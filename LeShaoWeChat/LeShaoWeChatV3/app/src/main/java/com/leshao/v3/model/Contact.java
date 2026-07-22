@@ -23,6 +23,7 @@ public class Contact {
 
     public String displayName() {
         if (remarkName != null && !remarkName.isEmpty()) return remarkName;
+        if (alias != null && !alias.isEmpty()) return alias;
         if (nickname != null && !nickname.isEmpty()) return nickname;
         return wxid;
     }

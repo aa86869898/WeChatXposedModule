@@ -3,6 +3,7 @@ package com.leshao.v3.hook;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
@@ -27,6 +28,8 @@ import android.widget.Toast;
 
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.leshao.v3.ui.MainActivity;
 
 import com.leshao.v3.ContactPickerFragment;
 import com.leshao.v3.ContextManager;
@@ -83,6 +86,8 @@ public class SettingsEntryHook {
             sHandler = new Handler(Looper.getMainLooper());
             hookBackPressed();
             hookLayoutInflater();
+            hookMainSettingsUI();
+            hookLauncherUIEntry(wechatCL);
             LogWriter.log(TAG, "INIT: hooks registered ok");
         }
     }
@@ -99,20 +104,18 @@ public class SettingsEntryHook {
         return gd;
     }
 
-    private static GradientDrawable createPrimaryBtnBg(Context ctx, int rad) {
+    private static GradientDrawable createPrimaryBtnBg(Context ctx) {
         float d = ctx.getResources().getDisplayMetrics().density;
         GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{CLR_ACCENT2, CLR_ACCENT});
-        gd.setCornerRadius(dpf(d, rad));
+                new int[]{com.leshao.v3.ui.AppColors.accent2(), com.leshao.v3.ui.AppColors.accent()});
         return gd;
     }
 
-    private static GradientDrawable createOutlineBtnBg(Context ctx, int rad) {
+    private static GradientDrawable createOutlineBtnBg(Context ctx) {
         float d = ctx.getResources().getDisplayMetrics().density;
         GradientDrawable gd = new GradientDrawable();
-        gd.setCornerRadius(dpf(d, rad));
         gd.setColor(Color.TRANSPARENT);
-        gd.setStroke((int)(2*d), CLR_BORDER);
+        gd.setStroke((int)(2*d), com.leshao.v3.ui.AppColors.divider());
         return gd;
     }
 
@@ -249,7 +252,7 @@ public class SettingsEntryHook {
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
         card.setPadding((int)(16*d), (int)(12*d), (int)(16*d), (int)(12*d));
-        card.setBackground(createPrimaryBtnBg(ctx, 12));
+        card.setBackground(createPrimaryBtnBg(ctx));
         card.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
         View.OnClickListener listener = v -> openSettingsFromContext(ctx);
         card.setOnClickListener(listener);
@@ -257,7 +260,7 @@ public class SettingsEntryHook {
         TextView title = new TextView(ctx);
         title.setText("乐少助手 V3");
         title.setTextSize(15);
-        title.setTextColor(CLR_WHITE);
+        title.setTextColor(com.leshao.v3.ui.AppColors.whiteCard());
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, -2, 1.0f);
         tlp.gravity = Gravity.CENTER_VERTICAL;
         title.setLayoutParams(tlp);
@@ -265,8 +268,8 @@ public class SettingsEntryHook {
 
         Button btn = createBtn(ctx, "进入");
         btn.setTextSize(12);
-        btn.setTextColor(CLR_WHITE);
-        btn.setBackground(createOutlineBtnBg(ctx, 8));
+        btn.setTextColor(com.leshao.v3.ui.AppColors.whiteCard());
+        btn.setBackground(createOutlineBtnBg(ctx));
         btn.setPadding((int)(10*d), (int)(5*d), (int)(10*d), (int)(5*d));
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-2, -2);
         blp.setMargins((int)(6*d), 0, 0, 0);
@@ -287,10 +290,118 @@ public class SettingsEntryHook {
                 } else break;
             }
             if (act == null) return;
-            showMainPanel(act);
+            MainActivity.open(act);
         } catch (Throwable t) {
             LogWriter.log(TAG, "CARD: open failed: " + t.getMessage());
         }
+    }
+
+    // ========== MainSettingsUI entry injection (V21-style card prepended to settings list) ==========
+
+    private static void hookMainSettingsUI() {
+        try {
+            ClassLoader cl = ContextManager.getClassLoader();
+            if (cl == null) return;
+            Class<?> mainSettingsUI = XposedHelpers.findClass(
+                "com.tencent.mm.plugin.setting.ui.setting_new.MainSettingsUI", cl);
+
+            XposedBridge.hookAllMethods(mainSettingsUI, "onResume", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    Activity act = (Activity) param.thisObject;
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        try {
+                            injectSettingsEntry(act);
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "SETTINGS: inject fail: " + t.getMessage());
+                        }
+                    }, 180);
+                }
+            });
+            LogWriter.log(TAG, "SETTINGS: MainSettingsUI hook ok");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "SETTINGS: MainSettingsUI hook fail: " + t.getMessage());
+        }
+    }
+
+    private static void injectSettingsEntry(Activity act) {
+        View content = act.findViewById(android.R.id.content);
+        if (!(content instanceof ViewGroup)) return;
+        ViewGroup container = findListContainer((ViewGroup) content);
+        if (container == null) return;
+
+        for (int i = 0; i < container.getChildCount(); i++) {
+            if ("leshao_v3_entry".equals(container.getChildAt(i).getTag())) return;
+        }
+
+        int pos = findInsertPosition(container);
+        float d = act.getResources().getDisplayMetrics().density;
+        int p16 = (int)(16 * d);
+        int p12 = (int)(12 * d);
+
+        LinearLayout entry = new LinearLayout(act);
+        entry.setTag("leshao_v3_entry");
+        entry.setOrientation(LinearLayout.HORIZONTAL);
+        entry.setGravity(Gravity.CENTER_VERTICAL);
+        entry.setPadding(p16, p12, p16, p12);
+        entry.setClickable(true);
+        LinearLayout.LayoutParams elp = new LinearLayout.LayoutParams(-1, -2);
+        elp.setMargins(p16, p12, p16, 0);
+        entry.setLayoutParams(elp);
+
+        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{com.leshao.v3.ui.AppColors.accent2(), com.leshao.v3.ui.AppColors.accent()});
+        entry.setBackground(bg);
+
+        entry.setOnClickListener(v -> {
+            try { MainActivity.open(act); }
+            catch (Throwable t) {
+                LogWriter.log(TAG, "SETTINGS: open fail: " + t.getMessage());
+            }
+        });
+
+        TextView tv = new TextView(act);
+        tv.setText("乐少助手");
+        tv.setTextSize(15);
+        tv.setTextColor(com.leshao.v3.ui.AppColors.whiteCard());
+        entry.addView(tv);
+
+        container.addView(entry, pos);
+        LogWriter.log(TAG, "SETTINGS: entry injected at pos " + pos);
+    }
+
+    private static int findInsertPosition(ViewGroup container) {
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View child = container.getChildAt(i);
+            if (hasText(child, "个人资料") || hasText(child, "个人信息")) {
+                return i;
+            }
+        }
+        return 1;
+    }
+
+    private static boolean hasText(View v, String search) {
+        if (v instanceof TextView && ((TextView) v).getText().toString().contains(search))
+            return true;
+        if (v instanceof ViewGroup) {
+            for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) {
+                if (hasText(((ViewGroup) v).getChildAt(i), search)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static ViewGroup findListContainer(ViewGroup parent) {
+        if (parent instanceof LinearLayout && parent.getChildCount() >= 2)
+            return parent;
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            View child = parent.getChildAt(i);
+            if (child instanceof ViewGroup) {
+                ViewGroup result = findListContainer((ViewGroup) child);
+                if (result != null) return result;
+            }
+        }
+        return null;
     }
 
     // ========== Back press hook ==========
@@ -319,6 +430,56 @@ public class SettingsEntryHook {
         }
     }
 
+    // ========== LauncherUI entry hook (Route 1 from 设置注入方案) ==========
+
+    private static final Handler sLauncherHandler = new Handler(Looper.getMainLooper());
+
+    private static void hookLauncherUIEntry(ClassLoader cl) {
+        try {
+            Class<?> launcherUI = XposedHelpers.findClass(
+                "com.tencent.mm.ui.LauncherUI", cl);
+
+            XposedBridge.hookAllMethods(launcherUI, "onCreate", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        Activity act = (Activity) param.thisObject;
+                        Intent intent = act.getIntent();
+                        if (intent != null && intent.hasExtra("leshao_open")) {
+                            sLauncherHandler.postDelayed(() -> {
+                                try {
+                                    MainActivity.open(act);
+                                    LogWriter.log(TAG, "LauncherUI: entry via onCreate intent");
+                                } catch (Throwable t) {
+                                    LogWriter.log(TAG, "LauncherUI onCreate open err: " + t.getMessage());
+                                }
+                            }, 500);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+
+            XposedBridge.hookAllMethods(launcherUI, "onNewIntent", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        Activity act = (Activity) param.thisObject;
+                        Intent intent = (Intent) param.args[0];
+                        if (intent != null && intent.hasExtra("leshao_open")) {
+                            MainActivity.open(act);
+                            LogWriter.log(TAG, "LauncherUI: entry via onNewIntent");
+                        }
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "LauncherUI onNewIntent err: " + t.getMessage());
+                    }
+                }
+            });
+            LogWriter.log(TAG, "LauncherUI entry hooks ok");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "LauncherUI entry hook FAILED: " + t.getMessage());
+        }
+    }
+
     // ===== Contact tab button helpers =====
 
     private static TextView makeContactTabBtn(Activity act, String text, boolean selected) {
@@ -330,7 +491,7 @@ public class SettingsEntryHook {
         tv.setGravity(Gravity.CENTER);
         tv.setPadding(dpC(act, 10), dpC(act, 5), dpC(act, 10), dpC(act, 5));
         tv.setTextColor(selected ? CLR_WHITE : CLR_TEXT);
-        tv.setBackground(selected ? createPrimaryBtnBg(act, 8) : createOutlineBtnBg(act, 8));
+        tv.setBackground(selected ? createPrimaryBtnBg(act) : createOutlineBtnBg(act));
         tv.setClickable(true);
         tv.setFocusable(true);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
@@ -341,11 +502,11 @@ public class SettingsEntryHook {
 
     private static void highlightTab(TextView selected, TextView... others) {
         float d = selected.getContext().getResources().getDisplayMetrics().density;
-        selected.setBackground(createPrimaryBtnBg(selected.getContext(), 8));
-        selected.setTextColor(CLR_WHITE);
+        selected.setBackground(createPrimaryBtnBg(selected.getContext()));
+        selected.setTextColor(com.leshao.v3.ui.AppColors.whiteCard());
         for (TextView other : others) {
-            other.setBackground(createOutlineBtnBg(other.getContext(), 8));
-            other.setTextColor(CLR_TEXT);
+            other.setBackground(createOutlineBtnBg(other.getContext()));
+            other.setTextColor(com.leshao.v3.ui.AppColors.text1());
         }
     }
 
@@ -375,7 +536,7 @@ public class SettingsEntryHook {
             root.setBackground(createGlassBg(ctx, 14));
 
             TextView title = new TextView(ctx);
-            title.setText("乐少助手 V3");
+        title.setText("乐少多功能助手");
             title.setTextSize(20);
             title.setTextColor(CLR_ACCENT);
             title.setTypeface(null, Typeface.BOLD);
@@ -570,7 +731,7 @@ public class SettingsEntryHook {
             Button b = createBtn(ctx, bt);
             b.setTextSize(10);
             b.setTextColor(CLR_TEXT);
-            b.setBackground(createOutlineBtnBg(ctx, 4));
+            b.setBackground(createOutlineBtnBg(ctx));
             b.setPadding(dpC(ctx, 12), dpC(ctx, 2), dpC(ctx, 12), dpC(ctx, 2));
             if (li != null) b.setOnClickListener(li);
             r.addView(b);
@@ -848,7 +1009,7 @@ public class SettingsEntryHook {
         Button loadMoreBtn = createBtn(ctx, "加载更多");
         loadMoreBtn.setTextSize(11);
         loadMoreBtn.setTextColor(CLR_TEXT);
-        loadMoreBtn.setBackground(createOutlineBtnBg(ctx, 8));
+        loadMoreBtn.setBackground(createOutlineBtnBg(ctx));
         loadMoreBtn.setPadding(dpC(ctx, 12), dpC(ctx, 4), dpC(ctx, 12), dpC(ctx, 4));
         loadMoreBtn.setOnClickListener(v -> loadMore.run());
         actionRow.addView(loadMoreBtn);
@@ -857,7 +1018,7 @@ public class SettingsEntryHook {
         Button clearBtn = createBtn(ctx, "清空");
         clearBtn.setTextSize(11);
         clearBtn.setTextColor(CLR_TEXT);
-        clearBtn.setBackground(createOutlineBtnBg(ctx, 8));
+        clearBtn.setBackground(createOutlineBtnBg(ctx));
         clearBtn.setPadding(dpC(ctx, 12), dpC(ctx, 4), dpC(ctx, 12), dpC(ctx, 4));
         clearBtn.setOnClickListener(v -> { selectedWxids.clear(); adapter.notifyDataSetChanged(); });
         actionRow.addView(clearBtn);
@@ -866,7 +1027,7 @@ public class SettingsEntryHook {
         Button batchBtn = createBtn(ctx, "批量操作");
         batchBtn.setTextSize(11);
         batchBtn.setTextColor(CLR_WHITE);
-        batchBtn.setBackground(createPrimaryBtnBg(ctx, 8));
+        batchBtn.setBackground(createPrimaryBtnBg(ctx));
         batchBtn.setPadding(dpC(ctx, 12), dpC(ctx, 4), dpC(ctx, 12), dpC(ctx, 4));
         batchBtn.setOnClickListener(v -> {
             if (selectedWxids.isEmpty()) {

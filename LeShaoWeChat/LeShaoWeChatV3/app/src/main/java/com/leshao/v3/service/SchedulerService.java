@@ -20,28 +20,31 @@ public class SchedulerService {
     public static void start(ModuleConfig cfg) {
         if (sRunning) return;
         sRunning = true;
-        sThread = new Thread(() -> {
-            LogWriter.log(TAG, "scheduler started");
-            PowerManager.WakeLock wl = null;
-            try {
-                PowerManager pm = (PowerManager) ContextManager.getAppContext()
-                    .getSystemService(android.content.Context.POWER_SERVICE);
-                wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "leshao:scheduler");
-            } catch (Throwable ignored) {}
-
-            while (sRunning) {
+        sThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                LogWriter.log(TAG, "scheduler started");
+                PowerManager.WakeLock wl = null;
                 try {
-                    checkAndExecute(ContextManager.getPrefs() != null
-                        ? ModuleConfig.load(ContextManager.getPrefs()) : null);
-                    Thread.sleep(30000);
-                } catch (InterruptedException e) {
-                    break;
-                } catch (Throwable t) {
-                    LogWriter.log(TAG, "scheduler error: " + t.getMessage());
-                }
-            }
+                    PowerManager pm = (PowerManager) ContextManager.getAppContext()
+                        .getSystemService(android.content.Context.POWER_SERVICE);
+                    wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "leshao:scheduler");
+                } catch (Throwable ignored) {}
 
-            if (wl != null && wl.isHeld()) wl.release();
+                while (sRunning) {
+                    try {
+                        checkAndExecute(ContextManager.getPrefs() != null
+                            ? ModuleConfig.load(ContextManager.getPrefs()) : null);
+                        Thread.sleep(30000);
+                    } catch (InterruptedException e) {
+                        break;
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "scheduler error: " + t.getMessage());
+                    }
+                }
+
+                if (wl != null && wl.isHeld()) wl.release();
+            }
         }, "leshao-scheduler");
         sThread.start();
     }

@@ -32,17 +32,41 @@ public class DatabaseProvider {
     }
 
     /**
-     * 在 attachBaseContext 完成后调用，启动 WCDB Hook 捕获密钥和数据库实例。
-     * 所有耗时操作在子线程执行。
+     * 在 handleLoadPackage 中立即调用（attachBaseContext 之前），
+     * 使用 lpparam.classLoader 提前 Hook WCDB openDatabase，
+     * 确保 WeChat 初始化数据库时就被捕获，实现 0 延迟加载。
+     */
+    public static void initEarly(ClassLoader classLoader) {
+        if (sHooked.get()) return;
+        LogWriter.log(TAG, "initEarly: START via handleLoadPackage classLoader");
+        Class<?> wcdbClass = loadWcdbClass(classLoader, null);
+        if (wcdbClass != null) {
+            hookOpenDatabase(wcdbClass);
+            hookRawQuery(wcdbClass);
+        }
+    }
+
+    /**
+     * 在 attachBaseContext 完成后调用，作为兜底。
+     * 如果 initEarly 已成功则跳过。
      */
     public static void init() {
+        if (sHooked.get()) {
+            LogWriter.log(TAG, "init: already hooked via initEarly, skipping");
+            return;
+        }
         new Thread(() -> {
             if (!ContextManager.waitForReady(60000)) {
                 LogWriter.log(TAG, "init ABORTED: attachBaseContext not ready in 60s");
                 return;
             }
             LogWriter.log(TAG, "init START, apk=" + ContextManager.getApkPath());
-            tryHookWcdb();
+            Class<?> wcdbClass = loadWcdbClass(
+                ContextManager.getClassLoader(), ContextManager.getApkPath());
+            if (wcdbClass != null) {
+                hookOpenDatabase(wcdbClass);
+                hookRawQuery(wcdbClass);
+            }
         }, "leshao-db-init").start();
     }
 
@@ -50,26 +74,21 @@ public class DatabaseProvider {
      * 策略A: 直接 try ClassLoader.loadClass 加载 WCDB SQLiteDatabase
      * 策略B: DexFile 枚举 + Xposed 通用 hook
      */
-    private static void tryHookWcdb() {
-        ClassLoader cl = ContextManager.getClassLoader();
-        String apkPath = ContextManager.getApkPath();
-
-        Class<?> wcdbClass = null;
-
+    private static Class<?> loadWcdbClass(ClassLoader cl, String apkPath) {
         // 策略A: ClassLoader 直接加载
         for (String cn : new String[]{
             "com.tencent.wcdb.database.SQLiteDatabase",
             "com.tencent.wcdb.database.ExSQLiteDatabase",
         }) {
             try {
-                wcdbClass = cl.loadClass(cn);
-                LogWriter.log(TAG, "Strategy A OK: loaded " + cn);
-                break;
+                Class<?> wcdbClass = cl.loadClass(cn);
+                LogWriter.log(TAG, "STRATEGY A OK: loaded " + cn);
+                return wcdbClass;
             } catch (Throwable ignored) {}
         }
 
         // 策略B: DexFile 枚举
-        if (wcdbClass == null && apkPath != null) {
+        if (apkPath != null) {
             try {
                 DexFile df = new DexFile(apkPath);
                 java.util.Enumeration<String> entries = df.entries();
@@ -77,25 +96,21 @@ public class DatabaseProvider {
                     String cn = entries.nextElement();
                     if (cn.contains("wcdb") && cn.endsWith("SQLiteDatabase")) {
                         try {
-                            wcdbClass = df.loadClass(cn, cl);
-                            LogWriter.log(TAG, "Strategy B OK: loaded " + cn);
-                            break;
+                            Class<?> wcdbClass = df.loadClass(cn, cl);
+                            LogWriter.log(TAG, "STRATEGY B OK: loaded " + cn);
+                            df.close();
+                            return wcdbClass;
                         } catch (Throwable ignored) {}
                     }
                 }
                 df.close();
             } catch (Throwable e) {
-                LogWriter.log(TAG, "Strategy B FAILED: " + e.getMessage());
+                LogWriter.log(TAG, "STRATEGY B FAILED: " + e.getMessage());
             }
         }
 
-        if (wcdbClass == null) {
-            LogWriter.log(TAG, "ALL strategies FAILED: cannot find WCDB SQLiteDatabase");
-            return;
-        }
-
-        hookOpenDatabase(wcdbClass);
-        hookRawQuery(wcdbClass);
+        LogWriter.log(TAG, "ALL strategies FAILED: cannot find WCDB SQLiteDatabase");
+        return null;
     }
 
     /**

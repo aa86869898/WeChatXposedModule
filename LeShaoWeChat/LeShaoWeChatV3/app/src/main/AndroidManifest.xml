@@ -32,6 +32,11 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <provider
+            android:name="com.leshao.v3.hook.SettingsInjectProvider"
+            android:authorities="com.leshao.v3.provider.inject"
+            android:exported="false" />
     </application>
 
 </manifest>

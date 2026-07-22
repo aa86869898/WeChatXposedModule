@@ -15,6 +15,7 @@ public class ContextManager {
     private static boolean sReady = false;
     private static Context sAppContext;
     private static Runnable sOnReadyCallback;
+    private static volatile boolean sCallbackFired = false;
 
     public static void setOnReadyCallback(Runnable callback) {
         sOnReadyCallback = callback;
@@ -36,10 +37,15 @@ public class ContextManager {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         sAppContext = (Context) param.thisObject;
-                        sReady = true;
-                        LogWriter.log(TAG, "attachBaseContext DONE, ready=true");
-                        if (sOnReadyCallback != null) {
-                            try { sOnReadyCallback.run(); } catch (Throwable t) {
+                        if (!sReady) {
+                            sReady = true;
+                            LogWriter.log(TAG, "attachBaseContext DONE, ready=true");
+                        }
+                        if (sOnReadyCallback != null && !sCallbackFired) {
+                            sCallbackFired = true;
+                            try {
+                                sOnReadyCallback.run();
+                            } catch (Throwable t) {
                                 LogWriter.log(TAG, "onReady callback FAILED: " + t.getMessage());
                             }
                         }

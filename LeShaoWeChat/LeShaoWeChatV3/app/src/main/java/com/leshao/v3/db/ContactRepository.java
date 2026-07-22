@@ -1,11 +1,15 @@
 package com.leshao.v3.db;
 
+import android.content.SharedPreferences;
+import android.database.Cursor;
+
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.model.Contact;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -49,29 +53,37 @@ public class ContactRepository {
         LogWriter.log(TAG, "loadContacts START");
 
         try {
-            // Strategy A: DatabaseProvider hooks → 轮询等待（最多2秒，DB 回调会更快）
-            LogWriter.log(TAG, "Strategy A: waiting for DB (max 15s)...");
-            Object db = waitForDatabase(15000);
-            LogWriter.log(TAG, "Strategy A: waitForDatabase returned " + (db != null ? "DB" : "null"));
-            if (db != null && tryQueries(db)) {
+            // Strategy A: 直接打开 EnMicroMsg.db，反射 ka5.f.s()（最可靠，0 延迟）
+            LogWriter.log(TAG, "Strategy A: trying direct DB (ka5.f.s)...");
+            if (loadViaDirectDb()) {
                 sLoaded = true; sLoading = false;
-                LogWriter.log(TAG, "loadContacts OK via Strategy A (DB hooks)");
+                LogWriter.log(TAG, "loadContacts OK via Strategy A (direct DB)");
                 return true;
             }
 
-            // Strategy B: com.tencent.mm.model.aj 会话存储 (V21 Strategy 2)
-            LogWriter.log(TAG, "Strategy B: trying model.aj...");
+            // Strategy B: 反射遍历 model.aj（纯内存，零延迟，无需 Hook）
+            LogWriter.log(TAG, "Strategy B: trying model.aj reflection...");
             if (loadViaModelAj()) {
                 sLoaded = true; sLoading = false;
-                LogWriter.log(TAG, "loadContacts OK via Strategy B (model.aj)");
+                LogWriter.log(TAG, "loadContacts OK via Strategy B (model.aj reflection)");
                 return true;
             }
 
-            // Strategy C: Messaging plugin via findKernelClass (V21 Strategy 3)
+            // Strategy C: Messaging plugin via findKernelClass
             LogWriter.log(TAG, "Strategy C: trying findKernelClass...");
             if (loadViaMessagingPlugin()) {
                 sLoaded = true; sLoading = false;
                 LogWriter.log(TAG, "loadContacts OK via Strategy C (messaging plugin)");
+                return true;
+            }
+
+            // Strategy D: DatabaseProvider hooks（最终兜底）
+            LogWriter.log(TAG, "Strategy D: waiting for DB hooks (max 15s)...");
+            Object db = waitForDatabase(15000);
+            LogWriter.log(TAG, "Strategy D: waitForDatabase returned " + (db != null ? "DB" : "null"));
+            if (db != null && tryQueries(db)) {
+                sLoaded = true; sLoading = false;
+                LogWriter.log(TAG, "loadContacts OK via Strategy D (DB hooks)");
                 return true;
             }
 
@@ -86,7 +98,7 @@ public class ContactRepository {
     }
 
     private static boolean tryQueries(Object db) {
-        return queryContacts(db, "SELECT username, alias, conRemark, nickname, type FROM rcontact")
+        return queryContacts(db, "SELECT username, alias, conRemark, nickname, type FROM rcontact WHERE deleteFlag=0")
             || queryContacts(db, "SELECT username, alias, conRemark, nickname, type FROM Contact");
     }
 
@@ -100,95 +112,312 @@ public class ContactRepository {
         return DatabaseProvider.getDatabase();
     }
 
-    // ===== Strategy B: com.tencent.mm.model.aj (V21 Strategy 2) =====
+    // ===== Strategy A: 直接打开 EnMicroMsg.db（反射 ka5.f.s，无需 Hook，0 延迟）=====
+
+    private static boolean loadViaDirectDb() {
+        ClassLoader cl = ContextManager.getClassLoader();
+        if (cl == null) return false;
+
+        try {
+            // 1. 获取 uin
+            android.content.Context ctx = ContextManager.getAppContext();
+            if (ctx == null) {
+                LogWriter.log(TAG, "Strategy A: Context is null");
+                return false;
+            }
+            SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
+            Object uv = sp.getAll().get("default_uin");
+            if (uv == null) {
+                LogWriter.log(TAG, "Strategy A: uin not found in SharedPreferences");
+                return false;
+            }
+            long uin = Long.parseLong(uv.toString());
+            LogWriter.log(TAG, "Strategy A: uin=" + uin);
+
+            // 2. 获取 IMEI 并计算密码（多候选重试）
+            String dbPath = getDbPath(cl, ctx, uin);
+            if (dbPath == null) {
+                LogWriter.log(TAG, "Strategy A: dbPath is null");
+                return false;
+            }
+            LogWriter.log(TAG, "Strategy A: dbPath=" + dbPath);
+
+            // 3. 尝试多个密码候打开数据库
+            String[] imeiCandidates = getImeiCandidates(cl);
+            for (String imei : imeiCandidates) {
+                if (imei == null || imei.isEmpty()) continue;
+                String password = calcPassword(cl, imei, uin);
+                if (password == null || password.length() != 7) continue;
+                LogWriter.log(TAG, "Strategy A: trying imei=" + imei + " pwd=" + password);
+
+                Object db = openKa5Db(cl, dbPath, password);
+                if (db == null) continue;
+
+                // 4. 查询联系人
+                if (queryViaKa5(db)) {
+                    closeKa5Db(db);
+                    return true;
+                }
+                closeKa5Db(db);
+            }
+
+            LogWriter.log(TAG, "Strategy A: all password candidates failed");
+            return false;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "Strategy A ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    private static String[] getImeiCandidates(ClassLoader cl) {
+        java.util.List<String> list = new java.util.ArrayList<>();
+        // 候选1: wo.w0.g(true) — 设备 IMEI
+        try {
+            Class<?> wo = cl.loadClass("wo.w0");
+            Method g = wo.getDeclaredMethod("g", boolean.class);
+            String imei = (String) g.invoke(null, true);
+            if (imei != null && !imei.isEmpty() && !imei.equals("1234567890ABCDEF")) {
+                list.add(imei);
+            }
+        } catch (Throwable e) {}
+        // 候选2: 微信硬编码兜底密码
+        list.add("1234567890ABCDEF");
+        // 候选3: IMEI 兜底值
+        list.add("000000000000000");
+        list.add("");
+        return list.toArray(new String[0]);
+    }
+
+    private static String calcPassword(ClassLoader cl, String imei, long uin) {
+        String input = imei + uin;
+        // 方法1: 反射 kk.k.g(byte[]) 计算 MD5
+        try {
+            Class<?> kk = cl.loadClass("kk.k");
+            Method g = kk.getDeclaredMethod("g", byte[].class);
+            String full = (String) g.invoke(null, (Object) input.getBytes("UTF-8"));
+            return full.substring(0, 7);
+        } catch (Throwable e) {}
+        // 方法2: JDK MD5 兜底
+        return md5(input).substring(0, 7);
+    }
+
+    private static String getDbPath(ClassLoader cl, android.content.Context ctx, long uin) {
+        try {
+            // 方法1: 反射 mp0.b.X() + hm0.b0.e(int)
+            Class<?> mp0b = cl.loadClass("mp0.b");
+            Method X = mp0b.getDeclaredMethod("X");
+            String base = (String) X.invoke(null);
+
+            Class<?> hm0b0 = cl.loadClass("hm0.b0");
+            Method e = hm0b0.getDeclaredMethod("e", int.class);
+            String hash = (String) e.invoke(null, (int) uin);
+
+            return base + "MicroMsg/" + hash + "/EnMicroMsg.db";
+        } catch (Throwable ex) {}
+        // 方法2: 手动拼接路径
+        try {
+            String base = ctx.getFilesDir().getParentFile().getAbsolutePath() + "/";
+            return base + "MicroMsg/" + md5("mm" + uin) + "/EnMicroMsg.db";
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    private static Object openKa5Db(ClassLoader cl, String dbPath, String password) {
+        try {
+            Class<?> ka5f = cl.loadClass("ka5.f");
+            Method s = ka5f.getDeclaredMethod("s",
+                    String.class, String.class, int.class, boolean.class);
+            Object db = s.invoke(null, dbPath, password, 0, true);
+            if (db == null) return null;
+
+            // 验证：查询 sqlite_master 确认 rcontact 表存在
+            Method u = db.getClass().getDeclaredMethod("u", String.class, String[].class);
+            Cursor c = (Cursor) u.invoke(db,
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='rcontact'",
+                    null);
+            if (c != null && c.moveToFirst()) {
+                c.close();
+                LogWriter.log(TAG, "Strategy A: DB opened, rcontact table confirmed");
+                return db;
+            }
+            if (c != null) c.close();
+            // 密码不对，关闭这个库
+            try { db.getClass().getMethod("c").invoke(db); } catch (Throwable ignored) {}
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "Strategy A: openKa5Db failed: " + e.getClass().getSimpleName());
+        }
+        return null;
+    }
+
+    private static boolean queryViaKa5(Object db) {
+        try {
+            Method u = db.getClass().getDeclaredMethod("u", String.class, String[].class);
+            // 按文档：deleteFlag=0 过滤已删除，不取系统号/公众号/文件传输助手
+            String sql = "SELECT username, alias, conRemark, nickname, type FROM rcontact WHERE deleteFlag=0";
+            Cursor c = (Cursor) u.invoke(db, sql, null);
+            if (c == null) return false;
+
+            List<Contact> all = new ArrayList<>();
+            List<Contact> friends = new ArrayList<>();
+            List<Contact> groups = new ArrayList<>();
+
+            int ciU = c.getColumnIndex("username");
+            int ciA = c.getColumnIndex("alias");
+            int ciR = c.getColumnIndex("conRemark");
+            int ciN = c.getColumnIndex("nickname");
+            int ciT = c.getColumnIndex("type");
+
+            while (c.moveToNext()) {
+                String wxid = c.getString(ciU);
+                if (wxid == null || wxid.isEmpty()) continue;
+                if (wxid.startsWith("gh_")) continue;       // 公众号
+                if ("filehelper".equals(wxid)) continue;    // 文件传输助手
+                int type = c.getInt(ciT);
+                if (type == 33) continue;                   // 系统号
+
+                // displayName: 备注 > alias(微信号) > 昵称 > wxid
+                String name = c.getString(ciR);              // conRemark
+                if (name == null || name.isEmpty()) name = c.getString(ciA); // alias
+                if (name == null || name.isEmpty()) name = c.getString(ciN); // nickname
+                if (name == null || name.isEmpty()) name = wxid;
+
+                Contact contact = new Contact(wxid, name, name, wxid, type);
+                all.add(contact);
+                if (wxid.endsWith("@chatroom")) groups.add(contact);
+                else friends.add(contact);
+            }
+            c.close();
+
+            LogWriter.log(TAG, "Strategy A: query OK, all=" + all.size()
+                + " f=" + friends.size() + " g=" + groups.size());
+
+            if (all.isEmpty()) return false;
+            sAllContacts = all; sFriends = friends; sGroups = groups;
+            return true;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "Strategy A: query ERROR: " + e.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    private static void closeKa5Db(Object db) {
+        try {
+            Method c = db.getClass().getDeclaredMethod("c");
+            c.invoke(db);
+        } catch (Throwable ignored) {}
+    }
+
+    private static String md5(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] d = md.digest(input.getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : d) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Throwable e) { return ""; }
+    }
+
+    // ===== Strategy B: 反射遍历 com.tencent.mm.model.aj 自动发现方法（无需 Hook，零延迟）=====
 
     private static boolean loadViaModelAj() {
         ClassLoader cl = ContextManager.getClassLoader();
         if (cl == null) return false;
 
         try {
-            String[] ajMethods = {"getAs", "bJt", "aOJ", "aOM", "getResponse"};
-            Object convStg = null;
-            String ajMethodUsed = null;
-            for (String mn : ajMethods) {
+            Class<?> ajCls = cl.loadClass("com.tencent.mm.model.aj");
+            if (ajCls == null) {
+                LogWriter.log(TAG, "Strategy B: class com.tencent.mm.model.aj not found");
+                return false;
+            }
+
+            // 遍历所有静态方法，逐个尝试调用，找到返回会话存储对象的方法
+            java.lang.reflect.Method[] methods = ajCls.getDeclaredMethods();
+            for (java.lang.reflect.Method m : methods) {
+                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                if (m.getParameterTypes().length != 0) continue;
+                Class<?> rt = m.getReturnType();
+                if (rt == void.class || rt == int.class || rt == long.class
+                    || rt == boolean.class || rt == String.class || rt.isPrimitive()) continue;
+
+                Object convStg;
                 try {
-                    Class<?> ajCls = cl.loadClass("com.tencent.mm.model.aj");
-                    convStg = XposedHelpers.callStaticMethod(ajCls, mn);
-                    ajMethodUsed = mn;
-                    break;
-                } catch (Throwable e) {}
-            }
-            if (convStg == null) {
-                LogWriter.log(TAG, "Strategy B: com.tencent.mm.model.aj failed to load");
-                return false;
-            }
+                    convStg = m.invoke(null);
+                } catch (Throwable e) { continue; }
+                if (convStg == null) continue;
 
-            String[] getAllMethods = {"getAll", "bLw", "aOB", "values", "getMap"};
-            Object allConvs = null;
-            String getAllUsed = null;
-            for (String mn : getAllMethods) {
-                try {
-                    allConvs = XposedHelpers.callMethod(convStg, mn);
-                    getAllUsed = mn;
-                    break;
-                } catch (Throwable e) {}
-            }
-            if (allConvs == null) {
-                LogWriter.log(TAG, "Strategy B: aj." + ajMethodUsed + "() OK but no getAll-like method found");
-                return false;
-            }
+                // 检查这个对象是否有 getAll/values/getMap 之类的方法来获取全部会话
+                Object allConvs = discoverGetAll(convStg);
+                if (allConvs == null) continue;
 
-            List<Contact> all = new ArrayList<>();
-            List<Contact> friends = new ArrayList<>();
-            List<Contact> groups = new ArrayList<>();
+                // 尝试从会话中提取联系人
+                List<Contact> all = new ArrayList<>();
+                List<Contact> friends = new ArrayList<>();
+                List<Contact> groups = new ArrayList<>();
 
-            if (allConvs instanceof Map) {
-                Map<?, ?> convMap = (Map<?, ?>) allConvs;
-                LogWriter.log(TAG, "Strategy B: aj." + ajMethodUsed + "()." + getAllUsed + "() count=" + convMap.size());
-                for (Object conv : convMap.values()) {
-                    addConvEntry(conv, all, friends, groups);
+                if (allConvs instanceof Map) {
+                    Map<?, ?> convMap = (Map<?, ?>) allConvs;
+                    LogWriter.log(TAG, "Strategy B: found via " + m.getName() + "(), Map size=" + convMap.size());
+                    for (Object conv : convMap.values()) {
+                        addConvEntry(conv, all, friends, groups);
+                    }
+                } else if (allConvs instanceof Iterable) {
+                    int cnt = 0;
+                    for (Object conv : (Iterable<?>) allConvs) {
+                        if (addConvEntry(conv, all, friends, groups)) cnt++;
+                    }
+                    LogWriter.log(TAG, "Strategy B: found via " + m.getName() + "(), Iterable size=" + cnt);
+                } else {
+                    continue;
                 }
-            } else if (allConvs instanceof Iterable) {
-                int cnt = 0;
-                for (Object conv : (Iterable<?>) allConvs) {
-                    if (addConvEntry(conv, all, friends, groups)) cnt++;
-                }
-                LogWriter.log(TAG, "Strategy B: convList count=" + cnt);
-            } else {
-                LogWriter.log(TAG, "Strategy B: unsupported allConvs type: " + allConvs.getClass().getName());
-                return false;
+
+                if (all.isEmpty()) continue;
+                sAllContacts = all; sFriends = friends; sGroups = groups;
+                LogWriter.log(TAG, "Strategy B OK: all=" + all.size() + " f=" + friends.size() + " g=" + groups.size()
+                    + " via method=" + m.getName());
+                return true;
             }
 
-            if (all.isEmpty()) return false;
-            sAllContacts = all; sFriends = friends; sGroups = groups;
-            LogWriter.log(TAG, "Strategy B OK: all=" + all.size() + " f=" + friends.size() + " g=" + groups.size());
-            return true;
+            LogWriter.log(TAG, "Strategy B: tried " + methods.length + " static methods, none returned valid conv storage");
+            return false;
         } catch (Throwable e) {
             LogWriter.log(TAG, "Strategy B ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
             return false;
         }
     }
 
+    private static Object discoverGetAll(Object obj) {
+        // 先检查常见方法名
+        for (String mn : new String[]{"getAll", "bLw", "aOB", "values", "getMap",
+            "bLx", "bLy", "aOC", "aOD", "getValues", "toMap", "asMap", "entrySet"}) {
+            try {
+                Object result = XposedHelpers.callMethod(obj, mn);
+                if (result != null && (result instanceof Map || result instanceof Iterable)) {
+                    return result;
+                }
+            } catch (Throwable e) {}
+        }
+
+        // 遍历所有无参方法
+        for (java.lang.reflect.Method m : obj.getClass().getDeclaredMethods()) {
+            if (m.getParameterTypes().length != 0) continue;
+            Class<?> rt = m.getReturnType();
+            if (rt == void.class || rt.isPrimitive()) continue;
+            try {
+                Object result = m.invoke(obj);
+                if (result instanceof Map) return result;
+                if (result instanceof Iterable && ((Iterable<?>) result).iterator().hasNext()) return result;
+            } catch (Throwable e) {}
+        }
+        return null;
+    }
+
     private static boolean addConvEntry(Object conv, List<Contact> all, List<Contact> friends, List<Contact> groups) {
         try {
             String wxid = resolveObjWxid(conv);
-            if (wxid == null) {
-                for (String mn : new String[]{"getUsername", "field_username", "bLp", "getTalker"}) {
-                    try {
-                        Object val = XposedHelpers.callMethod(conv, mn);
-                        if (val instanceof String) { wxid = (String) val; if (wxid != null && !wxid.isEmpty()) break; }
-                    } catch (Throwable e) {}
-                }
-            }
             if (skipWxid(wxid)) return false;
 
             String name = resolveObjName(conv);
-            if (name == null || name.isEmpty()) {
-                for (String mn : new String[]{"getRemarkName", "getNickname", "getDisplayName", "getConRemark"}) {
-                    try { name = (String) XposedHelpers.callMethod(conv, mn); if (name != null && !name.isEmpty()) break; }
-                    catch (Throwable e) {}
-                }
-            }
             if (name == null || name.isEmpty()) name = wxid;
 
             int type = wxid.endsWith("@chatroom") ? 1 : 0;
@@ -395,32 +624,50 @@ public class ContactRepository {
 
     private static String resolveObjWxid(Object obj) {
         if (obj == null) return null;
-        String[] getters = {"getWxid", "getUsername", "getChatRoomName", "getChatroomName", "getRoomId", "getTalker"};
+        // 先尝试常见名称
+        String[] getters = {"getWxid", "getUsername", "getChatRoomName", "getChatroomName",
+            "getRoomId", "getTalker", "bLp", "aOM", "getWxId", "field_username",
+            "getWxusername", "getStrangerName", "getEncryptUsername"};
         for (String mn : getters) {
-            try { String r = (String) obj.getClass().getMethod(mn).invoke(obj); if (r != null && !r.isEmpty()) return r; }
+            try { String r = (String) obj.getClass().getMethod(mn).invoke(obj);
+                if (r != null && !r.isEmpty()) return r; }
             catch (Throwable e) {}
         }
-        String[] pubFields = {"wxid", "username", "chatroomName", "chatRoomName", "mUsername"};
-        for (String fn : pubFields) {
-            try { String r = (String) obj.getClass().getField(fn).get(obj); if (r != null && !r.isEmpty()) return r; }
-            catch (Throwable e1) {
-                try {
-                    java.lang.reflect.Field f = obj.getClass().getDeclaredField(fn);
-                    f.setAccessible(true);
-                    String r = (String) f.get(obj); if (r != null && !r.isEmpty()) return r;
-                } catch (Throwable e2) {}
-            }
+        // 遍历所有返回 String 的无参方法
+        for (java.lang.reflect.Method m : obj.getClass().getDeclaredMethods()) {
+            if (m.getParameterTypes().length != 0) continue;
+            if (m.getReturnType() != String.class) continue;
+            try {
+                String r = (String) m.invoke(obj);
+                if (r != null && !r.isEmpty() && r.length() > 4) {
+                    // wxid 特征: 包含 @chatroom 或长度适中
+                    if (r.contains("@") || (r.length() >= 6 && r.length() <= 64)) return r;
+                }
+            } catch (Throwable e) {}
         }
         return null;
     }
 
     private static String resolveObjName(Object obj) {
         if (obj == null) return null;
-        String[] getters = {"getRemarkName", "getNickname", "getDisplayName", "getConRemark", "getName"};
+        String[] getters = {"getRemarkName", "getNickname", "getDisplayName", "getConRemark",
+            "getName", "getShowName", "getAlias", "field_nickname", "field_conRemark"};
         for (String mn : getters) {
             try {
                 Object r = obj.getClass().getMethod(mn).invoke(obj);
                 if (r instanceof String && !((String) r).isEmpty()) return (String) r;
+            } catch (Throwable e) {}
+        }
+        // 遍历所有返回 String 的无参方法
+        for (java.lang.reflect.Method m : obj.getClass().getDeclaredMethods()) {
+            if (m.getParameterTypes().length != 0) continue;
+            if (m.getReturnType() != String.class) continue;
+            try {
+                String r = (String) m.invoke(obj);
+                if (r != null && !r.isEmpty() && r.length() > 1 && r.length() < 128
+                    && !r.startsWith("wxid_") && !r.contains("@chatroom") && !r.contains("@")) {
+                    return r;
+                }
             } catch (Throwable e) {}
         }
         return null;

@@ -5,6 +5,7 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.service.StatsCollector;
 
 import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 public class AntiRecallHook {
@@ -14,9 +15,6 @@ public class AntiRecallHook {
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
-    /**
-     * Hook 消息撤回，记录撤回内容
-     */
     public static void hook() {
         if (!ContextManager.isReady()) {
             LogWriter.log(TAG, "hook ABORTED: ContextManager not ready");
@@ -25,6 +23,72 @@ public class AntiRecallHook {
 
         ClassLoader cl = ContextManager.getClassLoader();
 
+        hookXmlRevoke(cl);
+        hookProtoRevoke(cl);
+        hookRecallRecorder(cl);
+        LogWriter.log(TAG, "anti-recall hooks installed");
+    }
+
+    // ===== 路径1: XML 撤回阻断 — af5.a.run() =====
+
+    private static void hookXmlRevoke(ClassLoader cl) {
+        // 多版本类名尝试（按最常见排序）
+        for (String clsName : new String[]{
+            "af5.a",      // 实测 8.0.76 有效
+            "af6.a",      // 备选
+            "af4.a",      // 备选 8.0.49
+            "af6.c",      // 备选
+            "af5.c",      // 备选
+        }) {
+            try {
+                Class<?> c = XposedHelpers.findClass(clsName, cl);
+                XposedBridge.hookAllMethods(c, "run", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        if (!sEnabled) return;
+                        param.setResult(null);
+                        LogWriter.log(TAG, "[XML] 阻止撤回成功: " + clsName);
+                    }
+                });
+                LogWriter.log(TAG, "[XML] Hooked: " + clsName + ".run()");
+                return;
+            } catch (XposedHelpers.ClassNotFoundError ignored) {
+            } catch (Throwable t) { LogWriter.log(TAG, "[XML] " + clsName + " err: " + t.getMessage()); }
+        }
+        LogWriter.log(TAG, "[XML] 未找到 af*.run() 类，请更新类名");
+    }
+
+    // ===== 路径2: Protobuf 撤回阻断 — e01.u.f() =====
+
+    private static void hookProtoRevoke(ClassLoader cl) {
+        for (String clsName : new String[]{
+            "e01.u",      // 实测 8.0.76 有效
+            "e02.u",      // 备选
+            "e00.u",      // 备选
+            "e01.t",      // 备选
+            "e02.t",      // 备选
+        }) {
+            try {
+                Class<?> c = XposedHelpers.findClass(clsName, cl);
+                XposedBridge.hookAllMethods(c, "f", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        if (!sEnabled) return;
+                        param.setResult(null);
+                        LogWriter.log(TAG, "[Proto] 阻止撤回成功: " + clsName);
+                    }
+                });
+                LogWriter.log(TAG, "[Proto] Hooked: " + clsName + ".f()");
+                return;
+            } catch (XposedHelpers.ClassNotFoundError ignored) {
+            } catch (Throwable t) { LogWriter.log(TAG, "[Proto] " + clsName + " err: " + t.getMessage()); }
+        }
+        LogWriter.log(TAG, "[Proto] 未找到 e*.f() 类，请更新类名");
+    }
+
+    // ===== 路径3: 撤回记录 + 系统提示插入 =====
+
+    private static void hookRecallRecorder(ClassLoader cl) {
         for (String className : new String[]{
             "com.tencent.mm.modelmulti.p",
             "com.tencent.mm.modelmulti.q",
@@ -36,7 +100,7 @@ public class AntiRecallHook {
                         XposedHelpers.findAndHookMethod(className, cl, m.getName(),
                             new XC_MethodHook() {
                                 @Override
-                                protected void beforeHookedMethod(MethodHookParam param) {
+                                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                                     if (!sEnabled) return;
                                     try {
                                         Object msgObj = findRecallMsg(param.args);
@@ -45,8 +109,10 @@ public class AntiRecallHook {
                                             String content = getField(msgObj, "field_content", "getContent");
                                             if (content != null) {
                                                 StatsCollector.recordRecall(talker, content);
-                                                LogWriter.log(TAG, "recall intercepted: " + talker);
+                                                LogWriter.log(TAG, "recall recorded: " + talker + " -> " + (content.length() > 20 ? content.substring(0, 20) + "..." : content));
                                             }
+                                            // 尝试插入系统提示 "xxx撤回了一条消息"
+                                            tryInsertSystemTip(msgObj, talker);
                                         }
                                     } catch (Throwable ignored) {}
                                 }
@@ -55,6 +121,81 @@ public class AntiRecallHook {
                 }
             } catch (Throwable ignored) {}
         }
+    }
+
+    /**
+     * 尝试在聊天中插入 "某某某撤回了一条消息" 的系统提示
+     */
+    private static void tryInsertSystemTip(Object recallMsg, String talkerWxid) {
+        try {
+            // 尝试拿到原消息的 talker（聊天对象）
+            String convTalker = getField(recallMsg, "field_talker", "talker", "getTalker");
+            if (convTalker == null) return;
+
+            // 取撤回者显示名
+            String displayName = talkerWxid;
+            try {
+                java.util.List<com.leshao.v3.model.Contact> contacts =
+                    com.leshao.v3.db.ContactRepository.getAll();
+                if (contacts != null) {
+                    for (com.leshao.v3.model.Contact ct : contacts) {
+                        if (talkerWxid != null && talkerWxid.equals(ct.wxid)) {
+                            displayName = ct.displayName();
+                            break;
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+
+            String tipText = displayName + " 撤回了一条消息";
+
+            // 调用 WeChat 内部 API 插入系统消息:
+            // 方法1: com.tencent.mm.model.br.a(String convTalker, long time, cc msg)
+            // 方法2: com.tencent.mm.modelmulti.p.c(String convTalker, cc msg, boolean)
+            ClassLoader cl = ContextManager.getClassLoader();
+            try {
+                // 尝试通过 modelmulti 插入
+                Class<?> mmCls = cl.loadClass("com.tencent.mm.modelmulti.p");
+                if (mmCls != null) {
+                    // 找 insert 方法: 通常签名 (String, cc, boolean) 或 (String, cc)
+                    for (java.lang.reflect.Method mm : mmCls.getDeclaredMethods()) {
+                        Class<?>[] pts = mm.getParameterTypes();
+                        if (pts.length >= 2 && pts[0] == String.class) {
+                            // 创建一个简单的系统消息
+                            Class<?> msgCls = null;
+                            try { msgCls = cl.loadClass("com.tencent.mm.storage.cc"); }
+                            catch (Throwable e2) {
+                                try { msgCls = cl.loadClass("com.tencent.mm.storage.bv"); }
+                                catch (Throwable e3) {}
+                            }
+                            if (msgCls != null) {
+                                Object sysMsg = msgCls.newInstance();
+                                // setContent(tipText)
+                                trySetField(sysMsg, "field_content", tipText);
+                                trySetField(sysMsg, "field_type", 10000);
+                                trySetField(sysMsg, "field_isSend", 0);
+                                trySetField(sysMsg, "field_createTime", System.currentTimeMillis());
+                                trySetField(sysMsg, "field_talker", convTalker);
+
+                                mm.invoke(null, convTalker, sysMsg, false);
+                                LogWriter.log(TAG, "system tip inserted: " + tipText);
+                                break;
+                            }
+                        }
+                    }
+                }
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "insert system tip failed: " + e.getMessage());
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static void trySetField(Object obj, String fieldName, Object value) {
+        try {
+            java.lang.reflect.Field f = obj.getClass().getDeclaredField(fieldName);
+            f.setAccessible(true);
+            f.set(obj, value);
+        } catch (Throwable ignored) {}
     }
 
     private static Object findRecallMsg(Object[] args) {
