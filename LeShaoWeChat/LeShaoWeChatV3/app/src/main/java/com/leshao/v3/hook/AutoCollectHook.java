@@ -3,7 +3,6 @@ package com.leshao.v3.hook;
 import android.app.Activity;
 import android.os.Handler;
 import android.os.Looper;
-import android.speech.tts.TextToSpeech;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
@@ -11,7 +10,9 @@ import android.widget.TextView;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.service.TTSBroadcaster;
 
+import java.lang.reflect.Field;
 import java.util.Calendar;
 import java.util.HashSet;
 import java.util.Set;
@@ -24,6 +25,7 @@ import de.robv.android.xposed.XposedHelpers;
 public class AutoCollectHook {
 
     private static final String TAG = "AutoCollect";
+    private static final String PKG_WECHAT = "com.tencent.mm";
 
     private static volatile boolean sEnabled = false;
     private static volatile boolean sPrivateEnabled = true;
@@ -38,7 +40,6 @@ public class AutoCollectHook {
     private static volatile Set<String> sFastPrivateWxids = new HashSet<>();
     private static volatile Set<String> sFastGroupIds = new HashSet<>();
     private static volatile boolean sTtsAnnounce = true;
-    private static volatile TextToSpeech sTts;
 
     private static final Handler sHandler = new Handler(Looper.getMainLooper());
     private static final AtomicBoolean sProcessing = new AtomicBoolean(false);
@@ -69,29 +70,99 @@ public class AutoCollectHook {
             return;
         }
         ClassLoader cl = ContextManager.getClassLoader();
-        initTts();
         hookReceiveUIs(cl);
         hookChatFragmentResume(cl);
-        LogWriter.log(TAG, "hooks installed");
+        hookTransferResult(cl);
+        LogWriter.log(TAG, "hooks installed (transfer result + UI auto-collect)");
     }
 
-    private static void initTts() {
+    // ==================== TTS: onSceneEnd 播报结果 ====================
+    public static void hookTransferResult(ClassLoader cl) {
         try {
-            android.content.Context ctx = ContextManager.getAppContext();
-            if (ctx == null) return;
-            sTts = new TextToSpeech(ctx, new TextToSpeech.OnInitListener() {
-                @Override
-                public void onInit(int status) {
-                    if (status == TextToSpeech.SUCCESS) {
-                        LogWriter.log(TAG, "TTS init OK");
+            Class<?> uiCls = cl.loadClass(PKG_WECHAT + ".plugin.remittance.ui.RemittanceDetailUI");
+            Class<?> m1Cls = cl.loadClass(PKG_WECHAT + ".modelbase.m1");
+            XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
+                int.class, int.class, String.class, m1Cls,
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            int errType = (int) param.args[0];
+                            int errCode = (int) param.args[1];
+                            if (errType != 0 || errCode != 0) return;
+                            if (!sTtsAnnounce) return;
+
+                            Object resp = param.args[3];
+                            String xml = reflectToString(resp);
+
+                            String feeStr = extractTag(xml, "fee");
+                            String sender = extractTag(xml, "payer_username");
+                            String desc = extractTag(xml, "pay_memo");
+
+                            if (sender == null) sender = reflectFieldByKeyword(param.thisObject, "payer", "sender", "fromuser");
+                            if (desc == null) desc = reflectFieldByKeyword(param.thisObject, "desc", "memo", "remark");
+
+                            if (feeStr == null || feeStr.isEmpty()) return;
+
+                            String yuan = RedPacketHook.fenToYuan(feeStr);
+                            TTSBroadcaster.announceTransfer(sender, yuan, desc);
+
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "onSceneEnd TTS err: " + t.getMessage());
+                        }
                     }
-                }
-            });
+                });
+            LogWriter.log(TAG, "transfer onSceneEnd hook OK");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "TTS init err: " + t.getMessage());
+            LogWriter.log(TAG, "transfer onSceneEnd hook FAILED: " + t.getClass().getSimpleName());
         }
     }
 
+    // ==================== TTS: 反射工具 ====================
+    private static String reflectToString(Object obj) {
+        if (obj == null) return null;
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (Field f : obj.getClass().getDeclaredFields()) {
+                f.setAccessible(true);
+                Object v = f.get(obj);
+                if (v instanceof String) {
+                    sb.append("<").append(f.getName()).append(">")
+                      .append((String) v)
+                      .append("</").append(f.getName()).append(">");
+                }
+            }
+            return sb.length() > 0 ? sb.toString() : obj.toString();
+        } catch (Exception e) { return obj.toString(); }
+    }
+
+    private static String reflectFieldByKeyword(Object obj, String... names) {
+        if (obj == null) return null;
+        for (String name : names) {
+            try {
+                for (Field f : obj.getClass().getDeclaredFields()) {
+                    f.setAccessible(true);
+                    if (f.getName().toLowerCase().contains(name.toLowerCase())) {
+                        Object v = f.get(obj);
+                        if (v instanceof String && !((String) v).isEmpty())
+                            return (String) v;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        return null;
+    }
+
+    private static String extractTag(String xml, String tag) {
+        if (xml == null) return null;
+        int s = xml.indexOf("<" + tag + ">");
+        if (s < 0) return null;
+        s += tag.length() + 2;
+        int e = xml.indexOf("</" + tag + ">", s);
+        return e > s ? xml.substring(s, e) : null;
+    }
+
+    // ==================== 自动收款 (保留) ====================
     private static boolean shouldCollect(String talker, String sender) {
         if (!sEnabled) return false;
         boolean isGroup = talker != null && talker.endsWith("@chatroom");
@@ -128,21 +199,6 @@ public class AutoCollectHook {
         return true;
     }
 
-    private static void announceCollect(Activity act, String talker, String sender, String amount) {
-        if (!sTtsAnnounce || sTts == null) return;
-        try {
-            String senderName = sender != null ? sender : "";
-            StringBuilder sb = new StringBuilder();
-            if (talker != null && talker.endsWith("@chatroom")) sb.append("群聊");
-            sb.append(senderName).append("的转账");
-            if (amount != null && !amount.isEmpty()) sb.append(amount).append("元");
-            sb.append("已收款");
-            sTts.speak(sb.toString(), TextToSpeech.QUEUE_FLUSH, null, "collect_" + System.currentTimeMillis());
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "TTS announce err: " + t.getMessage());
-        }
-    }
-
     private static int parseTimeToMin(String time) {
         try {
             String[] parts = time.split(":");
@@ -152,15 +208,14 @@ public class AutoCollectHook {
 
     private static void hookReceiveUIs(ClassLoader cl) {
         String[] uis = {
-            "com.tencent.mm.plugin.collection.ui.CollectionMainUI",
-            "com.tencent.mm.plugin.collection.ui.CollectionBusiUI",
-            "com.tencent.mm.plugin.order.ui.MallTransactionUI",
-            "com.tencent.mm.plugin.wallet.pay.ui.WalletPayUI",
+            PKG_WECHAT + ".plugin.collection.ui.CollectionMainUI",
+            PKG_WECHAT + ".plugin.collection.ui.CollectionBusiUI",
+            PKG_WECHAT + ".plugin.order.ui.MallTransactionUI",
+            PKG_WECHAT + ".plugin.wallet.pay.ui.WalletPayUI",
         };
         for (String cls : uis) {
             tryHookActivity(cl, cls);
         }
-        hookActivityCreate(cl);
     }
 
     private static void tryHookActivity(ClassLoader cl, String className) {
@@ -171,29 +226,9 @@ public class AutoCollectHook {
         } catch (Throwable ignored) {}
     }
 
-    private static void hookActivityCreate(ClassLoader cl) {
-        XposedBridge.hookAllMethods(Activity.class, "onCreate", new XC_MethodHook() {
-            @Override
-            protected void afterHookedMethod(MethodHookParam param) {
-                try {
-                    Activity act = (Activity) param.thisObject;
-                    String clsName = act.getClass().getName().toLowerCase();
-                    if (clsName.contains("collection") || clsName.contains("transaction")
-                        || clsName.contains("wallet") && clsName.contains("pay")) {
-                        sHandler.postDelayed(new Runnable() {
-                            @Override
-                            public void run() { clickCollectButton(act); }
-                        }, 150);
-                    }
-                } catch (Throwable ignored) {}
-            }
-        });
-    }
-
     private static void hookChatFragmentResume(ClassLoader cl) {
         try {
-            Class<?> chattingUI = XposedHelpers.findClass(
-                "com.tencent.mm.ui.chatting.ChattingUI", cl);
+            Class<?> chattingUI = XposedHelpers.findClass(PKG_WECHAT + ".ui.chatting.ChattingUI", cl);
             XposedBridge.hookAllMethods(chattingUI, "onResume", new ChatFragmentResumeHook());
             LogWriter.log(TAG, "[OK] ChattingUI.onResume()");
         } catch (Throwable e) {
@@ -206,9 +241,6 @@ public class AutoCollectHook {
         sProcessing.set(true);
         try {
             View root = activity.getWindow().getDecorView();
-            View amountView = findAmountView(root);
-            String amount = amountView instanceof TextView
-                ? ((TextView) amountView).getText().toString() : "";
             Button btn = findCollectButton(root);
             if (btn != null && btn.isEnabled() && isVisible(btn)) {
                 String talker = getTalkerFromActivity(activity);
@@ -217,29 +249,11 @@ public class AutoCollectHook {
                 String content = getContentFromActivity(activity);
                 if (!shouldCollectByContent(content)) { return; }
                 btn.performClick();
-                LogWriter.log(TAG, "clicked collect: " + amount);
-                announceCollect(activity, talker, sender, amount);
+                LogWriter.log(TAG, "auto-clicked collect button");
             }
         } catch (Throwable ignored) {} finally {
             sProcessing.set(false);
         }
-    }
-
-    private static View findAmountView(View v) {
-        if (v instanceof TextView) {
-            CharSequence t = ((TextView) v).getText();
-            if (t != null) {
-                String s = t.toString();
-                if (s.contains(".") || s.contains("元") || s.matches(".*\\d+\\..*")) return v;
-            }
-        }
-        if (v instanceof ViewGroup) {
-            for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) {
-                View found = findAmountView(((ViewGroup) v).getChildAt(i));
-                if (found != null) return found;
-            }
-        }
-        return null;
     }
 
     private static Button findCollectButton(View v) {
@@ -284,14 +298,6 @@ public class AutoCollectHook {
 
     private static String getContentFromActivity(Activity act) { return ""; }
 
-    public static void release() {
-        if (sTts != null) {
-            sTts.stop();
-            sTts.shutdown();
-            sTts = null;
-        }
-    }
-
     static class ReceiveOpenHook extends XC_MethodHook {
         private final boolean mIsCreate;
 
@@ -300,13 +306,11 @@ public class AutoCollectHook {
         @Override
         protected void afterHookedMethod(MethodHookParam param) {
             try {
+                if (!sEnabled) return;
                 Activity act = (Activity) param.thisObject;
                 sHandler.postDelayed(new Runnable() {
                     @Override
-                    public void run() {
-                        if (!sEnabled) return;
-                        clickCollectButton(act);
-                    }
+                    public void run() { clickCollectButton(act); }
                 }, mIsCreate ? 200 : 80);
             } catch (Throwable ignored) {}
         }

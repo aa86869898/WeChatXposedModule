@@ -19,6 +19,7 @@ import com.leshao.v3.hook.SettingsInjectProvider;
 import com.leshao.v3.hook.VoiceForwardHook;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.SchedulerService;
+import com.leshao.v3.service.TTSBroadcaster;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XposedBridge;
@@ -81,6 +82,9 @@ public class MainHook implements IXposedHookLoadPackage {
             SettingsEntryHook.hook(lpparam.classLoader);
             XposedBridge.log("LeShaoV3: SettingsEntryHook registered");
 
+            MessageHook.hook(lpparam.classLoader);
+            XposedBridge.log("LeShaoV3: MessageHook registered");
+
             ContextManager.setOnReadyCallback(new Runnable() {
                 @Override
                 public void run() {
@@ -108,6 +112,8 @@ public class MainHook implements IXposedHookLoadPackage {
                             }
                         }
 
+                        TTSBroadcaster.init(ctx);
+
                         HookManager.register(AntiDetectionHook::hook);
                         HookManager.register(AntiRecallHook::hook);
                         HookManager.register(RedPacketHook::hook);
@@ -127,7 +133,6 @@ public class MainHook implements IXposedHookLoadPackage {
                                 } catch (Throwable ignored) {}
                             }
                         });
-                        MessageHook.hook();
 
                         SchedulerService.start(ModuleConfig.load(ContextManager.getPrefs()));
 

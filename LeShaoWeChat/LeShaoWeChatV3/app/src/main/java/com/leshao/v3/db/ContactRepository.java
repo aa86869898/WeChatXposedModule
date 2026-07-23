@@ -35,6 +35,15 @@ public class ContactRepository {
     public static boolean isLoaded() { return sLoaded; }
     public static boolean isLoading() { return sLoading; }
 
+    public static Contact findByWxid(String wxid) {
+        if (wxid == null || wxid.isEmpty()) return null;
+        if (sAllContacts == null) return null;
+        for (Contact c : sAllContacts) {
+            if (wxid.equals(c.wxid)) return c;
+        }
+        return null;
+    }
+
     public static void forceReload() {
         if (sLoading) return;
         sLoaded = false;
