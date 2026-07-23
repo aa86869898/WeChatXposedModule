@@ -716,7 +716,7 @@ public class ThemeHook {
     private static void methodM_SettingsUI(ClassLoader cl) {
         try {
             Class<?> baseSetting = XposedHelpers.findClass(
-                "com.tencent.mm.ui.setting.BaseSettingUI", cl);
+                "com.tencent.mm.plugin.setting.ui.setting_new.base.BaseSettingUI", cl);
             XposedBridge.hookAllMethods(baseSetting, "onCreate",
                 new XC_MethodHook() {
                     @Override
@@ -867,8 +867,8 @@ public class ThemeHook {
             { "AddressUI", "com.tencent.mm.ui.contact.AddressUI", "contact", "" },
             { "FindMoreFriendsUI", "com.tencent.mm.ui.FindMoreFriendsUI", "discover", "" },
             { "WebViewUI", "com.tencent.mm.plugin.webview.ui.tools.WebViewUI", "webview", "" },
-            { "MainSettingsUI", "com.tencent.mm.ui.setting.MainSettingsUI", "setting", "" },
-            { "CommonSettingsUI", "com.tencent.mm.ui.setting.CommonSettingsUI", "setting", "" },
+            { "MainSettingsUI", "com.tencent.mm.plugin.setting.ui.setting_new.MainSettingsUI", "setting", "" },
+            { "CommonSettingsUI", "com.tencent.mm.plugin.setting.ui.setting_new.CommonSettingsUI", "setting", "" },
             { "BizConversationUI", "com.tencent.mm.ui.conversation.BizConversationUI", "biz", "" },
             { "SnsUserUI", "com.tencent.mm.plugin.sns.ui.SnsUserUI", "sns", "" },
             { "SnsCommentUI", "com.tencent.mm.plugin.sns.ui.SnsCommentUI", "sns", "" },
@@ -897,34 +897,14 @@ public class ThemeHook {
             } catch (Throwable t) { LogWriter.log(TAG, "[Q] " + tag + " err: " + t.getMessage()); }
         }
 
-        try {
-            Class<?> convAdapter = XposedHelpers.findClass(
-                "com.tencent.mm.ui.conversation.ConversationAdapter", cl);
-            XposedBridge.hookAllMethods(convAdapter, "getView", new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        try {
-                            if (!sMasterEnabled || !sConvListOn) return;
-                            View v = (View) param.getResult();
-                            if (v != null) {
-                                v.setBackgroundColor(sPageBg);
-                                if (v instanceof ViewGroup)
-                                    colorTexts((ViewGroup) v, sTextPrimary);
-                            }
-                        } catch (Throwable ignored) {}
-                    }
-                });
-            LogWriter.log(TAG, "[Q] ConversationAdapter ok");
-        } catch (Throwable t) { LogWriter.log(TAG, "[Q] ConversationAdapter err: " + t.getMessage()); }
-
         String[][] viewHooks = {
             { "ConversationListView", "com.tencent.mm.ui.conversation.ConversationListView" },
             { "ConversationFolderItemView", "com.tencent.mm.ui.conversation.ConversationFolderItemView" },
             { "MainUIView", "com.tencent.mm.ui.conversation.MainUIView" },
-            { "ChattingItemFooter", "com.tencent.mm.ui.chatting.component.ChattingItemFooter" },
+            { "ChattingItemFooter", "com.tencent.mm.ui.chatting.viewitems.ChattingItemFooter" },
             { "SnsHeader", "com.tencent.mm.plugin.sns.ui.SnsHeader" },
             { "SnsCollapsibleTextView", "com.tencent.mm.plugin.sns.ui.SnsCollapsibleTextView" },
-            { "TimelineCommentView", "com.tencent.mm.plugin.sns.ui.TimelineCommentView" },
+            { "TimelineCommentView", "com.tencent.mm.plugin.sns.ui.item.improve.recycle.TimelineCommentView" },
             { "LauncherUIBottomTabView", "com.tencent.mm.ui.LauncherUIBottomTabView" },
         };
         for (String[] entry : viewHooks) {

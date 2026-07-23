@@ -134,8 +134,11 @@ public class ContactRepository {
     }
 
     private static boolean tryQueries(Object db) {
-        return queryContacts(db, "SELECT username, alias, conRemark, nickname, type FROM rcontact WHERE deleteFlag=0 AND (type & 1 != 0)")
-            || queryContacts(db, "SELECT username, alias, conRemark, nickname, type FROM Contact");
+        return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag"
+            + " FROM rcontact"
+            + " WHERE type IN (0,1) AND verifyFlag=0"
+            + " AND username NOT LIKE 'gh_%'"
+            + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, username");
     }
 
     private static Object waitForDatabase(long timeoutMs) {
@@ -761,6 +764,52 @@ public class ContactRepository {
         if (wxid.contains("@im.chatroom")) return true;
         if (wxid.startsWith("qqmail_")) return true;
         return false;
+    }
+
+    public static String queryNickFromDB(String wxid) {
+        if (wxid == null || wxid.isEmpty()) return null;
+        Object db = DatabaseProvider.getDatabase();
+        if (db == null) {
+            LogWriter.log(TAG, "queryNickFromDB: DB is null");
+            return null;
+        }
+
+        Object cursor = null;
+        try {
+            cursor = XposedHelpers.callMethod(db, "rawQuery",
+                "SELECT conRemark, nickname FROM rcontact WHERE username=?",
+                new String[]{wxid});
+            if (cursor == null) {
+                LogWriter.log(TAG, "queryNickFromDB: cursor is null for " + truncate(wxid));
+                return null;
+            }
+
+            int ciR = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "conRemark");
+            int ciN = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "nickname");
+
+            String name = null;
+            while ((Boolean) XposedHelpers.callMethod(cursor, "moveToNext")) {
+                String r = colStr(cursor, ciR);
+                String n = colStr(cursor, ciN);
+                if (r != null && !r.isEmpty()) name = r;
+                else if (n != null && !n.isEmpty()) name = n;
+                break;
+            }
+            XposedHelpers.callMethod(cursor, "close");
+            LogWriter.log(TAG, "queryNickFromDB: " + truncate(wxid) + " → " + name);
+            return name;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "queryNickFromDB err: " + t.getMessage());
+            return null;
+        } finally {
+            if (cursor != null) {
+                try { XposedHelpers.callMethod(cursor, "close"); } catch (Throwable ignored) {}
+            }
+        }
+    }
+
+    private static String truncate(String s) {
+        return s == null ? "" : s.length() > 30 ? s.substring(0, 27) + "..." : s;
     }
 
     private static String colStr(Object cursor, int idx) {

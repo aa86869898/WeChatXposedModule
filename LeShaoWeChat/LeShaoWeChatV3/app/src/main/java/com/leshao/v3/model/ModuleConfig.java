@@ -297,6 +297,15 @@ public class ModuleConfig {
         } catch (Exception e) {}
         cfg.antiRecall = prefs.getBoolean("ls_recall_enabled", false);
 
+        cfg.announceWhitelist.clear();
+        String wlStr = prefs.getString("ls_tts_whitelist", "");
+        if (!wlStr.isEmpty()) {
+            for (String id : wlStr.split(",")) {
+                String t = id.trim();
+                if (!t.isEmpty()) cfg.announceWhitelist.add(t);
+            }
+        }
+
         return cfg;
     }
 
@@ -417,6 +426,14 @@ public class ModuleConfig {
         JSONArray gmArr = new JSONArray();
         for (String g : groupManageList) gmArr.put(g);
         e.putString("ls_group_manage_list", gmArr.toString());
+
+        StringBuilder wlSb = new StringBuilder();
+        for (String id : announceWhitelist) {
+            if (wlSb.length() > 0) wlSb.append(",");
+            wlSb.append(id);
+        }
+        e.putString("ls_tts_whitelist", wlSb.toString());
+
         e.apply();
     }
 

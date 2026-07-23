@@ -5,7 +5,6 @@ import android.os.Looper;
 
 import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.db.DatabaseProvider;
-import com.leshao.v3.dispatch.MessageDispatcher;
 import com.leshao.v3.hook.AntiRecallHook;
 import com.leshao.v3.hook.AntiDetectionHook;
 import com.leshao.v3.hook.AutoCollectHook;
@@ -123,16 +122,6 @@ public class MainHook implements IXposedHookLoadPackage {
                         HookManager.register(VoiceForwardHook::hook);
 
                         HookManager.activateAll();
-
-                        MessageHook.setCallback(new MessageHook.MessageCallback() {
-                            @Override
-                            public void onMessage(com.leshao.v3.model.WeChatMessage msg) {
-                                try {
-                                    ModuleConfig cfg = ModuleConfig.load(ContextManager.getPrefs());
-                                    MessageDispatcher.dispatch(msg, cfg);
-                                } catch (Throwable ignored) {}
-                            }
-                        });
 
                         SchedulerService.start(ModuleConfig.load(ContextManager.getPrefs()));
 

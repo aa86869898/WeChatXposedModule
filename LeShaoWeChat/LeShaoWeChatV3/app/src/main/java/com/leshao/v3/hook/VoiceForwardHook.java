@@ -34,8 +34,10 @@ public class VoiceForwardHook {
 
         hookChattingUIContextMenu(cl);
 
+        hookBaseChattingUIFragment(cl);
+
         sHooked = true;
-        LogWriter.log(TAG, "hooks installed (A+B scheme)");
+        LogWriter.log(TAG, "hooks installed (A+B+C scheme)");
     }
 
     // ===== A方案: Hook ChattingUI context menu =====
@@ -57,39 +59,7 @@ public class VoiceForwardHook {
                 }
             });
 
-            try {
-                Class<?>[] paramTypes = new Class<?>[]{
-                    ContextMenu.class, android.view.View.class, ContextMenu.ContextMenuInfo.class
-                };
-                XposedHelpers.findAndHookMethod(chattingUI, "onCreateContextMenu",
-                    ContextMenu.class, android.view.View.class,
-                    ContextMenu.ContextMenuInfo.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            if (!sEnabled) return;
-                            try {
-                                ContextMenu menu = (ContextMenu) param.args[0];
-                                android.view.View v = (android.view.View) param.args[1];
-                                tryCaptureVoiceMsg(v);
-                            } catch (Throwable ignored) {}
-                        }
-
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            if (!sEnabled) return;
-                            try {
-                                if (sPendingMsg == null && sPendingTalker == null) return;
-                                ContextMenu menu = (ContextMenu) param.args[0];
-                                menu.add("语音转发");
-                                LogWriter.log(TAG, "A-scheme: added voice fwd menu item");
-                            } catch (Throwable ignored) {}
-                        }
-                    });
-                LogWriter.log(TAG, "A-scheme: context menu hooked");
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "A-scheme context menu not found: " + t.getMessage());
-            }
+            // A-scheme: removed per fix5 (findMethodExact failing, C-scheme covers it)
 
             XposedBridge.hookAllMethods(chattingUI, "onContextItemSelected", new XC_MethodHook() {
                 @Override
@@ -111,6 +81,53 @@ public class VoiceForwardHook {
 
         } catch (Throwable t) {
             LogWriter.log(TAG, "A-scheme failed: " + t.getMessage());
+        }
+    }
+
+    // ===== C方案: Hook BaseChattingUIFragment RecyclerView长按 =====
+    private static void hookBaseChattingUIFragment(ClassLoader cl) {
+        try {
+            Class<?> fragmentCls = cl.loadClass("com.tencent.mm.ui.chatting.BaseChattingUIFragment");
+            XposedHelpers.findAndHookMethod(fragmentCls, "onCreateView",
+                android.view.LayoutInflater.class,
+                android.view.ViewGroup.class,
+                android.os.Bundle.class,
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            android.view.View root = (android.view.View) param.getResult();
+                            if (root == null) return;
+                            setLongClickListener(root);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            LogWriter.log(TAG, "C-scheme: BaseChattingUIFragment hook OK");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "C-scheme: " + t.getMessage());
+        }
+    }
+
+    private static void setLongClickListener(android.view.View view) {
+        if (view instanceof android.widget.ListView) {
+            ((android.widget.ListView) view).setOnItemLongClickListener(
+                (parent, v, position, id) -> {
+                    if (!sEnabled) return false;
+                    try {
+                        tryCaptureVoiceMsg(v);
+                        if (sPendingMsg != null) {
+                            LogWriter.log(TAG, "C-scheme: captured via long click, pos=" + position);
+                        }
+                    } catch (Throwable ignored) {}
+                    return false;
+                });
+            return;
+        }
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup vg = (android.view.ViewGroup) view;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                setLongClickListener(vg.getChildAt(i));
+            }
         }
     }
 

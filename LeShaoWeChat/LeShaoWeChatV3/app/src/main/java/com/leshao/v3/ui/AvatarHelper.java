@@ -24,6 +24,8 @@ public class AvatarHelper {
     private static final String TAG = "AvatarHelper";
     private static String sAccountDir;
     private static volatile boolean sInited = false;
+    private static volatile Class<?> sCachedJ1Class = null;
+    private static volatile boolean sJ1InitDone = false;
 
     private static final int MAX_CACHE = 80;
     private static final Map<String, Bitmap> sCache = new LinkedHashMap<String, Bitmap>() {
@@ -40,6 +42,9 @@ public class AvatarHelper {
             try {
                 Context ctx = ContextManager.getAppContext();
                 if (ctx == null) return;
+
+                ClassLoader cl = ContextManager.getClassLoader();
+                if (cl != null) initJ1OnMainThread(cl);
 
                 sAccountDir = findAccountDir(ctx);
                 if (sAccountDir != null && !sAccountDir.isEmpty()) {
@@ -70,12 +75,27 @@ public class AvatarHelper {
         return null;
     }
 
+    private static void initJ1OnMainThread(ClassLoader cl) {
+        if (sJ1InitDone) return;
+        synchronized (AvatarHelper.class) {
+            if (sJ1InitDone) return;
+            try {
+                sCachedJ1Class = cl.loadClass("j1");
+                sCachedJ1Class.getDeclaredMethod("u").setAccessible(true);
+                sCachedJ1Class.getDeclaredMethod("h").setAccessible(true);
+                LogWriter.log(TAG, "j1 Class cached on main thread OK");
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "j1 Class not available: " + e.getMessage());
+            }
+            sJ1InitDone = true;
+        }
+    }
+
     private static String tryMethodA() {
         try {
-            ClassLoader cl = ContextManager.getClassLoader();
-            Class<?> j1 = cl.loadClass("j1");
-            Object uInstance = j1.getDeclaredMethod("u").invoke(null);
-            String path = (String) j1.getDeclaredMethod("h").invoke(uInstance);
+            if (sCachedJ1Class == null) return null;
+            Object uInstance = sCachedJ1Class.getDeclaredMethod("u").invoke(null);
+            String path = (String) sCachedJ1Class.getDeclaredMethod("h").invoke(uInstance);
             if (path != null && !path.isEmpty()) {
                 LogWriter.log(TAG, "MethodA (j1.u().h()) OK: " + path);
                 return path;

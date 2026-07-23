@@ -2,7 +2,12 @@ package com.leshao.v3.service;
 
 import com.leshao.v3.model.ModuleConfig;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 public class MessageHandler {
+
+    private static final Pattern SENDER_PREFIX = Pattern.compile("^(wxid_[a-zA-Z0-9]+):\\s*");
 
     private final TtsEngine mTts;
     private final FilterManager mFilter;
@@ -17,20 +22,39 @@ public class MessageHandler {
     public void handle(Object msgInfo, int msgType, String talker, String content, ModuleConfig cfg) {
         if (!mFilter.shouldProcess(talker, msgType, content, cfg)) return;
 
-        String displayName = mNick.resolveDisplayName(talker);
         boolean isGroup = talker != null && talker.endsWith("@chatroom");
+        String displayName;
+        String effectiveContent = content;
+
+        if (isGroup) {
+            String groupName = mNick.resolveDisplayName(talker);
+            String senderWxid = extractSenderWxid(content);
+            if (senderWxid != null) {
+                effectiveContent = removeSenderPrefix(content);
+                String senderName = mNick.resolveDisplayName(senderWxid);
+                if (senderName.equals(senderWxid)) {
+                    displayName = groupName + "群" + "群成员";
+                } else {
+                    displayName = groupName + "群" + senderName;
+                }
+            } else {
+                displayName = groupName + "群";
+            }
+        } else {
+            displayName = mNick.resolveDisplayName(talker);
+        }
 
         switch (msgType) {
-            case 1:  handleText(displayName, content, isGroup, cfg); break;
-            case 3:  handleImage(displayName, isGroup); break;
-            case 34: handleVoice(displayName, isGroup); break;
-            case 43: handleVideo(displayName, isGroup); break;
-            case 48: handleLocation(displayName, content, isGroup); break;
-            case 49: handleAppMsg(displayName, content, isGroup); break;
+            case 1:  handleText(displayName, effectiveContent, cfg); break;
+            case 3:  handleImage(displayName); break;
+            case 34: handleVoice(displayName); break;
+            case 43: handleVideo(displayName); break;
+            case 48: handleLocation(displayName, effectiveContent); break;
+            case 49: handleAppMsg(displayName, effectiveContent); break;
         }
     }
 
-    private void handleText(String name, String text, boolean isGroup, ModuleConfig cfg) {
+    private void handleText(String name, String text, ModuleConfig cfg) {
         String cleaned = cleanText(text);
         if (cleaned.isEmpty()) return;
 
@@ -38,46 +62,34 @@ public class MessageHandler {
             cleaned = cleaned.substring(0, cfg.textCutoffLen) + "等长内容";
         }
 
-        String speak = isGroup ? groupPrefix(name, isGroup) + "说：" + cleaned
-                               : name + "说：" + cleaned;
-        mTts.speak(speak);
+        mTts.speak(name + "说：" + cleaned);
     }
 
-    private void handleVoice(String name, boolean isGroup) {
-        String speak = isGroup ? groupPrefix(name, isGroup) + "发来语音，请在手机上收听"
-                               : name + "发来语音，请在手机上收听";
-        mTts.speak(speak);
+    private void handleVoice(String name) {
+        mTts.speak(name + "发来语音，请在手机上收听");
     }
 
-    private void handleImage(String name, boolean isGroup) {
-        String speak = isGroup ? groupPrefix(name, isGroup) + "发来一张照片"
-                               : name + "发来一张照片";
-        mTts.speak(speak);
+    private void handleImage(String name) {
+        mTts.speak(name + "发来一张照片");
     }
 
-    private void handleVideo(String name, boolean isGroup) {
-        String speak = isGroup ? groupPrefix(name, isGroup) + "发来一段视频"
-                               : name + "发来一段视频";
-        mTts.speak(speak);
+    private void handleVideo(String name) {
+        mTts.speak(name + "发来一段视频");
     }
 
-    private void handleLocation(String name, String content, boolean isGroup) {
+    private void handleLocation(String name, String content) {
         String loc = parseLocation(content);
-        String speak = isGroup ? groupPrefix(name, isGroup) + "发来定位在：" + loc
-                               : name + "发来定位在：" + loc;
-        mTts.speak(speak);
+        mTts.speak(name + "发来定位在：" + loc);
     }
 
-    private void handleAppMsg(String name, String content, boolean isGroup) {
+    private void handleAppMsg(String name, String content) {
         if (content == null) return;
         if (content.contains("<location")) {
-            handleLocation(name, content, isGroup);
+            handleLocation(name, content);
             return;
         }
         if (content.contains("luckymoney") || content.contains("lucky money")) {
-            String speak = isGroup ? groupPrefix(name, isGroup) + "发来一个红包"
-                                   : name + "发来一个红包";
-            mTts.speak(speak);
+            mTts.speak(name + "发来一个红包");
         }
     }
 
@@ -122,7 +134,15 @@ public class MessageHandler {
         return "未知位置";
     }
 
-    private String groupPrefix(String name, boolean isGroup) {
-        return isGroup ? "群聊的" : name;
+    static String extractSenderWxid(String content) {
+        if (content == null) return null;
+        Matcher m = SENDER_PREFIX.matcher(content);
+        return m.find() ? m.group(1) : null;
+    }
+
+    static String removeSenderPrefix(String content) {
+        if (content == null) return "";
+        Matcher m = SENDER_PREFIX.matcher(content);
+        return m.find() ? content.substring(m.end()) : content;
     }
 }
