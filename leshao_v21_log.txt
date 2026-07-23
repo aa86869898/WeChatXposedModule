@@ -1,0 +1,419 @@
+07-21 02:46:53.863 ═══ 乐少助手 v2.1 日志启动(early) ═══
+07-21 02:46:53.864 >>> handleLoadPackage: com.tencent.mm (pid=17206)
+07-21 02:46:53.864 >>> processName=com.tencent.mm:push
+07-21 02:46:53.865 ━━━ START v2.1 wx= (3140) ━━━
+07-21 02:46:53.876 Hook LauncherUI.onCreate OK
+07-21 02:46:53.877 Hook LauncherUI.onResume OK
+07-21 02:46:53.878 Hook LauncherUI.onPostResume skip (may be expected): NoSuchMethodError
+07-21 02:46:53.879 Hook Activity.onCreate for settings OK
+07-21 02:46:53.879 Hook Activity.onDestroy for card reset OK
+07-21 02:46:53.880 Hook Activity.onResume OK
+07-21 02:46:53.881 Hook dispatchKeyEvent OK
+07-21 02:46:53.882 Hook LauncherUI.onKeyDown err: com.tencent.mm.ui.LauncherUI#onKeyDown[int, class android.view.KeyEvent]#exact
+07-21 02:46:53.882 Hook LauncherUI.onKeyUp err: com.tencent.mm.ui.LauncherUI#onKeyUp[int, class android.view.KeyEvent]#exact
+07-21 02:46:53.883 Hook Activity.onKeyDown OK
+07-21 02:46:53.884 Hook Activity.onKeyUp OK
+07-21 02:46:53.885 ━━━ hooks registered ━━━
+07-21 02:46:54.109 Context from MMAppLike OK
+07-21 02:46:54.326 ═══ 乐少助手 v2.1 日志启动(early) ═══
+07-21 02:46:54.327 >>> handleLoadPackage: com.tencent.mm (pid=10353)
+07-21 02:46:54.327 >>> processName=com.tencent.mm
+07-21 02:46:54.328 ━━━ START v2.1 wx= (3140) ━━━
+07-21 02:46:54.330 Hook LauncherUI.onCreate OK
+07-21 02:46:54.331 Hook LauncherUI.onResume OK
+07-21 02:46:54.331 Hook LauncherUI.onPostResume skip (may be expected): NoSuchMethodError
+07-21 02:46:54.332 Hook Activity.onCreate for settings OK
+07-21 02:46:54.332 Hook Activity.onDestroy for card reset OK
+07-21 02:46:54.333 Hook Activity.onResume OK
+07-21 02:46:54.334 Hook dispatchKeyEvent OK
+07-21 02:46:54.334 Hook LauncherUI.onKeyDown err: com.tencent.mm.ui.LauncherUI#onKeyDown[int, class android.view.KeyEvent]#exact
+07-21 02:46:54.334 Hook LauncherUI.onKeyUp err: com.tencent.mm.ui.LauncherUI#onKeyUp[int, class android.view.KeyEvent]#exact
+07-21 02:46:54.335 Hook Activity.onKeyDown OK
+07-21 02:46:54.336 Hook Activity.onKeyUp OK
+07-21 02:46:54.336 ━━━ hooks registered ━━━
+07-21 02:46:54.497 Context from MMAppLike OK
+07-21 02:46:54.995 LauncherUI.onCreate — start injection
+07-21 02:46:55.008 Fallback LauncherUI.onResume
+07-21 02:46:55.178 LauncherUI.onResume — start injection
+07-21 02:46:55.827 ═══ 乐少助手 v2.1 日志启动(early) ═══
+07-21 02:46:55.828 >>> handleLoadPackage: com.tencent.mm (pid=17913)
+07-21 02:46:55.829 >>> processName=com.tencent.mm:appbrand0
+07-21 02:46:55.829 ━━━ START v2.1 wx= (3140) ━━━
+07-21 02:46:55.832 Hook LauncherUI.onCreate OK
+07-21 02:46:55.833 Hook LauncherUI.onResume OK
+07-21 02:46:55.833 Hook LauncherUI.onPostResume skip (may be expected): NoSuchMethodError
+07-21 02:46:55.834 Hook Activity.onCreate for settings OK
+07-21 02:46:55.835 Hook Activity.onDestroy for card reset OK
+07-21 02:46:55.835 Hook Activity.onResume OK
+07-21 02:46:55.836 Hook dispatchKeyEvent OK
+07-21 02:46:55.836 Hook LauncherUI.onKeyDown err: com.tencent.mm.ui.LauncherUI#onKeyDown[int, class android.view.KeyEvent]#exact
+07-21 02:46:55.836 Hook LauncherUI.onKeyUp err: com.tencent.mm.ui.LauncherUI#onKeyUp[int, class android.view.KeyEvent]#exact
+07-21 02:46:55.837 Hook Activity.onKeyDown OK
+07-21 02:46:55.838 Hook Activity.onKeyUp OK
+07-21 02:46:55.838 ━━━ hooks registered ━━━
+07-21 02:46:55.886 Context delay: done r=0
+07-21 02:46:55.998 tabInjection: root=DecorView
+07-21 02:46:55.998 DecorView
+07-21 02:46:55.998   LinearLayout
+07-21 02:46:55.998     ViewStub id=action_mode_bar_stub
+07-21 02:46:55.999     FitSystemWindowLayoutView
+07-21 02:46:55.999       DynamicBgContainer
+07-21 02:46:55.999       GradientColorBackgroundView
+07-21 02:46:55.999       e
+07-21 02:46:56.000   View id=statusBarBackground
+07-21 02:46:56.000   l
+07-21 02:46:56.000   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:56.009 tabInjection: root=DecorView
+07-21 02:46:56.009 DecorView
+07-21 02:46:56.009   LinearLayout
+07-21 02:46:56.010     ViewStub id=action_mode_bar_stub
+07-21 02:46:56.010     FitSystemWindowLayoutView
+07-21 02:46:56.010       DynamicBgContainer
+07-21 02:46:56.010       GradientColorBackgroundView
+07-21 02:46:56.011       e
+07-21 02:46:56.012   View id=statusBarBackground
+07-21 02:46:56.012   l
+07-21 02:46:56.012   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:56.135 hookMsg a2 class found
+07-21 02:46:56.136 hookMsg matched method b(3 params)
+07-21 02:46:56.137 Anti-recall disabled
+07-21 02:46:56.137 RedPacket disabled
+07-21 02:46:56.137 AutoAcceptFriend disabled
+07-21 02:46:56.139 ChatroomEvents FAILED — all class names tried
+07-21 02:46:56.140 MemberChange FAILED — no class found
+07-21 02:46:56.140 WeChatHooks OK
+07-21 02:46:56.168 Context from MMAppLike OK
+07-21 02:46:56.203 tabInjection: root=DecorView
+07-21 02:46:56.203 DecorView
+07-21 02:46:56.203   LinearLayout
+07-21 02:46:56.204     ViewStub id=action_mode_bar_stub
+07-21 02:46:56.204     FitSystemWindowLayoutView
+07-21 02:46:56.204       DynamicBgContainer
+07-21 02:46:56.204       GradientColorBackgroundView
+07-21 02:46:56.205       e
+07-21 02:46:56.205   View id=statusBarBackground
+07-21 02:46:56.205   l
+07-21 02:46:56.206   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:56.350 Context delay: done r=0
+07-21 02:46:56.418 ═══ 乐少助手 v2.1 日志启动(early) ═══
+07-21 02:46:56.419 >>> handleLoadPackage: com.tencent.mm (pid=17938)
+07-21 02:46:56.419 >>> processName=com.tencent.mm:appbrand1
+07-21 02:46:56.421 ━━━ START v2.1 wx= (3140) ━━━
+07-21 02:46:56.426 Hook LauncherUI.onCreate OK
+07-21 02:46:56.427 Hook LauncherUI.onResume OK
+07-21 02:46:56.428 Hook LauncherUI.onPostResume skip (may be expected): NoSuchMethodError
+07-21 02:46:56.429 Hook Activity.onCreate for settings OK
+07-21 02:46:56.430 Hook Activity.onDestroy for card reset OK
+07-21 02:46:56.430 Hook Activity.onResume OK
+07-21 02:46:56.432 Hook dispatchKeyEvent OK
+07-21 02:46:56.433 Hook LauncherUI.onKeyDown err: com.tencent.mm.ui.LauncherUI#onKeyDown[int, class android.view.KeyEvent]#exact
+07-21 02:46:56.437 Hook LauncherUI.onKeyUp err: com.tencent.mm.ui.LauncherUI#onKeyUp[int, class android.view.KeyEvent]#exact
+07-21 02:46:56.439 Hook Activity.onKeyDown OK
+07-21 02:46:56.440 Hook Activity.onKeyUp OK
+07-21 02:46:56.441 ━━━ hooks registered ━━━
+07-21 02:46:56.468 TTS: 引擎初始化成功
+07-21 02:46:56.505 hookMsg a2 class found
+07-21 02:46:56.506 hookMsg matched method b(3 params)
+07-21 02:46:56.642 Anti-recall disabled
+07-21 02:46:56.642 RedPacket disabled
+07-21 02:46:56.643 AutoAcceptFriend disabled
+07-21 02:46:56.645 ChatroomEvents FAILED — all class names tried
+07-21 02:46:56.647 MemberChange FAILED — no class found
+07-21 02:46:56.647 WeChatHooks OK
+07-21 02:46:56.659 TTS: 引擎初始化成功
+07-21 02:46:56.824 Settings page: MainSettingsUI
+07-21 02:46:56.843 Context from MMAppLike OK
+07-21 02:46:56.849 Fallback Settings activity: MainSettingsUI
+07-21 02:46:57.496 DecorView
+07-21 02:46:57.497   LinearLayout
+07-21 02:46:57.497     ViewStub id=action_mode_bar_stub
+07-21 02:46:57.497     FitSystemWindowLayoutView
+07-21 02:46:57.498       DynamicBgContainer
+07-21 02:46:57.498       GradientColorBackgroundView
+07-21 02:46:57.499       e
+07-21 02:46:57.499   View id=statusBarBackground
+07-21 02:46:57.499   l
+07-21 02:46:57.500   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:57.509 DecorView
+07-21 02:46:57.509   LinearLayout
+07-21 02:46:57.510     ViewStub id=action_mode_bar_stub
+07-21 02:46:57.510     FitSystemWindowLayoutView
+07-21 02:46:57.510       DynamicBgContainer
+07-21 02:46:57.511       GradientColorBackgroundView
+07-21 02:46:57.511       e
+07-21 02:46:57.512   View id=statusBarBackground
+07-21 02:46:57.516   l
+07-21 02:46:57.517   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:57.679 DecorView
+07-21 02:46:57.680   LinearLayout
+07-21 02:46:57.681     ViewStub id=action_mode_bar_stub
+07-21 02:46:57.682     FitSystemWindowLayoutView
+07-21 02:46:57.683       DynamicBgContainer
+07-21 02:46:57.683       GradientColorBackgroundView
+07-21 02:46:57.684       e
+07-21 02:46:57.685   View id=statusBarBackground
+07-21 02:46:57.686   l
+07-21 02:46:57.687   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:57.839 Context delay: done r=0
+07-21 02:46:58.101   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:58.118   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:58.149 MSG type=1 talker=48321925870@chatroom sender=48321925870@chatroom content=wxid_mfq0pdkff4bz22:
+贼头庄之佳，琢磨我吐出血在监狱里。
+07-21 02:46:58.150 CMD check: ct=贼头庄之佳，琢磨我吐出血在监狱里。
+07-21 02:46:58.172 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:46:58.172 findKernelClass: ALL attempts exhausted!
+07-21 02:46:58.173 hookMsg a2 class found
+07-21 02:46:58.173 hookMsg matched method b(3 params)
+07-21 02:46:58.175 Anti-recall disabled
+07-21 02:46:58.175 RedPacket disabled
+07-21 02:46:58.175 AutoAcceptFriend disabled
+07-21 02:46:58.177 ChatroomEvents FAILED — all class names tried
+07-21 02:46:58.179 MemberChange FAILED — no class found
+07-21 02:46:58.180 WeChatHooks OK
+07-21 02:46:58.189 TTS: 引擎初始化成功
+07-21 02:46:58.191 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:46:58.191 findKernelClass: ALL attempts exhausted!
+07-21 02:46:58.210 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:46:58.211 findKernelClass: ALL attempts exhausted!
+07-21 02:46:58.211 📢 #1 [群] 48321925870 说 消息
+07-21 02:46:58.211 TTS: 队列+1 size=1 speaking=false
+07-21 02:46:58.211 TTS[wusound]: 48321925870 说 消息
+07-21 02:46:58.289   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:58.324 injectSettingsCard: root=DecorView
+07-21 02:46:58.325   Settings scroll container found: NestedScrollView
+07-21 02:46:58.329   Settings card inserted at index 0
+07-21 02:46:58.330 Settings card injected OK
+07-21 02:46:58.441 Context delay: done r=0
+07-21 02:46:58.704   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:58.722   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:58.851   Found '插件' in settings, injecting
+07-21 02:46:58.853 ✅ Settings entry injected near 插件
+07-21 02:46:58.858 hookMsg a2 class found
+07-21 02:46:58.859 hookMsg matched method b(3 params)
+07-21 02:46:58.862 Anti-recall disabled
+07-21 02:46:58.862 RedPacket disabled
+07-21 02:46:58.863 AutoAcceptFriend disabled
+07-21 02:46:58.866 ChatroomEvents FAILED — all class names tried
+07-21 02:46:58.867 MemberChange FAILED — no class found
+07-21 02:46:58.868 WeChatHooks OK
+07-21 02:46:58.875 TTS: 引擎初始化成功
+07-21 02:46:58.890   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:59.308   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:59.323   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:59.407 showMainPanel 开始构建...
+07-21 02:46:59.434 showMainPanel 弹窗完成
+07-21 02:46:59.492   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:59.912   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:46:59.926   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:00.096   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:00.516 DecorView
+07-21 02:47:00.518   LinearLayout
+07-21 02:47:00.520     ViewStub id=action_mode_bar_stub
+07-21 02:47:00.522     FitSystemWindowLayoutView
+07-21 02:47:00.523       DynamicBgContainer
+07-21 02:47:00.524       GradientColorBackgroundView
+07-21 02:47:00.525       e
+07-21 02:47:00.527   View id=statusBarBackground
+07-21 02:47:00.528   l
+07-21 02:47:00.530   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:00.530 DecorView
+07-21 02:47:00.531   LinearLayout
+07-21 02:47:00.532     ViewStub id=action_mode_bar_stub
+07-21 02:47:00.532     FitSystemWindowLayoutView
+07-21 02:47:00.533       DynamicBgContainer
+07-21 02:47:00.533       GradientColorBackgroundView
+07-21 02:47:00.534       e
+07-21 02:47:00.534   View id=statusBarBackground
+07-21 02:47:00.535   l
+07-21 02:47:00.536   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:00.699 DecorView
+07-21 02:47:00.700   LinearLayout
+07-21 02:47:00.701     ViewStub id=action_mode_bar_stub
+07-21 02:47:00.702     FitSystemWindowLayoutView
+07-21 02:47:00.703       DynamicBgContainer
+07-21 02:47:00.703       GradientColorBackgroundView
+07-21 02:47:00.705       e
+07-21 02:47:00.705   View id=statusBarBackground
+07-21 02:47:00.707   l
+07-21 02:47:00.710   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:01.030 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:01.031 findKernelClass: ALL attempts exhausted!
+07-21 02:47:01.031 ContactSelector: kernel class not found!
+07-21 02:47:01.047 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:01.047 findKernelClass: ALL attempts exhausted!
+07-21 02:47:01.047 ContactSelector: Strategy3 kernel class not found
+07-21 02:47:01.048 ContactSelector: Strategy3 failed: java.lang.RuntimeException: kernel class not found
+07-21 02:47:01.048 ContactSelector: All strategies failed, falling back to nameCache
+07-21 02:47:01.131   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:01.138   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:01.311   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:01.736   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:01.740   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:01.915   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:02.126 TTS: onDone id=tts_1784573218211
+07-21 02:47:02.340   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:02.343   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:02.518   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:02.944   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:02.946   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:03.123   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:03.548 DecorView
+07-21 02:47:03.550   LinearLayout
+07-21 02:47:03.552     ViewStub id=action_mode_bar_stub
+07-21 02:47:03.553     FitSystemWindowLayoutView
+07-21 02:47:03.555       DynamicBgContainer
+07-21 02:47:03.556       GradientColorBackgroundView
+07-21 02:47:03.557       e
+07-21 02:47:03.559   View id=statusBarBackground
+07-21 02:47:03.560   l
+07-21 02:47:03.562   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:03.564 DecorView
+07-21 02:47:03.565   LinearLayout
+07-21 02:47:03.567     ViewStub id=action_mode_bar_stub
+07-21 02:47:03.568     FitSystemWindowLayoutView
+07-21 02:47:03.569       DynamicBgContainer
+07-21 02:47:03.570       GradientColorBackgroundView
+07-21 02:47:03.571       e
+07-21 02:47:03.572   View id=statusBarBackground
+07-21 02:47:03.573   l
+07-21 02:47:03.574   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:03.726 DecorView
+07-21 02:47:03.727   LinearLayout
+07-21 02:47:03.728     ViewStub id=action_mode_bar_stub
+07-21 02:47:03.729     FitSystemWindowLayoutView
+07-21 02:47:03.731       DynamicBgContainer
+07-21 02:47:03.732       GradientColorBackgroundView
+07-21 02:47:03.733       e
+07-21 02:47:03.734   View id=statusBarBackground
+07-21 02:47:03.735   l
+07-21 02:47:03.737   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:04.164   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:04.176   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:04.340   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:04.766   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:04.778   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:04.943   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:05.367   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:05.380   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:05.545   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:05.969   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:05.982   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:06.147 showMainPanel 复用现有Dialog, 切换Tab=1
+07-21 02:47:06.164   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:06.571 DecorView
+07-21 02:47:06.573   LinearLayout
+07-21 02:47:06.575     ViewStub id=action_mode_bar_stub
+07-21 02:47:06.576     FitSystemWindowLayoutView
+07-21 02:47:06.577       DynamicBgContainer
+07-21 02:47:06.579       GradientColorBackgroundView
+07-21 02:47:06.579       e
+07-21 02:47:06.580   View id=statusBarBackground
+07-21 02:47:06.582   l
+07-21 02:47:06.584   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:06.585 DecorView
+07-21 02:47:06.586   LinearLayout
+07-21 02:47:06.587     ViewStub id=action_mode_bar_stub
+07-21 02:47:06.588     FitSystemWindowLayoutView
+07-21 02:47:06.588       DynamicBgContainer
+07-21 02:47:06.589       GradientColorBackgroundView
+07-21 02:47:06.590       e
+07-21 02:47:06.591   View id=statusBarBackground
+07-21 02:47:06.591   l
+07-21 02:47:06.593   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:06.767 DecorView
+07-21 02:47:06.768   LinearLayout
+07-21 02:47:06.770     ViewStub id=action_mode_bar_stub
+07-21 02:47:06.771     FitSystemWindowLayoutView
+07-21 02:47:06.772       DynamicBgContainer
+07-21 02:47:06.773       GradientColorBackgroundView
+07-21 02:47:06.774       e
+07-21 02:47:06.775   View id=statusBarBackground
+07-21 02:47:06.776   l
+07-21 02:47:06.778   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:06.954 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:06.954 findKernelClass: ALL attempts exhausted!
+07-21 02:47:06.955 ContactSelector: kernel class not found!
+07-21 02:47:06.971 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:06.972 findKernelClass: ALL attempts exhausted!
+07-21 02:47:06.972 ContactSelector: Strategy3 kernel class not found
+07-21 02:47:06.973 ContactSelector: Strategy3 failed: java.lang.RuntimeException: kernel class not found
+07-21 02:47:06.973 ContactSelector: All strategies failed, falling back to nameCache
+07-21 02:47:07.188   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:07.195   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:07.381   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:07.791   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:07.798   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:07.984   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:08.393   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:08.399   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:08.587   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:08.784 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:08.785 findKernelClass: ALL attempts exhausted!
+07-21 02:47:08.785 ContactSelector: kernel class not found!
+07-21 02:47:08.798 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:08.798 findKernelClass: ALL attempts exhausted!
+07-21 02:47:08.798 ContactSelector: Strategy3 kernel class not found
+07-21 02:47:08.798 ContactSelector: Strategy3 failed: java.lang.RuntimeException: kernel class not found
+07-21 02:47:08.799 ContactSelector: All strategies failed, falling back to nameCache
+07-21 02:47:08.997   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:09.001   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:09.190   BottomTabBar NOT confirmed (best=1), will retry
+07-21 02:47:09.599 tabInjection retry stop: hooked=false r=20
+07-21 02:47:09.601 tabInjection retry stop: hooked=false r=20
+07-21 02:47:09.792 tabInjection retry stop: hooked=false r=20
+07-21 02:47:10.500 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:10.500 findKernelClass: ALL attempts exhausted!
+07-21 02:47:10.500 ContactSelector: kernel class not found!
+07-21 02:47:10.520 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:10.521 findKernelClass: ALL attempts exhausted!
+07-21 02:47:10.521 ContactSelector: Strategy3 kernel class not found
+07-21 02:47:10.522 ContactSelector: Strategy3 failed: java.lang.RuntimeException: kernel class not found
+07-21 02:47:10.522 ContactSelector: All strategies failed, falling back to nameCache
+07-21 02:47:11.017 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:11.017 findKernelClass: ALL attempts exhausted!
+07-21 02:47:11.017 ContactSelector: kernel class not found!
+07-21 02:47:11.036 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:11.037 findKernelClass: ALL attempts exhausted!
+07-21 02:47:11.038 ContactSelector: Strategy3 kernel class not found
+07-21 02:47:11.039 ContactSelector: Strategy3 failed: java.lang.RuntimeException: kernel class not found
+07-21 02:47:11.039 ContactSelector: All strategies failed, falling back to nameCache
+07-21 02:47:11.596 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:11.597 findKernelClass: ALL attempts exhausted!
+07-21 02:47:11.597 ContactSelector: kernel class not found!
+07-21 02:47:11.616 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:11.616 findKernelClass: ALL attempts exhausted!
+07-21 02:47:11.617 ContactSelector: Strategy3 kernel class not found
+07-21 02:47:11.617 ContactSelector: Strategy3 failed: java.lang.RuntimeException: kernel class not found
+07-21 02:47:11.618 ContactSelector: All strategies failed, falling back to nameCache
+07-21 02:47:12.484 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:12.484 findKernelClass: ALL attempts exhausted!
+07-21 02:47:12.484 ContactSelector: kernel class not found!
+07-21 02:47:12.503 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:12.504 findKernelClass: ALL attempts exhausted!
+07-21 02:47:12.504 ContactSelector: Strategy3 kernel class not found
+07-21 02:47:12.505 ContactSelector: Strategy3 failed: java.lang.RuntimeException: kernel class not found
+07-21 02:47:12.505 ContactSelector: All strategies failed, falling back to nameCache
+07-21 02:47:12.716 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:12.716 findKernelClass: ALL attempts exhausted!
+07-21 02:47:12.717 ContactSelector: kernel class not found!
+07-21 02:47:12.735 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:12.736 findKernelClass: ALL attempts exhausted!
+07-21 02:47:12.737 ContactSelector: Strategy3 kernel class not found
+07-21 02:47:12.737 ContactSelector: Strategy3 failed: java.lang.RuntimeException: kernel class not found
+07-21 02:47:12.737 ContactSelector: All strategies failed, falling back to nameCache
+07-21 02:47:13.148 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:13.148 findKernelClass: ALL attempts exhausted!
+07-21 02:47:13.148 ContactSelector: kernel class not found!
+07-21 02:47:13.167 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:13.168 findKernelClass: ALL attempts exhausted!
+07-21 02:47:13.168 ContactSelector: Strategy3 kernel class not found
+07-21 02:47:13.168 ContactSelector: Strategy3 failed: java.lang.RuntimeException: kernel class not found
+07-21 02:47:13.169 ContactSelector: All strategies failed, falling back to nameCache
+07-21 02:47:13.638 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:13.638 findKernelClass: ALL attempts exhausted!
+07-21 02:47:13.639 ContactSelector: kernel class not found!
+07-21 02:47:13.658 findKernelClass: DexFile scan failed: Attempt to invoke virtual method 'java.security.CodeSource java.security.ProtectionDomain.getCodeSource()' on a null object reference
+07-21 02:47:13.658 findKernelClass: ALL attempts exhausted!
+07-21 02:47:13.658 ContactSelector: Strategy3 kernel class not found
+07-21 02:47:13.659 ContactSelector: Strategy3 failed: java.lang.RuntimeException: kernel class not found
+07-21 02:47:13.659 ContactSelector: All strategies failed, falling back to nameCache

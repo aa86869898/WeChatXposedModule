@@ -1,0 +1,53 @@
+07-21 16:05:10.481 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-21 16:05:10.482 [main] LeShaoV3: >>> handleLoadPackage process=com.tencent.mm
+07-21 16:05:10.483 [main] LeShaoV3: wxVersionName err: android.content.pm.ApplicationInfo#versionName
+07-21 16:05:10.483 [main] LeShaoV3: WeChat:  (3140)
+07-21 16:05:10.484 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 16:05:10.484 [main] ContextManager: hookAttachBaseContext FAILED: android.app.Application#attachBaseContext[class android.content.Context]#exact
+07-21 16:05:10.486 [main] SettingsEntryHook: INIT: hook registered ok
+07-21 16:05:11.684 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-21 16:05:11.685 [main] LeShaoV3: >>> handleLoadPackage process=com.tencent.mm:appbrand0
+07-21 16:05:11.688 [main] LeShaoV3: wxVersionName err: android.content.pm.ApplicationInfo#versionName
+07-21 16:05:11.688 [main] LeShaoV3: WeChat:  (3140)
+07-21 16:05:11.693 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 16:05:11.694 [main] ContextManager: hookAttachBaseContext FAILED: android.app.Application#attachBaseContext[class android.content.Context]#exact
+07-21 16:05:11.698 [main] SettingsEntryHook: INIT: hook registered ok
+07-21 16:05:11.787 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-21 16:05:11.792 [main] LeShaoV3: >>> handleLoadPackage process=com.tencent.mm:push
+07-21 16:05:11.793 [main] LeShaoV3: wxVersionName err: android.content.pm.ApplicationInfo#versionName
+07-21 16:05:11.794 [main] LeShaoV3: WeChat:  (3140)
+07-21 16:05:11.795 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 16:05:11.796 [main] ContextManager: hookAttachBaseContext FAILED: android.app.Application#attachBaseContext[class android.content.Context]#exact
+07-21 16:05:11.812 [main] SettingsEntryHook: INIT: hook registered ok
+07-21 16:05:12.142 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-21 16:05:12.144 [main] LeShaoV3: >>> handleLoadPackage process=com.tencent.mm:appbrand1
+07-21 16:05:12.146 [main] LeShaoV3: wxVersionName err: android.content.pm.ApplicationInfo#versionName
+07-21 16:05:12.146 [main] LeShaoV3: WeChat:  (3140)
+07-21 16:05:12.149 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 16:05:12.150 [main] ContextManager: hookAttachBaseContext FAILED: android.app.Application#attachBaseContext[class android.content.Context]#exact
+07-21 16:05:12.153 [main] SettingsEntryHook: INIT: hook registered ok
+07-21 16:05:13.762 [main] SettingsEntryHook: MATCH: activity=MainSettingsUI
+07-21 16:05:14.763 [main] SettingsEntryHook: FALLBACK: long-press on tool ActionBarOverlayLayout
+07-21 16:05:14.766 [main] SettingsEntryHook: CONTAINER: NestedScrollView (androidx.core.widget.NestedScrollView) children=1
+07-21 16:05:14.773 [main] SettingsEntryHook: INJECT: NestedScrollView error: ScrollView can host only one direct child
+07-21 16:05:14.774 [main] SettingsEntryHook: CONTAINER: WxRecyclerView (com.tencent.mm.view.recyclerview.WxRecyclerView) children=13
+07-21 16:05:14.776 [main] SettingsEntryHook: RECYCLER: wrapping WxRecyclerView
+07-21 16:05:14.778 [main] SettingsEntryHook: RECYCLER: parent=RelativeLayout idx=0 parentKids=2 rvWidth=-1 rvHeight=-1
+07-21 16:05:14.781 [main] SettingsEntryHook: RECYCLER: card margins preserved L=38 T=25
+07-21 16:05:14.784 [main] SettingsEntryHook: INJECT: RecyclerView wrapped in RelativeLayout[0] wrapperKids=2
+07-21 16:05:14.785 [main] SettingsEntryHook: SUCCESS: card via scroll container, attempt=1
+07-21 16:05:15.858 [main] SettingsEntryHook: CLICK: card tapped
+07-21 16:05:15.872 [main] SettingsEntryHook: OPEN: implicit intent com.leshao.v3.action.SETTINGS
+07-21 16:05:16.029 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-21 16:05:16.030 [main] LeShaoV3: >>> handleLoadPackage process=com.tencent.mm:patch
+07-21 16:05:16.031 [main] LeShaoV3: wxVersionName err: android.content.pm.ApplicationInfo#versionName
+07-21 16:05:16.031 [main] LeShaoV3: WeChat:  (3140)
+07-21 16:05:16.035 [main] SettingsEntryHook: RESUME: re-checking card health for MainSettingsUI
+07-21 16:05:16.036 [main] SettingsEntryHook: RESUME: card still present, ok
+07-21 16:05:16.036 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 16:05:16.037 [main] ContextManager: hookAttachBaseContext FAILED: android.app.Application#attachBaseContext[class android.content.Context]#exact
+07-21 16:05:16.040 [main] SettingsEntryHook: INIT: hook registered ok
+07-21 16:05:18.622 [main] SettingsEntryHook: CLICK: card tapped
+07-21 16:05:18.632 [main] SettingsEntryHook: OPEN: implicit intent com.leshao.v3.action.SETTINGS
+07-21 16:05:18.761 [main] SettingsEntryHook: RESUME: re-checking card health for MainSettingsUI
+07-21 16:05:18.762 [main] SettingsEntryHook: RESUME: card still present, ok

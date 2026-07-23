@@ -1,0 +1,183 @@
+07-21 23:18:55.708 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-21 23:18:55.709 [main] LeShaoV3: >>> handleLoadPackage process=com.tencent.mm
+07-21 23:18:55.710 [main] LeShaoV3: wxVersionName err: android.content.pm.ApplicationInfo#versionName
+07-21 23:18:55.710 [main] LeShaoV3: WeChat:  (3140)
+07-21 23:18:55.711 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:18:55.715 [main] SettingsEntryHook: BACKPRESS: hook registered
+07-21 23:18:55.715 [main] SettingsEntryHook: CARD: inflate hook ok
+07-21 23:18:55.716 [main] SettingsEntryHook: INIT: hooks registered ok
+07-21 23:18:55.722 [main] ContextManager: attachBaseContext DONE, ready=true
+07-21 23:18:55.723 [main] LeShaoV3: Context ready, initializing all components...
+07-21 23:18:55.723 [leshao-db-init] DatabaseProvider: init START, apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:18:55.724 [leshao-db-init] DatabaseProvider: Strategy A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-21 23:18:55.725 [leshao-db-init] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-21 23:18:55.727 [main] RedPacketHook: red packet hook registered: com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyDetailUI
+07-21 23:18:55.728 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.subapp.ui.friend.FMessageConversationUI
+07-21 23:18:55.729 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.SayHiWithSnsPermissionUI
+07-21 23:18:55.731 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.ContactInfoUI
+07-21 23:18:55.731 [main] HookManager: all hooks activated: 3
+07-21 23:18:55.732 [main] MessageHook: hook complete
+07-21 23:18:55.734 [main] LeShaoV3: All components initialized
+07-21 23:18:55.734 [leshao-scheduler] SchedulerService: scheduler started
+07-21 23:18:57.038 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-21 23:18:57.041 [main] LeShaoV3: >>> handleLoadPackage process=com.tencent.mm:push
+07-21 23:18:57.042 [main] LeShaoV3: wxVersionName err: android.content.pm.ApplicationInfo#versionName
+07-21 23:18:57.043 [main] LeShaoV3: WeChat:  (3140)
+07-21 23:18:57.044 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:18:57.050 [main] SettingsEntryHook: BACKPRESS: hook registered
+07-21 23:18:57.051 [main] SettingsEntryHook: CARD: inflate hook ok
+07-21 23:18:57.052 [main] SettingsEntryHook: INIT: hooks registered ok
+07-21 23:18:57.058 [main] ContextManager: attachBaseContext DONE, ready=true
+07-21 23:18:57.059 [main] LeShaoV3: Context ready, initializing all components...
+07-21 23:18:57.066 [main] RedPacketHook: red packet hook registered: com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyDetailUI
+07-21 23:18:57.069 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.subapp.ui.friend.FMessageConversationUI
+07-21 23:18:57.069 [leshao-db-init] DatabaseProvider: init START, apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:18:57.071 [leshao-db-init] DatabaseProvider: Strategy A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-21 23:18:57.072 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.SayHiWithSnsPermissionUI
+07-21 23:18:57.073 [leshao-db-init] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-21 23:18:57.074 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.ContactInfoUI
+07-21 23:18:57.076 [main] HookManager: all hooks activated: 3
+07-21 23:18:57.078 [main] MessageHook: hook complete
+07-21 23:18:57.083 [main] LeShaoV3: All components initialized
+07-21 23:18:57.095 [leshao-scheduler] SchedulerService: scheduler started
+07-21 23:18:57.098 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-21 23:18:57.110 [main] LeShaoV3: >>> handleLoadPackage process=com.tencent.mm:appbrand0
+07-21 23:18:57.117 [main] LeShaoV3: wxVersionName err: android.content.pm.ApplicationInfo#versionName
+07-21 23:18:57.118 [main] LeShaoV3: WeChat:  (3140)
+07-21 23:18:57.119 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:18:57.126 [main] SettingsEntryHook: BACKPRESS: hook registered
+07-21 23:18:57.127 [main] SettingsEntryHook: CARD: inflate hook ok
+07-21 23:18:57.129 [main] SettingsEntryHook: INIT: hooks registered ok
+07-21 23:18:57.135 [main] ContextManager: attachBaseContext DONE, ready=true
+07-21 23:18:57.137 [main] LeShaoV3: Context ready, initializing all components...
+07-21 23:18:57.143 [main] RedPacketHook: red packet hook registered: com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyDetailUI
+07-21 23:18:57.147 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.subapp.ui.friend.FMessageConversationUI
+07-21 23:18:57.149 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.SayHiWithSnsPermissionUI
+07-21 23:18:57.151 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.ContactInfoUI
+07-21 23:18:57.151 [main] HookManager: all hooks activated: 3
+07-21 23:18:57.154 [main] MessageHook: hook complete
+07-21 23:18:57.156 [main] LeShaoV3: All components initialized
+07-21 23:18:57.156 [leshao-db-init] DatabaseProvider: init START, apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:18:57.157 [leshao-db-init] DatabaseProvider: Strategy A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-21 23:18:57.162 [leshao-db-init] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-21 23:18:57.159 [leshao-scheduler] SchedulerService: scheduler started
+07-21 23:18:57.740 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-21 23:18:57.742 [main] LeShaoV3: >>> handleLoadPackage process=com.tencent.mm:appbrand1
+07-21 23:18:57.743 [main] LeShaoV3: wxVersionName err: android.content.pm.ApplicationInfo#versionName
+07-21 23:18:57.743 [main] LeShaoV3: WeChat:  (3140)
+07-21 23:18:57.744 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:18:57.749 [main] SettingsEntryHook: BACKPRESS: hook registered
+07-21 23:18:57.752 [main] SettingsEntryHook: CARD: inflate hook ok
+07-21 23:18:57.756 [main] SettingsEntryHook: INIT: hooks registered ok
+07-21 23:18:57.768 [main] ContextManager: attachBaseContext DONE, ready=true
+07-21 23:18:57.769 [main] LeShaoV3: Context ready, initializing all components...
+07-21 23:18:57.770 [leshao-db-init] DatabaseProvider: init START, apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:18:57.773 [main] RedPacketHook: red packet hook registered: com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyDetailUI
+07-21 23:18:57.775 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.subapp.ui.friend.FMessageConversationUI
+07-21 23:18:57.774 [leshao-db-init] DatabaseProvider: Strategy A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-21 23:18:57.776 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.SayHiWithSnsPermissionUI
+07-21 23:18:57.776 [leshao-db-init] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-21 23:18:57.778 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.ContactInfoUI
+07-21 23:18:57.778 [main] HookManager: all hooks activated: 3
+07-21 23:18:57.780 [main] MessageHook: hook complete
+07-21 23:18:57.781 [main] LeShaoV3: All components initialized
+07-21 23:18:57.781 [leshao-scheduler] SchedulerService: scheduler started
+07-21 23:18:58.424 [main] SettingsEntryHook: CARD: layout wrapped with entry card
+07-21 23:18:59.942 [main] SettingsEntryHook: PANEL: dismissed
+07-21 23:18:59.959 [Thread-16] ContactRepository: rawQueryHook: hooking rawQuery(2)
+07-21 23:18:59.963 [Thread-16] ContactRepository: findKernelClass: com.tencent.mm.app.h loaded but no static(Class) method
+07-21 23:18:59.963 [Thread-16] ContactRepository: findKernelClass: com.tencent.mm.app.g loaded but no static(Class) method
+07-21 23:18:59.964 [Thread-16] ContactRepository: findKernelClass: com.tencent.mm.app.i loaded but no static(Class) method
+07-21 23:18:59.964 [Thread-16] ContactRepository: findKernelClass: com.tencent.mm.app.j loaded but no static(Class) method
+07-21 23:18:59.980 [main] SettingsEntryHook: PANEL: dialog opened in MainSettingsUI
+07-21 23:19:01.313 [Thread-16] ContactRepository: findKernelClass: scannedK=0 all matched known names
+07-21 23:19:02.628 [Thread-16] ContactRepository: findDbClass: candidates=0
+07-21 23:19:02.631 [Thread-16] ContactRepository: getWechatDB FAILED: all strategies exhausted
+07-21 23:19:06.061 [[GT]ColdPool#9] ContactRepository: rawQueryHook: captured DB!
+07-21 23:19:06.239 [Thread-16] ContactRepository: queryContacts columns: u=0 r=2 n=3 a=1 t=4 v=5
+07-21 23:19:06.327 [Thread-16] ContactRepository: queryContacts DONE: all=85 f=0 g=85 skipped=15667
+07-21 23:19:06.328 [main] SettingsEntryHook: CONTACT: async loaded 85 contacts
+07-21 23:19:06.659 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-21 23:19:06.659 [main] LeShaoV3: >>> handleLoadPackage process=com.tencent.mm:sandbox
+07-21 23:19:06.660 [main] LeShaoV3: wxVersionName err: android.content.pm.ApplicationInfo#versionName
+07-21 23:19:06.660 [main] LeShaoV3: WeChat:  (3140)
+07-21 23:19:06.661 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:19:06.665 [main] SettingsEntryHook: BACKPRESS: hook registered
+07-21 23:19:06.666 [main] SettingsEntryHook: CARD: inflate hook ok
+07-21 23:19:06.666 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-21 23:19:06.666 [main] SettingsEntryHook: INIT: hooks registered ok
+07-21 23:19:06.667 [main] LeShaoV3: >>> handleLoadPackage process=com.tencent.mm:recovery
+07-21 23:19:06.668 [main] LeShaoV3: wxVersionName err: android.content.pm.ApplicationInfo#versionName
+07-21 23:19:06.668 [main] LeShaoV3: WeChat:  (3140)
+07-21 23:19:06.669 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:19:06.674 [main] SettingsEntryHook: BACKPRESS: hook registered
+07-21 23:19:06.674 [main] ContextManager: attachBaseContext DONE, ready=true
+07-21 23:19:06.675 [main] LeShaoV3: Context ready, initializing all components...
+07-21 23:19:06.675 [main] SettingsEntryHook: CARD: inflate hook ok
+07-21 23:19:06.676 [main] SettingsEntryHook: INIT: hooks registered ok
+07-21 23:19:06.676 [leshao-db-init] DatabaseProvider: init START, apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:19:06.677 [leshao-db-init] DatabaseProvider: Strategy A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-21 23:19:06.678 [leshao-db-init] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-21 23:19:06.679 [main] RedPacketHook: red packet hook registered: com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyDetailUI
+07-21 23:19:06.682 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.subapp.ui.friend.FMessageConversationUI
+07-21 23:19:06.682 [main] ContextManager: attachBaseContext DONE, ready=true
+07-21 23:19:06.683 [main] LeShaoV3: Context ready, initializing all components...
+07-21 23:19:06.684 [leshao-db-init] DatabaseProvider: init START, apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:19:06.684 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.SayHiWithSnsPermissionUI
+07-21 23:19:06.684 [leshao-db-init] DatabaseProvider: Strategy A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-21 23:19:06.685 [leshao-db-init] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-21 23:19:06.687 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.ContactInfoUI
+07-21 23:19:06.688 [main] HookManager: all hooks activated: 3
+07-21 23:19:06.688 [main] RedPacketHook: red packet hook registered: com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyDetailUI
+07-21 23:19:06.689 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.subapp.ui.friend.FMessageConversationUI
+07-21 23:19:06.690 [main] MessageHook: hook complete
+07-21 23:19:06.691 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.SayHiWithSnsPermissionUI
+07-21 23:19:06.691 [main] LeShaoV3: All components initialized
+07-21 23:19:06.693 [leshao-scheduler] SchedulerService: scheduler started
+07-21 23:19:06.701 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.ContactInfoUI
+07-21 23:19:06.702 [main] HookManager: all hooks activated: 3
+07-21 23:19:06.704 [main] MessageHook: hook complete
+07-21 23:19:06.706 [main] LeShaoV3: All components initialized
+07-21 23:19:06.720 [leshao-scheduler] SchedulerService: scheduler started
+07-21 23:19:06.929 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-21 23:19:06.930 [main] LeShaoV3: >>> handleLoadPackage process=com.tencent.mm
+07-21 23:19:06.930 [main] LeShaoV3: wxVersionName err: android.content.pm.ApplicationInfo#versionName
+07-21 23:19:06.931 [main] LeShaoV3: WeChat:  (3140)
+07-21 23:19:06.931 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:19:06.936 [main] SettingsEntryHook: BACKPRESS: hook registered
+07-21 23:19:06.937 [main] SettingsEntryHook: CARD: inflate hook ok
+07-21 23:19:06.937 [main] SettingsEntryHook: INIT: hooks registered ok
+07-21 23:19:06.942 [main] ContextManager: attachBaseContext DONE, ready=true
+07-21 23:19:06.942 [main] LeShaoV3: Context ready, initializing all components...
+07-21 23:19:06.943 [leshao-db-init] DatabaseProvider: init START, apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:19:06.943 [leshao-db-init] DatabaseProvider: Strategy A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-21 23:19:06.944 [leshao-db-init] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-21 23:19:06.947 [main] RedPacketHook: red packet hook registered: com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyDetailUI
+07-21 23:19:06.948 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.subapp.ui.friend.FMessageConversationUI
+07-21 23:19:06.949 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.SayHiWithSnsPermissionUI
+07-21 23:19:06.951 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.ContactInfoUI
+07-21 23:19:06.951 [main] HookManager: all hooks activated: 3
+07-21 23:19:06.953 [main] MessageHook: hook complete
+07-21 23:19:06.954 [main] LeShaoV3: All components initialized
+07-21 23:19:06.954 [leshao-scheduler] SchedulerService: scheduler started
+07-21 23:19:15.027 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-21 23:19:15.028 [main] LeShaoV3: >>> handleLoadPackage process=com.tencent.mm:patch
+07-21 23:19:15.028 [main] LeShaoV3: wxVersionName err: android.content.pm.ApplicationInfo#versionName
+07-21 23:19:15.029 [main] LeShaoV3: WeChat:  (3140)
+07-21 23:19:15.030 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:19:15.035 [main] SettingsEntryHook: BACKPRESS: hook registered
+07-21 23:19:15.037 [main] SettingsEntryHook: CARD: inflate hook ok
+07-21 23:19:15.037 [main] SettingsEntryHook: INIT: hooks registered ok
+07-21 23:19:15.043 [main] ContextManager: attachBaseContext DONE, ready=true
+07-21 23:19:15.044 [main] LeShaoV3: Context ready, initializing all components...
+07-21 23:19:15.045 [leshao-db-init] DatabaseProvider: init START, apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-21 23:19:15.046 [leshao-db-init] DatabaseProvider: Strategy A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-21 23:19:15.047 [leshao-db-init] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-21 23:19:15.050 [main] RedPacketHook: red packet hook registered: com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyDetailUI
+07-21 23:19:15.052 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.subapp.ui.friend.FMessageConversationUI
+07-21 23:19:15.053 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.SayHiWithSnsPermissionUI
+07-21 23:19:15.055 [main] FriendRequestHook: friend request hook registered: com.tencent.mm.plugin.profile.ui.ContactInfoUI
+07-21 23:19:15.056 [main] HookManager: all hooks activated: 3
+07-21 23:19:15.058 [main] MessageHook: hook complete
+07-21 23:19:15.060 [main] LeShaoV3: All components initialized
+07-21 23:19:15.060 [leshao-scheduler] SchedulerService: scheduler started

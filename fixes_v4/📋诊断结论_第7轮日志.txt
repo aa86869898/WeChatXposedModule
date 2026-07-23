@@ -1,0 +1,28 @@
+====================================================
+  第7轮日志精确诊断 (12:54)
+====================================================
+
+✅ 已修复:
+  1. 类名全部OK — 无 ClassNotFoundException
+  2. isSend=0 — 用 e9.A2 正确
+  3. type 正确识别: 1/3/49
+  4. VoiceFwd C-scheme 已工作
+  5. M+N 策略已注册: e01.x9.m(String,long) + n(e9,p0)
+
+❌ 核心瓶颈: content=talker用户名 非消息文本
+  - M-STR: wxid_9ohhf82mrlgc22 ← m()方法的String参数是talker
+  - #1 content=wxid_9ohhf82mrlgc22 ← 把talker当内容了!
+  - E9 x2="" z2="" ← n()阶段e9内容字段全是空的
+
+根本原因:
+  e01.x9 的消息写入流程:
+    Step1: m(talker, msgId) → 缓存 talker
+    Step2: n(e9, p0)     → 创建 e9 对象, 内容在 p0 protobuf 里
+    Step3: e(e9, true)    → 这里 e9 内容已完整! I0() 可读!
+
+当前Hook: 主力用 n() → e9 还没内容 → content=空
+正确Hook: 主力用 e() → e9 内容已写入 → content=正常文本
+
+解决: 修复_核心 文件中的方案A — 主力 Hook e() 方法
+
+====================================================

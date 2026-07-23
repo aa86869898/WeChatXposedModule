@@ -1,0 +1,49 @@
+===========================================================
+ e01.x9 源码反编译 — 完整分析
+===========================================================
+
+e01.x9 所有方法:
+
+  m(String talker, long msgId)
+    → 缓存 talker用户名, 58行代码只做字符串匹配
+    → ❌ String=talker, 不是内容!
+
+  n(e9 e9Var, p0 p0Var)
+    → p0.a = a65.j4 (protobuf)
+    → p0.b/c/d/e = get/fault/up/fixTime 标志位
+    → p0.f = fixTime (long)
+    → 只设标志位: f1(get|fault|up)
+    → e9.e1(fixTime) 修正时间
+    → ❌ e9.I0() 此时为空 (内容未写入!)
+
+  e(e9 e9Var, boolean z)
+    → 发 DeleteMsgEvent!
+    → z=true 时: new DeleteMsgEvent() → deleteMsgEvent.e()
+    → ❌ 这是删除消息事件, 不是插入!
+
+  C(e9 e9Var)
+    → wj().Ta(msgId, e9, true) ★ 消息入库!
+    → 检查 MsgInsertWithNewContactEvent
+    → ✅ 此时 e9 已完整写入, j()/I0() 可读!
+
+  e9.I0() — 消息内容
+    → 第188行: if (x2()) return S1()
+    → x2() → 检测是否是 appmsg 类型
+    → j() — 消息摘要
+    → 第704行: if (x2()) 从 S1() XML 解析内容
+    → 第730行: if (d3()) 群聊消息处理
+    → 第748行: if (isVideo()) 视频消息处理
+
+===========================================================
+ 结论
+===========================================================
+
+  之前 Hook 的方法     实际行为           结果
+  ──────────────────────────────────────────────
+  e01.x9.m(talker,id)  缓存 talker        content=talker ❌
+  e01.x9.n(e9, p0)    设标志位            I0()=null     ❌  
+  e01.x9.e(e9, bool)  发 DeleteMsgEvent   完全错误      ❌
+  e01.x9.C(e9)        消息入库            I0()可读      ✅
+
+  正确 Hook 只有一条: e01.x9.C(e9)
+===========================================================

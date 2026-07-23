@@ -12,7 +12,6 @@ import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.service.TTSBroadcaster;
 
-import java.lang.reflect.Field;
 import java.util.Calendar;
 import java.util.HashSet;
 import java.util.Set;
@@ -72,201 +71,92 @@ public class RedPacketHook {
         ClassLoader cl = ContextManager.getClassLoader();
         hookReceiveUIs(cl);
         hookChatListClick(cl);
-        hookOpenResult(cl);
-        LogWriter.log(TAG, "hooks installed (open result + UI auto-click)");
+        hookTtsCheck(cl);
+        LogWriter.log(TAG, "hooks installed (open result + UI auto-click + TTS check)");
     }
 
-    // ==================== TTS: onSceneEnd 播报结果 ====================
-    public static void hookOpenResult(ClassLoader cl) {
-        hookOnSceneEnd(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNewReceiveUI");
-        hookOnSceneEnd(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyDetailUI");
-        hookDetailUI(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyDetailUI");
-    }
-
-    private static void hookDetailUI(ClassLoader cl, String className) {
-        try {
-            Class<?> dCls = cl.loadClass(className);
-            XposedBridge.hookAllMethods(dCls, "onCreate",
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        Activity act = (Activity) param.thisObject;
-                        sHandler.postDelayed(() -> extractAndAnnounce(act), 400);
-                    }
-                });
-            LogWriter.log(TAG, "detailUI onCreate hook OK: " + className);
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "detailUI create FAILED: " + className + " " + t.getClass().getSimpleName());
-        }
-    }
-
+    // ==================== TTS: 监听 ReceiveUI 提取结果文字 ====================
     private static long sLastRedAnnounce = 0;
 
-    private static void extractAndAnnounce(Activity act) {
-        if (!sTtsAnnounce) return;
+    public static void hookTtsCheck(ClassLoader cl) {
+        hookTtsOnUI(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNewReceiveUI", "initView");
+        hookTtsOnUI(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI", "initView");
+        hookTtsOnUI(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI", "onCreate");
+        hookTtsOnUI(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2", "onCreate");
+        hookTtsOnUI(cl, PKG_WECHAT + ".plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI", "onCreate");
+    }
+
+    private static void hookTtsOnUI(ClassLoader cl, String className, String methodName) {
+        try {
+            Class<?> cls = XposedHelpers.findClass(className, cl);
+            XposedBridge.hookAllMethods(cls, methodName, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    if (!sTtsAnnounce) return;
+                    Activity act = (Activity) param.thisObject;
+                    sHandler.postDelayed(() -> checkAndAnnounce(act), 1200);
+                    sHandler.postDelayed(() -> checkAndAnnounce(act), 2800);
+                    sHandler.postDelayed(() -> checkAndAnnounce(act), 5000);
+                }
+            });
+            LogWriter.log(TAG, "ttsCheck hook OK: " + className + "." + methodName + "()");
+        } catch (Throwable ignored) {}
+    }
+
+    private static void checkAndAnnounce(Activity act) {
         long now = System.currentTimeMillis();
-        if (now - sLastRedAnnounce < 3000) return;
+        if (now - sLastRedAnnounce < 4000) return;
 
         try {
             View root = act.getWindow().getDecorView();
             java.util.List<String> texts = new java.util.ArrayList<>();
-            collectTextViews(root, texts);
+            collectAllText(root, texts);
 
             String sender = null;
-            String amount = null;
-            String groupHint = null;
+            String amountRaw = null;
 
             for (String t : texts) {
-                if (t.isEmpty()) continue;
-                LogWriter.log(TAG, "detailUI text=[" + t + "]");
-                if (amount == null && (t.contains("元") || t.contains("¥") || t.matches("^[\\d,.]+$"))) {
-                    amount = t.replaceAll("[^\\d.]", "").trim();
-                    if (!amount.contains(".")) {
-                        try {
-                            double d = Double.parseDouble(amount) / 100.0;
-                            amount = String.format("%.2f", d);
-                        } catch (Exception ignored) {}
+                if (t.isEmpty() || t.length() > 100) continue;
+                LogWriter.log(TAG, "ttsCheck text=[" + t + "]");
+
+                if (amountRaw == null) {
+                    if (t.contains("元") || t.contains("¥")) {
+                        amountRaw = t.replaceAll("[^\\d.]", "").trim();
+                    } else if (t.matches("^\\s*[\\d,]+\\.[\\d]{2}\\s*$")) {
+                        amountRaw = t.replace(",", "").trim();
                     }
                 }
-                if (t.contains("群")) groupHint = t;
-                if (sender == null && !t.contains("元") && !t.contains("¥")
+
+                if (sender == null && amountRaw != null && !t.equals(amountRaw)
                     && t.length() >= 2 && t.length() <= 20
-                    && !t.startsWith("<") && !t.matches(".*\\d{4,}.*")) {
+                    && !t.startsWith("<") && !t.matches(".*\\d{6,}.*")
+                    && !t.contains("元") && !t.contains("¥")) {
                     sender = t;
                 }
             }
 
-            if (amount == null || amount.isEmpty()) {
-                LogWriter.log(TAG, "detailUI: no amount found");
-                return;
-            }
-
+            if (amountRaw == null || amountRaw.isEmpty()) return;
             if (sender == null) sender = "好友";
-            String chatroom = groupHint;
-            LogWriter.log(TAG, "detailUI TTS: sender=" + sender + " amount=" + amount + " group=" + groupHint);
 
-            TTSBroadcaster.announceRedPacket(sender, chatroom, null, amount + "元");
+            LogWriter.log(TAG, "ttsCheck OK: sender=" + sender + " amount=" + amountRaw);
+            TTSBroadcaster.announceRedPacket(sender, null, null, amountRaw + "元");
             sLastRedAnnounce = now;
         } catch (Throwable t) {
-            LogWriter.log(TAG, "extractAndAnnounce err: " + t.getMessage());
+            LogWriter.log(TAG, "checkAndAnnounce err: " + t.getMessage());
         }
     }
 
-    private static void collectTextViews(View view, java.util.List<String> out) {
-        if (view instanceof TextView) {
-            CharSequence cs = ((TextView) view).getText();
+    private static void collectAllText(View view, java.util.List<String> out) {
+        if (view instanceof android.widget.TextView) {
+            CharSequence cs = ((android.widget.TextView) view).getText();
             if (cs != null && cs.length() > 0) out.add(cs.toString());
         }
         if (view instanceof ViewGroup) {
             ViewGroup vg = (ViewGroup) view;
             for (int i = 0; i < vg.getChildCount(); i++) {
-                collectTextViews(vg.getChildAt(i), out);
+                collectAllText(vg.getChildAt(i), out);
             }
         }
-    }
-
-    private static void hookOnSceneEnd(ClassLoader cl, String className) {
-        try {
-            Class<?> uiCls = cl.loadClass(className);
-            XposedBridge.hookAllMethods(uiCls, "onSceneEnd",
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        try {
-                            if (param.args.length < 4) return;
-                            int errType = ((Number) param.args[0]).intValue();
-                            int errCode = ((Number) param.args[1]).intValue();
-                            if (errType != 0 || errCode != 0) return;
-                            if (!sTtsAnnounce) return;
-
-                            Object resp = param.args[3];
-                            if (resp == null) return;
-                            LogWriter.log(TAG, "onSceneEnd FIRE respClass=" + resp.getClass().getSimpleName());
-
-                            String xml = reflectToString(resp);
-                            LogWriter.log(TAG, "onSceneEnd xml=" + (xml != null ? xml.substring(0, Math.min(xml.length(), 200)) : "null"));
-
-                            String amountStr = extractTag(xml, "amount");
-                            if (amountStr == null) amountStr = extractTag(xml, "receiveamount");
-                            if (amountStr == null) amountStr = extractTag(xml, "totalamount");
-
-                            String sender = extractTag(xml, "sendname");
-                            String wishing = extractTag(xml, "wishing");
-                            String chatroom = extractTag(xml, "chatroom");
-
-                            if (sender == null) sender = reflectFieldByKeyword(resp, "sendname", "sender", "sendername");
-                            if (wishing == null) wishing = reflectFieldByKeyword(resp, "wish", "desc", "greeting", "wishing");
-                            if (chatroom == null) chatroom = rifStrByKw(resp, "chatroom", "groupid", "roomname");
-
-                            if (amountStr == null || amountStr.isEmpty()) return;
-
-                            String yuan = fenToYuan(amountStr);
-                            TTSBroadcaster.announceRedPacket(sender, chatroom, wishing, yuan);
-
-                        } catch (Throwable t) {
-                            LogWriter.log(TAG, "onSceneEnd TTS err: " + t.getMessage());
-                        }
-                    }
-                });
-            LogWriter.log(TAG, "onSceneEnd hook OK: " + className);
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "onSceneEnd hook FAILED: " + className + " " + t.getClass().getSimpleName());
-        }
-    }
-
-    // ==================== TTS: 反射工具 ====================
-    private static String reflectToString(Object obj) {
-        if (obj == null) return null;
-        try {
-            StringBuilder sb = new StringBuilder();
-            for (Field f : obj.getClass().getDeclaredFields()) {
-                f.setAccessible(true);
-                Object v = f.get(obj);
-                if (v instanceof String) {
-                    sb.append("<").append(f.getName()).append(">")
-                      .append((String) v)
-                      .append("</").append(f.getName()).append(">");
-                }
-            }
-            return sb.length() > 0 ? sb.toString() : obj.toString();
-        } catch (Exception e) { return obj.toString(); }
-    }
-
-    private static String rifStrByKw(Object obj, String... names) {
-        if (obj == null) return null;
-        for (String name : names) {
-            try {
-                for (Field f : obj.getClass().getDeclaredFields()) {
-                    f.setAccessible(true);
-                    if (f.getName().toLowerCase().contains(name.toLowerCase())) {
-                        Object v = f.get(obj);
-                        if (v instanceof String && !((String) v).isEmpty())
-                            return (String) v;
-                    }
-                }
-            } catch (Exception ignored) {}
-        }
-        return null;
-    }
-
-    private static String reflectFieldByKeyword(Object obj, String... names) {
-        return rifStrByKw(obj, names);
-    }
-
-    private static String extractTag(String xml, String tag) {
-        if (xml == null) return null;
-        int s = xml.indexOf("<" + tag + ">");
-        if (s < 0) return null;
-        s += tag.length() + 2;
-        int e = xml.indexOf("</" + tag + ">", s);
-        return e > s ? xml.substring(s, e) : null;
-    }
-
-    static String fenToYuan(String fen) {
-        try {
-            long f = Long.parseLong(fen.trim());
-            return String.format("%.2f", f / 100.0);
-        } catch (NumberFormatException e) { return fen; }
     }
 
     // ==================== 自动抢红包 (保留) ====================

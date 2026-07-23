@@ -1,0 +1,11 @@
+★ 删除以下代码:
+
+1. MessageHook 中对 e01.x9.m() 的任何 Hook
+   → m() 的 String=talker, 不是内容
+
+2. ThemeHook 中 ConversationAdapter 的 Hook:
+   "com$tencent$mm$ui$conversation$adapter$MvvmConversationAdapter"
+   → 主类已混淆, ConversationListView 替代
+
+3. VoiceFwd 中 findMethodExact 调用
+   → C-scheme 已工作
