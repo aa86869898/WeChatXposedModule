@@ -75,136 +75,89 @@ public class RedPacketHook {
         LogWriter.log(TAG, "hooks installed (open result + UI auto-click + TTS check)");
     }
 
-    // ==================== TTS: 扫描 onSceneEnd 全部重载 + m1 响应字段探测 ====================
+    // ==================== TTS: onSceneEnd + m1 字段精确提取 ====================
     public static void hookTtsCheck(ClassLoader cl) {
-        probeOnSceneEnd(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNewReceiveUI");
-        probeOnSceneEnd(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI");
-        probeOnSceneEnd(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI");
-        probeOnSceneEnd(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2");
-        probeOnSceneEnd(cl, PKG_WECHAT + ".plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI");
-    }
+        Class<?> m1Cls = null;
+        try { m1Cls = cl.loadClass("com.tencent.mm.modelbase.m1"); } catch (Throwable ignored) {}
+        if (m1Cls == null) { LogWriter.log(TAG, "m1 class not found, skip onSceneEnd"); return; }
 
-    private static void probeOnSceneEnd(ClassLoader cl, String className) {
-        try {
-            Class<?> cls = cl.loadClass(className);
-            int hooked = 0;
-            for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
-                if (m.getName().equals("onSceneEnd")) {
-                    XposedBridge.hookMethod(m, new OnSceneEndProbe());
-                    hooked++;
-                    LogWriter.log(TAG, "probe onSceneEnd(" + m.getParameterCount() + ") OK: " + className);
-                }
+        String[] classes = {
+            PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNewReceiveUI",
+            PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyDetailUI",
+            PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI",
+            PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI",
+            PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2",
+            PKG_WECHAT + ".plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI",
+        };
+        for (String clsName : classes) {
+            try {
+                Class<?> uiCls = cl.loadClass(clsName);
+                XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
+                    int.class, int.class, String.class, m1Cls, boolean.class,
+                    new MoneyResultHook("红包"));
+                XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
+                    int.class, int.class, String.class, m1Cls,
+                    new MoneyResultHook("红包"));
+                LogWriter.log(TAG, "tts onSceneEnd OK: " + clsName);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "tts FAILED: " + clsName + " " + t.getMessage());
             }
-            Class<?> sup = cls.getSuperclass();
-            while (sup != null && sup != Object.class) {
-                for (java.lang.reflect.Method m : sup.getDeclaredMethods()) {
-                    if (m.getName().equals("onSceneEnd")) {
-                        XposedBridge.hookMethod(m, new OnSceneEndProbe());
-                        hooked++;
-                        LogWriter.log(TAG, "probe onSceneEnd(" + m.getParameterCount() + ") OK: super " + sup.getName());
-                    }
-                }
-                sup = sup.getSuperclass();
-            }
-            if (hooked == 0) {
-                LogWriter.log(TAG, "probe: NO onSceneEnd methods on " + className);
-            }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "probe FAILED: " + className + " " + t.getMessage());
         }
     }
 
-    static class OnSceneEndProbe extends XC_MethodHook {
+    static class MoneyResultHook extends XC_MethodHook {
+        private final String mType;
+        MoneyResultHook(String type) { mType = type; }
+
         @Override
         protected void afterHookedMethod(MethodHookParam param) {
             try {
                 if (!sTtsAnnounce) return;
-                if (param.args.length < 4) return;
                 int errType = ((Number) param.args[0]).intValue();
                 int errCode = ((Number) param.args[1]).intValue();
                 if (errType != 0 || errCode != 0) return;
 
                 Object resp = param.args[3];
-                Object ui = param.thisObject;
+                if (resp == null) return;
+                LogWriter.log(TAG, "onSceneEnd FIRE respClass=" + resp.getClass().getSimpleName());
 
-                LogWriter.log(TAG, "onSceneEnd FIRE args=" + param.args.length
-                    + " respClass=" + (resp != null ? resp.getClass().getSimpleName() : "null"));
+                double amount = -1;
+                try {
+                    java.lang.reflect.Field ff = resp.getClass().getDeclaredField("f");
+                    ff.setAccessible(true);
+                    amount = ff.getDouble(resp);
+                } catch (Throwable e) {
+                    for (java.lang.reflect.Field fld : resp.getClass().getDeclaredFields()) {
+                        if (fld.getType() == double.class) {
+                            fld.setAccessible(true);
+                            amount = fld.getDouble(resp);
+                            break;
+                        }
+                    }
+                }
+                if (amount <= 0) return;
 
-                String amount = null;
+                int q = 0;
+                try {
+                    java.lang.reflect.Field fq = resp.getClass().getDeclaredField("q");
+                    fq.setAccessible(true);
+                    q = fq.getInt(resp);
+                } catch (Throwable ignored) {}
+                if (q != 1) return;
+
                 String sender = null;
-                String wishing = null;
+                try {
+                    java.lang.reflect.Field fm = resp.getClass().getDeclaredField("m");
+                    fm.setAccessible(true);
+                    Object v = fm.get(resp);
+                    if (v instanceof String && !((String) v).isEmpty()) sender = (String) v;
+                } catch (Throwable ignored) {}
 
-                if (resp != null) {
-                    for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
-                        f.setAccessible(true);
-                        String n = f.getName().toLowerCase();
-                        try {
-                            Object v = f.get(resp);
-                            if (v == null) continue;
-                            String valStr = v instanceof byte[] ? "byte[" + ((byte[])v).length + "]"
-                                : v.toString();
-                            if (valStr.length() > 100) valStr = valStr.substring(0, 100) + "...";
-                            LogWriter.log(TAG, "probe resp: " + f.getType().getSimpleName()
-                                + " " + f.getName() + " = " + valStr);
-
-                            if (amount == null && (n.contains("amount") || n.contains("total")
-                                || n.contains("fee") || n.contains("receive") || n.contains("money")
-                                || n.contains("hb") || n.contains("value"))
-                                && !n.contains("req") && !n.contains("type") && !n.contains("status")) {
-                                if (v instanceof String) amount = (String) v;
-                                else if (v instanceof Integer || v instanceof Long) {
-                                    long fen = ((Number)v).longValue();
-                                    if (fen > 0 && fen < 100000000) amount = String.valueOf(fen);
-                                }
-                            }
-                            if (sender == null && (n.contains("send") || n.contains("from")
-                                || n.contains("payer") || n.contains("nick"))
-                                && !n.contains("type") && !n.contains("id") && v instanceof String) {
-                                String s = (String) v;
-                                if (s.length() > 1 && s.length() < 50) sender = s;
-                            }
-                            if (wishing == null && (n.contains("wish") || n.contains("desc")
-                                || n.contains("greet") || n.contains("word")) && v instanceof String) {
-                                String s = (String) v;
-                                if (s.length() > 1 && s.length() < 100) wishing = s;
-                            }
-                        } catch (Exception ignored) {}
-                    }
-                    String str = resp.toString();
-                    if (str != null && !str.isEmpty()) {
-                        LogWriter.log(TAG, "probe resp.toString: " +
-                            (str.length() > 200 ? str.substring(0, 200) + "..." : str));
-                    }
-                }
-
-                if (amount == null && ui != null) {
-                    for (java.lang.reflect.Field f : ui.getClass().getDeclaredFields()) {
-                        f.setAccessible(true);
-                        String n = f.getName().toLowerCase();
-                        if (!n.contains("amount") && !n.contains("total") && !n.contains("fee")
-                            && !n.contains("money")) continue;
-                        try {
-                            Object v = f.get(ui);
-                            if (v instanceof String) amount = (String) v;
-                            else if (v instanceof Number) amount = String.valueOf(((Number)v).longValue());
-                            if (amount != null) {
-                                LogWriter.log(TAG, "probe ui amount: " + n + "=" + amount);
-                                break;
-                            }
-                        } catch (Exception ignored) {}
-                    }
-                }
-
-                if (amount != null && !amount.isEmpty()) {
-                    String yuan = fenToYuan(amount);
-                    String name = sender != null ? sender : "好友";
-                    LogWriter.log(TAG, "probe TTS: sender=" + name + " amount=" + yuan);
-                    TTSBroadcaster.announceRedPacket(name, null, null, yuan + "元");
-                } else {
-                    LogWriter.log(TAG, "probe FAIL: no amount found");
-                }
+                String yuan = String.format("%.2f", amount);
+                LogWriter.log(TAG, "tts: type=" + mType + " sender=" + sender + " amount=" + yuan);
+                TTSBroadcaster.announceRedPacket(sender != null ? sender : "好友", null, null, yuan + "元");
             } catch (Throwable t) {
-                LogWriter.log(TAG, "probe ERR: " + t.getMessage());
+                LogWriter.log(TAG, "MoneyResultHook ERR: " + t.getMessage());
             }
         }
     }

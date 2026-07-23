@@ -75,136 +75,132 @@ public class AutoCollectHook {
         LogWriter.log(TAG, "hooks installed (transfer result + UI auto-collect)");
     }
 
-    // ==================== TTS: 扫描 onSceneEnd 全部重载 + m1 响应字段探测 ====================
+    // ==================== TTS: onSceneEnd + 自动收款 onResume ====================
     public static void hookTransferResult(ClassLoader cl) {
-        probeOnSceneEnd(cl, PKG_WECHAT + ".plugin.wallet.pay.ui.WalletPayUI");
-        probeOnSceneEnd(cl, PKG_WECHAT + ".plugin.collection.ui.CollectionMainUI");
-    }
+        Class<?> m1Cls = null;
+        try { m1Cls = cl.loadClass("com.tencent.mm.modelbase.m1"); } catch (Throwable ignored) {}
+        if (m1Cls == null) { LogWriter.log(TAG, "m1 class not found, skip"); return; }
 
-    private static void probeOnSceneEnd(ClassLoader cl, String className) {
         try {
-            Class<?> cls = cl.loadClass(className);
-            int hooked = 0;
-            for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
-                if (m.getName().equals("onSceneEnd")) {
-                    XposedBridge.hookMethod(m, new OnSceneEndProbe());
-                    hooked++;
-                    LogWriter.log(TAG, "probe onSceneEnd(" + m.getParameterCount() + ") OK: " + className);
-                }
-            }
-            Class<?> sup = cls.getSuperclass();
-            while (sup != null && sup != Object.class) {
-                for (java.lang.reflect.Method m : sup.getDeclaredMethods()) {
-                    if (m.getName().equals("onSceneEnd")) {
-                        XposedBridge.hookMethod(m, new OnSceneEndProbe());
-                        hooked++;
-                        LogWriter.log(TAG, "probe onSceneEnd(" + m.getParameterCount() + ") OK: super " + sup.getName());
+            Class<?> uiCls = cl.loadClass(PKG_WECHAT + ".plugin.remittance.ui.RemittanceDetailUI");
+
+            XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
+                int.class, int.class, String.class, m1Cls, boolean.class,
+                new MoneyResultHook("转账"));
+            XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
+                int.class, int.class, String.class, m1Cls,
+                new MoneyResultHook("转账"));
+            LogWriter.log(TAG, "tts onSceneEnd OK: RemittanceDetailUI");
+
+            // 自动收款: Hook onResume
+            XposedHelpers.findAndHookMethod(uiCls, "onResume",
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        autoClickConfirm((Activity) param.thisObject);
                     }
-                }
-                sup = sup.getSuperclass();
-            }
-            if (hooked == 0) {
-                LogWriter.log(TAG, "probe: NO onSceneEnd methods on " + className);
-            }
+                });
+            LogWriter.log(TAG, "auto-collect onResume OK: RemittanceDetailUI");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "probe FAILED: " + className + " " + t.getMessage());
+            LogWriter.log(TAG, "transfer hook FAILED: " + t.getMessage());
         }
     }
 
-    static class OnSceneEndProbe extends XC_MethodHook {
+    static class MoneyResultHook extends XC_MethodHook {
+        private final String mType;
+        MoneyResultHook(String type) { mType = type; }
+
         @Override
         protected void afterHookedMethod(MethodHookParam param) {
             try {
                 if (!sTtsAnnounce) return;
-                if (param.args.length < 4) return;
                 int errType = ((Number) param.args[0]).intValue();
                 int errCode = ((Number) param.args[1]).intValue();
                 if (errType != 0 || errCode != 0) return;
 
                 Object resp = param.args[3];
-                Object ui = param.thisObject;
+                if (resp == null) return;
+                LogWriter.log(TAG, "onSceneEnd FIRE respClass=" + resp.getClass().getSimpleName());
 
-                LogWriter.log(TAG, "onSceneEnd FIRE args=" + param.args.length
-                    + " respClass=" + (resp != null ? resp.getClass().getSimpleName() : "null"));
+                double amount = -1;
+                try {
+                    java.lang.reflect.Field ff = resp.getClass().getDeclaredField("f");
+                    ff.setAccessible(true);
+                    amount = ff.getDouble(resp);
+                } catch (Throwable e) {
+                    for (java.lang.reflect.Field fld : resp.getClass().getDeclaredFields()) {
+                        if (fld.getType() == double.class) {
+                            fld.setAccessible(true);
+                            amount = fld.getDouble(resp);
+                            break;
+                        }
+                    }
+                }
+                if (amount <= 0) return;
 
-                String amount = null;
+                int q = 0;
+                try {
+                    java.lang.reflect.Field fq = resp.getClass().getDeclaredField("q");
+                    fq.setAccessible(true);
+                    q = fq.getInt(resp);
+                } catch (Throwable ignored) {}
+                if (q != 1) return;
+
                 String sender = null;
-                String desc = null;
+                try {
+                    java.lang.reflect.Field fm = resp.getClass().getDeclaredField("m");
+                    fm.setAccessible(true);
+                    Object v = fm.get(resp);
+                    if (v instanceof String && !((String) v).isEmpty()) sender = (String) v;
+                } catch (Throwable ignored) {}
 
-                if (resp != null) {
-                    for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
-                        f.setAccessible(true);
-                        String n = f.getName().toLowerCase();
-                        try {
-                            Object v = f.get(resp);
-                            if (v == null) continue;
-                            String valStr = v instanceof byte[] ? "byte[" + ((byte[])v).length + "]"
-                                : v.toString();
-                            if (valStr.length() > 100) valStr = valStr.substring(0, 100) + "...";
-                            LogWriter.log(TAG, "probe resp: " + f.getType().getSimpleName()
-                                + " " + f.getName() + " = " + valStr);
-
-                            if (amount == null && (n.contains("amount") || n.contains("total")
-                                || n.contains("fee") || n.contains("receive") || n.contains("money")
-                                || n.contains("hb") || n.contains("value"))
-                                && !n.contains("req") && !n.contains("type") && !n.contains("status")) {
-                                if (v instanceof String) amount = (String) v;
-                                else if (v instanceof Integer || v instanceof Long) {
-                                    long fen = ((Number)v).longValue();
-                                    if (fen > 0 && fen < 100000000) amount = String.valueOf(fen);
-                                }
-                            }
-                            if (sender == null && (n.contains("send") || n.contains("from")
-                                || n.contains("payer") || n.contains("nick"))
-                                && !n.contains("type") && !n.contains("id") && v instanceof String) {
-                                String s = (String) v;
-                                if (s.length() > 1 && s.length() < 50) sender = s;
-                            }
-                            if (desc == null && (n.contains("desc") || n.contains("remark")
-                                || n.contains("memo") || n.contains("note") || n.contains("word"))
-                                && v instanceof String) {
-                                String s = (String) v;
-                                if (s.length() > 1 && s.length() < 100) desc = s;
-                            }
-                        } catch (Exception ignored) {}
-                    }
-                    String str = resp.toString();
-                    if (str != null && !str.isEmpty()) {
-                        LogWriter.log(TAG, "probe resp.toString: " +
-                            (str.length() > 200 ? str.substring(0, 200) + "..." : str));
-                    }
-                }
-
-                if (amount == null && ui != null) {
-                    for (java.lang.reflect.Field f : ui.getClass().getDeclaredFields()) {
-                        f.setAccessible(true);
-                        String n = f.getName().toLowerCase();
-                        if (!n.contains("amount") && !n.contains("total") && !n.contains("fee")
-                            && !n.contains("money")) continue;
-                        try {
-                            Object v = f.get(ui);
-                            if (v instanceof String) amount = (String) v;
-                            else if (v instanceof Number) amount = String.valueOf(((Number)v).longValue());
-                            if (amount != null) {
-                                LogWriter.log(TAG, "probe ui amount: " + n + "=" + amount);
-                                break;
-                            }
-                        } catch (Exception ignored) {}
-                    }
-                }
-
-                if (amount != null && !amount.isEmpty()) {
-                    String yuan = RedPacketHook.fenToYuan(amount);
-                    String name = sender != null ? sender : "好友";
-                    LogWriter.log(TAG, "probe TTS: sender=" + name + " amount=" + yuan);
-                    TTSBroadcaster.announceTransfer(name, null, yuan + "元", desc);
-                } else {
-                    LogWriter.log(TAG, "probe FAIL: no amount found");
-                }
+                String yuan = String.format("%.2f", amount);
+                LogWriter.log(TAG, "tts: type=" + mType + " sender=" + sender + " amount=" + yuan);
+                TTSBroadcaster.announceTransfer(sender != null ? sender : "好友", null, yuan + "元", null);
             } catch (Throwable t) {
-                LogWriter.log(TAG, "probe ERR: " + t.getMessage());
+                LogWriter.log(TAG, "MoneyResultHook ERR: " + t.getMessage());
             }
         }
+    }
+
+    // ==================== 自动收款: 点击确认按钮 ====================
+    private static void autoClickConfirm(final Activity activity) {
+        if (activity == null) return;
+        sHandler.postDelayed(() -> {
+            try {
+                View root = activity.getWindow().getDecorView();
+                View btn = findConfirmButton(root);
+                if (btn != null) {
+                    LogWriter.log(TAG, "auto-click: " +
+                        (btn instanceof TextView ? ((TextView) btn).getText() : btn.getClass().getSimpleName()));
+                    btn.performClick();
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "autoClick err: " + t.getMessage());
+            }
+        }, 800);
+    }
+
+    private static View findConfirmButton(View root) {
+        if (root == null) return null;
+        if (root instanceof Button || root instanceof TextView) {
+            CharSequence text = root instanceof Button ? ((Button) root).getText() : ((TextView) root).getText();
+            if (text != null) {
+                String t = text.toString();
+                if (t.contains("确认收款") || t.contains("收钱") || t.contains("收款")
+                    || t.contains("确认") || t.contains("领取")) {
+                    if (root.isClickable() || root.isEnabled()) return root;
+                }
+            }
+        }
+        if (root instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) root;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                View result = findConfirmButton(vg.getChildAt(i));
+                if (result != null) return result;
+            }
+        }
+        return null;
     }
 
     // ==================== 自动收款 (保留) ====================
