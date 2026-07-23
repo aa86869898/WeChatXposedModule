@@ -94,8 +94,10 @@ public class MessageHook {
         return s == null ? "" : s.length() > m ? s.substring(0, m) + "..." : s;
     }
 
-    static int mapType(int rawType) {
-        if ((rawType & 0xFFFFFF00) == 0) return rawType;
-        return rawType & 0xFF;
+    static int mapType(int t) {
+        if (t >= 268435456 || t == 74 || t == 83 || t == 84 || t == 87
+            || t == 95 || t == 102 || t == 103 || t == 131 || t == 132
+            || t == 1048625 || t == 16777265) return 49;
+        return t;
     }
 }
