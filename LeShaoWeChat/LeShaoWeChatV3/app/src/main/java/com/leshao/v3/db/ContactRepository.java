@@ -35,6 +35,33 @@ public class ContactRepository {
     public static boolean isLoaded() { return sLoaded; }
     public static boolean isLoading() { return sLoading; }
 
+    public static void forceReload() {
+        if (sLoading) return;
+        sLoaded = false;
+        loadContacts();
+    }
+
+    // ===== 分类常量 (按手册第13章 WeChat j4.t() 位掩码) =====
+    public static int categorize(String wxid, int type) {
+        if (wxid == null) return CAT_EXCLUDED;
+        if ("filehelper".equals(wxid)) return CAT_SPECIAL;
+        if (wxid.endsWith("@chatroom")) return CAT_GROUP;
+        if (wxid.startsWith("gh_")) return CAT_OFFICIAL;
+        if (wxid.endsWith("@openim")) return CAT_OPENIM;
+        // ★ WeChat native friend filter: (type & 1) != 0 才是联系人
+        // type=4 (二进制100) → type & 1 = 0 → 不是好友，排除
+        if ((type & 1) == 0) return CAT_EXCLUDED;
+        if ((type & 32) != 0) return CAT_OFFICIAL;
+        if ((type & 8) != 0) return CAT_EXCLUDED;
+        return CAT_FRIEND;
+    }
+
+    private static final int CAT_FRIEND = 0;
+    private static final int CAT_GROUP = 1;
+    private static final int CAT_OFFICIAL = 2;
+    private static final int CAT_SPECIAL = 3;
+    private static final int CAT_OPENIM = 4;
+    private static final int CAT_EXCLUDED = 5;
     public static void init() {
         if (sListenerRegistered) return;
         sListenerRegistered = true;
@@ -98,7 +125,7 @@ public class ContactRepository {
     }
 
     private static boolean tryQueries(Object db) {
-        return queryContacts(db, "SELECT username, alias, conRemark, nickname, type FROM rcontact WHERE deleteFlag=0")
+        return queryContacts(db, "SELECT username, alias, conRemark, nickname, type FROM rcontact WHERE deleteFlag=0 AND (type & 1 != 0)")
             || queryContacts(db, "SELECT username, alias, conRemark, nickname, type FROM Contact");
     }
 
@@ -250,11 +277,23 @@ public class ContactRepository {
         return null;
     }
 
+    // ===== WeChat native friend filter (来自 j4.t() 源码, 手册第13章) =====
+    private static final String FRIEND_BITMASK =
+        "(r.type & 1) != 0 AND (r.type & 32) = 0 AND (r.type & 8) = 0 AND (r.verifyFlag & 8) = 0";
+
     private static boolean queryViaKa5(Object db) {
         try {
             Method u = db.getClass().getDeclaredMethod("u", String.class, String[].class);
-            // 按文档：deleteFlag=0 过滤已删除，不取系统号/公众号/文件传输助手
-            String sql = "SELECT username, alias, conRemark, nickname, type FROM rcontact WHERE deleteFlag=0";
+
+            // ★ 手册第13章: 用 WeChat 原生位掩码 + LEFT JOIN contact 一次性获取好友/群聊/性别
+            String sql = "SELECT r.username, r.alias, r.conRemark, r.nickname, r.type, r.createTime,"
+                + " COALESCE(c.sex, 0) AS sex"
+                + " FROM rcontact r"
+                + " LEFT JOIN contact c ON r.username = c.username"
+                + " WHERE r.deleteFlag = 0"
+                + " AND (r.username LIKE '%@chatroom'"
+                + "   OR (" + FRIEND_BITMASK + "))"
+                + " ORDER BY CASE WHEN r.username LIKE '%@chatroom' THEN 1 ELSE 0 END, r.nickname";
             Cursor c = (Cursor) u.invoke(db, sql, null);
             if (c == null) return false;
 
@@ -267,36 +306,43 @@ public class ContactRepository {
             int ciR = c.getColumnIndex("conRemark");
             int ciN = c.getColumnIndex("nickname");
             int ciT = c.getColumnIndex("type");
+            int ciCr = c.getColumnIndex("createTime");
+            int ciS = c.getColumnIndex("sex");
 
+            int sexCount = 0;
             while (c.moveToNext()) {
                 String wxid = c.getString(ciU);
                 if (wxid == null || wxid.isEmpty()) continue;
-                if (wxid.startsWith("gh_")) continue;       // 公众号
-                if ("filehelper".equals(wxid)) continue;    // 文件传输助手
                 int type = c.getInt(ciT);
-                if (type == 33) continue;                   // 系统号
 
-                // displayName: 备注 > alias(微信号) > 昵称 > wxid
-                String name = c.getString(ciR);              // conRemark
-                if (name == null || name.isEmpty()) name = c.getString(ciA); // alias
-                if (name == null || name.isEmpty()) name = c.getString(ciN); // nickname
+                int cat = categorize(wxid, type);
+                if (cat == CAT_EXCLUDED || cat == CAT_SPECIAL) continue;
+
+                String name = c.getString(ciR);
+                if (name == null || name.isEmpty()) name = c.getString(ciA);
+                if (name == null || name.isEmpty()) name = c.getString(ciN);
                 if (name == null || name.isEmpty()) name = wxid;
 
-                Contact contact = new Contact(wxid, name, name, wxid, type);
+                long createTime = ciCr >= 0 ? c.getLong(ciCr) : 0;
+                int sex = ciS >= 0 ? c.getInt(ciS) : 0;
+                if (sex != 0) sexCount++;
+
+                Contact contact = new Contact(wxid, name, name, wxid, type, sex, createTime);
                 all.add(contact);
-                if (wxid.endsWith("@chatroom")) groups.add(contact);
+                if (cat == CAT_GROUP) groups.add(contact);
                 else friends.add(contact);
             }
             c.close();
 
             LogWriter.log(TAG, "Strategy A: query OK, all=" + all.size()
-                + " f=" + friends.size() + " g=" + groups.size());
+                + " f=" + friends.size() + " g=" + groups.size() + " sex=" + sexCount);
 
             if (all.isEmpty()) return false;
             sAllContacts = all; sFriends = friends; sGroups = groups;
             return true;
         } catch (Throwable e) {
-            LogWriter.log(TAG, "Strategy A: query ERROR: " + e.getClass().getSimpleName());
+            LogWriter.log(TAG, "Strategy A: query ERROR: " + e.getClass().getSimpleName()
+                + ": " + e.getMessage());
             return false;
         }
     }
@@ -420,10 +466,13 @@ public class ContactRepository {
             String name = resolveObjName(conv);
             if (name == null || name.isEmpty()) name = wxid;
 
+            int cat = categorize(wxid, 0);
+            if (cat == CAT_OFFICIAL || cat == CAT_SPECIAL || cat == CAT_EXCLUDED || cat == CAT_OPENIM) return false;
+
             int type = wxid.endsWith("@chatroom") ? 1 : 0;
             Contact c = new Contact(wxid, name, name, wxid, type);
             all.add(c);
-            if (wxid.endsWith("@chatroom")) groups.add(c);
+            if (cat == CAT_GROUP) groups.add(c);
             else friends.add(c);
             return true;
         } catch (Throwable e) { return false; }
@@ -595,12 +644,13 @@ public class ContactRepository {
             int fb = 0, gb = 0;
             while ((Boolean) XposedHelpers.callMethod(cursor, "moveToNext")) {
                 String wxid = colStr(cursor, ciU);
-                if (skipWxid(wxid)) continue;
                 int type = colInt(cursor, ciT);
+                int cat = categorize(wxid, type);
+                if (cat == CAT_OFFICIAL || cat == CAT_SPECIAL || cat == CAT_EXCLUDED || cat == CAT_OPENIM) continue;
                 Contact c = new Contact(wxid, colStr(cursor, ciN), colStr(cursor, ciR), colStr(cursor, ciA), type);
 
                 all.add(c);
-                if (wxid.endsWith("@chatroom")) { groups.add(c); gb++; }
+                if (cat == CAT_GROUP) { groups.add(c); gb++; }
                 else { friends.add(c); fb++; }
             }
             XposedHelpers.callMethod(cursor, "close");

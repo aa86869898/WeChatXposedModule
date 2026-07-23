@@ -8,18 +8,29 @@ public class Contact {
     public final String remarkName;
     public final String alias;
     public final int type;
+    public int sex;
+    public final long createTime;
 
     public Contact(String wxid, String nickname, String remarkName, String alias, int type) {
+        this(wxid, nickname, remarkName, alias, type, 0, 0);
+    }
+
+    public Contact(String wxid, String nickname, String remarkName, String alias, int type, int sex, long createTime) {
         this.wxid = wxid != null ? wxid : "";
         this.nickname = nickname != null ? nickname : "";
         this.remarkName = remarkName != null ? remarkName : "";
         this.alias = alias != null ? alias : "";
         this.type = type;
+        this.sex = sex;
+        this.createTime = createTime;
     }
 
     public boolean isGroup() {
         return wxid != null && wxid.endsWith("@chatroom");
     }
+
+    public boolean isMale() { return sex == 1; }
+    public boolean isFemale() { return sex == 2; }
 
     public String displayName() {
         if (remarkName != null && !remarkName.isEmpty()) return remarkName;

@@ -1,5 +1,8 @@
 package com.leshao.v3.hook;
 
+import android.app.Notification;
+import android.os.Bundle;
+
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.model.WeChatMessage;
@@ -11,6 +14,8 @@ public class MessageHook {
 
     private static final String TAG = "MessageHook";
     private static volatile MessageCallback sCallback;
+    private static long sLastDedupTime = 0;
+    private static String sLastDedupKey = "";
 
     public interface MessageCallback {
         void onMessage(WeChatMessage msg);
@@ -19,7 +24,11 @@ public class MessageHook {
     public static void setCallback(MessageCallback cb) { sCallback = cb; }
 
     /**
-     * Hook 微信消息处理，尝试多个可能的目标方法
+     * Hook 微信消息处理，四层策略:
+     *   P1: modelmulti.p/q/r (WeChat 内部消息引擎)
+     *   P2: WXMsgBizEntry (WebView JS 桥)
+     *   P3: plugin.notification (微信通知插件)
+     *   P4: NotificationManager.notify (系统通知，最可靠兜底)
      */
     public static void hook() {
         if (!ContextManager.isReady()) {
@@ -29,10 +38,8 @@ public class MessageHook {
 
         ClassLoader cl = ContextManager.getClassLoader();
 
-        // 策略1: 尝试 hook com.tencent.mm.plugin.base.stub.WXMsgBizEntry
-        tryHookClass(cl, "com.tencent.mm.plugin.base.stub.WXMsgBizEntry", "handleMessage");
-
-        // 策略2: 尝试 hook com.tencent.mm.modelmulti 相关
+        // ===== P1: modelmulti.p/q/r =====
+        int p1Hooked = 0;
         for (String cls : new String[]{
             "com.tencent.mm.modelmulti.p",
             "com.tencent.mm.modelmulti.q",
@@ -40,7 +47,6 @@ public class MessageHook {
         }) {
             try {
                 Class<?> c = cl.loadClass(cls);
-                LogWriter.log(TAG, "tryHookClass: " + cls);
                 for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
                     if (m.getParameterTypes().length >= 3) {
                         XposedHelpers.findAndHookMethod(cls, cl, m.getName(),
@@ -53,24 +59,87 @@ public class MessageHook {
                                             WeChatMessage wm = WeChatMessage.fromReflectedObject(msgObj);
                                             if (wm != null && sCallback != null) {
                                                 sCallback.onMessage(wm);
+                                                LogWriter.log(TAG, "P1:" + cls + "." + m.getName() + " msg type=" + wm.type);
                                             }
                                         }
                                     } catch (Throwable ignored) {}
                                 }
                             });
-                        LogWriter.log(TAG, "hooked " + cls + "." + m.getName());
+                        p1Hooked++;
                     }
                 }
-            } catch (Throwable ignored) {}
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "P1: " + cls + " not found: " + e.getClass().getSimpleName());
+            }
         }
 
-        // 策略3: Hook plugin.notification 消息通知
-        tryHookClass(cl, "com.tencent.mm.plugin.notification.b.a", "a");
+        // ===== P2: WXMsgBizEntry =====
+        int p2Hooked = tryHookClass(cl, "com.tencent.mm.plugin.base.stub.WXMsgBizEntry", TAG, "P2");
 
-        LogWriter.log(TAG, "hook complete");
+        // ===== P3: plugin.notification =====
+        int p3Hooked = tryHookClass(cl, "com.tencent.mm.plugin.notification.b.a", TAG, "P3");
+
+        // ===== P4: NotificationManager 兜底 =====
+        hookNotificationManager();
+
+        LogWriter.log(TAG, "hook complete: P1=" + p1Hooked + " P2=" + p2Hooked
+            + " P3=" + p3Hooked + " P4=ok");
     }
 
-    private static void tryHookClass(ClassLoader cl, String className, String methodName) {
+    private static void hookNotificationManager() {
+        try {
+            // Hook notify(String, int, Notification)
+            XposedHelpers.findAndHookMethod(
+                android.app.NotificationManager.class,
+                "notify",
+                String.class, Integer.TYPE, Notification.class,
+                new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        try {
+                            String tag = (String) param.args[0];
+                            Notification n = (Notification) param.args[2];
+                            if (n == null || tag == null) return;
+
+                            // 跳过非微信的包（但 checkOp 需要 Context，这里用 heuristic）
+                            Bundle extras = n.extras;
+                            if (extras == null) return;
+
+                            String title = extras.getString(Notification.EXTRA_TITLE, "");
+                            String text = extras.getString(Notification.EXTRA_TEXT, "");
+                            if (text.isEmpty() && title.isEmpty()) return;
+
+                            // 去重: 1.5s 内相同内容跳过
+                            String dedupKey = tag + "|" + text;
+                            long now = System.currentTimeMillis();
+                            if (dedupKey.equals(sLastDedupKey) && now - sLastDedupTime < 1500) return;
+                            sLastDedupKey = dedupKey;
+                            sLastDedupTime = now;
+
+                            // 构建 WeChatMessage
+                            boolean isGroup = tag != null && tag.endsWith("@chatroom");
+                            String senderWxid = isGroup ? "" : tag;
+                            int type = WeChatMessage.TYPE_TEXT;
+                            WeChatMessage wm = new WeChatMessage(tag, senderWxid, text, type, now);
+
+                            if (sCallback != null) {
+                                sCallback.onMessage(wm);
+                                LogWriter.log(TAG, "P4: notify tacker=" + tag
+                                    + " group=" + isGroup + " text="
+                                    + (text.length() > 20 ? text.substring(0, 20) + "..." : text));
+                            }
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "P4: notify err: " + t.getMessage());
+                        }
+                    }
+                });
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "P4: NotificationManager hook FAILED: " + e.getClass().getSimpleName());
+        }
+    }
+
+    private static int tryHookClass(ClassLoader cl, String className, String tag, String label) {
+        int count = 0;
         try {
             Class<?> c = cl.loadClass(className);
             for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
@@ -85,15 +154,20 @@ public class MessageHook {
                                         WeChatMessage wm = WeChatMessage.fromReflectedObject(msgObj);
                                         if (wm != null && sCallback != null) {
                                             sCallback.onMessage(wm);
+                                            LogWriter.log(tag, label + ": msg type=" + wm.type
+                                                + " from=" + wm.talker);
                                         }
                                     }
                                 } catch (Throwable ignored) {}
                             }
                         });
-                    LogWriter.log(TAG, "hooked " + className + "." + m.getName());
+                    count++;
                 }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable e) {
+            LogWriter.log(tag, label + ": " + className + " not found: " + e.getClass().getSimpleName());
+        }
+        return count;
     }
 
     private static Object findMsgObject(Object[] args) {
