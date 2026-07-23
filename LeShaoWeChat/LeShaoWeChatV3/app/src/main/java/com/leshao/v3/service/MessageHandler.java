@@ -32,11 +32,7 @@ public class MessageHandler {
             if (senderWxid != null) {
                 effectiveContent = removeSenderPrefix(content);
                 String senderName = mNick.resolveDisplayName(senderWxid);
-                if (senderName.equals(senderWxid)) {
-                    displayName = groupName + "群" + "群成员";
-                } else {
-                    displayName = groupName + "群" + senderName;
-                }
+                displayName = groupName + "群" + senderName;
             } else {
                 displayName = groupName + "群";
             }

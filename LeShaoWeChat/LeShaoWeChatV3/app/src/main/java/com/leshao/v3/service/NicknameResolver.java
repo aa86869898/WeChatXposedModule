@@ -1,6 +1,5 @@
 package com.leshao.v3.service;
 
-import com.leshao.v3.LogWriter;
 import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.model.Contact;
 
@@ -9,7 +8,6 @@ import java.util.Map;
 
 public class NicknameResolver {
 
-    private static final String TAG = "Nickname";
     private final Map<String, String> mCache = new HashMap<>();
 
     public String resolveDisplayName(String wxid) {
@@ -20,26 +18,23 @@ public class NicknameResolver {
         String name = null;
 
         try {
-            Contact c = ContactRepository.findByWxid(wxid);
-            if (c != null) {
-                if (c.remarkName != null && !c.remarkName.isEmpty()) {
-                    name = c.remarkName;
-                } else if (c.nickname != null && !c.nickname.isEmpty()) {
-                    name = c.nickname;
-                } else if (c.alias != null && !c.alias.isEmpty()) {
-                    name = c.alias;
-                }
-            }
+            name = ContactRepository.queryNickFromDB(wxid);
         } catch (Throwable ignored) {}
 
         if (name == null) {
             try {
-                name = ContactRepository.queryNickFromDB(wxid);
+                Contact c = ContactRepository.findByWxid(wxid);
+                if (c != null) {
+                    if (c.remarkName != null && !c.remarkName.isEmpty()) {
+                        name = c.remarkName;
+                    } else if (c.nickname != null && !c.nickname.isEmpty()) {
+                        name = c.nickname;
+                    }
+                }
             } catch (Throwable ignored) {}
         }
 
         if (name == null) name = fallbackName(wxid);
-
         mCache.put(wxid, name);
         return name;
     }
