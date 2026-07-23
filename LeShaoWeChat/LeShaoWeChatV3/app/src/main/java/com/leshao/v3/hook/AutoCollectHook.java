@@ -117,43 +117,92 @@ public class AutoCollectHook {
 
                 Object resp = param.args[3];
                 if (resp == null) return;
-                LogWriter.log(TAG, "onSceneEnd FIRE respClass=" + resp.getClass().getSimpleName());
+                LogWriter.log(TAG, "respClass=" + resp.getClass().getName());
 
-                double amount = -1;
-                try {
-                    java.lang.reflect.Field ff = resp.getClass().getDeclaredField("f");
-                    ff.setAccessible(true);
-                    amount = ff.getDouble(resp);
-                } catch (Throwable e) {
-                    for (java.lang.reflect.Field fld : resp.getClass().getDeclaredFields()) {
-                        if (fld.getType() == double.class) {
-                            fld.setAccessible(true);
-                            amount = fld.getDouble(resp);
-                            break;
+                // ── 探测 resp 一级字段 ──
+                double amount = 0;
+                String sender = null;
+
+                for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
+                    f.setAccessible(true);
+                    try {
+                        Object v = f.get(resp);
+                        String name = f.getName();
+
+                        if (f.getType() == double.class && f.getDouble(resp) > 0) {
+                            amount = f.getDouble(resp);
+                        }
+                        if ((f.getType() == int.class || f.getType() == long.class)
+                            && name.toLowerCase().contains("amount")) {
+                            long val = f.getLong(resp);
+                            if (val > 0 && val < 100000000) {
+                                amount = val / 100.0;
+                                LogWriter.log(TAG, "amount(int) from " + name + "=" + val);
+                            }
+                        }
+                        if (v instanceof String && name.toLowerCase().contains("amount")) {
+                            try { amount = Double.parseDouble((String) v); }
+                            catch (NumberFormatException ignored) {}
+                        }
+                        if (v instanceof String && (name.contains("send") || name.contains("from")
+                            || name.contains("user") || name.contains("payer") || name.contains("nick"))
+                            && !name.contains("type") && !name.contains("id") && !name.contains("status")
+                            && ((String) v).length() > 1 && ((String) v).length() < 50) {
+                            sender = (String) v;
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                // ── 如果一级字段没找到金额，探测嵌套对象 ──
+                if (amount <= 0) {
+                    for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
+                        if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                        f.setAccessible(true);
+                        try {
+                            Object nested = f.get(resp);
+                            if (nested == null || nested instanceof String || nested instanceof Number) continue;
+                            LogWriter.log(TAG, "probing nested: " + f.getName() + " class=" + nested.getClass().getName());
+                            for (java.lang.reflect.Field nf : nested.getClass().getDeclaredFields()) {
+                                nf.setAccessible(true);
+                                try {
+                                    Object nv = nf.get(nested);
+                                    if (nf.getType() == double.class && nf.getDouble(nested) > 0) {
+                                        amount = nf.getDouble(nested);
+                                    }
+                                    if (nv instanceof String && nf.getName().toLowerCase().contains("amount")) {
+                                        try { amount = Double.parseDouble((String) nv); }
+                                        catch (NumberFormatException ignored) {}
+                                    }
+                                } catch (Exception ignored2) {}
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                }
+
+                // ── 如果没有 double 字段，尝试所有可能的金额字段 ──
+                if (amount <= 0) {
+                    for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
+                        if (f.getType() == int.class || f.getType() == long.class) {
+                            f.setAccessible(true);
+                            try {
+                                long v = f.getLong(resp);
+                                if (v > 10 && v < 100000000) {
+                                    amount = v / 100.0;
+                                    LogWriter.log(TAG, "guessed amount: " + f.getName() + "=" + v);
+                                    break;
+                                }
+                            } catch (Exception ignored) {}
                         }
                     }
                 }
+
+                LogWriter.log(TAG, "final amount=" + amount + " type=" + mType);
                 if (amount <= 0) return;
 
-                int q = 0;
-                try {
-                    java.lang.reflect.Field fq = resp.getClass().getDeclaredField("q");
-                    fq.setAccessible(true);
-                    q = fq.getInt(resp);
-                } catch (Throwable ignored) {}
-                if (q != 1) return;
-
-                String sender = null;
-                try {
-                    java.lang.reflect.Field fm = resp.getClass().getDeclaredField("m");
-                    fm.setAccessible(true);
-                    Object v = fm.get(resp);
-                    if (v instanceof String && !((String) v).isEmpty()) sender = (String) v;
-                } catch (Throwable ignored) {}
-
                 String yuan = String.format("%.2f", amount);
+                String name = sender != null ? sender : "好友";
                 LogWriter.log(TAG, "tts: type=" + mType + " sender=" + sender + " amount=" + yuan);
-                TTSBroadcaster.announceTransfer(sender != null ? sender : "好友", null, yuan + "元", null);
+                TTSBroadcaster.announceTransfer(name, null, yuan + "元", null);
             } catch (Throwable t) {
                 LogWriter.log(TAG, "MoneyResultHook ERR: " + t.getMessage());
             }
@@ -165,28 +214,32 @@ public class AutoCollectHook {
         if (activity == null) return;
         sHandler.postDelayed(() -> {
             try {
-                View root = activity.getWindow().getDecorView();
-                View btn = findConfirmButton(root);
+                View btn = findConfirmButton(activity.getWindow().getDecorView());
                 if (btn != null) {
-                    LogWriter.log(TAG, "auto-click: " +
-                        (btn instanceof TextView ? ((TextView) btn).getText() : btn.getClass().getSimpleName()));
+                    LogWriter.log(TAG, "auto-click: " + ((Button) btn).getText());
                     btn.performClick();
+                } else {
+                    LogWriter.log(TAG, "auto-click: no Button matched");
                 }
             } catch (Throwable t) {
                 LogWriter.log(TAG, "autoClick err: " + t.getMessage());
             }
-        }, 800);
+        }, 1000);
     }
 
     private static View findConfirmButton(View root) {
         if (root == null) return null;
-        if (root instanceof Button || root instanceof TextView) {
-            CharSequence text = root instanceof Button ? ((Button) root).getText() : ((TextView) root).getText();
+        if (root instanceof Button) {
+            CharSequence text = ((Button) root).getText();
             if (text != null) {
                 String t = text.toString();
-                if (t.contains("确认收款") || t.contains("收钱") || t.contains("收款")
-                    || t.contains("确认") || t.contains("领取")) {
-                    if (root.isClickable() || root.isEnabled()) return root;
+                LogWriter.log(TAG, "Button: " + t + " clickable=" + root.isClickable());
+                if (root.isClickable() || root.isEnabled()) {
+                    if (t.contains("确认收款") || t.contains("收款") || t.contains("收钱")
+                        || t.contains("确认") || t.contains("领取") || t.contains("拆开")
+                        || t.contains("收下")) {
+                        return root;
+                    }
                 }
             }
         }
