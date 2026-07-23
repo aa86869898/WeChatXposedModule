@@ -138,6 +138,7 @@
 **/.metadata
 **/.flutter_build
 **/build/
+!**/build/outputs/apk/debug/*.apk
 **/.dart_tool/
 **/ios/Pods/
 **/ios/.symlinks/
