@@ -1,5 +1,6 @@
 package com.leshao.v3.service;
 
+import com.leshao.v3.LogWriter;
 import com.leshao.v3.model.ModuleConfig;
 
 import java.util.regex.Matcher;
@@ -7,7 +8,8 @@ import java.util.regex.Pattern;
 
 public class MessageHandler {
 
-    private static final Pattern SENDER_PREFIX = Pattern.compile("^(wxid_[a-zA-Z0-9]+):\\s*");
+    private static final Pattern SENDER_PREFIX_WXID = Pattern.compile("^(wxid_[a-zA-Z0-9]+):\\s*");
+    private static final Pattern SENDER_PREFIX_ANY = Pattern.compile("^([a-zA-Z0-9_]+):\\s*");
 
     private final TtsEngine mTts;
     private final FilterManager mFilter;
@@ -40,10 +42,13 @@ public class MessageHandler {
             displayName = mNick.resolveDisplayName(talker);
         }
 
+        LogWriter.log("MessageHandler", "handle type=" + msgType + " talker=" + talker + " name=" + displayName);
+
         switch (msgType) {
             case 1:  handleText(displayName, effectiveContent, cfg); break;
             case 3:  handleImage(displayName); break;
-            case 34: handleVoice(displayName); break;
+            case 34: handleVoice(displayName); VoiceRelay.process(talker, msgType); break;
+            case 42: handleCard(displayName); break;
             case 43: handleVideo(displayName); break;
             case 48: handleLocation(displayName, effectiveContent); break;
             case 49: handleAppMsg(displayName, effectiveContent); break;
@@ -62,7 +67,7 @@ public class MessageHandler {
     }
 
     private void handleVoice(String name) {
-        mTts.speak(name + "发来语音，请在手机上收听");
+        mTts.speak(name + "发来语音");
     }
 
     private void handleImage(String name) {
@@ -71,6 +76,10 @@ public class MessageHandler {
 
     private void handleVideo(String name) {
         mTts.speak(name + "发来一段视频");
+    }
+
+    private void handleCard(String name) {
+        mTts.speak(name + "发来一张名片");
     }
 
     private void handleLocation(String name, String content) {
@@ -89,18 +98,21 @@ public class MessageHandler {
         }
     }
 
-    public void announceRedPacket(String sender, String wishing, String amount) {
-        String name = sender != null ? mNick.resolveDisplayName(sender) : "好友";
-        String wish = wishing != null ? wishing : "恭喜发财";
-        String speak = name + "的红包：" + wish + "，你抢到了" + amount + "元";
-        mTts.speak(speak);
+    public void announceRedPacket(String sender, String chatroom, String wishing, String amount) {
+        String senderName = sender != null ? mNick.resolveDisplayName(sender) : "好友";
+        boolean isGroup = chatroom != null && chatroom.endsWith("@chatroom");
+
+        if (isGroup) {
+            String groupName = mNick.resolveDisplayName(chatroom);
+            mTts.speak("成功抢到" + groupName + "群" + senderName + "发送的红包，金额" + amount + "元");
+        } else {
+            mTts.speak("成功领取" + senderName + "发来的红包，金额" + amount + "元");
+        }
     }
 
-    public void announceTransfer(String sender, String amount, String desc) {
-        String name = sender != null ? mNick.resolveDisplayName(sender) : "好友";
-        String speak = "收到" + name + "转账" + amount + "元";
-        if (desc != null && !desc.isEmpty()) speak += "，备注：" + desc;
-        mTts.speak(speak);
+    public void announceTransfer(String sender, String chatroom, String amount, String desc) {
+        String senderName = sender != null ? mNick.resolveDisplayName(sender) : "好友";
+        mTts.speak("成功领取" + senderName + "发来的转账，金额" + amount + "元");
     }
 
     static String cleanText(String content) {
@@ -117,28 +129,40 @@ public class MessageHandler {
 
     static String parseLocation(String content) {
         if (content == null) return "未知位置";
-        int i = content.indexOf("label=\"");
-        if (i >= 0) {
-            int s = i + 7, e = content.indexOf("\"", s);
-            if (e > s) return content.substring(s, e);
-        }
-        i = content.indexOf("poiname=\"");
-        if (i >= 0) {
-            int s = i + 9, e = content.indexOf("\"", s);
-            if (e > s) return content.substring(s, e);
-        }
-        return "未知位置";
+        String label = extractXmlAttr(content, "label");
+        String poiname = extractXmlAttr(content, "poiname");
+
+        if (label.isEmpty() && poiname.isEmpty()) return "未知位置";
+        if (label.isEmpty()) return poiname;
+        if (poiname.isEmpty()) return label;
+        if (poiname.startsWith(label)) return poiname;
+        return label + poiname;
+    }
+
+    private static String extractXmlAttr(String content, String name) {
+        int i = content.indexOf(name + "=\"");
+        if (i < 0) return "";
+        int s = i + name.length() + 2;
+        int e = content.indexOf("\"", s);
+        if (e <= s) return "";
+        return content.substring(s, e);
     }
 
     static String extractSenderWxid(String content) {
         if (content == null) return null;
-        Matcher m = SENDER_PREFIX.matcher(content);
-        return m.find() ? m.group(1) : null;
+        Matcher m = SENDER_PREFIX_WXID.matcher(content);
+        if (m.find()) return m.group(1);
+        m = SENDER_PREFIX_ANY.matcher(content);
+        if (m.find()) return m.group(1);
+        return null;
     }
 
     static String removeSenderPrefix(String content) {
         if (content == null) return "";
-        Matcher m = SENDER_PREFIX.matcher(content);
-        return m.find() ? content.substring(m.end()) : content;
+        Matcher m = SENDER_PREFIX_WXID.matcher(content);
+        if (m.find()) return content.substring(m.end());
+        m = SENDER_PREFIX_ANY.matcher(content);
+        if (m.find()) return content.substring(m.end());
+        return content;
     }
 }

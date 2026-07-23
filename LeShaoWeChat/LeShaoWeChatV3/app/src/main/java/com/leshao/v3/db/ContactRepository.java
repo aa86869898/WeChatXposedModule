@@ -13,6 +13,7 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -28,6 +29,10 @@ public class ContactRepository {
     private static volatile boolean sLoaded = false;
     private static volatile boolean sLoading = false;
     private static volatile boolean sListenerRegistered = false;
+
+    private static Object sDirDb;
+    private static final Map<String, String> sNickCache = new HashMap<>();
+    private static final Object sDirLock = new Object();
 
     public static List<Contact> getAll() { return sAllContacts != null ? sAllContacts : Collections.<Contact>emptyList(); }
     public static List<Contact> getFriends() { return sFriends != null ? sFriends : Collections.<Contact>emptyList(); }
@@ -768,43 +773,126 @@ public class ContactRepository {
 
     public static String queryNickFromDB(String wxid) {
         if (wxid == null || wxid.isEmpty()) return null;
-        Object db = DatabaseProvider.getDatabase();
-        if (db == null) {
-            LogWriter.log(TAG, "queryNickFromDB: DB is null");
-            return null;
+
+        String cached = sNickCache.get(wxid);
+        if (cached != null) return cached;
+
+        String name = null;
+        Object db = ensureDirDb();
+
+        if (db != null) {
+            Object cursor = null;
+            try {
+                cursor = XposedHelpers.callMethod(db, "u",
+                    "SELECT conRemark, nickname FROM rcontact WHERE username=?",
+                    new String[]{wxid});
+                if (cursor != null) {
+                    int ciR = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "conRemark");
+                    int ciN = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "nickname");
+                    while ((Boolean) XposedHelpers.callMethod(cursor, "moveToNext")) {
+                        String r = colStr(cursor, ciR);
+                        String n = colStr(cursor, ciN);
+                        if (r != null && !r.isEmpty()) name = r;
+                        else if (n != null && !n.isEmpty()) name = n;
+                        break;
+                    }
+                    XposedHelpers.callMethod(cursor, "close");
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "queryNick[dir] err: " + t.getMessage());
+            } finally {
+                if (cursor != null) {
+                    try { XposedHelpers.callMethod(cursor, "close"); } catch (Throwable ignored) {}
+                }
+            }
         }
 
-        Object cursor = null;
-        try {
-            cursor = XposedHelpers.callMethod(db, "rawQuery",
-                "SELECT conRemark, nickname FROM rcontact WHERE username=?",
-                new String[]{wxid});
-            if (cursor == null) {
-                LogWriter.log(TAG, "queryNickFromDB: cursor is null for " + truncate(wxid));
-                return null;
+        if (name == null) {
+            Object ddb = DatabaseProvider.getDatabase();
+            if (ddb != null) {
+                Object cursor = null;
+                try {
+                    cursor = XposedHelpers.callMethod(ddb, "rawQuery",
+                        "SELECT conRemark, nickname FROM rcontact WHERE username=?",
+                        new String[]{wxid});
+                    if (cursor != null) {
+                        int ciR = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "conRemark");
+                        int ciN = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "nickname");
+                        while ((Boolean) XposedHelpers.callMethod(cursor, "moveToNext")) {
+                            String r = colStr(cursor, ciR);
+                            String n = colStr(cursor, ciN);
+                            if (r != null && !r.isEmpty()) name = r;
+                            else if (n != null && !n.isEmpty()) name = n;
+                            break;
+                        }
+                        XposedHelpers.callMethod(cursor, "close");
+                    }
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "queryNick[dbp] err: " + t.getMessage());
+                } finally {
+                    if (cursor != null) {
+                        try { XposedHelpers.callMethod(cursor, "close"); } catch (Throwable ignored) {}
+                    }
+                }
             }
+        }
 
-            int ciR = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "conRemark");
-            int ciN = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "nickname");
+        if (name == null) name = "";
+        sNickCache.put(wxid, name);
+        if (name.isEmpty()) {
+            LogWriter.log(TAG, "queryNick: " + truncate(wxid) + " -> (not found)");
+        }
+        return name.isEmpty() ? null : name;
+    }
 
-            String name = null;
-            while ((Boolean) XposedHelpers.callMethod(cursor, "moveToNext")) {
-                String r = colStr(cursor, ciR);
-                String n = colStr(cursor, ciN);
-                if (r != null && !r.isEmpty()) name = r;
-                else if (n != null && !n.isEmpty()) name = n;
-                break;
+    private static Object ensureDirDb() {
+        if (sDirDb != null) return sDirDb;
+
+        ClassLoader cl = ContextManager.getClassLoader();
+        if (cl == null) return null;
+
+        synchronized (sDirLock) {
+            if (sDirDb != null) return sDirDb;
+
+            try {
+                android.content.Context ctx = ContextManager.getAppContext();
+                if (ctx == null) {
+                    LogWriter.log(TAG, "ensureDirDb: Context is null");
+                    return null;
+                }
+
+                SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
+                Object uv = sp.getAll().get("default_uin");
+                if (uv == null) {
+                    LogWriter.log(TAG, "ensureDirDb: uin not found");
+                    return null;
+                }
+                long uin = Long.parseLong(uv.toString());
+
+                String dbPath = getDbPath(cl, ctx, uin);
+                if (dbPath == null) {
+                    LogWriter.log(TAG, "ensureDirDb: dbPath is null");
+                    return null;
+                }
+
+                String[] imeiCandidates = getImeiCandidates(cl);
+                for (String imei : imeiCandidates) {
+                    if (imei == null || imei.isEmpty()) continue;
+                    String password = calcPassword(cl, imei, uin);
+                    if (password == null || password.length() != 7) continue;
+
+                    Object db = openKa5Db(cl, dbPath, password);
+                    if (db != null) {
+                        sDirDb = db;
+                        LogWriter.log(TAG, "ensureDirDb OK");
+                        return db;
+                    }
+                }
+                LogWriter.log(TAG, "ensureDirDb: all password candidates failed");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "ensureDirDb FAIL: " + t.getMessage());
             }
-            XposedHelpers.callMethod(cursor, "close");
-            LogWriter.log(TAG, "queryNickFromDB: " + truncate(wxid) + " → " + name);
-            return name;
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "queryNickFromDB err: " + t.getMessage());
             return null;
-        } finally {
-            if (cursor != null) {
-                try { XposedHelpers.callMethod(cursor, "close"); } catch (Throwable ignored) {}
-            }
         }
     }
 

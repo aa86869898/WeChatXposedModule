@@ -19,6 +19,7 @@ public class ModuleConfig {
     public boolean announceRedBag = true, announceTransfer = true, announceCard = true;
     public boolean announceFile = true, announceLocation = true, announceSticker = false;
     public boolean announceCall = true, announceNickname = true, announceGroup = false;
+    public boolean autoPlayVoice = true;
 
     public String customAnnounceFormat = "{sender}: {content}";
     public long announceIntervalMs = 0;
@@ -173,6 +174,7 @@ public class ModuleConfig {
         cfg.announceCall = prefs.getBoolean("ls_announce_call", true);
         cfg.announceNickname = prefs.getBoolean("ls_announce_nickname", true);
         cfg.announceGroup = prefs.getBoolean("ls_announce_group", false);
+        cfg.autoPlayVoice = prefs.getBoolean("ls_auto_voice", true);
 
         cfg.announceIntervalMs = parseInt(prefs.getString("ls_announce_interval_ms", "0"), 0);
         cfg.textTruncateEnabled = prefs.getBoolean("ls_text_truncate", true);
@@ -331,6 +333,7 @@ public class ModuleConfig {
         e.putBoolean("ls_announce_call", announceCall);
         e.putBoolean("ls_announce_nickname", announceNickname);
         e.putBoolean("ls_announce_group", announceGroup);
+        e.putBoolean("ls_auto_voice", autoPlayVoice);
         e.putString("ls_announce_interval_ms", String.valueOf(announceIntervalMs));
         e.putString("ls_announce_fmt", customAnnounceFormat);
         e.putBoolean("ls_text_truncate", textTruncateEnabled);

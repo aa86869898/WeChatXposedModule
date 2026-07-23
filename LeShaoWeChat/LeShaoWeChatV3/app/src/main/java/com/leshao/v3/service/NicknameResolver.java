@@ -4,15 +4,33 @@ import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.model.Contact;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class NicknameResolver {
 
-    private final Map<String, String> mCache = new HashMap<>();
+    private static final Map<String, String> sCache = new HashMap<>();
+
+    public static void init() {
+        List<Contact> all = ContactRepository.getAll();
+        for (Contact c : all) {
+            if (c.wxid == null || c.wxid.isEmpty()) continue;
+            String name = null;
+            if (c.remarkName != null && !c.remarkName.isEmpty()) {
+                name = c.remarkName;
+            } else if (c.nickname != null && !c.nickname.isEmpty()) {
+                name = c.nickname;
+            }
+            if (name != null && !name.isEmpty()) {
+                sCache.put(c.wxid, name);
+            }
+        }
+    }
 
     public String resolveDisplayName(String wxid) {
         if (wxid == null || wxid.isEmpty()) return "未知";
-        String cached = mCache.get(wxid);
+
+        String cached = sCache.get(wxid);
         if (cached != null) return cached;
 
         String name = null;
@@ -35,7 +53,7 @@ public class NicknameResolver {
         }
 
         if (name == null) name = fallbackName(wxid);
-        mCache.put(wxid, name);
+        sCache.put(wxid, name);
         return name;
     }
 

@@ -19,6 +19,7 @@ public class TTSBroadcaster {
         if (sEngine != null) return;
         sEngine = new TtsEngine(ctx);
         sFilter = new FilterManager();
+        NicknameResolver.init();
         sHandler = new MessageHandler(sEngine, sFilter, new NicknameResolver());
         LogWriter.log(TAG, "TTS init done");
     }
@@ -44,12 +45,12 @@ public class TTSBroadcaster {
         }
     }
 
-    public static void announceRedPacket(String sender, String wishing, String amount) {
-        if (sHandler != null) sHandler.announceRedPacket(sender, wishing, amount);
+    public static void announceRedPacket(String sender, String chatroom, String wishing, String amount) {
+        if (sHandler != null) sHandler.announceRedPacket(sender, chatroom, wishing, amount);
     }
 
-    public static void announceTransfer(String sender, String amount, String desc) {
-        if (sHandler != null) sHandler.announceTransfer(sender, amount, desc);
+    public static void announceTransfer(String sender, String chatroom, String amount, String desc) {
+        if (sHandler != null) sHandler.announceTransfer(sender, chatroom, amount, desc);
     }
 
     public static void stopAll() {

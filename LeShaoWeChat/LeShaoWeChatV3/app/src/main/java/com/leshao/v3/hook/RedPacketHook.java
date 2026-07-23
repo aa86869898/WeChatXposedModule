@@ -85,20 +85,23 @@ public class RedPacketHook {
     private static void hookOnSceneEnd(ClassLoader cl, String className) {
         try {
             Class<?> uiCls = cl.loadClass(className);
-            Class<?> m1Cls = cl.loadClass(PKG_WECHAT + ".modelbase.m1");
-            XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
-                int.class, int.class, String.class, m1Cls,
+            XposedBridge.hookAllMethods(uiCls, "onSceneEnd",
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         try {
-                            int errType = (int) param.args[0];
-                            int errCode = (int) param.args[1];
+                            if (param.args.length < 4) return;
+                            int errType = ((Number) param.args[0]).intValue();
+                            int errCode = ((Number) param.args[1]).intValue();
                             if (errType != 0 || errCode != 0) return;
                             if (!sTtsAnnounce) return;
 
                             Object resp = param.args[3];
+                            if (resp == null) return;
+                            LogWriter.log(TAG, "onSceneEnd FIRE respClass=" + resp.getClass().getSimpleName());
+
                             String xml = reflectToString(resp);
+                            LogWriter.log(TAG, "onSceneEnd xml=" + (xml != null ? xml.substring(0, Math.min(xml.length(), 200)) : "null"));
 
                             String amountStr = extractTag(xml, "amount");
                             if (amountStr == null) amountStr = extractTag(xml, "receiveamount");
@@ -106,14 +109,16 @@ public class RedPacketHook {
 
                             String sender = extractTag(xml, "sendname");
                             String wishing = extractTag(xml, "wishing");
+                            String chatroom = extractTag(xml, "chatroom");
 
-                            if (sender == null) sender = reflectFieldByKeyword(param.thisObject, "sendname", "sender", "sendername");
-                            if (wishing == null) wishing = reflectFieldByKeyword(param.thisObject, "wish", "desc", "greeting", "wishing");
+                            if (sender == null) sender = reflectFieldByKeyword(resp, "sendname", "sender", "sendername");
+                            if (wishing == null) wishing = reflectFieldByKeyword(resp, "wish", "desc", "greeting", "wishing");
+                            if (chatroom == null) chatroom = rifStrByKw(resp, "chatroom", "groupid", "roomname");
 
                             if (amountStr == null || amountStr.isEmpty()) return;
 
                             String yuan = fenToYuan(amountStr);
-                            TTSBroadcaster.announceRedPacket(sender, wishing, yuan);
+                            TTSBroadcaster.announceRedPacket(sender, chatroom, wishing, yuan);
 
                         } catch (Throwable t) {
                             LogWriter.log(TAG, "onSceneEnd TTS err: " + t.getMessage());
@@ -144,7 +149,7 @@ public class RedPacketHook {
         } catch (Exception e) { return obj.toString(); }
     }
 
-    private static String reflectFieldByKeyword(Object obj, String... names) {
+    private static String rifStrByKw(Object obj, String... names) {
         if (obj == null) return null;
         for (String name : names) {
             try {
@@ -159,6 +164,10 @@ public class RedPacketHook {
             } catch (Exception ignored) {}
         }
         return null;
+    }
+
+    private static String reflectFieldByKeyword(Object obj, String... names) {
+        return rifStrByKw(obj, names);
     }
 
     private static String extractTag(String xml, String tag) {

@@ -62,8 +62,7 @@ public class MessageHook {
             String content = (String) XposedHelpers.callMethod(e9, "j");
 
             if (content != null && (content.startsWith("<msgsource")
-                || content.startsWith("<pushcontent")
-                || content.startsWith("<?xml")))
+                || content.startsWith("<pushcontent")))
                 return;
 
             sCount++;
@@ -72,14 +71,12 @@ public class MessageHook {
                 + " talker=" + trunc(talker, 20)
                 + " content=" + trunc(content, 40));
 
-            if (type != 1) return;
-            if (content == null || content.isEmpty()) return;
-
+            final int fType = type;
             final String fTalker = talker;
             final String fContent = content;
             sMainHandler.post(() -> {
                 try {
-                    TTSBroadcaster.handleMessageRaw(1, fTalker, fContent);
+                    TTSBroadcaster.handleMessageRaw(fType, fTalker, fContent);
                 } catch (Throwable e) {
                     LogWriter.log("TTS", "err: " + e.getMessage());
                 }

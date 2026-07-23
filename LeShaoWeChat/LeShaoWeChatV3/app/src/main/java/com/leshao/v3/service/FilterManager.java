@@ -26,12 +26,18 @@ public class FilterManager {
                 return true;
             case com.leshao.v3.model.WeChatMessage.TYPE_IMAGE:
                 return cfg.announceImage;
+            case com.leshao.v3.model.WeChatMessage.TYPE_CARD:
+                return cfg.announceCard;
             case com.leshao.v3.model.WeChatMessage.TYPE_VIDEO:
                 return cfg.announceVideo;
             case com.leshao.v3.model.WeChatMessage.TYPE_APPMSG:
                 if (content == null) return true;
                 if (content.contains("<location")) return cfg.announceLocation;
                 return true;
+            case com.leshao.v3.model.WeChatMessage.TYPE_STICKER:
+                return cfg.announceSticker;
+            case com.leshao.v3.model.WeChatMessage.TYPE_VOIP:
+                return cfg.announceCall;
             default:
                 return true;
         }

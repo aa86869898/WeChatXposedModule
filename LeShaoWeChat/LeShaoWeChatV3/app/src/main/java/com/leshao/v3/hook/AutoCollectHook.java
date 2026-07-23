@@ -80,32 +80,35 @@ public class AutoCollectHook {
     public static void hookTransferResult(ClassLoader cl) {
         try {
             Class<?> uiCls = cl.loadClass(PKG_WECHAT + ".plugin.remittance.ui.RemittanceDetailUI");
-            Class<?> m1Cls = cl.loadClass(PKG_WECHAT + ".modelbase.m1");
-            XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
-                int.class, int.class, String.class, m1Cls,
+            XposedBridge.hookAllMethods(uiCls, "onSceneEnd",
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         try {
-                            int errType = (int) param.args[0];
-                            int errCode = (int) param.args[1];
+                            if (param.args.length < 4) return;
+                            int errType = ((Number) param.args[0]).intValue();
+                            int errCode = ((Number) param.args[1]).intValue();
                             if (errType != 0 || errCode != 0) return;
                             if (!sTtsAnnounce) return;
 
                             Object resp = param.args[3];
+                            if (resp == null) return;
+                            LogWriter.log(TAG, "transfer onSceneEnd FIRE respClass=" + resp.getClass().getSimpleName());
+
                             String xml = reflectToString(resp);
+                            LogWriter.log(TAG, "transfer onSceneEnd xml=" + (xml != null ? xml.substring(0, Math.min(xml.length(), 200)) : "null"));
 
                             String feeStr = extractTag(xml, "fee");
                             String sender = extractTag(xml, "payer_username");
                             String desc = extractTag(xml, "pay_memo");
 
-                            if (sender == null) sender = reflectFieldByKeyword(param.thisObject, "payer", "sender", "fromuser");
-                            if (desc == null) desc = reflectFieldByKeyword(param.thisObject, "desc", "memo", "remark");
+                            if (sender == null) sender = rifStrByKw(resp, "payer", "sender", "fromuser");
+                            if (desc == null) desc = rifStrByKw(resp, "desc", "memo", "remark");
 
                             if (feeStr == null || feeStr.isEmpty()) return;
 
                             String yuan = RedPacketHook.fenToYuan(feeStr);
-                            TTSBroadcaster.announceTransfer(sender, yuan, desc);
+                            TTSBroadcaster.announceTransfer(sender, null, yuan, desc);
 
                         } catch (Throwable t) {
                             LogWriter.log(TAG, "onSceneEnd TTS err: " + t.getMessage());
@@ -136,7 +139,7 @@ public class AutoCollectHook {
         } catch (Exception e) { return obj.toString(); }
     }
 
-    private static String reflectFieldByKeyword(Object obj, String... names) {
+    private static String rifStrByKw(Object obj, String... names) {
         if (obj == null) return null;
         for (String name : names) {
             try {
@@ -151,6 +154,10 @@ public class AutoCollectHook {
             } catch (Exception ignored) {}
         }
         return null;
+    }
+
+    private static String reflectFieldByKeyword(Object obj, String... names) {
+        return rifStrByKw(obj, names);
     }
 
     private static String extractTag(String xml, String tag) {
