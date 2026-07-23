@@ -38,6 +38,10 @@ public class FilterManager {
                 return cfg.announceSticker;
             case com.leshao.v3.model.WeChatMessage.TYPE_VOIP:
                 return cfg.announceCall;
+            case com.leshao.v3.model.WeChatMessage.TYPE_REDPACKET:
+                return true;
+            case com.leshao.v3.model.WeChatMessage.TYPE_TRANSFER:
+                return true;
             default:
                 return true;
         }

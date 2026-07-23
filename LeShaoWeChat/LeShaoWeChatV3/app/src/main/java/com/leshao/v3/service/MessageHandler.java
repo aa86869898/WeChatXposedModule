@@ -52,6 +52,9 @@ public class MessageHandler {
             case 43: handleVideo(displayName); break;
             case 48: handleLocation(displayName, effectiveContent); break;
             case 49: handleAppMsg(displayName, effectiveContent); break;
+            case 318767153: handleRedPacket(displayName); break;
+            case 419430449: handleTransfer(displayName); break;
+            case 436207665: handleLuckyCard(displayName); break;
         }
     }
 
@@ -96,6 +99,18 @@ public class MessageHandler {
         if (content.contains("luckymoney") || content.contains("lucky money")) {
             mTts.speak(name + "发来一个红包");
         }
+    }
+
+    private void handleRedPacket(String name) {
+        mTts.speak(name + "发来一个红包");
+    }
+
+    private void handleTransfer(String name) {
+        mTts.speak(name + "发来一个转账");
+    }
+
+    private void handleLuckyCard(String name) {
+        mTts.speak(name + "发来一张聚会券");
     }
 
     public void announceRedPacket(String sender, String chatroom, String wishing, String amount) {
