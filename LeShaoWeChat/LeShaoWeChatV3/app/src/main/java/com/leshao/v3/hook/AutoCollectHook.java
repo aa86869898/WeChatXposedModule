@@ -85,9 +85,6 @@ public class AutoCollectHook {
             Class<?> uiCls = cl.loadClass(PKG_WECHAT + ".plugin.remittance.ui.RemittanceDetailUI");
 
             XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
-                int.class, int.class, String.class, m1Cls, boolean.class,
-                new MoneyResultHook("转账"));
-            XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
                 int.class, int.class, String.class, m1Cls,
                 new MoneyResultHook("转账"));
             LogWriter.log(TAG, "tts onSceneEnd OK: RemittanceDetailUI");

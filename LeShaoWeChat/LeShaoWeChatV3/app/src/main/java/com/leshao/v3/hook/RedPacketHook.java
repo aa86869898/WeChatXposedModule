@@ -93,9 +93,6 @@ public class RedPacketHook {
             try {
                 Class<?> uiCls = cl.loadClass(clsName);
                 XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
-                    int.class, int.class, String.class, m1Cls, boolean.class,
-                    new MoneyResultHook("红包"));
-                XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
                     int.class, int.class, String.class, m1Cls,
                     new MoneyResultHook("红包"));
                 LogWriter.log(TAG, "tts onSceneEnd OK: " + clsName);
