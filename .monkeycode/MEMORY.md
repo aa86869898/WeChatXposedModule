@@ -43,8 +43,19 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - proguard-rules.pro 必须保护所有反射相关类: `-keep class com.leshao.v3.hook.**`, `-keep class com.leshao.v3.db.**`, `-keep class com.leshao.v3.model.**`
   - 开发优先级严格按: 数据库密钥捕获 → 联系人/群聊列表查询 → 设置页跳转入口 → 独立 Activity 基础界面
   - 包名 com.leshao.v3，编译 Java 17 + Gradle 8.5 + Android SDK 35
-  - 编译命令: `cd /workspace/LeShaoWeChat/LeShaoWeChatV3 && ./gradlew assembleRelease`
-  - APK 输出路径: app/build/outputs/apk/release/app-release-unsigned.apk
-  - 签名: apksigner sign --ks debug.keystore --ks-key-alias androiddebugkey
-  - 日志文件路径: /data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt
-  - 日志过滤 TAG: LeShaoV3
+   - 编译命令: `cd /workspace/LeShaoWeChat/LeShaoWeChatV3 && ./gradlew assembleDebug`
+   - APK 输出路径: app/build/outputs/apk/debug/app-debug.apk
+   - 签名: apksigner sign --ks debug.keystore --ks-key-alias androiddebugkey
+   - 日志文件路径: /data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt
+   - 日志过滤 TAG: LeShaoV3
+
+### 自动推送 Git
+- Date: 2026-07-23
+- Context: 用户要求每次改完代码编译成功后自动提交并推送
+- Category: 工作流协作
+- Instructions:
+  - 远程仓库: https://github.com/aa86869898/WeChatXposedModule.git
+  - 推送分支: 本地 master → 远程 main (强制推送)
+  - 每次代码修改编译成功后，自动执行 git add + commit + push
+  - APK 已解除 gitignore (!**/build/outputs/apk/debug/*.apk)，会随源码一起推送
+  - 推送命令: `git push https://<token>@github.com/aa86869898/WeChatXposedModule.git master:main --force`
