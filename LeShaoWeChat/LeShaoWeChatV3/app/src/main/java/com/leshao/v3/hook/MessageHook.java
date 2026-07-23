@@ -14,6 +14,7 @@ public class MessageHook {
     private static final String TAG = "MessageHook";
     private static int sCount = 0;
     private static Handler sMainHandler;
+    private static java.lang.reflect.Method sTypeMapper;
 
     public static void hook(ClassLoader cl) {
         sMainHandler = new Handler(Looper.getMainLooper());
@@ -57,7 +58,8 @@ public class MessageHook {
 
     static void onMessage(Object e9) {
         try {
-            int type = (int) XposedHelpers.callMethod(e9, "getType");
+            int rawType = (int) XposedHelpers.callMethod(e9, "getType");
+            int type = mapType(rawType);
             String talker = (String) XposedHelpers.callMethod(e9, "N0");
             String content = (String) XposedHelpers.callMethod(e9, "j");
 
@@ -67,7 +69,8 @@ public class MessageHook {
 
             sCount++;
             LogWriter.log(TAG, "#" + sCount
-                + " type=" + type + " isSend=" + (int) XposedHelpers.callMethod(e9, "O0")
+                + " type=" + rawType + "->" + type
+                + " isSend=" + (int) XposedHelpers.callMethod(e9, "O0")
                 + " talker=" + trunc(talker, 20)
                 + " content=" + trunc(content, 40));
 
@@ -89,5 +92,10 @@ public class MessageHook {
 
     static String trunc(String s, int m) {
         return s == null ? "" : s.length() > m ? s.substring(0, m) + "..." : s;
+    }
+
+    static int mapType(int rawType) {
+        if ((rawType & 0xFFFFFF00) == 0) return rawType;
+        return rawType & 0xFF;
     }
 }
