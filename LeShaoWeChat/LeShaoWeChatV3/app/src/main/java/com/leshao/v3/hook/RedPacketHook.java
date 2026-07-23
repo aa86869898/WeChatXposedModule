@@ -75,88 +75,147 @@ public class RedPacketHook {
         LogWriter.log(TAG, "hooks installed (open result + UI auto-click + TTS check)");
     }
 
-    // ==================== TTS: 监听 ReceiveUI 提取结果文字 ====================
-    private static long sLastRedAnnounce = 0;
-
+    // ==================== TTS: 扫描 onSceneEnd 全部重载 + m1 响应字段探测 ====================
     public static void hookTtsCheck(ClassLoader cl) {
-        hookTtsOnUI(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNewReceiveUI", "initView");
-        hookTtsOnUI(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI", "initView");
-        hookTtsOnUI(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI", "onCreate");
-        hookTtsOnUI(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2", "onCreate");
-        hookTtsOnUI(cl, PKG_WECHAT + ".plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI", "onCreate");
+        probeOnSceneEnd(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNewReceiveUI");
+        probeOnSceneEnd(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI");
+        probeOnSceneEnd(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI");
+        probeOnSceneEnd(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2");
+        probeOnSceneEnd(cl, PKG_WECHAT + ".plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI");
     }
 
-    private static void hookTtsOnUI(ClassLoader cl, String className, String methodName) {
+    private static void probeOnSceneEnd(ClassLoader cl, String className) {
         try {
-            Class<?> cls = XposedHelpers.findClass(className, cl);
-            XposedBridge.hookAllMethods(cls, methodName, new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    if (!sTtsAnnounce) return;
-                    Activity act = (Activity) param.thisObject;
-                    sHandler.postDelayed(() -> checkAndAnnounce(act), 1200);
-                    sHandler.postDelayed(() -> checkAndAnnounce(act), 2800);
-                    sHandler.postDelayed(() -> checkAndAnnounce(act), 5000);
+            Class<?> cls = cl.loadClass(className);
+            int hooked = 0;
+            for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+                if (m.getName().equals("onSceneEnd")) {
+                    XposedBridge.hookMethod(m, new OnSceneEndProbe());
+                    hooked++;
+                    LogWriter.log(TAG, "probe onSceneEnd(" + m.getParameterCount() + ") OK: " + className);
                 }
-            });
-            LogWriter.log(TAG, "ttsCheck hook OK: " + className + "." + methodName + "()");
-        } catch (Throwable ignored) {}
+            }
+            Class<?> sup = cls.getSuperclass();
+            while (sup != null && sup != Object.class) {
+                for (java.lang.reflect.Method m : sup.getDeclaredMethods()) {
+                    if (m.getName().equals("onSceneEnd")) {
+                        XposedBridge.hookMethod(m, new OnSceneEndProbe());
+                        hooked++;
+                        LogWriter.log(TAG, "probe onSceneEnd(" + m.getParameterCount() + ") OK: super " + sup.getName());
+                    }
+                }
+                sup = sup.getSuperclass();
+            }
+            if (hooked == 0) {
+                LogWriter.log(TAG, "probe: NO onSceneEnd methods on " + className);
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "probe FAILED: " + className + " " + t.getMessage());
+        }
     }
 
-    private static void checkAndAnnounce(Activity act) {
-        long now = System.currentTimeMillis();
-        if (now - sLastRedAnnounce < 4000) return;
+    static class OnSceneEndProbe extends XC_MethodHook {
+        @Override
+        protected void afterHookedMethod(MethodHookParam param) {
+            try {
+                if (!sTtsAnnounce) return;
+                if (param.args.length < 4) return;
+                int errType = ((Number) param.args[0]).intValue();
+                int errCode = ((Number) param.args[1]).intValue();
+                if (errType != 0 || errCode != 0) return;
 
-        try {
-            View root = act.getWindow().getDecorView();
-            java.util.List<String> texts = new java.util.ArrayList<>();
-            collectAllText(root, texts);
+                Object resp = param.args[3];
+                Object ui = param.thisObject;
 
-            String sender = null;
-            String amountRaw = null;
+                LogWriter.log(TAG, "onSceneEnd FIRE args=" + param.args.length
+                    + " respClass=" + (resp != null ? resp.getClass().getSimpleName() : "null"));
 
-            for (String t : texts) {
-                if (t.isEmpty() || t.length() > 100) continue;
-                LogWriter.log(TAG, "ttsCheck text=[" + t + "]");
+                String amount = null;
+                String sender = null;
+                String wishing = null;
 
-                if (amountRaw == null) {
-                    if (t.contains("元") || t.contains("¥")) {
-                        amountRaw = t.replaceAll("[^\\d.]", "").trim();
-                    } else if (t.matches("^\\s*[\\d,]+\\.[\\d]{2}\\s*$")) {
-                        amountRaw = t.replace(",", "").trim();
+                if (resp != null) {
+                    for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
+                        f.setAccessible(true);
+                        String n = f.getName().toLowerCase();
+                        try {
+                            Object v = f.get(resp);
+                            if (v == null) continue;
+                            String valStr = v instanceof byte[] ? "byte[" + ((byte[])v).length + "]"
+                                : v.toString();
+                            if (valStr.length() > 100) valStr = valStr.substring(0, 100) + "...";
+                            LogWriter.log(TAG, "probe resp: " + f.getType().getSimpleName()
+                                + " " + f.getName() + " = " + valStr);
+
+                            if (amount == null && (n.contains("amount") || n.contains("total")
+                                || n.contains("fee") || n.contains("receive") || n.contains("money")
+                                || n.contains("hb") || n.contains("value"))
+                                && !n.contains("req") && !n.contains("type") && !n.contains("status")) {
+                                if (v instanceof String) amount = (String) v;
+                                else if (v instanceof Integer || v instanceof Long) {
+                                    long fen = ((Number)v).longValue();
+                                    if (fen > 0 && fen < 100000000) amount = String.valueOf(fen);
+                                }
+                            }
+                            if (sender == null && (n.contains("send") || n.contains("from")
+                                || n.contains("payer") || n.contains("nick"))
+                                && !n.contains("type") && !n.contains("id") && v instanceof String) {
+                                String s = (String) v;
+                                if (s.length() > 1 && s.length() < 50) sender = s;
+                            }
+                            if (wishing == null && (n.contains("wish") || n.contains("desc")
+                                || n.contains("greet") || n.contains("word")) && v instanceof String) {
+                                String s = (String) v;
+                                if (s.length() > 1 && s.length() < 100) wishing = s;
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                    String str = resp.toString();
+                    if (str != null && !str.isEmpty()) {
+                        LogWriter.log(TAG, "probe resp.toString: " +
+                            (str.length() > 200 ? str.substring(0, 200) + "..." : str));
                     }
                 }
 
-                if (sender == null && amountRaw != null && !t.equals(amountRaw)
-                    && t.length() >= 2 && t.length() <= 20
-                    && !t.startsWith("<") && !t.matches(".*\\d{6,}.*")
-                    && !t.contains("元") && !t.contains("¥")) {
-                    sender = t;
+                if (amount == null && ui != null) {
+                    for (java.lang.reflect.Field f : ui.getClass().getDeclaredFields()) {
+                        f.setAccessible(true);
+                        String n = f.getName().toLowerCase();
+                        if (!n.contains("amount") && !n.contains("total") && !n.contains("fee")
+                            && !n.contains("money")) continue;
+                        try {
+                            Object v = f.get(ui);
+                            if (v instanceof String) amount = (String) v;
+                            else if (v instanceof Number) amount = String.valueOf(((Number)v).longValue());
+                            if (amount != null) {
+                                LogWriter.log(TAG, "probe ui amount: " + n + "=" + amount);
+                                break;
+                            }
+                        } catch (Exception ignored) {}
+                    }
                 }
+
+                if (amount != null && !amount.isEmpty()) {
+                    String yuan = fenToYuan(amount);
+                    String name = sender != null ? sender : "好友";
+                    LogWriter.log(TAG, "probe TTS: sender=" + name + " amount=" + yuan);
+                    TTSBroadcaster.announceRedPacket(name, null, null, yuan + "元");
+                } else {
+                    LogWriter.log(TAG, "probe FAIL: no amount found");
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "probe ERR: " + t.getMessage());
             }
-
-            if (amountRaw == null || amountRaw.isEmpty()) return;
-            if (sender == null) sender = "好友";
-
-            LogWriter.log(TAG, "ttsCheck OK: sender=" + sender + " amount=" + amountRaw);
-            TTSBroadcaster.announceRedPacket(sender, null, null, amountRaw + "元");
-            sLastRedAnnounce = now;
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "checkAndAnnounce err: " + t.getMessage());
         }
     }
 
-    private static void collectAllText(View view, java.util.List<String> out) {
-        if (view instanceof android.widget.TextView) {
-            CharSequence cs = ((android.widget.TextView) view).getText();
-            if (cs != null && cs.length() > 0) out.add(cs.toString());
-        }
-        if (view instanceof ViewGroup) {
-            ViewGroup vg = (ViewGroup) view;
-            for (int i = 0; i < vg.getChildCount(); i++) {
-                collectAllText(vg.getChildAt(i), out);
-            }
-        }
+    static String fenToYuan(String s) {
+        try {
+            long f = Long.parseLong(s.trim());
+            if (f > 10000) return String.format("%.2f", f / 100.0);
+            else if (f > 100) return String.format("%.2f", f / 100.0);
+            else return String.format("%.2f", f);
+        } catch (NumberFormatException e) { return s; }
     }
 
     // ==================== 自动抢红包 (保留) ====================
