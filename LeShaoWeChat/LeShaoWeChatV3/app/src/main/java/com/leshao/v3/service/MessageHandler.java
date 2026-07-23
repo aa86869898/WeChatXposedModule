@@ -95,7 +95,9 @@ public class MessageHandler {
         }
         if (content.contains("luckymoney") || content.contains("lucky money")) {
             mTts.speak(name + "发来一个红包");
+            return;
         }
+        LogWriter.log("MessageHandler", "handleAppMsg unknown: " + (content.length() > 200 ? content.substring(0, 200) + "..." : content));
     }
 
     public void announceRedPacket(String sender, String chatroom, String wishing, String amount) {
