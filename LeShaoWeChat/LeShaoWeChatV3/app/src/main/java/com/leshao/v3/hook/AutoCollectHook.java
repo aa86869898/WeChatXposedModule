@@ -14,11 +14,12 @@ import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.service.TTSBroadcaster;
 
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.lang.ref.WeakReference;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -45,8 +46,6 @@ public class AutoCollectHook {
 
     private static final Handler sHandler = new Handler(Looper.getMainLooper());
     private static final AtomicBoolean sProcessing = new AtomicBoolean(false);
-    private static boolean sCollecting = false;
-    private static WeakReference<Activity> sTransferAct;
 
     public static void setEnabled(boolean v) { sEnabled = v; }
     public static void setPrivateEnabled(boolean v) { sPrivateEnabled = v; }
@@ -80,7 +79,7 @@ public class AutoCollectHook {
         LogWriter.log(TAG, "hooks installed (transfer result + UI auto-collect)");
     }
 
-    // ==================== TTS: onSceneEnd + 自动收款 onResume (后台) ====================
+    // ==================== TTS: onSceneEnd + 自动收款 onResume (retry) ====================
     public static void hookTransferResult(ClassLoader cl) {
         Class<?> m1Cls = null;
         try { m1Cls = cl.loadClass("com.tencent.mm.modelbase.m1"); } catch (Throwable ignored) {}
@@ -89,20 +88,15 @@ public class AutoCollectHook {
         try {
             Class<?> uiCls = cl.loadClass(PKG_WECHAT + ".plugin.remittance.ui.RemittanceDetailUI");
 
-            // onResume — 保存引用 + 自动点击
+            // onResume — 自动点收款
             XposedHelpers.findAndHookMethod(uiCls, "onResume", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam p) {
-                    Activity act = (Activity) p.thisObject;
-                    sTransferAct = new WeakReference<>(act);
-                    if (sCollecting) {
-                        act.overridePendingTransition(0, 0);
-                        sHandler.postDelayed(() -> autoClick(act), 1200);
-                    }
+                    autoClickCollect((Activity) p.thisObject, 800);
                 }
             });
 
-            // onSceneEnd — 收款完成后播报 + 关闭
+            // onSceneEnd — TTS播报
             XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
                 int.class, int.class, String.class, m1Cls,
                 new XC_MethodHook() {
@@ -111,15 +105,11 @@ public class AutoCollectHook {
                         int et = (int) p.args[0], ec = (int) p.args[1];
                         if (et != 0 || ec != 0) return;
                         Object resp = p.args[3];
-                        double amt = readDouble(resp, "f");
-                        int q = readInt(resp, "q");
+                        double amt = getDouble(resp, "f");
+                        int q = getInt(resp, "q");
                         if (amt > 0 && q == 1) {
-                            String sender = readString(resp, "m");
-                            String name = sender != null ? sender : "好友";
-                            LogWriter.log(TAG, "TTS: " + name + "=" + String.format("%.2f", amt));
-                            TTSBroadcaster.announceTransfer(name, null, String.format("%.2f", amt) + "元", null);
-                            sHandler.postDelayed(() -> finishAct(), 300);
-                            sCollecting = false;
+                            LogWriter.log(TAG, "TTS: " + String.format("%.2f", amt));
+                            TTSBroadcaster.announceTransfer("好友", null, String.format("%.2f", amt) + "元", null);
                         }
                     }
                 });
@@ -130,43 +120,91 @@ public class AutoCollectHook {
         }
     }
 
-    static void autoClick(Activity act) {
-        try {
-            View btn = findConfirmButton(act.getWindow().getDecorView());
-            if (btn != null) {
-                LogWriter.log(TAG, "auto-click: " + ((Button) btn).getText());
-                btn.performClick();
+    /** 自动点击收款按钮 — 带重试 */
+    static void autoClickCollect(Activity act, int delayMs) {
+        sHandler.postDelayed(() -> {
+            try {
+                List<View> candidates = new ArrayList<>();
+                collectClickableViews(act.getWindow().getDecorView(), candidates);
+
+                if (candidates.isEmpty()) {
+                    LogWriter.log(TAG, "no candidates, delay=" + delayMs);
+                    if (delayMs < 2500) autoClickCollect(act, delayMs + 800);
+                    return;
+                }
+
+                LogWriter.log(TAG, "delay=" + delayMs + " candidates=" + candidates.size());
+                for (View v : candidates) {
+                    String info = v.getClass().getSimpleName() + " ";
+                    if (v instanceof Button) info += "btn=[" + ((Button) v).getText() + "]";
+                    else if (v instanceof TextView) info += "txt=[" + ((TextView) v).getText() + "]";
+                    info += " clk=" + v.isClickable();
+                    LogWriter.log(TAG, "  " + info);
+                }
+
+                // 匹配: "收款" 但不含 "已收款"
+                for (View v : candidates) {
+                    String text = getViewText(v);
+                    if (text != null && text.contains("收款") && !text.contains("已收款")) {
+                        LogWriter.log(TAG, "click: " + text);
+                        v.performClick();
+                        return;
+                    }
+                }
+
+                // 兜底: "收钱"/"确认"
+                for (View v : candidates) {
+                    String text = getViewText(v);
+                    if (text != null && (text.contains("收钱") || text.contains("确认"))) {
+                        LogWriter.log(TAG, "fallback click: " + text);
+                        v.performClick();
+                        return;
+                    }
+                }
+
+                // 没找到就重试
+                if (delayMs < 2500) {
+                    LogWriter.log(TAG, "no match, retry " + (delayMs + 800));
+                    autoClickCollect(act, delayMs + 800);
+                } else {
+                    LogWriter.log(TAG, "give up");
+                }
+
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "autoClickCollect err: " + t);
             }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "autoClick err: " + t);
-        }
+        }, delayMs);
     }
 
-    static void finishAct() {
-        if (sTransferAct != null) {
-            Activity act = sTransferAct.get();
-            if (act != null && !act.isFinishing()) {
-                act.finish();
-                act.overridePendingTransition(0, 0);
+    static void collectClickableViews(View root, List<View> out) {
+        if (root == null) return;
+        if (root.isClickable() && root.isEnabled()) {
+            if (root instanceof Button) {
+                out.add(root);
+            } else if (root instanceof TextView) {
+                String t = ((TextView) root).getText().toString();
+                if (t.contains("收款") || t.contains("收钱") || t.contains("确认"))
+                    out.add(root);
             }
         }
+        if (root instanceof ViewGroup)
+            for (int i = 0; i < ((ViewGroup) root).getChildCount(); i++)
+                collectClickableViews(((ViewGroup) root).getChildAt(i), out);
     }
 
-    // ==================== 按钮查找 ====================
-    private static View findConfirmButton(View root) {
-        if (root == null) return null;
-        if (root instanceof Button && root.isClickable()) {
-            String t = ((Button) root).getText().toString();
-            if (t.contains("收款") || t.contains("确认") || t.contains("收钱")) return root;
-        }
-        if (root instanceof ViewGroup) {
-            ViewGroup vg = (ViewGroup) root;
-            for (int i = 0; i < vg.getChildCount(); i++) {
-                View result = findConfirmButton(vg.getChildAt(i));
-                if (result != null) return result;
-            }
-        }
+    static String getViewText(View v) {
+        if (v instanceof Button) return ((Button) v).getText().toString();
+        if (v instanceof TextView) return ((TextView) v).getText().toString();
         return null;
+    }
+
+    static double getDouble(Object o, String n) {
+        try { java.lang.reflect.Field f = o.getClass().getDeclaredField(n); f.setAccessible(true); return f.getDouble(o); }
+        catch (Throwable t) { return -1; }
+    }
+    static int getInt(Object o, String n) {
+        try { java.lang.reflect.Field f = o.getClass().getDeclaredField(n); f.setAccessible(true); return f.getInt(o); }
+        catch (Throwable t) { return -1; }
     }
 
     // ==================== 零延迟: 收到转账消息直接打开详情页 ====================
@@ -189,7 +227,6 @@ public class AutoCollectHook {
             android.content.Context ctx = ContextManager.getAppContext();
             if (ctx != null) {
                 ctx.startActivity(intent);
-                sCollecting = true;
                 LogWriter.log(TAG, "zero-delay: opened RemittanceDetailUI");
             }
         } catch (Throwable t) {

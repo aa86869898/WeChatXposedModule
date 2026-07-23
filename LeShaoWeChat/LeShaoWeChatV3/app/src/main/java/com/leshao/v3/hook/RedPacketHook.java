@@ -75,7 +75,7 @@ public class RedPacketHook {
         LogWriter.log(TAG, "hooks installed (open result + UI auto-click + TTS UI)");
     }
 
-    // ==================== TTS: 纯UI兜底 — LuckyMoneyDetailUI.onResume 读金额 ====================
+    // ==================== TTS: LuckyMoneyDetailUI.onResume 读UI金额 ====================
     public static void hookRedPacketUI(ClassLoader cl) {
         try {
             Class<?> cls = cl.loadClass(PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyDetailUI");
@@ -85,31 +85,25 @@ public class RedPacketHook {
                     Activity act = (Activity) p.thisObject;
                     sHandler.postDelayed(() -> {
                         String amt = scanAmount(act.getWindow().getDecorView());
-                        if (amt != null) {
-                            amt = amt.replaceAll("[^0-9.]", "");
-                            if (!amt.isEmpty() && amt.contains(".")) {
-                                try {
-                                    double d = Double.parseDouble(amt);
-                                    if (d > 0) {
-                                        LogWriter.log(TAG, "UI: " + d);
-                                        TTSBroadcaster.announceRedPacket("好友", null, null, String.format("%.2f", d) + "元");
-                                    }
-                                } catch (NumberFormatException ignored) {}
-                            }
+                        if (amt != null && !amt.isEmpty()) {
+                            LogWriter.log(TAG, "RP: " + amt);
+                            TTSBroadcaster.announceRedPacket("好友", null, null, amt + "元");
                         }
-                    }, 600);
+                    }, 800);
                 }
             });
-            LogWriter.log(TAG, "RP-UI OK");
+            LogWriter.log(TAG, "RP OK");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "RP-UI fail: " + t);
+            LogWriter.log(TAG, "RP fail: " + t);
         }
     }
 
     static String scanAmount(View root) {
         if (root instanceof TextView) {
             String t = ((TextView) root).getText().toString();
-            if (t.matches(".*\\d+\\.\\d{2}.*") && t.length() < 15) return t;
+            java.util.regex.Matcher m =
+                java.util.regex.Pattern.compile("(\\d+\\.\\d{2})").matcher(t);
+            if (m.find() && t.length() < 20) return m.group(1);
         }
         if (root instanceof ViewGroup)
             for (int i = 0; i < ((ViewGroup) root).getChildCount(); i++) {
