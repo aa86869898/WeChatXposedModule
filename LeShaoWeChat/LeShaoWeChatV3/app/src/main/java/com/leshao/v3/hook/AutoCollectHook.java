@@ -1,8 +1,6 @@
 package com.leshao.v3.hook;
 
 import android.app.Activity;
-import android.content.Context;
-import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
@@ -205,70 +203,6 @@ public class AutoCollectHook {
     static int getInt(Object o, String n) {
         try { java.lang.reflect.Field f = o.getClass().getDeclaredField(n); f.setAccessible(true); return f.getInt(o); }
         catch (Throwable t) { return -1; }
-    }
-
-    // ==================== 零延迟: 收到转账消息直接打开详情页 ====================
-
-    /**
-     * 在 MessageHook 检测到转账消息时调用
-     * @param content 消息 XML
-     */
-    public static void onTransferMessage(String content) {
-        if (content == null) return;
-        String url = extractXml(content, "url");
-        if (url == null || url.isEmpty()) return;
-        try {
-            Intent intent = new Intent();
-            intent.setClassName("com.tencent.mm",
-                "com.tencent.mm.plugin.remittance.ui.RemittanceDetailUI");
-            intent.putExtra("key_scene", 1);
-            intent.putExtra("key_url", url);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
-            android.content.Context ctx = ContextManager.getAppContext();
-            if (ctx != null) {
-                ctx.startActivity(intent);
-                LogWriter.log(TAG, "zero-delay: opened RemittanceDetailUI");
-            }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "zero-delay open fail: " + t);
-        }
-    }
-
-    static String extractXml(String xml, String tag) {
-        int start = xml.indexOf("<" + tag);
-        if (start < 0) return null;
-        int gt = xml.indexOf(">", start);
-        if (gt < 0) return null;
-        int end = xml.indexOf("</" + tag + ">", gt);
-        if (end < 0) return null;
-        String val = xml.substring(gt + 1, end);
-        if (val.startsWith("<![CDATA[")) {
-            val = val.substring(9, val.indexOf("]]>"));
-        }
-        return val;
-    }
-
-    // ==================== 反射工具 ====================
-    static double readDouble(Object obj, String name) {
-        try {
-            java.lang.reflect.Field f = obj.getClass().getDeclaredField(name);
-            f.setAccessible(true);
-            return f.getDouble(obj);
-        } catch (Throwable t) { return -1; }
-    }
-    static int readInt(Object obj, String name) {
-        try {
-            java.lang.reflect.Field f = obj.getClass().getDeclaredField(name);
-            f.setAccessible(true);
-            return f.getInt(obj);
-        } catch (Throwable t) { return -1; }
-    }
-    static String readString(Object obj, String name) {
-        try {
-            java.lang.reflect.Field f = obj.getClass().getDeclaredField(name);
-            f.setAccessible(true);
-            return (String) f.get(obj);
-        } catch (Throwable t) { return null; }
     }
 
     // ==================== 自动收款 (保留) ====================
