@@ -71,126 +71,49 @@ public class RedPacketHook {
         ClassLoader cl = ContextManager.getClassLoader();
         hookReceiveUIs(cl);
         hookChatListClick(cl);
-        hookTtsCheck(cl);
-        LogWriter.log(TAG, "hooks installed (open result + UI auto-click + TTS check)");
+        hookRedPacketUI(cl);
+        LogWriter.log(TAG, "hooks installed (open result + UI auto-click + TTS UI)");
     }
 
-    // ==================== TTS: onSceneEnd + m1(v5) 字段提取 + UI兜底 ====================
-    public static void hookTtsCheck(ClassLoader cl) {
-        Class<?> m1Cls = null;
-        try { m1Cls = cl.loadClass("com.tencent.mm.modelbase.m1"); } catch (Throwable ignored) {}
-        if (m1Cls == null) { LogWriter.log(TAG, "m1 class not found, skip onSceneEnd"); return; }
-
-        String[] classes = {
-            PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNewReceiveUI",
-            PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyDetailUI",
-            PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI",
-            PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI",
-            PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2",
-            PKG_WECHAT + ".plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI",
-        };
-        for (String clsName : classes) {
-            try {
-                Class<?> uiCls = cl.loadClass(clsName);
-                XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
-                    int.class, int.class, String.class, m1Cls,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam p) {
-                            int et = (int) p.args[0], ec = (int) p.args[1];
-                            if (et == 0 && ec == 0) onRedPacket(p.args[3]);
-                        }
-                    });
-                LogWriter.log(TAG, "tts onSceneEnd OK: " + clsName);
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "tts FAILED: " + clsName + " " + t.getMessage());
-            }
-        }
-
-        // 兜底: LuckyMoneyDetailUI.onResume 读 UI 金额
+    // ==================== TTS: 纯UI兜底 — LuckyMoneyDetailUI.onResume 读金额 ====================
+    public static void hookRedPacketUI(ClassLoader cl) {
         try {
-            Class<?> detailCls = cl.loadClass(PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyDetailUI");
-            XposedHelpers.findAndHookMethod(detailCls, "onResume", new XC_MethodHook() {
+            Class<?> cls = cl.loadClass(PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyDetailUI");
+            XposedHelpers.findAndHookMethod(cls, "onResume", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam p) {
+                    Activity act = (Activity) p.thisObject;
                     sHandler.postDelayed(() -> {
-                        String amt = findAmountText(((Activity) p.thisObject).getWindow().getDecorView());
+                        String amt = scanAmount(act.getWindow().getDecorView());
                         if (amt != null) {
-                            LogWriter.log(TAG, "UI-fallback: " + amt);
-                            TTSBroadcaster.announceRedPacket("好友", null, null, amt + "元");
+                            amt = amt.replaceAll("[^0-9.]", "");
+                            if (!amt.isEmpty() && amt.contains(".")) {
+                                try {
+                                    double d = Double.parseDouble(amt);
+                                    if (d > 0) {
+                                        LogWriter.log(TAG, "UI: " + d);
+                                        TTSBroadcaster.announceRedPacket("好友", null, null, String.format("%.2f", d) + "元");
+                                    }
+                                } catch (NumberFormatException ignored) {}
+                            }
                         }
-                    }, 500);
+                    }, 600);
                 }
             });
-            LogWriter.log(TAG, "UI fallback OK");
+            LogWriter.log(TAG, "RP-UI OK");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "UI fallback FAIL: " + t);
+            LogWriter.log(TAG, "RP-UI fail: " + t);
         }
     }
 
-    // ── onSceneEnd 回调: v5 红包结果 ──
-    static void onRedPacket(Object resp) {
-        try {
-            if (!sTtsAnnounce) return;
-            if (resp == null) return;
-            LogWriter.log(TAG, "class=" + resp.getClass().getName());
-            double amount = 0;
-            String sender = null;
-
-            // 一级字段: v5.m = "0.10" (金额字符串)
-            for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
-                f.setAccessible(true);
-                try {
-                    Object v = f.get(resp);
-                    if (v == null) continue;
-                    if (v instanceof String && f.getName().equals("m")) {
-                        try { amount = Double.parseDouble((String) v); }
-                        catch (NumberFormatException ignored) {}
-                    }
-                    if (v instanceof String && (f.getName().contains("send") || f.getName().contains("from"))
-                        && ((String) v).length() < 50) sender = (String) v;
-                } catch (Exception ignored) {}
-            }
-
-            // 嵌套: v5.h (e1类型) -> amount字符串, Q字段(发送者)
-            for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
-                if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
-                f.setAccessible(true);
-                try {
-                    Object nested = f.get(resp);
-                    if (nested == null || nested instanceof String || nested instanceof Number) continue;
-                    for (java.lang.reflect.Field nf : nested.getClass().getDeclaredFields()) {
-                        nf.setAccessible(true);
-                        try {
-                            Object nv = nf.get(nested);
-                            if (nv == null) continue;
-                            if (nv instanceof String && nf.getName().toLowerCase().contains("amount"))
-                                try { amount = Double.parseDouble((String) nv); } catch (NumberFormatException ignored) {}
-                            if (nv instanceof String && nf.getName().equals("Q")) sender = (String) nv;
-                        } catch (Exception ignored2) {}
-                    }
-                } catch (Exception ignored) {}
-            }
-
-            if (amount > 0) {
-                String yuan = String.format("%.2f", amount);
-                String name = sender != null ? sender : "好友";
-                LogWriter.log(TAG, "TTS: " + name + "=" + yuan);
-                TTSBroadcaster.announceRedPacket(name, null, null, yuan + "元");
-            }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "onRedPacket err: " + t);
-        }
-    }
-
-    static String findAmountText(View root) {
+    static String scanAmount(View root) {
         if (root instanceof TextView) {
             String t = ((TextView) root).getText().toString();
-            if (t.matches(".*\\d+\\.\\d{2}.*") && t.length() < 20) return t.replaceAll("[^0-9.]", "");
+            if (t.matches(".*\\d+\\.\\d{2}.*") && t.length() < 15) return t;
         }
         if (root instanceof ViewGroup)
             for (int i = 0; i < ((ViewGroup) root).getChildCount(); i++) {
-                String r = findAmountText(((ViewGroup) root).getChildAt(i));
+                String r = scanAmount(((ViewGroup) root).getChildAt(i));
                 if (r != null) return r;
             }
         return null;

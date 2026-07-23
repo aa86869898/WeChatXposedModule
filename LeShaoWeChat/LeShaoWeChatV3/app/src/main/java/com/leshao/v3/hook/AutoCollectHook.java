@@ -18,6 +18,7 @@ import java.util.Calendar;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.lang.ref.WeakReference;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -44,6 +45,8 @@ public class AutoCollectHook {
 
     private static final Handler sHandler = new Handler(Looper.getMainLooper());
     private static final AtomicBoolean sProcessing = new AtomicBoolean(false);
+    private static boolean sCollecting = false;
+    private static WeakReference<Activity> sTransferAct;
 
     public static void setEnabled(boolean v) { sEnabled = v; }
     public static void setPrivateEnabled(boolean v) { sPrivateEnabled = v; }
@@ -77,7 +80,7 @@ public class AutoCollectHook {
         LogWriter.log(TAG, "hooks installed (transfer result + UI auto-collect)");
     }
 
-    // ==================== TTS: onSceneEnd + 自动收款 onResume ====================
+    // ==================== TTS: onSceneEnd + 自动收款 onResume (后台) ====================
     public static void hookTransferResult(ClassLoader cl) {
         Class<?> m1Cls = null;
         try { m1Cls = cl.loadClass("com.tencent.mm.modelbase.m1"); } catch (Throwable ignored) {}
@@ -86,70 +89,75 @@ public class AutoCollectHook {
         try {
             Class<?> uiCls = cl.loadClass(PKG_WECHAT + ".plugin.remittance.ui.RemittanceDetailUI");
 
+            // onResume — 保存引用 + 自动点击
+            XposedHelpers.findAndHookMethod(uiCls, "onResume", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam p) {
+                    Activity act = (Activity) p.thisObject;
+                    sTransferAct = new WeakReference<>(act);
+                    if (sCollecting) {
+                        act.overridePendingTransition(0, 0);
+                        sHandler.postDelayed(() -> autoClick(act), 1200);
+                    }
+                }
+            });
+
+            // onSceneEnd — 收款完成后播报 + 关闭
             XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
                 int.class, int.class, String.class, m1Cls,
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam p) {
                         int et = (int) p.args[0], ec = (int) p.args[1];
-                        if (et == 0 && ec == 0) onTransfer(p.args[3]);
+                        if (et != 0 || ec != 0) return;
+                        Object resp = p.args[3];
+                        double amt = readDouble(resp, "f");
+                        int q = readInt(resp, "q");
+                        if (amt > 0 && q == 1) {
+                            String sender = readString(resp, "m");
+                            String name = sender != null ? sender : "好友";
+                            LogWriter.log(TAG, "TTS: " + name + "=" + String.format("%.2f", amt));
+                            TTSBroadcaster.announceTransfer(name, null, String.format("%.2f", amt) + "元", null);
+                            sHandler.postDelayed(() -> finishAct(), 300);
+                            sCollecting = false;
+                        }
                     }
                 });
-            LogWriter.log(TAG, "tts onSceneEnd OK: RemittanceDetailUI");
 
-            XposedHelpers.findAndHookMethod(uiCls, "onResume", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam p) {
-                    sHandler.postDelayed(() -> {
-                        View btn = findConfirmButton(((Activity) p.thisObject).getWindow().getDecorView());
-                        if (btn != null) {
-                            LogWriter.log(TAG, "auto-click: " + ((Button) btn).getText());
-                            btn.performClick();
-                        }
-                    }, 800);
-                }
-            });
-            LogWriter.log(TAG, "auto-collect onResume OK: RemittanceDetailUI");
+            LogWriter.log(TAG, "AC OK");
         } catch (Throwable t) {
             LogWriter.log(TAG, "transfer hook FAILED: " + t.getMessage());
         }
     }
 
-    // ── onSceneEnd 回调: g1 转账结果 ──
-    static void onTransfer(Object resp) {
+    static void autoClick(Activity act) {
         try {
-            if (!sTtsAnnounce) return;
-            if (resp == null) return;
-            double amount = -1; String sender = null; int q = 0;
-            for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
-                f.setAccessible(true);
-                try {
-                    if (f.getType() == double.class) amount = f.getDouble(resp);
-                    if (f.getName().equals("q")) q = f.getInt(resp);
-                    if (f.getName().equals("m")) {
-                        Object v = f.get(resp);
-                        if (v instanceof String && !((String) v).isEmpty()) sender = (String) v;
-                    }
-                } catch (Exception ignored) {}
+            View btn = findConfirmButton(act.getWindow().getDecorView());
+            if (btn != null) {
+                LogWriter.log(TAG, "auto-click: " + ((Button) btn).getText());
+                btn.performClick();
             }
-            if (amount <= 0 || q != 1) return;
-            String name = sender != null ? sender : "好友";
-            LogWriter.log(TAG, "TTS: " + name + "=" + String.format("%.2f", amount));
-            TTSBroadcaster.announceTransfer(name, null, String.format("%.2f", amount) + "元", null);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "onTransfer err: " + t);
+            LogWriter.log(TAG, "autoClick err: " + t);
         }
     }
 
-    // ==================== 自动收款: 按钮查找 ====================
+    static void finishAct() {
+        if (sTransferAct != null) {
+            Activity act = sTransferAct.get();
+            if (act != null && !act.isFinishing()) {
+                act.finish();
+                act.overridePendingTransition(0, 0);
+            }
+        }
+    }
+
+    // ==================== 按钮查找 ====================
     private static View findConfirmButton(View root) {
         if (root == null) return null;
-        if (root instanceof Button) {
-            CharSequence text = ((Button) root).getText();
-            if (text != null && (root.isClickable() || root.isEnabled())) {
-                String t = text.toString();
-                if (t.contains("收款") || t.contains("确认收款") || t.contains("收钱")) return root;
-            }
+        if (root instanceof Button && root.isClickable()) {
+            String t = ((Button) root).getText().toString();
+            if (t.contains("收款") || t.contains("确认") || t.contains("收钱")) return root;
         }
         if (root instanceof ViewGroup) {
             ViewGroup vg = (ViewGroup) root;
@@ -177,10 +185,11 @@ public class AutoCollectHook {
                 "com.tencent.mm.plugin.remittance.ui.RemittanceDetailUI");
             intent.putExtra("key_scene", 1);
             intent.putExtra("key_url", url);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             android.content.Context ctx = ContextManager.getAppContext();
             if (ctx != null) {
                 ctx.startActivity(intent);
+                sCollecting = true;
                 LogWriter.log(TAG, "zero-delay: opened RemittanceDetailUI");
             }
         } catch (Throwable t) {
@@ -200,6 +209,29 @@ public class AutoCollectHook {
             val = val.substring(9, val.indexOf("]]>"));
         }
         return val;
+    }
+
+    // ==================== 反射工具 ====================
+    static double readDouble(Object obj, String name) {
+        try {
+            java.lang.reflect.Field f = obj.getClass().getDeclaredField(name);
+            f.setAccessible(true);
+            return f.getDouble(obj);
+        } catch (Throwable t) { return -1; }
+    }
+    static int readInt(Object obj, String name) {
+        try {
+            java.lang.reflect.Field f = obj.getClass().getDeclaredField(name);
+            f.setAccessible(true);
+            return f.getInt(obj);
+        } catch (Throwable t) { return -1; }
+    }
+    static String readString(Object obj, String name) {
+        try {
+            java.lang.reflect.Field f = obj.getClass().getDeclaredField(name);
+            f.setAccessible(true);
+            return (String) f.get(obj);
+        } catch (Throwable t) { return null; }
     }
 
     // ==================== 自动收款 (保留) ====================
