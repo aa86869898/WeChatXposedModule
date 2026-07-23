@@ -1,6 +1,8 @@
 package com.leshao.v3.hook;
 
 import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
@@ -86,161 +88,67 @@ public class AutoCollectHook {
 
             XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
                 int.class, int.class, String.class, m1Cls,
-                new MoneyResultHook("转账"));
-            LogWriter.log(TAG, "tts onSceneEnd OK: RemittanceDetailUI");
-
-            // 自动收款: Hook onResume
-            XposedHelpers.findAndHookMethod(uiCls, "onResume",
                 new XC_MethodHook() {
                     @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        autoClickConfirm((Activity) param.thisObject);
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        int et = (int) p.args[0], ec = (int) p.args[1];
+                        if (et == 0 && ec == 0) onTransfer(p.args[3]);
                     }
                 });
+            LogWriter.log(TAG, "tts onSceneEnd OK: RemittanceDetailUI");
+
+            XposedHelpers.findAndHookMethod(uiCls, "onResume", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam p) {
+                    sHandler.postDelayed(() -> {
+                        View btn = findConfirmButton(((Activity) p.thisObject).getWindow().getDecorView());
+                        if (btn != null) {
+                            LogWriter.log(TAG, "auto-click: " + ((Button) btn).getText());
+                            btn.performClick();
+                        }
+                    }, 800);
+                }
+            });
             LogWriter.log(TAG, "auto-collect onResume OK: RemittanceDetailUI");
         } catch (Throwable t) {
             LogWriter.log(TAG, "transfer hook FAILED: " + t.getMessage());
         }
     }
 
-    static class MoneyResultHook extends XC_MethodHook {
-        private final String mType;
-        MoneyResultHook(String type) { mType = type; }
-
-        @Override
-        protected void afterHookedMethod(MethodHookParam param) {
-            try {
-                if (!sTtsAnnounce) return;
-                int errType = ((Number) param.args[0]).intValue();
-                int errCode = ((Number) param.args[1]).intValue();
-                if (errType != 0 || errCode != 0) return;
-
-                Object resp = param.args[3];
-                if (resp == null) return;
-                LogWriter.log(TAG, "respClass=" + resp.getClass().getName());
-
-                // ── 探测 resp 一级字段 ──
-                double amount = 0;
-                String sender = null;
-
-                for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
-                    f.setAccessible(true);
-                    try {
+    // ── onSceneEnd 回调: g1 转账结果 ──
+    static void onTransfer(Object resp) {
+        try {
+            if (!sTtsAnnounce) return;
+            if (resp == null) return;
+            double amount = -1; String sender = null; int q = 0;
+            for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
+                f.setAccessible(true);
+                try {
+                    if (f.getType() == double.class) amount = f.getDouble(resp);
+                    if (f.getName().equals("q")) q = f.getInt(resp);
+                    if (f.getName().equals("m")) {
                         Object v = f.get(resp);
-                        String name = f.getName();
-
-                        if (f.getType() == double.class && f.getDouble(resp) > 0) {
-                            amount = f.getDouble(resp);
-                        }
-                        if ((f.getType() == int.class || f.getType() == long.class)
-                            && name.toLowerCase().contains("amount")) {
-                            long val = f.getLong(resp);
-                            if (val > 0 && val < 100000000) {
-                                amount = val / 100.0;
-                                LogWriter.log(TAG, "amount(int) from " + name + "=" + val);
-                            }
-                        }
-                        if (v instanceof String && name.toLowerCase().contains("amount")) {
-                            try { amount = Double.parseDouble((String) v); }
-                            catch (NumberFormatException ignored) {}
-                        }
-                        if (v instanceof String && (name.contains("send") || name.contains("from")
-                            || name.contains("user") || name.contains("payer") || name.contains("nick"))
-                            && !name.contains("type") && !name.contains("id") && !name.contains("status")
-                            && ((String) v).length() > 1 && ((String) v).length() < 50) {
-                            sender = (String) v;
-                        }
-                    } catch (Exception ignored) {}
-                }
-
-                // ── 如果一级字段没找到金额，探测嵌套对象 ──
-                if (amount <= 0) {
-                    for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
-                        if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
-                        f.setAccessible(true);
-                        try {
-                            Object nested = f.get(resp);
-                            if (nested == null || nested instanceof String || nested instanceof Number) continue;
-                            LogWriter.log(TAG, "probing nested: " + f.getName() + " class=" + nested.getClass().getName());
-                            for (java.lang.reflect.Field nf : nested.getClass().getDeclaredFields()) {
-                                nf.setAccessible(true);
-                                try {
-                                    Object nv = nf.get(nested);
-                                    if (nf.getType() == double.class && nf.getDouble(nested) > 0) {
-                                        amount = nf.getDouble(nested);
-                                    }
-                                    if (nv instanceof String && nf.getName().toLowerCase().contains("amount")) {
-                                        try { amount = Double.parseDouble((String) nv); }
-                                        catch (NumberFormatException ignored) {}
-                                    }
-                                } catch (Exception ignored2) {}
-                            }
-                        } catch (Exception ignored) {}
+                        if (v instanceof String && !((String) v).isEmpty()) sender = (String) v;
                     }
-                }
-
-                // ── 如果没有 double 字段，尝试所有可能的金额字段 ──
-                if (amount <= 0) {
-                    for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
-                        if (f.getType() == int.class || f.getType() == long.class) {
-                            f.setAccessible(true);
-                            try {
-                                long v = f.getLong(resp);
-                                if (v > 10 && v < 100000000) {
-                                    amount = v / 100.0;
-                                    LogWriter.log(TAG, "guessed amount: " + f.getName() + "=" + v);
-                                    break;
-                                }
-                            } catch (Exception ignored) {}
-                        }
-                    }
-                }
-
-                LogWriter.log(TAG, "final amount=" + amount + " type=" + mType);
-                if (amount <= 0) return;
-
-                String yuan = String.format("%.2f", amount);
-                String name = sender != null ? sender : "好友";
-                LogWriter.log(TAG, "tts: type=" + mType + " sender=" + sender + " amount=" + yuan);
-                TTSBroadcaster.announceTransfer(name, null, yuan + "元", null);
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "MoneyResultHook ERR: " + t.getMessage());
+                } catch (Exception ignored) {}
             }
+            if (amount <= 0 || q != 1) return;
+            String name = sender != null ? sender : "好友";
+            LogWriter.log(TAG, "TTS: " + name + "=" + String.format("%.2f", amount));
+            TTSBroadcaster.announceTransfer(name, null, String.format("%.2f", amount) + "元", null);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "onTransfer err: " + t);
         }
     }
 
-    // ==================== 自动收款: 点击确认按钮 ====================
-    private static void autoClickConfirm(final Activity activity) {
-        if (activity == null) return;
-        sHandler.postDelayed(() -> {
-            try {
-                View btn = findConfirmButton(activity.getWindow().getDecorView());
-                if (btn != null) {
-                    LogWriter.log(TAG, "auto-click: " + ((Button) btn).getText());
-                    btn.performClick();
-                } else {
-                    LogWriter.log(TAG, "auto-click: no Button matched");
-                }
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "autoClick err: " + t.getMessage());
-            }
-        }, 1000);
-    }
-
+    // ==================== 自动收款: 按钮查找 ====================
     private static View findConfirmButton(View root) {
         if (root == null) return null;
         if (root instanceof Button) {
             CharSequence text = ((Button) root).getText();
-            if (text != null) {
+            if (text != null && (root.isClickable() || root.isEnabled())) {
                 String t = text.toString();
-                LogWriter.log(TAG, "Button: " + t + " clickable=" + root.isClickable());
-                if (root.isClickable() || root.isEnabled()) {
-                    if (t.contains("确认收款") || t.contains("收款") || t.contains("收钱")
-                        || t.contains("确认") || t.contains("领取") || t.contains("拆开")
-                        || t.contains("收下")) {
-                        return root;
-                    }
-                }
+                if (t.contains("收款") || t.contains("确认收款") || t.contains("收钱")) return root;
             }
         }
         if (root instanceof ViewGroup) {
@@ -251,6 +159,47 @@ public class AutoCollectHook {
             }
         }
         return null;
+    }
+
+    // ==================== 零延迟: 收到转账消息直接打开详情页 ====================
+
+    /**
+     * 在 MessageHook 检测到转账消息时调用
+     * @param content 消息 XML
+     */
+    public static void onTransferMessage(String content) {
+        if (content == null) return;
+        String url = extractXml(content, "url");
+        if (url == null || url.isEmpty()) return;
+        try {
+            Intent intent = new Intent();
+            intent.setClassName("com.tencent.mm",
+                "com.tencent.mm.plugin.remittance.ui.RemittanceDetailUI");
+            intent.putExtra("key_scene", 1);
+            intent.putExtra("key_url", url);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            android.content.Context ctx = ContextManager.getAppContext();
+            if (ctx != null) {
+                ctx.startActivity(intent);
+                LogWriter.log(TAG, "zero-delay: opened RemittanceDetailUI");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "zero-delay open fail: " + t);
+        }
+    }
+
+    static String extractXml(String xml, String tag) {
+        int start = xml.indexOf("<" + tag);
+        if (start < 0) return null;
+        int gt = xml.indexOf(">", start);
+        if (gt < 0) return null;
+        int end = xml.indexOf("</" + tag + ">", gt);
+        if (end < 0) return null;
+        String val = xml.substring(gt + 1, end);
+        if (val.startsWith("<![CDATA[")) {
+            val = val.substring(9, val.indexOf("]]>"));
+        }
+        return val;
     }
 
     // ==================== 自动收款 (保留) ====================

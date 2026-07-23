@@ -75,7 +75,7 @@ public class RedPacketHook {
         LogWriter.log(TAG, "hooks installed (open result + UI auto-click + TTS check)");
     }
 
-    // ==================== TTS: onSceneEnd + m1 字段精确提取 ====================
+    // ==================== TTS: onSceneEnd + m1(v5) 字段提取 + UI兜底 ====================
     public static void hookTtsCheck(ClassLoader cl) {
         Class<?> m1Cls = null;
         try { m1Cls = cl.loadClass("com.tencent.mm.modelbase.m1"); } catch (Throwable ignored) {}
@@ -94,127 +94,106 @@ public class RedPacketHook {
                 Class<?> uiCls = cl.loadClass(clsName);
                 XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
                     int.class, int.class, String.class, m1Cls,
-                    new MoneyResultHook("红包"));
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam p) {
+                            int et = (int) p.args[0], ec = (int) p.args[1];
+                            if (et == 0 && ec == 0) onRedPacket(p.args[3]);
+                        }
+                    });
                 LogWriter.log(TAG, "tts onSceneEnd OK: " + clsName);
             } catch (Throwable t) {
                 LogWriter.log(TAG, "tts FAILED: " + clsName + " " + t.getMessage());
             }
         }
-    }
 
-    static class MoneyResultHook extends XC_MethodHook {
-        private final String mType;
-        MoneyResultHook(String type) { mType = type; }
-
-        @Override
-        protected void afterHookedMethod(MethodHookParam param) {
-            try {
-                if (!sTtsAnnounce) return;
-                int errType = ((Number) param.args[0]).intValue();
-                int errCode = ((Number) param.args[1]).intValue();
-                if (errType != 0 || errCode != 0) return;
-
-                Object resp = param.args[3];
-                if (resp == null) return;
-                LogWriter.log(TAG, "respClass=" + resp.getClass().getName());
-
-                // ── 探测 resp 一级字段 ──
-                double amount = 0;
-                String sender = null;
-
-                for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
-                    f.setAccessible(true);
-                    try {
-                        Object v = f.get(resp);
-                        String name = f.getName();
-
-                        if (f.getType() == double.class && f.getDouble(resp) > 0) {
-                            amount = f.getDouble(resp);
+        // 兜底: LuckyMoneyDetailUI.onResume 读 UI 金额
+        try {
+            Class<?> detailCls = cl.loadClass(PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyDetailUI");
+            XposedHelpers.findAndHookMethod(detailCls, "onResume", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam p) {
+                    sHandler.postDelayed(() -> {
+                        String amt = findAmountText(((Activity) p.thisObject).getWindow().getDecorView());
+                        if (amt != null) {
+                            LogWriter.log(TAG, "UI-fallback: " + amt);
+                            TTSBroadcaster.announceRedPacket("好友", null, null, amt + "元");
                         }
-                        if ((f.getType() == int.class || f.getType() == long.class)
-                            && name.toLowerCase().contains("amount")) {
-                            long val = f.getLong(resp);
-                            if (val > 0 && val < 100000000) {
-                                amount = val / 100.0;
-                                LogWriter.log(TAG, "amount(int) from " + name + "=" + val);
-                            }
-                        }
-                        if (v instanceof String && name.toLowerCase().contains("amount")) {
-                            try { amount = Double.parseDouble((String) v); }
-                            catch (NumberFormatException ignored) {}
-                        }
-                        if (v instanceof String && (name.contains("send") || name.contains("from")
-                            || name.contains("user") || name.contains("payer") || name.contains("nick"))
-                            && !name.contains("type") && !name.contains("id") && !name.contains("status")
-                            && ((String) v).length() > 1 && ((String) v).length() < 50) {
-                            sender = (String) v;
-                        }
-                    } catch (Exception ignored) {}
+                    }, 500);
                 }
-
-                // ── 如果一级字段没找到金额，探测嵌套对象 ──
-                if (amount <= 0) {
-                    for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
-                        if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
-                        f.setAccessible(true);
-                        try {
-                            Object nested = f.get(resp);
-                            if (nested == null || nested instanceof String || nested instanceof Number) continue;
-                            LogWriter.log(TAG, "probing nested: " + f.getName() + " class=" + nested.getClass().getName());
-                            for (java.lang.reflect.Field nf : nested.getClass().getDeclaredFields()) {
-                                nf.setAccessible(true);
-                                try {
-                                    Object nv = nf.get(nested);
-                                    if (nf.getType() == double.class && nf.getDouble(nested) > 0) {
-                                        amount = nf.getDouble(nested);
-                                    }
-                                    if (nv instanceof String && nf.getName().toLowerCase().contains("amount")) {
-                                        try { amount = Double.parseDouble((String) nv); }
-                                        catch (NumberFormatException ignored) {}
-                                    }
-                                } catch (Exception ignored2) {}
-                            }
-                        } catch (Exception ignored) {}
-                    }
-                }
-
-                // ── 如果没有 double 字段，尝试所有可能的金额字段 ──
-                if (amount <= 0) {
-                    for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
-                        if (f.getType() == int.class || f.getType() == long.class) {
-                            f.setAccessible(true);
-                            try {
-                                long v = f.getLong(resp);
-                                if (v > 10 && v < 100000000) {
-                                    amount = v / 100.0;
-                                    LogWriter.log(TAG, "guessed amount: " + f.getName() + "=" + v);
-                                    break;
-                                }
-                            } catch (Exception ignored) {}
-                        }
-                    }
-                }
-
-                LogWriter.log(TAG, "final amount=" + amount + " type=" + mType);
-                if (amount <= 0) return;
-
-                String yuan = String.format("%.2f", amount);
-                String name = sender != null ? sender : "好友";
-                LogWriter.log(TAG, "tts: type=" + mType + " sender=" + sender + " amount=" + yuan);
-                TTSBroadcaster.announceRedPacket(name, null, null, yuan + "元");
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "MoneyResultHook ERR: " + t.getMessage());
-            }
+            });
+            LogWriter.log(TAG, "UI fallback OK");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "UI fallback FAIL: " + t);
         }
     }
 
-    static String fenToYuan(String s) {
+    // ── onSceneEnd 回调: v5 红包结果 ──
+    static void onRedPacket(Object resp) {
         try {
-            long f = Long.parseLong(s.trim());
-            if (f > 10000) return String.format("%.2f", f / 100.0);
-            else if (f > 100) return String.format("%.2f", f / 100.0);
-            else return String.format("%.2f", f);
-        } catch (NumberFormatException e) { return s; }
+            if (!sTtsAnnounce) return;
+            if (resp == null) return;
+            LogWriter.log(TAG, "class=" + resp.getClass().getName());
+            double amount = 0;
+            String sender = null;
+
+            // 一级字段: v5.m = "0.10" (金额字符串)
+            for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
+                f.setAccessible(true);
+                try {
+                    Object v = f.get(resp);
+                    if (v == null) continue;
+                    if (v instanceof String && f.getName().equals("m")) {
+                        try { amount = Double.parseDouble((String) v); }
+                        catch (NumberFormatException ignored) {}
+                    }
+                    if (v instanceof String && (f.getName().contains("send") || f.getName().contains("from"))
+                        && ((String) v).length() < 50) sender = (String) v;
+                } catch (Exception ignored) {}
+            }
+
+            // 嵌套: v5.h (e1类型) -> amount字符串, Q字段(发送者)
+            for (java.lang.reflect.Field f : resp.getClass().getDeclaredFields()) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                f.setAccessible(true);
+                try {
+                    Object nested = f.get(resp);
+                    if (nested == null || nested instanceof String || nested instanceof Number) continue;
+                    for (java.lang.reflect.Field nf : nested.getClass().getDeclaredFields()) {
+                        nf.setAccessible(true);
+                        try {
+                            Object nv = nf.get(nested);
+                            if (nv == null) continue;
+                            if (nv instanceof String && nf.getName().toLowerCase().contains("amount"))
+                                try { amount = Double.parseDouble((String) nv); } catch (NumberFormatException ignored) {}
+                            if (nv instanceof String && nf.getName().equals("Q")) sender = (String) nv;
+                        } catch (Exception ignored2) {}
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            if (amount > 0) {
+                String yuan = String.format("%.2f", amount);
+                String name = sender != null ? sender : "好友";
+                LogWriter.log(TAG, "TTS: " + name + "=" + yuan);
+                TTSBroadcaster.announceRedPacket(name, null, null, yuan + "元");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "onRedPacket err: " + t);
+        }
+    }
+
+    static String findAmountText(View root) {
+        if (root instanceof TextView) {
+            String t = ((TextView) root).getText().toString();
+            if (t.matches(".*\\d+\\.\\d{2}.*") && t.length() < 20) return t.replaceAll("[^0-9.]", "");
+        }
+        if (root instanceof ViewGroup)
+            for (int i = 0; i < ((ViewGroup) root).getChildCount(); i++) {
+                String r = findAmountText(((ViewGroup) root).getChildAt(i));
+                if (r != null) return r;
+            }
+        return null;
     }
 
     // ==================== 自动抢红包 (保留) ====================

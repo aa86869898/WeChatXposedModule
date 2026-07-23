@@ -60,6 +60,7 @@ public class MessageHook {
         try {
             int rawType = (int) XposedHelpers.callMethod(e9, "getType");
             int type = mapType(rawType);
+            int isSend = (int) XposedHelpers.callMethod(e9, "O0");
             String talker = (String) XposedHelpers.callMethod(e9, "N0");
             String content = (String) XposedHelpers.callMethod(e9, "j");
 
@@ -67,10 +68,17 @@ public class MessageHook {
                 || content.startsWith("<pushcontent")))
                 return;
 
+            // 零延迟: 检测到转账消息直接打开 RemittanceDetailUI
+            if (type == 49 && content != null && content.contains("<type>2000</type>")) {
+                if (isSend != 1) {
+                    AutoCollectHook.onTransferMessage(content);
+                }
+            }
+
             sCount++;
             LogWriter.log(TAG, "#" + sCount
                 + " type=" + rawType + "->" + type
-                + " isSend=" + (int) XposedHelpers.callMethod(e9, "O0")
+                + " isSend=" + isSend
                 + " talker=" + trunc(talker, 20)
                 + " content=" + trunc(content, 40));
 
