@@ -80,6 +80,89 @@ public class RedPacketHook {
     public static void hookOpenResult(ClassLoader cl) {
         hookOnSceneEnd(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNewReceiveUI");
         hookOnSceneEnd(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyDetailUI");
+        hookDetailUI(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyDetailUI");
+    }
+
+    private static void hookDetailUI(ClassLoader cl, String className) {
+        try {
+            Class<?> dCls = cl.loadClass(className);
+            XposedBridge.hookAllMethods(dCls, "onCreate",
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        Activity act = (Activity) param.thisObject;
+                        sHandler.postDelayed(() -> extractAndAnnounce(act), 400);
+                    }
+                });
+            LogWriter.log(TAG, "detailUI onCreate hook OK: " + className);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "detailUI create FAILED: " + className + " " + t.getClass().getSimpleName());
+        }
+    }
+
+    private static long sLastRedAnnounce = 0;
+
+    private static void extractAndAnnounce(Activity act) {
+        if (!sTtsAnnounce) return;
+        long now = System.currentTimeMillis();
+        if (now - sLastRedAnnounce < 3000) return;
+
+        try {
+            View root = act.getWindow().getDecorView();
+            java.util.List<String> texts = new java.util.ArrayList<>();
+            collectTextViews(root, texts);
+
+            String sender = null;
+            String amount = null;
+            String groupHint = null;
+
+            for (String t : texts) {
+                if (t.isEmpty()) continue;
+                LogWriter.log(TAG, "detailUI text=[" + t + "]");
+                if (amount == null && (t.contains("元") || t.contains("¥") || t.matches("^[\\d,.]+$"))) {
+                    amount = t.replaceAll("[^\\d.]", "").trim();
+                    if (!amount.contains(".")) {
+                        try {
+                            double d = Double.parseDouble(amount) / 100.0;
+                            amount = String.format("%.2f", d);
+                        } catch (Exception ignored) {}
+                    }
+                }
+                if (t.contains("群")) groupHint = t;
+                if (sender == null && !t.contains("元") && !t.contains("¥")
+                    && t.length() >= 2 && t.length() <= 20
+                    && !t.startsWith("<") && !t.matches(".*\\d{4,}.*")) {
+                    sender = t;
+                }
+            }
+
+            if (amount == null || amount.isEmpty()) {
+                LogWriter.log(TAG, "detailUI: no amount found");
+                return;
+            }
+
+            if (sender == null) sender = "好友";
+            String chatroom = groupHint;
+            LogWriter.log(TAG, "detailUI TTS: sender=" + sender + " amount=" + amount + " group=" + groupHint);
+
+            TTSBroadcaster.announceRedPacket(sender, chatroom, null, amount + "元");
+            sLastRedAnnounce = now;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "extractAndAnnounce err: " + t.getMessage());
+        }
+    }
+
+    private static void collectTextViews(View view, java.util.List<String> out) {
+        if (view instanceof TextView) {
+            CharSequence cs = ((TextView) view).getText();
+            if (cs != null && cs.length() > 0) out.add(cs.toString());
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) view;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                collectTextViews(vg.getChildAt(i), out);
+            }
+        }
     }
 
     private static void hookOnSceneEnd(ClassLoader cl, String className) {

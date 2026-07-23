@@ -115,9 +115,81 @@ public class AutoCollectHook {
                         }
                     }
                 });
+
+            XposedBridge.hookAllMethods(uiCls, "onCreate",
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        Activity act = (Activity) param.thisObject;
+                        sHandler.postDelayed(() -> extractAndAnnounceTransfer(act), 400);
+                    }
+                });
+
             LogWriter.log(TAG, "transfer onSceneEnd hook OK");
         } catch (Throwable t) {
             LogWriter.log(TAG, "transfer onSceneEnd hook FAILED: " + t.getClass().getSimpleName());
+        }
+    }
+
+    private static long sLastTransferAnnounce = 0;
+
+    private static void extractAndAnnounceTransfer(Activity act) {
+        if (!sTtsAnnounce) return;
+        long now = System.currentTimeMillis();
+        if (now - sLastTransferAnnounce < 3000) return;
+
+        try {
+            View root = act.getWindow().getDecorView();
+            java.util.List<String> texts = new java.util.ArrayList<>();
+            collectTextViews(root, texts);
+
+            String sender = null;
+            String amount = null;
+
+            for (String t : texts) {
+                if (t.isEmpty()) continue;
+                LogWriter.log(TAG, "transferUI text=[" + t + "]");
+                if (amount == null && (t.contains("元") || t.contains("¥") || t.matches("^[\\d,.]+$"))) {
+                    amount = t.replaceAll("[^\\d.]", "").trim();
+                    if (!amount.contains(".")) {
+                        try {
+                            double d = Double.parseDouble(amount) / 100.0;
+                            amount = String.format("%.2f", d);
+                        } catch (Exception ignored) {}
+                    }
+                }
+                if (sender == null && !t.contains("元") && !t.contains("¥")
+                    && t.length() >= 2 && t.length() <= 20
+                    && !t.startsWith("<") && !t.matches(".*\\d{4,}.*")) {
+                    sender = t;
+                }
+            }
+
+            if (amount == null || amount.isEmpty()) {
+                LogWriter.log(TAG, "transferUI: no amount found");
+                return;
+            }
+
+            if (sender == null) sender = "好友";
+            LogWriter.log(TAG, "transferUI TTS: sender=" + sender + " amount=" + amount);
+
+            TTSBroadcaster.announceTransfer(sender, null, amount + "元", null);
+            sLastTransferAnnounce = now;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "extractTransfer err: " + t.getMessage());
+        }
+    }
+
+    private static void collectTextViews(View view, java.util.List<String> out) {
+        if (view instanceof TextView) {
+            CharSequence cs = ((TextView) view).getText();
+            if (cs != null && cs.length() > 0) out.add(cs.toString());
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) view;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                collectTextViews(vg.getChildAt(i), out);
+            }
         }
     }
 
