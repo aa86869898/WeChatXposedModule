@@ -36,17 +36,7 @@ public class AppColors {
     private static final int DARK_OFF     = 0xFF555555;
     private static final int DARK_WHITE   = 0xFFE8E8F0;
 
-    private static volatile boolean sDarkMode = false;
-    private static volatile boolean sDarkChecked = false;
-
-    public static void setDarkMode(boolean dark) {
-        sDarkMode = dark;
-        sDarkChecked = true;
-    }
-
     public static boolean isDarkMode() {
-        if (sDarkChecked) return sDarkMode;
-        sDarkChecked = true;
         try {
             android.content.Context ctx = ContextManager.getAppContext();
             if (ctx == null) return false;
@@ -54,9 +44,9 @@ public class AppColors {
             if (res == null) return false;
             int uiMode = res.getConfiguration().uiMode
                 & Configuration.UI_MODE_NIGHT_MASK;
-            sDarkMode = (uiMode == Configuration.UI_MODE_NIGHT_YES);
+            return (uiMode == Configuration.UI_MODE_NIGHT_YES);
         } catch (Throwable ignored) {}
-        return sDarkMode;
+        return false;
     }
 
     private static SharedPreferences p() {

@@ -55,9 +55,13 @@ public class SubPageActivity {
         root.addView(MainActivity.makeTitleBar(ctx, title, true, () -> goBack(parentAct)));
 
         View body = createPageBody(ctx, parentAct, pageId);
-        android.widget.LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-1, 0, 1.0f);
-        body.setLayoutParams(blp);
-        root.addView(body);
+        android.widget.ScrollView sv = new android.widget.ScrollView(ctx);
+        sv.setFillViewport(true);
+        sv.setVerticalScrollBarEnabled(true);
+        android.widget.LinearLayout.LayoutParams svLp = new LinearLayout.LayoutParams(-1, 0, 1.0f);
+        sv.setLayoutParams(svLp);
+        sv.addView(body);
+        root.addView(sv);
 
         AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert);
         b.setView(root);
@@ -104,10 +108,14 @@ public class SubPageActivity {
                 return ChatPageView.create(ctx, parentAct);
             case 2:  // 主题美化
                 return ThemePageView.create(ctx, parentAct);
+            case 8:  // TTS播报转语音
+                return TTSPageView.create(ctx, parentAct);
             case 9:  // 红包转账
                 return RedPacketPageView.create(ctx, parentAct);
             case 91: // 红包转账 > 自动秒抢红包
                 return RedPacketConfigView.create(ctx, parentAct);
+            case 92: // 红包转账 > 自动收款
+                return AutoCollectConfigView.create(ctx, parentAct);
             case 20: // 主题美化 > 具体功能配置
                 return ThemePageView.createFeatureConfigPage(ctx, parentAct, sThemeFeaturePageId);
             default:

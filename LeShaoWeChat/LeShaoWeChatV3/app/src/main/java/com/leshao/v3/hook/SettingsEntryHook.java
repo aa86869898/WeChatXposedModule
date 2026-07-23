@@ -39,7 +39,9 @@ import com.leshao.v3.model.Contact;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.model.ScheduledTask;
 
+import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.Set;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -85,8 +87,6 @@ public class SettingsEntryHook {
             XposedBridge.log("LeShaoV3: EntryHook.hook() called");
             sHandler = new Handler(Looper.getMainLooper());
             hookBackPressed();
-            hookLayoutInflater();
-            hookMainSettingsUI();
             hookLauncherUIEntry(wechatCL);
             LogWriter.log(TAG, "INIT: hooks registered ok");
         }
@@ -220,25 +220,27 @@ public class SettingsEntryHook {
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
-                        if ((int) param.args[0] != SETTINGS_LAYOUT_ID) return;
-                        View original = (View) param.getResult();
-                        if (original == null) return;
                         try {
-                            ViewGroup parent = (ViewGroup) param.args[1];
-                            Context ctx = parent != null ? parent.getContext() : original.getContext();
-                            View card = buildSettingsCard(ctx);
-                            LinearLayout wrapper = new LinearLayout(ctx);
-                            wrapper.setOrientation(LinearLayout.VERTICAL);
-                            wrapper.addView(card, new LinearLayout.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                            original.setPadding(original.getPaddingLeft(), 0,
-                                    original.getPaddingRight(), original.getPaddingBottom());
-                            wrapper.addView(original, new LinearLayout.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.0f));
-                            param.setResult(wrapper);
-                        } catch (Throwable e) {
-                            LogWriter.log(TAG, "CARD: wrap failed: " + e.getMessage());
-                        }
+                            if ((int) param.args[0] != SETTINGS_LAYOUT_ID) return;
+                            View original = (View) param.getResult();
+                            if (original == null) return;
+                            try {
+                                ViewGroup parent = (ViewGroup) param.args[1];
+                                Context ctx = parent != null ? parent.getContext() : original.getContext();
+                                View card = buildSettingsCard(ctx);
+                                LinearLayout wrapper = new LinearLayout(ctx);
+                                wrapper.setOrientation(LinearLayout.VERTICAL);
+                                wrapper.addView(card, new LinearLayout.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                                original.setPadding(original.getPaddingLeft(), 0,
+                                        original.getPaddingRight(), original.getPaddingBottom());
+                                wrapper.addView(original, new LinearLayout.LayoutParams(
+                                        ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.0f));
+                                param.setResult(wrapper);
+                            } catch (Throwable e) {
+                                LogWriter.log(TAG, "CARD: wrap failed: " + e.getMessage());
+                            }
+                        } catch (Throwable ignored) {}
                     }
                 });
         } catch (Throwable t) {
@@ -298,6 +300,8 @@ public class SettingsEntryHook {
 
     // ========== MainSettingsUI entry injection (V21-style card prepended to settings list) ==========
 
+    private static final Set<Integer> sInjectedSettings = new HashSet<>();
+
     private static void hookMainSettingsUI() {
         try {
             ClassLoader cl = ContextManager.getClassLoader();
@@ -308,14 +312,19 @@ public class SettingsEntryHook {
             XposedBridge.hookAllMethods(mainSettingsUI, "onResume", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    Activity act = (Activity) param.thisObject;
-                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                        try {
-                            injectSettingsEntry(act);
-                        } catch (Throwable t) {
-                            LogWriter.log(TAG, "SETTINGS: inject fail: " + t.getMessage());
-                        }
-                    }, 180);
+                    try {
+                        Activity act = (Activity) param.thisObject;
+                        int id = System.identityHashCode(act);
+                        if (sInjectedSettings.contains(id)) return;
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            try {
+                                injectSettingsEntry(act);
+                                sInjectedSettings.add(id);
+                            } catch (Throwable t) {
+                                LogWriter.log(TAG, "SETTINGS: inject fail: " + t.getMessage());
+                            }
+                        }, 180);
+                    } catch (Throwable ignored) {}
                 }
             });
             LogWriter.log(TAG, "SETTINGS: MainSettingsUI hook ok");
@@ -433,6 +442,7 @@ public class SettingsEntryHook {
     // ========== LauncherUI entry hook (Route 1 from 设置注入方案) ==========
 
     private static final Handler sLauncherHandler = new Handler(Looper.getMainLooper());
+    private static volatile boolean sEntryOpenPending = false;
 
     private static void hookLauncherUIEntry(ClassLoader cl) {
         try {
@@ -446,12 +456,17 @@ public class SettingsEntryHook {
                         Activity act = (Activity) param.thisObject;
                         Intent intent = act.getIntent();
                         if (intent != null && intent.hasExtra("leshao_open")) {
+                            intent.removeExtra("leshao_open");
+                            if (sEntryOpenPending) return;
+                            sEntryOpenPending = true;
                             sLauncherHandler.postDelayed(() -> {
                                 try {
                                     MainActivity.open(act);
                                     LogWriter.log(TAG, "LauncherUI: entry via onCreate intent");
                                 } catch (Throwable t) {
                                     LogWriter.log(TAG, "LauncherUI onCreate open err: " + t.getMessage());
+                                } finally {
+                                    sLauncherHandler.postDelayed(() -> sEntryOpenPending = false, 3000);
                                 }
                             }, 500);
                         }
@@ -466,8 +481,12 @@ public class SettingsEntryHook {
                         Activity act = (Activity) param.thisObject;
                         Intent intent = (Intent) param.args[0];
                         if (intent != null && intent.hasExtra("leshao_open")) {
+                            intent.removeExtra("leshao_open");
+                            if (sEntryOpenPending) return;
+                            sEntryOpenPending = true;
                             MainActivity.open(act);
                             LogWriter.log(TAG, "LauncherUI: entry via onNewIntent");
+                            sLauncherHandler.postDelayed(() -> sEntryOpenPending = false, 3000);
                         }
                     } catch (Throwable t) {
                         LogWriter.log(TAG, "LauncherUI onNewIntent err: " + t.getMessage());

@@ -2,13 +2,25 @@ package com.leshao.v3.ui;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Typeface;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.CompoundButton;
+import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.SeekBar;
+import android.widget.Switch;
 import android.widget.TextView;
 
-public class RedPacketPageView {
+import com.leshao.v3.ContextManager;
+import com.leshao.v3.hook.AutoCollectHook;
+
+import java.util.HashSet;
+import java.util.Set;
+
+public class AutoCollectPageView {
 
     public static View create(Context ctx, Activity parentAct) {
         float d = ctx.getResources().getDisplayMetrics().density;
@@ -19,14 +31,8 @@ public class RedPacketPageView {
 
         root.addView(MainActivity.makeDivider(ctx));
 
-        root.addView(makeMenuEntry(ctx, d, 0x1F4B0, "自动秒抢红包",
-            "配置红包自动领取功能，支持私聊/群聊、时间段过滤、关键词过滤、秒抢名单",
-            v -> SubPageActivity.open(parentAct, "自动秒抢红包", 91)));
-
-        root.addView(MainActivity.makeDivider(ctx));
-
         root.addView(makeMenuEntry(ctx, d, 0x1F4B0, "自动收款",
-            "配置自动收款功能，支持私聊/群聊、时间段过滤、关键词过滤、快速收款名单",
+            "配置自动收款功能，所有功能与红包一致",
             v -> SubPageActivity.open(parentAct, "自动收款", 92)));
 
         root.addView(spacerV(ctx, d, 24));
@@ -74,7 +80,7 @@ public class RedPacketPageView {
         TextView arrow = new TextView(ctx);
         arrow.setText(">");
         arrow.setTextSize(16);
-        arrow.setTextColor(AppColors.arrow());
+        arrow.setTextColor(AppColors.text2());
         row.addView(arrow);
 
         return row;

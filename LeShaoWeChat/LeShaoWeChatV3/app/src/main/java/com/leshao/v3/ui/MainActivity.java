@@ -35,6 +35,7 @@ public class MainActivity {
     private static final String TAG = "MainActivity";
 
     private static AlertDialog sActiveDialog;
+    private static volatile long sLastOpenTime = 0;
 
     private static String sUserNickname;
     private static String sUserAlias;
@@ -43,6 +44,9 @@ public class MainActivity {
     private static String sVipLevel = "王者VIP";
 
     public static void open(Activity act) {
+        long now = System.currentTimeMillis();
+        if (now - sLastOpenTime < 2000) return;
+        sLastOpenTime = now;
         loadUserInfo();
         showMainPanel(act);
     }

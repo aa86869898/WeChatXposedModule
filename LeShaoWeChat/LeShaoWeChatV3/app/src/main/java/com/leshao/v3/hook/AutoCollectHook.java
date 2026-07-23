@@ -21,9 +21,9 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
-public class RedPacketHook {
+public class AutoCollectHook {
 
-    private static final String TAG = "RedPacket";
+    private static final String TAG = "AutoCollect";
 
     private static volatile boolean sEnabled = false;
     private static volatile boolean sPrivateEnabled = true;
@@ -39,10 +39,6 @@ public class RedPacketHook {
     private static volatile Set<String> sFastGroupIds = new HashSet<>();
     private static volatile boolean sTtsAnnounce = true;
     private static volatile TextToSpeech sTts;
-    private static volatile String sAnnouncedTalker = "";
-    private static volatile String sAnnouncedSender = "";
-    private static volatile String sAnnouncedAmount = "";
-    private static volatile boolean sAutoCollectEnabled = false;
 
     private static final Handler sHandler = new Handler(Looper.getMainLooper());
     private static final AtomicBoolean sProcessing = new AtomicBoolean(false);
@@ -66,7 +62,6 @@ public class RedPacketHook {
         sFastGroupIds = ids != null ? ids : new HashSet<>();
     }
     public static void setTtsAnnounce(boolean v) { sTtsAnnounce = v; }
-    public static void setAutoCollectEnabled(boolean v) { sAutoCollectEnabled = v; }
 
     public static void hook() {
         if (!ContextManager.isReady()) {
@@ -76,7 +71,7 @@ public class RedPacketHook {
         ClassLoader cl = ContextManager.getClassLoader();
         initTts();
         hookReceiveUIs(cl);
-        hookChatListClick(cl);
+        hookChatFragmentResume(cl);
         LogWriter.log(TAG, "hooks installed");
     }
 
@@ -97,7 +92,8 @@ public class RedPacketHook {
         }
     }
 
-    private static boolean shouldGrab(String talker, String sender) {
+    private static boolean shouldCollect(String talker, String sender) {
+        if (!sEnabled) return false;
         boolean isGroup = talker != null && talker.endsWith("@chatroom");
         if (!isGroup && !sPrivateEnabled) return false;
         if (isGroup && !sGroupEnabled) return false;
@@ -117,7 +113,7 @@ public class RedPacketHook {
         return true;
     }
 
-    private static boolean shouldGrabByContent(String content) {
+    private static boolean shouldCollectByContent(String content) {
         if (sKeywordExcludeOn && !sKeywordExclude.isEmpty()) {
             for (String kw : sKeywordExclude) {
                 if (!kw.isEmpty() && content.contains(kw)) return false;
@@ -132,25 +128,20 @@ public class RedPacketHook {
         return true;
     }
 
-    private static void announceGrab(Activity act, String talker, String sender, String amount) {
+    private static void announceCollect(Activity act, String talker, String sender, String amount) {
         if (!sTtsAnnounce || sTts == null) return;
         try {
-            sAnnouncedTalker = talker;
-            sAnnouncedSender = sender;
-            sAnnouncedAmount = amount;
-            String senderName = resolveNickname(sender);
+            String senderName = sender != null ? sender : "";
             StringBuilder sb = new StringBuilder();
             if (talker != null && talker.endsWith("@chatroom")) sb.append("群聊");
-            sb.append(senderName).append("的红包");
+            sb.append(senderName).append("的转账");
             if (amount != null && !amount.isEmpty()) sb.append(amount).append("元");
-            sb.append("已领取");
-            sTts.speak(sb.toString(), TextToSpeech.QUEUE_FLUSH, null, "redpacket_" + System.currentTimeMillis());
+            sb.append("已收款");
+            sTts.speak(sb.toString(), TextToSpeech.QUEUE_FLUSH, null, "collect_" + System.currentTimeMillis());
         } catch (Throwable t) {
             LogWriter.log(TAG, "TTS announce err: " + t.getMessage());
         }
     }
-
-    private static String resolveNickname(String wxid) { return wxid; }
 
     private static int parseTimeToMin(String time) {
         try {
@@ -160,22 +151,19 @@ public class RedPacketHook {
     }
 
     private static void hookReceiveUIs(ClassLoader cl) {
-        hookInitView(cl, "com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewReceiveUI", "initView");
-        hookInitView(cl, "com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI", "initView");
-        tryHookAndClick(cl, "com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI");
-        tryHookAndClick(cl, "com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2");
-        tryHookAndClick(cl, "com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI");
+        String[] uis = {
+            "com.tencent.mm.plugin.collection.ui.CollectionMainUI",
+            "com.tencent.mm.plugin.collection.ui.CollectionBusiUI",
+            "com.tencent.mm.plugin.order.ui.MallTransactionUI",
+            "com.tencent.mm.plugin.wallet.pay.ui.WalletPayUI",
+        };
+        for (String cls : uis) {
+            tryHookActivity(cl, cls);
+        }
+        hookActivityCreate(cl);
     }
 
-    private static void hookInitView(ClassLoader cl, String className, String methodName) {
-        try {
-            Class<?> cls = XposedHelpers.findClass(className, cl);
-            XposedBridge.hookAllMethods(cls, methodName, new ReceiveOpenHook(false));
-            LogWriter.log(TAG, "[OK] " + className + "." + methodName + "()");
-        } catch (Throwable ignored) {}
-    }
-
-    private static void tryHookAndClick(ClassLoader cl, String className) {
+    private static void tryHookActivity(ClassLoader cl, String className) {
         try {
             Class<?> cls = XposedHelpers.findClass(className, cl);
             XposedBridge.hookAllMethods(cls, "onCreate", new ReceiveOpenHook(true));
@@ -183,17 +171,37 @@ public class RedPacketHook {
         } catch (Throwable ignored) {}
     }
 
-    private static void hookChatListClick(ClassLoader cl) {
+    private static void hookActivityCreate(ClassLoader cl) {
+        XposedBridge.hookAllMethods(Activity.class, "onCreate", new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                try {
+                    Activity act = (Activity) param.thisObject;
+                    String clsName = act.getClass().getName().toLowerCase();
+                    if (clsName.contains("collection") || clsName.contains("transaction")
+                        || clsName.contains("wallet") && clsName.contains("pay")) {
+                        sHandler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() { clickCollectButton(act); }
+                        }, 150);
+                    }
+                } catch (Throwable ignored) {}
+            }
+        });
+    }
+
+    private static void hookChatFragmentResume(ClassLoader cl) {
         try {
-            Class<?> chattingUI = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUI", cl);
-            XposedBridge.hookAllMethods(chattingUI, "onResume", new ChatListResumeHook());
+            Class<?> chattingUI = XposedHelpers.findClass(
+                "com.tencent.mm.ui.chatting.ChattingUI", cl);
+            XposedBridge.hookAllMethods(chattingUI, "onResume", new ChatFragmentResumeHook());
             LogWriter.log(TAG, "[OK] ChattingUI.onResume()");
         } catch (Throwable e) {
             LogWriter.log(TAG, "[MISS] ChattingUI: " + e.getMessage());
         }
     }
 
-    private static void clickOpenButton(Activity activity) {
+    private static void clickCollectButton(Activity activity) {
         if (sProcessing.get()) return;
         sProcessing.set(true);
         try {
@@ -201,13 +209,16 @@ public class RedPacketHook {
             View amountView = findAmountView(root);
             String amount = amountView instanceof TextView
                 ? ((TextView) amountView).getText().toString() : "";
-            Button btn = findButtonRecursive(root);
+            Button btn = findCollectButton(root);
             if (btn != null && btn.isEnabled() && isVisible(btn)) {
-                btn.performClick();
-                LogWriter.log(TAG, "clicked open: " + amount);
                 String talker = getTalkerFromActivity(activity);
                 String sender = getSenderFromActivity(activity);
-                announceGrab(activity, talker, sender, amount);
+                if (!shouldCollect(talker, sender)) { return; }
+                String content = getContentFromActivity(activity);
+                if (!shouldCollectByContent(content)) { return; }
+                btn.performClick();
+                LogWriter.log(TAG, "clicked collect: " + amount);
+                announceCollect(activity, talker, sender, amount);
             }
         } catch (Throwable ignored) {} finally {
             sProcessing.set(false);
@@ -231,23 +242,21 @@ public class RedPacketHook {
         return null;
     }
 
-    private static Button findButtonRecursive(View v) {
+    private static Button findCollectButton(View v) {
         if (v instanceof Button) {
             Button b = (Button) v;
             CharSequence t = b.getText();
             if (t != null) {
                 String s = t.toString();
-                if (s.contains("开") || s.contains("拆") || s.contains("领取")
-                    || s.contains("Open") || s.contains("OPEN")) return b;
+                if (s.contains("收款") || s.contains("确认") || s.contains("收下")
+                    || s.contains("接收") || s.contains("Collect") || s.contains("Accept")) {
+                    return b;
+                }
             }
-            try {
-                String resName = v.getResources().getResourceEntryName(v.getId());
-                if (resName != null && resName.toLowerCase().contains("open")) return b;
-            } catch (Throwable ignored) {}
         }
         if (v instanceof ViewGroup) {
             for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) {
-                Button r = findButtonRecursive(((ViewGroup) v).getChildAt(i));
+                Button r = findCollectButton(((ViewGroup) v).getChildAt(i));
                 if (r != null) return r;
             }
         }
@@ -256,49 +265,6 @@ public class RedPacketHook {
 
     private static boolean isVisible(View v) {
         return v.getVisibility() == View.VISIBLE && v.getWidth() > 0 && v.getHeight() > 0;
-    }
-
-    private static void scanAndClickEnvelope(Activity activity) {
-        if (sProcessing.get()) return;
-        sProcessing.set(true);
-        try {
-            View root = activity.getWindow().getDecorView();
-            View envelope = findEnvelopeView(root);
-            if (envelope != null) {
-                envelope.performClick();
-                LogWriter.log(TAG, "auto clicked red packet in chat");
-            }
-        } catch (Throwable ignored) {} finally {
-            sProcessing.set(false);
-        }
-    }
-
-    private static View findEnvelopeView(View v) {
-        if (v instanceof TextView) {
-            CharSequence t = ((TextView) v).getText();
-            if (t != null) {
-                String s = t.toString();
-                if (s.contains("微信红包") || s.contains("红包")) {
-                    return findClickableParent(v);
-                }
-            }
-        }
-        if (v instanceof ViewGroup) {
-            for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) {
-                View r = findEnvelopeView(((ViewGroup) v).getChildAt(i));
-                if (r != null) return r;
-            }
-        }
-        return null;
-    }
-
-    private static View findClickableParent(View v) {
-        View parent = (View) v.getParent();
-        while (parent != null) {
-            if (parent.isClickable()) return parent;
-            parent = (View) parent.getParent();
-        }
-        return v;
     }
 
     private static String getTalkerFromActivity(Activity act) {
@@ -316,6 +282,8 @@ public class RedPacketHook {
 
     private static String getSenderFromActivity(Activity act) { return ""; }
 
+    private static String getContentFromActivity(Activity act) { return ""; }
+
     public static void release() {
         if (sTts != null) {
             sTts.stop();
@@ -332,17 +300,19 @@ public class RedPacketHook {
         @Override
         protected void afterHookedMethod(MethodHookParam param) {
             try {
-                if (!sEnabled) return;
                 Activity act = (Activity) param.thisObject;
                 sHandler.postDelayed(new Runnable() {
                     @Override
-                    public void run() { clickOpenButton(act); }
-                }, mIsCreate ? 100 : 50);
+                    public void run() {
+                        if (!sEnabled) return;
+                        clickCollectButton(act);
+                    }
+                }, mIsCreate ? 200 : 80);
             } catch (Throwable ignored) {}
         }
     }
 
-    static class ChatListResumeHook extends XC_MethodHook {
+    static class ChatFragmentResumeHook extends XC_MethodHook {
         @Override
         protected void afterHookedMethod(MethodHookParam param) {
             try {
@@ -350,9 +320,54 @@ public class RedPacketHook {
                 Activity act = (Activity) param.thisObject;
                 sHandler.postDelayed(new Runnable() {
                     @Override
-                    public void run() { scanAndClickEnvelope(act); }
-                }, 300);
+                    public void run() { scanAndClickTransferBubble(act); }
+                }, 400);
             } catch (Throwable ignored) {}
         }
+    }
+
+    private static void scanAndClickTransferBubble(Activity activity) {
+        if (sProcessing.get()) return;
+        sProcessing.set(true);
+        try {
+            View root = activity.getWindow().getDecorView();
+            View bubble = findTransferBubble(root);
+            if (bubble != null) {
+                String talker = getTalkerFromActivity(activity);
+                if (!shouldCollect(talker, "")) { return; }
+                bubble.performClick();
+                LogWriter.log(TAG, "auto clicked transfer bubble in chat");
+            }
+        } catch (Throwable ignored) {} finally {
+            sProcessing.set(false);
+        }
+    }
+
+    private static View findTransferBubble(View v) {
+        if (v instanceof TextView) {
+            CharSequence t = ((TextView) v).getText();
+            if (t != null) {
+                String s = t.toString();
+                if (s.contains("转账") || s.contains("向你转账") || s.contains("微信转账")) {
+                    return findClickableParent(v);
+                }
+            }
+        }
+        if (v instanceof ViewGroup) {
+            for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) {
+                View r = findTransferBubble(((ViewGroup) v).getChildAt(i));
+                if (r != null) return r;
+            }
+        }
+        return null;
+    }
+
+    private static View findClickableParent(View v) {
+        View parent = (View) v.getParent();
+        while (parent != null) {
+            if (parent.isClickable()) return parent;
+            parent = (View) parent.getParent();
+        }
+        return v;
     }
 }

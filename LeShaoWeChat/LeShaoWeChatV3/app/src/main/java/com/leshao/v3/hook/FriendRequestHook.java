@@ -35,13 +35,15 @@ public class FriendRequestHook {
                     new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
-                            if (!sEnabled) return;
                             try {
-                                android.app.Activity activity = (android.app.Activity) param.thisObject;
-                                autoAccept(activity);
-                            } catch (Throwable t) {
-                                LogWriter.log(TAG, "autoAccept error: " + t.getMessage());
-                            }
+                                if (!sEnabled) return;
+                                try {
+                                    android.app.Activity activity = (android.app.Activity) param.thisObject;
+                                    autoAccept(activity);
+                                } catch (Throwable t) {
+                                    LogWriter.log(TAG, "autoAccept error: " + t.getMessage());
+                                }
+                            } catch (Throwable ignored) {}
                         }
                     });
                 LogWriter.log(TAG, "friend request hook registered: " + className);

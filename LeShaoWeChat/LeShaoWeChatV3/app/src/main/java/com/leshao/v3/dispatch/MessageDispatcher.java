@@ -16,7 +16,13 @@ public class MessageDispatcher {
 
     public static void dispatch(WeChatMessage msg, ModuleConfig cfg) {
         if (msg == null) return;
-        if (!cfg.masterSwitch) return;
+        if (!cfg.masterSwitch) {
+            LogWriter.log(TAG, "masterSwitch OFF, drop msg type=" + msg.type + " from=" + msg.talker);
+            return;
+        }
+
+        LogWriter.log(TAG, "dispatch msg type=" + msg.type + " from=" + msg.talker + " text="
+            + (msg.content != null ? msg.content.substring(0, Math.min(30, msg.content.length())) : "null"));
 
         new Thread(() -> {
             try {

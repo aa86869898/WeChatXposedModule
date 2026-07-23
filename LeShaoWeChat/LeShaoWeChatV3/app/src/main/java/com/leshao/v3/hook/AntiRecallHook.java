@@ -45,9 +45,11 @@ public class AntiRecallHook {
                 XposedBridge.hookAllMethods(c, "run", new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        if (!sEnabled) return;
-                        param.setResult(null);
-                        LogWriter.log(TAG, "[XML] 阻止撤回成功: " + clsName);
+                        try {
+                            if (!sEnabled) return;
+                            param.setResult(null);
+                            LogWriter.log(TAG, "[XML] 阻止撤回成功: " + clsName);
+                        } catch (Throwable ignored) {}
                     }
                 });
                 LogWriter.log(TAG, "[XML] Hooked: " + clsName + ".run()");
@@ -73,9 +75,11 @@ public class AntiRecallHook {
                 XposedBridge.hookAllMethods(c, "f", new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        if (!sEnabled) return;
-                        param.setResult(null);
-                        LogWriter.log(TAG, "[Proto] 阻止撤回成功: " + clsName);
+                        try {
+                            if (!sEnabled) return;
+                            param.setResult(null);
+                            LogWriter.log(TAG, "[Proto] 阻止撤回成功: " + clsName);
+                        } catch (Throwable ignored) {}
                     }
                 });
                 LogWriter.log(TAG, "[Proto] Hooked: " + clsName + ".f()");
@@ -101,19 +105,21 @@ public class AntiRecallHook {
                             new XC_MethodHook() {
                                 @Override
                                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                                    if (!sEnabled) return;
                                     try {
-                                        Object msgObj = findRecallMsg(param.args);
-                                        if (msgObj != null) {
-                                            String talker = getField(msgObj, "field_talker", "getTalker");
-                                            String content = getField(msgObj, "field_content", "getContent");
-                                            if (content != null) {
-                                                StatsCollector.recordRecall(talker, content);
-                                                LogWriter.log(TAG, "recall recorded: " + talker + " -> " + (content.length() > 20 ? content.substring(0, 20) + "..." : content));
+                                        if (!sEnabled) return;
+                                        try {
+                                            Object msgObj = findRecallMsg(param.args);
+                                            if (msgObj != null) {
+                                                String talker = getField(msgObj, "field_talker", "getTalker");
+                                                String content = getField(msgObj, "field_content", "getContent");
+                                                if (content != null) {
+                                                    StatsCollector.recordRecall(talker, content);
+                                                    LogWriter.log(TAG, "recall recorded: " + talker + " -> " + (content.length() > 20 ? content.substring(0, 20) + "..." : content));
+                                                }
+                                                // 尝试插入系统提示 "xxx撤回了一条消息"
+                                                tryInsertSystemTip(msgObj, talker);
                                             }
-                                            // 尝试插入系统提示 "xxx撤回了一条消息"
-                                            tryInsertSystemTip(msgObj, talker);
-                                        }
+                                        } catch (Throwable ignored) {}
                                     } catch (Throwable ignored) {}
                                 }
                             });

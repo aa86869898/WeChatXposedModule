@@ -18,6 +18,7 @@ import android.widget.TextView;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.ui.AppColors;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -39,6 +40,8 @@ public class ThemeHook {
     private static volatile boolean sBubbleOn       = true;
     private static volatile boolean sTextColorOn    = true;
     private static volatile boolean sHooksInstalled = false;
+    private static volatile boolean sForceSystemDark = true;
+    private static volatile boolean sLastDarkMode = false;
     private static volatile Activity sForegroundActivity;
     private static volatile String  sBubbleImagePath;
     private static volatile Bitmap  sBubbleBitmap;
@@ -153,6 +156,12 @@ public class ThemeHook {
         methodH_TextColor(cl);
         methodX_AddViewFallback(cl);
         methodG_ChatUI_Scan(cl);
+        methodL_DarkModeSync(cl);
+        methodM_SettingsUI(cl);
+        methodN_VASTheme(cl);
+        methodO_FragmentBg(cl);
+        methodP_ChatFooter(cl);
+        methodQ_PageTheming(cl);
         trackForegroundActivity();
         hookGalleryResult();
 
@@ -165,22 +174,28 @@ public class ThemeHook {
                 new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
-                        sForegroundActivity = (Activity) param.thisObject;
+                        try {
+                            sForegroundActivity = (Activity) param.thisObject;
+                        } catch (Throwable ignored) {}
                     }
                 });
             XposedBridge.hookAllMethods(Activity.class, "onResume",
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
-                        sForegroundActivity = (Activity) param.thisObject;
+                        try {
+                            sForegroundActivity = (Activity) param.thisObject;
+                        } catch (Throwable ignored) {}
                     }
                 });
             XposedBridge.hookAllMethods(Activity.class, "onPause",
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
-                        if (sForegroundActivity == param.thisObject)
-                            sForegroundActivity = null;
+                        try {
+                            if (sForegroundActivity == param.thisObject)
+                                sForegroundActivity = null;
+                        } catch (Throwable ignored) {}
                     }
                 });
         } catch (Throwable ignored) {}
@@ -192,9 +207,11 @@ public class ThemeHook {
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
-                        if (!sMasterEnabled || !sConvListOn) return;
-                        int orig = (int) param.getResult();
-                        if (orig == 0xFF07C160) param.setResult(sTabSelected);
+                        try {
+                            if (!sMasterEnabled || !sConvListOn) return;
+                            int orig = (int) param.getResult();
+                            if (orig == 0xFF07C160) param.setResult(sTabSelected);
+                        } catch (Throwable ignored) {}
                     }
                 });
             LogWriter.log(TAG, "[A] ok");
@@ -207,11 +224,13 @@ public class ThemeHook {
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
-                        if (!sMasterEnabled || !sPageBgOn) return;
-                        Activity act = (Activity) param.thisObject;
-                        if (!act.getClass().getName().startsWith("com.tencent.mm")) return;
-                        if (isChattingUI(act)) return;
-                        applyPageBg(act);
+                        try {
+                            if (!sMasterEnabled || !sPageBgOn) return;
+                            Activity act = (Activity) param.thisObject;
+                            if (!act.getClass().getName().startsWith("com.tencent.mm")) return;
+                            if (isChattingUI(act)) return;
+                            applyPageBg(act);
+                        } catch (Throwable ignored) {}
                     }
                 });
             LogWriter.log(TAG, "[B] ok");
@@ -240,9 +259,11 @@ public class ThemeHook {
             XposedBridge.hookAllMethods(ga, "E0", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    if (!sMasterEnabled || !sActionBarOn) return;
-                    if (param.args.length > 0 && param.args[0] instanceof Integer)
-                        param.args[0] = sActionBarTitle;
+                    try {
+                        if (!sMasterEnabled || !sActionBarOn) return;
+                        if (param.args.length > 0 && param.args[0] instanceof Integer)
+                            param.args[0] = sActionBarTitle;
+                    } catch (Throwable ignored) {}
                 }
             });
             LogWriter.log(TAG, "[C] ga.E0 title ok");
@@ -254,11 +275,13 @@ public class ThemeHook {
             XposedBridge.hookAllMethods(mmActivity, "onResume", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    if (!sMasterEnabled || !sActionBarOn) return;
-                    Activity act = (Activity) param.thisObject;
-                    Handler h = new Handler(Looper.getMainLooper());
-                    h.postDelayed(() -> themeActionBarByDimension(act), 60);
-                    h.postDelayed(() -> themeActionBarByDimension(act), 300);
+                    try {
+                        if (!sMasterEnabled || !sActionBarOn) return;
+                        Activity act = (Activity) param.thisObject;
+                        Handler h = new Handler(Looper.getMainLooper());
+                        h.postDelayed(() -> themeActionBarByDimension(act), 60);
+                        h.postDelayed(() -> themeActionBarByDimension(act), 300);
+                    } catch (Throwable ignored) {}
                 }
             });
             LogWriter.log(TAG, "[C] dim-scan ok");
@@ -304,12 +327,14 @@ public class ThemeHook {
             XposedBridge.hookAllMethods(lUI, "onResume", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    if (!sMasterEnabled || !sConvListOn) return;
-                    Activity act = (Activity) param.thisObject;
-                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                        try { colorByName(act.getWindow().getDecorView(), "tablayout|bottomtab|mmtab|maintab", sTabBg); }
-                        catch (Throwable ignored) {}
-                    }, 300);
+                    try {
+                        if (!sMasterEnabled || !sConvListOn) return;
+                        Activity act = (Activity) param.thisObject;
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                            try { colorByName(act.getWindow().getDecorView(), "tablayout|bottomtab|mmtab|maintab", sTabBg); }
+                            catch (Throwable ignored) {}
+                        }, 300);
+                    } catch (Throwable ignored) {}
                 }
             });
             LogWriter.log(TAG, "[D] ok");
@@ -327,12 +352,14 @@ public class ThemeHook {
                 XposedBridge.hookAllMethods(c, "onResume", new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
-                        if (!sMasterEnabled || !sConvListOn) return;
-                        Activity act = (Activity) param.thisObject;
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            try { colorByName(act.getWindow().getDecorView(), "recycler", sPageBg); }
-                            catch (Throwable ignored) {}
-                        }, 120);
+                        try {
+                            if (!sMasterEnabled || !sConvListOn) return;
+                            Activity act = (Activity) param.thisObject;
+                            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                                try { colorByName(act.getWindow().getDecorView(), "recycler", sPageBg); }
+                                catch (Throwable ignored) {}
+                            }, 120);
+                        } catch (Throwable ignored) {}
                     }
                 });
                 LogWriter.log(TAG, "[E] " + name + " ok");
@@ -350,17 +377,21 @@ public class ThemeHook {
             XposedBridge.hookAllMethods(dye, "l0", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    LogWriter.log(TAG, "[F] l0 FIRED master=" + sMasterEnabled + " bubble=" + sBubbleOn);
-                    if (!sMasterEnabled || !sBubbleOn) return;
-                    applyDyeColors(param.thisObject);
+                    try {
+                        LogWriter.log(TAG, "[F] l0 FIRED master=" + sMasterEnabled + " bubble=" + sBubbleOn);
+                        if (!sMasterEnabled || !sBubbleOn) return;
+                        applyDyeColors(param.thisObject);
+                    } catch (Throwable ignored) {}
                 }
             });
 
             XposedBridge.hookAllMethods(dye, "n0", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    if (!sMasterEnabled || !sBubbleOn) return;
-                    applyDyeColors(param.thisObject);
+                    try {
+                        if (!sMasterEnabled || !sBubbleOn) return;
+                        applyDyeColors(param.thisObject);
+                    } catch (Throwable ignored) {}
                 }
             });
 
@@ -368,8 +399,10 @@ public class ThemeHook {
                 XposedBridge.hookAllMethods(dye, "p0", new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
-                        if (!sMasterEnabled || !sBubbleOn) return;
-                        applyDyeColors(param.thisObject);
+                        try {
+                            if (!sMasterEnabled || !sBubbleOn) return;
+                            applyDyeColors(param.thisObject);
+                        } catch (Throwable ignored) {}
                     }
                 });
                 LogWriter.log(TAG, "[F] p0 extra hook ok");
@@ -416,12 +449,14 @@ public class ThemeHook {
                 new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
-                        if (!sMasterEnabled || !sTextColorOn) return;
-                        if (!isInThemableContext()) return;
-                        if (param.args.length == 0) return;
-                        int color = (int) param.args[0];
-                        if (color == 0xFF000000 || color == Color.BLACK || isNearBlack(color))
-                            param.args[0] = sTextPrimary;
+                        try {
+                            if (!sMasterEnabled || !sTextColorOn) return;
+                            if (!isInThemableContext()) return;
+                            if (param.args.length == 0) return;
+                            int color = (int) param.args[0];
+                            if (color == 0xFF000000 || color == Color.BLACK || isNearBlack(color))
+                                param.args[0] = sTextPrimary;
+                        } catch (Throwable ignored) {}
                     }
                 });
             LogWriter.log(TAG, "[H] ok");
@@ -434,17 +469,19 @@ public class ThemeHook {
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
-                        if (!sMasterEnabled || !sBubbleOn) return;
-                        View child = (View) param.args[0];
-                        if (child == null) return;
-                        ViewGroup parent = (ViewGroup) param.thisObject;
-                        String pn = parent.getClass().getName().toLowerCase();
-                        if (!pn.contains("recycler") && !pn.contains("list")) return;
-                        if (!isInMMContext()) return;
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            try { scanBubbles(child); }
-                            catch (Throwable ignored) {}
-                        }, 100);
+                        try {
+                            if (!sMasterEnabled || !sBubbleOn) return;
+                            View child = (View) param.args[0];
+                            if (child == null) return;
+                            ViewGroup parent = (ViewGroup) param.thisObject;
+                            String pn = parent.getClass().getName().toLowerCase();
+                            if (!pn.contains("recycler") && !pn.contains("list")) return;
+                            if (!isInMMContext()) return;
+                            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                                try { scanBubbles(child); }
+                                catch (Throwable ignored) {}
+                            }, 100);
+                        } catch (Throwable ignored) {}
                     }
                 });
             LogWriter.log(TAG, "[X] addView scan ok");
@@ -458,14 +495,16 @@ public class ThemeHook {
             XposedBridge.hookAllMethods(chatUI, "onResume", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    Activity act = (Activity) param.thisObject;
-                    LogWriter.log(TAG, "[G] ChattingUI resume"
-                        + " master=" + sMasterEnabled + " chatBg=" + sChatBgOn + " bubble=" + sBubbleOn);
-                    if (!sMasterEnabled) return;
-                    Handler h = new Handler(Looper.getMainLooper());
-                    h.postDelayed(() -> applyChatTheme(act), 200);
-                    h.postDelayed(() -> applyChatTheme(act), 600);
-                    h.postDelayed(() -> applyChatTheme(act), 1200);
+                    try {
+                        Activity act = (Activity) param.thisObject;
+                        LogWriter.log(TAG, "[G] ChattingUI resume"
+                            + " master=" + sMasterEnabled + " chatBg=" + sChatBgOn + " bubble=" + sBubbleOn);
+                        if (!sMasterEnabled) return;
+                        Handler h = new Handler(Looper.getMainLooper());
+                        h.postDelayed(() -> applyChatTheme(act), 200);
+                        h.postDelayed(() -> applyChatTheme(act), 600);
+                        h.postDelayed(() -> applyChatTheme(act), 1200);
+                    } catch (Throwable ignored) {}
                 }
             });
             LogWriter.log(TAG, "[G] ChattingUI ok");
@@ -559,26 +598,28 @@ public class ThemeHook {
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
-                        int reqCode = (int) param.args[0];
-                        int resCode = (int) param.args[1];
-                        android.content.Intent data = (android.content.Intent) param.args[2];
-                        if (reqCode != 9001 || resCode != Activity.RESULT_OK || data == null) return;
                         try {
-                            Uri uri = data.getData();
-                            if (uri == null) return;
-                            Activity act = (Activity) param.thisObject;
-                            File dest = new File(act.getFilesDir(), "leshao_bubble_img.png");
-                            InputStream is = act.getContentResolver().openInputStream(uri);
-                            if (is != null) {
-                                FileOutputStream fos = new FileOutputStream(dest);
-                                byte[] buf = new byte[8192];
-                                int n;
-                                while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
-                                fos.close(); is.close();
-                                setBubbleImage(dest.getAbsolutePath());
-                                LogWriter.log(TAG, "gallery ok: " + dest.getAbsolutePath());
-                            }
-                        } catch (Throwable t) { LogWriter.log(TAG, "gallery err: " + t.getMessage()); }
+                            int reqCode = (int) param.args[0];
+                            int resCode = (int) param.args[1];
+                            android.content.Intent data = (android.content.Intent) param.args[2];
+                            if (reqCode != 9001 || resCode != Activity.RESULT_OK || data == null) return;
+                            try {
+                                Uri uri = data.getData();
+                                if (uri == null) return;
+                                Activity act = (Activity) param.thisObject;
+                                File dest = new File(act.getFilesDir(), "leshao_bubble_img.png");
+                                InputStream is = act.getContentResolver().openInputStream(uri);
+                                if (is != null) {
+                                    FileOutputStream fos = new FileOutputStream(dest);
+                                    byte[] buf = new byte[8192];
+                                    int n;
+                                    while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
+                                    fos.close(); is.close();
+                                    setBubbleImage(dest.getAbsolutePath());
+                                    LogWriter.log(TAG, "gallery ok: " + dest.getAbsolutePath());
+                                }
+                            } catch (Throwable t) { LogWriter.log(TAG, "gallery err: " + t.getMessage()); }
+                        } catch (Throwable ignored) {}
                     }
                 });
         } catch (Throwable t) { LogWriter.log(TAG, "gallery hook err: " + t.getMessage()); }
@@ -640,5 +681,271 @@ public class ThemeHook {
 
     private static int dp(View v, int dp) {
         return (int) (dp * v.getContext().getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private static void methodL_DarkModeSync(ClassLoader cl) {
+        try {
+            XposedBridge.hookAllMethods(
+                XposedHelpers.findClass("com.tencent.mm.ui.MMActivity", cl), "onResume",
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sMasterEnabled) return;
+                            Activity act = (Activity) param.thisObject;
+                            boolean isDark = AppColors.isDarkMode();
+                            if (sForceSystemDark && sLastDarkMode != isDark) {
+                                sLastDarkMode = isDark;
+                                refreshAllStates();
+                                LogWriter.log(TAG, "dark sync: " + isDark);
+                            }
+                            if (isDark) {
+                                if (sPageBgOn && !isChattingUI(act))
+                                    applyPageBg(act);
+                                if (sActionBarOn)
+                                    new Handler(Looper.getMainLooper())
+                                        .postDelayed(() -> themeActionBarByDimension(act), 200);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            LogWriter.log(TAG, "[L] dark sync ok");
+        } catch (Throwable t) { LogWriter.log(TAG, "[L] err: " + t.getMessage()); }
+    }
+
+    private static void methodM_SettingsUI(ClassLoader cl) {
+        try {
+            Class<?> baseSetting = XposedHelpers.findClass(
+                "com.tencent.mm.ui.setting.BaseSettingUI", cl);
+            XposedBridge.hookAllMethods(baseSetting, "onCreate",
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sMasterEnabled || !sPageBgOn) return;
+                            Activity act = (Activity) param.thisObject;
+                            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                                try {
+                                    View content = act.findViewById(android.R.id.content);
+                                    if (content instanceof ViewGroup) {
+                                        ViewGroup vg = (ViewGroup) content;
+                                        if (vg.getChildCount() > 0)
+                                            vg.getChildAt(0).setBackgroundColor(sPageBg);
+                                    }
+                                } catch (Throwable ignored) {}
+                            }, 100);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            LogWriter.log(TAG, "[M] settings bg ok");
+        } catch (Throwable t) { LogWriter.log(TAG, "[M] settings err: " + t.getMessage()); }
+    }
+
+    private static void methodN_VASTheme(ClassLoader cl) {
+        String[] vasClasses = {
+            "com.tencent.mm.ui.vas.VASActivity",
+            "com.tencent.mm.ui.vas.VASActivityJava",
+        };
+        for (String name : vasClasses) {
+            try {
+                Class<?> c = XposedHelpers.findClass(name, cl);
+                XposedBridge.hookAllMethods(c, "onResume", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sMasterEnabled) return;
+                            Activity act = (Activity) param.thisObject;
+                            Handler h = new Handler(Looper.getMainLooper());
+                            if (sPageBgOn && !isChattingUI(act))
+                                h.postDelayed(() -> applyPageBg(act), 60);
+                            if (sActionBarOn)
+                                h.postDelayed(() -> themeActionBarByDimension(act), 120);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "[N] " + name + " ok");
+            } catch (Throwable t) { LogWriter.log(TAG, "[N] " + name + " err: " + t.getMessage()); }
+        }
+    }
+
+    private static void methodO_FragmentBg(ClassLoader cl) {
+        try {
+            Class<?> mmFragment = XposedHelpers.findClass(
+                "com.tencent.mm.ui.MMFragment", cl);
+            XposedBridge.hookAllMethods(mmFragment, "onCreateView", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sMasterEnabled || !sPageBgOn) return;
+                            View view = (View) param.getResult();
+                            if (view instanceof ViewGroup) {
+                                ViewGroup vg = (ViewGroup) view;
+                                vg.setBackgroundColor(sPageBg);
+                                colorTexts(vg, sTextPrimary);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            LogWriter.log(TAG, "[O] MMFragment ok");
+        } catch (Throwable t) { LogWriter.log(TAG, "[O] MMFragment err: " + t.getMessage()); }
+
+        try {
+            Class<?> mmFragmentActivity = XposedHelpers.findClass(
+                "com.tencent.mm.ui.MMFragmentActivity", cl);
+            XposedBridge.hookAllMethods(mmFragmentActivity, "onResume",
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sMasterEnabled || !sPageBgOn) return;
+                            Activity act = (Activity) param.thisObject;
+                            if (!act.getClass().getName().startsWith("com.tencent.mm")) return;
+                            if (isChattingUI(act)) return;
+                            applyPageBg(act);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            LogWriter.log(TAG, "[O] MMFragmentActivity ok");
+        } catch (Throwable t) { LogWriter.log(TAG, "[O] MMFragmentActivity err: " + t.getMessage()); }
+    }
+
+    private static void methodP_ChatFooter(ClassLoader cl) {
+        String[] footerClasses = {
+            "com.tencent.mm.pluginsdk.ui.chat.ChatFooter",
+            "com.tencent.mm.pluginsdk.ui.chat.ChatFooterBottom",
+            "com.tencent.mm.pluginsdk.ui.ChatFooterPanel",
+            "com.tencent.mm.ui.chatting.ChattingFooterMoreBtnBar",
+        };
+        for (String name : footerClasses) {
+            try {
+                Class<?> c = XposedHelpers.findClass(name, cl);
+                XposedBridge.hookAllConstructors(c, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sMasterEnabled || !sPageBgOn) return;
+                            View v = (View) param.thisObject;
+                            v.setBackgroundColor(sChatBg);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "[P] " + name + " ok");
+            } catch (Throwable t) { LogWriter.log(TAG, "[P] " + name + " err: " + t.getMessage()); }
+        }
+
+        try {
+            Class<?> imageBg = XposedHelpers.findClass(
+                "com.tencent.mm.ui.chatting.ChattingImageBGView", cl);
+            XposedBridge.hookAllMethods(imageBg, "setBackgroundColor", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sMasterEnabled || !sChatBgOn) return;
+                            if (param.args.length > 0 && param.args[0] instanceof Integer)
+                                param.args[0] = sChatBg;
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            XposedBridge.hookAllMethods(imageBg, "setBackground", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sMasterEnabled || !sChatBgOn) return;
+                            param.setResult(null);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            LogWriter.log(TAG, "[P] ChattingImageBGView ok");
+        } catch (Throwable t) { LogWriter.log(TAG, "[P] ChattingImageBGView err: " + t.getMessage()); }
+    }
+
+    private static void methodQ_PageTheming(ClassLoader cl) {
+        String[][] pageHooks = {
+            { "SnsTimeLineUI", "com.tencent.mm.plugin.sns.ui.SnsTimeLineUI", "sns", "" },
+            { "ImproveSnsTimelineUI", "com.tencent.mm.plugin.sns.ui.improve.ImproveSnsTimelineUI", "sns", "" },
+            { "ContactInfoUI", "com.tencent.mm.plugin.profile.ui.ContactInfoUI", "contact", "" },
+            { "AddressUI", "com.tencent.mm.ui.contact.AddressUI", "contact", "" },
+            { "FindMoreFriendsUI", "com.tencent.mm.ui.FindMoreFriendsUI", "discover", "" },
+            { "WebViewUI", "com.tencent.mm.plugin.webview.ui.tools.WebViewUI", "webview", "" },
+            { "MainSettingsUI", "com.tencent.mm.ui.setting.MainSettingsUI", "setting", "" },
+            { "CommonSettingsUI", "com.tencent.mm.ui.setting.CommonSettingsUI", "setting", "" },
+            { "BizConversationUI", "com.tencent.mm.ui.conversation.BizConversationUI", "biz", "" },
+            { "SnsUserUI", "com.tencent.mm.plugin.sns.ui.SnsUserUI", "sns", "" },
+            { "SnsCommentUI", "com.tencent.mm.plugin.sns.ui.SnsCommentUI", "sns", "" },
+            { "SnsUploadUI", "com.tencent.mm.plugin.sns.ui.SnsUploadUI", "sns", "" },
+            { "ContactProfileUI", "com.tencent.mm.plugin.profile.ui.ContactProfileUI", "contact", "" },
+        };
+        for (String[] entry : pageHooks) {
+            String tag = entry[0];
+            String className = entry[1];
+            try {
+                Class<?> c = XposedHelpers.findClass(className, cl);
+                XposedBridge.hookAllMethods(c, "onResume", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sMasterEnabled || !sPageBgOn) return;
+                            Activity act = (Activity) param.thisObject;
+                            Handler h = new Handler(Looper.getMainLooper());
+                            h.postDelayed(() -> applyPageBg(act), 80);
+                            if (sActionBarOn)
+                                h.postDelayed(() -> themeActionBarByDimension(act), 160);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "[Q] " + tag + " ok");
+            } catch (Throwable t) { LogWriter.log(TAG, "[Q] " + tag + " err: " + t.getMessage()); }
+        }
+
+        try {
+            Class<?> convAdapter = XposedHelpers.findClass(
+                "com.tencent.mm.ui.conversation.ConversationAdapter", cl);
+            XposedBridge.hookAllMethods(convAdapter, "getView", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sMasterEnabled || !sConvListOn) return;
+                            View v = (View) param.getResult();
+                            if (v != null) {
+                                v.setBackgroundColor(sPageBg);
+                                if (v instanceof ViewGroup)
+                                    colorTexts((ViewGroup) v, sTextPrimary);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            LogWriter.log(TAG, "[Q] ConversationAdapter ok");
+        } catch (Throwable t) { LogWriter.log(TAG, "[Q] ConversationAdapter err: " + t.getMessage()); }
+
+        String[][] viewHooks = {
+            { "ConversationListView", "com.tencent.mm.ui.conversation.ConversationListView" },
+            { "ConversationFolderItemView", "com.tencent.mm.ui.conversation.ConversationFolderItemView" },
+            { "MainUIView", "com.tencent.mm.ui.conversation.MainUIView" },
+            { "ChattingItemFooter", "com.tencent.mm.ui.chatting.component.ChattingItemFooter" },
+            { "SnsHeader", "com.tencent.mm.plugin.sns.ui.SnsHeader" },
+            { "SnsCollapsibleTextView", "com.tencent.mm.plugin.sns.ui.SnsCollapsibleTextView" },
+            { "TimelineCommentView", "com.tencent.mm.plugin.sns.ui.TimelineCommentView" },
+            { "LauncherUIBottomTabView", "com.tencent.mm.ui.LauncherUIBottomTabView" },
+        };
+        for (String[] entry : viewHooks) {
+            String tag = entry[0];
+            String className = entry[1];
+            try {
+                Class<?> c = XposedHelpers.findClass(className, cl);
+                XposedBridge.hookAllConstructors(c, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sMasterEnabled) return;
+                            View v = (View) param.thisObject;
+                            if (sPageBgOn) v.setBackgroundColor(sPageBg);
+                            if (sTextColorOn && v instanceof ViewGroup)
+                                colorTexts((ViewGroup) v, sTextPrimary);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "[Q] " + tag + " ok");
+            } catch (Throwable t) { LogWriter.log(TAG, "[Q] " + tag + " err: " + t.getMessage()); }
+        }
     }
 }

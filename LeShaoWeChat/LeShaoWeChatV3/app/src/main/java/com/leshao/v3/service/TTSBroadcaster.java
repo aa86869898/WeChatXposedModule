@@ -17,11 +17,15 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class TTSBroadcaster {
 
     private static final String TAG = "TTSBroadcaster";
     private static TextToSpeech sTts;
+    private static volatile boolean sTtsReady = false;
+    private static CountDownLatch sTtsInitLatch;
     private static MediaPlayer sMp;
     private static final ArrayList<HashMap<String, String>> sQueue = new ArrayList<>();
     private static volatile boolean sSpeaking = false;
@@ -31,19 +35,31 @@ public class TTSBroadcaster {
 
     public static synchronized void process(WeChatMessage msg, ModuleConfig cfg) {
         if (msg == null || cfg == null) return;
-        if (!isTypeEnabled(msg.type, cfg.announceTypeMask)) return;
+        if (!isTypeEnabled(msg.type, cfg.announceTypeMask)) {
+            LogWriter.log(TAG, "TTS skip: type mask mismatch, msgType=" + msg.type + " mask=" + cfg.announceTypeMask);
+            return;
+        }
         if (!cfg.announceWhitelist.isEmpty()) {
             boolean inWl = cfg.announceWhitelist.contains(msg.talker);
             if (msg.isGroup()) inWl = inWl || cfg.announceWhitelist.contains(msg.senderWxid);
-            if (!inWl) return;
+            if (!inWl) {
+                LogWriter.log(TAG, "TTS skip: not in whitelist talker=" + msg.talker);
+                return;
+            }
         }
         if (cfg.quietEnabled && isQuietTime(cfg)) return;
 
         String text = buildAnnounce(msg, cfg);
-        if (text == null || text.isEmpty()) return;
+        if (text == null || text.isEmpty()) {
+            LogWriter.log(TAG, "TTS skip: empty announce text");
+            return;
+        }
 
         long now = System.currentTimeMillis();
-        if (now - sLastAnnounce < cfg.announceIntervalMs) return;
+        if (now - sLastAnnounce < cfg.announceIntervalMs) {
+            LogWriter.log(TAG, "TTS skip: interval limit");
+            return;
+        }
         sLastAnnounce = now;
 
         if (cfg.textCutoffLen > 0 && text.length() > cfg.textCutoffLen)
@@ -135,28 +151,65 @@ public class TTSBroadcaster {
     private static void speakSys(final String text, final String uid) {
         Context ctx = ContextManager.getAppContext();
         if (ctx == null) { queueNextAfterDelay(); return; }
+
         if (sTts == null) {
-            sTts = new TextToSpeech(ctx, status -> {
-                if (status == TextToSpeech.SUCCESS) {
-                    int r = sTts.setLanguage(Locale.CHINA);
-                    if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
-                        sTts.setLanguage(Locale.US);
-                    }
-                    sTts.setSpeechRate(0.9f);
+            synchronized (TTSBroadcaster.class) {
+                if (sTts == null) {
+                    sTtsReady = false;
+                    sTtsInitLatch = new CountDownLatch(1);
+                    sTts = new TextToSpeech(ctx, status -> {
+                        if (status == TextToSpeech.SUCCESS) {
+                            int r = sTts.setLanguage(Locale.CHINA);
+                            if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
+                                sTts.setLanguage(Locale.US);
+                            }
+                            sTts.setSpeechRate(0.9f);
+                            sTtsReady = true;
+                            LogWriter.log(TAG, "TTS: engine init OK, lang=" + sTts.getLanguage());
+                        } else {
+                            LogWriter.log(TAG, "TTS: engine init FAIL, status=" + status);
+                            try { sTts.shutdown(); } catch (Throwable e) {}
+                            sTts = null;
+                            sTtsReady = false;
+                        }
+                        sTtsInitLatch.countDown();
+                    });
+                    LogWriter.log(TAG, "TTS: creating engine, waiting init...");
                 }
-            });
+            }
         }
-        final TextToSpeech localTts = sTts;
-        if (localTts == null) { queueNextAfterDelay(); return; }
+
+        if (sTtsInitLatch != null) {
+            try {
+                boolean ok = sTtsInitLatch.await(8, TimeUnit.SECONDS);
+                if (!ok) LogWriter.log(TAG, "TTS: init timeout (8s)");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LogWriter.log(TAG, "TTS: init interrupted");
+            }
+        }
+
+        if (!sTtsReady || sTts == null) {
+            LogWriter.log(TAG, "TTS: engine not ready, skip speak. ready=" + sTtsReady + " tts=" + (sTts != null));
+            queueNextAfterDelay();
+            return;
+        }
+
         try {
-            localTts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+            sTts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                 public void onStart(String id) {}
                 public void onDone(String id) { queueNextAfterDelay(); }
                 public void onError(String id) { queueNextAfterDelay(); }
             });
-            localTts.speak(text, TextToSpeech.QUEUE_FLUSH, null, uid);
+            int rc = sTts.speak(text, TextToSpeech.QUEUE_FLUSH, null, uid);
+            if (rc == TextToSpeech.SUCCESS) {
+                LogWriter.log(TAG, "TTS: speak OK [" + text.substring(0, Math.min(30, text.length())) + "]");
+            } else {
+                LogWriter.log(TAG, "TTS: speak returned " + rc + ", fallback");
+                queueNextAfterDelay();
+            }
         } catch (Throwable e) {
-            LogWriter.log(TAG, "TTS: speakSys异常: " + e.getMessage());
+            LogWriter.log(TAG, "TTS: speak异常: " + e.getClass().getSimpleName() + " " + e.getMessage());
             queueNextAfterDelay();
         }
     }
@@ -211,6 +264,7 @@ public class TTSBroadcaster {
 
     public static void shutdown() {
         stopAll();
+        sTtsReady = false;
         if (sTts != null) { try { sTts.shutdown(); } catch (Throwable e) {} sTts = null; }
     }
 
@@ -218,39 +272,114 @@ public class TTSBroadcaster {
     private static String buildAnnounce(WeChatMessage msg, ModuleConfig cfg) {
         String senderName = msg.senderWxid;
         if (senderName == null || senderName.isEmpty()) senderName = msg.talker;
+        boolean isGroup = msg.isGroup();
 
         if (msg.isText()) {
             if (!cfg.announceText) return null;
             String ct = msg.content != null ? msg.content.trim() : "";
             if (ct.isEmpty()) return null;
             StringBuilder p = new StringBuilder();
-            if (msg.isGroup() && cfg.announceGroup) p.append(msg.talker).append(" ");
-            if (cfg.announceNickname) p.append(senderName);
-            return p.length() > 0 ? p.toString() + ct : senderName + "发来消息";
+            if (isGroup && cfg.announceGroup) p.append(msg.talker).append("的");
+            p.append(senderName).append("说:");
+            if (cfg.textTruncateEnabled && cfg.textCutoffLen > 0 && ct.length() > cfg.textCutoffLen)
+                ct = ct.substring(0, cfg.textCutoffLen) + "...";
+            return p.append(ct).toString();
         }
-        String prefix;
-        if (msg.isGroup() && cfg.announceGroup) {
-            prefix = msg.talker + "的" + senderName;
-        } else {
-            prefix = senderName;
-        }
-        if (msg.isImage()) { if (!cfg.announceImage) return null; return prefix + "发来[图片]"; }
-        if (msg.isVideo()) { if (!cfg.announceVideo) return null; return prefix + "发来[视频]"; }
+
         if (msg.isVoice()) {
-            StringBuilder vp = new StringBuilder();
-            if (msg.isGroup() && cfg.announceGroup) vp.append(msg.talker).append(" ");
-            if (cfg.announceNickname) vp.append(senderName);
-            if (vp.length() > 0) vp.append(" 说 ");
-            return vp.toString() + "语音播放";
+            if (isGroup && cfg.announceGroup)
+                return msg.talker + "的" + senderName + "说:开始播放语音";
+            return senderName + "说:开始播放语音";
         }
-        if (msg.isCard()) { if (!cfg.announceCard) return null; return prefix + "发来[名片]"; }
-        if (msg.isSticker()) { if (!cfg.announceSticker) return null; return prefix + "发来一个表情"; }
-        if (msg.isRedBag()) { if (!cfg.announceRedBag) return null; return prefix + "发来[红包]"; }
-        if (msg.isTransfer()) { if (!cfg.announceTransfer) return null; return prefix + "发来[转账]"; }
-        if (msg.isFile()) { if (!cfg.announceFile) return null; return prefix + "发来[文件]"; }
-        if (msg.isLocation()) { if (!cfg.announceLocation) return null; return prefix + "发来[位置]"; }
-        if (msg.isVoip()) { if (!cfg.announceCall) return null; return prefix + "发起语音通话"; }
-        return prefix + "发来一条消息";
+
+        if (msg.isImage()) {
+            if (!cfg.announceImage) return null;
+            if (isGroup && cfg.announceGroup)
+                return msg.talker + "的" + senderName + "发来一张照片";
+            return senderName + "发来一张照片";
+        }
+
+        if (msg.isVideo()) {
+            if (!cfg.announceVideo) return null;
+            if (isGroup && cfg.announceGroup)
+                return msg.talker + "的" + senderName + "发来一段视频";
+            return senderName + "发来一段视频";
+        }
+
+        if (msg.isLocation()) {
+            if (!cfg.announceLocation) return null;
+            String locDetail = extractLocationDetail(msg);
+            String locInfo = locDetail.isEmpty() ? "未知位置" : locDetail;
+            if (isGroup && cfg.announceGroup)
+                return msg.talker + "的" + senderName + "发来定位在:" + locInfo;
+            return senderName + "发来定位在:" + locInfo;
+        }
+
+        if (msg.isCard()) {
+            if (!cfg.announceCard) return null;
+            if (isGroup && cfg.announceGroup)
+                return msg.talker + "的" + senderName + "发来一张名片";
+            return senderName + "发来一张名片";
+        }
+
+        if (msg.isSticker()) {
+            if (!cfg.announceSticker) return null;
+            if (isGroup && cfg.announceGroup)
+                return msg.talker + "的" + senderName + "发来一个表情";
+            return senderName + "发来一个表情";
+        }
+
+        if (msg.isRedBag()) {
+            if (!cfg.announceRedBag) return null;
+            if (isGroup && cfg.announceGroup)
+                return msg.talker + "的" + senderName + "发来一个红包";
+            return senderName + "发来一个红包";
+        }
+
+        if (msg.isTransfer()) {
+            if (!cfg.announceTransfer) return null;
+            if (isGroup && cfg.announceGroup)
+                return msg.talker + "的" + senderName + "发来一笔转账";
+            return senderName + "发来一笔转账";
+        }
+
+        if (msg.isFile()) {
+            if (!cfg.announceFile) return null;
+            if (isGroup && cfg.announceGroup)
+                return msg.talker + "的" + senderName + "发来一个文件";
+            return senderName + "发来一个文件";
+        }
+
+        if (msg.isVoip()) {
+            if (!cfg.announceCall) return null;
+            if (isGroup && cfg.announceGroup)
+                return msg.talker + "的" + senderName + "发起语音通话";
+            return senderName + "发起语音通话";
+        }
+
+        if (isGroup && cfg.announceGroup)
+            return msg.talker + "的" + senderName + "发来一条消息";
+        return senderName + "发来一条消息";
+    }
+
+    private static String extractLocationDetail(WeChatMessage msg) {
+        if (msg.dbContent == null) return "";
+        try {
+            String db = msg.dbContent;
+            int idx = db.indexOf("label=\"");
+            if (idx >= 0) {
+                int start = idx + 7;
+                int end = db.indexOf("\"", start);
+                if (end > start) return db.substring(start, end);
+            }
+            idx = db.indexOf("<label>");
+            if (idx >= 0) {
+                int start = idx + 7;
+                int end = db.indexOf("</label>", start);
+                if (end > start) return db.substring(start, end);
+            }
+        } catch (Throwable ignored) {}
+        return "";
     }
 
     private static boolean isTypeEnabled(int type, int mask) {

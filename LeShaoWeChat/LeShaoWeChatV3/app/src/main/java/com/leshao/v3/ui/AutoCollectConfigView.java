@@ -16,27 +16,28 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 import com.leshao.v3.ContextManager;
+import com.leshao.v3.hook.AutoCollectHook;
 import com.leshao.v3.hook.RedPacketHook;
 
 import java.util.HashSet;
 import java.util.Set;
 
-public class RedPacketConfigView {
+public class AutoCollectConfigView {
 
-    private static final String KEY_ENABLED = "ls_redpacket_enabled";
-    private static final String KEY_DELAY = "ls_redpacket_delay";
-    private static final String KEY_PRIVATE = "ls_rp_private";
-    private static final String KEY_GROUP = "ls_rp_group";
-    private static final String KEY_TIME_ON = "ls_rp_time_on";
-    private static final String KEY_TIME_START = "ls_rp_time_start";
-    private static final String KEY_TIME_END = "ls_rp_time_end";
-    private static final String KEY_KW_EXCLUDE_ON = "ls_rp_kw_exclude_on";
-    private static final String KEY_KW_EXCLUDE = "ls_rp_kw_exclude";
-    private static final String KEY_KW_INCLUDE_ON = "ls_rp_kw_include_on";
-    private static final String KEY_KW_INCLUDE = "ls_rp_kw_include";
-    private static final String KEY_FAST_PRIVATE = "ls_rp_fast_private";
-    private static final String KEY_FAST_GROUP = "ls_rp_fast_group";
-    private static final String KEY_TTS_ANNOUNCE = "ls_rp_tts_announce";
+    private static final String KEY_ENABLED = "ls_autocollect_enabled";
+    private static final String KEY_DELAY = "ls_ac_delay";
+    private static final String KEY_PRIVATE = "ls_ac_private";
+    private static final String KEY_GROUP = "ls_ac_group";
+    private static final String KEY_TIME_ON = "ls_ac_time_on";
+    private static final String KEY_TIME_START = "ls_ac_time_start";
+    private static final String KEY_TIME_END = "ls_ac_time_end";
+    private static final String KEY_KW_EXCLUDE_ON = "ls_ac_kw_exclude_on";
+    private static final String KEY_KW_EXCLUDE = "ls_ac_kw_exclude";
+    private static final String KEY_KW_INCLUDE_ON = "ls_ac_kw_include_on";
+    private static final String KEY_KW_INCLUDE = "ls_ac_kw_include";
+    private static final String KEY_FAST_PRIVATE = "ls_ac_fast_private";
+    private static final String KEY_FAST_GROUP = "ls_ac_fast_group";
+    private static final String KEY_TTS_ANNOUNCE = "ls_ac_tts_announce";
 
     public static View create(Context ctx, Activity parentAct) {
         float d = ctx.getResources().getDisplayMetrics().density;
@@ -64,92 +65,92 @@ public class RedPacketConfigView {
 
         root.addView(sectionLabel(ctx, d, "核心开关"));
         LinearLayout card1 = makeCard(ctx, d);
-        card1.addView(switchRow(ctx, d, "自动秒抢红包", "检测到红包后自动点击按钮领取", enabled, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "自动收款", "检测到收款消息后自动点击领取", enabled, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ENABLED, on).apply();
-            RedPacketHook.setEnabled(on);
+            AutoCollectHook.setEnabled(on);
         }));
         root.addView(card1);
 
         root.addView(spacerV(ctx, d, 12));
         root.addView(sectionLabel(ctx, d, "领取范围"));
         LinearLayout card2 = makeCard(ctx, d);
-        card2.addView(switchRow(ctx, d, "私聊红包", "自动领取私聊中的红包", priv, (v, on) -> {
+        card2.addView(switchRow(ctx, d, "私聊收款", "自动收取私聊中的收款", priv, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_PRIVATE, on).apply();
-            RedPacketHook.setPrivateEnabled(on);
+            AutoCollectHook.setPrivateEnabled(on);
         }));
         card2.addView(itemDivider(ctx, d));
-        card2.addView(switchRow(ctx, d, "群聊红包", "自动领取群聊中的红包", group, (v, on) -> {
+        card2.addView(switchRow(ctx, d, "群聊收款", "自动收取群聊中的收款", group, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_GROUP, on).apply();
-            RedPacketHook.setGroupEnabled(on);
+            AutoCollectHook.setGroupEnabled(on);
         }));
         root.addView(card2);
 
         root.addView(spacerV(ctx, d, 12));
         root.addView(sectionLabel(ctx, d, "时间段过滤"));
         LinearLayout card3 = makeCard(ctx, d);
-        card3.addView(switchRow(ctx, d, "开启时间段过滤", "在指定时间段内不领取红包", timeOn, (v, on) -> {
+        card3.addView(switchRow(ctx, d, "开启时间段过滤", "在指定时间段内不收取", timeOn, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_TIME_ON, on).apply();
-            RedPacketHook.setTimeFilter(on, timeStart, timeEnd);
+            AutoCollectHook.setTimeFilter(on, timeStart, timeEnd);
         }));
         card3.addView(itemDivider(ctx, d));
         card3.addView(timeRangeRow(ctx, d, timeStart, timeEnd, (s, e) -> {
             if (prefs != null) {
                 prefs.edit().putString(KEY_TIME_START, s).putString(KEY_TIME_END, e).apply();
             }
-            RedPacketHook.setTimeFilter(prefs != null && prefs.getBoolean(KEY_TIME_ON, false), s, e);
+            AutoCollectHook.setTimeFilter(prefs != null && prefs.getBoolean(KEY_TIME_ON, false), s, e);
         }));
         root.addView(card3);
 
         root.addView(spacerV(ctx, d, 12));
         root.addView(sectionLabel(ctx, d, "关键词过滤"));
         LinearLayout card4 = makeCard(ctx, d);
-        card4.addView(switchRow(ctx, d, "排除关键词", "包含这些关键词的红包不领取", kwExOn, (v, on) -> {
+        card4.addView(switchRow(ctx, d, "排除关键词", "包含这些关键词的收款不自动收取", kwExOn, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_KW_EXCLUDE_ON, on).apply();
             Set<String> set = parseKeywords(prefs != null ? prefs.getString(KEY_KW_EXCLUDE, "") : "");
-            RedPacketHook.setKeywordExclude(on, set);
+            AutoCollectHook.setKeywordExclude(on, set);
         }));
         card4.addView(itemDivider(ctx, d));
         card4.addView(keywordRow(ctx, d, "排除关键词(空格分隔)", kwEx, val -> {
             if (prefs != null) prefs.edit().putString(KEY_KW_EXCLUDE, val).apply();
             Set<String> set = parseKeywords(val);
-            RedPacketHook.setKeywordExclude(prefs != null && prefs.getBoolean(KEY_KW_EXCLUDE_ON, false), set);
+            AutoCollectHook.setKeywordExclude(prefs != null && prefs.getBoolean(KEY_KW_EXCLUDE_ON, false), set);
         }));
         card4.addView(itemDivider(ctx, d));
-        card4.addView(switchRow(ctx, d, "包含关键词", "只领取包含这些关键词的红包", kwInOn, (v, on) -> {
+        card4.addView(switchRow(ctx, d, "包含关键词", "只收取包含这些关键词的收款", kwInOn, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_KW_INCLUDE_ON, on).apply();
             Set<String> set = parseKeywords(prefs != null ? prefs.getString(KEY_KW_INCLUDE, "") : "");
-            RedPacketHook.setKeywordInclude(on, set);
+            AutoCollectHook.setKeywordInclude(on, set);
         }));
         card4.addView(itemDivider(ctx, d));
         card4.addView(keywordRow(ctx, d, "包含关键词(空格分隔)", kwIn, val -> {
             if (prefs != null) prefs.edit().putString(KEY_KW_INCLUDE, val).apply();
             Set<String> set = parseKeywords(val);
-            RedPacketHook.setKeywordInclude(prefs != null && prefs.getBoolean(KEY_KW_INCLUDE_ON, false), set);
+            AutoCollectHook.setKeywordInclude(prefs != null && prefs.getBoolean(KEY_KW_INCLUDE_ON, false), set);
         }));
         root.addView(card4);
 
         root.addView(spacerV(ctx, d, 12));
-        root.addView(sectionLabel(ctx, d, "秒抢名单"));
+        root.addView(sectionLabel(ctx, d, "快速收款名单"));
         LinearLayout card5 = makeCard(ctx, d);
-        card5.addView(pickerRow(ctx, d, parentAct, "好友秒抢白名单", "指定的好友红包立即秒抢，无延迟", fastPriv,
+        card5.addView(pickerRow(ctx, d, parentAct, "好友快速收款白名单", "指定好友的收款立即收取，无延迟", fastPriv,
             ContactPickerDialog.MODE_FRIEND, val -> {
                 if (prefs != null) prefs.edit().putString(KEY_FAST_PRIVATE, val).apply();
-                RedPacketHook.setFastPrivateWxids(parseIds(val));
+                AutoCollectHook.setFastPrivateWxids(parseIds(val));
             }));
         card5.addView(itemDivider(ctx, d));
-        card5.addView(pickerRow(ctx, d, parentAct, "群聊秒抢白名单", "指定的群聊红包立即秒抢，无延迟", fastGrp,
+        card5.addView(pickerRow(ctx, d, parentAct, "群聊快速收款白名单", "指定群聊的收款立即收取，无延迟", fastGrp,
             ContactPickerDialog.MODE_GROUP, val -> {
                 if (prefs != null) prefs.edit().putString(KEY_FAST_GROUP, val).apply();
-                RedPacketHook.setFastGroupIds(parseIds(val));
+                AutoCollectHook.setFastGroupIds(parseIds(val));
             }));
         root.addView(card5);
 
         root.addView(spacerV(ctx, d, 12));
         root.addView(sectionLabel(ctx, d, "播报设置"));
         LinearLayout card6 = makeCard(ctx, d);
-        card6.addView(switchRow(ctx, d, "抢到红包播报金额", "通过TTS语音播报抢到的金额", ttsOn, (v, on) -> {
+        card6.addView(switchRow(ctx, d, "收到收款播报金额", "通过TTS语音播报收款金额", ttsOn, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_TTS_ANNOUNCE, on).apply();
-            RedPacketHook.setTtsAnnounce(on);
+            AutoCollectHook.setTtsAnnounce(on);
         }));
         root.addView(card6);
 
@@ -306,7 +307,7 @@ public class RedPacketConfigView {
         return row;
     }
 
-    private static View delayRow(Context ctx, float d, int currentMs, RedPacketConfigView.DelayCallback cb) {
+    private static View delayRow(Context ctx, float d, int currentMs, DelayCallback cb) {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
