@@ -265,7 +265,7 @@ public class VoiceForwardHook {
             // 方式1: addMenuItem(int, CharSequence) 
             try {
                 Method addItem = menuObj.getClass().getMethod("addMenuItem", int.class, CharSequence.class);
-                addItem.invoke(menuObj, MENU_ID, "转发[K]");
+                addItem.invoke(menuObj, MENU_ID, "语音转发");
                 LogWriter.log(TAG, "added via addMenuItem(int,CharSequence)");
                 ok = true;
             } catch (Throwable ignored) {}
@@ -274,7 +274,7 @@ public class VoiceForwardHook {
             if (!ok) {
                 try {
                     Method addItem = menuObj.getClass().getMethod("addMenuItem", int.class, CharSequence.class, Drawable.class);
-                    addItem.invoke(menuObj, MENU_ID, "转发[K]", null);
+                    addItem.invoke(menuObj, MENU_ID, "语音转发", null);
                     LogWriter.log(TAG, "added via addMenuItem(int,CharSequence,Drawable)");
                     ok = true;
                 } catch (Throwable ignored) {}
@@ -284,7 +284,7 @@ public class VoiceForwardHook {
             if (!ok) {
                 try {
                     Method add = menuObj.getClass().getMethod("add", int.class, int.class, int.class, CharSequence.class);
-                    add.invoke(menuObj, 0, MENU_ID, 0, "转发[K]");
+                    add.invoke(menuObj, 0, MENU_ID, 0, "语音转发");
                     LogWriter.log(TAG, "added via add(int,int,int,CharSequence)");
                     ok = true;
                 } catch (Throwable ignored) {}
@@ -400,59 +400,109 @@ public class VoiceForwardHook {
     private static void executeForward() {
         if (!sEnabled) return;
         try {
-            Object msg = sPendingMsg;
-            String talker = sPendingTalker;
-            sPendingMsg = null;
-            sPendingTalker = null;
-            if (msg == null) { showToast("请先选中一条语音消息"); return; }
-            long msgId = extractMsgId(msg);
-            if (msgId <= 0) { showToast("无法获取消息信息"); return; }
-            String extTalker = extractTalker(msg);
-            if (talker == null || talker.isEmpty()) talker = extTalker;
-            if (talker == null) talker = "";
+            View view = sPendingView;
+            if (view == null) { showToast("请先长按一条语音消息"); return; }
+
+            Object tag = view.getTag();
+            if (tag == null) { showToast("无法获取消息信息"); return; }
+
+            LogWriter.log(TAG, "forward: tag=" + tag.getClass().getName());
+
+            // 尝试获取消息 ID — vo/ze/any 对象
+            long msgId = extractMsgId(tag);
+            if (msgId <= 0) {
+                // 尝试 tag 内部对象
+                try {
+                    Object inner = tag.getClass().getMethod("getMsgInfo").invoke(tag);
+                    msgId = extractMsgId(inner);
+                } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "forward: msgId=" + msgId);
+
+            String talker = extractTalker(tag);
+            if (talker == null || talker.isEmpty()) {
+                try {
+                    Object inner = tag.getClass().getMethod("getMsgInfo").invoke(tag);
+                    talker = extractTalker(inner);
+                } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "forward: talker=" + talker);
+
             Context ctx = sChatAct != null ? sChatAct : ContextManager.getAppContext();
             if (ctx == null) { showToast("context unavailable"); return; }
-            ClassLoader cl = ctx.getClassLoader();
-            Class<?> fwdUI = null;
-            for (String n : new String[]{
-                "com.tencent.mm.ui.transmit.SelectConversationUI",
-                "com.tencent.mm.ui.transmit.MsgRetransmitUI",
-            }) { try { fwdUI = cl.loadClass(n); break; } catch (Throwable ignored) {} }
-            if (fwdUI == null) { showToast("微信版本不兼容"); return; }
-            Intent intent = new Intent(ctx, fwdUI);
-            intent.putExtra("Retr_Msg_content", talker);
-            intent.putExtra("Retr_Msg_Type", 1);
-            intent.putExtra("Retr_Msg_Id", msgId);
-            intent.putExtra("Retr_Msg_Img_Type", 0);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            ctx.startActivity(intent);
-            showToast("已打开转发界面");
+
+            // 方式1: 用 msgSvrId 打开 SelectConversationUI
+            if (msgId > 0) {
+                ClassLoader cl = ctx.getClassLoader();
+                Class<?> fwdUI = null;
+                for (String n : new String[]{
+                    "com.tencent.mm.ui.transmit.SelectConversationUI",
+                    "com.tencent.mm.ui.transmit.MsgRetransmitUI",
+                }) { try { fwdUI = cl.loadClass(n); break; } catch (Throwable ignored) {} }
+
+                if (fwdUI != null) {
+                    Intent intent = new Intent(ctx, fwdUI);
+                    intent.putExtra("Retr_Msg_content", talker != null ? talker : "");
+                    intent.putExtra("Retr_Msg_Type", 34); // voice
+                    intent.putExtra("Retr_Msg_Id", msgId);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    ctx.startActivity(intent);
+                    LogWriter.log(TAG, "forward: SelectConversationUI launched");
+                    showToast("请选择接收人");
+                    return;
+                }
+            }
+
+            // 方式2: 备用 — 显示消息内容用于调试
+            StringBuilder sb = new StringBuilder("tag fields: ");
+            for (java.lang.reflect.Field f : tag.getClass().getDeclaredFields()) {
+                try { f.setAccessible(true); sb.append(f.getName()).append("=").append(f.get(tag)).append(" "); } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, sb.toString());
+            showToast("转发: msgId=" + msgId + " talker=" + talker);
+
         } catch (Throwable t) {
-            LogWriter.log(TAG, "exec err: " + t.getMessage());
+            LogWriter.log(TAG, "forward error: " + t.getMessage());
             showToast("转发失败: " + t.getMessage());
         }
     }
 
     // ===== 工具 =====
     private static long extractMsgId(Object msg) {
-        try { return (long) XposedHelpers.callMethod(msg, "getMsgId"); } catch (Throwable ignored) {}
+        if (msg == null) return 0;
+        // WeChat 8.0.76 common field names
         try { return XposedHelpers.getLongField(msg, "field_msgId"); } catch (Throwable ignored) {}
         try { return XposedHelpers.getLongField(msg, "msgId"); } catch (Throwable ignored) {}
+        try { return XposedHelpers.getLongField(msg, "field_msgSvrId"); } catch (Throwable ignored) {}
+        try { return XposedHelpers.getLongField(msg, "msgSvrId"); } catch (Throwable ignored) {}
+        try { return XposedHelpers.getLongField(msg, "D"); } catch (Throwable ignored) {}
+        try { return XposedHelpers.getLongField(msg, "d"); } catch (Throwable ignored) {}
+        try { return (long) XposedHelpers.callMethod(msg, "getMsgId"); } catch (Throwable ignored) {}
+        try { return (long) XposedHelpers.callMethod(msg, "getMsgSvrId"); } catch (Throwable ignored) {}
         for (Field f : msg.getClass().getDeclaredFields()) {
-            if (f.getType() == long.class && f.getName().toLowerCase().contains("msgid")) {
-                try { f.setAccessible(true); return f.getLong(msg); } catch (Throwable ignored) {}
+            if (f.getType() == long.class) {
+                String fn = f.getName().toLowerCase();
+                if (fn.contains("msgid") || fn.contains("svrid") || fn.contains("msg_id")) {
+                    try { f.setAccessible(true); return f.getLong(msg); } catch (Throwable ignored) {}
+                }
             }
         }
         return 0;
     }
 
     private static String extractTalker(Object msg) {
-        try { return (String) XposedHelpers.callMethod(msg, "N0"); } catch (Throwable ignored) {}
+        if (msg == null) return "";
         try { return (String) XposedHelpers.getObjectField(msg, "field_talker"); } catch (Throwable ignored) {}
         try { return (String) XposedHelpers.getObjectField(msg, "talker"); } catch (Throwable ignored) {}
+        try { return (String) XposedHelpers.callMethod(msg, "N0"); } catch (Throwable ignored) {}
+        try { return (String) XposedHelpers.callMethod(msg, "getTalker"); } catch (Throwable ignored) {}
+        try { return (String) XposedHelpers.callMethod(msg, "a"); } catch (Throwable ignored) {}
         for (Field f : msg.getClass().getDeclaredFields()) {
-            if (f.getType() == String.class && f.getName().toLowerCase().contains("talker")) {
-                try { f.setAccessible(true); return (String) f.get(msg); } catch (Throwable ignored) {}
+            if (f.getType() == String.class) {
+                String fn = f.getName().toLowerCase();
+                if (fn.contains("talker") || fn.contains("username") || fn.contains("fromuser")) {
+                    try { f.setAccessible(true); return (String) f.get(msg); } catch (Throwable ignored) {}
+                }
             }
         }
         return "";
