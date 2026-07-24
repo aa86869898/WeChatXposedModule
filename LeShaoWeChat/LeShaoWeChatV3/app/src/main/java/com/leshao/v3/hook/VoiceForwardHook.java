@@ -808,6 +808,11 @@ public class VoiceForwardHook {
             boolean stopResult = (Boolean) XposedHelpers.callMethod(recorder, "stop");
             LogWriter.log(TAG, "SceneVoice: stop()=" + stopResult);
 
+            if (!stopResult) {
+                // dump recorder 状态定位 stop() 失败原因
+                dumpRecorderState(recorder);
+            }
+
             if (stopResult) return true;
 
             LogWriter.log(TAG, "SceneVoice: stop() failed, trying b31.w fallback...");
@@ -821,26 +826,66 @@ public class VoiceForwardHook {
     private static boolean trySendViaB31(ClassLoader cl, String targetWxid, String voiceFile, int duration) {
         try {
             Class<?> wClass = XposedHelpers.findClass("b31.w", cl);
-            // b31.w(int,int,b) 构造: b = talker/msgInfo 对象
-            Object sender = XposedHelpers.newInstance(wClass,
-                new Class[]{int.class, int.class, Object.class}, 0, 0, null);
+            Object sender;
+            
+            try {
+                // 先试无参构造
+                sender = XposedHelpers.newInstance(wClass);
+            } catch (Throwable e1) {
+                try {
+                    // 试 (int,int,com.tencent.mm.modelbase.b)  — b31 的内部类型
+                    Class<?> bClass = XposedHelpers.findClass("com.tencent.mm.modelbase.b", cl);
+                    sender = XposedHelpers.newInstance(wClass,
+                        new Class[]{int.class, int.class, bClass}, 0, 0, null);
+                } catch (Throwable e2) {
+                    LogWriter.log(TAG, "b31.w: all constructors failed: " + e2.getMessage());
+                    return false;
+                }
+            }
             LogWriter.log(TAG, "b31.w: instance created");
 
-            // init → set file path → start
-            try { XposedHelpers.callMethod(sender, "init", 0, 0, null); } catch (Throwable ignored) {}
-            try {
-                java.io.File f = new java.io.File(voiceFile);
-                if (f.exists()) XposedHelpers.setObjectField(sender, "e", voiceFile);
-            } catch (Throwable ignored) {}
+            // 设目标 + 文件 + 时长
+            try { XposedHelpers.setObjectField(sender, "e", voiceFile); } catch (Throwable ignored) {}
             try { XposedHelpers.setIntField(sender, "m", duration); } catch (Throwable ignored) {}
             try { XposedHelpers.setObjectField(sender, "d", targetWxid); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(sender, "init", 0, 0, null); } catch (Throwable ignored) {}
 
-            XposedHelpers.callMethod(sender, "start", voiceFile);
-            LogWriter.log(TAG, "b31.w: start(voicePath) called → sent");
+            // start 上传
+            try {
+                XposedHelpers.callMethod(sender, "start",
+                    new Class[]{String.class}, voiceFile);
+            } catch (Throwable e) {
+                try {
+                    XposedHelpers.callMethod(sender, "start", voiceFile);
+                } catch (Throwable e2) {
+                    LogWriter.log(TAG, "b31.w start() failed: " + e2.getMessage());
+                    return false;
+                }
+            }
+            LogWriter.log(TAG, "b31.w: start() called → sent");
             return true;
         } catch (Throwable t) {
-            LogWriter.log(TAG, "b31.w error: " + t.getMessage());
+            LogWriter.log(TAG, "b31.w error: " + t.getClass().getSimpleName() + " " + t.getMessage());
             return false;
+        }
+    }
+
+    private static void dumpRecorderState(Object recorder) {
+        try {
+            Class<?> cls = recorder.getClass();
+            LogWriter.log(TAG, "=== Recorder State Dump (" + cls.getName() + ") ===");
+            for (java.lang.reflect.Field f : cls.getDeclaredFields()) {
+                f.setAccessible(true);
+                try {
+                    Object val = f.get(recorder);
+                    String vStr = val == null ? "null" : val.getClass().getSimpleName() + "=" + val;
+                    LogWriter.log(TAG, "  " + f.getName() + " (" + f.getType().getSimpleName() + ") = " + vStr);
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "  " + f.getName() + " = ERROR: " + t.getMessage());
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "dumpRecorderState error: " + t.getMessage());
         }
     }
 
