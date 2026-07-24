@@ -292,7 +292,8 @@ public class VoiceForwardHook {
 
                     if (menuObj == null) return;
 
-                    // 存储 args[2] 作为消息数据（如果存在且非 View）
+                    // 存储消息数据: 优先 View.tag (vo), 其次 args[2] (d)
+                    Object tagData = itemView.getTag();
                     Object msgData = null;
                     for (int i = 0; i < param.args.length; i++) {
                         Object a = param.args[i];
@@ -301,19 +302,25 @@ public class VoiceForwardHook {
                             break;
                         }
                     }
-                    if (msgData != null) {
-                        sPendingMsg = msgData;
-                        long mid = extractMsgId(msgData);
-                        String tlk = extractTalker(msgData);
-                        LogWriter.log(TAG, "=== FOUND [" + label + "." + mName + "] msgId=" + mid + " talker=" + tlk + " data=" + msgData.getClass().getSimpleName() + " ===");
-                        // dump msgData 全字段 + 父类
-                        LogWriter.log(TAG, "  msgData: " + dumpObjFields(msgData));
-                        // 同时 dump tag 对象
-                        Object vtag = itemView.getTag();
-                        if (vtag != null && vtag != msgData) {
-                            long tid = extractMsgId(vtag);
-                            String tlk2 = extractTalker(vtag);
-                            LogWriter.log(TAG, "  tag: " + dumpObjFields(vtag) + " msgId=" + tid + " talker=" + tlk2);
+                    // vo tag 有更丰富层次结构，优先存
+                    sPendingMsg = (tagData != null) ? tagData : msgData;
+                    sPendingView = itemView;
+
+                    if (sPendingMsg != null) {
+                        long mid = extractMsgId(sPendingMsg);
+                        String tlk = extractTalker(sPendingMsg);
+                        LogWriter.log(TAG, "=== FOUND [" + label + "." + mName + "] msgId=" + mid + " talker=" + tlk + " msg=" + sPendingMsg.getClass().getSimpleName() + " ===");
+                        LogWriter.log(TAG, "  sPendingMsg: " + dumpObjFields(sPendingMsg));
+                        // 尝试调用 getter 方法
+                        for (String mn : new String[]{"getMsgInfo","getMsg","a","b","c","d","e","f","getTag","getData"}) {
+                            try {
+                                Object r = XposedHelpers.callMethod(sPendingMsg, mn);
+                                if (r != null && r.getClass().getName().contains("storage")) {
+                                    LogWriter.log(TAG, "  ★ " + mn + "() → " + r.getClass().getName());
+                                    long rmid = extractMsgId(r);
+                                    LogWriter.log(TAG, "  ★ " + mn + " msgId=" + rmid);
+                                }
+                            } catch (Throwable ignored) {}
                         }
                     } else {
                         LogWriter.log(TAG, "=== FOUND [" + label + "." + mName + "] ===");
@@ -458,11 +465,69 @@ public class VoiceForwardHook {
         sForwarding = true;
         try {
             final Object msg = sPendingMsg;
+            final View view = sPendingView;
             if (msg == null) { showToast("请先长按一条语音消息"); return; }
 
+            // 尝试从 vo/d/hq/父类提取 msgId
             long msgId = extractMsgId(msg);
-            LogWriter.log(TAG, "forward: msgData=" + msg.getClass().getSimpleName() + " msgId=" + msgId);
+            String talker = extractTalker(msg);
 
+            // 方法2: 通过 RecyclerView ViewHolder 获取 adapter position
+            if (msgId <= 0 && view != null) {
+                try {
+                    // 从 view 向上找 RecyclerView
+                    View p = view;
+                    while (p != null && !(p instanceof RecyclerView)) {
+                        if (p.getParent() instanceof View) p = (View) p.getParent();
+                        else break;
+                    }
+                    if (p instanceof RecyclerView) {
+                        RecyclerView rv = (RecyclerView) p;
+                        RecyclerView.ViewHolder vh = rv.findContainingViewHolder(view);
+                        if (vh != null) {
+                            int pos = vh.getAdapterPosition();
+                            LogWriter.log(TAG, "forward: ViewHolder pos=" + pos);
+                            RecyclerView.Adapter<?> adapter = rv.getAdapter();
+                            if (adapter != null) {
+                                LogWriter.log(TAG, "forward: adapter=" + adapter.getClass().getName());
+                                // 尝试通过 adapter 获取消息
+                                try {
+                                    Object adapterMsg = XposedHelpers.callMethod(adapter, "getItem", pos);
+                                    if (adapterMsg != null) {
+                                        LogWriter.log(TAG, "forward: adapter getItem=" + adapterMsg.getClass().getName());
+                                        msgId = extractMsgId(adapterMsg);
+                                        if (talker.isEmpty()) talker = extractTalker(adapterMsg);
+                                    }
+                                } catch (Throwable ignored) {}
+                            }
+                        }
+                    }
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "forward: adapter error: " + t.getMessage());
+                }
+            }
+
+            // 方法3: 通过 msg 的 getter 方法获取消息对象
+            if (msgId <= 0) {
+                for (String mn : new String[]{"a","b","c","d","e","f","getMsgInfo","getMsg","getData"}) {
+                    try {
+                        Object inner = XposedHelpers.callMethod(msg, mn);
+                        if (inner != null) {
+                            long id = extractMsgId(inner);
+                            if (id > 0) {
+                                msgId = id;
+                                if (talker.isEmpty()) talker = extractTalker(inner);
+                                LogWriter.log(TAG, "forward: msgId=" + msgId + " via " + mn + "() → " + inner.getClass().getSimpleName());
+                                break;
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            }
+
+            LogWriter.log(TAG, "forward: msgId=" + msgId + " talker=" + talker + " msg=" + msg.getClass().getSimpleName());
+
+            final long finalMsgId = msgId;
             final Activity act = sChatAct;
             if (act == null) { showToast("context unavailable"); return; }
 
@@ -474,7 +539,7 @@ public class VoiceForwardHook {
                     public void onSelected(Set<String> wxids, String display) {
                         LogWriter.log(TAG, "forward: selected=" + wxids + " display=" + display);
                         // TODO: 调用微信转发 API 实际执行转发
-                        showToast("选择了 " + wxids.size() + " 个目标 (msgId=" + msgId + ")");
+                        showToast("选择了 " + wxids.size() + " 个目标 (msgId=" + finalMsgId + ")");
                     }
                 });
         } catch (Throwable t) {
