@@ -807,24 +807,36 @@ public class VoiceForwardHook {
             LogWriter.log(TAG, "SceneVoice: fields overridden, calling stop()...");
             boolean stopResult = (Boolean) XposedHelpers.callMethod(recorder, "stop");
             LogWriter.log(TAG, "SceneVoice: stop()=" + stopResult);
-            return stopResult;
+
+            if (stopResult) return true;
+
+            LogWriter.log(TAG, "SceneVoice: stop() failed, trying b31.w fallback...");
+            return trySendViaB31(cl, targetWxid, voiceFile, duration);
         } catch (Throwable t) {
             LogWriter.log(TAG, "SceneVoice error: " + t.getClass().getSimpleName() + " " + t.getMessage());
-            return trySendViaB31(cl, targetWxid, voiceFile);
+            return trySendViaB31(cl, targetWxid, voiceFile, duration);
         }
     }
 
-    private static boolean trySendViaB31(ClassLoader cl, String targetWxid, String voiceFile) {
+    private static boolean trySendViaB31(ClassLoader cl, String targetWxid, String voiceFile, int duration) {
         try {
             Class<?> wClass = XposedHelpers.findClass("b31.w", cl);
-            // 尝试无参构造
-            Object sender = XposedHelpers.newInstance(wClass);
+            // b31.w(int,int,b) 构造: b = talker/msgInfo 对象
+            Object sender = XposedHelpers.newInstance(wClass,
+                new Class[]{int.class, int.class, Object.class}, 0, 0, null);
             LogWriter.log(TAG, "b31.w: instance created");
-            // init(int,int,b) 初始化
+
+            // init → set file path → start
             try { XposedHelpers.callMethod(sender, "init", 0, 0, null); } catch (Throwable ignored) {}
-            // start(voicePath)
+            try {
+                java.io.File f = new java.io.File(voiceFile);
+                if (f.exists()) XposedHelpers.setObjectField(sender, "e", voiceFile);
+            } catch (Throwable ignored) {}
+            try { XposedHelpers.setIntField(sender, "m", duration); } catch (Throwable ignored) {}
+            try { XposedHelpers.setObjectField(sender, "d", targetWxid); } catch (Throwable ignored) {}
+
             XposedHelpers.callMethod(sender, "start", voiceFile);
-            LogWriter.log(TAG, "b31.w: start(voicePath) called");
+            LogWriter.log(TAG, "b31.w: start(voicePath) called → sent");
             return true;
         } catch (Throwable t) {
             LogWriter.log(TAG, "b31.w error: " + t.getMessage());
