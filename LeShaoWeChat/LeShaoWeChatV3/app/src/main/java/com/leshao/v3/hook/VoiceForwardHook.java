@@ -1013,8 +1013,8 @@ public class VoiceForwardHook {
                         for (Method m : cls.getDeclaredMethods()) {
                             LogWriter.log(TAG, "  method: " + sig(m));
                         }
-                        // Hook stop() — 在 duration check 前强改字段
-                        if (!sSceneVoiceStopHooked) {
+                        // 只 hook tl.p0 (SceneVoice 主类), 跳过 ch4.w 等变体
+                        if (!sSceneVoiceStopHooked && cn.equals("tl.p0")) {
                             hookSceneVoiceStop(cls);
                             sSceneVoiceStopHooked = true;
                         }
