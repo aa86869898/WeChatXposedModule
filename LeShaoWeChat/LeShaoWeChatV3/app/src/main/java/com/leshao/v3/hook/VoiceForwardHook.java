@@ -212,8 +212,9 @@ public class VoiceForwardHook {
 
                     // 策略1: 检测 MenuItem click (case 22)
                     for (Object arg : param.args) {
-                        if (arg instanceof MenuItem && ((MenuItem) arg).getItemId() == MENU_ID) {
+                            if (arg instanceof MenuItem && ((MenuItem) arg).getItemId() == MENU_ID) {
                             LogWriter.log(TAG, ">>> our menu item clicked! <<<");
+                            sMenuInjected = false; // 下次长按重新注入
                             executeForward();
                             try { param.setResult(true); } catch (Throwable ignored) {}
                             return;
@@ -255,8 +256,19 @@ public class VoiceForwardHook {
                     Object tag = itemView.getTag();
                     LogWriter.log(TAG, "  tag: " + (tag == null ? "null" : tag.getClass().getName()));
 
-                    sMenuInjected = true;
+                    // dump parent chain tags
+                    View p = (View) itemView.getParent();
+                    for (int pi = 0; p != null && pi < 5; pi++) {
+                        Object pt = p.getTag();
+                        if (pt != null) {
+                            LogWriter.log(TAG, "  parent[" + pi + "]=" + p.getClass().getSimpleName() + " tag=" + pt.getClass().getName());
+                        }
+                        if (p.getParent() instanceof View) p = (View) p.getParent(); else break;
+                    }
+
+                    // sMenuInjected 不再阻止重复注入（每次长按都重新注入）
                     sPendingView = itemView;
+                    sMenuInjected = true; // 仅用于此次回调防重
                     injectForwardMenuItem(menuObj, itemView);
                 }
             });
