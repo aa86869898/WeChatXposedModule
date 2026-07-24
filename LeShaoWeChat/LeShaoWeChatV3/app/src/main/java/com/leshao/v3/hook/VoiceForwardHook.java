@@ -2,7 +2,6 @@ package com.leshao.v3.hook;
 
 import android.app.Activity;
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.drawable.Drawable;
 import android.view.MenuItem;
 import android.view.View;
@@ -17,6 +16,7 @@ import com.leshao.v3.LogWriter;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -58,7 +58,6 @@ public class VoiceForwardHook {
 
         hookChatActivity(cl);
         hookChatFragmentForAdapter(cl);
-        installClickHandlers(cl);
 
         sHooked = true;
         LogWriter.log(TAG, "ready — enter chat to discover Adapter");
@@ -210,18 +209,7 @@ public class VoiceForwardHook {
                         LogWriter.log(TAG, sb.toString());
                     }
 
-                    // 策略1: 检测 MenuItem click (case 22)
-                    for (Object arg : param.args) {
-                            if (arg instanceof MenuItem && ((MenuItem) arg).getItemId() == MENU_ID) {
-                            LogWriter.log(TAG, ">>> our menu item clicked! <<<");
-                            sMenuInjected = false; // 下次长按重新注入
-                            executeForward();
-                            try { param.setResult(true); } catch (Throwable ignored) {}
-                            return;
-                        }
-                    }
-
-                    // 策略2: 检测菜单创建 (case 21) — 有 View arg 就可能
+                    // 策略1: 检测菜单创建 (case 21) — 有 View arg 就可能
                     if (sMenuInjected) return;
                     View itemView = null;
                     for (Object arg : param.args) {
@@ -250,7 +238,42 @@ public class VoiceForwardHook {
 
                     if (menuObj == null) return;
 
-                    LogWriter.log(TAG, "=== FOUND [" + label + "." + mName + "] ===");
+                    // 存储 args[2] 作为消息数据（如果存在且非 View）
+                    Object msgData = null;
+                    for (int i = 0; i < param.args.length; i++) {
+                        Object a = param.args[i];
+                        if (a != menuObj && a != itemView && a != null && !(a instanceof View)) {
+                            msgData = a;
+                            break;
+                        }
+                    }
+                    if (msgData != null) {
+                        sPendingMsg = msgData;
+                        long mid = extractMsgId(msgData);
+                        String tlk = extractTalker(msgData);
+                        LogWriter.log(TAG, "=== FOUND [" + label + "." + mName + "] msgId=" + mid + " talker=" + tlk + " data=" + msgData.getClass().getSimpleName() + " ===");
+                        // dump msgData 所有字段
+                        StringBuilder md = new StringBuilder("  msgData fields: ");
+                        for (Field f : msgData.getClass().getDeclaredFields()) {
+                            try {
+                                f.setAccessible(true);
+                                Object v = f.get(msgData);
+                                md.append(f.getName()).append("=");
+                                if (v instanceof Number || v instanceof String || v instanceof Boolean) {
+                                    md.append(v);
+                                } else if (v != null) {
+                                    md.append(v.getClass().getSimpleName());
+                                } else {
+                                    md.append("null");
+                                }
+                                md.append(" ");
+                            } catch (Throwable ignored) {}
+                        }
+                        LogWriter.log(TAG, md.toString());
+                    } else {
+                        LogWriter.log(TAG, "=== FOUND [" + label + "." + mName + "] ===");
+                    }
+
                     // dump 所有参数
                     StringBuilder argsb = new StringBuilder("  args: ");
                     for (int i = 0; i < param.args.length; i++) {
@@ -377,137 +400,31 @@ public class VoiceForwardHook {
 
 
 
-    // ===== addMenuItem 注入 ====
-    private static boolean tryAddMenuItem(Object menuObj) {
-        try {
-            for (Method m : menuObj.getClass().getDeclaredMethods()) {
-                Class<?>[] pts = m.getParameterTypes();
-                m.setAccessible(true);
-                if (pts.length == 3 && (pts[0] == int.class || pts[0] == Integer.class)
-                    && (pts[1] == String.class || pts[1] == CharSequence.class)
-                    && (pts[2] == Drawable.class || pts[2] == Object.class)) {
-                    try { m.invoke(menuObj, MENU_ID, "语音转发", null); return true; }
-                    catch (Throwable ignored) {}
-                }
-                if (pts.length == 2 && (pts[0] == int.class || pts[0] == Integer.class)
-                    && (pts[1] == String.class || pts[1] == CharSequence.class)) {
-                    try { m.invoke(menuObj, MENU_ID, "语音转发"); return true; }
-                    catch (Throwable ignored) {}
-                }
-            }
-        } catch (Throwable ignored) {}
-        return false;
-    }
-
-    // ===== Click handler ====
-    private static void installClickHandlers(ClassLoader cl) {
-        String[] targets = {
-            "com.tencent.mm.ui.chatting.ChattingUI",
-            "com.tencent.mm.ui.chatting.ChattingUIFragment",
-            "com.tencent.mm.ui.chatting.BaseChattingUIFragment",
-            "com.tencent.mm.ui.MMActivity",
-        };
-        for (String clsName : targets) {
-            try {
-                Class<?> cls = cl.loadClass(clsName);
-                XposedBridge.hookAllMethods(cls, "onContextItemSelected", new XC_MethodHook() {
-                    @Override protected void beforeHookedMethod(MethodHookParam param) {
-                        if (!sEnabled) return;
-                        try {
-                            MenuItem item = (MenuItem) param.args[0];
-                            if (item.getItemId() == MENU_ID) {
-                                executeForward();
-                                param.setResult(true);
-                                LogWriter.log(TAG, "VF:CLICK " + cls.getSimpleName());
-                            }
-                        } catch (Throwable ignored) {}
-                    }
-                });
-            } catch (Throwable ignored) {}
-        }
-    }
-
-    // ===== 消息捕获 ====
-    private static void tryCapture(Object tag) {
-        if (tag == null) return;
-        try {
-            Object msgObj = tag;
-            try {
-                Object inner = XposedHelpers.callMethod(tag, "a", new Class[]{boolean.class}, false);
-                if (inner != null) msgObj = inner;
-            } catch (Throwable ignored) {}
-
-            long msgId = extractMsgId(msgObj);
-            if (msgId > 0) {
-                sPendingMsg = msgObj;
-                sPendingTalker = extractTalker(msgObj);
-                if (sPendingTalker == null) sPendingTalker = "";
-            }
-        } catch (Throwable ignored) {}
-    }
-
-    // ===== 转发执行 ====
+    // ===== 转发执行 — 使用自己的联系人选择器 ====
     private static void executeForward() {
         if (!sEnabled || sForwarding) return;
         sForwarding = true;
         try {
-            View view = sPendingView;
-            if (view == null) { showToast("请先长按一条语音消息"); return; }
+            final Object msg = sPendingMsg;
+            if (msg == null) { showToast("请先长按一条语音消息"); return; }
 
-            Object tag = view.getTag();
-            if (tag == null) { showToast("无法获取消息信息"); return; }
+            long msgId = extractMsgId(msg);
+            LogWriter.log(TAG, "forward: msgData=" + msg.getClass().getSimpleName() + " msgId=" + msgId);
 
-            LogWriter.log(TAG, "forward: tag=" + tag.getClass().getName());
+            final Activity act = sChatAct;
+            if (act == null) { showToast("context unavailable"); return; }
 
-            // 优先从父 View 链找消息数据 (hq 对象)
-            long msgId = 0;
-            View pp = (View) view.getParent();
-            for (int pi = 0; pp != null && pi < 5; pi++) {
-                Object pt = pp.getTag();
-                if (pt != null) {
-                    msgId = extractMsgId(pt);
-                    if (msgId > 0) {
-                        LogWriter.log(TAG, "forward: msgId=" + msgId + " from parent[" + pi + "]=" + pt.getClass().getSimpleName());
-                        break;
+            // 用我们自己的 ContactPickerDialog
+            com.leshao.v3.ui.ContactPickerDialog.show(act, "", 
+                com.leshao.v3.ui.ContactPickerDialog.MODE_GROUP,
+                new com.leshao.v3.ui.ContactPickerDialog.OnContactsSelected() {
+                    @Override
+                    public void onSelected(Set<String> wxids, String display) {
+                        LogWriter.log(TAG, "forward: selected=" + wxids + " display=" + display);
+                        // TODO: 调用微信转发 API 实际执行转发
+                        showToast("选择了 " + wxids.size() + " 个目标 (msgId=" + msgId + ")");
                     }
-                }
-                if (pp.getParent() instanceof View) pp = (View) pp.getParent(); else break;
-            }
-
-            // 尝试从 vo 对象通过方法获取
-            if (msgId <= 0) {
-                msgId = extractMsgId(tag);
-                if (msgId <= 0) {
-                    Object inner = null;
-                    try { inner = XposedHelpers.callMethod(tag, "a"); } catch (Throwable ignored) {}
-                    if (inner == null) try { inner = XposedHelpers.callMethod(tag, "a", new Class[]{boolean.class}, false); } catch (Throwable ignored) {}
-                    if (inner != null) msgId = extractMsgId(inner);
-                }
-            }
-            LogWriter.log(TAG, "forward: msgId=" + msgId);
-
-            String talker = extractTalker(tag);
-            LogWriter.log(TAG, "forward: talker=" + talker);
-
-            Context ctx = sChatAct != null ? sChatAct : ContextManager.getAppContext();
-            if (ctx == null) { showToast("context unavailable"); return; }
-
-            Class<?> fwdUI = null;
-            for (String n : new String[]{
-                "com.tencent.mm.ui.transmit.SelectConversationUI",
-                "com.tencent.mm.ui.transmit.MsgRetransmitUI",
-            }) { try { fwdUI = ctx.getClassLoader().loadClass(n); break; } catch (Throwable ignored) {} }
-
-            if (fwdUI == null) { showToast("微信版本不兼容"); return; }
-
-            Intent intent = new Intent(ctx, fwdUI);
-            intent.putExtra("Retr_Msg_content", talker != null ? talker : "");
-            intent.putExtra("Retr_Msg_Type", 34); // voice
-            intent.putExtra("Retr_Msg_Id", msgId);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            ctx.startActivity(intent);
-            LogWriter.log(TAG, "forward: SelectConversationUI launched");
-            showToast("请选择接收人");
+                });
         } catch (Throwable t) {
             LogWriter.log(TAG, "forward error: " + t.getMessage());
             showToast("转发失败: " + t.getMessage());
