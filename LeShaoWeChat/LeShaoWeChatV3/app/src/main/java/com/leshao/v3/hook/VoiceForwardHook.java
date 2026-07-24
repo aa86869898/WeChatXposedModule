@@ -83,26 +83,41 @@ public class VoiceForwardHook {
         } catch (Throwable ignored) {}
     }
 
-    // ===== WeKit 方案: DexFile 全量扫描 chatting.* 所有方法 =====
+    // ===== WeKit 方案: 精准扫描 viewitems + component + Menu.add 拦截 =====
     private static void hookChatFragmentForAdapter(final ClassLoader cl) {
-        // 策略 A: 枚举 com.tencent.mm.ui.chatting.* 全部类, hook 所有方法
-        hookAllChattingClasses(cl);
+        // 策略 A: 扫描 WeKit 文档明确的 2 个包 (含静态方法 + 内部类)
+        String[] pkgs = {
+            "com.tencent.mm.ui.chatting.viewitems",
+            "com.tencent.mm.ui.chatting.component",
+        };
+        hookAllClassesInPackages(cl, pkgs);
 
-        // 策略 B: View.createContextMenu (兜底)
+        // 策略 B: hook android.view.Menu.add (拦截所有菜单项添加)
         try {
-            XposedBridge.hookAllMethods(View.class, "createContextMenu", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam param) {
-                    onMenuCreateMethod("View.createContextMenu", param);
+            Class<?> menuIf = android.view.Menu.class;
+            for (Method m : menuIf.getDeclaredMethods()) {
+                if (m.getName().equals("add")) {
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override protected void afterHookedMethod(MethodHookParam param) {
+                            int n = sCallCount.incrementAndGet();
+                            if (n > 20) return;
+                            LogWriter.log(TAG, "Menu.add id=" + param.args[1] + " title=" + param.args[3] + " @" + param.thisObject.getClass().getSimpleName());
+                        }
+                    });
                 }
-            });
-        } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "Menu.add hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "Menu.add fail: " + t.getMessage());
+        }
 
-        // 策略 C: Activity.onContextItemSelected (菜单点击兜底)
+        // 策略 C: Activity.onContextItemSelected (click handler)
         try {
             XposedBridge.hookAllMethods(Activity.class, "onContextItemSelected", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam param) {
                     if (param.args.length > 0 && param.args[0] instanceof MenuItem) {
                         MenuItem item = (MenuItem) param.args[0];
+                        LogWriter.log(TAG, "Click: id=" + item.getItemId() + " menu=" + param.thisObject.getClass().getSimpleName());
                         if (item.getItemId() == MENU_ID) {
                             executeForward();
                             param.setResult(true);
@@ -112,10 +127,10 @@ public class VoiceForwardHook {
             });
         } catch (Throwable ignored) {}
 
-        LogWriter.log(TAG, "chatting scan + View/Activity hooks installed");
+        LogWriter.log(TAG, "viewitems+component+Menu.add hooks installed");
     }
 
-    private static void hookAllChattingClasses(ClassLoader cl) {
+    private static void hookAllClassesInPackages(ClassLoader cl, String[] pkgs) {
         try {
             String apkPath = ContextManager.getApkPath();
             if (apkPath == null) { LogWriter.log(TAG, "APK path null"); return; }
@@ -126,93 +141,116 @@ public class VoiceForwardHook {
 
             while (entries.hasMoreElements()) {
                 String className = entries.nextElement();
-                if (!className.startsWith("com.tencent.mm.ui.chatting.")) continue;
+                boolean match = false;
+                for (String pkg : pkgs) {
+                    if (className.startsWith(pkg + ".") || className.equals(pkg + ".a") || className.equals(pkg)) {
+                        match = true; break;
+                    }
+                }
+                if (!match) continue;
 
                 try {
                     Class<?> cls = cl.loadClass(className);
-                    int n = hookAllNonStaticMethods(cls);
-                    if (n > 0) {
-                        clsCount++;
-                        hookedCount += n;
+                    // 含内部类: 枚举 declared classes
+                    int n = hookAllMethodsOnClass(cls, cls.getSimpleName());
+                    clsCount++;
+                    hookedCount += n;
+                    for (Class<?> inner : cls.getDeclaredClasses()) {
+                        int ni = hookAllMethodsOnClass(inner, cls.getSimpleName() + "$" + inner.getSimpleName());
+                        hookedCount += ni;
                     }
                 } catch (Throwable ignored) {}
             }
             dex.close();
-            LogWriter.log(TAG, "chatting scan: " + clsCount + " classes, " + hookedCount + " methods hooked");
+            LogWriter.log(TAG, "scan " + java.util.Arrays.toString(pkgs) + ": " + clsCount + " classes, " + hookedCount + " methods");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "DEX scan error: " + t.getMessage());
+            LogWriter.log(TAG, "scan error: " + t.getMessage());
         }
     }
 
-    private static int hookAllNonStaticMethods(Class<?> cls) {
+    private static int hookAllMethodsOnClass(Class<?> cls, String label) {
         int count = 0;
         for (Method m : cls.getDeclaredMethods()) {
-            if (Modifier.isStatic(m.getModifiers())) continue;
-            final String clsName = cls.getSimpleName();
             final String mName = m.getName();
             count++;
             XposedBridge.hookMethod(m, new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
                     int n = sCallCount.incrementAndGet();
-                    if (n <= 20) {
+                    if (n <= 30) {
                         StringBuilder sb = new StringBuilder();
-                        sb.append(clsName).append(".").append(mName).append("(");
+                        sb.append(label).append(".").append(mName).append("(");
+                        boolean hasView = false;
                         for (int i = 0; i < Math.min(param.args.length, 4); i++) {
                             if (i > 0) sb.append(",");
                             Object a = param.args[i];
-                            sb.append(a == null ? "null" : a.getClass().getSimpleName());
                             if (a instanceof View) {
+                                hasView = true;
                                 Object tag = ((View) a).getTag();
-                                if (tag != null) sb.append(":T=").append(tag.getClass().getSimpleName());
+                                sb.append("V:").append(a.getClass().getSimpleName());
+                                sb.append(tag != null ? ":T=" + tag.getClass().getSimpleName() : "");
+                            } else if (a instanceof MenuItem) {
+                                sb.append("MI:").append(((MenuItem) a).getItemId());
+                            } else {
+                                sb.append(a == null ? "null" : a.getClass().getSimpleName());
                             }
                         }
                         sb.append(")");
+                        if (hasView) sb.insert(0, "★");
                         LogWriter.log(TAG, sb.toString());
                     }
-                    onMenuCreateMethod(clsName + "." + mName, param);
+
+                    // 策略1: 检测 MenuItem click (case 22)
+                    for (Object arg : param.args) {
+                        if (arg instanceof MenuItem && ((MenuItem) arg).getItemId() == MENU_ID) {
+                            LogWriter.log(TAG, ">>> our menu item clicked! <<<");
+                            executeForward();
+                            try { param.setResult(true); } catch (Throwable ignored) {}
+                            return;
+                        }
+                    }
+
+                    // 策略2: 检测菜单创建 (case 21) — 有 View arg 就可能
+                    if (sMenuInjected) return;
+                    View itemView = null;
+                    for (Object arg : param.args) {
+                        if (arg instanceof View) { itemView = (View) arg; break; }
+                    }
+                    if (itemView == null) return;
+
+                    // 有 View 了，找菜单对象
+                    Object menuObj = null;
+                    for (Object arg : param.args) {
+                        if (arg == itemView) continue;
+                        if (arg == null) continue;
+                        // 尝试调用 addMenuItem
+                        try {
+                            arg.getClass().getMethod("addMenuItem", int.class, CharSequence.class);
+                            menuObj = arg;
+                            break;
+                        } catch (Throwable ignored) {}
+                        // 尝试调用 add
+                        try {
+                            arg.getClass().getMethod("add", int.class, int.class, int.class, CharSequence.class);
+                            menuObj = arg;
+                            break;
+                        } catch (Throwable ignored) {}
+                    }
+
+                    if (menuObj == null) return;
+
+                    LogWriter.log(TAG, "=== FOUND [" + label + "." + mName + "] ===");
+                    LogWriter.log(TAG, "  menu: " + menuObj.getClass().getName());
+                    LogWriter.log(TAG, "  view: " + itemView.getClass().getName());
+                    Object tag = itemView.getTag();
+                    LogWriter.log(TAG, "  tag: " + (tag == null ? "null" : tag.getClass().getName()));
+
+                    sMenuInjected = true;
+                    sPendingView = itemView;
+                    injectForwardMenuItem(menuObj, itemView);
                 }
             });
         }
         return count;
-    }
-
-    /**
-     * WeKit case 21 逻辑: 检测菜单创建方法并注入"转发[K]"
-     * 特征: args 中有 View (消息项) + menu 对象
-     */
-    private static void onMenuCreateMethod(String source, XC_MethodHook.MethodHookParam param) {
-        if (sMenuInjected) return;
-
-        // 提取 View — 微信把消息存在 View.getTag() 中
-        View itemView = null;
-        Object menuObj = null;
-
-        for (int i = 0; i < param.args.length; i++) {
-            Object arg = param.args[i];
-            if (arg instanceof View && arg.getClass().getName().startsWith("android")) {
-                itemView = (View) arg;
-            }
-            if (arg != null && i == 0 && param.args.length >= 2) {
-                String name = arg.getClass().getName().toLowerCase();
-                if (name.contains("menu") || name.contains("context")) {
-                    menuObj = arg;
-                }
-            }
-        }
-
-        if (itemView == null || menuObj == null) return;
-
-        LogWriter.log(TAG, "=== FOUND [" + source + "] ===");
-        LogWriter.log(TAG, "  menu: " + menuObj.getClass().getName());
-        LogWriter.log(TAG, "  view: " + itemView.getClass().getSimpleName());
-
-        // WeKit: View.getTag() → 消息对象
-        Object tag = itemView.getTag();
-        LogWriter.log(TAG, "  tag: " + (tag == null ? "null" : tag.getClass().getName()));
-
-        sMenuInjected = true;
-        sPendingView = itemView;
-        injectForwardMenuItem(menuObj, itemView);
     }
 
     private static void injectForwardMenuItem(Object menuObj, View itemView) {
