@@ -306,24 +306,15 @@ public class VoiceForwardHook {
                         long mid = extractMsgId(msgData);
                         String tlk = extractTalker(msgData);
                         LogWriter.log(TAG, "=== FOUND [" + label + "." + mName + "] msgId=" + mid + " talker=" + tlk + " data=" + msgData.getClass().getSimpleName() + " ===");
-                        // dump msgData 所有字段
-                        StringBuilder md = new StringBuilder("  msgData fields: ");
-                        for (Field f : msgData.getClass().getDeclaredFields()) {
-                            try {
-                                f.setAccessible(true);
-                                Object v = f.get(msgData);
-                                md.append(f.getName()).append("=");
-                                if (v instanceof Number || v instanceof String || v instanceof Boolean) {
-                                    md.append(v);
-                                } else if (v != null) {
-                                    md.append(v.getClass().getSimpleName());
-                                } else {
-                                    md.append("null");
-                                }
-                                md.append(" ");
-                            } catch (Throwable ignored) {}
+                        // dump msgData 全字段 + 父类
+                        LogWriter.log(TAG, "  msgData: " + dumpObjFields(msgData));
+                        // 同时 dump tag 对象
+                        Object vtag = itemView.getTag();
+                        if (vtag != null && vtag != msgData) {
+                            long tid = extractMsgId(vtag);
+                            String tlk2 = extractTalker(vtag);
+                            LogWriter.log(TAG, "  tag: " + dumpObjFields(vtag) + " msgId=" + tid + " talker=" + tlk2);
                         }
-                        LogWriter.log(TAG, md.toString());
                     } else {
                         LogWriter.log(TAG, "=== FOUND [" + label + "." + mName + "] ===");
                     }
@@ -497,20 +488,38 @@ public class VoiceForwardHook {
     // ===== 工具 =====
     private static long extractMsgId(Object msg) {
         if (msg == null) return 0;
-        // WeChat 8.0.76 common field names
+        long id = extractMsgIdFromClass(msg, msg.getClass());
+        if (id > 0) return id;
+        // 遍历父类链
+        for (Class<?> sc = msg.getClass().getSuperclass(); sc != null && sc != Object.class; sc = sc.getSuperclass()) {
+            id = extractMsgIdFromClass(msg, sc);
+            if (id > 0) return id;
+        }
+        return 0;
+    }
+
+    private static long extractMsgIdFromClass(Object msg, Class<?> cls) {
+        if (cls == null) return 0;
         try { return XposedHelpers.getLongField(msg, "field_msgId"); } catch (Throwable ignored) {}
         try { return XposedHelpers.getLongField(msg, "msgId"); } catch (Throwable ignored) {}
         try { return XposedHelpers.getLongField(msg, "field_msgSvrId"); } catch (Throwable ignored) {}
         try { return XposedHelpers.getLongField(msg, "msgSvrId"); } catch (Throwable ignored) {}
         try { return XposedHelpers.getLongField(msg, "D"); } catch (Throwable ignored) {}
         try { return XposedHelpers.getLongField(msg, "d"); } catch (Throwable ignored) {}
-        try { return (long) XposedHelpers.callMethod(msg, "getMsgId"); } catch (Throwable ignored) {}
-        try { return (long) XposedHelpers.callMethod(msg, "getMsgSvrId"); } catch (Throwable ignored) {}
-        for (Field f : msg.getClass().getDeclaredFields()) {
+        for (Field f : cls.getDeclaredFields()) {
             if (f.getType() == long.class) {
                 String fn = f.getName().toLowerCase();
                 if (fn.contains("msgid") || fn.contains("svrid") || fn.contains("msg_id")) {
                     try { f.setAccessible(true); return f.getLong(msg); } catch (Throwable ignored) {}
+                }
+            }
+        }
+        // 也检查 int 类型的 msgId
+        for (Field f : cls.getDeclaredFields()) {
+            if (f.getType() == int.class) {
+                String fn = f.getName().toLowerCase();
+                if (fn.contains("msgid") || fn.contains("svrid") || fn.contains("msg_id") || fn.contains("id")) {
+                    try { f.setAccessible(true); return f.getInt(msg); } catch (Throwable ignored) {}
                 }
             }
         }
@@ -519,12 +528,20 @@ public class VoiceForwardHook {
 
     private static String extractTalker(Object msg) {
         if (msg == null) return "";
+        String s = extractTalkerFromClass(msg, msg.getClass());
+        if (s != null && !s.isEmpty()) return s;
+        for (Class<?> sc = msg.getClass().getSuperclass(); sc != null && sc != Object.class; sc = sc.getSuperclass()) {
+            s = extractTalkerFromClass(msg, sc);
+            if (s != null && !s.isEmpty()) return s;
+        }
+        return "";
+    }
+
+    private static String extractTalkerFromClass(Object msg, Class<?> cls) {
+        if (cls == null) return null;
         try { return (String) XposedHelpers.getObjectField(msg, "field_talker"); } catch (Throwable ignored) {}
         try { return (String) XposedHelpers.getObjectField(msg, "talker"); } catch (Throwable ignored) {}
-        try { return (String) XposedHelpers.callMethod(msg, "N0"); } catch (Throwable ignored) {}
-        try { return (String) XposedHelpers.callMethod(msg, "getTalker"); } catch (Throwable ignored) {}
-        try { return (String) XposedHelpers.callMethod(msg, "a"); } catch (Throwable ignored) {}
-        for (Field f : msg.getClass().getDeclaredFields()) {
+        for (Field f : cls.getDeclaredFields()) {
             if (f.getType() == String.class) {
                 String fn = f.getName().toLowerCase();
                 if (fn.contains("talker") || fn.contains("username") || fn.contains("fromuser")) {
@@ -532,7 +549,34 @@ public class VoiceForwardHook {
                 }
             }
         }
-        return "";
+        return null;
+    }
+
+    private static String dumpObjFields(Object obj) {
+        if (obj == null) return "null";
+        StringBuilder sb = new StringBuilder(obj.getClass().getName()).append(" extends ");
+        Class<?> sc = obj.getClass().getSuperclass();
+        sb.append(sc != null ? sc.getSimpleName() : "null");
+        sb.append(" {");
+        for (Class<?> c = obj.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Field f : c.getDeclaredFields()) {
+                try {
+                    f.setAccessible(true);
+                    Object v = f.get(obj);
+                    sb.append(f.getName()).append("=");
+                    if (v instanceof Number || v instanceof String || v instanceof Boolean) {
+                        sb.append(v);
+                    } else if (v != null) {
+                        sb.append(v.getClass().getSimpleName());
+                    } else {
+                        sb.append("null");
+                    }
+                    sb.append(" ");
+                } catch (Throwable ignored) {}
+            }
+        }
+        sb.append("}");
+        return sb.toString();
     }
 
     private static void showToast(String text) {
