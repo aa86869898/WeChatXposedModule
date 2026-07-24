@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XC_MethodReplacement;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
@@ -796,22 +797,13 @@ public class VoiceForwardHook {
                 return false;
             }
 
-            // g() 成功了, 覆盖字段: 发给新目标, 用我们的语音文件
+            // 设目标用户, 等录音线程初始化
             XposedHelpers.setObjectField(recorder, "d", targetWxid);
-            XposedHelpers.setObjectField(recorder, "e", voiceFile);
-            XposedHelpers.setIntField(recorder, "m", duration);
-            try { XposedHelpers.setBooleanField(recorder, "n", false); } catch (Throwable ignored) {}
-            try {
-                XposedHelpers.setLongField(recorder, "k",
-                    android.os.SystemClock.elapsedRealtime() - (duration + 5000));
-            } catch (Throwable ignored) {}
+            try { Thread.sleep(500); } catch (InterruptedException ignored) {}
 
-            // 等 300ms 让 g() 的录音线程启动
-            try { Thread.sleep(300); } catch (InterruptedException ignored) {}
+            LogWriter.log(TAG, "SceneVoice: calling stop()...");
 
-            LogWriter.log(TAG, "SceneVoice: fields overridden, calling stop()...");
-
-            // 通过 ThreadLocal 传递参数给 Xposed hook (beforeHookedMethod 中强改字段)
+            // ThreadLocal 传参给 Xposed hook replacement
             sHookVoiceFile.set(voiceFile);
             sHookDuration.set(duration);
 
@@ -820,11 +812,6 @@ public class VoiceForwardHook {
 
             sHookVoiceFile.remove();
             sHookDuration.remove();
-
-            if (!stopResult) {
-                // dump recorder 状态定位 stop() 失败原因
-                dumpRecorderState(recorder);
-            }
 
             if (stopResult) return true;
 
@@ -880,25 +867,6 @@ public class VoiceForwardHook {
         } catch (Throwable t) {
             LogWriter.log(TAG, "b31.w error: " + t.getClass().getSimpleName() + " " + t.getMessage());
             return false;
-        }
-    }
-
-    private static void dumpRecorderState(Object recorder) {
-        try {
-            Class<?> cls = recorder.getClass();
-            LogWriter.log(TAG, "=== Recorder State Dump (" + cls.getName() + ") ===");
-            for (java.lang.reflect.Field f : cls.getDeclaredFields()) {
-                f.setAccessible(true);
-                try {
-                    Object val = f.get(recorder);
-                    String vStr = val == null ? "null" : val.getClass().getSimpleName() + "=" + val;
-                    LogWriter.log(TAG, "  " + f.getName() + " (" + f.getType().getSimpleName() + ") = " + vStr);
-                } catch (Throwable t) {
-                    LogWriter.log(TAG, "  " + f.getName() + " = ERROR: " + t.getMessage());
-                }
-            }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "dumpRecorderState error: " + t.getMessage());
         }
     }
 
@@ -1099,24 +1067,77 @@ public class VoiceForwardHook {
 
     private static void hookSceneVoiceStop(Class<?> p0Class) {
         try {
-            XposedBridge.hookAllMethods(p0Class, "stop", new XC_MethodHook() {
+            XposedBridge.hookAllMethods(p0Class, "stop", new XC_MethodReplacement() {
                 @Override
-                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                protected Object replaceHookedMethod(MethodHookParam param) throws Throwable {
                     String voiceFile = sHookVoiceFile.get();
                     Integer duration = sHookDuration.get();
-                    if (voiceFile == null || duration == null) return;
+                    if (voiceFile == null || duration == null) {
+                        // 正常录音流程, 走原始 stop
+                        return XposedBridge.invokeOriginalMethod(param.method, param.thisObject, param.args);
+                    }
 
                     Object thiz = param.thisObject;
-                    LogWriter.log(TAG, "SceneVoice HOOK: overriding e/m/k before stop()");
+                    LogWriter.log(TAG, "SceneVoice REPLACE: bypassing hardware recorder, direct send");
+
+                    // 强设字段
                     XposedHelpers.setObjectField(thiz, "e", voiceFile);
                     XposedHelpers.setIntField(thiz, "m", duration);
-                    // 设 k 到足够早, c() 返回 >= duration+5000
-                    long newK = android.os.SystemClock.elapsedRealtime() - (duration + 10000L);
-                    XposedHelpers.setLongField(thiz, "k", newK);
-                    XposedHelpers.setBooleanField(thiz, "n", false);
+                    XposedHelpers.setBooleanField(thiz, "n", true);
+
+                    // x0.t(fileName, duration, offset, msgInfo) → 更新 msgInfo 内容 + 写 DB
+                    Object e9 = XposedHelpers.getObjectField(thiz, "h");
+                    ClassLoader cl = thiz.getClass().getClassLoader();
+
+                    try {
+                        Class<?> x0class = XposedHelpers.findClass("tl.x0", cl);
+                        XposedHelpers.callStaticMethod(x0class, "t",
+                            new Class[]{String.class, int.class, int.class,
+                                XposedHelpers.findClass("com.tencent.mm.storage.e9", cl)},
+                            voiceFile, duration, 0, e9);
+                        LogWriter.log(TAG, "SceneVoice REPLACE: x0.t() done");
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "SceneVoice REPLACE: x0.t() error: " + t.getMessage());
+                    }
+
+                    // y21.p0.kj().e() → 刷新播放列表
+                    try {
+                        Class<?> y21p0 = XposedHelpers.findClass("y21.p0", cl);
+                        Object pm = XposedHelpers.callStaticMethod(y21p0, "kj");
+                        if (pm != null) XposedHelpers.callMethod(pm, "e");
+                        LogWriter.log(TAG, "SceneVoice REPLACE: playlist refreshed");
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "SceneVoice REPLACE: playlist error: " + t.getMessage());
+                    }
+
+                    // 提交 send task (n0.c(f.class).zj(task))
+                    try {
+                        Object sendTask = XposedHelpers.getObjectField(thiz, "f");
+                        if (sendTask != null) {
+                            Class<?> n0class = null;
+                            for (String n : new String[]{"f.n0", "n0"}) {
+                                try { n0class = cl.loadClass(n); break; } catch (Throwable ignored) {}
+                            }
+                            if (n0class != null) {
+                                Object handler = XposedHelpers.callStaticMethod(n0class, "c",
+                                    new Class[]{Class.class}, sendTask.getClass());
+                                if (handler != null) {
+                                    XposedHelpers.callMethod(handler, "zj",
+                                        new Class[]{sendTask.getClass()}, sendTask);
+                                    LogWriter.log(TAG, "SceneVoice REPLACE: send task submitted");
+                                }
+                            }
+                        } else {
+                            LogWriter.log(TAG, "SceneVoice REPLACE: send task is null, skipping");
+                        }
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "SceneVoice REPLACE: submit task error: " + t.getMessage());
+                    }
+
+                    return true;
                 }
             });
-            LogWriter.log(TAG, "◆Hooked " + p0Class.getName() + ".stop() for field override");
+            LogWriter.log(TAG, "◆Hooked " + p0Class.getName() + ".stop() REPLACEMENT");
         } catch (Throwable t) {
             LogWriter.log(TAG, "◆Hook stop() failed: " + t.getMessage());
         }
