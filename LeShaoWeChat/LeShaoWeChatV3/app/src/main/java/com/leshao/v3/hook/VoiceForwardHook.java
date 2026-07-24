@@ -54,6 +54,11 @@ public class VoiceForwardHook {
     private static volatile boolean sForwarding = false;
     private static volatile String sFullHookedClass = null;
 
+    // ThreadLocal: Xposed hook 与 sendViaSceneVoice 之间传递参数 (因为 hook 在 stop() 前执行, 需要知道文件路径和时长)
+    private static final ThreadLocal<String> sHookVoiceFile = new ThreadLocal<>();
+    private static final ThreadLocal<Integer> sHookDuration = new ThreadLocal<>();
+    private static boolean sSceneVoiceStopHooked = false;
+
     public static void hook() {
         if (sHooked) return;
         ClassLoader cl = ContextManager.getClassLoader();
@@ -801,12 +806,20 @@ public class VoiceForwardHook {
                     android.os.SystemClock.elapsedRealtime() - (duration + 5000));
             } catch (Throwable ignored) {}
 
-            // 等 300ms 让 g() 的录音线程启动, 否则 stop() 里 stopHardwareRecorder 会 NPE
+            // 等 300ms 让 g() 的录音线程启动
             try { Thread.sleep(300); } catch (InterruptedException ignored) {}
 
             LogWriter.log(TAG, "SceneVoice: fields overridden, calling stop()...");
+
+            // 通过 ThreadLocal 传递参数给 Xposed hook (beforeHookedMethod 中强改字段)
+            sHookVoiceFile.set(voiceFile);
+            sHookDuration.set(duration);
+
             boolean stopResult = (Boolean) XposedHelpers.callMethod(recorder, "stop");
             LogWriter.log(TAG, "SceneVoice: stop()=" + stopResult);
+
+            sHookVoiceFile.remove();
+            sHookDuration.remove();
 
             if (!stopResult) {
                 // dump recorder 状态定位 stop() 失败原因
@@ -1032,6 +1045,11 @@ public class VoiceForwardHook {
                         for (Method m : cls.getDeclaredMethods()) {
                             LogWriter.log(TAG, "  method: " + sig(m));
                         }
+                        // Hook stop() — 在 duration check 前强改字段
+                        if (!sSceneVoiceStopHooked) {
+                            hookSceneVoiceStop(cls);
+                            sSceneVoiceStopHooked = true;
+                        }
                     }
                     // 检查 b31.w 特征: 有 start()+stop()+init()方法
                     boolean hasStart = false, hasInit = false;
@@ -1076,6 +1094,31 @@ public class VoiceForwardHook {
             dex.close();
         } catch (Throwable t) {
             LogWriter.log(TAG, "◆find error: " + t.getMessage());
+        }
+    }
+
+    private static void hookSceneVoiceStop(Class<?> p0Class) {
+        try {
+            XposedBridge.hookAllMethods(p0Class, "stop", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    String voiceFile = sHookVoiceFile.get();
+                    Integer duration = sHookDuration.get();
+                    if (voiceFile == null || duration == null) return;
+
+                    Object thiz = param.thisObject;
+                    LogWriter.log(TAG, "SceneVoice HOOK: overriding e/m/k before stop()");
+                    XposedHelpers.setObjectField(thiz, "e", voiceFile);
+                    XposedHelpers.setIntField(thiz, "m", duration);
+                    // 设 k 到足够早, c() 返回 >= duration+5000
+                    long newK = android.os.SystemClock.elapsedRealtime() - (duration + 10000L);
+                    XposedHelpers.setLongField(thiz, "k", newK);
+                    XposedHelpers.setBooleanField(thiz, "n", false);
+                }
+            });
+            LogWriter.log(TAG, "◆Hooked " + p0Class.getName() + ".stop() for field override");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "◆Hook stop() failed: " + t.getMessage());
         }
     }
 
