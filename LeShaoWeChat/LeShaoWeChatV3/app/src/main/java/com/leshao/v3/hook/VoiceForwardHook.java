@@ -92,18 +92,44 @@ public class VoiceForwardHook {
             "com.tencent.mm.ui.chatting.component.ChattingContextMenu",
         };
 
+        // 8.0.76 已知存在的类 (来自旧 P2 验证)
+        String[] chatClasses = {
+            "com.tencent.mm.ui.chatting.ChattingUIFragment",
+            "com.tencent.mm.ui.chatting.BaseChattingUIFragment",
+            "com.tencent.mm.ui.chatting.ChattingUI",
+            "com.tencent.mm.ui.MMFragment",
+            "com.tencent.mm.ui.MMFragmentActivity",
+            "com.tencent.mm.ui.MMActivity",
+            "com.tencent.mm.ui.LauncherUI",
+            "com.tencent.mm.ui.tools.ActionBarSearchView",
+        };
+
         for (String clsName : mmMenuClasses) {
             try {
                 Class<?> cls = cl.loadClass(clsName);
-                hookAllMMMenuMethods(cls, clsName);
-            } catch (ClassNotFoundException ignored) {
+                int cnt = hookAllMMMenuMethods(cls, clsName);
+                LogWriter.log(TAG, "DISC: " + clsName + " -> found, " + cnt + " methods hooked");
+            } catch (ClassNotFoundException e) {
+                LogWriter.log(TAG, "DISC: " + clsName + " -> NOT FOUND");
             } catch (Throwable t) {
-                LogWriter.log(TAG, "err loading " + clsName + ": " + t.getClass().getSimpleName());
+                LogWriter.log(TAG, "DISC: " + clsName + " -> err: " + t.getClass().getSimpleName());
+            }
+        }
+
+        for (String clsName : chatClasses) {
+            try {
+                Class<?> cls = cl.loadClass(clsName);
+                int cnt = hookViewMethodsOnly(cls, clsName);
+                LogWriter.log(TAG, "DISC_CHAT: " + clsName + " -> found, " + cnt + " view methods hooked");
+            } catch (ClassNotFoundException e) {
+                LogWriter.log(TAG, "DISC_CHAT: " + clsName + " -> NOT FOUND");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "DISC_CHAT: " + clsName + " -> err: " + t.getClass().getSimpleName());
             }
         }
     }
 
-    private static void hookAllMMMenuMethods(Class<?> cls, String clsName) {
+    private static int hookAllMMMenuMethods(Class<?> cls, String clsName) {
         int count = 0;
         for (Method m : cls.getDeclaredMethods()) {
             if (Modifier.isStatic(m.getModifiers())) continue;
@@ -111,19 +137,53 @@ public class VoiceForwardHook {
             final Class<?>[] paramTypes = m.getParameterTypes();
             final int paramCount = paramTypes.length;
 
-            XposedBridge.hookMethod(m, new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam param) {
-                    onMMMenuMethodCalled(param.thisObject, param.args, clsName, mName, paramCount, false);
-                }
-                @Override protected void afterHookedMethod(MethodHookParam param) {
-                    onMMMenuMethodCalled(param.thisObject, param.args, clsName, mName, paramCount, true);
-                }
-            });
-            count++;
+            try {
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam param) {
+                        onMMMenuMethodCalled(param.thisObject, param.args, clsName, mName, paramCount, false);
+                    }
+                    @Override protected void afterHookedMethod(MethodHookParam param) {
+                        onMMMenuMethodCalled(param.thisObject, param.args, clsName, mName, paramCount, true);
+                    }
+                });
+                count++;
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "DISC: hook " + clsName + "." + mName + " failed: " + t.getClass().getSimpleName());
+            }
         }
-        if (count > 0) {
-            LogWriter.log(TAG, "DISC: hooked " + count + " methods on " + clsName);
+        return count;
+    }
+
+    private static int hookViewMethodsOnly(Class<?> cls, String clsName) {
+        int count = 0;
+        for (Method m : cls.getDeclaredMethods()) {
+            if (Modifier.isStatic(m.getModifiers())) continue;
+            Class<?>[] pts = m.getParameterTypes();
+            boolean hasView = false;
+            for (Class<?> pt : pts) {
+                if (View.class.isAssignableFrom(pt)) { hasView = true; break; }
+                if (pt == Object.class) { hasView = true; break; }
+            }
+            if (!hasView && pts.length < 2) continue;
+
+            final String mName = m.getName();
+            final int paramCount = pts.length;
+
+            try {
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam param) {
+                        onMMMenuMethodCalled(param.thisObject, param.args, clsName, mName, paramCount, false);
+                    }
+                    @Override protected void afterHookedMethod(MethodHookParam param) {
+                        onMMMenuMethodCalled(param.thisObject, param.args, clsName, mName, paramCount, true);
+                    }
+                });
+                count++;
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "DISC_CHAT: hook " + clsName + "." + mName + " failed: " + t.getClass().getSimpleName());
+            }
         }
+        return count;
     }
 
     private static void onMMMenuMethodCalled(Object self, Object[] args, String clsName,
