@@ -561,7 +561,6 @@ public class VoiceForwardHook {
     // ===== 实际转发语音 =====
     private static boolean doForwardVoice(Activity act, Object msgObj, String targetWxid) {
         try {
-            // msgObj = vo, 通过 c() 获取 storage.e9
             Object e9 = msgObj;
             if (!e9.getClass().getName().contains("storage")) {
                 try { e9 = XposedHelpers.callMethod(msgObj, "c"); } catch (Throwable ignored) {}
@@ -572,63 +571,48 @@ public class VoiceForwardHook {
             }
 
             long msgId = extractMsgId(e9);
+            String xml = null;
+            try { xml = (String) XposedHelpers.callMethod(e9, "I0"); } catch (Throwable ignored) {}
+
             LogWriter.log(TAG, "doForward: msgId=" + msgId + " → " + targetWxid);
 
-            // dump e9 所有 String 字段和 long 字段
-            StringBuilder fsb = new StringBuilder("doForward: e9.Strings={");
-            for (Field f : e9.getClass().getDeclaredFields()) {
-                if (f.getType() == String.class) {
-                    try { f.setAccessible(true); Object v = f.get(e9); fsb.append(f.getName()).append("=").append(v).append(" "); } catch (Throwable ignored) {}
-                }
-            }
-            Class<?> sc = e9.getClass().getSuperclass();
-            while (sc != null && sc != Object.class) {
-                for (Field f : sc.getDeclaredFields()) {
-                    if (f.getType() == String.class) {
-                        try { f.setAccessible(true); Object v = f.get(e9); fsb.append(f.getName()).append("=").append(v).append(" "); } catch (Throwable ignored) {}
-                    }
-                }
-                sc = sc.getSuperclass();
-            }
-            fsb.append("} longs={");
-            for (Class<?> c = e9.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
-                for (Field f : c.getDeclaredFields()) {
-                    if (f.getType() == long.class) {
-                        try { f.setAccessible(true); fsb.append(f.getName()).append("=").append(f.getLong(e9)).append(" "); } catch (Throwable ignored) {}
-                    }
-                }
-            }
-            fsb.append("}");
-            LogWriter.log(TAG, fsb.toString());
-
-            // 尝试多种转发类
             ClassLoader cl = ContextManager.getClassLoader();
-            String[] fwdClasses = {
-                "com.tencent.mm.modelmulti.p", "com.tencent.mm.modelmulti.q",
-                "com.tencent.mm.modelmulti.r", "com.tencent.mm.modelmulti.s",
-                "com.tencent.mm.ui.transmit.SendRequest",
-                "com.tencent.mm.plugin.forward.ForwardRetry",
-            };
-            for (String cn : fwdClasses) {
-                try {
-                    Class<?> cls = cl.loadClass(cn);
-                    LogWriter.log(TAG, "doForward: FOUND " + cn + " methods:");
-                    for (Method m : cls.getDeclaredMethods()) {
-                        Class<?>[] pts = m.getParameterTypes();
-                        if (!m.getName().equals("toString") && !m.getName().equals("equals") && !m.getName().equals("hashCode")) {
-                            StringBuilder msb = new StringBuilder("  ").append(m.getName()).append("(");
-                            for (int i = 0; i < pts.length; i++) {
-                                if (i > 0) msb.append(",");
-                                msb.append(pts[i].getSimpleName());
-                            }
-                            msb.append(")");
-                            LogWriter.log(TAG, msb.toString());
+
+            // ★ 扫描 modelmulti 包所有类
+            try {
+                String apkPath = ContextManager.getApkPath();
+                if (apkPath != null) {
+                    dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+                    java.util.Enumeration<String> entries = dex.entries();
+                    while (entries.hasMoreElements()) {
+                        String cn = entries.nextElement();
+                        if (cn.startsWith("com.tencent.mm.modelmulti.")) {
+                            try {
+                                Class<?> cls = cl.loadClass(cn);
+                                StringBuilder ms = new StringBuilder("multi:" + cn);
+                                for (Method m : cls.getDeclaredMethods()) {
+                                    if (!Modifier.isStatic(m.getModifiers())) continue;
+                                    Class<?>[] pts = m.getParameterTypes();
+                                    if (pts.length >= 2) {
+                                        ms.append(" ").append(m.getName()).append("(");
+                                        for (int j = 0; j < pts.length; j++) {
+                                            if (j > 0) ms.append(",");
+                                            ms.append(pts[j].getSimpleName());
+                                        }
+                                        ms.append(")");
+                                    }
+                                }
+                                LogWriter.log(TAG, ms.toString());
+                            } catch (Throwable ignored) {}
                         }
                     }
-                } catch (Throwable ignored) {}
+                    dex.close();
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "doForward: modelmulti scan: " + t.getMessage());
             }
 
-            // SelectConversationUI fallback (不带预选，显示选择器)
+            // 兜底: SelectConversationUI
             try {
                 Class<?> selUI = cl.loadClass("com.tencent.mm.ui.transmit.SelectConversationUI");
                 Intent intent = new Intent(act, selUI);
@@ -638,9 +622,8 @@ public class VoiceForwardHook {
                 act.startActivity(intent);
                 return true;
             } catch (Throwable t) {
-                LogWriter.log(TAG, "doForward: SelectConversationUI fail: " + t.getMessage());
+                LogWriter.log(TAG, "doForward: SelUI fail: " + t.getMessage());
             }
-
             return false;
         } catch (Throwable t) {
             LogWriter.log(TAG, "doForward error: " + t.getMessage());
