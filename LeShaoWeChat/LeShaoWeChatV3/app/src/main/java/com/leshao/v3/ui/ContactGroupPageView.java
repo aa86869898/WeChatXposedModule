@@ -19,8 +19,9 @@ public class ContactGroupPageView {
 
     public static View create(Context ctx, Activity parentAct) {
         float d = ctx.getResources().getDisplayMetrics().density;
-        SharedPreferences prefs = ContextManager.getPrefs();
-        ModuleConfig cfg = ModuleConfig.load(prefs);
+        final SharedPreferences prefs = ContextManager.getPrefs();
+        final ModuleConfig cfg = ModuleConfig.load(prefs);
+        final Activity act = parentAct;
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -32,28 +33,51 @@ public class ContactGroupPageView {
         LinearLayout cardContact = makeCard(ctx, d);
         cardContact.addView(switchRow(ctx, d, "通讯录导出", null, cfg.contactExportEnabled, (v, on) -> {
             cfg.contactExportEnabled = on; cfg.save(prefs); ContactExport.setEnabled(on);
-        }));
+        }, null));
         cardContact.addView(switchRow(ctx, d, "联系人变更日志", null, cfg.contactChangeLogEnabled, (v, on) -> {
             cfg.contactChangeLogEnabled = on; cfg.save(prefs); ContactChangeLog.setEnabled(on);
-        }));
+        }, null));
         cardContact.addView(switchRow(ctx, d, "隐藏联系人敏感字段", null, cfg.hideContactFieldsEnabled, (v, on) -> {
             cfg.hideContactFieldsEnabled = on; cfg.save(prefs); HideContactFields.setEnabled(on);
-        }));
+        }, v -> ConfigPanels.showHideContactFields(act, prefs)));
         root.addView(cardContact);
 
         root.addView(spacerV(ctx, d, 12));
         root.addView(sectionLabel(ctx, "群管理"));
 
         LinearLayout cardGroup = makeCard(ctx, d);
-        cardGroup.addView(switchRow(ctx, d, "群功能增强 (踢人/禁言/群发)", null, cfg.groupFeaturesEnabled, (v, on) -> {
+        cardGroup.addView(switchRow(ctx, d, "群功能增强",
+                "关闭后所有群子功能均不生效", cfg.groupFeaturesEnabled, (v, on) -> {
             cfg.groupFeaturesEnabled = on; cfg.save(prefs); GroupFeatures.setEnabled(on);
-        }));
+        }, null));
+
+        cardGroup.addView(subSwitch(ctx, prefs, d, "group_member_log", "群成员变更日志",
+                "记录群内踢人/退群/邀请等操作", true));
+        cardGroup.addView(subSwitch(ctx, prefs, d, "group_announce", "群公告已读回执",
+                "进入群信息页时自动检测公告更新", true));
+        cardGroup.addView(subSwitch(ctx, prefs, d, "group_batch_op", "批量操作",
+                "批量踢人 + 导出成员列表", true));
+        cardGroup.addView(subSwitch(ctx, prefs, d, "anonymous_chat", "匿名发言",
+                "在群聊中以匿名身份发送消息", false,
+                v -> ConfigPanels.showAnonymousName(act, prefs)));
         root.addView(cardGroup);
 
         return root;
     }
 
-    // ===== 组件工厂 (复用 ChatPageView 样式) =====
+    private static LinearLayout subSwitch(Context ctx, SharedPreferences prefs, float d,
+                                           String key, String title, String desc, boolean defVal) {
+        return subSwitch(ctx, prefs, d, key, title, desc, defVal, null);
+    }
+
+    private static LinearLayout subSwitch(Context ctx, SharedPreferences prefs, float d,
+                                           String key, String title, String desc, boolean defVal,
+                                           View.OnClickListener config) {
+        boolean checked = prefs != null ? prefs.getBoolean(key, defVal) : defVal;
+        return switchRow(ctx, d, title, desc, checked, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean(key, on).apply();
+        }, config);
+    }
 
     private static LinearLayout makeCard(Context ctx, float d) {
         LinearLayout card = new LinearLayout(ctx);
@@ -64,7 +88,8 @@ public class ContactGroupPageView {
     }
 
     private static LinearLayout switchRow(Context ctx, float d, String title, String desc,
-                                           boolean checked, CompoundButton.OnCheckedChangeListener listener) {
+                                           boolean checked, CompoundButton.OnCheckedChangeListener listener,
+                                           View.OnClickListener configListener) {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -88,6 +113,14 @@ public class ContactGroupPageView {
             textCol.addView(dv);
         }
         row.addView(textCol);
+
+        if (configListener != null) {
+            TextView btn = new TextView(ctx);
+            btn.setText("[设置]"); btn.setTextSize(12); btn.setTextColor(0xFF4A90D9);
+            btn.setPadding((int)(6 * d), 0, (int)(6 * d), 0);
+            btn.setOnClickListener(configListener);
+            row.addView(btn);
+        }
 
         Switch sw = new Switch(ctx); sw.setChecked(checked);
         try { if (checked) sw.setThumbResource(android.R.drawable.btn_star_big_on); } catch (Throwable ignored) {}

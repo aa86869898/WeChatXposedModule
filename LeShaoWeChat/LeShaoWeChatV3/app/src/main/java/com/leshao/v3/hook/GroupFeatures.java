@@ -26,7 +26,7 @@ public class GroupFeatures {
     private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     private static File logFile = new File("/sdcard/LeShaoV3Logs/group_changes.log");
     private static String anonymousName = "匿名群友";
-    private static boolean sEnabled = false;
+    private static volatile boolean sEnabled = true;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 

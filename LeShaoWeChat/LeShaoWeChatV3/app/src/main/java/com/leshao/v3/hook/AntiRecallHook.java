@@ -11,7 +11,7 @@ import de.robv.android.xposed.XposedHelpers;
 public class AntiRecallHook {
 
     private static final String TAG = "AntiRecallHook";
-    private static volatile boolean sEnabled = false;
+    private static volatile boolean sEnabled = true;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 

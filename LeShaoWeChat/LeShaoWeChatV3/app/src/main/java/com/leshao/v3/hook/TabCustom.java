@@ -23,9 +23,9 @@ public class TabCustom {
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
-    private static int[] hiddenTabs = new int[0];
-    private static String[] tabLabels = {"微信", "联系人", "发现", "我"};
-    private static boolean customLabels = false;
+    public static int[] hiddenTabs = new int[0];
+    public static String[] tabLabels = {"微信", "联系人", "发现", "我"};
+    public static boolean customLabels = false;
 
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;

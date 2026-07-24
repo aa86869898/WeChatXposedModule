@@ -4,6 +4,8 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import com.leshao.v3.Logger;
+import com.leshao.v3.ContextManager;
+import com.leshao.v3.model.ModuleConfig;
 import android.media.MediaRecorder;
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -32,12 +34,14 @@ public class CallFeatures {
     private static boolean isRecording = false;
     private static String currentCaller = "";
     private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd_HHmmss");
-    private static final Set<String> autoAnswerList = new HashSet<>();
+    public static final Set<String> autoAnswerList = new HashSet<>();
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;
+        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        if (config == null || !config.callFeaturesEnabled) return;
         loadAutoAnswerList();
         hookCallRecord(cl);
         hookAutoAnswer(cl);

@@ -36,7 +36,7 @@ public class TypingIndicator {
     private static boolean showInTitle = true;
     private static boolean showToast = false;
     private static boolean showInNotification = false;
-    private static boolean sEnabled = false;
+    private static volatile boolean sEnabled = true;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 

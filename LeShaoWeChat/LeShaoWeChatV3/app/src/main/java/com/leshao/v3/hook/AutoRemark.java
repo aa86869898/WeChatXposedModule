@@ -12,8 +12,8 @@ public class AutoRemark {
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
-    private static boolean autoFillFromGroupNick = true;
-    private static boolean autoFillFromCard = true;
+    public static boolean autoFillFromGroupNick = true;
+    public static boolean autoFillFromCard = true;
     private static ClassLoader classLoader;
 
     public static void hook(ClassLoader cl) {

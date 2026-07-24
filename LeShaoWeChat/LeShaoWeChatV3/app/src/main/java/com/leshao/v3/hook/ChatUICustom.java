@@ -39,7 +39,7 @@ public class ChatUICustom {
     private static int bubbleRadius = 0;
     private static int titleColor = 0;
     private static boolean hideNickname = false;
-    private static boolean sEnabled = false;
+    private static volatile boolean sEnabled = true;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 

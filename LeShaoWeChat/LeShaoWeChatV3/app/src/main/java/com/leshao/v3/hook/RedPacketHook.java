@@ -26,7 +26,7 @@ public class RedPacketHook {
     private static final String TAG = "RedPacket";
     private static final String PKG_WECHAT = "com.tencent.mm";
 
-    private static volatile boolean sEnabled = false;
+    private static volatile boolean sEnabled = true;
     private static volatile boolean sPrivateEnabled = true;
     private static volatile boolean sGroupEnabled = false;
     private static volatile boolean sTimeFilterOn = false;

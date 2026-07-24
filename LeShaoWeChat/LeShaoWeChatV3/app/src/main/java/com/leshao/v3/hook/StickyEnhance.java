@@ -15,7 +15,7 @@ public class StickyEnhance {
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
-    private static int maxSticky = 999;
+    public static int maxSticky = 999;
 
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;

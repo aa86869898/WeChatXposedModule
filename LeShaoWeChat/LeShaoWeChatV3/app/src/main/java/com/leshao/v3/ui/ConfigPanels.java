@@ -1,0 +1,666 @@
+package com.leshao.v3.ui;
+
+import android.app.Activity;
+import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.text.InputType;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.*;
+
+import com.leshao.v3.hook.*;
+import com.leshao.v3.db.ContactRepository;
+import com.leshao.v3.model.Contact;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * 各功能模块的独立配置面板 (AlertDialog 形式)。
+ * 所有配置均通过 SharedPreferences 持久化，由 HookConfig 读取生效。
+ */
+public class ConfigPanels {
+
+    // ==================== ChatUICustom ====================
+
+    public static void showChatUICustom(Activity act, SharedPreferences prefs) {
+        ScrollView sv = new ScrollView(act);
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        int bgC = prefs.getInt("chat_bg_color", 0);
+        int sendC = prefs.getInt("chat_bubble_send", 0);
+        int recvC = prefs.getInt("chat_bubble_recv", 0);
+        int rad = prefs.getInt("chat_bubble_radius", 0);
+        int titleC = prefs.getInt("chat_title_color", 0);
+        boolean hideNick = prefs.getInt("chat_hide_nickname", 0) == 1;
+
+        EditText bgEt = addColorRow(act, root, "聊天背景色 (#AARRGGBB)", colorToHex(bgC));
+        EditText sendEt = addColorRow(act, root, "发送气泡色", colorToHex(sendC));
+        EditText recvEt = addColorRow(act, root, "接收气泡色", colorToHex(recvC));
+        EditText titleEt = addColorRow(act, root, "标题栏颜色", colorToHex(titleC));
+        EditText radEt = addIntRow(act, root, "气泡圆角 (dp)", String.valueOf(rad));
+        LinearLayout hideRow = addSwitchRow(act, root, "隐藏昵称", hideNick);
+        Switch hideSw = (Switch) hideRow.getChildAt(1);
+
+        sv.addView(root);
+        showDialog(act, "聊天界面UI定制", sv, () -> {
+            try { prefs.edit().putInt("chat_bg_color", parseColor(bgEt.getText().toString())).apply(); } catch (Throwable e) {}
+            try { prefs.edit().putInt("chat_bubble_send", parseColor(sendEt.getText().toString())).apply(); } catch (Throwable e) {}
+            try { prefs.edit().putInt("chat_bubble_recv", parseColor(recvEt.getText().toString())).apply(); } catch (Throwable e) {}
+            try { prefs.edit().putInt("chat_title_color", parseColor(titleEt.getText().toString())).apply(); } catch (Throwable e) {}
+            try { prefs.edit().putInt("chat_bubble_radius", Integer.parseInt(radEt.getText().toString())).apply(); } catch (Throwable e) {}
+            prefs.edit().putInt("chat_hide_nickname", hideSw.isChecked() ? 1 : 0).apply();
+        });
+    }
+
+    // ==================== NotifyCustom ====================
+
+    public static void showNotifyCustom(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        int mode = prefs.getInt("notify_priority_mode", 0);
+        boolean avatar = prefs.getInt("notify_avatar", 1) == 1;
+        String contacts = prefs.getString("notify_important_contacts", "");
+        String phrases = prefs.getString("quick_reply_phrases", "好的|收到|稍等|在路上|马上到");
+
+        Spinner modeSp = addSpinnerRow(act, root, "通知优先级", mode,
+                new String[]{"关闭", "仅重要联系人", "全部联系人", "仅群聊"});
+
+        LinearLayout avatarRow = addSwitchRow(act, root, "显示通知头像", avatar);
+        Switch avatarSw = (Switch) avatarRow.getChildAt(1);
+
+        Set<String> impSelected = new HashSet<>();
+        if (!contacts.isEmpty()) for (String s : contacts.split(",")) impSelected.add(s.trim());
+        addContactPickerRow(act, root, "重要联系人", impSelected);
+        TextView impTv = addSelectedLabel(act, root, impSelected);
+
+        EditText phrasesEt = addTextRow(act, root, "快捷回复短语 (|分隔)", phrases);
+
+        showDialog(act, "通知自定义配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            prefs.edit().putInt("notify_priority_mode", modeSp.getSelectedItemPosition()).apply();
+            prefs.edit().putInt("notify_avatar", avatarSw.isChecked() ? 1 : 0).apply();
+            StringBuilder csb = new StringBuilder();
+            for (String s : impSelected) { if (csb.length() > 0) csb.append(","); csb.append(s); }
+            prefs.edit().putString("notify_important_contacts", csb.toString()).apply();
+            prefs.edit().putString("quick_reply_phrases", phrasesEt.getText().toString().trim()).apply();
+        });
+    }
+
+    // ==================== TypingIndicator ====================
+
+    public static void showTypingIndicator(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        boolean showToast = prefs.getInt("typing_show_toast", 0) == 1;
+
+        LinearLayout toastRow = addSwitchRow(act, root, "Toast 气泡提示", showToast);
+        Switch toastSw = (Switch) toastRow.getChildAt(1);
+
+        showDialog(act, "正在输入提示配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            prefs.edit().putInt("typing_show_toast", toastSw.isChecked() ? 1 : 0).apply();
+        });
+    }
+
+    // ==================== ScheduledSend ====================
+
+    public static void showScheduledSend(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        EditText delayEt = addIntRow(act, root, "默认延迟 (毫秒，0=立即)", "0");
+
+        showDialog(act, "定时发送配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            try { ScheduledSend.delayMs = Long.parseLong(delayEt.getText().toString()); } catch (Throwable e) {}
+        });
+    }
+
+    // ==================== ChatFooterEnhance ====================
+
+    public static void showChatFooterEnhance(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        EditText maxLenEt = addIntRow(act, root, "最大文本长度 (默认50000)", "50000");
+        EditText maxLinesEt = addIntRow(act, root, "最大输入行数 (默认10)", "10");
+
+        showDialog(act, "底部栏增强配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            try { ChatFooterEnhance.maxTextLength = Integer.parseInt(maxLenEt.getText().toString()); } catch (Throwable e) {}
+            try { ChatFooterEnhance.maxLines = Integer.parseInt(maxLinesEt.getText().toString()); } catch (Throwable e) {}
+        });
+    }
+
+    // ==================== BatchMessage ====================
+
+    public static void showBatchMessage(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        EditText maxSelEt = addIntRow(act, root, "最大选择数 (默认999)", "999");
+        EditText splitEt = addIntRow(act, root, "转发分批大小 (默认50)", "50");
+
+        showDialog(act, "批量消息配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            try { BatchMessage.maxSelectCount = Integer.parseInt(maxSelEt.getText().toString()); } catch (Throwable e) {}
+            try { BatchMessage.forwardSplitSize = Integer.parseInt(splitEt.getText().toString()); } catch (Throwable e) {}
+        });
+    }
+
+    // ==================== AutoRemark ====================
+
+    public static void showAutoRemark(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        LinearLayout groupRow = addSwitchRow(act, root, "从群昵称自动填充", AutoRemark.autoFillFromGroupNick);
+        Switch groupSw = (Switch) groupRow.getChildAt(1);
+
+        LinearLayout cardRow = addSwitchRow(act, root, "从名片自动填充", AutoRemark.autoFillFromCard);
+        Switch cardSw = (Switch) cardRow.getChildAt(1);
+
+        showDialog(act, "自动备注配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            AutoRemark.autoFillFromGroupNick = groupSw.isChecked();
+            AutoRemark.autoFillFromCard = cardSw.isChecked();
+        });
+    }
+
+    // ==================== SearchEnhance ====================
+
+    public static void showSearchEnhance(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        EditText maxEt = addIntRow(act, root, "最大搜索结果数 (默认500)", "500");
+
+        showDialog(act, "搜索增强配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            try { SearchEnhance.maxResults = Integer.parseInt(maxEt.getText().toString()); } catch (Throwable e) {}
+        });
+    }
+
+    // ==================== UnreadBadge ====================
+
+    public static void showUnreadBadge(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        int style = prefs.getInt("badge_style", 0);
+        int max = prefs.getInt("badge_max", 99);
+        int bc = prefs.getInt("badge_color", 0xFFFA5151);
+
+        Spinner styleSp = addSpinnerRow(act, root, "角标样式", style,
+                new String[]{"默认", "仅红点", "精确数字", "99+模式", "自定义颜色"});
+
+        EditText maxEt = addIntRow(act, root, "最大显示数", String.valueOf(max));
+        EditText colorEt = addColorRow(act, root, "自定义颜色 (#AARRGGBB)", colorToHex(bc));
+
+        showDialog(act, "未读角标配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            prefs.edit().putInt("badge_style", styleSp.getSelectedItemPosition()).apply();
+            try { prefs.edit().putInt("badge_max", Integer.parseInt(maxEt.getText().toString())).apply(); } catch (Throwable e) {}
+            try { prefs.edit().putInt("badge_color", parseColor(colorEt.getText().toString())).apply(); } catch (Throwable e) {}
+        });
+    }
+
+    // ==================== TabCustom ====================
+
+    public static void showTabCustom(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        EditText labelsEt = addTextRow(act, root, "标签名称 (|分隔，4个)", "微信|联系人|发现|我");
+
+        LinearLayout customRow = addSwitchRow(act, root, "使用自定义名称", TabCustom.customLabels);
+        Switch customSw = (Switch) customRow.getChildAt(1);
+
+        showDialog(act, "底部Tab配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            TabCustom.customLabels = customSw.isChecked();
+            String labels = labelsEt.getText().toString().trim();
+            if (!labels.isEmpty()) {
+                TabCustom.tabLabels = labels.split("\\|");
+            }
+        });
+    }
+
+    // ==================== ShakeCustom ====================
+
+    public static void showShakeCustom(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        int action = prefs.getInt("shake_action", 3);
+
+        Spinner actionSp = addSpinnerRow(act, root, "摇一摇动作", action,
+                new String[]{"截图", "回顶部", "自定义广播", "仅记录", "快捷菜单"});
+
+        showDialog(act, "摇一摇配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            prefs.edit().putInt("shake_action", actionSp.getSelectedItemPosition()).apply();
+        });
+    }
+
+    // ==================== CallFeatures ====================
+
+    public static void showCallFeatures(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        Set<String> selected = new HashSet<>(CallFeatures.autoAnswerList);
+        addContactPickerRow(act, root, "自动接听白名单", selected);
+
+        TextView tv = addSelectedLabel(act, root, selected);
+
+        showDialog(act, "通话功能配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            CallFeatures.autoAnswerList.clear();
+            CallFeatures.autoAnswerList.addAll(selected);
+        });
+    }
+
+    // ==================== AutoReplyHook ====================
+
+    public static void showAutoReply(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        String saved = prefs.getString("auto_reply_rules", "");
+
+        EditText rulesEt = addTextRow(act, root,
+                "回复规则 (keyword=reply 每行一条)", keywordsToText(saved));
+        rulesEt.setMinLines(6);
+
+        TextView hint = new TextView(act);
+        hint.setText("格式: 关键词=回复内容\n示例: 你好=您好，请问有什么事？\n示例: 在吗=在的，请说");
+        hint.setTextSize(12);
+        hint.setTextColor(0xFF999999);
+        hint.setPadding(0, dp(act, 8), 0, 0);
+        root.addView(hint);
+
+        showDialog(act, "关键词回复配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            String text = rulesEt.getText().toString().trim();
+            prefs.edit().putString("auto_reply_rules", text).apply();
+        });
+    }
+
+    // ==================== SnsFeatures - time_edit ====================
+
+    public static void showSnsTimeOffset(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        long offset = prefs.getLong("sns_time_offset_ms", -3600000);
+        String hours = String.valueOf(offset / 3600000);
+
+        EditText offsetEt = addIntRow(act, root, "时间偏移 (小时，负数为提前)", hours);
+
+        showDialog(act, "发布时间偏移配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            try {
+                long h = Long.parseLong(offsetEt.getText().toString());
+                prefs.edit().putLong("sns_time_offset_ms", h * 3600000).apply();
+            } catch (Throwable e) {}
+        });
+    }
+
+    // ==================== GroupFeatures - anonymous ====================
+
+    public static void showAnonymousName(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        String name = prefs.getString("anonymous_name", "匿名群友");
+        EditText nameEt = addTextRow(act, root, "匿名显示名称", name);
+
+        showDialog(act, "匿名名称配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            prefs.edit().putString("anonymous_name", nameEt.getText().toString().trim()).apply();
+        });
+    }
+
+    // ==================== ConvPrivacy ====================
+
+    public static void showConvPrivacy(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        int level = prefs.getInt("conv_privacy_level", 1);
+        boolean hideNotif = prefs.getBoolean("conv_hide_notification", true);
+        boolean hideList = prefs.getBoolean("conv_hide_convlist", true);
+
+        Spinner levelSp = addSpinnerRow(act, root, "隐私级别", level,
+                new String[]{"关闭", "全局隐藏", "按联系人隐藏", "仅隐藏内容"});
+
+        LinearLayout notifRow = addSwitchRow(act, root, "隐藏通知内容", hideNotif);
+        Switch notifSw = (Switch) notifRow.getChildAt(1);
+
+        LinearLayout listRow = addSwitchRow(act, root, "隐藏会话列表内容", hideList);
+        Switch listSw = (Switch) listRow.getChildAt(1);
+
+        showDialog(act, "会话隐私配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            prefs.edit().putInt("conv_privacy_level", levelSp.getSelectedItemPosition()).apply();
+            prefs.edit().putBoolean("conv_hide_notification", notifSw.isChecked()).apply();
+            prefs.edit().putBoolean("conv_hide_convlist", listSw.isChecked()).apply();
+        });
+    }
+
+    // ==================== FriendRequest ====================
+
+    public static void showFriendRequest(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        boolean passAll = prefs.getInt("auto_pass_all", 0) == 1;
+        String list = prefs.getString("auto_pass_list", "");
+        Set<String> selected = new HashSet<>();
+        if (!list.isEmpty()) for (String s : list.split(",")) selected.add(s.trim());
+
+        LinearLayout passRow = addSwitchRow(act, root, "自动通过所有好友", passAll);
+        Switch passSw = (Switch) passRow.getChildAt(1);
+
+        addContactPickerRow(act, root, "自动通过白名单", selected);
+        TextView tv = addSelectedLabel(act, root, selected);
+
+        showDialog(act, "好友请求配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            prefs.edit().putInt("auto_pass_all", passSw.isChecked() ? 1 : 0).apply();
+            StringBuilder sb = new StringBuilder();
+            for (String s : selected) { if (sb.length() > 0) sb.append(","); sb.append(s); }
+            prefs.edit().putString("auto_pass_list", sb.toString()).apply();
+        });
+    }
+
+    // ==================== HideContactFields ====================
+
+    public static void showHideContactFields(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        String saved = prefs.getString("hidden_fields_list", "");
+
+        root.addView(fieldCheck(act, "contact_info_mobile", "手机号", true, prefs));
+        root.addView(fieldCheck(act, "contact_info_region", "地区", true, prefs));
+        root.addView(fieldCheck(act, "contact_info_source", "来源", true, prefs));
+        root.addView(fieldCheck(act, "contact_info_alias", "微信号", false, prefs));
+        root.addView(fieldCheck(act, "contact_info_signature", "签名", false, prefs));
+        root.addView(fieldCheck(act, "contact_info_remark", "备注名", false, prefs));
+        root.addView(fieldCheck(act, "contact_info_chatroom", "共同群聊", false, prefs));
+        root.addView(fieldCheck(act, "contact_info_linkedin", "领英", false, prefs));
+
+        showDialog(act, "隐藏字段配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            StringBuilder sb = new StringBuilder();
+            for (String key : new String[]{"contact_info_mobile", "contact_info_region", "contact_info_source",
+                    "contact_info_alias", "contact_info_signature", "contact_info_remark",
+                    "contact_info_chatroom", "contact_info_linkedin"}) {
+                if (prefs.getBoolean("field_" + key, false)) {
+                    if (sb.length() > 0) sb.append(",");
+                    sb.append(key);
+                }
+            }
+            prefs.edit().putString("hidden_fields_list", sb.toString()).apply();
+        });
+    }
+
+    private static LinearLayout fieldCheck(Activity act, String key, String label, boolean defVal, SharedPreferences prefs) {
+        LinearLayout row = new LinearLayout(act);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(act, 4), 0, dp(act, 4));
+        CheckBox cb = new CheckBox(act);
+        cb.setText(label);
+        cb.setChecked(prefs.getBoolean("field_" + key, defVal));
+        cb.setOnCheckedChangeListener((v, on) -> prefs.edit().putBoolean("field_" + key, on).apply());
+        row.addView(cb);
+        return row;
+    }
+
+    // ==================== StickyEnhance ====================
+
+    public static void showStickyEnhance(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        EditText maxEt = addIntRow(act, root, "最大置顶数量 (默认999)", String.valueOf(StickyEnhance.maxSticky));
+
+        showDialog(act, "置顶增强配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            try { StickyEnhance.maxSticky = Integer.parseInt(maxEt.getText().toString()); } catch (Throwable e) {}
+        });
+    }
+
+    // ==================== 联系人多选器 ====================
+
+    private static void addContactPickerRow(Activity act, LinearLayout root, String label, Set<String> selected) {
+        TextView tv = new TextView(act);
+        tv.setText(label);
+        tv.setTextSize(13);
+        tv.setTextColor(0xFF666666);
+        tv.setPadding(0, dp(act, 8), 0, dp(act, 2));
+        root.addView(tv);
+
+        Button btn = new Button(act);
+        btn.setText("从通讯录选择...");
+        btn.setTextSize(13);
+        btn.setPadding(dp(act, 10), dp(act, 6), dp(act, 10), dp(act, 6));
+        btn.setOnClickListener(v -> showContactPicker(act, selected));
+        root.addView(btn);
+    }
+
+    private static TextView addSelectedLabel(Activity act, LinearLayout root, Set<String> selected) {
+        TextView tv = new TextView(act);
+        tv.setTextSize(12);
+        tv.setTextColor(0xFF999999);
+        tv.setPadding(0, dp(act, 2), 0, dp(act, 6));
+        updateContactLabel(tv, selected);
+        root.addView(tv);
+        return tv;
+    }
+
+    private static void updateContactLabel(TextView tv, Set<String> selected) {
+        if (selected.isEmpty()) {
+            tv.setText("未选择 (可手动输入wxid)");
+            return;
+        }
+        StringBuilder sb = new StringBuilder("已选 ").append(selected.size()).append(" 人: ");
+        int i = 0;
+        for (String wxid : selected) {
+            if (i++ > 4) { sb.append("..."); break; }
+            sb.append(wxid);
+            if (i < selected.size() && i <= 4) sb.append(", ");
+        }
+        tv.setText(sb.toString());
+    }
+
+    private static void showContactPicker(Activity act, Set<String> selected) {
+        List<Contact> friends = ContactRepository.getFriends();
+        if (friends.isEmpty()) {
+            Toast.makeText(act, "通讯录未加载，请先打开微信加载联系人", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        LinearLayout listRoot = new LinearLayout(act);
+        listRoot.setOrientation(LinearLayout.VERTICAL);
+        listRoot.setPadding(dp(act, 12), dp(act, 8), dp(act, 12), dp(act, 8));
+
+        EditText filterEt = new EditText(act);
+        filterEt.setHint("搜索联系人...");
+        filterEt.setTextSize(13);
+        filterEt.setPadding(dp(act, 10), dp(act, 6), dp(act, 10), dp(act, 6));
+        listRoot.addView(filterEt);
+
+        LinearLayout checkList = new LinearLayout(act);
+        checkList.setOrientation(LinearLayout.VERTICAL);
+        listRoot.addView(checkList);
+
+        ScrollView sv = new ScrollView(act);
+        sv.addView(listRoot);
+
+        Runnable refresh = () -> {
+            checkList.removeAllViews();
+            String f = filterEt.getText().toString().toLowerCase().trim();
+            for (Contact c : friends) {
+                if (c == null || c.wxid == null) continue;
+                String label = c.nickname != null ? c.nickname : c.wxid;
+                if (!f.isEmpty() && !label.toLowerCase().contains(f) && !c.wxid.toLowerCase().contains(f)) continue;
+
+                LinearLayout row = new LinearLayout(act);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+                row.setPadding(0, dp(act, 2), 0, dp(act, 2));
+
+                CheckBox cb = new CheckBox(act);
+                cb.setText(label + " (" + c.wxid + ")");
+                cb.setTextSize(13);
+                cb.setChecked(selected.contains(c.wxid));
+                cb.setOnCheckedChangeListener((v, on) -> {
+                    if (on) selected.add(c.wxid); else selected.remove(c.wxid);
+                });
+                row.addView(cb);
+                checkList.addView(row);
+            }
+        };
+
+        filterEt.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+            @Override public void afterTextChanged(android.text.Editable s) { refresh.run(); }
+        });
+
+        refresh.run();
+
+        new android.app.AlertDialog.Builder(act)
+                .setTitle("选择联系人")
+                .setView(sv)
+                .setPositiveButton("确定", null)
+                .show();
+    }
+
+    // ==================== 对话框与行组件工厂 ====================
+
+    private static void showDialog(Activity act, String title, View content, Runnable onSave) {
+        new android.app.AlertDialog.Builder(act)
+                .setTitle(title)
+                .setView(content)
+                .setPositiveButton("保存", (d, w) -> { onSave.run(); Toast.makeText(act, "已保存(重启后生效)", Toast.LENGTH_SHORT).show(); })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private static EditText addColorRow(Activity act, LinearLayout root, String label, String value) {
+        return addEditRow(act, root, label, value, InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+    }
+
+    private static EditText addIntRow(Activity act, LinearLayout root, String label, String value) {
+        return addEditRow(act, root, label, value, InputType.TYPE_CLASS_NUMBER);
+    }
+
+    private static EditText addTextRow(Activity act, LinearLayout root, String label, String value) {
+        return addEditRow(act, root, label, value, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+    }
+
+    private static EditText addEditRow(Activity act, LinearLayout root, String label, String value, int inputType) {
+        TextView tv = new TextView(act);
+        tv.setText(label);
+        tv.setTextSize(13);
+        tv.setTextColor(0xFF666666);
+        tv.setPadding(0, dp(act, 8), 0, dp(act, 2));
+        root.addView(tv);
+
+        EditText et = new EditText(act);
+        et.setText(value);
+        et.setTextSize(14);
+        et.setInputType(inputType);
+        et.setPadding(dp(act, 10), dp(act, 8), dp(act, 10), dp(act, 8));
+        et.setBackgroundColor(0xFFF5F5F5);
+        root.addView(et);
+        return et;
+    }
+
+    private static Spinner addSpinnerRow(Activity act, LinearLayout root, String label, int selected, String[] items) {
+        TextView tv = new TextView(act);
+        tv.setText(label);
+        tv.setTextSize(13);
+        tv.setTextColor(0xFF666666);
+        tv.setPadding(0, dp(act, 8), 0, dp(act, 2));
+        root.addView(tv);
+
+        Spinner sp = new Spinner(act);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(act, android.R.layout.simple_spinner_item, items);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        sp.setAdapter(adapter);
+        sp.setSelection(selected);
+        root.addView(sp);
+        return sp;
+    }
+
+    private static LinearLayout addSwitchRow(Activity act, LinearLayout root, String label, boolean checked) {
+        LinearLayout row = new LinearLayout(act);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(act, 8), 0, dp(act, 8));
+
+        TextView tv = new TextView(act);
+        tv.setText(label);
+        tv.setTextSize(14);
+        tv.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        row.addView(tv);
+
+        Switch sw = new Switch(act);
+        sw.setChecked(checked);
+        row.addView(sw);
+
+        root.addView(row);
+        return row;
+    }
+
+    // ==================== 工具方法 ====================
+
+    private static int parseColor(String s) {
+        if (s == null || s.isEmpty()) return 0;
+        s = s.trim();
+        if (s.startsWith("0x") || s.startsWith("0X")) s = s.substring(2);
+        if (s.startsWith("#")) s = s.substring(1);
+        if (s.length() == 6) s = "FF" + s;
+        return (int) Long.parseLong(s, 16);
+    }
+
+    private static String colorToHex(int color) {
+        return String.format("#%08X", color);
+    }
+
+    private static String keywordsToText(String saved) {
+        if (saved == null || saved.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        try {
+            org.json.JSONObject obj = new org.json.JSONObject(saved);
+            java.util.Iterator<String> keys = obj.keys();
+            while (keys.hasNext()) {
+                String k = keys.next();
+                String v = obj.optString(k, "");
+                if (sb.length() > 0) sb.append("\n");
+                sb.append(k).append("=").append(v);
+            }
+        } catch (Exception e) {
+            return saved;
+        }
+        return sb.toString();
+    }
+
+    private static int dp(Activity act, int dp) {
+        return (int) (dp * act.getResources().getDisplayMetrics().density + 0.5f);
+    }
+}

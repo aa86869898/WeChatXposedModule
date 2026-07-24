@@ -24,8 +24,8 @@ public class ChatFooterEnhance {
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
-    private static int maxTextLength = 50000;
-    private static int maxLines = 10;
+    public static int maxTextLength = 50000;
+    public static int maxLines = 10;
 
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;

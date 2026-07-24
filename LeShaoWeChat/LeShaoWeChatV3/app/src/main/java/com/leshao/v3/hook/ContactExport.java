@@ -3,6 +3,8 @@ package com.leshao.v3.hook;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
+import com.leshao.v3.ContextManager;
+import com.leshao.v3.model.ModuleConfig;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.widget.Toast;
@@ -26,12 +28,14 @@ public class ContactExport {
     private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd_HHmmss");
     private static boolean exportTriggered = false;
     private static ClassLoader classLoader;
-    private static boolean sEnabled = false;
+    private static volatile boolean sEnabled = true;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;
+        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        if (config == null || !config.contactExportEnabled) return;
         classLoader = cl;
         hookSelectContactUI(cl);
     }

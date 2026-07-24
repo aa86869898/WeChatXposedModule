@@ -37,7 +37,7 @@ public class HideContactFields {
     ));
 
     private static Set<String> hiddenFields = new HashSet<>(DEFAULT_HIDDEN);
-    private static boolean sEnabled = false;
+    private static volatile boolean sEnabled = true;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 

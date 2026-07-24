@@ -5,6 +5,7 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import com.leshao.v3.Logger;
 import com.leshao.v3.ContextManager;
+import com.leshao.v3.model.ModuleConfig;
 import android.os.Vibrator;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -22,6 +23,8 @@ public class RedPacketAlert {
 
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;
+        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        if (config == null || !config.redPacketAlertEnabled) return;
         hookRedPacketDetect(cl);
         hookNotificationOverride(cl);
         Logger.i("[RedPacketAlert] 红包提醒 Hook完成");

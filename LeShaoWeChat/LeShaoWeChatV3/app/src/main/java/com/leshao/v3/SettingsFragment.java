@@ -1,5 +1,6 @@
 package com.leshao.v3;
 
+import android.app.Activity;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -22,6 +23,7 @@ import com.leshao.v3.hook.CallFeatures;
 import com.leshao.v3.hook.MsgExport;
 import com.leshao.v3.hook.ChatBackup;
 import com.leshao.v3.hook.ShakeCustom;
+import com.leshao.v3.ui.ConfigPanels;
 import com.leshao.v3.model.KeywordRule;
 import com.leshao.v3.model.ModuleConfig;
 import java.util.ArrayList;
@@ -39,6 +41,7 @@ public class SettingsFragment extends Fragment {
                              @Nullable Bundle savedInstanceState) {
         mPrefs = ContextManager.getPrefs();
         mCfg = ModuleConfig.load(mPrefs);
+        final Activity act = getActivity();
 
         LinearLayout root = new LinearLayout(getContext());
         root.setOrientation(LinearLayout.VERTICAL);
@@ -62,7 +65,7 @@ public class SettingsFragment extends Fragment {
         }));
         root.addView(switchRow("自动通过好友", mCfg.autoAcceptFriend, (v, on) -> {
             mCfg.autoAcceptFriend = on; mCfg.save(mPrefs); FriendRequestHook.setEnabled(on);
-        }));
+        }, v -> ConfigPanels.showFriendRequest(act, mPrefs)));
         root.addView(editRow("好友欢迎语", mCfg.autoAcceptFriendMsg, s -> {
             mCfg.autoAcceptFriendMsg = s; mCfg.save(mPrefs);
         }));
@@ -182,10 +185,22 @@ public class SettingsFragment extends Fragment {
     }
 
     private LinearLayout switchRow(String label, boolean checked, CompoundButton.OnCheckedChangeListener l) {
+        return switchRow(label, checked, l, null);
+    }
+
+    private LinearLayout switchRow(String label, boolean checked, CompoundButton.OnCheckedChangeListener l,
+                                    View.OnClickListener config) {
         LinearLayout row = new LinearLayout(getContext()); row.setOrientation(LinearLayout.HORIZONTAL);
         row.setPadding(0, dp(6), 0, dp(6));
         TextView tv = new TextView(getContext()); tv.setText(label); tv.setTextSize(14);
         row.addView(tv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        if (config != null) {
+            TextView btn = new TextView(getContext());
+            btn.setText("[设置]"); btn.setTextSize(12); btn.setTextColor(0xFF4A90D9);
+            btn.setPadding(dp(6), 0, dp(6), 0);
+            btn.setOnClickListener(config);
+            row.addView(btn);
+        }
         Switch sw = new Switch(getContext()); sw.setChecked(checked); sw.setOnCheckedChangeListener(l);
         row.addView(sw); return row;
     }

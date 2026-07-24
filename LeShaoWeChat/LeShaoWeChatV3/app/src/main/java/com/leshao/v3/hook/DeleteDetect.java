@@ -4,6 +4,8 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import com.leshao.v3.Logger;
+import com.leshao.v3.ContextManager;
+import com.leshao.v3.model.ModuleConfig;
 
 /**
  * [功能10] 好友删除检测
@@ -44,6 +46,9 @@ public class DeleteDetect {
     public static final int TYPE_BLACKLIST = 4;
 
     public static void hook(ClassLoader cl) {
+        if (!sEnabled) return;
+        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        if (config == null || !config.deleteDetectEnabled) return;
         Logger.i("--- [10] 好友删除检测 ---");
         hookContactInfoUI(cl);
         hookMessageSendFail(cl);

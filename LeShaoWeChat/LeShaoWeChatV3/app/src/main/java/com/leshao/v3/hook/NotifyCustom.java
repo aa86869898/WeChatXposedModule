@@ -28,7 +28,7 @@ public class NotifyCustom {
     private static String[] quickReplyPhrases = {
         "好的", "收到", "稍等", "在路上", "马上到", "👌"
     };
-    private static boolean sEnabled = false;
+    private static volatile boolean sEnabled = true;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 

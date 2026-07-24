@@ -4,6 +4,8 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import com.leshao.v3.Logger;
+import com.leshao.v3.ContextManager;
+import com.leshao.v3.model.ModuleConfig;
 
 /**
  * [功能54/55/56/64] 隐私安全合集
@@ -37,6 +39,9 @@ public class PrivacyFeatures {
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     public static void hook(ClassLoader cl) {
+        if (!sEnabled) return;
+        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        if (config == null || !config.privacyFeaturesEnabled) return;
         Logger.i("--- [54/55/56/64] 隐私安全 ---");
         hookScreenshot(cl);
         hookClipboard(cl);

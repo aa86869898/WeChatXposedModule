@@ -1,7 +1,10 @@
 package com.leshao.v3.ui;
 
+import android.app.Activity;
 import android.content.SharedPreferences;
+import android.graphics.Typeface;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -26,46 +29,92 @@ public class PrivacyFragment extends Fragment {
                              @Nullable Bundle savedInstanceState) {
         mPrefs = ContextManager.getPrefs();
         mCfg = ModuleConfig.load(mPrefs);
+        float d = getResources() != null ? getResources().getDisplayMetrics().density : 2.0f;
+        final Activity act = getActivity();
 
         LinearLayout root = new LinearLayout(getContext());
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.setPadding((int)(16 * d), (int)(16 * d), (int)(16 * d), (int)(16 * d));
 
-        root.addView(sLabel("隐私安全"));
-        root.addView(switchRow("隐私保护 (截图检测/剪贴板/WebView/指纹锁定)", mCfg.privacyFeaturesEnabled, (v, on) -> {
+        root.addView(sLabel(d, "隐私安全"));
+
+        LinearLayout card = makeCard(d);
+        card.addView(switchRow(d, "隐私保护 (截图检测/剪贴板/WebView/指纹锁定)",
+                null, mCfg.privacyFeaturesEnabled, (v, on) -> {
             mCfg.privacyFeaturesEnabled = on; mCfg.save(mPrefs); PrivacyFeatures.setEnabled(on);
-        }));
-        root.addView(switchRow("登录设备监控", mCfg.loginMonitorEnabled, (v, on) -> {
+        }, null));
+        card.addView(switchRow(d, "登录设备监控",
+                null, mCfg.loginMonitorEnabled, (v, on) -> {
             mCfg.loginMonitorEnabled = on; mCfg.save(mPrefs); LoginMonitor.setEnabled(on);
-        }));
-        root.addView(switchRow("隐藏联系人敏感字段", mCfg.hideContactFieldsEnabled, (v, on) -> {
+        }, null));
+        card.addView(switchRow(d, "隐藏联系人敏感字段",
+                null, mCfg.hideContactFieldsEnabled, (v, on) -> {
             mCfg.hideContactFieldsEnabled = on; mCfg.save(mPrefs); HideContactFields.setEnabled(on);
-        }));
-        root.addView(switchRow("会话隐私保护", mCfg.convPrivacyEnabled, (v, on) -> {
+        }, v -> ConfigPanels.showHideContactFields(act, mPrefs)));
+        card.addView(switchRow(d, "会话隐私保护",
+                null, mCfg.convPrivacyEnabled, (v, on) -> {
             mCfg.convPrivacyEnabled = on; mCfg.save(mPrefs); ConvPrivacy.setEnabled(on);
-        }));
+        }, v -> ConfigPanels.showConvPrivacy(act, mPrefs)));
+        root.addView(card);
 
         ScrollView sv = new ScrollView(getContext());
         sv.addView(root);
         return sv;
     }
 
-    private TextView sLabel(String t) {
-        TextView tv = new TextView(getContext()); tv.setText(t); tv.setTextSize(18);
-        tv.setPadding(0, dp(12), 0, dp(6)); tv.getPaint().setFakeBoldText(true); return tv;
+    private LinearLayout makeCard(float d) {
+        LinearLayout card = new LinearLayout(getContext());
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding((int)(2 * d), (int)(2 * d), (int)(2 * d), (int)(2 * d));
+        card.setBackgroundColor(0xFFF5F5F5);
+        return card;
     }
 
-    private LinearLayout switchRow(String label, boolean checked, CompoundButton.OnCheckedChangeListener l) {
-        LinearLayout row = new LinearLayout(getContext()); row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(0, dp(6), 0, dp(6));
-        TextView tv = new TextView(getContext()); tv.setText(label); tv.setTextSize(14);
-        row.addView(tv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        Switch sw = new Switch(getContext()); sw.setChecked(checked); sw.setOnCheckedChangeListener(l);
-        row.addView(sw); return row;
+    private LinearLayout switchRow(float d, String title, String desc,
+                                    boolean checked, CompoundButton.OnCheckedChangeListener l,
+                                    View.OnClickListener config) {
+        LinearLayout row = new LinearLayout(getContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
+        row.setBackgroundColor(0xFFFFFFFF);
+
+        LinearLayout textCol = new LinearLayout(getContext());
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        textCol.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        TextView tv = new TextView(getContext());
+        tv.setText(title); tv.setTextSize(15);
+        tv.setTextColor(0xFF1A1A1A); tv.setTypeface(null, Typeface.BOLD);
+        textCol.addView(tv);
+
+        if (desc != null && !desc.isEmpty()) {
+            TextView dv = new TextView(getContext());
+            dv.setText(desc); dv.setTextSize(12); dv.setTextColor(0xFF999999);
+            dv.setPadding(0, (int)(3 * d), 0, 0);
+            textCol.addView(dv);
+        }
+
+        row.addView(textCol);
+
+        if (config != null) {
+            TextView btn = new TextView(getContext());
+            btn.setText("[设置]"); btn.setTextSize(12); btn.setTextColor(0xFF4A90D9);
+            btn.setPadding((int)(6 * d), 0, (int)(6 * d), 0);
+            btn.setOnClickListener(config);
+            row.addView(btn);
+        }
+
+        Switch sw = new Switch(getContext()); sw.setChecked(checked);
+        sw.setOnCheckedChangeListener(l);
+        row.addView(sw);
+        return row;
     }
 
-    private int dp(int dp) {
-        float d = getResources() != null ? getResources().getDisplayMetrics().density : 2.0f;
-        return (int) (dp * d + 0.5f);
+    private TextView sLabel(float d, String t) {
+        TextView tv = new TextView(getContext());
+        tv.setText(t); tv.setTextSize(13); tv.setTextColor(0xFF999999);
+        tv.setPadding(0, 0, 0, (int)(8 * d));
+        return tv;
     }
 }

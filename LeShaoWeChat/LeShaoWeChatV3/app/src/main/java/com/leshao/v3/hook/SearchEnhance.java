@@ -25,7 +25,7 @@ public class SearchEnhance {
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     private static boolean voiceSearchEnabled = true;
-    private static int maxResults = 500;
+    public static int maxResults = 500;
 
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;

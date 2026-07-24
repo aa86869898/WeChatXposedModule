@@ -17,7 +17,7 @@ public class VoiceForwardHook {
 
     private static final String TAG = "VoiceFwd";
     private static volatile boolean sHooked = false;
-    private static volatile boolean sEnabled = false;
+    private static volatile boolean sEnabled = true;
     private static volatile Activity sChatAct;
     private static volatile Object sPendingMsg;
     private static volatile String sPendingTalker;

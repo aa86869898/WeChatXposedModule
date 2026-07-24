@@ -21,7 +21,7 @@ import android.widget.Toast;
 public class SnsFeatures {
     private static ClassLoader cl;
     private static long timeOffsetMs = -3600000;
-    private static boolean sEnabled = false;
+    private static volatile boolean sEnabled = true;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 

@@ -31,8 +31,8 @@ public class BatchMessage {
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
-    private static int maxSelectCount = 999;
-    private static int forwardSplitSize = 50;
+    public static int maxSelectCount = 999;
+    public static int forwardSplitSize = 50;
 
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;

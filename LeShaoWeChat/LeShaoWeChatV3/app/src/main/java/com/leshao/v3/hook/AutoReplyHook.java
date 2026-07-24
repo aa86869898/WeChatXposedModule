@@ -26,7 +26,7 @@ public class AutoReplyHook {
     private static final ConcurrentHashMap<String, Long> cooldowns = new ConcurrentHashMap<>();
     private static ClassLoader classLoader;
     private static Object msgStorage;
-    private static boolean sEnabled = false;
+    private static volatile boolean sEnabled = true;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
