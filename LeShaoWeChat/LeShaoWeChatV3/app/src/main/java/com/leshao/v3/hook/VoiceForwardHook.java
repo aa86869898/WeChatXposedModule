@@ -84,27 +84,20 @@ public class VoiceForwardHook {
         try {
             Class<?> cf = cl.loadClass("com.tencent.mm.ui.chatting.ChattingUIFragment");
 
-            XposedBridge.hookAllMethods(cf, "onViewCreated", new XC_MethodHook() {
+            XposedBridge.hookAllMethods(cf, "onCreateView", new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
                     if (sAdapterHooked) return;
                     sCallCount.set(0);
 
-                    View root = null;
-                    for (Object arg : param.args) {
-                        if (arg instanceof View) { root = (View) arg; break; }
-                    }
-                    if (root == null) {
-                        LogWriter.log(TAG, "onViewCreated: no View arg, args=" + param.args.length);
-                        return;
-                    }
+                    View root = (View) param.getResult();
+                    LogWriter.log(TAG, "onCreateView returned: " + (root == null ? "null" : root.getClass().getSimpleName()));
+
+                    if (root == null) return;
 
                     int childCount = root instanceof ViewGroup ? ((ViewGroup) root).getChildCount() : -1;
-                    LogWriter.log(TAG, "onViewCreated: root=" + root.getClass().getSimpleName()
-                        + " children=" + childCount);
-
                     RecyclerView rv = findRecyclerView(root);
                     if (rv == null) {
-                        LogWriter.log(TAG, "no RecyclerView found (root " + root.getClass().getSimpleName() + " has " + childCount + " children)");
+                        LogWriter.log(TAG, "no RecyclerView: root=" + root.getClass().getSimpleName() + " children=" + childCount);
                         return;
                     }
 
@@ -127,9 +120,9 @@ public class VoiceForwardHook {
                     }
                 }
             });
-            LogWriter.log(TAG, "hookAllMethods onViewCreated installed");
+            LogWriter.log(TAG, "hookAllMethods onCreateView on ChattingUIFragment installed");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "hook onViewCreated failed: " + t.getMessage());
+            LogWriter.log(TAG, "hook onCreateView failed: " + t.getMessage());
         }
     }
 
