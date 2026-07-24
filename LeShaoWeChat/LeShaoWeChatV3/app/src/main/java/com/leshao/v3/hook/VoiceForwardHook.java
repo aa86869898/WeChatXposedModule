@@ -2,6 +2,7 @@ package com.leshao.v3.hook;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.drawable.Drawable;
 import android.view.MenuItem;
 import android.view.View;
@@ -373,12 +374,6 @@ public class VoiceForwardHook {
                     sMenuInjected = true;
                     sMenuInjectedTime = System.currentTimeMillis();
                     injectForwardMenuItem(menuObj, itemView);
-
-                    // 对菜单创建类开启全方法 hook（覆盖无 View 参数的 click handler）
-                    if (!label.equals(sFullHookedClass)) {
-                        sFullHookedClass = label;
-                        hookAllMethodsNoFilterOnLabel(label);
-                    }
                 }
             });
         }
@@ -527,8 +522,7 @@ public class VoiceForwardHook {
 
             LogWriter.log(TAG, "forward: msgId=" + msgId + " talker=" + talker + " msg=" + msg.getClass().getSimpleName());
 
-            final long finalMsgId = msgId;
-            // 从 view 获取 Activity，优先于 sChatAct
+            // 从 view 获取 Activity
             Activity act = sChatAct;
             if (act == null && view != null) {
                 Context ctx = view.getContext();
@@ -541,14 +535,19 @@ public class VoiceForwardHook {
             LogWriter.log(TAG, "forward: act=" + act.getClass().getSimpleName());
 
             // 用我们自己的 ContactPickerDialog
+            final Activity fwdAct = act;
+            final Object fwdMsg = (sPendingMsg != null) ? sPendingMsg : msg;
             com.leshao.v3.ui.ContactPickerDialog.show(act, "", 
                 com.leshao.v3.ui.ContactPickerDialog.MODE_GROUP,
                 new com.leshao.v3.ui.ContactPickerDialog.OnContactsSelected() {
                     @Override
                     public void onSelected(Set<String> wxids, String display) {
                         LogWriter.log(TAG, "forward: selected=" + wxids + " display=" + display);
-                        // TODO: 调用微信转发 API 实际执行转发
-                        showToast("选择了 " + wxids.size() + " 个目标 (msgId=" + finalMsgId + ")");
+                        int done = 0;
+                        for (String wxid : wxids) {
+                            if (doForwardVoice(fwdAct, fwdMsg, wxid)) done++;
+                        }
+                        showToast("已转发到 " + done + " 个目标");
                     }
                 });
         } catch (Throwable t) {
@@ -556,6 +555,57 @@ public class VoiceForwardHook {
             showToast("转发失败: " + t.getMessage());
         } finally {
             sForwarding = false;
+        }
+    }
+
+    // ===== 实际转发语音 =====
+    private static boolean doForwardVoice(Activity act, Object msgObj, String targetWxid) {
+        try {
+            // msgObj = vo, 通过 c() 获取 storage.e9
+            Object e9 = msgObj;
+            if (!e9.getClass().getName().contains("storage")) {
+                try { e9 = XposedHelpers.callMethod(msgObj, "c"); } catch (Throwable ignored) {}
+            }
+            if (e9 == null || !e9.getClass().getName().contains("storage")) {
+                LogWriter.log(TAG, "forward: cannot get e9 from " + (msgObj != null ? msgObj.getClass().getSimpleName() : "null"));
+                return false;
+            }
+
+            long msgId = extractMsgId(e9);
+            LogWriter.log(TAG, "doForward: msgId=" + msgId + " → " + targetWxid);
+
+            // 方案1: SelectConversationUI 带目标用户
+            try {
+                Class<?> selUI = act.getClassLoader().loadClass("com.tencent.mm.ui.transmit.SelectConversationUI");
+                Intent intent = new Intent(act, selUI);
+                intent.putExtra("Select_Conv_User", targetWxid);
+                intent.putExtra("Retr_Msg_Type", 34);
+                intent.putExtra("Retr_Msg_Id", msgId);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                act.startActivity(intent);
+                return true;
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "forward: SelectConversationUI fail: " + t.getMessage());
+            }
+
+            // 方案2: 直接用 MsgRetransmitUI
+            try {
+                Class<?> retUI = act.getClassLoader().loadClass("com.tencent.mm.ui.transmit.MsgRetransmitUI");
+                Intent intent = new Intent(act, retUI);
+                intent.putExtra("Select_Conv_User", targetWxid);
+                intent.putExtra("Retr_Msg_Type", 34);
+                intent.putExtra("Retr_Msg_Id", msgId);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                act.startActivity(intent);
+                return true;
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "forward: MsgRetransmitUI fail: " + t.getMessage());
+            }
+
+            return false;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "doForward error: " + t.getMessage());
+            return false;
         }
     }
 
