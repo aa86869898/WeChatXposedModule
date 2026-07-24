@@ -574,50 +574,61 @@ public class VoiceForwardHook {
             long msgId = extractMsgId(e9);
             LogWriter.log(TAG, "doForward: msgId=" + msgId + " → " + targetWxid);
 
-            // 方案1: 获取 voice 文件路径，直接调用发送 API
-            String voicePath = null;
-            try { voicePath = (String) XposedHelpers.callMethod(e9, "P0"); } catch (Throwable ignored) {}
-            if (voicePath == null) try { voicePath = (String) XposedHelpers.getObjectField(e9, "field_imgPath"); } catch (Throwable ignored) {}
-            LogWriter.log(TAG, "doForward: voicePath=" + voicePath);
-
-            // 方案2: 通过 modelmulti.o 的 b(msgInfo, talker) 或 a(...) 直接转发
-            ClassLoader cl = ContextManager.getClassLoader();
-            try {
-                Class<?> multiCls = cl.loadClass("com.tencent.mm.modelmulti.o");
-                Object multi = XposedHelpers.callStaticMethod(multiCls, "a");
-                // try a(msgInfo, ...)
-                try {
-                    XposedHelpers.callMethod(multi, "a", e9, targetWxid);
-                    LogWriter.log(TAG, "doForward: multi.a(e9, talker) OK");
-                    return true;
-                } catch (Throwable t1) {
-                    LogWriter.log(TAG, "doForward: multi.a fail: " + t1.getMessage());
+            // dump e9 所有 String 字段和 long 字段
+            StringBuilder fsb = new StringBuilder("doForward: e9.Strings={");
+            for (Field f : e9.getClass().getDeclaredFields()) {
+                if (f.getType() == String.class) {
+                    try { f.setAccessible(true); Object v = f.get(e9); fsb.append(f.getName()).append("=").append(v).append(" "); } catch (Throwable ignored) {}
                 }
-                // try b(msgInfo, talker)
-                try {
-                    XposedHelpers.callMethod(multi, "b", e9, targetWxid);
-                    LogWriter.log(TAG, "doForward: multi.b(e9, talker) OK");
-                    return true;
-                } catch (Throwable t2) {
-                    LogWriter.log(TAG, "doForward: multi.b fail: " + t2.getMessage());
-                }
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "doForward: modelmulti.o fail: " + t.getMessage());
             }
-
-            // 方案3: 查 modelmulti.o 的所有 public 方法
-            try {
-                Class<?> multiCls = cl.loadClass("com.tencent.mm.modelmulti.o");
-                Object multi = XposedHelpers.callStaticMethod(multiCls, "a");
-                for (Method m : multiCls.getDeclaredMethods()) {
-                    Class<?>[] pts = m.getParameterTypes();
-                    if (pts.length >= 2 && !m.getName().equals("toString") && !m.getName().equals("equals")) {
-                        LogWriter.log(TAG, "doForward: multi." + m.getName() + "(" + java.util.Arrays.toString(pts) + ")");
+            Class<?> sc = e9.getClass().getSuperclass();
+            while (sc != null && sc != Object.class) {
+                for (Field f : sc.getDeclaredFields()) {
+                    if (f.getType() == String.class) {
+                        try { f.setAccessible(true); Object v = f.get(e9); fsb.append(f.getName()).append("=").append(v).append(" "); } catch (Throwable ignored) {}
                     }
                 }
-            } catch (Throwable ignored) {}
+                sc = sc.getSuperclass();
+            }
+            fsb.append("} longs={");
+            for (Class<?> c = e9.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                for (Field f : c.getDeclaredFields()) {
+                    if (f.getType() == long.class) {
+                        try { f.setAccessible(true); fsb.append(f.getName()).append("=").append(f.getLong(e9)).append(" "); } catch (Throwable ignored) {}
+                    }
+                }
+            }
+            fsb.append("}");
+            LogWriter.log(TAG, fsb.toString());
 
-            // 方案4: SelectConversationUI 带 result
+            // 尝试多种转发类
+            ClassLoader cl = ContextManager.getClassLoader();
+            String[] fwdClasses = {
+                "com.tencent.mm.modelmulti.p", "com.tencent.mm.modelmulti.q",
+                "com.tencent.mm.modelmulti.r", "com.tencent.mm.modelmulti.s",
+                "com.tencent.mm.ui.transmit.SendRequest",
+                "com.tencent.mm.plugin.forward.ForwardRetry",
+            };
+            for (String cn : fwdClasses) {
+                try {
+                    Class<?> cls = cl.loadClass(cn);
+                    LogWriter.log(TAG, "doForward: FOUND " + cn + " methods:");
+                    for (Method m : cls.getDeclaredMethods()) {
+                        Class<?>[] pts = m.getParameterTypes();
+                        if (!m.getName().equals("toString") && !m.getName().equals("equals") && !m.getName().equals("hashCode")) {
+                            StringBuilder msb = new StringBuilder("  ").append(m.getName()).append("(");
+                            for (int i = 0; i < pts.length; i++) {
+                                if (i > 0) msb.append(",");
+                                msb.append(pts[i].getSimpleName());
+                            }
+                            msb.append(")");
+                            LogWriter.log(TAG, msb.toString());
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+
+            // SelectConversationUI fallback (不带预选，显示选择器)
             try {
                 Class<?> selUI = cl.loadClass("com.tencent.mm.ui.transmit.SelectConversationUI");
                 Intent intent = new Intent(act, selUI);
