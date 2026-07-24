@@ -1091,13 +1091,34 @@ public class VoiceForwardHook {
 
                     try {
                         Class<?> x0class = XposedHelpers.findClass("tl.x0", cl);
-                        XposedHelpers.callStaticMethod(x0class, "t",
-                            new Class[]{String.class, int.class, int.class,
-                                XposedHelpers.findClass("com.tencent.mm.storage.e9", cl)},
-                            voiceFile, duration, 0, e9);
-                        LogWriter.log(TAG, "SceneVoice REPLACE: x0.t() done");
+                        // 枚举 t 方法找到签名匹配的
+                        Method tMethod = null;
+                        for (Method m : x0class.getDeclaredMethods()) {
+                            if (m.getName().equals("t") && m.getParameterTypes().length >= 3) {
+                                tMethod = m;
+                                break;
+                            }
+                        }
+                        if (tMethod != null) {
+                            tMethod.setAccessible(true);
+                            tMethod.invoke(null, voiceFile, duration, 0, e9);
+                            LogWriter.log(TAG, "SceneVoice REPLACE: x0.t() done via " + sig(tMethod));
+                        } else {
+                            // dump x0 所有方法帮助排查
+                            LogWriter.log(TAG, "SceneVoice REPLACE: no t() with >=3 params in tl.x0");
+                            for (Method m : x0class.getDeclaredMethods()) {
+                                LogWriter.log(TAG, "  x0." + sig(m));
+                            }
+                        }
                     } catch (Throwable t) {
+                        // 调用失败, dump 方法签名
                         LogWriter.log(TAG, "SceneVoice REPLACE: x0.t() error: " + t.getMessage());
+                        try {
+                            Class<?> x0class = XposedHelpers.findClass("tl.x0", cl);
+                            for (Method m : x0class.getDeclaredMethods()) {
+                                if (m.getName().equals("t")) LogWriter.log(TAG, "  x0." + sig(m));
+                            }
+                        } catch (Throwable ignored2) {}
                     }
 
                     // y21.p0.kj().e() → 刷新播放列表

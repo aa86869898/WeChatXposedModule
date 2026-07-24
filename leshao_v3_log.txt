@@ -1,1029 +1,521 @@
-07-25 00:23:47.518 [[GT]ColdPool#6] MessageHook: #1 type=1->1 isSend=51 talker=23149434800@chatroom content=wxid_uyayjyhkr8sy22:
-各位老板好，生意兴隆！
-广州市安大禽业...
-07-25 00:23:47.577 [[GT]ColdPool#6] MessageHook: #2 type=318767153->49 isSend=1925 talker=gh_3dfda90e39d6 content=<msg> <appmsg appid="" sdkver="0">     <...
-07-25 00:23:47.654 [[GT]ColdPool#6] MessageHook: #3 type=318767153->49 isSend=1925 talker=gh_3dfda90e39d6 content=<msg> <appmsg appid="" sdkver="0">     <...
-07-25 00:55:33.490 [[GT]ColdPool#6] MessageHook: #4 type=1->1 isSend=6209 talker=21916245815@chatroom content=wxid_wkyzjmds2pmv22:
-【🚗类型🚗 】车找人
-【时间】7月...
-07-25 00:55:33.505 [[GT]ColdPool#6] MessageHook: #5 type=1->1 isSend=54 talker=25295891650@chatroom content=wxid_wkyzjmds2pmv22:
-【🚗类型🚗 】车找人
-【时间】7月...
-07-25 00:55:33.521 [[GT]ColdPool#6] MessageHook: #6 type=1->1 isSend=30 talker=22918947217@chatroom content=wxid_y28cprugwm5w12:
- 正宗潮汕牛肉丸！厂家直发，零售也享批...
-07-25 00:55:33.543 [[GT]ColdPool#6] MessageHook: #7 type=3->3 isSend=30 talker=22918947217@chatroom content=wxid_y28cprugwm5w12:
+07-25 07:41:35.641 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-25 07:41:35.643 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-25 07:41:35.645 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-25 07:41:35.646 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-25 07:41:35.647 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-25 07:41:35.649 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-25 07:41:35.650 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-25 07:41:35.652 [main] ContactRepository: init: DB ready listener registered
+07-25 07:41:35.653 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-25 07:41:35.653 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-25 07:41:35.654 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-25 07:41:35.655 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-25 07:41:35.672 [main] SettingsEntryHook: LauncherUI entry hooks ok
+07-25 07:41:35.672 [main] SettingsEntryHook: INIT: hooks registered ok
+07-25 07:41:35.675 [main] MessageHook: n(e9,p0) OK
+07-25 07:41:35.676 [main] MessageHook: C(e9) OK
+07-25 07:41:35.684 [main] ContextManager: attachBaseContext DONE, ready=true
+07-25 07:41:35.685 [main] DatabaseProvider: init: already hooked via initEarly, skipping
+07-25 07:41:35.686 [main] SettingsInject: INIT: registered
+07-25 07:41:35.691 [main] TTSBroadcaster: TTS init done
+07-25 07:41:35.701 [main] AntiRecallHook: [XML] Hooked: af5.a.run()
+07-25 07:41:35.702 [main] AntiRecallHook: [Proto] Hooked: e01.u.f()
+07-25 07:41:35.707 [main] AntiRecallHook: [协程] Hooked: bd0.s.invokeSuspend()
+07-25 07:41:35.708 [main] AntiRecallHook: anti-recall hooks installed (4 paths)
+07-25 07:41:35.712 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewReceiveUI.initView()
+07-25 07:41:35.715 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI.initView()
+07-25 07:41:35.717 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI.onCreate()
+07-25 07:41:35.718 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2.onCreate()
+07-25 07:41:35.721 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI.onCreate()
+07-25 07:41:35.723 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKBeforeDetailUI.onCreate()
+07-25 07:41:35.725 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewDetailUI.onCreate()
+07-25 07:41:35.726 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI.onCreate()
+07-25 07:41:35.728 [main] RedPacket: [OK] ChattingUI.onResume()
+07-25 07:41:35.730 [main] RedPacket: RP OK
+07-25 07:41:35.730 [main] RedPacket: hooks installed (open result + UI auto-click + TTS UI)
+07-25 07:41:35.736 [main] AutoCollect: [OK] com.tencent.mm.plugin.wallet.pay.ui.WalletPayUI.onCreate()
+07-25 07:41:35.736 [main] AutoCollect: [OK] ChattingUI.onResume()
+07-25 07:41:35.743 [main] AutoCollect: AC OK
+07-25 07:41:35.746 [main] AutoCollect: hooks installed (transfer result + UI auto-collect)
+07-25 07:41:35.756 [main] LeShaoV3: [Footer] 字数限制已解除 (返回'0')
+07-25 07:41:35.770 [main] LeShaoV3: --- [6] 定时发送 ---
+07-25 07:41:35.772 [main] LeShaoV3:   ChatFooter.F(e9,a35.g)→boolean ✓
+07-25 07:41:35.773 [main] LeShaoV3:   ChatFooterCustom.r(10 params) ✓
+07-25 07:41:35.776 [main] LeShaoV3:   ChatFooterCustom.onClick(View) ✓
+07-25 07:41:35.780 [main] LeShaoV3: [Search] 语音搜索(字段扫描)已启用
+07-25 07:41:35.782 [main] LeShaoV3: [Search] FTSBaseVoiceSearchUI Hook完成
+07-25 07:41:35.784 [main] LeShaoV3: [Badge] MainTabUI.b() Hook完成
+07-25 07:41:35.795 [main] LeShaoV3: [Shake] ShakeReportUI Hook完成 (14个方法)
+07-25 07:41:35.797 [main] LeShaoV3: --- [10] 好友删除检测 ---
+07-25 07:41:35.799 [main] LeShaoV3:   ContactInfoUI.D2() + onResume() ✓
+07-25 07:41:35.799 [main] LeShaoV3:   SendMsgSuccessEvent ✓
+07-25 07:41:35.801 [main] LeShaoV3: [CallRecord] widget.k.g() Hook完成
+07-25 07:41:35.802 [main] LeShaoV3: [CallRecord] model.c0.d() Hook完成
+07-25 07:41:35.803 [main] LeShaoV3: [AutoAnswer] CheckVoipCSIsStartedEvent Hook完成
+07-25 07:41:35.804 [main] LeShaoV3: [CallFeatures] 通话录音+自动接听 Hook完成
+07-25 07:41:35.816 [main] LeShaoV3: [LoginMonitor] LauncherUI.onCreate Hook完成
+07-25 07:41:35.819 [main] LeShaoV3: [ConvPrivacy] notification.m0.a() Hook完成 (level=1)
+07-25 07:41:35.821 [main] LeShaoV3: [ConvPrivacy] MvvmConvList Hook完成
+07-25 07:41:35.832 [main] ThemeHook: loadColors done
+07-25 07:41:35.832 [main] ThemeHook: state: m=false bar=true page=true chatBg=true bubble=true tab=true text=true
+07-25 07:41:35.833 [main] ThemeHook: [A] ok
+07-25 07:41:35.835 [main] ThemeHook: [B] ok
+07-25 07:41:35.836 [main] ThemeHook: [C] ga.E0 title ok
+07-25 07:41:35.837 [main] ThemeHook: [C] dim-scan ok
+07-25 07:41:35.837 [main] ThemeHook: [D] ok
+07-25 07:41:35.838 [main] ThemeHook: [E] com.tencent.mm.ui.conversation.MainUI ok
+07-25 07:41:35.840 [main] ThemeHook: [F] p0 extra hook ok
+07-25 07:41:35.840 [main] ThemeHook: [F] DyeTemplate l0+n0 ok
+07-25 07:41:35.842 [main] ThemeHook: [H] ok
+07-25 07:41:35.844 [main] ThemeHook: [X] addView scan ok
+07-25 07:41:35.845 [main] ThemeHook: [G] ChattingUI ok
+07-25 07:41:35.845 [main] ThemeHook: [L] dark sync ok
+07-25 07:41:35.846 [main] ThemeHook: [M] settings bg ok
+07-25 07:41:35.847 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivity ok
+07-25 07:41:35.848 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivityJava ok
+07-25 07:41:35.848 [main] ThemeHook: [O] MMFragment ok
+07-25 07:41:35.849 [main] ThemeHook: [O] MMFragmentActivity ok
+07-25 07:41:35.850 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooter ok
+07-25 07:41:35.851 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooterBottom ok
+07-25 07:41:35.852 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.ChatFooterPanel ok
+07-25 07:41:35.852 [main] ThemeHook: [P] com.tencent.mm.ui.chatting.ChattingFooterMoreBtnBar ok
+07-25 07:41:35.853 [main] ThemeHook: [P] ChattingImageBGView ok
+07-25 07:41:35.853 [main] ThemeHook: [Q] SnsTimeLineUI ok
+07-25 07:41:35.854 [main] ThemeHook: [Q] ImproveSnsTimelineUI ok
+07-25 07:41:35.855 [main] ThemeHook: [Q] ContactInfoUI ok
+07-25 07:41:35.855 [main] ThemeHook: [Q] AddressUI ok
+07-25 07:41:35.856 [main] ThemeHook: [Q] FindMoreFriendsUI ok
+07-25 07:41:35.857 [main] ThemeHook: [Q] WebViewUI ok
+07-25 07:41:35.857 [main] ThemeHook: [Q] MainSettingsUI ok
+07-25 07:41:35.857 [main] ThemeHook: [Q] CommonSettingsUI ok
+07-25 07:41:35.858 [main] ThemeHook: [Q] BizConversationUI ok
+07-25 07:41:35.859 [main] ThemeHook: [Q] SnsUserUI ok
+07-25 07:41:35.860 [main] ThemeHook: [Q] SnsCommentUI ok
+07-25 07:41:35.860 [main] ThemeHook: [Q] SnsUploadUI ok
+07-25 07:41:35.861 [main] ThemeHook: [Q] ContactProfileUI ok
+07-25 07:41:35.862 [main] ThemeHook: [Q] ConversationListView ok
+07-25 07:41:35.863 [main] ThemeHook: [Q] ConversationFolderItemView ok
+07-25 07:41:35.864 [main] ThemeHook: [Q] MainUIView ok
+07-25 07:41:35.865 [main] ThemeHook: [Q] ChattingItemFooter ok
+07-25 07:41:35.866 [main] ThemeHook: [Q] SnsHeader ok
+07-25 07:41:35.867 [main] ThemeHook: [Q] SnsCollapsibleTextView ok
+07-25 07:41:35.868 [main] ThemeHook: [Q] TimelineCommentView ok
+07-25 07:41:35.870 [main] ThemeHook: [Q] LauncherUIBottomTabView ok
+07-25 07:41:35.871 [main] ThemeHook: all hooks installed
+07-25 07:41:37.580 [main] VF: scan [com.tencent.mm.ui.chatting.viewitems, com.tencent.mm.ui.chatting.component]: 2076 classes, 1161 methods
+07-25 07:41:37.582 [main] VF: Menu.add fail: Cannot hook abstract methods: public abstract android.view.MenuItem android.view.Menu.add(int)
+07-25 07:41:37.584 [main] VF: viewitems+component+Menu.add hooks installed
+07-25 07:41:38.826 [main] VF: ◆FOUND b31.j: b31.j
+07-25 07:41:38.828 [main] VF:   method: H()→int
+07-25 07:41:38.829 [main] VF:   method: I()→int
+07-25 07:41:38.829 [main] VF:   method: J()→String[]
+07-25 07:41:38.831 [main] VF:   method: K()→long
+07-25 07:41:38.831 [main] VF:   method: L()→List
+07-25 07:41:38.832 [main] VF:   method: M()→void
+07-25 07:41:38.833 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:38.834 [main] VF:   method: getType()→int
+07-25 07:41:38.834 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:38.835 [main] VF:   method: securityLimitCount()→int
+07-25 07:41:38.836 [main] VF:   method: securityVerificationChecked(v0)→o1
+07-25 07:41:38.837 [main] VF:   method: setSecurityCheckError(n1)→void
+07-25 07:41:38.838 [main] VF: ◆FOUND b31.l: b31.l
+07-25 07:41:38.839 [main] VF:   method: H()→int
+07-25 07:41:38.840 [main] VF:   method: I()→int
+07-25 07:41:38.841 [main] VF:   method: J()→String[]
+07-25 07:41:38.841 [main] VF:   method: K()→long
+07-25 07:41:38.842 [main] VF:   method: L()→List
+07-25 07:41:38.842 [main] VF:   method: M()→void
+07-25 07:41:38.843 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:38.844 [main] VF:   method: getType()→int
+07-25 07:41:38.844 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:38.845 [main] VF:   method: securityLimitCount()→int
+07-25 07:41:38.845 [main] VF:   method: securityVerificationChecked(v0)→o1
+07-25 07:41:38.847 [main] VF:   method: setSecurityCheckError(n1)→void
+07-25 07:41:38.858 [main] VF: ◆FOUND b31.j: bg3.j
+07-25 07:41:38.859 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:38.860 [main] VF:   method: getType()→int
+07-25 07:41:38.861 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
+07-25 07:41:38.861 [main] VF: ◆FOUND b31.l: bg3.l
+07-25 07:41:38.862 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:38.863 [main] VF:   method: getType()→int
+07-25 07:41:38.863 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
+07-25 07:41:38.872 [main] VF: ◆FOUND b31.j: bz1.j
+07-25 07:41:38.873 [main] VF:   method: H()→String
+07-25 07:41:38.873 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:38.874 [main] VF:   method: getType()→int
+07-25 07:41:38.875 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:38.877 [main] VF: ◆FOUND b31.l: c04.l
+07-25 07:41:38.877 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:38.878 [main] VF:   method: getType()→int
+07-25 07:41:38.878 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:38.885 [main] VF: ◆FOUND SceneVoice p0: ch4.w
+07-25 07:41:38.885 [main] VF:   method: a()→String
+07-25 07:41:38.886 [main] VF:   method: b(e1)→void
+07-25 07:41:38.886 [main] VF:   method: c()→long
+07-25 07:41:38.886 [main] VF:   method: cancel()→boolean
+07-25 07:41:38.887 [main] VF:   method: d()→int
+07-25 07:41:38.887 [main] VF:   method: e()→int
+07-25 07:41:38.888 [main] VF:   method: f()→void
+07-25 07:41:38.888 [main] VF:   method: g(String,e9)→boolean
+07-25 07:41:38.888 [main] VF:   method: h(f1)→void
+07-25 07:41:38.889 [main] VF:   method: i()→boolean
+07-25 07:41:38.889 [main] VF:   method: j()→e9
+07-25 07:41:38.889 [main] VF:   method: k()→int
+07-25 07:41:38.890 [main] VF:   method: reset()→void
+07-25 07:41:38.890 [main] VF:   method: stop()→boolean
+07-25 07:41:38.924 [main] VF: ◆FOUND x0 utils: com.tencent.mm.plugin.appbrand.x0
+07-25 07:41:38.925 [main] VF:   method: a(String,v0)→void
+07-25 07:41:38.926 [main] VF:   method: b(String)→u0
+07-25 07:41:38.927 [main] VF:   method: c(String)→Iterator
+07-25 07:41:38.927 [main] VF:   method: d(String)→w0
+07-25 07:41:38.928 [main] VF:   method: e(String,v0)→void
+07-25 07:41:38.929 [main] VF:   method: f(String,u0)→void
+07-25 07:41:38.929 [main] VF:   method: g(String,w0)→void
+07-25 07:41:38.939 [main] VF: ◆FOUND x0 utils: com.tencent.mm.plugin.finder.live.widget.x0
+07-25 07:41:38.940 [main] VF:   method: i(x0,boolean,int,Object)→void
+07-25 07:41:38.941 [main] VF:   method: a(Context)→View
+07-25 07:41:38.941 [main] VF:   method: j(x0)→x0
+07-25 07:41:38.942 [main] VF:   method: s()→View
+07-25 07:41:38.942 [main] VF:   method: t()→ViewPager
+07-25 07:41:38.943 [main] VF:   method: u()→boolean
+07-25 07:41:38.943 [main] VF:   method: v()→void
+07-25 07:41:38.944 [main] VF:   method: w(int)→void
+07-25 07:41:38.962 [main] VF: ◆FOUND b31.l: com.tencent.mm.plugin.remittance.model.l
+07-25 07:41:38.962 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:38.962 [main] VF:   method: getType()→int
+07-25 07:41:38.963 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
+07-25 07:41:38.968 [main] VF: ◆FOUND b31.j: com.tencent.mm.plugin.sport.model.j
+07-25 07:41:38.969 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:38.969 [main] VF:   method: getType()→int
+07-25 07:41:38.970 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.025 [main] VF: ◆FOUND b31.j: fo3.j
+07-25 07:41:39.026 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.027 [main] VF:   method: getType()→int
+07-25 07:41:39.028 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.029 [main] VF: ◆FOUND b31.l: fq3.l
+07-25 07:41:39.030 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.030 [main] VF:   method: getType()→int
+07-25 07:41:39.031 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
+07-25 07:41:39.035 [main] VF: ◆FOUND b31.j: g21.j
+07-25 07:41:39.036 [main] VF:   method: H(List)→n50
+07-25 07:41:39.036 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.037 [main] VF:   method: getType()→int
+07-25 07:41:39.037 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.037 [main] VF:   method: securityLimitCount()→int
+07-25 07:41:39.038 [main] VF:   method: securityVerificationChecked(v0)→o1
+07-25 07:41:39.053 [main] VF: ◆FOUND b31.j: hk4.j
+07-25 07:41:39.054 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.055 [main] VF:   method: getType()→int
+07-25 07:41:39.056 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.075 [main] VF: ◆FOUND b31.j: jn3.j
+07-25 07:41:39.076 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.077 [main] VF:   method: getType()→int
+07-25 07:41:39.078 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.080 [main] VF: ◆FOUND b31.l: jn3.l
+07-25 07:41:39.081 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.082 [main] VF:   method: getType()→int
+07-25 07:41:39.083 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.085 [main] VF: ◆FOUND b31.l: jr4.l
+07-25 07:41:39.086 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.087 [main] VF:   method: getType()→int
+07-25 07:41:39.089 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.089 [main] VF:   method: securityLimitCount()→int
+07-25 07:41:39.090 [main] VF:   method: securityVerificationChecked(v0)→o1
+07-25 07:41:39.090 [main] VF:   method: setSecurityCheckError(n1)→void
+07-25 07:41:39.094 [main] VF: ◆FOUND b31.l: k44.l
+07-25 07:41:39.096 [main] VF:   method: H()→ku5
+07-25 07:41:39.098 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.102 [main] VF:   method: getType()→int
+07-25 07:41:39.106 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.107 [main] VF: ◆FOUND b31.j: k61.j
+07-25 07:41:39.108 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.108 [main] VF:   method: getType()→int
+07-25 07:41:39.109 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
+07-25 07:41:39.119 [main] VF: ◆FOUND b31.j: kv4.j
+07-25 07:41:39.120 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.122 [main] VF:   method: getType()→int
+07-25 07:41:39.136 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.142 [main] VF: ◆FOUND b31.j: l93.j
+07-25 07:41:39.143 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.145 [main] VF:   method: getType()→int
+07-25 07:41:39.146 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.151 [main] VF: ◆FOUND b31.l: l93.l
+07-25 07:41:39.152 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.153 [main] VF:   method: getType()→int
+07-25 07:41:39.154 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.159 [main] VF: ◆FOUND b31.j: lc4.j
+07-25 07:41:39.163 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.164 [main] VF:   method: getType()→int
+07-25 07:41:39.165 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.166 [main] VF: ◆FOUND b31.l: lc4.l
+07-25 07:41:39.168 [main] VF:   method: H()→String
+07-25 07:41:39.168 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.169 [main] VF:   method: getType()→int
+07-25 07:41:39.170 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.174 [main] VF: ◆FOUND b31.j: lr1.j
+07-25 07:41:39.175 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.178 [main] VF:   method: getType()→int
+07-25 07:41:39.179 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.180 [main] VF: ◆FOUND b31.l: lt4.l
+07-25 07:41:39.180 [main] VF:   method: H()→sj5
+07-25 07:41:39.181 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.181 [main] VF:   method: getType()→int
+07-25 07:41:39.182 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
+07-25 07:41:39.193 [main] VF: ◆FOUND x0 utils: n3.x0
+07-25 07:41:39.194 [main] VF:   method: a(View)→int
+07-25 07:41:39.195 [main] VF:   method: b(View)→boolean
+07-25 07:41:39.198 [main] VF:   method: c(View)→boolean
+07-25 07:41:39.199 [main] VF:   method: d(View)→boolean
+07-25 07:41:39.200 [main] VF:   method: e(ViewParent,View,View,int)→void
+07-25 07:41:39.201 [main] VF:   method: f(View,int)→void
+07-25 07:41:39.201 [main] VF:   method: g(AccessibilityEvent,int)→void
+07-25 07:41:39.213 [main] VF: ◆FOUND b31.j: o22.j
+07-25 07:41:39.213 [main] VF:   method: H(EmojiInfo,boolean)→void
+07-25 07:41:39.214 [main] VF:   method: I()→void
+07-25 07:41:39.214 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.215 [main] VF:   method: getType()→int
+07-25 07:41:39.215 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.216 [main] VF:   method: securityLimitCount()→int
+07-25 07:41:39.217 [main] VF:   method: securityVerificationChecked(v0)→o1
+07-25 07:41:39.217 [main] VF: ◆FOUND b31.l: o22.l
+07-25 07:41:39.218 [main] VF:   method: H(l,String,boolean)→void
+07-25 07:41:39.218 [main] VF:   method: I(String,int,int,String)→void
+07-25 07:41:39.219 [main] VF:   method: cancel()→void
+07-25 07:41:39.219 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.219 [main] VF:   method: getType()→int
+07-25 07:41:39.220 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.227 [main] VF: ◆FOUND b31.j: ot1.j
+07-25 07:41:39.227 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.228 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.229 [main] VF: ◆FOUND b31.j: ou4.j
+07-25 07:41:39.231 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.231 [main] VF:   method: getType()→int
+07-25 07:41:39.232 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
+07-25 07:41:39.233 [main] VF: ◆FOUND b31.l: oy3.l
+07-25 07:41:39.234 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.235 [main] VF:   method: getType()→int
+07-25 07:41:39.236 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.259 [main] VF: ◆FOUND b31.l: r43.l
+07-25 07:41:39.261 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.262 [main] VF:   method: getType()→int
+07-25 07:41:39.263 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.265 [main] VF: ◆FOUND b31.j: rf4.j
+07-25 07:41:39.266 [main] VF:   method: B(b)→void
+07-25 07:41:39.266 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.266 [main] VF:   method: getType()→int
+07-25 07:41:39.267 [main] VF:   method: j(Object)→void
+07-25 07:41:39.267 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.268 [main] VF:   method: securityLimitCount()→int
+07-25 07:41:39.268 [main] VF:   method: securityVerificationChecked(v0)→o1
+07-25 07:41:39.269 [main] VF:   method: x()→void
+07-25 07:41:39.278 [main] VF: ◆FOUND b31.l: s71.l
+07-25 07:41:39.279 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.279 [main] VF:   method: getType()→int
+07-25 07:41:39.280 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.284 [main] VF: ◆FOUND b31.j: sn4.j
+07-25 07:41:39.285 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.285 [main] VF:   method: getType()→int
+07-25 07:41:39.286 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.288 [main] VF: ◆FOUND b31.l: su4.l
+07-25 07:41:39.288 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.289 [main] VF:   method: getType()→int
+07-25 07:41:39.289 [main] VF:   method: getUri()→String
+07-25 07:41:39.289 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
+07-25 07:41:39.293 [main] VF: ◆FOUND b31.j: t93.j
+07-25 07:41:39.294 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.294 [main] VF:   method: getType()→int
+07-25 07:41:39.295 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.298 [main] VF: ◆FOUND SceneVoice p0: tl.p0
+07-25 07:41:39.298 [main] VF:   method: a()→String
+07-25 07:41:39.299 [main] VF:   method: b(e1)→void
+07-25 07:41:39.299 [main] VF:   method: c()→long
+07-25 07:41:39.300 [main] VF:   method: cancel()→boolean
+07-25 07:41:39.300 [main] VF:   method: d()→int
+07-25 07:41:39.300 [main] VF:   method: e()→int
+07-25 07:41:39.301 [main] VF:   method: f()→void
+07-25 07:41:39.301 [main] VF:   method: g(String,e9)→boolean
+07-25 07:41:39.301 [main] VF:   method: h(f1)→void
+07-25 07:41:39.302 [main] VF:   method: i()→boolean
+07-25 07:41:39.302 [main] VF:   method: j()→e9
+07-25 07:41:39.303 [main] VF:   method: k()→int
+07-25 07:41:39.303 [main] VF:   method: l()→void
+07-25 07:41:39.303 [main] VF:   method: m()→boolean
+07-25 07:41:39.304 [main] VF:   method: n()→void
+07-25 07:41:39.304 [main] VF:   method: reset()→void
+07-25 07:41:39.305 [main] VF:   method: stop()→boolean
+07-25 07:41:39.306 [main] VF: ◆Hooked tl.p0.stop() REPLACEMENT
+07-25 07:41:39.326 [main] VF: ◆FOUND b31.j: vx3.j
+07-25 07:41:39.327 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.328 [main] VF:   method: getType()→int
+07-25 07:41:39.328 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
+07-25 07:41:39.330 [main] VF: ◆FOUND b31.l: w62.l
+07-25 07:41:39.330 [main] VF:   method: H(boolean)→LinkedList
+07-25 07:41:39.331 [main] VF:   method: I(int)→void
+07-25 07:41:39.331 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.332 [main] VF:   method: getType()→int
+07-25 07:41:39.332 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.336 [main] VF: ◆FOUND b31.j: wn4.j
+07-25 07:41:39.337 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.337 [main] VF:   method: getType()→int
+07-25 07:41:39.338 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
+07-25 07:41:39.346 [main] VF: ◆FOUND b31.j: xt4.j
+07-25 07:41:39.347 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.347 [main] VF:   method: getType()→int
+07-25 07:41:39.348 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
+07-25 07:41:39.348 [main] VF: ◆FOUND b31.l: xt4.l
+07-25 07:41:39.348 [main] VF:   method: doScene(s,u0)→int
+07-25 07:41:39.349 [main] VF:   method: getType()→int
+07-25 07:41:39.349 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
+07-25 07:41:39.352 [main] VF: ◆FOUND x0 utils: y16.x0
+07-25 07:41:39.352 [main] VF:   method: H()→List
+07-25 07:41:39.353 [main] VF:   method: J(c)→k1
+07-25 07:41:39.353 [main] VF:   method: e()→m
+07-25 07:41:39.353 [main] VF:   method: f0(u0)→Object
+07-25 07:41:39.354 [main] VF:   method: h(c,l)→Collection
+07-25 07:41:39.354 [main] VF:   method: i()→o
+07-25 07:41:39.354 [main] VF:   method: i0()→void
+07-25 07:41:39.355 [main] VF:   method: p(v0)→boolean
+07-25 07:41:39.355 [main] VF:   method: t(o,Object)→Object
+07-25 07:41:39.355 [main] VF:   method: toString()→String
+07-25 07:41:39.356 [main] VF: ◆FOUND x0 utils: y21.x0
+07-25 07:41:39.357 [main] VF:   method: a(e9,String)→boolean
+07-25 07:41:39.357 [main] VF:   method: b(String)→boolean
+07-25 07:41:39.357 [main] VF:   method: c(String)→boolean
+07-25 07:41:39.358 [main] VF:   method: d(w0,boolean,int,String,String,p0)→long
+07-25 07:41:39.358 [main] VF:   method: e(e9,String)→boolean
+07-25 07:41:39.359 [main] VF:   method: f(int,byte[],int,int)→int
+07-25 07:41:39.359 [main] VF:   method: g(String,String)→String
+07-25 07:41:39.359 [main] VF:   method: h(e9,String)→j
+07-25 07:41:39.360 [main] VF:   method: i(y,String,String,boolean)→j
+07-25 07:41:39.360 [main] VF:   method: j(String)→w0
+07-25 07:41:39.360 [main] VF:   method: k(String)→e9
+07-25 07:41:39.361 [main] VF:   method: l(int,CancellationSignal)→List
+07-25 07:41:39.361 [main] VF:   method: m(long)→float
+07-25 07:41:39.361 [main] VF:   method: n(e9)→boolean
+07-25 07:41:39.362 [main] VF:   method: o(e9)→boolean
+07-25 07:41:39.362 [main] VF:   method: p(String)→boolean
+07-25 07:41:39.362 [main] VF:   method: q(e9)→void
+07-25 07:41:39.363 [main] VF:   method: r(String,String,int)→String
+07-25 07:41:39.363 [main] VF:   method: s(String)→boolean
+07-25 07:41:39.363 [main] VF:   method: t(String,int,int,e9)→boolean
+07-25 07:41:39.364 [main] VF:   method: u(String,int,p0)→int
+07-25 07:41:39.364 [main] VF:   method: v(w0,p0)→boolean
+07-25 07:41:39.365 [main] VF:   method: w(w0)→boolean
+07-25 07:41:39.365 [main] VF:   method: x(y,String,String,byte[])→boolean
+07-25 07:41:39.395 [main] VF: ready — do a native forward to trace API
+07-25 07:41:39.396 [leshao-scheduler] SchedulerService: scheduler started
+07-25 07:41:39.651 [main] TtsEngine: TTS init OK
+07-25 07:41:40.839 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-25 07:41:40.840 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-25 07:41:40.842 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-25 07:41:40.843 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-25 07:41:40.844 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-25 07:41:41.001 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-25 07:41:41.003 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-25 07:41:41.004 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-25 07:41:41.005 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-25 07:41:41.007 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-25 07:41:41.535 [main] VF: qe.v0(V:Toolbar)
+07-25 07:41:41.545 [main] VF: TranslateControllerView.a(V:TranslateControllerView,Integer)
+07-25 07:41:41.595 [main] VF: zm.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-25 07:41:41.596 [main] VF: ym.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-25 07:41:41.598 [main] VF: a1.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-25 07:41:41.599 [main] VF: so.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-25 07:41:41.600 [main] VF: sf.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-25 07:41:41.602 [main] VF: s2.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-25 07:41:41.602 [main] VF: h6.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-25 07:41:41.611 [main] VF: cj.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-25 07:41:41.612 [main] VF: n7.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-25 07:41:41.613 [main] VF: g9.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-25 07:41:41.614 [main] VF: c0.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-25 07:41:41.614 [main] VF: k.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-25 07:41:41.615 [main] VF: k1.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-25 07:41:41.616 [main] VF: g7.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-25 07:41:41.627 [main] VF: TranslateControllerView.a(V:TranslateControllerView,Integer)
+07-25 07:41:41.636 [main] VF: qe.v0(V:Toolbar)
+07-25 07:41:41.647 [main] VF: TranslateControllerView.a(V:TranslateControllerView,Integer)
+07-25 07:41:41.651 [main] VF: hn.G(gd,null)
+07-25 07:41:41.665 [main] VF: hn.G(gd,null)
+07-25 07:41:41.669 [main] VF: hn.G(gd,null)
+07-25 07:41:41.676 [main] VF: g0.create(V:fh)
+07-25 07:41:41.682 [main] VF: hq.b(V:fh,Boolean,Boolean)
+07-25 07:41:41.684 [main] VF: wp.G(gd,null)
+07-25 07:41:41.685 [main] VF: a0.U(V:ChattingAvatarImageView,String,null)
+07-25 07:41:41.695 [main] VF: g0.create(V:fh)
+07-25 07:41:41.700 [main] VF: hq.b(V:fh,Boolean,Boolean)
+07-25 07:41:41.702 [main] VF: wp.G(gd,null)
+07-25 07:41:41.703 [main] VF: a0.U(V:ChattingAvatarImageView,String,null)
+07-25 07:41:43.148 [main] VF: === FOUND [wp.R] msgId=0 talker= msg=vo ===
+07-25 07:41:43.149 [main] VF:   sPendingMsg: com.tencent.mm.ui.chatting.viewitems.vo extends es {R=1 S=null A=0 B=0 C=null D=null E=-1 F=null G=null H=0 I=null J=null K=null L=null M=null N=0 O=0 P=null Q=null a=d b=null c=false d=hq e=null f=null g=null h=null i=null j=false k=false l=0 m=null n=null o=0 p=null q=null r=null s=null t=0 u=null v=null w=null x=null y=0 z=null }
+07-25 07:41:43.151 [main] VF:   ★ c() → com.tencent.mm.storage.e9
+07-25 07:41:43.152 [main] VF:   ★ c msgId=76284
+07-25 07:41:43.154 [main] VF:   args: [0]=g4 [1]=TextView:T=vo [2]=d 
+07-25 07:41:43.156 [main] VF:   parent[4]=fh tag=com.tencent.mm.ui.chatting.viewitems.hq {A=RelativeLayout B=RelativeLayout C=TextView D=null E=LinearLayout b=254 c=TextView d=TextView e=AnimImageView f=ViewStub g=ViewStub h=null i=null j=null k=null l=null m=null n= o=FrameLayout p=null q=null r=TextView s=ProgressBar t=AnimImageView u=TextView v=null w=null x=ImageView y=RelativeLayout z=TextView }
+07-25 07:41:43.157 [main] VF: View.tag: com.tencent.mm.ui.chatting.viewitems.vo
+07-25 07:41:43.157 [main] VF: added via add(int,int,int,CharSequence)
+07-25 07:41:43.173 [main] VF: >>> MENU_ID found in n0.a elapsed=16ms <<<
+07-25 07:41:43.183 [main] VF: >>> MENU_ID found in n0.a elapsed=26ms <<<
+07-25 07:41:43.567 [[GT]ColdPool#10] MessageHook: #1 type=43->43 isSend=4298 talker=47757372655@chatroom content=wxid_qikyjsnjslw212:0:0
+
+07-25 07:41:43.579 [[GT]ColdPool#10] MessageHook: #2 type=43->43 isSend=12666 talker=24207296042@chatroom content=wxid_qikyjsnjslw212:0:0
+
+07-25 07:41:43.593 [[GT]ColdPool#10] MessageHook: #3 type=3->3 isSend=12663 talker=49830920700@chatroom content=wxid_zpher75ag8bm21:
 <?xml version="1.0"...
-07-25 00:55:33.558 [[GT]ColdPool#6] MessageHook: #8 type=1->1 isSend=2299 talker=22271795842@chatroom content=wxid_y28cprugwm5w12:
- 正宗潮汕牛肉丸！厂家直发，零售也享批...
-07-25 00:55:33.581 [[GT]ColdPool#6] MessageHook: #9 type=3->3 isSend=2299 talker=22271795842@chatroom content=wxid_y28cprugwm5w12:
+07-25 07:41:43.609 [[GT]ColdPool#10] MessageHook: #4 type=3->3 isSend=12663 talker=49830920700@chatroom content=wxid_zpher75ag8bm21:
 <?xml version="1.0"...
-07-25 00:55:33.597 [[GT]ColdPool#6] MessageHook: #10 type=3->3 isSend=12095 talker=45328847051@chatroom content=wxid_r9tr08wn5rx122:
-<?xml version="1.0"...
-07-25 00:55:33.617 [[GT]ColdPool#6] MessageHook: #11 type=3->3 isSend=12095 talker=45328847051@chatroom content=wxid_r9tr08wn5rx122:
-<?xml version="1.0"...
-07-25 00:55:33.638 [[GT]ColdPool#6] MessageHook: #12 type=318767153->49 isSend=1925 talker=gh_3dfda90e39d6 content=<msg> <appmsg appid="" sdkver="0">     <...
-07-25 00:55:33.690 [[GT]ColdPool#6] MessageHook: #13 type=318767153->49 isSend=1925 talker=gh_3dfda90e39d6 content=<msg> <appmsg appid="" sdkver="0">     <...
-07-25 00:55:33.802 [[GT]ColdPool#6] MessageHook: #14 type=318767153->49 isSend=1925 talker=gh_3dfda90e39d6 content=<msg> <appmsg appid="" sdkver="0">     <...
-07-25 02:56:39.372 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-25 02:56:39.374 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-25 02:56:39.375 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-25 02:56:39.376 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-25 02:56:39.378 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-25 03:32:14.133 [[GT]ColdPool#4] MessageHook: #15 type=754974769->49 isSend=721 talker=23170398730@chatroom content=wxid_yd59n8og9f6m12:
-<?xml version="1.0"...
-07-25 03:32:14.182 [[GT]ColdPool#4] MessageHook: #16 type=1->1 isSend=48 talker=25730409559@chatroom content=wxid_y28cprugwm5w12:
- 正宗潮汕牛肉丸！厂家直发，零售也享批...
-07-25 03:32:14.209 [[GT]ColdPool#4] MessageHook: #17 type=3->3 isSend=48 talker=25730409559@chatroom content=wxid_y28cprugwm5w12:
-<?xml version="1.0"...
-07-25 03:32:14.230 [[GT]ColdPool#4] MessageHook: #18 type=43->43 isSend=49 talker=48321925870@chatroom content=wxid_mfq0pdkff4bz22:0:0
+07-25 07:41:43.618 [[GT]ColdPool#10] MessageHook: #5 type=1->1 isSend=12663 talker=49830920700@chatroom content=wxid_zpher75ag8bm21:
+开工，还带着体温的肉[跳跳]
+07-25 07:41:43.633 [[GT]ColdPool#10] MessageHook: #6 type=43->43 isSend=7780 talker=23314569660@chatroom content=wxid_qikyjsnjslw212:0:0
 
-07-25 03:32:14.266 [[GT]ColdPool#4] MessageHook: #19 type=43->43 isSend=12671 talker=44679649572@chatroom content=wxid_bhgv5hsx3yjk22:0:0
+07-25 07:41:43.644 [[GT]ColdPool#10] MessageHook: #7 type=1->1 isSend=12666 talker=24207296042@chatroom content=wxid_8heg765fiix422:
+@彭康明-黄牛肉(短码6775) 
+07-25 07:41:43.648 [[GT]ColdPool#10] MessageHook: #8 type=43->43 isSend=12663 talker=49830920700@chatroom content=wxid_zpher75ag8bm21:0:0
 
-07-25 03:32:14.275 [[GT]ColdPool#4] MessageHook: #20 type=1->1 isSend=6209 talker=21916245815@chatroom content=wxid_wkyzjmds2pmv22:
-【🚗类型🚗 】车找人
-【时间】7月...
-07-25 03:32:14.281 [[GT]ColdPool#4] MessageHook: #21 type=1->1 isSend=54 talker=25295891650@chatroom content=wxid_wkyzjmds2pmv22:
-【🚗类型🚗 】车找人
-【时间】7月...
-07-25 05:06:39.551 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-25 05:06:39.553 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-25 05:06:39.555 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-25 05:06:39.558 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-25 05:06:39.560 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-25 07:12:13.018 [[GT]ColdPool#5] MessageHook: #22 type=1->1 isSend=6209 talker=21916245815@chatroom content=wxid_14cjkxb1tbdr22:
-【🚗类型🚗 】车找人
-【时间】7月...
-07-25 07:12:13.040 [[GT]ColdPool#5] MessageHook: #23 type=754974769->49 isSend=51 talker=23149434800@chatroom content=wxid_xk1k0drahvzz22:
-<?xml version="1.0"...
-07-25 07:12:13.059 [[GT]ColdPool#5] MessageHook: #24 type=754974769->49 isSend=51 talker=23149434800@chatroom content=wxid_xk1k0drahvzz22:
-<?xml version="1.0"...
-07-25 07:12:13.085 [[GT]ColdPool#5] MessageHook: #25 type=3->3 isSend=2299 talker=22271795842@chatroom content=wxid_e6crajbg5lut22:
-<?xml version="1.0"...
-07-25 07:12:13.101 [[GT]ColdPool#5] MessageHook: #26 type=1->1 isSend=9200 talker=23552094189@chatroom content=wxid_aj2tll4v80mc22:
-               买卖  ...
-07-25 07:12:13.110 [[GT]ColdPool#5] MessageHook: #27 type=1->1 isSend=32 talker=18628618055@chatroom content=wxid_14cjkxb1tbdr22:
-【🚗类型🚗 】车找人
-【时间】7月...
-07-25 07:12:13.120 [[GT]ColdPool#5] MessageHook: #28 type=43->43 isSend=12095 talker=45328847051@chatroom content=wxid_bzw7fn0ynn4a22:0:0
+07-25 07:41:43.653 [[GT]ColdPool#10] MessageHook: #9 type=1->1 isSend=12666 talker=24207296042@chatroom content=wxid_8heg765fiix422:
+几钱一斤了
+07-25 07:41:43.657 [[GT]ColdPool#10] MessageHook: #10 type=1->1 isSend=12663 talker=49830920700@chatroom content=wxid_zpher75ag8bm21:
+农家豆角，炒好易能，2.5元1斤[勾引...
+07-25 07:41:43.661 [[GT]ColdPool#10] MessageHook: #11 type=1->1 isSend=9200 talker=23552094189@chatroom content=wxid_mam8dwvju8m522:
+4A5A里美牌泰国南部山竹，枝头新鲜，...
+07-25 07:41:43.666 [[GT]ColdPool#10] MessageHook: #12 type=43->43 isSend=9200 talker=23552094189@chatroom content=wxid_mam8dwvju8m522:0:0
 
-07-25 07:12:13.135 [[GT]ColdPool#5] MessageHook: #29 type=43->43 isSend=52 talker=49735108879@chatroom content=wxid_bzw7fn0ynn4a22:0:0
+07-25 07:41:43.672 [[GT]ColdPool#10] MessageHook: #13 type=43->43 isSend=12663 talker=49830920700@chatroom content=wxid_zpher75ag8bm21:0:0
 
-07-25 07:12:13.148 [[GT]ColdPool#5] MessageHook: #30 type=43->43 isSend=3404 talker=43882405797@chatroom content=wxid_hddhop9u534k21:0:0
-
-07-25 07:12:13.161 [[GT]ColdPool#5] MessageHook: #31 type=1->1 isSend=3404 talker=43882405797@chatroom content=wxid_hddhop9u534k21:
-7月25号  
-刚卸完车  超级老水文...
-07-25 07:12:13.168 [[GT]ColdPool#5] MessageHook: #32 type=43->43 isSend=13774 talker=7824133803@chatroom content=wxid_hddhop9u534k21:0:0
-
-07-25 07:12:13.182 [[GT]ColdPool#5] MessageHook: #33 type=1->1 isSend=13774 talker=7824133803@chatroom content=wxid_hddhop9u534k21:
-7月25号  
-刚卸完车  超级老水文...
-07-25 07:12:13.192 [[GT]ColdPool#5] MessageHook: #34 type=1->1 isSend=13774 talker=7824133803@chatroom content=wxid_csurjz1zhukg22:
-一个多重呀
-07-25 07:12:13.200 [[GT]ColdPool#5] MessageHook: #35 type=1->1 isSend=13774 talker=7824133803@chatroom content=wxid_csurjz1zhukg22:
-@眞眞 
-07-25 07:12:13.209 [[GT]ColdPool#5] MessageHook: #36 type=1->1 isSend=13774 talker=7824133803@chatroom content=wxid_hddhop9u534k21:
-三斤多  四斤
-07-25 07:12:13.216 [[GT]ColdPool#5] MessageHook: #37 type=1->1 isSend=13774 talker=7824133803@chatroom content=wxid_csurjz1zhukg22:
-好的
-07-25 07:12:13.223 [[GT]ColdPool#5] MessageHook: #38 type=754974769->49 isSend=26 talker=22110637730@chatroom content=wxid_b3sw86ly1v2s21:
-<?xml version="1.0"...
-07-25 07:12:13.238 [[GT]ColdPool#5] MessageHook: #39 type=754974769->49 isSend=3942 talker=5738091646@chatroom content=wxid_b3sw86ly1v2s21:
-<?xml version="1.0"...
-07-25 07:12:13.254 [[GT]ColdPool#5] MessageHook: #40 type=3->3 isSend=12095 talker=45328847051@chatroom content=wxid_x9ucz2pn3vpt22:
-<?xml version="1.0"...
-07-25 07:12:13.268 [[GT]ColdPool#5] MessageHook: #41 type=3->3 isSend=12095 talker=45328847051@chatroom content=wxid_x9ucz2pn3vpt22:
-<?xml version="1.0"...
-07-25 07:12:13.284 [[GT]ColdPool#5] MessageHook: #42 type=3->3 isSend=12095 talker=45328847051@chatroom content=wxid_x9ucz2pn3vpt22:
-<?xml version="1.0"...
-07-25 07:12:13.296 [[GT]ColdPool#5] MessageHook: #43 type=1->1 isSend=12095 talker=45328847051@chatroom content=wxid_x9ucz2pn3vpt22:
-今天的新鲜靓货哈
-腩肉新鲜炸扣肉[色]...
-07-25 07:12:13.306 [[GT]ColdPool#5] MessageHook: #44 type=47->47 isSend=2299 talker=22271795842@chatroom content=wxid_om1f7pts3jwi12:0:0:aea010d993646221...
-07-25 07:12:13.318 [[GT]ColdPool#5] MessageHook: #45 type=47->47 isSend=12667 talker=45177926004@chatroom content=wxid_om1f7pts3jwi12:0:0:aea010d993646221...
-07-25 07:12:13.326 [[GT]ColdPool#5] MessageHook: #46 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-❤️青蛙王子·捡漏❤️
-07-25 07:12:13.342 [[GT]ColdPool#5] MessageHook: #47 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.358 [[GT]ColdPool#5] MessageHook: #48 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.375 [[GT]ColdPool#5] MessageHook: #49 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.398 [[GT]ColdPool#5] MessageHook: #50 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.412 [[GT]ColdPool#5] MessageHook: #51 type=754974769->49 isSend=2720 talker=1097203234@chatroom content=wxid_gziv9f6rzpa912:
-<?xml version="1.0"...
-07-25 07:12:13.429 [[GT]ColdPool#5] MessageHook: #52 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.445 [[GT]ColdPool#5] MessageHook: #53 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.455 [[GT]ColdPool#5] MessageHook: #54 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-爸爸妈妈们，
-快给宝贝买新衣服！
-青蛙王子，专柜来清仓啦
-...
-07-25 07:12:13.460 [[GT]ColdPool#5] MessageHook: #55 type=1->1 isSend=2720 talker=1097203234@chatroom content=wxid_gziv9f6rzpa912:
-向幸福出发，
-做更好的自己，
-明智选择...
-07-25 07:12:13.492 [[GT]ColdPool#5] MessageHook: #56 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.512 [[GT]ColdPool#5] MessageHook: #57 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.522 [[GT]ColdPool#5] MessageHook: #58 type=1->1 isSend=54 talker=25295891650@chatroom content=aaron174739:
-【车找人】🚗直达快车🚗
-时间 ：8点左右
-起点 ：...
-07-25 07:12:13.535 [[GT]ColdPool#5] MessageHook: #59 type=1->1 isSend=36 talker=7215621333@chatroom content=aaron174739:
-【车找人】🚗直达快车🚗
-时间 ：8点左右
-起点 ：...
-07-25 07:12:13.543 [[GT]ColdPool#5] MessageHook: #60 type=1->1 isSend=46 talker=2097769708@chatroom content=aaron174739:
-【车找人】🚗直达快车🚗
-时间 ：8点左右
-起点 ：...
-07-25 07:12:13.554 [[GT]ColdPool#5] MessageHook: #61 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.568 [[GT]ColdPool#5] MessageHook: #62 type=1->1 isSend=43 talker=49222549277@chatroom content=aaron174739:
-【车找人】🚗直达快车🚗
-时间 ：8点左右
-起点 ：...
-07-25 07:12:13.582 [[GT]ColdPool#5] MessageHook: #63 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.600 [[GT]ColdPool#5] MessageHook: #64 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.613 [[GT]ColdPool#5] MessageHook: #65 type=1->1 isSend=49 talker=48321925870@chatroom content=wxid_agk06weipe1922:
-        [玫瑰]过来人的真心话...
-07-25 07:12:13.635 [[GT]ColdPool#5] MessageHook: #66 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.650 [[GT]ColdPool#5] MessageHook: #67 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.665 [[GT]ColdPool#5] MessageHook: #68 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.675 [[GT]ColdPool#5] MessageHook: #69 type=1->1 isSend=43 talker=49222549277@chatroom content=zhou296755:
- 车  找  人
-
- 时间： 早上7点出发
-
-起点  :...
-07-25 07:12:13.684 [[GT]ColdPool#5] MessageHook: #70 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.694 [[GT]ColdPool#5] MessageHook: #71 type=1->1 isSend=46 talker=2097769708@chatroom content=zhou296755:
- 车  找  人
-
- 时间： 早上7点出发
-
-起点  :...
-07-25 07:12:13.702 [[GT]ColdPool#5] MessageHook: #72 type=1->1 isSend=29 talker=11021177242@chatroom content=zhou296755:
- 车  找  人
-
- 时间： 早上7点出发
-
-起点  :...
-07-25 07:12:13.710 [[GT]ColdPool#5] MessageHook: #73 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-这些外套，一定要早下手！
-都是专柜款啊！
-质量真的很好！
-...
-07-25 07:12:13.717 [[GT]ColdPool#5] MessageHook: #74 type=1->1 isSend=45 talker=21730591086@chatroom content=zhou296755:
- 车  找  人
-
- 时间： 早上7点出发
-
-起点  :...
-07-25 07:12:13.724 [[GT]ColdPool#5] MessageHook: #75 type=1->1 isSend=27 talker=34831702152@chatroom content=zhou296755:
- 车  找  人
-
- 时间： 早上7点出发
-
-起点  :...
-07-25 07:12:13.731 [[GT]ColdPool#5] MessageHook: #76 type=1->1 isSend=35 talker=17402151153@chatroom content=zhou296755:
- 车  找  人
-
- 时间： 早上7点出发
-
-起点  :...
-07-25 07:12:13.743 [[GT]ColdPool#5] MessageHook: #77 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.756 [[GT]ColdPool#5] MessageHook: #78 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:13.770 [[GT]ColdPool#5] MessageHook: #79 type=49->49 isSend=53 talker=11586179019@chatroom content=oulele002:
-<msg><appmsg><title>【🔥低至9.9元...
-07-25 07:12:13.778 [[GT]ColdPool#5] MessageHook: #80 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-@爸爸妈妈们，速速回群！
-青蛙王子专柜清仓！
-十几二十多?...
-07-25 07:12:13.784 [[GT]ColdPool#5] MessageHook: #81 type=1->1 isSend=29 talker=11021177242@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.791 [[GT]ColdPool#5] MessageHook: #82 type=1->1 isSend=46 talker=2097769708@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.797 [[GT]ColdPool#5] MessageHook: #83 type=1->1 isSend=36 talker=7215621333@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.802 [[GT]ColdPool#5] MessageHook: #84 type=1->1 isSend=36 talker=7215621333@chatroom content=wxid_ykm4yznugri722:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.806 [[GT]ColdPool#5] MessageHook: #85 type=1->1 isSend=46 talker=2097769708@chatroom content=wxid_ykm4yznugri722:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.812 [[GT]ColdPool#5] MessageHook: #86 type=1->1 isSend=29 talker=11021177242@chatroom content=wxid_ykm4yznugri722:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.817 [[GT]ColdPool#5] MessageHook: #87 type=1->1 isSend=45 talker=21730591086@chatroom content=wxid_ykm4yznugri722:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.822 [[GT]ColdPool#5] MessageHook: #88 type=1->1 isSend=27 talker=34831702152@chatroom content=wxid_ykm4yznugri722:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.827 [[GT]ColdPool#5] MessageHook: #89 type=1->1 isSend=35 talker=17402151153@chatroom content=wxid_ykm4yznugri722:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.833 [[GT]ColdPool#5] MessageHook: #90 type=1->1 isSend=44 talker=7937897945@chatroom content=wxid_ykm4yznugri722:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.839 [[GT]ColdPool#5] MessageHook: #91 type=1->1 isSend=38 talker=25536537447@chatroom content=wxid_ykm4yznugri722:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.846 [[GT]ColdPool#5] MessageHook: #92 type=1->1 isSend=32 talker=18628618055@chatroom content=wxid_ykm4yznugri722:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.851 [[GT]ColdPool#5] MessageHook: #93 type=1->1 isSend=43 talker=49222549277@chatroom content=wxid_ykm4yznugri722:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.857 [[GT]ColdPool#5] MessageHook: #94 type=1->1 isSend=43 talker=49222549277@chatroom content=wxid_bmzwjk7fgvvi22:
-车找人 🚄  直达快车
-时间 :8点...
-07-25 07:12:13.862 [[GT]ColdPool#5] MessageHook: #95 type=1->1 isSend=27 talker=34831702152@chatroom content=wxid_5rmgbt17r25d22:
-车找人  
-时间：8:00
-起点:  ...
-07-25 07:12:13.866 [[GT]ColdPool#5] MessageHook: #96 type=1->1 isSend=29 talker=11021177242@chatroom content=wxid_bmzwjk7fgvvi22:
-车找人 🚄  直达快车
-时间 :8点...
-07-25 07:12:13.873 [[GT]ColdPool#5] MessageHook: #97 type=1->1 isSend=29 talker=11021177242@chatroom content=wxid_5rmgbt17r25d22:
-车找人  
-时间：8:00
-起点:  ...
-07-25 07:12:13.880 [[GT]ColdPool#5] MessageHook: #98 type=1->1 isSend=46 talker=2097769708@chatroom content=wxid_bmzwjk7fgvvi22:
-车找人 🚄  直达快车
-时间 :8点...
-07-25 07:12:13.884 [[GT]ColdPool#5] MessageHook: #99 type=1->1 isSend=35 talker=17402151153@chatroom content=wxid_5rmgbt17r25d22:
-车找人  
-时间：8:00
-起点:  ...
-07-25 07:12:13.889 [[GT]ColdPool#5] MessageHook: #100 type=1->1 isSend=37 talker=23818285582@chatroom content=wxid_5rmgbt17r25d22:
-车找人  
-时间：8:00
-起点:  ...
-07-25 07:12:13.897 [[GT]ColdPool#5] MessageHook: #101 type=1->1 isSend=46 talker=2097769708@chatroom content=wxid_bmzwjk7fgvvi22:
-车找人 🚄  直达快车
-时间 :8点...
-07-25 07:12:13.906 [[GT]ColdPool#5] MessageHook: #102 type=1->1 isSend=43 talker=49222549277@chatroom content=wxid_bmzwjk7fgvvi22:
-车找人 🚄  直达快车
-时间 :8点...
-07-25 07:12:13.912 [[GT]ColdPool#5] MessageHook: #103 type=1->1 isSend=35 talker=17402151153@chatroom content=wxid_nd4fk1pw6xb222:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.916 [[GT]ColdPool#5] MessageHook: #104 type=1->1 isSend=29 talker=11021177242@chatroom content=wxid_nd4fk1pw6xb222:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.923 [[GT]ColdPool#5] MessageHook: #105 type=1->1 isSend=43 talker=49222549277@chatroom content=wxid_nd4fk1pw6xb222:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.928 [[GT]ColdPool#5] MessageHook: #106 type=1->1 isSend=44 talker=7937897945@chatroom content=wxid_nd4fk1pw6xb222:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.935 [[GT]ColdPool#5] MessageHook: #107 type=1->1 isSend=45 talker=21730591086@chatroom content=wxid_nd4fk1pw6xb222:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.939 [[GT]ColdPool#5] MessageHook: #108 type=1->1 isSend=36 talker=7215621333@chatroom content=wxid_nd4fk1pw6xb222:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.970 [[GT]ColdPool#5] MessageHook: #109 type=1->1 isSend=41 talker=48811616092@chatroom content=wxid_nd4fk1pw6xb222:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:12:13.981 [[GT]ColdPool#5] MessageHook: #110 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-❤️专柜大牌美妆❤️
-07-25 07:12:13.989 [[GT]ColdPool#5] MessageHook: #111 type=1->1 isSend=3717 talker=48338996712@chatroom content=wxid_iuxo4fjb2vxk22:
-好吃的榴莲回到货[庆祝][庆祝]
-继续...
-07-25 07:12:14.000 [[GT]ColdPool#5] MessageHook: #112 type=3->3 isSend=3717 talker=48338996712@chatroom content=wxid_iuxo4fjb2vxk22:
-<?xml version="1.0"...
-07-25 07:12:14.014 [[GT]ColdPool#5] MessageHook: #113 type=3->3 isSend=3717 talker=48338996712@chatroom content=wxid_iuxo4fjb2vxk22:
-<?xml version="1.0"...
-07-25 07:12:14.028 [[GT]ColdPool#5] MessageHook: #114 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.041 [[GT]ColdPool#5] MessageHook: #115 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.051 [[GT]ColdPool#5] MessageHook: #116 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-快快快！快抢这个单肩包
-限量100个，先到先得！
-小伙伴反...
-07-25 07:12:14.062 [[GT]ColdPool#5] MessageHook: #117 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.072 [[GT]ColdPool#5] MessageHook: #118 type=1->1 isSend=43 talker=49222549277@chatroom content=wxid_bzwphetn9iy722:
-车找人
-起点：新安
-终点：化州
-时间：...
-07-25 07:12:14.078 [[GT]ColdPool#5] MessageHook: #119 type=1->1 isSend=27 talker=34831702152@chatroom content=wxid_bzwphetn9iy722:
-车找人
-起点：新安
-终点：化州
-时间：...
-07-25 07:12:14.093 [[GT]ColdPool#5] MessageHook: #120 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.105 [[GT]ColdPool#5] MessageHook: #121 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.121 [[GT]ColdPool#5] MessageHook: #122 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.130 [[GT]ColdPool#5] MessageHook: #123 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-CPB的日间防护乳！
-79.9到手50ml，速速抢！
-正装...
-07-25 07:12:14.150 [[GT]ColdPool#5] MessageHook: #124 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.161 [[GT]ColdPool#5] MessageHook: #125 type=1->1 isSend=43 talker=49222549277@chatroom content=wxid_x0jg4sg6bapn22:
-【🚙车找人】
-直达快车🚗
-
-起点:...
-07-25 07:12:14.168 [[GT]ColdPool#5] MessageHook: #126 type=1->1 isSend=27 talker=34831702152@chatroom content=wxid_x0jg4sg6bapn22:
-【🚙车找人】
-直达快车🚗
-
-起点:...
-07-25 07:12:14.173 [[GT]ColdPool#5] MessageHook: #127 type=1->1 isSend=45 talker=21730591086@chatroom content=wxid_x0jg4sg6bapn22:
-【🚙车找人】
-直达快车🚗
-
-起点:...
-07-25 07:12:14.177 [[GT]ColdPool#5] MessageHook: #128 type=1->1 isSend=44 talker=7937897945@chatroom content=wxid_x0jg4sg6bapn22:
-【🚙车找人】
-直达快车🚗
-
-起点:...
-07-25 07:12:14.185 [[GT]ColdPool#5] MessageHook: #129 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.197 [[GT]ColdPool#5] MessageHook: #130 type=1->1 isSend=35 talker=17402151153@chatroom content=wxid_x0jg4sg6bapn22:
-【🚙车找人】
-直达快车🚗
-
-起点:...
-07-25 07:12:14.202 [[GT]ColdPool#5] MessageHook: #131 type=1->1 isSend=29 talker=11021177242@chatroom content=wxid_x0jg4sg6bapn22:
-【🚙车找人】
-直达快车🚗
-
-起点:...
-07-25 07:12:14.213 [[GT]ColdPool#5] MessageHook: #132 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.226 [[GT]ColdPool#5] MessageHook: #133 type=754974769->49 isSend=12670 talker=49415615410@chatroom content=wxid_51wdgrpcmlno22:
-<?xml version="1.0"...
-07-25 07:12:14.237 [[GT]ColdPool#5] MessageHook: #134 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-防晒吖！晒黑啦！长斑啦！
-赶紧安排蓝胖子吧～
-
-46.9?...
-07-25 07:12:14.248 [[GT]ColdPool#5] MessageHook: #135 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.272 [[GT]ColdPool#5] MessageHook: #136 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.287 [[GT]ColdPool#5] MessageHook: #137 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.301 [[GT]ColdPool#5] MessageHook: #138 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.311 [[GT]ColdPool#5] MessageHook: #139 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-金盏花爽肤水，油痘肌都安排吖
-56.9🉐️120ml，划...
-07-25 07:12:14.323 [[GT]ColdPool#5] MessageHook: #140 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.337 [[GT]ColdPool#5] MessageHook: #141 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-25 07:12:14.350 [[GT]ColdPool#5] MessageHook: #142 type=49->49 isSend=53 talker=11586179019@chatroom content=oulele002:
-<msg><appmsg><title>【秒杀9.9元起】...
-07-25 07:12:14.358 [[GT]ColdPool#5] MessageHook: #143 type=43->43 isSend=52 talker=49735108879@chatroom content=wxid_rqgeifvtp6mp22:0:0
-
-07-25 07:12:14.371 [[GT]ColdPool#5] MessageHook: #144 type=49->49 isSend=53 talker=11586179019@chatroom content=oulele002:
-<msg><appmsg><title>【🔥低至39.9...
-07-25 07:12:14.379 [[GT]ColdPool#5] MessageHook: #145 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-都是专柜中小样
-自用很划算！
-07-25 07:12:14.384 [[GT]ColdPool#5] MessageHook: #146 type=1->1 isSend=29 talker=11021177242@chatroom content=wxid_jadj11omd8rv22:
-               车  找...
-07-25 07:12:14.398 [[GT]ColdPool#5] MessageHook: #147 type=1->1 isSend=27 talker=34831702152@chatroom content=wxid_jadj11omd8rv22:
-               车  找...
-07-25 07:12:14.409 [[GT]ColdPool#5] MessageHook: #148 type=1->1 isSend=43 talker=49222549277@chatroom content=wxid_jadj11omd8rv22:
-               车  找...
-07-25 07:12:14.436 [[GT]ColdPool#5] MessageHook: #149 type=754974769->49 isSend=47 talker=44509651297@chatroom content=wxid_hyh5uj7viecy21:
-<?xml version="1.0"...
-07-25 07:16:39.533 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-25 07:16:39.536 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-25 07:16:39.537 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-25 07:16:39.539 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-25 07:16:39.541 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-25 07:24:33.989 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-25 07:24:34.015 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-25 07:24:34.035 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-25 07:24:34.037 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-25 07:24:34.048 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-25 07:24:34.048 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-25 07:24:34.049 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-25 07:24:34.051 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-25 07:24:34.053 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-25 07:24:34.055 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-25 07:24:34.063 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-25 07:24:34.071 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-25 07:24:34.074 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-25 07:24:34.075 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-25 07:24:34.077 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-25 07:24:34.080 [[GT]ColdPool#14] MessageHook: #150 type=1->1 isSend=2299 talker=22271795842@chatroom content=wxid_i49ilr5ps9c222:
-车找人！东莞企石厂招模具师傅补师学徒多...
-07-25 07:24:34.104 [[GT]ColdPool#14] MessageHook: #151 type=1->1 isSend=13774 talker=7824133803@chatroom content=wxid_orwrp8xryw6c22:
-清热解暑的鸡屎藤籺子已做出来，6元一斤
-07-25 07:24:34.137 [[GT]ColdPool#14] MessageHook: #152 type=43->43 isSend=13774 talker=7824133803@chatroom content=wxid_orwrp8xryw6c22:0:0
-
-07-25 07:24:34.161 [[GT]ColdPool#14] MessageHook: #153 type=1->1 isSend=29 talker=11021177242@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:24:34.186 [[GT]ColdPool#14] MessageHook: #154 type=1->1 isSend=36 talker=7215621333@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:24:34.200 [[GT]ColdPool#14] MessageHook: #155 type=1->1 isSend=46 talker=2097769708@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人，[微笑] 🚄  直达快车
-时...
-07-25 07:24:34.221 [[GT]ColdPool#14] MessageHook: #156 type=587202609->49 isSend=1979 talker=23328166663@chatroom content=wxid_99n4qvylvx3b21:
-<?xml version="1.0"...
-07-25 07:24:35.867 [[GT]ColdPool#13] MessageHook: #157 type=49->49 isSend=12667 talker=45177926004@chatroom content=wxid_6966459664822:
-<msg><appmsg><title>...
-07-25 07:27:48.417 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-25 07:27:48.419 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-25 07:27:48.424 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-25 07:27:48.427 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-25 07:27:48.427 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-25 07:27:48.428 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
-07-25 07:27:48.428 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-25 07:27:48.430 [main] ContactRepository: init: DB ready listener registered
-07-25 07:27:48.431 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-25 07:27:48.432 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-25 07:27:48.432 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-25 07:27:48.434 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-25 07:27:48.465 [main] SettingsEntryHook: LauncherUI entry hooks ok
-07-25 07:27:48.466 [main] SettingsEntryHook: INIT: hooks registered ok
-07-25 07:27:48.469 [main] MessageHook: n(e9,p0) OK
-07-25 07:27:48.470 [main] MessageHook: C(e9) OK
-07-25 07:27:48.477 [main] ContextManager: attachBaseContext DONE, ready=true
-07-25 07:27:48.478 [main] DatabaseProvider: init: already hooked via initEarly, skipping
-07-25 07:27:48.479 [main] SettingsInject: INIT: registered
-07-25 07:27:48.485 [main] TTSBroadcaster: TTS init done
-07-25 07:27:48.494 [main] AntiRecallHook: [XML] Hooked: af5.a.run()
-07-25 07:27:48.495 [main] AntiRecallHook: [Proto] Hooked: e01.u.f()
-07-25 07:27:48.498 [main] AntiRecallHook: [协程] Hooked: bd0.s.invokeSuspend()
-07-25 07:27:48.498 [main] AntiRecallHook: anti-recall hooks installed (4 paths)
-07-25 07:27:48.501 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewReceiveUI.initView()
-07-25 07:27:48.503 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI.initView()
-07-25 07:27:48.504 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI.onCreate()
-07-25 07:27:48.506 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2.onCreate()
-07-25 07:27:48.507 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI.onCreate()
-07-25 07:27:48.509 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKBeforeDetailUI.onCreate()
-07-25 07:27:48.511 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewDetailUI.onCreate()
-07-25 07:27:48.512 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI.onCreate()
-07-25 07:27:48.514 [main] RedPacket: [OK] ChattingUI.onResume()
-07-25 07:27:48.515 [main] RedPacket: RP OK
-07-25 07:27:48.516 [main] RedPacket: hooks installed (open result + UI auto-click + TTS UI)
-07-25 07:27:48.520 [main] AutoCollect: [OK] com.tencent.mm.plugin.wallet.pay.ui.WalletPayUI.onCreate()
-07-25 07:27:48.521 [main] AutoCollect: [OK] ChattingUI.onResume()
-07-25 07:27:48.523 [main] AutoCollect: AC OK
-07-25 07:27:48.524 [main] AutoCollect: hooks installed (transfer result + UI auto-collect)
-07-25 07:27:48.530 [main] LeShaoV3: [Footer] 字数限制已解除 (返回'0')
-07-25 07:27:48.540 [main] LeShaoV3: --- [6] 定时发送 ---
-07-25 07:27:48.542 [main] LeShaoV3:   ChatFooter.F(e9,a35.g)→boolean ✓
-07-25 07:27:48.543 [main] LeShaoV3:   ChatFooterCustom.r(10 params) ✓
-07-25 07:27:48.544 [main] LeShaoV3:   ChatFooterCustom.onClick(View) ✓
-07-25 07:27:48.548 [main] LeShaoV3: [Search] 语音搜索(字段扫描)已启用
-07-25 07:27:48.550 [main] LeShaoV3: [Search] FTSBaseVoiceSearchUI Hook完成
-07-25 07:27:48.552 [main] LeShaoV3: [Badge] MainTabUI.b() Hook完成
-07-25 07:27:48.561 [main] LeShaoV3: [Shake] ShakeReportUI Hook完成 (14个方法)
-07-25 07:27:48.563 [main] LeShaoV3: --- [10] 好友删除检测 ---
-07-25 07:27:48.564 [main] LeShaoV3:   ContactInfoUI.D2() + onResume() ✓
-07-25 07:27:48.564 [main] LeShaoV3:   SendMsgSuccessEvent ✓
-07-25 07:27:48.566 [main] LeShaoV3: [CallRecord] widget.k.g() Hook完成
-07-25 07:27:48.567 [main] LeShaoV3: [CallRecord] model.c0.d() Hook完成
-07-25 07:27:48.567 [main] LeShaoV3: [AutoAnswer] CheckVoipCSIsStartedEvent Hook完成
-07-25 07:27:48.568 [main] LeShaoV3: [CallFeatures] 通话录音+自动接听 Hook完成
-07-25 07:27:48.579 [main] LeShaoV3: [LoginMonitor] LauncherUI.onCreate Hook完成
-07-25 07:27:48.582 [main] LeShaoV3: [ConvPrivacy] notification.m0.a() Hook完成 (level=1)
-07-25 07:27:48.583 [main] LeShaoV3: [ConvPrivacy] MvvmConvList Hook完成
-07-25 07:27:48.598 [main] ThemeHook: loadColors done
-07-25 07:27:48.599 [main] ThemeHook: state: m=false bar=true page=true chatBg=true bubble=true tab=true text=true
-07-25 07:27:48.601 [main] ThemeHook: [A] ok
-07-25 07:27:48.603 [main] ThemeHook: [B] ok
-07-25 07:27:48.604 [main] ThemeHook: [C] ga.E0 title ok
-07-25 07:27:48.606 [main] ThemeHook: [C] dim-scan ok
-07-25 07:27:48.607 [main] ThemeHook: [D] ok
-07-25 07:27:48.608 [main] ThemeHook: [E] com.tencent.mm.ui.conversation.MainUI ok
-07-25 07:27:48.611 [main] ThemeHook: [F] p0 extra hook ok
-07-25 07:27:48.611 [main] ThemeHook: [F] DyeTemplate l0+n0 ok
-07-25 07:27:48.614 [main] ThemeHook: [H] ok
-07-25 07:27:48.617 [main] ThemeHook: [X] addView scan ok
-07-25 07:27:48.618 [main] ThemeHook: [G] ChattingUI ok
-07-25 07:27:48.618 [main] ThemeHook: [L] dark sync ok
-07-25 07:27:48.619 [main] ThemeHook: [M] settings bg ok
-07-25 07:27:48.621 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivity ok
-07-25 07:27:48.621 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivityJava ok
-07-25 07:27:48.622 [main] ThemeHook: [O] MMFragment ok
-07-25 07:27:48.623 [main] ThemeHook: [O] MMFragmentActivity ok
-07-25 07:27:48.625 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooter ok
-07-25 07:27:48.626 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooterBottom ok
-07-25 07:27:48.627 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.ChatFooterPanel ok
-07-25 07:27:48.628 [main] ThemeHook: [P] com.tencent.mm.ui.chatting.ChattingFooterMoreBtnBar ok
-07-25 07:27:48.629 [main] ThemeHook: [P] ChattingImageBGView ok
-07-25 07:27:48.629 [main] ThemeHook: [Q] SnsTimeLineUI ok
-07-25 07:27:48.630 [main] ThemeHook: [Q] ImproveSnsTimelineUI ok
-07-25 07:27:48.631 [main] ThemeHook: [Q] ContactInfoUI ok
-07-25 07:27:48.631 [main] ThemeHook: [Q] AddressUI ok
-07-25 07:27:48.632 [main] ThemeHook: [Q] FindMoreFriendsUI ok
-07-25 07:27:48.633 [main] ThemeHook: [Q] WebViewUI ok
-07-25 07:27:48.634 [main] ThemeHook: [Q] MainSettingsUI ok
-07-25 07:27:48.634 [main] ThemeHook: [Q] CommonSettingsUI ok
-07-25 07:27:48.634 [main] ThemeHook: [Q] BizConversationUI ok
-07-25 07:27:48.635 [main] ThemeHook: [Q] SnsUserUI ok
-07-25 07:27:48.636 [main] ThemeHook: [Q] SnsCommentUI ok
-07-25 07:27:48.638 [main] ThemeHook: [Q] SnsUploadUI ok
-07-25 07:27:48.638 [main] ThemeHook: [Q] ContactProfileUI ok
-07-25 07:27:48.640 [main] ThemeHook: [Q] ConversationListView ok
-07-25 07:27:48.641 [main] ThemeHook: [Q] ConversationFolderItemView ok
-07-25 07:27:48.642 [main] ThemeHook: [Q] MainUIView ok
-07-25 07:27:48.643 [main] ThemeHook: [Q] ChattingItemFooter ok
-07-25 07:27:48.644 [main] ThemeHook: [Q] SnsHeader ok
-07-25 07:27:48.646 [main] ThemeHook: [Q] SnsCollapsibleTextView ok
-07-25 07:27:48.647 [main] ThemeHook: [Q] TimelineCommentView ok
-07-25 07:27:48.649 [main] ThemeHook: [Q] LauncherUIBottomTabView ok
-07-25 07:27:48.651 [main] ThemeHook: all hooks installed
-07-25 07:27:50.626 [main] VF: scan [com.tencent.mm.ui.chatting.viewitems, com.tencent.mm.ui.chatting.component]: 2076 classes, 1161 methods
-07-25 07:27:50.628 [main] VF: Menu.add fail: Cannot hook abstract methods: public abstract android.view.MenuItem android.view.Menu.add(int)
-07-25 07:27:50.683 [main] VF: viewitems+component+Menu.add hooks installed
-07-25 07:27:51.920 [main] VF: ◆FOUND b31.j: b31.j
-07-25 07:27:51.922 [main] VF:   method: H()→int
-07-25 07:27:51.923 [main] VF:   method: I()→int
-07-25 07:27:51.924 [main] VF:   method: J()→String[]
-07-25 07:27:51.925 [main] VF:   method: K()→long
-07-25 07:27:51.927 [main] VF:   method: L()→List
-07-25 07:27:51.928 [main] VF:   method: M()→void
-07-25 07:27:51.929 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:51.930 [main] VF:   method: getType()→int
-07-25 07:27:51.931 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:51.931 [main] VF:   method: securityLimitCount()→int
-07-25 07:27:51.932 [main] VF:   method: securityVerificationChecked(v0)→o1
-07-25 07:27:51.933 [main] VF:   method: setSecurityCheckError(n1)→void
-07-25 07:27:51.934 [main] VF: ◆FOUND b31.l: b31.l
-07-25 07:27:51.935 [main] VF:   method: H()→int
-07-25 07:27:51.936 [main] VF:   method: I()→int
-07-25 07:27:51.938 [main] VF:   method: J()→String[]
-07-25 07:27:51.940 [main] VF:   method: K()→long
-07-25 07:27:51.941 [main] VF:   method: L()→List
-07-25 07:27:51.942 [main] VF:   method: M()→void
-07-25 07:27:51.944 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:51.945 [main] VF:   method: getType()→int
-07-25 07:27:51.946 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:51.948 [main] VF:   method: securityLimitCount()→int
-07-25 07:27:51.950 [main] VF:   method: securityVerificationChecked(v0)→o1
-07-25 07:27:51.951 [main] VF:   method: setSecurityCheckError(n1)→void
-07-25 07:27:51.959 [main] VF: ◆FOUND b31.j: bg3.j
-07-25 07:27:51.963 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:51.964 [main] VF:   method: getType()→int
-07-25 07:27:51.965 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
-07-25 07:27:51.965 [main] VF: ◆FOUND b31.l: bg3.l
-07-25 07:27:51.966 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:51.966 [main] VF:   method: getType()→int
-07-25 07:27:51.967 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
-07-25 07:27:51.973 [main] VF: ◆FOUND b31.j: bz1.j
-07-25 07:27:51.974 [main] VF:   method: H()→String
-07-25 07:27:51.975 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:51.975 [main] VF:   method: getType()→int
-07-25 07:27:51.975 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:51.976 [main] VF: ◆FOUND b31.l: c04.l
-07-25 07:27:51.977 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:51.977 [main] VF:   method: getType()→int
-07-25 07:27:51.978 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:51.984 [main] VF: ◆FOUND SceneVoice p0: ch4.w
-07-25 07:27:51.984 [main] VF:   method: a()→String
-07-25 07:27:51.998 [main] VF:   method: b(e1)→void
-07-25 07:27:52.002 [main] VF:   method: c()→long
-07-25 07:27:52.005 [main] VF:   method: cancel()→boolean
-07-25 07:27:52.005 [main] VF:   method: d()→int
-07-25 07:27:52.006 [main] VF:   method: e()→int
-07-25 07:27:52.006 [main] VF:   method: f()→void
-07-25 07:27:52.007 [main] VF:   method: g(String,e9)→boolean
-07-25 07:27:52.007 [main] VF:   method: h(f1)→void
-07-25 07:27:52.008 [main] VF:   method: i()→boolean
-07-25 07:27:52.008 [main] VF:   method: j()→e9
-07-25 07:27:52.008 [main] VF:   method: k()→int
-07-25 07:27:52.009 [main] VF:   method: reset()→void
-07-25 07:27:52.009 [main] VF:   method: stop()→boolean
-07-25 07:27:52.010 [main] VF: ◆Hooked ch4.w.stop() REPLACEMENT
-07-25 07:27:52.041 [main] VF: ◆FOUND x0 utils: com.tencent.mm.plugin.appbrand.x0
-07-25 07:27:52.042 [main] VF:   method: a(String,v0)→void
-07-25 07:27:52.043 [main] VF:   method: b(String)→u0
-07-25 07:27:52.044 [main] VF:   method: c(String)→Iterator
-07-25 07:27:52.045 [main] VF:   method: d(String)→w0
-07-25 07:27:52.045 [main] VF:   method: e(String,v0)→void
-07-25 07:27:52.046 [main] VF:   method: f(String,u0)→void
-07-25 07:27:52.047 [main] VF:   method: g(String,w0)→void
-07-25 07:27:52.057 [main] VF: ◆FOUND x0 utils: com.tencent.mm.plugin.finder.live.widget.x0
-07-25 07:27:52.058 [main] VF:   method: i(x0,boolean,int,Object)→void
-07-25 07:27:52.059 [main] VF:   method: a(Context)→View
-07-25 07:27:52.059 [main] VF:   method: j(x0)→x0
-07-25 07:27:52.059 [main] VF:   method: s()→View
-07-25 07:27:52.060 [main] VF:   method: t()→ViewPager
-07-25 07:27:52.060 [main] VF:   method: u()→boolean
-07-25 07:27:52.061 [main] VF:   method: v()→void
-07-25 07:27:52.061 [main] VF:   method: w(int)→void
-07-25 07:27:52.078 [main] VF: ◆FOUND b31.l: com.tencent.mm.plugin.remittance.model.l
-07-25 07:27:52.079 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.080 [main] VF:   method: getType()→int
-07-25 07:27:52.081 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
-07-25 07:27:52.086 [main] VF: ◆FOUND b31.j: com.tencent.mm.plugin.sport.model.j
-07-25 07:27:52.087 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.087 [main] VF:   method: getType()→int
-07-25 07:27:52.088 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.132 [main] VF: ◆FOUND b31.j: fo3.j
-07-25 07:27:52.134 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.135 [main] VF:   method: getType()→int
-07-25 07:27:52.136 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.138 [main] VF: ◆FOUND b31.l: fq3.l
-07-25 07:27:52.138 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.139 [main] VF:   method: getType()→int
-07-25 07:27:52.140 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
-07-25 07:27:52.145 [main] VF: ◆FOUND b31.j: g21.j
-07-25 07:27:52.146 [main] VF:   method: H(List)→n50
-07-25 07:27:52.146 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.147 [main] VF:   method: getType()→int
-07-25 07:27:52.147 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.147 [main] VF:   method: securityLimitCount()→int
-07-25 07:27:52.148 [main] VF:   method: securityVerificationChecked(v0)→o1
-07-25 07:27:52.165 [main] VF: ◆FOUND b31.j: hk4.j
-07-25 07:27:52.165 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.166 [main] VF:   method: getType()→int
-07-25 07:27:52.166 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.186 [main] VF: ◆FOUND b31.j: jn3.j
-07-25 07:27:52.188 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.189 [main] VF:   method: getType()→int
-07-25 07:27:52.189 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.191 [main] VF: ◆FOUND b31.l: jn3.l
-07-25 07:27:52.191 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.193 [main] VF:   method: getType()→int
-07-25 07:27:52.193 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.196 [main] VF: ◆FOUND b31.l: jr4.l
-07-25 07:27:52.196 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.197 [main] VF:   method: getType()→int
-07-25 07:27:52.197 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.198 [main] VF:   method: securityLimitCount()→int
-07-25 07:27:52.198 [main] VF:   method: securityVerificationChecked(v0)→o1
-07-25 07:27:52.198 [main] VF:   method: setSecurityCheckError(n1)→void
-07-25 07:27:52.204 [main] VF: ◆FOUND b31.l: k44.l
-07-25 07:27:52.204 [main] VF:   method: H()→ku5
-07-25 07:27:52.205 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.205 [main] VF:   method: getType()→int
-07-25 07:27:52.206 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.206 [main] VF: ◆FOUND b31.j: k61.j
-07-25 07:27:52.207 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.207 [main] VF:   method: getType()→int
-07-25 07:27:52.208 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
-07-25 07:27:52.221 [main] VF: ◆FOUND b31.j: kv4.j
-07-25 07:27:52.222 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.222 [main] VF:   method: getType()→int
-07-25 07:27:52.223 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.227 [main] VF: ◆FOUND b31.j: l93.j
-07-25 07:27:52.227 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.228 [main] VF:   method: getType()→int
-07-25 07:27:52.229 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.229 [main] VF: ◆FOUND b31.l: l93.l
-07-25 07:27:52.230 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.231 [main] VF:   method: getType()→int
-07-25 07:27:52.231 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.233 [main] VF: ◆FOUND b31.j: lc4.j
-07-25 07:27:52.233 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.234 [main] VF:   method: getType()→int
-07-25 07:27:52.234 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.235 [main] VF: ◆FOUND b31.l: lc4.l
-07-25 07:27:52.235 [main] VF:   method: H()→String
-07-25 07:27:52.236 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.236 [main] VF:   method: getType()→int
-07-25 07:27:52.237 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.243 [main] VF: ◆FOUND b31.j: lr1.j
-07-25 07:27:52.244 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.244 [main] VF:   method: getType()→int
-07-25 07:27:52.245 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.246 [main] VF: ◆FOUND b31.l: lt4.l
-07-25 07:27:52.247 [main] VF:   method: H()→sj5
-07-25 07:27:52.247 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.247 [main] VF:   method: getType()→int
-07-25 07:27:52.248 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
-07-25 07:27:52.263 [main] VF: ◆FOUND x0 utils: n3.x0
-07-25 07:27:52.265 [main] VF:   method: a(View)→int
-07-25 07:27:52.265 [main] VF:   method: b(View)→boolean
-07-25 07:27:52.265 [main] VF:   method: c(View)→boolean
-07-25 07:27:52.266 [main] VF:   method: d(View)→boolean
-07-25 07:27:52.266 [main] VF:   method: e(ViewParent,View,View,int)→void
-07-25 07:27:52.267 [main] VF:   method: f(View,int)→void
-07-25 07:27:52.267 [main] VF:   method: g(AccessibilityEvent,int)→void
-07-25 07:27:52.280 [main] VF: ◆FOUND b31.j: o22.j
-07-25 07:27:52.281 [main] VF:   method: H(EmojiInfo,boolean)→void
-07-25 07:27:52.282 [main] VF:   method: I()→void
-07-25 07:27:52.282 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.282 [main] VF:   method: getType()→int
-07-25 07:27:52.283 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.283 [main] VF:   method: securityLimitCount()→int
-07-25 07:27:52.284 [main] VF:   method: securityVerificationChecked(v0)→o1
-07-25 07:27:52.284 [main] VF: ◆FOUND b31.l: o22.l
-07-25 07:27:52.285 [main] VF:   method: H(l,String,boolean)→void
-07-25 07:27:52.285 [main] VF:   method: I(String,int,int,String)→void
-07-25 07:27:52.285 [main] VF:   method: cancel()→void
-07-25 07:27:52.286 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.286 [main] VF:   method: getType()→int
-07-25 07:27:52.286 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.297 [main] VF: ◆FOUND b31.j: ot1.j
-07-25 07:27:52.298 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.298 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.299 [main] VF: ◆FOUND b31.j: ou4.j
-07-25 07:27:52.300 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.300 [main] VF:   method: getType()→int
-07-25 07:27:52.301 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
-07-25 07:27:52.302 [main] VF: ◆FOUND b31.l: oy3.l
-07-25 07:27:52.302 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.303 [main] VF:   method: getType()→int
-07-25 07:27:52.303 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.327 [main] VF: ◆FOUND b31.l: r43.l
-07-25 07:27:52.329 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.330 [main] VF:   method: getType()→int
-07-25 07:27:52.331 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.333 [main] VF: ◆FOUND b31.j: rf4.j
-07-25 07:27:52.334 [main] VF:   method: B(b)→void
-07-25 07:27:52.335 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.336 [main] VF:   method: getType()→int
-07-25 07:27:52.337 [main] VF:   method: j(Object)→void
-07-25 07:27:52.338 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.338 [main] VF:   method: securityLimitCount()→int
-07-25 07:27:52.339 [main] VF:   method: securityVerificationChecked(v0)→o1
-07-25 07:27:52.339 [main] VF:   method: x()→void
-07-25 07:27:52.349 [main] VF: ◆FOUND b31.l: s71.l
-07-25 07:27:52.350 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.350 [main] VF:   method: getType()→int
-07-25 07:27:52.351 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.355 [main] VF: ◆FOUND b31.j: sn4.j
-07-25 07:27:52.355 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.356 [main] VF:   method: getType()→int
-07-25 07:27:52.356 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.363 [main] VF: ◆FOUND b31.l: su4.l
-07-25 07:27:52.364 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.364 [main] VF:   method: getType()→int
-07-25 07:27:52.365 [main] VF:   method: getUri()→String
-07-25 07:27:52.365 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
-07-25 07:27:52.370 [main] VF: ◆FOUND b31.j: t93.j
-07-25 07:27:52.371 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.372 [main] VF:   method: getType()→int
-07-25 07:27:52.372 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.385 [main] VF: ◆FOUND SceneVoice p0: tl.p0
-07-25 07:27:52.387 [main] VF:   method: a()→String
-07-25 07:27:52.388 [main] VF:   method: b(e1)→void
-07-25 07:27:52.389 [main] VF:   method: c()→long
-07-25 07:27:52.390 [main] VF:   method: cancel()→boolean
-07-25 07:27:52.390 [main] VF:   method: d()→int
-07-25 07:27:52.391 [main] VF:   method: e()→int
-07-25 07:27:52.392 [main] VF:   method: f()→void
-07-25 07:27:52.393 [main] VF:   method: g(String,e9)→boolean
-07-25 07:27:52.393 [main] VF:   method: h(f1)→void
-07-25 07:27:52.394 [main] VF:   method: i()→boolean
-07-25 07:27:52.394 [main] VF:   method: j()→e9
-07-25 07:27:52.396 [main] VF:   method: k()→int
-07-25 07:27:52.398 [main] VF:   method: l()→void
-07-25 07:27:52.400 [main] VF:   method: m()→boolean
-07-25 07:27:52.401 [main] VF:   method: n()→void
-07-25 07:27:52.403 [main] VF:   method: reset()→void
-07-25 07:27:52.405 [main] VF:   method: stop()→boolean
-07-25 07:27:52.447 [main] VF: ◆FOUND b31.j: vx3.j
-07-25 07:27:52.448 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.449 [main] VF:   method: getType()→int
-07-25 07:27:52.449 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
-07-25 07:27:52.451 [main] VF: ◆FOUND b31.l: w62.l
-07-25 07:27:52.452 [main] VF:   method: H(boolean)→LinkedList
-07-25 07:27:52.452 [main] VF:   method: I(int)→void
-07-25 07:27:52.452 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.453 [main] VF:   method: getType()→int
-07-25 07:27:52.453 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.459 [main] VF: ◆FOUND b31.j: wn4.j
-07-25 07:27:52.459 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.459 [main] VF:   method: getType()→int
-07-25 07:27:52.460 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[])→void
-07-25 07:27:52.474 [main] VF: ◆FOUND b31.j: xt4.j
-07-25 07:27:52.475 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.476 [main] VF:   method: getType()→int
-07-25 07:27:52.476 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
-07-25 07:27:52.476 [main] VF: ◆FOUND b31.l: xt4.l
-07-25 07:27:52.477 [main] VF:   method: doScene(s,u0)→int
-07-25 07:27:52.477 [main] VF:   method: getType()→int
-07-25 07:27:52.477 [main] VF:   method: onGYNetEnd(int,int,int,String,v0,byte[],long)→void
-07-25 07:27:52.480 [main] VF: ◆FOUND x0 utils: y16.x0
-07-25 07:27:52.481 [main] VF:   method: H()→List
-07-25 07:27:52.481 [main] VF:   method: J(c)→k1
-07-25 07:27:52.482 [main] VF:   method: e()→m
-07-25 07:27:52.482 [main] VF:   method: f0(u0)→Object
-07-25 07:27:52.483 [main] VF:   method: h(c,l)→Collection
-07-25 07:27:52.483 [main] VF:   method: i()→o
-07-25 07:27:52.483 [main] VF:   method: i0()→void
-07-25 07:27:52.484 [main] VF:   method: p(v0)→boolean
-07-25 07:27:52.484 [main] VF:   method: t(o,Object)→Object
-07-25 07:27:52.484 [main] VF:   method: toString()→String
-07-25 07:27:52.485 [main] VF: ◆FOUND x0 utils: y21.x0
-07-25 07:27:52.485 [main] VF:   method: a(e9,String)→boolean
-07-25 07:27:52.486 [main] VF:   method: b(String)→boolean
-07-25 07:27:52.486 [main] VF:   method: c(String)→boolean
-07-25 07:27:52.486 [main] VF:   method: d(w0,boolean,int,String,String,p0)→long
-07-25 07:27:52.487 [main] VF:   method: e(e9,String)→boolean
-07-25 07:27:52.487 [main] VF:   method: f(int,byte[],int,int)→int
-07-25 07:27:52.487 [main] VF:   method: g(String,String)→String
-07-25 07:27:52.488 [main] VF:   method: h(e9,String)→j
-07-25 07:27:52.488 [main] VF:   method: i(y,String,String,boolean)→j
-07-25 07:27:52.488 [main] VF:   method: j(String)→w0
-07-25 07:27:52.489 [main] VF:   method: k(String)→e9
-07-25 07:27:52.489 [main] VF:   method: l(int,CancellationSignal)→List
-07-25 07:27:52.490 [main] VF:   method: m(long)→float
-07-25 07:27:52.490 [main] VF:   method: n(e9)→boolean
-07-25 07:27:52.490 [main] VF:   method: o(e9)→boolean
-07-25 07:27:52.491 [main] VF:   method: p(String)→boolean
-07-25 07:27:52.491 [main] VF:   method: q(e9)→void
-07-25 07:27:52.492 [main] VF:   method: r(String,String,int)→String
-07-25 07:27:52.493 [main] VF:   method: s(String)→boolean
-07-25 07:27:52.495 [main] VF:   method: t(String,int,int,e9)→boolean
-07-25 07:27:52.496 [main] VF:   method: u(String,int,p0)→int
-07-25 07:27:52.496 [main] VF:   method: v(w0,p0)→boolean
-07-25 07:27:52.497 [main] VF:   method: w(w0)→boolean
-07-25 07:27:52.497 [main] VF:   method: x(y,String,String,byte[])→boolean
-07-25 07:27:52.536 [main] VF: ready — do a native forward to trace API
-07-25 07:27:52.540 [leshao-scheduler] SchedulerService: scheduler started
-07-25 07:27:52.796 [main] TtsEngine: TTS init OK
-07-25 07:27:54.024 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-25 07:27:54.026 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-25 07:27:54.028 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-25 07:27:54.030 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-25 07:27:54.032 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-25 07:27:54.221 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-25 07:27:54.225 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-25 07:27:54.226 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-25 07:27:54.231 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-25 07:27:54.236 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-25 07:27:54.887 [main] VF: qe.v0(V:Toolbar)
-07-25 07:27:54.892 [main] VF: TranslateControllerView.a(V:TranslateControllerView,Integer)
-07-25 07:27:54.977 [main] VF: zm.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-25 07:27:54.978 [main] VF: ym.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-25 07:27:54.981 [main] VF: a1.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-25 07:27:54.983 [main] VF: so.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-25 07:27:54.984 [main] VF: sf.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-25 07:27:54.985 [main] VF: s2.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-25 07:27:54.992 [main] VF: h6.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-25 07:27:54.993 [main] VF: cj.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-25 07:27:54.994 [main] VF: n7.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-25 07:27:54.998 [main] VF: g9.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-25 07:27:54.999 [main] VF: c0.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-25 07:27:55.000 [main] VF: k.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-25 07:27:55.002 [main] VF: k1.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-25 07:27:55.003 [main] VF: g7.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-25 07:27:55.015 [main] VF: TranslateControllerView.a(V:TranslateControllerView,Integer)
-07-25 07:27:55.024 [main] VF: qe.v0(V:Toolbar)
-07-25 07:27:55.030 [main] VF: TranslateControllerView.a(V:TranslateControllerView,Integer)
-07-25 07:27:55.042 [main] VF: TranslateControllerView.a(V:TranslateControllerView,Integer)
-07-25 07:27:55.043 [[GT]ColdPool#6] VF: n9.Y(V:ScrollControlRecyclerView,w0)
-07-25 07:27:55.068 [[GT]ColdPool#6] VF: i4.Y(V:ScrollControlRecyclerView,w0)
-07-25 07:27:55.070 [main] VF: hn.G(gd,null)
-07-25 07:27:55.069 [[GT]ColdPool#6] VF: f1.Y(V:ScrollControlRecyclerView,w0)
-07-25 07:27:55.085 [main] VF: hn.G(gd,null)
-07-25 07:27:55.083 [[GT]ColdPool#6] VF: h9.Y(V:ScrollControlRecyclerView,w0)
-07-25 07:27:55.088 [main] VF: hn.G(gd,null)
-07-25 07:27:55.093 [main] VF: g0.create(V:fh)
-07-25 07:27:55.098 [main] VF: hq.b(V:fh,Boolean,Boolean)
-07-25 07:27:55.088 [[GT]ColdPool#6] VF: y7.Y(V:ScrollControlRecyclerView,w0)
-07-25 07:27:56.275 [[GT]ColdPool#9] MessageHook: #1 type=43->43 isSend=43 talker=49222549277@chatroom content=wxid_qikyjsnjslw212:0:0
-
-07-25 07:27:56.293 [[GT]ColdPool#9] MessageHook: #2 type=43->43 isSend=27 talker=34831702152@chatroom content=wxid_qikyjsnjslw212:0:0
-
-07-25 07:27:56.304 [[GT]ColdPool#9] MessageHook: #3 type=43->43 isSend=35 talker=17402151153@chatroom content=wxid_qikyjsnjslw212:0:0
-
-07-25 07:27:56.314 [[GT]ColdPool#9] MessageHook: #4 type=43->43 isSend=54 talker=25295891650@chatroom content=wxid_qikyjsnjslw212:0:0
-
-07-25 07:27:56.324 [[GT]ColdPool#9] MessageHook: #5 type=43->43 isSend=3404 talker=43882405797@chatroom content=wxid_qikyjsnjslw212:0:0
-
-07-25 07:27:56.335 [[GT]ColdPool#9] MessageHook: #6 type=43->43 isSend=9511 talker=24130456064@chatroom content=wxid_qikyjsnjslw212:0:0
-
-07-25 07:27:56.342 [[GT]ColdPool#9] MessageHook: #7 type=43->43 isSend=34 talker=4543198331@chatroom content=wxid_qikyjsnjslw212:0:0
-
-07-25 07:27:56.780 [main] VF: === FOUND [wp.R] msgId=0 talker= msg=vo ===
-07-25 07:27:56.781 [main] VF:   sPendingMsg: com.tencent.mm.ui.chatting.viewitems.vo extends es {R=1 S=null A=0 B=0 C=null D=null E=-1 F=null G=null H=0 I=null J=null K=null L=null M=null N=0 O=0 P=null Q=null a=d b=null c=false d=hq e=null f=null g=null h=null i=null j=false k=false l=0 m=null n=null o=0 p=null q=null r=null s=null t=0 u=null v=null w=null x=null y=0 z=null }
-07-25 07:27:56.782 [main] VF:   ★ c() → com.tencent.mm.storage.e9
-07-25 07:27:56.782 [main] VF:   ★ c msgId=76284
-07-25 07:27:56.783 [main] VF:   args: [0]=g4 [1]=TextView:T=vo [2]=d 
-07-25 07:27:56.784 [main] VF:   parent[4]=fh tag=com.tencent.mm.ui.chatting.viewitems.hq {A=RelativeLayout B=RelativeLayout C=TextView D=null E=LinearLayout b=254 c=TextView d=TextView e=AnimImageView f=ViewStub g=ViewStub h=null i=null j=null k=null l=null m=null n= o=FrameLayout p=null q=null r=TextView s=ProgressBar t=AnimImageView u=TextView v=null w=null x=ImageView y=RelativeLayout z=TextView }
-07-25 07:27:56.784 [main] VF: View.tag: com.tencent.mm.ui.chatting.viewitems.vo
-07-25 07:27:56.785 [main] VF: added via add(int,int,int,CharSequence)
-07-25 07:27:56.793 [main] VF: >>> MENU_ID found in n0.a elapsed=9ms <<<
-07-25 07:27:56.803 [main] VF: >>> MENU_ID found in n0.a elapsed=19ms <<<
-07-25 07:27:57.871 [main] VF: >>> MENU_ID found in wp.Q elapsed=1087ms <<<
-07-25 07:27:57.873 [main] VF: >>> COOLDOWN PASSED — executeForward! <<<
-07-25 07:27:57.874 [main] VF: forward: msgId=76284 via c() → e9
-07-25 07:27:57.874 [main] VF: forward: msgId=76284 talker=wxid_9ohhf82mrlgc22 msg=vo
-07-25 07:27:57.875 [main] VF: forward: act=LauncherUI
-07-25 07:27:57.876 [main] ContactRepository: loadContacts START
-07-25 07:27:57.877 [main] ContactRepository: Strategy A: trying direct DB (ka5.f.s)...
-07-25 07:27:57.877 [main] ContactRepository: Strategy A: uin=295734952
-07-25 07:27:57.877 [main] ContactRepository: Strategy A: dbPath=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db
-07-25 07:27:57.878 [main] ContactRepository: Strategy A: trying imei=1234567890ABCDEF pwd=e13b6eb
-07-25 07:27:57.889 [main] ContactRepository: Strategy A: DB opened, rcontact table confirmed
-07-25 07:27:57.899 [main] ContactRepository: Strategy A: query OK, all=127 f=51 g=76 sex=0
-07-25 07:27:57.901 [main] ContactRepository: loadContacts OK via Strategy A (direct DB)
-07-25 07:27:57.920 [main] VF: >>> MENU_ID found in bh.l0 elapsed=1136ms <<<
-07-25 07:27:57.921 [main] VF: >>> MENU_ID found in p0.onMMMenuItemSelected elapsed=1137ms <<<
-07-25 07:27:58.078 [Thread-16] AvatarHelper: j1 Class not available: Didn't find class "j1" on path: DexPathList[[zip file "/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/lib/arm64, /data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk!/lib/arm64-v8a, /system/lib64, /system_ext/lib64]]
-07-25 07:27:58.079 [Thread-16] AvatarHelper: MethodB: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
-07-25 07:27:58.079 [Thread-16] AvatarHelper: init OK, dir=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
-07-25 07:28:00.982 [main] VF: forward: selected=[51719151602@chatroom] display=1 个选中
-07-25 07:28:00.983 [main] VF: doForward: msgId=76284 → 51719151602@chatroom
-07-25 07:28:00.984 [main] VF: voice: cid=142356072426bea2cb805d3102
-07-25 07:28:00.985 [main] VF: uinHash from prefs: uin=295734952
-07-25 07:28:00.986 [main] VF: voice: md5 path not found, falling back to search
-07-25 07:28:01.039 [main] VF: voice2: found /data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2/2e/22/msg_142356072426bea2cb805d3102.amr size=2135
-07-25 07:28:01.039 [main] VF: doForward: voiceFile=/data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2/2e/22/msg_142356072426bea2cb805d3102.amr
-07-25 07:28:01.040 [main] VF: doForward: duration=5000ms
-07-25 07:28:01.040 [main] VF: SceneVoice: origTalker=wxid_9ohhf82mrlgc22 origMsgId=76284
-07-25 07:28:01.055 [main] VF: SceneVoice: g()=true
-07-25 07:28:01.556 [main] VF: SceneVoice: calling stop()...
-07-25 07:28:01.725 [main] VF: SceneVoice: stop()=false
-07-25 07:28:01.728 [main] VF: SceneVoice: stop() failed, trying b31.w fallback...
-07-25 07:28:01.730 [main] VF: b31.w: instance created
-07-25 07:28:01.731 [main] VF: b31.w: start() called → sent
-07-25 07:28:01.731 [main] VF: doForward: sent=true
-07-25 07:28:02.855 [[GT]ColdPool#15] DatabaseProvider: DB captured via rawQuery (EnMicroMsg: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db)
+07-25 07:41:43.676 [[GT]ColdPool#10] MessageHook: #14 type=1->1 isSend=12663 talker=49830920700@chatroom content=wxid_zpher75ag8bm21:
+ 农家香火米蕉，皮薄清甜[色]
+福利1...
+07-25 07:41:44.123 [main] VF: >>> MENU_ID found in wp.Q elapsed=966ms <<<
+07-25 07:41:44.124 [main] VF: >>> COOLDOWN PASSED — executeForward! <<<
+07-25 07:41:44.125 [main] VF: forward: msgId=76284 via c() → e9
+07-25 07:41:44.125 [main] VF: forward: msgId=76284 talker=wxid_9ohhf82mrlgc22 msg=vo
+07-25 07:41:44.126 [main] VF: forward: act=LauncherUI
+07-25 07:41:44.128 [main] ContactRepository: loadContacts START
+07-25 07:41:44.128 [main] ContactRepository: Strategy A: trying direct DB (ka5.f.s)...
+07-25 07:41:44.129 [main] ContactRepository: Strategy A: uin=295734952
+07-25 07:41:44.129 [main] ContactRepository: Strategy A: dbPath=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db
+07-25 07:41:44.130 [main] ContactRepository: Strategy A: trying imei=1234567890ABCDEF pwd=e13b6eb
+07-25 07:41:44.143 [main] ContactRepository: Strategy A: DB opened, rcontact table confirmed
+07-25 07:41:44.157 [main] ContactRepository: Strategy A: query OK, all=127 f=51 g=76 sex=0
+07-25 07:41:44.160 [main] ContactRepository: loadContacts OK via Strategy A (direct DB)
+07-25 07:41:44.197 [main] VF: >>> MENU_ID found in bh.l0 elapsed=1040ms <<<
+07-25 07:41:44.199 [main] VF: >>> MENU_ID found in p0.onMMMenuItemSelected elapsed=1042ms <<<
+07-25 07:41:44.367 [Thread-17] AvatarHelper: j1 Class not available: Didn't find class "j1" on path: DexPathList[[zip file "/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/lib/arm64, /data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk!/lib/arm64-v8a, /system/lib64, /system_ext/lib64]]
+07-25 07:41:44.372 [Thread-17] AvatarHelper: MethodB: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
+07-25 07:41:44.375 [Thread-17] AvatarHelper: init OK, dir=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
+07-25 07:41:46.657 [main] VF: forward: selected=[51719151602@chatroom] display=1 个选中
+07-25 07:41:46.658 [main] VF: doForward: msgId=76284 → 51719151602@chatroom
+07-25 07:41:46.659 [main] VF: voice: cid=142356072426bea2cb805d3102
+07-25 07:41:46.660 [main] VF: uinHash from prefs: uin=295734952
+07-25 07:41:46.661 [main] VF: voice: md5 path not found, falling back to search
+07-25 07:41:46.708 [main] VF: voice2: found /data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2/2e/22/msg_142356072426bea2cb805d3102.amr size=2135
+07-25 07:41:46.709 [main] VF: doForward: voiceFile=/data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2/2e/22/msg_142356072426bea2cb805d3102.amr
+07-25 07:41:46.709 [main] VF: doForward: duration=5000ms
+07-25 07:41:46.710 [main] VF: SceneVoice: origTalker=wxid_9ohhf82mrlgc22 origMsgId=76284
+07-25 07:41:46.729 [main] VF: SceneVoice: g()=true
+07-25 07:41:47.230 [main] VF: SceneVoice: calling stop()...
+07-25 07:41:47.234 [main] VF: SceneVoice REPLACE: bypassing hardware recorder, direct send
+07-25 07:41:47.237 [main] VF: SceneVoice REPLACE: x0.t() error: tl.x0#t[class java.lang.String, int, int, class com.tencent.mm.storage.e9]
+07-25 07:41:47.240 [main] VF: SceneVoice REPLACE: playlist refreshed
+07-25 07:41:47.246 [main] VF: SceneVoice: stop()=true
+07-25 07:41:47.247 [main] VF: doForward: sent=true
+07-25 07:41:49.692 [[GT]ColdPool#5] DatabaseProvider: DB captured via rawQuery (EnMicroMsg: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db)
