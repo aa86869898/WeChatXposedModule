@@ -1,0 +1,328 @@
+================================================================================
+ 微信 8.0.76 语音文件路径 — 地毯式搜索完整分析
+================================================================================
+
+一、为什么你找不到语音文件？
+================================================================================
+
+  问题: 你尝试转发语音消息, 读取 msgInfo 的 field_content 或 field_imgPath,
+       但找不到实际文件。原因:
+
+  1. 语音文件名不是简单的 "xxx.amr"
+     → 格式: msg_<clientMsgId>.amr (clientMsgId 在 content XML 中)
+
+  2. 语音文件不在常用路径
+     → 路径: <MicroMsg>/<hash>/voice2/msg_<id>.amr
+     不是 <MicroMsg>/<hash>/voice/
+
+  3. field_imgPath 在 ProGuard 混淆后无法直接读取
+     → 真正的 getter 是 e9.y0() (混淆名)
+
+
+二、语音文件物理存放路径 (3层)
+================================================================================
+
+  [层1] 主路径 — voice2 目录
+  ────────────────────────────────────────
+  基础路径: q7.c("voice2") 返回
+    /data/user/0/com.tencent.mm/MicroMsg/<md5(uin)>/voice2/
+
+  文件格式: msg_<clientMsgId>.amr
+  示例:     /data/user/0/com.tencent.mm/MicroMsg/
+            7b998556beeef3a1552aa84157df99e8/voice2/
+            msg_1234567890abcdef.amr
+
+  构建方式 (from ev.p0.lj()):
+    com.tencent.mm.sdk.platformtools.h1.d(
+        q7.c("voice2") + "/",     // 目录
+        "msg_",                    // 前缀
+        clientMsgId,               // 客户端消息ID
+        ".amr",                    // 后缀
+        2,                         // 目录层级
+        create                     // 是否创建目录
+    )
+
+  [层2] 备用路径 — voice 目录 (旧格式)
+  ────────────────────────────────────
+  q7.c("voice") + clientMsgId + ".amr"
+
+  [层3] 录音临时文件 — amr_ 前缀
+  ──────────────────────────────
+  y21.g1.x0(prefix, "amr_") 生成 → y1.a(prefix, timestamp)
+  或 y21.x0.g(talker, "amr_") 生成
+  存储在 DB 中 (y21.w0 表/voicestg)
+
+
+三、从 msgInfo (e9) 获取语音文件路径 — 3种方法
+================================================================================
+
+  [方法1] msgInfo.y0() → String (最直接)
+  ────────────────────────────────────────
+  Xposed:
+    String path = (String) XposedHelpers.callMethod(msgInfo, "y0");
+  
+  来源: ev.p0.ij(e9) 源码:
+    String y0 = e9Var.y0();
+    o.f(y0, "getImgPath(...)");
+    return y0;
+  
+  → y0() 返回 field_imgPath (语音文件完整路径)
+
+
+  [方法2] ev.p0.lj() → String (通过 voice2 目录拼接)
+  ────────────────────────────────────────
+  Xposed:
+    Class<?> evP0 = XposedHelpers.findClass("ev.p0", cl);
+    Object instance = /* 获取 ev.p0 实例 */;
+    String path = (String) XposedHelpers.callMethod(instance, "lj", 
+        yVar, clientMsgId, false);
+
+  → 内部调用 h1.d() 拼接: voice2/msg_<id>.amr
+
+
+  [方法3] u0.Mj() / u0.Nj() → String (通过 u0 工具)
+  ────────────────────────────────────────
+  u0.Mj(yVar, filename, create) → 完整路径
+  u0.Nj(yVar, filename, create, something) → 完整路径
+
+  在 tl.o0.run() 中调用:
+    ((u0) n0.c(u0.class)).Mj(y.j, this.e.e, true)
+
+
+四、语音文件相关数据库
+================================================================================
+
+  [voicestg 表] (y21.w0 — 语音存储记录)
+  ────────────────────────────────────────
+  类: y21.w0
+  字段:
+    a  → int          序号/状态 (-1=初始)
+    b  → String       文件名 ★
+    c  → String       talker/username
+    d  → String       路径/dir
+    e  → long         时间戳
+    h  → int          时长(ms) ★
+    i  → int          状态 (1=录音中, 3=完成, 97=特殊, 98=特殊)
+    j  → long         创建时间
+    k  → long         更新时间
+    l  → int          时长 ★
+    m  → long         消息ID
+    n  → String       wxid
+    x  → String       talker
+
+  查询方法:
+    y21.p0.lj() → 获取 voicestg 管理器
+    y21.x0.j(filename) → 按文件名查 w0
+    y21.p0.lj().F0(filename) → 按文件名查 w0
+    y21.p0.lj().I0(id) → 按ID查 w0
+    y21.p0.lj().N0(msgId, time) → 按msgId查 w0
+
+
+五、语音消息的 content XML 结构
+================================================================================
+
+  type=34 时, field_content 可能是:
+
+  [格式1] 简单格式 (群聊)
+    "wxid_sender:duration_ms:0"
+    例: "wxid_xxx:5000:0"
+
+  [格式2] XML 格式
+    <msg>
+      <voicemsg endflag="1"
+                cancelflag="0"
+                length="5000"         ← 时长ms
+                voiceformat="4"       ← 4=AMR
+                voicelength="5000"
+                forwardflag="0"
+                bufid="..."           ← 文件标识
+                fromusername="wxid_xxx"
+                clientmsgid="1234567890abcdef"  ← 文件ID! ★
+                />
+    </msg>
+
+  → clientmsgid 就是文件名中的 <clientMsgId> 部分!
+
+
+六、语音转发 — 完整流程
+================================================================================
+
+  如果你想"转发语音消息":
+
+  Step 1: 从 msgInfo 获取语音文件路径
+  ────────────────────────────────────
+    // 方式A: 直接读 field_imgPath
+    String path = (String) XposedHelpers.callMethod(msgInfo, "y0");
+    
+    // 方式B: 从 content XML 提取 clientmsgid, 拼接路径
+    String content = (String) XposedHelpers.callMethod(msgInfo, "I0");
+    // 解析 content 提取 clientmsgid
+    // 拼接: voice2/msg_<clientmsgid>.amr
+
+  Step 2: 检查文件是否存在
+  ─────────────────────────
+    File voiceFile = new File(path);
+    if (!voiceFile.exists()) {
+      // 文件可能未下载! 语音消息有时不自动下载
+      // 需要触发下载 → VoiceMsgDownloadFinishEvent
+    }
+
+  Step 3: 复制/转发
+  ──────────────────
+    复制到临时目录 → 通过 Intent 分享
+    或: 构造新的 MsgInfo(type=34) → Ra()写入DB → 调用发送API
+
+
+七、ExtVoiceMsgIdToFileNameEvent — 官方获取文件名的事件
+================================================================================
+
+  类: com.tencent.mm.autogen.events.ExtVoiceMsgIdToFileNameEvent
+  
+  使用:
+    Object event = XposedHelpers.newInstance(voiceEventClass);
+    Object data = XposedHelpers.getObjectField(event, "data");
+    XposedHelpers.setLongField(data, "msgId", msgId);
+    XposedHelpers.callMethod(event, "publish");
+    // 获取结果
+    Object result = XposedHelpers.getObjectField(event, "result");
+    String filename = (String) XposedHelpers.getObjectField(result, "filename");
+
+  但这个事件可能返回的是逻辑文件名(非完整路径), 需要再用 u0.Mj() 拼接
+
+
+八、完整 Xposed 代码: 获取语音文件完整路径
+================================================================================
+
+  public static String getVoiceFilePath(Object msgInfo, ClassLoader cl) {
+    // 方法1: y0() — 直接获取
+    try {
+      return (String) XposedHelpers.callMethod(msgInfo, "y0");
+    } catch (Throwable ignored) {}
+
+    // 方法2: 从 content XML 解析 clientmsgid
+    try {
+      String content = (String) XposedHelpers.callMethod(msgInfo, "I0");
+      if (content != null && content.contains("clientmsgid")) {
+        String clientMsgId = extractXmlValue(content, "clientmsgid");
+        if (clientMsgId != null) {
+          // 拼接 voice2 路径
+          String hash = getUinHash();
+          String basePath = "/data/user/0/com.tencent.mm/MicroMsg/" 
+                          + hash + "/voice2/";
+          // h1.d 使用2级目录
+          String subDir = clientMsgId.substring(0, 2);
+          String path = basePath + subDir + "/msg_" + clientMsgId + ".amr";
+          
+          File f = new File(path);
+          if (f.exists()) return path;
+          
+          // 也尝试不带子目录的
+          path = basePath + "msg_" + clientMsgId + ".amr";
+          f = new File(path);
+          if (f.exists()) return path;
+        }
+      }
+    } catch (Throwable ignored) {}
+
+    // 方法3: ExtVoiceMsgIdToFileNameEvent
+    try {
+      long msgId = (Long) XposedHelpers.callMethod(msgInfo, "H0");
+      Class<?> eventCls = XposedHelpers.findClass(
+        "com.tencent.mm.autogen.events.ExtVoiceMsgIdToFileNameEvent", cl);
+      Object event = XposedHelpers.newInstance(eventCls);
+      Object data = XposedHelpers.getObjectField(event, "data");
+      XposedHelpers.setLongField(data, "msgId", msgId);
+      XposedHelpers.callMethod(event, "publish");
+      Object result = XposedHelpers.getObjectField(event, "result");
+      if (result != null) {
+        String filename = (String) XposedHelpers.getObjectField(result, "filename");
+        if (filename != null) {
+          // 拼接完整路径
+          String hash = getUinHash();
+          String path = "/data/user/0/com.tencent.mm/MicroMsg/" 
+                      + hash + "/voice2/" + filename;
+          return path;
+        }
+      }
+    } catch (Throwable ignored) {}
+
+    // 方法4: 遍历 voice2 目录搜索
+    try {
+      String hash = getUinHash();
+      String voice2Dir = "/data/user/0/com.tencent.mm/MicroMsg/" + hash + "/voice2/";
+      long msgId = (Long) XposedHelpers.callMethod(msgInfo, "H0");
+      return searchVoiceFile(new File(voice2Dir), String.valueOf(msgId));
+    } catch (Throwable ignored) {}
+
+    return null;
+  }
+
+  private static String extractXmlValue(String xml, String attr) {
+    String pattern = attr + "=\"";
+    int start = xml.indexOf(pattern);
+    if (start < 0) pattern = attr + "='";
+    start = xml.indexOf(pattern);
+    if (start < 0) return null;
+    start += pattern.length();
+    int end = xml.indexOf("\"", start);
+    if (end < 0) end = xml.indexOf("'", start);
+    if (end < 0) return null;
+    return xml.substring(start, end);
+  }
+
+  private static String searchVoiceFile(File dir, String keyword) {
+    File[] files = dir.listFiles();
+    if (files == null) return null;
+    for (File f : files) {
+      if (f.isDirectory()) {
+        String r = searchVoiceFile(f, keyword);
+        if (r != null) return r;
+      } else if (f.getName().contains(keyword)) {
+        return f.getAbsolutePath();
+      }
+    }
+    return null;
+  }
+
+  private static String getUinHash() {
+    // 从日志: uin=295734952 → 7b998556beeef3a1552aa84157df99e8
+    android.content.Context ctx = com.tencent.mm.ui.LauncherUI.getInstance();
+    long uin = ctx.getSharedPreferences("system_config_prefs", 0)
+              .getLong("default_uin", 0);
+    if (uin == 0) uin = ctx.getSharedPreferences("system_config_prefs", 0)
+              .getInt("default_uin", 0);
+    return md5(String.valueOf(uin));
+  }
+
+
+九、语音文件路径汇总表
+================================================================================
+
+┌──────────────────────────────────────────────────────────────────┐
+│ 场景                 │ 路径                                        │
+├──────────────────────────────────────────────────────────────────┤
+│ 新录制语音(voice2)   │ <MicroMsg>/<hash>/voice2/msg_<cid>.amr    │
+│ 旧语音(voice)        │ <MicroMsg>/<hash>/voice/<id>.amr          │
+│ 录音临时(amr_)       │ <MicroMsg>/<hash>/voice2/amr_<ts>         │
+│ getImgPath            │ e9.y0() 返回 field_imgPath                │
+│ clientMsgId           │ 从 field_content XML 中提取               │
+│ 语音已下载标记        │ field_lvbuffer (byte[]) 非空=已下载       │
+└──────────────────────────────────────────────────────────────────┘
+
+
+十、为什么 forwardAsFile 失败 — 根因分析
+================================================================================
+
+  你的 VoiceForwardHook 中用 ExtVoiceMsgIdToFileNameEvent 获取 filename,
+  然后直接用这个 filename 作为路径 — 这是错误的!
+
+  原因: 事件返回的只是文件名 (如 msg_xxx.amr), 不包含目录路径。
+        而且文件名中的 ID 是 clientMsgId, 不是 msgId(H0())。
+
+  正确做法:
+    1. 从 msgInfo.content (I0()) 的 XML 中提取 clientmsgid
+    2. 拼接: voice2目录 + "msg_" + clientmsgid + ".amr"
+    3. 检查文件是否存在
+    4. 如不存在, 用 field_imgPath (y0()) 兜底
+
+================================================================================

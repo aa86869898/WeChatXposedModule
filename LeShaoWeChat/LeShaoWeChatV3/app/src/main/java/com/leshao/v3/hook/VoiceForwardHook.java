@@ -612,38 +612,102 @@ public class VoiceForwardHook {
     }
 
     private static String findVoiceFile(Object e9) {
-        StringBuilder diag = new StringBuilder("findVoiceFile: ");
+        // 方法1: e9.y0() → field_imgPath (最直接)
         try {
-            // 尝试所有可能的文件路径字段/方法
-            String[] fieldNames = {"field_imgPath","imgPath","field_path","path",
-                "field_voicePath","voicePath","field_filePath","filePath"};
-            for (String fn : fieldNames) {
-                try {
-                    Object val = XposedHelpers.getObjectField(e9, fn);
-                    diag.append(fn).append("=").append(val).append(" ");
-                    if (val instanceof String) {
-                        java.io.File f = new java.io.File((String) val);
-                        if (f.exists()) return (String) val;
-                    }
-                } catch (Throwable ignored) {}
+            String path = (String) XposedHelpers.callMethod(e9, "y0");
+            if (path != null) {
+                java.io.File f = new java.io.File(path);
+                if (f.exists()) { LogWriter.log(TAG, "voice: y0()=" + path + " EXISTS"); return path; }
+                LogWriter.log(TAG, "voice: y0()=" + path + " NOT_FOUND");
             }
-            // 尝试 getter 方法
-            String[] methods = {"I0","P0","N0","M0","H0","J0","K0","L0",
-                "getImgPath","getFilePath","getVoicePath","getFileName"};
-            for (String mn : methods) {
-                try {
-                    Object r = XposedHelpers.callMethod(e9, mn);
-                    if (r == null) diag.append(mn).append("()=null ");
-                    else diag.append(mn).append("()=").append(r).append("(").append(r.getClass().getSimpleName()).append(") ");
-                } catch (Throwable t) {
-                    diag.append(mn).append("()=ERR ").append(t.getMessage()).append(" ");
+        } catch (Throwable ignored) {}
+
+        // 方法2: 从 content XML 提取 clientmsgid, 拼接 voice2 路径
+        try {
+            String content = (String) XposedHelpers.callMethod(e9, "I0");
+            if (content != null) {
+                String cid = extractXmlAttr(content, "clientmsgid");
+                if (cid != null) {
+                    String hash = getUinHash(ContextManager.getClassLoader());
+                    if (hash != null) {
+                        String base = "/data/user/0/com.tencent.mm/MicroMsg/" + hash + "/voice2/";
+                        // h1.d 使用 2 级子目录 (clientmsgid 前 2 字符)
+                        String[] attempts = {
+                            base + cid.substring(0, 2) + "/msg_" + cid + ".amr",
+                            base + "msg_" + cid + ".amr",
+                        };
+                        for (String p : attempts) {
+                            java.io.File f = new java.io.File(p);
+                            if (f.exists()) { LogWriter.log(TAG, "voice: constructed " + p + " EXISTS"); return p; }
+                        }
+                        LogWriter.log(TAG, "voice: clientmsgid=" + cid + " not found in voice2/");
+                    }
                 }
             }
         } catch (Throwable t) {
-            diag.append("ERR: ").append(t.getMessage());
+            LogWriter.log(TAG, "voice: xml parse error: " + t.getMessage());
         }
-        LogWriter.log(TAG, diag.toString());
+
+        // 方法3: ExtVoiceMsgIdToFileNameEvent
+        try {
+            long msgId = extractMsgId(e9);
+            Class<?> evtCls = XposedHelpers.findClass(
+                "com.tencent.mm.autogen.events.ExtVoiceMsgIdToFileNameEvent", ContextManager.getClassLoader());
+            Object evt = XposedHelpers.newInstance(evtCls);
+            Object data = XposedHelpers.getObjectField(evt, "data");
+            XposedHelpers.setLongField(data, "msgId", msgId);
+            XposedHelpers.callMethod(evt, "publish");
+            Object result = XposedHelpers.getObjectField(evt, "result");
+            if (result != null) {
+                String fn = (String) XposedHelpers.getObjectField(result, "filename");
+                if (fn != null) {
+                    String hash = getUinHash(ContextManager.getClassLoader());
+                    if (hash != null) {
+                        String p = "/data/user/0/com.tencent.mm/MicroMsg/" + hash + "/voice2/" + fn;
+                        java.io.File f = new java.io.File(p);
+                        if (f.exists()) { LogWriter.log(TAG, "voice: eventPath=" + p + " EXISTS"); return p; }
+                        LogWriter.log(TAG, "voice: event filename=" + fn + " not found");
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "voice: event error: " + t.getMessage());
+        }
+
+        // 方法4: searchVoice2Dir 兜底
+        LogWriter.log(TAG, "voice: all methods failed, trying voice2 search...");
         return null;
+    }
+
+    private static String extractXmlAttr(String xml, String attr) {
+        for (String q : new String[]{"\"", "'"}) {
+            String pattern = attr + "=" + q;
+            int idx = xml.indexOf(pattern);
+            if (idx >= 0) {
+                idx += pattern.length();
+                int end = xml.indexOf(q, idx);
+                if (end > idx) return xml.substring(idx, end);
+            }
+        }
+        return null;
+    }
+
+    private static String getUinHash(ClassLoader cl) {
+        try {
+            // 从 com.tencent.mm.kernel.h 获取 uin
+            Object uin = XposedHelpers.callStaticMethod(
+                XposedHelpers.findClass("com.tencent.mm.kernel.h", cl), "c");
+            String uinStr = String.valueOf(uin);
+            // MD5
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+            byte[] digest = md.digest(uinStr.getBytes());
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getUinHash error: " + t.getMessage());
+            return null;
+        }
     }
 
     private static String searchVoice2Dir() {
