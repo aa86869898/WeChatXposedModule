@@ -49,6 +49,8 @@ public class VoiceForwardHook {
         LogWriter.log(TAG, "setEnabled=" + v);
     }
 
+    private static volatile boolean sForwarding = false;
+
     public static void hook() {
         if (sHooked) return;
         ClassLoader cl = ContextManager.getClassLoader();
@@ -171,6 +173,15 @@ public class VoiceForwardHook {
     private static int hookAllMethodsOnClass(Class<?> cls, String label) {
         int count = 0;
         for (Method m : cls.getDeclaredMethods()) {
+            // 性能优化: 只 hook 参数签名为 (View,XXX) 或 (XXX,View) 的方法
+            Class<?>[] pts = m.getParameterTypes();
+            if (pts.length < 2) continue;
+            boolean hasView = false;
+            for (Class<?> pt : pts) {
+                if (View.class.isAssignableFrom(pt)) { hasView = true; break; }
+            }
+            if (!hasView) continue;
+
             final String mName = m.getName();
             count++;
             XposedBridge.hookMethod(m, new XC_MethodHook() {
@@ -398,7 +409,8 @@ public class VoiceForwardHook {
 
     // ===== 转发执行 ====
     private static void executeForward() {
-        if (!sEnabled) return;
+        if (!sEnabled || sForwarding) return;
+        sForwarding = true;
         try {
             View view = sPendingView;
             if (view == null) { showToast("请先长按一条语音消息"); return; }
@@ -408,62 +420,59 @@ public class VoiceForwardHook {
 
             LogWriter.log(TAG, "forward: tag=" + tag.getClass().getName());
 
-            // 尝试获取消息 ID — vo/ze/any 对象
+            // 提取消息 ID
             long msgId = extractMsgId(tag);
+            LogWriter.log(TAG, "forward: msgId=" + msgId + " (from " + tag.getClass().getSimpleName() + ")");
+
             if (msgId <= 0) {
-                // 尝试 tag 内部对象
-                try {
-                    Object inner = tag.getClass().getMethod("getMsgInfo").invoke(tag);
-                    msgId = extractMsgId(inner);
-                } catch (Throwable ignored) {}
+                StringBuilder sb = new StringBuilder("tag fields: ");
+                for (Field f : tag.getClass().getDeclaredFields()) {
+                    try {
+                        f.setAccessible(true);
+                        Object v = f.get(tag);
+                        sb.append(f.getName()).append("=");
+                        if (v instanceof Number || v instanceof String || v instanceof Boolean) {
+                            sb.append(v);
+                        } else if (v != null) {
+                            sb.append(v.getClass().getSimpleName());
+                        } else {
+                            sb.append("null");
+                        }
+                        sb.append(" ");
+                    } catch (Throwable ignored) {}
+                }
+                LogWriter.log(TAG, sb.toString());
+                showToast("消息ID提取失败, 查看日志");
+                return;
             }
-            LogWriter.log(TAG, "forward: msgId=" + msgId);
 
             String talker = extractTalker(tag);
-            if (talker == null || talker.isEmpty()) {
-                try {
-                    Object inner = tag.getClass().getMethod("getMsgInfo").invoke(tag);
-                    talker = extractTalker(inner);
-                } catch (Throwable ignored) {}
-            }
             LogWriter.log(TAG, "forward: talker=" + talker);
 
             Context ctx = sChatAct != null ? sChatAct : ContextManager.getAppContext();
             if (ctx == null) { showToast("context unavailable"); return; }
 
-            // 方式1: 用 msgSvrId 打开 SelectConversationUI
-            if (msgId > 0) {
-                ClassLoader cl = ctx.getClassLoader();
-                Class<?> fwdUI = null;
-                for (String n : new String[]{
-                    "com.tencent.mm.ui.transmit.SelectConversationUI",
-                    "com.tencent.mm.ui.transmit.MsgRetransmitUI",
-                }) { try { fwdUI = cl.loadClass(n); break; } catch (Throwable ignored) {} }
+            Class<?> fwdUI = null;
+            for (String n : new String[]{
+                "com.tencent.mm.ui.transmit.SelectConversationUI",
+                "com.tencent.mm.ui.transmit.MsgRetransmitUI",
+            }) { try { fwdUI = ctx.getClassLoader().loadClass(n); break; } catch (Throwable ignored) {} }
 
-                if (fwdUI != null) {
-                    Intent intent = new Intent(ctx, fwdUI);
-                    intent.putExtra("Retr_Msg_content", talker != null ? talker : "");
-                    intent.putExtra("Retr_Msg_Type", 34); // voice
-                    intent.putExtra("Retr_Msg_Id", msgId);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    ctx.startActivity(intent);
-                    LogWriter.log(TAG, "forward: SelectConversationUI launched");
-                    showToast("请选择接收人");
-                    return;
-                }
-            }
+            if (fwdUI == null) { showToast("微信版本不兼容"); return; }
 
-            // 方式2: 备用 — 显示消息内容用于调试
-            StringBuilder sb = new StringBuilder("tag fields: ");
-            for (java.lang.reflect.Field f : tag.getClass().getDeclaredFields()) {
-                try { f.setAccessible(true); sb.append(f.getName()).append("=").append(f.get(tag)).append(" "); } catch (Throwable ignored) {}
-            }
-            LogWriter.log(TAG, sb.toString());
-            showToast("转发: msgId=" + msgId + " talker=" + talker);
-
+            Intent intent = new Intent(ctx, fwdUI);
+            intent.putExtra("Retr_Msg_content", talker != null ? talker : "");
+            intent.putExtra("Retr_Msg_Type", 34); // voice
+            intent.putExtra("Retr_Msg_Id", msgId);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(intent);
+            LogWriter.log(TAG, "forward: SelectConversationUI launched");
+            showToast("请选择接收人");
         } catch (Throwable t) {
             LogWriter.log(TAG, "forward error: " + t.getMessage());
             showToast("转发失败: " + t.getMessage());
+        } finally {
+            sForwarding = false;
         }
     }
 
