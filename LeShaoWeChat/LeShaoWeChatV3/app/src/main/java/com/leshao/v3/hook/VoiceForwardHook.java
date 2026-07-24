@@ -82,26 +82,32 @@ public class VoiceForwardHook {
     // ===== 动态发现 RecyclerView Adapter ====
     private static void hookChatFragmentForAdapter(final ClassLoader cl) {
         try {
-            Class<?> bf = cl.loadClass("com.tencent.mm.ui.chatting.BaseChattingUIFragment");
-            XposedHelpers.findAndHookMethod(bf, "onCreateView",
-                android.view.LayoutInflater.class, ViewGroup.class, android.os.Bundle.class,
+            Class<?> bf = cl.loadClass("com.tencent.mm.ui.chatting.ChattingUIFragment");
+            XposedHelpers.findAndHookMethod(bf, "onViewCreated",
+                View.class, android.os.Bundle.class,
                 new XC_MethodHook() {
                     @Override protected void afterHookedMethod(MethodHookParam param) {
                         if (sAdapterHooked) return;
                         sCallCount.set(0);
 
-                        View root = (View) param.getResult();
-                        if (root == null) return;
+                        View root = (View) param.args[0];
+                        if (root == null) {
+                            LogWriter.log(TAG, "onViewCreated: arg[0] is null");
+                            return;
+                        }
+
+                        LogWriter.log(TAG, "onViewCreated: root=" + root.getClass().getSimpleName()
+                            + " children=" + (root instanceof ViewGroup ? ((ViewGroup) root).getChildCount() : 0));
 
                         RecyclerView rv = findRecyclerView(root);
                         if (rv == null) {
-                            LogWriter.log(TAG, "no RecyclerView found in onCreateView");
+                            LogWriter.log(TAG, "no RecyclerView found in onViewCreated root");
                             return;
                         }
 
                         RecyclerView.Adapter<?> adapter = rv.getAdapter();
                         if (adapter == null) {
-                            LogWriter.log(TAG, "RecyclerView found but Adapter is null");
+                            LogWriter.log(TAG, "RecyclerView found(" + rv.getClass().getSimpleName() + ") but Adapter is null");
                             return;
                         }
 
@@ -111,16 +117,16 @@ public class VoiceForwardHook {
                         try {
                             Class<?> adCls = cl.loadClass(adapterCls);
                             int cnt = hookAllNonStaticMethods(adCls);
-                            LogWriter.log(TAG, "hooked " + cnt + " methods on Adapter");
+                            LogWriter.log(TAG, "hooked " + cnt + " methods on Adapter " + adCls.getSimpleName());
                             sAdapterHooked = true;
                         } catch (Throwable t) {
                             LogWriter.log(TAG, "failed to hook Adapter: " + t.getMessage());
                         }
                     }
                 });
-            LogWriter.log(TAG, "onCreateView hook installed");
+            LogWriter.log(TAG, "onViewCreated hook installed on ChattingUIFragment");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "onCreateView hook failed: " + t.getMessage());
+            LogWriter.log(TAG, "onViewCreated hook failed: " + t.getMessage());
         }
     }
 
