@@ -70,6 +70,9 @@ public class VoiceForwardHook {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
                     sChatAct = (Activity) param.thisObject;
                     sCallCount.set(0);
+                    sMenuInjected = false;
+                    sPendingMsg = null;
+                    sPendingView = null;
                 }
             });
             XposedBridge.hookAllMethods(cui, "onPause", new XC_MethodHook() {
@@ -152,7 +155,7 @@ public class VoiceForwardHook {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
                     int n = sCallCount.incrementAndGet();
                     if (n <= 20) {
-                        StringBuilder sb = new StringBuilder("VF: ");
+                        StringBuilder sb = new StringBuilder();
                         sb.append(clsName).append(".").append(mName).append("(");
                         for (int i = 0; i < Math.min(param.args.length, 4); i++) {
                             if (i > 0) sb.append(",");
