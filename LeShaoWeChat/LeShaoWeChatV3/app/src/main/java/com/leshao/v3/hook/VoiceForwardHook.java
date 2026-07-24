@@ -82,51 +82,54 @@ public class VoiceForwardHook {
     // ===== 动态发现 RecyclerView Adapter ====
     private static void hookChatFragmentForAdapter(final ClassLoader cl) {
         try {
-            Class<?> bf = cl.loadClass("com.tencent.mm.ui.chatting.ChattingUIFragment");
-            XposedHelpers.findAndHookMethod(bf, "onViewCreated",
-                View.class, android.os.Bundle.class,
-                new XC_MethodHook() {
-                    @Override protected void afterHookedMethod(MethodHookParam param) {
-                        if (sAdapterHooked) return;
-                        sCallCount.set(0);
+            Class<?> cf = cl.loadClass("com.tencent.mm.ui.chatting.ChattingUIFragment");
 
-                        View root = (View) param.args[0];
-                        if (root == null) {
-                            LogWriter.log(TAG, "onViewCreated: arg[0] is null");
-                            return;
-                        }
+            XposedBridge.hookAllMethods(cf, "onViewCreated", new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam param) {
+                    if (sAdapterHooked) return;
+                    sCallCount.set(0);
 
-                        LogWriter.log(TAG, "onViewCreated: root=" + root.getClass().getSimpleName()
-                            + " children=" + (root instanceof ViewGroup ? ((ViewGroup) root).getChildCount() : 0));
-
-                        RecyclerView rv = findRecyclerView(root);
-                        if (rv == null) {
-                            LogWriter.log(TAG, "no RecyclerView found in onViewCreated root");
-                            return;
-                        }
-
-                        RecyclerView.Adapter<?> adapter = rv.getAdapter();
-                        if (adapter == null) {
-                            LogWriter.log(TAG, "RecyclerView found(" + rv.getClass().getSimpleName() + ") but Adapter is null");
-                            return;
-                        }
-
-                        String adapterCls = adapter.getClass().getName();
-                        LogWriter.log(TAG, "found Adapter: " + adapterCls);
-
-                        try {
-                            Class<?> adCls = cl.loadClass(adapterCls);
-                            int cnt = hookAllNonStaticMethods(adCls);
-                            LogWriter.log(TAG, "hooked " + cnt + " methods on Adapter " + adCls.getSimpleName());
-                            sAdapterHooked = true;
-                        } catch (Throwable t) {
-                            LogWriter.log(TAG, "failed to hook Adapter: " + t.getMessage());
-                        }
+                    View root = null;
+                    for (Object arg : param.args) {
+                        if (arg instanceof View) { root = (View) arg; break; }
                     }
-                });
-            LogWriter.log(TAG, "onViewCreated hook installed on ChattingUIFragment");
+                    if (root == null) {
+                        LogWriter.log(TAG, "onViewCreated: no View arg, args=" + param.args.length);
+                        return;
+                    }
+
+                    int childCount = root instanceof ViewGroup ? ((ViewGroup) root).getChildCount() : -1;
+                    LogWriter.log(TAG, "onViewCreated: root=" + root.getClass().getSimpleName()
+                        + " children=" + childCount);
+
+                    RecyclerView rv = findRecyclerView(root);
+                    if (rv == null) {
+                        LogWriter.log(TAG, "no RecyclerView found (root " + root.getClass().getSimpleName() + " has " + childCount + " children)");
+                        return;
+                    }
+
+                    RecyclerView.Adapter<?> adapter = rv.getAdapter();
+                    if (adapter == null) {
+                        LogWriter.log(TAG, "RecyclerView found but Adapter null");
+                        return;
+                    }
+
+                    String adapterCls = adapter.getClass().getName();
+                    LogWriter.log(TAG, "found Adapter: " + adapterCls);
+
+                    try {
+                        Class<?> adCls = cl.loadClass(adapterCls);
+                        int cnt = hookAllNonStaticMethods(adCls);
+                        LogWriter.log(TAG, "hooked " + cnt + " methods on Adapter " + adCls.getSimpleName());
+                        sAdapterHooked = true;
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "failed to hook Adapter: " + t.getMessage());
+                    }
+                }
+            });
+            LogWriter.log(TAG, "hookAllMethods onViewCreated installed");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "onViewCreated hook failed: " + t.getMessage());
+            LogWriter.log(TAG, "hook onViewCreated failed: " + t.getMessage());
         }
     }
 
