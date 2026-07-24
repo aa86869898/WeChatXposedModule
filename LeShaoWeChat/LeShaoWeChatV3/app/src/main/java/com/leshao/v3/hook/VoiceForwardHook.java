@@ -79,38 +79,150 @@ public class VoiceForwardHook {
         } catch (Throwable ignored) {}
     }
 
-    // ===== 动态发现 RecyclerView Adapter ====
+    // ===== 枚举 chat.viewitems 包下所有类, 找到长按菜单方法 =====
     private static void hookChatFragmentForAdapter(final ClassLoader cl) {
-        // 全局拦截 RecyclerView.setAdapter，按类名匹配聊天 Adapter
-        try {
-            XposedHelpers.findAndHookMethod(RecyclerView.class, "setAdapter",
-                RecyclerView.Adapter.class,
-                new XC_MethodHook() {
-                    @Override protected void afterHookedMethod(MethodHookParam param) {
-                        if (sAdapterHooked) return;
+        // 按 WeKit 文档: menu create 方法在 com.tencent.mm.ui.chatting.viewitems 包
+        // 类名如 ChattingItemAppMsg, 方法名混淆(如 "a"), 接收 ContextMenu + View
+        String[] knownClasses = {
+            "com.tencent.mm.ui.chatting.viewitems.ChattingItemAppMsg",
+            "com.tencent.mm.ui.chatting.viewitems.a",
+            "com.tencent.mm.ui.chatting.viewitems.b",
+            "com.tencent.mm.ui.chatting.viewitems.c",
+            "com.tencent.mm.ui.chatting.viewitems.d",
+            "com.tencent.mm.ui.chatting.viewitems.e",
+            "com.tencent.mm.ui.chatting.viewitems.f",
+            "com.tencent.mm.ui.chatting.viewitems.g",
+            "com.tencent.mm.ui.chatting.viewitems.h",
+            "com.tencent.mm.ui.chatting.viewitems.i",
+            "com.tencent.mm.ui.chatting.viewitems.j",
+        };
 
-                        RecyclerView.Adapter<?> adapter = (RecyclerView.Adapter<?>) param.args[0];
-                        if (adapter == null) return;
-                        String clsName = adapter.getClass().getName();
-                        LogWriter.log(TAG, "RecyclerView.setAdapter: " + clsName);
+        boolean any = false;
+        for (String cn : knownClasses) {
+            try {
+                Class<?> cls = cl.loadClass(cn);
+                int cnt = hookAllNonStaticMethodsWithMenuCheck(cls);
+                LogWriter.log(TAG, cn + ": hooked " + cnt + " methods");
+                any = true;
+            } catch (Throwable t) {
+                // class not found, skip
+            }
+        }
 
-                        if (!clsName.contains("Chatting")) return;
+        if (any) {
+            LogWriter.log(TAG, "viewitems hooks installed, long-press to test");
+        } else {
+            LogWriter.log(TAG, "NO viewitems classes found in 8.0.76");
+        }
+    }
 
-                        sCallCount.set(0);
-                        LogWriter.log(TAG, "CHAT ADAPTER FOUND: " + clsName);
-                        try {
-                            Class<?> adCls = adapter.getClass();
-                            int cnt = hookAllNonStaticMethods(adCls);
-                            LogWriter.log(TAG, "hooked " + cnt + " methods on " + adCls.getSimpleName());
-                            sAdapterHooked = true;
-                        } catch (Throwable t) {
-                            LogWriter.log(TAG, "failed to hook Adapter: " + t.getMessage());
-                        }
+    private static int hookAllNonStaticMethodsWithMenuCheck(Class<?> cls) {
+        int count = 0;
+        for (Method m : cls.getDeclaredMethods()) {
+            if (Modifier.isStatic(m.getModifiers())) continue;
+            final String mName = m.getName();
+            final Class<?>[] paramTypes = m.getParameterTypes();
+            if (!Modifier.isPublic(m.getModifiers()) && !Modifier.isProtected(m.getModifiers()))
+                continue;
+            count++;
+            XposedBridge.hookMethod(m, new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam param) {
+                    if (sAdapterHooked) return; // menu creation method found
+                    if (param.args == null || param.args.length < 2) return;
+
+                    Object arg0 = param.args[0];
+                    Object arg1 = param.args[1];
+
+                    boolean hasMenu = arg0 != null && arg0.getClass().getName().toLowerCase().contains("menu");
+                    boolean hasView = arg1 instanceof View;
+
+                    // 精确定位: 必须同时有 menu 对象 和 View 对象
+                    if (hasMenu && hasView) {
+                        LogWriter.log(TAG, "=== MENU CREATE FOUND ===");
+                        LogWriter.log(TAG, "class: " + cls.getName());
+                        LogWriter.log(TAG, "method: " + mName);
+                        LogWriter.log(TAG, "arg0: " + arg0.getClass().getName());
+                        LogWriter.log(TAG, "arg1: View=" + ((View) arg1).getClass().getSimpleName());
+                        sAdapterHooked = true;
+
+                        // 注入菜单项
+                        injectForwardMenuItem(arg0, (View) arg1);
                     }
-                });
-            LogWriter.log(TAG, "RecyclerView.setAdapter global hook installed");
+                }
+            });
+        }
+        return count;
+    }
+
+    private static void injectForwardMenuItem(Object menuObj, View itemView) {
+        try {
+            // WeKit 文档: addMenuItem(int, CharSequence, Drawable)
+            Object tag = itemView.getTag();
+            LogWriter.log(TAG, "View.tag: " + (tag == null ? "null" : tag.getClass().getName()));
+
+            // 尝试多种菜单添加方式
+            boolean ok = false;
+
+            // 方式1: addMenuItem(int, CharSequence) 
+            try {
+                Method addItem = menuObj.getClass().getMethod("addMenuItem", int.class, CharSequence.class);
+                addItem.invoke(menuObj, MENU_ID, "转发[K]");
+                LogWriter.log(TAG, "added via addMenuItem(int,CharSequence)");
+                ok = true;
+            } catch (Throwable ignored) {}
+
+            // 方式2: addMenuItem(int, CharSequence, Drawable)
+            if (!ok) {
+                try {
+                    Method addItem = menuObj.getClass().getMethod("addMenuItem", int.class, CharSequence.class, Drawable.class);
+                    addItem.invoke(menuObj, MENU_ID, "转发[K]", null);
+                    LogWriter.log(TAG, "added via addMenuItem(int,CharSequence,Drawable)");
+                    ok = true;
+                } catch (Throwable ignored) {}
+            }
+
+            // 方式3: add(int, int, int, CharSequence) — ContextMenu 标准方法
+            if (!ok) {
+                try {
+                    Method add = menuObj.getClass().getMethod("add", int.class, int.class, int.class, CharSequence.class);
+                    add.invoke(menuObj, 0, MENU_ID, 0, "转发[K]");
+                    LogWriter.log(TAG, "added via add(int,int,int,CharSequence)");
+                    ok = true;
+                } catch (Throwable ignored) {}
+            }
+
+            // 方式4: add(int, int, int, int) 
+            if (!ok) {
+                try {
+                    Method add = menuObj.getClass().getMethod("add", int.class, int.class, int.class, int.class);
+                    add.invoke(menuObj, 0, MENU_ID, 0, 0);
+                    LogWriter.log(TAG, "added via add(int,int,int,int)");
+                    ok = true;
+                } catch (Throwable ignored) {}
+            }
+
+            if (!ok) {
+                LogWriter.log(TAG, "ALL addMenuItem methods failed on " + menuObj.getClass().getName());
+                StringBuilder sb = new StringBuilder("methods: ");
+                for (Method m : menuObj.getClass().getMethods()) {
+                    if (m.getName().toLowerCase().contains("add")) {
+                        sb.append(m.getName()).append("(");
+                        Class<?>[] pts = m.getParameterTypes();
+                        for (int i = 0; i < pts.length; i++) {
+                            if (i > 0) sb.append(",");
+                            sb.append(pts[i].getSimpleName());
+                        }
+                        sb.append(") ");
+                    }
+                }
+                LogWriter.log(TAG, sb.toString());
+            }
+
+            // 待后续: 注册 menu item click handler
+            // 需要 hook ContextMenu/Activity.onContextItemSelected 等
+
         } catch (Throwable t) {
-            LogWriter.log(TAG, "setAdapter hook failed: " + t.getMessage());
+            LogWriter.log(TAG, "injectMenu error: " + t.getMessage());
         }
     }
 
