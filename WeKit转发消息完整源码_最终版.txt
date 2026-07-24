@@ -1,0 +1,734 @@
+================================================================================
+    WeKit 转发消息 —— 完整源码 + DexKit搜索方案 + 手工实现指南
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第一部分  DexKit 搜索微信方法 —— 4个目标的完整搜索指纹
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WeKit 用 org.luckypray.dexkit.DexKitBridge 在微信 DEX 中搜索4个目标方法。
+
+┌──────────┬──────────────────────┬──────────────────────────────────────┐
+│ 搜索层    │ 设置代码               │ 搜索条件                              │
+├──────────┼──────────────────────┼──────────────────────────────────────┤
+│ 第1层:包  │ pq9(3).B(qw2)        │ qw2.K="com.tencent.mm.ui.            │
+│ 范围      │                      │        chatting.viewitems"           │
+│           │                      │ qw2.Y(in9(26))  ← 第2层回调           │
+├──────────┼──────────────────────┼──────────────────────────────────────┤
+│ 第2层:    │ in9(26).B(wc5)       │ wc5.j0("onCreateMMMenu")             │
+│ 方法指纹  │                      │ wc5.X(pq9(14))  ← 参数过滤             │
+├──────────┼──────────────────────┼──────────────────────────────────────┤
+│ 第3层:    │ x52.d(dexKitBridge)  │ dexKitBridge.B(qw2)                  │
+│ DEX搜索   │                      │ → pc5 → oc5(className,methodName,    │
+│           │                      │           methodInstance)            │
+└──────────┴──────────────────────┴──────────────────────────────────────┘
+
+4个目标的具体搜索指纹:
+
+┌──────────────────────┬──────────────────────┬─────────────────────────────┐
+│ 目标                  │ 搜索包                │ 方法内字符串指纹             │
+├──────────────────────┼──────────────────────┼─────────────────────────────┤
+│ [0] methodCreateMenu │ chatting.viewitems   │ ★ "onCreateMMMenu"          │
+│ (菜单创建Hook)        │ pq9(3)→in9(26)       │   pq9(14)参数过滤            │
+├──────────────────────┼──────────────────────┼─────────────────────────────┤
+│ [1] methodSelect     │ chatting.viewitems   │ "MicroMsg.ChattingItem"     │
+│ MenuItem (菜单点击)   │ pq9(4)→in9(20)       │ "msg is null!"              │
+│                      │                      │ "context item select        │
+│                      │                      │  failed, null dataTag"      │
+├──────────────────────┼──────────────────────┼─────────────────────────────┤
+│ [2] methodMulti      │ chatting.component   │ "onMMMenuItemSelected"      │
+│ CreateMenu (多选创建) │ pq9(5)→in9(27)       │ "MicroMsg.ChattingForward   │
+│                      │                      │  MultiMsgLogic"             │
+│                      │                      │ "sendMultiMsg fromTalker:"  │
+├──────────────────────┼──────────────────────┼─────────────────────────────┤
+│ [3] methodMulti      │ chatting.component   │ 多选菜单项选择相关字符串      │
+│ SelectMenuItem       │ pq9(6)→in9(25)       │                             │
+│ (多选菜单点击)        │                      │                             │
+└──────────────────────┴──────────────────────┴─────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第二部分  手工寻找微信方法 (不用 DexKit)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+步骤: 用 jadx 打开微信 APK, 搜索以下字符串:
+
+1. 搜索 "onCreateMMMenu"
+   → 找到的方法就是菜单创建方法
+   → 记下: 类名 (混淆后如 ChattingItemAppMsg) + 方法名 (混淆后如 a)
+   → 参数通常是 (ContextMenu, View, ...)
+
+2. 搜索 "MicroMsg.ChattingItem" 和 "msg is null!"
+   → 找到的方法就是菜单点击处理方法
+
+3. 搜索 "MicroMsg.ChattingForwardMultiMsgLogic" 和 "sendMultiMsg fromTalker"
+   → 找到的方法就是多选转发方法
+
+4. 转发 API 的发现方法:
+   搜索 "sendText" / "sendImage" / "sendAppMsg" 等
+   或者用 Xposed 枚举 chatting.component 包下所有类的所有方法
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第三部分  pq9 源码 —— DexKit 第1层: 包范围设置 (case 3/4/5/6)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+文件: pq9.java (defpackage, 328行)
+
+public final class pq9 implements u83 {
+    public final int X;
+
+    public pq9(int i) { this.X = i; }
+
+    public final Object B(Object obj) {
+        switch (this.X) {
+
+            // ─── case 3: methodCreateMenu ───
+            case 3:
+                qw2 qw2Var = (qw2) obj;
+                WeChatMessageContextMenuApi api4 = WeChatMessageContextMenuApi.g;
+                qw2Var.K = bx.k1(new String[]{
+                    "com.tencent.mm.ui.chatting.viewitems"    // ★ 搜索包
+                });
+                qw2Var.Y(new in9(26));   // ★ 第2层: 方法指纹设置
+                return v79.a;
+
+            // ─── case 4: methodSelectMenuItem ───
+            case 4:
+                qw2 qw2Var2 = (qw2) obj;
+                WeChatMessageContextMenuApi api5 = WeChatMessageContextMenuApi.g;
+                qw2Var2.K = bx.k1(new String[]{
+                    "com.tencent.mm.ui.chatting.viewitems"
+                });
+                qw2Var2.Y(new in9(20));
+                return v79.a;
+
+            // ─── case 5: methodMultiCreateMenu ───
+            case 5:
+                qw2 qw2Var3 = (qw2) obj;
+                WeChatMessageContextMenuApi api6 = WeChatMessageContextMenuApi.g;
+                qw2Var3.K = bx.k1(new String[]{
+                    "com.tencent.mm.ui.chatting.component"    // ★ 不同包!
+                });
+                qw2Var3.Y(new in9(27));
+                return v79.a;
+
+            // ─── case 6: methodMultiSelectMenuItem ───
+            case 6:
+                qw2 qw2Var4 = (qw2) obj;
+                WeChatMessageContextMenuApi api7 = WeChatMessageContextMenuApi.g;
+                qw2Var4.K = bx.k1(new String[]{
+                    "com.tencent.mm.ui.chatting.component"
+                });
+                qw2Var4.Y(new in9(25));
+                return v79.a;
+        }
+    }
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第四部分  in9 源码 —— DexKit 第2层: 方法指纹设置 (case 20/25/26/27)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+in9 的 packed-switch 映射:
+  case 20 → :pswitch_2f0  (在线的 selectMenuItem 配置)
+  case 25 → :pswitch_f4   (在线的 multiSelectMenuItem 配置)
+  case 26 → :pswitch_ec   (在线的 methodCreateMenu 配置)
+  case 27 → :pswitch_d6   (在线的 multiCreateMenu 配置)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4.1  in9(26) → case 26 (:pswitch_ec) ★ methodCreateMenu
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+:pswitch_ec
+    check-cast p1, Lwc5;                   // DexKit DSL构建器
+    sget-object v1, Ldev/.../WeChatMessageContextMenuApi;->g:...
+    invoke-virtual {v0}, Ljava/lang/Object;->getClass()...
+
+    const-string v1, "onCreateMMMenu"       // ★ 方法名指纹!
+    invoke-virtual {v0, v1}, Lwc5;->j0(Ljava/lang/String;)V
+    // wc5.j0("onCreateMMMenu") → 搜索包含此字符串的方法
+
+    new-instance v1, Lpq9;
+    invoke-direct {v1, v14}, Lpq9;-><init>(I)V   // pq9(14) 参数过滤
+    invoke-virtual {v0, v1}, Lwc5;->X(Lu83;)V
+
+    return-object v19
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4.2  in9(20) → case 20 (:pswitch_2f0) ★ methodSelectMenuItem
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+:pswitch_2f0
+    check-cast v0, Lwc5;
+    sget-object v1, Ldev/.../WeChatMessageContextMenuApi;->g:...
+
+    const-string v1, "MicroMsg.ChattingItem"    // ★ 字符串指纹1
+    const-string v2, "msg is null!"              // ★ 字符串指纹2
+    filled-new-array {v1, v2}, [Ljava/lang/String;
+    move-result-object v1
+    invoke-virtual {v0, v1}, Lwc5;->k0([Ljava/lang/String;)V
+    // wc5.k0("MicroMsg.ChattingItem", "msg is null!")
+    // → 搜索同时包含这两个字符串的方法
+
+    return-object v19
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4.3  in9(27) → case 27 (:pswitch_d6) ★ methodMultiCreateMenu
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+:pswitch_d6
+    check-cast v0, Lwc5;
+    sget-object v1, Ldev/.../WeChatMessageContextMenuApi;->g:...
+
+    const-string v1, "onMMMenuItemSelected"              // ★ 字符串指纹1
+    invoke-virtual {v0, v1}, Lwc5;->j0(Ljava/lang/String;)V
+
+    const-string v1, "MicroMsg.ChattingForwardMultiMsgLogic"  // ★ 指纹2
+    const-string v2, "sendMultiMsg fromTalker:"               // ★ 指纹3
+    filled-new-array {v1, v2}, [Ljava/lang/String;
+    move-result-object v1
+    invoke-virtual {v0, v1}, Lwc5;->k0([Ljava/lang/String;)V
+
+    return-object v19
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4.4  in9(25) → case 25 (:pswitch_f4) ★ methodMultiSelectMenuItem
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+:pswitch_f4
+    check-cast v0, Lwc5;
+    sget-object v1, Ldev/.../WeChatMessageContextMenuApi;->g:...
+
+    const-string v1, "context item select failed, null dataTag"
+    filled-new-array {v8, v1}, [Ljava/lang/String;
+    move-result-object v1
+    invoke-virtual {v0, v1}, Lwc5;->k0([Ljava/lang/String;)V
+
+    return-object v19
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第五部分  d43 —— 转发菜单项提供者 (完整55行)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+文件: d43.java
+
+package defpackage;
+
+import dev.ujhhgtg.wekit.features.api.ui.WeChatMessageContextMenuApi;
+import java.util.List;
+
+public final class d43 extends jc8 implements sq9 {
+    public static final d43 i = new x50();
+
+    public final void C() {
+        WeChatMessageContextMenuApi.g.getClass();
+        WeChatMessageContextMenuApi.N(this);           // 注销
+    }
+
+    public final void D() {
+        WeChatMessageContextMenuApi.g.getClass();
+        WeChatMessageContextMenuApi.K(this);           // 注册
+    }
+
+    public final List a() {
+        a43 a43Var = a43.c;
+        aq3 aq3Var = u5.E;
+        if (aq3Var == null) {
+            zp3 zp3Var = new zp3("forward", 24f,24f, 960f,960f, 0L,0,false,224);
+            nx7 nx7Var = new nx7(hg1.e(4278190080L));
+            // ... 矢量路径绘制 (省略) ...
+            aq3Var = zp3Var.c();
+            u5.E = aq3Var;
+        }
+        return hu.O(new tq9(
+            777010,                  // 菜单ID
+            "转发",                  // 文本 → 运行时 + " [K]" = "转发 [K]"
+            a43Var,                  // Drawable图标
+            aq3Var,                  // Compose矢量图标
+            new sw2(25),             // isSupported: 消息类型条件
+            new vq9(                 // multiSelect: 多选条件
+                new sw2(26),         //   单消息条件
+                q90.i0               //   多消息onClick = q90(6)
+            ),
+            q90.j0                   // onClick: 单消息onClick = q90(7)
+        ));
+    }
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第六部分  q90 —— 转发 onClick 回调 (完整340行)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+文件: q90.java
+
+q90 有21个静态单例 (Y~w0), 实现了 y83::z(View, rq9, msg):
+  q90(0)  = Y   → 批量撤回
+  q90(1)  = Z   → (占位)
+  q90(2)  = e0  → 网络响应处理
+  q90(3)  = f0  → 查看详情
+  q90(4)  = g0  → 下载(缓存并下载)
+  q90(5)  = h0  → 下载(直接下载)
+  q90(6)  = i0  → ★ 多消息批量转发
+  q90(7)  = j0  → ★ 单消息转发
+  q90(8)  = k0  → 多消息转圈(朋友圈)
+  q90(9)  = l0  → 单消息转圈(朋友圈)
+  q90(10) = m0  → (占位)
+  q90(11) = n0  → 显示对话框
+  q90(12) = o0  → 编辑消息
+  q90(13) = p0  → 复读消息
+  q90(14) = q0  → 多消息存本地
+  q90(15) = r0  → 单消息存本地
+  q90(16) = s0  → (占位)
+  q90(17) = t0  → (占位)
+  q90(18) = u0  → (占位)
+  q90(19) = v0  → (占位)
+  q90(20) = w0  → (占位)
+
+================================================================================
+6.1  q90(7) = j0 → ★ 单消息转发
+================================================================================
+
+public final Object z(Object obj, Object obj2, Object obj3) {
+    // case 7:
+    View view4 = (View) obj;                  // 聊天窗口View
+    Object obj11 = ((rq9) obj2).a;             // 微信原始消息对象
+    jb5 jb5Var5 = (jb5) obj3;                 // WeKit消息包装
+
+    view4.getClass();
+    jb5Var5.getClass();
+    d43 d43Var2 = d43.i;
+    nd2 nd2Var = new nd2(6, jb5Var5);          // ★ 包装为 nd2(6, msg)
+    d43Var2.getClass();
+
+    sx1 sx1Var4 = y82.a;                       // 协程调度器
+    dh1.B(
+        is0.c(bx1.Z),                          // 主线程Dispatcher
+        (io1) null, (uo1) null,
+        new ry1(view4, nd2Var, (lk1) null, 7), // ★ ry1(7) 协程执行
+        3
+    );
+    return v79.a;
+}
+
+================================================================================
+6.2  q90(6) = i0 → ★ 多消息批量转发
+================================================================================
+
+public final Object z(Object obj, Object obj2, Object obj3) {
+    // case 6:
+    View view3 = (View) obj;
+    Object obj10 = ((rq9) obj2).a;
+    List list2 = (List) obj3;                  // ★ List<jb5> 消息列表
+
+    view3.getClass();
+    list2.getClass();
+    d43 d43Var = d43.i;
+    w6 w6Var = new w6(4, list2);               // ★ w6(4, list) 包装消息列表
+    d43Var.getClass();
+
+    sx1 sx1Var3 = y82.a;
+    dh1.B(
+        is0.c(bx1.Z),
+        (io1) null, (uo1) null,
+        new ry1(view3, w6Var, (lk1) null, 7),  // ★ ry1(7) 协程执行
+        3
+    );
+    return v79.a;
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第七部分  w6 —— 多消息转发任务包装 (完整79行)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+文件: w6.java
+
+public final class w6 implements u83 {
+    public final int X;           // 4
+    public final List Y;          // List<jb5>
+
+    public w6(int i, List list) { this.X = i; this.Y = list; }
+
+    public final Object B(Object obj) {
+        switch (this.X) {
+            case 4:  // ★ 多消息转发入口 ★
+                Set set = (Set) obj;            // 目标联系人集合
+                set.getClass();
+                d43.i.getClass();
+                sx1 sx1Var = y82.a;
+                dh1.B(
+                    is0.c(bx1.Z),
+                    (io1) null, (uo1) null,
+                    new c43(list, set, (lk1) null),  // ★ 核心转发引擎!
+                    3
+                );
+                return v79.a;
+        }
+    }
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第八部分  c43 —— ★ 核心转发引擎 (完整371行) ★
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+文件: c43.java
+
+package defpackage;
+
+import android.widget.Toast;
+import dev.ujhhgtg.wekit.features.api.core.WeMessageApi;
+import dev.ujhhgtg.wekit.features.api.core.WeServiceApi;
+import dev.ujhhgtg.wekit.utils.AudioUtils;
+import java.util.List;
+import java.util.Set;
+
+public final class c43 extends mb8 implements x83 {
+    public final int f0 = 1;
+    public int g0;                       // 进度状态: 0=初始,1=执行中,2=完成
+    public int h0;                       // 总操作数
+    public Object i0;                    // List<jb5> 或 h85
+    public final Object j0;              // Set<String> 或 h85
+
+    // 构造函数1: 批量转发到多个目标
+    public c43(List list, Set set, lk1 lk1Var) {
+        super(2, lk1Var);
+        this.i0 = list;
+        this.j0 = set;
+    }
+
+    // 构造函数2: 单消息转发
+    public c43(h85 h85Var, lk1 lk1Var) {
+        super(2, lk1Var);
+        this.j0 = h85Var;
+    }
+
+    // ★ 核心转发逻辑 ★
+    public final Object r(Object obj) {
+        switch (this.f0) {
+            case 0:
+                List<jb5> list = (List) this.i0;       // 消息列表
+                Set<String> set = (Set) this.j0;        // 目标ID集合
+
+                switch (this.h0) {
+                    case 0:   // ── 阶段1: 初始化 ──
+                        nf4.I(obj);
+                        int total = list.size() * set.size();
+                        String progress = "正在转发 " + list.size()
+                            + " 条消息到 " + set.size() + " 个对象...";
+                        this.g0 = total;
+                        this.h0 = 1;                    // → 进入执行
+                        dh1.O(se3Var, new g25(progress, null, 8), this);
+                        return so1Var;
+
+                    case 1:   // ── 阶段2: 逐目标逐消息执行 ──
+                        total = this.g0;
+                        nf4.I(obj);
+                        int successCount = 0;
+
+                        for (String targetId : set) {       // ★ 遍历目标
+                            for (jb5 msg : list) {          // ★ 遍历消息
+                                d43.i.getClass();
+                                ub5 msgType = msg.k();      // ★ 获取消息类型
+
+                                // ★★★ 按消息类型分发 ★★★
+                                switch (b43.a[msgType.ordinal()]) {
+                                    case 1:  // 文本
+                                        WeMessageApi.g.I0(targetId, msg.a());
+                                        break;
+                                    case 2:  // 图片
+                                        WeMessageApi.g.A0(targetId,
+                                            WeServiceApi.g.O(msg));
+                                        break;
+                                    case 3:  // 语音
+                                        String path = msg.e();
+                                        if (path != null) {
+                                            String newPath =
+                                                WeMessageApi.g.k0(path);
+                                            int dur = (int) AudioUtils.a
+                                                .getDurationMs(newPath);
+                                            WeMessageApi.g.K0(dur, targetId,
+                                                newPath);
+                                        }
+                                        break;
+                                    case 8:  // ★ 卡片消息 ★
+                                        WeMessageApi.g.L0(targetId,
+                                            msg.a());
+                                        break;
+                                    case 9:  // 文件
+                                        WeMessageApi.g.I0(targetId,
+                                            msg.g());
+                                        break;
+                                    default: // 回退为卡片模式
+                                        Toast.makeText(app,
+                                            "警告: 该消息类型未经过测试," +
+                                            " 回退为作为卡片消息发送, 可能失败!",
+                                            0).show();
+                                        WeMessageApi.g.L0(targetId,
+                                            msg.a());
+                                        break;
+                                }
+                                successCount++;
+                            }
+                        }
+
+                        // ── 阶段3: 报告结果 ──
+                        String result;
+                        if (successCount == total) {
+                            result = "已转发到 " + set.size() + " 个对象";
+                        } else {
+                            result = "已转发 " + successCount + "/"
+                                + total + " 条 (部分失败)";
+                        }
+                        this.g0 = total;
+                        this.h0 = 2;
+                        dh1.O(se3Var, new g25(result, null, 8), this);
+                        break;
+
+                    case 2:   // ── 完成 ──
+                        nf4.I(obj);
+                        return v79.a;
+                }
+        }
+    }
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第九部分  WeMessageApi —— 底层微信反射调用
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+文件: dev.ujhhgtg.wekit.features.api.core.WeMessageApi
+
+================================================================================
+9.1  f0(rawMsg) → 转换消息对象
+================================================================================
+
+public static Object f0(Object rawMsg) {
+    // 方法1: 查找返回指定类型的getter方法
+    t43 t43Var = new t43(rawMsg.getClass());
+    yc5 cond = new yc5();
+    cond.f0 = a0().e();           // 目标返回类型
+    cond.h0 = true;                // 允许非精确匹配
+    uz6 method = t43Var.J(cond);
+    if (method != null) {
+        return new dv3(method.a, rawMsg).b(new Object[0]);
+    }
+
+    // 方法2: 查找类型匹配的字段
+    iv2 fieldCond = new iv2();
+    fieldCond.Z = a0().e();       // 目标字段类型
+    fieldCond.f0 = true;
+    sz6 field = new t43(rawMsg.getClass()).I(fieldCond);
+    if (field != null) {
+        return mc9.c(rawMsg, field.a);
+    }
+    return null;
+}
+
+================================================================================
+9.2  I0(targetId, xmlStr) → 发送文本消息
+================================================================================
+
+public final boolean I0(String targetId, String xmlStr) {
+    try {
+        // 反射调用微信的工厂方法创建消息对象
+        Object invoke = h[4].e().invoke(null, null);
+        if (invoke != null) {
+            // 反射调用微信的发送方法
+            Object result = h[5].e().invoke(invoke,
+                c01.c(h[0].e(), new Object[]{targetId, xmlStr, 1, 0, null}, true)
+            );
+            return result instanceof Boolean ? (Boolean) result : false;
+        }
+        return false;
+    } catch (Exception e) {
+        hu9.c("WeMessageApi", "failed to send text message", e);
+        return false;
+    }
+}
+
+================================================================================
+9.3  ★ L0(targetId, xmlStr) → 发送卡片消息 (AppMsg) ★
+================================================================================
+
+public static boolean L0(String targetId, String xmlStr) {
+    String appId = zs6.n(xmlStr, "appid");    // 从XML提取appid
+    String title = zs6.o(xmlStr, "title");     // 从XML提取title
+
+    WeAppMsgApi weAppMsgApi = WeAppMsgApi.g;
+    try {
+        // Step 1: 反射调用微信的 XML→AppMsg 解析器
+        x52 parser = WeAppMsgApi.i;
+        parser.j(ec4VarArr[0], weAppMsgApi);
+        Object appMsg = parser.e().invoke(null, xmlStr);
+
+        if (appMsg == null) {
+            hu9.b("WeAppMsgApi", "failed to parse xml");
+            return false;
+        }
+
+        // Step 2: 反射调用微信的 AppMsg 发送器
+        x52 sender = WeAppMsgApi.j;
+        sender.j(ec4VarArr[1], weAppMsgApi);
+        sender.e().invoke(null, appMsg, appId, title, targetId, null, null);
+
+        return true;
+    } catch (Throwable th) {
+        hu9.c("WeAppMsgApi", "failed to send appmsg", th);
+        return false;
+    }
+}
+
+================================================================================
+9.4  A0(targetId, imagePath) → 发送图片消息
+================================================================================
+
+public final void A0(String targetId, String imagePath) {
+    if (version > 3000 || version >= 2963) {
+        // 新版微信: 直接反射构造参数并调用发送方法
+        x52 sender = k0;
+        sender.j(ec4VarArr[42], this);
+        Method e = sender.e();
+        Class<?> paramClass = e.getParameterTypes()[0];
+
+        // 反射查找构造参数所需的内部类型
+        iv2 fieldCond = new iv2();
+        fieldCond.h0 = new ju9(23);
+        fieldCond.X = true;
+        sz6 field = new t43(paramClass).I(fieldCond);
+
+        Object param = c01.c(paramClass, new Object[]{
+            imagePath, 1,
+            getLoginUserName(),
+            targetId,
+            createEmptyObj(field.a.getType())
+        }, true);
+
+        e.invoke(WeServiceApi.g.R(e.getDeclaringClass()), param);
+    } else {
+        // 旧版微信: 通过 NetScene 网络协议发送
+        WeNetSceneApi.g.J(g52Var.f(new Object[]{
+            4, loginUser, targetId, imagePath, 1,
+            null, 0, null, "", Boolean.TRUE, 0
+        }));
+    }
+}
+
+================================================================================
+9.5  K0(duration, targetId, voicePath) → 发送语音消息
+================================================================================
+
+(反射调用微信的语音发送API)
+
+================================================================================
+9.6  k0(path) → 处理语音文件路径
+================================================================================
+
+public final String k0(String path) {
+    Method e = h[35].e();
+    Object obj = Modifier.isStatic(e.getModifiers())
+        ? null : WeServiceApi.g.R(e.getDeclaringClass());
+    return (String) h[35].e().invoke(obj, null, path, Boolean.TRUE);
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第十部分  WeAppMsgApi —— AppMsg 卡片解析/发送 (完整44行)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+文件: dev.ujhhgtg.wekit.features.api.core.WeAppMsgApi
+
+package dev.ujhhgtg.wekit.features.api.core;
+
+import org.luckypray.dexkit.DexKitBridge;
+
+public final class WeAppMsgApi extends zm implements yn3 {
+    public static final WeAppMsgApi g;
+    public static final ec4[] h;
+    public static final x52 i;        // ★ methodParseXml
+    public static final x52 j;        // ★ methodSendAppMsg
+
+    static {
+        ea4[] ea4VarArr = {
+            new pl6(WeAppMsgApi.class, "methodParseXml",
+                "getMethodParseXml()L...DexMethodDelegate;", 0),
+            new pl6(WeAppMsgApi.class, "methodSendAppMsg",
+                "getMethodSendAppMsg()L...DexMethodDelegate;", 0)
+        };
+        h = ea4VarArr;
+        g = new x50();
+        i = new x52("...methodParseXml", null);    // DexKit委托
+        j = new x52("...methodSendAppMsg", null);  // DexKit委托
+    }
+
+    // DexKit 搜索微信的 XML解析 和 AppMsg发送 方法
+    public final void d(DexKitBridge dexKitBridge) {
+        uy0 uy0Var = (uy0) dexKitBridge.z(new in9(12)).b();
+
+        // 搜索 methodParseXml
+        i.j(h[0], this);
+        i.d(dexKitBridge, true, false, new jq9(uy0Var, 0));
+
+        // 搜索 methodSendAppMsg
+        j.j(h[1], this);
+        j.d(dexKitBridge, false, false,
+            new kq9(dexKitBridge.z(new in9(13)).b(), uy0Var, 0));
+    }
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第十一部分  sw2(25)/sw2(26) —— 消息类型条件
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+sw2 case 26 (:pswitch_ec) → vq9.a → 多消息条件:
+  参数: List<jb5> (消息列表)
+  返回: Boolean.TRUE  (始终返回true, 不过滤)
+
+sw2 case 25 (:pswitch_f4) → tq9.e → 单消息条件:
+  参数: jb5 (单条消息)
+  返回: Boolean.TRUE  (始终返回true, 不过滤)
+
+★ 这意味着 sw2(25) 和 sw2(26) 在当前版本中不执行过滤!
+  所有消息都会被显示"转发 [K]"菜单项。
+  消息类型过滤实际上发生在 c43.r() 的 switch 中。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第十二部分  完整调用链总结
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+用户长按消息
+  ↓
+微信调用菜单创建方法 (被 Xposed Hook)
+  ↓
+in9(21) case 21 → 获取 View.getTag() → 消息对象
+  ↓
+遍历 LinkedHashMap i 的所有 tq9
+  ↓ tq9.e.B(jb5) → sw2(25) → Boolean.TRUE
+  ↓ 条件满足
+反射 addMenuItem(777010, "转发 [K]", icon)
+  ↓
+用户点击 "转发 [K]"
+  ↓
+in9(22) case 22 → getItemId()=777010
+  ↓
+tq9.g.z(view, rq9(rawMsg), jb5)
+  ↓ q90(7).z()
+  ↓
+nd2(6, jb5) → ry1(7) → 协程执行 → 选择目标联系人
+  ↓
+w6(4, list).B(targetSet)
+  ↓
+c43(list, set, null).r() → 逐目标逐消息:
+  ↓
+  文本: WeMessageApi.I0(id, xml)
+        → 反射调用微信 sendText
+  图片: WeMessageApi.A0(id, path)
+        → 反射调用微信 sendImage
+  语音: WeMessageApi.K0(dur, id, path)
+        → 反射调用微信 sendVoice
+  ★卡片: WeMessageApi.L0(id, xml)
+        → WeAppMsgApi 解析XML
+        → 反射调用微信 sendAppMsg
+  默认: WeMessageApi.L0(id, xml)  (回退为卡片)
+  ↓
+Toast "已转发到 X 个对象"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                         —— 全文完 ——
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

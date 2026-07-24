@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.drawable.Drawable;
+import android.os.Bundle;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,6 +18,7 @@ import com.leshao.v3.LogWriter;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.Enumeration;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -61,9 +63,10 @@ public class VoiceForwardHook {
 
         hookChatActivity(cl);
         hookChatFragmentForAdapter(cl);
+        hookForwardTracing(cl);
 
         sHooked = true;
-        LogWriter.log(TAG, "ready — enter chat to discover Adapter");
+        LogWriter.log(TAG, "ready — do a native forward to trace API");
     }
 
     // ===== 聊天页 Activity =====
@@ -730,5 +733,181 @@ public class VoiceForwardHook {
             Context ctx = sChatAct != null ? sChatAct : ContextManager.getAppContext();
             if (ctx != null) Toast.makeText(ctx, text, Toast.LENGTH_SHORT).show();
         } catch (Throwable ignored) {}
+    }
+
+    // ===== Forward Tracing: hook native WeChat forward flow to discover API =====
+    private static void hookForwardTracing(ClassLoader cl) {
+        hookSelectConversationUI(cl);
+        hookChattingUIOnActivityResult(cl);
+        hookSetResult(cl);
+        scanTransmitAndMessenger(cl);
+        scanModelmultiAll(cl);
+    }
+
+    private static void hookSelectConversationUI(ClassLoader cl) {
+        try {
+            Class<?> scUI = cl.loadClass("com.tencent.mm.ui.transmit.SelectConversationUI");
+
+            XposedBridge.hookAllMethods(scUI, "onCreate", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Activity act = (Activity) param.thisObject;
+                    Intent intent = act.getIntent();
+                    LogWriter.log(TAG, "=== SelectConversationUI.onCreate ===");
+                    dumpIntentExtras(intent);
+                }
+            });
+
+            XposedBridge.hookAllMethods(scUI, "onActivityResult", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    int reqCode = (int) param.args[0];
+                    int resCode = (int) param.args[1];
+                    Intent data = (Intent) param.args[2];
+                    LogWriter.log(TAG, "=== SelUI.onActivityResult req=" + reqCode + " res=" + resCode + " ===");
+                    if (data != null) dumpIntentExtras(data);
+                }
+            });
+
+            XposedBridge.hookAllMethods(scUI, "onNewIntent", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Intent intent = (Intent) param.args[0];
+                    LogWriter.log(TAG, "=== SelUI.onNewIntent ===");
+                    dumpIntentExtras(intent);
+                }
+            });
+
+            LogWriter.log(TAG, "SelUI lifecycle hooks installed");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "SelUI hook fail: " + t.getMessage());
+        }
+    }
+
+    private static void hookChattingUIOnActivityResult(ClassLoader cl) {
+        try {
+            Class<?> cui = cl.loadClass("com.tencent.mm.ui.chatting.ChattingUI");
+            XposedBridge.hookAllMethods(cui, "onActivityResult", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    int reqCode = (int) param.args[0];
+                    int resCode = (int) param.args[1];
+                    Intent data = (Intent) param.args[2];
+                    LogWriter.log(TAG, "=== ChatUI.onActivityResult req=" + reqCode + " res=" + resCode + " ===");
+                    if (data != null) dumpIntentExtras(data);
+                }
+            });
+            LogWriter.log(TAG, "ChatUI.onActivityResult hooked");
+        } catch (Throwable ignored) {}
+    }
+
+    private static void hookSetResult(ClassLoader cl) {
+        try {
+            Class<?> scUI = cl.loadClass("com.tencent.mm.ui.transmit.SelectConversationUI");
+            for (Method m : scUI.getDeclaredMethods()) {
+                if (m.getName().contains("setResult") || m.getName().contains("finish")) {
+                    final String mName = m.getName();
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            LogWriter.log(TAG, "=== SelUI." + mName + " ===");
+                            for (int i = 0; i < param.args.length; i++) {
+                                Object a = param.args[i];
+                                if (a instanceof Intent) {
+                                    dumpIntentExtras((Intent) a);
+                                } else if (a instanceof Integer) {
+                                    LogWriter.log(TAG, "  arg[" + i + "]=" + a);
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+            LogWriter.log(TAG, "SelUI setResult/finish hooks installed");
+        } catch (Throwable ignored) {}
+    }
+
+    private static void scanTransmitAndMessenger(ClassLoader cl) {
+        try {
+            String apkPath = ContextManager.getApkPath();
+            if (apkPath == null) return;
+            dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+            Enumeration<String> entries = dex.entries();
+            while (entries.hasMoreElements()) {
+                String cn = entries.nextElement();
+                boolean match = cn.startsWith("com.tencent.mm.ui.transmit.")
+                    || cn.startsWith("com.tencent.mm.plugin.messenger.foundation.");
+                if (!match) continue;
+                try {
+                    Class<?> cls = cl.loadClass(cn);
+                    StringBuilder sb = new StringBuilder("TRACE:").append(cn);
+                    for (Method m : cls.getDeclaredMethods()) {
+                        sb.append(" ").append(m.getName()).append("(");
+                        Class<?>[] pts = m.getParameterTypes();
+                        for (int j = 0; j < pts.length; j++) {
+                            if (j > 0) sb.append(",");
+                            sb.append(pts[j].getSimpleName());
+                        }
+                        sb.append(")");
+                    }
+                    LogWriter.log(TAG, sb.toString());
+                } catch (Throwable ignored) {}
+            }
+            dex.close();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "TRACE scan error: " + t.getMessage());
+        }
+    }
+
+    private static void scanModelmultiAll(ClassLoader cl) {
+        try {
+            String apkPath = ContextManager.getApkPath();
+            if (apkPath == null) return;
+            dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+            Enumeration<String> entries = dex.entries();
+            while (entries.hasMoreElements()) {
+                String cn = entries.nextElement();
+                if (!cn.startsWith("com.tencent.mm.modelmulti.")) continue;
+                try {
+                    Class<?> cls = cl.loadClass(cn);
+                    StringBuilder ms = new StringBuilder("MULTI:").append(cn);
+                    for (Method m : cls.getDeclaredMethods()) {
+                        ms.append(" ").append(m.getName()).append("(");
+                        Class<?>[] pts = m.getParameterTypes();
+                        for (int j = 0; j < pts.length; j++) {
+                            if (j > 0) ms.append(",");
+                            ms.append(pts[j].getSimpleName());
+                        }
+                        ms.append(")");
+                    }
+                    LogWriter.log(TAG, ms.toString());
+                } catch (Throwable ignored) {}
+            }
+            dex.close();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "MULTI scan error: " + t.getMessage());
+        }
+    }
+
+    private static void dumpIntentExtras(Intent intent) {
+        if (intent == null) { LogWriter.log(TAG, "  intent=null"); return; }
+        LogWriter.log(TAG, "  action=" + intent.getAction());
+        if (intent.getComponent() != null) {
+            LogWriter.log(TAG, "  component=" + intent.getComponent().getClassName());
+        }
+        Bundle extras = intent.getExtras();
+        if (extras == null) { LogWriter.log(TAG, "  extras=null"); return; }
+        for (String key : extras.keySet()) {
+            Object val = extras.get(key);
+            String valStr;
+            if (val == null) {
+                valStr = "null";
+            } else if (val instanceof Number || val instanceof String || val instanceof Boolean) {
+                valStr = val.toString();
+            } else {
+                valStr = val.getClass().getSimpleName();
+            }
+            LogWriter.log(TAG, "  EXTRA[" + key + "]=" + valStr);
+        }
     }
 }

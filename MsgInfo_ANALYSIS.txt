@@ -1,0 +1,214 @@
+================================================================================
+  storage.e9 (MsgInfo) 完整字段/方法分析 — 微信 8.0.76
+  基于 dm.c8.convertFrom(ContentValues) 源码逆向
+================================================================================
+
+一、继承链
+================================================================================
+
+  s85.f0 (ORM基类 — 5字段)
+    → dm.c8 (消息数据基类 — 108字段, 实际消息数据全在这)
+      → pt0.o3 (只有1个字段 p2:s85/e0)
+        → storage.e9 (最终消息类 — 12字段, 加额外方法)
+
+  所以: storage.e9 对象 = dm.c8 全部字段 + pt0.o3字段 + 自有12字段
+        = ~121 个字段
+
+
+二、dm.c8 — 消息核心字段 (从 convertFrom(ContentValues) 逆向)
+================================================================================
+
+  字段名                      类型      对应DB列          说明
+  ─────────────────────────── ──────── ───────────────── ──────────────────────
+  field_msgId                 long     msgId            本地消息ID(主键)
+  field_msgSvrId              long     msgSvrId         服务器消息ID
+  field_type                  int      type             消息类型码
+  field_status                int      status           消息状态
+  field_isSend                int      isSend           是否发送(0=收 1=发) ★
+  field_isShowTimer           int      isShowTimer      显示时间标记
+  field_createTime            long     createTime       创建时间(毫秒)
+  field_talker                String   talker           会话ID/对方username
+  field_content               String   content          消息内容
+  field_imgPath               String   imgPath          图片/语音文件路径 ★
+  field_reserved              String   reserved         预留字段
+  field_lvbuffer              byte[]   lvbuffer         语音二进制数据缓存 ★
+  field_talkerId              int      talkerId         会话数字ID
+  field_transContent          String   transContent     翻译内容
+  field_transBrandWording     String   transBrandWording 品牌翻译文本
+  field_bizClientMsgId        String   bizClientMsgId   企业客户端消息ID
+  field_bizChatId             long     bizChatId         企业聊天ID
+
+  (>18个字段, 部分被截断未显示, 继续还有约90个字段在dm.c8中)
+
+
+三、语音消息(type=34)相关字段 ★★★
+================================================================================
+
+  核心字段:
+  field_content    — 语音XML: 包含 duration(时长), format(格式), voiceUrl等
+  field_lvbuffer   — 语音二进制数据(AMR/SILK格式)
+  field_imgPath    — 语音文件本地路径: /voice2/<md5>.amr
+  field_reserved   — 语音元数据(可能是格式/采样率等)
+
+  获取方法:
+  I0() → String           获取 content (语音XML)
+  j() → String            获取 content 别名
+  Q0() → String           可能是 imgPath
+  R0() → String           可能是 reserved
+  P0() → String           可能是另一个字符串
+  N0() → String           可能是 talker
+
+  时间相关:
+  getCreateTime() → long  语音发送/接收时间 (未混淆, 可直接用)
+  H0() → long             获取 msgId (getMsgId混淆名)
+
+  状态相关:
+  O0() → int              status (可能包含语音播放状态)
+  G1() → boolean          isSend (是否自己发送)
+  isVideo() → boolean     是否视频
+
+  语音文件路径结构:
+  数据库: /data/user/0/com.tencent.mm/MicroMsg/<hash>/voice2/<md5>.amr
+  文件名可从 field_content 的 XML 中解析, 或通过 ExtVoiceMsgIdToFileNameEvent
+
+
+四、dm.c8 公开方法 (未混淆 + 混淆映射)
+================================================================================
+
+  未混淆(直接可用):
+  getType() → int                消息类型
+  getCreateTime() → long         创建时间
+  getMsgId() → long              消息ID
+  isVideo() → boolean            是否视频
+  convertFrom(Cursor) → void     从数据库恢复
+  convertTo() → ContentValues    序列化
+  convertFrom(ContentValues,boolean) → void  从CV恢复
+  initAutoDBInfo(Class) → e0     初始化ORM信息
+  compareContent(f0) → boolean   比较内容
+  parseBuff() → void             解析buffer
+  toJSON() → Object              转JSON
+  setType(int) → void            设置类型
+  setMsgId(long) → void          设置消息ID
+  getDBInfo() → e0               获取ORM信息
+  getObserverOwner() → v85.e     观察者
+  getPrimaryKeyValue() → Object  主键值
+  getTable() → n0                表信息
+  getTableName() → String        表名
+
+  混淆方法(需死记):
+  H0() → long               getMsgId() 别名? 还是 msgSvrId?
+  I0() → String             getContent()
+  N0() → String             getTalker()
+  O0() → int                getStatus()
+  P0() → String             可能是 imgPath
+  Q0() → String             可能是 reserved
+  R0() → String             可能是 transContent
+  F0() → long               可能是 msgSvrId
+  G0() → String             可能是某个字符串
+  M0() → int                可能是某个int
+  K0() → qe4                可能是某个对象
+  A0() → byte[]             可能是 lvbuffer
+  U0(long) → void           设置某long
+  X0(String) → void         设置某String (content?)
+  Z0(String) → void         设置某String
+  d1(String) → void         设置撤回文本
+  i1(String) → void         设置某String (可能是 talker?)
+  j1(String) → void         设置某String
+  y1(String) → void         设置某String
+  q1(String) → void         设置某String
+  B1(String) → void         设置某String
+  F1(String) → void         设置某String
+  A1(int) → void            设置 type
+  b1(int) → void            设置某int (可能是 status?)
+  f1(int) → void            设置某int
+  k1(int) → void            设置某int
+  m1(int) → void            设置某int
+  t1(int) → void            设置某int
+  e1(long) → void           设置某long (可能是 createTime?)
+  n1(long) → void           设置某long
+  p1(long) → void           设置某long
+  l1(byte[]) → void         设置 lvbuffer
+  r1(qe4) → void            设置某对象
+  t0() → long               获取某long
+  u0() → String             获取某String
+  v0() → String             获取某String
+  w0() → int                获取某int (可能是 flag?)
+  x0() → String             获取某String
+  y0() → String             获取某String
+  z0() → int                获取某int
+
+
+五、storage.e9 自有方法 (最终消息类)
+================================================================================
+
+  未混淆:
+  getType() → int          (继承/重写)
+  getCreateTime() → long   (继承)
+  isVideo() → boolean      (继承)
+
+  混淆方法(混淆名→原始含义):
+  G1() → boolean          是否自己发送(isSend)
+  H0() → long             getMsgId()
+  I0() → String           getContent()
+  O0() → int              getStatus()
+  P0() → String           可能是 imgPath
+  Q0() → String           可能是 reserved
+  R0() → String           可能是 transContent
+  A1(int) → void          setType()
+  B1(String) → void       setContent() 或设置某String
+  d1(String) → void       setRevokeText()
+  L1(long) → void         setCreateTime()
+  P1(e9) → e9 (static)   克隆消息
+  Q1() → int              可能是另一个状态标志
+  U0(long) → void         设置某long
+  X0(String) → void       setContent() (另一个入口)
+  Z0(String) → void       设置某String
+  j() → String            获取 content (别名)
+
+
+六、关键发现 — isSend 确认
+================================================================================
+
+  ✅ convertFrom 第367-372行确认:
+     "if (contentValues.containsKey("isSend")) {
+          this.field_isSend = contentValues.getAsInteger("isSend").intValue();
+      }"
+  
+  → field_isSend 字段确实存在! 是在 dm.c8 父类中, 不在 storage.e9 自身。
+  
+  但是日志中 isSend=53/13774 的原因是:
+    你旧模块的 MessageHook 尝试用 XposedHelpers.getIntField() 读取,
+    但传入的是 storage.e9 对象, 而 field_isSend 在父类 dm.c8 中,
+    由于混淆, 字段的真实Java名不是 "field_isSend" 而是某个混淆名(可能是A或B等).
+  
+  ✅ 正确读取方式:
+    方法1: 遍历父类字段用 getDeclaredFields()
+    方法2: 用 G1() 方法 (已经确认返回boolean)
+    方法3: 从父类 dm.c8 读取: 
+           Object parent = msgInfo;  // 本身就是 dm.c8 子类
+           遍历 parent.getClass().getSuperclass().getDeclaredFields()
+
+
+七、语音消息 XML 结构 (field_content 内容)
+================================================================================
+
+  语音消息 type=34 时 content 格式:
+    <msg>
+      <voicemsg endflag="1" 
+                cancelflag="0"
+                length="5000"           ← 时长(毫秒)
+                voiceformat="4"          ← 格式(4=AMR)
+                voicelength="5000"
+                forwardflag="0"
+                bufid="..."             ← 文件标识
+                fromusername="wxid_xxx"
+                clientmsgid="..." />
+    </msg>
+
+  或简单格式: wxid_xxx:0:0  (群聊中可能是 sender:0:0)
+
+
+================================================================================
+  分析完成
+  微信 8.0.76 · uin=295734952 · msgId=H0() · isSend=G1()
+================================================================================

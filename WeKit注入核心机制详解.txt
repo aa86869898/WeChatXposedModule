@@ -1,0 +1,429 @@
+================================================================================
+     WeKit 聊天长按菜单注入「转发[K]」—— 核心机制深度解析
+================================================================================
+    回答: "为什么我的实现不工作?" / "它到底怎么调用的?"
+================================================================================
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第一章  核心答案: DexKit 是灵魂,不是可选的
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WeKit 调用的核心依赖:  org.luckypray.dexkit.DexKitBridge
+
+证据链:
+  j52.java → import org.luckypray.dexkit.DexKitBridge;
+  x52.d() → dexKitBridge.B(qw2) → pc5 (搜索结果)
+  x52.e() → 返回 java.lang.reflect.Method (已找到的微信方法)
+
+没有 DexKit, WeKit 的整个架构就无法工作。
+因为微信的类名/方法名是混淆的 (a, b, c, d...), 且每个版本不同。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DexKit 是什么?
+  - 一个 DEX 字节码搜索引擎
+  - 可以按方法名、参数字符串、返回值类型等在 DEX 中搜索方法
+  - 返回匹配方法的 ClassName + MethodName + Method实例
+  - GitHub: github.com/LuckyPray/DexKit
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第二章  WeKit 的三层搜索引擎配置
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+层级结构:
+  q35.O(7, pq9(X))              ← 创建搜索器 h52
+    └→ h52.a(pl6, this)         ← 绑定委托到宿主实例
+        └→ j52.R(x52, dexKitBridge)
+            └→ x52.d(dexKitBridge, ...)
+                ├→ pq9(X).B(qw2)     ← 第1层: 设置包范围
+                │    ├ pq9(3)→qw2.K="com.tencent.mm.ui.chatting.viewitems"
+                │    │         qw2.Y(in9(26))
+                │    ├ pq9(4)→qw2.K="com.tencent.mm.ui.chatting.viewitems"
+                │    │         qw2.Y(in9(20))
+                │    ├ pq9(5)→qw2.K="com.tencent.mm.ui.chatting.component"
+                │    │         qw2.Y(in9(27))
+                │    └ pq9(6)→qw2.K="com.tencent.mm.ui.chatting.component"
+                │              qw2.Y(in9(25))
+                │
+                ├→ in9(Y).B(wc5)      ← 第2层: 设置方法搜索条件
+                │    ├ in9(26) → j0("onCreateMMMenu")
+                │    ├ in9(20) → j0("onMMMenuItemSelected")? + msg检测
+                │    ├ in9(27) → j0("onMMMenuItemSelected")? + 多选检测
+                │    └ in9(25) → 多选菜单项选择检测
+                │
+                └→ dexKitBridge.B(qw2) ← 第3层: 执行DEX搜索
+                    └→ pc5 → oc5 → y52(className, methodName, method)
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第三章  四个 Hook 目标的 DexKit 搜索指纹
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌──────────────────┬──────────────────────────┬─────────────────────────────────┐
+│ Hook目标          │ 搜索包范围                │ 搜索指纹 (方法内字符串)          │
+├──────────────────┼──────────────────────────┼─────────────────────────────────┤
+│ methodCreateMenu │ com.tencent.mm.ui.       │ "onCreateMMMenu"                │
+│ (菜单创建)        │ chatting.viewitems       │                                 │
+├──────────────────┼──────────────────────────┼─────────────────────────────────┤
+│ methodSelectMenu │ com.tencent.mm.ui.       │ "MicroMsg.ChattingItem"         │
+│ Item (菜单点击)   │ chatting.viewitems       │ "msg is null!"                  │
+│                  │                          │ "context item select failed..."  │
+├──────────────────┼──────────────────────────┼─────────────────────────────────┤
+│ methodMulti      │ com.tencent.mm.ui.       │ "onMMMenuItemSelected"          │
+│ CreateMenu       │ chatting.component       │ "MicroMsg.ChattingForward..."   │
+│ (多选菜单创建)    │                          │ "sendMultiMsg fromTalker:"      │
+├──────────────────┼──────────────────────────┼─────────────────────────────────┤
+│ methodMulti      │ com.tencent.mm.ui.       │ 多选菜单项选择相关字符串         │
+│ SelectMenuItem   │ chatting.component       │                                 │
+│ (多选菜单点击)    │                          │                                 │
+└──────────────────┴──────────────────────────┴─────────────────────────────────┘
+
+这些"搜索指纹"是微信源码中的字符串常量，存在于方法的字节码中。
+即使类名和方法名被混淆，这些字符串不会变。
+DexKit 通过扫描 DEX 中所有方法的字节码来匹配这些字符串。
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第四章  搜索结果如何变成 Xposed Hook
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 1: DexKit 搜索
+  dexKitBridge.B(qw2)
+  → pc5 = [oc5(className="com.tencent.mm.ui.chatting.viewitems.ChattingItemAppMsg",
+                methodName="a",
+                method=Method实例)]
+
+Step 2: 缓存结果
+  x52.Z = y52("com.tencent.mm.ui.chatting.viewitems.ChattingItemAppMsg", "a", method)
+
+Step 3: 获取 Method
+  x52.e()
+  → if e0==null: e0 = y52.resolve() (通过Class.forName + getDeclaredMethod)
+  → return e0  (java.lang.reflect.Method)
+
+Step 4: Xposed Hook
+  x50.w(x52.e(), 50ms, in9(21))
+  → XposedBridge.hookMethod(
+      com.tencent.mm.ui.chatting.viewitems.ChattingItemAppMsg.a,  ← 混淆名!
+      w50(in9(21))
+    )
+
+Step 5: 运行时触发
+  用户长按消息 → 微信调用 a() 方法
+  → w50.beforeHookedMethod()
+  → x50.q(param, in9(21))
+  → in9(21).B(param)
+  → case 21 → args[0]=菜单对象, args[1]=View
+  → 注入 "转发 [K]"
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第五章  运行时注入的完整 Java 等价代码
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/**
+ * 这是 case 21 运行时回调的 Java 等价代码
+ * 展示了 WeKit 如何在微信菜单中注入 "转发 [K]"
+ */
+public void onMenuCreate(XC_MethodHook.MethodHookParam param) {
+    // ===== Step 1: 获取参数 =====
+    Object menuObj = param.args[0];      // 微信的 ContextMenu / MMMenu 对象
+    View itemView = (View) param.args[1]; // 被长按的消息View
+    
+    // ===== Step 2: 从View获取消息对象 =====
+    Object rawMsg = itemView.getTag();    // ★ 微信把消息存在View的Tag里!
+    // 缓存View供后续使用
+    WeChatMessageContextMenuApi.n = itemView;
+    
+    // 用WeMessageApi转换消息对象
+    Object msgObj = WeMessageApi.g.f0(rawMsg);
+    jb5 msg = new jb5(msgObj);
+    
+    // ===== Step 3: 反射查找addMenuItem方法 =====
+    Class<?> menuClass = menuObj.getClass();
+    Method addMenuItem = findMethod(menuClass,
+        int.class, CharSequence.class, Drawable.class);
+    // ★ 微信ContextMenu有 addMenuItem(int, CharSequence, Drawable) 方法!
+    
+    // ===== Step 4: 遍历注册表, 过滤匹配的菜单项 =====
+    Map<String, List<tq9>> registry = WeChatMessageContextMenuApi.i;
+    List<tq9> matchedItems = new ArrayList<>();
+    for (List<tq9> items : registry.values()) {
+        for (tq9 item : items) {
+            // tq9.e = sw2(25): 检查消息类型是否支持转发
+            Boolean supported = (Boolean) item.e.B(msg);
+            if (supported) {
+                matchedItems.add(item);
+            }
+        }
+    }
+    
+    // ===== Step 5: 注入菜单项 =====
+    boolean mergeMode = ra5.i.g;  // 从SharedPreferences读取
+    
+    if (mergeMode) {
+        // 合并模式: 只添加一个"WeKit"入口
+        addMenuItem.invoke(menuObj, 0xbdb28, "WeKit", defaultIcon);
+    } else {
+        // ★ 独立模式: 逐个添加 (最常用) ★
+        for (tq9 item : matchedItems) {
+            int id = item.a;              // 777010
+            String text = item.b + " [K]"; // "转发" + " [K]" = "转发 [K]"
+            Drawable icon = item.c;
+            
+            addMenuItem.invoke(menuObj, id, text, icon);
+            // → 微信菜单中出现了 "转发 [K]" !
+        }
+    }
+}
+
+/**
+ * 这是 case 22 运行时回调的 Java 等价代码
+ * 处理用户点击 "转发 [K]"
+ */
+public void onMenuItemClick(XC_MethodHook.MethodHookParam param) {
+    MenuItem menuItem = (MenuItem) param.args[0];
+    int itemId = menuItem.getItemId();
+    
+    // ===== 分支A: 合并模式 (id=0xbdb28) =====
+    if (itemId == 0xbdb28) {
+        // 获取缓存的消息和View
+        View cachedView = WeChatMessageContextMenuApi.n;
+        WeChatMessageContextMenuApi.n = null;  // 清空缓存
+        
+        Object rawMsg = cachedView.getTag();
+        jb5 msg = new jb5(WeMessageApi.g.f0(rawMsg));
+        
+        // 过滤匹配的菜单项
+        List<tq9> matched = filterItems(msg);
+        
+        // ★ 显示 Compose 子菜单对话框
+        dg1.W(cachedView.getContext(), true, 
+              new ta1(new iq4(matched, cachedView, msg, param, 21), 
+                      true, 0x43f7ff87));
+        param.setResult(null);  // 消费事件
+        return;
+    }
+    
+    // ===== 分支B: 独立模式 (id=777010 等) =====
+    for (tq9 item : allItems()) {
+        if (item.a == itemId) {
+            // ★ 直接调用 onClick 回调!
+            Object rawMsg = getRawMsgFromCachedView();
+            item.g.z(
+                cachedView,              // View
+                new rq9(rawMsg),         // 原始消息对象
+                new jb5(rawMsg)          // 包装的消息对象
+            );
+            // = q90(7).z(view, rq9, jb5)
+            // = d43.i.doForward(msg)
+            
+            param.setResult(null);  // 消费事件
+            return;
+        }
+    }
+}
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第六章  为什么你的实现不工作? 常见原因诊断
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+如果你没有用 DexKit, 而试图手动 Hook, 以下是每个环节可能失败的原因:
+
+┌──────────────────────┬──────────────────────────────────────────────────────┐
+│ 失败环节              │ 诊断方法                                              │
+├──────────────────────┼──────────────────────────────────────────────────────┤
+│ 1. 找错方法           │ 你 Hook 的不是微信创建上下文菜单的方法                  │
+│                      │ 检查: Xposed日志中 Hook 是否被触发?                    │
+│                      │ 如果没有 → 方法名/类名不正确                          │
+├──────────────────────┼──────────────────────────────────────────────────────┤
+│ 2. 参数索引错误        │ args[0]不是菜单对象, args[1]不是View                 │
+│                      │ 检查: param.args.length 是多少? 打印args类型          │
+│                      │ 不同微信版本参数位置可能不同                            │
+├──────────────────────┼──────────────────────────────────────────────────────┤
+│ 3. View.getTag()为空  │ 微信的消息不一定存在 View.getTag() 中                 │
+│                      │ 打印 View.getTag() 看是否为 null                      │
+│                      │ 可能需要用其他方式获取消息 (如遍历字段)                 │
+├──────────────────────┼──────────────────────────────────────────────────────┤
+│ 4. addMenuItem不存在  │ 微信的菜单对象可能没有 addMenuItem 方法               │
+│                      │ 打印 menuObj.getClass().getMethods() 确认              │
+│                      │ 方法签名可能不同 (如返回void而非MenuItem)              │
+├──────────────────────┼──────────────────────────────────────────────────────┤
+│ 5. 菜单项被覆盖        │ 微信在原方法末尾可能清空了菜单                        │
+│                      │ 检查是 beforeHookedMethod 还是 afterHookedMethod      │
+│                      │ WeKit 用 beforeHookedMethod (w50 case 1)              │
+├──────────────────────┼──────────────────────────────────────────────────────┤
+│ 6. 条件过滤失败        │ tq9.e.B(msg) 返回了 false                           │
+│                      │ 消息类型不满足条件, 所有菜单项都被过滤掉了              │
+│                      │ 打印 msg 的类型和 sw2(25) 的返回值                     │
+├──────────────────────┼──────────────────────────────────────────────────────┤
+│ 7. 微信版本不匹配      │ WeChat 8076版本的类结构可能完全不同                   │
+│                      │ 搜索的包名/方法指纹可能已过时                          │
+│                      │ 需要用 ClassLoader.loadClass 枚举检查                  │
+└──────────────────────┴──────────────────────────────────────────────────────┘
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第七章  不用 DexKit 的手动实现方案 (针对微信 8076)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+方案 A: 字符串搜索定位法 (推荐)
+
+Step 1: 在微信 DEX 中搜索字符串 "onCreateMMMenu"
+  用任何 DEX 分析工具 (jadx, GDA, MT管理器等)
+  搜索字符串 "onCreateMMMenu"
+  找到包含该字符串的方法 → 这就是菜单创建方法
+
+Step 2: 确认方法签名
+  用 jadx 反编译该方法, 查看参数
+  通常类似: 方法名(ContextMenu menu, View itemView) 或类似签名
+  args[0] 可能是 ContextMenu, args[1] 可能是 View
+
+Step 3: Hook
+```java
+// 假设找到的方法在 ChattingItemAppMsg 类中
+XposedHelpers.findAndHookMethod(
+    "com.tencent.mm.ui.chatting.viewitems.ChattingItemAppMsg",
+    lpparam.classLoader,
+    "a",  // 混淆后的方法名
+    ContextMenu.class,
+    View.class,
+    new XC_MethodHook() {
+        @Override
+        protected void beforeHookedMethod(MethodHookParam param) {
+            ContextMenu menu = (ContextMenu) param.args[0];
+            View itemView = (View) param.args[1];
+            
+            // 获取消息
+            Object msg = itemView.getTag();
+            if (msg == null) return;
+            
+            // 添加菜单项
+            menu.add(0, 777010, 0, "转发 [K]");
+        }
+    }
+);
+```
+
+方案 B: 类层次枚举法
+
+Step 1: 枚举 chat.viewitems 包下所有类的所有方法
+Step 2: 对每个方法尝试 Hook
+Step 3: 在 Hook 回调中检查参数类型: 是否有 ContextMenu 参数
+Step 4: 找到后记录类名和方法名
+
+方案 C: 使用 DexKit 库 (最可靠)
+
+```gradle
+dependencies {
+    implementation 'org.luckypray:dexkit:2.0.0'
+}
+```
+
+```kotlin
+// 使用 DexKit 搜索
+val bridge = DexKitBridge.create(apkPath)
+val result = bridge.findMethod {
+    searchPackages("com.tencent.mm.ui.chatting.viewitems")
+    matcher {
+        usingStrings("onCreateMMMenu")
+    }
+}
+// result.first() → className + methodName
+```
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第八章  完整的数据流和关键对象
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+注入触发链:
+  微信长按消息
+    ↓
+  [Hook点] ChattingItemXXX.onCreateContextMenu / a(ContextMenu, View, ...)
+    ↓ args[0]=ContextMenu, args[1]=View
+  WeKit case 21 拦截
+    ↓
+  View.getTag() → 微信消息原始对象
+    ↓
+  WeMessageApi.f0(rawMsg) → 转换后的消息对象
+    ↓
+  new jb5(msgObj) → WeKit 消息包装
+    ↓
+  tq9.e.B(jb5) → sw2(25) 检查消息类型
+    ↓
+  ↓ 类型匹配?
+    ↓ YES
+  反射: menu.addMenuItem(777010, "转发 [K]", icon)
+    ↓
+  微信菜单显示 "转发 [K]"
+    ↓
+  用户点击
+    ↓
+  [Hook点] onContextItemSelected / onMMMenuItemSelected
+    ↓
+  WeKit case 22 拦截
+    ↓
+  getItemId() = 777010 → 找到 tq9
+    ↓
+  tq9.g.z(view, rq9(rawMsg), jb5)
+    ↓
+  q90(7).z() → d43.i.doForward(msg)
+    ↓
+  c43 转发引擎 → 转发完成!
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第九章  调试检查清单
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+请逐项检查你的实现:
+
+□ 1. 你的 Hook 是否真的被触发了?
+     → 在 beforeHookedMethod 中加 XposedBridge.log("HOOK FIRED!")
+     → 如果没输出 → 方法没 Hook 到
+
+□ 2. Hook 的参数是什么?
+     → XposedBridge.log("args[0]=" + param.args[0].getClass().getName())
+     → XposedBridge.log("args[1]=" + param.args[1].getClass().getName())
+
+□ 3. View.getTag() 返回了什么?
+     → Object tag = ((View)param.args[1]).getTag()
+     → XposedBridge.log("tag=" + tag + " class=" + tag.getClass().getName())
+
+□ 4. 菜单对象支持什么方法?
+     → for (Method m : param.args[0].getClass().getMethods())
+     →   XposedBridge.log(m.toString())
+     → 找到 add 或 addMenuItem 方法
+
+□ 5. 调用 add 后菜单是否出现?
+     → menu.add(0, 99999, 0, "TEST MENU ITEM")
+     → 检查微信上下文菜单中是否出现 "TEST MENU ITEM"
+     → 如果出现 → 你的注入逻辑正确, 问题在条件过滤
+     → 如果不出现 → 菜单对象不正确, 或方法签名错误
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+第十章  总结: WeKit 核心机制一句话
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WeKit = DexKit(搜方法) + Xposed(Hook方法) + 反射(addMenuItem注入菜单项)
+
+三个环节缺一不可:
+  1. DexKit: 从混淆的微信DEX中搜索包含特定字符串指纹的方法
+  2. Xposed: Hook 搜索到的方法, 拦截菜单创建和点击事件
+  3. 反射: 调用微信菜单对象的 addMenuItem 方法注入自定义菜单项
+
+如果你没有 DexKit:
+  → 你必须手动找到对应微信版本的类名和方法名
+  → 可以用字符串搜索 (搜索"onCreateMMMenu") 辅助定位
+  → 每个微信版本可能需要不同的类名和方法名
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                              —— 全文完 ——
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
