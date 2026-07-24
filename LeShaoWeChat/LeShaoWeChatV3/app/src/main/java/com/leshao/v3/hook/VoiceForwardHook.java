@@ -675,20 +675,62 @@ public class VoiceForwardHook {
 
     private static String getUinHash(ClassLoader cl) {
         try {
-            // 从 com.tencent.mm.kernel.h 获取 uin
-            Object uin = XposedHelpers.callStaticMethod(
-                XposedHelpers.findClass("com.tencent.mm.kernel.h", cl), "c");
-            String uinStr = String.valueOf(uin);
-            // MD5
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
-            byte[] digest = md.digest(uinStr.getBytes());
-            StringBuilder sb = new StringBuilder();
-            for (byte b : digest) sb.append(String.format("%02x", b));
-            return sb.toString();
+            // 方法1: kernel.h.c() — 试多种变体
+            for (String clsName : new String[]{
+                "com.tencent.mm.kernel.h", 
+                "com.tencent.mm.kernel.g", 
+                "com.tencent.mm.sdk.platformtools.x"
+            }) {
+                try {
+                    Object acc = XposedHelpers.callStaticMethod(
+                        XposedHelpers.findClass(clsName, cl), "c");
+                    if (acc != null) {
+                        long uin = 0;
+                        try { uin = XposedHelpers.getLongField(acc, "e"); } catch (Throwable ignored) {}
+                        if (uin <= 0) try { uin = XposedHelpers.getIntField(acc, "e"); } catch (Throwable ignored) {}
+                        if (uin <= 0) try { uin = XposedHelpers.getLongField(acc, "field_uin"); } catch (Throwable ignored) {}
+                        if (uin <= 0) try { 
+                            // 尝试 callMethod("getUin") 
+                            Object val = XposedHelpers.callMethod(acc, "getUin");
+                            if (val instanceof Long) uin = (Long) val;
+                            else if (val instanceof Integer) uin = ((Integer) val).longValue();
+                        } catch (Throwable ignored) {}
+                        if (uin > 0) {
+                            String uinStr = String.valueOf(uin);
+                            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+                            byte[] d = md.digest(uinStr.getBytes());
+                            StringBuilder sb = new StringBuilder();
+                            for (byte b : d) sb.append(String.format("%02x", b));
+                            LogWriter.log(TAG, "uinHash: uin=" + uin + " hash=" + sb);
+                            return sb.toString();
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+
+            // 方法2: SharedPreferences — 从 context 获取
+            try {
+                android.content.Context ctx = ContextManager.getAppContext();
+                if (ctx != null) {
+                    long uin = ctx.getSharedPreferences("system_config_prefs", 0).getLong("default_uin", 0);
+                    if (uin <= 0) uin = ctx.getSharedPreferences("system_config_prefs", 0).getInt("default_uin", 0);
+                    if (uin > 0) {
+                        String uinStr = String.valueOf(uin);
+                        java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+                        byte[] d = md.digest(uinStr.getBytes());
+                        StringBuilder sb = new StringBuilder();
+                        for (byte b : d) sb.append(String.format("%02x", b));
+                        LogWriter.log(TAG, "uinHash from prefs: uin=" + uin + " hash=" + sb);
+                        return sb.toString();
+                    }
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "uinHash prefs error: " + t.getMessage());
+            }
         } catch (Throwable t) {
             LogWriter.log(TAG, "getUinHash error: " + t.getMessage());
-            return null;
         }
+        return null;
     }
 
     private static String searchVoice2Dir() {
@@ -772,6 +814,9 @@ public class VoiceForwardHook {
                 XposedHelpers.setLongField(recorder, "k",
                     android.os.SystemClock.elapsedRealtime() - (duration + 5000));
             } catch (Throwable ignored) {}
+
+            // 等 300ms 让 g() 的录音线程启动, 否则 stop() 里 stopHardwareRecorder 会 NPE
+            try { Thread.sleep(300); } catch (InterruptedException ignored) {}
 
             LogWriter.log(TAG, "SceneVoice: fields overridden, calling stop()...");
             boolean stopResult = (Boolean) XposedHelpers.callMethod(recorder, "stop");
