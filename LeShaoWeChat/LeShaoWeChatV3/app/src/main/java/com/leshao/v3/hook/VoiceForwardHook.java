@@ -818,44 +818,14 @@ public class VoiceForwardHook {
         } catch (Throwable ignored) {}
     }
 
-    // ===== Voice Send API 发现: hook 语音录制发送流 + messenger.foundation 接口 =====
+    // ===== Voice Send API 发现: hook 录音组件 + 全 DEX 扫描语音类 =====
     private static void hookForwardTracing(ClassLoader cl) {
-        hookIMsgService(cl);
-        hookVoiceSendFlow(cl);
+        hookChattingFooterVoice(cl);
+        scanAllVoiceClasses(cl);
     }
 
-    private static void hookIMsgService(ClassLoader cl) {
-        try {
-            Class<?> jCls = cl.loadClass("com.tencent.mm.plugin.messenger.foundation.a.a.j");
-            LogWriter.log(TAG, "IMsgService(j) found: " + jCls.getName());
-            for (Method m : jCls.getDeclaredMethods()) {
-                final String msig = jCls.getSimpleName() + "." + m.getName() + "("
-                    + java.util.Arrays.toString(m.getParameterTypes()) + ")";
-                LogWriter.log(TAG, "IMsgService method: " + msig);
-                XposedBridge.hookMethod(m, new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        StringBuilder args = new StringBuilder();
-                        for (int i = 0; i < param.args.length; i++) {
-                            if (i > 0) args.append(",");
-                            Object a = param.args[i];
-                            if (a instanceof String) args.append("\"").append(a).append("\"");
-                            else if (a instanceof Number) args.append(a);
-                            else if (a == null) args.append("null");
-                            else args.append(a.getClass().getSimpleName());
-                        }
-                        LogWriter.log(TAG, ">>> IMsgService." + msig + " args=[" + args + "]");
-                    }
-                });
-            }
-            LogWriter.log(TAG, "IMsgService hooks installed (" + jCls.getDeclaredMethods().length + " methods)");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "IMsgService(j) not found: " + t.getMessage());
-        }
-    }
-
-    private static void hookVoiceSendFlow(ClassLoader cl) {
-        // Hook modelvoice 包中所有 public 方法, 录制并发送语音时会被触发
+    private static void hookChattingFooterVoice(ClassLoader cl) {
+        // 扫描 ChattingFooter 及其内部类, hook 所有跟语音录制相关的方法
         try {
             String apkPath = ContextManager.getApkPath();
             if (apkPath == null) return;
@@ -864,19 +834,32 @@ public class VoiceForwardHook {
             int hooked = 0;
             while (entries.hasMoreElements()) {
                 String cn = entries.nextElement();
-                if (!cn.startsWith("com.tencent.mm.modelvoice.") && !cn.startsWith("com.tencent.mm.plugin.voice.")) continue;
+                // 录音组件可能的类名模式
+                boolean match = cn.contains("VoiceRecord")
+                    || cn.contains("RecordVoice")
+                    || cn.contains("VoiceBtn")
+                    || cn.contains("VoicePanel")
+                    || cn.contains(".voice.")
+                    || cn.contains(".voicerecord.")
+                    || cn.contains(".voicemsg.")
+                    || cn.contains(".recorder.")
+                    || cn.contains(".speex.")
+                    || cn.contains(".audio.")
+                    || cn.endsWith(".VoiceUtil")
+                    || cn.endsWith(".VoiceLogic")
+                    || cn.contains("AudioUtil");
+                if (!match) continue;
                 try {
                     Class<?> cls = cl.loadClass(cn);
-                    // 跳过接口
                     if (cls.isInterface()) continue;
+                    int methodsHookedOnClass = 0;
                     for (Method m : cls.getDeclaredMethods()) {
-                        if (!Modifier.isPublic(m.getModifiers())) continue;
                         final String fullName = cn + "." + m.getName();
                         XposedBridge.hookMethod(m, new XC_MethodHook() {
                             @Override
                             protected void beforeHookedMethod(MethodHookParam param) {
                                 int n = sCallCount.incrementAndGet();
-                                if (n > 50) return;
+                                if (n > 80) return;
                                 StringBuilder args = new StringBuilder();
                                 args.append(fullName).append("(");
                                 for (int i = 0; i < Math.min(param.args.length, 5); i++) {
@@ -884,7 +867,7 @@ public class VoiceForwardHook {
                                     Object a = param.args[i];
                                     if (a instanceof String) {
                                         String s = (String) a;
-                                        args.append("\"").append(s.length() > 40 ? s.substring(0, 40) + "..." : s).append("\"");
+                                        args.append("\"").append(s.length() > 50 ? s.substring(0, 50) + "..." : s).append("\"");
                                     } else if (a instanceof Number) {
                                         args.append(a);
                                     } else if (a == null) {
@@ -894,17 +877,50 @@ public class VoiceForwardHook {
                                     }
                                 }
                                 args.append(")");
-                                LogWriter.log(TAG, "◆VOICE " + args);
+                                LogWriter.log(TAG, "◆VOC " + args);
                             }
                         });
-                        hooked++;
+                        methodsHookedOnClass++;
                     }
+                    if (methodsHookedOnClass > 0) {
+                        LogWriter.log(TAG, "◆VOC hooked " + cn + " (" + methodsHookedOnClass + " methods)");
+                    }
+                    hooked += methodsHookedOnClass;
                 } catch (Throwable ignored) {}
             }
             dex.close();
-            LogWriter.log(TAG, "voice hooks installed: " + hooked + " methods");
+            LogWriter.log(TAG, "◆VOC total hooked: " + hooked + " methods");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "voice hook error: " + t.getMessage());
+            LogWriter.log(TAG, "◆VOC hook error: " + t.getMessage());
+        }
+    }
+
+    private static void scanAllVoiceClasses(ClassLoader cl) {
+        // 列出所有含 voice/audio/speex 的类名供分析
+        try {
+            String apkPath = ContextManager.getApkPath();
+            if (apkPath == null) return;
+            dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+            Enumeration<String> entries = dex.entries();
+            StringBuilder sb = new StringBuilder("◆ALL voice classes:");
+            int count = 0;
+            while (entries.hasMoreElements()) {
+                String cn = entries.nextElement();
+                String lc = cn.toLowerCase();
+                if (lc.contains("voice") || lc.contains("audio") || lc.contains("speex") || lc.contains("recordvoi")) {
+                    if (sb.length() > 2000) {
+                        LogWriter.log(TAG, sb.toString());
+                        sb = new StringBuilder("◆ALL voice classes (cont):");
+                    }
+                    sb.append(" ").append(cn);
+                    count++;
+                }
+            }
+            sb.append(" total=").append(count);
+            LogWriter.log(TAG, sb.toString());
+            dex.close();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "◆ALL voice scan error: " + t.getMessage());
         }
     }
 }
