@@ -251,24 +251,51 @@ public class VoiceForwardHook {
                     if (menuObj == null) return;
 
                     LogWriter.log(TAG, "=== FOUND [" + label + "." + mName + "] ===");
-                    LogWriter.log(TAG, "  menu: " + menuObj.getClass().getName());
-                    LogWriter.log(TAG, "  view: " + itemView.getClass().getName());
-                    Object tag = itemView.getTag();
-                    LogWriter.log(TAG, "  tag: " + (tag == null ? "null" : tag.getClass().getName()));
+                    // dump 所有参数
+                    StringBuilder argsb = new StringBuilder("  args: ");
+                    for (int i = 0; i < param.args.length; i++) {
+                        Object a = param.args[i];
+                        argsb.append("[").append(i).append("]=");
+                        argsb.append(a == null ? "null" : a.getClass().getSimpleName());
+                        if (a instanceof View) {
+                            Object vt = ((View) a).getTag();
+                            if (vt != null) argsb.append(":T=").append(vt.getClass().getSimpleName());
+                        }
+                        argsb.append(" ");
+                    }
+                    LogWriter.log(TAG, argsb.toString());
 
-                    // dump parent chain tags
+                    // dump parent chain tags with field values
                     View p = (View) itemView.getParent();
                     for (int pi = 0; p != null && pi < 5; pi++) {
                         Object pt = p.getTag();
                         if (pt != null) {
-                            LogWriter.log(TAG, "  parent[" + pi + "]=" + p.getClass().getSimpleName() + " tag=" + pt.getClass().getName());
+                            StringBuilder sb = new StringBuilder("  parent[").append(pi).append("]=")
+                                .append(p.getClass().getSimpleName()).append(" tag=").append(pt.getClass().getName())
+                                .append(" {");
+                            for (Field f : pt.getClass().getDeclaredFields()) {
+                                try {
+                                    f.setAccessible(true);
+                                    Object v = f.get(pt);
+                                    sb.append(f.getName()).append("=");
+                                    if (v instanceof Number || v instanceof String || v instanceof Boolean) {
+                                        sb.append(v);
+                                    } else if (v != null) {
+                                        sb.append(v.getClass().getSimpleName());
+                                    } else {
+                                        sb.append("null");
+                                    }
+                                    sb.append(" ");
+                                } catch (Throwable ignored) {}
+                            }
+                            sb.append("}");
+                            LogWriter.log(TAG, sb.toString());
                         }
                         if (p.getParent() instanceof View) p = (View) p.getParent(); else break;
                     }
 
-                    // sMenuInjected 不再阻止重复注入（每次长按都重新注入）
                     sPendingView = itemView;
-                    sMenuInjected = true; // 仅用于此次回调防重
+                    sMenuInjected = true;
                     injectForwardMenuItem(menuObj, itemView);
                 }
             });
@@ -432,70 +459,32 @@ public class VoiceForwardHook {
 
             LogWriter.log(TAG, "forward: tag=" + tag.getClass().getName());
 
-            // 尝试 WeKit 方式: tag.a(false) 获取内部消息对象
-            long msgId = extractMsgId(tag);
-            if (msgId <= 0) {
-                // 尝试调用 tag 的方法获取内部消息
-                Object inner = null;
-                try { inner = XposedHelpers.callMethod(tag, "a", new Class[]{boolean.class}, false); } catch (Throwable ignored) {}
-                if (inner == null) try { inner = XposedHelpers.callMethod(tag, "a"); } catch (Throwable ignored) {}
-                if (inner == null) try { inner = XposedHelpers.callMethod(tag, "getMsgInfo"); } catch (Throwable ignored) {}
-
-                if (inner != null) {
-                    LogWriter.log(TAG, "forward: inner=" + inner.getClass().getName());
-                    msgId = extractMsgId(inner);
-                    if (msgId <= 0) {
-                        // dump inner 字段
-                        StringBuilder sb = new StringBuilder("inner fields: ");
-                        for (Field f : inner.getClass().getDeclaredFields()) {
-                            try {
-                                f.setAccessible(true);
-                                Object v = f.get(inner);
-                                sb.append(f.getName()).append("=");
-                                if (v instanceof Number || v instanceof String || v instanceof Boolean) {
-                                    sb.append(v);
-                                } else if (v != null) {
-                                    sb.append(v.getClass().getSimpleName());
-                                } else {
-                                    sb.append("null");
-                                }
-                                sb.append(" ");
-                            } catch (Throwable ignored) {}
-                        }
-                        LogWriter.log(TAG, sb.toString());
+            // 优先从父 View 链找消息数据 (hq 对象)
+            long msgId = 0;
+            View pp = (View) view.getParent();
+            for (int pi = 0; pp != null && pi < 5; pi++) {
+                Object pt = pp.getTag();
+                if (pt != null) {
+                    msgId = extractMsgId(pt);
+                    if (msgId > 0) {
+                        LogWriter.log(TAG, "forward: msgId=" + msgId + " from parent[" + pi + "]=" + pt.getClass().getSimpleName());
+                        break;
                     }
                 }
+                if (pp.getParent() instanceof View) pp = (View) pp.getParent(); else break;
             }
-            LogWriter.log(TAG, "forward: msgId=" + msgId + " (from " + tag.getClass().getSimpleName() + ")");
 
+            // 尝试从 vo 对象通过方法获取
             if (msgId <= 0) {
-                // 最终兜底: dump vo 方法和字段
-                StringBuilder sb = new StringBuilder("vo fields: ");
-                for (Field f : tag.getClass().getDeclaredFields()) {
-                    try {
-                        f.setAccessible(true);
-                        Object v = f.get(tag);
-                        sb.append(f.getName()).append("=");
-                        if (v instanceof Number || v instanceof String || v instanceof Boolean) {
-                            sb.append(v);
-                        } else if (v != null) {
-                            sb.append(v.getClass().getSimpleName());
-                        } else {
-                            sb.append("null");
-                        }
-                        sb.append(" ");
-                    } catch (Throwable ignored) {}
+                msgId = extractMsgId(tag);
+                if (msgId <= 0) {
+                    Object inner = null;
+                    try { inner = XposedHelpers.callMethod(tag, "a"); } catch (Throwable ignored) {}
+                    if (inner == null) try { inner = XposedHelpers.callMethod(tag, "a", new Class[]{boolean.class}, false); } catch (Throwable ignored) {}
+                    if (inner != null) msgId = extractMsgId(inner);
                 }
-                sb.append("| methods: ");
-                for (Method m : tag.getClass().getDeclaredMethods()) {
-                    if (m.getParameterTypes().length <= 1 && !Modifier.isStatic(m.getModifiers())) {
-                        sb.append(m.getName()).append(" ");
-                    }
-                }
-                LogWriter.log(TAG, sb.toString());
-                showToast("消息ID提取失败, 查看日志");
-                return;
             }
+            LogWriter.log(TAG, "forward: msgId=" + msgId);
 
             String talker = extractTalker(tag);
             LogWriter.log(TAG, "forward: talker=" + talker);
