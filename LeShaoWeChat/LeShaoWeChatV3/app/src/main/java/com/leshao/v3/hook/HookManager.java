@@ -32,14 +32,23 @@ public class HookManager {
         else { pendingTasks.add(task); }
     }
 
+    public static int pendingCount() { return pendingTasks.size(); }
+
     public static void activateAll() {
         activated = true;
+        XposedBridge.log("[HookManager] activateAll: " + pendingTasks.size() + " tasks");
+        int idx = 0;
         for (Runnable t : pendingTasks) {
-            try { t.run(); } catch (Throwable ex) {
-                XposedBridge.log("[HookManager] task failed: " + ex.getMessage());
+            try {
+                t.run();
+            } catch (Throwable ex) {
+                XposedBridge.log("[HookManager] task[" + idx + "] failed: " + ex.getClass().getSimpleName()
+                    + " " + ex.getMessage());
             }
+            idx++;
         }
         pendingTasks.clear();
+        XposedBridge.log("[HookManager] activateAll DONE, success=" + successCount + " fail=" + failCount);
     }
 
     /** 注册Hook并追踪 */

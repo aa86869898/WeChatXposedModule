@@ -4,9 +4,14 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.view.ContextMenu;
+import android.view.Gravity;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.LinearLayout;
+import android.widget.PopupWindow;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
@@ -21,6 +26,16 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
+/**
+ * 语音消息转发 — 完整实现
+ * ========================
+ *
+ * 按 WeKit 注入流程文档实现:
+ *   P1: 标准 android.view.ContextMenu (onCreateContextMenu / onContextItemSelected)
+ *   P2: 微信 MM 菜单 (onCreateMMMenu) — 多类穷举
+ *   P3: PopupWindow 拦截 (showAsDropDown / showAtLocation) — 兜底方案
+ *   P4: 消息捕获 (RecyclerView/ListView 长按 + View.setTag 拦截)
+ */
 public class VoiceForwardHook {
 
     private static final String TAG = "VoiceFwd";
@@ -30,6 +45,7 @@ public class VoiceForwardHook {
     private static volatile Activity sChatAct;
     private static volatile Object sPendingMsg;
     private static volatile String sPendingTalker;
+    private static volatile View sLastLongClickView;
 
     public static void setEnabled(boolean v) {
         sEnabled = v;
@@ -41,16 +57,17 @@ public class VoiceForwardHook {
         ClassLoader cl = ContextManager.getClassLoader();
         if (cl == null) { LogWriter.log(TAG, "cl not ready"); return; }
 
-        hookChatUICtxMenu(cl);
-        hookMenuCreateOnBaseFragments(cl);
-        hookMessageTapCapture(cl);
+        hookChatUI(cl);
+        hookMMMenuMulti(cl);
+        hookPopupWindow(cl);
+        hookMsgCapture(cl);
 
         sHooked = true;
-        LogWriter.log(TAG, "all hooks installed");
+        LogWriter.log(TAG, "all P1-P4 hooks installed");
     }
 
-    // ===== 标准 Android ContextMenu: ChattingUI =====
-    private static void hookChatUICtxMenu(ClassLoader cl) {
+    // ===== P1: 标准 ContextMenu =====
+    private static void hookChatUI(ClassLoader cl) {
         try {
             Class<?> chattingUI = cl.loadClass("com.tencent.mm.ui.chatting.ChattingUI");
 
@@ -71,16 +88,17 @@ public class VoiceForwardHook {
                     try {
                         ContextMenu menu = (ContextMenu) param.args[0];
                         View v = (View) param.args[1];
-                        if (hasVoiceCapture(v)) {
+                        tryCapture(v);
+                        if (sPendingMsg != null && menu != null) {
                             menu.add(0, MENU_ID, 0, "语音转发");
-                            LogWriter.log(TAG, "+ctxMenu item added");
+                            LogWriter.log(TAG, "P1: +ctxMenu");
                         }
                     } catch (Throwable t) {
-                        LogWriter.log(TAG, "onCrtCtxMenu ERR: " + t.getMessage());
+                        LogWriter.log(TAG, "P1 err: " + t.getMessage());
                     }
                 }
             });
-            LogWriter.log(TAG, "onCreateContextMenu hooked");
+            LogWriter.log(TAG, "P1: onCreateContextMenu ok");
 
             XposedBridge.hookAllMethods(chattingUI, "onContextItemSelected", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam param) {
@@ -90,27 +108,40 @@ public class VoiceForwardHook {
                         if (item.getItemId() == MENU_ID || "语音转发".equals(item.getTitle())) {
                             executeForward();
                             param.setResult(true);
+                            LogWriter.log(TAG, "P1: ctxItem click");
                         }
                     } catch (Throwable t) {}
                 }
             });
-            LogWriter.log(TAG, "onContextItemSelected hooked");
+            LogWriter.log(TAG, "P1: onContextItemSelected ok");
 
         } catch (Throwable t) {
-            LogWriter.log(TAG, "ctxMenu ERR: " + t.getMessage());
+            LogWriter.log(TAG, "P1 fail: " + t.getMessage());
         }
     }
 
-    // ===== 微信 MM 菜单: 多类尝试 =====
-    private static void hookMenuCreateOnBaseFragments(ClassLoader cl) {
-        String[] candidateClasses = {
+    // ===== P2: 微信 MM 菜单 — 穷举所有候选类 =====
+    private static void hookMMMenuMulti(ClassLoader cl) {
+        String[] candidates = {
+            // 聊天界面
             "com.tencent.mm.ui.chatting.ChattingUI",
+            "com.tencent.mm.ui.chatting.ChattingUIFragment",
+            "com.tencent.mm.ui.chatting.BaseChattingUIFragment",
+            // MM 基类
             "com.tencent.mm.ui.MMFragment",
             "com.tencent.mm.ui.MMFragmentActivity",
             "com.tencent.mm.ui.MMActivity",
+            // LauncherUI
+            "com.tencent.mm.ui.LauncherUI",
+            // 通用菜单工具类
+            "com.tencent.mm.ui.tools.MMTextInput",
+            "com.tencent.mm.ui.tools.MMPopupMenu",
+            "com.tencent.mm.ui.tools.ActionBarSearchView",
+            "com.tencent.mm.ui.base.MMAlert",
+            "com.tencent.mm.ui.base.MMPreference",
         };
 
-        for (String clsName : candidateClasses) {
+        for (final String clsName : candidates) {
             try {
                 Class<?> cls = cl.loadClass(clsName);
                 XposedBridge.hookAllMethods(cls, "onCreateMMMenu", new XC_MethodHook() {
@@ -119,26 +150,152 @@ public class VoiceForwardHook {
                         Object mmMenu = param.args[0];
                         if (mmMenu == null) return;
                         try {
-                            Method addMethod = findAddMethod(mmMenu.getClass());
-                            if (addMethod != null) {
-                                addMethod.invoke(mmMenu, MENU_ID, "语音转发");
-                                LogWriter.log(TAG, "+MMMenu(" + clsName + ")");
-                            }
+                            boolean added = tryAddToMMMenu(mmMenu, clsName);
+                            if (added) LogWriter.log(TAG, "P2: +MMMenu on " + clsName);
+                            else LogWriter.log(TAG, "P2: MMMenu found on " + clsName + " but add failed");
                         } catch (Throwable inner) {
-                            LogWriter.log(TAG, "addMM ERR(" + clsName + "): "
-                                + inner.getClass().getSimpleName());
+                            LogWriter.log(TAG, "P2: add err on " + clsName + ": " + inner.getClass().getSimpleName());
                         }
                     }
                 });
-                LogWriter.log(TAG, "onCreateMMMenu hooked on " + clsName);
+                LogWriter.log(TAG, "P2: hooked onCreateMMMenu on " + clsName);
+            } catch (ClassNotFoundException ignored) {
             } catch (Throwable t) {
-                LogWriter.log(TAG, "onCreateMMMenu MISS on " + clsName);
+                LogWriter.log(TAG, "P2: err hooking " + clsName + ": " + t.getClass().getSimpleName());
             }
         }
     }
 
-    // ===== 消息捕获: RecyclerView / ListView 长按拦截 =====
-    private static void hookMessageTapCapture(ClassLoader cl) {
+    private static boolean tryAddToMMMenu(Object mmMenu, String clsName) {
+        Class<?> menuClass = mmMenu.getClass();
+        for (Method m : menuClass.getDeclaredMethods()) {
+            Class<?>[] pts = m.getParameterTypes();
+            if (pts.length >= 2
+                && (pts[0] == int.class || pts[0] == Integer.class)
+                && (pts[1] == String.class || pts[1] == CharSequence.class
+                    || pts[1] == Object.class)) {
+                try { m.setAccessible(true); m.invoke(mmMenu, MENU_ID, "语音转发"); return true; }
+                catch (Throwable ignored) {}
+            }
+            if (pts.length == 4 && (pts[0] == int.class || pts[0] == Integer.class)
+                && pts[1] == int.class && pts[2] == int.class
+                && (pts[3] == String.class || pts[3] == CharSequence.class)) {
+                try { m.setAccessible(true); m.invoke(mmMenu, 0, MENU_ID, 0, "语音转发"); return true; }
+                catch (Throwable ignored) {}
+            }
+        }
+        for (Method m : menuClass.getMethods()) {
+            Class<?>[] pts = m.getParameterTypes();
+            if (pts.length >= 2 && pts[1] == CharSequence.class) {
+                try { m.setAccessible(true); m.invoke(mmMenu, MENU_ID, "语音转发"); return true; }
+                catch (Throwable ignored) {}
+            }
+        }
+        return false;
+    }
+
+    // ===== P3: PopupWindow 拦截 — 兜底 =====
+    private static void hookPopupWindow(ClassLoader cl) {
+        try {
+            XposedBridge.hookAllMethods(PopupWindow.class, "showAsDropDown", new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam param) {
+                    if (!sEnabled) return;
+                    PopupWindow pw = (PopupWindow) param.thisObject;
+                    View anchor = (View) param.args[0];
+                    tryCapture(anchor);
+                    if (sPendingMsg != null) {
+                        injectIntoPopupWindow(pw, anchor);
+                    }
+                }
+            });
+            LogWriter.log(TAG, "P3: showAsDropDown ok");
+
+            XposedBridge.hookAllMethods(PopupWindow.class, "showAtLocation", new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam param) {
+                    if (!sEnabled) return;
+                    PopupWindow pw = (PopupWindow) param.thisObject;
+                    if (sChatAct == null) return;
+                    View decor = sChatAct.getWindow().getDecorView();
+                    tryCapture(decor);
+                    if (sPendingMsg != null) {
+                        injectIntoPopupWindow(pw, null);
+                    }
+                }
+            });
+            LogWriter.log(TAG, "P3: showAtLocation ok");
+
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "P3 fail: " + t.getMessage());
+        }
+    }
+
+    private static void injectIntoPopupWindow(PopupWindow pw, View anchor) {
+        try {
+            View content = pw.getContentView();
+            if (content == null) return;
+
+            // 遍历查找可以添加菜单项的 LinearLayout
+            LinearLayout target = findAddableLayout(content);
+            if (target == null) {
+                // 如果是 ListView (旧版微信菜单), 无法简单注入
+                if (content instanceof android.widget.ListView) return;
+                return;
+            }
+
+            // 检查是否已经添加过
+            for (int i = 0; i < target.getChildCount(); i++) {
+                View child = target.getChildAt(i);
+                if (child instanceof TextView && "语音转发".equals(((TextView) child).getText())) {
+                    return;
+                }
+            }
+
+            Context ctx = sChatAct != null ? sChatAct : target.getContext();
+            TextView tv = new TextView(ctx);
+            tv.setText("语音转发");
+            tv.setTextSize(16);
+            tv.setPadding(48, 32, 48, 32);
+            tv.setGravity(Gravity.CENTER_VERTICAL);
+            tv.setClickable(true);
+            tv.setFocusable(true);
+            tv.setTextColor(0xFF333333);
+            tv.setOnClickListener(v -> {
+                pw.dismiss();
+                executeForward();
+            });
+
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+            target.addView(tv, lp);
+            LogWriter.log(TAG, "P3: injected into PopupWindow");
+
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "P3 inject err: " + t.getClass().getSimpleName());
+        }
+    }
+
+    private static LinearLayout findAddableLayout(View v) {
+        if (v instanceof LinearLayout) {
+            LinearLayout ll = (LinearLayout) v;
+            // 检查是否是菜单容器 (有多个子项或方向为垂直)
+            if (ll.getOrientation() == LinearLayout.VERTICAL && ll.getChildCount() > 0) {
+                return ll;
+            }
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) v;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                LinearLayout found = findAddableLayout(vg.getChildAt(i));
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    // ===== P4: 消息捕获 =====
+    private static void hookMsgCapture(ClassLoader cl) {
         try {
             Class<?> fragmentCls = cl.loadClass("com.tencent.mm.ui.chatting.BaseChattingUIFragment");
             XposedHelpers.findAndHookMethod(fragmentCls, "onCreateView",
@@ -149,74 +306,65 @@ public class VoiceForwardHook {
                     @Override protected void afterHookedMethod(MethodHookParam param) {
                         View root = (View) param.getResult();
                         if (root == null) return;
-                        installLongClickCapture(root);
+                        installCaptureOnAllViews(root);
                     }
                 });
-            LogWriter.log(TAG, "msg capture hooked");
+            LogWriter.log(TAG, "P4: BaseChattingUIFragment.onCreateView ok");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "msg capture ERR: " + t.getMessage());
+            LogWriter.log(TAG, "P4 fail: " + t.getMessage());
         }
     }
 
-    private static void installLongClickCapture(View root) {
-        List<View> listViews = new ArrayList<>();
-        List<View> recyclerViews = new ArrayList<>();
-        collectListAndRecycler(root, listViews, recyclerViews);
+    private static void installCaptureOnAllViews(View root) {
+        List<View> allViews = new ArrayList<>();
+        collectAll(root, allViews);
+        LogWriter.log(TAG, "P4: scanning " + allViews.size() + " views");
 
-        for (View lv : listViews) {
-            if (lv instanceof android.widget.ListView) {
-                android.widget.ListView l = (android.widget.ListView) lv;
-                l.setOnItemLongClickListener((parent, v, position, id) -> {
-                    tryCaptureFromView(v);
-                    return false;
+        for (View v : allViews) {
+            // 在微信聊天列表中，消息 item 通常有 tag
+            if (v.getTag() != null) {
+                final View fv = v;
+                v.setOnLongClickListener(new View.OnLongClickListener() {
+                    @Override public boolean onLongClick(View view) {
+                        sLastLongClickView = fv;
+                        tryCapture(fv);
+                        return false; // 不拦截, 让微信继续处理
+                    }
                 });
-                LogWriter.log(TAG, "ListView capture ok");
             }
-        }
-        for (View rvView : recyclerViews) {
-            if (rvView instanceof androidx.recyclerview.widget.RecyclerView) {
-                final androidx.recyclerview.widget.RecyclerView rv =
-                    (androidx.recyclerview.widget.RecyclerView) rvView;
-                rv.addOnItemTouchListener(
-                    new androidx.recyclerview.widget.RecyclerView.SimpleOnItemTouchListener() {
-                        @Override public boolean onInterceptTouchEvent(
-                                androidx.recyclerview.widget.RecyclerView r,
-                                android.view.MotionEvent e) {
-                            if (e.getAction() == android.view.MotionEvent.ACTION_DOWN) {
-                                View child = r.findChildViewUnder(e.getX(), e.getY());
-                                if (child != null) tryCaptureFromView(child);
-                            }
-                            return false;
-                        }
+
+            // 也尝试 ListView item long click
+            if (v instanceof android.widget.ListView) {
+                ((android.widget.ListView) v).setOnItemLongClickListener(
+                    (parent, itemView, position, id) -> {
+                        sLastLongClickView = itemView;
+                        tryCapture(itemView);
+                        return false;
                     });
-                LogWriter.log(TAG, "RecyclerView capture ok");
             }
         }
     }
 
-    private static void collectListAndRecycler(View v, List<View> lvs, List<View> rvs) {
-        if (v instanceof android.widget.ListView) { lvs.add(v); return; }
-        if (v instanceof androidx.recyclerview.widget.RecyclerView) { rvs.add(v); return; }
+    private static void collectAll(View v, List<View> out) {
+        out.add(v);
         if (v instanceof ViewGroup) {
             ViewGroup vg = (ViewGroup) v;
             for (int i = 0; i < vg.getChildCount(); i++) {
-                collectListAndRecycler(vg.getChildAt(i), lvs, rvs);
+                collectAll(vg.getChildAt(i), out);
             }
         }
     }
 
     // ===== 消息捕获辅助 =====
-    private static boolean hasVoiceCapture(View v) {
-        tryCaptureFromView(v);
-        return sPendingMsg != null;
-    }
-
-    private static void tryCaptureFromView(View v) {
+    private static void tryCapture(View v) {
         sPendingMsg = null;
         sPendingTalker = null;
         if (v == null) return;
         try {
             Object tag = v.getTag();
+            if (tag == null && sLastLongClickView != null) {
+                tag = sLastLongClickView.getTag();
+            }
             if (tag == null) return;
 
             try {
@@ -229,6 +377,7 @@ public class VoiceForwardHook {
                 sPendingMsg = tag;
                 sPendingTalker = extractTalker(tag);
                 if (sPendingTalker == null) sPendingTalker = "";
+                LogWriter.log(TAG, "captured msgId=" + msgId + " talker=" + sPendingTalker);
             }
         } catch (Throwable ignored) {}
     }
@@ -246,6 +395,7 @@ public class VoiceForwardHook {
 
             long msgId = extractMsgId(msg);
             if (msgId <= 0) { showToast("无法获取消息信息"); return; }
+
             String extTalker = extractTalker(msg);
             if (talker == null || talker.isEmpty()) talker = extTalker;
             if (talker == null) talker = "";
@@ -254,15 +404,15 @@ public class VoiceForwardHook {
             if (ctx == null) { showToast("context unavailable"); return; }
 
             ClassLoader cl = ctx.getClassLoader();
-            Class<?> forwardUI = null;
-            for (String name : new String[]{
+            Class<?> fwdUI = null;
+            for (String n : new String[]{
                 "com.tencent.mm.ui.transmit.SelectConversationUI",
                 "com.tencent.mm.ui.transmit.MsgRetransmitUI",
-            }) { try { forwardUI = cl.loadClass(name); break; } catch (Throwable ignored) {} }
+            }) { try { fwdUI = cl.loadClass(n); break; } catch (Throwable ignored) {} }
 
-            if (forwardUI == null) { showToast("微信版本不兼容"); return; }
+            if (fwdUI == null) { showToast("微信版本不兼容"); return; }
 
-            Intent intent = new Intent(ctx, forwardUI);
+            Intent intent = new Intent(ctx, fwdUI);
             intent.putExtra("Retr_Msg_content", talker);
             intent.putExtra("Retr_Msg_Type", 1);
             intent.putExtra("Retr_Msg_Id", msgId);
@@ -272,32 +422,12 @@ public class VoiceForwardHook {
             showToast("已打开转发界面");
 
         } catch (Throwable t) {
-            LogWriter.log(TAG, "exec ERR: " + t.getMessage());
+            LogWriter.log(TAG, "exec err: " + t.getMessage());
             showToast("转发失败: " + t.getMessage());
         }
     }
 
-    // ===== 工具方法 =====
-    private static Method findAddMethod(Class<?> menuClass) {
-        for (Method m : menuClass.getDeclaredMethods()) {
-            Class<?>[] pts = m.getParameterTypes();
-            if (pts.length >= 2
-                && (pts[0] == int.class || pts[0] == Integer.class)
-                && (pts[1] == String.class || pts[1] == CharSequence.class)) {
-                m.setAccessible(true); return m;
-            }
-        }
-        for (Method m : menuClass.getMethods()) {
-            Class<?>[] pts = m.getParameterTypes();
-            if (pts.length >= 2
-                && (pts[0] == int.class || pts[0] == Integer.class)
-                && (pts[1] == String.class || pts[1] == CharSequence.class)) {
-                m.setAccessible(true); return m;
-            }
-        }
-        return null;
-    }
-
+    // ===== 工具 =====
     private static long extractMsgId(Object msg) {
         try { return (long) XposedHelpers.callMethod(msg, "getMsgId"); } catch (Throwable ignored) {}
         try { return XposedHelpers.getLongField(msg, "field_msgId"); } catch (Throwable ignored) {}

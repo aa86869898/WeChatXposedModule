@@ -158,10 +158,17 @@ public class MainHook implements IXposedHookLoadPackage {
                         HookManager.register(ThemeHook::hook);
                         HookManager.register(VoiceForwardHook::hook);
 
+                        XposedBridge.log("[MainHook] activateAll() START, pendingTasks=" + HookManager.pendingCount());
+
                         HookManager.activateAll();
 
+                        XposedBridge.log("[MainHook] activateAll() DONE");
+
                         SchedulerService.start(ModuleConfig.load(ContextManager.getPrefs()));
-                    } catch (Throwable t) {}
+                    } catch (Throwable t) {
+                        XposedBridge.log("[MainHook] FATAL in onReadyCallback: " + t.getClass().getSimpleName()
+                            + " " + t.getMessage());
+                    }
                 }
             });
         } catch (Throwable t) {
