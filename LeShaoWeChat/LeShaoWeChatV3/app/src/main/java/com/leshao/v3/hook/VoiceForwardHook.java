@@ -612,71 +612,52 @@ public class VoiceForwardHook {
     }
 
     private static String findVoiceFile(Object e9) {
-        // 方法1: e9.y0() → field_imgPath (最直接)
-        try {
-            String path = (String) XposedHelpers.callMethod(e9, "y0");
-            if (path != null) {
-                java.io.File f = new java.io.File(path);
-                if (f.exists()) { LogWriter.log(TAG, "voice: y0()=" + path + " EXISTS"); return path; }
-                LogWriter.log(TAG, "voice: y0()=" + path + " NOT_FOUND");
-            }
-        } catch (Throwable ignored) {}
+        // y0() → clientmsgid → MD5 → 2级子目录 → voice2/XX/YY/msg_{cid}.amr
+        ClassLoader cl = ContextManager.getClassLoader();
 
-        // 方法2: 从 content XML 提取 clientmsgid, 拼接 voice2 路径
-        try {
-            String content = (String) XposedHelpers.callMethod(e9, "I0");
-            if (content != null) {
-                String cid = extractXmlAttr(content, "clientmsgid");
-                if (cid != null) {
-                    String hash = getUinHash(ContextManager.getClassLoader());
-                    if (hash != null) {
-                        String base = "/data/user/0/com.tencent.mm/MicroMsg/" + hash + "/voice2/";
-                        // h1.d 使用 2 级子目录 (clientmsgid 前 2 字符)
-                        String[] attempts = {
-                            base + cid.substring(0, 2) + "/msg_" + cid + ".amr",
-                            base + "msg_" + cid + ".amr",
-                        };
-                        for (String p : attempts) {
-                            java.io.File f = new java.io.File(p);
-                            if (f.exists()) { LogWriter.log(TAG, "voice: constructed " + p + " EXISTS"); return p; }
-                        }
-                        LogWriter.log(TAG, "voice: clientmsgid=" + cid + " not found in voice2/");
-                    }
-                }
-            }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "voice: xml parse error: " + t.getMessage());
+        String cid = null;
+        try { cid = (String) XposedHelpers.callMethod(e9, "y0"); } catch (Throwable ignored) {}
+        if (cid == null || cid.isEmpty()) {
+            try {
+                String xml = (String) XposedHelpers.callMethod(e9, "I0");
+                if (xml != null) cid = extractXmlAttr(xml, "clientmsgid");
+            } catch (Throwable ignored) {}
         }
-
-        // 方法3: ExtVoiceMsgIdToFileNameEvent
-        try {
-            long msgId = extractMsgId(e9);
-            Class<?> evtCls = XposedHelpers.findClass(
-                "com.tencent.mm.autogen.events.ExtVoiceMsgIdToFileNameEvent", ContextManager.getClassLoader());
-            Object evt = XposedHelpers.newInstance(evtCls);
-            Object data = XposedHelpers.getObjectField(evt, "data");
-            XposedHelpers.setLongField(data, "msgId", msgId);
-            XposedHelpers.callMethod(evt, "publish");
-            Object result = XposedHelpers.getObjectField(evt, "result");
-            if (result != null) {
-                String fn = (String) XposedHelpers.getObjectField(result, "filename");
-                if (fn != null) {
-                    String hash = getUinHash(ContextManager.getClassLoader());
-                    if (hash != null) {
-                        String p = "/data/user/0/com.tencent.mm/MicroMsg/" + hash + "/voice2/" + fn;
-                        java.io.File f = new java.io.File(p);
-                        if (f.exists()) { LogWriter.log(TAG, "voice: eventPath=" + p + " EXISTS"); return p; }
-                        LogWriter.log(TAG, "voice: event filename=" + fn + " not found");
-                    }
-                }
-            }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "voice: event error: " + t.getMessage());
+        if (cid == null || cid.isEmpty()) {
+            LogWriter.log(TAG, "voice: no clientmsgid");
+            return null;
         }
+        LogWriter.log(TAG, "voice: cid=" + cid);
 
-        // 方法4: searchVoice2Dir 兜底
-        LogWriter.log(TAG, "voice: all methods failed, trying voice2 search...");
+        String uinHash = getUinHash(cl);
+        if (uinHash == null) { LogWriter.log(TAG, "voice: no uinHash"); return null; }
+
+        String voice2 = "/data/user/0/com.tencent.mm/MicroMsg/" + uinHash + "/voice2";
+        String md5 = md5(cid);
+        String subdir = md5.substring(0, 2) + "/" + md5.substring(2, 4);
+        String path = voice2 + "/" + subdir + "/msg_" + cid + ".amr";
+
+        java.io.File f = new java.io.File(path);
+        if (f.exists()) { LogWriter.log(TAG, "voice: " + path + " EXISTS"); return path; }
+        LogWriter.log(TAG, "voice: " + path + " NOT_FOUND");
+
+        // fallback: 尝试去掉子目录
+        path = voice2 + "/msg_" + cid + ".amr";
+        f = new java.io.File(path);
+        if (f.exists()) { LogWriter.log(TAG, "voice: flat=" + path + " EXISTS"); return path; }
+
+        LogWriter.log(TAG, "voice: not found, trying voice2 search...");
         return null;
+    }
+
+    private static String md5(String s) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+            byte[] d = md.digest(s.getBytes());
+            StringBuilder sb = new StringBuilder();
+            for (byte b : d) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Throwable t) { return ""; }
     }
 
     private static String extractXmlAttr(String xml, String attr) {
