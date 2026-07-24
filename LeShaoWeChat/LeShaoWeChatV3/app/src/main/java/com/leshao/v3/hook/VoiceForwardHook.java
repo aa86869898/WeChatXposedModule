@@ -35,9 +35,10 @@ public class VoiceForwardHook {
     private static final String TAG = "VF";
     private static final int MENU_ID = 777001;
     private static volatile boolean sHooked = false;
-    private static volatile boolean sAdapterHooked = false;
+    private static volatile boolean sMenuInjected = false;
     private static volatile boolean sEnabled = true;
     private static volatile Activity sChatAct;
+    private static volatile View sPendingView;
     private static volatile Object sPendingMsg;
     private static volatile String sPendingTalker;
     private static final AtomicInteger sCallCount = new AtomicInteger(0);
@@ -79,146 +80,136 @@ public class VoiceForwardHook {
         } catch (Throwable ignored) {}
     }
 
-    // ===== 全量搜索: 枚举所有含 "Menu" 的类 + View/Activity menu 方法 =====
+    // ===== WeKit 方案: DexFile 全量扫描 chatting.* 所有方法 =====
     private static void hookChatFragmentForAdapter(final ClassLoader cl) {
-        // 策略 A: 搜索所有含 "Menu" 的 WeChat 类
-        hookAllMenuClasses(cl);
+        // 策略 A: 枚举 com.tencent.mm.ui.chatting.* 全部类, hook 所有方法
+        hookAllChattingClasses(cl);
 
-        // 策略 B: Hook View.createContextMenu (所有重载)
+        // 策略 B: View.createContextMenu (兜底)
         try {
             XposedBridge.hookAllMethods(View.class, "createContextMenu", new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
-                    onAnyMenuMethod("View.createContextMenu", param);
+                    onMenuCreateMethod("View.createContextMenu", param);
                 }
             });
-            LogWriter.log(TAG, "View.createContextMenu hooked");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "View.createContextMenu fail: " + t.getMessage());
-        }
+        } catch (Throwable ignored) {}
 
-        // 策略 C: Hook Activity.onCreateContextMenu
+        // 策略 C: Activity.onContextItemSelected (菜单点击兜底)
         try {
-            XposedBridge.hookAllMethods(Activity.class, "onCreateContextMenu", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam param) {
-                    onAnyMenuMethod("Activity.onCreateContextMenu", param);
+            XposedBridge.hookAllMethods(Activity.class, "onContextItemSelected", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam param) {
+                    if (param.args.length > 0 && param.args[0] instanceof MenuItem) {
+                        MenuItem item = (MenuItem) param.args[0];
+                        if (item.getItemId() == MENU_ID) {
+                            executeForward();
+                            param.setResult(true);
+                        }
+                    }
                 }
             });
-            LogWriter.log(TAG, "Activity.onCreateContextMenu hooked");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "Activity.onCreateContextMenu fail: " + t.getMessage());
-        }
+        } catch (Throwable ignored) {}
 
-        LogWriter.log(TAG, "all menu hooks installed");
+        LogWriter.log(TAG, "chatting scan + View/Activity hooks installed");
     }
 
-    private static void hookAllMenuClasses(ClassLoader cl) {
+    private static void hookAllChattingClasses(ClassLoader cl) {
         try {
             String apkPath = ContextManager.getApkPath();
-            if (apkPath == null) {
-                LogWriter.log(TAG, "APK path null, skip DEX scan");
-                return;
-            }
-            LogWriter.log(TAG, "scanning: " + apkPath.substring(apkPath.lastIndexOf('/') + 1));
+            if (apkPath == null) { LogWriter.log(TAG, "APK path null"); return; }
 
-            dalvik.system.DexFile dexFile = new dalvik.system.DexFile(apkPath);
-            java.util.Enumeration<String> entries = dexFile.entries();
-            int menuCount = 0;
-            int totalHooked = 0;
+            dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+            java.util.Enumeration<String> entries = dex.entries();
+            int clsCount = 0, hookedCount = 0;
+
             while (entries.hasMoreElements()) {
                 String className = entries.nextElement();
-                String lower = className.toLowerCase();
-                if (!lower.contains("menu") && !lower.contains("context")) continue;
+                if (!className.startsWith("com.tencent.mm.ui.chatting.")) continue;
 
                 try {
                     Class<?> cls = cl.loadClass(className);
-                    int n = 0;
-                    for (Method m : cls.getDeclaredMethods()) {
-                        if (Modifier.isStatic(m.getModifiers())) continue;
-                        String mlow = m.getName().toLowerCase();
-                        if (!mlow.contains("create") && !mlow.contains("show") && !mlow.contains("add")
-                            && !mlow.contains("init") && !mlow.contains("popup") && !mlow.contains("setup")
-                            && !mlow.contains("oncreate"))
-                            continue;
-                        n++;
-                    }
+                    int n = hookAllNonStaticMethods(cls);
                     if (n > 0) {
-                        menuCount++;
-                        LogWriter.log(TAG, "Menu: " + className + " (" + n + ")");
-                        totalHooked += hookMenuClassMethods(cls);
+                        clsCount++;
+                        hookedCount += n;
                     }
                 } catch (Throwable ignored) {}
             }
-            dexFile.close();
-            LogWriter.log(TAG, "DEX scan: " + menuCount + " menu classes, " + totalHooked + " methods hooked");
+            dex.close();
+            LogWriter.log(TAG, "chatting scan: " + clsCount + " classes, " + hookedCount + " methods hooked");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "DEX scan failed: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            LogWriter.log(TAG, "DEX scan error: " + t.getMessage());
         }
     }
 
-    private static int hookMenuClassMethods(Class<?> cls) {
+    private static int hookAllNonStaticMethods(Class<?> cls) {
         int count = 0;
         for (Method m : cls.getDeclaredMethods()) {
             if (Modifier.isStatic(m.getModifiers())) continue;
             final String clsName = cls.getSimpleName();
             final String mName = m.getName();
-            // 只看方法名含 "create"/"show"/"add" 等 (减少噪音)
-            String low = mName.toLowerCase();
-            if (!low.contains("create") && !low.contains("show") && !low.contains("add")
-                && !low.contains("init") && !low.contains("popup") && !low.contains("setup"))
-                continue;
             count++;
             XposedBridge.hookMethod(m, new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
-                    onAnyMenuMethod(clsName + "." + mName, param);
+                    int n = sCallCount.incrementAndGet();
+                    if (n <= 20) {
+                        StringBuilder sb = new StringBuilder("VF: ");
+                        sb.append(clsName).append(".").append(mName).append("(");
+                        for (int i = 0; i < Math.min(param.args.length, 4); i++) {
+                            if (i > 0) sb.append(",");
+                            Object a = param.args[i];
+                            sb.append(a == null ? "null" : a.getClass().getSimpleName());
+                            if (a instanceof View) {
+                                Object tag = ((View) a).getTag();
+                                if (tag != null) sb.append(":T=").append(tag.getClass().getSimpleName());
+                            }
+                        }
+                        sb.append(")");
+                        LogWriter.log(TAG, sb.toString());
+                    }
+                    onMenuCreateMethod(clsName + "." + mName, param);
                 }
             });
         }
         return count;
     }
 
-    private static void onAnyMenuMethod(String source, XC_MethodHook.MethodHookParam param) {
-        if (sAdapterHooked) return;
-        int n = sCallCount.incrementAndGet();
+    /**
+     * WeKit case 21 逻辑: 检测菜单创建方法并注入"转发[K]"
+     * 特征: args 中有 View (消息项) + menu 对象
+     */
+    private static void onMenuCreateMethod(String source, XC_MethodHook.MethodHookParam param) {
+        if (sMenuInjected) return;
 
-        // 打印前 10 次调用
-        if (n <= 10) {
-            StringBuilder sb = new StringBuilder("MENU:").append(source).append("(");
-            for (int i = 0; i < Math.min(param.args.length, 4); i++) {
-                if (i > 0) sb.append(",");
-                Object a = param.args[i];
-                sb.append(a == null ? "null" : a.getClass().getSimpleName());
-            }
-            sb.append(")");
-            LogWriter.log(TAG, sb.toString());
-        }
-
-        // 检查是否有 View 参数（长按菜单大概率有 View）
+        // 提取 View — 微信把消息存在 View.getTag() 中
         View itemView = null;
-        for (Object arg : param.args) {
-            if (arg instanceof View) { itemView = (View) arg; break; }
-        }
-        if (itemView == null) return;
-
-        LogWriter.log(TAG, "=== MENU+VIEW FOUND: " + source + " ===");
-        sAdapterHooked = true;
-
-        // 尝试注入
         Object menuObj = null;
-        for (Object arg : param.args) {
-            if (arg != null && !(arg instanceof View) && arg.getClass().getName().toLowerCase().contains("menu")) {
-                menuObj = arg;
-                break;
+
+        for (int i = 0; i < param.args.length; i++) {
+            Object arg = param.args[i];
+            if (arg instanceof View && arg.getClass().getName().startsWith("android")) {
+                itemView = (View) arg;
+            }
+            if (arg != null && i == 0 && param.args.length >= 2) {
+                String name = arg.getClass().getName().toLowerCase();
+                if (name.contains("menu") || name.contains("context")) {
+                    menuObj = arg;
+                }
             }
         }
-        if (menuObj != null) {
-            injectForwardMenuItem(menuObj, itemView);
-        } else {
-            // 没有明显的 menu 对象，尝试给 itemView 创建 ContextMenu
-            LogWriter.log(TAG, "no menu arg, trying View.showContextMenu");
-            try {
-                itemView.showContextMenu();
-            } catch (Throwable ignored) {}
-        }
+
+        if (itemView == null || menuObj == null) return;
+
+        LogWriter.log(TAG, "=== FOUND [" + source + "] ===");
+        LogWriter.log(TAG, "  menu: " + menuObj.getClass().getName());
+        LogWriter.log(TAG, "  view: " + itemView.getClass().getSimpleName());
+
+        // WeKit: View.getTag() → 消息对象
+        Object tag = itemView.getTag();
+        LogWriter.log(TAG, "  tag: " + (tag == null ? "null" : tag.getClass().getName()));
+
+        sMenuInjected = true;
+        sPendingView = itemView;
+        injectForwardMenuItem(menuObj, itemView);
     }
 
     private static void injectForwardMenuItem(Object menuObj, View itemView) {
@@ -293,83 +284,7 @@ public class VoiceForwardHook {
         }
     }
 
-    private static RecyclerView findRecyclerView(View v) {
-        if (v instanceof RecyclerView) return (RecyclerView) v;
-        if (v instanceof ViewGroup) {
-            ViewGroup vg = (ViewGroup) v;
-            for (int i = 0; i < vg.getChildCount(); i++) {
-                RecyclerView rv = findRecyclerView(vg.getChildAt(i));
-                if (rv != null) return rv;
-            }
-        }
-        return null;
-    }
 
-    private static int hookAllNonStaticMethods(Class<?> cls) {
-        int count = 0;
-        for (Method m : cls.getDeclaredMethods()) {
-            if (Modifier.isStatic(m.getModifiers())) continue;
-            try {
-                XposedBridge.hookMethod(m, createCallback(cls.getSimpleName(), m.getName(), m.getParameterTypes().length));
-                count++;
-            } catch (Throwable ignored) {}
-        }
-        for (Class<?> sup = cls.getSuperclass(); sup != null && sup != Object.class; sup = sup.getSuperclass()) {
-            for (Method m : sup.getDeclaredMethods()) {
-                if (Modifier.isStatic(m.getModifiers())) continue;
-                try {
-                    XposedBridge.hookMethod(m, createCallback(sup.getSimpleName(), m.getName(), m.getParameterTypes().length));
-                    count++;
-                } catch (Throwable ignored) {}
-            }
-        }
-        return count;
-    }
-
-    private static XC_MethodHook createCallback(final String clsName, final String mName, final int pc) {
-        return new XC_MethodHook() {
-            @Override protected void beforeHookedMethod(MethodHookParam param) {
-                if (!sEnabled) return;
-                int n = sCallCount.incrementAndGet();
-                if (n > MAX_LOG) return;
-
-                StringBuilder sb = new StringBuilder("VF:CALL[").append(n).append("] ");
-                sb.append(clsName).append(".").append(mName).append("(").append(pc).append(")");
-
-                boolean foundView = false;
-                for (int i = 0; i < param.args.length; i++) {
-                    Object a = param.args[i];
-                    if (a instanceof View) {
-                        View v = (View) a;
-                        Object t = v.getTag();
-                        sb.append(" a[").append(i).append("]=View+tag=").append(t != null ? t.getClass().getSimpleName() : "null");
-                        foundView = true;
-                        if (t != null) tryCapture(t);
-                    }
-                }
-                if (!foundView) {
-                    for (int i = 0; i < Math.min(param.args.length, 4); i++) {
-                        Object a = param.args[i];
-                        sb.append(" a[").append(i).append("]=").append(a != null ? a.getClass().getSimpleName() : "null");
-                    }
-                }
-
-                LogWriter.log(TAG, sb.toString());
-
-                if (sPendingMsg != null && param.args.length >= 1) {
-                    for (Object a : param.args) {
-                        if (a != null && !(a instanceof View) && !(a instanceof Number) && !(a instanceof Boolean)) {
-                            boolean ok = tryAddMenuItem(a);
-                            if (ok) {
-                                LogWriter.log(TAG, "VF:INJECT OK into " + clsName + "." + mName);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        };
-    }
 
     // ===== addMenuItem 注入 ====
     private static boolean tryAddMenuItem(Object menuObj) {
