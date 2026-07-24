@@ -122,13 +122,26 @@ public class VoiceForwardHook {
             if (Modifier.isStatic(m.getModifiers())) continue;
             final String mName = m.getName();
             final Class<?>[] paramTypes = m.getParameterTypes();
-            if (!Modifier.isPublic(m.getModifiers()) && !Modifier.isProtected(m.getModifiers()))
-                continue;
+            // hook 所有非静态方法 (package-private/private 也可能包含 menu 创建方法)
             count++;
             XposedBridge.hookMethod(m, new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
-                    if (sAdapterHooked) return; // menu creation method found
+                    if (sAdapterHooked) return;
                     if (param.args == null || param.args.length < 2) return;
+
+                    // 诊断: 前 5 次调用打印参数信息
+                    int callNo = sCallCount.incrementAndGet();
+                    if (callNo <= 5) {
+                        StringBuilder sb = new StringBuilder();
+                        sb.append("VF:CALL ").append(cls.getSimpleName())
+                          .append(".").append(mName).append(" args=[");
+                        for (int i = 0; i < Math.min(param.args.length, 4); i++) {
+                            if (i > 0) sb.append(", ");
+                            sb.append(param.args[i] == null ? "null" : param.args[i].getClass().getSimpleName());
+                        }
+                        sb.append("]");
+                        LogWriter.log(TAG, sb.toString());
+                    }
 
                     Object arg0 = param.args[0];
                     Object arg1 = param.args[1];
