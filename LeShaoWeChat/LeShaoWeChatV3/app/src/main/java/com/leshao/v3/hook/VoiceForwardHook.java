@@ -420,12 +420,45 @@ public class VoiceForwardHook {
 
             LogWriter.log(TAG, "forward: tag=" + tag.getClass().getName());
 
-            // 提取消息 ID
+            // 尝试 WeKit 方式: tag.a(false) 获取内部消息对象
             long msgId = extractMsgId(tag);
+            if (msgId <= 0) {
+                // 尝试调用 tag 的方法获取内部消息
+                Object inner = null;
+                try { inner = XposedHelpers.callMethod(tag, "a", new Class[]{boolean.class}, false); } catch (Throwable ignored) {}
+                if (inner == null) try { inner = XposedHelpers.callMethod(tag, "a"); } catch (Throwable ignored) {}
+                if (inner == null) try { inner = XposedHelpers.callMethod(tag, "getMsgInfo"); } catch (Throwable ignored) {}
+
+                if (inner != null) {
+                    LogWriter.log(TAG, "forward: inner=" + inner.getClass().getName());
+                    msgId = extractMsgId(inner);
+                    if (msgId <= 0) {
+                        // dump inner 字段
+                        StringBuilder sb = new StringBuilder("inner fields: ");
+                        for (Field f : inner.getClass().getDeclaredFields()) {
+                            try {
+                                f.setAccessible(true);
+                                Object v = f.get(inner);
+                                sb.append(f.getName()).append("=");
+                                if (v instanceof Number || v instanceof String || v instanceof Boolean) {
+                                    sb.append(v);
+                                } else if (v != null) {
+                                    sb.append(v.getClass().getSimpleName());
+                                } else {
+                                    sb.append("null");
+                                }
+                                sb.append(" ");
+                            } catch (Throwable ignored) {}
+                        }
+                        LogWriter.log(TAG, sb.toString());
+                    }
+                }
+            }
             LogWriter.log(TAG, "forward: msgId=" + msgId + " (from " + tag.getClass().getSimpleName() + ")");
 
             if (msgId <= 0) {
-                StringBuilder sb = new StringBuilder("tag fields: ");
+                // 最终兜底: dump vo 方法和字段
+                StringBuilder sb = new StringBuilder("vo fields: ");
                 for (Field f : tag.getClass().getDeclaredFields()) {
                     try {
                         f.setAccessible(true);
@@ -440,6 +473,12 @@ public class VoiceForwardHook {
                         }
                         sb.append(" ");
                     } catch (Throwable ignored) {}
+                }
+                sb.append("| methods: ");
+                for (Method m : tag.getClass().getDeclaredMethods()) {
+                    if (m.getParameterTypes().length <= 1 && !Modifier.isStatic(m.getModifiers())) {
+                        sb.append(m.getName()).append(" ");
+                    }
                 }
                 LogWriter.log(TAG, sb.toString());
                 showToast("消息ID提取失败, 查看日志");
