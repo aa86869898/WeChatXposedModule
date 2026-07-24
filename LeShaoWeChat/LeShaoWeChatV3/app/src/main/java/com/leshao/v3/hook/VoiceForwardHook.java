@@ -4,14 +4,11 @@ import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
 import android.view.ContextMenu;
-import android.view.Gravity;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
-import android.widget.LinearLayout;
 import android.widget.PopupWindow;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
@@ -29,14 +26,14 @@ import de.robv.android.xposed.XposedHelpers;
  * 语音消息转发 — WeChat 8.0.76 专用
  * ==============================
  *
- * 已验证失败的路径 (8.0.76):
- *   View.performLongClick() — 不触发
- *   PopupWindow.showAsDropDown() — 不触发
- *   Dialog.show() — 不触发
- *   ContextMenu.onCreateContextMenu — 不触发
+ * 按 WeKit 注入流程文档 (FINAL v3) 实现:
+ *   case 21 等效: hook 微信 methodCreateMenu(menu_obj, view)
+ *                 → View.getTag() → 消息
+ *                 → addMenuItem(int, CharSequence, Drawable) 注入"语音转发"
+ *   case 22 等效: hook 微信 click handler
+ *                 → MenuItem.getItemId() == 777001 → executeForward()
  *
- * 新策略: 直接 Hook WeChat 内部 MMPopupMenu 菜单构建器
- *   8.0.76 长按菜单通过 com.tencent.mm.ui.tools.MMPopupMenu 构建
+ * 核心策略: 全量 hook MMPopupMenu 族类 → 发现 + 注入
  */
 public class VoiceForwardHook {
 
@@ -60,6 +57,7 @@ public class VoiceForwardHook {
 
         hookChatActivity(cl);
         hookMMPopupMenuDiscovery(cl);
+        hookClickHandlers(cl);
         hookFallbackPopupWindow();
         hookFallbackDialog();
         hookFallbackContextMenu(cl);
@@ -81,7 +79,7 @@ public class VoiceForwardHook {
         } catch (Throwable ignored) {}
     }
 
-    // ===== 核心: Hook WeChat MMPopupMenu 发现菜单构建流程 ====
+    // ===== 核心: Hook WeChat 内部菜单类 ====
     private static void hookMMPopupMenuDiscovery(ClassLoader cl) {
         String[] mmMenuClasses = {
             "com.tencent.mm.ui.tools.MMPopupMenu",
@@ -115,23 +113,10 @@ public class VoiceForwardHook {
 
             XposedBridge.hookMethod(m, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam param) {
-                    if (!sEnabled) return;
-                    Object self = param.thisObject;
-
-                    for (Object arg : param.args) {
-                        if (arg instanceof View) {
-                            View v = (View) arg;
-                            if (v.getTag() != null) {
-                                tryCapture(v.getTag());
-                            }
-                        }
-                    }
-
-                    if (sPendingMsg != null) {
-                        injectMenuItems(self, clsName, mName);
-                    }
-
-                    LogWriter.log(TAG, "DISC:" + clsName + "." + mName + "(" + paramCount + " args) hasMsg=" + (sPendingMsg != null));
+                    onMMMenuMethodCalled(param.thisObject, param.args, clsName, mName, paramCount, false);
+                }
+                @Override protected void afterHookedMethod(MethodHookParam param) {
+                    onMMMenuMethodCalled(param.thisObject, param.args, clsName, mName, paramCount, true);
                 }
             });
             count++;
@@ -141,69 +126,105 @@ public class VoiceForwardHook {
         }
     }
 
-    // ===== 通用 addMenuItem 注入 ====
-    private static void injectMenuItems(Object menuObj, String clsName, String methodName) {
+    private static void onMMMenuMethodCalled(Object self, Object[] args, String clsName,
+                                              String mName, int paramCount, boolean isAfter) {
+        if (!sEnabled) return;
+
+        for (Object arg : args) {
+            if (arg instanceof View) {
+                View v = (View) arg;
+                if (v.getTag() != null) {
+                    tryCapture(v.getTag());
+                }
+            }
+        }
+
+        if (sPendingMsg != null) {
+            boolean ok = injectMenuItems(self, clsName, mName);
+            if (ok) {
+                LogWriter.log(TAG, "INJECTED into " + clsName + "." + mName + "(" + paramCount + " args)" + " after=" + isAfter);
+            }
+        }
+    }
+
+    // ===== addMenuItem 注入 — 按 FINAL 文档签名 ====
+    private static boolean injectMenuItems(Object menuObj, String clsName, String methodName) {
         try {
             Class<?> menuClass = menuObj.getClass();
 
             for (Method m : menuClass.getDeclaredMethods()) {
                 Class<?>[] pts = m.getParameterTypes();
-                // addMenuItem(int, String/CharSequence)
-                if (pts.length == 2
-                    && (pts[0] == int.class || pts[0] == Integer.class)
-                    && (pts[1] == String.class || pts[1] == CharSequence.class)) {
-                    try { m.setAccessible(true); m.invoke(menuObj, MENU_ID, "语音转发");
-                        LogWriter.log(TAG, "injected via addMenuItem(id,text) in " + clsName + "." + methodName);
-                        return; } catch (Throwable ignored) {}
+                m.setAccessible(true);
+
+                // ★ 文档签名: addMenuItem(int, CharSequence, Drawable)
+                if (pts.length == 3 && (pts[0] == int.class || pts[0] == Integer.class)
+                    && (pts[1] == String.class || pts[1] == CharSequence.class)
+                    && (pts[2] == Drawable.class || pts[2] == Object.class)) {
+                    try { m.invoke(menuObj, MENU_ID, "语音转发", null); return true; }
+                    catch (Throwable ignored) {}
                 }
-                // addMenuItem(int, int, int, String/CharSequence)
-                if (pts.length == 4
-                    && (pts[0] == int.class || pts[0] == Integer.class)
+                // addMenuItem(int, CharSequence) — 2 参数简化版
+                if (pts.length == 2 && (pts[0] == int.class || pts[0] == Integer.class)
+                    && (pts[1] == String.class || pts[1] == CharSequence.class)) {
+                    try { m.invoke(menuObj, MENU_ID, "语音转发"); return true; }
+                    catch (Throwable ignored) {}
+                }
+                // addMenuItem(int, int, int, CharSequence) — ContextMenu 标准
+                if (pts.length == 4 && (pts[0] == int.class || pts[0] == Integer.class)
                     && (pts[1] == int.class || pts[1] == Integer.class)
                     && (pts[2] == int.class || pts[2] == Integer.class)
                     && (pts[3] == String.class || pts[3] == CharSequence.class)) {
-                    try { m.setAccessible(true); m.invoke(menuObj, 0, MENU_ID, 0, "语音转发");
-                        LogWriter.log(TAG, "injected via addMenuItem(group,id,order,text) in " + clsName + "." + methodName);
-                        return; } catch (Throwable ignored) {}
-                }
-                // add(int, String/CharSequence)
-                if (pts.length == 2
-                    && (pts[0] == int.class || pts[0] == Integer.class)
-                    && (pts[1] == String.class || pts[1] == CharSequence.class || pts[1] == Object.class)) {
-                    try { m.setAccessible(true); m.invoke(menuObj, MENU_ID, "语音转发");
-                        LogWriter.log(TAG, "injected via add(id,text) in " + clsName + "." + methodName);
-                        return; } catch (Throwable ignored) {}
-                }
-                // add(String/CharSequence)
-                if (pts.length == 1
-                    && (pts[0] == String.class || pts[0] == CharSequence.class || pts[0] == Object.class)) {
-                    try { m.setAccessible(true); m.invoke(menuObj, "语音转发");
-                        LogWriter.log(TAG, "injected via add(text) in " + clsName + "." + methodName);
-                        return; } catch (Throwable ignored) {}
+                    try { m.invoke(menuObj, 0, MENU_ID, 0, "语音转发"); return true; }
+                    catch (Throwable ignored) {}
                 }
             }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "inject err on " + clsName + ": " + t.getClass().getSimpleName());
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    // ===== Click Handler: case 22 等效 ====
+    private static void hookClickHandlers(ClassLoader cl) {
+        String[] uiClasses = {
+            "com.tencent.mm.ui.chatting.ChattingUI",
+            "com.tencent.mm.ui.chatting.ChattingUIFragment",
+            "com.tencent.mm.ui.chatting.BaseChattingUIFragment",
+            "com.tencent.mm.ui.MMActivity",
+        };
+
+        for (String clsName : uiClasses) {
+            try {
+                Class<?> cls = cl.loadClass(clsName);
+
+                XposedBridge.hookAllMethods(cls, "onContextItemSelected", new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam param) {
+                        if (!sEnabled) return;
+                        try {
+                            MenuItem item = (MenuItem) param.args[0];
+                            if (item.getItemId() == MENU_ID) {
+                                executeForward();
+                                param.setResult(true);
+                                LogWriter.log(TAG, "CLICK: onContextItemSelected on " + clsName);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "CLICK: hook onContextItemSelected on " + clsName);
+
+            } catch (Throwable ignored) {}
         }
     }
 
-    // ===== 备用: PopupWindow 拦截 ====
+    // ===== 备用: PopupWindow ====
     private static void hookFallbackPopupWindow() {
         try {
             XposedBridge.hookAllMethods(PopupWindow.class, "showAsDropDown", new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
-                    if (!sEnabled) return;
                     View anchor = (View) param.args[0];
                     Object tag = anchor.getTag();
-                    LogWriter.log(TAG, "FB_PW: showAsDropDown anchor=" + anchor.getClass().getSimpleName() + " tag=" + (tag != null ? tag.getClass().getSimpleName() : "null"));
-                    tryCapture(tag);
-                }
-            });
-            XposedBridge.hookAllMethods(PopupWindow.class, "showAtLocation", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam param) {
-                    if (!sEnabled) return;
-                    View parent = (View) param.args[0];
-                    LogWriter.log(TAG, "FB_PW: showAtLocation parent=" + parent.getClass().getSimpleName());
+                    if (tag != null) tryCapture(tag);
+                    if (sPendingMsg != null) {
+                        LogWriter.log(TAG, "FB_PW: showAsDropDown anchor=" + anchor.getClass().getSimpleName());
+                    }
                 }
             });
         } catch (Throwable ignored) {}
@@ -214,7 +235,9 @@ public class VoiceForwardHook {
         try {
             XposedBridge.hookAllMethods(Dialog.class, "show", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam param) {
-                    LogWriter.log(TAG, "FB_DLG: show " + param.thisObject.getClass().getSimpleName());
+                    if (sPendingMsg != null) {
+                        LogWriter.log(TAG, "FB_DLG: show " + param.thisObject.getClass().getSimpleName());
+                    }
                 }
             });
         } catch (Throwable ignored) {}
@@ -237,20 +260,10 @@ public class VoiceForwardHook {
                     }
                 }
             });
-            XposedBridge.hookAllMethods(chattingUI, "onContextItemSelected", new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam param) {
-                    if (!sEnabled) return;
-                    MenuItem item = (MenuItem) param.args[0];
-                    if (item.getItemId() == MENU_ID || "语音转发".equals(item.getTitle())) {
-                        executeForward();
-                        param.setResult(true);
-                    }
-                }
-            });
         } catch (Throwable ignored) {}
     }
 
-    // ===== 消息捕获 ====
+    // ===== 消息捕获 =====
     private static void tryCapture(Object tag) {
         if (tag == null) return;
         try {
@@ -265,14 +278,14 @@ public class VoiceForwardHook {
                 sPendingMsg = msgObj;
                 sPendingTalker = extractTalker(msgObj);
                 if (sPendingTalker == null) sPendingTalker = "";
-                LogWriter.log(TAG, "captured msgId=" + msgId + " talker=" + sPendingTalker + " from tag=" + tag.getClass().getSimpleName());
+                LogWriter.log(TAG, "captured msgId=" + msgId + " talker=" + sPendingTalker + " tagType=" + tag.getClass().getSimpleName());
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, "capture err: " + t.getMessage());
         }
     }
 
-    // ===== 转发执行 ====
+    // ===== 转发执行 (case 22 等效 onClick) ====
     private static void executeForward() {
         if (!sEnabled) return;
         try {
@@ -317,7 +330,7 @@ public class VoiceForwardHook {
         }
     }
 
-    // ===== 工具 ====
+    // ===== 工具 =====
     private static long extractMsgId(Object msg) {
         try { return (long) XposedHelpers.callMethod(msg, "getMsgId"); } catch (Throwable ignored) {}
         try { return XposedHelpers.getLongField(msg, "field_msgId"); } catch (Throwable ignored) {}
