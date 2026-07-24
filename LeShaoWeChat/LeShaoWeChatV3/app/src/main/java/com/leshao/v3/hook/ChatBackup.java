@@ -37,6 +37,7 @@ public class ChatBackup {
     private static String lastBackupDate = "";
 
     public static void hook(ClassLoader cl) {
+        XposedBridge.log("[ChatBackup] hook() ENTER sEnabled=" + sEnabled);
         if (!sEnabled || !ModuleConfig.load(ContextManager.getPrefs()).chatBackupEnabled) return;
         hookAppExit(cl);
         scheduleDailyBackup();

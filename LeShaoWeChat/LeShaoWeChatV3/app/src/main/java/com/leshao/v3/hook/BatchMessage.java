@@ -32,6 +32,7 @@ public class BatchMessage {
     public static int forwardSplitSize = 50;
 
     public static void hook(ClassLoader cl) {
+        XposedBridge.log("[BatchMessage] hook() ENTER sEnabled=" + sEnabled);
         if (!sEnabled || !ModuleConfig.load(ContextManager.getPrefs()).batchMessageEnabled) return;
         maxSelectCount = HookConfig.getInt("batch_max_select", 999);
         forwardSplitSize = HookConfig.getInt("forward_split_size", 50);

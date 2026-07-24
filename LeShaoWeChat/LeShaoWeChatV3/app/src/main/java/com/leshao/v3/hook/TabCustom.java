@@ -31,8 +31,10 @@ public class TabCustom {
     public static boolean customLabels = false;
 
     public static void hook(ClassLoader cl) {
+        XposedBridge.log("[TabCustom] hook() ENTER sEnabled=" + sEnabled);
         if (!sEnabled) return;
         ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        XposedBridge.log("[TabCustom] config.tabCustomEnabled=" + config.tabCustomEnabled);
         if (config == null || !config.tabCustomEnabled) return;
 
         String hidden = HookConfig.getString("tab_visible", "");

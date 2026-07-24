@@ -34,8 +34,10 @@ public class AutoReplyHook {
     private static Object msgStorage;
 
     public static void hook(ClassLoader cl) {
+        XposedBridge.log("[AutoReplyHook] hook() ENTER sEnabled=" + sEnabled);
         if (!sEnabled) return;
         ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        XposedBridge.log("[AutoReplyHook] config.autoReplyEnabled=" + config.autoReplyEnabled);
         if (config == null || !config.autoReplyEnabled) return;
         classLoader = cl;
         loadRules();

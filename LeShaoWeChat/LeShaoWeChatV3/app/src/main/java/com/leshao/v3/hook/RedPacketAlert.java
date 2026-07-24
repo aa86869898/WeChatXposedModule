@@ -42,6 +42,7 @@ public class RedPacketAlert {
     private static boolean forceRing = true;
 
     public static void hook(ClassLoader cl) {
+        XposedBridge.log("[RedPacketAlert] hook() ENTER sEnabled=" + sEnabled);
         if (!sEnabled || !ModuleConfig.load(ContextManager.getPrefs()).redPacketAlertEnabled) return;
         forceVibrate = HookConfig.getInt("rp_alert_vibrate", 1) == 1;
         forceRing = HookConfig.getInt("rp_alert_ring", 1) == 1;

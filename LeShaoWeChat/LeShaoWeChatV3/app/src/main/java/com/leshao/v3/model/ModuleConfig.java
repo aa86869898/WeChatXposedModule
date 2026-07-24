@@ -272,7 +272,7 @@ public class ModuleConfig {
         cfg.autoRemarkEnabled = prefs.getBoolean("ls_wp_autoremark", true);
         cfg.searchEnhanceEnabled = prefs.getBoolean("ls_wp_search", true);
         cfg.notifyCustomEnabled = prefs.getBoolean("ls_wp_notify", true);
-        cfg.autoReplyEnabled = prefs.getBoolean("ls_wp_autoreply", false);
+        cfg.autoReplyEnabled = prefs.getBoolean("ls_wp_autoreply", true);
         cfg.snsFeaturesEnabled = prefs.getBoolean("ls_wp_sns", true);
         cfg.privacyFeaturesEnabled = prefs.getBoolean("ls_wp_privacy", true);
         cfg.loginMonitorEnabled = prefs.getBoolean("ls_wp_loginmon", true);

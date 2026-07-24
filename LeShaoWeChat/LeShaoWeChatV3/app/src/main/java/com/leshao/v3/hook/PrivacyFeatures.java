@@ -32,6 +32,7 @@ public class PrivacyFeatures {
     private static Set<String> lockedChats = new HashSet<>();
 
     public static void hook(ClassLoader cl) {
+        XposedBridge.log("[PrivacyFeatures] hook() ENTER sEnabled=" + sEnabled);
         loadLockedChats();
         if (sEnabled && ModuleConfig.load(ContextManager.getPrefs()).privacyFeaturesEnabled)  hookScreenshot(cl);
         if (sEnabled && ModuleConfig.load(ContextManager.getPrefs()).privacyFeaturesEnabled)  hookClipboard(cl);

@@ -48,7 +48,9 @@ public class ChatUICustom {
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     public static void hook(ClassLoader cl) {
+        XposedBridge.log("[ChatUICustom] hook() ENTER sEnabled=" + sEnabled);
         ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        XposedBridge.log("[ChatUICustom] chatUICustomEnabled=" + config.chatUICustomEnabled);
         if (!sEnabled || !config.chatUICustomEnabled) return;
         XposedBridge.log("[ChatUICustom] 开始安装hooks...");
         hookChattingFragment(cl);
