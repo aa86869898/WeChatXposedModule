@@ -1,0 +1,153 @@
+================================================================================
+ 微信 8.0.76 语音发送 — 完整类路径
+================================================================================
+
+1. b31.w   →   语音上传 NetScene 管理器
+───────────────────────────────────────
+  完整类名: b31.w
+  (ProGuard混淆, 在默认包下)
+  Xposed: XposedHelpers.findClass("b31.w", classLoader)
+
+  构造:
+    w()                                  无参
+    w(int type, int scene, b31.b callback)    3参数
+    w(int, int, String, String, String, b70.w, b31.b)  7参数
+
+  关键方法:
+    void start()                              开始上传
+    void start(String voicePath)              指定路径上传
+    void stop(boolean)                        停止上传
+    void cancel(boolean)                      取消上传
+    void init(int, int, b31.b)                初始化
+    void init(boolean, boolean, int, int, b31.b) 完整初始化
+    void f(boolean, boolean, b31.d)           发送参数设置
+    void d(boolean, boolean)                  设置参数
+    void onSceneEnd(int errType, int errCode, String errMsg, m1 scene) 网络回调
+    int getMaxAmplitudeRate()                 最大振幅
+    void setVadSAndNRation(float)             VAD信噪比
+    String b()                               获取某字符串
+
+
+2. tl.p0   →   语音录制器 (SceneVoice Recorder)
+───────────────────────────────────────
+  完整类名: tl.p0
+  TAG: "MicroMsg.SceneVoice.Recorder"
+  Xposed: XposedHelpers.findClass("tl.p0", classLoader)
+
+  构造:
+    p0(android.content.Context ctx, boolean useSpeex)
+
+  关键方法:
+    boolean g(String toUser, e9 msgInfo)        开始录音 ★
+    boolean g(String path, e9 msgInfo, boolean) 指定路径开始录音
+    boolean stop()                              停止并发送 ★
+    boolean cancel()                            取消录音
+    void reset()                                重置
+    e9 j()                                     获取关联的消息对象
+    long c()                                   获取录音时长(ms)
+    int d()                                    获取振幅
+    void b(e1 callback)                        设置录音回调
+    void h(f1 listener)                        设置发送监听器
+
+
+3. x0   →   语音文件工具类
+───────────────────────────────────────
+  说明: 在 tl.p0 源码中引用, 是语音文件操作的实用工具类
+  推测位置: 可能是 y21.* 包下的类 (如 y21.g1 或类似)
+            在 tl.p0 的 import 中可能被导入为别名 x0
+
+  y21.g1 (疑似 x0):
+    完整类名: y21.g1
+    构造: g1(s85.k0)
+    方法:
+      static String x0(String prefix, String ext)  生成随机文件名
+      static String y0(long)                       另一种文件名生成
+      static w0 F0(String)                        获取文件信息
+      static w0 H0(String)
+      static w0 I0(long)
+      static w0 N0(String, long)
+      static boolean O0(w0)                       检查文件信息
+      static boolean Q0(String, w0)
+      static boolean d(String)                    可能是删除
+      static void t0(y, String)                   可能是更新DB
+
+  另一个 x0 (可能在 y21 或 voice 相关包):
+    方法参考(从 tl.p0.stop() 反推):
+      static ? x0.g(String talker, String prefix) → 生成文件路径
+      static void x0.b(String path)               → 删除/清理
+      static void x0.t(String path, int duration, int zero, e9 msg) → 更新DB
+
+  实际查找方法:
+    如果 XposedHelpers.findClass("y21.g1", cl) 不行,
+    尝试在 y21 包下搜索所有以 g/h 开头的类
+
+
+4. po   →   可能是指 tl.p0 或 y21.p0 (播放列表)
+───────────────────────────────────────
+  如果 "po" 是指 tl.p0:
+    见上 #2
+
+  如果 "po" 是指 y21.p0 (Voice Playlist Manager):
+    tl.p0.stop() 源码中有:
+      y21.p0.kj().e()   → 语音播放列表刷新
+
+    完整类名: y21.p0 (推测)
+    方法: kj() → 获取某实例
+          e()  → 刷新列表
+
+
+================================================================================
+ 快速查找 Xposed 代码
+================================================================================
+
+  // 语音录制器
+  Class<?> voiceRecorder = XposedHelpers.findClass("tl.p0", cl);
+
+  // 语音上传器
+  Class<?> voiceUploader = XposedHelpers.findClass("b31.w", cl);
+
+  // 语音文件工具 (尝试多个候选)
+  Class<?> voiceUtil = null;
+  try { voiceUtil = XposedHelpers.findClass("y21.g1", cl); }
+  catch (Exception e) {
+    try { voiceUtil = XposedHelpers.findClass("y21.g2", cl); }
+    catch (Exception e2) {}
+  }
+
+  // 语音播放列表
+  Class<?> voicePlaylist = XposedHelpers.findClass("y21.p0", cl);
+
+
+================================================================================
+ 语音相关类完整列表 (tl 包)
+================================================================================
+
+  tl.j0    — SceneVoice 相关
+  tl.l0    — SceneVoice 相关
+  tl.m0    — SceneVoice 相关
+  tl.o0    — Record Start Runnable (录音启动线程)
+  tl.p0    — SceneVoice Recorder (语音录制器) ★
+  tl.q0    — SceneVoice 相关
+  tl.r0    — SceneVoice 相关
+  tl.s0    — SceneVoice 相关
+  tl.x     — AudioRecord 回调
+  tl.x0    — Voice Send Task (发送任务)
+  tl.y0    — Voice Send Manager (发送管理)
+
+================================================================================
+ 语音相关类完整列表 (b31 包, NetScene)
+================================================================================
+
+  b31.j    — Voice Upload NetScene (语音上传)
+  b31.l    — Voice Upload NetScene (变体)
+  b31.m    — SceneVoice 相关 NetScene
+  b31.o    — SceneVoice 相关 NetScene
+  b31.q    — SceneVoice 相关 NetScene
+  b31.r    — SceneVoice 相关 NetScene
+  b31.s    — SceneVoice 相关 NetScene
+  b31.t    — SceneVoice 相关 NetScene
+  b31.u    — SceneVoice 相关 NetScene
+  b31.w    — Voice Send Manager (网络发送管理) ★
+  b31.x    — SceneVoice 相关 NetScene
+
+================================================================================

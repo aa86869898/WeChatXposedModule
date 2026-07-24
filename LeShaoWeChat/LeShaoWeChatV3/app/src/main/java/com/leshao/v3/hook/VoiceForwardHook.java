@@ -559,96 +559,38 @@ public class VoiceForwardHook {
         }
     }
 
-    // ===== 实际转发语音 (反射方案 v1) =====
-    // 思路: 不用 SelectConversationUI, 直接通过 DEX 扫描找到 sendVoice/sendMsg API 用反射调用
+    // ===== 实际转发语音 (tl.p0 SceneVoice Recorder 方案) =====
     private static boolean doForwardVoice(Activity act, Object msgObj, String targetWxid) {
         try {
-            Object e9 = msgObj;
-            if (!e9.getClass().getName().contains("storage")) {
-                try { e9 = XposedHelpers.callMethod(msgObj, "c"); } catch (Throwable ignored) {}
-            }
-            if (e9 == null || !e9.getClass().getName().contains("storage")) {
-                LogWriter.log(TAG, "forward: cannot get e9");
-                return false;
-            }
+            Object e9 = getE9(msgObj);
+            if (e9 == null) { LogWriter.log(TAG, "doForward: cannot get e9"); return false; }
 
+            ClassLoader cl = ContextManager.getClassLoader();
             long msgId = extractMsgId(e9);
             String xml = null;
             try { xml = (String) XposedHelpers.callMethod(e9, "I0"); } catch (Throwable ignored) {}
 
             LogWriter.log(TAG, "doForward: msgId=" + msgId + " → " + targetWxid);
 
-            ClassLoader cl = ContextManager.getClassLoader();
-
-            // 1. 扫描打包所有可能包含 send 方法的类
-            String[] searchPkgs = {
-                "com.tencent.mm.plugin.messenger.foundation",
-                "com.tencent.mm.modelvoice",
-                "com.tencent.mm.plugin.voice",
-                "com.tencent.mm.plugin.recordvoice",
-                "com.tencent.mm.modelmulti",
-            };
-            StringBuilder allMethods = new StringBuilder();
-            try {
-                String apkPath = ContextManager.getApkPath();
-                if (apkPath != null) {
-                    dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
-                    Enumeration<String> entries = dex.entries();
-                    while (entries.hasMoreElements()) {
-                        String cn = entries.nextElement();
-                        boolean match = false;
-                        for (String pkg : searchPkgs) {
-                            if (cn.startsWith(pkg + ".")) { match = true; break; }
-                        }
-                        if (!match) continue;
-                        try {
-                            Class<?> cls = cl.loadClass(cn);
-                            for (Method m : cls.getDeclaredMethods()) {
-                                String mn = m.getName();
-                                Class<?>[] pts = m.getParameterTypes();
-                                if (pts.length < 1) continue;
-                                // 只记录名字含 send/forward/retr/voice/sendMsg 的方法
-                                String ml = mn.toLowerCase();
-                                if (ml.contains("send") || ml.contains("forward") || ml.contains("retr")
-                                    || ml.contains("voice") || ml.contains("audio") || ml.contains("upload")) {
-                                    allMethods.append(" ").append(cn).append(".").append(mn).append("(");
-                                    for (int j = 0; j < pts.length; j++) {
-                                        if (j > 0) allMethods.append(",");
-                                        allMethods.append(pts[j].getSimpleName());
-                                    }
-                                    allMethods.append(") static=").append(Modifier.isStatic(m.getModifiers()));
-                                }
-                            }
-                        } catch (Throwable ignored) {}
-                    }
-                    dex.close();
-                }
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "doForward scan error: " + t.getMessage());
+            // 1. 找语音文件
+            String voiceFile = findVoiceFile(e9);
+            if (voiceFile == null) {
+                LogWriter.log(TAG, "doForward: voice file not found, try voice2/ dir");
+                voiceFile = searchVoice2Dir();
             }
-            LogWriter.log(TAG, "doForward scan result:" + allMethods);
-
-            // 2. 尝试找到并调用 send API
-            // 策略A: 先用 IMsgService(plugin.messenger.foundation.a.a.j) 的 send 方法
-            boolean sent = trySendViaIMsgService(cl, e9, targetWxid);
-
-            // 策略B: 扫描 modelvoice 包的 send 方法
-            if (!sent) sent = trySendViaVoicePlugin(cl, e9, targetWxid);
-
-            // 策略C: 兜底 SelectConversationUI
-            if (!sent) {
-                try {
-                    Class<?> selUI = cl.loadClass("com.tencent.mm.ui.transmit.SelectConversationUI");
-                    Intent intent = new Intent(act, selUI);
-                    intent.putExtra("Retr_Msg_Type", 34);
-                    intent.putExtra("Retr_Msg_Id", msgId);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    act.startActivity(intent);
-                    return true;
-                } catch (Throwable t) {
-                    LogWriter.log(TAG, "doForward: all strategies failed: " + t.getMessage());
-                }
+            if (voiceFile == null) {
+                LogWriter.log(TAG, "doForward: cannot find any voice file");
+                return false;
             }
+            LogWriter.log(TAG, "doForward: voiceFile=" + voiceFile);
+
+            // 2. 解析时长
+            int duration = parseVoiceDuration(xml);
+            LogWriter.log(TAG, "doForward: duration=" + duration + "ms");
+
+            // 3. 使用 tl.p0 SceneVoice Recorder 发送
+            boolean sent = sendViaSceneVoice(act, cl, targetWxid, voiceFile, duration);
+            LogWriter.log(TAG, "doForward: sent=" + sent);
             return sent;
         } catch (Throwable t) {
             LogWriter.log(TAG, "doForward error: " + t.getMessage());
@@ -656,63 +598,149 @@ public class VoiceForwardHook {
         }
     }
 
-    private static boolean trySendViaIMsgService(ClassLoader cl, Object e9, String targetWxid) {
-        try {
-            // 尝试 plugin.messenger.foundation.a.a.j (IMsgService 接口)
-            Object msgService = XposedHelpers.callStaticMethod(
-                XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.a.a.h", cl), "z");
-            LogWriter.log(TAG, "IMsgService: got service instance type=" + (msgService != null ? msgService.getClass().getName() : "null"));
-            if (msgService == null) return false;
-
-            long msgId = extractMsgId(e9);
-            // 尝试各种可能的 send 方法签名
-            for (String methodName : new String[]{"cx", "m", "a", "send", "sendMsg", "a5"}) {
-                for (Class<?>[] params : new Class[][]{
-                    {String.class, long.class},
-                    {long.class, String.class},
-                    {String.class, Object.class},
-                    {Object.class, String.class},
-                    {String.class, long.class, int.class},
-                }) {
-                    try {
-                        Method m = findMethodInHierarchy(msgService.getClass(), methodName, params);
-                        if (m != null) {
-                            Object result;
-                            if (params[0] == String.class) {
-                                result = m.invoke(msgService, targetWxid, msgId);
-                            } else {
-                                result = m.invoke(msgService, msgId, targetWxid);
-                            }
-                            LogWriter.log(TAG, "IMsgService." + methodName + " result=" + result);
-                            return true;
-                        }
-                    } catch (Throwable ignored) {}
-                }
-            }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "IMsgService fail: " + t.getMessage());
-        }
-        return false;
-    }
-
-    private static Method findMethodInHierarchy(Class<?> cls, String name, Class<?>[] paramTypes) {
-        for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
+    private static Object getE9(Object msgObj) {
+        if (msgObj == null) return null;
+        if (msgObj.getClass().getName().contains("storage")) return msgObj;
+        try { return XposedHelpers.callMethod(msgObj, "c"); } catch (Throwable ignored) {}
+        for (String mn : new String[]{"getMsgInfo","getMsg","a","b","d"}) {
             try {
-                return c.getDeclaredMethod(name, paramTypes);
-            } catch (NoSuchMethodException e) {
-                for (Class<?> iface : c.getInterfaces()) {
-                    try {
-                        return iface.getDeclaredMethod(name, paramTypes);
-                    } catch (NoSuchMethodException ignored) {}
-                }
-            }
+                Object r = XposedHelpers.callMethod(msgObj, mn);
+                if (r != null && r.getClass().getName().contains("storage")) return r;
+            } catch (Throwable ignored) {}
         }
         return null;
     }
 
-    private static boolean trySendViaVoicePlugin(ClassLoader cl, Object e9, String targetWxid) {
-        // 待扫描结果补充
-        return false;
+    private static String findVoiceFile(Object e9) {
+        try {
+            String imgPath = (String) XposedHelpers.getObjectField(e9, "field_imgPath");
+            if (imgPath != null) {
+                java.io.File f = new java.io.File(imgPath);
+                if (f.exists()) return imgPath;
+                LogWriter.log(TAG, "field_imgPath=" + imgPath + " (not a file)");
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private static String searchVoice2Dir() {
+        try {
+            java.io.File md = new java.io.File("/data/data/com.tencent.mm/MicroMsg");
+            if (!md.exists()) return null;
+            for (java.io.File userDir : md.listFiles()) {
+                if (userDir.isDirectory() && userDir.getName().length() == 32) {
+                    java.io.File v2 = new java.io.File(userDir, "voice2");
+                    if (v2.isDirectory()) {
+                        java.io.File[] files = v2.listFiles();
+                        if (files != null) {
+                            java.io.File newest = null;
+                            for (java.io.File f : files) {
+                                if (f.getName().endsWith(".amr") && f.length() > 500) {
+                                    if (newest == null || f.lastModified() > newest.lastModified()) {
+                                        newest = f;
+                                    }
+                                }
+                            }
+                            if (newest != null) {
+                                LogWriter.log(TAG, "voice2 newest=" + newest.getAbsolutePath() + " size=" + newest.length());
+                                return newest.getAbsolutePath();
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "voice2 scan error: " + t.getMessage());
+        }
+        return null;
+    }
+
+    private static int parseVoiceDuration(String xml) {
+        if (xml == null) return 5000; // default 5s
+        try {
+            for (String attr : new String[]{"voicelength", "length"}) {
+                int idx = xml.indexOf(attr + "=\"");
+                if (idx >= 0) {
+                    idx += attr.length() + 2;
+                    int end = xml.indexOf("\"", idx);
+                    if (end > idx) return Integer.parseInt(xml.substring(idx, end));
+                }
+            }
+        } catch (Throwable ignored) {}
+        return 5000;
+    }
+
+    private static boolean sendViaSceneVoice(Activity act, ClassLoader cl, String targetWxid, String voiceFile, int duration) {
+        try {
+            Class<?> p0Class = XposedHelpers.findClass("tl.p0", cl);
+            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", cl);
+            LogWriter.log(TAG, "SceneVoice: classes loaded, creating recorder...");
+
+            // 创建新的 e9 for target
+            Object newE9 = XposedHelpers.newInstance(e9Class, new Class[]{String.class}, targetWxid);
+            XposedHelpers.callMethod(newE9, "A1", 34);
+            XposedHelpers.callMethod(newE9, "L1", System.currentTimeMillis());
+
+            // 创建 recorder
+            Object recorder = XposedHelpers.newInstance(p0Class,
+                new Class[]{android.content.Context.class, boolean.class}, act, false);
+
+            // 调用 g() 初始化录音 → 会创建 send task 并开始硬件录音
+            // 我们立即覆盖字段来模拟已有录音
+            boolean gResult = (Boolean) XposedHelpers.callMethod(recorder, "g",
+                new Class[]{String.class, XposedHelpers.findClass("com.tencent.mm.storage.e9", cl)},
+                targetWxid, newE9);
+            LogWriter.log(TAG, "SceneVoice: g()=" + gResult);
+
+            if (!gResult) {
+                LogWriter.log(TAG, "SceneVoice: g() returned false, trying direct field set");
+                // g() failed — 直接设置字段
+                XposedHelpers.setObjectField(recorder, "d", targetWxid);
+                XposedHelpers.setObjectField(recorder, "h", newE9);
+            }
+
+            // 强制覆盖字段为我们的语音数据
+            XposedHelpers.setObjectField(recorder, "e", voiceFile);     // 语音文件路径
+            XposedHelpers.setIntField(recorder, "m", duration);          // 时长ms
+            XposedHelpers.setIntField(recorder, "p", 2);                 // 状态=正常
+            try { XposedHelpers.setBooleanField(recorder, "i", false); } catch (Throwable ignored) {} // 不是扔瓶子
+            try { XposedHelpers.setBooleanField(recorder, "j", false); } catch (Throwable ignored) {} // 不是笔记
+            try { XposedHelpers.setBooleanField(recorder, "n", false); } catch (Throwable ignored) {} // 未停止
+            try {
+                long startTime = android.os.SystemClock.elapsedRealtime() - (duration + 2000);
+                XposedHelpers.setLongField(recorder, "k", startTime);
+            } catch (Throwable ignored) {}
+
+            LogWriter.log(TAG, "SceneVoice: fields set, calling stop()...");
+
+            // 调用 stop() → 触发 x0.t() 写入DB → 提交 send task
+            boolean stopResult = (Boolean) XposedHelpers.callMethod(recorder, "stop");
+            LogWriter.log(TAG, "SceneVoice: stop()=" + stopResult);
+
+            return stopResult;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "SceneVoice error: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            // 尝试备用方案: b31.w.start()
+            return trySendViaB31(cl, targetWxid, voiceFile);
+        }
+    }
+
+    private static boolean trySendViaB31(ClassLoader cl, String targetWxid, String voiceFile) {
+        try {
+            Class<?> wClass = XposedHelpers.findClass("b31.w", cl);
+            // 尝试无参构造
+            Object sender = XposedHelpers.newInstance(wClass);
+            LogWriter.log(TAG, "b31.w: instance created");
+            // init(int,int,b) 初始化
+            try { XposedHelpers.callMethod(sender, "init", 0, 0, null); } catch (Throwable ignored) {}
+            // start(voicePath)
+            XposedHelpers.callMethod(sender, "start", voiceFile);
+            LogWriter.log(TAG, "b31.w: start(voicePath) called");
+            return true;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "b31.w error: " + t.getMessage());
+            return false;
+        }
     }
 
     // ===== 工具 =====
