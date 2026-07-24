@@ -528,8 +528,17 @@ public class VoiceForwardHook {
             LogWriter.log(TAG, "forward: msgId=" + msgId + " talker=" + talker + " msg=" + msg.getClass().getSimpleName());
 
             final long finalMsgId = msgId;
-            final Activity act = sChatAct;
-            if (act == null) { showToast("context unavailable"); return; }
+            // 从 view 获取 Activity，优先于 sChatAct
+            Activity act = sChatAct;
+            if (act == null && view != null) {
+                Context ctx = view.getContext();
+                if (ctx instanceof Activity) act = (Activity) ctx;
+                else try { act = (Activity) XposedHelpers.callMethod(ctx, "getActivity"); } catch (Throwable ignored) {}
+                if (act == null) act = (Activity) XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("com.tencent.mm.ui.LauncherUI", ContextManager.getClassLoader()), "getInstance");
+            }
+            if (act == null) { showToast("无法获取Activity"); return; }
+            LogWriter.log(TAG, "forward: act=" + act.getClass().getSimpleName());
 
             // 用我们自己的 ContactPickerDialog
             com.leshao.v3.ui.ContactPickerDialog.show(act, "", 
