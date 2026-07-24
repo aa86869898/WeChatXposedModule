@@ -612,45 +612,73 @@ public class VoiceForwardHook {
     }
 
     private static String findVoiceFile(Object e9) {
+        StringBuilder diag = new StringBuilder("findVoiceFile: ");
         try {
-            String imgPath = (String) XposedHelpers.getObjectField(e9, "field_imgPath");
-            if (imgPath != null) {
-                java.io.File f = new java.io.File(imgPath);
-                if (f.exists()) return imgPath;
-                LogWriter.log(TAG, "field_imgPath=" + imgPath + " (not a file)");
+            // 尝试所有可能的文件路径字段/方法
+            String[] fieldNames = {"field_imgPath","imgPath","field_path","path",
+                "field_voicePath","voicePath","field_filePath","filePath"};
+            for (String fn : fieldNames) {
+                try {
+                    Object val = XposedHelpers.getObjectField(e9, fn);
+                    diag.append(fn).append("=").append(val).append(" ");
+                    if (val instanceof String) {
+                        java.io.File f = new java.io.File((String) val);
+                        if (f.exists()) return (String) val;
+                    }
+                } catch (Throwable ignored) {}
             }
-        } catch (Throwable ignored) {}
+            // 尝试 getter 方法
+            String[] methods = {"I0","P0","N0","M0","H0","J0","K0","L0",
+                "getImgPath","getFilePath","getVoicePath","getFileName"};
+            for (String mn : methods) {
+                try {
+                    Object r = XposedHelpers.callMethod(e9, mn);
+                    if (r == null) diag.append(mn).append("()=null ");
+                    else diag.append(mn).append("()=").append(r).append("(").append(r.getClass().getSimpleName()).append(") ");
+                } catch (Throwable t) {
+                    diag.append(mn).append("()=ERR ").append(t.getMessage()).append(" ");
+                }
+            }
+        } catch (Throwable t) {
+            diag.append("ERR: ").append(t.getMessage());
+        }
+        LogWriter.log(TAG, diag.toString());
         return null;
     }
 
     private static String searchVoice2Dir() {
-        try {
-            java.io.File md = new java.io.File("/data/data/com.tencent.mm/MicroMsg");
-            if (!md.exists()) return null;
+        String[] roots = {
+            "/data/data/com.tencent.mm/MicroMsg",
+            "/data/user/0/com.tencent.mm/MicroMsg",
+            "/sdcard/Android/data/com.tencent.mm/MicroMsg",
+            "/storage/emulated/0/Android/data/com.tencent.mm/MicroMsg",
+        };
+        for (String root : roots) {
+            java.io.File md = new java.io.File(root);
+            if (!md.exists()) { LogWriter.log(TAG, "voice2: " + root + " not exists"); continue; }
+            LogWriter.log(TAG, "voice2: scanning " + root);
             for (java.io.File userDir : md.listFiles()) {
-                if (userDir.isDirectory() && userDir.getName().length() == 32) {
-                    java.io.File v2 = new java.io.File(userDir, "voice2");
-                    if (v2.isDirectory()) {
-                        java.io.File[] files = v2.listFiles();
-                        if (files != null) {
-                            java.io.File newest = null;
-                            for (java.io.File f : files) {
-                                if (f.getName().endsWith(".amr") && f.length() > 500) {
-                                    if (newest == null || f.lastModified() > newest.lastModified()) {
-                                        newest = f;
-                                    }
-                                }
-                            }
-                            if (newest != null) {
-                                LogWriter.log(TAG, "voice2 newest=" + newest.getAbsolutePath() + " size=" + newest.length());
-                                return newest.getAbsolutePath();
-                            }
+                if (!userDir.isDirectory()) continue;
+                String[] subDirs = {"voice2", "voice", "voicemsg", "audio", "Voice"};
+                for (String sub : subDirs) {
+                    java.io.File v2 = new java.io.File(userDir, sub);
+                    if (!v2.isDirectory()) continue;
+                    java.io.File[] files = v2.listFiles();
+                    if (files == null || files.length == 0) continue;
+                    LogWriter.log(TAG, "voice2: found " + v2.getAbsolutePath() + " with " + files.length + " files");
+                    java.io.File newest = null;
+                    for (java.io.File f : files) {
+                        long sz = f.length();
+                        if (sz > 500) {
+                            if (newest == null || f.lastModified() > newest.lastModified()) newest = f;
                         }
+                    }
+                    if (newest != null) {
+                        LogWriter.log(TAG, "voice2: selected " + newest.getAbsolutePath() + " size=" + newest.length());
+                        return newest.getAbsolutePath();
                     }
                 }
             }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "voice2 scan error: " + t.getMessage());
         }
         return null;
     }
