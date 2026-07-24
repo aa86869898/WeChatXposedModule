@@ -103,7 +103,7 @@ public class ModuleConfig {
     public boolean autoRemarkEnabled = true;
     public boolean searchEnhanceEnabled = true;
     public boolean notifyCustomEnabled = true;
-    public boolean autoReplyEnabled = false;  // 默认关闭(需手动配置关键词)
+    public boolean autoReplyEnabled = true;
 
     // 朋友圈
     public boolean snsFeaturesEnabled = true;
