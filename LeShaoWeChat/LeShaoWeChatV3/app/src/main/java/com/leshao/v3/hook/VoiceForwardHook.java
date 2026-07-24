@@ -112,32 +112,46 @@ public class VoiceForwardHook {
     }
 
     private static void hookAllMenuClasses(ClassLoader cl) {
-        // 枚举 loaded classes 中含 "Menu" 的类，hook 所有方法
         try {
-            java.lang.reflect.Field fLoaded = ClassLoader.class.getDeclaredField("classes");
-            fLoaded.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            java.util.Vector<Class<?>> classes = (java.util.Vector<Class<?>>) fLoaded.get(cl);
+            String apkPath = ContextManager.getApkPath();
+            if (apkPath == null) {
+                LogWriter.log(TAG, "APK path null, skip DEX scan");
+                return;
+            }
+            LogWriter.log(TAG, "scanning: " + apkPath.substring(apkPath.lastIndexOf('/') + 1));
+
+            dalvik.system.DexFile dexFile = new dalvik.system.DexFile(apkPath);
+            java.util.Enumeration<String> entries = dexFile.entries();
             int menuCount = 0;
             int totalHooked = 0;
-            for (Class<?> cls : classes) {
-                String name = cls.getName();
-                if (!name.toLowerCase().contains("menu")) continue;
-                menuCount++;
-                // 只打印类名 + 方法数，不 hook（避免刷屏）
-                int n = 0;
-                for (Method m : cls.getDeclaredMethods()) {
-                    if (Modifier.isStatic(m.getModifiers())) continue;
-                    n++;
-                }
-                if (n > 0) {
-                    LogWriter.log(TAG, "Menu class: " + name + " (" + n + " methods)");
-                    totalHooked += hookMenuClassMethods(cls);
-                }
+            while (entries.hasMoreElements()) {
+                String className = entries.nextElement();
+                String lower = className.toLowerCase();
+                if (!lower.contains("menu") && !lower.contains("context")) continue;
+
+                try {
+                    Class<?> cls = cl.loadClass(className);
+                    int n = 0;
+                    for (Method m : cls.getDeclaredMethods()) {
+                        if (Modifier.isStatic(m.getModifiers())) continue;
+                        String mlow = m.getName().toLowerCase();
+                        if (!mlow.contains("create") && !mlow.contains("show") && !mlow.contains("add")
+                            && !mlow.contains("init") && !mlow.contains("popup") && !mlow.contains("setup")
+                            && !mlow.contains("oncreate"))
+                            continue;
+                        n++;
+                    }
+                    if (n > 0) {
+                        menuCount++;
+                        LogWriter.log(TAG, "Menu: " + className + " (" + n + ")");
+                        totalHooked += hookMenuClassMethods(cls);
+                    }
+                } catch (Throwable ignored) {}
             }
-            LogWriter.log(TAG, "found " + menuCount + " Menu classes, hooked " + totalHooked + " methods");
+            dexFile.close();
+            LogWriter.log(TAG, "DEX scan: " + menuCount + " menu classes, " + totalHooked + " methods hooked");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "Menu class enum failed: " + t.getClass().getSimpleName());
+            LogWriter.log(TAG, "DEX scan failed: " + t.getClass().getSimpleName() + " " + t.getMessage());
         }
     }
 
