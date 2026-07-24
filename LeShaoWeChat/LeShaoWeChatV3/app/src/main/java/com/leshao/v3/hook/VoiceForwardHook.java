@@ -1,15 +1,15 @@
 package com.leshao.v3.hook;
 
 import android.app.Activity;
-import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.drawable.Drawable;
-import android.view.ContextMenu;
 import android.view.MenuItem;
 import android.view.View;
-import android.widget.PopupWindow;
+import android.view.ViewGroup;
 import android.widget.Toast;
+
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
@@ -24,18 +24,18 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /**
- * 语音消息转发 — WeChat 8.0.76 发现模式 v4
- * =======================================
+ * 语音消息转发 — WeChat 8.0.76 Adapter 发现模式 v5
+ * ==============================================
  *
- * 目标: 发现微信长按消息时的菜单创建方法 (methodCreateMenu 等效)
- * 策略: hook ChattingUIFragment/ChattingUI 的 View 参数方法
- *       任意触发立即日志，包含方法名和参数计数
+ * 已排除: ChattingUIFragment/ChattingUI (无长按方法)
+ * 新策略: 动态发现 RecyclerView Adapter → hook 其方法
  */
 public class VoiceForwardHook {
 
     private static final String TAG = "VF";
     private static final int MENU_ID = 777001;
     private static volatile boolean sHooked = false;
+    private static volatile boolean sAdapterHooked = false;
     private static volatile boolean sEnabled = true;
     private static volatile Activity sChatAct;
     private static volatile Object sPendingMsg;
@@ -54,11 +54,11 @@ public class VoiceForwardHook {
         if (cl == null) { LogWriter.log(TAG, "cl not ready"); return; }
 
         hookChatActivity(cl);
-        hookChattingFragMethods(cl);
+        hookChatFragmentForAdapter(cl);
         installClickHandlers(cl);
 
         sHooked = true;
-        LogWriter.log(TAG, "ready — long-press a msg to see VF:CALL logs");
+        LogWriter.log(TAG, "ready — enter chat to discover Adapter");
     }
 
     // ===== 聊天页 Activity =====
@@ -79,83 +79,127 @@ public class VoiceForwardHook {
         } catch (Throwable ignored) {}
     }
 
-    // ===== 核心: Hook ChattingUIFragment/BF 的 View 参数方法 ====
-    private static void hookChattingFragMethods(ClassLoader cl) {
-        String[] targets = {
-            "com.tencent.mm.ui.chatting.ChattingUIFragment",
-            "com.tencent.mm.ui.chatting.BaseChattingUIFragment",
-            "com.tencent.mm.ui.chatting.ChattingUI",
-        };
+    // ===== 动态发现 RecyclerView Adapter ====
+    private static void hookChatFragmentForAdapter(final ClassLoader cl) {
+        try {
+            Class<?> bf = cl.loadClass("com.tencent.mm.ui.chatting.BaseChattingUIFragment");
+            XposedHelpers.findAndHookMethod(bf, "onCreateView",
+                android.view.LayoutInflater.class, ViewGroup.class, android.os.Bundle.class,
+                new XC_MethodHook() {
+                    @Override protected void afterHookedMethod(MethodHookParam param) {
+                        if (sAdapterHooked) return;
+                        sCallCount.set(0);
 
-        for (String clsName : targets) {
-            try {
-                Class<?> cls = cl.loadClass(clsName);
-                int cnt = hookMethodsWithViewParam(cls, clsName);
-                LogWriter.log(TAG, "hooked " + cnt + " view-methods on " + cls.getSimpleName());
-            } catch (ClassNotFoundException e) {
-                LogWriter.log(TAG, clsName + " NOT FOUND");
-            }
-        }
-    }
+                        View root = (View) param.getResult();
+                        if (root == null) return;
 
-    private static int hookMethodsWithViewParam(Class<?> cls, String clsName) {
-        int count = 0;
-        for (Method m : cls.getDeclaredMethods()) {
-            if (Modifier.isStatic(m.getModifiers())) continue;
+                        RecyclerView rv = findRecyclerView(root);
+                        if (rv == null) {
+                            LogWriter.log(TAG, "no RecyclerView found in onCreateView");
+                            return;
+                        }
 
-            Class<?>[] pts = m.getParameterTypes();
-            boolean hasView = false;
-            boolean hasMenuLike = false;
-            for (Class<?> pt : pts) {
-                if (View.class.isAssignableFrom(pt)) hasView = true;
-                if (pt == Object.class) hasView = true;
-                if (pt.getName().contains("Menu")) hasMenuLike = true;
-            }
+                        RecyclerView.Adapter<?> adapter = rv.getAdapter();
+                        if (adapter == null) {
+                            LogWriter.log(TAG, "RecyclerView found but Adapter is null");
+                            return;
+                        }
 
-            if (!hasView && !hasMenuLike && pts.length < 2) continue;
+                        String adapterCls = adapter.getClass().getName();
+                        LogWriter.log(TAG, "found Adapter: " + adapterCls);
 
-            final String mName = m.getName();
-            final int pc = pts.length;
-            final boolean hv = hasView;
-
-            try {
-                XposedBridge.hookMethod(m, new XC_MethodHook() {
-                    @Override protected void beforeHookedMethod(MethodHookParam param) {
-                        if (!sEnabled) return;
-                        int n = sCallCount.incrementAndGet();
-                        if (n <= MAX_LOG) {
-                            StringBuilder sb = new StringBuilder();
-                            sb.append("VF:CALL[").append(n).append("] ");
-                            sb.append(cls.getSimpleName()).append(".").append(mName);
-                            sb.append("(").append(pc).append(" args)");
-                            if (hv) {
-                                for (int i = 0; i < param.args.length && i < pc; i++) {
-                                    if (param.args[i] instanceof View) {
-                                        View v = (View) param.args[i];
-                                        Object t = v.getTag();
-                                        sb.append(" arg[").append(i).append("]=View");
-                                        if (t != null) {
-                                            sb.append("+tag=").append(t.getClass().getSimpleName());
-                                            tryCapture(t);
-                                        } else {
-                                            sb.append("+tag=null");
-                                        }
-                                    }
-                                }
-                            }
-                            LogWriter.log(TAG, sb.toString());
-
-                            if (sPendingMsg != null) {
-                                boolean ok = tryAddMenuItem(param.thisObject);
-                                LogWriter.log(TAG, "VF:INJECT " + (ok ? "OK" : "FAIL") + " into " + cls.getSimpleName() + "." + mName);
-                            }
+                        try {
+                            Class<?> adCls = cl.loadClass(adapterCls);
+                            int cnt = hookAllNonStaticMethods(adCls);
+                            LogWriter.log(TAG, "hooked " + cnt + " methods on Adapter");
+                            sAdapterHooked = true;
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "failed to hook Adapter: " + t.getMessage());
                         }
                     }
                 });
+            LogWriter.log(TAG, "onCreateView hook installed");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "onCreateView hook failed: " + t.getMessage());
+        }
+    }
+
+    private static RecyclerView findRecyclerView(View v) {
+        if (v instanceof RecyclerView) return (RecyclerView) v;
+        if (v instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) v;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                RecyclerView rv = findRecyclerView(vg.getChildAt(i));
+                if (rv != null) return rv;
+            }
+        }
+        return null;
+    }
+
+    private static int hookAllNonStaticMethods(Class<?> cls) {
+        int count = 0;
+        for (Method m : cls.getDeclaredMethods()) {
+            if (Modifier.isStatic(m.getModifiers())) continue;
+            try {
+                XposedBridge.hookMethod(m, createCallback(cls.getSimpleName(), m.getName(), m.getParameterTypes().length));
                 count++;
             } catch (Throwable ignored) {}
         }
+        for (Class<?> sup = cls.getSuperclass(); sup != null && sup != Object.class; sup = sup.getSuperclass()) {
+            for (Method m : sup.getDeclaredMethods()) {
+                if (Modifier.isStatic(m.getModifiers())) continue;
+                try {
+                    XposedBridge.hookMethod(m, createCallback(sup.getSimpleName(), m.getName(), m.getParameterTypes().length));
+                    count++;
+                } catch (Throwable ignored) {}
+            }
+        }
         return count;
+    }
+
+    private static XC_MethodHook createCallback(final String clsName, final String mName, final int pc) {
+        return new XC_MethodHook() {
+            @Override protected void beforeHookedMethod(MethodHookParam param) {
+                if (!sEnabled) return;
+                int n = sCallCount.incrementAndGet();
+                if (n > MAX_LOG) return;
+
+                StringBuilder sb = new StringBuilder("VF:CALL[").append(n).append("] ");
+                sb.append(clsName).append(".").append(mName).append("(").append(pc).append(")");
+
+                boolean foundView = false;
+                for (int i = 0; i < param.args.length; i++) {
+                    Object a = param.args[i];
+                    if (a instanceof View) {
+                        View v = (View) a;
+                        Object t = v.getTag();
+                        sb.append(" a[").append(i).append("]=View+tag=").append(t != null ? t.getClass().getSimpleName() : "null");
+                        foundView = true;
+                        if (t != null) tryCapture(t);
+                    }
+                }
+                if (!foundView) {
+                    for (int i = 0; i < Math.min(param.args.length, 4); i++) {
+                        Object a = param.args[i];
+                        sb.append(" a[").append(i).append("]=").append(a != null ? a.getClass().getSimpleName() : "null");
+                    }
+                }
+
+                LogWriter.log(TAG, sb.toString());
+
+                if (sPendingMsg != null && param.args.length >= 1) {
+                    for (Object a : param.args) {
+                        if (a != null && !(a instanceof View) && !(a instanceof Number) && !(a instanceof Boolean)) {
+                            boolean ok = tryAddMenuItem(a);
+                            if (ok) {
+                                LogWriter.log(TAG, "VF:INJECT OK into " + clsName + "." + mName);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        };
     }
 
     // ===== addMenuItem 注入 ====
@@ -164,7 +208,6 @@ public class VoiceForwardHook {
             for (Method m : menuObj.getClass().getDeclaredMethods()) {
                 Class<?>[] pts = m.getParameterTypes();
                 m.setAccessible(true);
-
                 if (pts.length == 3 && (pts[0] == int.class || pts[0] == Integer.class)
                     && (pts[1] == String.class || pts[1] == CharSequence.class)
                     && (pts[2] == Drawable.class || pts[2] == Object.class)) {
@@ -176,19 +219,12 @@ public class VoiceForwardHook {
                     try { m.invoke(menuObj, MENU_ID, "语音转发"); return true; }
                     catch (Throwable ignored) {}
                 }
-                if (pts.length == 4 && (pts[0] == int.class || pts[0] == Integer.class)
-                    && (pts[1] == int.class || pts[1] == Integer.class)
-                    && (pts[2] == int.class || pts[2] == Integer.class)
-                    && (pts[3] == String.class || pts[3] == CharSequence.class)) {
-                    try { m.invoke(menuObj, 0, MENU_ID, 0, "语音转发"); return true; }
-                    catch (Throwable ignored) {}
-                }
             }
         } catch (Throwable ignored) {}
         return false;
     }
 
-    // ===== Click handler: case 22 等效 ====
+    // ===== Click handler ====
     private static void installClickHandlers(ClassLoader cl) {
         String[] targets = {
             "com.tencent.mm.ui.chatting.ChattingUI",
@@ -207,7 +243,7 @@ public class VoiceForwardHook {
                             if (item.getItemId() == MENU_ID) {
                                 executeForward();
                                 param.setResult(true);
-                                LogWriter.log(TAG, "VF:CLICK on " + cls.getSimpleName());
+                                LogWriter.log(TAG, "VF:CLICK " + cls.getSimpleName());
                             }
                         } catch (Throwable ignored) {}
                     }
@@ -215,10 +251,6 @@ public class VoiceForwardHook {
             } catch (Throwable ignored) {}
         }
     }
-
-    // Note: click handlers install happens inside hook() — see MainHook
-    // For now, we rely on the fact that onContextItemSelected will fire
-    // if our addMenuItem was called with our MENU_ID on a ContextMenu
 
     // ===== 消息捕获 ====
     private static void tryCapture(Object tag) {
@@ -247,28 +279,21 @@ public class VoiceForwardHook {
             String talker = sPendingTalker;
             sPendingMsg = null;
             sPendingTalker = null;
-
             if (msg == null) { showToast("请先选中一条语音消息"); return; }
-
             long msgId = extractMsgId(msg);
             if (msgId <= 0) { showToast("无法获取消息信息"); return; }
-
             String extTalker = extractTalker(msg);
             if (talker == null || talker.isEmpty()) talker = extTalker;
             if (talker == null) talker = "";
-
             Context ctx = sChatAct != null ? sChatAct : ContextManager.getAppContext();
             if (ctx == null) { showToast("context unavailable"); return; }
-
             ClassLoader cl = ctx.getClassLoader();
             Class<?> fwdUI = null;
             for (String n : new String[]{
                 "com.tencent.mm.ui.transmit.SelectConversationUI",
                 "com.tencent.mm.ui.transmit.MsgRetransmitUI",
             }) { try { fwdUI = cl.loadClass(n); break; } catch (Throwable ignored) {} }
-
             if (fwdUI == null) { showToast("微信版本不兼容"); return; }
-
             Intent intent = new Intent(ctx, fwdUI);
             intent.putExtra("Retr_Msg_content", talker);
             intent.putExtra("Retr_Msg_Type", 1);
@@ -277,7 +302,6 @@ public class VoiceForwardHook {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             ctx.startActivity(intent);
             showToast("已打开转发界面");
-
         } catch (Throwable t) {
             LogWriter.log(TAG, "exec err: " + t.getMessage());
             showToast("转发失败: " + t.getMessage());
