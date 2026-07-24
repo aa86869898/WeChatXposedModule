@@ -589,7 +589,7 @@ public class VoiceForwardHook {
             LogWriter.log(TAG, "doForward: duration=" + duration + "ms");
 
             // 3. 使用 tl.p0 SceneVoice Recorder 发送
-            boolean sent = sendViaSceneVoice(act, cl, targetWxid, voiceFile, duration);
+            boolean sent = sendViaSceneVoice(act, cl, targetWxid, voiceFile, duration, e9);
             LogWriter.log(TAG, "doForward: sent=" + sent);
             return sent;
         } catch (Throwable t) {
@@ -714,37 +714,37 @@ public class VoiceForwardHook {
         String[] roots = {
             "/data/data/com.tencent.mm/MicroMsg",
             "/data/user/0/com.tencent.mm/MicroMsg",
-            "/sdcard/Android/data/com.tencent.mm/MicroMsg",
-            "/storage/emulated/0/Android/data/com.tencent.mm/MicroMsg",
         };
         for (String root : roots) {
             java.io.File md = new java.io.File(root);
-            if (!md.exists()) { LogWriter.log(TAG, "voice2: " + root + " not exists"); continue; }
-            LogWriter.log(TAG, "voice2: scanning " + root);
+            if (!md.exists()) continue;
             for (java.io.File userDir : md.listFiles()) {
                 if (!userDir.isDirectory()) continue;
-                String[] subDirs = {"voice2", "voice", "voicemsg", "audio", "Voice"};
-                for (String sub : subDirs) {
-                    java.io.File v2 = new java.io.File(userDir, sub);
-                    if (!v2.isDirectory()) continue;
-                    java.io.File[] files = v2.listFiles();
-                    if (files == null || files.length == 0) continue;
-                    LogWriter.log(TAG, "voice2: found " + v2.getAbsolutePath() + " with " + files.length + " files");
-                    java.io.File newest = null;
-                    for (java.io.File f : files) {
-                        long sz = f.length();
-                        if (sz > 500) {
-                            if (newest == null || f.lastModified() > newest.lastModified()) newest = f;
-                        }
-                    }
-                    if (newest != null) {
-                        LogWriter.log(TAG, "voice2: selected " + newest.getAbsolutePath() + " size=" + newest.length());
-                        return newest.getAbsolutePath();
-                    }
-                }
+                java.io.File v2 = new java.io.File(userDir, "voice2");
+                if (!v2.isDirectory()) continue;
+                // 递归搜索 .amr 文件 (voice2 下可能有子目录)
+                String found = searchAmrRecursive(v2, 3);
+                if (found != null) return found;
             }
         }
         return null;
+    }
+
+    private static String searchAmrRecursive(java.io.File dir, int depth) {
+        if (depth <= 0) return null;
+        java.io.File[] files = dir.listFiles();
+        if (files == null) return null;
+        java.io.File best = null;
+        for (java.io.File f : files) {
+            if (f.isDirectory()) {
+                String found = searchAmrRecursive(f, depth - 1);
+                if (found != null) return found;
+            } else if (f.isFile() && f.getName().endsWith(".amr") && f.length() > 500) {
+                if (best == null || f.lastModified() > best.lastModified()) best = f;
+            }
+        }
+        if (best != null) LogWriter.log(TAG, "voice2: recursive found " + best.getAbsolutePath() + " size=" + best.length());
+        return best != null ? best.getAbsolutePath() : null;
     }
 
     private static int parseVoiceDuration(String xml) {
@@ -762,57 +762,42 @@ public class VoiceForwardHook {
         return 5000;
     }
 
-    private static boolean sendViaSceneVoice(Activity act, ClassLoader cl, String targetWxid, String voiceFile, int duration) {
+    private static boolean sendViaSceneVoice(Activity act, ClassLoader cl, String targetWxid, String voiceFile, int duration, Object origE9) {
         try {
             Class<?> p0Class = XposedHelpers.findClass("tl.p0", cl);
-            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", cl);
-            LogWriter.log(TAG, "SceneVoice: classes loaded, creating recorder...");
+            String origTalker = extractTalker(origE9);
+            LogWriter.log(TAG, "SceneVoice: origTalker=" + origTalker + " origMsgId=" + extractMsgId(origE9));
 
-            // 创建新的 e9 for target
-            Object newE9 = XposedHelpers.newInstance(e9Class, new Class[]{String.class}, targetWxid);
-            XposedHelpers.callMethod(newE9, "A1", 34);
-            XposedHelpers.callMethod(newE9, "L1", System.currentTimeMillis());
-
-            // 创建 recorder
+            // 创建 recorder, 用原始 e9 调 g() — msgId 合法, 否则 p06.b 报错
             Object recorder = XposedHelpers.newInstance(p0Class,
                 new Class[]{android.content.Context.class, boolean.class}, act, false);
 
-            // 调用 g() 初始化录音 → 会创建 send task 并开始硬件录音
-            // 我们立即覆盖字段来模拟已有录音
             boolean gResult = (Boolean) XposedHelpers.callMethod(recorder, "g",
                 new Class[]{String.class, XposedHelpers.findClass("com.tencent.mm.storage.e9", cl)},
-                targetWxid, newE9);
+                origTalker, origE9);
             LogWriter.log(TAG, "SceneVoice: g()=" + gResult);
 
             if (!gResult) {
-                LogWriter.log(TAG, "SceneVoice: g() returned false, trying direct field set");
-                // g() failed — 直接设置字段
-                XposedHelpers.setObjectField(recorder, "d", targetWxid);
-                XposedHelpers.setObjectField(recorder, "h", newE9);
+                LogWriter.log(TAG, "SceneVoice: g() failed");
+                return false;
             }
 
-            // 强制覆盖字段为我们的语音数据
-            XposedHelpers.setObjectField(recorder, "e", voiceFile);     // 语音文件路径
-            XposedHelpers.setIntField(recorder, "m", duration);          // 时长ms
-            XposedHelpers.setIntField(recorder, "p", 2);                 // 状态=正常
-            try { XposedHelpers.setBooleanField(recorder, "i", false); } catch (Throwable ignored) {} // 不是扔瓶子
-            try { XposedHelpers.setBooleanField(recorder, "j", false); } catch (Throwable ignored) {} // 不是笔记
-            try { XposedHelpers.setBooleanField(recorder, "n", false); } catch (Throwable ignored) {} // 未停止
+            // g() 成功了, 覆盖字段: 发给新目标, 用我们的语音文件
+            XposedHelpers.setObjectField(recorder, "d", targetWxid);
+            XposedHelpers.setObjectField(recorder, "e", voiceFile);
+            XposedHelpers.setIntField(recorder, "m", duration);
+            try { XposedHelpers.setBooleanField(recorder, "n", false); } catch (Throwable ignored) {}
             try {
-                long startTime = android.os.SystemClock.elapsedRealtime() - (duration + 2000);
-                XposedHelpers.setLongField(recorder, "k", startTime);
+                XposedHelpers.setLongField(recorder, "k",
+                    android.os.SystemClock.elapsedRealtime() - (duration + 5000));
             } catch (Throwable ignored) {}
 
-            LogWriter.log(TAG, "SceneVoice: fields set, calling stop()...");
-
-            // 调用 stop() → 触发 x0.t() 写入DB → 提交 send task
+            LogWriter.log(TAG, "SceneVoice: fields overridden, calling stop()...");
             boolean stopResult = (Boolean) XposedHelpers.callMethod(recorder, "stop");
             LogWriter.log(TAG, "SceneVoice: stop()=" + stopResult);
-
             return stopResult;
         } catch (Throwable t) {
             LogWriter.log(TAG, "SceneVoice error: " + t.getClass().getSimpleName() + " " + t.getMessage());
-            // 尝试备用方案: b31.w.start()
             return trySendViaB31(cl, targetWxid, voiceFile);
         }
     }
