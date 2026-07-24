@@ -561,7 +561,8 @@ public class VoiceForwardHook {
         }
     }
 
-    // ===== 实际转发语音 =====
+    // ===== 实际转发语音 (反射方案 v1) =====
+    // 思路: 不用 SelectConversationUI, 直接通过 DEX 扫描找到 sendVoice/sendMsg API 用反射调用
     private static boolean doForwardVoice(Activity act, Object msgObj, String targetWxid) {
         try {
             Object e9 = msgObj;
@@ -581,57 +582,139 @@ public class VoiceForwardHook {
 
             ClassLoader cl = ContextManager.getClassLoader();
 
-            // ★ 扫描 modelmulti 包所有类
+            // 1. 扫描打包所有可能包含 send 方法的类
+            String[] searchPkgs = {
+                "com.tencent.mm.plugin.messenger.foundation",
+                "com.tencent.mm.modelvoice",
+                "com.tencent.mm.plugin.voice",
+                "com.tencent.mm.plugin.recordvoice",
+                "com.tencent.mm.modelmulti",
+            };
+            StringBuilder allMethods = new StringBuilder();
             try {
                 String apkPath = ContextManager.getApkPath();
                 if (apkPath != null) {
                     dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
-                    java.util.Enumeration<String> entries = dex.entries();
+                    Enumeration<String> entries = dex.entries();
                     while (entries.hasMoreElements()) {
                         String cn = entries.nextElement();
-                        if (cn.startsWith("com.tencent.mm.modelmulti.")) {
-                            try {
-                                Class<?> cls = cl.loadClass(cn);
-                                StringBuilder ms = new StringBuilder("multi:" + cn);
-                                for (Method m : cls.getDeclaredMethods()) {
-                                    if (!Modifier.isStatic(m.getModifiers())) continue;
-                                    Class<?>[] pts = m.getParameterTypes();
-                                    if (pts.length >= 2) {
-                                        ms.append(" ").append(m.getName()).append("(");
-                                        for (int j = 0; j < pts.length; j++) {
-                                            if (j > 0) ms.append(",");
-                                            ms.append(pts[j].getSimpleName());
-                                        }
-                                        ms.append(")");
-                                    }
-                                }
-                                LogWriter.log(TAG, ms.toString());
-                            } catch (Throwable ignored) {}
+                        boolean match = false;
+                        for (String pkg : searchPkgs) {
+                            if (cn.startsWith(pkg + ".")) { match = true; break; }
                         }
+                        if (!match) continue;
+                        try {
+                            Class<?> cls = cl.loadClass(cn);
+                            for (Method m : cls.getDeclaredMethods()) {
+                                String mn = m.getName();
+                                Class<?>[] pts = m.getParameterTypes();
+                                if (pts.length < 1) continue;
+                                // 只记录名字含 send/forward/retr/voice/sendMsg 的方法
+                                String ml = mn.toLowerCase();
+                                if (ml.contains("send") || ml.contains("forward") || ml.contains("retr")
+                                    || ml.contains("voice") || ml.contains("audio") || ml.contains("upload")) {
+                                    allMethods.append(" ").append(cn).append(".").append(mn).append("(");
+                                    for (int j = 0; j < pts.length; j++) {
+                                        if (j > 0) allMethods.append(",");
+                                        allMethods.append(pts[j].getSimpleName());
+                                    }
+                                    allMethods.append(") static=").append(Modifier.isStatic(m.getModifiers()));
+                                }
+                            }
+                        } catch (Throwable ignored) {}
                     }
                     dex.close();
                 }
             } catch (Throwable t) {
-                LogWriter.log(TAG, "doForward: modelmulti scan: " + t.getMessage());
+                LogWriter.log(TAG, "doForward scan error: " + t.getMessage());
             }
+            LogWriter.log(TAG, "doForward scan result:" + allMethods);
 
-            // 兜底: SelectConversationUI
-            try {
-                Class<?> selUI = cl.loadClass("com.tencent.mm.ui.transmit.SelectConversationUI");
-                Intent intent = new Intent(act, selUI);
-                intent.putExtra("Retr_Msg_Type", 34);
-                intent.putExtra("Retr_Msg_Id", msgId);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                act.startActivity(intent);
-                return true;
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "doForward: SelUI fail: " + t.getMessage());
+            // 2. 尝试找到并调用 send API
+            // 策略A: 先用 IMsgService(plugin.messenger.foundation.a.a.j) 的 send 方法
+            boolean sent = trySendViaIMsgService(cl, e9, targetWxid);
+
+            // 策略B: 扫描 modelvoice 包的 send 方法
+            if (!sent) sent = trySendViaVoicePlugin(cl, e9, targetWxid);
+
+            // 策略C: 兜底 SelectConversationUI
+            if (!sent) {
+                try {
+                    Class<?> selUI = cl.loadClass("com.tencent.mm.ui.transmit.SelectConversationUI");
+                    Intent intent = new Intent(act, selUI);
+                    intent.putExtra("Retr_Msg_Type", 34);
+                    intent.putExtra("Retr_Msg_Id", msgId);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    act.startActivity(intent);
+                    return true;
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "doForward: all strategies failed: " + t.getMessage());
+                }
             }
-            return false;
+            return sent;
         } catch (Throwable t) {
             LogWriter.log(TAG, "doForward error: " + t.getMessage());
             return false;
         }
+    }
+
+    private static boolean trySendViaIMsgService(ClassLoader cl, Object e9, String targetWxid) {
+        try {
+            // 尝试 plugin.messenger.foundation.a.a.j (IMsgService 接口)
+            Object msgService = XposedHelpers.callStaticMethod(
+                XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.a.a.h", cl), "z");
+            LogWriter.log(TAG, "IMsgService: got service instance type=" + (msgService != null ? msgService.getClass().getName() : "null"));
+            if (msgService == null) return false;
+
+            long msgId = extractMsgId(e9);
+            // 尝试各种可能的 send 方法签名
+            for (String methodName : new String[]{"cx", "m", "a", "send", "sendMsg", "a5"}) {
+                for (Class<?>[] params : new Class[][]{
+                    {String.class, long.class},
+                    {long.class, String.class},
+                    {String.class, Object.class},
+                    {Object.class, String.class},
+                    {String.class, long.class, int.class},
+                }) {
+                    try {
+                        Method m = findMethodInHierarchy(msgService.getClass(), methodName, params);
+                        if (m != null) {
+                            Object result;
+                            if (params[0] == String.class) {
+                                result = m.invoke(msgService, targetWxid, msgId);
+                            } else {
+                                result = m.invoke(msgService, msgId, targetWxid);
+                            }
+                            LogWriter.log(TAG, "IMsgService." + methodName + " result=" + result);
+                            return true;
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "IMsgService fail: " + t.getMessage());
+        }
+        return false;
+    }
+
+    private static Method findMethodInHierarchy(Class<?> cls, String name, Class<?>[] paramTypes) {
+        for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
+            try {
+                return c.getDeclaredMethod(name, paramTypes);
+            } catch (NoSuchMethodException e) {
+                for (Class<?> iface : c.getInterfaces()) {
+                    try {
+                        return iface.getDeclaredMethod(name, paramTypes);
+                    } catch (NoSuchMethodException ignored) {}
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean trySendViaVoicePlugin(ClassLoader cl, Object e9, String targetWxid) {
+        // 待扫描结果补充
+        return false;
     }
 
     // ===== 工具 =====
@@ -735,179 +818,93 @@ public class VoiceForwardHook {
         } catch (Throwable ignored) {}
     }
 
-    // ===== Forward Tracing: hook native WeChat forward flow to discover API =====
+    // ===== Voice Send API 发现: hook 语音录制发送流 + messenger.foundation 接口 =====
     private static void hookForwardTracing(ClassLoader cl) {
-        hookSelectConversationUI(cl);
-        hookChattingUIOnActivityResult(cl);
-        hookSetResult(cl);
-        scanTransmitAndMessenger(cl);
-        scanModelmultiAll(cl);
+        hookIMsgService(cl);
+        hookVoiceSendFlow(cl);
     }
 
-    private static void hookSelectConversationUI(ClassLoader cl) {
+    private static void hookIMsgService(ClassLoader cl) {
         try {
-            Class<?> scUI = cl.loadClass("com.tencent.mm.ui.transmit.SelectConversationUI");
-
-            XposedBridge.hookAllMethods(scUI, "onCreate", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    Activity act = (Activity) param.thisObject;
-                    Intent intent = act.getIntent();
-                    LogWriter.log(TAG, "=== SelectConversationUI.onCreate ===");
-                    dumpIntentExtras(intent);
-                }
-            });
-
-            XposedBridge.hookAllMethods(scUI, "onActivityResult", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    int reqCode = (int) param.args[0];
-                    int resCode = (int) param.args[1];
-                    Intent data = (Intent) param.args[2];
-                    LogWriter.log(TAG, "=== SelUI.onActivityResult req=" + reqCode + " res=" + resCode + " ===");
-                    if (data != null) dumpIntentExtras(data);
-                }
-            });
-
-            XposedBridge.hookAllMethods(scUI, "onNewIntent", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    Intent intent = (Intent) param.args[0];
-                    LogWriter.log(TAG, "=== SelUI.onNewIntent ===");
-                    dumpIntentExtras(intent);
-                }
-            });
-
-            LogWriter.log(TAG, "SelUI lifecycle hooks installed");
+            Class<?> jCls = cl.loadClass("com.tencent.mm.plugin.messenger.foundation.a.a.j");
+            LogWriter.log(TAG, "IMsgService(j) found: " + jCls.getName());
+            for (Method m : jCls.getDeclaredMethods()) {
+                final String msig = jCls.getSimpleName() + "." + m.getName() + "("
+                    + java.util.Arrays.toString(m.getParameterTypes()) + ")";
+                LogWriter.log(TAG, "IMsgService method: " + msig);
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        StringBuilder args = new StringBuilder();
+                        for (int i = 0; i < param.args.length; i++) {
+                            if (i > 0) args.append(",");
+                            Object a = param.args[i];
+                            if (a instanceof String) args.append("\"").append(a).append("\"");
+                            else if (a instanceof Number) args.append(a);
+                            else if (a == null) args.append("null");
+                            else args.append(a.getClass().getSimpleName());
+                        }
+                        LogWriter.log(TAG, ">>> IMsgService." + msig + " args=[" + args + "]");
+                    }
+                });
+            }
+            LogWriter.log(TAG, "IMsgService hooks installed (" + jCls.getDeclaredMethods().length + " methods)");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "SelUI hook fail: " + t.getMessage());
+            LogWriter.log(TAG, "IMsgService(j) not found: " + t.getMessage());
         }
     }
 
-    private static void hookChattingUIOnActivityResult(ClassLoader cl) {
+    private static void hookVoiceSendFlow(ClassLoader cl) {
+        // Hook modelvoice 包中所有 public 方法, 录制并发送语音时会被触发
         try {
-            Class<?> cui = cl.loadClass("com.tencent.mm.ui.chatting.ChattingUI");
-            XposedBridge.hookAllMethods(cui, "onActivityResult", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    int reqCode = (int) param.args[0];
-                    int resCode = (int) param.args[1];
-                    Intent data = (Intent) param.args[2];
-                    LogWriter.log(TAG, "=== ChatUI.onActivityResult req=" + reqCode + " res=" + resCode + " ===");
-                    if (data != null) dumpIntentExtras(data);
-                }
-            });
-            LogWriter.log(TAG, "ChatUI.onActivityResult hooked");
-        } catch (Throwable ignored) {}
-    }
-
-    private static void hookSetResult(ClassLoader cl) {
-        try {
-            Class<?> scUI = cl.loadClass("com.tencent.mm.ui.transmit.SelectConversationUI");
-            for (Method m : scUI.getDeclaredMethods()) {
-                if (m.getName().contains("setResult") || m.getName().contains("finish")) {
-                    final String mName = m.getName();
-                    XposedBridge.hookMethod(m, new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            LogWriter.log(TAG, "=== SelUI." + mName + " ===");
-                            for (int i = 0; i < param.args.length; i++) {
-                                Object a = param.args[i];
-                                if (a instanceof Intent) {
-                                    dumpIntentExtras((Intent) a);
-                                } else if (a instanceof Integer) {
-                                    LogWriter.log(TAG, "  arg[" + i + "]=" + a);
+            String apkPath = ContextManager.getApkPath();
+            if (apkPath == null) return;
+            dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+            Enumeration<String> entries = dex.entries();
+            int hooked = 0;
+            while (entries.hasMoreElements()) {
+                String cn = entries.nextElement();
+                if (!cn.startsWith("com.tencent.mm.modelvoice.") && !cn.startsWith("com.tencent.mm.plugin.voice.")) continue;
+                try {
+                    Class<?> cls = cl.loadClass(cn);
+                    // 跳过接口
+                    if (cls.isInterface()) continue;
+                    for (Method m : cls.getDeclaredMethods()) {
+                        if (!Modifier.isPublic(m.getModifiers())) continue;
+                        final String fullName = cn + "." + m.getName();
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
+                            @Override
+                            protected void beforeHookedMethod(MethodHookParam param) {
+                                int n = sCallCount.incrementAndGet();
+                                if (n > 50) return;
+                                StringBuilder args = new StringBuilder();
+                                args.append(fullName).append("(");
+                                for (int i = 0; i < Math.min(param.args.length, 5); i++) {
+                                    if (i > 0) args.append(",");
+                                    Object a = param.args[i];
+                                    if (a instanceof String) {
+                                        String s = (String) a;
+                                        args.append("\"").append(s.length() > 40 ? s.substring(0, 40) + "..." : s).append("\"");
+                                    } else if (a instanceof Number) {
+                                        args.append(a);
+                                    } else if (a == null) {
+                                        args.append("null");
+                                    } else {
+                                        args.append(a.getClass().getSimpleName());
+                                    }
                                 }
+                                args.append(")");
+                                LogWriter.log(TAG, "◆VOICE " + args);
                             }
-                        }
-                    });
-                }
-            }
-            LogWriter.log(TAG, "SelUI setResult/finish hooks installed");
-        } catch (Throwable ignored) {}
-    }
-
-    private static void scanTransmitAndMessenger(ClassLoader cl) {
-        try {
-            String apkPath = ContextManager.getApkPath();
-            if (apkPath == null) return;
-            dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
-            Enumeration<String> entries = dex.entries();
-            while (entries.hasMoreElements()) {
-                String cn = entries.nextElement();
-                boolean match = cn.startsWith("com.tencent.mm.ui.transmit.")
-                    || cn.startsWith("com.tencent.mm.plugin.messenger.foundation.");
-                if (!match) continue;
-                try {
-                    Class<?> cls = cl.loadClass(cn);
-                    StringBuilder sb = new StringBuilder("TRACE:").append(cn);
-                    for (Method m : cls.getDeclaredMethods()) {
-                        sb.append(" ").append(m.getName()).append("(");
-                        Class<?>[] pts = m.getParameterTypes();
-                        for (int j = 0; j < pts.length; j++) {
-                            if (j > 0) sb.append(",");
-                            sb.append(pts[j].getSimpleName());
-                        }
-                        sb.append(")");
+                        });
+                        hooked++;
                     }
-                    LogWriter.log(TAG, sb.toString());
                 } catch (Throwable ignored) {}
             }
             dex.close();
+            LogWriter.log(TAG, "voice hooks installed: " + hooked + " methods");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "TRACE scan error: " + t.getMessage());
-        }
-    }
-
-    private static void scanModelmultiAll(ClassLoader cl) {
-        try {
-            String apkPath = ContextManager.getApkPath();
-            if (apkPath == null) return;
-            dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
-            Enumeration<String> entries = dex.entries();
-            while (entries.hasMoreElements()) {
-                String cn = entries.nextElement();
-                if (!cn.startsWith("com.tencent.mm.modelmulti.")) continue;
-                try {
-                    Class<?> cls = cl.loadClass(cn);
-                    StringBuilder ms = new StringBuilder("MULTI:").append(cn);
-                    for (Method m : cls.getDeclaredMethods()) {
-                        ms.append(" ").append(m.getName()).append("(");
-                        Class<?>[] pts = m.getParameterTypes();
-                        for (int j = 0; j < pts.length; j++) {
-                            if (j > 0) ms.append(",");
-                            ms.append(pts[j].getSimpleName());
-                        }
-                        ms.append(")");
-                    }
-                    LogWriter.log(TAG, ms.toString());
-                } catch (Throwable ignored) {}
-            }
-            dex.close();
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "MULTI scan error: " + t.getMessage());
-        }
-    }
-
-    private static void dumpIntentExtras(Intent intent) {
-        if (intent == null) { LogWriter.log(TAG, "  intent=null"); return; }
-        LogWriter.log(TAG, "  action=" + intent.getAction());
-        if (intent.getComponent() != null) {
-            LogWriter.log(TAG, "  component=" + intent.getComponent().getClassName());
-        }
-        Bundle extras = intent.getExtras();
-        if (extras == null) { LogWriter.log(TAG, "  extras=null"); return; }
-        for (String key : extras.keySet()) {
-            Object val = extras.get(key);
-            String valStr;
-            if (val == null) {
-                valStr = "null";
-            } else if (val instanceof Number || val instanceof String || val instanceof Boolean) {
-                valStr = val.toString();
-            } else {
-                valStr = val.getClass().getSimpleName();
-            }
-            LogWriter.log(TAG, "  EXTRA[" + key + "]=" + valStr);
+            LogWriter.log(TAG, "voice hook error: " + t.getMessage());
         }
     }
 }
