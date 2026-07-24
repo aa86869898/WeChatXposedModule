@@ -84,20 +84,34 @@ public class VoiceForwardHook {
         try {
             Class<?> cf = cl.loadClass("com.tencent.mm.ui.chatting.ChattingUIFragment");
 
-            XposedBridge.hookAllMethods(cf, "onCreateView", new XC_MethodHook() {
+            // dealContentView 已知触发且带 View 参数 (v4 验证)
+            XposedBridge.hookAllMethods(cf, "dealContentView", new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
                     if (sAdapterHooked) return;
                     sCallCount.set(0);
 
-                    View root = (View) param.getResult();
-                    LogWriter.log(TAG, "onCreateView returned: " + (root == null ? "null" : root.getClass().getSimpleName()));
+                    View view = null;
+                    for (Object arg : param.args) {
+                        if (arg instanceof View) { view = (View) arg; break; }
+                    }
+                    if (view == null) return;
 
-                    if (root == null) return;
+                    StringBuilder sb = new StringBuilder();
+                    sb.append(view.getClass().getSimpleName());
+                    if (view instanceof ViewGroup) {
+                        ViewGroup vg = (ViewGroup) view;
+                        sb.append("[").append(vg.getChildCount()).append("] ");
+                        int n = Math.min(vg.getChildCount(), 12);
+                        for (int i = 0; i < n; i++) {
+                            View c = vg.getChildAt(i);
+                            sb.append(i).append(":").append(c.getClass().getSimpleName()).append(" ");
+                        }
+                    }
+                    LogWriter.log(TAG, "dealContentView view: " + sb.toString());
 
-                    int childCount = root instanceof ViewGroup ? ((ViewGroup) root).getChildCount() : -1;
-                    RecyclerView rv = findRecyclerView(root);
+                    RecyclerView rv = findRecyclerView(view);
                     if (rv == null) {
-                        LogWriter.log(TAG, "no RecyclerView: root=" + root.getClass().getSimpleName() + " children=" + childCount);
+                        LogWriter.log(TAG, "no RecyclerView in dealContentView");
                         return;
                     }
 
@@ -113,16 +127,16 @@ public class VoiceForwardHook {
                     try {
                         Class<?> adCls = cl.loadClass(adapterCls);
                         int cnt = hookAllNonStaticMethods(adCls);
-                        LogWriter.log(TAG, "hooked " + cnt + " methods on Adapter " + adCls.getSimpleName());
+                        LogWriter.log(TAG, "hooked " + cnt + " methods on " + adCls.getSimpleName());
                         sAdapterHooked = true;
                     } catch (Throwable t) {
                         LogWriter.log(TAG, "failed to hook Adapter: " + t.getMessage());
                     }
                 }
             });
-            LogWriter.log(TAG, "hookAllMethods onCreateView on ChattingUIFragment installed");
+            LogWriter.log(TAG, "dealContentView hook installed");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "hook onCreateView failed: " + t.getMessage());
+            LogWriter.log(TAG, "dealContentView hook failed: " + t.getMessage());
         }
     }
 
