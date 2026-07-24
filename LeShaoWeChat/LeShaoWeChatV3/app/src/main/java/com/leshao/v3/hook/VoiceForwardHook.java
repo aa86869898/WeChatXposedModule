@@ -835,20 +835,14 @@ public class VoiceForwardHook {
             while (entries.hasMoreElements()) {
                 String cn = entries.nextElement();
                 // 录音组件可能的类名模式
-                boolean match = cn.contains("VoiceRecord")
-                    || cn.contains("RecordVoice")
-                    || cn.contains("VoiceBtn")
-                    || cn.contains("VoicePanel")
-                    || cn.contains(".voice.")
-                    || cn.contains(".voicerecord.")
-                    || cn.contains(".voicemsg.")
-                    || cn.contains(".recorder.")
-                    || cn.contains(".speex.")
-                    || cn.contains(".audio.")
-                    || cn.endsWith(".VoiceUtil")
-                    || cn.endsWith(".VoiceLogic")
-                    || cn.contains("AudioUtil");
+                String lc = cn.toLowerCase();
+                boolean match = lc.contains("voice")
+                    || lc.contains(".speex.")
+                    || lc.contains("audio")
+                    || lc.contains("recordvoi");
                 if (!match) continue;
+                // 只 hook com.tencent.mm 下的类, 避免 hook 大量第三方音频库
+                if (!cn.startsWith("com.tencent.mm.")) continue;
                 try {
                     Class<?> cls = cl.loadClass(cn);
                     if (cls.isInterface()) continue;

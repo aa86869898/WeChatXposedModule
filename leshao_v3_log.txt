@@ -1,216 +1,456 @@
-07-24 22:40:56.435 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-24 22:40:56.437 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
-07-24 22:40:56.439 [main] ContactRepository: init: DB ready listener registered
-07-24 22:40:56.439 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-24 22:40:56.440 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-24 22:40:56.441 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-24 22:40:56.442 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-24 22:40:56.450 [main] SettingsEntryHook: LauncherUI entry hooks ok
-07-24 22:40:56.450 [main] SettingsEntryHook: INIT: hooks registered ok
-07-24 22:40:56.451 [main] MessageHook: n(e9,p0) OK
-07-24 22:40:56.452 [main] MessageHook: C(e9) OK
-07-24 22:40:56.458 [main] ContextManager: attachBaseContext DONE, ready=true
-07-24 22:40:56.459 [main] DatabaseProvider: init: already hooked via initEarly, skipping
-07-24 22:40:56.459 [main] SettingsInject: INIT: registered
-07-24 22:40:56.462 [main] TTSBroadcaster: TTS init done
-07-24 22:40:56.470 [main] AntiRecallHook: [XML] Hooked: af5.a.run()
-07-24 22:40:56.472 [main] AntiRecallHook: [Proto] Hooked: e01.u.f()
-07-24 22:40:56.474 [main] AntiRecallHook: [协程] Hooked: bd0.s.invokeSuspend()
-07-24 22:40:56.475 [main] AntiRecallHook: anti-recall hooks installed (4 paths)
-07-24 22:40:56.477 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewReceiveUI.initView()
-07-24 22:40:56.478 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI.initView()
-07-24 22:40:56.479 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI.onCreate()
-07-24 22:40:56.480 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2.onCreate()
-07-24 22:40:56.481 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI.onCreate()
-07-24 22:40:56.482 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKBeforeDetailUI.onCreate()
-07-24 22:40:56.483 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewDetailUI.onCreate()
-07-24 22:40:56.484 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI.onCreate()
-07-24 22:40:56.485 [main] RedPacket: [OK] ChattingUI.onResume()
-07-24 22:40:56.486 [main] RedPacket: RP OK
-07-24 22:40:56.487 [main] RedPacket: hooks installed (open result + UI auto-click + TTS UI)
-07-24 22:40:56.490 [main] AutoCollect: [OK] com.tencent.mm.plugin.wallet.pay.ui.WalletPayUI.onCreate()
-07-24 22:40:56.491 [main] AutoCollect: [OK] ChattingUI.onResume()
-07-24 22:40:56.492 [main] AutoCollect: AC OK
-07-24 22:40:56.493 [main] AutoCollect: hooks installed (transfer result + UI auto-collect)
-07-24 22:40:56.497 [main] LeShaoV3: [Footer] 字数限制已解除 (返回'0')
-07-24 22:40:56.504 [main] LeShaoV3: --- [6] 定时发送 ---
-07-24 22:40:56.504 [main] LeShaoV3:   ChatFooter.F(e9,a35.g)→boolean ✓
-07-24 22:40:56.505 [main] LeShaoV3:   ChatFooterCustom.r(10 params) ✓
-07-24 22:40:56.506 [main] LeShaoV3:   ChatFooterCustom.onClick(View) ✓
-07-24 22:40:56.509 [main] LeShaoV3: [Search] 语音搜索(字段扫描)已启用
-07-24 22:40:56.510 [main] LeShaoV3: [Search] FTSBaseVoiceSearchUI Hook完成
-07-24 22:40:56.512 [main] LeShaoV3: [Badge] MainTabUI.b() Hook完成
-07-24 22:40:56.518 [main] LeShaoV3: [Shake] ShakeReportUI Hook完成 (14个方法)
-07-24 22:40:56.519 [main] LeShaoV3: --- [10] 好友删除检测 ---
-07-24 22:40:56.520 [main] LeShaoV3:   ContactInfoUI.D2() + onResume() ✓
-07-24 22:40:56.520 [main] LeShaoV3:   SendMsgSuccessEvent ✓
-07-24 22:40:56.521 [main] LeShaoV3: [CallRecord] widget.k.g() Hook完成
-07-24 22:40:56.522 [main] LeShaoV3: [CallRecord] model.c0.d() Hook完成
-07-24 22:40:56.523 [main] LeShaoV3: [AutoAnswer] CheckVoipCSIsStartedEvent Hook完成
-07-24 22:40:56.523 [main] LeShaoV3: [CallFeatures] 通话录音+自动接听 Hook完成
-07-24 22:40:56.533 [main] LeShaoV3: [LoginMonitor] LauncherUI.onCreate Hook完成
-07-24 22:40:56.535 [main] LeShaoV3: [ConvPrivacy] notification.m0.a() Hook完成 (level=1)
-07-24 22:40:56.536 [main] LeShaoV3: [ConvPrivacy] MvvmConvList Hook完成
-07-24 22:40:56.546 [main] ThemeHook: loadColors done
-07-24 22:40:56.546 [main] ThemeHook: state: m=false bar=true page=true chatBg=true bubble=true tab=true text=true
-07-24 22:40:56.548 [main] ThemeHook: [A] ok
-07-24 22:40:56.549 [main] ThemeHook: [B] ok
-07-24 22:40:56.550 [main] ThemeHook: [C] ga.E0 title ok
-07-24 22:40:56.552 [main] ThemeHook: [C] dim-scan ok
-07-24 22:40:56.552 [main] ThemeHook: [D] ok
-07-24 22:40:56.553 [main] ThemeHook: [E] com.tencent.mm.ui.conversation.MainUI ok
-07-24 22:40:56.555 [main] ThemeHook: [F] p0 extra hook ok
-07-24 22:40:56.556 [main] ThemeHook: [F] DyeTemplate l0+n0 ok
-07-24 22:40:56.558 [main] ThemeHook: [H] ok
-07-24 22:40:56.561 [main] ThemeHook: [X] addView scan ok
-07-24 22:40:56.562 [main] ThemeHook: [G] ChattingUI ok
-07-24 22:40:56.562 [main] ThemeHook: [L] dark sync ok
-07-24 22:40:56.563 [main] ThemeHook: [M] settings bg ok
-07-24 22:40:56.564 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivity ok
-07-24 22:40:56.565 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivityJava ok
-07-24 22:40:56.566 [main] ThemeHook: [O] MMFragment ok
-07-24 22:40:56.567 [main] ThemeHook: [O] MMFragmentActivity ok
-07-24 22:40:56.568 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooter ok
-07-24 22:40:56.570 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooterBottom ok
-07-24 22:40:56.570 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.ChatFooterPanel ok
-07-24 22:40:56.571 [main] ThemeHook: [P] com.tencent.mm.ui.chatting.ChattingFooterMoreBtnBar ok
-07-24 22:40:56.572 [main] ThemeHook: [P] ChattingImageBGView ok
-07-24 22:40:56.572 [main] ThemeHook: [Q] SnsTimeLineUI ok
-07-24 22:40:56.573 [main] ThemeHook: [Q] ImproveSnsTimelineUI ok
-07-24 22:40:56.573 [main] ThemeHook: [Q] ContactInfoUI ok
-07-24 22:40:56.574 [main] ThemeHook: [Q] AddressUI ok
-07-24 22:40:56.575 [main] ThemeHook: [Q] FindMoreFriendsUI ok
-07-24 22:40:56.575 [main] ThemeHook: [Q] WebViewUI ok
-07-24 22:40:56.576 [main] ThemeHook: [Q] MainSettingsUI ok
-07-24 22:40:56.576 [main] ThemeHook: [Q] CommonSettingsUI ok
-07-24 22:40:56.576 [main] ThemeHook: [Q] BizConversationUI ok
-07-24 22:40:56.577 [main] ThemeHook: [Q] SnsUserUI ok
-07-24 22:40:56.578 [main] ThemeHook: [Q] SnsCommentUI ok
-07-24 22:40:56.579 [main] ThemeHook: [Q] SnsUploadUI ok
-07-24 22:40:56.580 [main] ThemeHook: [Q] ContactProfileUI ok
-07-24 22:40:56.581 [main] ThemeHook: [Q] ConversationListView ok
-07-24 22:40:56.582 [main] ThemeHook: [Q] ConversationFolderItemView ok
-07-24 22:40:56.583 [main] ThemeHook: [Q] MainUIView ok
-07-24 22:40:56.584 [main] ThemeHook: [Q] ChattingItemFooter ok
-07-24 22:40:56.585 [main] ThemeHook: [Q] SnsHeader ok
-07-24 22:40:56.587 [main] ThemeHook: [Q] SnsCollapsibleTextView ok
-07-24 22:40:56.588 [main] ThemeHook: [Q] TimelineCommentView ok
-07-24 22:40:56.589 [main] ThemeHook: [Q] LauncherUIBottomTabView ok
-07-24 22:40:56.591 [main] ThemeHook: all hooks installed
-07-24 22:40:57.812 [main] VF: scan [com.tencent.mm.ui.chatting.viewitems, com.tencent.mm.ui.chatting.component]: 2076 classes, 1161 methods
-07-24 22:40:57.813 [main] VF: Menu.add fail: Cannot hook abstract methods: public abstract android.view.MenuItem android.view.Menu.add(int)
-07-24 22:40:57.814 [main] VF: viewitems+component+Menu.add hooks installed
-07-24 22:40:57.815 [main] VF: IMsgService(j) not found: Didn't find class "com.tencent.mm.plugin.messenger.foundation.a.a.j" on path: DexPathList[[zip file "/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/lib/arm64, /data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk!/lib/arm64-v8a, /system/lib64, /system_ext/lib64]]
-07-24 22:40:58.830 [main] VF: voice hooks installed: 33 methods
-07-24 22:40:58.832 [main] VF: ready — do a native forward to trace API
-07-24 22:40:58.836 [leshao-scheduler] SchedulerService: scheduler started
-07-24 22:40:59.106 [main] TtsEngine: TTS init OK
-07-24 22:41:00.197 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-24 22:41:00.200 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-24 22:41:00.202 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-24 22:41:00.204 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-24 22:41:00.206 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-24 22:41:00.233 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-24 22:41:00.236 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-24 22:41:00.238 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-24 22:41:00.239 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-24 22:41:00.243 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-24 22:41:01.058 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-24 22:41:01.061 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-24 22:41:01.062 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-24 22:41:01.063 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-24 22:41:01.064 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-24 22:41:01.509 [main] VF: TranslateControllerView.a(V:TranslateControllerView,Integer)
-07-24 22:41:01.519 [main] VF: qe.v0(V:Toolbar)
-07-24 22:41:01.580 [main] VF: zm.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-24 22:41:01.582 [main] VF: ym.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-24 22:41:01.585 [main] VF: a1.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-24 22:41:01.586 [main] VF: so.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-24 22:41:01.590 [main] VF: sf.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-24 22:41:01.591 [main] VF: s2.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-24 22:41:01.592 [main] VF: h6.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-24 22:41:01.598 [main] VF: cj.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-24 22:41:01.599 [main] VF: n7.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-24 22:41:01.600 [main] VF: g9.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-24 22:41:01.600 [main] VF: c0.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-24 22:41:01.601 [main] VF: k.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-24 22:41:01.602 [main] VF: k1.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-24 22:41:01.603 [main] VF: g7.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-24 22:41:01.612 [main] VF: TranslateControllerView.a(V:TranslateControllerView,Integer)
-07-24 22:41:01.627 [main] VF: qe.v0(V:Toolbar)
-07-24 22:41:01.639 [main] VF: TranslateControllerView.a(V:TranslateControllerView,Integer)
-07-24 22:41:01.644 [main] VF: hn.G(gd,null)
-07-24 22:41:01.662 [main] VF: hn.G(gd,null)
-07-24 22:41:01.671 [main] VF: g0.create(V:fh)
-07-24 22:41:01.676 [main] VF: a0.U(V:ChattingAvatarImageView,String,null)
-07-24 22:41:01.688 [main] VF: g0.create(V:fh)
-07-24 22:41:01.689 [main] VF: hq.b(V:fh,Boolean,Boolean)
-07-24 22:41:01.690 [main] VF: dq.G(gd,null)
-07-24 22:41:01.691 [main] VF: a0.U(V:ChattingAvatarImageView,String,null)
-07-24 22:41:01.696 [main] VF: hn.G(gd,null)
-07-24 22:41:01.699 [main] VF: hn.G(gd,null)
-07-24 22:41:01.703 [main] VF: hn.G(gd,null)
-07-24 22:41:02.419 [[GT]ColdPool#17] MessageHook: #1 type=1->1 isSend=12227 talker=58408603454@chatroom content=luhaisi:
-@天&後 来步行街请你饮朱大叔[坏笑]
-07-24 22:41:02.428 [[GT]ColdPool#17] MessageHook: #2 type=1->1 isSend=1749 talker=22758609081@chatroom content=wxid_iaafzgi18jtq12:
-【类型】车找人（五座小车）上程
-【时间...
-07-24 22:41:02.437 [[GT]ColdPool#17] MessageHook: #3 type=1->1 isSend=6209 talker=21916245815@chatroom content=wxid_iaafzgi18jtq12:
-【类型】车找人（五座小车）上程
-【时间...
-07-24 22:41:02.446 [[GT]ColdPool#17] MessageHook: #4 type=1->1 isSend=9200 talker=23552094189@chatroom content=wxid_780u2gxmubjn12:
-福利来了，新疆小青提，一件净重4.2-...
-07-24 22:41:02.453 [[GT]ColdPool#17] MessageHook: #5 type=1->1 isSend=9200 talker=23552094189@chatroom content=wxid_780u2gxmubjn12:
-福利来了，整挂车，火焰山石头瓜，市场最...
-07-24 22:41:02.458 [[GT]ColdPool#17] MessageHook: #6 type=1->1 isSend=12227 talker=58408603454@chatroom content=wxid_jbw0g241ca6p22:
-@彭鸿鸿(电信)19106685330...
-07-24 22:41:02.463 [[GT]ColdPool#17] MessageHook: #7 type=1->1 isSend=12227 talker=58408603454@chatroom content=pengpearl:
-好
-07-24 22:41:02.470 [[GT]ColdPool#17] MessageHook: #8 type=1->1 isSend=6209 talker=21916245815@chatroom content=wxid_xt0ynq6vx05x12:
-【🚗类型🚗 】车找人（私家车）
-【...
-07-24 22:41:02.477 [[GT]ColdPool#17] MessageHook: #9 type=1->1 isSend=51 talker=23149434800@chatroom content=wxid_y28cprugwm5w12:
- 正宗潮汕牛肉丸！厂家直发，零售也享批...
-07-24 22:41:02.488 [[GT]ColdPool#17] MessageHook: #10 type=3->3 isSend=51 talker=23149434800@chatroom content=wxid_y28cprugwm5w12:
-<?xml version="1.0"...
-07-24 22:41:02.501 [[GT]ColdPool#17] MessageHook: #11 type=1->1 isSend=12227 talker=58408603454@chatroom content=wxid_zmiz3feprfbc22:
-@朱大叔（新安店） 不在化州[破涕为笑...
-07-24 22:41:02.507 [[GT]ColdPool#17] MessageHook: #12 type=1->1 isSend=2299 talker=22271795842@chatroom content=wxid_iaafzgi18jtq12:
-【类型】车找人（五座小车）上程
-【时间...
-07-24 22:41:02.519 [[GT]ColdPool#17] MessageHook: #13 type=1->1 isSend=30 talker=22918947217@chatroom content=wxid_wls7dqzalbsb12:
-
-[红包]普工2⃣2⃣元/小时
-[红包...
-07-24 22:41:02.526 [[GT]ColdPool#17] MessageHook: #14 type=1->1 isSend=9511 talker=24130456064@chatroom content=wxid_x3snmvfetphi22:
-🙅🏻‍♀️别等开学再后悔“暑假怎么...
-07-24 22:41:02.540 [[GT]ColdPool#17] MessageHook: #15 type=3->3 isSend=9511 talker=24130456064@chatroom content=wxid_x3snmvfetphi22:
-<?xml version="1.0"...
-07-24 22:41:02.550 [[GT]ColdPool#17] MessageHook: #16 type=1->1 isSend=4689 talker=18249563796@chatroom content=wxid_iaafzgi18jtq12:
-【类型】车找人（五座小车）上程
-【时间...
-07-24 22:41:02.558 [[GT]ColdPool#17] MessageHook: #17 type=1->1 isSend=36 talker=7215621333@chatroom content=wxid_iaafzgi18jtq12:
-【类型】车找人（五座小车）上程
-【时间...
-07-24 22:41:02.567 [[GT]ColdPool#17] MessageHook: #18 type=1->1 isSend=54 talker=25295891650@chatroom content=wxid_s4miygmdckeu22:
+07-24 22:47:40.390 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-24 22:47:40.391 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-24 22:47:40.392 [main] ContactRepository: init: DB ready listener registered
+07-24 22:47:40.393 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-24 22:47:40.393 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-24 22:47:40.394 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-24 22:47:40.395 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-24 22:47:40.403 [main] SettingsEntryHook: LauncherUI entry hooks ok
+07-24 22:47:40.403 [main] SettingsEntryHook: INIT: hooks registered ok
+07-24 22:47:40.405 [main] MessageHook: n(e9,p0) OK
+07-24 22:47:40.405 [main] MessageHook: C(e9) OK
+07-24 22:47:40.412 [main] ContextManager: attachBaseContext DONE, ready=true
+07-24 22:47:40.412 [main] DatabaseProvider: init: already hooked via initEarly, skipping
+07-24 22:47:40.413 [main] SettingsInject: INIT: registered
+07-24 22:47:40.417 [main] TTSBroadcaster: TTS init done
+07-24 22:47:40.425 [main] AntiRecallHook: [XML] Hooked: af5.a.run()
+07-24 22:47:40.426 [main] AntiRecallHook: [Proto] Hooked: e01.u.f()
+07-24 22:47:40.428 [main] AntiRecallHook: [协程] Hooked: bd0.s.invokeSuspend()
+07-24 22:47:40.429 [main] AntiRecallHook: anti-recall hooks installed (4 paths)
+07-24 22:47:40.431 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewReceiveUI.initView()
+07-24 22:47:40.432 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI.initView()
+07-24 22:47:40.433 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI.onCreate()
+07-24 22:47:40.434 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2.onCreate()
+07-24 22:47:40.435 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI.onCreate()
+07-24 22:47:40.435 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKBeforeDetailUI.onCreate()
+07-24 22:47:40.436 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewDetailUI.onCreate()
+07-24 22:47:40.437 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI.onCreate()
+07-24 22:47:40.438 [main] RedPacket: [OK] ChattingUI.onResume()
+07-24 22:47:40.439 [main] RedPacket: RP OK
+07-24 22:47:40.439 [main] RedPacket: hooks installed (open result + UI auto-click + TTS UI)
+07-24 22:47:40.442 [main] AutoCollect: [OK] com.tencent.mm.plugin.wallet.pay.ui.WalletPayUI.onCreate()
+07-24 22:47:40.443 [main] AutoCollect: [OK] ChattingUI.onResume()
+07-24 22:47:40.444 [main] AutoCollect: AC OK
+07-24 22:47:40.444 [main] AutoCollect: hooks installed (transfer result + UI auto-collect)
+07-24 22:47:40.449 [main] LeShaoV3: [Footer] 字数限制已解除 (返回'0')
+07-24 22:47:40.456 [main] LeShaoV3: --- [6] 定时发送 ---
+07-24 22:47:40.457 [main] LeShaoV3:   ChatFooter.F(e9,a35.g)→boolean ✓
+07-24 22:47:40.458 [main] LeShaoV3:   ChatFooterCustom.r(10 params) ✓
+07-24 22:47:40.458 [main] LeShaoV3:   ChatFooterCustom.onClick(View) ✓
+07-24 22:47:40.461 [main] LeShaoV3: [Search] 语音搜索(字段扫描)已启用
+07-24 22:47:40.462 [main] LeShaoV3: [Search] FTSBaseVoiceSearchUI Hook完成
+07-24 22:47:40.464 [main] LeShaoV3: [Badge] MainTabUI.b() Hook完成
+07-24 22:47:40.470 [main] LeShaoV3: [Shake] ShakeReportUI Hook完成 (14个方法)
+07-24 22:47:40.471 [main] LeShaoV3: --- [10] 好友删除检测 ---
+07-24 22:47:40.472 [main] LeShaoV3:   ContactInfoUI.D2() + onResume() ✓
+07-24 22:47:40.472 [main] LeShaoV3:   SendMsgSuccessEvent ✓
+07-24 22:47:40.474 [main] LeShaoV3: [CallRecord] widget.k.g() Hook完成
+07-24 22:47:40.474 [main] LeShaoV3: [CallRecord] model.c0.d() Hook完成
+07-24 22:47:40.475 [main] LeShaoV3: [AutoAnswer] CheckVoipCSIsStartedEvent Hook完成
+07-24 22:47:40.475 [main] LeShaoV3: [CallFeatures] 通话录音+自动接听 Hook完成
+07-24 22:47:40.485 [main] LeShaoV3: [LoginMonitor] LauncherUI.onCreate Hook完成
+07-24 22:47:40.487 [main] LeShaoV3: [ConvPrivacy] notification.m0.a() Hook完成 (level=1)
+07-24 22:47:40.488 [main] LeShaoV3: [ConvPrivacy] MvvmConvList Hook完成
+07-24 22:47:40.499 [main] ThemeHook: loadColors done
+07-24 22:47:40.499 [main] ThemeHook: state: m=false bar=true page=true chatBg=true bubble=true tab=true text=true
+07-24 22:47:40.500 [main] ThemeHook: [A] ok
+07-24 22:47:40.502 [main] ThemeHook: [B] ok
+07-24 22:47:40.503 [main] ThemeHook: [C] ga.E0 title ok
+07-24 22:47:40.504 [main] ThemeHook: [C] dim-scan ok
+07-24 22:47:40.505 [main] ThemeHook: [D] ok
+07-24 22:47:40.506 [main] ThemeHook: [E] com.tencent.mm.ui.conversation.MainUI ok
+07-24 22:47:40.508 [main] ThemeHook: [F] p0 extra hook ok
+07-24 22:47:40.508 [main] ThemeHook: [F] DyeTemplate l0+n0 ok
+07-24 22:47:40.510 [main] ThemeHook: [H] ok
+07-24 22:47:40.512 [main] ThemeHook: [X] addView scan ok
+07-24 22:47:40.513 [main] ThemeHook: [G] ChattingUI ok
+07-24 22:47:40.514 [main] ThemeHook: [L] dark sync ok
+07-24 22:47:40.514 [main] ThemeHook: [M] settings bg ok
+07-24 22:47:40.516 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivity ok
+07-24 22:47:40.516 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivityJava ok
+07-24 22:47:40.517 [main] ThemeHook: [O] MMFragment ok
+07-24 22:47:40.519 [main] ThemeHook: [O] MMFragmentActivity ok
+07-24 22:47:40.520 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooter ok
+07-24 22:47:40.521 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooterBottom ok
+07-24 22:47:40.522 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.ChatFooterPanel ok
+07-24 22:47:40.522 [main] ThemeHook: [P] com.tencent.mm.ui.chatting.ChattingFooterMoreBtnBar ok
+07-24 22:47:40.523 [main] ThemeHook: [P] ChattingImageBGView ok
+07-24 22:47:40.524 [main] ThemeHook: [Q] SnsTimeLineUI ok
+07-24 22:47:40.524 [main] ThemeHook: [Q] ImproveSnsTimelineUI ok
+07-24 22:47:40.525 [main] ThemeHook: [Q] ContactInfoUI ok
+07-24 22:47:40.525 [main] ThemeHook: [Q] AddressUI ok
+07-24 22:47:40.526 [main] ThemeHook: [Q] FindMoreFriendsUI ok
+07-24 22:47:40.527 [main] ThemeHook: [Q] WebViewUI ok
+07-24 22:47:40.527 [main] ThemeHook: [Q] MainSettingsUI ok
+07-24 22:47:40.527 [main] ThemeHook: [Q] CommonSettingsUI ok
+07-24 22:47:40.528 [main] ThemeHook: [Q] BizConversationUI ok
+07-24 22:47:40.529 [main] ThemeHook: [Q] SnsUserUI ok
+07-24 22:47:40.529 [main] ThemeHook: [Q] SnsCommentUI ok
+07-24 22:47:40.530 [main] ThemeHook: [Q] SnsUploadUI ok
+07-24 22:47:40.531 [main] ThemeHook: [Q] ContactProfileUI ok
+07-24 22:47:40.532 [main] ThemeHook: [Q] ConversationListView ok
+07-24 22:47:40.533 [main] ThemeHook: [Q] ConversationFolderItemView ok
+07-24 22:47:40.534 [main] ThemeHook: [Q] MainUIView ok
+07-24 22:47:40.534 [main] ThemeHook: [Q] ChattingItemFooter ok
+07-24 22:47:40.535 [main] ThemeHook: [Q] SnsHeader ok
+07-24 22:47:40.537 [main] ThemeHook: [Q] SnsCollapsibleTextView ok
+07-24 22:47:40.538 [main] ThemeHook: [Q] TimelineCommentView ok
+07-24 22:47:40.539 [main] ThemeHook: [Q] LauncherUIBottomTabView ok
+07-24 22:47:40.541 [main] ThemeHook: all hooks installed
+07-24 22:47:42.820 [main] VF: scan [com.tencent.mm.ui.chatting.viewitems, com.tencent.mm.ui.chatting.component]: 2076 classes, 1161 methods
+07-24 22:47:42.822 [main] VF: Menu.add fail: Cannot hook abstract methods: public abstract android.view.MenuItem android.view.Menu.add(int)
+07-24 22:47:42.824 [main] VF: viewitems+component+Menu.add hooks installed
+07-24 22:47:44.472 [main] VF: ◆VOC hooked com.qq.wx.voice.embed.recognizer.Grammar (10 methods)
+07-24 22:47:44.476 [main] VF: ◆VOC hooked com.qq.wx.voice.embed.recognizer.GrammarNative (6 methods)
+07-24 22:47:44.482 [main] VF: ◆VOC hooked com.qq.wx.voice.vad.EVadNative (4 methods)
+07-24 22:47:44.485 [main] VF: ◆VOC hooked com.qq.wx.voice.vad.MMVoipVadNative (4 methods)
+07-24 22:47:44.495 [main] VF: ◆VOC hooked com.qq.wx.voice.vad.VoiceRecognizeNative (12 methods)
+07-24 22:47:44.498 [main] VF: ◆VOC hooked com.tencent.liteav.audio.TXAudioEffectManager$AudioMusicParam (1 methods)
+07-24 22:47:44.501 [main] VF: ◆VOC hooked com.tencent.liteav.audio.TXAudioEffectManager$TXVoiceChangerType (3 methods)
+07-24 22:47:44.503 [main] VF: ◆VOC hooked com.tencent.liteav.audio.TXAudioEffectManager$TXVoiceReverbType (3 methods)
+07-24 22:47:44.506 [main] VF: ◆VOC hooked com.tencent.liteav.audio.TXAudioEffectManagerImpl$AudioBgmParams (5 methods)
+07-24 22:47:44.509 [main] VF: ◆VOC hooked com.tencent.liteav.audio.TXAudioEffectManagerImpl$MusicPlayObserver (5 methods)
+07-24 22:47:44.511 [main] VF: ◆VOC hooked com.tencent.liteav.audio.TXAudioEffectManagerImpl$MusicPreloadObserver (3 methods)
+07-24 22:47:44.544 [main] VF: ◆VOC hooked com.tencent.liteav.audio.TXAudioEffectManagerImpl (61 methods)
+07-24 22:47:44.552 [main] VF: ◆VOC hooked com.tencent.liteav.audio.musicdecoder.MediaCodecBridge (16 methods)
+07-24 22:47:44.558 [main] VF: ◆VOC hooked com.tencent.liteav.audio.musicdecoder.MusicResourceDecoderAndroid (12 methods)
+07-24 22:47:44.567 [main] VF: ◆VOC hooked com.tencent.mm.audio.mix.jni.AudioFFmpegDecodeJni (5 methods)
+07-24 22:47:44.570 [main] VF: ◆VOC hooked com.tencent.mm.audio.mix.jni.SilkResampleJni (4 methods)
+07-24 22:47:44.582 [main] VF: ◆VOC hooked com.tencent.mm.mj_publisher.finder.movie_composing.audio.services.AudioChannels3aConfig (1 methods)
+07-24 22:47:44.584 [main] VF: ◆VOC hooked com.tencent.mm.mj_publisher.finder.movie_composing.audio.services.AudioChannels3aLevel (3 methods)
+07-24 22:47:44.594 [main] VF: ◆VOC hooked com.tencent.mm.mj_publisher.finder.movie_composing.audio.services.MJAudioChannels3aInterface (17 methods)
+07-24 22:47:44.599 [main] VF: ◆VOC hooked com.tencent.mm.mj_publisher.finder.movie_composing.widgets.voice.MCVoiceInputLayout (9 methods)
+07-24 22:47:44.601 [main] VF: ◆VOC hooked com.tencent.mm.msgsubscription.voice.MsgSubscriptionVoicePlayHelperMM$mAudioPlayerEventListener$1 (1 methods)
+07-24 22:47:44.604 [main] VF: ◆VOC hooked com.tencent.mm.msgsubscription.voice.PlayVoiceData (5 methods)
+07-24 22:47:44.611 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiGetBackgroundAudioState$GetBackgroundAudioStateTask (3 methods)
+07-24 22:47:44.614 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiGetMusicPlayerState$GetMusicPlayerState (4 methods)
+07-24 22:47:44.632 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiGetTingAudioState$GetTingAudioStateTask (37 methods)
+07-24 22:47:44.635 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiOperateBackgroundAudio$OperateBackgroundAudioTask (4 methods)
+07-24 22:47:44.636 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiOperateMusicPlayer$OperateMusicPlayer$6 (1 methods)
+07-24 22:47:44.638 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiOperateMusicPlayer$OperateMusicPlayer (4 methods)
+07-24 22:47:44.639 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiOperateRecorder$OperateRecordTask$1 (1 methods)
+07-24 22:47:44.647 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiOperateTingAudio$OperateTingAudioTask (16 methods)
+07-24 22:47:44.648 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiPausePlayVoice$PausePlayVoice (1 methods)
+07-24 22:47:44.650 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetAudioState$AudioPlayerEventListenerTask$1 (1 methods)
+07-24 22:47:44.651 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioState$1 (1 methods)
+07-24 22:47:44.653 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioState$SetBackgroundAudioListenerTask$MainProcessMusicPlayerEventListener (2 methods)
+07-24 22:47:44.656 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioState$SetBackgroundAudioListenerTask$a (4 methods)
+07-24 22:47:44.661 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioState$SetBackgroundAudioListenerTask (8 methods)
+07-24 22:47:44.664 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioState$SetBackgroundAudioStateTask$a (4 methods)
+07-24 22:47:44.668 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioState$SetBackgroundAudioStateTask (6 methods)
+07-24 22:47:44.669 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioStateWC$SetBackgroundAudioListenerTaskWC (1 methods)
+07-24 22:47:44.670 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioStateWC$SetBackgroundAudioStateTaskWC (1 methods)
+07-24 22:47:44.683 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetTingAudioState$SeTingAudioStateTask (26 methods)
+07-24 22:47:44.685 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetTingAudioState$SetTingAudioListenerTask$musicPlayerListener$1 (1 methods)
+07-24 22:47:44.698 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetTingAudioState$SetTingAudioListenerTask (26 methods)
+07-24 22:47:44.700 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiStartPlayVoice$StartPlayVoice (4 methods)
+07-24 22:47:44.703 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiStartRecordVoice$StartRecordVoice (5 methods)
+07-24 22:47:44.704 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiStopPlayVoice$StopPlayVoice (1 methods)
+07-24 22:47:44.706 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiStopRecordVoice$StopRecordVoice (1 methods)
+07-24 22:47:44.708 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.a0 (3 methods)
+07-24 22:47:44.709 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.a1 (1 methods)
+07-24 22:47:44.711 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.a3 (1 methods)
+07-24 22:47:44.713 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.a (3 methods)
+07-24 22:47:44.714 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.b0 (2 methods)
+07-24 22:47:44.715 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.b1 (1 methods)
+07-24 22:47:44.717 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.b2 (2 methods)
+07-24 22:47:44.718 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.b3 (1 methods)
+07-24 22:47:44.719 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.b (1 methods)
+07-24 22:47:44.720 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.c0 (1 methods)
+07-24 22:47:44.721 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.c1 (1 methods)
+07-24 22:47:44.722 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.c2 (2 methods)
+07-24 22:47:44.724 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.c3 (2 methods)
+07-24 22:47:44.726 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.d0 (2 methods)
+07-24 22:47:44.727 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.d1 (2 methods)
+07-24 22:47:44.728 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.d2 (1 methods)
+07-24 22:47:44.730 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.d3 (3 methods)
+07-24 22:47:44.732 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.d (3 methods)
+07-24 22:47:44.733 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.e0 (1 methods)
+07-24 22:47:44.735 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.e1 (1 methods)
+07-24 22:47:44.736 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.e2$$a (1 methods)
+07-24 22:47:44.738 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.e2 (4 methods)
+07-24 22:47:44.740 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.f0 (2 methods)
+07-24 22:47:44.741 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.f1 (2 methods)
+07-24 22:47:44.742 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.f2 (1 methods)
+07-24 22:47:44.743 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.f3 (1 methods)
+07-24 22:47:44.745 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.f (2 methods)
+07-24 22:47:44.746 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.g0 (1 methods)
+07-24 22:47:44.746 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.g1 (1 methods)
+07-24 22:47:44.748 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.g3 (2 methods)
+07-24 22:47:44.749 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.h0 (2 methods)
+07-24 22:47:44.750 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.h1 (1 methods)
+07-24 22:47:44.752 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.h2 (3 methods)
+07-24 22:47:44.753 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.h3 (1 methods)
+07-24 22:47:44.757 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.h (7 methods)
+07-24 22:47:44.758 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.i0 (1 methods)
+07-24 22:47:44.760 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.i2 (1 methods)
+07-24 22:47:44.761 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.j0 (1 methods)
+07-24 22:47:44.762 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.j1 (2 methods)
+07-24 22:47:44.764 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.j2 (2 methods)
+07-24 22:47:44.765 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.j3 (1 methods)
+07-24 22:47:44.766 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.j (2 methods)
+07-24 22:47:44.767 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.k0 (1 methods)
+07-24 22:47:44.769 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.k1 (3 methods)
+07-24 22:47:44.770 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.k2 (1 methods)
+07-24 22:47:44.772 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.k3 (2 methods)
+07-24 22:47:44.773 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.k (1 methods)
+07-24 22:47:44.774 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.l2 (2 methods)
+07-24 22:47:44.776 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.l3 (2 methods)
+07-24 22:47:44.777 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.l (3 methods)
+07-24 22:47:44.779 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.m2 (1 methods)
+07-24 22:47:44.780 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.n2 (1 methods)
+07-24 22:47:44.781 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.n (2 methods)
+07-24 22:47:44.783 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.o0 (2 methods)
+07-24 22:47:44.784 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.o2 (1 methods)
+07-24 22:47:44.785 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.o3 (1 methods)
+07-24 22:47:44.786 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.o (1 methods)
+07-24 22:47:44.788 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.p0 (3 methods)
+07-24 22:47:44.789 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.p2 (1 methods)
+07-24 22:47:44.791 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.p (3 methods)
+07-24 22:47:44.793 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.q1 (2 methods)
+07-24 22:47:44.794 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.q2 (1 methods)
+07-24 22:47:44.795 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.r0 (1 methods)
+07-24 22:47:44.796 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.r1 (1 methods)
+07-24 22:47:44.797 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.r2 (1 methods)
+07-24 22:47:44.801 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.r3 (7 methods)
+07-24 22:47:44.802 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.r (2 methods)
+07-24 22:47:44.804 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.s0 (2 methods)
+07-24 22:47:44.805 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.s1 (1 methods)
+07-24 22:47:44.806 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.s2 (1 methods)
+07-24 22:47:44.807 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.s (1 methods)
+07-24 22:47:44.808 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.t1 (1 methods)
+07-24 22:47:44.809 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.t2 (1 methods)
+07-24 22:47:44.811 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.t (3 methods)
+07-24 22:47:44.812 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.u0 (2 methods)
+07-24 22:47:44.813 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.u1 (1 methods)
+07-24 22:47:44.815 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.u2 (2 methods)
+07-24 22:47:44.816 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.v2 (1 methods)
+07-24 22:47:44.818 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.v (4 methods)
+07-24 22:47:44.820 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.w1 (1 methods)
+07-24 22:47:44.821 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.w2 (1 methods)
+07-24 22:47:44.822 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.w (1 methods)
+07-24 22:47:44.823 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.x1 (2 methods)
+07-24 22:47:44.824 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.x2 (1 methods)
+07-24 22:47:44.826 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.x (2 methods)
+07-24 22:47:44.827 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.y0 (1 methods)
+07-24 22:47:44.828 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.y1 (1 methods)
+07-24 22:47:44.829 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.y2 (1 methods)
+07-24 22:47:44.831 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.y (2 methods)
+07-24 22:47:44.832 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.z0 (1 methods)
+07-24 22:47:44.833 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.z1 (1 methods)
+07-24 22:47:44.834 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.z2 (1 methods)
+07-24 22:47:44.835 [main] VF: ◆VOC hooked com.tencent.mm.plugin.appbrand.jsapi.audio.z (1 methods)
+07-24 22:47:44.850 [main] VF: ◆VOC hooked com.tencent.mm.plugin.audio.BizAudioFlutterActivity (14 methods)
+07-24 22:47:44.852 [main] VF: ◆VOC hooked com.tencent.mm.plugin.audio.broadcast.base.BaseAudioReceiver (1 methods)
+07-24 22:47:44.853 [main] VF: ◆VOC hooked com.tencent.mm.plugin.audio.broadcast.bluetooth.BluetoothReceiver (2 methods)
+07-24 22:47:44.854 [main] VF: ◆VOC hooked com.tencent.mm.plugin.audio.broadcast.headset.HeadsetPlugReceiver (1 methods)
+07-24 22:47:44.891 [main] VF: ◆VOC hooked com.tencent.mm.plugin.audio.comment.view.BizCommentFooter (78 methods)
+07-24 22:47:44.899 [main] VF: ◆VOC hooked com.tencent.mm.plugin.audio.flutter.plugin.FlutterBizAudioPlugin (12 methods)
+07-24 22:47:44.903 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.F2fRcvVoiceOffLineLogic$2 (1 methods)
+07-24 22:47:44.905 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.F2fRcvVoiceOffLineLogic$3 (1 methods)
+07-24 22:47:44.907 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.SynthesizerNative (3 methods)
+07-24 22:47:44.909 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.b (2 methods)
+07-24 22:47:44.910 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.c (1 methods)
+07-24 22:47:44.912 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.d (3 methods)
+07-24 22:47:44.913 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.e$$a (1 methods)
+07-24 22:47:44.914 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.f (1 methods)
+07-24 22:47:44.915 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.g (1 methods)
+07-24 22:47:44.916 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.h (2 methods)
+07-24 22:47:44.917 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.j (1 methods)
+07-24 22:47:44.930 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.m (16 methods)
+07-24 22:47:44.932 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.n (1 methods)
+07-24 22:47:44.934 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.o (1 methods)
+07-24 22:47:44.935 [main] VF: ◆VOC hooked com.tencent.mm.plugin.collect.model.voice.t (1 methods)
+07-24 22:47:44.954 [main] VF: ◆VOC hooked com.tencent.mm.plugin.finder.live.plugin.view.audio.FinderLiveAudioWaveRootView (10 methods)
+07-24 22:47:44.956 [main] VF: ◆VOC hooked com.tencent.mm.plugin.finder.live.plugin.view.audio.FinderLiveAudioWaveView$Wave$createWaveAnimation$1$1 (1 methods)
+07-24 22:47:44.959 [main] VF: ◆VOC hooked com.tencent.mm.plugin.finder.live.plugin.view.audio.FinderLiveAudioWaveView$Wave (5 methods)
+07-24 22:47:44.970 [main] VF: ◆VOC hooked com.tencent.mm.plugin.finder.live.plugin.view.audio.FinderLiveAudioWaveView (20 methods)
+07-24 22:47:44.997 [main] VF: ◆VOC hooked com.tencent.mm.plugin.finder.voice.FinderLiveVoiceInputLayout (24 methods)
+07-24 22:47:45.003 [main] VF: ◆VOC hooked com.tencent.mm.plugin.finder.voice.FinderLiveVoiceInputLayoutImpl (8 methods)
+07-24 22:47:45.010 [main] VF: ◆VOC hooked com.tencent.mm.plugin.finder.voice.FinderLiveVoiceInputPanel (12 methods)
+07-24 22:47:45.012 [main] VF: ◆VOC hooked com.tencent.mm.plugin.fts.ui.voice.EducationGradientMask (2 methods)
+07-24 22:47:45.017 [main] VF: ◆VOC hooked com.tencent.mm.plugin.fts.ui.voice.FTSBStyleSoundWaveView (9 methods)
+07-24 22:47:45.020 [main] VF: ◆VOC hooked com.tencent.mm.plugin.fts.ui.voice.FTSFloatingVoiceHalfScreenActivity (5 methods)
+07-24 22:47:45.021 [main] VF: ◆VOC hooked com.tencent.mm.plugin.fts.ui.voice.FTSFloatingVoiceInputViewModel$enableKeyboardBindingWithAutoProvider$3 (1 methods)
+07-24 22:47:45.024 [main] VF: ◆VOC hooked com.tencent.mm.plugin.fts.ui.voice.FTSFloatingVoiceMMHalfScreenDialogFragment (4 methods)
+07-24 22:47:45.029 [main] VF: ◆VOC hooked com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyVoiceRecordUI (1 methods)
+07-24 22:47:45.033 [main] VF: ◆VOC hooked com.tencent.mm.plugin.luckymoney.ui.voice.LuckyMoneyVoiceLayout (3 methods)
+07-24 22:47:45.037 [main] VF: ◆VOC hooked com.tencent.mm.plugin.luckymoney.ui.voice.LuckyMoneyVoiceTransLayout (7 methods)
+07-24 22:47:45.044 [main] VF: ◆VOC hooked com.tencent.mm.plugin.record.ui.RecordVoiceBaseView (5 methods)
+07-24 22:47:45.052 [main] VF: ◆VOC hooked com.tencent.mm.plugin.recordvideo.model.audio.AudioCacheInfo (12 methods)
+07-24 22:47:45.053 [main] VF: ◆VOC hooked com.tencent.mm.plugin.recordvideo.model.audio.LyricsInfo (2 methods)
+07-24 22:47:45.056 [main] VF: ◆VOC hooked com.tencent.mm.plugin.recordvideo.ui.editor.audio.EditorAudioFinderFavFragment (3 methods)
+07-24 22:47:45.058 [main] VF: ◆VOC hooked com.tencent.mm.plugin.recordvideo.ui.editor.audio.EditorAudioFinderLikeFragment (3 methods)
+07-24 22:47:45.059 [main] VF: ◆VOC hooked com.tencent.mm.plugin.recordvideo.ui.editor.audio.EditorAudioFinderTabFragment$1 (1 methods)
+07-24 22:47:45.074 [main] VF: ◆VOC hooked com.tencent.mm.plugin.recordvideo.ui.editor.audio.EditorAudioSelectFinderVideoView (17 methods)
+07-24 22:47:45.085 [main] VF: ◆VOC hooked com.tencent.mm.plugin.transvoice.ui.TransVoicePanelLayout (2 methods)
+07-24 22:47:45.092 [main] VF: ◆VOC hooked com.tencent.mm.plugin.webview.ui.tools.audio.AddItemToPlayLaterIPCTask$Args (5 methods)
+07-24 22:47:45.095 [main] VF: ◆VOC hooked com.tencent.mm.plugin.webview.ui.tools.audio.AddItemToPlayLaterIPCTask$Result (5 methods)
+07-24 22:47:45.102 [main] VF: ◆VOC hooked com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceRecordUseBluetooth (6 methods)
+07-24 22:47:45.120 [main] VF: ◆VOC hooked com.tencent.qqmusic.mediaplayer.utils.AudioUtil (5 methods)
+07-24 22:47:45.125 [main] VF: ◆VOC hooked com.tencent.qqmusicplayerprocess.audio.playermanager.EKeyDecryptor (6 methods)
+07-24 22:47:45.144 [main] VF: ◆VOC hooked com.tencent.tav.core.audio.AudioExportRunner (31 methods)
+07-24 22:47:45.146 [main] VF: ◆VOC hooked com.tencent.tav.core.audio.AudioExportSession (2 methods)
+07-24 22:47:45.147 [main] VF: ◆VOC hooked com.tencent.tav.core.audio.AudioExportTask$1 (1 methods)
+07-24 22:47:45.152 [main] VF: ◆VOC hooked com.tencent.tav.core.audio.AudioExportTask$SegmentStatus (8 methods)
+07-24 22:47:45.158 [main] VF: ◆VOC hooked com.tencent.tav.core.audio.AudioExportTask (11 methods)
+07-24 22:47:45.160 [main] VF: ◆VOC hooked com.tencent.tav.core.audio.AudioSourceComposition (3 methods)
+07-24 22:47:45.164 [main] VF: ◆VOC hooked com.tencent.tav.core.audio.AudioSourceTrack (5 methods)
+07-24 22:47:45.168 [main] VF: ◆VOC hooked com.tencent.tav.core.audio.EncoderUtils (8 methods)
+07-24 22:47:45.169 [main] VF: ◆VOC hooked com.tencent.tavkit.composition.audio.TAVAudioConfigurationSegment (1 methods)
+07-24 22:47:45.172 [main] VF: ◆VOC hooked com.tencent.tavkit.composition.audio.TAVAudioMixInputParameters (4 methods)
+07-24 22:47:45.174 [main] VF: ◆VOC hooked com.tencent.tavkit.composition.audio.TAVAudioTapProcessor (4 methods)
+07-24 22:47:45.190 [main] VF: ◆VOC hooked org.webrtc.audio.JavaAudioDeviceModule$AudioRecordStartErrorCode (3 methods)
+07-24 22:47:45.193 [main] VF: ◆VOC hooked org.webrtc.audio.JavaAudioDeviceModule$AudioSamples (4 methods)
+07-24 22:47:45.195 [main] VF: ◆VOC hooked org.webrtc.audio.JavaAudioDeviceModule$AudioTrackStartErrorCode (3 methods)
+07-24 22:47:45.204 [main] VF: ◆VOC hooked org.webrtc.audio.JavaAudioDeviceModule$Builder (18 methods)
+07-24 22:47:45.209 [main] VF: ◆VOC hooked org.webrtc.audio.JavaAudioDeviceModule (9 methods)
+07-24 22:47:45.212 [main] VF: ◆VOC hooked org.webrtc.audio.LegacyAudioDeviceModule (4 methods)
+07-24 22:47:45.213 [main] VF: ◆VOC hooked org.webrtc.audio.LowLatencyAudioBufferManager (1 methods)
+07-24 22:47:45.214 [main] VF: ◆VOC hooked org.webrtc.audio.VolumeLogger$LogVolumeTask (1 methods)
+07-24 22:47:45.216 [main] VF: ◆VOC hooked org.webrtc.audio.VolumeLogger (3 methods)
+07-24 22:47:45.221 [main] VF: ◆VOC hooked org.webrtc.audio.WebRtcAudioEffects (10 methods)
+07-24 22:47:45.227 [main] VF: ◆VOC hooked org.webrtc.audio.WebRtcAudioManager (10 methods)
+07-24 22:47:45.229 [main] VF: ◆VOC hooked org.webrtc.audio.WebRtcAudioRecord$$a (1 methods)
+07-24 22:47:45.230 [main] VF: ◆VOC hooked org.webrtc.audio.WebRtcAudioRecord$1 (1 methods)
+07-24 22:47:45.231 [main] VF: ◆VOC hooked org.webrtc.audio.WebRtcAudioRecord$AudioRecordThread (2 methods)
+07-24 22:47:45.253 [main] VF: ◆VOC hooked org.webrtc.audio.WebRtcAudioRecord (46 methods)
+07-24 22:47:45.256 [main] VF: ◆VOC hooked org.webrtc.audio.WebRtcAudioTrack$AudioTrackThread (3 methods)
+07-24 22:47:45.276 [main] VF: ◆VOC hooked org.webrtc.audio.WebRtcAudioTrack (43 methods)
+07-24 22:47:45.284 [main] VF: ◆VOC hooked org.webrtc.audio.WebRtcAudioUtils (16 methods)
+07-24 22:47:45.298 [main] VF: ◆VOC hooked org.webrtc.voiceengine.WebRtcAudioUtils (28 methods)
+07-24 22:47:45.324 [main] VF: ◆VOC total hooked: 1123 methods
+07-24 22:47:47.047 [main] VF: ◆ALL voice classes: android.support.v4.media.AudioAttributesCompatParcelizer android.support.v4.media.AudioAttributesImplApi21Parcelizer android.support.v4.media.AudioAttributesImplApi26Parcelizer android.support.v4.media.AudioAttributesImplBaseParcelizer androidx.camera.core.impl.AutoValue_EncoderProfilesProxy_AudioProfileProxy androidx.camera.core.impl.EncoderProfilesProxy$AudioProfileProxy$AudioEncoder androidx.camera.core.impl.EncoderProfilesProxy$AudioProfileProxy androidx.camera.core.impl.utils.executor.AudioExecutor$1$$a androidx.camera.core.impl.utils.executor.AudioExecutor$1 androidx.camera.core.impl.utils.executor.AudioExecutor androidx.media.AudioAttributesCompat androidx.media.AudioAttributesCompatParcelizer androidx.media.AudioAttributesImpl androidx.media.AudioAttributesImplApi21 androidx.media.AudioAttributesImplApi21Parcelizer androidx.media.AudioAttributesImplApi26 androidx.media.AudioAttributesImplApi26Parcelizer androidx.media.AudioAttributesImplBase androidx.media.AudioAttributesImplBaseParcelizer com.qq.wx.voice.embed.recognizer.Grammar com.qq.wx.voice.embed.recognizer.GrammarNative com.qq.wx.voice.vad.EVadNative com.qq.wx.voice.vad.MMVoipVadNative com.qq.wx.voice.vad.VoiceRecognizeNative$Result com.qq.wx.voice.vad.VoiceRecognizeNative com.tencent.liteav.audio.TXAudioEffectManager$AudioMusicParam com.tencent.liteav.audio.TXAudioEffectManager$TXMusicPlayObserver com.tencent.liteav.audio.TXAudioEffectManager$TXMusicPreloadObserver com.tencent.liteav.audio.TXAudioEffectManager$TXVoiceChangerType com.tencent.liteav.audio.TXAudioEffectManager$TXVoiceReverbType com.tencent.liteav.audio.TXAudioEffectManager com.tencent.liteav.audio.TXAudioEffectManagerImpl$AudioBgmParams com.tencent.liteav.audio.TXAudioEffectManagerImpl$MusicPlayObserver com.tencent.liteav.audio.TXAudioEffectManagerImpl$MusicPreloadObserver com.tencent.liteav.audio.TXAudioEffectManagerImpl com.tencent.liteav.audio.musicdecoder.MediaCodecBridge com.tencent.liteav.audio.musicdecoder.MusicResourceDecoderAndroid
+07-24 22:47:47.049 [main] VF: ◆ALL voice classes (cont): com.tencent.liteav.audio2.AndroidInterruptedStateListener$RecordingConfig com.tencent.liteav.audio2.AndroidInterruptedStateListener com.tencent.liteav.audio2.LiteavAudioRecord2 com.tencent.liteav.audio2.LiteavAudioTrack2 com.tencent.liteav.audio2.SystemLoopbackRecorder2$Recorder com.tencent.liteav.audio2.SystemLoopbackRecorder2 com.tencent.liteav.audio2.a com.tencent.liteav.audio2.b com.tencent.liteav.audio2.c$a com.tencent.liteav.audio2.c com.tencent.liteav.audio2.d$a com.tencent.liteav.audio2.d com.tencent.liteav.audio2.e$a com.tencent.liteav.audio2.e$b com.tencent.liteav.audio2.e com.tencent.liteav.audio2.f com.tencent.liteav.audio2.g com.tencent.liteav.audio2.route.AudioDeviceProperty$1 com.tencent.liteav.audio2.route.AudioDeviceProperty$UsbAudioDeviceInfo com.tencent.liteav.audio2.route.AudioDeviceProperty com.tencent.liteav.audio2.route.a$a com.tencent.liteav.audio2.route.a com.tencent.liteav.audio2.route.b com.tencent.liteav.device.TXDeviceManager$TXAudioRoute com.tencent.liteav.trtc.AudioVodTrackJni$AudioFrame com.tencent.liteav.trtc.AudioVodTrackJni com.tencent.liteav.trtc.TrtcCloudJni$AudioFrame com.tencent.liteav.trtc.TrtcCloudJni$AudioParallelParams com.tencent.liteav.trtc.TrtcCloudJni$AudioRecordingParams com.tencent.live2.V2TXLiveDef$V2TXLiveAudioFrame com.tencent.live2.V2TXLiveDef$V2TXLiveAudioFrameObserverFormat com.tencent.live2.V2TXLiveDef$V2TXLiveAudioFrameOperationMode com.tencent.live2.V2TXLiveDef$V2TXLiveAudioQuality com.tencent.luggage.sdk.jsapi.component.webaudio.WxAudioNativeInstallHelper$5 com.tencent.luggage.sdk.jsapi.component.webaudio.WxAudioNativeInstallHelper com.tencent.luggage.sdk.jsapi.component.webaudio.a com.tencent.luggage.sdk.jsapi.component.webaudio.b com.tencent.luggage.sdk.jsapi.component.webaudio.c com.tencent.luggage.sdk.jsapi.component.webaudio.d com.tencent.luggage.sdk.jsapi.component.webaudio.e com.tencent.luggage.sdk.jsapi.component.webaudio.f com.tencent.luggage.sdk.jsapi.component.webaudio.g com.tencent.luggage.sdk.jsapi.component.webaudio.h
+07-24 22:47:47.055 [main] VF: ◆ALL voice classes (cont): com.tencent.luggage.sdk.jsapi.component.webaudio.i com.tencent.luggage.sdk.jsapi.component.webaudio.j com.tencent.luggage.sdk.jsapi.component.webaudio.k com.tencent.luggage.sdk.jsapi.component.webaudio.l com.tencent.luggage.sdk.jsapi.component.webaudio.m com.tencent.luggage.sdk.jsapi.component.webaudio.n com.tencent.luggage.sdk.jsapi.component.webaudio.o com.tencent.luggage.sdk.jsapi.component.webaudio.p com.tencent.luggage.sdk.jsapi.component.webaudio.q com.tencent.luggage.sdk.jsapi.component.webaudio.r com.tencent.maas.camerafun.MJAudioDeviceType com.tencent.maas.camerafun.MJAudioFrame com.tencent.maas.camstudio.frame.AudioFrame com.tencent.maas.moviecomposing.AudioTempoProcessor com.tencent.maas.moviecomposing.AudioWaveformProvider com.tencent.maas.utils.MJAudioPCMExtractor$OnComplete com.tencent.maas.utils.MJAudioPCMExtractor$OnProgress com.tencent.maas.utils.MJAudioPCMExtractor com.tencent.mm.audio.mix.decode.IDecodeCallback com.tencent.mm.audio.mix.jni.AudioFFmpegDecodeJni$StreamMetaInfo com.tencent.mm.audio.mix.jni.AudioFFmpegDecodeJni com.tencent.mm.audio.mix.jni.SilkResampleJni com.tencent.mm.autogen.events.AudioPlayerEvent com.tencent.mm.autogen.events.C2CNYPredownloadVoiceEvent com.tencent.mm.autogen.events.CollectRcvVoiceEvent com.tencent.mm.autogen.events.ExtTranslateVoiceEvent com.tencent.mm.autogen.events.ExtVoiceFileNameToMsgIdEvent com.tencent.mm.autogen.events.ExtVoiceMsgIdToFileNameEvent com.tencent.mm.autogen.events.ExtVoiceTransformTextClickEvent com.tencent.mm.autogen.events.ExtVoiceTransformTextResultEvent com.tencent.mm.autogen.events.F2FRemoteAudioModeChangeEvent com.tencent.mm.autogen.events.LbsVerifyMessageCreateFromVoiceEvent com.tencent.mm.autogen.events.NotifyCanPullVoiceTransResEvent com.tencent.mm.autogen.events.NotifyGetResultOfVoiceControlEvent com.tencent.mm.autogen.events.ReInitVoiceOffLineSynthesizerEvent com.tencent.mm.autogen.events.RecallVoiceTransTextActEvent com.tencent.mm.autogen.events.ResendVoiceMsgEvent
+07-24 22:47:47.057 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.autogen.events.ResendVoiceRemindMsgEvent com.tencent.mm.autogen.events.SceneVoiceRcdDataEvent com.tencent.mm.autogen.events.VoiceInputResultEvent com.tencent.mm.autogen.events.VoiceInputStartEvent com.tencent.mm.autogen.events.VoiceMsgDownloadFinishEvent com.tencent.mm.autogen.events.VoicePlayStopEvent com.tencent.mm.autogen.events.VoicePrintLoginEvent com.tencent.mm.autogen.events.VoicePrintNoiseDetectResultEvent com.tencent.mm.autogen.events.VoiceReminderDeleteRecordMessageEvent com.tencent.mm.autogen.events.VoiceReminderRemindEvent com.tencent.mm.autogen.events.VoiceTransTextCompletedEvent com.tencent.mm.autogen.events.WxAudioStateEvent com.tencent.mm.autogen.mmdata.rpt.AudioDeviceInfoKvReportStruct com.tencent.mm.autogen.mmdata.rpt.AudioRouteReportStruct com.tencent.mm.autogen.mmdata.rpt.CareModeTxt2VoiceUsageStruct com.tencent.mm.autogen.mmdata.rpt.FTSVoiceSearchReportInfoStruct com.tencent.mm.autogen.mmdata.rpt.NewVoiceTransTipsReportStruct com.tencent.mm.autogen.mmdata.rpt.StreamVoiceInputStruct com.tencent.mm.autogen.mmdata.rpt.TingAudioPushLogStruct com.tencent.mm.autogen.mmdata.rpt.VoiceBreakPointConPlayStruct com.tencent.mm.autogen.mmdata.rpt.VoiceMessageDownloadStruct com.tencent.mm.autogen.mmdata.rpt.VoiceToTextChatInterfaceStruct com.tencent.mm.autogen.mmdata.rpt.WCPayF2FVoicePushReportStruct com.tencent.mm.boot.svg.code.drawable.appbrand_menu_header_record_voice com.tencent.mm.boot.svg.code.drawable.appbrand_subscribe_msg_voice_broadcast_for_dyeing_item com.tencent.mm.boot.svg.code.drawable.audio com.tencent.mm.boot.svg.code.drawable.audio_filled com.tencent.mm.boot.svg.code.drawable.audio_medium com.tencent.mm.boot.svg.code.drawable.audio_panel_audio_icon com.tencent.mm.boot.svg.code.drawable.audio_panel_default_cover com.tencent.mm.boot.svg.code.drawable.audio_panel_music_icon com.tencent.mm.boot.svg.code.drawable.audio_panel_taskbar_icon_audio_new com.tencent.mm.boot.svg.code.drawable.audio_panel_taskbar_icon_music_new
+07-24 22:47:47.059 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.boot.svg.code.drawable.biz_voice_playing_icon_black_inner1 com.tencent.mm.boot.svg.code.drawable.biz_voice_playing_icon_black_inner2 com.tencent.mm.boot.svg.code.drawable.biz_voice_playing_icon_black_inner3 com.tencent.mm.boot.svg.code.drawable.biz_voice_playing_icon_inner1 com.tencent.mm.boot.svg.code.drawable.biz_voice_playing_icon_inner2 com.tencent.mm.boot.svg.code.drawable.biz_voice_playing_icon_inner3 com.tencent.mm.boot.svg.code.drawable.chatfrom_voice_playing_f1 com.tencent.mm.boot.svg.code.drawable.chatfrom_voice_playing_f1_dark com.tencent.mm.boot.svg.code.drawable.chatfrom_voice_playing_f2 com.tencent.mm.boot.svg.code.drawable.chatfrom_voice_playing_f2_dark com.tencent.mm.boot.svg.code.drawable.chatfrom_voice_playing_f3 com.tencent.mm.boot.svg.code.drawable.chatfrom_voice_playing_f3_dark com.tencent.mm.boot.svg.code.drawable.chatfrom_voice_playing_new com.tencent.mm.boot.svg.code.drawable.chatfrom_voice_playing_new_f1 com.tencent.mm.boot.svg.code.drawable.chatfrom_voice_playing_new_f2 com.tencent.mm.boot.svg.code.drawable.chatfrom_voice_playing_new_f3 com.tencent.mm.boot.svg.code.drawable.chatting_fast_entrance_voice com.tencent.mm.boot.svg.code.drawable.chatto_voice_playing com.tencent.mm.boot.svg.code.drawable.chatto_voice_playing_f1 com.tencent.mm.boot.svg.code.drawable.chatto_voice_playing_f2 com.tencent.mm.boot.svg.code.drawable.chatto_voice_playing_f3 com.tencent.mm.boot.svg.code.drawable.default_voiceinput com.tencent.mm.boot.svg.code.drawable.default_voicevoip com.tencent.mm.boot.svg.code.drawable.editor_toolbar_voice com.tencent.mm.boot.svg.code.drawable.editor_voice_recording com.tencent.mm.boot.svg.code.drawable.editor_voiceplayer_record_icon com.tencent.mm.boot.svg.code.drawable.fav_note_toolbar_voice com.tencent.mm.boot.svg.code.drawable.fav_note_voiceplayer_record_icon com.tencent.mm.boot.svg.code.drawable.finder_live_audio_tips com.tencent.mm.boot.svg.code.drawable.float_ball_audio_panel_close com.tencent.mm.boot.svg.code.drawable.float_ball_icon_audio_close
+07-24 22:47:47.062 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.boot.svg.code.drawable.float_ball_icon_audio_pause com.tencent.mm.boot.svg.code.drawable.float_ball_icon_audio_play com.tencent.mm.boot.svg.code.drawable.icon_filled_switch_to_voice com.tencent.mm.boot.svg.code.drawable.icon_filled_voice_call com.tencent.mm.boot.svg.code.drawable.icon_filled_voice_entrance com.tencent.mm.boot.svg.code.drawable.icons_filled_note_voiceinput com.tencent.mm.boot.svg.code.drawable.icons_filled_voice2txt_cursor com.tencent.mm.boot.svg.code.drawable.icons_outlined_audio_fav com.tencent.mm.boot.svg.code.drawable.icons_outlined_quote_voice com.tencent.mm.boot.svg.code.drawable.icons_outlined_voice com.tencent.mm.boot.svg.code.drawable.icons_outlined_voice_back_play com.tencent.mm.boot.svg.code.drawable.icons_outlined_voice_new com.tencent.mm.boot.svg.code.drawable.locky_money_voice_icon com.tencent.mm.boot.svg.code.drawable.locky_money_voice_icon_press com.tencent.mm.boot.svg.code.drawable.new_voice2search_cancel com.tencent.mm.boot.svg.code.drawable.new_voice2search_microphone com.tencent.mm.boot.svg.code.drawable.new_voice2search_search com.tencent.mm.boot.svg.code.drawable.new_voice2search_vertical_cancel com.tencent.mm.boot.svg.code.drawable.new_voice2txt_cancel com.tencent.mm.boot.svg.code.drawable.new_voice2txt_trans_ch com.tencent.mm.boot.svg.code.drawable.new_voice2txt_trans_en com.tencent.mm.boot.svg.code.drawable.new_voice2txt_voice com.tencent.mm.boot.svg.code.drawable.note_filled_voice com.tencent.mm.boot.svg.code.drawable.note_voice_recording com.tencent.mm.boot.svg.code.drawable.ofm_audio_icon com.tencent.mm.boot.svg.code.drawable.panel_icon_voiceinput com.tencent.mm.boot.svg.code.drawable.panel_icon_voipvoice com.tencent.mm.boot.svg.code.drawable.voice2txt_cancel_img com.tencent.mm.boot.svg.code.drawable.voice2txt_hint_cancel com.tencent.mm.boot.svg.code.drawable.voice2txt_hint_trans_chs com.tencent.mm.boot.svg.code.drawable.voice2txt_hint_trans_eng com.tencent.mm.boot.svg.code.drawable.voice2txt_trans_chs_img
+07-24 22:47:47.065 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.boot.svg.code.drawable.voice2txt_trans_eng_img com.tencent.mm.boot.svg.code.drawable.voice_chat_on_filled com.tencent.mm.boot.svg.code.drawable.voice_default_dark com.tencent.mm.boot.svg.code.drawable.voice_default_light com.tencent.mm.boot.svg.code.drawable.voice_expired_dark com.tencent.mm.boot.svg.code.drawable.voice_expired_light com.tencent.mm.boot.svg.code.drawable.voice_filled com.tencent.mm.boot.svg.code.drawable.voice_icon_new com.tencent.mm.boot.svg.code.drawable.voice_input_filled com.tencent.mm.boot.svg.code.drawable.voice_input_icon com.tencent.mm.boot.svg.code.drawable.voice_input_icon_festival com.tencent.mm.boot.svg.code.drawable.voice_password_icon_normal com.tencent.mm.boot.svg.code.drawable.voice_rcd_hint com.tencent.mm.boot.svg.code.drawable.voice_rcd_hint_new com.tencent.mm.boot.svg.code.drawable.voice_to_short com.tencent.mm.boot.svg.code.drawable.voice_transform_text_finish_normal com.tencent.mm.boot.svg.code.drawable.voice_transform_text_finish_pressed com.tencent.mm.boot.svg.code.drawable.voice_unfinished_dark com.tencent.mm.boot.svg.code.drawable.voice_unfinished_light com.tencent.mm.boot.svg.code.drawable.voiceinput_cancel com.tencent.mm.boot.svg.code.drawable.voiceinput_cancel_pressed com.tencent.mm.boot.svg.code.drawable.voiceinput_icon_button com.tencent.mm.boot.svg.code.drawable.voiceinput_icon_button_care com.tencent.mm.boot.svg.code.drawable.voicepost_beginicon com.tencent.mm.boot.svg.code.drawable.voicepost_pauseicon com.tencent.mm.boot.svg.code.drawable.voip_voicecall com.tencent.mm.libwxaudio.WxAudioNative$1 com.tencent.mm.libwxaudio.WxAudioNative$NativeAudioPcmCallback com.tencent.mm.libwxaudio.WxAudioNative$NativeCallBackInterface com.tencent.mm.libwxaudio.WxAudioNative com.tencent.mm.libwxaudio.a com.tencent.mm.libwxaudio.b com.tencent.mm.libwxaudio.c com.tencent.mm.live.core.core.trtc.sdkadapter.feature.WeixinAudioJitterBufferControllerFactory com.tencent.mm.live.core.core.trtc.sdkadapter.feature.WxAudio3aParmConfig
+07-24 22:47:47.068 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.mediaplus.AudioSoftDecoderJni com.tencent.mm.mj_publisher.finder.movie_composing.audio.services.AudioChannels3aConfig com.tencent.mm.mj_publisher.finder.movie_composing.audio.services.AudioChannels3aLevel com.tencent.mm.mj_publisher.finder.movie_composing.audio.services.MJAudioChannels3aInterface com.tencent.mm.mj_publisher.finder.movie_composing.widgets.voice.MCVoiceInputLayout com.tencent.mm.modelvoice.MediaRecorder com.tencent.mm.modelvoice.RemoteController$RemoteControlReceiver com.tencent.mm.modelvoice.VoiceOpus com.tencent.mm.modelvoiceaddr.SceneVoiceInputAddrProxy com.tencent.mm.modelvoiceaddr.ui.VoiceSearchLayout com.tencent.mm.msgsubscription.voice.MsgSubscriptionVoicePlayHelperMM$mAudioPlayerEventListener$1 com.tencent.mm.msgsubscription.voice.PlayVoiceData com.tencent.mm.open_voice_control.OVCInfoProvider com.tencent.mm.open_voice_control.card.A2ACardActivity com.tencent.mm.open_voice_control.card.BaseCard com.tencent.mm.open_voice_control.card.LoadingCard com.tencent.mm.open_voice_control.card.PermissionRequestCard com.tencent.mm.open_voice_control.card.SelectContactCard$initView$adapter$2 com.tencent.mm.open_voice_control.card.SelectContactCard com.tencent.mm.open_voice_control.card.SendMsgCard com.tencent.mm.open_voice_control.debug.A2AVolumeBarView com.tencent.mm.opensdk.modelbiz.WXInvoiceAuthInsert$Req com.tencent.mm.opensdk.modelbiz.WXInvoiceAuthInsert$Resp com.tencent.mm.opensdk.modelbiz.WXInvoiceAuthInsert com.tencent.mm.plugin.account.model.VoiceActionService com.tencent.mm.plugin.account.ui.BaseLoginVoiceUI$1 com.tencent.mm.plugin.account.ui.BaseLoginVoiceUI com.tencent.mm.plugin.account.ui.LoginVoiceUI$$a com.tencent.mm.plugin.account.ui.LoginVoiceUI$$b com.tencent.mm.plugin.account.ui.LoginVoiceUI com.tencent.mm.plugin.account.ui.RegByMobileVoiceVerifySelectUI com.tencent.mm.plugin.account.ui.RegByMobileVoiceVerifyUI com.tencent.mm.plugin.account.ui.VoiceActionActivity com.tencent.mm.plugin.account.ui.VoiceCodeHalfScreenDialogFragment
+07-24 22:47:47.072 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.account.ui.VoicePhoneLanguageTipsUI com.tencent.mm.plugin.address.ui.AddInvoiceUI com.tencent.mm.plugin.address.ui.InvoiceEditView com.tencent.mm.plugin.address.ui.InvoiceListUI com.tencent.mm.plugin.address.ui.InvoiceQrcodeTextView com.tencent.mm.plugin.address.ui.QrcodeInvoiceUI com.tencent.mm.plugin.appbrand.backgroundrunning.AppBrandAudioOfVideoBackgroundPlayNotificationLogic com.tencent.mm.plugin.appbrand.custom_loading.MagicGameLoadingImpl$mWxAudioStateEventListener$1 com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiGetBackgroundAudioState$GetBackgroundAudioStateTask com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiGetMusicPlayerState$GetMusicPlayerState com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiGetTingAudioState$GetTingAudioStateTask com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiOperateBackgroundAudio$OperateBackgroundAudioTask com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiOperateMusicPlayer$OperateMusicPlayer$6 com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiOperateMusicPlayer$OperateMusicPlayer com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiOperateRecorder$OperateRecordTask$1 com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiOperateTingAudio$OperateTingAudioTask com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiPausePlayVoice$PausePlayVoice com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetAudioState$AudioPlayerEventListenerTask$1 com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioState$1 com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioState$SetBackgroundAudioListenerTask$MainProcessMusicPlayerEventListener com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioState$SetBackgroundAudioListenerTask$a com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioState$SetBackgroundAudioListenerTask com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioState$SetBackgroundAudioStateTask$a com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioState$SetBackgroundAudioStateTask
+07-24 22:47:47.072 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioStateWC$SetBackgroundAudioListenerTaskWC com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetBackgroundAudioStateWC$SetBackgroundAudioStateTaskWC com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetTingAudioState$SeTingAudioStateTask com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetTingAudioState$SetTingAudioListenerTask$musicPlayerListener$1 com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiSetTingAudioState$SetTingAudioListenerTask com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiStartPlayVoice$StartPlayVoice com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiStartRecordVoice$StartRecordVoice com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiStopPlayVoice$StopPlayVoice com.tencent.mm.plugin.appbrand.jsapi.audio.JsApiStopRecordVoice$StopRecordVoice com.tencent.mm.plugin.appbrand.jsapi.audio.a0 com.tencent.mm.plugin.appbrand.jsapi.audio.a1 com.tencent.mm.plugin.appbrand.jsapi.audio.a2 com.tencent.mm.plugin.appbrand.jsapi.audio.a3 com.tencent.mm.plugin.appbrand.jsapi.audio.a com.tencent.mm.plugin.appbrand.jsapi.audio.b0 com.tencent.mm.plugin.appbrand.jsapi.audio.b1 com.tencent.mm.plugin.appbrand.jsapi.audio.b2 com.tencent.mm.plugin.appbrand.jsapi.audio.b3 com.tencent.mm.plugin.appbrand.jsapi.audio.b com.tencent.mm.plugin.appbrand.jsapi.audio.c0 com.tencent.mm.plugin.appbrand.jsapi.audio.c1 com.tencent.mm.plugin.appbrand.jsapi.audio.c2 com.tencent.mm.plugin.appbrand.jsapi.audio.c3 com.tencent.mm.plugin.appbrand.jsapi.audio.c com.tencent.mm.plugin.appbrand.jsapi.audio.d0 com.tencent.mm.plugin.appbrand.jsapi.audio.d1 com.tencent.mm.plugin.appbrand.jsapi.audio.d2 com.tencent.mm.plugin.appbrand.jsapi.audio.d3 com.tencent.mm.plugin.appbrand.jsapi.audio.d com.tencent.mm.plugin.appbrand.jsapi.audio.e0 com.tencent.mm.plugin.appbrand.jsapi.audio.e1 com.tencent.mm.plugin.appbrand.jsapi.audio.e2$$a com.tencent.mm.plugin.appbrand.jsapi.audio.e2 com.tencent.mm.plugin.appbrand.jsapi.audio.e3 com.tencent.mm.plugin.appbrand.jsapi.audio.e
+07-24 22:47:47.073 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.appbrand.jsapi.audio.f0 com.tencent.mm.plugin.appbrand.jsapi.audio.f1 com.tencent.mm.plugin.appbrand.jsapi.audio.f2 com.tencent.mm.plugin.appbrand.jsapi.audio.f3 com.tencent.mm.plugin.appbrand.jsapi.audio.f com.tencent.mm.plugin.appbrand.jsapi.audio.g0 com.tencent.mm.plugin.appbrand.jsapi.audio.g1 com.tencent.mm.plugin.appbrand.jsapi.audio.g2 com.tencent.mm.plugin.appbrand.jsapi.audio.g3 com.tencent.mm.plugin.appbrand.jsapi.audio.g com.tencent.mm.plugin.appbrand.jsapi.audio.h0 com.tencent.mm.plugin.appbrand.jsapi.audio.h1 com.tencent.mm.plugin.appbrand.jsapi.audio.h2 com.tencent.mm.plugin.appbrand.jsapi.audio.h3 com.tencent.mm.plugin.appbrand.jsapi.audio.h com.tencent.mm.plugin.appbrand.jsapi.audio.i0 com.tencent.mm.plugin.appbrand.jsapi.audio.i1 com.tencent.mm.plugin.appbrand.jsapi.audio.i2 com.tencent.mm.plugin.appbrand.jsapi.audio.i3 com.tencent.mm.plugin.appbrand.jsapi.audio.i com.tencent.mm.plugin.appbrand.jsapi.audio.j0 com.tencent.mm.plugin.appbrand.jsapi.audio.j1 com.tencent.mm.plugin.appbrand.jsapi.audio.j2 com.tencent.mm.plugin.appbrand.jsapi.audio.j3 com.tencent.mm.plugin.appbrand.jsapi.audio.j com.tencent.mm.plugin.appbrand.jsapi.audio.k0 com.tencent.mm.plugin.appbrand.jsapi.audio.k1 com.tencent.mm.plugin.appbrand.jsapi.audio.k2 com.tencent.mm.plugin.appbrand.jsapi.audio.k3 com.tencent.mm.plugin.appbrand.jsapi.audio.k com.tencent.mm.plugin.appbrand.jsapi.audio.l0 com.tencent.mm.plugin.appbrand.jsapi.audio.l1 com.tencent.mm.plugin.appbrand.jsapi.audio.l2 com.tencent.mm.plugin.appbrand.jsapi.audio.l3 com.tencent.mm.plugin.appbrand.jsapi.audio.l com.tencent.mm.plugin.appbrand.jsapi.audio.m0 com.tencent.mm.plugin.appbrand.jsapi.audio.m1 com.tencent.mm.plugin.appbrand.jsapi.audio.m2 com.tencent.mm.plugin.appbrand.jsapi.audio.m3 com.tencent.mm.plugin.appbrand.jsapi.audio.m com.tencent.mm.plugin.appbrand.jsapi.audio.n0 com.tencent.mm.plugin.appbrand.jsapi.audio.n1 com.tencent.mm.plugin.appbrand.jsapi.audio.n2 com.tencent.mm.plugin.appbrand.jsapi.audio.n3
+07-24 22:47:47.073 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.appbrand.jsapi.audio.n com.tencent.mm.plugin.appbrand.jsapi.audio.o0 com.tencent.mm.plugin.appbrand.jsapi.audio.o1 com.tencent.mm.plugin.appbrand.jsapi.audio.o2 com.tencent.mm.plugin.appbrand.jsapi.audio.o3 com.tencent.mm.plugin.appbrand.jsapi.audio.o com.tencent.mm.plugin.appbrand.jsapi.audio.p0 com.tencent.mm.plugin.appbrand.jsapi.audio.p1 com.tencent.mm.plugin.appbrand.jsapi.audio.p2 com.tencent.mm.plugin.appbrand.jsapi.audio.p3 com.tencent.mm.plugin.appbrand.jsapi.audio.p com.tencent.mm.plugin.appbrand.jsapi.audio.q0 com.tencent.mm.plugin.appbrand.jsapi.audio.q1 com.tencent.mm.plugin.appbrand.jsapi.audio.q2 com.tencent.mm.plugin.appbrand.jsapi.audio.q3 com.tencent.mm.plugin.appbrand.jsapi.audio.q com.tencent.mm.plugin.appbrand.jsapi.audio.r0 com.tencent.mm.plugin.appbrand.jsapi.audio.r1 com.tencent.mm.plugin.appbrand.jsapi.audio.r2 com.tencent.mm.plugin.appbrand.jsapi.audio.r3 com.tencent.mm.plugin.appbrand.jsapi.audio.r com.tencent.mm.plugin.appbrand.jsapi.audio.s0 com.tencent.mm.plugin.appbrand.jsapi.audio.s1 com.tencent.mm.plugin.appbrand.jsapi.audio.s2 com.tencent.mm.plugin.appbrand.jsapi.audio.s com.tencent.mm.plugin.appbrand.jsapi.audio.t0 com.tencent.mm.plugin.appbrand.jsapi.audio.t1 com.tencent.mm.plugin.appbrand.jsapi.audio.t2 com.tencent.mm.plugin.appbrand.jsapi.audio.t com.tencent.mm.plugin.appbrand.jsapi.audio.u0 com.tencent.mm.plugin.appbrand.jsapi.audio.u1 com.tencent.mm.plugin.appbrand.jsapi.audio.u2 com.tencent.mm.plugin.appbrand.jsapi.audio.u com.tencent.mm.plugin.appbrand.jsapi.audio.v0 com.tencent.mm.plugin.appbrand.jsapi.audio.v1 com.tencent.mm.plugin.appbrand.jsapi.audio.v2 com.tencent.mm.plugin.appbrand.jsapi.audio.v com.tencent.mm.plugin.appbrand.jsapi.audio.w0 com.tencent.mm.plugin.appbrand.jsapi.audio.w1 com.tencent.mm.plugin.appbrand.jsapi.audio.w2 com.tencent.mm.plugin.appbrand.jsapi.audio.w com.tencent.mm.plugin.appbrand.jsapi.audio.x0 com.tencent.mm.plugin.appbrand.jsapi.audio.x1 com.tencent.mm.plugin.appbrand.jsapi.audio.x2
+07-24 22:47:47.080 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.appbrand.jsapi.audio.x com.tencent.mm.plugin.appbrand.jsapi.audio.y0 com.tencent.mm.plugin.appbrand.jsapi.audio.y1 com.tencent.mm.plugin.appbrand.jsapi.audio.y2 com.tencent.mm.plugin.appbrand.jsapi.audio.y com.tencent.mm.plugin.appbrand.jsapi.audio.z0 com.tencent.mm.plugin.appbrand.jsapi.audio.z1 com.tencent.mm.plugin.appbrand.jsapi.audio.z2 com.tencent.mm.plugin.appbrand.jsapi.audio.z com.tencent.mm.plugin.appbrand.jsapi.offlinevoice.IPCSetCurrentPaySpeech$IPCSetCurrentPaySpeechParam com.tencent.mm.plugin.appbrand.jsapi.offlinevoice.IPCSetCurrentPaySpeech com.tencent.mm.plugin.appbrand.jsapi.offlinevoice.a com.tencent.mm.plugin.appbrand.jsapi.offlinevoice.b com.tencent.mm.plugin.appbrand.jsapi.openvoice.AppBrandVoIP1v1FloatBallEvent com.tencent.mm.plugin.appbrand.media.encode.M4aAudioFormatJni com.tencent.mm.plugin.appbrand.media.record.AudioRecordVoIPInterruptListener$CheckInterruptTask com.tencent.mm.plugin.appbrand.media.record.AudioRecordVoIPInterruptListener$StartInterruptEventListenTask$2 com.tencent.mm.plugin.appbrand.media.record.AudioRecordVoIPInterruptListener$StartInterruptEventListenTask$3 com.tencent.mm.plugin.appbrand.media.record.AudioRecordVoIPInterruptListener$StartInterruptEventListenTask com.tencent.mm.plugin.appbrand.media.record.AudioRecordVoIPInterruptListener$StopInterruptEventListenTask com.tencent.mm.plugin.audio.BizAudioFlutterActivity com.tencent.mm.plugin.audio.broadcast.base.BaseAudioReceiver com.tencent.mm.plugin.audio.broadcast.bluetooth.BluetoothReceiver com.tencent.mm.plugin.audio.broadcast.headset.HeadsetPlugReceiver com.tencent.mm.plugin.audio.comment.view.BizCommentFooter com.tencent.mm.plugin.audio.flutter.plugin.FlutterBizAudioPlugin com.tencent.mm.plugin.audio.view.BizAudioPlayerDraggableLayout com.tencent.mm.plugin.ball.audio_panel.view.AudioPanelTaskBarBaseView com.tencent.mm.plugin.ball.audio_panel.view.AudioPanelTaskBarViewRecommendMusicList com.tencent.mm.plugin.ball.audio_panel.view.AudioPanelTaskBarViewRecommendV2
+07-24 22:47:47.082 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.ball.audio_panel.view.AudioPanelTaskBarViewV4 com.tencent.mm.plugin.ball.audio_panel.view.AudioPanelTaskBarViewV5 com.tencent.mm.plugin.ball.audio_panel.view.FloatBallAudioPanelView com.tencent.mm.plugin.ball.audio_panel.view.FloatBallAudioPanelViewNew com.tencent.mm.plugin.ball.view.FloatBallAudioWaveRootView com.tencent.mm.plugin.ball.view.FloatBallAudioWaveView com.tencent.mm.plugin.cloudvoip.cloudvoice.service.OpenVoiceVoIPInterruptListener$StartInterruptEventListenTask$2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.OpenVoiceVoIPInterruptListener$StartInterruptEventListenTask com.tencent.mm.plugin.cloudvoip.cloudvoice.service.OpenVoiceVoIPInterruptListener$StopInterruptEventListenTask com.tencent.mm.plugin.cloudvoip.cloudvoice.service.a0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.a1$$a com.tencent.mm.plugin.cloudvoip.cloudvoice.service.a1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.a2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.a3 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.a com.tencent.mm.plugin.cloudvoip.cloudvoice.service.b0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.b1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.b2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.b3 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.b com.tencent.mm.plugin.cloudvoip.cloudvoice.service.c0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.c1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.c2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.c3 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.c com.tencent.mm.plugin.cloudvoip.cloudvoice.service.d0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.d1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.d2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.d3 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.d com.tencent.mm.plugin.cloudvoip.cloudvoice.service.e0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.e1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.e2
+07-24 22:47:47.082 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.cloudvoip.cloudvoice.service.e3 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.e com.tencent.mm.plugin.cloudvoip.cloudvoice.service.f0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.f1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.f2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.f3 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.f com.tencent.mm.plugin.cloudvoip.cloudvoice.service.g0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.g1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.g2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.g com.tencent.mm.plugin.cloudvoip.cloudvoice.service.h0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.h1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.h2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.h com.tencent.mm.plugin.cloudvoip.cloudvoice.service.i0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.i1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.i2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.i com.tencent.mm.plugin.cloudvoip.cloudvoice.service.j0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.j1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.j2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.j com.tencent.mm.plugin.cloudvoip.cloudvoice.service.k0$a com.tencent.mm.plugin.cloudvoip.cloudvoice.service.k0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.k1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.k2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.k com.tencent.mm.plugin.cloudvoip.cloudvoice.service.l0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.l1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.l2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.l com.tencent.mm.plugin.cloudvoip.cloudvoice.service.m0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.m1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.m2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.m com.tencent.mm.plugin.cloudvoip.cloudvoice.service.n0
+07-24 22:47:47.083 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.cloudvoip.cloudvoice.service.n1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.n2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.n com.tencent.mm.plugin.cloudvoip.cloudvoice.service.o0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.o1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.o2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.o com.tencent.mm.plugin.cloudvoip.cloudvoice.service.p0$$a com.tencent.mm.plugin.cloudvoip.cloudvoice.service.p0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.p1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.p2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.p com.tencent.mm.plugin.cloudvoip.cloudvoice.service.q0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.q1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.q2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.q com.tencent.mm.plugin.cloudvoip.cloudvoice.service.r0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.r1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.r2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.r com.tencent.mm.plugin.cloudvoip.cloudvoice.service.s0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.s1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.s2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.s com.tencent.mm.plugin.cloudvoip.cloudvoice.service.t0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.t1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.t2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.t com.tencent.mm.plugin.cloudvoip.cloudvoice.service.u0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.u1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.u2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.u com.tencent.mm.plugin.cloudvoip.cloudvoice.service.v0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.v1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.v2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.v com.tencent.mm.plugin.cloudvoip.cloudvoice.service.w0
+07-24 22:47:47.083 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.cloudvoip.cloudvoice.service.w1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.w2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.w com.tencent.mm.plugin.cloudvoip.cloudvoice.service.x0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.x1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.x2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.x com.tencent.mm.plugin.cloudvoip.cloudvoice.service.y0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.y1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.y2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.y com.tencent.mm.plugin.cloudvoip.cloudvoice.service.z0 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.z1 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.z2 com.tencent.mm.plugin.cloudvoip.cloudvoice.service.z com.tencent.mm.plugin.collect.model.voice.F2fRcvVoiceOffLineLogic$2 com.tencent.mm.plugin.collect.model.voice.F2fRcvVoiceOffLineLogic$3 com.tencent.mm.plugin.collect.model.voice.SynthesizerNative com.tencent.mm.plugin.collect.model.voice.a com.tencent.mm.plugin.collect.model.voice.b com.tencent.mm.plugin.collect.model.voice.c com.tencent.mm.plugin.collect.model.voice.d com.tencent.mm.plugin.collect.model.voice.e$$a com.tencent.mm.plugin.collect.model.voice.e com.tencent.mm.plugin.collect.model.voice.f com.tencent.mm.plugin.collect.model.voice.g com.tencent.mm.plugin.collect.model.voice.h com.tencent.mm.plugin.collect.model.voice.i com.tencent.mm.plugin.collect.model.voice.j com.tencent.mm.plugin.collect.model.voice.k com.tencent.mm.plugin.collect.model.voice.l com.tencent.mm.plugin.collect.model.voice.m com.tencent.mm.plugin.collect.model.voice.n com.tencent.mm.plugin.collect.model.voice.o com.tencent.mm.plugin.collect.model.voice.p com.tencent.mm.plugin.collect.model.voice.q com.tencent.mm.plugin.collect.model.voice.r com.tencent.mm.plugin.collect.model.voice.s com.tencent.mm.plugin.collect.model.voice.t com.tencent.mm.plugin.component.editor.widget.voiceview.EditorVoiceBaseView
+07-24 22:47:47.096 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.component.editor.widget.voiceview.VoiceView com.tencent.mm.plugin.ext.voicecontrol.ExtControlProviderVoiceControl com.tencent.mm.plugin.fav.ui.FavChatVoiceView com.tencent.mm.plugin.fav.ui.FavPostVoiceUI com.tencent.mm.plugin.fav.ui.FavVoiceBaseView com.tencent.mm.plugin.fav.ui.detail.FavoriteVoiceDetailUI com.tencent.mm.plugin.finder.feed.FinderTingAudioCollectionUIContract$Presenter$buildItemCoverts$1 com.tencent.mm.plugin.finder.feed.model.FinderAudioCollectionLoader com.tencent.mm.plugin.finder.feed.model.FinderProfileTingAudioListLoader com.tencent.mm.plugin.finder.feed.model.FinderProfileTingAudioLoader com.tencent.mm.plugin.finder.feed.ui.FinderLiveAudioBgAlbumUI com.tencent.mm.plugin.finder.feed.ui.FinderTingAudioCollectionUI com.tencent.mm.plugin.finder.helper.FinderAudioExtractor$1 com.tencent.mm.plugin.finder.live.mic.chatvoiceroom.layout.ChatRoomSubtitleLayout$1$1 com.tencent.mm.plugin.finder.live.mic.chatvoiceroom.layout.FixedLineHeightTextView com.tencent.mm.plugin.finder.live.mic.voiceroom.LiveVoiceRoomLayoutView com.tencent.mm.plugin.finder.live.mic.voiceroom.wave.RipperAnimateView com.tencent.mm.plugin.finder.live.plugin.view.audio.FinderLiveAudioWaveRootView com.tencent.mm.plugin.finder.live.plugin.view.audio.FinderLiveAudioWaveView$Wave$createWaveAnimation$1$1 com.tencent.mm.plugin.finder.live.plugin.view.audio.FinderLiveAudioWaveView$Wave com.tencent.mm.plugin.finder.live.plugin.view.audio.FinderLiveAudioWaveView com.tencent.mm.plugin.finder.nearby.ui.special.view.PlayTogetherVoiceRoomLinkMicView$1 com.tencent.mm.plugin.finder.nearby.ui.special.view.PlayTogetherVoiceRoomLinkMicView com.tencent.mm.plugin.finder.profile.uic.FinderProfileTingAudioFragment com.tencent.mm.plugin.finder.profile.uic.FinderProfileTingAudioUIC$buildItemCoverts$1 com.tencent.mm.plugin.finder.profile.uic.FinderProfileTingAudioUIC$tingFinderProfileEvent$1 com.tencent.mm.plugin.finder.profile.uic.FinderProfileTingAudioUIC com.tencent.mm.plugin.finder.profile.uic.FinderProfileTingAudioWithCollectionUIC$initAudioListLayout$3$1
+07-24 22:47:47.105 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.finder.profile.uic.FinderProfileTingAudioWithCollectionUIC$initAudioListLayout$3$2 com.tencent.mm.plugin.finder.profile.uic.FinderProfileTingAudioWithCollectionUIC$initCollectionListLayout$2$2 com.tencent.mm.plugin.finder.profile.uic.FinderProfileTingAudioWithCollectionUIC$tingFinderProfileEvent$1 com.tencent.mm.plugin.finder.profile.uic.FinderProfileTingAudioWithCollectionUIC com.tencent.mm.plugin.finder.video.FinderAudioVolumeController$attachFinderPage$1 com.tencent.mm.plugin.finder.video.FinderAudioVolumeController$registerAudioBroadCaseReceiver$1 com.tencent.mm.plugin.finder.video.FinderAudioVolumeController$volumeKeyEvent$1 com.tencent.mm.plugin.finder.video.FinderAudioVolumeController com.tencent.mm.plugin.finder.voice.FinderLiveVoiceInputLayout com.tencent.mm.plugin.finder.voice.FinderLiveVoiceInputLayoutImpl com.tencent.mm.plugin.finder.voice.FinderLiveVoiceInputPanel com.tencent.mm.plugin.finder_audio.FinderAudioViewActivity com.tencent.mm.plugin.fts.ui.FTSBaseVoiceSearchUI$$a com.tencent.mm.plugin.fts.ui.FTSBaseVoiceSearchUI$$b com.tencent.mm.plugin.fts.ui.FTSBaseVoiceSearchUI$$c com.tencent.mm.plugin.fts.ui.FTSBaseVoiceSearchUI$$d com.tencent.mm.plugin.fts.ui.FTSBaseVoiceSearchUI com.tencent.mm.plugin.fts.ui.voice.EducationGradientMask com.tencent.mm.plugin.fts.ui.voice.FTSBStyleSoundWaveView com.tencent.mm.plugin.fts.ui.voice.FTSFloatingVoiceHalfScreenActivity com.tencent.mm.plugin.fts.ui.voice.FTSFloatingVoiceInputViewModel$enableKeyboardBindingWithAutoProvider$3 com.tencent.mm.plugin.fts.ui.voice.FTSFloatingVoiceMMHalfScreenDialogFragment com.tencent.mm.plugin.fts.ui.widget.FTSVoiceInputLayoutImpl$$a com.tencent.mm.plugin.fts.ui.widget.FTSVoiceInputLayoutImpl com.tencent.mm.plugin.fts.ui.widget.VoiceInputLayout com.tencent.mm.plugin.lite.config.LiteAppConfigModel$LiteAppConfigVoiceToText com.tencent.mm.plugin.lite.jsapi.bridge.webview.LiteAppTingAudioStateApi$liteAppCloseWindowEvent$1 com.tencent.mm.plugin.lite.jsapi.bridge.webview.LiteAppTingAudioStateApi
+07-24 22:47:47.110 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.lite.jsapi.comms.LiteAppJsApiGetBackgroundAudioState$1 com.tencent.mm.plugin.lite.jsapi.comms.LiteAppJsApiGetBackgroundAudioState$2 com.tencent.mm.plugin.lite.jsapi.comms.LiteAppJsApiGetBackgroundAudioState com.tencent.mm.plugin.lite.jsapi.comms.LiteAppJsApiSetBackgroundAudioStateMV$1 com.tencent.mm.plugin.lite.jsapi.comms.LiteAppJsApiSetBackgroundAudioStateMV$2 com.tencent.mm.plugin.lite.jsapi.comms.LiteAppJsApiSetBackgroundAudioStateMV com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyVoiceRecordUI com.tencent.mm.plugin.luckymoney.ui.voice.LuckyMoneyVoiceInputLayout com.tencent.mm.plugin.luckymoney.ui.voice.LuckyMoneyVoiceLayout com.tencent.mm.plugin.luckymoney.ui.voice.LuckyMoneyVoiceTransLayout com.tencent.mm.plugin.music.cache.ipc.IPCAudioParamRequest com.tencent.mm.plugin.music.cache.ipc.IPCAudioParamResponse com.tencent.mm.plugin.music.player.base.AudioPlayerUtils$DefaultMusicLoadLibrary com.tencent.mm.plugin.normsg.api.AudioModeStatus com.tencent.mm.plugin.profile.ui.tab.list.BizProfileTabAudioAdapter$tingPlayerListener$1 com.tencent.mm.plugin.profile.ui.tab.list.BizProfileTabAudioFragment com.tencent.mm.plugin.record.ui.RecordVoiceBaseView com.tencent.mm.plugin.recordvideo.model.audio.AudioCacheInfo com.tencent.mm.plugin.recordvideo.model.audio.LyricsInfo com.tencent.mm.plugin.recordvideo.plugin.parent.RecordCheckAudioPermissionPluginLayout com.tencent.mm.plugin.recordvideo.ui.editor.AudioWaveView com.tencent.mm.plugin.recordvideo.ui.editor.EditorAudioSearchView com.tencent.mm.plugin.recordvideo.ui.editor.EditorAudioView$a com.tencent.mm.plugin.recordvideo.ui.editor.EditorAudioView com.tencent.mm.plugin.recordvideo.ui.editor.RoundCornerAudioWaveView com.tencent.mm.plugin.recordvideo.ui.editor.audio.EditorAudioFinderFavFragment com.tencent.mm.plugin.recordvideo.ui.editor.audio.EditorAudioFinderLikeFragment com.tencent.mm.plugin.recordvideo.ui.editor.audio.EditorAudioFinderTabFragment$1 com.tencent.mm.plugin.recordvideo.ui.editor.audio.EditorAudioFinderTabFragment
+07-24 22:47:47.118 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.recordvideo.ui.editor.audio.EditorAudioSelectFinderVideoView com.tencent.mm.plugin.recordvideo.ui.editor.contract.IAudioPanelView com.tencent.mm.plugin.report.kvdata.VoiceInputBehavior com.tencent.mm.plugin.setting.ui.setting.SettingsHearingAidAudioCardView com.tencent.mm.plugin.setting.ui.setting.SettingsHearingAidAudioCardViewManager com.tencent.mm.plugin.setting.ui.setting.WaveAudioHAid com.tencent.mm.plugin.setting.ui.setting.permission.SettingVoiceAssistantPermissionUI com.tencent.mm.plugin.setting.ui.setting_new.settings.acount_info.SettingGroupVoiceLockItem com.tencent.mm.plugin.setting.ui.setting_new.settings.chatting.SettingSwitchVoicePlayMode com.tencent.mm.plugin.setting.ui.setting_new.settings.personal_info.SettingActivityItemInvoice com.tencent.mm.plugin.sight.base.AudioSoftEncoder com.tencent.mm.plugin.sns.ad.landingpage.component.comp.AdLandingMusicComponent$listenAudioEvent$1 com.tencent.mm.plugin.sns.storage.AdLandingPagesStorage.AdLandingPageComponent.component.AdLandingPageBgmVoiceComponent$initComp$2 com.tencent.mm.plugin.sns.ui.item.improve.handle.ImproveFinderMusicAudioHandle com.tencent.mm.plugin.subapp.ui.voicereminder.RemindDialog com.tencent.mm.plugin.ting.audiopush.TingAudioPushConfigLogic com.tencent.mm.plugin.ting.playapp.finderaudio.FinderAudioFloatBallHelper$screenStateReceiver$1 com.tencent.mm.plugin.ting.playapp.finderaudio.FinderAudioFloatBallView com.tencent.mm.plugin.translate.model.TextToSpeechService$readVoiceMessageAndWait$3$downloadListener$1 com.tencent.mm.plugin.transvoice.model.CutShortSentence$1 com.tencent.mm.plugin.transvoice.model.a com.tencent.mm.plugin.transvoice.model.b com.tencent.mm.plugin.transvoice.model.c com.tencent.mm.plugin.transvoice.model.d com.tencent.mm.plugin.transvoice.model.e com.tencent.mm.plugin.transvoice.ui.LanguageChoiceLayout com.tencent.mm.plugin.transvoice.ui.SelectLanguageHalfScreenDialogFragment com.tencent.mm.plugin.transvoice.ui.SelectLanguageUIC$buildItemConverts$1
+07-24 22:47:47.119 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.transvoice.ui.TransVoicePanelLayout com.tencent.mm.plugin.transvoice.ui.a0 com.tencent.mm.plugin.transvoice.ui.a com.tencent.mm.plugin.transvoice.ui.b0 com.tencent.mm.plugin.transvoice.ui.b com.tencent.mm.plugin.transvoice.ui.c0 com.tencent.mm.plugin.transvoice.ui.c com.tencent.mm.plugin.transvoice.ui.d0 com.tencent.mm.plugin.transvoice.ui.d com.tencent.mm.plugin.transvoice.ui.e0 com.tencent.mm.plugin.transvoice.ui.e com.tencent.mm.plugin.transvoice.ui.f0 com.tencent.mm.plugin.transvoice.ui.f com.tencent.mm.plugin.transvoice.ui.g0 com.tencent.mm.plugin.transvoice.ui.g com.tencent.mm.plugin.transvoice.ui.h0 com.tencent.mm.plugin.transvoice.ui.h com.tencent.mm.plugin.transvoice.ui.i0 com.tencent.mm.plugin.transvoice.ui.i com.tencent.mm.plugin.transvoice.ui.j0 com.tencent.mm.plugin.transvoice.ui.j com.tencent.mm.plugin.transvoice.ui.k0 com.tencent.mm.plugin.transvoice.ui.k com.tencent.mm.plugin.transvoice.ui.l0 com.tencent.mm.plugin.transvoice.ui.l com.tencent.mm.plugin.transvoice.ui.m0 com.tencent.mm.plugin.transvoice.ui.m com.tencent.mm.plugin.transvoice.ui.n0 com.tencent.mm.plugin.transvoice.ui.n com.tencent.mm.plugin.transvoice.ui.o0 com.tencent.mm.plugin.transvoice.ui.o com.tencent.mm.plugin.transvoice.ui.p0 com.tencent.mm.plugin.transvoice.ui.p com.tencent.mm.plugin.transvoice.ui.q0 com.tencent.mm.plugin.transvoice.ui.q com.tencent.mm.plugin.transvoice.ui.r0 com.tencent.mm.plugin.transvoice.ui.r com.tencent.mm.plugin.transvoice.ui.s0 com.tencent.mm.plugin.transvoice.ui.s com.tencent.mm.plugin.transvoice.ui.t0 com.tencent.mm.plugin.transvoice.ui.t com.tencent.mm.plugin.transvoice.ui.u0 com.tencent.mm.plugin.transvoice.ui.u com.tencent.mm.plugin.transvoice.ui.v0 com.tencent.mm.plugin.transvoice.ui.v com.tencent.mm.plugin.transvoice.ui.w0 com.tencent.mm.plugin.transvoice.ui.w com.tencent.mm.plugin.transvoice.ui.x com.tencent.mm.plugin.transvoice.ui.y com.tencent.mm.plugin.transvoice.ui.z com.tencent.mm.plugin.voiceprint.model.VertifyInfo
+07-24 22:47:47.119 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.voiceprint.ui.BaseVoicePrintUI$$a com.tencent.mm.plugin.voiceprint.ui.BaseVoicePrintUI com.tencent.mm.plugin.voiceprint.ui.NoiseDetectMaskView$$a com.tencent.mm.plugin.voiceprint.ui.NoiseDetectMaskView com.tencent.mm.plugin.voiceprint.ui.VoiceCreateUI$$a com.tencent.mm.plugin.voiceprint.ui.VoiceCreateUI$1 com.tencent.mm.plugin.voiceprint.ui.VoiceCreateUI com.tencent.mm.plugin.voiceprint.ui.VoiceLoginUI com.tencent.mm.plugin.voiceprint.ui.VoicePrintCreateFinishUI com.tencent.mm.plugin.voiceprint.ui.VoicePrintStateSettingUI com.tencent.mm.plugin.voiceprint.ui.VoicePrintVolumeMeter com.tencent.mm.plugin.voiceprint.ui.VoiceResetUI com.tencent.mm.plugin.voiceprint.ui.VoiceTipInfoView com.tencent.mm.plugin.voiceprint.ui.VoiceUnLockUI com.tencent.mm.plugin.voiceprint.ui.a0 com.tencent.mm.plugin.voiceprint.ui.a com.tencent.mm.plugin.voiceprint.ui.b0 com.tencent.mm.plugin.voiceprint.ui.b com.tencent.mm.plugin.voiceprint.ui.c0 com.tencent.mm.plugin.voiceprint.ui.c com.tencent.mm.plugin.voiceprint.ui.d0 com.tencent.mm.plugin.voiceprint.ui.d com.tencent.mm.plugin.voiceprint.ui.e0 com.tencent.mm.plugin.voiceprint.ui.e com.tencent.mm.plugin.voiceprint.ui.f0 com.tencent.mm.plugin.voiceprint.ui.f com.tencent.mm.plugin.voiceprint.ui.g0 com.tencent.mm.plugin.voiceprint.ui.g com.tencent.mm.plugin.voiceprint.ui.h0 com.tencent.mm.plugin.voiceprint.ui.h com.tencent.mm.plugin.voiceprint.ui.i0 com.tencent.mm.plugin.voiceprint.ui.i com.tencent.mm.plugin.voiceprint.ui.j0 com.tencent.mm.plugin.voiceprint.ui.j com.tencent.mm.plugin.voiceprint.ui.k0 com.tencent.mm.plugin.voiceprint.ui.k com.tencent.mm.plugin.voiceprint.ui.l0 com.tencent.mm.plugin.voiceprint.ui.l com.tencent.mm.plugin.voiceprint.ui.m0 com.tencent.mm.plugin.voiceprint.ui.m com.tencent.mm.plugin.voiceprint.ui.n0 com.tencent.mm.plugin.voiceprint.ui.n com.tencent.mm.plugin.voiceprint.ui.o0 com.tencent.mm.plugin.voiceprint.ui.o com.tencent.mm.plugin.voiceprint.ui.p0 com.tencent.mm.plugin.voiceprint.ui.p
+07-24 22:47:47.126 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.plugin.voiceprint.ui.q0 com.tencent.mm.plugin.voiceprint.ui.q com.tencent.mm.plugin.voiceprint.ui.r0 com.tencent.mm.plugin.voiceprint.ui.r com.tencent.mm.plugin.voiceprint.ui.s0 com.tencent.mm.plugin.voiceprint.ui.s com.tencent.mm.plugin.voiceprint.ui.t0 com.tencent.mm.plugin.voiceprint.ui.t com.tencent.mm.plugin.voiceprint.ui.u0 com.tencent.mm.plugin.voiceprint.ui.u com.tencent.mm.plugin.voiceprint.ui.v0 com.tencent.mm.plugin.voiceprint.ui.v com.tencent.mm.plugin.voiceprint.ui.w0 com.tencent.mm.plugin.voiceprint.ui.w com.tencent.mm.plugin.voiceprint.ui.x0 com.tencent.mm.plugin.voiceprint.ui.x com.tencent.mm.plugin.voiceprint.ui.y0 com.tencent.mm.plugin.voiceprint.ui.y com.tencent.mm.plugin.voiceprint.ui.z0 com.tencent.mm.plugin.voiceprint.ui.z com.tencent.mm.plugin.webview.model.WebViewJSSDKVoiceItem com.tencent.mm.plugin.webview.ui.tools.audio.AddItemToPlayLaterIPCTask$Args com.tencent.mm.plugin.webview.ui.tools.audio.AddItemToPlayLaterIPCTask$Result com.tencent.mm.plugin.wenote.ui.nativenote.voiceview.NoteEditorVoiceBaseView com.tencent.mm.plugin.wenote.ui.nativenote.voiceview.NoteVoiceView com.tencent.mm.pluginsdk.ui.VoiceInputFooter$$a com.tencent.mm.pluginsdk.ui.VoiceInputFooter$$b com.tencent.mm.pluginsdk.ui.VoiceInputFooter com.tencent.mm.pluginsdk.ui.VoiceInputLayout com.tencent.mm.pluginsdk.ui.VoiceInputLayoutImpl com.tencent.mm.pluginsdk.ui.VoiceInputScrollView com.tencent.mm.pluginsdk.ui.VoiceInputUI com.tencent.mm.pluginsdk.ui.chat.VoiceInputPanel$12 com.tencent.mm.pluginsdk.ui.websearch.WebSearchVoiceInputLayoutImpl com.tencent.mm.pluginsdk.ui.websearch.WebSearchVoiceInputPanel$3 com.tencent.mm.repairer.config.chatting.RepairerConfigAttachVoiceInput com.tencent.mm.repairer.config.chatting.RepairerConfigResetVoice2TxtGuidance com.tencent.mm.repairer.config.chatting.RepairerConfigSetVoiceInputLongclickTime com.tencent.mm.repairer.config.chatting.RepairerConfigVoice60minAutoSend com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceBackPlay
+07-24 22:47:47.128 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceDialectRecognize com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceInputGuide com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceInputIlink com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceInputInstruction com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceInputLongClick com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceInputLongClickGuide com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceInputNewIcon com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceInputOpus com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceInputStopFlush com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceMsgIlink com.tencent.mm.repairer.config.chatting.RepairerConfigVoicePlaySpeedUpSpeed com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceRecordUseBluetooth com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceResumeIgnoreOther com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceSpeakerSeek com.tencent.mm.repairer.config.chatting.RepairerConfigVoiceTransformScrollOpt com.tencent.mm.repairer.config.conversation.RepairerConfigConvVoiceDigestColorChange com.tencent.mm.repairer.config.demo.RepairerActivityVoiceDemo com.tencent.mm.repairer.config.fts.RepairerConfigFTSVoiceMsgEnable com.tencent.mm.repairer.config.fundation.RepairerConfigVideoAudioLimitList com.tencent.mm.repairer.config.fundation.RepairerConfigVideoAudioLimitMute com.tencent.mm.repairer.config.fundation.RepairerConfigVideoAudioLimitSelect com.tencent.mm.repairer.config.ilink_voip.RepairerConfigVoIPMPAudioEnable com.tencent.mm.repairer.config.msgrefactor.RepairerConfigVoiceC2CPathRefactor com.tencent.mm.repairer.config.msgsend.RepairerConfigNewDownloadVoice com.tencent.mm.repairer.config.msgsend.RepairerConfigNewDownloadVoiceForceCgi com.tencent.mm.repairer.config.msgsend.RepairerConfigNewSendVoice com.tencent.mm.repairer.config.msgsend.RepairerConfigNewSendVoiceMode
+07-24 22:47:47.134 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.repairer.config.search.RepairerConfigFTSFloatingVoiceInputUI com.tencent.mm.repairer.config.search.RepairerConfigFTSFloatingVoiceSearch com.tencent.mm.repairer.config.search.RepairerConfigFTSVoiceInputBStyle com.tencent.mm.repairer.config.search.RepairerConfigFTSVoiceInputShowProcessText com.tencent.mm.repairer.config.search.RepairerConfigVoiceSearchNewStyle com.tencent.mm.repairer.config.search.RepairerConfigWebSearchVoiceASRExptArg com.tencent.mm.repairer.config.search.RepairerConfigWebSearchVoiceILink com.tencent.mm.repairer.config.search.RepairerConfigWebSearchVoiceOpus com.tencent.mm.repairer.config.ting.RepairerConfigFinderAudioAppEnable com.tencent.mm.repairer.config.ting.RepairerConfigFinderAudioEntryEnable com.tencent.mm.repairer.config.ting.RepairerConfigTingAudioTimelineEntry com.tencent.mm.repairer.config.ting.RepairerConfigTingRadioAudioSquare com.tencent.mm.repairer.config.ting.RepairerGroupTingAudioPush com.tencent.mm.repairer.config.ting.audiopush.RepairerConfigTingAudioPushNoMinInterval com.tencent.mm.repairer.config.ting.audiopush.RepairerConfigTingAudioPushOpen com.tencent.mm.repairer.config.ting.audiopush.RepairerConfigTingAudioPushOutdoor com.tencent.mm.repairer.config.ting.audiopush.RepairerConfigTingAudioPushPlayDirectly com.tencent.mm.repairer.config.ting.player.RepairerConfigTingFinderAudioPreferPlayMv com.tencent.mm.repairer.config.voip.setting.RepairerConfigVoIPRingBackAudio com.tencent.mm.repairer.config.voip.setting.RepairerConfigVoIPUseLEAudioProfile com.tencent.mm.transvoice.ui.RingView com.tencent.mm.transvoice.ui.SoundWaveView com.tencent.mm.ui.base.VoiceSearchEditText com.tencent.mm.ui.chatting.component.ChattingVoice2TxtComponent$listenSendMsgSuccess$listener$1 com.tencent.mm.ui.chatting.component.VoiceComponent$3$$a com.tencent.mm.ui.chatting.component.VoiceComponent$3 com.tencent.mm.ui.chatting.component.VoiceComponent$4 com.tencent.mm.ui.chatting.component.VoiceComponent$6 com.tencent.mm.ui.voicesearch.SearchConversationResultUI
+07-24 22:47:47.140 [main] VF: ◆ALL voice classes (cont): com.tencent.mm.ui.voicesearch.VoiceSearchResultUI com.tencent.mm.ui.websearch.WebSearchVoiceUI com.tencent.mm.vfs.VoiceGCFileSystem com.tencent.mm.view.VoiceAnimImageView com.tencent.mm.xeffect.WeAudioCls com.tencent.mm.xwebutil.XWebAudioPlayerProgress com.tencent.mm.xwebutil.XWebAudioPlayerProgressBall com.tencent.pigeon.biz_audio.BizAudioApi$Companion$codec$2 com.tencent.pigeon.biz_audio.BizAudioApi$Companion$setUp$1$1 com.tencent.pigeon.biz_audio.BizAudioApi$Companion$setUp$2$1 com.tencent.pigeon.biz_audio.BizAudioApi$Companion$setUp$3$1$1 com.tencent.pigeon.biz_audio.BizAudioApi$Companion$setUp$3$1 com.tencent.pigeon.biz_audio.BizAudioApi$Companion$setUp$4$1$1 com.tencent.pigeon.biz_audio.BizAudioApi$Companion$setUp$4$1 com.tencent.pigeon.biz_audio.BizAudioApi$Companion$setUp$5$1$1 com.tencent.pigeon.biz_audio.BizAudioApi$Companion$setUp$5$1 com.tencent.pigeon.biz_audio.BizAudioApi$Companion com.tencent.pigeon.biz_audio.BizAudioApi com.tencent.pigeon.biz_audio.BizAudioApiCodec com.tencent.pigeon.biz_audio.BizAudioArticleInfo$Companion com.tencent.pigeon.biz_audio.BizAudioArticleInfo com.tencent.pigeon.biz_audio.BizAudioPigeonKt com.tencent.pigeon.biz_audio.BizStarSnapInfo$Companion com.tencent.pigeon.biz_audio.BizStarSnapInfo com.tencent.pigeon.biz_audio.FlutterError com.tencent.pigeon.flutter_voip.AudioDevice$Companion com.tencent.pigeon.flutter_voip.AudioDevice com.tencent.pigeon.flutter_voip.AudioRouteInfo$Companion com.tencent.pigeon.flutter_voip.AudioRouteInfo com.tencent.pigeon.flutter_voip.VoIPFlutterApi$onAudioOutputDeviceChanged$1 com.tencent.pigeon.flutter_voip.VoIPFlutterApi$onExternalAudioOutputDeviceChanged$1 com.tencent.pigeon.ting.TingAudioRecordCallback$Companion$codec$2 com.tencent.pigeon.ting.TingAudioRecordCallback$Companion com.tencent.pigeon.ting.TingAudioRecordCallback$onLoudnessUpdate$1 com.tencent.pigeon.ting.TingAudioRecordCallback com.tencent.pigeon.ting.TingAudioRecordConfiguration$Companion com.tencent.pigeon.ting.TingAudioRecordConfiguration
+07-24 22:47:47.141 [main] VF: ◆ALL voice classes (cont): com.tencent.pigeon.ting.TingNoteVoiceToTextApi$Companion$codec$2 com.tencent.pigeon.ting.TingNoteVoiceToTextApi$Companion$setUp$1$1 com.tencent.pigeon.ting.TingNoteVoiceToTextApi$Companion com.tencent.pigeon.ting.TingNoteVoiceToTextApi com.tencent.pigeon.ting.TingNoteVoiceToTextCallbackApi$Companion$codec$2 com.tencent.pigeon.ting.TingNoteVoiceToTextCallbackApi$Companion com.tencent.pigeon.ting.TingNoteVoiceToTextCallbackApi$onConvertFailed$1 com.tencent.pigeon.ting.TingNoteVoiceToTextCallbackApi$onConvertPartial$1 com.tencent.pigeon.ting.TingNoteVoiceToTextCallbackApi$onConvertSuccess$1 com.tencent.pigeon.ting.TingNoteVoiceToTextCallbackApi com.tencent.pigeon.ting.TingNoteVoiceToTextCallbackApiCodec com.tencent.pigeon.ting.TingNoteVoiceToTextPigeonKt com.tencent.pigeon.ting.TingVoiceRecognitionApiKt com.tencent.pigeon.ting.VoiceRecognition$Companion$codec$2 com.tencent.pigeon.ting.VoiceRecognition$Companion$setUp$1$1 com.tencent.pigeon.ting.VoiceRecognition$Companion$setUp$2$1 com.tencent.pigeon.ting.VoiceRecognition$Companion$setUp$3$1 com.tencent.pigeon.ting.VoiceRecognition$Companion$setUp$4$1 com.tencent.pigeon.ting.VoiceRecognition$Companion$setUp$5$1 com.tencent.pigeon.ting.VoiceRecognition$Companion com.tencent.pigeon.ting.VoiceRecognition com.tencent.pigeon.ting.VoiceRecognitionCallback$Companion$codec$2 com.tencent.pigeon.ting.VoiceRecognitionCallback$Companion com.tencent.pigeon.ting.VoiceRecognitionCallback$onError$1 com.tencent.pigeon.ting.VoiceRecognitionCallback$onRecognizeFinished$1 com.tencent.pigeon.ting.VoiceRecognitionCallback$onRecordFinished$1 com.tencent.pigeon.ting.VoiceRecognitionCallback$onResult$1 com.tencent.pigeon.ting.VoiceRecognitionCallback com.tencent.pigeon.ting.VoiceRecognitionCallbackCodec com.tencent.pigeon.ting.VoiceRecognitionResult$Companion com.tencent.pigeon.ting.VoiceRecognitionResult com.tencent.qqmusic.mediaplayer.AudioFormat$AudioType com.tencent.qqmusic.mediaplayer.AudioFormat com.tencent.qqmusic.mediaplayer.AudioInformation$1
+07-24 22:47:47.142 [main] VF: ◆ALL voice classes (cont): com.tencent.qqmusic.mediaplayer.AudioInformation com.tencent.qqmusic.mediaplayer.AudioPlayerConfigure$1 com.tencent.qqmusic.mediaplayer.AudioPlayerConfigure com.tencent.qqmusic.mediaplayer.AudioRecognition com.tencent.qqmusic.mediaplayer.CorePlayer$AudioListenerDelegate com.tencent.qqmusic.mediaplayer.IAudioTrackCreator com.tencent.qqmusic.mediaplayer.PlayStuckMonitor$onAudioTrackFlush$$inlined$apply$lambda$1 com.tencent.qqmusic.mediaplayer.audiofx.IAudioListener com.tencent.qqmusic.mediaplayer.audiofx.IAudioListenerBuilder com.tencent.qqmusic.mediaplayer.audiofx.OnBuilderStateChangedListener com.tencent.qqmusic.mediaplayer.audioplaylist.AudioPlayListItemInfo com.tencent.qqmusic.mediaplayer.audioplaylist.TrackInfo$1 com.tencent.qqmusic.mediaplayer.audioplaylist.TrackInfo com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetDetector$CSRecognizerInfo com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetDetector com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetMatch com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_2022$CharsetRecog_2022CN com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_2022$CharsetRecog_2022JP com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_2022$CharsetRecog_2022KR com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_2022 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_UTF8 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_Unicode$CharsetRecog_UTF_16_BE com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_Unicode$CharsetRecog_UTF_16_LE com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_Unicode$CharsetRecog_UTF_32 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_Unicode$CharsetRecog_UTF_32_BE com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_Unicode$CharsetRecog_UTF_32_LE
+07-24 22:47:47.142 [main] VF: ◆ALL voice classes (cont): com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_Unicode com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_mbcs$CharsetRecog_big5 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_mbcs$CharsetRecog_euc$CharsetRecog_euc_jp com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_mbcs$CharsetRecog_euc$CharsetRecog_euc_kr com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_mbcs$CharsetRecog_euc com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_mbcs$CharsetRecog_gb_18030 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_mbcs$CharsetRecog_sjis com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_mbcs$iteratedChar com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_mbcs com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_8859_1 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_8859_2 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_8859_5 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_8859_5_ru com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_8859_6 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_8859_6_ar com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_8859_7 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_8859_7_el com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_8859_8 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_8859_8_I_he com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_8859_8_he
+07-24 22:47:47.143 [main] VF: ◆ALL voice classes (cont): com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_8859_9 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_8859_9_tr com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_IBM420_ar com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_IBM420_ar_ltr com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_IBM420_ar_rtl com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_IBM424_he com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_IBM424_he_ltr com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_IBM424_he_rtl com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_KOI8_R com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_windows_1251 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$CharsetRecog_windows_1256 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$NGramParser com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$NGramParser_IBM420 com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs$NGramsPlusLang com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecog_sbcs com.tencent.qqmusic.mediaplayer.audioplaylist.charsetdetector.CharsetRecognizer com.tencent.qqmusic.mediaplayer.audioplaylist.itemparser.AudioPlayListItemParser com.tencent.qqmusic.mediaplayer.audioplaylist.itemparser.AudioPlayListItemParserFactory com.tencent.qqmusic.mediaplayer.audioplaylist.itemparser.CueItemParser com.tencent.qqmusic.mediaplayer.audioplaylist.itemparser.ParseException com.tencent.qqmusic.mediaplayer.codec.IAudioRecognition com.tencent.qqmusic.mediaplayer.util.AudioTrackMonitor$1
+07-24 22:47:47.144 [main] VF: ◆ALL voice classes (cont): com.tencent.qqmusic.mediaplayer.util.AudioTrackMonitor com.tencent.qqmusic.mediaplayer.utils.AudioUtil com.tencent.qqmusicplayerprocess.audio.playermanager.EKeyDecryptor com.tencent.qqpinyin.voicerecoapi.TRSpeexNative com.tencent.qqpinyin.voicerecoapi.TRVADNative com.tencent.qqpinyin.voicerecoapi.a com.tencent.qqpinyin.voicerecoapi.b com.tencent.qqpinyin.voicerecoapi.c com.tencent.rtmp.TXLivePlayer$ITXAudioRawDataListener com.tencent.rtmp.TXLivePlayer$ITXAudioVolumeEvaluationListener com.tencent.rtmp.TXLivePusher$AudioCustomProcessListener com.tencent.rtmp.TXLivePusher$ITXAudioVolumeEvaluationListener com.tencent.tav.core.AssetExportThread$AudioFrameOperateTimeoutCallback com.tencent.tav.core.AssetExportThread$AudioRequestMediaDataCallback com.tencent.tav.core.AssetExportThread$AudioWriterProgressListener com.tencent.tav.core.AssetReaderAudioMixOutput com.tencent.tav.core.AssetWriterInput$WriterAudioRunnable com.tencent.tav.core.AudioCompositionDecoderTrack$DecoderThread com.tencent.tav.core.AudioCompositionDecoderTrack com.tencent.tav.core.AudioCompositor com.tencent.tav.core.AudioMix com.tencent.tav.core.AudioMixInputParameters$VolumeRange com.tencent.tav.core.AudioMixInputParameters com.tencent.tav.core.AudioResample com.tencent.tav.core.AudioTapProcessor com.tencent.tav.core.MutableAudioMix com.tencent.tav.core.MutableAudioMixInputParameters com.tencent.tav.core.audio.AudioExportRunner com.tencent.tav.core.audio.AudioExportSession com.tencent.tav.core.audio.AudioExportTask$1 com.tencent.tav.core.audio.AudioExportTask$SegmentStatus com.tencent.tav.core.audio.AudioExportTask com.tencent.tav.core.audio.AudioSourceComposition com.tencent.tav.core.audio.AudioSourceTrack com.tencent.tav.core.audio.EncoderUtils com.tencent.tav.core.audio.ExportCallback com.tencent.tav.core.audio.IAudioExportTask com.tencent.tav.core.audio.IAudioSource com.tencent.tav.core.parallel.newversion.AssetSingleExportThread$AudioFrameOperateTimeoutCallback com.tencent.tav.core.parallel.newversion.AssetSingleExportThread$AudioRequestMediaDataCallback
+07-24 22:47:47.145 [main] VF: ◆ALL voice classes (cont): com.tencent.tav.core.parallel.newversion.AssetSingleExportThread$AudioWriterProgressListener com.tencent.tav.decoder.AssetWriterAudioEncoder com.tencent.tav.decoder.AudioDecoder$1 com.tencent.tav.decoder.AudioDecoder$PendingFrame com.tencent.tav.decoder.AudioDecoder com.tencent.tav.decoder.AudioDecoderTrack$1 com.tencent.tav.decoder.AudioDecoderTrack$AudioDecoderCreateThread com.tencent.tav.decoder.AudioDecoderTrack$CacheBuffer com.tencent.tav.decoder.AudioDecoderTrack$DecoderThread com.tencent.tav.decoder.AudioDecoderTrack$DecoderWrapper com.tencent.tav.decoder.AudioDecoderTrack$ReleaseDecoderThread com.tencent.tav.decoder.AudioDecoderTrack com.tencent.tav.decoder.AudioInfo com.tencent.tav.decoder.AudioMixer com.tencent.tav.decoder.MediaCodecAudioEncoder com.tencent.tav.player.AudioFocusHelper$1 com.tencent.tav.player.AudioFocusHelper com.tencent.tav.player.AudioTrackWrapper$AudioTrackConfig com.tencent.tav.player.AudioTrackWrapper com.tencent.tav.player.PlayerThreadAudio com.tencent.tav.report.AudioBufferPrintHelper$Instance com.tencent.tav.report.AudioBufferPrintHelper com.tencent.tavkit.composition.audio.TAVAudioConfigurationSegment com.tencent.tavkit.composition.audio.TAVAudioMixInputParameters com.tencent.tavkit.composition.audio.TAVAudioProcessorNode$TAVAudioProcessorEffect com.tencent.tavkit.composition.audio.TAVAudioProcessorNode com.tencent.tavkit.composition.audio.TAVAudioTapProcessor com.tencent.tavkit.composition.audio.TAVAudioTransition com.tencent.tavkit.composition.builder.AudioInfo com.tencent.tavkit.composition.builder.AudioMixInfo com.tencent.tavkit.composition.builder.AudioParamsBuilder com.tencent.tavkit.composition.builder.AudioParamsInfo com.tencent.tavkit.composition.builder.AudioTransitionInfo com.tencent.tavkit.composition.model.TAVAudio com.tencent.tavkit.composition.model.TAVAudioCompositionTrack com.tencent.tavkit.composition.model.TAVAudioConfiguration$VolumeEdge com.tencent.tavkit.composition.model.TAVAudioConfiguration
+07-24 22:47:47.146 [main] VF: ◆ALL voice classes (cont): com.tencent.tavkit.composition.model.TAVTransition$EmptyAudioTransition com.tencent.tavkit.composition.model.TAVTransitionableAudio com.tencent.thumbplayer.adapter.TPPlaybackParams$AudioTrackAttribute com.tencent.thumbplayer.adapter.player.ITPPlayerBaseListener$IOnAudioPcmOutListener com.tencent.thumbplayer.adapter.player.ITPPlayerBaseListener$IOnAudioProcessOutListener com.tencent.thumbplayer.adapter.strategy.utils.TPNativeKeyMap$MapAudioAVSyncStrategy com.tencent.thumbplayer.adapter.strategy.utils.TPNativeKeyMap$MapAudioCodecType com.tencent.thumbplayer.adapter.strategy.utils.TPNativeKeyMap$MapAudioDecoderType com.tencent.thumbplayer.adapter.strategy.utils.TPNativeKeyMap$MapAudioSampleFormat com.tencent.thumbplayer.adapter.strategy.utils.TPNativeKeyMap$MapTPAudioAttributeContentType com.tencent.thumbplayer.adapter.strategy.utils.TPNativeKeyMap$MapTPAudioAttributeFlag com.tencent.thumbplayer.adapter.strategy.utils.TPNativeKeyMap$MapTPAudioAttributeStreamType com.tencent.thumbplayer.adapter.strategy.utils.TPNativeKeyMap$MapTPAudioAttributeUsage com.tencent.thumbplayer.api.ITPPlayerListener$IOnAudioFrameOutputListener com.tencent.thumbplayer.api.ITPPlayerListener$IOnAudioProcessFrameOutputListener com.tencent.thumbplayer.api.TPAudioAVSyncStrategy$TP_AUDIO_AVSYNC_STRATEGY com.tencent.thumbplayer.api.TPAudioAVSyncStrategy com.tencent.thumbplayer.api.TPAudioAttributes$1 com.tencent.thumbplayer.api.TPAudioAttributes$Builder com.tencent.thumbplayer.api.TPAudioAttributes$TPAudioAttributeContentType com.tencent.thumbplayer.api.TPAudioAttributes$TPAudioAttributeFlag com.tencent.thumbplayer.api.TPAudioAttributes$TPAudioAttributeStreamType com.tencent.thumbplayer.api.TPAudioAttributes$TPAudioAttributeUsage com.tencent.thumbplayer.api.TPAudioAttributes com.tencent.thumbplayer.api.TPAudioFrameBuffer$TP_AUDIO_CH_LAYOUT com.tencent.thumbplayer.api.TPAudioFrameBuffer com.tencent.thumbplayer.api.TPCommonEnum$InnerAudioAVSyncStrategy com.tencent.thumbplayer.api.TPCommonEnum$InnerAudioCodecType
+07-24 22:47:47.148 [main] VF: ◆ALL voice classes (cont): com.tencent.thumbplayer.api.TPCommonEnum$InnerAudioDecoderType com.tencent.thumbplayer.api.TPCommonEnum$InnerAudioSampleFormat com.tencent.thumbplayer.api.TPCommonEnum$TP_AUDIO_CODEC_TYPE com.tencent.thumbplayer.api.TPCommonEnum$TP_AUDIO_DECODER_TYPE com.tencent.thumbplayer.api.TPCommonEnum$TP_AUDIO_SAMPLE_FORMAT com.tencent.thumbplayer.api.TPPlayerMsg$TPAudioTrackInfo com.tencent.thumbplayer.core.common.TPAudioFrame com.tencent.thumbplayer.core.common.TPAudioPassThroughCapabilities com.tencent.thumbplayer.core.common.TPAudioPassThroughPluginCallbackToNative com.tencent.thumbplayer.core.common.TPAudioPassThroughPluginDetector$1 com.tencent.thumbplayer.core.common.TPAudioPassThroughPluginDetector$AudioPassThroughPluginListener com.tencent.thumbplayer.core.common.TPAudioPassThroughPluginDetector$HdmiAudioPlugBroadcastReceiver com.tencent.thumbplayer.core.common.TPAudioPassThroughPluginDetector com.tencent.thumbplayer.core.common.TPNativeAudioAVSyncStrategy com.tencent.thumbplayer.core.common.TPNativeAudioAttributes$1 com.tencent.thumbplayer.core.common.TPNativeAudioAttributes$Builder com.tencent.thumbplayer.core.common.TPNativeAudioAttributes$TPNativeAudioAttributeContentType com.tencent.thumbplayer.core.common.TPNativeAudioAttributes$TPNativeAudioAttributeFlag com.tencent.thumbplayer.core.common.TPNativeAudioAttributes$TPNativeAudioAttributeStreamType com.tencent.thumbplayer.core.common.TPNativeAudioAttributes$TPNativeAudioAttributeUsage com.tencent.thumbplayer.core.common.TPNativeAudioAttributes com.tencent.thumbplayer.core.decoder.TPMediaCodecAudioDecoder com.tencent.thumbplayer.core.player.ITPNativePlayerAudioFrameCallback com.tencent.thumbplayer.tmediacodec.codec.AudioCodecWrapper com.tencent.thumbplayer.tplayer.TPThreadSwitchCommons$TPAudioTrackSourceParams com.tencent.trtc.TRTCCloudDef$TRTCAudioEffectParam com.tencent.trtc.TRTCCloudDef$TRTCAudioFrame com.tencent.trtc.TRTCCloudDef$TRTCAudioFrameCallbackFormat com.tencent.trtc.TRTCCloudDef$TRTCAudioParallelParams
+07-24 22:47:47.149 [main] VF: ◆ALL voice classes (cont): com.tencent.trtc.TRTCCloudDef$TRTCAudioRecordingParams com.tencent.trtc.TRTCCloudDef$TRTCAudioVolumeEvaluateParams com.tencent.trtc.TRTCCloudListener$TRTCAudioFrameListener com.tencent.trtc.hardwareearmonitor.daisy.DaisyAudioFeaturesKit com.tencent.trtc.hardwareearmonitor.daisy.DaisyAudioKaraokeFeatureKit$1 com.tencent.trtc.hardwareearmonitor.daisy.DaisyAudioKaraokeFeatureKit$2 com.tencent.trtc.hardwareearmonitor.daisy.DaisyAudioKaraokeFeatureKit$ParameName com.tencent.trtc.hardwareearmonitor.daisy.DaisyAudioKaraokeFeatureKit com.tencent.trtc.hardwareearmonitor.daisy.DaisyAudioKit$1 com.tencent.trtc.hardwareearmonitor.daisy.DaisyAudioKit$2 com.tencent.trtc.hardwareearmonitor.daisy.DaisyAudioKit$FeatureType com.tencent.trtc.hardwareearmonitor.daisy.DaisyAudioKit com.tencent.trtc.hardwareearmonitor.daisy.IDaisyAudioEngine$Stub$a com.tencent.trtc.hardwareearmonitor.daisy.IDaisyAudioEngine$Stub com.tencent.trtc.hardwareearmonitor.daisy.IDaisyAudioEngine com.tencent.trtc.hardwareearmonitor.daisy.IDaisyAudioKaraokeFeature$Stub$a com.tencent.trtc.hardwareearmonitor.daisy.IDaisyAudioKaraokeFeature$Stub com.tencent.trtc.hardwareearmonitor.daisy.IDaisyAudioKaraokeFeature com.tencent.trtc.hardwareearmonitor.daisy.IDaisyAudioKitCallback com.tencent.trtc.hardwareearmonitor.honor.HonorAudioClient$1 com.tencent.trtc.hardwareearmonitor.honor.HonorAudioClient$2 com.tencent.trtc.hardwareearmonitor.honor.HonorAudioClient$ServiceType com.tencent.trtc.hardwareearmonitor.honor.HonorAudioClient com.tencent.trtc.hardwareearmonitor.honor.HonorAudioFeaturesKit com.tencent.trtc.hardwareearmonitor.honor.HonorAudioPlayClient$1 com.tencent.trtc.hardwareearmonitor.honor.HonorAudioPlayClient$2 com.tencent.trtc.hardwareearmonitor.honor.HonorAudioPlayClient com.tencent.trtc.hardwareearmonitor.honor.IHonorAudioPlayService$Default com.tencent.trtc.hardwareearmonitor.honor.IHonorAudioPlayService$Stub$Proxy com.tencent.trtc.hardwareearmonitor.honor.IHonorAudioPlayService$Stub com.tencent.trtc.hardwareearmonitor.honor.IHonorAudioPlayService
+07-24 22:47:47.171 [main] VF: ◆ALL voice classes (cont): com.tencent.trtc.hardwareearmonitor.honor.IHonorAudioService$Default com.tencent.trtc.hardwareearmonitor.honor.IHonorAudioService$Stub$Proxy com.tencent.trtc.hardwareearmonitor.honor.IHonorAudioService$Stub com.tencent.trtc.hardwareearmonitor.honor.IHonorAudioService com.tencent.trtc.hardwareearmonitor.honor.IHonorAudioServiceCallback org.webrtc.AudioDecoderFactoryFactory org.webrtc.AudioEncoderFactoryFactory org.webrtc.AudioProcessingFactory org.webrtc.AudioSource org.webrtc.AudioTrack org.webrtc.BuiltinAudioDecoderFactoryFactory org.webrtc.BuiltinAudioEncoderFactoryFactory org.webrtc.audio.AudioDeviceModule org.webrtc.audio.JavaAudioDeviceModule$1 org.webrtc.audio.JavaAudioDeviceModule$AudioRecordErrorCallback org.webrtc.audio.JavaAudioDeviceModule$AudioRecordStartErrorCode org.webrtc.audio.JavaAudioDeviceModule$AudioRecordStateCallback org.webrtc.audio.JavaAudioDeviceModule$AudioSamples org.webrtc.audio.JavaAudioDeviceModule$AudioTrackErrorCallback org.webrtc.audio.JavaAudioDeviceModule$AudioTrackStartErrorCode org.webrtc.audio.JavaAudioDeviceModule$AudioTrackStateCallback org.webrtc.audio.JavaAudioDeviceModule$Builder org.webrtc.audio.JavaAudioDeviceModule$SamplesReadyCallback org.webrtc.audio.JavaAudioDeviceModule org.webrtc.audio.LegacyAudioDeviceModule org.webrtc.audio.LowLatencyAudioBufferManager org.webrtc.audio.VolumeLogger$LogVolumeTask org.webrtc.audio.VolumeLogger org.webrtc.audio.WebRtcAudioEffects org.webrtc.audio.WebRtcAudioManager org.webrtc.audio.WebRtcAudioRecord$$a org.webrtc.audio.WebRtcAudioRecord$1 org.webrtc.audio.WebRtcAudioRecord$AudioRecordThread org.webrtc.audio.WebRtcAudioRecord org.webrtc.audio.WebRtcAudioTrack$AudioTrackThread org.webrtc.audio.WebRtcAudioTrack org.webrtc.audio.WebRtcAudioUtils org.webrtc.voiceengine.BuildInfo org.webrtc.voiceengine.WebRtcAudioEffects org.webrtc.voiceengine.WebRtcAudioManager$VolumeLogger$LogVolumeTask org.webrtc.voiceengine.WebRtcAudioManager$VolumeLogger org.webrtc.voiceengine.WebRtcAudioManager
+07-24 22:47:47.178 [main] VF: ◆ALL voice classes (cont): org.webrtc.voiceengine.WebRtcAudioRecord$1 org.webrtc.voiceengine.WebRtcAudioRecord$AudioRecordStartErrorCode org.webrtc.voiceengine.WebRtcAudioRecord$AudioRecordThread org.webrtc.voiceengine.WebRtcAudioRecord$AudioSamples org.webrtc.voiceengine.WebRtcAudioRecord$WebRtcAudioRecordErrorCallback org.webrtc.voiceengine.WebRtcAudioRecord$WebRtcAudioRecordSamplesReadyCallback org.webrtc.voiceengine.WebRtcAudioRecord org.webrtc.voiceengine.WebRtcAudioTrack$AudioTrackStartErrorCode org.webrtc.voiceengine.WebRtcAudioTrack$AudioTrackThread org.webrtc.voiceengine.WebRtcAudioTrack$ErrorCallback org.webrtc.voiceengine.WebRtcAudioTrack$WebRtcAudioTrackErrorCallback org.webrtc.voiceengine.WebRtcAudioTrack org.webrtc.voiceengine.WebRtcAudioUtils total=1271
+07-24 22:47:47.199 [main] VF: ready — do a native forward to trace API
+07-24 22:47:47.201 [leshao-scheduler] SchedulerService: scheduler started
+07-24 22:47:47.338 [initThread] VF: ◆VOC com.tencent.mm.plugin.appbrand.jsapi.audio.h.getQualifierAttribute("onProcess")
+07-24 22:47:47.339 [initThread] VF: ◆VOC com.tencent.mm.plugin.appbrand.jsapi.audio.h.getQualifierAttribute("accountAware")
+07-24 22:47:47.339 [initThread] VF: ◆VOC com.tencent.mm.plugin.appbrand.jsapi.audio.h.hasKey(a)
+07-24 22:47:47.378 [initThread] VF: ◆VOC com.tencent.mm.plugin.appbrand.jsapi.audio.r3.getQualifierAttribute("onProcess")
+07-24 22:47:47.379 [initThread] VF: ◆VOC com.tencent.mm.plugin.appbrand.jsapi.audio.r3.getQualifierAttribute("accountAware")
+07-24 22:47:47.380 [initThread] VF: ◆VOC com.tencent.mm.plugin.appbrand.jsapi.audio.r3.hasKey(a)
+07-24 22:47:47.516 [main] TtsEngine: TTS init OK
+07-24 22:47:48.588 [main] VF: ◆VOC com.tencent.mm.plugin.appbrand.jsapi.audio.h.getQualifierAttribute("onProcess")
+07-24 22:47:48.590 [main] VF: ◆VOC com.tencent.mm.plugin.appbrand.jsapi.audio.h.getQualifierAttribute("accountAware")
+07-24 22:47:48.590 [main] VF: ◆VOC com.tencent.mm.plugin.appbrand.jsapi.audio.h.hasKey(a)
+07-24 22:47:48.592 [main] VF: ◆VOC com.tencent.mm.plugin.appbrand.jsapi.audio.r3.getQualifierAttribute("onProcess")
+07-24 22:47:48.592 [main] VF: ◆VOC com.tencent.mm.plugin.appbrand.jsapi.audio.r3.getQualifierAttribute("accountAware")
+07-24 22:47:48.593 [main] VF: ◆VOC com.tencent.mm.plugin.appbrand.jsapi.audio.r3.hasKey(a)
+07-24 22:47:48.946 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-24 22:47:48.948 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-24 22:47:48.950 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-24 22:47:48.950 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-24 22:47:48.951 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-24 22:47:48.952 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-24 22:47:48.953 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-24 22:47:48.953 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-24 22:47:48.955 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-24 22:47:48.956 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-24 22:47:49.009 [wc_srvinit_7] VF: ◆VOC com.tencent.mm.plugin.collect.model.voice.m.d()
+07-24 22:47:49.016 [wc_srvinit_7] VF: ◆VOC com.tencent.mm.plugin.collect.model.voice.m.k(Boolean)
+07-24 22:47:49.242 [main] VF: ◆VOC com.tencent.mm.plugin.audio.broadcast.bluetooth.BluetoothReceiver.onReceive(Application,Intent)
+07-24 22:47:49.247 [main] VF: ◆VOC com.tencent.mm.plugin.audio.broadcast.bluetooth.BluetoothReceiver.a(BluetoothAdapter)
+07-24 22:47:49.686 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-24 22:47:49.690 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-24 22:47:49.692 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-24 22:47:49.693 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-24 22:47:49.695 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-24 22:47:49.994 [main] VF: qe.v0(V:Toolbar)
+07-24 22:47:50.009 [main] VF: TranslateControllerView.a(V:TranslateControllerView,Integer)
+07-24 22:47:50.081 [main] VF: zm.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-24 22:47:50.091 [main] VF: ym.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-24 22:47:50.092 [main] VF: a1.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-24 22:47:50.094 [main] VF: so.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-24 22:47:50.106 [main] VF: sf.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-24 22:47:50.107 [main] VF: s2.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-24 22:47:50.108 [main] VF: h6.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-24 22:47:50.109 [main] VF: cj.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-24 22:47:50.110 [main] VF: n7.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-24 22:47:50.111 [main] VF: g9.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-24 22:47:50.112 [main] VF: c0.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-24 22:47:50.113 [main] VF: k.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
+07-24 22:47:52.079 [[GT]ColdPool#8] MessageHook: #1 type=1->1 isSend=51 talker=23149434800@chatroom content=wxid_xyv4wqfvwrs422:
+亲子教育网课，课程内容超级实用，免费试...
+07-24 22:47:52.090 [[GT]ColdPool#8] MessageHook: #2 type=1->1 isSend=54 talker=25295891650@chatroom content=wxid_s4miygmdckeu22:
 ,【🚗 类型🚗 】车找人（私家车）...
-07-24 22:41:02.577 [[GT]ColdPool#17] MessageHook: #19 type=1->1 isSend=54 talker=25295891650@chatroom content=wxid_xt0ynq6vx05x12:
-【🚗类型🚗 】车找人（私家车）
-【...
-07-24 22:41:09.090 [[GT]ColdPool#19] DatabaseProvider: DB captured via rawQuery (EnMicroMsg: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db)
-07-24 22:41:09.092 [[GT]ColdPool#19] ContactRepository: DB ready callback, loading contacts...
-07-24 22:41:09.094 [[GT]ColdPool#19] ContactRepository: loadContacts START
-07-24 22:41:09.094 [[GT]ColdPool#19] ContactRepository: Strategy A: trying direct DB (ka5.f.s)...
-07-24 22:41:09.095 [[GT]ColdPool#19] ContactRepository: Strategy A: uin=295734952
-07-24 22:41:09.096 [[GT]ColdPool#19] ContactRepository: Strategy A: dbPath=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db
-07-24 22:41:09.098 [[GT]ColdPool#19] ContactRepository: Strategy A: trying imei=1234567890ABCDEF pwd=e13b6eb
-07-24 22:41:09.128 [[GT]ColdPool#19] ContactRepository: Strategy A: DB opened, rcontact table confirmed
-07-24 22:41:09.274 [[GT]ColdPool#19] ContactRepository: Strategy A: query OK, all=127 f=51 g=76 sex=0
-07-24 22:41:09.281 [[GT]ColdPool#19] ContactRepository: loadContacts OK via Strategy A (direct DB)
-07-24 22:41:16.682 [[GT]ColdPool#15] MessageHook: #20 type=34->34 isSend=228 talker=wxid_9ohhf82mrlgc22 content=
-07-24 22:41:16.705 [main] ContactRepository: Strategy A: DB opened, rcontact table confirmed
-07-24 22:41:16.705 [main] ContactRepository: ensureDirDb OK
-07-24 22:41:16.707 [main] MessageHandler: handle type=34 talker=wxid_9ohhf82mrlgc22 name=乐少
-07-24 22:41:17.511 [main] VoiceRelay: retry#1: no chat activity
-07-24 22:41:18.511 [main] VoiceRelay: retry#2: no chat activity
-07-24 22:41:20.212 [main] VoiceRelay: retry#3: no chat activity
+07-24 22:47:52.102 [[GT]ColdPool#8] MessageHook: #3 type=1->1 isSend=29 talker=11021177242@chatroom content=wxid_xyv4wqfvwrs422:
+亲子教育网课，课程内容超级实用，免费试...
+07-24 22:47:52.109 [[GT]ColdPool#8] MessageHook: #4 type=1->1 isSend=29 talker=11021177242@chatroom content=YANGJIAZHEN520:
+车找人
+时间:  马上出发
+起点:   化州
+终...
+07-24 22:47:52.115 [[GT]ColdPool#8] MessageHook: #5 type=1->1 isSend=36 talker=7215621333@chatroom content=YANGJIAZHEN520:
+车找人
+时间:  马上出发
+起点:   化州
+终...
+07-24 22:47:52.122 [[GT]ColdPool#8] MessageHook: #6 type=1->1 isSend=35 talker=17402151153@chatroom content=YANGJIAZHEN520:
+车找人
+时间:  马上出发
+起点:   化州
+终...
+07-24 22:47:52.129 [[GT]ColdPool#8] MessageHook: #7 type=1->1 isSend=27 talker=34831702152@chatroom content=YANGJIAZHEN520:
+车找人
+时间:  马上出发
+起点:   化州
+终...
+07-24 22:47:53.576 [[GT]ColdPool#13] MessageHook: #8 type=1->1 isSend=37 talker=23818285582@chatroom content=YANGJIAZHEN520:
+车找人
+时间:  马上出发
+起点:   化州
+终...
+07-24 22:47:57.451 [[GT]ColdPool#4] DatabaseProvider: DB captured via rawQuery (EnMicroMsg: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db)
+07-24 22:47:57.454 [[GT]ColdPool#4] ContactRepository: DB ready callback, loading contacts...
+07-24 22:47:57.456 [[GT]ColdPool#4] ContactRepository: loadContacts START
+07-24 22:47:57.457 [[GT]ColdPool#4] ContactRepository: Strategy A: trying direct DB (ka5.f.s)...
+07-24 22:47:57.459 [[GT]ColdPool#4] ContactRepository: Strategy A: uin=295734952
+07-24 22:47:57.461 [[GT]ColdPool#4] ContactRepository: Strategy A: dbPath=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db
+07-24 22:47:57.464 [[GT]ColdPool#4] ContactRepository: Strategy A: trying imei=1234567890ABCDEF pwd=e13b6eb
+07-24 22:47:57.486 [[GT]ColdPool#4] ContactRepository: Strategy A: DB opened, rcontact table confirmed
+07-24 22:47:57.512 [[GT]ColdPool#4] ContactRepository: Strategy A: query OK, all=127 f=51 g=76 sex=0
+07-24 22:47:57.519 [[GT]ColdPool#4] ContactRepository: loadContacts OK via Strategy A (direct DB)
+07-24 22:48:04.555 [[GT]ColdPool#1] MessageHook: #9 type=34->34 isSend=228 talker=wxid_9ohhf82mrlgc22 content=
+07-24 22:48:04.577 [main] ContactRepository: Strategy A: DB opened, rcontact table confirmed
+07-24 22:48:04.578 [main] ContactRepository: ensureDirDb OK
+07-24 22:48:04.580 [main] MessageHandler: handle type=34 talker=wxid_9ohhf82mrlgc22 name=乐少
+07-24 22:48:05.384 [main] VoiceRelay: retry#1: no chat activity
+07-24 22:48:06.384 [main] VoiceRelay: retry#2: no chat activity
+07-24 22:48:08.084 [main] VoiceRelay: retry#3: no chat activity
