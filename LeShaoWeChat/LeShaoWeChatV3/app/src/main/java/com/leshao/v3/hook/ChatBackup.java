@@ -144,12 +144,18 @@ public class ChatBackup {
             android.content.SharedPreferences sp = ctx.getSharedPreferences(
                     "system_config_prefs", 0);
             long uin = sp.getLong("default_uin", 0);
+            if (uin == 0) uin = sp.getInt("default_uin", 0);
             if (uin == 0) return null;
 
             String hash = md5(String.valueOf(uin));
-            String dbPath = "/data/data/com.tencent.mm/MicroMsg/" + hash + "/EnMicroMsg.db";
-            File f = new File(dbPath);
-            return f.exists() ? f : null;
+            String[] paths = {
+                "/data/user/0/com.tencent.mm/MicroMsg/" + hash + "/EnMicroMsg.db",
+                "/data/data/com.tencent.mm/MicroMsg/" + hash + "/EnMicroMsg.db"
+            };
+            for (String path : paths) {
+                File f = new File(path);
+                if (f.exists()) return f;
+            }
         } catch (Throwable t) {}
         return null;
     }

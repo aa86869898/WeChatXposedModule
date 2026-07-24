@@ -9,6 +9,7 @@ import com.leshao.v3.model.ModuleConfig;
 import android.os.Vibrator;
 import android.media.RingtoneManager;
 import android.net.Uri;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * [功能52] 红包提醒
@@ -18,6 +19,8 @@ public class RedPacketAlert {
 
     private static volatile boolean sEnabled = true;
     private static final int LUCKY_MONEY_TYPE = 0x1A000031;
+    private static final ConcurrentHashMap<Long, Long> alertedMsgs = new ConcurrentHashMap<>();
+    private static final long ALERT_EXPIRE_MS = 5 * 60 * 1000;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
@@ -28,6 +31,20 @@ public class RedPacketAlert {
         hookRedPacketDetect(cl);
         hookNotificationOverride(cl);
         Logger.i("[RedPacketAlert] 红包提醒 Hook完成");
+    }
+
+    private static boolean shouldAlert(Object msgInfo) {
+        if (msgInfo == null) return false;
+        try {
+            long msgId = (Long) XposedHelpers.callMethod(msgInfo, "H0");
+            long now = System.currentTimeMillis();
+            alertedMsgs.entrySet().removeIf(e -> now - e.getValue() > ALERT_EXPIRE_MS);
+            if (alertedMsgs.containsKey(msgId)) return false;
+            alertedMsgs.put(msgId, now);
+            return true;
+        } catch (Throwable t) {
+            return true;
+        }
     }
 
     /** 检测红包消息类型 */
@@ -41,6 +58,7 @@ public class RedPacketAlert {
                     int type = (Integer) param.getResult();
                     if (type == LUCKY_MONEY_TYPE) {
                         try {
+                            if (!shouldAlert(param.thisObject)) return;
                             String talker = (String) XposedHelpers.getObjectField(
                                     param.thisObject, "field_talker");
                             Logger.i("[RedPacketAlert] 红包! from=" + talker);

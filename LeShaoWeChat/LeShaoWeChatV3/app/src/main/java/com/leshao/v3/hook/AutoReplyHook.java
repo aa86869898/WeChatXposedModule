@@ -98,11 +98,23 @@ public class AutoReplyHook {
         } catch (Throwable t) {}
     }
 
+    private static boolean isSentByMe(Object msgInfo) {
+        try {
+            return (Boolean) XposedHelpers.callMethod(msgInfo, "G1");
+        } catch (Throwable e1) {
+            try {
+                int val = (Integer) XposedHelpers.callMethod(msgInfo, "Q1");
+                return val == 1;
+            } catch (Throwable e2) {
+                return false;
+            }
+        }
+    }
+
     private static void handleNewMsg(Object msgInfo) {
         if (msgInfo == null) return;
         try {
-            int isSend = XposedHelpers.getIntField(msgInfo, "field_isSend");
-            if (isSend == 1) return;
+            if (isSentByMe(msgInfo)) return;
 
             int type = (Integer) XposedHelpers.callMethod(msgInfo, "getType");
             if (type != 1) return;

@@ -220,8 +220,7 @@ public class ChatUICustom {
 
     private static boolean isSentMessage(Object msgInfo) {
         try {
-            int isSend = XposedHelpers.getIntField(msgInfo, "field_isSend");
-            return isSend == 1;
+            return (Boolean) XposedHelpers.callMethod(msgInfo, "G1");
         } catch (Throwable t) { return false; }
     }
 

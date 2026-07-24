@@ -68,37 +68,44 @@ public class TabCustom {
 
     private static void applyTabModifications(Object mainTab) {
         try {
-            ViewGroup vg = (ViewGroup) mainTab;
-            int childCount = vg.getChildCount();
-
-            for (int i = 0; i < childCount; i++) {
-                View child = vg.getChildAt(i);
-
-                Object tag = child.getTag();
-                int tabIndex = -1;
-                if (tag instanceof Integer) {
-                    tabIndex = (Integer) tag;
-                } else {
-                    tabIndex = i;
-                }
-
-                if (shouldHide(tabIndex)) {
-                    child.setVisibility(View.GONE);
-                    Logger.i("[Tab] 已隐藏Tab: " + tabIndex);
-                }
-
-                if (customLabels && tabIndex >= 0 && tabIndex < tabLabels.length) {
-                    modifyTabLabel(child, tabLabels[tabIndex]);
-                }
-            }
-
-            if (hiddenTabs.length > 0) {
+            if (hiddenTabs != null && hiddenTabs.length > 0) {
                 for (int idx : hiddenTabs) {
                     try {
                         XposedHelpers.callMethod(mainTab, "c", idx);
                         Logger.i("[Tab] c(" + idx + ") 调用成功");
                     } catch (Throwable ignored) {}
                 }
+            }
+
+            Class<?> clazz = mainTab.getClass();
+            for (java.lang.reflect.Field f : clazz.getDeclaredFields()) {
+                f.setAccessible(true);
+                try {
+                    Object value = f.get(mainTab);
+                    if (value instanceof ViewGroup) {
+                        ViewGroup vg = (ViewGroup) value;
+                        for (int i = 0; i < vg.getChildCount(); i++) {
+                            View child = vg.getChildAt(i);
+
+                            Object tag = child.getTag();
+                            int tabIndex = -1;
+                            if (tag instanceof Integer) {
+                                tabIndex = (Integer) tag;
+                            } else {
+                                tabIndex = i;
+                            }
+
+                            if (shouldHide(tabIndex)) {
+                                child.setVisibility(View.GONE);
+                                Logger.i("[Tab] 已隐藏Tab: " + tabIndex);
+                            }
+
+                            if (customLabels && tabIndex >= 0 && tabIndex < tabLabels.length) {
+                                modifyTabLabel(child, tabLabels[tabIndex]);
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {}
             }
         } catch (Throwable t) {
             Logger.w("[Tab] 修改失败: " + t.getMessage());
