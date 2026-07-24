@@ -51,6 +51,7 @@ public class VoiceForwardHook {
     }
 
     private static volatile boolean sForwarding = false;
+    private static volatile String sFullHookedClass = null;
 
     public static void hook() {
         if (sHooked) return;
@@ -170,17 +171,54 @@ public class VoiceForwardHook {
         }
     }
 
+    // 对指定 simpleName 的类做全方法 hook（找 click handler）
+    private static void hookAllMethodsNoFilterOnLabel(String simpleName) {
+        ClassLoader cl = ContextManager.getClassLoader();
+        if (cl == null) return;
+        try {
+            String apkPath = ContextManager.getApkPath();
+            if (apkPath == null) return;
+            dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+            java.util.Enumeration<String> entries = dex.entries();
+            while (entries.hasMoreElements()) {
+                String cn = entries.nextElement();
+                if (!cn.endsWith("." + simpleName)) continue;
+                // 只匹配 viewitems 或 component 包
+                if (!cn.startsWith("com.tencent.mm.ui.chatting.viewitems.")
+                    && !cn.startsWith("com.tencent.mm.ui.chatting.component.")) continue;
+                try {
+                    Class<?> cls = cl.loadClass(cn);
+                    int n = hookAllMethodsOnClass(cls, simpleName, true);
+                    LogWriter.log(TAG, "FULL-hook " + simpleName + ": " + n + " methods");
+                    for (Class<?> inner : cls.getDeclaredClasses()) {
+                        n += hookAllMethodsOnClass(inner, simpleName + "$" + inner.getSimpleName(), true);
+                    }
+                } catch (Throwable ignored) {}
+                break;
+            }
+            dex.close();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "FULL-hook error: " + t.getMessage());
+        }
+    }
+
     private static int hookAllMethodsOnClass(Class<?> cls, String label) {
+        return hookAllMethodsOnClass(cls, label, false);
+    }
+
+    private static int hookAllMethodsOnClass(Class<?> cls, String label, boolean noFilter) {
         int count = 0;
         for (Method m : cls.getDeclaredMethods()) {
-            // 性能优化: 只 hook 参数签名为 (View,XXX) 或 (XXX,View) 的方法
-            Class<?>[] pts = m.getParameterTypes();
-            if (pts.length < 2) continue;
-            boolean hasView = false;
-            for (Class<?> pt : pts) {
-                if (View.class.isAssignableFrom(pt)) { hasView = true; break; }
+            // 性能优化: 只 hook 参数签名为 (View,XXX) 或 (XXX,View) 或 (MenuItem,XXX) 的方法
+            if (!noFilter) {
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length < 1) continue;
+                boolean hasTarget = false;
+                for (Class<?> pt : pts) {
+                    if (View.class.isAssignableFrom(pt) || MenuItem.class.isAssignableFrom(pt)) { hasTarget = true; break; }
+                }
+                if (!hasTarget) continue;
             }
-            if (!hasView) continue;
 
             final String mName = m.getName();
             count++;
@@ -188,15 +226,15 @@ public class VoiceForwardHook {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
                     int n = sCallCount.incrementAndGet();
                     if (n <= 30) {
+                        boolean hadTag = false;
                         StringBuilder sb = new StringBuilder();
                         sb.append(label).append(".").append(mName).append("(");
-                        boolean hasView = false;
                         for (int i = 0; i < Math.min(param.args.length, 4); i++) {
                             if (i > 0) sb.append(",");
                             Object a = param.args[i];
                             if (a instanceof View) {
-                                hasView = true;
                                 Object tag = ((View) a).getTag();
+                                if (tag != null) hadTag = true;
                                 sb.append("V:").append(a.getClass().getSimpleName());
                                 sb.append(tag != null ? ":T=" + tag.getClass().getSimpleName() : "");
                             } else if (a instanceof MenuItem) {
@@ -206,7 +244,7 @@ public class VoiceForwardHook {
                             }
                         }
                         sb.append(")");
-                        if (hasView) sb.insert(0, "★");
+                        if (hadTag) sb.insert(0, "★");
                         LogWriter.log(TAG, sb.toString());
                     }
 
@@ -337,6 +375,12 @@ public class VoiceForwardHook {
                     sMenuInjected = true;
                     sMenuInjectedTime = System.currentTimeMillis();
                     injectForwardMenuItem(menuObj, itemView);
+
+                    // 对菜单创建类开启全方法 hook（覆盖无 View 参数的 click handler）
+                    if (!label.equals(sFullHookedClass)) {
+                        sFullHookedClass = label;
+                        hookAllMethodsNoFilterOnLabel(label);
+                    }
                 }
             });
         }
