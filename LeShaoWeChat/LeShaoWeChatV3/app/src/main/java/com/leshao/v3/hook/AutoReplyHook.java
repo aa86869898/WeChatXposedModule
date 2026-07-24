@@ -6,32 +6,37 @@ import de.robv.android.xposed.XposedHelpers;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
+import com.leshao.v3.Logger;
+import com.leshao.v3.ContextManager;
+import com.leshao.v3.model.ModuleConfig;
+import com.leshao.v3.hook.HookConfig;
 
 /**
- * [功能5] 自动回复 — 生产级完整实现
- * ================================
+ * [功能5] AutoReply — 完整修复版
+ * ==============================
  * 
- * 完整流程:
- *   监听f9.Ra() → 新消息入库 → 检查type==1(文本) + isSend==0(接收)
- *   → 匹配关键词 → 构造e9消息 → 直接调用f9.Ra()写入本地DB
- *   → 微信消息同步机制会自动将本地消息同步到服务器
+ * ⚠️ 修复: isSend 判断
+ *   storage.e9 没有 field_isSend 字段!
+ *   G1() → boolean  是正确的 isSend 判断方法(混淆名)
+ *   备选: Q1() → int  可能是另一个发送标志
  * 
- * 为什么直接写DB而不调ChatFooter.F():
- *   ChatFooter.F()需要当前聊天窗口正好是目标会话，
- *   否则无法发送。直接写DB可以绕过此限制。
+ * 消息入库检测: f9.Ra(long, e9)
+ * 发送回复: 构造 e9 → f9.Ra() 写入DB → 微信同步机制自动发送
  */
 public class AutoReplyHook {
+
+    private static volatile boolean sEnabled = true;
+    public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     private static final long COOLDOWN_MS = 5000;
     private static final ConcurrentHashMap<String, Long> cooldowns = new ConcurrentHashMap<>();
     private static ClassLoader classLoader;
     private static Object msgStorage;
-    private static volatile boolean sEnabled = true;
-
-    public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;
+        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        if (config == null || !config.autoReplyEnabled) return;
         classLoader = cl;
         loadRules();
         hookMessageReceive(cl);
@@ -62,6 +67,7 @@ public class AutoReplyHook {
         }
     }
 
+    /** 获取 f9 实例 */
     private static void hookMsgStorage(ClassLoader cl) {
         try {
             Class<?> d9 = XposedHelpers.findClass("d9", cl);
@@ -75,6 +81,7 @@ public class AutoReplyHook {
         }
     }
 
+    /** Hook f9.Ra() — 新消息入库 */
     private static void hookMessageReceive(ClassLoader cl) {
         try {
             Class<?> f9 = null;
@@ -88,9 +95,7 @@ public class AutoReplyHook {
             XposedBridge.hookAllMethods(f9, "Ra", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    if (msgStorage == null) {
-                        msgStorage = param.thisObject;
-                    }
+                    if (msgStorage == null) msgStorage = param.thisObject;
                     if (param.args.length >= 2) handleNewMsg(param.args[1]);
                 }
             });
@@ -98,22 +103,10 @@ public class AutoReplyHook {
         } catch (Throwable t) {}
     }
 
-    private static boolean isSentByMe(Object msgInfo) {
-        try {
-            return (Boolean) XposedHelpers.callMethod(msgInfo, "G1");
-        } catch (Throwable e1) {
-            try {
-                int val = (Integer) XposedHelpers.callMethod(msgInfo, "Q1");
-                return val == 1;
-            } catch (Throwable e2) {
-                return false;
-            }
-        }
-    }
-
     private static void handleNewMsg(Object msgInfo) {
         if (msgInfo == null) return;
         try {
+            // ⚠️ 修复: 使用 G1() 而非 field_isSend
             if (isSentByMe(msgInfo)) return;
 
             int type = (Integer) XposedHelpers.callMethod(msgInfo, "getType");
@@ -138,26 +131,36 @@ public class AutoReplyHook {
     }
 
     /**
-     * 发送回复 — 直接构造消息写入DB
+     * ⚠️ 修复: 正确的 isSend 判断
      * 
-     * 消息构造: new e9(talker) → setType(1) → setContent(reply) → 设置时间
-     * 写入: msgStorage.Ra(msgId, msgInfo)
+     * storage.e9 没有 field_isSend 字段!
+     * G1() → boolean  混淆名, 返回 true=自己发送
      */
+    private static boolean isSentByMe(Object msgInfo) {
+        try {
+            return (Boolean) XposedHelpers.callMethod(msgInfo, "G1");
+        } catch (Throwable e1) {
+            try {
+                int q1 = (Integer) XposedHelpers.callMethod(msgInfo, "Q1");
+                return q1 == 1;
+            } catch (Throwable e2) {
+                return false;
+            }
+        }
+    }
+
     private static void doSendReply(String talker, String replyText) {
         try {
             Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", classLoader);
             Object msg = XposedHelpers.newInstance(e9Class, talker);
-            XposedHelpers.callMethod(msg, "A1", 1);
-            XposedHelpers.callMethod(msg, "X0", replyText);
+            XposedHelpers.callMethod(msg, "A1", 1);          // setType(1)=文本
+            XposedHelpers.callMethod(msg, "X0", replyText);   // setContent
             XposedHelpers.callMethod(msg, "L1", System.currentTimeMillis());
-
-            try { XposedHelpers.setIntField(msg, "field_isSend", 1); }
-            catch (Throwable ignored) {}
 
             if (msgStorage != null) {
                 long msgId = System.currentTimeMillis();
                 XposedHelpers.callMethod(msgStorage, "Ra", msgId, msg);
-                XposedBridge.log("[AutoReply] ✅ 回复: " 
+                XposedBridge.log("[AutoReply] ✅ 回复: "
                         + replyText.substring(0, Math.min(20, replyText.length()))
                         + " → " + talker);
             } else {
@@ -175,13 +178,10 @@ public class AutoReplyHook {
                     "com.tencent.mm.ui.LauncherUI", classLoader);
             Object instance = XposedHelpers.callStaticMethod(launcherUI, "getInstance");
             if (instance == null) return;
-
             Object fragment = XposedHelpers.callMethod(instance, "getCurrentFragmet");
             if (fragment == null) return;
-
             Object footer = XposedHelpers.getObjectField(fragment, "mFooter");
             if (footer == null) return;
-
             String currentTalker = (String) XposedHelpers.callMethod(footer, "getTalkerUserName");
             if (!talker.equals(currentTalker)) return;
 
@@ -189,11 +189,8 @@ public class AutoReplyHook {
             Object msg = XposedHelpers.newInstance(e9Class, talker);
             XposedHelpers.callMethod(msg, "A1", 1);
             XposedHelpers.callMethod(msg, "X0", replyText);
-
             XposedHelpers.callMethod(footer, "F", msg, null);
             XposedBridge.log("[AutoReply] ✅ 回复(via Footer): " + replyText);
-        } catch (Throwable t) {
-            XposedBridge.log("[AutoReply] Footer发送也失败: " + t.getMessage());
-        }
+        } catch (Throwable t) {}
     }
 }

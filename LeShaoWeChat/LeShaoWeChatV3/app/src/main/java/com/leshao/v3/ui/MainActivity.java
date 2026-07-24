@@ -10,10 +10,13 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -284,6 +287,20 @@ public class MainActivity {
 
     // ===== UI =====
 
+    // 模块列表数据
+    private static final String[] ITEM_NAMES = {
+        "聊天功能", "主题美化", "联系人和群聊", "群管理助手", "万群自动转发",
+        "定时消息助手", "AI智慧助手", "TTS播报转语音",
+        "红包转账", "朋友圈增强", "隐私安全",
+        "数据备份", "娱乐助手", "捐赠支持开发"
+    };
+    private static final int[] ITEM_ICONS = {
+        0x1F4AC, 0x1F3A8, 0x1F465, 0x1F6E1, 0x1F4E4,
+        0x23F0, 0x1F916, 0x1F50A,
+        0x1F4B0, 0x1F4F1, 0x1F512,
+        0x1F4BE, 0x1F3AE, 0x2764
+    };
+
     private static void showMainPanel(Activity act) {
         dismissDialog();
 
@@ -300,38 +317,96 @@ public class MainActivity {
         // 标题栏
         root.addView(makeTitleBar(ctx, "乐少多功能助手", false, null));
 
-        // 头像 + 用户信息
-        root.addView(makeUserHeader(ctx, d));
+        // 搜索框
+        EditText searchBox = new EditText(ctx);
+        searchBox.setHint("搜索模块功能...");
+        searchBox.setTextSize(14);
+        searchBox.setTextColor(AppColors.text1());
+        searchBox.setHintTextColor(AppColors.text2());
+        searchBox.setBackgroundColor(AppColors.card());
+        searchBox.setPadding((int)(16 * d), (int)(5 * d), (int)(16 * d), (int)(5 * d));
+        searchBox.setSingleLine(true);
+        GradientDrawable searchBg = new GradientDrawable();
+        searchBg.setCornerRadius((int)(8 * d));
+        searchBg.setColor(AppColors.card());
+        searchBox.setBackground(searchBg);
+        LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(-1, -2);
+        searchLp.setMargins((int)(12 * d), (int)(10 * d), (int)(12 * d), (int)(6 * d));
+        searchBox.setLayoutParams(searchLp);
+        root.addView(searchBox);
 
         // 分割线
         root.addView(makeDivider(ctx));
 
-        // 菜单列表
-        String[] items = {
-            "聊天功能", "主题美化", "联系人和群聊", "群管理助手", "万群自动转发",
-            "定时消息助手", "AI智慧助手", "TTS播报转语音",
-            "红包转账", "朋友圈增强", "隐私安全",
-            "数据备份", "娱乐助手", "捐赠支持开发"
-        };
-        int[] icons = {
-            0x1F4AC, 0x1F3A8, 0x1F465, 0x1F6E1, 0x1F4E4,
-            0x23F0, 0x1F916, 0x1F50A,
-            0x1F4B0, 0x1F4F1, 0x1F512,
-            0x1F4BE, 0x1F3AE, 0x2764
-        };
+        // 菜单列表容器
+        LinearLayout itemsContainer = new LinearLayout(ctx);
+        itemsContainer.setOrientation(LinearLayout.VERTICAL);
 
-        for (int i = 0; i < items.length; i++) {
-            if (i > 0) root.addView(makeItemDivider(ctx));
+        // 构建完整列表
+        for (int i = 0; i < ITEM_NAMES.length; i++) {
+            if (i > 0) itemsContainer.addView(makeItemDivider(ctx));
             final int idx = i;
-            root.addView(makeMenuItem(ctx, d, items[i], icons[i], v -> {
-                String title = items[idx];
+            View item = makeMenuItem(ctx, d, ITEM_NAMES[i], ITEM_ICONS[i], v -> {
                 dismissDialog();
-                SubPageActivity.open(act, title, idx + 1);
-            }));
+                SubPageActivity.open(act, ITEM_NAMES[idx], idx + 1);
+            });
+            item.setTag("menu_item");
+            itemsContainer.addView(item);
         }
+        root.addView(itemsContainer);
 
         // 底部间距
         root.addView(spacerV(ctx, 16));
+
+        // 搜索过滤逻辑
+        searchBox.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int cnt, int aft) {}
+            @Override public void onTextChanged(CharSequence s, int st, int bef, int cnt) {}
+            @Override
+            public void afterTextChanged(Editable s) {
+                String query = s.toString().trim().toLowerCase();
+                boolean anyVisible = false;
+                for (int i = 0; i < itemsContainer.getChildCount(); i++) {
+                    View child = itemsContainer.getChildAt(i);
+                    Object tag = child.getTag();
+                    if ("menu_item".equals(tag)) {
+                        String name = ITEM_NAMES[i / 2 >= ITEM_NAMES.length ? 0 : i / 2];
+                        if (query.isEmpty() || name.contains(query) || name.toLowerCase().contains(query)) {
+                            child.setVisibility(View.VISIBLE);
+                            anyVisible = true;
+                        } else {
+                            child.setVisibility(View.GONE);
+                        }
+                    }
+                }
+                // 同步隐藏/显示分隔线
+                boolean prevVisible = false;
+                for (int i = 0; i < itemsContainer.getChildCount(); i++) {
+                    View child = itemsContainer.getChildAt(i);
+                    if ("menu_item".equals(child.getTag())) {
+                        if (child.getVisibility() == View.VISIBLE) {
+                            prevVisible = true;
+                        }
+                    }
+                }
+                // 简化分隔线处理: 有搜索时隐藏全部分隔线, 无搜索时恢复
+                for (int i = 0; i < itemsContainer.getChildCount(); i++) {
+                    View child = itemsContainer.getChildAt(i);
+                    if (!"menu_item".equals(child.getTag())) {
+                        // 找下一个可见的 menu_item
+                        View nextItem = null;
+                        for (int j = i + 1; j < itemsContainer.getChildCount(); j++) {
+                            if ("menu_item".equals(itemsContainer.getChildAt(j).getTag())) {
+                                nextItem = itemsContainer.getChildAt(j);
+                                break;
+                            }
+                        }
+                        child.setVisibility(nextItem != null && nextItem.getVisibility() == View.VISIBLE
+                                && (query.isEmpty()) ? View.VISIBLE : View.GONE);
+                    }
+                }
+            }
+        });
 
         sv.addView(root);
 

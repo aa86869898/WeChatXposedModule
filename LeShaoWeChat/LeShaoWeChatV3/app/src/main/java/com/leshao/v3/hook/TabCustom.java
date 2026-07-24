@@ -6,20 +6,23 @@ import de.robv.android.xposed.XposedHelpers;
 import com.leshao.v3.Logger;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.model.ModuleConfig;
+import com.leshao.v3.hook.HookConfig;
+
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
 /**
- * [功能31] 底部Tab自定义
- * 微信底部4个Tab:
- *   0 = 微信(会话列表)
- *   1 = 通讯录
- *   2 = 发现
- *   3 = 我
+ * [功能31] TabCustom — 完整修复版
+ * ===============================
+ * 
+ * ⚠️ 修复: MainTabUI 不是 ViewGroup 子类
+ *   → 去掉强转, 改用反射调用 c() + 遍历内部字段找真正的 ViewGroup 容器
+ * 
+ * MainTabUI 方法: a(int)切换 b(int,int)角标 c(int)控制Tab d()初始化
+ *                 i()->int 当前Tab l(int)清除角标 n()通知变更
  */
 public class TabCustom {
-
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
@@ -31,6 +34,25 @@ public class TabCustom {
         if (!sEnabled) return;
         ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
         if (config == null || !config.tabCustomEnabled) return;
+
+        String hidden = HookConfig.getString("tab_visible", "");
+        if (hidden != null && !hidden.isEmpty()) {
+            String[] parts = hidden.split(",");
+            hiddenTabs = new int[parts.length];
+            for (int i = 0; i < parts.length; i++) {
+                try { hiddenTabs[i] = Integer.parseInt(parts[i].trim()); }
+                catch (Throwable ignored) {}
+            }
+        }
+
+        String labels = HookConfig.getString("tab_labels", "");
+        if (labels != null && !labels.isEmpty()) {
+            String[] parts = labels.split(",");
+            if (parts.length >= 4) {
+                tabLabels = parts;
+                customLabels = true;
+            }
+        }
 
         hookMainTabInit(cl);
         hookMainTabNotify(cl);
@@ -47,9 +69,9 @@ public class TabCustom {
                     applyTabModifications(param.thisObject);
                 }
             });
-            Logger.i("[Tab] MainTabUI.d() Hook完成");
+            XposedBridge.log("[Tab] MainTabUI.d() Hook完成");
         } catch (Throwable t) {
-            Logger.w("[Tab] MainTabUI失败: " + t.getMessage());
+            XposedBridge.log("[Tab] MainTabUI失败: " + t.getMessage());
         }
     }
 
@@ -66,56 +88,66 @@ public class TabCustom {
         } catch (Throwable t) {}
     }
 
+    /**
+     * ⚠️ 修复: 不再强转 (ViewGroup) mainTab
+     * 
+     * 方式1: 调用 c(int) 方法控制Tab
+     * 方式2: 反射遍历 MainTabUI 内部字段找真正的 ViewGroup 容器
+     */
     private static void applyTabModifications(Object mainTab) {
         try {
-            if (hiddenTabs != null && hiddenTabs.length > 0) {
+            // === 方式1: 调用 c(int) ===
+            if (hiddenTabs.length > 0) {
                 for (int idx : hiddenTabs) {
                     try {
                         XposedHelpers.callMethod(mainTab, "c", idx);
-                        Logger.i("[Tab] c(" + idx + ") 调用成功");
+                        XposedBridge.log("[Tab] c(" + idx + ") 调用成功");
                     } catch (Throwable ignored) {}
                 }
             }
 
+            // === 方式2: 反射找内部 ViewGroup ===
             Class<?> clazz = mainTab.getClass();
-            for (java.lang.reflect.Field f : clazz.getDeclaredFields()) {
-                f.setAccessible(true);
-                try {
-                    Object value = f.get(mainTab);
-                    if (value instanceof ViewGroup) {
-                        ViewGroup vg = (ViewGroup) value;
-                        for (int i = 0; i < vg.getChildCount(); i++) {
-                            View child = vg.getChildAt(i);
-
-                            Object tag = child.getTag();
-                            int tabIndex = -1;
-                            if (tag instanceof Integer) {
-                                tabIndex = (Integer) tag;
-                            } else {
-                                tabIndex = i;
+            boolean foundViewGroup = false;
+            
+            while (clazz != null && clazz != Object.class && !foundViewGroup) {
+                for (java.lang.reflect.Field f : clazz.getDeclaredFields()) {
+                    f.setAccessible(true);
+                    try {
+                        Object value = f.get(mainTab);
+                        if (value instanceof ViewGroup) {
+                            ViewGroup vg = (ViewGroup) value;
+                            // 找到真正的Tab容器 → 操作子View
+                            for (int i = 0; i < vg.getChildCount(); i++) {
+                                View child = vg.getChildAt(i);
+                                if (shouldHide(i)) {
+                                    child.setVisibility(View.GONE);
+                                    XposedBridge.log("[Tab] 已隐藏Tab[" + i + "]");
+                                }
+                                if (customLabels && i < tabLabels.length) {
+                                    modifyTabLabel(child, tabLabels[i]);
+                                }
                             }
-
-                            if (shouldHide(tabIndex)) {
-                                child.setVisibility(View.GONE);
-                                Logger.i("[Tab] 已隐藏Tab: " + tabIndex);
-                            }
-
-                            if (customLabels && tabIndex >= 0 && tabIndex < tabLabels.length) {
-                                modifyTabLabel(child, tabLabels[tabIndex]);
-                            }
+                            foundViewGroup = true;
+                            break;
                         }
-                    }
-                } catch (Throwable ignored) {}
+                    } catch (Throwable ignored) {}
+                }
+                clazz = clazz.getSuperclass();
+            }
+
+            if (foundViewGroup) {
+                XposedBridge.log("[Tab] 通过反射找到内部ViewGroup ✓");
+            } else {
+                XposedBridge.log("[Tab] 仅通过c()方法控制 (未找到内部ViewGroup)");
             }
         } catch (Throwable t) {
-            Logger.w("[Tab] 修改失败: " + t.getMessage());
+            XposedBridge.log("[Tab] 修改失败: " + t.getMessage());
         }
     }
 
     private static boolean shouldHide(int index) {
-        for (int h : hiddenTabs) {
-            if (h == index) return true;
-        }
+        for (int h : hiddenTabs) if (h == index) return true;
         return false;
     }
 
@@ -128,7 +160,7 @@ public class TabCustom {
                     || current.equals("WeChat") || current.equals("Contacts")
                     || current.equals("Discover") || current.equals("Me")) {
                 tv.setText(newLabel);
-                Logger.i("[Tab] 标签已修改: " + current + " → " + newLabel);
+                XposedBridge.log("[Tab] 标签: " + current + " → " + newLabel);
             }
         }
         if (view instanceof ViewGroup) {

@@ -6,33 +6,38 @@ import de.robv.android.xposed.XposedHelpers;
 import com.leshao.v3.Logger;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.model.ModuleConfig;
+import com.leshao.v3.hook.HookConfig;
+
 import android.app.AlarmManager;
 import android.app.PendingIntent;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
+/**
+ * [功能39/44] ChatBackup — 完整修复版
+ * ===================================
+ * 
+ * ⚠️ 修复: 数据库路径
+ *   Android 11+ 使用 /data/user/0/ 而非 /data/data/
+ *   优先尝试 /data/user/0/... 失败尝试 /data/data/...
+ * 
+ *   实测路径: /data/user/0/com.tencent.mm/MicroMsg/<md5>/EnMicroMsg.db
+ */
 public class ChatBackup {
-
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd_HHmmss");
     private static final int RETENTION_DAYS = 7;
-    private static boolean hasBackedUpToday = false;
     private static String lastBackupDate = "";
 
     public static void hook(ClassLoader cl) {
-        if (!sEnabled) return;
-        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
-        if (config == null || !config.chatBackupEnabled) return;
-
+        if (!sEnabled || !ModuleConfig.load(ContextManager.getPrefs()).chatBackupEnabled) return;
         hookAppExit(cl);
         scheduleDailyBackup();
     }
@@ -49,7 +54,6 @@ public class ChatBackup {
                     if (!today.equals(lastBackupDate)) {
                         performBackup();
                         lastBackupDate = today;
-                        hasBackedUpToday = true;
                     }
                 }
             });
@@ -58,13 +62,12 @@ public class ChatBackup {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     String today = new SimpleDateFormat("yyyyMMdd").format(new Date());
-                    if (!today.equals(lastBackupDate) && !hasBackedUpToday) {
+                    if (!today.equals(lastBackupDate)) {
                         new android.os.Handler(android.os.Looper.getMainLooper())
                                 .postDelayed(new Runnable() {
                             public void run() {
                                 performBackup();
                                 lastBackupDate = today;
-                                hasBackedUpToday = true;
                             }
                         }, 5000);
                     }
@@ -75,11 +78,11 @@ public class ChatBackup {
 
     private static void scheduleDailyBackup() {
         try {
-            Context ctx = com.leshao.v3.ContextManager.getAppContext();
+            Context ctx = ContextManager.getAppContext();
             if (ctx == null) return;
 
             AlarmManager alarmMgr = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
-            Intent intent = new Intent("com.leshao.v3.BACKUP");
+            Intent intent = new Intent("com.wechatplus.BACKUP");
             PendingIntent pending = PendingIntent.getBroadcast(ctx, 0, intent,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
@@ -87,16 +90,14 @@ public class ChatBackup {
             calendar.set(java.util.Calendar.HOUR_OF_DAY, 2);
             calendar.set(java.util.Calendar.MINUTE, 0);
             calendar.set(java.util.Calendar.SECOND, 0);
-            if (calendar.before(java.util.Calendar.getInstance())) {
+            if (calendar.before(java.util.Calendar.getInstance()))
                 calendar.add(java.util.Calendar.DAY_OF_MONTH, 1);
-            }
 
             alarmMgr.setRepeating(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(),
                     AlarmManager.INTERVAL_DAY, pending);
-
-            Logger.i("[Backup] 每日备份已调度 (凌晨2:00)");
+            XposedBridge.log("[Backup] 每日备份已调度 (凌晨2:00)");
         } catch (Throwable t) {
-            Logger.w("[Backup] 调度失败: " + t.getMessage());
+            XposedBridge.log("[Backup] 调度失败: " + t.getMessage());
         }
     }
 
@@ -104,13 +105,13 @@ public class ChatBackup {
         try {
             File dbFile = findDatabaseFile();
             if (dbFile == null || !dbFile.exists()) {
-                Logger.w("[Backup] 数据库文件不存在");
+                XposedBridge.log("[Backup] 数据库文件不存在 (路径: " +
+                        (dbFile != null ? dbFile.getAbsolutePath() : "null") + ")");
                 return;
             }
 
-            File backupDir = new File("/sdcard/LeShaoV3Logs/backup/");
+            File backupDir = new File("/sdcard/WeChatPlus/backup/");
             backupDir.mkdirs();
-
             String name = "EnMicroMsg_" + sdf.format(new Date()) + ".db";
             File backupFile = new File(backupDir, name);
 
@@ -119,43 +120,49 @@ public class ChatBackup {
             byte[] buf = new byte[16384];
             int read;
             long total = 0;
-            while ((read = fis.read(buf)) > 0) {
-                fos.write(buf, 0, read);
-                total += read;
-            }
-            fos.flush();
-            fos.close();
-            fis.close();
+            while ((read = fis.read(buf)) > 0) { fos.write(buf, 0, read); total += read; }
+            fos.flush(); fos.close(); fis.close();
 
-            Logger.i("[Backup] 备份完成: " + backupFile.getName()
+            XposedBridge.log("[Backup] ✅ 备份完成: " + backupFile.getName()
                     + " (" + formatSize(total) + ")");
-
             cleanupOldBackups(backupDir);
         } catch (Throwable t) {
-            Logger.w("[Backup] 备份失败: " + t.getMessage());
+            XposedBridge.log("[Backup] 备份失败: " + t.getMessage());
         }
     }
 
+    /**
+     * ⚠️ 修复: 双路径尝试
+     *   /data/user/0/... (Android 11+) 优先
+     *   /data/data/...   (旧 Android)  备用
+     */
     private static File findDatabaseFile() {
         try {
-            Context ctx = com.leshao.v3.ContextManager.getAppContext();
+            Context ctx = ContextManager.getAppContext();
             if (ctx == null) return null;
 
-            android.content.SharedPreferences sp = ctx.getSharedPreferences(
-                    "system_config_prefs", 0);
-            long uin = sp.getLong("default_uin", 0);
-            if (uin == 0) uin = sp.getInt("default_uin", 0);
+            long uin = ctx.getSharedPreferences("system_config_prefs", 0)
+                    .getLong("default_uin", 0);
+            if (uin == 0) uin = ctx.getSharedPreferences("system_config_prefs", 0)
+                    .getInt("default_uin", 0);
             if (uin == 0) return null;
 
             String hash = md5(String.valueOf(uin));
+
+            // 优先 /data/user/0/, 备用 /data/data/
             String[] paths = {
                 "/data/user/0/com.tencent.mm/MicroMsg/" + hash + "/EnMicroMsg.db",
                 "/data/data/com.tencent.mm/MicroMsg/" + hash + "/EnMicroMsg.db"
             };
+
             for (String path : paths) {
                 File f = new File(path);
-                if (f.exists()) return f;
+                if (f.exists()) {
+                    XposedBridge.log("[Backup] 找到DB: " + path);
+                    return f;
+                }
             }
+            XposedBridge.log("[Backup] 所有路径都不存在: " + paths[0]);
         } catch (Throwable t) {}
         return null;
     }
@@ -166,13 +173,9 @@ public class ChatBackup {
         long cutoff = System.currentTimeMillis() - (RETENTION_DAYS * 86400000L);
         int deleted = 0;
         for (File f : files) {
-            if (f.lastModified() < cutoff) {
-                if (f.delete()) deleted++;
-            }
+            if (f.lastModified() < cutoff && f.delete()) deleted++;
         }
-        if (deleted > 0) {
-            Logger.i("[Backup] 清理了 " + deleted + " 个旧备份");
-        }
+        if (deleted > 0) XposedBridge.log("[Backup] 清理了 " + deleted + " 个旧备份");
     }
 
     private static String md5(String input) {

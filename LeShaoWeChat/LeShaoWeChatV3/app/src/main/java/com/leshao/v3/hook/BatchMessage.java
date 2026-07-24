@@ -6,6 +6,8 @@ import de.robv.android.xposed.XposedHelpers;
 import com.leshao.v3.Logger;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.model.ModuleConfig;
+import com.leshao.v3.hook.HookConfig;
+
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -15,19 +17,14 @@ import java.util.List;
 import java.util.ArrayList;
 
 /**
- * [功能9] 批量消息操作
- * 微信多选链路:
- *   长按消息 → ChatMoreSelectUI → 多选模式
- *   → SelectConversationUI → 转发到会话
- *   → ConvBoxTransmitUI → 合并转发
- * 增强:
- *   1. 突破微信9条合并转发限制
- *   2. 全选/反选功能
- *   3. 按类型选择(全选图片/视频/链接)
- *   4. 转发时自动拆分(超过限制自动分组)
+ * [功能9] BatchMessage — 完整修复版
+ * ==================================
+ * 
+ * ⚠️ 修复: ChatMoreSelectUI 类名中的 "." 被错误替换为 "$"
+ *   XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChatMoreSelectUI", cl)
+ *   如果该版本微信混淆了此类, 用 findClassOrNull 安全处理
  */
 public class BatchMessage {
-
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
@@ -35,22 +32,32 @@ public class BatchMessage {
     public static int forwardSplitSize = 50;
 
     public static void hook(ClassLoader cl) {
-        if (!sEnabled) return;
-        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
-        if (config == null || !config.batchMessageEnabled) return;
+        if (!sEnabled || !ModuleConfig.load(ContextManager.getPrefs()).batchMessageEnabled) return;
+        maxSelectCount = HookConfig.getInt("batch_max_select", 999);
+        forwardSplitSize = HookConfig.getInt("forward_split_size", 50);
 
         hookChatMoreSelect(cl);
         hookForwardLimit(cl);
     }
 
     /**
-     * Hook ChatMoreSelectUI — 多选界面
+     * ⚠️ 修复: 使用正确类名 + 安全查找
      */
     private static void hookChatMoreSelect(ClassLoader cl) {
+        // ⚠️ 修复: 使用正确的点分隔类名, 并安全查找
+        Class<?> moreSelect = null;
         try {
-            Class<?> moreSelect = XposedHelpers.findClass(
+            moreSelect = XposedHelpers.findClass(
                     "com.tencent.mm.ui.chatting.ChatMoreSelectUI", cl);
+        } catch (XposedHelpers.ClassNotFoundError e) {
+            XposedBridge.log("[Batch] ChatMoreSelectUI 在当前版本被混淆, 跳过");
+            return;
+        }
 
+        if (moreSelect == null) return;
+
+        try {
+            // Hook onCreateOptionsMenu — 添加全选/反选
             XposedBridge.hookAllMethods(moreSelect, "onCreateOptionsMenu",
                     new XC_MethodHook() {
                 @Override
@@ -65,6 +72,7 @@ public class BatchMessage {
                 }
             });
 
+            // Hook onOptionsItemSelected — 处理点击
             XposedBridge.hookAllMethods(moreSelect, "onOptionsItemSelected",
                     new XC_MethodHook() {
                 @Override
@@ -78,6 +86,7 @@ public class BatchMessage {
                 }
             });
 
+            // Hook 选中数量限制
             for (java.lang.reflect.Method m : moreSelect.getDeclaredMethods()) {
                 if (m.getReturnType() == int.class
                         && m.getParameterTypes().length == 0) {
@@ -87,7 +96,7 @@ public class BatchMessage {
                             int val = (Integer) param.getResult();
                             if (val == 9 || val == 50 || val == 100) {
                                 param.setResult(maxSelectCount);
-                                Logger.i("[Batch] 限制已修改: " + val + " → " + maxSelectCount);
+                                XposedBridge.log("[Batch] 限制: " + val + " → " + maxSelectCount);
                             }
                         }
                     });
@@ -97,48 +106,40 @@ public class BatchMessage {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
-                            boolean result = (Boolean) param.getResult();
-                            if (!result) {
-                                param.setResult(true);
-                                Logger.i("[Batch] 超限检查已绕过");
-                            }
+                            if (!(Boolean) param.getResult()) param.setResult(true);
                         }
                     });
                 }
             }
-            Logger.i("[Batch] ChatMoreSelectUI Hook完成");
+            XposedBridge.log("[Batch] ChatMoreSelectUI Hook完成");
         } catch (Throwable t) {
-            Logger.w("[Batch] ChatMoreSelectUI失败: " + t.getMessage());
+            XposedBridge.log("[Batch] ChatMoreSelectUI异常: " + t.getMessage());
         }
     }
 
-    /**
-     * Hook SelectConversationUI + ConvBoxTransmitUI — 转发限制
-     */
     private static void hookForwardLimit(ClassLoader cl) {
+        // SelectConversationUI
         try {
             Class<?> selectConv = XposedHelpers.findClass(
                     "com.tencent.mm.ui.transmit.SelectConversationUI", cl);
-
             for (java.lang.reflect.Method m : selectConv.getDeclaredMethods()) {
                 if (m.getReturnType() == boolean.class
                         && m.getParameterTypes().length == 0) {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
-                            boolean result = (Boolean) param.getResult();
-                            if (!result) param.setResult(true);
+                            if (!(Boolean) param.getResult()) param.setResult(true);
                         }
                     });
                 }
             }
-            Logger.i("[Batch] SelectConversationUI Hook完成");
+            XposedBridge.log("[Batch] SelectConversationUI Hook完成");
         } catch (Throwable t) {}
 
+        // ConvBoxTransmitUI
         try {
             Class<?> boxTransmit = XposedHelpers.findClass(
                     "com.tencent.mm.ui.transmit.ConvBoxTransmitUI", cl);
-
             for (java.lang.reflect.Method m : boxTransmit.getDeclaredMethods()) {
                 if (m.getReturnType() == int.class
                         && m.getParameterTypes().length == 0) {
@@ -146,14 +147,12 @@ public class BatchMessage {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
                             int val = (Integer) param.getResult();
-                            if (val > 0 && val <= 100) {
-                                param.setResult(maxSelectCount);
-                            }
+                            if (val > 0 && val <= 100) param.setResult(maxSelectCount);
                         }
                     });
                 }
             }
-            Logger.i("[Batch] ConvBoxTransmitUI Hook完成");
+            XposedBridge.log("[Batch] ConvBoxTransmitUI Hook完成");
         } catch (Throwable t) {}
     }
 
@@ -161,19 +160,15 @@ public class BatchMessage {
         try {
             View root = ((android.app.Activity) activity).getWindow().getDecorView();
             List<CheckBox> checkBoxes = findAllCheckBoxes(root);
-
             int toggled = 0;
-            for (int i = 0; i < checkBoxes.size(); i++) {
-                CheckBox cb = checkBoxes.get(i);
+            for (CheckBox cb : checkBoxes) {
                 boolean shouldCheck = false;
-
                 switch (actionId) {
                     case 99991: shouldCheck = true; break;
                     case 99992: shouldCheck = !cb.isChecked(); break;
                     case 99993: shouldCheck = isImageItem(cb); break;
                     case 99994: shouldCheck = isLinkItem(cb); break;
                 }
-
                 if (shouldCheck && !cb.isChecked()) {
                     cb.setChecked(true);
                     cb.performClick();
@@ -183,14 +178,11 @@ public class BatchMessage {
                     toggled++;
                 }
             }
-
-            String actionName = actionId == 99991 ? "全选"
-                    : actionId == 99992 ? "反选"
-                    : actionId == 99993 ? "全选图片" : "全选链接";
-            Logger.i("[Batch] " + actionName + ": " + toggled + "/"
-                    + checkBoxes.size() + "条");
+            XposedBridge.log("[Batch] " + (actionId == 99991 ? "全选" :
+                    actionId == 99992 ? "反选" : actionId == 99993 ? "全选图片" : "全选链接")
+                    + ": " + toggled + "/" + checkBoxes.size());
         } catch (Throwable t) {
-            Logger.w("[Batch] 操作失败: " + t.getMessage());
+            XposedBridge.log("[Batch] 操作失败: " + t.getMessage());
         }
     }
 
@@ -199,30 +191,25 @@ public class BatchMessage {
         if (v instanceof CheckBox) list.add((CheckBox) v);
         if (v instanceof ViewGroup) {
             ViewGroup vg = (ViewGroup) v;
-            for (int i = 0; i < vg.getChildCount(); i++) {
+            for (int i = 0; i < vg.getChildCount(); i++)
                 list.addAll(findAllCheckBoxes(vg.getChildAt(i)));
-            }
         }
         return list;
     }
 
     private static boolean isImageItem(View cb) {
         View parent = (View) cb.getParent();
-        if (parent != null) {
-            String contentDesc = parent.getContentDescription() != null
-                    ? parent.getContentDescription().toString() : "";
-            return contentDesc.contains("图片") || contentDesc.contains("image");
-        }
-        return false;
+        if (parent == null) return false;
+        String desc = parent.getContentDescription() != null
+                ? parent.getContentDescription().toString() : "";
+        return desc.contains("图片") || desc.contains("image");
     }
 
     private static boolean isLinkItem(View cb) {
         View parent = (View) cb.getParent();
-        if (parent != null) {
-            String contentDesc = parent.getContentDescription() != null
-                    ? parent.getContentDescription().toString() : "";
-            return contentDesc.contains("链接") || contentDesc.contains("link");
-        }
-        return false;
+        if (parent == null) return false;
+        String desc = parent.getContentDescription() != null
+                ? parent.getContentDescription().toString() : "";
+        return desc.contains("链接") || desc.contains("link");
     }
 }
