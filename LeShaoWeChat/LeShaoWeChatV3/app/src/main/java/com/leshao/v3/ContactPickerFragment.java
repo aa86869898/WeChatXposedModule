@@ -1,6 +1,7 @@
 package com.leshao.v3;
 
 import android.graphics.drawable.GradientDrawable;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -8,8 +9,10 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CheckBox;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.Switch;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -17,7 +20,10 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.leshao.v3.db.ContactRepository;
+import com.leshao.v3.hook.ContactExport;
+import com.leshao.v3.hook.ContactChangeLog;
 import com.leshao.v3.model.Contact;
+import com.leshao.v3.model.ModuleConfig;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -105,6 +111,21 @@ public class ContactPickerFragment extends Fragment {
         tabBar.addView(tabGroup);
         root.addView(tabBar);
 
+        // 联系人管理功能
+        SharedPreferences prefs = ContextManager.getPrefs();
+        ModuleConfig cfg = ModuleConfig.load(prefs);
+
+        LinearLayout featRow = new LinearLayout(getContext());
+        featRow.setOrientation(LinearLayout.HORIZONTAL);
+        featRow.setPadding(dp(8), dp(4), dp(8), dp(4));
+        featRow.addView(makeToggle("通讯录导出", cfg.contactExportEnabled, (v, on) -> {
+            cfg.contactExportEnabled = on; cfg.save(prefs); ContactExport.setEnabled(on);
+        }));
+        featRow.addView(makeToggle("联系人变更日志", cfg.contactChangeLogEnabled, (v, on) -> {
+            cfg.contactChangeLogEnabled = on; cfg.save(prefs); ContactChangeLog.setEnabled(on);
+        }));
+        root.addView(featRow);
+
         // RecyclerView
         mRecyclerView = new RecyclerView(getContext());
         mRecyclerView.setLayoutParams(new LinearLayout.LayoutParams(
@@ -142,6 +163,17 @@ public class ContactPickerFragment extends Fragment {
         tv.setBackgroundColor(active ? 0xFF4CAF50 : 0xFFE0E0E0);
         tv.setTextColor(active ? 0xFFFFFFFF : 0xFF000000);
         return tv;
+    }
+
+    private LinearLayout makeToggle(String label, boolean checked, CompoundButton.OnCheckedChangeListener l) {
+        LinearLayout row = new LinearLayout(getContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(dp(4), 0, dp(12), 0);
+        TextView tv = new TextView(getContext()); tv.setText(label); tv.setTextSize(12);
+        tv.setTextColor(CLR_BODY_TXT);
+        row.addView(tv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Switch sw = new Switch(getContext()); sw.setChecked(checked); sw.setOnCheckedChangeListener(l);
+        row.addView(sw); return row;
     }
 
     private void filterContacts(String query) {

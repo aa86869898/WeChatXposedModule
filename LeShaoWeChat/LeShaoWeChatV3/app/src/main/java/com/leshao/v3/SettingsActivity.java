@@ -14,6 +14,9 @@ import com.leshao.v3.ui.GroupGuardFragment;
 import com.leshao.v3.ui.AIFragment;
 import com.leshao.v3.ui.SchedulerFragment;
 import com.leshao.v3.ui.StatsFragment;
+import com.leshao.v3.ui.ChatEnhanceFragment;
+import com.leshao.v3.ui.SnsFragment;
+import com.leshao.v3.ui.PrivacyFragment;
 
 public class SettingsActivity extends FragmentActivity {
 
@@ -46,28 +49,34 @@ public class SettingsActivity extends FragmentActivity {
                 switch (position) {
                     case 0: return new ContactPickerFragment();
                     case 1: return new SettingsFragment();
-                    case 2: return new TTSFragment();
-                    case 3: return new DingDongFragment();
-                    case 4: return new GroupGuardFragment();
-                    case 5: return new AIFragment();
-                    case 6: return new SchedulerFragment();
-                    case 7: return new StatsFragment();
+                    case 2: return new ChatEnhanceFragment();
+                    case 3: return new SnsFragment();
+                    case 4: return new PrivacyFragment();
+                    case 5: return new TTSFragment();
+                    case 6: return new DingDongFragment();
+                    case 7: return new GroupGuardFragment();
+                    case 8: return new AIFragment();
+                    case 9: return new SchedulerFragment();
+                    case 10: return new StatsFragment();
                     default: return new SettingsFragment();
                 }
             }
-            @Override public int getItemCount() { return 8; }
+            @Override public int getItemCount() { return 11; }
         });
 
         new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
             switch (position) {
                 case 0: tab.setText("联系人"); break;
                 case 1: tab.setText("设置"); break;
-                case 2: tab.setText("播报"); break;
-                case 3: tab.setText("叮咚"); break;
-                case 4: tab.setText("群管"); break;
-                case 5: tab.setText("AI"); break;
-                case 6: tab.setText("定时"); break;
-                case 7: tab.setText("统计"); break;
+                case 2: tab.setText("聊天增强"); break;
+                case 3: tab.setText("朋友圈"); break;
+                case 4: tab.setText("隐私安全"); break;
+                case 5: tab.setText("播报"); break;
+                case 6: tab.setText("叮咚"); break;
+                case 7: tab.setText("群管"); break;
+                case 8: tab.setText("AI"); break;
+                case 9: tab.setText("定时"); break;
+                case 10: tab.setText("统计"); break;
             }
         }).attach();
     }

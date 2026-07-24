@@ -11,8 +11,17 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.hook.AntiRecallHook;
+import com.leshao.v3.hook.AntiDetectionHook;
 import com.leshao.v3.hook.FriendRequestHook;
 import com.leshao.v3.hook.RedPacketHook;
+import com.leshao.v3.hook.DeleteDetect;
+import com.leshao.v3.hook.StickyEnhance;
+import com.leshao.v3.hook.UnreadBadge;
+import com.leshao.v3.hook.TabCustom;
+import com.leshao.v3.hook.CallFeatures;
+import com.leshao.v3.hook.MsgExport;
+import com.leshao.v3.hook.ChatBackup;
+import com.leshao.v3.hook.ShakeCustom;
 import com.leshao.v3.model.KeywordRule;
 import com.leshao.v3.model.ModuleConfig;
 import java.util.ArrayList;
@@ -48,11 +57,42 @@ public class SettingsFragment extends Fragment {
         root.addView(switchRow("抢红包", mCfg.redPacketGrab, (v, on) -> {
             mCfg.redPacketGrab = on; mCfg.save(mPrefs); RedPacketHook.setEnabled(on);
         }));
+        root.addView(switchRow("反Xposed检测", mCfg.antiDetection, (v, on) -> {
+            mCfg.antiDetection = on; mCfg.save(mPrefs); AntiDetectionHook.setEnabled(on);
+        }));
         root.addView(switchRow("自动通过好友", mCfg.autoAcceptFriend, (v, on) -> {
             mCfg.autoAcceptFriend = on; mCfg.save(mPrefs); FriendRequestHook.setEnabled(on);
         }));
         root.addView(editRow("好友欢迎语", mCfg.autoAcceptFriendMsg, s -> {
             mCfg.autoAcceptFriendMsg = s; mCfg.save(mPrefs);
+        }));
+
+        root.addView(sLabel("会话与界面"));
+        root.addView(switchRow("好友删除检测", mCfg.deleteDetectEnabled, (v, on) -> {
+            mCfg.deleteDetectEnabled = on; mCfg.save(mPrefs); DeleteDetect.setEnabled(on);
+        }));
+        root.addView(switchRow("置顶增强", mCfg.stickyEnhanceEnabled, (v, on) -> {
+            mCfg.stickyEnhanceEnabled = on; mCfg.save(mPrefs); StickyEnhance.setEnabled(on);
+        }));
+        root.addView(switchRow("未读角标显示", mCfg.unreadBadgeEnabled, (v, on) -> {
+            mCfg.unreadBadgeEnabled = on; mCfg.save(mPrefs); UnreadBadge.setEnabled(on);
+        }));
+        root.addView(switchRow("底部Tab自定义", mCfg.tabCustomEnabled, (v, on) -> {
+            mCfg.tabCustomEnabled = on; mCfg.save(mPrefs); TabCustom.setEnabled(on);
+        }));
+
+        root.addView(sLabel("通话与数据"));
+        root.addView(switchRow("通话录音/自动接听", mCfg.callFeaturesEnabled, (v, on) -> {
+            mCfg.callFeaturesEnabled = on; mCfg.save(mPrefs); CallFeatures.setEnabled(on);
+        }));
+        root.addView(switchRow("消息导出", mCfg.msgExportEnabled, (v, on) -> {
+            mCfg.msgExportEnabled = on; mCfg.save(mPrefs); MsgExport.setEnabled(on);
+        }));
+        root.addView(switchRow("聊天记录备份", mCfg.chatBackupEnabled, (v, on) -> {
+            mCfg.chatBackupEnabled = on; mCfg.save(mPrefs); ChatBackup.setEnabled(on);
+        }));
+        root.addView(switchRow("摇一摇自定义", mCfg.shakeCustomEnabled, (v, on) -> {
+            mCfg.shakeCustomEnabled = on; mCfg.save(mPrefs); ShakeCustom.setEnabled(on);
         }));
 
         root.addView(sLabel("关键词回复"));

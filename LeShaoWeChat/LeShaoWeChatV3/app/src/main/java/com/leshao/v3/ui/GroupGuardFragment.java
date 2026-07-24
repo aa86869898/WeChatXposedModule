@@ -10,6 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import com.leshao.v3.ContextManager;
+import com.leshao.v3.hook.GroupFeatures;
 import com.leshao.v3.model.ModuleConfig;
 import java.util.ArrayList;
 import java.util.List;
@@ -71,6 +72,12 @@ public class GroupGuardFragment extends Fragment {
         });
         addRow.addView(addBtn);
         root.addView(addRow);
+
+        // 群管增强
+        root.addView(sLabel("群管增强"));
+        root.addView(switchRow("群功能增强 (踢人/禁言/群发/防炸群)", mCfg.groupFeaturesEnabled, (v, on) -> {
+            mCfg.groupFeaturesEnabled = on; mCfg.save(mPrefs); GroupFeatures.setEnabled(on);
+        }));
 
         // 黑名单
         root.addView(sLabel("黑名单 wxid (每行一个)"));

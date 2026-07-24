@@ -89,7 +89,45 @@ public class ModuleConfig {
     // 安全
     public boolean antiRecall = false;
     public boolean redPacketGrab = false;
+    public boolean redPacketAlertEnabled = true;  // 红包震动/响铃提醒
     public boolean recallLogEnabled = false;
+    public boolean antiDetection = true;          // 反Xposed/LSPosed检测
+
+    // ============ WeChatPlus 增强功能 (24项) ============
+    // 聊天增强
+    public boolean typingIndicatorEnabled = true;
+    public boolean chatFooterEnhanceEnabled = true;
+    public boolean chatUICustomEnabled = true;
+    public boolean batchMessageEnabled = true;
+    public boolean scheduledSendEnabled = true;
+    public boolean autoRemarkEnabled = true;
+    public boolean searchEnhanceEnabled = true;
+    public boolean notifyCustomEnabled = true;
+    public boolean autoReplyEnabled = false;  // 默认关闭(需手动配置关键词)
+
+    // 朋友圈
+    public boolean snsFeaturesEnabled = true;
+
+    // 隐私安全
+    public boolean privacyFeaturesEnabled = true;
+    public boolean loginMonitorEnabled = true;
+    public boolean hideContactFieldsEnabled = true;
+    public boolean convPrivacyEnabled = true;
+
+    // 联系人与群管
+    public boolean deleteDetectEnabled = true;
+    public boolean contactExportEnabled = true;
+    public boolean contactChangeLogEnabled = true;
+    public boolean groupFeaturesEnabled = true;
+
+    // 设置/其他
+    public boolean stickyEnhanceEnabled = true;
+    public boolean unreadBadgeEnabled = true;
+    public boolean tabCustomEnabled = true;
+    public boolean callFeaturesEnabled = true;
+    public boolean msgExportEnabled = true;
+    public boolean chatBackupEnabled = true;
+    public boolean shakeCustomEnabled = true;
 
     // 视频解析
     public boolean videoParseEnabled = true;
@@ -221,8 +259,36 @@ public class ModuleConfig {
         cfg.deepseekModel = prefs.getString("ls_ds_model", "deepseek-chat");
         cfg.deepseekPersona = prefs.getString("ls_ds_persona", "");
 
-        cfg.recallLogEnabled = prefs.getBoolean("ls_recall_enabled", false);
+        cfg.recallLogEnabled = prefs.getBoolean("ls_recall_log", false);
         cfg.redPacketGrab = prefs.getBoolean("ls_redpacket_enabled", false);
+        cfg.redPacketAlertEnabled = prefs.getBoolean("ls_wp_redalert", true);
+
+        // WeChatPlus 增强功能
+        cfg.typingIndicatorEnabled = prefs.getBoolean("ls_wp_typing", true);
+        cfg.chatFooterEnhanceEnabled = prefs.getBoolean("ls_wp_chatfooter", true);
+        cfg.chatUICustomEnabled = prefs.getBoolean("ls_wp_chatui", true);
+        cfg.batchMessageEnabled = prefs.getBoolean("ls_wp_batchmsg", true);
+        cfg.scheduledSendEnabled = prefs.getBoolean("ls_wp_schedsend", true);
+        cfg.autoRemarkEnabled = prefs.getBoolean("ls_wp_autoremark", true);
+        cfg.searchEnhanceEnabled = prefs.getBoolean("ls_wp_search", true);
+        cfg.notifyCustomEnabled = prefs.getBoolean("ls_wp_notify", true);
+        cfg.autoReplyEnabled = prefs.getBoolean("ls_wp_autoreply", false);
+        cfg.snsFeaturesEnabled = prefs.getBoolean("ls_wp_sns", true);
+        cfg.privacyFeaturesEnabled = prefs.getBoolean("ls_wp_privacy", true);
+        cfg.loginMonitorEnabled = prefs.getBoolean("ls_wp_loginmon", true);
+        cfg.hideContactFieldsEnabled = prefs.getBoolean("ls_wp_hidecontact", true);
+        cfg.convPrivacyEnabled = prefs.getBoolean("ls_wp_convprivacy", true);
+        cfg.deleteDetectEnabled = prefs.getBoolean("ls_wp_deldetect", true);
+        cfg.contactExportEnabled = prefs.getBoolean("ls_wp_contactexp", true);
+        cfg.contactChangeLogEnabled = prefs.getBoolean("ls_wp_contactlog", true);
+        cfg.groupFeaturesEnabled = prefs.getBoolean("ls_wp_group", true);
+        cfg.stickyEnhanceEnabled = prefs.getBoolean("ls_wp_sticky", true);
+        cfg.unreadBadgeEnabled = prefs.getBoolean("ls_wp_unread", true);
+        cfg.tabCustomEnabled = prefs.getBoolean("ls_wp_tabcustom", true);
+        cfg.callFeaturesEnabled = prefs.getBoolean("ls_wp_call", true);
+        cfg.msgExportEnabled = prefs.getBoolean("ls_wp_msgexport", true);
+        cfg.chatBackupEnabled = prefs.getBoolean("ls_wp_chatbackup", true);
+        cfg.shakeCustomEnabled = prefs.getBoolean("ls_wp_shake", true);
         cfg.sensitiveFilterEnabled = prefs.getBoolean("ls_sensitive_enabled", false);
         cfg.sensitiveWords.clear();
         try {
@@ -298,6 +364,7 @@ public class ModuleConfig {
             for (int i = 0; i < gmArr.length(); i++) cfg.groupManageList.add(gmArr.getString(i));
         } catch (Exception e) {}
         cfg.antiRecall = prefs.getBoolean("ls_recall_enabled", false);
+        cfg.antiDetection = prefs.getBoolean("ls_anti_detection", true);
 
         cfg.announceWhitelist.clear();
         String wlStr = prefs.getString("ls_tts_whitelist", "");
@@ -375,7 +442,37 @@ public class ModuleConfig {
         e.putString("ls_ds_model", deepseekModel);
         e.putString("ls_ds_persona", deepseekPersona);
         e.putBoolean("ls_recall_enabled", antiRecall);
+        e.putBoolean("ls_anti_detection", antiDetection);
+        e.putBoolean("ls_recall_log", recallLogEnabled);
         e.putBoolean("ls_redpacket_enabled", redPacketGrab);
+        e.putBoolean("ls_wp_redalert", redPacketAlertEnabled);
+
+        // WeChatPlus 增强功能
+        e.putBoolean("ls_wp_typing", typingIndicatorEnabled);
+        e.putBoolean("ls_wp_chatfooter", chatFooterEnhanceEnabled);
+        e.putBoolean("ls_wp_chatui", chatUICustomEnabled);
+        e.putBoolean("ls_wp_batchmsg", batchMessageEnabled);
+        e.putBoolean("ls_wp_schedsend", scheduledSendEnabled);
+        e.putBoolean("ls_wp_autoremark", autoRemarkEnabled);
+        e.putBoolean("ls_wp_search", searchEnhanceEnabled);
+        e.putBoolean("ls_wp_notify", notifyCustomEnabled);
+        e.putBoolean("ls_wp_autoreply", autoReplyEnabled);
+        e.putBoolean("ls_wp_sns", snsFeaturesEnabled);
+        e.putBoolean("ls_wp_privacy", privacyFeaturesEnabled);
+        e.putBoolean("ls_wp_loginmon", loginMonitorEnabled);
+        e.putBoolean("ls_wp_hidecontact", hideContactFieldsEnabled);
+        e.putBoolean("ls_wp_convprivacy", convPrivacyEnabled);
+        e.putBoolean("ls_wp_deldetect", deleteDetectEnabled);
+        e.putBoolean("ls_wp_contactexp", contactExportEnabled);
+        e.putBoolean("ls_wp_contactlog", contactChangeLogEnabled);
+        e.putBoolean("ls_wp_group", groupFeaturesEnabled);
+        e.putBoolean("ls_wp_sticky", stickyEnhanceEnabled);
+        e.putBoolean("ls_wp_unread", unreadBadgeEnabled);
+        e.putBoolean("ls_wp_tabcustom", tabCustomEnabled);
+        e.putBoolean("ls_wp_call", callFeaturesEnabled);
+        e.putBoolean("ls_wp_msgexport", msgExportEnabled);
+        e.putBoolean("ls_wp_chatbackup", chatBackupEnabled);
+        e.putBoolean("ls_wp_shake", shakeCustomEnabled);
         e.putBoolean("ls_sensitive_enabled", sensitiveFilterEnabled);
         JSONArray swArr = new JSONArray();
         for (String w : sensitiveWords) swArr.put(w);

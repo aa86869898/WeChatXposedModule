@@ -26,7 +26,8 @@ public class AntiRecallHook {
         hookXmlRevoke(cl);
         hookProtoRevoke(cl);
         hookRecallRecorder(cl);
-        LogWriter.log(TAG, "anti-recall hooks installed");
+        hookKotlinRevoke(cl);
+        LogWriter.log(TAG, "anti-recall hooks installed (4 paths)");
     }
 
     // ===== 路径1: XML 撤回阻断 — af5.a.run() =====
@@ -222,5 +223,26 @@ public class AntiRecallHook {
             catch (Throwable ignored) {}
         }
         return null;
+    }
+
+    // ===== 路径4: Kotlin协程撤回阻断 — bd0.s.invokeSuspend() ⭐新增 =====
+
+    private static void hookKotlinRevoke(ClassLoader cl) {
+        try {
+            Class<?> bd0s = XposedHelpers.findClass("bd0.s", cl);
+            XposedBridge.hookAllMethods(bd0s, "invokeSuspend", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    if (!sEnabled) return;
+                    param.setResult(null);
+                    LogWriter.log(TAG, "[协程] 阻止撤回成功: bd0.s.invokeSuspend()");
+                }
+            });
+            LogWriter.log(TAG, "[协程] Hooked: bd0.s.invokeSuspend()");
+        } catch (XposedHelpers.ClassNotFoundError ignored) {
+            LogWriter.log(TAG, "[协程] bd0.s 未找到 (可能版本不支持)");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[协程] bd0.s err: " + t.getMessage());
+        }
     }
 }

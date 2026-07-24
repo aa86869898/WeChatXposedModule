@@ -310,12 +310,14 @@ public class MainActivity {
         String[] items = {
             "聊天功能", "主题美化", "联系人和群聊", "群管理助手", "万群自动转发",
             "定时消息助手", "AI智慧助手", "TTS播报转语音",
-            "红包转账", "娱乐助手", "捐赠支持开发"
+            "红包转账", "朋友圈增强", "隐私安全",
+            "数据备份", "娱乐助手", "捐赠支持开发"
         };
         int[] icons = {
             0x1F4AC, 0x1F3A8, 0x1F465, 0x1F6E1, 0x1F4E4,
             0x23F0, 0x1F916, 0x1F50A,
-            0x1F4B0, 0x1F3AE, 0x2764
+            0x1F4B0, 0x1F4F1, 0x1F512,
+            0x1F4BE, 0x1F3AE, 0x2764
         };
 
         for (int i = 0; i < items.length; i++) {

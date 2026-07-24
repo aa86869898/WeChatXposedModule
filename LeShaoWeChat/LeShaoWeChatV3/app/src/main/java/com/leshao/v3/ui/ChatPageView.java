@@ -12,49 +12,103 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 import com.leshao.v3.ContextManager;
-import com.leshao.v3.hook.AntiRecallHook;
-import com.leshao.v3.hook.VoiceForwardHook;
+import com.leshao.v3.hook.*;
+import com.leshao.v3.model.ModuleConfig;
 
 public class ChatPageView {
 
-    private static final String KEY_RECALL_ENABLED = "ls_recall_enabled";
-
     public static View create(Context ctx, Activity parentAct) {
         float d = ctx.getResources().getDisplayMetrics().density;
+        SharedPreferences prefs = ContextManager.getPrefs();
+        ModuleConfig cfg = ModuleConfig.load(prefs);
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(AppColors.bg());
         root.setPadding((int)(16 * d), (int)(16 * d), (int)(16 * d), (int)(16 * d));
 
-        SharedPreferences prefs = ContextManager.getPrefs();
-        boolean recallOn = prefs != null && prefs.getBoolean(KEY_RECALL_ENABLED, false);
-
-        // 功能卡片
-        root.addView(sectionLabel(ctx, "核心功能"));
-
-        LinearLayout card1 = makeCard(ctx, d);
-        card1.addView(switchRow(ctx, d, "消息防撤回", null, recallOn, (v, on) -> {
-            if (prefs != null) {
-                prefs.edit().putBoolean(KEY_RECALL_ENABLED, on).apply();
-            }
-            AntiRecallHook.setEnabled(on);
-        }));
-        root.addView(card1);
-
-        root.addView(spacerV(ctx, d, 8));
-        root.addView(sectionLabel(ctx, "语音转发"));
+        boolean recallOn = prefs != null && prefs.getBoolean("ls_recall_enabled", false);
         boolean vfOn = prefs != null && prefs.getBoolean("ls_voice_forward", false);
 
-        LinearLayout cardVF = makeCard(ctx, d);
-        cardVF.addView(switchRow(ctx, d, "语音消息转发", null, vfOn, (v, on) -> {
-            if (prefs != null) {
-                prefs.edit().putBoolean("ls_voice_forward", on).apply();
-            }
+        // === 核心功能 ===
+        root.addView(sectionLabel(ctx, "核心功能"));
+
+        LinearLayout cardCore = makeCard(ctx, d);
+        cardCore.addView(switchRow(ctx, d, "消息防撤回", null, recallOn, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean("ls_recall_enabled", on).apply();
+            AntiRecallHook.setEnabled(on);
+        }));
+        cardCore.addView(switchRow(ctx, d, "自动关键词回复", null, cfg.autoReplyEnabled, (v, on) -> {
+            cfg.autoReplyEnabled = on; cfg.save(prefs); com.leshao.v3.hook.AutoReplyHook.setEnabled(on);
+        }));
+        cardCore.addView(switchRow(ctx, d, "语音消息转发", null, vfOn, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean("ls_voice_forward", on).apply();
             VoiceForwardHook.setEnabled(on);
         }));
-        VoiceForwardHook.setEnabled(vfOn);
-        root.addView(cardVF);
+        root.addView(cardCore);
+
+        // === 聊天增强 (WeChatPlus) ===
+        root.addView(spacerV(ctx, d, 12));
+        root.addView(sectionLabel(ctx, "聊天增强"));
+
+        LinearLayout cardChat = makeCard(ctx, d);
+        cardChat.addView(switchRow(ctx, d, "对方正在输入提示", null, cfg.typingIndicatorEnabled, (v, on) -> {
+            cfg.typingIndicatorEnabled = on; cfg.save(prefs); TypingIndicator.setEnabled(on);
+        }));
+        cardChat.addView(switchRow(ctx, d, "底部栏功能增强", null, cfg.chatFooterEnhanceEnabled, (v, on) -> {
+            cfg.chatFooterEnhanceEnabled = on; cfg.save(prefs); ChatFooterEnhance.setEnabled(on);
+        }));
+        cardChat.addView(switchRow(ctx, d, "聊天界面UI定制", null, cfg.chatUICustomEnabled, (v, on) -> {
+            cfg.chatUICustomEnabled = on; cfg.save(prefs); ChatUICustom.setEnabled(on);
+        }));
+        cardChat.addView(switchRow(ctx, d, "批量群发消息", null, cfg.batchMessageEnabled, (v, on) -> {
+            cfg.batchMessageEnabled = on; cfg.save(prefs); BatchMessage.setEnabled(on);
+        }));
+        cardChat.addView(switchRow(ctx, d, "定时发送消息", null, cfg.scheduledSendEnabled, (v, on) -> {
+            cfg.scheduledSendEnabled = on; cfg.save(prefs); ScheduledSend.setEnabled(on);
+        }));
+        cardChat.addView(switchRow(ctx, d, "自动设置好友备注", null, cfg.autoRemarkEnabled, (v, on) -> {
+            cfg.autoRemarkEnabled = on; cfg.save(prefs); AutoRemark.setEnabled(on);
+        }));
+        cardChat.addView(switchRow(ctx, d, "搜索功能增强", null, cfg.searchEnhanceEnabled, (v, on) -> {
+            cfg.searchEnhanceEnabled = on; cfg.save(prefs); SearchEnhance.setEnabled(on);
+        }));
+        cardChat.addView(switchRow(ctx, d, "消息通知自定义", null, cfg.notifyCustomEnabled, (v, on) -> {
+            cfg.notifyCustomEnabled = on; cfg.save(prefs); NotifyCustom.setEnabled(on);
+        }));
+        root.addView(cardChat);
+
+        // === 会话与界面 ===
+        root.addView(spacerV(ctx, d, 12));
+        root.addView(sectionLabel(ctx, "会话与界面"));
+
+        LinearLayout cardUI = makeCard(ctx, d);
+        cardUI.addView(switchRow(ctx, d, "好友删除检测", null, cfg.deleteDetectEnabled, (v, on) -> {
+            cfg.deleteDetectEnabled = on; cfg.save(prefs); DeleteDetect.setEnabled(on);
+        }));
+        cardUI.addView(switchRow(ctx, d, "置顶增强", null, cfg.stickyEnhanceEnabled, (v, on) -> {
+            cfg.stickyEnhanceEnabled = on; cfg.save(prefs); StickyEnhance.setEnabled(on);
+        }));
+        cardUI.addView(switchRow(ctx, d, "未读消息角标", null, cfg.unreadBadgeEnabled, (v, on) -> {
+            cfg.unreadBadgeEnabled = on; cfg.save(prefs); UnreadBadge.setEnabled(on);
+        }));
+        cardUI.addView(switchRow(ctx, d, "底部Tab自定义", null, cfg.tabCustomEnabled, (v, on) -> {
+            cfg.tabCustomEnabled = on; cfg.save(prefs); TabCustom.setEnabled(on);
+        }));
+        cardUI.addView(switchRow(ctx, d, "摇一摇自定义", null, cfg.shakeCustomEnabled, (v, on) -> {
+            cfg.shakeCustomEnabled = on; cfg.save(prefs); ShakeCustom.setEnabled(on);
+        }));
+        root.addView(cardUI);
+
+        // === 通话与录音 ===
+        root.addView(spacerV(ctx, d, 12));
+        root.addView(sectionLabel(ctx, "通话与录音"));
+
+        LinearLayout cardCall = makeCard(ctx, d);
+        cardCall.addView(switchRow(ctx, d, "通话录音与自动接听", null, cfg.callFeaturesEnabled, (v, on) -> {
+            cfg.callFeaturesEnabled = on; cfg.save(prefs); CallFeatures.setEnabled(on);
+        }));
+        root.addView(cardCall);
 
         return root;
     }
@@ -100,9 +154,7 @@ public class ChatPageView {
         Switch sw = new Switch(ctx);
         sw.setChecked(checked);
         try {
-            if (checked) {
-                sw.setThumbResource(android.R.drawable.btn_star_big_on);
-            }
+            if (checked) sw.setThumbResource(android.R.drawable.btn_star_big_on);
         } catch (Throwable ignored) {}
         sw.setOnCheckedChangeListener(listener);
         row.addView(sw);

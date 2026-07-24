@@ -2,11 +2,18 @@ package com.leshao.v3.ui;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.Typeface;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.CompoundButton;
 import android.widget.LinearLayout;
+import android.widget.Switch;
 import android.widget.TextView;
+
+import com.leshao.v3.ContextManager;
+import com.leshao.v3.hook.RedPacketAlert;
+import com.leshao.v3.model.ModuleConfig;
 
 public class RedPacketPageView {
 
@@ -30,6 +37,15 @@ public class RedPacketPageView {
             v -> SubPageActivity.open(parentAct, "自动收款", 92)));
 
         root.addView(spacerV(ctx, d, 24));
+
+        // 红包提醒开关
+        SharedPreferences prefs = ContextManager.getPrefs();
+        ModuleConfig cfg = ModuleConfig.load(prefs);
+        root.addView(MainActivity.makeDivider(ctx));
+        root.addView(switchRow(ctx, d, "红包震动+响铃提醒", "收到红包时强制震动和响铃",
+                cfg.redPacketAlertEnabled, (v, on) -> {
+            cfg.redPacketAlertEnabled = on; cfg.save(prefs); RedPacketAlert.setEnabled(on);
+        }));
 
         return root;
     }
@@ -84,5 +100,38 @@ public class RedPacketPageView {
         View v = new View(ctx);
         v.setLayoutParams(new LinearLayout.LayoutParams(-1, (int)(dp * d)));
         return v;
+    }
+
+    private static LinearLayout switchRow(Context ctx, float d, String title, String desc,
+                                           boolean checked, CompoundButton.OnCheckedChangeListener listener) {
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding((int)(18 * d), (int)(14 * d), (int)(18 * d), (int)(14 * d));
+        row.setBackgroundColor(AppColors.whiteCard());
+
+        LinearLayout textCol = new LinearLayout(ctx);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+
+        TextView tv = new TextView(ctx);
+        tv.setText(title); tv.setTextSize(15);
+        tv.setTextColor(AppColors.text1()); tv.setTypeface(null, Typeface.BOLD);
+        textCol.addView(tv);
+
+        if (desc != null && !desc.isEmpty()) {
+            TextView dv = new TextView(ctx);
+            dv.setText(desc); dv.setTextSize(12);
+            dv.setTextColor(AppColors.text2());
+            dv.setPadding(0, (int)(3 * d), 0, 0);
+            textCol.addView(dv);
+        }
+        row.addView(textCol);
+
+        Switch sw = new Switch(ctx); sw.setChecked(checked);
+        try { if (checked) sw.setThumbResource(android.R.drawable.btn_star_big_on); } catch (Throwable ignored) {}
+        sw.setOnCheckedChangeListener(listener);
+        row.addView(sw);
+        return row;
     }
 }

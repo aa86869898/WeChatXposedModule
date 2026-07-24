@@ -113,11 +113,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
                         TTSBroadcaster.init(ctx);
 
-                        HookManager.register(AntiDetectionHook::hook);
+                        AntiDetectionHook.hook(lpparam.classLoader);
                         HookManager.register(AntiRecallHook::hook);
                         HookManager.register(RedPacketHook::hook);
                         HookManager.register(AutoCollectHook::hook);
-                        HookManager.register(FriendRequestHook::hook);
+                        FriendRequestHook.hook(lpparam.classLoader);
                         HookManager.register(ThemeHook::hook);
                         HookManager.register(VoiceForwardHook::hook);
 
