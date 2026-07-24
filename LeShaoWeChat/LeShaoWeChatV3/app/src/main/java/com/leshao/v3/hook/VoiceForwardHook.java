@@ -36,6 +36,7 @@ public class VoiceForwardHook {
     private static final int MENU_ID = 777001;
     private static volatile boolean sHooked = false;
     private static volatile boolean sMenuInjected = false;
+    private static volatile long sMenuInjectedTime = 0;
     private static volatile boolean sEnabled = true;
     private static volatile Activity sChatAct;
     private static volatile View sPendingView;
@@ -209,6 +210,21 @@ public class VoiceForwardHook {
                         LogWriter.log(TAG, sb.toString());
                     }
 
+                    // ===== MenuItem click 检测 (冷却 500ms 后生效, 防自动触发) =====
+                    long elapsed = System.currentTimeMillis() - sMenuInjectedTime;
+                    for (Object arg : param.args) {
+                        if (arg instanceof MenuItem && ((MenuItem) arg).getItemId() == MENU_ID) {
+                            LogWriter.log(TAG, ">>> MENU_ID found in " + label + "." + mName + " elapsed=" + elapsed + "ms <<<");
+                            if (sMenuInjected && elapsed > 500) {
+                                LogWriter.log(TAG, ">>> COOLDOWN PASSED — executeForward! <<<");
+                                sMenuInjected = false;
+                                executeForward();
+                                try { param.setResult(true); } catch (Throwable ignored) {}
+                                return;
+                            }
+                        }
+                    }
+
                     // 策略1: 检测菜单创建 (case 21) — 有 View arg 就可能
                     if (sMenuInjected) return;
                     View itemView = null;
@@ -319,6 +335,7 @@ public class VoiceForwardHook {
 
                     sPendingView = itemView;
                     sMenuInjected = true;
+                    sMenuInjectedTime = System.currentTimeMillis();
                     injectForwardMenuItem(menuObj, itemView);
                 }
             });
