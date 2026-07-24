@@ -3,12 +3,16 @@ package com.leshao.v3.hook;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+
+import com.leshao.v3.model.ModuleConfig;
+import com.leshao.v3.ContextManager;
 
 /**
  * [功能8] 聊天界面自定义 — 生产级完整实现
@@ -44,16 +48,21 @@ public class ChatUICustom {
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     public static void hook(ClassLoader cl) {
-        if (!sEnabled) return;
+        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        if (!sEnabled || !config.chatUICustomEnabled) return;
+        XposedBridge.log("[ChatUICustom] 开始安装hooks...");
+        hookChattingFragment(cl);
+        hookBubbles(cl);
+        XposedBridge.log("[ChatUICustom] hooks安装完成");
+    }
+
+    private static void reloadConfig() {
         bgColor = (int) HookConfig.getLong("chat_bg_color", 0);
         sendBubbleColor = HookConfig.getInt("chat_bubble_send", 0);
         recvBubbleColor = HookConfig.getInt("chat_bubble_recv", 0);
         bubbleRadius = HookConfig.getInt("chat_bubble_radius", 0);
         titleColor = HookConfig.getInt("chat_title_color", 0);
         hideNickname = HookConfig.getInt("chat_hide_nickname", 0) == 1;
-
-        if (bgColor != 0 || titleColor != 0) hookChattingFragment(cl);
-        if (sendBubbleColor != 0 || recvBubbleColor != 0 || hideNickname) hookBubbles(cl);
     }
 
     private static void hookChattingFragment(ClassLoader cl) {
@@ -61,53 +70,51 @@ public class ChatUICustom {
             Class<?> chattingUI = XposedHelpers.findClass(
                     "com.tencent.mm.ui.chatting.ChattingUIFragment", cl);
 
-            if (bgColor != 0) {
-                XposedBridge.hookAllMethods(chattingUI, "dealContentView",
-                        new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        View contentView = (View) param.args[0];
-                        if (contentView != null) {
-                            contentView.setBackgroundColor(bgColor);
-                            XposedBridge.log("[ChatUI] 背景色已设置: #"
-                                    + Integer.toHexString(bgColor));
+            XposedBridge.hookAllMethods(chattingUI, "dealContentView",
+                    new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    reloadConfig();
+                    if (bgColor == 0) return;
+                    View contentView = (View) param.args[0];
+                    if (contentView != null) {
+                        contentView.setBackgroundColor(bgColor);
+                    }
+                }
+            });
+
+            XposedBridge.hookAllMethods(chattingUI, "getLayoutView",
+                    new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    reloadConfig();
+                    if (bgColor == 0) return;
+                    View layoutView = (View) param.getResult();
+                    if (layoutView != null) {
+                        setChatAreaBackground(layoutView);
+                    }
+                }
+            });
+
+            XposedBridge.hookAllMethods(chattingUI, "setMMTitle",
+                    new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    reloadConfig();
+                    if (titleColor == 0) return;
+                    try {
+                        android.app.Activity act = getActivity(param.thisObject);
+                        if (act != null && act.getActionBar() != null) {
+                            act.getActionBar().setBackgroundDrawable(
+                                    new ColorDrawable(titleColor));
                         }
-                    }
-                });
-            }
+                    } catch (Throwable ignored) {}
+                }
+            });
 
-            if (bgColor != 0) {
-                XposedBridge.hookAllMethods(chattingUI, "getLayoutView",
-                        new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        View layoutView = (View) param.getResult();
-                        if (layoutView != null) {
-                            setChatAreaBackground(layoutView);
-                        }
-                    }
-                });
-            }
-
-            if (titleColor != 0) {
-                XposedBridge.hookAllMethods(chattingUI, "setMMTitle",
-                        new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        try {
-                            android.app.Activity act = getActivity(param.thisObject);
-                            if (act != null && act.getActionBar() != null) {
-                                act.getActionBar().setBackgroundDrawable(
-                                        new ColorDrawable(titleColor));
-                            }
-                        } catch (Throwable ignored) {}
-                    }
-                });
-            }
-
-            XposedBridge.log("[ChatUI] ChattingUIFragment Hook完成");
+            XposedBridge.log("[ChatUI] ChattingUIFragment hooks已安装 (背景/标题)");
         } catch (Throwable t) {
-            XposedBridge.log("[ChatUI] Hook失败: " + t.getMessage());
+            XposedBridge.log("[ChatUI] ChattingUIFragment hook失败: " + t.getMessage());
         }
     }
 
@@ -119,6 +126,7 @@ public class ChatUICustom {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     try {
+                        reloadConfig();
                         int position = (Integer) param.args[0];
                         View itemView = (View) param.getResult();
                         if (itemView == null) return;
@@ -138,8 +146,7 @@ public class ChatUICustom {
                     } catch (Throwable ignored) {}
                 }
             });
-            XposedBridge.log("[ChatUI] 气泡Hook完成 (发送色="
-                    + colorStr(sendBubbleColor) + " 接收色=" + colorStr(recvBubbleColor) + ")");
+            XposedBridge.log("[ChatUI] 气泡Hook已安装");
         } catch (Throwable t) {
             XposedBridge.log("[ChatUI] 气泡Hook失败: " + t.getMessage());
         }
