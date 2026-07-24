@@ -567,39 +567,67 @@ public class VoiceForwardHook {
                 try { e9 = XposedHelpers.callMethod(msgObj, "c"); } catch (Throwable ignored) {}
             }
             if (e9 == null || !e9.getClass().getName().contains("storage")) {
-                LogWriter.log(TAG, "forward: cannot get e9 from " + (msgObj != null ? msgObj.getClass().getSimpleName() : "null"));
+                LogWriter.log(TAG, "forward: cannot get e9");
                 return false;
             }
 
             long msgId = extractMsgId(e9);
             LogWriter.log(TAG, "doForward: msgId=" + msgId + " → " + targetWxid);
 
-            // 方案1: SelectConversationUI 带目标用户
+            // 方案1: 获取 voice 文件路径，直接调用发送 API
+            String voicePath = null;
+            try { voicePath = (String) XposedHelpers.callMethod(e9, "P0"); } catch (Throwable ignored) {}
+            if (voicePath == null) try { voicePath = (String) XposedHelpers.getObjectField(e9, "field_imgPath"); } catch (Throwable ignored) {}
+            LogWriter.log(TAG, "doForward: voicePath=" + voicePath);
+
+            // 方案2: 通过 modelmulti.o 的 b(msgInfo, talker) 或 a(...) 直接转发
+            ClassLoader cl = ContextManager.getClassLoader();
             try {
-                Class<?> selUI = act.getClassLoader().loadClass("com.tencent.mm.ui.transmit.SelectConversationUI");
-                Intent intent = new Intent(act, selUI);
-                intent.putExtra("Select_Conv_User", targetWxid);
-                intent.putExtra("Retr_Msg_Type", 34);
-                intent.putExtra("Retr_Msg_Id", msgId);
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                act.startActivity(intent);
-                return true;
+                Class<?> multiCls = cl.loadClass("com.tencent.mm.modelmulti.o");
+                Object multi = XposedHelpers.callStaticMethod(multiCls, "a");
+                // try a(msgInfo, ...)
+                try {
+                    XposedHelpers.callMethod(multi, "a", e9, targetWxid);
+                    LogWriter.log(TAG, "doForward: multi.a(e9, talker) OK");
+                    return true;
+                } catch (Throwable t1) {
+                    LogWriter.log(TAG, "doForward: multi.a fail: " + t1.getMessage());
+                }
+                // try b(msgInfo, talker)
+                try {
+                    XposedHelpers.callMethod(multi, "b", e9, targetWxid);
+                    LogWriter.log(TAG, "doForward: multi.b(e9, talker) OK");
+                    return true;
+                } catch (Throwable t2) {
+                    LogWriter.log(TAG, "doForward: multi.b fail: " + t2.getMessage());
+                }
             } catch (Throwable t) {
-                LogWriter.log(TAG, "forward: SelectConversationUI fail: " + t.getMessage());
+                LogWriter.log(TAG, "doForward: modelmulti.o fail: " + t.getMessage());
             }
 
-            // 方案2: 直接用 MsgRetransmitUI
+            // 方案3: 查 modelmulti.o 的所有 public 方法
             try {
-                Class<?> retUI = act.getClassLoader().loadClass("com.tencent.mm.ui.transmit.MsgRetransmitUI");
-                Intent intent = new Intent(act, retUI);
-                intent.putExtra("Select_Conv_User", targetWxid);
+                Class<?> multiCls = cl.loadClass("com.tencent.mm.modelmulti.o");
+                Object multi = XposedHelpers.callStaticMethod(multiCls, "a");
+                for (Method m : multiCls.getDeclaredMethods()) {
+                    Class<?>[] pts = m.getParameterTypes();
+                    if (pts.length >= 2 && !m.getName().equals("toString") && !m.getName().equals("equals")) {
+                        LogWriter.log(TAG, "doForward: multi." + m.getName() + "(" + java.util.Arrays.toString(pts) + ")");
+                    }
+                }
+            } catch (Throwable ignored) {}
+
+            // 方案4: SelectConversationUI 带 result
+            try {
+                Class<?> selUI = cl.loadClass("com.tencent.mm.ui.transmit.SelectConversationUI");
+                Intent intent = new Intent(act, selUI);
                 intent.putExtra("Retr_Msg_Type", 34);
                 intent.putExtra("Retr_Msg_Id", msgId);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 act.startActivity(intent);
                 return true;
             } catch (Throwable t) {
-                LogWriter.log(TAG, "forward: MsgRetransmitUI fail: " + t.getMessage());
+                LogWriter.log(TAG, "doForward: SelectConversationUI fail: " + t.getMessage());
             }
 
             return false;
