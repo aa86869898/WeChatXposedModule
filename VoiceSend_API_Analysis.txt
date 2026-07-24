@@ -1,0 +1,323 @@
+================================================================================
+ 微信 8.0.76 语音发送API — 完整深度分析
+ 基于 tl.p0 (SceneVoice Recorder) + b31.* (NetScene) 源码反编译
+================================================================================
+
+一、语音发送完整流程图
+================================================================================
+
+  用户按住录音键
+  │
+  ├─► ChatFooter 创建 tl.p0 (Voice Recorder)
+  │   tl.p0 构造: p0(Context ctx, boolean useSpeex)
+  │
+  ├─► tl.p0.g(toUser, msgInfo) — 开始录音
+  │   │
+  │   ├─ 生成文件名: x0.g(toUser, "amr_")  → 返回完整路径
+  │   │   或: y21.g1.x0(z1.r(), "amr_")
+  │   │
+  │   ├─ 创建 tl.x0 (发送任务) 并通过 ((f)n0.c(f.class)).zj(task) 注册
+  │   │
+  │   └─ 启动录音线程 tl.o0.run()
+  │       └─ y21.f1.startRecord(filePath)  → 实际硬件录音
+  │
+  ├─► 用户松手 → tl.p0.stop()
+  │   │
+  │   ├─ 检查时长: <800ms 丢弃 (>1000ms for throw-bottle)
+  │   │
+  │   ├─ 正常路径:
+  │   │   x0.t(fileName, duration_ms, 0, msgInfo)
+  │   │   → 更新 msgInfo.content 为语音 XML
+  │   │   → 写入数据库
+  │   │   → y21.p0.kj().e() 触发播放列表刷新
+  │   │
+  │   └─ 新语音路径:
+  │       ((f)n0.c(f.class)).zj(task)  → task = tl.x0 → 异步发送
+  │
+  └─► NetScene 发送 (b31.*)
+      │
+      ├─ b31.j(String talker, int scene)   → 语音上传 NetScene
+      │   方法: doScene(s, u0)→int  getType()→int
+      │        onGYNetEnd(errType,errCode,errMsg,resp) 
+      │
+      ├─ b31.w  → 语音发送管理器
+      │   构造: w(int, int, b)
+      │         w(int, int, String, String, String, w70, b)
+      │   方法: start()  start(String)  stop(boolean)  cancel(boolean)
+      │        init(int,int,b)  init(boolean,boolean,int,int,b)
+      │        f(boolean,boolean,d)  d(boolean,boolean)
+      │        onSceneEnd(int,int,String,m1)
+      │
+      └─ b31.l(String talker, int scene)  → 另一语音 NetScene
+
+
+二、核心类详解
+================================================================================
+
+[1] tl.p0 — Voice Recorder (语音录制器)
+─────────────────────────────────────────
+  类名: tl.p0
+  标签: "MicroMsg.SceneVoice.Recorder"
+
+  构造: p0(Context ctx, boolean useSpeex)
+  字段:
+    this.h → e9           消息对象
+    this.d → String       目标用户(toUser/talker)
+    this.e → String       语音文件路径
+    this.a → d            录音器实例
+    this.f → tl.x0        发送任务
+    this.g → d            发送参数
+    this.m → int          录音时长(ms)
+    this.p → int          状态 (2=正常, -1=取消)
+    this.o → boolean      是否使用Speex编码
+    this.i → boolean      是否扔瓶子
+    this.j → boolean      是否笔记(medianote)
+    this.n → boolean      是否已停止
+    this.k → long         开始时间(elapsedRealtime)
+    this.s → e1           回调
+    this.u → b4           计时器
+
+  公开方法:
+    boolean g(String toUser, e9 msgInfo)
+      开始录音 — 核心入口!
+      参数: toUser=目标用户, msgInfo=预创建的消息对象
+      返回: true=成功
+      流程: ①生成文件路径 → ②创建发送任务 → ③启动硬件录音
+
+    boolean stop()
+      停止录音并触发发送
+      返回: true=录音有效(>800ms)并已发送
+      Hook点: afterHookedMethod → 可读取 this.e(文件路径) this.m(时长)
+
+    boolean cancel()
+      取消录音
+
+    void reset()
+      重置状态
+
+    e9 j()
+      获取关联的消息对象
+      返回: this.h
+
+    long c()
+      获取已录音时长(ms)
+
+    int d()
+      获取振幅
+
+    void b(e1 callback)
+      设置回调
+
+    void h(f1 listener)
+      设置发送监听
+
+    boolean g(String path, e9 msgInfo, boolean z)
+      另一个开始录音的入口(带文件路径)
+
+[2] tl.o0 — Voice Record Start Runnable
+─────────────────────────────────────────
+  类名: tl.o0
+  实现: Runnable
+
+  构造: o0(p0 recorder)
+  方法: void run()
+    ① 检查TTS是否在播放 → 等300ms
+    ② synchronized(recorder):
+       - 获取录音器 dVar
+       - 获取完整路径: ((u0)n0.c(u0.class)).Mj(...)
+       - dVar.startRecord(fullPath) → 开始硬件录音
+       - 记录开始时间
+
+[3] tl.x0 — Voice Send Task (发送任务)
+─────────────────────────────────────────
+  类名: tl.x0
+  构造: x0(y0 manager)
+  方法: void a() — 执行发送
+
+[4] tl.y0 — Voice Send Manager (发送管理)
+─────────────────────────────────────────
+  类名: tl.y0
+  方法: boolean a(String, int)   bool b()
+
+[5] y21.f1 — Hardware Voice Recorder (硬件录音)
+─────────────────────────────────────────
+  类名: y21.f1
+  构造: f1(to.c)
+  方法:
+    boolean startRecord(String path) — 开始硬件录音
+    boolean stopRecord()             — 停止硬件录音
+    int a()                          — 获取振幅
+    int d()                          — 获取状态
+    int getStatus()                  — 获取录音状态
+    void b(e1 callback)              — 设置回调
+
+[6] y21.e1 — Voice Recorder Wrapper
+─────────────────────────────────────────
+  类名: y21.e1
+  构造: e1(f1 recorder)
+  方法: void a()
+
+[7] b31.w — Voice NetScene Manager (网络发送)
+─────────────────────────────────────────
+  类名: b31.w
+  构造:
+    w(int, int, b)                       — 简单构造
+    w(int,int,String,String,String,w70,b) — 完整构造
+
+  方法:
+    void start()                         — 开始发送
+    void start(String path)              — 指定路径开始发送
+    void stop(boolean)                   — 停止发送
+    void cancel(boolean)                 — 取消发送
+    void init(int,int,b)                 — 初始化
+    void init(boolean,boolean,int,int,b) — 完整初始化
+    void f(boolean,boolean,d)            — 设置参数
+    void d(boolean,boolean)              — 设置参数
+    void onSceneEnd(int,int,String,m1)   — 网络回调
+    int getMaxAmplitudeRate()            — 获取最大振幅
+    void setVadSAndNRation(float)        — 设置VAD信噪比
+
+[8] b31.j — Voice Upload NetScene
+─────────────────────────────────────────
+  类名: b31.j
+  构造: j(String talker, int scene)
+  方法:
+    int doScene(Network, callback) → int  发送网络请求
+    int getType() → int                    网络请求类型
+    void onGYNetEnd(int errType, int errCode, String errMsg, byte[] response)
+                                           网络回调(0,0=成功)
+
+[9] b31.l — Voice NetScene (变体)
+─────────────────────────────────────────
+  类名: b31.l
+  构造: l(String talker, int scene)
+  方法: 同 b31.j
+
+[10] ChatFooter — 语音按钮入口
+─────────────────────────────────────────
+  类名: com.tencent.mm.pluginsdk.ui.chat.ChatFooter
+  相关方法:
+    A(boolean) — 切换到语音模式
+    B(boolean) — 切换到文字模式
+    E(boolean, int, boolean) — 可能是触发语音录制
+
+
+三、语音文件路径生成规则
+================================================================================
+
+  x0.g(toUser, "amr_")
+    → 在语音目录生成唯一文件名, 格式: amr_<随机>.amr
+  
+  y21.g1.x0(prefix, "amr_")
+    → 另一路径生成方式, 用于特殊场景(扔瓶子/笔记)
+
+  完整路径示例:
+    /data/user/0/com.tencent.mm/MicroMsg/<hash>/voice2/amr_xxxxx.amr
+
+  文件名存储在 msgInfo.field_content 中:
+    简单格式:  "wxid_xxx:duration:0"
+    XML格式:   <msg><voicemsg length="5000" .../></msg>
+
+  msgInfo.field_imgPath → 语音文件的完整路径
+
+
+四、Hook 语音发送的精确位置
+================================================================================
+
+  [Hook点1] tl.p0.stop() — afterHookedMethod
+  ───────────────────────────────────────────
+    时机: 用户松手, 语音发送即将触发
+    可获取:
+      this.e  → String    语音文件完整路径
+      this.m  → int       录音时长(ms)
+      this.h  → e9        消息对象
+      this.d  → String    目标用户
+    可操作:
+      ① 复制语音文件到自定义目录
+      ② 修改录音时长(伪造长/短语音)
+      ③ 阻止发送: setResult(false)
+
+  [Hook点2] b31.w.onSceneEnd() — afterHookedMethod
+  ───────────────────────────────────────────
+    时机: 语音上传完成
+    可获取: errType, errCode, errMsg
+    可操作: 记录发送结果
+
+  [Hook点3] tl.p0.g() — beforeHookedMethod
+  ───────────────────────────────────────────
+    时机: 开始录音时
+    可获取: toUser, msgInfo
+    可操作: 修改目标用户或消息对象
+
+  [Hook点4] ChatFooter.A()/B() — 语音/文字模式切换
+  ───────────────────────────────────────────
+    时机: 用户切换到语音输入模式
+
+  [Hook点5] tl.p0.h() 或 b() — 回调设置
+  ───────────────────────────────────────────
+    时机: 设置发送回调时
+    可获取: 回调对象
+
+
+五、构造并发送语音消息的完整API调用链
+================================================================================
+
+  如果要从代码中构造并发送一条语音消息, 完整链路:
+
+  1. 创建消息对象:
+     e9 msgInfo = new e9(talker);           // storage.e9
+     msgInfo.A1(34);                         // setType(34)=语音
+     msgInfo.L1(System.currentTimeMillis()); // setCreateTime
+
+  2. 准备语音文件:
+     String voicePath = "/path/to/voice.amr";
+
+  3. 一种方式 — 通过 tl.p0 录制+发送:
+     tl.p0 recorder = new tl.p0(context, false);
+     recorder.g(talker, msgInfo);           // 开始录音
+     // ... 等待用户松手或模拟松手 ...
+     recorder.stop();                        // 停止并发送
+
+  4. 另一种方式 — 直接写入DB(绕过录音):
+     msgInfo.X0("talker:5000:0");           // setContent (时长5000ms)
+     msgInfo.B1(voicePath);                 // 可能是 setImgPath
+     f9.Ra(msgId, msgInfo);                 // 写入数据库
+     // 然后触发发送 → 构造 b31.w 或 b31.j
+
+  5. 通过 NetScene 上传:
+     b31.w sender = new b31.w(type, scene, callback);
+     sender.start(voicePath);               // 开始上传
+     sender.onSceneEnd → 回调结果
+
+
+六、语音消息 content 格式说明
+================================================================================
+
+  语音消息 type=34 时, content 有多种格式:
+
+  格式1 (简单):
+    "wxid_xxx:5000:0"
+    解析: sender:duration_ms:unknown
+
+  格式2 (XML):
+    <msg>
+      <voicemsg endflag="1" 
+                length="5000"
+                voiceformat="4"
+                voicelength="5000"
+                bufid="..."
+                fromusername="wxid_xxx"
+                clientmsgid="..." />
+    </msg>
+
+  格式3 (群聊):
+    "wxid_xxx:0:0"  (后两个字段可能是其他含义)
+
+  voiceformat值:
+    4 = AMR (默认)
+    可能还有其他值对应不同编码格式
+
+
+================================================================================
+  分析完成 — 所有类名和方法均从微信 8.0.76 实际反编译提取
+================================================================================

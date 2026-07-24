@@ -816,94 +816,103 @@ public class VoiceForwardHook {
         } catch (Throwable ignored) {}
     }
 
-    // ===== Send API 发现: 全 DEX 扫描 send/dispatch 类 + Voice 组件 hook =====
+    // ===== Send API 发现: 找 tl.p0/x0 + b31.w/j =====
     private static void hookForwardTracing(ClassLoader cl) {
-        scanSendAndMessengerPackages(cl);
-        hookKeyVoiceClasses(cl);
+        findSceneVoiceRecorder(cl);
     }
 
-    private static void scanSendAndMessengerPackages(ClassLoader cl) {
-        // 扫描所有 send/dispatch/messenger 相关的包，找出 8.0.76 的发送入口
+    private static void findSceneVoiceRecorder(ClassLoader cl) {
+        // 扫描 DEX 中所有 simpleName 为 p0, o0, x0, y0 的类, 找 SceneVoice Recorder
         try {
             String apkPath = ContextManager.getApkPath();
             if (apkPath == null) return;
             dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
             Enumeration<String> entries = dex.entries();
 
-            String[] targetPkgs = {
-                "com.tencent.mm.plugin.messenger.",
-                "com.tencent.mm.plugin.messenger.foundation",
-                "com.tencent.mm.modelmulti",
-            };
-
             while (entries.hasMoreElements()) {
                 String cn = entries.nextElement();
-                boolean match = false;
-                for (String pkg : targetPkgs) {
-                    if (cn.startsWith(pkg)) { match = true; break; }
-                }
-                if (!match) continue;
+                String simple = cn.substring(cn.lastIndexOf('.') + 1);
+                // 目标类简名
+                if (!simple.equals("p0") && !simple.equals("o0") && !simple.equals("x0") && !simple.equals("y0")
+                    && !simple.equals("w") && !simple.equals("j") && !simple.equals("l")) continue;
                 try {
                     Class<?> cls = cl.loadClass(cn);
-                    StringBuilder sb = new StringBuilder("◆SEND ").append(cn);
+                    // 检查是否有 g(String,e9) 方法 (scene voice recorder 特征)
+                    boolean hasG = false, hasStop = false, hasJ = false;
+                    String gSig = "", stopSig = "";
                     for (Method m : cls.getDeclaredMethods()) {
-                        sb.append(" ").append(m.getName()).append("(");
-                        Class<?>[] pts = m.getParameterTypes();
-                        for (int j = 0; j < pts.length; j++) {
-                            if (j > 0) sb.append(",");
-                            sb.append(pts[j].getSimpleName());
+                        if (m.getName().equals("g") && m.getParameterTypes().length >= 2) {
+                            hasG = true;
+                            gSig = sig(m);
                         }
-                        sb.append(")");
-                        if (Modifier.isStatic(m.getModifiers())) sb.append("[static]");
+                        if (m.getName().equals("stop") && m.getReturnType() == boolean.class && m.getParameterTypes().length == 0) {
+                            hasStop = true;
+                            stopSig = sig(m);
+                        }
+                        if (m.getName().equals("j") && m.getReturnType() != void.class && m.getParameterTypes().length == 0) {
+                            hasJ = true;
+                        }
                     }
-                    LogWriter.log(TAG, sb.toString());
+                    if (hasG && hasStop) {
+                        LogWriter.log(TAG, "◆FOUND SceneVoice p0: " + cn);
+                        for (Method m : cls.getDeclaredMethods()) {
+                            LogWriter.log(TAG, "  method: " + sig(m));
+                        }
+                    }
+                    // 检查 b31.w 特征: 有 start()+stop()+init()方法
+                    boolean hasStart = false, hasInit = false;
+                    for (Method m : cls.getDeclaredMethods()) {
+                        if (m.getName().equals("start")) hasStart = true;
+                        if (m.getName().equals("init")) hasInit = true;
+                    }
+                    if (hasStart && hasStop && hasInit && simple.equals("w")) {
+                        LogWriter.log(TAG, "◆FOUND b31.w: " + cn);
+                        for (Method m : cls.getDeclaredMethods()) {
+                            LogWriter.log(TAG, "  method: " + sig(m));
+                        }
+                    }
+                    // 检查 b31.j/l 特征: 有 doScene()+onGYNetEnd()
+                    boolean hasDoScene = false, hasOnGY = false;
+                    for (Method m : cls.getDeclaredMethods()) {
+                        if (m.getName().equals("doScene")) hasDoScene = true;
+                        if (m.getName().equals("onGYNetEnd")) hasOnGY = true;
+                    }
+                    if (hasDoScene && hasOnGY && (simple.equals("j") || simple.equals("l"))) {
+                        LogWriter.log(TAG, "◆FOUND b31." + simple + ": " + cn);
+                        for (Method m : cls.getDeclaredMethods()) {
+                            LogWriter.log(TAG, "  method: " + sig(m));
+                        }
+                    }
+                    // 检查 x0 特征: 有 t() 或 g() 静态方法
+                    if (simple.equals("x0")) {
+                        boolean hasT = false, hasGStatic = false;
+                        for (Method m : cls.getDeclaredMethods()) {
+                            if (m.getName().equals("t")) hasT = true;
+                            if (m.getName().equals("g") && Modifier.isStatic(m.getModifiers())) hasGStatic = true;
+                        }
+                        if (hasT || hasGStatic) {
+                            LogWriter.log(TAG, "◆FOUND x0 utils: " + cn);
+                            for (Method m : cls.getDeclaredMethods()) {
+                                LogWriter.log(TAG, "  method: " + sig(m));
+                            }
+                        }
+                    }
                 } catch (Throwable ignored) {}
             }
             dex.close();
         } catch (Throwable t) {
-            LogWriter.log(TAG, "◆SEND scan error: " + t.getMessage());
+            LogWriter.log(TAG, "◆find error: " + t.getMessage());
         }
     }
 
-    private static void hookKeyVoiceClasses(ClassLoader cl) {
-        // 手动指定 key voice 类, hook 所有方法
-        String[] keyClasses = {
-            "com.tencent.mm.ui.chatting.component.VoiceComponent",
-            "com.tencent.mm.pluginsdk.ui.VoiceInputFooter",
-            "com.tencent.mm.pluginsdk.ui.VoiceInputLayout",
-            "com.tencent.mm.pluginsdk.ui.VoiceInputLayoutImpl",
-            "com.tencent.mm.pluginsdk.ui.chat.VoiceInputPanel",
-        };
-        int total = 0;
-        for (String cn : keyClasses) {
-            try {
-                Class<?> cls = cl.loadClass(cn);
-                for (Method m : cls.getDeclaredMethods()) {
-                    final String full = cn + "." + m.getName();
-                    XposedBridge.hookMethod(m, new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            LogWriter.log(TAG, "★KEY " + full);
-                        }
-                    });
-                    total++;
-                }
-                for (Class<?> inner : cls.getDeclaredClasses()) {
-                    for (Method m : inner.getDeclaredMethods()) {
-                        final String full = cn + "$" + inner.getSimpleName() + "." + m.getName();
-                        XposedBridge.hookMethod(m, new XC_MethodHook() {
-                            @Override
-                            protected void beforeHookedMethod(MethodHookParam param) {
-                                LogWriter.log(TAG, "★KEY " + full);
-                            }
-                        });
-                        total++;
-                    }
-                }
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "★KEY not found: " + cn);
-            }
+    private static String sig(Method m) {
+        StringBuilder sb = new StringBuilder(m.getName()).append("(");
+        Class<?>[] pts = m.getParameterTypes();
+        for (int i = 0; i < pts.length; i++) {
+            if (i > 0) sb.append(",");
+            sb.append(pts[i].getSimpleName());
         }
-        LogWriter.log(TAG, "★KEY hooked: " + total + " methods on " + keyClasses.length + " classes");
+        sb.append(")→").append(m.getReturnType().getSimpleName());
+        return sb.toString();
     }
 }
