@@ -575,10 +575,6 @@ public class VoiceForwardHook {
             // 1. 找语音文件
             String voiceFile = findVoiceFile(e9);
             if (voiceFile == null) {
-                LogWriter.log(TAG, "doForward: voice file not found, try voice2/ dir");
-                voiceFile = searchVoice2Dir();
-            }
-            if (voiceFile == null) {
                 LogWriter.log(TAG, "doForward: cannot find any voice file");
                 return false;
             }
@@ -629,25 +625,26 @@ public class VoiceForwardHook {
         }
         LogWriter.log(TAG, "voice: cid=" + cid);
 
+        // 优先用 MD5 路径直接定位
         String uinHash = getUinHash(cl);
-        if (uinHash == null) { LogWriter.log(TAG, "voice: no uinHash"); return null; }
+        if (uinHash != null) {
+            String[] roots = {
+                "/data/data/com.tencent.mm/MicroMsg/" + uinHash + "/voice2",
+                "/data/user/0/com.tencent.mm/MicroMsg/" + uinHash + "/voice2",
+            };
+            String md5 = md5(cid);
+            String path = md5.substring(0, 2) + "/" + md5.substring(2, 4) + "/msg_" + cid + ".amr";
+            for (String v2 : roots) {
+                java.io.File f = new java.io.File(v2, path);
+                if (f.exists()) { LogWriter.log(TAG, "voice: " + f.getAbsolutePath() + " EXISTS"); return f.getAbsolutePath(); }
+            }
+            LogWriter.log(TAG, "voice: md5 path not found, falling back to search");
+        } else {
+            LogWriter.log(TAG, "voice: no uinHash, searching recursively");
+        }
 
-        String voice2 = "/data/user/0/com.tencent.mm/MicroMsg/" + uinHash + "/voice2";
-        String md5 = md5(cid);
-        String subdir = md5.substring(0, 2) + "/" + md5.substring(2, 4);
-        String path = voice2 + "/" + subdir + "/msg_" + cid + ".amr";
-
-        java.io.File f = new java.io.File(path);
-        if (f.exists()) { LogWriter.log(TAG, "voice: " + path + " EXISTS"); return path; }
-        LogWriter.log(TAG, "voice: " + path + " NOT_FOUND");
-
-        // fallback: 尝试去掉子目录
-        path = voice2 + "/msg_" + cid + ".amr";
-        f = new java.io.File(path);
-        if (f.exists()) { LogWriter.log(TAG, "voice: flat=" + path + " EXISTS"); return path; }
-
-        LogWriter.log(TAG, "voice: not found, trying voice2 search...");
-        return null;
+        // fallback: 递归搜索 voice2 下精准匹配 msg_{cid}.amr
+        return searchVoice2Dir(cid);
     }
 
     private static String md5(String s) {
@@ -675,10 +672,9 @@ public class VoiceForwardHook {
 
     private static String getUinHash(ClassLoader cl) {
         try {
-            // 方法1: kernel.h.c() — 试多种变体
             for (String clsName : new String[]{
-                "com.tencent.mm.kernel.h", 
-                "com.tencent.mm.kernel.g", 
+                "com.tencent.mm.kernel.h",
+                "com.tencent.mm.kernel.g",
                 "com.tencent.mm.sdk.platformtools.x"
             }) {
                 try {
@@ -686,42 +682,32 @@ public class VoiceForwardHook {
                         XposedHelpers.findClass(clsName, cl), "c");
                     if (acc != null) {
                         long uin = 0;
-                        try { uin = XposedHelpers.getLongField(acc, "e"); } catch (Throwable ignored) {}
-                        if (uin <= 0) try { uin = XposedHelpers.getIntField(acc, "e"); } catch (Throwable ignored) {}
-                        if (uin <= 0) try { uin = XposedHelpers.getLongField(acc, "field_uin"); } catch (Throwable ignored) {}
-                        if (uin <= 0) try { 
-                            // 尝试 callMethod("getUin") 
+                        try { uin = XposedHelpers.getIntField(acc, "e"); } catch (Throwable ignored) {}
+                        if (uin <= 0) try { uin = XposedHelpers.getLongField(acc, "e"); } catch (Throwable ignored) {}
+                        if (uin <= 0) try { uin = XposedHelpers.getIntField(acc, "field_uin"); } catch (Throwable ignored) {}
+                        if (uin <= 0) try {
                             Object val = XposedHelpers.callMethod(acc, "getUin");
-                            if (val instanceof Long) uin = (Long) val;
-                            else if (val instanceof Integer) uin = ((Integer) val).longValue();
+                            if (val instanceof Integer) uin = ((Integer) val).longValue();
+                            else if (val instanceof Long) uin = (Long) val;
                         } catch (Throwable ignored) {}
                         if (uin > 0) {
                             String uinStr = String.valueOf(uin);
-                            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
-                            byte[] d = md.digest(uinStr.getBytes());
-                            StringBuilder sb = new StringBuilder();
-                            for (byte b : d) sb.append(String.format("%02x", b));
-                            LogWriter.log(TAG, "uinHash: uin=" + uin + " hash=" + sb);
-                            return sb.toString();
+                            return md5(uinStr);
                         }
                     }
                 } catch (Throwable ignored) {}
             }
 
-            // 方法2: SharedPreferences — 从 context 获取
             try {
                 android.content.Context ctx = ContextManager.getAppContext();
                 if (ctx != null) {
-                    long uin = ctx.getSharedPreferences("system_config_prefs", 0).getLong("default_uin", 0);
-                    if (uin <= 0) uin = ctx.getSharedPreferences("system_config_prefs", 0).getInt("default_uin", 0);
+                    android.content.SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
+                    long uin = 0;
+                    try { uin = sp.getInt("default_uin", 0); } catch (Throwable ignored) {}
+                    if (uin <= 0) try { uin = sp.getLong("default_uin", 0); } catch (Throwable ignored) {}
                     if (uin > 0) {
-                        String uinStr = String.valueOf(uin);
-                        java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
-                        byte[] d = md.digest(uinStr.getBytes());
-                        StringBuilder sb = new StringBuilder();
-                        for (byte b : d) sb.append(String.format("%02x", b));
-                        LogWriter.log(TAG, "uinHash from prefs: uin=" + uin + " hash=" + sb);
-                        return sb.toString();
+                        LogWriter.log(TAG, "uinHash from prefs: uin=" + uin);
+                        return md5(String.valueOf(uin));
                     }
                 }
             } catch (Throwable t) {
@@ -733,7 +719,8 @@ public class VoiceForwardHook {
         return null;
     }
 
-    private static String searchVoice2Dir() {
+    private static String searchVoice2Dir(String cid) {
+        String targetName = "msg_" + cid + ".amr";
         String[] roots = {
             "/data/data/com.tencent.mm/MicroMsg",
             "/data/user/0/com.tencent.mm/MicroMsg",
@@ -744,30 +731,29 @@ public class VoiceForwardHook {
             for (java.io.File userDir : md.listFiles()) {
                 if (!userDir.isDirectory()) continue;
                 java.io.File v2 = new java.io.File(userDir, "voice2");
+                if (!v2.isDirectory()) { v2 = new java.io.File(userDir, "voice"); continue; }
                 if (!v2.isDirectory()) continue;
-                // 递归搜索 .amr 文件 (voice2 下可能有子目录)
-                String found = searchAmrRecursive(v2, 3);
+                String found = searchFileRecursive(v2, targetName, 4);
                 if (found != null) return found;
             }
         }
         return null;
     }
 
-    private static String searchAmrRecursive(java.io.File dir, int depth) {
-        if (depth <= 0) return null;
+    private static String searchFileRecursive(java.io.File dir, String targetName, int depth) {
+        if (depth <= 0 || dir == null) return null;
         java.io.File[] files = dir.listFiles();
         if (files == null) return null;
-        java.io.File best = null;
         for (java.io.File f : files) {
             if (f.isDirectory()) {
-                String found = searchAmrRecursive(f, depth - 1);
+                String found = searchFileRecursive(f, targetName, depth - 1);
                 if (found != null) return found;
-            } else if (f.isFile() && f.getName().endsWith(".amr") && f.length() > 500) {
-                if (best == null || f.lastModified() > best.lastModified()) best = f;
+            } else if (f.isFile() && f.getName().equals(targetName) && f.length() > 500) {
+                LogWriter.log(TAG, "voice2: found " + f.getAbsolutePath() + " size=" + f.length());
+                return f.getAbsolutePath();
             }
         }
-        if (best != null) LogWriter.log(TAG, "voice2: recursive found " + best.getAbsolutePath() + " size=" + best.length());
-        return best != null ? best.getAbsolutePath() : null;
+        return null;
     }
 
     private static int parseVoiceDuration(String xml) {
