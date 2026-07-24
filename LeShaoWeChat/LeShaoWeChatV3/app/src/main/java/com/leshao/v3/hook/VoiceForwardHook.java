@@ -81,62 +81,36 @@ public class VoiceForwardHook {
 
     // ===== 动态发现 RecyclerView Adapter ====
     private static void hookChatFragmentForAdapter(final ClassLoader cl) {
+        // 全局拦截 RecyclerView.setAdapter，按类名匹配聊天 Adapter
         try {
-            Class<?> cf = cl.loadClass("com.tencent.mm.ui.chatting.ChattingUIFragment");
+            XposedHelpers.findAndHookMethod(RecyclerView.class, "setAdapter",
+                RecyclerView.Adapter.class,
+                new XC_MethodHook() {
+                    @Override protected void afterHookedMethod(MethodHookParam param) {
+                        if (sAdapterHooked) return;
 
-            // dealContentView 已知触发且带 View 参数 (v4 验证)
-            XposedBridge.hookAllMethods(cf, "dealContentView", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam param) {
-                    if (sAdapterHooked) return;
-                    sCallCount.set(0);
+                        RecyclerView.Adapter<?> adapter = (RecyclerView.Adapter<?>) param.args[0];
+                        if (adapter == null) return;
+                        String clsName = adapter.getClass().getName();
+                        LogWriter.log(TAG, "RecyclerView.setAdapter: " + clsName);
 
-                    View view = null;
-                    for (Object arg : param.args) {
-                        if (arg instanceof View) { view = (View) arg; break; }
-                    }
-                    if (view == null) return;
+                        if (!clsName.contains("Chatting")) return;
 
-                    StringBuilder sb = new StringBuilder();
-                    sb.append(view.getClass().getSimpleName());
-                    if (view instanceof ViewGroup) {
-                        ViewGroup vg = (ViewGroup) view;
-                        sb.append("[").append(vg.getChildCount()).append("] ");
-                        int n = Math.min(vg.getChildCount(), 12);
-                        for (int i = 0; i < n; i++) {
-                            View c = vg.getChildAt(i);
-                            sb.append(i).append(":").append(c.getClass().getSimpleName()).append(" ");
+                        sCallCount.set(0);
+                        LogWriter.log(TAG, "CHAT ADAPTER FOUND: " + clsName);
+                        try {
+                            Class<?> adCls = adapter.getClass();
+                            int cnt = hookAllNonStaticMethods(adCls);
+                            LogWriter.log(TAG, "hooked " + cnt + " methods on " + adCls.getSimpleName());
+                            sAdapterHooked = true;
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "failed to hook Adapter: " + t.getMessage());
                         }
                     }
-                    LogWriter.log(TAG, "dealContentView view: " + sb.toString());
-
-                    RecyclerView rv = findRecyclerView(view);
-                    if (rv == null) {
-                        LogWriter.log(TAG, "no RecyclerView in dealContentView");
-                        return;
-                    }
-
-                    RecyclerView.Adapter<?> adapter = rv.getAdapter();
-                    if (adapter == null) {
-                        LogWriter.log(TAG, "RecyclerView found but Adapter null");
-                        return;
-                    }
-
-                    String adapterCls = adapter.getClass().getName();
-                    LogWriter.log(TAG, "found Adapter: " + adapterCls);
-
-                    try {
-                        Class<?> adCls = cl.loadClass(adapterCls);
-                        int cnt = hookAllNonStaticMethods(adCls);
-                        LogWriter.log(TAG, "hooked " + cnt + " methods on " + adCls.getSimpleName());
-                        sAdapterHooked = true;
-                    } catch (Throwable t) {
-                        LogWriter.log(TAG, "failed to hook Adapter: " + t.getMessage());
-                    }
-                }
-            });
-            LogWriter.log(TAG, "dealContentView hook installed");
+                });
+            LogWriter.log(TAG, "RecyclerView.setAdapter global hook installed");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "dealContentView hook failed: " + t.getMessage());
+            LogWriter.log(TAG, "setAdapter hook failed: " + t.getMessage());
         }
     }
 
