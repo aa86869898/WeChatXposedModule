@@ -122,8 +122,9 @@ public class TypingIndicator {
                     if (act != null) {
                         String name = talker;
                         try {
-                            Object contact = XposedHelpers.callStaticMethod(
-                                    XposedHelpers.findClass("d9", sClassLoader), "b");
+                            Class<?> d9 = VersionCompat.findMsgStorageShortClass(sClassLoader);
+                            if (d9 == null) return;
+                            Object contact = XposedHelpers.callStaticMethod(d9, "b");
                             Object convStorage = XposedHelpers.callMethod(contact, "r");
                             Object y3 = XposedHelpers.callMethod(convStorage, "p", talker);
                             if (y3 != null) {

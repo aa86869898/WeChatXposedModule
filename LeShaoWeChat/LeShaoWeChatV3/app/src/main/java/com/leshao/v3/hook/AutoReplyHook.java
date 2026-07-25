@@ -72,7 +72,8 @@ public class AutoReplyHook {
     /** 获取 f9 实例 */
     private static void hookMsgStorage(ClassLoader cl) {
         try {
-            Class<?> d9 = XposedHelpers.findClass("d9", cl);
+            Class<?> d9 = VersionCompat.findMsgStorageShortClass(cl);
+            if (d9 == null) return;
             Object service = XposedHelpers.callStaticMethod(d9, "b");
             if (service != null) {
                 msgStorage = XposedHelpers.callMethod(service, "u");
@@ -153,7 +154,8 @@ public class AutoReplyHook {
 
     private static void doSendReply(String talker, String replyText) {
         try {
-            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", classLoader);
+            Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(classLoader);
+            if (e9Class == null) return;
             Object msg = XposedHelpers.newInstance(e9Class, talker);
             XposedHelpers.callMethod(msg, "A1", 1);          // setType(1)=文本
             XposedHelpers.callMethod(msg, "X0", replyText);   // setContent
@@ -187,7 +189,8 @@ public class AutoReplyHook {
             String currentTalker = (String) XposedHelpers.callMethod(footer, "getTalkerUserName");
             if (!talker.equals(currentTalker)) return;
 
-            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", classLoader);
+            Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(classLoader);
+            if (e9Class == null) return;
             Object msg = XposedHelpers.newInstance(e9Class, talker);
             XposedHelpers.callMethod(msg, "A1", 1);
             XposedHelpers.callMethod(msg, "X0", replyText);

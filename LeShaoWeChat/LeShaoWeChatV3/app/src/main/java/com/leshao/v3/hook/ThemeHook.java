@@ -269,7 +269,8 @@ public class ThemeHook {
 
     private static void methodC_ActionBar(ClassLoader cl) {
         try {
-            Class<?> ga = XposedHelpers.findClass("com.tencent.mm.ui.ga", cl);
+            Class<?> ga = VersionCompat.findGaClass(cl);
+            if (ga == null) return;
             XposedBridge.hookAllMethods(ga, "E0", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
@@ -337,7 +338,8 @@ public class ThemeHook {
 
     private static void methodD_MainTab(ClassLoader cl) {
         try {
-            Class<?> lUI = XposedHelpers.findClass("com.tencent.mm.ui.LauncherUI", cl);
+            Class<?> lUI = VersionCompat.findLauncherUIClass(cl);
+            if (lUI == null) return;
             XposedBridge.hookAllMethods(lUI, "onResume", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {

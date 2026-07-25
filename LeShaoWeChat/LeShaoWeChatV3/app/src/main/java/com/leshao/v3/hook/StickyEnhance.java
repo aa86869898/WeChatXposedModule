@@ -28,7 +28,8 @@ public class StickyEnhance {
 
     private static void hookStickyLimit(ClassLoader cl) {
         try {
-            Class<?> stickySorter = XposedHelpers.findClass("tm2.v8", cl);
+            Class<?> stickySorter = VersionCompat.findStickySorterClass(cl);
+            if (stickySorter == null) return;
 
             for (java.lang.reflect.Method m : stickySorter.getDeclaredMethods()) {
                 final String methodName = m.getName();
@@ -65,7 +66,8 @@ public class StickyEnhance {
 
     private static void hookStickyMenu(ClassLoader cl) {
         try {
-            Class<?> contextMenu = XposedHelpers.findClass("ly3.k3", cl);
+            Class<?> contextMenu = VersionCompat.findContextMenuClass(cl);
+            if (contextMenu == null) return;
 
             XposedBridge.hookAllMethods(contextMenu, "onCreateContextMenu",
                     new XC_MethodHook() {

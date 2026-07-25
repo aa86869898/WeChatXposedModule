@@ -59,7 +59,8 @@ public class AntiDetectionHook {
 
     private static void hookXposedStackCheck(ClassLoader cl) {
         try {
-            Class<?> h3 = XposedHelpers.findClass("com.tencent.mm.app.h3", cl);
+            Class<?> h3 = VersionCompat.findAppClass(cl);
+            if (h3 == null) { XposedBridge.log("[AntiDetect] app class not found"); return; }
             XposedBridge.hookAllMethods(h3, "a", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
@@ -74,7 +75,8 @@ public class AntiDetectionHook {
 
     private static void hookTinkerCrashProtect(ClassLoader cl) {
         try {
-            Class<?> h3 = XposedHelpers.findClass("com.tencent.mm.app.h3", cl);
+            Class<?> h3 = VersionCompat.findAppClass(cl);
+            if (h3 == null) return;
             XposedBridge.hookAllMethods(h3, "c", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {

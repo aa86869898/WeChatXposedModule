@@ -255,10 +255,9 @@ public class ContactExport {
                 uin = sp.getInt("default_uin", 0);
             }
             if (uin == 0) {
-                XposedBridge.log("[ContactExport] uin=0, 尝试从mp0.b获取dataDir");
+                XposedBridge.log("[ContactExport] uin=0, 尝试从baseDir获取dataDir");
                 try {
-                    Class<?> mp0b = XposedHelpers.findClass("mp0.b", classLoader);
-                    String dataDir = (String) XposedHelpers.callStaticMethod(mp0b, "X");
+                    String dataDir = VersionCompat.getBaseDir(classLoader, ctx);
                     if (dataDir != null) {
                         File microMsgDir = new File(dataDir, "MicroMsg");
                         if (microMsgDir.exists()) {
@@ -280,22 +279,19 @@ public class ContactExport {
 
     private static String getDbPassword() {
         try {
-            String imei = "1234567890ABCDEF";
-            try {
-                Class<?> w0 = XposedHelpers.findClass("wo.w0", classLoader);
-                Object imeiObj = XposedHelpers.callStaticMethod(w0, "g", Boolean.TRUE);
-                if (imeiObj != null) imei = imeiObj.toString();
-            } catch (Throwable ignored) {}
+            String imei = VersionCompat.getImei(classLoader);
 
             android.content.Context ctx = getContext();
             long uin = ctx.getSharedPreferences("system_config_prefs", 0).getLong("default_uin", 0);
             if (uin == 0) uin = ctx.getSharedPreferences("system_config_prefs", 0).getInt("default_uin", 0);
 
             try {
-                Class<?> kk = XposedHelpers.findClass("kk.k", classLoader);
-                String full = (String) XposedHelpers.callStaticMethod(kk, "g",
-                        (imei + uin).getBytes("UTF-8"));
-                if (full != null && full.length() >= 7) return full.substring(0, 7);
+                Class<?> kk = VersionCompat.findKkKClass(classLoader);
+                if (kk != null) {
+                    String full = (String) XposedHelpers.callStaticMethod(kk, "g",
+                            (imei + uin).getBytes("UTF-8"));
+                    if (full != null && full.length() >= 7) return full.substring(0, 7);
+                }
             } catch (Throwable ignored) {}
 
             return md5(imei + uin).substring(0, 7);

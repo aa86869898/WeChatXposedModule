@@ -229,7 +229,8 @@ public class AntiRecallHook {
 
     private static void hookKotlinRevoke(ClassLoader cl) {
         try {
-            Class<?> bd0s = XposedHelpers.findClass("bd0.s", cl);
+            Class<?> bd0s = VersionCompat.findBd0SClass(cl);
+            if (bd0s == null) return;
             XposedBridge.hookAllMethods(bd0s, "invokeSuspend", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {

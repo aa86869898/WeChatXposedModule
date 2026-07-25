@@ -133,7 +133,8 @@ public class AutoRemark {
 
     private static String getSuggestedRemark(String username) {
         try {
-            Class<?> contactStorage = XposedHelpers.findClass("d9", classLoader);
+            Class<?> contactStorage = VersionCompat.findMsgStorageShortClass(classLoader);
+            if (contactStorage == null) return null;
             Object storage = XposedHelpers.callStaticMethod(contactStorage, "b");
             if (storage == null) return null;
 

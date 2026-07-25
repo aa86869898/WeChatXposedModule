@@ -59,8 +59,11 @@ public class HideContactFields {
 
     private static void hookInitView(ClassLoader cl) {
         try {
-            Class<?> contactInfoUI = XposedHelpers.findClass(
-                    "com.tencent.mm.plugin.profile.ui.ContactInfoUI", cl);
+            Class<?> contactInfoUI = VersionCompat.findContactInfoUIClass(cl);
+            if (contactInfoUI == null) {
+                LogWriter.log(TAG, "ContactInfoUI class not found");
+                return;
+            }
 
             XposedBridge.hookAllMethods(contactInfoUI, "initView",
                     new XC_MethodHook() {

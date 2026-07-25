@@ -199,7 +199,8 @@ public class GroupFeatures {
     // ══════════════════════════════════════════════════════
     private static void hookAnonymous(ClassLoader cl) {
         try {
-            Class<?> adapter = XposedHelpers.findClass("nw1.t2", cl);
+            Class<?> adapter = VersionCompat.findAdapterClass(cl);
+            if (adapter == null) return;
             XposedBridge.hookAllMethods(adapter, "getView", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {

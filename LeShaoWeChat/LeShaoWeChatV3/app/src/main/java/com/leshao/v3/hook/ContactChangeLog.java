@@ -37,8 +37,11 @@ public class ContactChangeLog {
             LogWriter.log(TAG, "hook installing...");
             sCL = cl;
 
-            Class<?> vClass = XposedHelpers.findClass(
-                "com.tencent.mm.plugin.messenger.foundation.v", cl);
+            Class<?> vClass = VersionCompat.findVClass(cl);
+            if (vClass == null) {
+                LogWriter.log(TAG, "v class not found");
+                return;
+            }
 
             XposedBridge.hookAllMethods(vClass, "b", new XC_MethodHook() {
                 @Override
@@ -84,8 +87,11 @@ public class ContactChangeLog {
             }
             LogWriter.log(TAG, "[v.b] hook ok");
 
-            Class<?> storageClass = XposedHelpers.findClass(
-                "com.tencent.mm.storage.j4", cl);
+            Class<?> storageClass = VersionCompat.findContactStorageClass(cl);
+            if (storageClass == null) {
+                LogWriter.log(TAG, "storage class not found");
+                return;
+            }
             for (String m : new String[]{"h0", "i0", "l0"}) {
                 final String mn = m;
                 XposedBridge.hookAllMethods(storageClass, mn, new XC_MethodHook() {
@@ -99,24 +105,24 @@ public class ContactChangeLog {
                 });
             }
 
-            Class<?> contactInfoUI = XposedHelpers.findClass(
-                "com.tencent.mm.plugin.profile.ui.ContactInfoUI", cl);
+            Class<?> contactInfoUI = VersionCompat.findContactInfoUIClass(cl);
+            if (contactInfoUI != null) {
+                XposedBridge.hookAllMethods(contactInfoUI, "D2", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        Object contact = getContactField(param.thisObject);
+                        if (contact != null) detectChangesFromContact(contact);
+                    }
+                });
 
-            XposedBridge.hookAllMethods(contactInfoUI, "D2", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    Object contact = getContactField(param.thisObject);
-                    if (contact != null) detectChangesFromContact(contact);
-                }
-            });
-
-            XposedBridge.hookAllMethods(contactInfoUI, "onNotifyChange", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    Object contact = getContactField(param.thisObject);
-                    if (contact != null) detectChangesFromContact(contact);
-                }
-            });
+                XposedBridge.hookAllMethods(contactInfoUI, "onNotifyChange", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        Object contact = getContactField(param.thisObject);
+                        if (contact != null) detectChangesFromContact(contact);
+                    }
+                });
+            }
 
             LogWriter.log(TAG, "hook installed OK");
 
@@ -183,17 +189,7 @@ public class ContactChangeLog {
         try {
             Object ew5 = XposedHelpers.getObjectField(obj, fieldName);
             if (ew5 == null) return "";
-            try {
-                Class<?> j1 = XposedHelpers.findClass("a65.j1", sCL);
-                return (String) XposedHelpers.callStaticMethod(j1, "g", ew5);
-            } catch (Throwable t1) {
-                try {
-                    Object result = XposedHelpers.callMethod(ew5, "toString");
-                    return result != null ? result.toString() : "";
-                } catch (Throwable t2) {
-                    return "";
-                }
-            }
+            return VersionCompat.ew5ToString(ew5, sCL);
         } catch (Throwable t) {
             return "";
         }
@@ -233,7 +229,7 @@ public class ContactChangeLog {
         try {
             long now = System.currentTimeMillis();
 
-            String username = callStringMethod(contact, "d1");
+            String username = VersionCompat.getContactUsername(contact);
             if (username == null || username.isEmpty()) return;
 
             now = System.currentTimeMillis();
@@ -241,18 +237,11 @@ public class ContactChangeLog {
             if (last != null && (now - last) < 800) return;
             debounce.put(username, now);
 
-            String nickname  = callStringMethod(contact, "M0");
-            String remark    = callStringMethod(contact, "w0");
-            int avatarHash   = callIntMethod(contact, "R0");
+            String nickname  = VersionCompat.getContactNickname(contact);
+            String remark    = VersionCompat.getContactRemark(contact);
+            int avatarHash   = VersionCompat.getContactAvatar(contact);
 
-            String signature = "";
-            try {
-                Object extra = XposedHelpers.callMethod(contact, "z0");
-                if (extra != null) {
-                    signature = callStringMethod(extra, "getSignature");
-                    if (signature.isEmpty()) signature = callStringMethod(extra, "signature");
-                }
-            } catch (Throwable ignored) {}
+            String signature = VersionCompat.getContactSignature(contact);
 
             ContactSnapshot current = new ContactSnapshot(username, nickname, remark, avatarHash, signature);
             ContactSnapshot previous = lastSnapshot.get(username);

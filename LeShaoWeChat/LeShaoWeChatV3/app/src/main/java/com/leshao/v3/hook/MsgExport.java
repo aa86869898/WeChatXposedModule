@@ -41,8 +41,8 @@ public class MsgExport {
 
     private static void hookMenu(ClassLoader cl) {
         try {
-            Class<?> chattingUI = XposedHelpers.findClass(
-                    "com.tencent.mm.ui.chatting.ChattingUIFragment", cl);
+            Class<?> chattingUI = VersionCompat.findChattingUIClass(cl);
+            if (chattingUI == null) return;
 
             XposedBridge.hookAllMethods(chattingUI, "onCreateOptionsMenu", new XC_MethodHook() {
                 @Override
@@ -203,16 +203,19 @@ public class MsgExport {
                 return null;
             }
 
-            String imei = getImei();
+            String imei = VersionCompat.getImei(sCL);
             String password = md5(imei + uin).substring(0, 7);
 
-            String base = getBaseDir(appCtx);
-            String hash = getDbHash((int) uin);
+            String base = VersionCompat.getBaseDir(sCL, appCtx);
+            String hash = VersionCompat.getDbHash(sCL, (int) uin);
             String dbPath = base + "MicroMsg/" + hash + "/EnMicroMsg.db";
 
-            Class<?> ka5f = XposedHelpers.findClass("ka5.f", sCL);
-            Method s = ka5f.getDeclaredMethod("s", String.class, String.class, int.class, boolean.class);
-            return s.invoke(null, dbPath, password, 0, true);
+            Class<?> dbOpener = VersionCompat.findDbOpenerClass(sCL);
+            if (dbOpener == null) {
+                LogWriter.log(TAG, "dbOpener class not found");
+                return null;
+            }
+            return VersionCompat.openDatabase(dbOpener, dbPath, password);
         } catch (Throwable t) {
             LogWriter.log(TAG, "openWeChatDb err: " + t.getClass().getSimpleName());
         }
@@ -226,35 +229,6 @@ public class MsgExport {
             if (uv != null) return Long.parseLong(uv.toString());
         } catch (Throwable ignored) {}
         return 0;
-    }
-
-    private static String getImei() {
-        try {
-            Class<?> wo = XposedHelpers.findClass("wo.w0", sCL);
-            Method g = wo.getDeclaredMethod("g", boolean.class);
-            String s = (String) g.invoke(null, true);
-            if (s != null && !s.isEmpty() && !s.equals("1234567890ABCDEF")) return s;
-        } catch (Throwable e) {}
-        return "1234567890ABCDEF";
-    }
-
-    private static String getBaseDir(Context ctx) {
-        try {
-            Class<?> mp0b = XposedHelpers.findClass("mp0.b", sCL);
-            return (String) XposedHelpers.callStaticMethod(mp0b, "X");
-        } catch (Throwable e) {
-            File parent = ctx.getFilesDir() != null ? ctx.getFilesDir().getParentFile() : null;
-            return parent != null ? parent.getAbsolutePath() + "/" : "/data/data/com.tencent.mm/";
-        }
-    }
-
-    private static String getDbHash(int uin) {
-        try {
-            Class<?> hm0b0 = XposedHelpers.findClass("hm0.b0", sCL);
-            return (String) XposedHelpers.callStaticMethod(hm0b0, "e", uin);
-        } catch (Throwable e) {
-            return md5("mm" + uin);
-        }
     }
 
     private static void showToast(final String msg) {

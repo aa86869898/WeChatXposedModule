@@ -545,8 +545,10 @@ public class VoiceForwardHook {
                 Context ctx = view.getContext();
                 if (ctx instanceof Activity) act = (Activity) ctx;
                 else try { act = (Activity) XposedHelpers.callMethod(ctx, "getActivity"); } catch (Throwable ignored) {}
-                if (act == null) act = (Activity) XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("com.tencent.mm.ui.LauncherUI", ContextManager.getClassLoader()), "getInstance");
+                if (act == null) {
+                    Class<?> launcherClass = VersionCompat.findLauncherUIClass(ContextManager.getClassLoader());
+                    if (launcherClass != null) act = (Activity) XposedHelpers.callStaticMethod(launcherClass, "getInstance");
+                }
             }
             if (act == null) { showToast("无法获取Activity"); return; }
             LogWriter.log(TAG, "forward: act=" + act.getClass().getSimpleName());
@@ -876,7 +878,9 @@ public class VoiceForwardHook {
             if (newName == null) { LogWriter.log(TAG, "SceneVoice: g() null"); return false; }
 
             // Step 2: h1.d() 计算正确 VFS 路径（和 v0.d() 内部一致）
-            Class<?> h1Cls = XposedHelpers.findClass("com.tencent.mm.sdk.platformtools.h1", cl);
+            Class<?> h1Cls = VersionCompat.findPlayThreadClass(cl);
+            if (h1Cls == null) { LogWriter.log(TAG, "h1 class not found"); return false; }
+
             String voice2Dir = getVoice2Dir(voiceFile);
             String dstPath = (String) XposedHelpers.callStaticMethod(h1Cls, "d",
                 voice2Dir + "/", "msg_", newName, ".amr", 2, true);
@@ -901,7 +905,8 @@ public class VoiceForwardHook {
             if (!ok) { LogWriter.log(TAG, "SceneVoice: t() false, DB write failed"); return false; }
 
             // Step 5: y21.p0.kj().e() 刷新 → tl.t0自动捡起上传
-            Class<?> y21p0 = XposedHelpers.findClass("y21.p0", cl);
+            Class<?> y21p0 = VersionCompat.findVoicePlayerClass(cl);
+            if (y21p0 == null) { LogWriter.log(TAG, "y21p0 class not found"); return false; }
             Object q0 = XposedHelpers.callStaticMethod(y21p0, "kj");
             XposedHelpers.callMethod(q0, "e");
             LogWriter.log(TAG, "SceneVoice: y21.p0.kj().e() refreshed");
@@ -940,7 +945,8 @@ public class VoiceForwardHook {
     private static Object getMsgStorage(ClassLoader cl) {
         if (sMsgStorage != null) return sMsgStorage;
         try {
-            Class<?> e01d9 = XposedHelpers.findClass("e01.d9", cl);
+            Class<?> e01d9 = VersionCompat.findVoiceMsgClass(cl);
+            if (e01d9 == null) { LogWriter.log(TAG, "e01.d9 not found"); return null; }
             Object service = XposedHelpers.callStaticMethod(e01d9, "b");
             if (service != null) {
                 sMsgStorage = XposedHelpers.callMethod(service, "u");
@@ -954,16 +960,17 @@ public class VoiceForwardHook {
 
     private static boolean trySendViaB31(ClassLoader cl, String targetWxid, String voiceFile, int duration) {
         try {
-            Class<?> wClass = XposedHelpers.findClass("b31.w", cl);
+            Class<?> wClass = VersionCompat.findVoiceStreamClass(cl);
+            if (wClass == null) { LogWriter.log(TAG, "b31.w not found"); return false; }
             Object sender;
-            
+
             try {
                 // 先试无参构造
                 sender = XposedHelpers.newInstance(wClass);
             } catch (Throwable e1) {
                 try {
                     // 试 (int,int,com.tencent.mm.modelbase.b)  — b31 的内部类型
-                    Class<?> bClass = XposedHelpers.findClass("com.tencent.mm.modelbase.b", cl);
+                    Class<?> bClass = VersionCompat.findModelBaseClass(cl);
                     sender = XposedHelpers.newInstance(wClass,
                         new Class[]{int.class, int.class, bClass}, 0, 0, null);
                 } catch (Throwable e2) {

@@ -47,7 +47,8 @@ public class ChatBackup {
 
     private static void hookAppExit(ClassLoader cl) {
         try {
-            Class<?> launcherUI = XposedHelpers.findClass("com.tencent.mm.ui.LauncherUI", cl);
+            Class<?> launcherUI = VersionCompat.findLauncherUIClass(cl);
+            if (launcherUI == null) return;
 
             XposedBridge.hookAllMethods(launcherUI, "onCreate", new XC_MethodHook() {
                 @Override
@@ -209,22 +210,11 @@ public class ChatBackup {
     }
 
     private static String getBaseDir(Context ctx) {
-        try {
-            Class<?> mp0b = XposedHelpers.findClass("mp0.b", sCL);
-            return (String) XposedHelpers.callStaticMethod(mp0b, "X");
-        } catch (Throwable e) {
-            return ctx.getFilesDir() != null ?
-                ctx.getFilesDir().getParentFile().getAbsolutePath() + "/" : null;
-        }
+        return VersionCompat.getBaseDir(sCL, ctx);
     }
 
     private static String getDbHash(int uin) {
-        try {
-            Class<?> hm0b0 = XposedHelpers.findClass("hm0.b0", sCL);
-            return (String) XposedHelpers.callStaticMethod(hm0b0, "e", uin);
-        } catch (Throwable e) {
-            return md5("mm" + uin);
-        }
+        return VersionCompat.getDbHash(sCL, uin);
     }
 
     private static void cleanupOldBackups(File dir) {
