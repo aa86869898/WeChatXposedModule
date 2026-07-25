@@ -280,8 +280,9 @@ public class VoiceForwardHook {
                         }
                     }
 
-                    // 策略1: 检测菜单创建 (case 21) — 有 View arg 就可能
-                    if (sMenuInjected) return;
+                    // 时间冷却防重复注入，但允许切换页后重新注入
+                    long sinceInj = System.currentTimeMillis() - sMenuInjectedTime;
+                    if (sinceInj < 2000 && sinceInj > 0) return;
                     View itemView = null;
                     for (Object arg : param.args) {
                         if (arg instanceof View) { itemView = (View) arg; break; }
@@ -1115,57 +1116,10 @@ public class VoiceForwardHook {
             while (entries.hasMoreElements()) {
                 String cn = entries.nextElement();
                 String simple = cn.substring(cn.lastIndexOf('.') + 1);
-                boolean isMjLike = simple.length() <= 2;
                 if (!simple.equals("p0") && !simple.equals("o0") && !simple.equals("x0") && !simple.equals("y0")
-                    && !simple.equals("w") && !simple.equals("j") && !simple.equals("l") && !isMjLike) continue;
+                    && !simple.equals("w") && !simple.equals("j") && !simple.equals("l")) continue;
                 try {
                     Class<?> cls = cl.loadClass(cn);
-                    // 检查是否有 g(String,e9) 方法 (scene voice recorder 特征)
-                    boolean hasG = false, hasStop = false, hasJ = false;
-                    String gSig = "", stopSig = "";
-                    for (Method m : cls.getDeclaredMethods()) {
-                        if (m.getName().equals("g") && m.getParameterTypes().length >= 2) {
-                            hasG = true;
-                            gSig = sig(m);
-                        }
-                        if (m.getName().equals("stop") && m.getReturnType() == boolean.class && m.getParameterTypes().length == 0) {
-                            hasStop = true;
-                            stopSig = sig(m);
-                        }
-                        if (m.getName().equals("j") && m.getReturnType() != void.class && m.getParameterTypes().length == 0) {
-                            hasJ = true;
-                        }
-                    }
-                    if (hasG && hasStop) {
-                        LogWriter.log(TAG, "◆FOUND SceneVoice p0: " + cn);
-                        for (Method m : cls.getDeclaredMethods()) {
-                            LogWriter.log(TAG, "  method: " + sig(m));
-                        }
-                    }
-                    // 检查 b31.w 特征: 有 start()+stop()+init()方法
-                    boolean hasStart = false, hasInit = false;
-                    for (Method m : cls.getDeclaredMethods()) {
-                        if (m.getName().equals("start")) hasStart = true;
-                        if (m.getName().equals("init")) hasInit = true;
-                    }
-                    if (hasStart && hasStop && hasInit && simple.equals("w")) {
-                        LogWriter.log(TAG, "◆FOUND b31.w: " + cn);
-                        for (Method m : cls.getDeclaredMethods()) {
-                            LogWriter.log(TAG, "  method: " + sig(m));
-                        }
-                    }
-                    // 检查 b31.j/l 特征: 有 doScene()+onGYNetEnd()
-                    boolean hasDoScene = false, hasOnGY = false;
-                    for (Method m : cls.getDeclaredMethods()) {
-                        if (m.getName().equals("doScene")) hasDoScene = true;
-                        if (m.getName().equals("onGYNetEnd")) hasOnGY = true;
-                    }
-                    if (hasDoScene && hasOnGY && (simple.equals("j") || simple.equals("l"))) {
-                        LogWriter.log(TAG, "◆FOUND b31." + simple + ": " + cn);
-                        for (Method m : cls.getDeclaredMethods()) {
-                            LogWriter.log(TAG, "  method: " + sig(m));
-                        }
-                    }
                     // 检查 x0 特征: 有 t() 或 g() 静态方法
                     if (simple.equals("x0")) {
                         boolean hasT = false, hasGStatic = false;
@@ -1174,10 +1128,6 @@ public class VoiceForwardHook {
                             if (m.getName().equals("g") && Modifier.isStatic(m.getModifiers())) hasGStatic = true;
                         }
                         if (hasT || hasGStatic) {
-                            LogWriter.log(TAG, "◆FOUND x0 utils: " + cn);
-                            for (Method m : cls.getDeclaredMethods()) {
-                                LogWriter.log(TAG, "  method: " + sig(m));
-                            }
                             if (hasGStatic && sGMethod == null) {
                                 for (Method m : cls.getDeclaredMethods()) {
                                     if (m.getName().equals("g") && Modifier.isStatic(m.getModifiers())
@@ -1217,22 +1167,6 @@ public class VoiceForwardHook {
                                         LogWriter.log(TAG, "◆discovered t(): " + cn + ".t(" + sig(m) + ")");
                                     }
                                 }
-                            }
-                        }
-                    }
-                    // ★ Mj() 发现: 简名≤2的所有内类 + 长度<15排除长路径
-                    if (sPathMethod == null) {
-                        for (Method m : cls.getDeclaredMethods()) {
-                            Class<?>[] pts = m.getParameterTypes();
-                            if (m.getReturnType() == String.class
-                                && pts.length == 3
-                                && pts[1] == String.class
-                                && pts[2] == boolean.class
-                                && m.getName().length() <= 3
-                                && cn.length() < 15) {
-                                sPathServiceClass = cn;
-                                sPathMethod = m.getName();
-                                LogWriter.log(TAG, "◆discovered Mj(): " + cn + "." + sPathMethod + "(Object,String,boolean)→String");
                             }
                         }
                     }
