@@ -47,8 +47,15 @@ public class DataToolsPageView {
             cfg.contactChangeLogEnabled, (v, on) -> {
                 cfg.contactChangeLogEnabled = on; cfg.save(prefs); ContactChangeLog.setEnabled(on);
         }));
-        card2.addView(buttonRow(ctx, parentAct, d, "查看记录", () -> SubPageActivity.open(parentAct, "通讯录更新日志", 13)));
-        card2.addView(buttonRow(ctx, parentAct, d, "清除记录", () -> {
+        root.addView(card2);
+
+        root.addView(spacer(ctx, d, 8));
+        LinearLayout btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setPadding((int)(2*d), 0, (int)(2*d), 0);
+        btnRow.addView(actionButton(ctx, d, "查看记录", 1f, () -> SubPageActivity.open(parentAct, "通讯录更新日志", 13)));
+        btnRow.addView(spacer(ctx, d, 8));
+        btnRow.addView(actionButton(ctx, d, "清除记录", 1f, () -> {
             new AlertDialog.Builder(ctx)
                 .setTitle("确认清除")
                 .setMessage("确定要清除所有通讯录变更记录吗？")
@@ -56,7 +63,7 @@ public class DataToolsPageView {
                 .setNegativeButton("取消", null)
                 .show();
         }));
-        root.addView(card2);
+        root.addView(btnRow);
 
         return root;
     }
@@ -109,6 +116,27 @@ public class DataToolsPageView {
         tv.setTextColor(AppColors.text2());
         tv.setPadding(0, 0, 0, (int)(8 * d));
         return tv;
+    }
+
+    private static View actionButton(Context ctx, float d, String label, float weight, Runnable action) {
+        LinearLayout btn = new LinearLayout(ctx);
+        btn.setOrientation(LinearLayout.HORIZONTAL);
+        btn.setGravity(Gravity.CENTER);
+        btn.setPadding((int)(16*d), (int)(12*d), (int)(16*d), (int)(12*d));
+        btn.setBackgroundColor(AppColors.accent());
+        btn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, weight));
+        btn.setClickable(true);
+        btn.setOnClickListener(v -> {
+            try { action.run(); } catch (Throwable ignored) {}
+        });
+
+        TextView tv = new TextView(ctx);
+        tv.setText(label); tv.setTextSize(14);
+        tv.setTextColor(AppColors.whiteTextOnAccent());
+        tv.setGravity(Gravity.CENTER);
+        btn.addView(tv);
+
+        return btn;
     }
 
     private static View spacer(Context ctx, float d, int dpVal) {
