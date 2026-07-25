@@ -302,6 +302,24 @@ public class MainActivity {
         0x1F4BE, 0x1F3AE, 0x2764
     };
 
+    private static final java.util.Map<Integer, String> PAGE_FEATURES = new java.util.HashMap<>();
+    static {
+        PAGE_FEATURES.put(1, "防撤回|自动回复|关键词回复|语音转发|正在输入提示|底部栏增强|聊天UI定制|批量群发|定时发送|自动备注|搜索增强|消息通知|好友检测|删除检测|置顶增强|未读角标|Tab自定义|摇一摇|通话录音|自动接听|输入状态");
+        PAGE_FEATURES.put(2, "全局主题|标题栏美化|页面背景|聊天背景|底部Tab美化|自己气泡|对方气泡|文字颜色|Monet引擎|自定义气泡|背景色|文字色|气泡样式|颜色|美化");
+        PAGE_FEATURES.put(3, "通讯录导出|联系人变更日志|隐藏敏感字段|群功能增强|群成员日志|群公告回执|批量操作|群管理|踢人|导出成员|通讯录|联系人");
+        PAGE_FEATURES.put(4, "群管理|群成员|群公告|批量|踢人");
+        PAGE_FEATURES.put(5, "自动转发|万群|群转发|消息转发");
+        PAGE_FEATURES.put(6, "定时消息|定时发送|消息助手|计划消息");
+        PAGE_FEATURES.put(7, "AI助手|智慧助手|智能回复|AI");
+        PAGE_FEATURES.put(8, "语音播报|TTS播报|排版引擎|配音|API|Voice|间隔|熔断|消息类型|免打扰|安静时段|播报参数|音量|语速|音调|TTS");
+        PAGE_FEATURES.put(9, "自动抢红包|秒抢|自动收款|红包震动|响铃|红包提醒|转账收款");
+        PAGE_FEATURES.put(10, "朋友圈|去广告|转发|假点赞|时间修改|视频画质|长视频|增强");
+        PAGE_FEATURES.put(11, "隐私保护|截图检测|剪贴板|WebView|指纹锁定|登录监控|会话隐私|隐私|安全|指纹");
+        PAGE_FEATURES.put(12, "消息导出|聊天备份|导出聊天|备份数据|查看记录|清除记录|数据备份|导出");
+        PAGE_FEATURES.put(14, "娱乐|游戏|助手");
+        PAGE_FEATURES.put(15, "捐赠|支持|开发|赞助");
+    }
+
     private static void showMainPanel(Activity act) {
         dismissDialog();
 
@@ -343,8 +361,8 @@ public class MainActivity {
         LinearLayout itemsContainer = new LinearLayout(ctx);
         itemsContainer.setOrientation(LinearLayout.VERTICAL);
 
-        // 构建完整列表 + 记录 menuItem → name 映射
-        final java.util.HashMap<View, String> menuItemNames = new java.util.HashMap<>();
+        // 构建完整列表 + 记录 menuItem → 搜索文本映射（含子功能关键词）
+        final java.util.HashMap<View, String> menuSearchTexts = new java.util.HashMap<>();
         for (int i = 0; i < ITEM_NAMES.length; i++) {
             if (i > 0) itemsContainer.addView(makeItemDivider(ctx));
             final int idx = i;
@@ -353,26 +371,28 @@ public class MainActivity {
                 SubPageActivity.open(act, ITEM_NAMES[idx], idx + 1);
             });
             item.setTag("menu_item");
-            menuItemNames.put(item, ITEM_NAMES[i]);
+
+            int pageId = i + 1;
+            String features = PAGE_FEATURES.get(pageId);
+            String searchText = ITEM_NAMES[i] + (features != null ? "|" + features : "");
+            menuSearchTexts.put(item, searchText);
             itemsContainer.addView(item);
         }
-        root.addView(itemsContainer);
 
-        // 底部间距
-        root.addView(spacerV(ctx, 16));
-
-        // 搜索过滤逻辑
+        // 搜索过滤逻辑 — 同时搜索入口名称和子功能关键词
         searchBox.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int st, int cnt, int aft) {}
             @Override public void onTextChanged(CharSequence s, int st, int bef, int cnt) {}
             @Override
             public void afterTextChanged(Editable s) {
-                String query = s.toString().trim();
-                for (Map.Entry<View, String> entry : menuItemNames.entrySet()) {
+                String query = s.toString().trim().toLowerCase();
+                boolean anyVisible = false;
+                for (java.util.Map.Entry<View, String> entry : menuSearchTexts.entrySet()) {
                     View menuItem = entry.getKey();
-                    String name = entry.getValue();
-                    if (query.isEmpty() || name.contains(query)) {
+                    String searchText = entry.getValue().toLowerCase();
+                    if (query.isEmpty() || searchText.contains(query)) {
                         menuItem.setVisibility(View.VISIBLE);
+                        anyVisible = true;
                     } else {
                         menuItem.setVisibility(View.GONE);
                     }
@@ -381,7 +401,6 @@ public class MainActivity {
                 for (int i = 0; i < itemsContainer.getChildCount(); i++) {
                     View child = itemsContainer.getChildAt(i);
                     if ("menu_item".equals(child.getTag())) continue;
-                    // 找下一个可见的 menu_item
                     View nextItem = null;
                     for (int j = i + 1; j < itemsContainer.getChildCount(); j++) {
                         if ("menu_item".equals(itemsContainer.getChildAt(j).getTag())) {
@@ -389,8 +408,7 @@ public class MainActivity {
                             break;
                         }
                     }
-                    child.setVisibility(nextItem != null && nextItem.getVisibility() == View.VISIBLE
-                            && query.isEmpty() ? View.VISIBLE : View.GONE);
+                    child.setVisibility(nextItem != null && nextItem.getVisibility() == View.VISIBLE && query.isEmpty() ? View.VISIBLE : View.GONE);
                 }
             }
         });

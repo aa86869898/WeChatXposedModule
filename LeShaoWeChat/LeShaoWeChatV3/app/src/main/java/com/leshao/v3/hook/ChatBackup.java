@@ -11,6 +11,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.os.Handler;
+import android.os.Looper;
+import android.widget.Toast;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -19,6 +22,7 @@ import de.robv.android.xposed.XposedHelpers;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
@@ -30,12 +34,17 @@ public class ChatBackup {
     private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd_HHmmss");
     private static final SimpleDateFormat dateSdf = new SimpleDateFormat("yyyyMMdd");
     private static final int RETENTION_DAYS = 7;
+    private static final String TRIGGER_FILE = "/sdcard/leshao_v3_logs/trigger_backup";
+    private static final String STATUS_FILE = "/sdcard/leshao_v3_logs/last_backup_status.json";
+
     private static String lastBackupDate = "";
     private static ClassLoader sCL;
     private static long sUin = -1;
+    private static Handler sMainHandler;
 
     public static void hook(ClassLoader cl) {
         sCL = cl;
+        sMainHandler = new Handler(Looper.getMainLooper());
         if (!sEnabled) return;
         ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
         if (config == null || !config.chatBackupEnabled) return;
@@ -53,30 +62,56 @@ public class ChatBackup {
             XposedBridge.hookAllMethods(launcherUI, "onCreate", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    new android.os.Handler(android.os.Looper.getMainLooper())
-                        .postDelayed(() -> {
-                            String today = dateSdf.format(new Date());
-                            if (!today.equals(lastBackupDate)) {
-                                performBackup();
-                                lastBackupDate = today;
-                            }
-                        }, 8000);
+                    sMainHandler.postDelayed(() -> {
+                        checkAndPerformBackup();
+                    }, 8000);
                 }
             });
 
             XposedBridge.hookAllMethods(launcherUI, "onDestroy", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    String today = dateSdf.format(new Date());
-                    if (!today.equals(lastBackupDate)) {
-                        performBackup();
-                        lastBackupDate = today;
-                    }
+                    checkAndPerformBackup();
                 }
             });
         } catch (Throwable t) {
             LogWriter.log(TAG, "hookAppExit err: " + t.getClass().getSimpleName());
         }
+    }
+
+    private static void checkAndPerformBackup() {
+        boolean manual = checkManualTrigger();
+        String today = dateSdf.format(new Date());
+        if (!today.equals(lastBackupDate) || manual) {
+            boolean ok = performBackup();
+            if (ok) {
+                lastBackupDate = today;
+                writeStatus("ok", formatSize(getBackupTotalSize()));
+            } else {
+                writeStatus("fail", "DB not found");
+            }
+            if (manual) {
+                final String msg = ok ? "聊天记录备份完成" : "备份失败,请检查存储权限";
+                sMainHandler.post(() -> {
+                    try {
+                        Context ctx = ContextManager.getAppContext();
+                        if (ctx != null) Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show();
+                    } catch (Throwable ignored) {}
+                });
+            }
+        }
+    }
+
+    private static boolean checkManualTrigger() {
+        try {
+            File trigger = new File(TRIGGER_FILE);
+            if (trigger.exists()) {
+                boolean deleted = trigger.delete();
+                LogWriter.log(TAG, "manual trigger detected, deleted=" + deleted);
+                return true;
+            }
+        } catch (Throwable ignored) {}
+        return false;
     }
 
     private static void scheduleDailyBackup() {
@@ -87,11 +122,7 @@ public class ChatBackup {
             BroadcastReceiver receiver = new BroadcastReceiver() {
                 @Override
                 public void onReceive(Context context, Intent intent) {
-                    String today = dateSdf.format(new Date());
-                    if (!today.equals(lastBackupDate)) {
-                        performBackup();
-                        lastBackupDate = today;
-                    }
+                    checkAndPerformBackup();
                 }
             };
 
@@ -122,12 +153,12 @@ public class ChatBackup {
         }
     }
 
-    private static void performBackup() {
+    private static boolean performBackup() {
         try {
             File dbDir = findDbDirectory();
             if (dbDir == null || !dbDir.exists()) {
                 LogWriter.log(TAG, "DB directory not found");
-                return;
+                return false;
             }
 
             File backupDir = new File("/sdcard/leshao_v3_logs/backup/");
@@ -155,9 +186,47 @@ public class ChatBackup {
 
             LogWriter.log(TAG, "backup done " + count + " files " + formatSize(totalSize));
             cleanupOldBackups(backupDir);
+            return count > 0;
         } catch (Throwable t) {
             LogWriter.log(TAG, "backup err: " + t.getMessage());
+            return false;
         }
+    }
+
+    public static void triggerManualBackup() {
+        try {
+            File triggerDir = new File(TRIGGER_FILE).getParentFile();
+            if (triggerDir != null) triggerDir.mkdirs();
+            new FileWriter(TRIGGER_FILE).close();
+            LogWriter.log(TAG, "manual trigger written");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "trigger write err: " + t.getMessage());
+        }
+    }
+
+    private static long getBackupTotalSize() {
+        File dir = new File("/sdcard/leshao_v3_logs/backup/");
+        if (!dir.exists()) return 0;
+        File[] files = dir.listFiles();
+        if (files == null) return 0;
+        long total = 0;
+        for (File f : files) {
+            if (f.isFile() && f.lastModified() > System.currentTimeMillis() - 3600000) {
+                total += f.length();
+            }
+        }
+        return total;
+    }
+
+    private static void writeStatus(String status, String detail) {
+        try {
+            File dir = new File(STATUS_FILE).getParentFile();
+            if (dir != null) dir.mkdirs();
+            FileWriter fw = new FileWriter(new File(STATUS_FILE));
+            fw.write("{\"status\":\"" + status + "\",\"detail\":\"" + detail
+                + "\",\"time\":" + System.currentTimeMillis() + "}");
+            fw.close();
+        } catch (Throwable ignored) {}
     }
 
     private static File findDbDirectory() {
@@ -226,16 +295,6 @@ public class ChatBackup {
             if (f.lastModified() < cutoff && f.delete()) deleted++;
         }
         if (deleted > 0) LogWriter.log(TAG, "cleaned " + deleted + " old backups");
-    }
-
-    private static String md5(String input) {
-        try {
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
-            byte[] d = md.digest(input.getBytes("UTF-8"));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : d) sb.append(String.format("%02x", b));
-            return sb.toString();
-        } catch (Throwable t) { return ""; }
     }
 
     private static String formatSize(long bytes) {

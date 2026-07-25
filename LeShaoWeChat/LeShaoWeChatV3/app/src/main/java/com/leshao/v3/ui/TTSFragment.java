@@ -34,9 +34,9 @@ public class TTSFragment extends Fragment {
         root.addView(sectionLabel("语音播报设置", d));
 
         LinearLayout card1 = makeCard(d);
-        card1.addView(switchRow("播报总开关", mCfg.masterSwitch, d, (v, on) -> {
+        card1.addView(switchRow(d, "播报总开关", "启用后将在锁屏/通知栏播报新消息内容", mCfg.masterSwitch, (v, on) -> {
             mCfg.masterSwitch = on; mCfg.save(mPrefs);
-        }));
+        }, null));
         card1.addView(itemDivider(d));
         card1.addView(selectorRow("TTS 引擎", new String[]{"系统TTS", "配音引擎", "五音"}, mCfg.ttsEngine.equals("peiyin") ? 1 : mCfg.ttsEngine.equals("wusound") ? 2 : 0, d, idx -> {
             mCfg.ttsEngine = idx == 1 ? "peiyin" : idx == 2 ? "wusound" : "system";
@@ -47,19 +47,19 @@ public class TTSFragment extends Fragment {
         root.addView(spacerV(d, 12));
         root.addView(sectionLabel("配音配置", d));
         LinearLayout card2 = makeCard(d);
-        card2.addView(editRow("配音API Key", mCfg.peiyinApiKey, d, s -> { mCfg.peiyinApiKey = s; mCfg.save(mPrefs); }));
+        card2.addView(editRow(d, "配音API Key", mCfg.peiyinApiKey, s -> { mCfg.peiyinApiKey = s; mCfg.save(mPrefs); }));
         card2.addView(itemDivider(d));
-        card2.addView(editRow("配音Voice ID", mCfg.peiyinVoiceId, d, s -> { mCfg.peiyinVoiceId = s; mCfg.save(mPrefs); }));
+        card2.addView(editRow(d, "配音Voice ID", mCfg.peiyinVoiceId, s -> { mCfg.peiyinVoiceId = s; mCfg.save(mPrefs); }));
         root.addView(card2);
 
         root.addView(spacerV(d, 12));
         root.addView(sectionLabel("播报参数", d));
         LinearLayout card3 = makeCard(d);
-        card3.addView(editRow("播报间隔(ms)", String.valueOf(mCfg.announceIntervalMs), d, s -> {
+        card3.addView(editRow(d, "播报间隔(ms)", String.valueOf(mCfg.announceIntervalMs), s -> {
             try { mCfg.announceIntervalMs = Integer.parseInt(s); mCfg.save(mPrefs); } catch (Throwable ignored) {}
         }));
         card3.addView(itemDivider(d));
-        card3.addView(editRow("文本熔断字数", String.valueOf(mCfg.textCutoffLen), d, s -> {
+        card3.addView(editRow(d, "文本熔断字数", String.valueOf(mCfg.textCutoffLen), s -> {
             try { mCfg.textCutoffLen = Integer.parseInt(s); mCfg.save(mPrefs); } catch (Throwable ignored) {}
         }));
         root.addView(card3);
@@ -71,7 +71,8 @@ public class TTSFragment extends Fragment {
         for (int i = 0; i < types.length; i++) {
             if (i > 0) card4.addView(itemDivider(d));
             final int bit = 1 << (i + 1);
-            card4.addView(checkRow(types[i], (mCfg.announceTypeMask & bit) != 0, d, (v, checked) -> {
+            final String typeName = types[i];
+            card4.addView(subSwitchRow(d, typeName, (mCfg.announceTypeMask & bit) != 0, (v, checked) -> {
                 if (checked) mCfg.announceTypeMask |= bit;
                 else mCfg.announceTypeMask &= ~bit;
                 mCfg.save(mPrefs);
@@ -82,15 +83,15 @@ public class TTSFragment extends Fragment {
         root.addView(spacerV(d, 12));
         root.addView(sectionLabel("免打扰设置", d));
         LinearLayout card5 = makeCard(d);
-        card5.addView(switchRow("开启免打扰", mCfg.quietEnabled, d, (v, on) -> {
+        card5.addView(switchRow(d, "开启免打扰", "启用后在指定时间段内暂停语音播报", mCfg.quietEnabled, (v, on) -> {
             mCfg.quietEnabled = on; mCfg.save(mPrefs);
-        }));
+        }, null));
         card5.addView(itemDivider(d));
-        card5.addView(editRow("开始时间(HH:MM)", mCfg.quietStart, d, s -> {
+        card5.addView(editRow(d, "开始时间(HH:MM)", mCfg.quietStart, s -> {
             mCfg.quietStart = s; mCfg.save(mPrefs);
         }));
         card5.addView(itemDivider(d));
-        card5.addView(editRow("结束时间(HH:MM)", mCfg.quietEnd, d, s -> {
+        card5.addView(editRow(d, "结束时间(HH:MM)", mCfg.quietEnd, s -> {
             mCfg.quietEnd = s; mCfg.save(mPrefs);
         }));
         root.addView(card5);
@@ -100,11 +101,13 @@ public class TTSFragment extends Fragment {
         return sv;
     }
 
+    // === 组件工厂 (统一 ChatEnhanceFragment 风格) ===
+
     private LinearLayout makeCard(float d) {
         LinearLayout card = new LinearLayout(getContext());
         card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackgroundColor(0xFFF5F5F5);
         card.setPadding((int)(2*d), (int)(2*d), (int)(2*d), (int)(2*d));
-        card.setBackgroundColor(AppColors.card());
         return card;
     }
 
@@ -112,75 +115,108 @@ public class TTSFragment extends Fragment {
         TextView tv = new TextView(getContext());
         tv.setText(text);
         tv.setTextSize(13);
-        tv.setTextColor(AppColors.text2());
+        tv.setTextColor(0xFF999999);
         tv.setPadding(0, 0, 0, (int)(8*d));
         return tv;
     }
 
-    private LinearLayout switchRow(String label, boolean checked, float d, CompoundButton.OnCheckedChangeListener listener) {
+    private LinearLayout switchRow(float d, String title, String desc, boolean checked,
+                                    CompoundButton.OnCheckedChangeListener l, View.OnClickListener config) {
         LinearLayout row = new LinearLayout(getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14*d), (int)(12*d), (int)(14*d), (int)(12*d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setBackgroundColor(0xFFFFFFFF);
 
         LinearLayout textCol = new LinearLayout(getContext());
         textCol.setOrientation(LinearLayout.VERTICAL);
-        textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        textCol.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
         TextView tv = new TextView(getContext());
-        tv.setText(label); tv.setTextSize(15);
-        tv.setTextColor(AppColors.text1()); tv.setTypeface(null, Typeface.BOLD);
+        tv.setText(title);
+        tv.setTextSize(15);
+        tv.setTextColor(0xFF1A1A1A);
+        tv.setTypeface(null, Typeface.BOLD);
         textCol.addView(tv);
 
+        if (desc != null && !desc.isEmpty()) {
+            TextView dv = new TextView(getContext());
+            dv.setText(desc);
+            dv.setTextSize(12);
+            dv.setTextColor(0xFF999999);
+            dv.setPadding(0, (int)(3*d), 0, 0);
+            textCol.addView(dv);
+        }
+
         row.addView(textCol);
-        Switch sw = new Switch(getContext()); sw.setChecked(checked); sw.setOnCheckedChangeListener(listener);
+
+        if (config != null) {
+            TextView btn = new TextView(getContext());
+            btn.setText("[设置]");
+            btn.setTextSize(12);
+            btn.setTextColor(0xFF4A90D9);
+            btn.setPadding((int)(6*d), 0, (int)(6*d), 0);
+            btn.setOnClickListener(config);
+            row.addView(btn);
+        }
+
+        Switch sw = new Switch(getContext());
+        sw.setChecked(checked);
+        sw.setOnCheckedChangeListener(l);
         row.addView(sw);
         return row;
     }
 
-    private LinearLayout editRow(String label, String value, float d, EditCallback cb) {
+    private LinearLayout subSwitchRow(float d, String label, boolean checked, CompoundButton.OnCheckedChangeListener l) {
         LinearLayout row = new LinearLayout(getContext());
-        row.setOrientation(LinearLayout.VERTICAL);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14*d), (int)(10*d), (int)(14*d), (int)(10*d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setBackgroundColor(0xFFFFFFFF);
 
         TextView tv = new TextView(getContext());
         tv.setText(label);
-        tv.setTextSize(12);
-        tv.setTextColor(AppColors.text2());
-        tv.setPadding(0, 0, 0, (int)(4*d));
+        tv.setTextSize(14);
+        tv.setTextColor(0xFF333333);
+        tv.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        row.addView(tv);
+
+        Switch sw = new Switch(getContext());
+        sw.setChecked(checked);
+        sw.setOnCheckedChangeListener(l);
+        row.addView(sw);
+        return row;
+    }
+
+    private LinearLayout editRow(float d, String label, String value, EditCallback cb) {
+        LinearLayout row = new LinearLayout(getContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding((int)(14*d), (int)(10*d), (int)(14*d), (int)(10*d));
+        row.setBackgroundColor(0xFFFFFFFF);
+
+        TextView tv = new TextView(getContext());
+        tv.setText(label);
+        tv.setTextSize(14);
+        tv.setTextColor(0xFF333333);
+        tv.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.35f));
         row.addView(tv);
 
         EditText et = new EditText(getContext());
         et.setText(value);
         et.setTextSize(14);
-        et.setTextColor(AppColors.text1());
-        et.setBackgroundColor(AppColors.inputBg());
+        et.setTextColor(0xFF1A1A1A);
+        et.setBackgroundColor(0xFFF5F5F5);
         et.setPadding((int)(10*d), (int)(8*d), (int)(10*d), (int)(8*d));
+        et.setSingleLine(true);
         et.addTextChangedListener(new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
             @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
             @Override public void afterTextChanged(android.text.Editable s) { cb.onChange(s.toString()); }
         });
+        et.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.65f));
         row.addView(et);
-        return row;
-    }
 
-    private LinearLayout checkRow(String label, boolean checked, float d, CompoundButton.OnCheckedChangeListener listener) {
-        LinearLayout row = new LinearLayout(getContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding((int)(14*d), (int)(10*d), (int)(14*d), (int)(10*d));
-        row.setBackgroundColor(AppColors.whiteCard());
-
-        CheckBox cb = new CheckBox(getContext());
-        cb.setText(label);
-        cb.setTextSize(14);
-        cb.setTextColor(AppColors.text1());
-        cb.setChecked(checked);
-        cb.setOnCheckedChangeListener(listener);
-        row.addView(cb);
         return row;
     }
 
@@ -189,12 +225,12 @@ public class TTSFragment extends Fragment {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14*d), (int)(12*d), (int)(14*d), (int)(12*d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setBackgroundColor(0xFFFFFFFF);
 
         TextView tv = new TextView(getContext());
         tv.setText(label);
         tv.setTextSize(15);
-        tv.setTextColor(AppColors.text1());
+        tv.setTextColor(0xFF1A1A1A);
         tv.setTypeface(null, Typeface.BOLD);
         tv.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.4f));
         row.addView(tv);
