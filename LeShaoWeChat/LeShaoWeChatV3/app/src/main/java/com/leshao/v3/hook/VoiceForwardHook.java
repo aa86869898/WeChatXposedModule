@@ -847,12 +847,17 @@ public class VoiceForwardHook {
                 java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             LogWriter.log(TAG, "SceneVoice: md5 copy ok");
 
-            // Step 5: ★ tl.p0 SceneVoice 发送 (替代 b31.w)
-            Class<?> tl_p0 = XposedHelpers.findClass("tl.p0", cl);
-            Object sceneVoice = XposedHelpers.newInstance(tl_p0);
-            XposedHelpers.callMethod(sceneVoice, "g", voiceFile, origE9);
-            XposedHelpers.callMethod(sceneVoice, "l");
-            LogWriter.log(TAG, "SceneVoice: tl.p0.g() + l() → sent");
+            // Step 5: ★ SceneVoiceService 单例 → run() 真正发送 (WeKit T0()方案)
+            Class<?> b31w = XposedHelpers.findClass("b31.w", cl);
+            Object service = XposedHelpers.newInstance(b31w);
+            try {
+                // 优先 run()
+                XposedHelpers.callMethod(service, "run", new Class[]{Object.class}, (Object) null);
+            } catch (Throwable e1) {
+                // 回退到 start()
+                XposedHelpers.callMethod(service, "start", voiceFile);
+            }
+            LogWriter.log(TAG, "SceneVoice: b31.w run() → sent");
             return true;
 
         } catch (Throwable t) {
