@@ -1,0 +1,87 @@
+================================================================================
+ 微信 8.0.76 — f9 (MsgInfoStorage) 实例获取路径
+ 基于 af5.a.run() Smali 逆向
+================================================================================
+
+错误写法:
+  ClassNotFoundException: d9
+  → d9 不在默认包，实际类名是 e01.d9
+
+正确类名:
+  e01.d9   — 服务入口类 (包 e01)
+  e01.f    — 服务中间接口 (b() 返回)
+  uh3.m0   — 存储接口 (.u() 返回, 强制转换为 storage.f9)
+
+
+完整调用链 (从 Smali 验证):
+================================================================================
+
+  Smali 第26-27行:
+    invoke-static {}, Le01/d9;->b()Le01/f;
+    → e01.d9.b() 返回 e01.f
+
+  Smali 第30行:
+    invoke-virtual {v1}, Le01/f;->u()Luh3/m0;
+    → e01.f.u() 返回 uh3.m0
+
+  Smali 第42-44行:
+    check-cast v1, Lcom/tencent/mm/storage/f9;
+    invoke-virtual {v1, v2, v3, v4}, Lcom/tencent/mm/storage/f9;->Ra(...)I
+    → 实际类型就是 storage.f9!
+
+
+Xposed 代码:
+================================================================================
+
+  // ✅ 正确获取 f9 实例
+  Class<?> e01d9  = XposedHelpers.findClass("e01.d9", cl);
+  Object service  = XposedHelpers.callStaticMethod(e01d9, "b");      // e01.f
+  Object msgStorage = XposedHelpers.callMethod(service, "u");        // storage.f9
+
+  // 使用 msgStorage 插入消息
+  long msgId = (Long) XposedHelpers.callMethod(msgStorage, "H9", msg);
+
+完整修复后的 AutoReply.sendAutoReply():
+================================================================================
+
+  private static Object getMsgStorage(ClassLoader cl) {
+    if (msgStorage != null) return msgStorage;
+    try {
+      Class<?> e01d9 = XposedHelpers.findClass("e01.d9", cl);
+      Object service = XposedHelpers.callStaticMethod(e01d9, "b");
+      msgStorage = XposedHelpers.callMethod(service, "u");
+      XposedBridge.log("[AutoReply] ✅ f9实例获取成功 (e01.d9.b().u())");
+      return msgStorage;
+    } catch (Throwable t) {
+      XposedBridge.log("[AutoReply] ❌ f9实例获取失败: " + t.getMessage());
+      return null;
+    }
+  }
+
+
+同样影响的其他文件:
+================================================================================
+  所有使用 d9.b().u() 的文件都需要改为 e01.d9.b().u():
+
+  - AutoReply.java     → 自动回复
+  - BatchMessage.java   → 批量消息
+  - CallFeatures.java   → 通话录音
+  - ChatBackup.java     → 聊天备份
+  - ContactExport.java  → 通讯录导出
+  - GroupFeatures.java  → 群管理
+  - MsgExport.java      → 消息导出
+  - RedPacketAlert.java → 红包提醒
+
+
+类关系图:
+================================================================================
+
+  e01.d9 (服务入口)
+    │
+    └─ b() → e01.f (服务容器)
+              │
+              ├─ u() → storage.f9  (MsInfoStorage — 消息存储) ★
+              ├─ r() → 会话存储
+              └─ q() → 联系人存储
+
+================================================================================

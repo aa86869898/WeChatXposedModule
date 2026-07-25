@@ -826,11 +826,11 @@ public class VoiceForwardHook {
     private static Object getMsgStorage(ClassLoader cl) {
         if (sMsgStorage != null) return sMsgStorage;
         try {
-            Class<?> d9 = XposedHelpers.findClass("d9", cl);
-            Object service = XposedHelpers.callStaticMethod(d9, "b");
+            Class<?> e01d9 = XposedHelpers.findClass("e01.d9", cl);
+            Object service = XposedHelpers.callStaticMethod(e01d9, "b");
             if (service != null) {
                 sMsgStorage = XposedHelpers.callMethod(service, "u");
-                LogWriter.log(TAG, "SceneVoice: msgStorage obtained via d9.b().u()");
+                LogWriter.log(TAG, "SceneVoice: msgStorage obtained via e01.d9.b().u()");
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, "SceneVoice: msgStorage error: " + t.getMessage());
