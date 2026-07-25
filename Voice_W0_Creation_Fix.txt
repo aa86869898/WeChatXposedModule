@@ -1,0 +1,205 @@
+================================================================================
+ 语音 w0 记录创建 — 完整修复 (语音气泡不显示的根本原因)
+================================================================================
+
+问题: 手动 d1()+t1(1) 兜底不渲染语音气泡
+
+根因: 语音渲染器需要 y21.w0 (voicestg) 记录来关联音频文件、
+      显示波形/秒数。直接构造 e9(type=34) 没有对应 w0 记录。
+
+
+一、y21.x0.j(String) — 仅查询, 不创建
+================================================================================
+
+  源码: return p0.lj().F0(str);
+  F0(String fileName) → 按文件名查 w0
+  不存在 → 返回 null
+
+
+二、y21.x0.g(String talker, String prefix) — 创建 w0 ★
+================================================================================
+
+  源码 (17行):
+    String x0 = g1.x0(z1.r(), str2);   // 生成随机文件名
+    w0 w0Var = new w0();
+    w0Var.b = x0;              // fileName
+    w0Var.c = str;             // talker/username
+    w0Var.j = time/1000;       // 创建时间(秒)
+    w0Var.d = x0;              // 路径/dir
+    w0Var.k = time/1000;       // 更新时间(秒)
+    w0Var.i = 1;               // 状态=录音中
+    w0Var.n = z1.r();          // 自己的wxid
+    w0Var.a = -1;              // 初始标记
+    if (p0.lj().O0(w0Var)) {
+      return x0;               // 返回生成的文件名
+    }
+    return null;
+
+  返回: 新生成的文件名 (如 "amr_xxxxx")
+        同时 w0 已 INSERT 到 voiceinfo 表
+
+
+三、y21.x0.w(w0) — 更新 w0 到 DB
+================================================================================
+
+  源码 (Smali):
+    if (w0 == null || w0.a == -1) return false;
+    return p0.lj().Q0(w0.b, w0);
+
+  条件: w0.a != -1 (即 w0 已经过 O0 插入)
+         w0.b != null
+
+
+四、y21.w0 字段含义
+================================================================================
+
+  a  → int     状态掩码 (-1=初始, 插入后O0设4194304)
+  b  → String  文件名 (主键)
+  c  → String  talker/username
+  d  → String  路径/dir (同fileName)
+  e  → long    可能是 svrId
+  f  → int     可能是 format
+  g  → int
+  h  → int     时长(ms) ★
+  i  → int     状态 (1=录音中, 3=完成) ★
+  j  → long    创建时间(秒)
+  k  → long    更新时间(秒)
+  l  → int     时长(ms) ★
+  m  → long    消息ID
+  n  → String  发送者wxid
+  o  → int
+  p  → String
+  q  → String
+  r  → int     flag (2=未读, ...)
+  s  → int
+  t  → long
+  u  → int
+  v  → int
+  w  → o37    protobuf对象
+  x  → String  content? (g1.O0中: 空→="" 且 a|=4194304)
+  y  → int    flag (传给 e9.o3())
+
+
+五、完整流程 — y21.x0.t() 为什么返回 false
+================================================================================
+
+  y21.x0.t(fileName, duration, flag, e9Var):
+    ① w0 j = j(fileName)          → F0查w0
+    ② if (j == null) return false  ← 没有w0记录, 直接返回false!
+
+  所以调用 t() 前必须先创建 w0!
+
+
+六、正确的调用链 (3步)
+================================================================================
+
+  Step 1: 创建 w0 记录
+  ─────────────────────
+    // y21.x0.g(talker, "amr_") → 生成文件名 + INSERT w0
+    String newFileName = (String) XposedHelpers.callStaticMethod(
+        y21x0Class, "g",
+        targetTalker,   // String: 目标会话ID
+        "amr_"          // String: 文件名前缀
+    );
+    // 返回: "amr_<random>" (w0已写入voiceinfo表)
+
+
+  Step 2: 复制语音文件到微信语音目录
+  ──────────────────────────────────
+    // 用 y21.x0.r() — 创建w0 + 复制文件 + 写入DB (一行搞定)
+    String newFileName = (String) XposedHelpers.callStaticMethod(
+        y21x0Class, "r",
+        targetTalker,       // String: 目标会话ID
+        sourceVoicePath,    // String: 源语音文件完整路径
+        durationMs          // int:    时长(毫秒)
+    );
+    // 返回: 新文件名 (内部: g()→创建w0 → copyFile → t()→写DB)
+
+
+  Step 3: 最终调用 t() 写 MsgInfo
+  ────────────────────────────────
+    // t() 内部: j(name)→查w0 → 创建e9 → setType(34) → Ra()写message表
+    boolean ok = (Boolean) XposedHelpers.callStaticMethod(
+        y21x0Class, "t",
+        newFileName,   // Step1/2返回的文件名
+        durationMs,    // 时长
+        0,             // flag
+        null           // 引用消息
+    );
+
+
+七、最终完整代码 — 一行发送语音
+================================================================================
+
+  /**
+   * 发送一条语音消息 (显示为语音气泡)
+   * 
+   * y21.x0.r() 内部做了:
+   *   ① g(talker,"amr_")  → 生成文件名 + 创建w0记录
+   *   ② 复制源文件到 voice2 目录
+   *   ③ t(newName, duration, 1, null) → 创建e9 + 写DB
+   */
+  public static boolean sendVoiceMessage(ClassLoader cl,
+      String talker, String sourcePath, int durationMs) {
+
+    try {
+      Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
+
+      // ✅ 一行搞定 — r() 创建w0+复制文件+写DB
+      String result = (String) XposedHelpers.callStaticMethod(y21x0, "r",
+          talker,        // 目标会话
+          sourcePath,    // 源语音文件(/sdcard/voice.amr)
+          durationMs);   // 时长(毫秒)
+
+      if (result != null) {
+        XposedBridge.log("[Voice] ✅ 语音已发送: " + result);
+        return true;
+      }
+      return false;
+    } catch (Throwable t) {
+      XposedBridge.log("[Voice] ❌ 发送失败: " + t.getMessage());
+      return false;
+    }
+  }
+
+
+八、w0 创建 vs 查询 对照表
+================================================================================
+
+  方法                                        创建?  查询?
+  ─────────────────────────────────────────── ─────  ─────
+  y21.x0.j(fileName)                           ❌     ✅
+  y21.x0.g(talker, "amr_")                    ✅     ❌
+  y21.x0.r(talker, srcPath, duration)          ✅     ❌
+  y21.x0.w(w0)                                 ✅更新  ❌
+  y21.x0.d(w0, ...)                            ✅     ❌
+  y21.x0.t(fileName, duration, flag, msg)      ✅     ❌
+
+  y21.p0.lj().F0(fileName)                     ❌     ✅
+  y21.p0.lj().O0(w0)                           ✅插入  ❌
+  y21.p0.lj().Q0(fileName, w0)                 ✅更新  ❌
+  y21.p0.lj().I0(id)                           ❌     ✅
+  y21.p0.lj().N0(msgId, time)                  ❌     ✅
+
+
+九、w0 最小字段 (O0插入 + Q0更新)
+================================================================================
+
+  O0 插入时需要:
+    w0.b  → 文件名 (必须)
+    w0.c  → talker (必须)
+    w0.j  → 创建时间(秒) (必须)
+    w0.d  → 目录 (同文件名)
+    w0.k  → 更新时间(秒)
+    w0.i  → 状态=1
+    w0.n  → wxid
+    w0.a  → -1 (初始, O0会设置)
+    w0.x  → "" (空→O0设 a|=4194304)
+
+  Q0 更新时需要 (w0.a != -1):
+    w0.h  → 时长(ms)
+    w0.l  → 时长(ms)
+    w0.i  → 3 (完成状态)
+    w0.m  → msgId
+
+================================================================================

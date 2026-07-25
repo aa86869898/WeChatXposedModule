@@ -774,78 +774,37 @@ public class VoiceForwardHook {
     }
 
     /**
-     * 发送语音消息到目标会话 — 显示为语音气泡(非卡片)
+     * 发送语音消息到目标会话 — 显示为语音气泡
      *
-     * 方式1 (推荐): y21.x0.t(voiceFile, duration, 0, null) 一行搞定
-     * 方式2 (兜底): 手动构造 e9 → d1() + t1(1) + k1(1) + j1() + e1() → H9()
-     *              关键: d1() 是语音 XML setter, X0() 是文本 setter!
+     * y21.x0.r(talker, srcPath, duration) 内部:
+     *   ① g(talker,"amr_") → 创建 w0 记录
+     *   ② copyFile → 复制到 voice2 目录
+     *   ③ t(newName,duration,flag,null) → 创建 e9 + 写 DB
      */
     private static boolean sendViaSceneVoice(Activity act, ClassLoader cl, String targetWxid, String voiceFile, int duration, Object origE9) {
         try {
             LogWriter.log(TAG, "SceneVoice: target=" + targetWxid + " file=" + voiceFile + " dur=" + duration + "ms");
 
-            // 方式1: y21.x0.t() 一行搞定
-            try {
-                Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
-                boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
-                        voiceFile, duration, 0, null);
-                LogWriter.log(TAG, "SceneVoice: y21.x0.t() → " + ok);
-                if (ok) {
-                    trySendViaB31(cl, targetWxid, voiceFile, duration);
-                    return true;
-                }
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "SceneVoice: y21.x0.t() fail: " + t.getMessage());
+            Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
+
+            // 一行搞定: 创建w0 + 复制文件 + 写e9到DB
+            String result = (String) XposedHelpers.callStaticMethod(y21x0, "r",
+                    targetWxid, voiceFile, duration);
+            LogWriter.log(TAG, "SceneVoice: y21.x0.r() → " + result);
+
+            if (result != null) {
+                // b31.w 上传语音文件到服务器
+                trySendViaB31(cl, targetWxid, voiceFile, duration);
+                return true;
             }
 
-            // 方式2: 手动构造 e9 → d1() + t1(1) → H9()
-            return sendViaManualE9(cl, targetWxid, voiceFile, duration);
+            LogWriter.log(TAG, "SceneVoice: y21.x0.r() returned null");
+            return false;
 
         } catch (Throwable t) {
             LogWriter.log(TAG, "SceneVoice error: " + t.getClass().getSimpleName() + " " + t.getMessage());
             return false;
         }
-    }
-
-    private static boolean sendViaManualE9(ClassLoader cl, String targetWxid, String voiceFile, int duration) {
-        try {
-            Object storage = getMsgStorage(cl);
-            if (storage == null) {
-                LogWriter.log(TAG, "SceneVoice: msgStorage is null");
-                return false;
-            }
-
-            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", cl);
-            Object msg = XposedHelpers.newInstance(e9Class, targetWxid);
-
-            XposedHelpers.callMethod(msg, "A1", 34);   // setType=语音
-            XposedHelpers.callMethod(msg, "e1", System.currentTimeMillis()); // setCreateTime
-            XposedHelpers.callMethod(msg, "k1", 1);    // setIsSend=1 (自己发送→右边)
-            XposedHelpers.callMethod(msg, "t1", 1);    // voice status=正常 ← 关键! 缺此字段不渲染气泡
-
-            try { XposedHelpers.callMethod(msg, "y1", targetWxid); } catch (Throwable ignored) {}
-            try { XposedHelpers.callMethod(msg, "j1", voiceFile); } catch (Throwable ignored) {}
-
-            // d1() 是语音 XML setter (不是 X0()!)
-            String voiceXml = buildVoiceXml(targetWxid, duration);
-            XposedHelpers.callMethod(msg, "d1", voiceXml);
-            LogWriter.log(TAG, "SceneVoice: voiceXml=" + voiceXml);
-
-            long assignedMsgId = (Long) XposedHelpers.callMethod(storage, "H9", msg);
-            LogWriter.log(TAG, "SceneVoice: H9() assignedMsgId=" + assignedMsgId);
-
-            trySendViaB31(cl, targetWxid, voiceFile, duration);
-
-            return assignedMsgId > 0;
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "SceneVoice manual error: " + t.getClass().getSimpleName() + " " + t.getMessage());
-            return false;
-        }
-    }
-
-    private static String buildVoiceXml(String sender, long durationMs) {
-        return "<msg><voicemsg endflag=\"1\" voicelength=\"" + durationMs
-            + "\" voiceformat=\"4\" forwardflag=\"0\" fromusername=\"" + sender + "\" /></msg>";
     }
 
     private static Object sMsgStorage;
