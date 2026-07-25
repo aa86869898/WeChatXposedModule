@@ -874,27 +874,11 @@ public class VoiceForwardHook {
             LogWriter.log(TAG, "SceneVoice: " + sGClass + "." + sGMethod + "() → " + newName);
             if (newName == null) { LogWriter.log(TAG, "SceneVoice: g() null"); return false; }
 
-            // Step 2: Mj() → VFS 内部路径 (动态发现, 失败则 fallback)
-            String dstPath = null;
-            if (sPathServiceClass != null && sPathMethod != null) {
-                Class<?> svcCls = XposedHelpers.findClass(sPathServiceClass, cl);
-                Object svc = null;
-                try { svc = XposedHelpers.callStaticMethod(svcCls, "hj"); } catch (Throwable ignored) {}
-                if (svc == null) {
-                    try { svc = XposedHelpers.newInstance(svcCls); } catch (Throwable ignored2) {}
-                }
-                LogWriter.log(TAG, "SceneVoice: Mj svc=" + (svc != null ? svc.getClass().getSimpleName() : "NULL"));
-                if (svc != null) {
-                    dstPath = (String) XposedHelpers.callMethod(svc, sPathMethod, null, newName, true);
-                    LogWriter.log(TAG, "SceneVoice: Mj() → " + dstPath);
-                }
-            }
-            if (dstPath == null) {
-                // fallback: 手动拼 MD5 路径
-                String voice2Dir = getVoice2Dir(voiceFile);
-                String md5Prefix = newName.substring(0, 4);
-                dstPath = voice2Dir + md5Prefix.substring(0, 2) + "/" + md5Prefix.substring(2, 4) + "/msg_" + newName + ".amr";
-            }
+            // Step 2: h1.d() 计算正确 VFS 路径（和 v0.d() 内部一致）
+            Class<?> h1Cls = XposedHelpers.findClass("com.tencent.mm.sdk.platformtools.h1", cl);
+            String voice2Dir = getVoice2Dir(voiceFile);
+            String dstPath = (String) XposedHelpers.callStaticMethod(h1Cls, "d",
+                voice2Dir + "/", "msg_", newName, ".amr", 2, true);
             LogWriter.log(TAG, "SceneVoice: dstPath=" + dstPath);
 
             // Step 3: copy 原始文件 → Mj() 返回的路径
@@ -903,7 +887,7 @@ public class VoiceForwardHook {
                 java.nio.file.Paths.get(voiceFile),
                 java.nio.file.Paths.get(dstPath),
                 java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            LogWriter.log(TAG, "SceneVoice: copy to Mj path ok");
+            LogWriter.log(TAG, "SceneVoice: copy to dstPath ok");
 
             // Step 4: t(newName, duration, 0, null) → v0.d()→Lj()→同一个Mj()→文件存在→true (动态发现)
             if (sTClass == null || sTMethod == null) {
