@@ -80,6 +80,7 @@ public class VoiceForwardHook {
                     sChatAct = (Activity) param.thisObject;
                     sCallCount.set(0);
                     sMenuInjected = false;
+                    sMenuInjectedTime = 0;
                     sPendingMsg = null;
                     sPendingView = null;
                 }
@@ -254,12 +255,13 @@ public class VoiceForwardHook {
                         LogWriter.log(TAG, sb.toString());
                     }
 
-                    // ===== MenuItem click 检测 (冷却 500ms 后生效, 防自动触发) =====
+                    // ===== MenuItem click 检测 (仅 Click/Selected 方法，冷却后生效) =====
                     long elapsed = System.currentTimeMillis() - sMenuInjectedTime;
+                    boolean isClickMethod = mName.contains("Selected") || mName.contains("Click") || mName.contains("MenuItem");
                     for (Object arg : param.args) {
                         if (arg instanceof MenuItem && ((MenuItem) arg).getItemId() == MENU_ID) {
                             LogWriter.log(TAG, ">>> MENU_ID found in " + label + "." + mName + " elapsed=" + elapsed + "ms <<<");
-                            if (sMenuInjected && elapsed > 500) {
+                            if (isClickMethod && sMenuInjected && elapsed > 500) {
                                 LogWriter.log(TAG, ">>> COOLDOWN PASSED — executeForward! <<<");
                                 sMenuInjected = false;
                                 executeForward();
@@ -820,11 +822,7 @@ public class VoiceForwardHook {
             LogWriter.log(TAG, "SceneVoice: w6.j(dst) → " + flatExists);
             if (!flatExists) { LogWriter.log(TAG, "SceneVoice: VFS dst verify failed"); return false; }
 
-            // Step 3: t(newName, duration, 0, null) → setVoice #1 (忽略返回值)
-            XposedHelpers.callStaticMethod(y21x0, "t", newName, duration, 0, null);
-            LogWriter.log(TAG, "SceneVoice: setVoice t(" + newName + "," + duration + ",0,null)");
-
-            // Step 4: ★ MD5子目录 copy → voice2/XX/YY/msg_{newName}.amr
+            // Step 3: ★ MD5子目录 copy → 必须在 t() 之前(v0.d()扫描此路径)
             String md5Prefix = newName.substring(0, 4);
             String md5SubDir = voice2Dir + md5Prefix.substring(0, 2) + "/" + md5Prefix.substring(2, 4) + "/";
             String md5DestPath = md5SubDir + "msg_" + newName + ".amr";
@@ -836,7 +834,13 @@ public class VoiceForwardHook {
                 java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             LogWriter.log(TAG, "SceneVoice: md5 copy ok");
 
-            // Step 5: y21.p0.kj().e() 刷新 → tl.t0自动发现voice2/XX/YY/msg_xxx.amr → b31.j/l上传
+            // Step 4: t(newName, duration, 0, null) → 写DB (现在文件已在MD5路径，v0.d()能找到)
+            boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
+                    newName, duration, 0, null);
+            LogWriter.log(TAG, "SceneVoice: t(" + newName + "," + duration + ",0,null) → " + ok);
+            if (!ok) { LogWriter.log(TAG, "SceneVoice: t() false, DB write failed"); return false; }
+
+            // Step 5: y21.p0.kj().e() 刷新 → tl.t0自动捡起上传
             Class<?> y21p0 = XposedHelpers.findClass("y21.p0", cl);
             Object q0 = XposedHelpers.callStaticMethod(y21p0, "kj");
             XposedHelpers.callMethod(q0, "e");
