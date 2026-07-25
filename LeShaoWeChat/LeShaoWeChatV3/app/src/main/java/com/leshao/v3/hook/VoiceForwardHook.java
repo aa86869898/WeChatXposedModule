@@ -784,9 +784,6 @@ public class VoiceForwardHook {
             if (origXml == null) try { origXml = (String) XposedHelpers.getObjectField(origE9, "field_content"); } catch (Throwable ignored) {}
             LogWriter.log(TAG, "SceneVoice: origXml=" + (origXml != null ? origXml.substring(0, Math.min(80, origXml.length())) : "null"));
 
-            // 从原始 XML 中提取 clientmsgid
-            String cid = extractXmlAttr(origXml, "clientmsgid");
-
             // 创建新的语音消息
             Object newMsg = XposedHelpers.newInstance(e9Class, targetWxid);
             XposedHelpers.callMethod(newMsg, "A1", 34);   // setType=语音(34)
@@ -805,16 +802,14 @@ public class VoiceForwardHook {
             try { XposedHelpers.callMethod(newMsg, "j1", voiceFile); } catch (Throwable ignored) {}
             try { XposedHelpers.setObjectField(newMsg, "field_imgPath", voiceFile); } catch (Throwable ignored) {}
 
-            // f9.Ra() 写入 DB
+            // f9.H9(msg) 插入 DB — 内部调 uh3.k0.b() 自动分配合法 msgId
             Object storage = getMsgStorage(cl);
             if (storage == null) {
                 LogWriter.log(TAG, "SceneVoice: msgStorage is null");
                 return false;
             }
-            long msgId = System.currentTimeMillis();
-            XposedHelpers.callMethod(storage, "Ra",
-                new Class[]{long.class, e9Class}, msgId, newMsg);
-            LogWriter.log(TAG, "SceneVoice: f9.Ra() done, msgId=" + msgId);
+            long assignedMsgId = (Long) XposedHelpers.callMethod(storage, "H9", newMsg);
+            LogWriter.log(TAG, "SceneVoice: f9.H9() done, assignedMsgId=" + assignedMsgId);
 
             // b31.w 上传语音文件
             trySendViaB31(cl, targetWxid, voiceFile, duration);

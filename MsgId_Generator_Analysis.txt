@@ -1,0 +1,161 @@
+================================================================================
+ msgId 生成机制完整分析 — 微信 8.0.76
+================================================================================
+
+一、msgId 校验规则 (e9.L1)
+================================================================================
+
+  源码:
+    a.f("msgId: " + j + " not in the reasonable scope",
+        1500000001 > j && -10 < j);
+
+  结论: 合法 msgId 范围 = 0 ~ 1,500,000,000
+        你的 System.currentTimeMillis() ≈ 17,800,000,000 → 超出 11 倍!
+        正常消息 msgId ≈ 76280~76284 (小序号)
+
+
+二、msgId 生成器 (uh3.k0.b)
+================================================================================
+
+  类: uh3.k0 — 每张消息表一个实例
+  字段:
+    this.a    → long      当前序列号 (auto-increment)
+    this.b[]  → uh3.j0[]  保留区间数组 (跳过)
+    this.d    → String    表名 ("message")
+
+  方法: synchronized void b(e9 msgInfo)
+    ① j = this.a
+    ② 如果 j 命中保留区间的末尾 → 跳到下一个区间的开头
+    ③ 否则 this.a = j + 1
+    ④ msgInfo.setMsgId(this.a)   ← 赋值!
+    ⑤ e.putLong("msg." + this.d, this.a)  ← 持久化
+
+  方法: boolean c(long msgId)
+    检查 msgId 是否在保留区间内
+
+  构造: uh3.k0(int, String, uh3.j0[])
+    j0: 包含 long a(区间开始) 和 long b(区间结束)
+    保留区间是跳过的ID段, 正常消息不占用这些ID
+
+
+三、正确的插入方法 (3选1)
+================================================================================
+
+  [方法1] f9.H9(msg) — 最完整的插入 (推荐)
+  ──────────────────────────────────────────
+  内部调用 I9(msg, false):
+    ① 表路由 V8(talker) → 获取对应 uh3.k0
+    ② uh3.k0.b(msg) → 自动分配 msgId
+    ③ 插入DB (insertOrReplace)
+    ④ 通知观察者
+    ⑤ 返回 msgId (long)
+
+  Xposed:
+    Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
+    Object f9Instance = XposedHelpers.callMethod(
+        XposedHelpers.callStaticMethod(d9class, "b"), "u");
+    long msgId = (Long) XposedHelpers.callMethod(f9Instance, "H9", msgInfo);
+    // msgInfo.getMsgId() 现在返回有效的 msgId
+
+
+  [方法2] f9.O8(msg) — 简单插入(仅 message 表)
+  ──────────────────────────────────────────
+  内部: this.h = U8("message"); this.h.b(msg); return msg.getMsgId()
+
+  限制: 只适用于 message 表, 不适用于 bizchatmessage 等
+
+
+  [方法3] 手动调 Ra(msgId, msg) — 需要先用 H9 或 O8 获取 msgId
+  ──────────────────────────────────────────
+  先: f9.H9(msg) → 自动分配 msgId
+  后: f9.Ra(msg.getMsgId(), msg) → 更新(但不是必须, H9已插入)
+
+
+四、修复你的自动回复/语音转发代码
+================================================================================
+
+  错误写法:
+    long msgId = System.currentTimeMillis();  // ❌ 远超 15 亿!
+    f9.Ra(msgId, msg);
+
+  正确写法:
+    // 方式A: 用 H9 插入 (自动分配 msgId)
+    long assignedMsgId = (Long) XposedHelpers.callMethod(
+        msgStorage, "H9", msgInfo);
+    // 成功 → assignedMsgId 是有效的 msgId
+    // 失败 → assignedMsgId = -1
+
+    // 方式B: 用 O8 分配 msgId 再 Ra
+    long msgId = (Long) XposedHelpers.callMethod(msgStorage, "O8", msgInfo);
+    // msgInfo 已被分配 msgId
+    XposedHelpers.callMethod(msgStorage, "Ra", msgId, msgInfo);
+
+
+五、WeChatPlus 集成修复代码
+================================================================================
+
+  /**
+   * 发送一条消息 (自动回复/构造消息)
+   * 修复: 使用 H9() 自动分配 msgId
+   */
+  private static void doSendReply(String talker, String replyText) {
+    try {
+      // 构造消息对象
+      Class<?> e9Class = XposedHelpers.findClass(
+          "com.tencent.mm.storage.e9", classLoader);
+      Object msg = XposedHelpers.newInstance(e9Class, talker);
+      
+      // 设置消息属性
+      XposedHelpers.callMethod(msg, "A1", 1);   // setType(1)=文本
+      XposedHelpers.callMethod(msg, "X0", replyText); // setContent
+      XposedHelpers.callMethod(msg, "L1", System.currentTimeMillis()); // 时间
+
+      if (msgStorage != null) {
+        // ✅ 正确: 用 H9() 插入, 自动分配 msgId
+        long msgId = (Long) XposedHelpers.callMethod(msgStorage, "H9", msg);
+        
+        if (msgId > 0) {
+          XposedBridge.log("[AutoReply] ✅ 回复: " + replyText
+              + " → " + talker + " (msgId=" + msgId + ")");
+        } else {
+          XposedBridge.log("[AutoReply] ❌ 插入失败");
+        }
+      }
+    } catch (Throwable t) {
+      XposedBridge.log("[AutoReply] 失败: " + t.getMessage());
+    }
+  }
+
+
+六、msgId 不在合理范围 — 完整的错误链
+================================================================================
+
+  你的代码:
+    long msgId = System.currentTimeMillis();  // 1784942146811
+    f9.Ra(msgId, msg);
+      → f9.Ta(msgId, msg, true);
+        → this.r.q(h9(msgId, talker), msg.convertTo(), "msgId=?", [""+msgId])
+          → msg.convertTo()
+            → super.convertTo()
+              → L1(getMsgId())  ← 这里炸!
+                → e9.L1(1784942146811)
+                  → a.f("msgId: 1784942146811 not in reasonable scope",
+                         1500000001 > 1784942146811 && -10 < 1784942146811)
+                  → 1500000001 > 1784942146811 → FALSE → 报错!
+
+  修复: 用 f9.H9(msg) 替代。H9 内部:
+    → I9(msg, false)
+      → V8(talker) → 获取 uh3.k0
+      → uh3.k0.b(msg) → msg.setMsgId(76285)  ← 自动分配!
+      → insert → 返回 msgId
+
+
+七、回执确认
+================================================================================
+
+  ✅ msgId 合法范围: 0 ~ 1,500,000,000
+  ✅ msgId 生成器: uh3.k0.b(e9) → 自增序列 (当前 ~76285)
+  ✅ 插入方法: f9.H9(msg) 或 f9.O8(msg)
+  ✅ 修复方式: 用 H9(msg) 替代 System.currentTimeMillis()
+
+================================================================================
