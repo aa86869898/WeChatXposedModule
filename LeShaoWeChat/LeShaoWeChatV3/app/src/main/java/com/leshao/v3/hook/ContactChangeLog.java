@@ -126,10 +126,21 @@ public class ContactChangeLog {
         }
     }
 
+    private static boolean sDumpedFields = false;
+
     private static void processModContact(Object modContact) {
         if (!sEnabled || modContact == null) return;
 
         try {
+            if (!sDumpedFields) {
+                sDumpedFields = true;
+                StringBuilder sb = new StringBuilder();
+                for (java.lang.reflect.Field f : modContact.getClass().getDeclaredFields()) {
+                    sb.append(f.getName()).append("(").append(f.getType().getSimpleName()).append(") ");
+                }
+                LogWriter.log(TAG, "[v.b] all np4 fields: " + sb.toString());
+            }
+
             String username = "";
             try { username = (String) XposedHelpers.getObjectField(modContact, "Z1"); } catch (Throwable ignored) {}
             if (username == null || username.isEmpty()) {
