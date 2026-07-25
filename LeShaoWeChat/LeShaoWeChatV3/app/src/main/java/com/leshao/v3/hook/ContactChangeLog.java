@@ -37,7 +37,7 @@ public class ContactChangeLog {
         if (!sEnabled) return;
 
         try {
-            LogWriter.log(TAG, "hook installing...");
+            LogWriter.log(TAG, "hook installing... sEnabled=" + sEnabled);
 
             Class<?> contactInfoUI = XposedHelpers.findClass(
                 "com.tencent.mm.plugin.profile.ui.ContactInfoUI", cl);
@@ -71,16 +71,12 @@ public class ContactChangeLog {
     }
 
     private static void detectChanges(Object activity) {
+        if (!sEnabled) return;
+
         try {
-            LogWriter.log(TAG, "[detect.entry]");
             long now = System.currentTimeMillis();
             if (now - sLastDetect < 600) return;
             sLastDetect = now;
-            ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
-            if (config == null || !config.contactChangeLogEnabled) {
-                LogWriter.log(TAG, "detect skip: config=" + (config == null ? "null" : "disabled"));
-                return;
-            }
 
             Object contact = getContactField(activity);
             if (contact == null) {
