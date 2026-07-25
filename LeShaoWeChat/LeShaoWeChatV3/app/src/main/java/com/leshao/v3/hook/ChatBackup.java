@@ -35,6 +35,7 @@ public class ChatBackup {
     private static final SimpleDateFormat dateSdf = new SimpleDateFormat("yyyyMMdd");
     private static final int RETENTION_DAYS = 7;
     private static final String TRIGGER_FILE = "/sdcard/leshao_v3_logs/trigger_backup";
+    private static final String RESTORE_TRIGGER = "/sdcard/leshao_v3_logs/trigger_restore";
     private static final String STATUS_FILE = "/sdcard/leshao_v3_logs/last_backup_status.json";
 
     private static String lastBackupDate = "";
@@ -80,6 +81,7 @@ public class ChatBackup {
     }
 
     private static void checkAndPerformBackup() {
+        checkRestoreTrigger();
         boolean manual = checkManualTrigger();
         String today = dateSdf.format(new Date());
         if (!today.equals(lastBackupDate) || manual) {
@@ -99,6 +101,46 @@ public class ChatBackup {
                     } catch (Throwable ignored) {}
                 });
             }
+        }
+    }
+
+    private static void checkRestoreTrigger() {
+        try {
+            File trigger = new File(RESTORE_TRIGGER);
+            if (!trigger.exists()) return;
+            StringBuilder content = new StringBuilder();
+            java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(trigger));
+            String line;
+            while ((line = br.readLine()) != null) content.append(line);
+            br.close();
+            trigger.delete();
+
+            String path = content.toString().trim();
+            if (path.isEmpty()) return;
+            File src = new File(path);
+            if (!src.exists() || !src.isFile()) {
+                LogWriter.log(TAG, "restore src not found: " + path);
+                final String err = "恢复失败: 源文件不存在";
+                sMainHandler.post(() -> {
+                    try {
+                        Context ctx = ContextManager.getAppContext();
+                        if (ctx != null) Toast.makeText(ctx, err, Toast.LENGTH_LONG).show();
+                    } catch (Throwable ignored) {}
+                });
+                return;
+            }
+
+            boolean ok = performRestore(src);
+            final String msg = ok ? "聊天记录恢复完成,请重新打开微信" : "恢复失败,请检查文件";
+            sMainHandler.post(() -> {
+                try {
+                    Context ctx = ContextManager.getAppContext();
+                    if (ctx != null) Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show();
+                } catch (Throwable ignored) {}
+            });
+            LogWriter.log(TAG, "restore " + (ok ? "ok" : "fail") + " from " + src.getName());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "restore trigger err: " + t.getMessage());
         }
     }
 
@@ -201,6 +243,47 @@ public class ChatBackup {
             LogWriter.log(TAG, "manual trigger written");
         } catch (Throwable t) {
             LogWriter.log(TAG, "trigger write err: " + t.getMessage());
+        }
+    }
+
+    public static void triggerRestore(String backupPath) {
+        try {
+            File triggerDir = new File(RESTORE_TRIGGER).getParentFile();
+            if (triggerDir != null) triggerDir.mkdirs();
+            FileWriter fw = new FileWriter(new File(RESTORE_TRIGGER));
+            fw.write(backupPath);
+            fw.close();
+            LogWriter.log(TAG, "restore trigger written: " + backupPath);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "restore trigger err: " + t.getMessage());
+        }
+    }
+
+    private static boolean performRestore(File srcFile) {
+        try {
+            File dbDir = findDbDirectory();
+            if (dbDir == null || !dbDir.exists()) {
+                LogWriter.log(TAG, "restore: db dir not found");
+                return false;
+            }
+
+            String srcName = srcFile.getName();
+            String destName = "EnMicroMsg.db";
+            if (srcName.endsWith(".db-wal")) destName = "EnMicroMsg.db-wal";
+            else if (srcName.endsWith(".db-shm")) destName = "EnMicroMsg.db-shm";
+
+            File dest = new File(dbDir, destName);
+            FileInputStream fis = new FileInputStream(srcFile);
+            FileOutputStream fos = new FileOutputStream(dest);
+            byte[] buf = new byte[16384];
+            int read;
+            while ((read = fis.read(buf)) > 0) fos.write(buf, 0, read);
+            fos.flush(); fos.close(); fis.close();
+            LogWriter.log(TAG, "restored " + srcName + " -> " + dest.getAbsolutePath());
+            return true;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "restore err: " + t.getMessage());
+            return false;
         }
     }
 

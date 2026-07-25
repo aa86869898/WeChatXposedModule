@@ -293,13 +293,13 @@ public class MainActivity {
         "聊天功能", "主题美化", "联系人和群聊", "群管理助手", "万群自动转发",
         "定时消息助手", "AI智慧助手", "TTS播报转语音",
         "红包转账", "朋友圈增强", "隐私安全",
-        "数据备份", "娱乐助手", "捐赠支持开发"
+        "数据备份", "娱乐助手"
     };
     private static final int[] ITEM_ICONS = {
         0x1F4AC, 0x1F3A8, 0x1F465, 0x1F6E1, 0x1F4E4,
         0x23F0, 0x1F916, 0x1F50A,
         0x1F4B0, 0x1F4F1, 0x1F512,
-        0x1F4BE, 0x1F3AE, 0x2764
+        0x1F4BE, 0x1F3AE
     };
 
     private static final java.util.Map<Integer, String> PAGE_FEATURES = new java.util.HashMap<>();
@@ -317,7 +317,6 @@ public class MainActivity {
         PAGE_FEATURES.put(11, "隐私保护|截图检测|剪贴板|WebView|指纹锁定|登录监控|会话隐私|隐私|安全|指纹");
         PAGE_FEATURES.put(12, "消息导出|聊天备份|导出聊天|备份数据|查看记录|清除记录|数据备份|导出");
         PAGE_FEATURES.put(14, "娱乐|游戏|助手");
-        PAGE_FEATURES.put(15, "捐赠|支持|开发|赞助");
     }
 
     private static void showMainPanel(Activity act) {
@@ -357,6 +356,9 @@ public class MainActivity {
         // 分割线
         root.addView(makeDivider(ctx));
 
+        // 个人中心卡片 — 搜索栏正下方
+        root.addView(makeProfileCard(ctx, d, act));
+
         // 菜单列表容器
         LinearLayout itemsContainer = new LinearLayout(ctx);
         itemsContainer.setOrientation(LinearLayout.VERTICAL);
@@ -378,6 +380,9 @@ public class MainActivity {
             menuSearchTexts.put(item, searchText);
             itemsContainer.addView(item);
         }
+
+        root.addView(itemsContainer);
+        root.addView(spacerV(ctx, 16));
 
         // 搜索过滤逻辑 — 同时搜索入口名称和子功能关键词
         searchBox.addTextChangedListener(new TextWatcher() {
@@ -475,7 +480,7 @@ public class MainActivity {
         return bar;
     }
 
-    private static View makeUserHeader(Context ctx, float d) {
+    private static View makeProfileCard(Context ctx, float d, Activity act) {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
