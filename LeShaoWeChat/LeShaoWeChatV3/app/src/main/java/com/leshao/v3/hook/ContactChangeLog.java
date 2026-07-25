@@ -29,6 +29,7 @@ public class ContactChangeLog {
     private static volatile boolean sEnabled = true;
     private static final ConcurrentHashMap<String, ContactSnapshot> lastSnapshot = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Long> debounce = new ConcurrentHashMap<>();
+    private static volatile long sLastDetect = 0;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
@@ -40,6 +41,13 @@ public class ContactChangeLog {
 
             Class<?> contactInfoUI = XposedHelpers.findClass(
                 "com.tencent.mm.plugin.profile.ui.ContactInfoUI", cl);
+
+            XposedBridge.hookAllMethods(contactInfoUI, "D2", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    detectChanges(param.thisObject);
+                }
+            });
 
             XposedBridge.hookAllMethods(contactInfoUI, "onResume", new XC_MethodHook() {
                 @Override
@@ -63,6 +71,9 @@ public class ContactChangeLog {
 
     private static void detectChanges(Object activity) {
         try {
+            long now = System.currentTimeMillis();
+            if (now - sLastDetect < 600) return;
+            sLastDetect = now;
             ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
             if (config == null || !config.contactChangeLogEnabled) {
                 LogWriter.log(TAG, "detect skip: config=" + (config == null ? "null" : "disabled"));
@@ -81,7 +92,7 @@ public class ContactChangeLog {
                 return;
             }
 
-            long now = System.currentTimeMillis();
+            now = System.currentTimeMillis();
             Long last = debounce.get(username);
             if (last != null && (now - last) < 800) return;
             debounce.put(username, now);
