@@ -26,6 +26,7 @@ public class ContactChangeLog {
     private static volatile boolean sEnabled = true;
     private static final ConcurrentHashMap<String, ContactSnapshot> lastSnapshot = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Long> debounce = new ConcurrentHashMap<>();
+    private static ClassLoader sCL;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
@@ -34,6 +35,22 @@ public class ContactChangeLog {
 
         try {
             LogWriter.log(TAG, "hook installing...");
+            sCL = cl;
+
+            Class<?> vClass = XposedHelpers.findClass(
+                "com.tencent.mm.plugin.messenger.foundation.v", cl);
+
+            XposedBridge.hookAllMethods(vClass, "b", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        processModContact(param.args[0]);
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "[v.b] err: " + t.getClass().getSimpleName());
+                    }
+                }
+            });
+            LogWriter.log(TAG, "[v.b] hook ok");
 
             Class<?> storageClass = XposedHelpers.findClass(
                 "com.tencent.mm.storage.j4", cl);
@@ -72,6 +89,56 @@ public class ContactChangeLog {
             LogWriter.log(TAG, "hook installed OK");
         } catch (Throwable t) {
             LogWriter.log(TAG, "hook FAIL: " + t.getClass().getSimpleName() + " " + t.getMessage());
+        }
+    }
+
+    private static void processModContact(Object modContact) {
+        if (!sEnabled || modContact == null) return;
+
+        try {
+            String username = fieldNg(modContact, "d");
+            if (username == null || username.isEmpty()) return;
+
+            long now = System.currentTimeMillis();
+            Long last = debounce.get(username);
+            if (last != null && (now - last) < 5000) return;
+            debounce.put(username, now);
+
+            String nickname  = fieldNg(modContact, "e");
+            String remark    = fieldNg(modContact, "v");
+            int avatarHash   = 0;
+            try { avatarHash = XposedHelpers.getIntField(modContact, "h"); } catch (Throwable ignored) {}
+
+            ContactSnapshot cur = new ContactSnapshot(username, nickname, remark, avatarHash, "");
+            ContactSnapshot prev = lastSnapshot.get(username);
+
+            if (prev != null) {
+                buildAndSaveRecord(now, username, nickname, remark, prev, cur);
+            }
+
+            lastSnapshot.put(username, cur);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[v.b] parse err: " + t.getClass().getSimpleName());
+        }
+    }
+
+    private static String fieldNg(Object obj, String fieldName) {
+        try {
+            Object ew5 = XposedHelpers.getObjectField(obj, fieldName);
+            if (ew5 == null) return "";
+            try {
+                Class<?> j1 = XposedHelpers.findClass("a65.j1", sCL);
+                return (String) XposedHelpers.callStaticMethod(j1, "g", ew5);
+            } catch (Throwable t1) {
+                try {
+                    Object result = XposedHelpers.callMethod(ew5, "toString");
+                    return result != null ? result.toString() : "";
+                } catch (Throwable t2) {
+                    return "";
+                }
+            }
+        } catch (Throwable t) {
+            return "";
         }
     }
 
