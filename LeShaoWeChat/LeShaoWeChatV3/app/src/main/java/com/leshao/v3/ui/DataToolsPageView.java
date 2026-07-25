@@ -40,15 +40,6 @@ public class DataToolsPageView {
         }));
         root.addView(card);
 
-        root.addView(spacer(ctx, d, 16));
-        root.addView(sectionLabel(ctx, "通讯录更新日志"));
-        LinearLayout card2 = makeCard(ctx, d);
-        card2.addView(switchRow(ctx, d, "开启更新日志", "监控好友昵称/备注/微信号变动",
-            cfg.contactChangeLogEnabled, (v, on) -> {
-                cfg.contactChangeLogEnabled = on; cfg.save(prefs); ContactChangeLog.setEnabled(on);
-        }));
-        root.addView(card2);
-
         root.addView(spacer(ctx, d, 8));
         LinearLayout btnRow = new LinearLayout(ctx);
         btnRow.setOrientation(LinearLayout.HORIZONTAL);

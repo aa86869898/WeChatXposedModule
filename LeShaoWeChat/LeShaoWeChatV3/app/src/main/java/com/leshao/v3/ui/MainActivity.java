@@ -30,6 +30,7 @@ import com.leshao.v3.model.Contact;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.security.MessageDigest;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -342,7 +343,8 @@ public class MainActivity {
         LinearLayout itemsContainer = new LinearLayout(ctx);
         itemsContainer.setOrientation(LinearLayout.VERTICAL);
 
-        // 构建完整列表
+        // 构建完整列表 + 记录 menuItem → name 映射
+        final java.util.HashMap<View, String> menuItemNames = new java.util.HashMap<>();
         for (int i = 0; i < ITEM_NAMES.length; i++) {
             if (i > 0) itemsContainer.addView(makeItemDivider(ctx));
             final int idx = i;
@@ -351,6 +353,7 @@ public class MainActivity {
                 SubPageActivity.open(act, ITEM_NAMES[idx], idx + 1);
             });
             item.setTag("menu_item");
+            menuItemNames.put(item, ITEM_NAMES[i]);
             itemsContainer.addView(item);
         }
         root.addView(itemsContainer);
@@ -364,46 +367,30 @@ public class MainActivity {
             @Override public void onTextChanged(CharSequence s, int st, int bef, int cnt) {}
             @Override
             public void afterTextChanged(Editable s) {
-                String query = s.toString().trim().toLowerCase();
-                boolean anyVisible = false;
-                for (int i = 0; i < itemsContainer.getChildCount(); i++) {
-                    View child = itemsContainer.getChildAt(i);
-                    Object tag = child.getTag();
-                    if ("menu_item".equals(tag)) {
-                        String name = ITEM_NAMES[i / 2 >= ITEM_NAMES.length ? 0 : i / 2];
-                        if (query.isEmpty() || name.contains(query) || name.toLowerCase().contains(query)) {
-                            child.setVisibility(View.VISIBLE);
-                            anyVisible = true;
-                        } else {
-                            child.setVisibility(View.GONE);
-                        }
+                String query = s.toString().trim();
+                for (Map.Entry<View, String> entry : menuItemNames.entrySet()) {
+                    View menuItem = entry.getKey();
+                    String name = entry.getValue();
+                    if (query.isEmpty() || name.contains(query)) {
+                        menuItem.setVisibility(View.VISIBLE);
+                    } else {
+                        menuItem.setVisibility(View.GONE);
                     }
                 }
                 // 同步隐藏/显示分隔线
-                boolean prevVisible = false;
                 for (int i = 0; i < itemsContainer.getChildCount(); i++) {
                     View child = itemsContainer.getChildAt(i);
-                    if ("menu_item".equals(child.getTag())) {
-                        if (child.getVisibility() == View.VISIBLE) {
-                            prevVisible = true;
+                    if ("menu_item".equals(child.getTag())) continue;
+                    // 找下一个可见的 menu_item
+                    View nextItem = null;
+                    for (int j = i + 1; j < itemsContainer.getChildCount(); j++) {
+                        if ("menu_item".equals(itemsContainer.getChildAt(j).getTag())) {
+                            nextItem = itemsContainer.getChildAt(j);
+                            break;
                         }
                     }
-                }
-                // 简化分隔线处理: 有搜索时隐藏全部分隔线, 无搜索时恢复
-                for (int i = 0; i < itemsContainer.getChildCount(); i++) {
-                    View child = itemsContainer.getChildAt(i);
-                    if (!"menu_item".equals(child.getTag())) {
-                        // 找下一个可见的 menu_item
-                        View nextItem = null;
-                        for (int j = i + 1; j < itemsContainer.getChildCount(); j++) {
-                            if ("menu_item".equals(itemsContainer.getChildAt(j).getTag())) {
-                                nextItem = itemsContainer.getChildAt(j);
-                                break;
-                            }
-                        }
-                        child.setVisibility(nextItem != null && nextItem.getVisibility() == View.VISIBLE
-                                && (query.isEmpty()) ? View.VISIBLE : View.GONE);
-                    }
+                    child.setVisibility(nextItem != null && nextItem.getVisibility() == View.VISIBLE
+                            && query.isEmpty() ? View.VISIBLE : View.GONE);
                 }
             }
         });

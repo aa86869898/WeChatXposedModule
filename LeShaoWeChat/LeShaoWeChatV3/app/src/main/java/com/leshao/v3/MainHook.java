@@ -8,6 +8,7 @@ import android.os.Looper;
 
 import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.db.DatabaseProvider;
+import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.AntiRecallHook;
 import com.leshao.v3.hook.AntiDetectionHook;
 import com.leshao.v3.hook.AutoCollectHook;
@@ -69,7 +70,7 @@ public class MainHook implements IXposedHookLoadPackage {
         boolean isMain = WX_PKG.equals(lpparam.processName);
 
         try { LogWriter.init(); } catch (Throwable t) {
-            XposedBridge.log("LeShaoV3: LogWriter init FAILED: " + t.getMessage());
+            LogWriter.log(TAG, "LeShaoV3: LogWriter init FAILED: " + t.getMessage());
         }
 
         int wxVersion = 0;
@@ -158,21 +159,21 @@ public class MainHook implements IXposedHookLoadPackage {
                         HookManager.register(ThemeHook::hook);
                         HookManager.register(VoiceForwardHook::hook);
 
-                        XposedBridge.log("[MainHook] activateAll() START, pendingTasks=" + HookManager.pendingCount());
+                        LogWriter.log(TAG, "[MainHook] activateAll() START, pendingTasks=" + HookManager.pendingCount());
 
                         HookManager.activateAll();
 
-                        XposedBridge.log("[MainHook] activateAll() DONE");
+                        LogWriter.log(TAG, "[MainHook] activateAll() DONE");
 
                         SchedulerService.start(ModuleConfig.load(ContextManager.getPrefs()));
                     } catch (Throwable t) {
-                        XposedBridge.log("[MainHook] FATAL in onReadyCallback: " + t.getClass().getSimpleName()
+                        LogWriter.log(TAG, "[MainHook] FATAL in onReadyCallback: " + t.getClass().getSimpleName()
                             + " " + t.getMessage());
                     }
                 }
             });
         } catch (Throwable t) {
-            XposedBridge.log("LeShaoV3: FATAL during init: " + t.getMessage());
+            LogWriter.log(TAG, "LeShaoV3: FATAL during init: " + t.getMessage());
         }
     }
 }

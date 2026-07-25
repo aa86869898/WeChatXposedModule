@@ -95,6 +95,7 @@ public class AppColors {
     public static int bubbleOtherBg() { return themedDual("ls_tc_bubble_other_bg", 0xFFFFFFFF, 0xFF2D2D44); }
 
     public static int whiteTextOnAccent() { return 0xFFFFFFFF; }
+    public static int inputBg()    { return isDarkMode() ? DARK_CARD : 0xFFF0F0F0; }
 
     private static int adjust(int c, float ratio) {
         int r = (c >> 16) & 0xFF;

@@ -58,9 +58,6 @@ public class ContactGroupPageView {
                 "进入群信息页时自动检测公告更新", true));
         cardGroup.addView(subSwitch(ctx, prefs, d, "group_batch_op", "批量操作",
                 "批量踢人 + 导出成员列表", true));
-        cardGroup.addView(subSwitch(ctx, prefs, d, "anonymous_chat", "匿名发言",
-                "在群聊中以匿名身份发送消息", false,
-                v -> ConfigPanels.showAnonymousName(act, prefs)));
         root.addView(cardGroup);
 
         return root;

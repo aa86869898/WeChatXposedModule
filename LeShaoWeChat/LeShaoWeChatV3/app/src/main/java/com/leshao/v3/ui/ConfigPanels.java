@@ -386,26 +386,31 @@ public class ConfigPanels {
     // ==================== HideContactFields ====================
 
     public static void showHideContactFields(Activity act, SharedPreferences prefs) {
+        float d = act.getResources().getDisplayMetrics().density;
         LinearLayout root = new LinearLayout(act);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+        root.setPadding((int)(2*d), (int)(2*d), (int)(2*d), (int)(2*d));
+        root.setBackgroundColor(AppColors.card());
 
-        String saved = prefs.getString("hidden_fields_list", "");
+        String[] keys = {"contact_info_mobile", "contact_info_region", "contact_info_source",
+            "contact_info_alias", "contact_info_signature", "contact_info_remark",
+            "contact_info_chatroom", "contact_info_linkedin"};
+        String[] labels = {"手机号", "地区", "来源", "微信号", "签名", "备注名", "共同群聊", "领英"};
+        boolean[] defaults = {true, true, true, false, false, false, false, false};
 
-        root.addView(fieldCheck(act, "contact_info_mobile", "手机号", true, prefs));
-        root.addView(fieldCheck(act, "contact_info_region", "地区", true, prefs));
-        root.addView(fieldCheck(act, "contact_info_source", "来源", true, prefs));
-        root.addView(fieldCheck(act, "contact_info_alias", "微信号", false, prefs));
-        root.addView(fieldCheck(act, "contact_info_signature", "签名", false, prefs));
-        root.addView(fieldCheck(act, "contact_info_remark", "备注名", false, prefs));
-        root.addView(fieldCheck(act, "contact_info_chatroom", "共同群聊", false, prefs));
-        root.addView(fieldCheck(act, "contact_info_linkedin", "领英", false, prefs));
+        for (int i = 0; i < keys.length; i++) {
+            if (i > 0) {
+                View divider = new View(act);
+                divider.setLayoutParams(new LinearLayout.LayoutParams(-1, (int)(1*d)));
+                divider.setBackgroundColor(AppColors.divider());
+                root.addView(divider);
+            }
+            root.addView(fieldCheck(act, d, keys[i], labels[i], defaults[i], prefs));
+        }
 
         showDialog(act, "隐藏字段配置", new ScrollView(act) {{ addView(root); }}, () -> {
             StringBuilder sb = new StringBuilder();
-            for (String key : new String[]{"contact_info_mobile", "contact_info_region", "contact_info_source",
-                    "contact_info_alias", "contact_info_signature", "contact_info_remark",
-                    "contact_info_chatroom", "contact_info_linkedin"}) {
+            for (String key : keys) {
                 if (prefs.getBoolean("field_" + key, false)) {
                     if (sb.length() > 0) sb.append(",");
                     sb.append(key);
@@ -415,13 +420,16 @@ public class ConfigPanels {
         });
     }
 
-    private static LinearLayout fieldCheck(Activity act, String key, String label, boolean defVal, SharedPreferences prefs) {
+    private static LinearLayout fieldCheck(Activity act, float d, String key, String label, boolean defVal, SharedPreferences prefs) {
         LinearLayout row = new LinearLayout(act);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(act, 4), 0, dp(act, 4));
+        row.setPadding((int)(14*d), (int)(10*d), (int)(14*d), (int)(10*d));
+        row.setBackgroundColor(AppColors.whiteCard());
         CheckBox cb = new CheckBox(act);
         cb.setText(label);
+        cb.setTextSize(14);
+        cb.setTextColor(AppColors.text1());
         cb.setChecked(prefs.getBoolean("field_" + key, defVal));
         cb.setOnCheckedChangeListener((v, on) -> prefs.edit().putBoolean("field_" + key, on).apply());
         row.addView(cb);

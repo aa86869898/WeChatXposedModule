@@ -1,59 +1,60 @@
 package com.leshao.v3.hook;
 
+import android.app.Activity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.TextView;
+
+import com.leshao.v3.LogWriter;
+
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
-import java.util.Set;
-import java.util.HashSet;
-import java.util.Arrays;
 
-/**
- * [功能14/50] 隐藏联系人敏感字段 — 生产级完整实现
- * ===============================================
- * 
- * ContactInfoUI.initView() — 610行初始化所有Preference项
- * 
- * 可隐藏的字段(key):
- *   contact_info_alias      微信号
- *   contact_info_mobile     手机号
- *   contact_info_region     地区
- *   contact_info_signature  签名
- *   contact_info_source     来源
- *   contact_info_remark     备注名(不推荐)
- *   contact_info_chatroom    共同群聊
- *   contact_info_linkedin   领英
- * 
- * 实现:
- *   1. Hook initView()完成后遍历PreferenceScreen
- *   2. 按key查找Preference → removePreference
- *   3. 支持自定义隐藏列表
- */
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
 public class HideContactFields {
 
-    private static final Set<String> DEFAULT_HIDDEN = new HashSet<>(Arrays.asList(
-            "contact_info_mobile",
-            "contact_info_region",
-            "contact_info_source"
-    ));
+    private static final String TAG = "HideFields";
 
-    private static Set<String> hiddenFields = new HashSet<>(DEFAULT_HIDDEN);
+    private static final Map<String, String> FIELD_LABELS = new HashMap<>();
+    static {
+        FIELD_LABELS.put("contact_info_mobile", "手机号");
+        FIELD_LABELS.put("contact_info_region", "地区");
+        FIELD_LABELS.put("contact_info_source", "来源");
+        FIELD_LABELS.put("contact_info_alias", "微信号");
+        FIELD_LABELS.put("contact_info_signature", "签名");
+        FIELD_LABELS.put("contact_info_remark", "备注名");
+        FIELD_LABELS.put("contact_info_chatroom", "共同群聊");
+        FIELD_LABELS.put("contact_info_linkedin", "领英");
+    }
+
+    private static Set<String> hiddenFields = new HashSet<>();
     private static volatile boolean sEnabled = true;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;
+
+        hiddenFields.clear();
         String custom = HookConfig.getString("hidden_fields_list", "");
         if (custom != null && !custom.isEmpty()) {
-            hiddenFields.clear();
             for (String s : custom.split(",")) {
                 String trimmed = s.trim();
                 if (!trimmed.isEmpty()) hiddenFields.add(trimmed);
             }
         }
+        if (hiddenFields.isEmpty()) {
+            hiddenFields.add("contact_info_mobile");
+            hiddenFields.add("contact_info_region");
+            hiddenFields.add("contact_info_source");
+        }
 
         hookInitView(cl);
-        hookOnResume(cl);
     }
 
     private static void hookInitView(ClassLoader cl) {
@@ -65,61 +66,96 @@ public class HideContactFields {
                     new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    applyHiddenFields(param.thisObject);
+                    try {
+                        applyHiddenFields(param.thisObject);
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "applyHiddenFields err: " + t.getClass().getSimpleName());
+                    }
                 }
             });
-            XposedBridge.log("[HideFields] ContactInfoUI.initView() Hook完成");
-        } catch (Throwable t) {
-            XposedBridge.log("[HideFields] initView失败: " + t.getMessage());
-        }
-    }
 
-    private static void hookOnResume(ClassLoader cl) {
-        try {
-            Class<?> contactInfoUI = XposedHelpers.findClass(
-                    "com.tencent.mm.plugin.profile.ui.ContactInfoUI", cl);
-
-            XposedBridge.hookAllMethods(contactInfoUI, "onResume",
+            XposedBridge.hookAllMethods(contactInfoUI, "D2",
                     new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    applyHiddenFields(param.thisObject);
+                    try {
+                        applyHiddenFields(param.thisObject);
+                    } catch (Throwable t) {}
                 }
             });
-        } catch (Throwable t) {}
+
+            LogWriter.log(TAG, "hook initView OK");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hook FAIL: " + t.getClass().getSimpleName());
+        }
     }
 
-    private static void applyHiddenFields(Object activity) {
+    private static void applyHiddenFields(Object activityObj) {
         try {
-            Object prefScreen = XposedHelpers.callMethod(activity, "getPreferenceScreen");
-            if (prefScreen == null) return;
+            Activity act = (Activity) activityObj;
+            View root = act.getWindow().getDecorView();
+            if (root == null) return;
 
-            int totalBefore = (Integer) XposedHelpers.callMethod(
-                    prefScreen, "getPreferenceCount");
-
-            int removed = 0;
-            for (String key : hiddenFields) {
-                try {
-                    Object pref = XposedHelpers.callMethod(prefScreen, "findPreference", key);
-                    if (pref != null) {
-                        boolean result = (Boolean) XposedHelpers.callMethod(
-                                prefScreen, "removePreference", pref);
-                        if (result) {
-                            removed++;
-                            XposedBridge.log("[HideFields] 已隐藏: " + key);
-                        }
-                    }
-                } catch (Throwable ignored) {
-                }
-            }
-
-            int totalAfter = (Integer) XposedHelpers.callMethod(
-                    prefScreen, "getPreferenceCount");
-
-            XposedBridge.log("[HideFields] 隐藏完成: " + removed + "/"
-                    + totalBefore + " → " + totalAfter + "项");
+            int hidden = hideByLabel(root);
+            LogWriter.log(TAG, "hidden " + hidden + " fields");
         } catch (Throwable t) {
-            XposedBridge.log("[HideFields] 执行失败: " + t.getMessage());
+            LogWriter.log(TAG, "apply err: " + t.getClass().getSimpleName());
         }
+    }
+
+    private static int hideByLabel(View root) {
+        int count = 0;
+        for (String fieldKey : hiddenFields) {
+            String label = FIELD_LABELS.get(fieldKey);
+            if (label == null) continue;
+            if (hideRowByLabel(root, label)) count++;
+        }
+        return count;
+    }
+
+    private static boolean hideRowByLabel(View root, String labelText) {
+        java.util.List<TextView> matching = new java.util.ArrayList<>();
+        findTextViewsByText(root, labelText, matching);
+
+        for (TextView tv : matching) {
+            ViewGroup row = findRowParent(tv, 4);
+            if (row != null) {
+                row.setVisibility(View.GONE);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void findTextViewsByText(View root, String text, java.util.List<TextView> out) {
+        if (root instanceof TextView) {
+            TextView tv = (TextView) root;
+            CharSequence cs = tv.getText();
+            if (cs != null && cs.toString().trim().equals(text)) {
+                out.add(tv);
+                return;
+            }
+        }
+        if (root instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) root;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                findTextViewsByText(vg.getChildAt(i), text, out);
+            }
+        }
+    }
+
+    private static ViewGroup findRowParent(View child, int maxDepth) {
+        for (int i = 0; i < maxDepth; i++) {
+            if (child.getParent() instanceof ViewGroup) {
+                ViewGroup parent = (ViewGroup) child.getParent();
+                if (parent.getChildCount() == 2 || parent.getChildCount() == 3) {
+                    return parent;
+                }
+                child = parent;
+            } else {
+                break;
+            }
+        }
+        return null;
     }
 }

@@ -2,7 +2,6 @@ package com.leshao.v3.ui;
 
 import android.app.Activity;
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
 import android.text.InputType;
@@ -190,7 +189,7 @@ public class TTSPageView {
         etStart.setInputType(InputType.TYPE_CLASS_DATETIME);
         etStart.setWidth((int)(60 * d));
         etStart.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
-        etStart.setBackgroundColor(isDark() ? 0xFF3A3A50 : 0xFFF0F0F0);
+        etStart.setBackgroundColor(AppColors.card());
         row.addView(etStart);
 
         TextView sep = new TextView(ctx);
@@ -207,7 +206,7 @@ public class TTSPageView {
         etEnd.setInputType(InputType.TYPE_CLASS_DATETIME);
         etEnd.setWidth((int)(60 * d));
         etEnd.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
-        etEnd.setBackgroundColor(isDark() ? 0xFF3A3A50 : 0xFFF0F0F0);
+        etEnd.setBackgroundColor(AppColors.card());
         row.addView(etEnd);
 
         TextView save = new TextView(ctx);
@@ -368,7 +367,6 @@ public class TTSPageView {
         row.addView(textCol);
         Switch sw = new Switch(ctx);
         sw.setChecked(checked);
-        styleSwitch(sw, checked, ctx);
         sw.setOnCheckedChangeListener(listener);
         row.addView(sw);
         return row;
@@ -397,28 +395,6 @@ public class TTSPageView {
         v.setLayoutParams(new LinearLayout.LayoutParams(-1, (int)(dpVal * d)));
         return v;
     }
-
-    private static void styleSwitch(android.widget.Switch sw, boolean checked, Context ctx) {
-        float d = ctx.getResources().getDisplayMetrics().density;
-        android.graphics.drawable.GradientDrawable track = new android.graphics.drawable.GradientDrawable();
-        track.setOrientation(android.graphics.drawable.GradientDrawable.Orientation.TL_BR);
-        if (checked) {
-            track.setColors(new int[]{AppColors.accent2(), AppColors.accent(), AppColors.accent2(), AppColors.accent(), AppColors.accent2()});
-            track.setStroke((int)(2 * d), AppColors.accent());
-        } else {
-            track.setColor(AppColors.bg());
-            track.setStroke((int)(2 * d), AppColors.divider());
-        }
-        float rT = d * 10, rB = d * 18;
-        try { track.setCornerRadii(new float[]{rT, rT, rT, rT, rB, rB, rB, rB}); }
-        catch (Throwable e) { track.setCornerRadius(d * 14); }
-        sw.setTrackDrawable(track);
-        sw.setThumbTintList(new ColorStateList(
-            new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}},
-            new int[]{AppColors.accent(), AppColors.arrow()}));
-    }
-
-    private static boolean isDark() { return AppColors.isDarkMode(); }
 
     public interface TimeCallback { void onChange(String start, String end); }
     public interface IntCallback { void onChange(int value); }

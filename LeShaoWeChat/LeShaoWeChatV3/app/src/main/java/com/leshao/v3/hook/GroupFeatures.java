@@ -37,7 +37,6 @@ public class GroupFeatures {
         if (HookConfig.isEnabled("group_member_log"))  hookMemberLog(cl);
         if (HookConfig.isEnabled("group_announce"))    hookAnnounceRead(cl);
         if (HookConfig.isEnabled("group_batch_op"))    hookBatchOp(cl);
-        if (HookConfig.isEnabled("anonymous_chat"))    hookAnonymous(cl);
     }
 
     // ══════════════════════════════════════════════════════

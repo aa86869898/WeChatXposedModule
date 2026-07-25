@@ -1,80 +1,81 @@
 package com.leshao.v3.hook;
 
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.XposedHelpers;
-import com.leshao.v3.Logger;
+import com.leshao.v3.LogWriter;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.model.ModuleConfig;
-import com.leshao.v3.hook.HookConfig;
 
 import android.app.AlarmManager;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
+
+import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
+import de.robv.android.xposed.XposedHelpers;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-/**
- * [功能39/44] ChatBackup — 完整修复版
- * ===================================
- * 
- * ⚠️ 修复: 数据库路径
- *   Android 11+ 使用 /data/user/0/ 而非 /data/data/
- *   优先尝试 /data/user/0/... 失败尝试 /data/data/...
- * 
- *   实测路径: /data/user/0/com.tencent.mm/MicroMsg/<md5>/EnMicroMsg.db
- */
 public class ChatBackup {
+    private static final String TAG = "ChatBackup";
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd_HHmmss");
+    private static final SimpleDateFormat dateSdf = new SimpleDateFormat("yyyyMMdd");
     private static final int RETENTION_DAYS = 7;
     private static String lastBackupDate = "";
+    private static ClassLoader sCL;
+    private static long sUin = -1;
 
     public static void hook(ClassLoader cl) {
-        XposedBridge.log("[ChatBackup] hook() ENTER sEnabled=" + sEnabled);
-        if (!sEnabled || !ModuleConfig.load(ContextManager.getPrefs()).chatBackupEnabled) return;
+        sCL = cl;
+        if (!sEnabled) return;
+        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        if (config == null || !config.chatBackupEnabled) return;
+
         hookAppExit(cl);
         scheduleDailyBackup();
+        LogWriter.log(TAG, "hook OK");
     }
 
     private static void hookAppExit(ClassLoader cl) {
         try {
-            Class<?> launcherUI = XposedHelpers.findClass(
-                    "com.tencent.mm.ui.LauncherUI", cl);
+            Class<?> launcherUI = XposedHelpers.findClass("com.tencent.mm.ui.LauncherUI", cl);
+
+            XposedBridge.hookAllMethods(launcherUI, "onCreate", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    new android.os.Handler(android.os.Looper.getMainLooper())
+                        .postDelayed(() -> {
+                            String today = dateSdf.format(new Date());
+                            if (!today.equals(lastBackupDate)) {
+                                performBackup();
+                                lastBackupDate = today;
+                            }
+                        }, 8000);
+                }
+            });
 
             XposedBridge.hookAllMethods(launcherUI, "onDestroy", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    String today = new SimpleDateFormat("yyyyMMdd").format(new Date());
+                    String today = dateSdf.format(new Date());
                     if (!today.equals(lastBackupDate)) {
                         performBackup();
                         lastBackupDate = today;
                     }
                 }
             });
-
-            XposedBridge.hookAllMethods(launcherUI, "onCreate", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    String today = new SimpleDateFormat("yyyyMMdd").format(new Date());
-                    if (!today.equals(lastBackupDate)) {
-                        new android.os.Handler(android.os.Looper.getMainLooper())
-                                .postDelayed(new Runnable() {
-                            public void run() {
-                                performBackup();
-                                lastBackupDate = today;
-                            }
-                        }, 5000);
-                    }
-                }
-            });
-        } catch (Throwable t) {}
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookAppExit err: " + t.getClass().getSimpleName());
+        }
     }
 
     private static void scheduleDailyBackup() {
@@ -82,9 +83,27 @@ public class ChatBackup {
             Context ctx = ContextManager.getAppContext();
             if (ctx == null) return;
 
+            BroadcastReceiver receiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    String today = dateSdf.format(new Date());
+                    if (!today.equals(lastBackupDate)) {
+                        performBackup();
+                        lastBackupDate = today;
+                    }
+                }
+            };
+
+            try {
+                ctx.registerReceiver(receiver,
+                    new IntentFilter("com.leshao.v3.BACKUP_ALARM"),
+                    Context.RECEIVER_NOT_EXPORTED);
+            } catch (Throwable ignored) {}
+
             AlarmManager alarmMgr = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
-            Intent intent = new Intent("com.wechatplus.BACKUP");
-            PendingIntent pending = PendingIntent.getBroadcast(ctx, 0, intent,
+            Intent intent = new Intent("com.leshao.v3.BACKUP_ALARM");
+            intent.setPackage(ctx.getPackageName());
+            PendingIntent pending = PendingIntent.getBroadcast(ctx, 9999, intent,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
             java.util.Calendar calendar = java.util.Calendar.getInstance();
@@ -96,76 +115,116 @@ public class ChatBackup {
 
             alarmMgr.setRepeating(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(),
                     AlarmManager.INTERVAL_DAY, pending);
-            XposedBridge.log("[Backup] 每日备份已调度 (凌晨2:00)");
+            LogWriter.log(TAG, "daily backup scheduled at 02:00");
         } catch (Throwable t) {
-            XposedBridge.log("[Backup] 调度失败: " + t.getMessage());
+            LogWriter.log(TAG, "schedule err: " + t.getClass().getSimpleName());
         }
     }
 
     private static void performBackup() {
         try {
-            File dbFile = findDatabaseFile();
-            if (dbFile == null || !dbFile.exists()) {
-                XposedBridge.log("[Backup] 数据库文件不存在 (路径: " +
-                        (dbFile != null ? dbFile.getAbsolutePath() : "null") + ")");
+            File dbDir = findDbDirectory();
+            if (dbDir == null || !dbDir.exists()) {
+                LogWriter.log(TAG, "DB directory not found");
                 return;
             }
 
-            File backupDir = new File("/sdcard/WeChatPlus/backup/");
+            File backupDir = new File("/sdcard/leshao_v3_logs/backup/");
             backupDir.mkdirs();
-            String name = "EnMicroMsg_" + sdf.format(new Date()) + ".db";
-            File backupFile = new File(backupDir, name);
+            String timeStr = sdf.format(new Date());
 
-            FileInputStream fis = new FileInputStream(dbFile);
-            FileOutputStream fos = new FileOutputStream(backupFile);
-            byte[] buf = new byte[16384];
-            int read;
-            long total = 0;
-            while ((read = fis.read(buf)) > 0) { fos.write(buf, 0, read); total += read; }
-            fos.flush(); fos.close(); fis.close();
+            String[] dbs = {"EnMicroMsg.db", "EnMicroMsg.db-wal", "EnMicroMsg.db-shm"};
+            int count = 0;
+            long totalSize = 0;
 
-            XposedBridge.log("[Backup] ✅ 备份完成: " + backupFile.getName()
-                    + " (" + formatSize(total) + ")");
+            for (String dbName : dbs) {
+                File src = new File(dbDir, dbName);
+                if (!src.exists()) continue;
+
+                File dest = new File(backupDir, dbName.replace(".db", "_") + timeStr
+                    + dbName.substring(dbName.lastIndexOf('.')));
+                FileInputStream fis = new FileInputStream(src);
+                FileOutputStream fos = new FileOutputStream(dest);
+                byte[] buf = new byte[16384];
+                int read;
+                while ((read = fis.read(buf)) > 0) { fos.write(buf, 0, read); totalSize += read; }
+                fos.flush(); fos.close(); fis.close();
+                count++;
+            }
+
+            LogWriter.log(TAG, "backup done " + count + " files " + formatSize(totalSize));
             cleanupOldBackups(backupDir);
         } catch (Throwable t) {
-            XposedBridge.log("[Backup] 备份失败: " + t.getMessage());
+            LogWriter.log(TAG, "backup err: " + t.getMessage());
         }
     }
 
-    /**
-     * ⚠️ 修复: 双路径尝试
-     *   /data/user/0/... (Android 11+) 优先
-     *   /data/data/...   (旧 Android)  备用
-     */
-    private static File findDatabaseFile() {
+    private static File findDbDirectory() {
         try {
             Context ctx = ContextManager.getAppContext();
             if (ctx == null) return null;
 
-            long uin = ctx.getSharedPreferences("system_config_prefs", 0)
-                    .getLong("default_uin", 0);
-            if (uin == 0) uin = ctx.getSharedPreferences("system_config_prefs", 0)
-                    .getInt("default_uin", 0);
-            if (uin == 0) return null;
+            long uin = getUin(ctx);
+            if (uin <= 0) return null;
 
-            String hash = md5(String.valueOf(uin));
+            String hash = getDbHash((int) uin);
 
-            // 优先 /data/user/0/, 备用 /data/data/
             String[] paths = {
-                "/data/user/0/com.tencent.mm/MicroMsg/" + hash + "/EnMicroMsg.db",
-                "/data/data/com.tencent.mm/MicroMsg/" + hash + "/EnMicroMsg.db"
+                "/data/user/0/com.tencent.mm/MicroMsg/" + hash + "/",
+                "/data/data/com.tencent.mm/MicroMsg/" + hash + "/"
             };
 
             for (String path : paths) {
-                File f = new File(path);
-                if (f.exists()) {
-                    XposedBridge.log("[Backup] 找到DB: " + path);
-                    return f;
+                File dir = new File(path);
+                File db = new File(dir, "EnMicroMsg.db");
+                if (db.exists()) {
+                    LogWriter.log(TAG, "found DB at " + path);
+                    return dir;
                 }
             }
-            XposedBridge.log("[Backup] 所有路径都不存在: " + paths[0]);
-        } catch (Throwable t) {}
+
+            String base = getBaseDir(ctx);
+            if (base != null) {
+                File dir = new File(base, "MicroMsg/" + hash + "/");
+                File db = new File(dir, "EnMicroMsg.db");
+                if (db.exists()) return dir;
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "findDb err: " + t.getClass().getSimpleName());
+        }
         return null;
+    }
+
+    private static long getUin(Context ctx) {
+        if (sUin > 0) return sUin;
+        try {
+            SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
+            Object uv = sp.getAll().get("default_uin");
+            if (uv != null) {
+                sUin = Long.parseLong(uv.toString());
+                return sUin;
+            }
+        } catch (Throwable ignored) {}
+        return 0;
+    }
+
+    private static String getBaseDir(Context ctx) {
+        try {
+            Class<?> mp0b = XposedHelpers.findClass("mp0.b", sCL);
+            return (String) XposedHelpers.callStaticMethod(mp0b, "X");
+        } catch (Throwable e) {
+            return ctx.getFilesDir() != null ?
+                ctx.getFilesDir().getParentFile().getAbsolutePath() + "/" : null;
+        }
+    }
+
+    private static String getDbHash(int uin) {
+        try {
+            Class<?> hm0b0 = XposedHelpers.findClass("hm0.b0", sCL);
+            return (String) XposedHelpers.callStaticMethod(hm0b0, "e", uin);
+        } catch (Throwable e) {
+            return md5("mm" + uin);
+        }
     }
 
     private static void cleanupOldBackups(File dir) {
@@ -176,7 +235,7 @@ public class ChatBackup {
         for (File f : files) {
             if (f.lastModified() < cutoff && f.delete()) deleted++;
         }
-        if (deleted > 0) XposedBridge.log("[Backup] 清理了 " + deleted + " 个旧备份");
+        if (deleted > 0) LogWriter.log(TAG, "cleaned " + deleted + " old backups");
     }
 
     private static String md5(String input) {
