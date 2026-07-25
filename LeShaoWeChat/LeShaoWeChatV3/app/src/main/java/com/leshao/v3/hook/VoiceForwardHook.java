@@ -58,11 +58,20 @@ public class VoiceForwardHook {
     private static volatile String sFullHookedClass = null;
     private static volatile String sVfsCreateMethod = null;
 
+    // 动态发现的 API (版本无关)
+    private static volatile String sGClass = null;        // g(talker,prefix)→newName 所在类
+    private static volatile String sGMethod = null;        // 静态方法名
+    private static volatile String sTClass = null;         // t(name,dur,flag,e9)→bool 所在类
+    private static volatile String sTMethod = null;        // 静态方法名
+    private static volatile String sPathServiceClass = null; // Mj() 所在的 service 类
+    private static volatile String sPathMethod = null;     // Mj(vfsType,name,flag)→path
+
     public static void hook() {
         if (sHooked) return;
         ClassLoader cl = ContextManager.getClassLoader();
         if (cl == null) { LogWriter.log(TAG, "cl not ready"); return; }
 
+        discoverVoiceApi(cl);
         hookChatActivity(cl);
         hookChatFragmentForAdapter(cl);
         hookForwardTracing(cl);
@@ -778,6 +787,62 @@ public class VoiceForwardHook {
         return 5000;
     }
 
+    // ===== 版本无关的动态 API 发现 =====
+    private static void discoverVoiceApi(ClassLoader cl) {
+        try {
+            String apkPath = ContextManager.getApkPath();
+            if (apkPath == null) return;
+            dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+            Enumeration<String> entries = dex.entries();
+
+            while (entries.hasMoreElements()) {
+                String cn = entries.nextElement();
+                try {
+                    Class<?> cls = cl.loadClass(cn);
+                    for (Method m : cls.getDeclaredMethods()) {
+                        if (!Modifier.isStatic(m.getModifiers())) continue;
+                        if (m.getReturnType() != String.class) continue;
+                        Class<?>[] pts = m.getParameterTypes();
+                        // 找 g(talker, prefix)→newName: (String,String)→String, 方法名≤3字符
+                        if (pts.length == 2 && pts[0] == String.class && pts[1] == String.class
+                            && m.getName().length() <= 3 && sGMethod == null) {
+                            sGClass = cn;
+                            sGMethod = m.getName();
+                            LogWriter.log(TAG, "◆discovered g(): " + cn + "." + sGMethod + "(String,String)→String");
+                        }
+                        // 找 t(name, dur, flag, e9)→bool: (String,int,int,Object)→boolean, 方法名≤3字符
+                        if (pts.length == 4 && pts[0] == String.class && pts[1] == int.class
+                            && pts[2] == int.class && sTMethod == null
+                            && m.getReturnType() == boolean.class && m.getName().length() <= 3) {
+                            sTClass = cn;
+                            sTMethod = m.getName();
+                            LogWriter.log(TAG, "◆discovered t(): " + cn + "." + sTMethod + "(String,int,int,Object)→boolean");
+                        }
+                    }
+                    // 找 Mj(vfsType, name, flag)→path: (Object,String,boolean)→String
+                    if (sPathMethod == null) {
+                        for (Method m : cls.getDeclaredMethods()) {
+                            if (m.getReturnType() != String.class) continue;
+                            Class<?>[] pts = m.getParameterTypes();
+                            if (pts.length == 3 && pts[1] == String.class && pts[2] == boolean.class
+                                && m.getName().length() <= 3) {
+                                sPathServiceClass = cn;
+                                sPathMethod = m.getName();
+                                LogWriter.log(TAG, "◆discovered Mj(): " + cn + "." + sPathMethod + "(Object,String,boolean)→String");
+                                break;
+                            }
+                        }
+                    }
+                    if (sGMethod != null && sTMethod != null && sPathMethod != null) break;
+                } catch (Throwable ignored) {}
+            }
+            dex.close();
+            LogWriter.log(TAG, "discoverVoiceApi: g=" + sGClass + "." + sGMethod + " t=" + sTClass + "." + sTMethod + " path=" + sPathServiceClass + "." + sPathMethod);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "discoverVoiceApi error: " + t.getMessage());
+        }
+    }
+
     /**
      * 发送语音消息到目标会话 — WeKit方案
      *
@@ -790,21 +855,37 @@ public class VoiceForwardHook {
         try {
             LogWriter.log(TAG, "SceneVoice: target=" + targetWxid + " file=" + voiceFile + " dur=" + duration + "ms");
 
-            Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
+            if (sGClass == null || sGMethod == null) {
+                LogWriter.log(TAG, "SceneVoice: voice API not discovered"); return false;
+            }
 
-            // Step 1: g(talker, "amr_") → 创建 w0 + 生成新文件名(VoiceHelper.getVoiceFileName)
-            String newName = (String) XposedHelpers.callStaticMethod(y21x0, "g", targetWxid, "amr_");
-            LogWriter.log(TAG, "SceneVoice: g() → " + newName);
+            // Step 1: g(talker, "amr_") → 创建 w0 + 生成新文件名 (动态发现)
+            String newName = (String) XposedHelpers.callStaticMethod(
+                XposedHelpers.findClass(sGClass, cl), sGMethod, targetWxid, "amr_");
+            LogWriter.log(TAG, "SceneVoice: " + sGClass + "." + sGMethod + "() → " + newName);
             if (newName == null) { LogWriter.log(TAG, "SceneVoice: g() null"); return false; }
 
-            // Step 2: ★ Mj() → VFS 内部路径 (不手动拼! 手动拼的路径 ≠ hj()返回的路径)
-            Class<?> qh3u0 = XposedHelpers.findClass("qh3.u0", cl);
-            Object u0Service = XposedHelpers.callStaticMethod(
-                XposedHelpers.findClass("pa5.n0", cl), "c", qh3u0);
-            Object y_j = XposedHelpers.getStaticObjectField(
-                XposedHelpers.findClass("lin5.y", cl), "j");
-            String dstPath = (String) XposedHelpers.callMethod(u0Service, "Mj", y_j, newName, true);
-            LogWriter.log(TAG, "SceneVoice: Mj() → " + dstPath);
+            // Step 2: Mj() → VFS 内部路径 (动态发现)
+            String dstPath;
+            if (sPathServiceClass != null && sPathMethod != null) {
+                Class<?> svcCls = XposedHelpers.findClass(sPathServiceClass, cl);
+                Object svc = null;
+                // 尝试通过服务定位器获取实例 (单例/getInstance)
+                try { svc = XposedHelpers.callStaticMethod(svcCls, "hj"); } catch (Throwable ignored) {}
+                if (svc == null) {
+                    try { svc = XposedHelpers.newInstance(svcCls); } catch (Throwable ignored2) {}
+                }
+                dstPath = (svc != null)
+                    ? (String) XposedHelpers.callMethod(svc, sPathMethod, null, newName, true)
+                    : null;
+            } else {
+                // fallback: 手动拼 MD5 路径
+                String voice2Dir = getVoice2Dir(voiceFile);
+                String md5Prefix = newName.substring(0, 4);
+                dstPath = voice2Dir + md5Prefix.substring(0, 2) + "/" + md5Prefix.substring(2, 4) + "/msg_" + newName + ".amr";
+            }
+            if (dstPath == null) { LogWriter.log(TAG, "SceneVoice: path resolution failed"); return false; }
+            LogWriter.log(TAG, "SceneVoice: dstPath=" + dstPath);
 
             // Step 3: copy 原始文件 → Mj() 返回的路径
             new java.io.File(dstPath).getParentFile().mkdirs();
@@ -814,10 +895,14 @@ public class VoiceForwardHook {
                 java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             LogWriter.log(TAG, "SceneVoice: copy to Mj path ok");
 
-            // Step 4: t(newName, duration, 0, null) → v0.d()→Lj()→同一个Mj()→文件存在→true
-            boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
-                    newName, duration, 0, null);
-            LogWriter.log(TAG, "SceneVoice: t(" + newName + "," + duration + ",0,null) → " + ok);
+            // Step 4: t(newName, duration, 0, null) → v0.d()→Lj()→同一个Mj()→文件存在→true (动态发现)
+            if (sTClass == null || sTMethod == null) {
+                LogWriter.log(TAG, "SceneVoice: t() not discovered"); return false;
+            }
+            boolean ok = (Boolean) XposedHelpers.callStaticMethod(
+                XposedHelpers.findClass(sTClass, cl), sTMethod,
+                newName, duration, 0, null);
+            LogWriter.log(TAG, "SceneVoice: " + sTMethod + "(" + newName + "," + duration + ",0,null) → " + ok);
             if (!ok) { LogWriter.log(TAG, "SceneVoice: t() false, DB write failed"); return false; }
 
             // Step 5: y21.p0.kj().e() 刷新 → tl.t0自动捡起上传
