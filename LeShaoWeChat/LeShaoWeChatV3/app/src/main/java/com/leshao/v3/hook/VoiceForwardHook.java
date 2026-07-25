@@ -773,53 +773,79 @@ public class VoiceForwardHook {
         return 5000;
     }
 
+    /**
+     * 发送语音消息到目标会话 — 显示为语音气泡(非卡片)
+     *
+     * 方式1 (推荐): y21.x0.t(voiceFile, duration, 0, null) 一行搞定
+     * 方式2 (兜底): 手动构造 e9 → d1() + t1(1) + k1(1) + j1() + e1() → H9()
+     *              关键: d1() 是语音 XML setter, X0() 是文本 setter!
+     */
     private static boolean sendViaSceneVoice(Activity act, ClassLoader cl, String targetWxid, String voiceFile, int duration, Object origE9) {
         try {
-            LogWriter.log(TAG, "SceneVoice: origTalker=" + extractTalker(origE9) + " origMsgId=" + extractMsgId(origE9));
+            LogWriter.log(TAG, "SceneVoice: target=" + targetWxid + " file=" + voiceFile + " dur=" + duration + "ms");
 
-            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", cl);
+            // 方式1: y21.x0.t() 一行搞定
+            try {
+                Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
+                boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
+                        voiceFile, duration, 0, null);
+                LogWriter.log(TAG, "SceneVoice: y21.x0.t() → " + ok);
+                if (ok) {
+                    trySendViaB31(cl, targetWxid, voiceFile, duration);
+                    return true;
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "SceneVoice: y21.x0.t() fail: " + t.getMessage());
+            }
 
-            // 获取原始语音 XML, 作为模板
-            String origXml = null;
-            try { origXml = (String) XposedHelpers.callMethod(origE9, "I0"); } catch (Throwable ignored) {}
-            if (origXml == null) try { origXml = (String) XposedHelpers.getObjectField(origE9, "field_content"); } catch (Throwable ignored) {}
-            LogWriter.log(TAG, "SceneVoice: origXml=" + (origXml != null ? origXml.substring(0, Math.min(80, origXml.length())) : "null"));
+            // 方式2: 手动构造 e9 → d1() + t1(1) → H9()
+            return sendViaManualE9(cl, targetWxid, voiceFile, duration);
 
-            // 创建新的语音消息 (自己发送，右边气泡)
-            Object newMsg = XposedHelpers.newInstance(e9Class, targetWxid);
-            XposedHelpers.callMethod(newMsg, "A1", 34);   // setType=语音(34)
-            XposedHelpers.callMethod(newMsg, "e1", System.currentTimeMillis()); // setCreateTime
-            XposedHelpers.callMethod(newMsg, "k1", 1);    // setIsSend=1 (自己发送→右边)
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "SceneVoice error: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return false;
+        }
+    }
 
-            // 设 talker
-            try { XposedHelpers.callMethod(newMsg, "y1", targetWxid); } catch (Throwable ignored) {}
-
-            // 设语音文件路径
-            try { XposedHelpers.callMethod(newMsg, "j1", voiceFile); } catch (Throwable ignored) {}
-
-            // 构建干净的语音气泡XML（去掉原消息的发件人/加密字段，防止渲染为卡片）
-            java.io.File vf = new java.io.File(voiceFile);
-            String cleanXml = "<msg><voicemsg endflag=\"1\" voiceformat=\"4\" voicelength=\"" + duration + "\" length=\"" + vf.length() + "\" /></msg>";
-            XposedHelpers.callMethod(newMsg, "X0", cleanXml);
-            LogWriter.log(TAG, "SceneVoice: cleanXml=" + cleanXml);
-
-            // f9.H9(msg) 插入 DB — 内部调 uh3.k0.b() 自动分配合法 msgId
+    private static boolean sendViaManualE9(ClassLoader cl, String targetWxid, String voiceFile, int duration) {
+        try {
             Object storage = getMsgStorage(cl);
             if (storage == null) {
                 LogWriter.log(TAG, "SceneVoice: msgStorage is null");
                 return false;
             }
-            long assignedMsgId = (Long) XposedHelpers.callMethod(storage, "H9", newMsg);
-            LogWriter.log(TAG, "SceneVoice: f9.H9() done, assignedMsgId=" + assignedMsgId);
 
-            // b31.w 上传语音文件
+            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", cl);
+            Object msg = XposedHelpers.newInstance(e9Class, targetWxid);
+
+            XposedHelpers.callMethod(msg, "A1", 34);   // setType=语音
+            XposedHelpers.callMethod(msg, "e1", System.currentTimeMillis()); // setCreateTime
+            XposedHelpers.callMethod(msg, "k1", 1);    // setIsSend=1 (自己发送→右边)
+            XposedHelpers.callMethod(msg, "t1", 1);    // voice status=正常 ← 关键! 缺此字段不渲染气泡
+
+            try { XposedHelpers.callMethod(msg, "y1", targetWxid); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(msg, "j1", voiceFile); } catch (Throwable ignored) {}
+
+            // d1() 是语音 XML setter (不是 X0()!)
+            String voiceXml = buildVoiceXml(targetWxid, duration);
+            XposedHelpers.callMethod(msg, "d1", voiceXml);
+            LogWriter.log(TAG, "SceneVoice: voiceXml=" + voiceXml);
+
+            long assignedMsgId = (Long) XposedHelpers.callMethod(storage, "H9", msg);
+            LogWriter.log(TAG, "SceneVoice: H9() assignedMsgId=" + assignedMsgId);
+
             trySendViaB31(cl, targetWxid, voiceFile, duration);
 
-            return true;
+            return assignedMsgId > 0;
         } catch (Throwable t) {
-            LogWriter.log(TAG, "SceneVoice error: " + t.getClass().getSimpleName() + " " + t.getMessage());
-            return trySendViaB31(cl, targetWxid, voiceFile, duration);
+            LogWriter.log(TAG, "SceneVoice manual error: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return false;
         }
+    }
+
+    private static String buildVoiceXml(String sender, long durationMs) {
+        return "<msg><voicemsg endflag=\"1\" voicelength=\"" + durationMs
+            + "\" voiceformat=\"4\" forwardflag=\"0\" fromusername=\"" + sender + "\" /></msg>";
     }
 
     private static Object sMsgStorage;
