@@ -847,19 +847,49 @@ public class VoiceForwardHook {
                 java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             LogWriter.log(TAG, "SceneVoice: md5 copy ok");
 
-            // Step 5: b31.w.g(target, e9) 设目标+消息 → run() 发送
-            Class<?> b31w = XposedHelpers.findClass("b31.w", cl);
-            Object service = XposedHelpers.newInstance(b31w);
-            // g(targetTalker, msgE9) 告诉 b31.w 发给谁、发什么 (同 tl.p0.g)
-            XposedHelpers.callMethod(service, "g", targetWxid, origE9);
-            try {
-                XposedHelpers.callMethod(service, "run", new Class[]{Object.class}, (Object) null);
-                LogWriter.log(TAG, "SceneVoice: b31.w.g() + run() → sent");
-            } catch (Throwable e1) {
-                XposedHelpers.callMethod(service, "start",
-                    new Class[]{String.class}, voiceFile);
-                LogWriter.log(TAG, "SceneVoice: b31.w.g() + start() → sent");
+            // Step 5: tl.p0.g(target, e9) + l() 发送 (tl.p0 才是 SceneVoice)
+            Class<?> tlp0 = XposedHelpers.findClass("tl.p0", cl);
+            Object scene = null;
+            
+            // 枚举构造函数，找到能用的 (b31.w 不是 SceneVoice，必须用 tl.p0)
+            for (java.lang.reflect.Constructor<?> ctor : tlp0.getDeclaredConstructors()) {
+                ctor.setAccessible(true);
+                Class<?>[] pts = ctor.getParameterTypes();
+                try {
+                    if (pts.length == 0) {
+                        scene = ctor.newInstance();
+                    } else if (pts.length == 1) {
+                        if (String.class.isAssignableFrom(pts[0])) scene = ctor.newInstance(targetWxid);
+                        else if (pts[0].isAssignableFrom(origE9.getClass())) scene = ctor.newInstance(origE9);
+                        else scene = ctor.newInstance(new Object[]{null});
+                    } else if (pts.length == 2) {
+                        Object[] args = new Object[pts.length];
+                        for (int i = 0; i < pts.length; i++) {
+                            if (String.class.isAssignableFrom(pts[i])) args[i] = targetWxid;
+                            else if (pts[i].isAssignableFrom(origE9.getClass())) args[i] = origE9;
+                            else args[i] = null;
+                        }
+                        scene = ctor.newInstance(args);
+                    } else {
+                        Object[] args = new Object[pts.length];
+                        for (int i = 0; i < pts.length; i++) {
+                            if (String.class.isAssignableFrom(pts[i])) args[i] = targetWxid;
+                            else if (pts[i].isAssignableFrom(origE9.getClass())) args[i] = origE9;
+                            else args[i] = null;
+                        }
+                        scene = ctor.newInstance(args);
+                    }
+                    if (scene != null) {
+                        LogWriter.log(TAG, "SceneVoice: tl.p0 ctor(" + pts.length + " args) ok");
+                        break;
+                    }
+                } catch (Throwable ignored) {}
             }
+            if (scene == null) { LogWriter.log(TAG, "SceneVoice: all tl.p0 ctors failed"); return false; }
+            
+            XposedHelpers.callMethod(scene, "g", targetWxid, origE9);
+            XposedHelpers.callMethod(scene, "l");
+            LogWriter.log(TAG, "SceneVoice: tl.p0.g() + l() → sent");
             return true;
 
         } catch (Throwable t) {
