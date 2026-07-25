@@ -130,8 +130,12 @@ public class ContactChangeLog {
         if (!sEnabled || modContact == null) return;
 
         try {
-            String username = fieldNg(modContact, "d");
-            if (username == null || username.isEmpty()) return;
+            String username = "";
+            try { username = (String) XposedHelpers.getObjectField(modContact, "Z1"); } catch (Throwable ignored) {}
+            if (username == null || username.isEmpty()) {
+                LogWriter.log(TAG, "[v.b] skip: Z1 empty");
+                return;
+            }
 
             long now = System.currentTimeMillis();
             Long last = debounce.get(username);
