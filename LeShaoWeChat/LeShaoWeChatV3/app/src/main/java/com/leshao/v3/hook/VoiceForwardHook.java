@@ -1237,11 +1237,13 @@ public class VoiceForwardHook {
                     }
                     // ★ Mj() 发现: $c/$d/$b 内类
                     if (isMjLike && sPathMethod == null) {
+                        LogWriter.log(TAG, "◆Mj candidate: " + cn + " loaded, " + cls.getDeclaredMethods().length + " methods");
                         for (Method m : cls.getDeclaredMethods()) {
+                            Class<?>[] pts = m.getParameterTypes();
                             if (m.getReturnType() == String.class
-                                && m.getParameterTypes().length == 3
-                                && m.getParameterTypes()[1] == String.class
-                                && m.getParameterTypes()[2] == boolean.class
+                                && pts.length == 3
+                                && pts[1] == String.class
+                                && pts[2] == boolean.class
                                 && m.getName().length() <= 3) {
                                 sPathServiceClass = cn;
                                 sPathMethod = m.getName();
@@ -1249,7 +1251,9 @@ public class VoiceForwardHook {
                             }
                         }
                     }
-                } catch (Throwable ignored) {}
+                } catch (Throwable e) {
+                    if (isMjLike) LogWriter.log(TAG, "◆Mj candidate load fail: " + cn + " → " + e.getClass().getSimpleName() + " " + e.getMessage());
+                }
             }
             LogWriter.log(TAG, "discoverVoiceApi: g=" + sGClass + "." + sGMethod + " t=" + sTClass + "." + sTMethod + " path=" + sPathServiceClass + "." + sPathMethod);
             dex.close();
