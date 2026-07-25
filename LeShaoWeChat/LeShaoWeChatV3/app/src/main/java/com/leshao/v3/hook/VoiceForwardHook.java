@@ -883,8 +883,10 @@ public class VoiceForwardHook {
                 if (svc == null) {
                     try { svc = XposedHelpers.newInstance(svcCls); } catch (Throwable ignored2) {}
                 }
+                LogWriter.log(TAG, "SceneVoice: Mj svc=" + (svc != null ? svc.getClass().getSimpleName() : "NULL"));
                 if (svc != null) {
                     dstPath = (String) XposedHelpers.callMethod(svc, sPathMethod, null, newName, true);
+                    LogWriter.log(TAG, "SceneVoice: Mj() → " + dstPath);
                 }
             }
             if (dstPath == null) {
