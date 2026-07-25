@@ -12,6 +12,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 import com.leshao.v3.ContextManager;
+import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.*;
 import com.leshao.v3.model.ModuleConfig;
 
@@ -115,6 +116,7 @@ public class ContactGroupPageView {
         row.addView(textCol);
 
         if (configListener != null) {
+            LogWriter.log("ContactGroupPageView", "switchRow [" + title + "] 显示[设置]按钮");
             TextView btn = new TextView(ctx);
             btn.setText("[设置]"); btn.setTextSize(12); btn.setTextColor(0xFF4A90D9);
             btn.setPadding((int)(6 * d), 0, (int)(6 * d), 0);
