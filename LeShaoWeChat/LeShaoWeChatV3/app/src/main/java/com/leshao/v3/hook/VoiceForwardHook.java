@@ -774,69 +774,73 @@ public class VoiceForwardHook {
 
     private static boolean sendViaSceneVoice(Activity act, ClassLoader cl, String targetWxid, String voiceFile, int duration, Object origE9) {
         try {
-            Class<?> p0Class = XposedHelpers.findClass("tl.p0", cl);
-            String origTalker = extractTalker(origE9);
-            LogWriter.log(TAG, "SceneVoice: origTalker=" + origTalker + " origMsgId=" + extractMsgId(origE9));
+            LogWriter.log(TAG, "SceneVoice: origTalker=" + extractTalker(origE9) + " origMsgId=" + extractMsgId(origE9));
 
-            // 创建 recorder
-            Object recorder = XposedHelpers.newInstance(p0Class,
-                new Class[]{android.content.Context.class, boolean.class}, act, false);
+            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", cl);
 
-            // g() → 生成文件名(存 this.e) + 创建 y21.w0 记录(按文件名索引)
-            boolean gResult = (Boolean) XposedHelpers.callMethod(recorder, "g",
-                new Class[]{String.class, XposedHelpers.findClass("com.tencent.mm.storage.e9", cl)},
-                origTalker, origE9);
-            LogWriter.log(TAG, "SceneVoice: g()=" + gResult);
-            if (!gResult) return false;
+            // 获取原始语音 XML, 作为模板
+            String origXml = null;
+            try { origXml = (String) XposedHelpers.callMethod(origE9, "I0"); } catch (Throwable ignored) {}
+            if (origXml == null) try { origXml = (String) XposedHelpers.getObjectField(origE9, "field_content"); } catch (Throwable ignored) {}
+            LogWriter.log(TAG, "SceneVoice: origXml=" + (origXml != null ? origXml.substring(0, Math.min(80, origXml.length())) : "null"));
 
-            // 获取 g() 生成的文件名 (y21.w0 按此文件名索引)
-            String genFileName = (String) XposedHelpers.getObjectField(recorder, "e");
-            LogWriter.log(TAG, "SceneVoice: genFileName=" + genFileName);
+            // 从原始 XML 中提取 clientmsgid
+            String cid = extractXmlAttr(origXml, "clientmsgid");
 
-            // 找到 y21.w0 记录, 改 talker = 目标
-            Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
-            try {
-                Object stg = XposedHelpers.callStaticMethod(y21x0, "j",
-                    new Class[]{String.class}, genFileName);
-                if (stg != null) {
-                    XposedHelpers.setObjectField(stg, "c", targetWxid);
-                    LogWriter.log(TAG, "SceneVoice: y21.w0.c = " + targetWxid);
-                }
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "SceneVoice: y21.w0 update error: " + t.getMessage());
+            // 创建新的语音消息
+            Object newMsg = XposedHelpers.newInstance(e9Class, targetWxid);
+            XposedHelpers.callMethod(newMsg, "A1", 34);   // setType=语音(34)
+            XposedHelpers.callMethod(newMsg, "L1", System.currentTimeMillis());
+
+            // 设 talker
+            try { XposedHelpers.setObjectField(newMsg, "field_talker", targetWxid); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(newMsg, "y1", targetWxid); } catch (Throwable ignored) {}
+
+            // 设语音 XML content — 用原始 XML 但替换必要字段
+            if (origXml != null) {
+                XposedHelpers.callMethod(newMsg, "X0", origXml);
             }
 
-            // 设目标 + 时长
-            XposedHelpers.setObjectField(recorder, "d", targetWxid);
-            XposedHelpers.setIntField(recorder, "m", duration);
+            // 设语音文件路径
+            try { XposedHelpers.callMethod(newMsg, "j1", voiceFile); } catch (Throwable ignored) {}
+            try { XposedHelpers.setObjectField(newMsg, "field_imgPath", voiceFile); } catch (Throwable ignored) {}
 
-            // PATH A: y21.x0.t(文件名, duration, 0, e9) — j(文件名) 能找到 y21.w0
-            boolean dbResult = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
-                new Class[]{String.class, int.class, int.class,
-                    XposedHelpers.findClass("com.tencent.mm.storage.e9", cl)},
-                genFileName, duration, 0, origE9);
-            LogWriter.log(TAG, "SceneVoice: y21.x0.t()=" + dbResult);
-
-            if (!dbResult) {
-                LogWriter.log(TAG, "SceneVoice: y21.x0.t() failed, trying b31.w...");
-                return trySendViaB31(cl, targetWxid, voiceFile, duration);
+            // f9.Ra() 写入 DB
+            Object storage = getMsgStorage(cl);
+            if (storage == null) {
+                LogWriter.log(TAG, "SceneVoice: msgStorage is null");
+                return false;
             }
+            long msgId = System.currentTimeMillis();
+            XposedHelpers.callMethod(storage, "Ra",
+                new Class[]{long.class, e9Class}, msgId, newMsg);
+            LogWriter.log(TAG, "SceneVoice: f9.Ra() done, msgId=" + msgId);
 
-            // 刷新播放列表
-            try {
-                Class<?> y21p0 = XposedHelpers.findClass("y21.p0", cl);
-                Object pm = XposedHelpers.callStaticMethod(y21p0, "kj");
-                if (pm != null) XposedHelpers.callMethod(pm, "e");
-                LogWriter.log(TAG, "SceneVoice: playlist refreshed");
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "SceneVoice: playlist error: " + t.getMessage());
-            }
+            // b31.w 上传语音文件
+            trySendViaB31(cl, targetWxid, voiceFile, duration);
 
             return true;
         } catch (Throwable t) {
             LogWriter.log(TAG, "SceneVoice error: " + t.getClass().getSimpleName() + " " + t.getMessage());
             return trySendViaB31(cl, targetWxid, voiceFile, duration);
         }
+    }
+
+    private static Object sMsgStorage;
+
+    private static Object getMsgStorage(ClassLoader cl) {
+        if (sMsgStorage != null) return sMsgStorage;
+        try {
+            Class<?> d9 = XposedHelpers.findClass("d9", cl);
+            Object service = XposedHelpers.callStaticMethod(d9, "b");
+            if (service != null) {
+                sMsgStorage = XposedHelpers.callMethod(service, "u");
+                LogWriter.log(TAG, "SceneVoice: msgStorage obtained via d9.b().u()");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "SceneVoice: msgStorage error: " + t.getMessage());
+        }
+        return sMsgStorage;
     }
 
     private static boolean trySendViaB31(ClassLoader cl, String targetWxid, String voiceFile, int duration) {
