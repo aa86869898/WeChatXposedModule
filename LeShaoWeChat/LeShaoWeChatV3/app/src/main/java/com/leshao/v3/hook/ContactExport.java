@@ -5,30 +5,33 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.model.ModuleConfig;
+import com.leshao.v3.model.Contact;
+import com.leshao.v3.db.ContactRepository;
+import com.leshao.v3.ui.ContactPickerDialog;
+import android.app.Activity;
+import android.content.Intent;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.net.Uri;
 import android.widget.Toast;
 import java.io.File;
 import java.io.FileWriter;
+import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
+import java.util.Set;
 
-/**
- * [功能11] 通讯录批量导出 — 生产级完整实现
- * =========================================
- * 
- * 完整流程:
- *   1. 获取uin → 计算MD5 → 拼接DB路径
- *   2. 读取imei → 计算密码 → 打开SQLiteDatabase
- *   3. 查询rcontact表 → 遍历Cursor → 写入CSV
- *   4. Toast提示完成
- */
 public class ContactExport {
 
     private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd_HHmmss");
+    private static final int REQ_SAF = 9937;
     private static boolean exportTriggered = false;
     private static ClassLoader classLoader;
     private static volatile boolean sEnabled = true;
+    private static Set<String> sPendingWxids;
+    private static Activity sPendingAct;
+    private static boolean sHookReady = false;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
@@ -38,6 +41,25 @@ public class ContactExport {
         if (config == null || !config.contactExportEnabled) return;
         classLoader = cl;
         hookSelectContactUI(cl);
+        hookOnActivityResult();
+    }
+
+    private static void hookOnActivityResult() {
+        if (sHookReady) return;
+        try {
+            XposedHelpers.findAndHookMethod(Activity.class, "onActivityResult",
+                int.class, int.class, Intent.class, new XC_MethodHook() {
+                    @Override protected void afterHookedMethod(MethodHookParam param) {
+                        int req = (int) param.args[0];
+                        int res = (int) param.args[1];
+                        Intent data = (Intent) param.args[2];
+                        handleActivityResult(req, res, data, (Activity) param.thisObject);
+                    }
+                });
+            sHookReady = true;
+        } catch (Throwable t) {
+            XposedBridge.log("[ContactExport] onActivityResult hook fail: " + t.getMessage());
+        }
     }
 
     private static void hookSelectContactUI(ClassLoader cl) {
@@ -61,6 +83,93 @@ public class ContactExport {
     }
 
     public static void triggerExport() { exportTriggered = true; }
+
+    public static void startCustomExport(Activity act) {
+        ContactPickerDialog.show(act, "", ContactPickerDialog.MODE_FRIEND,
+        new ContactPickerDialog.OnContactsSelected() {
+            @Override public void onSelected(Set<String> wxids, String display) {
+                if (wxids == null || wxids.isEmpty()) {
+                    showToast("未选择联系人");
+                    return;
+                }
+                sPendingWxids = wxids;
+                sPendingAct = act;
+                openFilePicker(act, display);
+            }
+        });
+    }
+
+    private static void openFilePicker(Activity act, String display) {
+        try {
+            String name = "contacts_" + sdf.format(new Date()) + ".csv";
+            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("text/csv");
+            intent.putExtra(Intent.EXTRA_TITLE, name);
+            act.startActivityForResult(intent, REQ_SAF);
+        } catch (Throwable t) {
+            showToast("无法打开文件选择器");
+            sPendingWxids = null;
+            sPendingAct = null;
+        }
+    }
+
+    private static void handleActivityResult(int requestCode, int resultCode, Intent data, Activity act) {
+        if (requestCode != REQ_SAF || sPendingWxids == null) return;
+        final Set<String> wxids = sPendingWxids;
+        sPendingWxids = null;
+        sPendingAct = null;
+
+        if (resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
+            showToast("已取消导出");
+            return;
+        }
+
+        final Uri uri = data.getData();
+        new Thread(new Runnable() {
+            public void run() {
+                int count = writeContactsToUri(wxids, uri);
+                if (count >= 0) {
+                    showToast("导出完成: " + count + " 个联系人");
+                } else {
+                    showToast("导出失败, 请重试");
+                }
+            }
+        }).start();
+    }
+
+    private static int writeContactsToUri(Set<String> wxids, Uri uri) {
+        List<Contact> all = ContactRepository.getFriends();
+        OutputStream os = null;
+        try {
+            os = ContextManager.getAppContext().getContentResolver().openOutputStream(uri);
+            if (os == null) return -1;
+
+            os.write(0xEF); os.write(0xBB); os.write(0xBF);
+            String header = "序号,wxid,昵称,备注名,微信号,类型,性别\n";
+            os.write(header.getBytes("UTF-8"));
+
+            int count = 0;
+            for (Contact c : all) {
+                if (!wxids.contains(c.wxid)) continue;
+                count++;
+                String line = count + "," +
+                    csv(c.wxid) + "," + csv(c.nickname) + "," +
+                    csv(c.remarkName) + "," + csv(c.alias) + "," +
+                    typeName(c.type) + "," + sexName(c.sex) + "\n";
+                os.write(line.getBytes("UTF-8"));
+            }
+            os.flush();
+            return count;
+        } catch (Throwable t) {
+            XposedBridge.log("[ContactExport] write error: " + t.getMessage());
+            return -1;
+        } finally {
+            try { if (os != null) os.close(); } catch (Throwable ignored) {}
+        }
+    }
+
+    // ====== 原有全量导出逻辑(保留) ======
 
     private static void exportContacts() {
         SQLiteDatabase db = null;
@@ -128,9 +237,9 @@ public class ContactExport {
 
             final int finalCount = count;
             final String path = outFile.getAbsolutePath();
-            XposedBridge.log("[ContactExport] ✅ 导出完成: " + path + " (" + finalCount + "人)");
+            XposedBridge.log("[ContactExport] 导出完成: " + path + " (" + finalCount + "人)");
 
-            showToast("✅ 通讯录导出完成: " + finalCount + "人\n" + path);
+            showToast("通讯录导出完成: " + finalCount + "人\n" + path);
         } catch (Throwable t) {
             XposedBridge.log("[ContactExport] 导出失败: " + t.getMessage());
         } finally {

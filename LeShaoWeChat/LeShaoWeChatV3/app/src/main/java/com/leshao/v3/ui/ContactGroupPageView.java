@@ -33,7 +33,7 @@ public class ContactGroupPageView {
         LinearLayout cardContact = makeCard(ctx, d);
         cardContact.addView(switchRow(ctx, d, "通讯录导出", null, cfg.contactExportEnabled, (v, on) -> {
             cfg.contactExportEnabled = on; cfg.save(prefs); ContactExport.setEnabled(on);
-        }, null));
+        }, v -> ContactExport.startCustomExport(act)));
         cardContact.addView(switchRow(ctx, d, "联系人变更日志", null, cfg.contactChangeLogEnabled, (v, on) -> {
             cfg.contactChangeLogEnabled = on; cfg.save(prefs); ContactChangeLog.setEnabled(on);
         }, null));
