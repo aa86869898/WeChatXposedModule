@@ -410,7 +410,7 @@ public class MainActivity {
 
         sv.addView(root);
 
-        AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert);
+        AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert);
         b.setView(sv);
         b.setCancelable(true);
         AlertDialog dlg = b.create();

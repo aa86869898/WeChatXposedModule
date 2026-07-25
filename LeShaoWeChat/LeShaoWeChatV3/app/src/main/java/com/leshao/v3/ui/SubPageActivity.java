@@ -63,7 +63,7 @@ public class SubPageActivity {
         sv.addView(body);
         root.addView(sv);
 
-        AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert);
+        AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert);
         b.setView(root);
         b.setCancelable(true);
         AlertDialog dlg = b.create();

@@ -42,6 +42,9 @@ public class AppColors {
             if (ctx == null) return false;
             Resources res = ctx.getResources();
             if (res == null) return false;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                return res.getConfiguration().isNightModeActive();
+            }
             int uiMode = res.getConfiguration().uiMode
                 & Configuration.UI_MODE_NIGHT_MASK;
             return (uiMode == Configuration.UI_MODE_NIGHT_YES);
