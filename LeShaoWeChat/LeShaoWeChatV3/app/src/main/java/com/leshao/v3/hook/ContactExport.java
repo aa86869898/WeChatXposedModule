@@ -101,10 +101,12 @@ public class ContactExport {
 
     private static void openFilePicker(Activity act, String display) {
         try {
-            String name = "contacts_" + sdf.format(new Date()) + ".csv";
+            int count = sPendingWxids != null ? sPendingWxids.size() : 0;
+            String date = new SimpleDateFormat("yyyyMMdd").format(new Date());
+            String name = "联系人数据导出" + count + "个" + date + ".txt";
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType("text/csv");
+            intent.setType("text/plain");
             intent.putExtra(Intent.EXTRA_TITLE, name);
             act.startActivityForResult(intent, REQ_SAF);
         } catch (Throwable t) {
@@ -145,18 +147,11 @@ public class ContactExport {
             os = ContextManager.getAppContext().getContentResolver().openOutputStream(uri);
             if (os == null) return -1;
 
-            os.write(0xEF); os.write(0xBB); os.write(0xBF);
-            String header = "序号,wxid,昵称,备注名,微信号,类型,性别\n";
-            os.write(header.getBytes("UTF-8"));
-
             int count = 0;
             for (Contact c : all) {
                 if (!wxids.contains(c.wxid)) continue;
                 count++;
-                String line = count + "," +
-                    csv(c.wxid) + "," + csv(c.nickname) + "," +
-                    csv(c.remarkName) + "," + csv(c.alias) + "," +
-                    typeName(c.type) + "," + sexName(c.sex) + "\n";
+                String line = c.nickname + " " + c.remarkName + " " + c.wxid + " " + c.alias + "\n";
                 os.write(line.getBytes("UTF-8"));
             }
             os.flush();
