@@ -17,10 +17,10 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            storeFile = file("release.keystore")
+            storePassword = "leshao2024"
+            keyAlias = "leshao"
+            keyPassword = "leshao2024"
         }
     }
 
