@@ -9,25 +9,30 @@ public class ContactChangeRecord {
     public long time;
     public String wxid;
     public String nickname;
-    public String changeType;
-    public String oldValue;
-    public String newValue;
+    public String remark;
+    public String oldNickname;
+    public String newNickname;
+    public String oldRemark;
+    public String newRemark;
+    public String oldSignature;
+    public String newSignature;
+    public boolean nicknameChanged;
+    public boolean remarkChanged;
+    public boolean signatureChanged;
+    public boolean avatarChanged;
+    public int oldAvatarHash;
+    public int newAvatarHash;
 
     public ContactChangeRecord() {}
 
-    public ContactChangeRecord(long time, String wxid, String nickname, String changeType, String oldValue, String newValue) {
-        this.time = time;
-        this.wxid = wxid;
-        this.nickname = nickname;
-        this.changeType = changeType;
-        this.oldValue = oldValue;
-        this.newValue = newValue;
+    public boolean hasAnyChange() {
+        return nicknameChanged || remarkChanged || signatureChanged || avatarChanged;
     }
 
-    public String desc() {
-        if (oldValue == null) oldValue = "";
-        if (newValue == null) newValue = "";
-        return nickname + " " + changeType + ": " + oldValue + " -> " + newValue;
+    public String displayName() {
+        if (remark != null && !remark.isEmpty()) return remark;
+        if (nickname != null && !nickname.isEmpty()) return nickname;
+        return wxid;
     }
 
     public JSONObject toJson() {
@@ -36,9 +41,27 @@ public class ContactChangeRecord {
             o.put("t", time);
             o.put("w", wxid != null ? wxid : "");
             o.put("n", nickname != null ? nickname : "");
-            o.put("c", changeType != null ? changeType : "");
-            o.put("o", oldValue != null ? oldValue : "");
-            o.put("v", newValue != null ? newValue : "");
+            o.put("r", remark != null ? remark : "");
+            o.put("nc", nicknameChanged);
+            o.put("rc", remarkChanged);
+            o.put("sc", signatureChanged);
+            o.put("ac", avatarChanged);
+            if (nicknameChanged) {
+                o.put("on", oldNickname != null ? oldNickname : "");
+                o.put("nn", newNickname != null ? newNickname : "");
+            }
+            if (remarkChanged) {
+                o.put("or", oldRemark != null ? oldRemark : "");
+                o.put("nr", newRemark != null ? newRemark : "");
+            }
+            if (signatureChanged) {
+                o.put("os", oldSignature != null ? oldSignature : "");
+                o.put("ns", newSignature != null ? newSignature : "");
+            }
+            if (avatarChanged) {
+                o.put("ah", oldAvatarHash);
+                o.put("na", newAvatarHash);
+            }
         } catch (Throwable ignored) {}
         return o;
     }
@@ -48,9 +71,27 @@ public class ContactChangeRecord {
         r.time = o.optLong("t");
         r.wxid = o.optString("w");
         r.nickname = o.optString("n");
-        r.changeType = o.optString("c");
-        r.oldValue = o.optString("o");
-        r.newValue = o.optString("v");
+        r.remark = o.optString("r");
+        r.nicknameChanged = o.optBoolean("nc");
+        r.remarkChanged = o.optBoolean("rc");
+        r.signatureChanged = o.optBoolean("sc");
+        r.avatarChanged = o.optBoolean("ac");
+        if (r.nicknameChanged) {
+            r.oldNickname = o.optString("on");
+            r.newNickname = o.optString("nn");
+        }
+        if (r.remarkChanged) {
+            r.oldRemark = o.optString("or");
+            r.newRemark = o.optString("nr");
+        }
+        if (r.signatureChanged) {
+            r.oldSignature = o.optString("os");
+            r.newSignature = o.optString("ns");
+        }
+        if (r.avatarChanged) {
+            r.oldAvatarHash = o.optInt("ah");
+            r.newAvatarHash = o.optInt("na");
+        }
         return r;
     }
 
@@ -60,7 +101,8 @@ public class ContactChangeRecord {
         try {
             JSONArray arr = new JSONArray(json);
             for (int i = 0; i < arr.length(); i++) {
-                list.add(fromJson(arr.getJSONObject(i)));
+                ContactChangeRecord r = fromJson(arr.getJSONObject(i));
+                if (r.hasAnyChange()) list.add(r);
             }
         } catch (Throwable ignored) {}
         return list;

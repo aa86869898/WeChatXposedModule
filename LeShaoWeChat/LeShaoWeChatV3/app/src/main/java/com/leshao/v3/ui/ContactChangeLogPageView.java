@@ -64,7 +64,6 @@ public class ContactChangeLogPageView {
         }
 
         body.addView(card);
-
         return body;
     }
 
@@ -89,30 +88,69 @@ public class ContactChangeLogPageView {
         header.addView(timeView);
 
         TextView nameView = new TextView(ctx);
-        nameView.setText(r.nickname != null && !r.nickname.isEmpty() ? r.nickname : r.wxid);
+        nameView.setText(r.displayName());
         nameView.setTextSize(14);
         nameView.setTextColor(AppColors.text1());
         nameView.setTypeface(null, Typeface.BOLD);
         header.addView(nameView);
 
-        TextView typeView = new TextView(ctx);
-        typeView.setText(" " + r.changeType);
-        typeView.setTextSize(12);
-        typeView.setTextColor(AppColors.accent());
-        header.addView(typeView);
-
         row.addView(header);
 
-        String old = r.oldValue != null ? r.oldValue : "(无)";
-        String newVal = r.newValue != null ? r.newValue : "(无)";
-        TextView detail = new TextView(ctx);
-        detail.setText(old + " -> " + newVal);
-        detail.setTextSize(12);
-        detail.setTextColor(AppColors.text2());
-        detail.setPadding(0, (int)(4*d), 0, 0);
-        row.addView(detail);
+        if (r.avatarChanged) {
+            row.addView(changeLine(ctx, d, "头像", null, null));
+        }
+        if (r.nicknameChanged) {
+            row.addView(changeLine(ctx, d, "昵称", r.oldNickname, r.newNickname));
+        }
+        if (r.remarkChanged) {
+            row.addView(changeLine(ctx, d, "备注", r.oldRemark, r.newRemark));
+        }
+        if (r.signatureChanged) {
+            row.addView(changeLine(ctx, d, "签名", r.oldSignature, r.newSignature));
+        }
 
         return row;
+    }
+
+    private static View changeLine(Context ctx, float d, String label, String oldVal, String newVal) {
+        LinearLayout line = new LinearLayout(ctx);
+        line.setOrientation(LinearLayout.HORIZONTAL);
+        line.setPadding(0, (int)(4*d), 0, 0);
+
+        TextView labelView = new TextView(ctx);
+        labelView.setText(label);
+        labelView.setTextSize(12);
+        labelView.setTextColor(AppColors.accent());
+        labelView.setPadding(0, 0, (int)(6*d), 0);
+        line.addView(labelView);
+
+        if (oldVal == null && newVal == null) {
+            TextView valView = new TextView(ctx);
+            valView.setText("已变更");
+            valView.setTextSize(12);
+            valView.setTextColor(AppColors.text2());
+            line.addView(valView);
+        } else {
+            TextView oldView = new TextView(ctx);
+            oldView.setText(oldVal != null ? oldVal : "(无)");
+            oldView.setTextSize(12);
+            oldView.setTextColor(AppColors.text2());
+            line.addView(oldView);
+
+            TextView arrow = new TextView(ctx);
+            arrow.setText(" -> ");
+            arrow.setTextSize(12);
+            arrow.setTextColor(AppColors.text2());
+            line.addView(arrow);
+
+            TextView newView = new TextView(ctx);
+            newView.setText(newVal != null ? newVal : "(无)");
+            newView.setTextSize(12);
+            newView.setTextColor(AppColors.text1());
+            line.addView(newView);
+        }
+
+        return line;
     }
 
     private static View divider(Context ctx, float d) {

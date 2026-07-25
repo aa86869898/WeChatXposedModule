@@ -5,15 +5,12 @@ import android.content.Context;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.model.ContactChangeRecord;
-import com.leshao.v3.model.ModuleConfig;
 
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.BufferedReader;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -29,7 +26,6 @@ public class ContactChangeLog {
     private static volatile boolean sEnabled = true;
     private static final ConcurrentHashMap<String, ContactSnapshot> lastSnapshot = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Long> debounce = new ConcurrentHashMap<>();
-    private static volatile long sLastDetect = 0;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
@@ -38,6 +34,21 @@ public class ContactChangeLog {
 
         try {
             LogWriter.log(TAG, "hook installing...");
+
+            Class<?> storageClass = XposedHelpers.findClass(
+                "com.tencent.mm.storage.j4", cl);
+            for (String m : new String[]{"h0", "i0", "l0"}) {
+                final String mn = m;
+                XposedBridge.hookAllMethods(storageClass, mn, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        LogWriter.log(TAG, "[j4." + mn + "] fired");
+                        if (param.args.length > 0 && param.args[0] != null) {
+                            detectChangesFromContact(param.args[0]);
+                        }
+                    }
+                });
+            }
 
             Class<?> contactInfoUI = XposedHelpers.findClass(
                 "com.tencent.mm.plugin.profile.ui.ContactInfoUI", cl);
@@ -83,19 +94,23 @@ public class ContactChangeLog {
         }
     }
 
+    private static int callIntMethod(Object obj, String methodName) {
+        try {
+            Object result = XposedHelpers.callMethod(obj, methodName);
+            return result instanceof Integer ? (Integer) result : 0;
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
     private static void detectChangesFromContact(Object contact) {
         if (!sEnabled) return;
 
         try {
             long now = System.currentTimeMillis();
-            if (now - sLastDetect < 600) return;
-            sLastDetect = now;
 
             String username = callStringMethod(contact, "d1");
-            if (username == null || username.isEmpty()) {
-                LogWriter.log(TAG, "detect skip: username empty");
-                return;
-            }
+            if (username == null || username.isEmpty()) return;
 
             now = System.currentTimeMillis();
             Long last = debounce.get(username);
@@ -103,29 +118,23 @@ public class ContactChangeLog {
             debounce.put(username, now);
 
             String nickname  = callStringMethod(contact, "M0");
-            String alias     = callStringMethod(contact, "t0");
             String remark    = callStringMethod(contact, "w0");
+            int avatarHash   = callIntMethod(contact, "R0");
 
             String signature = "";
             try {
                 Object extra = XposedHelpers.callMethod(contact, "z0");
                 if (extra != null) {
-                    String sigField = callStringMethod(extra, "getSignature");
-                    if (sigField.isEmpty()) sigField = callStringMethod(extra, "signature");
-                    signature = sigField;
+                    signature = callStringMethod(extra, "getSignature");
+                    if (signature.isEmpty()) signature = callStringMethod(extra, "signature");
                 }
             } catch (Throwable ignored) {}
 
-            ContactSnapshot current = new ContactSnapshot(username, nickname, alias, remark, signature);
+            ContactSnapshot current = new ContactSnapshot(username, nickname, remark, avatarHash, signature);
             ContactSnapshot previous = lastSnapshot.get(username);
 
             if (previous != null) {
-                compareAndRecord(now, username, nickname, "昵称", previous.nickname, current.nickname);
-                compareAndRecord(now, username, nickname, "备注", previous.remark, current.remark);
-                compareAndRecord(now, username, nickname, "微信号", previous.alias, current.alias);
-                if (signature != null && !signature.isEmpty() || (previous.signature != null && !previous.signature.isEmpty())) {
-                    compareAndRecord(now, username, nickname, "签名", previous.signature, current.signature);
-                }
+                buildAndSaveRecord(now, username, nickname, remark, previous, current);
             }
 
             lastSnapshot.put(username, current);
@@ -134,11 +143,40 @@ public class ContactChangeLog {
         }
     }
 
-    private static void compareAndRecord(long now, String username, String nickname,
-                                          String changeType, String oldVal, String newVal) {
-        if (!nullSafeEquals(oldVal, newVal)) {
-            LogWriter.log(TAG, "CHANGE: " + changeType + " " + trunc(oldVal, 20) + " -> " + trunc(newVal, 20));
-            saveRecord(new ContactChangeRecord(now, username, nickname, changeType, oldVal, newVal));
+    private static void buildAndSaveRecord(long now, String wxid, String nickname, String remark,
+                                            ContactSnapshot prev, ContactSnapshot cur) {
+        ContactChangeRecord r = new ContactChangeRecord();
+        r.time = now;
+        r.wxid = wxid;
+        r.nickname = nickname;
+        r.remark = remark;
+
+        if (!nullSafeEquals(prev.nickname, cur.nickname)) {
+            r.nicknameChanged = true;
+            r.oldNickname = prev.nickname;
+            r.newNickname = cur.nickname;
+        }
+        if (!nullSafeEquals(prev.remark, cur.remark)) {
+            r.remarkChanged = true;
+            r.oldRemark = prev.remark;
+            r.newRemark = cur.remark;
+        }
+        if (!nullSafeEquals(prev.signature, cur.signature)) {
+            r.signatureChanged = true;
+            r.oldSignature = prev.signature;
+            r.newSignature = cur.signature;
+        }
+        if (prev.avatarHash != cur.avatarHash) {
+            r.avatarChanged = true;
+            r.oldAvatarHash = prev.avatarHash;
+            r.newAvatarHash = cur.avatarHash;
+        }
+
+        if (r.hasAnyChange()) {
+            LogWriter.log(TAG, "CHANGE: nick=" + r.nicknameChanged + " remark=" + r.remarkChanged
+                + " sig=" + r.signatureChanged + " avatar=" + r.avatarChanged
+                + " | " + r.displayName());
+            saveRecord(r);
         }
     }
 
@@ -213,15 +251,11 @@ public class ContactChangeLog {
         return new File("/sdcard/LeShaoV3Logs/contact_changes.json");
     }
 
-    private static String trunc(String s, int max) {
-        if (s == null) return "null";
-        return s.length() <= max ? s : s.substring(0, max) + "...";
-    }
-
     private static class ContactSnapshot {
-        String username, nickname, alias, remark, signature;
-        ContactSnapshot(String u, String n, String a, String r, String s) {
-            username = u; nickname = n; alias = a; remark = r; signature = s;
+        String username, nickname, remark, signature;
+        int avatarHash;
+        ContactSnapshot(String u, String n, String r, int a, String s) {
+            username = u; nickname = n; remark = r; avatarHash = a; signature = s;
         }
     }
 }
