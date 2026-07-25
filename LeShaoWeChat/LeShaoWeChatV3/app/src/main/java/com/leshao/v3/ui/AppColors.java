@@ -67,22 +67,22 @@ public class AppColors {
         return p != null ? p.getInt(key, def) : def;
     }
 
-    public static int bg()          { return isDarkMode() ? DARK_BG : themed("ls_tc_page_bg", DEF_BG); }
-    public static int card()        { return isDarkMode() ? DARK_CARD : themed("ls_tc_actionbar_bg", DEF_WHITE); }
+    public static int bg()          { return themed("ls_tc_page_bg",          isDarkMode() ? DARK_BG      : DEF_BG); }
+    public static int card()        { return themed("ls_tc_actionbar_bg",    isDarkMode() ? DARK_CARD    : DEF_WHITE); }
     public static int whiteCard()   { return isDarkMode() ? DARK_CARD : DEF_WHITE; }
-    public static int text1()       { return isDarkMode() ? DARK_TEXT : themed("ls_tc_text_primary", DEF_TEXT); }
-    public static int text2()       { return isDarkMode() ? DARK_TEXT2 : themed("ls_tc_text_secondary", DEF_TEXT2); }
-    public static int accent()      { return isDarkMode() ? DARK_ACCENT : themed("ls_tc_tab_selected", DEF_ACCENT); }
+    public static int text1()       { return themed("ls_tc_text_primary",    isDarkMode() ? DARK_TEXT    : DEF_TEXT); }
+    public static int text2()       { return themed("ls_tc_text_secondary",  isDarkMode() ? DARK_TEXT2   : DEF_TEXT2); }
+    public static int accent()      { return themed("ls_tc_tab_selected",    isDarkMode() ? DARK_ACCENT  : DEF_ACCENT); }
     public static int divider()     {
-        if (isDarkMode()) return DARK_DIV;
+        boolean dm = isDarkMode();
         int b = bg();
-        return (0xFF << 24) | adjust(b, 0.08f);
+        return (0xFF << 24) | adjust(b, dm ? 0.12f : 0.08f);
     }
-    public static int arrow()       { return isDarkMode() ? DARK_ARROW : themed("ls_tc_text_secondary", DEF_ARROW); }
-    public static int border()      { return isDarkMode() ? DARK_BORDER : themed("ls_tc_tab_selected", DEF_BORDER); }
-    public static int accent2()     { return isDarkMode() ? DARK_ACCENT2 : themed("ls_tc_tab_selected", DEF_ACCENT2); }
-    public static int green()       { return isDarkMode() ? DARK_GREEN : themed("ls_tc_tab_selected", DEF_GREEN); }
-    public static int onColor()     { return isDarkMode() ? DARK_ON : themed("ls_tc_tab_selected", DEF_ON); }
+    public static int arrow()       { return themed("ls_tc_text_secondary",  isDarkMode() ? DARK_ARROW   : DEF_ARROW); }
+    public static int border()      { return themed("ls_tc_tab_selected",    isDarkMode() ? DARK_BORDER  : DEF_BORDER); }
+    public static int accent2()     { return themed("ls_tc_tab_selected",    isDarkMode() ? DARK_ACCENT2 : DEF_ACCENT2); }
+    public static int green()       { return themed("ls_tc_tab_selected",    isDarkMode() ? DARK_GREEN   : DEF_GREEN); }
+    public static int onColor()     { return themed("ls_tc_tab_selected",    isDarkMode() ? DARK_ON      : DEF_ON); }
     public static int offColor()    { return isDarkMode() ? DARK_OFF : DEF_OFF; }
     public static int bubbleSelfBg()  { return themed("ls_tc_bubble_self_bg", 0xFF95EC69); }
     public static int bubbleOtherBg() { return themed("ls_tc_bubble_other_bg", 0xFFFFFFFF); }
