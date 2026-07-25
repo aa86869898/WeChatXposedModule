@@ -792,14 +792,26 @@ public class VoiceForwardHook {
             LogWriter.log(TAG, "SceneVoice: g() → " + newName);
             if (newName == null) { LogWriter.log(TAG, "SceneVoice: g() null"); return false; }
 
-            // Step 2: 手动复制文件到 voice2/msg_{newName}.amr (WeKit做法，不依赖Mj/Nj)
+            // Step 2: VFS 流拷贝到 voice2/msg_{newName}.amr (WeKit Q() 模式)
             String voice2Dir = getVoice2Dir(voiceFile);
             String destPath = voice2Dir + "msg_" + newName + ".amr";
             LogWriter.log(TAG, "SceneVoice: copy " + voiceFile + " → " + destPath);
-            XposedHelpers.callStaticMethod(
-                XposedHelpers.findClass("com.tencent.mm.vfs.w6", cl),
-                "d", voiceFile, destPath, false);
+
+            Class<?> w6 = XposedHelpers.findClass("com.tencent.mm.vfs.w6", cl);
+
+            // 2a: VFS 验证源文件 (w6.j → exists, w6.E → open InputStream)
+            boolean srcExists = (Boolean) XposedHelpers.callStaticMethod(w6, "j", voiceFile);
+            LogWriter.log(TAG, "SceneVoice: w6.j(src) → " + srcExists);
+            if (!srcExists) { LogWriter.log(TAG, "SceneVoice: src not found via VFS"); return false; }
+
+            // 2b: VFS 流拷贝 (w6.d 内部走 VFS 流读写，非普通文件复制)
+            XposedHelpers.callStaticMethod(w6, "d", voiceFile, destPath, false);
             LogWriter.log(TAG, "SceneVoice: w6.d() copied ok");
+
+            // 2c: VFS 验证目标文件
+            boolean dstExists = (Boolean) XposedHelpers.callStaticMethod(w6, "j", destPath);
+            LogWriter.log(TAG, "SceneVoice: w6.j(dst) → " + dstExists);
+            if (!dstExists) { LogWriter.log(TAG, "SceneVoice: dst verify failed"); return false; }
 
             // Step 3: t(newName, duration, 0, null) → VoiceLogic.setVoice → v0.d()测时长 → 创建 e9 + 写 DB
             boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
