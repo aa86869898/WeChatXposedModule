@@ -37,83 +37,34 @@ public class ContactChangeLog {
         if (!sEnabled) return;
 
         try {
-            LogWriter.log(TAG, "hook installing... sEnabled=" + sEnabled);
+            LogWriter.log(TAG, "hook installing...");
+
+            Class<?> storageClass = XposedHelpers.findClass(
+                "com.tencent.mm.storage.j4", cl);
+
+            XposedBridge.hookAllMethods(storageClass, "l0", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    if (param.args.length > 0 && param.args[0] != null) {
+                        detectChangesFromContact(param.args[0]);
+                    }
+                }
+            });
 
             Class<?> contactInfoUI = XposedHelpers.findClass(
                 "com.tencent.mm.plugin.profile.ui.ContactInfoUI", cl);
 
-            XposedBridge.hookAllMethods(contactInfoUI, "D2", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    LogWriter.log(TAG, "[D2.callback] entering detectChanges");
-                    detectChanges(param.thisObject);
-                }
-            });
-
-            XposedBridge.hookAllMethods(contactInfoUI, "onResume", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    detectChanges(param.thisObject);
-                }
-            });
-
             XposedBridge.hookAllMethods(contactInfoUI, "onNotifyChange", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    detectChanges(param.thisObject);
+                    Object contact = getContactField(param.thisObject);
+                    if (contact != null) detectChangesFromContact(contact);
                 }
             });
 
             LogWriter.log(TAG, "hook installed OK");
         } catch (Throwable t) {
             LogWriter.log(TAG, "hook FAIL: " + t.getClass().getSimpleName() + " " + t.getMessage());
-        }
-    }
-
-    private static void detectChanges(Object activity) {
-        if (!sEnabled) return;
-
-        try {
-            long now = System.currentTimeMillis();
-            if (now - sLastDetect < 600) return;
-            sLastDetect = now;
-
-            Object contact = getContactField(activity);
-            if (contact == null) {
-                LogWriter.log(TAG, "detect skip: contact null");
-                return;
-            }
-
-            String username = readStringField(contact, "field_username");
-            if (username == null || username.isEmpty()) {
-                LogWriter.log(TAG, "detect skip: username empty");
-                return;
-            }
-
-            now = System.currentTimeMillis();
-            Long last = debounce.get(username);
-            if (last != null && (now - last) < 800) return;
-            debounce.put(username, now);
-
-            String nickname  = readStringField(contact, "field_nickname");
-            String alias     = readStringField(contact, "field_alias");
-            String remark    = readStringField(contact, "field_conRemark");
-            String signature = readStringField(contact, "field_signature");
-            if (signature.isEmpty()) signature = readStringField(contact, "signature");
-
-            ContactSnapshot current = new ContactSnapshot(username, nickname, alias, remark, signature);
-            ContactSnapshot previous = lastSnapshot.get(username);
-
-            if (previous != null) {
-                compareAndRecord(now, username, nickname, "昵称", previous.nickname, current.nickname);
-                compareAndRecord(now, username, nickname, "备注", previous.remark, current.remark);
-                compareAndRecord(now, username, nickname, "微信号", previous.alias, current.alias);
-                compareAndRecord(now, username, nickname, "签名", previous.signature, current.signature);
-            }
-
-            lastSnapshot.put(username, current);
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "detect err: " + t.getClass().getSimpleName() + " " + t.getMessage());
         }
     }
 
@@ -127,12 +78,63 @@ public class ContactChangeLog {
         return null;
     }
 
-    private static String readStringField(Object obj, String fieldName) {
+    private static String callStringMethod(Object obj, String methodName) {
         try {
-            String val = (String) XposedHelpers.getObjectField(obj, fieldName);
-            return val != null ? val : "";
-        } catch (Throwable ignored) {
+            Object result = XposedHelpers.callMethod(obj, methodName);
+            return result instanceof String ? (String) result : "";
+        } catch (Throwable t) {
             return "";
+        }
+    }
+
+    private static void detectChangesFromContact(Object contact) {
+        if (!sEnabled) return;
+
+        try {
+            long now = System.currentTimeMillis();
+            if (now - sLastDetect < 600) return;
+            sLastDetect = now;
+
+            String username = callStringMethod(contact, "d1");
+            if (username == null || username.isEmpty()) {
+                LogWriter.log(TAG, "detect skip: username empty");
+                return;
+            }
+
+            now = System.currentTimeMillis();
+            Long last = debounce.get(username);
+            if (last != null && (now - last) < 800) return;
+            debounce.put(username, now);
+
+            String nickname  = callStringMethod(contact, "M0");
+            String alias     = callStringMethod(contact, "t0");
+            String remark    = callStringMethod(contact, "w0");
+
+            String signature = "";
+            try {
+                Object extra = XposedHelpers.callMethod(contact, "z0");
+                if (extra != null) {
+                    String sigField = callStringMethod(extra, "getSignature");
+                    if (sigField.isEmpty()) sigField = callStringMethod(extra, "signature");
+                    signature = sigField;
+                }
+            } catch (Throwable ignored) {}
+
+            ContactSnapshot current = new ContactSnapshot(username, nickname, alias, remark, signature);
+            ContactSnapshot previous = lastSnapshot.get(username);
+
+            if (previous != null) {
+                compareAndRecord(now, username, nickname, "昵称", previous.nickname, current.nickname);
+                compareAndRecord(now, username, nickname, "备注", previous.remark, current.remark);
+                compareAndRecord(now, username, nickname, "微信号", previous.alias, current.alias);
+                if (signature != null && !signature.isEmpty() || (previous.signature != null && !previous.signature.isEmpty())) {
+                    compareAndRecord(now, username, nickname, "签名", previous.signature, current.signature);
+                }
+            }
+
+            lastSnapshot.put(username, current);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "detect err: " + t.getClass().getSimpleName() + " " + t.getMessage());
         }
     }
 
