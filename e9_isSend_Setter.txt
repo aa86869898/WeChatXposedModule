@@ -1,0 +1,61 @@
+================================================================================
+ e9.isSend — getter/setter 完整映射
+ 基于 dm.c8 (MsgInfo父类) 源码反编译
+================================================================================
+
+类: dm.c8 → storage.e9 的父类
+
+三组 getter:
+────────────────────────────────────────────────────────────────
+  z0() → int       返回 field_isSend (0=接收, 1=发送)
+  G1() → boolean   返回 field_isSend (布尔包装, true=自己发送)
+  w0() → int       返回 field_flag (不是 isSend, 别用)
+
+setter:
+────────────────────────────────────────────────────────────────
+  k1(int) → void   设置 field_isSend ★
+
+源码:
+  public void k1(int i) {
+      this.field_isSend = i;
+      this.h = true;
+  }
+
+
+完整 getter/setter 映射表:
+================================================================================
+
+  字段                getter        setter
+  ──────────────────  ────────────  ──────────
+  field_msgId         getMsgId()    setMsgId(long)
+  field_msgSvrId      H0()          p1(long)
+  field_type          getType()     setType(int) / A1(int)
+  field_status        O0()          b1(int)
+  field_isSend        z0() / G1()   k1(int) ★
+  field_createTime    getCreateTime() e1(long)
+  field_content       I0()          X0(String)
+  field_talker        N0()          y1(String)
+  field_imgPath       y0()          j1(String)
+  field_lvbuffer      A0()          l1(byte[])
+  field_reserved      P0() / Q0()   Z0(String)
+  field_transContent  R0()          B1(String)
+
+注意:
+  L1(long) → 不是 setter! 是 msgId 校验器 (0~15亿)
+  G1()    → boolean getter (true=自己发)
+  z0()    → int getter (1=自己发, 0=接收)
+  k1(int) → setter (传1=自己发, 传0=接收)
+
+
+Xposed 使用:
+================================================================================
+
+  // 读取
+  boolean sent = (Boolean) XposedHelpers.callMethod(msgInfo, "G1");
+  int isSend   = (Integer) XposedHelpers.callMethod(msgInfo, "z0");
+
+  // 写入
+  XposedHelpers.callMethod(msg, "k1", 1);  // 标记为自己发送
+  XposedHelpers.callMethod(msg, "k1", 0);  // 标记为接收
+
+================================================================================

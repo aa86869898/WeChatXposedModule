@@ -785,23 +785,23 @@ public class VoiceForwardHook {
             if (origXml == null) try { origXml = (String) XposedHelpers.getObjectField(origE9, "field_content"); } catch (Throwable ignored) {}
             LogWriter.log(TAG, "SceneVoice: origXml=" + (origXml != null ? origXml.substring(0, Math.min(80, origXml.length())) : "null"));
 
-            // 创建新的语音消息
+            // 创建新的语音消息 (自己发送，右边气泡)
             Object newMsg = XposedHelpers.newInstance(e9Class, targetWxid);
             XposedHelpers.callMethod(newMsg, "A1", 34);   // setType=语音(34)
             XposedHelpers.callMethod(newMsg, "e1", System.currentTimeMillis()); // setCreateTime
+            XposedHelpers.callMethod(newMsg, "k1", 1);    // setIsSend=1 (自己发送→右边)
 
             // 设 talker
-            try { XposedHelpers.setObjectField(newMsg, "field_talker", targetWxid); } catch (Throwable ignored) {}
             try { XposedHelpers.callMethod(newMsg, "y1", targetWxid); } catch (Throwable ignored) {}
-
-            // 设语音 XML content — 用原始 XML 但替换必要字段
-            if (origXml != null) {
-                XposedHelpers.callMethod(newMsg, "X0", origXml);
-            }
 
             // 设语音文件路径
             try { XposedHelpers.callMethod(newMsg, "j1", voiceFile); } catch (Throwable ignored) {}
-            try { XposedHelpers.setObjectField(newMsg, "field_imgPath", voiceFile); } catch (Throwable ignored) {}
+
+            // 构建干净的语音气泡XML（去掉原消息的发件人/加密字段，防止渲染为卡片）
+            java.io.File vf = new java.io.File(voiceFile);
+            String cleanXml = "<msg><voicemsg endflag=\"1\" voiceformat=\"4\" voicelength=\"" + duration + "\" length=\"" + vf.length() + "\" /></msg>";
+            XposedHelpers.callMethod(newMsg, "X0", cleanXml);
+            LogWriter.log(TAG, "SceneVoice: cleanXml=" + cleanXml);
 
             // f9.H9(msg) 插入 DB — 内部调 uh3.k0.b() 自动分配合法 msgId
             Object storage = getMsgStorage(cl);
