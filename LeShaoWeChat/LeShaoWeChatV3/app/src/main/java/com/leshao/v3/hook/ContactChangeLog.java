@@ -119,6 +119,8 @@ public class ContactChangeLog {
             });
 
             LogWriter.log(TAG, "hook installed OK");
+
+            loadSnapshots();
         } catch (Throwable t) {
             LogWriter.log(TAG, "hook FAIL: " + t.getClass().getSimpleName() + " " + t.getMessage());
         }
@@ -149,6 +151,7 @@ public class ContactChangeLog {
             }
 
             lastSnapshot.put(username, cur);
+            saveSnapshots();
         } catch (Throwable t) {
             LogWriter.log(TAG, "[v.b] parse err: " + t.getClass().getSimpleName());
         }
@@ -237,6 +240,7 @@ public class ContactChangeLog {
             }
 
             lastSnapshot.put(username, current);
+            saveSnapshots();
         } catch (Throwable t) {
             LogWriter.log(TAG, "detect err: " + t.getClass().getSimpleName() + " " + t.getMessage());
         }
@@ -319,6 +323,8 @@ public class ContactChangeLog {
             File f = getLogFile();
             if (f.exists()) f.delete();
             lastSnapshot.clear();
+            File sf = getSnapshotFile();
+            if (sf.exists()) sf.delete();
         } catch (Throwable t) {
             LogWriter.log(TAG, "clear err: " + t.getClass().getSimpleName() + " " + t.getMessage());
         }
@@ -353,6 +359,62 @@ public class ContactChangeLog {
         }
         sLogFile = new File("/sdcard/Android/data/com.tencent.mm/files/contact_changes.json");
         return sLogFile;
+    }
+
+    private static File getSnapshotFile() {
+        return new File(getLogFile().getParentFile(), "contact_snapshots.json");
+    }
+
+    private static void loadSnapshots() {
+        try {
+            File f = getSnapshotFile();
+            if (!f.exists()) return;
+            StringBuilder sb = new StringBuilder();
+            BufferedReader br = new BufferedReader(new FileReader(f));
+            String line;
+            while ((line = br.readLine()) != null) sb.append(line);
+            br.close();
+            org.json.JSONObject root = new org.json.JSONObject(sb.toString());
+            java.util.Iterator<String> keys = root.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                org.json.JSONObject o = root.optJSONObject(key);
+                if (o != null) {
+                    ContactSnapshot s = new ContactSnapshot(
+                        key,
+                        o.optString("n"),
+                        o.optString("r"),
+                        o.optInt("a"),
+                        o.optString("s")
+                    );
+                    lastSnapshot.put(key, s);
+                }
+            }
+            LogWriter.log(TAG, "loaded " + lastSnapshot.size() + " snapshots");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "load snapshot err: " + t.getClass().getSimpleName());
+        }
+    }
+
+    private static void saveSnapshots() {
+        try {
+            org.json.JSONObject root = new org.json.JSONObject();
+            for (java.util.Map.Entry<String, ContactSnapshot> e : lastSnapshot.entrySet()) {
+                org.json.JSONObject o = new org.json.JSONObject();
+                o.put("n", e.getValue().nickname != null ? e.getValue().nickname : "");
+                o.put("r", e.getValue().remark != null ? e.getValue().remark : "");
+                o.put("a", e.getValue().avatarHash);
+                o.put("s", e.getValue().signature != null ? e.getValue().signature : "");
+                root.put(e.getKey(), o);
+            }
+            File f = getSnapshotFile();
+            f.getParentFile().mkdirs();
+            FileWriter fw = new FileWriter(f);
+            fw.write(root.toString());
+            fw.close();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "save snapshot err: " + t.getClass().getSimpleName());
+        }
     }
 
     private static class ContactSnapshot {
