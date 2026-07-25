@@ -39,42 +39,22 @@ public class ContactChangeLog {
         try {
             LogWriter.log(TAG, "hook installing...");
 
-            Class<?> storageClass = XposedHelpers.findClass(
-                "com.tencent.mm.storage.j4", cl);
-            LogWriter.log(TAG, "j4 found, dumping methods:");
-            for (java.lang.reflect.Method m : storageClass.getDeclaredMethods()) {
-                LogWriter.log(TAG, "  j4." + m.getName());
-            }
-
-            XposedBridge.hookAllMethods(storageClass, "l0", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    LogWriter.log(TAG, "[l0.callback] args=" + param.args.length);
-                    if (param.args.length > 0 && param.args[0] != null) {
-                        detectChangesFromContact(param.args[0]);
-                    }
-                }
-            });
-
             Class<?> contactInfoUI = XposedHelpers.findClass(
                 "com.tencent.mm.plugin.profile.ui.ContactInfoUI", cl);
 
-            LogWriter.log(TAG, "ContactInfoUI found, dumping methods:");
-            for (java.lang.reflect.Method m : contactInfoUI.getDeclaredMethods()) {
-                LogWriter.log(TAG, "  CUI." + m.getName());
-            }
+            XposedBridge.hookAllMethods(contactInfoUI, "D2", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    Object contact = getContactField(param.thisObject);
+                    if (contact != null) detectChangesFromContact(contact);
+                }
+            });
 
             XposedBridge.hookAllMethods(contactInfoUI, "onNotifyChange", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    LogWriter.log(TAG, "[onNotifyChange.callback]");
                     Object contact = getContactField(param.thisObject);
-                    if (contact != null) {
-                        LogWriter.log(TAG, "[onNotifyChange] contact found, class=" + contact.getClass().getName());
-                        detectChangesFromContact(contact);
-                    } else {
-                        LogWriter.log(TAG, "[onNotifyChange] contact null from activity fields");
-                    }
+                    if (contact != null) detectChangesFromContact(contact);
                 }
             });
 
