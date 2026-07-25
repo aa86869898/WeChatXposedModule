@@ -1,0 +1,74 @@
+b31.w 数据传入分析 — 微信 8.0.76
+
+完整类名: b31.w
+日志Tag: "MicroMsg.SceneVoiceInputAddr"
+
+这不是语音消息上传器！它是 语音输入/识别 (voice input addr)。
+
+34个字段 (按用途分组):
+
+[构造参数 — 3个构造]
+  w()                                      无参
+  w(int type, int scene, b31.b callback)   有 type=消息类型 scene=场景 callback=结果回调
+  w(int,int,String,String,String,b70.w,b31.b) 含文件信息
+
+[init 初始化 — 3个参数]
+  init(int i, int i2, b bVar)
+    参数1: this.s = i     → 场景(scene)
+    参数2: this.h = i2    → 类型(type)  
+    参数3: this.t = bVar  → 回调(b31.b)
+
+[核心字段 — 语音输入数据]
+  L: String      ← toUser/目标用户
+  M: String      ← content/识别文本
+  N: int         ← 标志
+  B: String      ← 文件路径
+  n: String      ← 可能是 talker
+  o: String      ← 可能是 临时文件
+  p: String      ← 可能是 文件路径
+  q: String      ← 可能是 MD5
+  d: int         ← 场景类型
+  e: int         ← 消息类型
+  m: int         ← 时长(ms)
+  s: int         ← 场景 (init设)
+  h: int         ← 类型 (init设)
+
+[回调]
+  t: b31.b       ← 结果回调 (init设)
+  I: b31.d       ← 数据回调
+  J: tl.v        ← 语音状态
+  z: b31.a       ← 适配器
+  A: b31.j0      ← 可能是原始消息
+  v: tl.w        ← 可能是语音对象
+
+[标志位]
+  C D E F G H r f g: boolean  ← 各种状态开关
+
+[其他]
+  i: int         ← 可能是文件大小
+  K: byte[]      ← 可能是音频数据
+  u: b70.w       ← 可能是网络响应
+  w: o35.m0      ← 可能是录音器
+  x y: yl.b      ← 可能是回调
+
+数据传入方式:
+
+  方式1 — 构造时传入:
+    b31.w sender = new b31.w(type, scene, callback);
+    或 b31.w sender = new b31.w(type, scene, talker, filePath, md5, response, callback);
+
+  方式2 — init() 方法:
+    sender.init(scene, type, callback);
+
+  方式3 — 直接设字段:
+    sender.L = "wxid_xxx";        // toUser
+    sender.B = "/voice2/xxx.amr"; // voice file path
+    sender.m = 5000;              // duration
+    sender.e = 34;                // type=语音
+
+  方式4 — start() 启动录音:
+    sender.start();   // 内部: d.c(new u(this,null), "SceneVoiceInputAddr_record", 10)
+
+注意: b31.w 是 语音输入/识别, 不是 语音消息上传!
+      语音消息的发送通过 y21.x0.t() → 写入 DB → tl.t0 后台线程 → b31.j/l 上传
+      转发语音 不需要 b31.w, 只需要 g() + 复制文件 + t()

@@ -54,7 +54,9 @@ public class DataToolsPageView {
         btnRow.setOrientation(LinearLayout.HORIZONTAL);
         btnRow.setPadding((int)(2*d), 0, (int)(2*d), 0);
         btnRow.addView(actionButton(ctx, d, "查看记录", 1f, () -> SubPageActivity.open(parentAct, "通讯录更新日志", 13)));
-        btnRow.addView(spacer(ctx, d, 8));
+        View gap = new View(ctx);
+        gap.setLayoutParams(new LinearLayout.LayoutParams((int)(8*d), -2));
+        btnRow.addView(gap);
         btnRow.addView(actionButton(ctx, d, "清除记录", 1f, () -> {
             new AlertDialog.Builder(ctx)
                 .setTitle("确认清除")
