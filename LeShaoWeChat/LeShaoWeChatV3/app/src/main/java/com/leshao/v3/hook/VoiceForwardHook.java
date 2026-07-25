@@ -1130,7 +1130,7 @@ public class VoiceForwardHook {
                 String cn = entries.nextElement();
                 String simple = cn.substring(cn.lastIndexOf('.') + 1);
                 // 目标类简名
-                boolean isMjLike = cn.length() < 15 && (cn.indexOf('.') != cn.lastIndexOf('.'));
+                boolean isMjLike = cn.length() < 15 && (cn.indexOf('.') != cn.lastIndexOf('.') || cn.indexOf('$') >= 0);
                 if (!simple.equals("p0") && !simple.equals("o0") && !simple.equals("x0") && !simple.equals("y0")
                     && !simple.equals("w") && !simple.equals("j") && !simple.equals("l") && !isMjLike) continue;
                 try {
