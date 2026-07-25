@@ -1075,13 +1075,18 @@ public class VoiceForwardHook {
                     if (voiceFile == null || duration == null) return;
 
                     Object thiz = param.thisObject;
-                    // 在 stop() 执行前强改字段 — stopHardwareRecorder 会覆盖, 但这至少让初始状态正确
+                    LogWriter.log(TAG, "SceneVoice HOOK: beforeHooked — disabling recorder");
+
+                    // 保存并清空录音线程, 让 stopHardwareRecorder 做空操作
+                    XposedHelpers.setAdditionalInstanceField(thiz, "__saved_c", XposedHelpers.getObjectField(thiz, "c"));
+                    XposedHelpers.setObjectField(thiz, "c", null);
+
+                    // 强改关键字段
                     XposedHelpers.setObjectField(thiz, "e", voiceFile);
                     XposedHelpers.setIntField(thiz, "m", duration.intValue());
                     XposedHelpers.setBooleanField(thiz, "n", false);
                     XposedHelpers.setLongField(thiz, "k",
                         android.os.SystemClock.elapsedRealtime() - (duration + 10000L));
-                    LogWriter.log(TAG, "SceneVoice HOOK: beforeHooked — e/m/k overridden");
                 }
 
                 @Override
@@ -1092,65 +1097,18 @@ public class VoiceForwardHook {
 
                     Object thiz = param.thisObject;
 
-                    // afterHooked: stopHardwareRecorder 可能清掉了 e/m
-                    // 重新覆盖
-                    XposedHelpers.setObjectField(thiz, "e", voiceFile);
-                    XposedHelpers.setIntField(thiz, "m", duration.intValue());
-                    XposedHelpers.setLongField(thiz, "k",
-                        android.os.SystemClock.elapsedRealtime() - (duration + 10000L));
+                    // 恢复录音线程
+                    Object savedC = XposedHelpers.getAdditionalInstanceField(thiz, "__saved_c");
+                    if (savedC != null) XposedHelpers.setObjectField(thiz, "c", savedC);
 
                     boolean origResult = param.getResult() != null && (Boolean) param.getResult();
-                    LogWriter.log(TAG, "SceneVoice HOOK: afterHooked — origResult=" + origResult + " e=" + XposedHelpers.getObjectField(thiz, "e") + " m=" + XposedHelpers.getIntField(thiz, "m"));
+                    LogWriter.log(TAG, "SceneVoice HOOK: origResult=" + origResult
+                        + " e=" + XposedHelpers.getObjectField(thiz, "e")
+                        + " m=" + XposedHelpers.getIntField(thiz, "m")
+                        + " n=" + XposedHelpers.getBooleanField(thiz, "n"));
 
                     if (!origResult) {
-                        // 原生 stop() 失败了, 手动修复
-                        Object e9 = XposedHelpers.getObjectField(thiz, "h");
-                        ClassLoader cl = thiz.getClass().getClassLoader();
-
-                        // tl.x0 在 8.0.76 可能只有 a() 方法, 枚举所有方法尝试
-                        try {
-                            Class<?> x0class = XposedHelpers.findClass("tl.x0", cl);
-                            boolean dbWritten = false;
-                            for (java.lang.reflect.Method m : x0class.getDeclaredMethods()) {
-                                Class<?>[] pts = m.getParameterTypes();
-                                if (pts.length >= 3) {
-                                    try {
-                                        m.setAccessible(true);
-                                        if (java.lang.reflect.Modifier.isStatic(m.getModifiers())) {
-                                            m.invoke(null, voiceFile, duration, 0, e9);
-                                        } else {
-                                            m.invoke(thiz, voiceFile, duration, 0, e9);
-                                        }
-                                        LogWriter.log(TAG, "SceneVoice HOOK: called " + m.getName() + sig(m) + " → DB written");
-                                        dbWritten = true;
-                                        break;
-                                    } catch (Throwable t) {
-                                        LogWriter.log(TAG, "SceneVoice HOOK: " + m.getName() + sig(m) + " invoke failed: " + t.getMessage());
-                                    }
-                                }
-                            }
-                            if (!dbWritten) {
-                                LogWriter.log(TAG, "SceneVoice HOOK: no DB write method found in tl.x0");
-                                for (java.lang.reflect.Method m : x0class.getDeclaredMethods())
-                                    LogWriter.log(TAG, "  x0." + sig(m));
-                            }
-                        } catch (Throwable t) {
-                            LogWriter.log(TAG, "SceneVoice HOOK: x0 error: " + t.getMessage());
-                        }
-
-                        // 刷新播放列表
-                        try {
-                            Class<?> y21p0 = XposedHelpers.findClass("y21.p0", cl);
-                            Object pm = XposedHelpers.callStaticMethod(y21p0, "kj");
-                            if (pm != null) XposedHelpers.callMethod(pm, "e");
-                        } catch (Throwable ignored) {}
-
-                        // 尝试提交 send task
-                        Object sendTask = XposedHelpers.getObjectField(thiz, "f");
-                        if (sendTask != null) {
-                            LogWriter.log(TAG, "SceneVoice HOOK: sendTask=" + sendTask.getClass().getName());
-                        }
-
+                        LogWriter.log(TAG, "SceneVoice HOOK: native stop() returned false, forcing true");
                         param.setResult(true);
                     }
                 }
