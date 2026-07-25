@@ -19,6 +19,8 @@ import java.lang.reflect.Modifier;
 import java.util.Enumeration;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XC_MethodReplacement;
@@ -54,6 +56,7 @@ public class VoiceForwardHook {
 
     private static volatile boolean sForwarding = false;
     private static volatile String sFullHookedClass = null;
+    private static volatile String sVfsCreateMethod = null;
 
     public static void hook() {
         if (sHooked) return;
@@ -792,23 +795,36 @@ public class VoiceForwardHook {
             LogWriter.log(TAG, "SceneVoice: g() → " + newName);
             if (newName == null) { LogWriter.log(TAG, "SceneVoice: g() null"); return false; }
 
-            // Step 2: VFS 流拷贝到 voice2/msg_{newName}.amr (WeKit Q() 模式)
+            // Step 2: VFS Q() 模式 — 流拷贝到 voice2/msg_{newName}.amr
             String voice2Dir = getVoice2Dir(voiceFile);
             String destPath = voice2Dir + "msg_" + newName + ".amr";
             LogWriter.log(TAG, "SceneVoice: copy " + voiceFile + " → " + destPath);
 
             Class<?> w6 = XposedHelpers.findClass("com.tencent.mm.vfs.w6", cl);
+            String vfsCreate = findVfsCreateMethod(w6);
+            if (vfsCreate == null) { LogWriter.log(TAG, "SceneVoice: VFS create method not found"); return false; }
 
-            // 2a: VFS 验证源文件 (w6.j → exists, w6.E → open InputStream)
+            // 2a: VFS exists 源文件
             boolean srcExists = (Boolean) XposedHelpers.callStaticMethod(w6, "j", voiceFile);
             LogWriter.log(TAG, "SceneVoice: w6.j(src) → " + srcExists);
             if (!srcExists) { LogWriter.log(TAG, "SceneVoice: src not found via VFS"); return false; }
 
-            // 2b: VFS 流拷贝 (w6.d 内部走 VFS 流读写，非普通文件复制)
-            XposedHelpers.callStaticMethod(w6, "d", voiceFile, destPath, false);
-            LogWriter.log(TAG, "SceneVoice: w6.d() copied ok");
+            // 2b: VFS 打开输入流 — w6.E(String)→InputStream
+            InputStream in = (InputStream) XposedHelpers.callStaticMethod(w6, "E", voiceFile);
 
-            // 2c: VFS 验证目标文件
+            // 2c: VFS 创建输出流 — w6.?(String,boolean)→OutputStream
+            OutputStream out = (OutputStream) XposedHelpers.callStaticMethod(w6, vfsCreate, destPath, false);
+
+            // 2d: 流拷贝
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
+            out.flush();
+            out.close();
+            in.close();
+            LogWriter.log(TAG, "SceneVoice: VFS stream copy ok");
+
+            // 2e: VFS exists 目标文件
             boolean dstExists = (Boolean) XposedHelpers.callStaticMethod(w6, "j", destPath);
             LogWriter.log(TAG, "SceneVoice: w6.j(dst) → " + dstExists);
             if (!dstExists) { LogWriter.log(TAG, "SceneVoice: dst verify failed"); return false; }
@@ -833,6 +849,22 @@ public class VoiceForwardHook {
         int idx = voiceFile.indexOf("/voice2/");
         if (idx >= 0) return voiceFile.substring(0, idx + 8);
         return voiceFile.substring(0, voiceFile.lastIndexOf('/') + 1);
+    }
+
+    private static String findVfsCreateMethod(Class<?> w6) {
+        if (sVfsCreateMethod != null) return sVfsCreateMethod;
+        for (Method m : w6.getDeclaredMethods()) {
+            if (!Modifier.isStatic(m.getModifiers())) continue;
+            if (m.getReturnType() != OutputStream.class) continue;
+            Class<?>[] pts = m.getParameterTypes();
+            if (pts.length == 2 && pts[0] == String.class && pts[1] == boolean.class) {
+                sVfsCreateMethod = m.getName();
+                LogWriter.log(TAG, "VFS create: w6." + sVfsCreateMethod + "(String,boolean)→OutputStream");
+                return sVfsCreateMethod;
+            }
+        }
+        LogWriter.log(TAG, "VFS create method NOT found in w6");
+        return null;
     }
 
     private static Object sMsgStorage;
