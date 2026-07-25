@@ -45,6 +45,7 @@ public class ContactChangeLog {
             XposedBridge.hookAllMethods(contactInfoUI, "D2", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
+                    LogWriter.log(TAG, "[D2.callback] entering detectChanges");
                     detectChanges(param.thisObject);
                 }
             });
@@ -71,6 +72,7 @@ public class ContactChangeLog {
 
     private static void detectChanges(Object activity) {
         try {
+            LogWriter.log(TAG, "[detect.entry]");
             long now = System.currentTimeMillis();
             if (now - sLastDetect < 600) return;
             sLastDetect = now;
