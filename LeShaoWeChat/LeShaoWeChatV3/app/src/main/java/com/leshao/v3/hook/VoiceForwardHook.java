@@ -829,13 +829,25 @@ public class VoiceForwardHook {
             LogWriter.log(TAG, "SceneVoice: w6.j(dst) → " + dstExists);
             if (!dstExists) { LogWriter.log(TAG, "SceneVoice: dst verify failed"); return false; }
 
-            // Step 3: t(newName, duration, 0, null) → VoiceLogic.setVoice → v0.d()测时长 → 创建 e9 + 写 DB
+            // Step 3: 补 MD5 子目录 — VoiceLogic 按文件名前4位子目录查找
+            String md5Prefix = newName.substring(0, 4);
+            String md5SubDir = voice2Dir + md5Prefix.substring(0, 2) + "/" + md5Prefix.substring(2, 4) + "/";
+            String md5DestPath = md5SubDir + "msg_" + newName + ".amr";
+            LogWriter.log(TAG, "SceneVoice: md5 copy " + destPath + " → " + md5DestPath);
+            new java.io.File(md5SubDir).mkdirs();
+            java.nio.file.Files.copy(
+                java.nio.file.Paths.get(destPath),
+                java.nio.file.Paths.get(md5DestPath),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            LogWriter.log(TAG, "SceneVoice: md5 copy ok");
+
+            // Step 4: t(newName, duration, 0, null) → VoiceLogic.setVoice → v0.d()测时长 → 创建 e9 + 写 DB
             boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
                     newName, duration, 0, null);
             LogWriter.log(TAG, "SceneVoice: t(" + newName + "," + duration + ") → " + ok);
             if (!ok) { LogWriter.log(TAG, "SceneVoice: t() false"); return false; }
 
-            // Step 4: b31.w 上传语音文件
+            // Step 5: b31.w 上传语音文件
             trySendViaB31(cl, targetWxid, newName, duration);
             return true;
 
