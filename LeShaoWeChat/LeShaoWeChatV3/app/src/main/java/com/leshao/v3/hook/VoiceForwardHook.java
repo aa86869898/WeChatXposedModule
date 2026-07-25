@@ -804,11 +804,18 @@ public class VoiceForwardHook {
                         if (m.getReturnType() != String.class) continue;
                         Class<?>[] pts = m.getParameterTypes();
                         // 找 g(talker, prefix)→newName: (String,String)→String, 方法名≤3字符
+                        // ★ 验证: 返回值不能等于任一入参 (排除参数回显方法)
                         if (pts.length == 2 && pts[0] == String.class && pts[1] == String.class
                             && m.getName().length() <= 3 && sGMethod == null) {
-                            sGClass = cn;
-                            sGMethod = m.getName();
-                            LogWriter.log(TAG, "◆discovered g(): " + cn + "." + sGMethod + "(String,String)→String");
+                            try {
+                                String test = (String) m.invoke(null, "test_talker", "amr_");
+                                if (test != null && !test.equals("test_talker") && !test.equals("amr_")
+                                    && test.matches("[0-9a-f]{20,}")) {
+                                    sGClass = cn;
+                                    sGMethod = m.getName();
+                                    LogWriter.log(TAG, "◆discovered g(): " + cn + "." + sGMethod + "(String,String)→String test=" + test);
+                                }
+                            } catch (Throwable ignored) {}
                         }
                         // 找 t(name, dur, flag, e9)→bool: (String,int,int,Object)→boolean, 方法名≤3字符
                         if (pts.length == 4 && pts[0] == String.class && pts[1] == int.class
@@ -865,26 +872,25 @@ public class VoiceForwardHook {
             LogWriter.log(TAG, "SceneVoice: " + sGClass + "." + sGMethod + "() → " + newName);
             if (newName == null) { LogWriter.log(TAG, "SceneVoice: g() null"); return false; }
 
-            // Step 2: Mj() → VFS 内部路径 (动态发现)
-            String dstPath;
+            // Step 2: Mj() → VFS 内部路径 (动态发现, 失败则 fallback)
+            String dstPath = null;
             if (sPathServiceClass != null && sPathMethod != null) {
                 Class<?> svcCls = XposedHelpers.findClass(sPathServiceClass, cl);
                 Object svc = null;
-                // 尝试通过服务定位器获取实例 (单例/getInstance)
                 try { svc = XposedHelpers.callStaticMethod(svcCls, "hj"); } catch (Throwable ignored) {}
                 if (svc == null) {
                     try { svc = XposedHelpers.newInstance(svcCls); } catch (Throwable ignored2) {}
                 }
-                dstPath = (svc != null)
-                    ? (String) XposedHelpers.callMethod(svc, sPathMethod, null, newName, true)
-                    : null;
-            } else {
+                if (svc != null) {
+                    dstPath = (String) XposedHelpers.callMethod(svc, sPathMethod, null, newName, true);
+                }
+            }
+            if (dstPath == null) {
                 // fallback: 手动拼 MD5 路径
                 String voice2Dir = getVoice2Dir(voiceFile);
                 String md5Prefix = newName.substring(0, 4);
                 dstPath = voice2Dir + md5Prefix.substring(0, 2) + "/" + md5Prefix.substring(2, 4) + "/msg_" + newName + ".amr";
             }
-            if (dstPath == null) { LogWriter.log(TAG, "SceneVoice: path resolution failed"); return false; }
             LogWriter.log(TAG, "SceneVoice: dstPath=" + dstPath);
 
             // Step 3: copy 原始文件 → Mj() 返回的路径
