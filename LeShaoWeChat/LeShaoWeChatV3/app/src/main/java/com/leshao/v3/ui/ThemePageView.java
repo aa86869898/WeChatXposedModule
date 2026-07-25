@@ -449,6 +449,7 @@ public class ThemePageView {
             LinearLayout row = new LinearLayout(ctx);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER);
+            row.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
             for (int c = 0; c < cols; c++) {
                 int idx = r * cols + c;
                 if (idx >= MONET_NAMES.length) break;
@@ -471,6 +472,10 @@ public class ThemePageView {
 
                 final int fi = idx;
                 btn.setOnClickListener(v -> {
+                    if (!prefs.getBoolean("ls_theme_enabled", false)) {
+                        prefs.edit().putBoolean("ls_theme_enabled", true).apply();
+                        ThemeHook.setMasterEnabled(true);
+                    }
                     int s = prefs.getInt("ls_monet_seed", 0xFFFF4298);
                     MonetColorEngine.Style st = MonetColorEngine.Style.fromIndex(fi);
                     int[] palette = MonetColorEngine.generate(s, st);
