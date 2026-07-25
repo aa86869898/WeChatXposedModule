@@ -99,22 +99,6 @@ public class VoiceForwardHook {
                     if (sChatAct == param.thisObject) sChatAct = null;
                 }
             });
-            XposedBridge.hookAllMethods(cui, "onCreateContextMenu", new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam param) {
-                    if (param.args.length < 2) return;
-                    android.view.ContextMenu menu = null;
-                    android.view.View v = null;
-                    for (Object arg : param.args) {
-                        if (arg instanceof android.view.ContextMenu) menu = (android.view.ContextMenu) arg;
-                        if (arg instanceof android.view.View) v = (android.view.View) arg;
-                    }
-                    if (menu != null && v != null) {
-                        sMenuInjected = true;
-                        sMenuInjectedTime = System.currentTimeMillis();
-                        injectForwardMenuItem(menu, v);
-                    }
-                }
-            });
         } catch (Throwable ignored) {}
     }
 
@@ -296,7 +280,9 @@ public class VoiceForwardHook {
                         }
                     }
 
-                    // 找到View → 收集消息数据(注入由onCreateContextMenu完成)
+                    // 时间冷却防重复注入, 冷却后可重新注入
+                    long sinceInj = System.currentTimeMillis() - sMenuInjectedTime;
+                    if (sinceInj < 500 && sinceInj > 0) return;
                     View itemView = null;
                     for (Object arg : param.args) {
                         if (arg instanceof View) { itemView = (View) arg; break; }
@@ -400,6 +386,11 @@ public class VoiceForwardHook {
                         }
                         if (p.getParent() instanceof View) p = (View) p.getParent(); else break;
                     }
+
+                    sPendingView = itemView;
+                    sMenuInjected = true;
+                    sMenuInjectedTime = System.currentTimeMillis();
+                    injectForwardMenuItem(menuObj, itemView);
                 }
             });
         }
