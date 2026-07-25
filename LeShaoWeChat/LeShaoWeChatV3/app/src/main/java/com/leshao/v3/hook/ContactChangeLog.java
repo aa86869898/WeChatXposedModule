@@ -372,7 +372,7 @@ public class ContactChangeLog {
 
     private static File getLogFile() {
         if (sLogFile != null) return sLogFile;
-        sLogFile = new File("/sdcard/LeShaoV3Logs/contact_changes.json");
+        sLogFile = new File("/sdcard/leshao_v3_logs/contact_changes.json");
         sLogFile.getParentFile().mkdirs();
         return sLogFile;
     }
