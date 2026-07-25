@@ -141,10 +141,15 @@ public class ContactChangeLog {
                 LogWriter.log(TAG, "[v.b] all np4 fields: " + sb.toString());
             }
 
-            String username = "";
-            try { username = (String) XposedHelpers.getObjectField(modContact, "Z1"); } catch (Throwable ignored) {}
+            String username = fieldNg(modContact, "d");
             if (username == null || username.isEmpty()) {
-                LogWriter.log(TAG, "[v.b] skip: Z1 empty");
+                try { username = (String) XposedHelpers.getObjectField(modContact, "Z1"); } catch (Throwable ignored) {}
+            }
+            if (username == null || username.isEmpty()) {
+                try { username = (String) XposedHelpers.getObjectField(modContact, "Z"); } catch (Throwable ignored) {}
+            }
+            if (username == null || username.isEmpty()) {
+                LogWriter.log(TAG, "[v.b] skip: username empty (d/Z1/Z all empty)");
                 return;
             }
 
