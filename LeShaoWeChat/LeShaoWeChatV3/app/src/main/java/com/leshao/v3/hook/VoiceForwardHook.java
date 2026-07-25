@@ -557,6 +557,7 @@ public class VoiceForwardHook {
             showToast("转发失败: " + t.getMessage());
         } finally {
             sForwarding = false;
+            sMenuInjected = false;
         }
     }
 
