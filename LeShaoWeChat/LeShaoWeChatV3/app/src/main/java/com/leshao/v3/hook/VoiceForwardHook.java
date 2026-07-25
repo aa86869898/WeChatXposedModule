@@ -1130,7 +1130,7 @@ public class VoiceForwardHook {
                 String cn = entries.nextElement();
                 String simple = cn.substring(cn.lastIndexOf('.') + 1);
                 // 目标类简名
-                boolean isMjLike = simple.contains("$c") || simple.contains("$d") || simple.contains("$b");
+                boolean isMjLike = (cn.indexOf('.') != cn.lastIndexOf('.')) && simple.length() <= 2;
                 if (!simple.equals("p0") && !simple.equals("o0") && !simple.equals("x0") && !simple.equals("y0")
                     && !simple.equals("w") && !simple.equals("j") && !simple.equals("l") && !isMjLike) continue;
                 try {
@@ -1206,8 +1206,12 @@ public class VoiceForwardHook {
                                                 sGClass = cn;
                                                 sGMethod = "g";
                                                 LogWriter.log(TAG, "◆discovered g(): " + cn + ".g(String,String)→String test=" + test);
+                                            } else {
+                                                LogWriter.log(TAG, "◆g() test miss: " + cn + ".g → " + test);
                                             }
-                                        } catch (Throwable ignored) {}
+                                        } catch (Throwable e) {
+                                            LogWriter.log(TAG, "◆g() test fail: " + cn + ".g → " + e.getClass().getSimpleName() + " " + e.getMessage());
+                                        }
                                     }
                                 }
                             }
