@@ -120,6 +120,8 @@ public class SubPageActivity {
                 return PrivacyPageView.create(ctx, parentAct);
             case 12: // 数据备份
                 return DataToolsPageView.create(ctx, parentAct);
+            case 13: // 通讯录更新日志
+                return ContactChangeLogPageView.create(ctx, parentAct);
             case 91: // 红包转账 > 自动秒抢红包
                 return RedPacketConfigView.create(ctx, parentAct);
             case 92: // 红包转账 > 自动收款
