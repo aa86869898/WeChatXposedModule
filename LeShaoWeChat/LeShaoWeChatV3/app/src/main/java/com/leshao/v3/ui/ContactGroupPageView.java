@@ -36,7 +36,7 @@ public class ContactGroupPageView {
         }, v -> ContactExport.startCustomExport(act)));
         cardContact.addView(switchRow(ctx, d, "联系人变更日志", null, cfg.contactChangeLogEnabled, (v, on) -> {
             cfg.contactChangeLogEnabled = on; cfg.save(prefs); ContactChangeLog.setEnabled(on);
-        }, null));
+        }, v -> SubPageActivity.open(act, "通讯录更新日志", 13)));
         cardContact.addView(switchRow(ctx, d, "隐藏联系人敏感字段", null, cfg.hideContactFieldsEnabled, (v, on) -> {
             cfg.hideContactFieldsEnabled = on; cfg.save(prefs); HideContactFields.setEnabled(on);
         }, v -> ConfigPanels.showHideContactFields(act, prefs)));
