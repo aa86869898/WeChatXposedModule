@@ -787,20 +787,51 @@ public class VoiceForwardHook {
 
             Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
 
-            // y21.x0.r(talker, srcPath, msgType) → g()创建w0 + 复制文件 + t()写e9+DB
-            // 第三个参数是 msgType (不是duration!), 传1
-            String result = (String) XposedHelpers.callStaticMethod(y21x0, "r",
-                    targetWxid, voiceFile, 1);
-            LogWriter.log(TAG, "SceneVoice: r(" + targetWxid + ",file,1) → " + result);
-
-            if (result != null) {
-                // b31.w 上传语音文件
-                trySendViaB31(cl, targetWxid, voiceFile, duration);
-                return true;
+            // Step 1: g(talker, "amr_") → 创建 w0 记录, 返回新文件名
+            String newName = (String) XposedHelpers.callStaticMethod(y21x0, "g", targetWxid, "amr_");
+            LogWriter.log(TAG, "SceneVoice: g() → " + newName);
+            if (newName == null) {
+                LogWriter.log(TAG, "SceneVoice: g() null");
+                return false;
             }
 
-            LogWriter.log(TAG, "SceneVoice: r() returned null");
-            return false;
+            // Step 2: 复制源文件到新 w0 的 voice2 路径 (t() 内部 v0.d() 需要读文件测时长)
+            String uinHash = getUinHash(cl);
+            if (uinHash != null) {
+                String md5 = md5(newName);
+                String destPath = "/data/data/com.tencent.mm/MicroMsg/" + uinHash
+                    + "/voice2/" + md5.substring(0, 2) + "/" + md5.substring(2, 4)
+                    + "/" + newName;
+                try {
+                    new java.io.File(destPath).getParentFile().mkdirs();
+                    java.io.FileInputStream fis = new java.io.FileInputStream(voiceFile);
+                    java.io.FileOutputStream fos = new java.io.FileOutputStream(destPath);
+                    byte[] buf = new byte[8192];
+                    int len;
+                    while ((len = fis.read(buf)) > 0) fos.write(buf, 0, len);
+                    fis.close();
+                    fos.close();
+                    LogWriter.log(TAG, "SceneVoice: copied → " + destPath);
+                } catch (Throwable e) {
+                    LogWriter.log(TAG, "SceneVoice: copy fail: " + e.getMessage());
+                    return false;
+                }
+            } else {
+                LogWriter.log(TAG, "SceneVoice: no uinHash, skip copy");
+            }
+
+            // Step 3: t(fileName, duration, 0, null) → v0.d()测时长 → 创建 e9 + 写 DB
+            boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
+                    newName, duration, 0, null);
+            LogWriter.log(TAG, "SceneVoice: t(" + newName + "," + duration + ",0,null) → " + ok);
+            if (!ok) {
+                LogWriter.log(TAG, "SceneVoice: t() false");
+                return false;
+            }
+
+            // Step 4: b31.w 上传语音文件
+            trySendViaB31(cl, targetWxid, voiceFile, duration);
+            return true;
 
         } catch (Throwable t) {
             LogWriter.log(TAG, "SceneVoice error: " + t.getClass().getSimpleName() + " " + t.getMessage());

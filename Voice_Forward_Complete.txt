@@ -1,0 +1,298 @@
+================================================================================
+ 语音消息转发 — 完整全链路分析
+ 基于微信 8.0.76 SelectConversationUI / MsgRetransmitUI 源码逆向
+================================================================================
+
+一、微信原生语音转发流程
+================================================================================
+
+  用户操作:
+    长按语音气泡 → 弹出菜单 → 点击"多选"下的转发 → SelectConversationUI
+    → 选择目标会话 → MsgRetransmitUI → 发送语音消息
+
+  原生流程代码链:
+    ① ChattingUIFragment 长按菜单
+       → 读取 msgInfo.getType()==34 (语音)
+       → 构造 MenuItem "转发"
+
+    ② 点击"转发"
+       → 创建 Intent → StartActivity(MsgRetransmitUI)
+       → Intent Extras:
+         Retr_Msg_Type     = 34 (语音类型)
+         Retr_Msg_content  = "<msg><voicemsg .../>" (语音XML)
+         Retr_Msg_Id       = msgId (消息ID)
+         Retr_Msg_Talker   = talker (源会话)
+         Retr_From         = "chat"
+         Retr_File_Name    = voiceFileName (语音文件名)
+
+    ③ MsgRetransmitUI.onCreate()
+       → 读取 Intent Extras → 保存到字段
+       → 显示转发预览界面
+       → 用户点击"发送"
+
+    ④ MsgRetransmitUI.d7(targetTalker)
+       → 创建 c3 发送任务
+       → c3 内部:
+          a. 读取源语音文件 → 复制到目标 voice2 目录
+          b. 构造新的 y21.w0 (voicestg) → INSERT
+          c. 构造新 e9(type=34) → Ra() 写入 message 表
+          d. 通知UI刷新
+
+二、Intent Extra 完整清单 (MsgRetransmitUI.onCreate 读取的)
+================================================================================
+
+  关键 Extra:
+  字段                     类型      说明
+  ──────────────────────── ──────── ──────────────────────────
+  Retr_Msg_Type           int      消息类型(34=语音)
+  Retr_Msg_content        String   语音XML content
+  Retr_Msg_Id             long     源消息ID
+  Retr_Msg_Talker         String   源会话talker
+  Retr_File_Name          String   语音文件名
+  Retr_Msg_thumb_path     String   缩略图路径(语音无)
+  Retr_go_to_chattingUI   boolean  发送后跳转到聊天界面
+  Retr_show_success_tips  boolean  显示成功提示
+  Select_Conv_User         String   目标会话(SelectConversationUI设置)
+  Retr_From               String   来源("chat","gallery"等)
+  Retr_length             int      语音时长(秒)
+  Multi_Retr              boolean  是否批量转发
+
+三、模块直发语音 — 最简单的实现 (推荐)
+================================================================================
+
+  不经过 MsgRetransmitUI, 直接调用微信内部的发送链路:
+
+  [方式1] y21.x0.r(talker, srcPath, duration) — 一行到位
+  ────────────────────────────────────────────
+    r() 内部: g()→创建w0 → copyFile→voice2 → t()→写e9+DB
+
+    Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
+    String result = (String) XposedHelpers.callStaticMethod(y21x0, "r",
+        targetTalker,    // 目标会话ID
+        voiceFilePath,   // 源语音文件完整路径
+        durationMs);     // 时长(毫秒)
+
+    // result != null → 成功
+
+  ────────────────────────────────────────────────────────────
+  [方式2] 分步操作 — g()+copyFile+t() (需要更多控制)
+  ────────────────────────────────────────────────────────────
+
+    // Step 1: 创建 w0 记录
+    String newFileName = (String) XposedHelpers.callStaticMethod(
+        y21x0, "g", targetTalker, "amr_");
+    if (newFileName == null) return false;
+
+    // Step 2: 获取目标路径并复制文件
+    Object u0Class = findU0Class(cl);
+    Object yObj = ...; // y.j 或类似静态字段
+    String targetPath = (String) XposedHelpers.callStaticMethod(
+        u0Class, "Mj", yObj, newFileName, true);
+    copyFile(sourceVoicePath, targetPath);
+
+    // Step 3: 写入消息 DB
+    boolean ok = (Boolean) XposedHelpers.callStaticMethod(
+        y21x0, "t", newFileName, durationMs, 0, null);
+    // ok=true → 语音气泡已显示在目标会话!
+
+
+四、从源 msgInfo 提取语音信息并转发 (完整代码)
+================================================================================
+
+  /**
+   * 转发语音消息到指定会话
+   * 
+   * 流程:
+   *   ① 从源 msgInfo 提取语音文件路径
+   *   ② 获取语音时长
+   *   ③ 调用 y21.x0.r() → 创建w0 + 复制文件 + 写DB
+   *   ④ 返回成功/失败
+   */
+  public static boolean forwardVoiceMessage(ClassLoader cl,
+      Object sourceMsgInfo, String targetTalker) {
+
+    try {
+      // 1. 获取语音文件路径
+      String voicePath = getVoiceFilePath(cl, sourceMsgInfo);
+      if (voicePath == null || !new java.io.File(voicePath).exists()) {
+        XposedBridge.log("[VoiceFwd] 语音文件不存在");
+        return false;
+      }
+
+      // 2. 获取语音时长
+      int duration = getVoiceDuration(cl, sourceMsgInfo);
+      if (duration <= 0) duration = 5000; // 默认5秒
+
+      // 3. 一行转发!
+      Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
+      String result = (String) XposedHelpers.callStaticMethod(y21x0, "r",
+          targetTalker, voicePath, duration);
+
+      if (result != null) {
+        XposedBridge.log("[VoiceFwd] ✅ 语音已转发: " + result);
+        return true;
+      }
+      return false;
+    } catch (Throwable t) {
+      XposedBridge.log("[VoiceFwd] ❌ 转发失败: " + t.getMessage());
+      return false;
+    }
+  }
+
+  /**
+   * 从 msgInfo 获取语音文件完整路径
+   */
+  public static String getVoiceFilePath(ClassLoader cl, Object msgInfo) {
+    try {
+      // 方式1: y0() → field_imgPath
+      String path = (String) XposedHelpers.callMethod(msgInfo, "y0");
+      if (path != null && new java.io.File(path).exists()) return path;
+
+      // 方式2: 从 content XML 提取 clientmsgid, 拼接 voice2 路径
+      String content = (String) XposedHelpers.callMethod(msgInfo, "I0");
+      if (content != null) {
+        String cid = extractXmlAttr(content, "clientmsgid");
+        if (cid == null) {
+          // 简单格式: "wxid:5000:0" → 没有 clientmsgid
+          // 用 w0 查找
+          String fileName = getVoiceFileName(cl, msgInfo);
+          if (fileName != null) {
+            return getVoice2Path(cl, fileName);
+          }
+        } else {
+          return getVoice2PathByClientMsgId(cl, cid);
+        }
+      }
+    } catch (Throwable t) {}
+    return null;
+  }
+
+  /**
+   * 获取语音时长(毫秒)
+   */
+  public static int getVoiceDuration(ClassLoader cl, Object msgInfo) {
+    try {
+      String content = (String) XposedHelpers.callMethod(msgInfo, "I0");
+      if (content != null) {
+        // XML: <voicemsg length="5000"
+        String len = extractXmlAttr(content, "length");
+        if (len == null) len = extractXmlAttr(content, "voicelength");
+        if (len != null) return Integer.parseInt(len);
+
+        // 简单格式: "wxid:5000:0"
+        String[] parts = content.split(":");
+        if (parts.length >= 2) return Integer.parseInt(parts[1]);
+      }
+
+      // 从 w0 记录获取
+      Object w0 = getW0ForMsg(cl, msgInfo);
+      if (w0 != null) {
+        int h = XposedHelpers.getIntField(w0, "h");
+        int l = XposedHelpers.getIntField(w0, "l");
+        return h > 0 ? h : (l > 0 ? l : 5000);
+      }
+    } catch (Throwable t) {}
+    return 5000; // 默认5秒
+  }
+
+  /**
+   * 用 voice2 路径 + clientMsgId + md5子目录 拼接完整路径
+   */
+  private static String getVoice2PathByClientMsgId(ClassLoader cl, String cid) {
+    // 计算 MD5 获取子目录
+    String md5 = md5(cid);
+    String subDir = md5.substring(0, 2) + "/" + md5.substring(2, 4) + "/";
+
+    String hash = getUinHash();
+    String base = "/data/user/0/com.tencent.mm/MicroMsg/" + hash + "/voice2/";
+    return base + subDir + "msg_" + cid + ".amr";
+  }
+
+  /**
+   * 获取 w0 记录
+   */
+  private static Object getW0ForMsg(ClassLoader cl, Object msgInfo) {
+    try {
+      Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
+      String fileName = (String) XposedHelpers.callMethod(msgInfo, "y0");
+      if (fileName == null) return null;
+      return XposedHelpers.callStaticMethod(y21x0, "j", fileName);
+    } catch (Throwable t) { return null; }
+  }
+
+
+五、转发后跳转到聊天界面
+================================================================================
+
+  // 发送成功后, 可以通过 startChatting 直接进入聊天界面
+  Class<?> launcherUI = XposedHelpers.findClass(
+      "com.tencent.mm.ui.LauncherUI", cl);
+  Object instance = XposedHelpers.callStaticMethod(launcherUI, "getInstance");
+  if (instance != null) {
+    XposedHelpers.callMethod(instance, "startChatting",
+        targetTalker,   // String: 目标会话
+        null,           // Bundle: 额外参数
+        true);          // boolean: 是否动画
+  }
+
+
+六、完整的转发 Hook 集成代码 (VoiceForwardHook 修复版)
+================================================================================
+
+  /**
+   * 在 VoiceForwardHook 中: 长按语音 → 弹出菜单 → 选转发 → 直接转发
+   */
+  private static void forwardVoiceFile(Object msgInfo, View view) {
+    try {
+      // 获取目标会话 (弹出选择器)
+      showConversationSelector(view.getContext(), new ConversationCallback() {
+        @Override
+        public void onSelected(String targetTalker) {
+          boolean ok = forwardVoiceMessage(
+              view.getContext().getClassLoader(),
+              msgInfo, targetTalker);
+          
+          if (ok) {
+            Toast.makeText(view.getContext(), "语音已转发",
+                Toast.LENGTH_SHORT).show();
+          }
+        }
+      });
+    } catch (Throwable t) { ... }
+  }
+
+  // 启动微信内置的好友选择器
+  private static void showConversationSelector(Context ctx, 
+      ConversationCallback callback) {
+    Intent intent = new Intent();
+    intent.setClassName("com.tencent.mm",
+        "com.tencent.mm.ui.transmit.SelectConversationUI");
+    intent.putExtra("Select_Conv_Type", 3);
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+    
+    // 保存回调到静态变量, 在 onActivityResult 中处理
+    pendingCallback = callback;
+    ctx.startActivity(intent);
+  }
+
+
+七、核心 API 速查表
+================================================================================
+
+  函数                                    作用
+  ─────────────────────────────────────── ─────────────────────
+  y21.x0.r(talker, srcPath, duration)     创建w0+复制+写DB (一行)
+  y21.x0.g(talker, "amr_")                创建w0 (返回文件名)
+  y21.x0.t(fileName, dur, flag, msg)      写e9到message表
+  y21.x0.j(fileName)                       查w0记录
+  y21.x0.w(w0)                            更新w0到DB
+  msgInfo.y0()                            获取 field_imgPath
+  msgInfo.I0()                            获取 content (语音XML)
+  msgInfo.G1()→boolean                    是否自己发送
+  msgInfo.k1(1)                           设置为发送
+  y21.w0.h / y21.w0.l                    语音时长(ms)
+  md5(clientMsgId).substring(0,4)         子目录 如 "45/f3"
+  e01.d9.b().u()                          获取 f9 (MsgInfoStorage)
+  f9.H9(msg)                              插入消息(自动分配msgId)
+
+================================================================================
