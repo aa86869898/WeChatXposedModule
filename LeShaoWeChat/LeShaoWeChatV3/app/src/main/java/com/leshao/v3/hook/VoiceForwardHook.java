@@ -789,6 +789,8 @@ public class VoiceForwardHook {
 
     // ===== 版本无关的动态 API 发现 =====
     private static void discoverVoiceApi(ClassLoader cl) {
+        return;
+        /*
         try {
             String apkPath = ContextManager.getApkPath();
             if (apkPath == null) return;
@@ -845,9 +847,9 @@ public class VoiceForwardHook {
             }
             dex.close();
             LogWriter.log(TAG, "discoverVoiceApi: g=" + sGClass + "." + sGMethod + " t=" + sTClass + "." + sTMethod + " path=" + sPathServiceClass + "." + sPathMethod);
-        } catch (Throwable t) {
             LogWriter.log(TAG, "discoverVoiceApi error: " + t.getMessage());
         }
+        */
     }
 
     /**
@@ -1128,8 +1130,9 @@ public class VoiceForwardHook {
                 String cn = entries.nextElement();
                 String simple = cn.substring(cn.lastIndexOf('.') + 1);
                 // 目标类简名
+                boolean isMjLike = simple.contains("$c") || simple.contains("$d") || simple.contains("$b");
                 if (!simple.equals("p0") && !simple.equals("o0") && !simple.equals("x0") && !simple.equals("y0")
-                    && !simple.equals("w") && !simple.equals("j") && !simple.equals("l")) continue;
+                    && !simple.equals("w") && !simple.equals("j") && !simple.equals("l") && !isMjLike) continue;
                 try {
                     Class<?> cls = cl.loadClass(cn);
                     // 检查是否有 g(String,e9) 方法 (scene voice recorder 特征)
@@ -1190,10 +1193,57 @@ public class VoiceForwardHook {
                             for (Method m : cls.getDeclaredMethods()) {
                                 LogWriter.log(TAG, "  method: " + sig(m));
                             }
+                            if (hasGStatic && sGMethod == null) {
+                                for (Method m : cls.getDeclaredMethods()) {
+                                    if (m.getName().equals("g") && Modifier.isStatic(m.getModifiers())
+                                        && m.getReturnType() == String.class
+                                        && m.getParameterTypes().length == 2
+                                        && m.getParameterTypes()[0] == String.class
+                                        && m.getParameterTypes()[1] == String.class) {
+                                        try {
+                                            String test = (String) m.invoke(null, "wxid_test12345", "amr_");
+                                            if (test != null && test.matches("[0-9a-f]{20,}")) {
+                                                sGClass = cn;
+                                                sGMethod = "g";
+                                                LogWriter.log(TAG, "◆discovered g(): " + cn + ".g(String,String)→String test=" + test);
+                                            }
+                                        } catch (Throwable ignored) {}
+                                    }
+                                }
+                            }
+                            if (hasT && sTMethod == null) {
+                                for (Method m : cls.getDeclaredMethods()) {
+                                    if (m.getName().equals("t") && Modifier.isStatic(m.getModifiers())
+                                        && m.getReturnType() == boolean.class
+                                        && m.getParameterTypes().length >= 4
+                                        && m.getParameterTypes()[0] == String.class
+                                        && m.getParameterTypes()[1] == int.class
+                                        && m.getParameterTypes()[2] == int.class) {
+                                        sTClass = cn;
+                                        sTMethod = "t";
+                                        LogWriter.log(TAG, "◆discovered t(): " + cn + ".t(" + sig(m) + ")");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // ★ Mj() 发现: $c/$d/$b 内类
+                    if (isMjLike && sPathMethod == null) {
+                        for (Method m : cls.getDeclaredMethods()) {
+                            if (m.getReturnType() == String.class
+                                && m.getParameterTypes().length == 3
+                                && m.getParameterTypes()[1] == String.class
+                                && m.getParameterTypes()[2] == boolean.class
+                                && m.getName().length() <= 3) {
+                                sPathServiceClass = cn;
+                                sPathMethod = m.getName();
+                                LogWriter.log(TAG, "◆discovered Mj(): " + cn + "." + sPathMethod + "(Object,String,boolean)→String");
+                            }
                         }
                     }
                 } catch (Throwable ignored) {}
             }
+            LogWriter.log(TAG, "discoverVoiceApi: g=" + sGClass + "." + sGMethod + " t=" + sTClass + "." + sTMethod + " path=" + sPathServiceClass + "." + sPathMethod);
             dex.close();
         } catch (Throwable t) {
             LogWriter.log(TAG, "◆find error: " + t.getMessage());
