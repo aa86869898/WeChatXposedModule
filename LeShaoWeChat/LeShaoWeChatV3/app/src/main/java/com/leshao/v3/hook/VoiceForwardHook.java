@@ -787,19 +787,29 @@ public class VoiceForwardHook {
 
             Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
 
-            // 一行搞定: 创建w0 + 复制文件 + 写e9到DB
-            String result = (String) XposedHelpers.callStaticMethod(y21x0, "r",
-                    targetWxid, voiceFile, duration);
-            LogWriter.log(TAG, "SceneVoice: y21.x0.r() → " + result);
+            // Step 1: g(talker, "amr_") → 创建 w0 记录 + 生成文件名
+            String newName = (String) XposedHelpers.callStaticMethod(y21x0, "g", targetWxid, "amr_");
+            LogWriter.log(TAG, "SceneVoice: g() → " + newName);
 
-            if (result != null) {
-                // b31.w 上传语音文件到服务器
-                trySendViaB31(cl, targetWxid, voiceFile, duration);
-                return true;
+            if (newName == null) {
+                LogWriter.log(TAG, "SceneVoice: g() returned null — w0 creation failed");
+                return false;
             }
 
-            LogWriter.log(TAG, "SceneVoice: y21.x0.r() returned null");
-            return false;
+            // Step 2: t(newName, duration, flag, null) → 创建 e9 + 写 DB
+            boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
+                    newName, duration, 1, null);
+            LogWriter.log(TAG, "SceneVoice: t(" + newName + "," + duration + ",1,null) → " + ok);
+
+            if (!ok) {
+                LogWriter.log(TAG, "SceneVoice: t() returned false");
+                return false;
+            }
+
+            // Step 3: b31.w 上传语音文件
+            trySendViaB31(cl, targetWxid, voiceFile, duration);
+
+            return true;
 
         } catch (Throwable t) {
             LogWriter.log(TAG, "SceneVoice error: " + t.getClass().getSimpleName() + " " + t.getMessage());
