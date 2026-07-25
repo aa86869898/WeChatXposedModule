@@ -787,10 +787,12 @@ public class VoiceForwardHook {
 
             Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
 
-            // r(talker, srcPath, duration) 内部自动: g()→Mj/Nj→w6.d()→t()
+            // r()第二参数要文件名(非完整路径)，内部Mj()会拼voice2目录
+            String fileName = new java.io.File(voiceFile).getName();
+            LogWriter.log(TAG, "SceneVoice: fileName=" + fileName);
             String result = (String) XposedHelpers.callStaticMethod(y21x0, "r",
-                    targetWxid, voiceFile, duration);
-            LogWriter.log(TAG, "SceneVoice: r() → " + result);
+                    targetWxid, fileName, duration);
+            LogWriter.log(TAG, "SceneVoice: r(" + targetWxid + "," + fileName + "," + duration + ") → " + result);
             if (result == null) { LogWriter.log(TAG, "SceneVoice: r() null"); return false; }
 
             // b31.w 上传语音文件
