@@ -795,12 +795,40 @@ public class VoiceForwardHook {
             LogWriter.log(TAG, "SceneVoice: g() → " + newName);
             if (newName == null) { LogWriter.log(TAG, "SceneVoice: g() null"); return false; }
 
-            // Step 2: copy 原始文件 → MD5子目录 (t() 内部 v0.d() 扫描此路径)
+            // Step 2: ★ VFS copy 不能省 → 微信 VFS 层登记文件 (WeKit Q() 模式)
             String voice2Dir = getVoice2Dir(voiceFile);
+            String flatPath = voice2Dir + "msg_" + newName + ".amr";
+            LogWriter.log(TAG, "SceneVoice: VFS copy " + voiceFile + " → " + flatPath);
+
+            Class<?> w6 = XposedHelpers.findClass("com.tencent.mm.vfs.w6", cl);
+            String vfsCreate = findVfsCreateMethod(w6);
+            if (vfsCreate == null) { LogWriter.log(TAG, "SceneVoice: VFS create method not found"); return false; }
+
+            boolean srcExists = (Boolean) XposedHelpers.callStaticMethod(w6, "j", voiceFile);
+            LogWriter.log(TAG, "SceneVoice: w6.j(src) → " + srcExists);
+            if (!srcExists) { LogWriter.log(TAG, "SceneVoice: src not found via VFS"); return false; }
+
+            InputStream in = (InputStream) XposedHelpers.callStaticMethod(w6, "E", voiceFile);
+            OutputStream out = (OutputStream) XposedHelpers.callStaticMethod(w6, vfsCreate, flatPath, false);
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
+            out.flush(); out.close(); in.close();
+            LogWriter.log(TAG, "SceneVoice: VFS stream copy ok");
+
+            boolean flatExists = (Boolean) XposedHelpers.callStaticMethod(w6, "j", flatPath);
+            LogWriter.log(TAG, "SceneVoice: w6.j(dst) → " + flatExists);
+            if (!flatExists) { LogWriter.log(TAG, "SceneVoice: VFS dst verify failed"); return false; }
+
+            // Step 3: t(newName, duration, 0, null) → setVoice #1 (忽略返回值)
+            XposedHelpers.callStaticMethod(y21x0, "t", newName, duration, 0, null);
+            LogWriter.log(TAG, "SceneVoice: setVoice t(" + newName + "," + duration + ",0,null)");
+
+            // Step 4: ★ MD5子目录 copy → voice2/XX/YY/msg_{newName}.amr
             String md5Prefix = newName.substring(0, 4);
             String md5SubDir = voice2Dir + md5Prefix.substring(0, 2) + "/" + md5Prefix.substring(2, 4) + "/";
             String md5DestPath = md5SubDir + "msg_" + newName + ".amr";
-            LogWriter.log(TAG, "SceneVoice: copy " + voiceFile + " → " + md5DestPath);
+            LogWriter.log(TAG, "SceneVoice: md5 copy " + voiceFile + " → " + md5DestPath);
             new java.io.File(md5SubDir).mkdirs();
             java.nio.file.Files.copy(
                 java.nio.file.Paths.get(voiceFile),
@@ -808,13 +836,13 @@ public class VoiceForwardHook {
                 java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             LogWriter.log(TAG, "SceneVoice: md5 copy ok");
 
-            // Step 3: t(newName, duration, 0, null) → 写 DB (现在文件已在MD5路径，t()能读到)
+            // Step 5: ★ t(targetTalker, 34, duration, msgObj) → 写 DB
             boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
-                    newName, duration, 0, null);
-            LogWriter.log(TAG, "SceneVoice: t(" + newName + "," + duration + ",0,null) → " + ok);
-            if (!ok) { LogWriter.log(TAG, "SceneVoice: t() false, DB write failed"); return false; }
+                    targetWxid, 34, duration, origE9);
+            LogWriter.log(TAG, "SceneVoice: DB t(talker,34," + duration + ",e9) → " + ok);
+            if (!ok) { LogWriter.log(TAG, "SceneVoice: DB write failed"); return false; }
 
-            // Step 4: y21.p0.kj().e() 刷新 → tl.t0后台线程自动捡起上传
+            // Step 6: y21.p0.kj().e() 刷新 → tl.t0后台线程自动捡起上传
             Class<?> y21p0 = XposedHelpers.findClass("y21.p0", cl);
             Object q0 = XposedHelpers.callStaticMethod(y21p0, "kj");
             XposedHelpers.callMethod(q0, "e");
