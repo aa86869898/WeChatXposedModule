@@ -782,56 +782,39 @@ public class VoiceForwardHook {
             Object recorder = XposedHelpers.newInstance(p0Class,
                 new Class[]{android.content.Context.class, boolean.class}, act, false);
 
-            // g() → 生成文件路径(存 this.e) + 创建 y21.w0 记录(voicestg)
+            // g() → 生成文件名(存 this.e) + 创建 y21.w0 记录(按文件名索引)
             boolean gResult = (Boolean) XposedHelpers.callMethod(recorder, "g",
                 new Class[]{String.class, XposedHelpers.findClass("com.tencent.mm.storage.e9", cl)},
                 origTalker, origE9);
             LogWriter.log(TAG, "SceneVoice: g()=" + gResult);
             if (!gResult) return false;
 
-            // 获取 g() 生成的文件路径 (y21.w0 记录已在此路径创建)
-            String generatedPath = (String) XposedHelpers.getObjectField(recorder, "e");
-            LogWriter.log(TAG, "SceneVoice: generatedPath=" + generatedPath);
+            // 获取 g() 生成的文件名 (y21.w0 按此文件名索引)
+            String genFileName = (String) XposedHelpers.getObjectField(recorder, "e");
+            LogWriter.log(TAG, "SceneVoice: genFileName=" + genFileName);
 
-            // 把我们的语音文件拷到生成路径, 覆盖空录音
-            java.io.File src = new java.io.File(voiceFile);
-            java.io.File dst = new java.io.File(generatedPath);
-            if (!src.equals(dst)) {
-                dst.getParentFile().mkdirs();
-                java.io.FileInputStream fin = new java.io.FileInputStream(src);
-                java.io.FileOutputStream fout = new java.io.FileOutputStream(dst);
-                byte[] buf = new byte[8192]; int n;
-                while ((n = fin.read(buf)) > 0) fout.write(buf, 0, n);
-                fin.close(); fout.close();
-                LogWriter.log(TAG, "SceneVoice: copied " + src.length() + " bytes → " + generatedPath);
-            }
-
-            // 找到 y21.w0 记录, 把 talker 改成目标用户
+            // 找到 y21.w0 记录, 改 talker = 目标
+            Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
             try {
-                Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
                 Object stg = XposedHelpers.callStaticMethod(y21x0, "j",
-                    new Class[]{String.class}, generatedPath);
+                    new Class[]{String.class}, genFileName);
                 if (stg != null) {
                     XposedHelpers.setObjectField(stg, "c", targetWxid);
                     LogWriter.log(TAG, "SceneVoice: y21.w0.c = " + targetWxid);
-                } else {
-                    LogWriter.log(TAG, "SceneVoice: y21.w0 record not found!");
                 }
             } catch (Throwable t) {
                 LogWriter.log(TAG, "SceneVoice: y21.w0 update error: " + t.getMessage());
             }
 
-            // 覆盖目标 talker
+            // 设目标 + 时长
             XposedHelpers.setObjectField(recorder, "d", targetWxid);
             XposedHelpers.setIntField(recorder, "m", duration);
 
-            // PATH A: y21.x0.t(生成路径, duration, 0, origE9) → 写 DB
-            //   j(生成路径) 能找到 y21.w0 记录 → 正常走完整流程
-            Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
+            // PATH A: y21.x0.t(文件名, duration, 0, e9) — j(文件名) 能找到 y21.w0
             boolean dbResult = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
                 new Class[]{String.class, int.class, int.class,
                     XposedHelpers.findClass("com.tencent.mm.storage.e9", cl)},
-                generatedPath, duration, 0, origE9);
+                genFileName, duration, 0, origE9);
             LogWriter.log(TAG, "SceneVoice: y21.x0.t()=" + dbResult);
 
             if (!dbResult) {
