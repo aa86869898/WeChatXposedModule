@@ -64,13 +64,22 @@ public class ContactChangeLog {
     private static void detectChanges(Object activity) {
         try {
             ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
-            if (config == null || !config.contactChangeLogEnabled) return;
+            if (config == null || !config.contactChangeLogEnabled) {
+                LogWriter.log(TAG, "detect skip: config=" + (config == null ? "null" : "disabled"));
+                return;
+            }
 
             Object contact = getContactField(activity);
-            if (contact == null) return;
+            if (contact == null) {
+                LogWriter.log(TAG, "detect skip: contact null");
+                return;
+            }
 
             String username = readStringField(contact, "field_username");
-            if (username == null || username.isEmpty()) return;
+            if (username == null || username.isEmpty()) {
+                LogWriter.log(TAG, "detect skip: username empty");
+                return;
+            }
 
             long now = System.currentTimeMillis();
             Long last = debounce.get(username);
