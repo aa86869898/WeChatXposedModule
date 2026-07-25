@@ -1,0 +1,100 @@
+================================================================================
+ u0 类 — 完整路径和签名 (从 y21.x0.r() Smali 提取)
+================================================================================
+
+Smali 确认:
+
+  接口:   qh3.u0  (服务接口)
+  实现:   h90.b   (实际实现类)
+  获取:   n0.c(qh3.u0.class) → h90.b 实例
+
+
+方法签名:
+================================================================================
+
+  Mj(lin5.y, String srcFileName, boolean isCreate) → String
+    作用: 获取源文件完整路径
+    参数1: lin5.y  → 静态字段 y.j (sget-object Lin5/y;->j:Lin5/y)
+    参数2: srcFileName → 源文件名或路径
+    参数3: isCreate    → false=不创建目录
+    返回: 文件完整路径
+
+  Nj(lin5.y, String dstFileName, boolean isCreate, boolean flag) → String
+    作用: 获取目标文件完整路径(voice2目录)
+    参数1: lin5.y  → 静态字段 y.j
+    参数2: dstFileName → 目标文件名
+    参数3: isCreate    → false
+    参数4: flag        → true
+    返回: 目标文件完整路径
+
+
+r() 内部完整流程:
+================================================================================
+
+  y21.x0.r(talker, srcPath, duration):
+
+  ① g(talker, prefix) → newFileName
+     "amr_xxxxx"
+
+  ② n0.c(qh3.u0.class) → h90.b
+     b.Mj(y.j, srcPath, false) → srcFullPath
+     b.Nj(y.j, newFileName, false, true) → dstFullPath
+
+  ③ w6.d(srcFullPath, dstFullPath, false) → long
+     copyFile
+
+  ④ t(newFileName, duration, 1, null) → boolean
+     创建 e9(type=34) + 写 DB + 通知
+
+
+Xposed 调用 (如果你不想用 r(), 手动步骤):
+================================================================================
+
+  // Step 0: 获取依赖
+  Class<?> qh3u0 = XposedHelpers.findClass("qh3.u0", cl);
+  Object u0Service = XposedHelpers.callStaticMethod(
+      XposedHelpers.findClass("pa5.n0", cl), "c", qh3u0);
+  // u0Service 实际是 h90.b 实例
+
+  Class<?> yClass = XposedHelpers.findClass("lin5.y", cl);
+  Object y_j = XposedHelpers.getStaticObjectField(yClass, "j");
+
+  Class<?> w6 = XposedHelpers.findClass("com.tencent.mm.vfs.w6", cl);
+
+  // Step 1: 创建 w0
+  String newName = (String) XposedHelpers.callStaticMethod(y21x0, "g", talker, "amr_");
+
+  // Step 2: 获取路径
+  String srcFull = (String) XposedHelpers.callMethod(u0Service, "Mj", y_j, srcFilePath, false);
+  String dstFull = (String) XposedHelpers.callMethod(u0Service, "Nj", y_j, newName, false, true);
+
+  // Step 3: 复制文件
+  long result = (Long) XposedHelpers.callStaticMethod(w6, "d", srcFull, dstFull, false);
+
+  // Step 4: 写 DB
+  boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t", newName, duration, 0, null);
+
+
+一行方案 (推荐!):
+================================================================================
+
+  // r() = g+w0+Mj+Nj+copyFile+t 全自动
+  String result = (String) XposedHelpers.callStaticMethod(y21x0, "r",
+      talker,       // 目标会话ID
+      voiceFilePath, // 你的 .amr 文件完整路径
+      durationMs);   // 时长(毫秒)
+
+
+完整类路径速查:
+================================================================================
+
+  类       完整名                              作用
+  ──────── ─────────────────────────────────── ────────────
+  u0接口   qh3.u0                              语音文件路径服务接口
+  u0实现   h90.b                               语音文件路径服务实现
+  y21.x0   y21.x0                              语音逻辑(创建/读写DB)
+  lin5.y   lin5.y                              语音上下文对象(y.j)
+  w6       com.tencent.mm.vfs.w6               文件操作(copy/move)
+  n0       pa5.n0                              服务管理器(c()获取服务)
+
+================================================================================

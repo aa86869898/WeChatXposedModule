@@ -787,47 +787,36 @@ public class VoiceForwardHook {
 
             Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
 
-            // Step 1: g(talker, "amr_") → 创建 w0 记录, 返回新文件名
+            // Step 1: g(talker, "amr_") → 创建 w0 记录 + 生成新文件名
             String newName = (String) XposedHelpers.callStaticMethod(y21x0, "g", targetWxid, "amr_");
             LogWriter.log(TAG, "SceneVoice: g() → " + newName);
-            if (newName == null) {
-                LogWriter.log(TAG, "SceneVoice: g() null");
+            if (newName == null) { LogWriter.log(TAG, "SceneVoice: g() null"); return false; }
+
+            // Step 2: 用微信 API 获取源/目标路径 + 复制文件 (同 r() 内部逻辑)
+            try {
+                Class<?> qh3u0 = XposedHelpers.findClass("qh3.u0", cl);
+                Object u0Service = XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("pa5.n0", cl), "c", qh3u0);
+                Object y_j = XposedHelpers.getStaticObjectField(
+                    XposedHelpers.findClass("lin5.y", cl), "j");
+
+                String srcFull = (String) XposedHelpers.callMethod(u0Service, "Mj", y_j, voiceFile, false);
+                String dstFull = (String) XposedHelpers.callMethod(u0Service, "Nj", y_j, newName, false, true);
+                LogWriter.log(TAG, "SceneVoice: src=" + srcFull + " dst=" + dstFull);
+
+                Class<?> w6 = XposedHelpers.findClass("com.tencent.mm.vfs.w6", cl);
+                XposedHelpers.callStaticMethod(w6, "d", srcFull, dstFull, false);
+                LogWriter.log(TAG, "SceneVoice: w6.d() copied ok");
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "SceneVoice: Mj/Nj/copy fail: " + e.getMessage());
                 return false;
             }
 
-            // Step 2: 复制源文件到新 w0 的 voice2 路径 (t() 内部 v0.d() 需要读文件测时长)
-            String uinHash = getUinHash(cl);
-            if (uinHash != null) {
-                String md5 = md5(newName);
-                String destPath = "/data/data/com.tencent.mm/MicroMsg/" + uinHash
-                    + "/voice2/" + md5.substring(0, 2) + "/" + md5.substring(2, 4)
-                    + "/" + newName;
-                try {
-                    new java.io.File(destPath).getParentFile().mkdirs();
-                    java.io.FileInputStream fis = new java.io.FileInputStream(voiceFile);
-                    java.io.FileOutputStream fos = new java.io.FileOutputStream(destPath);
-                    byte[] buf = new byte[8192];
-                    int len;
-                    while ((len = fis.read(buf)) > 0) fos.write(buf, 0, len);
-                    fis.close();
-                    fos.close();
-                    LogWriter.log(TAG, "SceneVoice: copied → " + destPath);
-                } catch (Throwable e) {
-                    LogWriter.log(TAG, "SceneVoice: copy fail: " + e.getMessage());
-                    return false;
-                }
-            } else {
-                LogWriter.log(TAG, "SceneVoice: no uinHash, skip copy");
-            }
-
-            // Step 3: t(fileName, duration, 0, null) → v0.d()测时长 → 创建 e9 + 写 DB
+            // Step 3: t(newName, duration, 0, null) → v0.d()测时长 → 创建 e9 + 写 DB
             boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
                     newName, duration, 0, null);
             LogWriter.log(TAG, "SceneVoice: t(" + newName + "," + duration + ",0,null) → " + ok);
-            if (!ok) {
-                LogWriter.log(TAG, "SceneVoice: t() false");
-                return false;
-            }
+            if (!ok) { LogWriter.log(TAG, "SceneVoice: t() false"); return false; }
 
             // Step 4: b31.w 上传语音文件
             trySendViaB31(cl, targetWxid, voiceFile, duration);
