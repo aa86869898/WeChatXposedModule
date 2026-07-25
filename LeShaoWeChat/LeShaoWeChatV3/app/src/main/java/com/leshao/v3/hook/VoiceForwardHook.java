@@ -847,17 +847,19 @@ public class VoiceForwardHook {
                 java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             LogWriter.log(TAG, "SceneVoice: md5 copy ok");
 
-            // Step 5: ★ SceneVoiceService 单例 → run() 真正发送 (WeKit T0()方案)
+            // Step 5: b31.w.g(target, e9) 设目标+消息 → run() 发送
             Class<?> b31w = XposedHelpers.findClass("b31.w", cl);
             Object service = XposedHelpers.newInstance(b31w);
+            // g(targetTalker, msgE9) 告诉 b31.w 发给谁、发什么 (同 tl.p0.g)
+            XposedHelpers.callMethod(service, "g", targetWxid, origE9);
             try {
-                // 优先 run()
                 XposedHelpers.callMethod(service, "run", new Class[]{Object.class}, (Object) null);
+                LogWriter.log(TAG, "SceneVoice: b31.w.g() + run() → sent");
             } catch (Throwable e1) {
-                // 回退到 start()
-                XposedHelpers.callMethod(service, "start", voiceFile);
+                XposedHelpers.callMethod(service, "start",
+                    new Class[]{String.class}, voiceFile);
+                LogWriter.log(TAG, "SceneVoice: b31.w.g() + start() → sent");
             }
-            LogWriter.log(TAG, "SceneVoice: b31.w run() → sent");
             return true;
 
         } catch (Throwable t) {
