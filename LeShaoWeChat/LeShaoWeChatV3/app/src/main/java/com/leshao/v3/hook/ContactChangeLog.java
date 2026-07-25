@@ -163,6 +163,8 @@ public class ContactChangeLog {
             int avatarHash   = 0;
             try { avatarHash = XposedHelpers.getIntField(modContact, "h"); } catch (Throwable ignored) {}
 
+            LogWriter.log(TAG, "[v.b] uid=" + username + " nick=" + nickname + " remark=" + remark + " avatar=" + avatarHash);
+
             ContactSnapshot cur = new ContactSnapshot(username, nickname, remark, avatarHash, "");
             ContactSnapshot prev = lastSnapshot.get(username);
 
@@ -300,6 +302,10 @@ public class ContactChangeLog {
                 + " sig=" + r.signatureChanged + " avatar=" + r.avatarChanged
                 + " | " + r.displayName());
             saveRecord(r);
+        } else {
+            LogWriter.log(TAG, "[v.b] no-change: " + wxid + " prevNick=" + prev.nickname + " curNick=" + cur.nickname
+                + " prevRemark=" + prev.remark + " curRemark=" + cur.remark
+                + " prevAvatar=" + prev.avatarHash + " curAvatar=" + cur.avatarHash);
         }
     }
 
