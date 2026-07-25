@@ -366,18 +366,8 @@ public class ContactChangeLog {
 
     private static File getLogFile() {
         if (sLogFile != null) return sLogFile;
-        Context ctx = ContextManager.getAppContext();
-        if (ctx != null) {
-            try {
-                File dir = ctx.getExternalFilesDir(null);
-                if (dir != null) {
-                    dir.mkdirs();
-                    sLogFile = new File(dir, "contact_changes.json");
-                    return sLogFile;
-                }
-            } catch (Throwable ignored) {}
-        }
-        sLogFile = new File("/sdcard/Android/data/com.tencent.mm/files/contact_changes.json");
+        sLogFile = new File("/sdcard/LeShaoV3Logs/contact_changes.json");
+        sLogFile.getParentFile().mkdirs();
         return sLogFile;
     }
 
