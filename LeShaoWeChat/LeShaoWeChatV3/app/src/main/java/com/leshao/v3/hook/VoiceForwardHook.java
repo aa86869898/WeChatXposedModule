@@ -796,17 +796,10 @@ public class VoiceForwardHook {
             String voice2Dir = getVoice2Dir(voiceFile);
             String destPath = voice2Dir + "msg_" + newName + ".amr";
             LogWriter.log(TAG, "SceneVoice: copy " + voiceFile + " → " + destPath);
-            java.io.File srcFile = new java.io.File(voiceFile);
-            java.io.File destFile = new java.io.File(destPath);
-            destFile.getParentFile().mkdirs();
-            java.io.FileInputStream fis = new java.io.FileInputStream(srcFile);
-            java.io.FileOutputStream fos = new java.io.FileOutputStream(destFile);
-            byte[] buf = new byte[8192];
-            int len;
-            while ((len = fis.read(buf)) > 0) fos.write(buf, 0, len);
-            fis.close();
-            fos.close();
-            LogWriter.log(TAG, "SceneVoice: copy ok " + destFile.length() + " bytes");
+            XposedHelpers.callStaticMethod(
+                XposedHelpers.findClass("com.tencent.mm.vfs.w6", cl),
+                "d", voiceFile, destPath, false);
+            LogWriter.log(TAG, "SceneVoice: w6.d() copied ok");
 
             // Step 3: t(newName, duration, 0, null) → VoiceLogic.setVoice → v0.d()测时长 → 创建 e9 + 写 DB
             boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
