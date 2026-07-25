@@ -1129,8 +1129,7 @@ public class VoiceForwardHook {
             while (entries.hasMoreElements()) {
                 String cn = entries.nextElement();
                 String simple = cn.substring(cn.lastIndexOf('.') + 1);
-                // 目标类简名
-                boolean isMjLike = cn.length() < 15 && (cn.indexOf('.') != cn.lastIndexOf('.') || cn.indexOf('$') >= 0);
+                boolean isMjLike = simple.length() <= 2;
                 if (!simple.equals("p0") && !simple.equals("o0") && !simple.equals("x0") && !simple.equals("y0")
                     && !simple.equals("w") && !simple.equals("j") && !simple.equals("l") && !isMjLike) continue;
                 try {
@@ -1235,25 +1234,23 @@ public class VoiceForwardHook {
                             }
                         }
                     }
-                    // ★ Mj() 发现: $c/$d/$b 内类
-                    if (isMjLike && sPathMethod == null) {
-                        LogWriter.log(TAG, "◆Mj candidate: " + cn + " loaded, " + cls.getDeclaredMethods().length + " methods");
+                    // ★ Mj() 发现: 简名≤2的所有内类 + 长度<15排除长路径
+                    if (sPathMethod == null) {
                         for (Method m : cls.getDeclaredMethods()) {
                             Class<?>[] pts = m.getParameterTypes();
                             if (m.getReturnType() == String.class
                                 && pts.length == 3
                                 && pts[1] == String.class
                                 && pts[2] == boolean.class
-                                && m.getName().length() <= 3) {
+                                && m.getName().length() <= 3
+                                && cn.length() < 15) {
                                 sPathServiceClass = cn;
                                 sPathMethod = m.getName();
                                 LogWriter.log(TAG, "◆discovered Mj(): " + cn + "." + sPathMethod + "(Object,String,boolean)→String");
                             }
                         }
                     }
-                } catch (Throwable e) {
-                    if (isMjLike) LogWriter.log(TAG, "◆Mj candidate load fail: " + cn + " → " + e.getClass().getSimpleName() + " " + e.getMessage());
-                }
+                } catch (Throwable ignored) {}
             }
             LogWriter.log(TAG, "discoverVoiceApi: g=" + sGClass + "." + sGMethod + " t=" + sTClass + "." + sTMethod + " path=" + sPathServiceClass + "." + sPathMethod);
             dex.close();
