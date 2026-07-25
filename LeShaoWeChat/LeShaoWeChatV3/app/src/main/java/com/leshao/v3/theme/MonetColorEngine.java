@@ -57,8 +57,22 @@ public class MonetColorEngine {
         Color.colorToHSV(seedColor, seedHsv);
         float seedH = seedHsv[0];
         float seedS = seedHsv[1];
-        float seedV = seedHsv[2];
 
+        float[] hs = calcHS(seedH, seedS, style);
+        return buildPalette(hs[0], hs[1], hs[2], hs[3], hs[4], hs[5], false);
+    }
+
+    public static int[] generateDark(int seedColor, Style style) {
+        float[] seedHsv = new float[3];
+        Color.colorToHSV(seedColor, seedHsv);
+        float seedH = seedHsv[0];
+        float seedS = seedHsv[1];
+
+        float[] hs = calcHS(seedH, seedS, style);
+        return buildPalette(hs[0], hs[1], hs[2], hs[3], hs[4], hs[5], true);
+    }
+
+    private static float[] calcHS(float seedH, float seedS, Style style) {
         float pH, pS, sH, sS, nH, nS;
 
         switch (style) {
@@ -105,33 +119,51 @@ public class MonetColorEngine {
                 break;
         }
 
-        pH = hueNormalize(pH);
-        sH = hueNormalize(sH);
-        nH = hueNormalize(nH);
+        return new float[]{hueNormalize(pH), pS, hueNormalize(sH), sS, hueNormalize(nH), nS};
+    }
 
+    private static int[] buildPalette(float pH, float pS, float sH, float sS, float nH, float nS, boolean dark) {
         int[] p = new int[PALETTE_SIZE];
-        p[IDX_PRIMARY]          = hsvColor(pH, pS, 0.50f);
-        p[IDX_PRIMARY_CONT]     = hsvColor(pH, pS * 0.5f, 0.95f);
-        p[IDX_ON_PRIMARY_CONT]  = hsvColor(pH, pS * 0.35f, 0.10f);
-        p[IDX_SECONDARY]        = hsvColor(sH, sS, 0.55f);
-        p[IDX_SECONDARY_CONT]   = hsvColor(sH, sS * 0.45f, 0.92f);
-        p[IDX_BACKGROUND]       = hsvColor(nH, nS, 0.98f);
-        p[IDX_SURFACE]          = hsvColor(nH, nS * 1.5f, 0.96f);
-        p[IDX_SURFACE_VARIANT]  = hsvColor(nH, nS * 2f, 0.91f);
-        p[IDX_ON_SURFACE]       = hsvColor(nH, nS * 2f, 0.10f);
-        p[IDX_ON_SURFACE_VAR]   = hsvColor(nH, nS * 2f, 0.38f);
-        p[IDX_DARK_PRIMARY]     = hsvColor(pH, pS, 0.40f);
-        p[IDX_WHITE]            = hsvColor(pH, pS * 0.15f, 0.98f);
-        p[IDX_DARK_TEXT]        = hsvColor(nH, nS * 2f, 0.07f);
-        p[IDX_MED_TEXT]         = hsvColor(nH, nS * 2f, 0.45f);
-        p[IDX_PURE_WHITE]       = 0xFFFFFFFF;
-
+        if (dark) {
+            p[IDX_PRIMARY]          = hsvColor(pH, pS, 0.65f);
+            p[IDX_PRIMARY_CONT]     = hsvColor(pH, pS * 0.5f, 0.20f);
+            p[IDX_ON_PRIMARY_CONT]  = hsvColor(pH, pS * 0.35f, 0.90f);
+            p[IDX_SECONDARY]        = hsvColor(sH, sS, 0.60f);
+            p[IDX_SECONDARY_CONT]   = hsvColor(sH, sS * 0.45f, 0.18f);
+            p[IDX_BACKGROUND]       = hsvColor(nH, nS, 0.10f);
+            p[IDX_SURFACE]          = hsvColor(nH, nS * 1.5f, 0.15f);
+            p[IDX_SURFACE_VARIANT]  = hsvColor(nH, nS * 2f, 0.20f);
+            p[IDX_ON_SURFACE]       = hsvColor(nH, nS * 2f, 0.88f);
+            p[IDX_ON_SURFACE_VAR]   = hsvColor(nH, nS * 2f, 0.70f);
+            p[IDX_DARK_PRIMARY]     = hsvColor(pH, pS, 0.55f);
+            p[IDX_WHITE]            = hsvColor(pH, pS * 0.15f, 0.92f);
+            p[IDX_DARK_TEXT]        = hsvColor(nH, nS * 2f, 0.93f);
+            p[IDX_MED_TEXT]         = hsvColor(nH, nS * 2f, 0.75f);
+            p[IDX_PURE_WHITE]       = 0xFFE8E8F0;
+        } else {
+            p[IDX_PRIMARY]          = hsvColor(pH, pS, 0.50f);
+            p[IDX_PRIMARY_CONT]     = hsvColor(pH, pS * 0.5f, 0.95f);
+            p[IDX_ON_PRIMARY_CONT]  = hsvColor(pH, pS * 0.35f, 0.10f);
+            p[IDX_SECONDARY]        = hsvColor(sH, sS, 0.55f);
+            p[IDX_SECONDARY_CONT]   = hsvColor(sH, sS * 0.45f, 0.92f);
+            p[IDX_BACKGROUND]       = hsvColor(nH, nS, 0.98f);
+            p[IDX_SURFACE]          = hsvColor(nH, nS * 1.5f, 0.96f);
+            p[IDX_SURFACE_VARIANT]  = hsvColor(nH, nS * 2f, 0.91f);
+            p[IDX_ON_SURFACE]       = hsvColor(nH, nS * 2f, 0.10f);
+            p[IDX_ON_SURFACE_VAR]   = hsvColor(nH, nS * 2f, 0.38f);
+            p[IDX_DARK_PRIMARY]     = hsvColor(pH, pS, 0.40f);
+            p[IDX_WHITE]            = hsvColor(pH, pS * 0.15f, 0.98f);
+            p[IDX_DARK_TEXT]        = hsvColor(nH, nS * 2f, 0.07f);
+            p[IDX_MED_TEXT]         = hsvColor(nH, nS * 2f, 0.45f);
+            p[IDX_PURE_WHITE]       = 0xFFFFFFFF;
+        }
         return p;
     }
 
-    public static void applyPalette(int[] palette) {
-        if (palette == null || palette.length < PALETTE_SIZE) return;
-        com.leshao.v3.hook.ThemeHook.applyMonetPalette(palette);
+    public static void applyPalette(int[] lightPalette, int[] darkPalette) {
+        if (lightPalette == null || lightPalette.length < PALETTE_SIZE) return;
+        if (darkPalette == null || darkPalette.length < PALETTE_SIZE) return;
+        com.leshao.v3.hook.ThemeHook.applyMonetPalette(lightPalette, darkPalette);
     }
 
     private static int hsvColor(float h, float s, float v) {

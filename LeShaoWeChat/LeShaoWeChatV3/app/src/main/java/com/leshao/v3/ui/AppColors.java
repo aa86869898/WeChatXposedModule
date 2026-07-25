@@ -67,25 +67,32 @@ public class AppColors {
         return p != null ? p.getInt(key, def) : def;
     }
 
-    public static int bg()          { return themed("ls_tc_page_bg",          isDarkMode() ? DARK_BG      : DEF_BG); }
-    public static int card()        { return themed("ls_tc_actionbar_bg",    isDarkMode() ? DARK_CARD    : DEF_WHITE); }
+    private static int themedDual(String key, int lightDef, int darkDef) {
+        if (isDarkMode()) {
+            return themed(key + "_dark", darkDef);
+        }
+        return themed(key, lightDef);
+    }
+
+    public static int bg()          { return themedDual("ls_tc_page_bg",          DEF_BG,      DARK_BG); }
+    public static int card()        { return themedDual("ls_tc_actionbar_bg",    DEF_WHITE,   DARK_CARD); }
     public static int whiteCard()   { return isDarkMode() ? DARK_CARD : DEF_WHITE; }
-    public static int text1()       { return themed("ls_tc_text_primary",    isDarkMode() ? DARK_TEXT    : DEF_TEXT); }
-    public static int text2()       { return themed("ls_tc_text_secondary",  isDarkMode() ? DARK_TEXT2   : DEF_TEXT2); }
-    public static int accent()      { return themed("ls_tc_tab_selected",    isDarkMode() ? DARK_ACCENT  : DEF_ACCENT); }
+    public static int text1()       { return themedDual("ls_tc_text_primary",    DEF_TEXT,    DARK_TEXT); }
+    public static int text2()       { return themedDual("ls_tc_text_secondary",  DEF_TEXT2,   DARK_TEXT2); }
+    public static int accent()      { return themedDual("ls_tc_tab_selected",    DEF_ACCENT,  DARK_ACCENT); }
     public static int divider()     {
         boolean dm = isDarkMode();
         int b = bg();
         return (0xFF << 24) | adjust(b, dm ? 0.12f : 0.08f);
     }
-    public static int arrow()       { return themed("ls_tc_text_secondary",  isDarkMode() ? DARK_ARROW   : DEF_ARROW); }
-    public static int border()      { return themed("ls_tc_tab_selected",    isDarkMode() ? DARK_BORDER  : DEF_BORDER); }
-    public static int accent2()     { return themed("ls_tc_tab_selected",    isDarkMode() ? DARK_ACCENT2 : DEF_ACCENT2); }
-    public static int green()       { return themed("ls_tc_tab_selected",    isDarkMode() ? DARK_GREEN   : DEF_GREEN); }
-    public static int onColor()     { return themed("ls_tc_tab_selected",    isDarkMode() ? DARK_ON      : DEF_ON); }
+    public static int arrow()       { return themedDual("ls_tc_text_secondary",  DEF_ARROW,   DARK_ARROW); }
+    public static int border()      { return themedDual("ls_tc_tab_selected",    DEF_BORDER,  DARK_BORDER); }
+    public static int accent2()     { return themedDual("ls_tc_tab_selected",    DEF_ACCENT2, DARK_ACCENT2); }
+    public static int green()       { return themedDual("ls_tc_tab_selected",    DEF_GREEN,   DARK_GREEN); }
+    public static int onColor()     { return themedDual("ls_tc_tab_selected",    DEF_ON,      DARK_ON); }
     public static int offColor()    { return isDarkMode() ? DARK_OFF : DEF_OFF; }
-    public static int bubbleSelfBg()  { return themed("ls_tc_bubble_self_bg", 0xFF95EC69); }
-    public static int bubbleOtherBg() { return themed("ls_tc_bubble_other_bg", 0xFFFFFFFF); }
+    public static int bubbleSelfBg()  { return themedDual("ls_tc_bubble_self_bg", 0xFF95EC69, 0xFF2D8A4E); }
+    public static int bubbleOtherBg() { return themedDual("ls_tc_bubble_other_bg", 0xFFFFFFFF, 0xFF2D2D44); }
 
     public static int whiteTextOnAccent() { return 0xFFFFFFFF; }
 

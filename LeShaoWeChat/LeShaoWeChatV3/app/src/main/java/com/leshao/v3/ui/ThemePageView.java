@@ -478,8 +478,9 @@ public class ThemePageView {
                     }
                     int s = prefs.getInt("ls_monet_seed", 0xFFFF4298);
                     MonetColorEngine.Style st = MonetColorEngine.Style.fromIndex(fi);
-                    int[] palette = MonetColorEngine.generate(s, st);
-                    ThemeHook.applyMonetPalette(palette);
+                    int[] lightPalette = MonetColorEngine.generate(s, st);
+                    int[] darkPalette = MonetColorEngine.generateDark(s, st);
+                    ThemeHook.applyMonetPalette(lightPalette, darkPalette);
                     prefs.edit().putInt("ls_monet_style", fi).apply();
                     SubPageActivity.reloadThemePage();
                 });

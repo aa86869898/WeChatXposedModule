@@ -85,42 +85,56 @@ public class ThemeHook {
     public static void loadColors() {
         SharedPreferences p = ContextManager.getPrefs();
         if (p == null) return;
-        sActionBarBg    = p.getInt("ls_tc_actionbar_bg",       0xFF2D2D2D);
-        sActionBarTitle = p.getInt("ls_tc_actionbar_title",    0xFFFFFFFF);
-        sPageBg         = p.getInt("ls_tc_page_bg",            0xFFF5F5F5);
-        sChatBg         = p.getInt("ls_tc_chat_bg",            0xFFEDEDED);
-        sBubbleSelfBg   = p.getInt("ls_tc_bubble_self_bg",     0xFF95EC69);
-        sBubbleOtherBg  = p.getInt("ls_tc_bubble_other_bg",    0xFFFFFFFF);
-        sBubbleSelfText = p.getInt("ls_tc_bubble_self_text",   0xFF000000);
-        sBubbleOtherText= p.getInt("ls_tc_bubble_other_text",  0xFF000000);
-        sTabBg          = p.getInt("ls_tc_tab_bg",             0xFFF7F7F7);
-        sTabSelected    = p.getInt("ls_tc_tab_selected",       0xFFFF4298);
-        sTabUnselected  = p.getInt("ls_tc_tab_unselected",     0xFF999999);
-        sTextPrimary    = p.getInt("ls_tc_text_primary",       0xFF191919);
-        sTextSecondary  = p.getInt("ls_tc_text_secondary",     0xFF888888);
+        boolean dm = AppColors.isDarkMode();
+        sActionBarBg    = p.getInt(dm ? "ls_tc_actionbar_bg_dark" : "ls_tc_actionbar_bg",       dm ? 0xFF2D2D44 : 0xFF2D2D2D);
+        sActionBarTitle = p.getInt(dm ? "ls_tc_actionbar_title_dark" : "ls_tc_actionbar_title", dm ? 0xFFE8E8F0 : 0xFFFFFFFF);
+        sPageBg         = p.getInt(dm ? "ls_tc_page_bg_dark" : "ls_tc_page_bg",                 dm ? 0xFF1A1A2E : 0xFFF5F5F5);
+        sChatBg         = p.getInt(dm ? "ls_tc_chat_bg_dark" : "ls_tc_chat_bg",                 dm ? 0xFF202035 : 0xFFEDEDED);
+        sBubbleSelfBg   = p.getInt(dm ? "ls_tc_bubble_self_bg_dark" : "ls_tc_bubble_self_bg",   dm ? 0xFF2D8A4E : 0xFF95EC69);
+        sBubbleOtherBg  = p.getInt(dm ? "ls_tc_bubble_other_bg_dark" : "ls_tc_bubble_other_bg", dm ? 0xFF2D2D44 : 0xFFFFFFFF);
+        sBubbleSelfText = p.getInt(dm ? "ls_tc_bubble_self_text_dark" : "ls_tc_bubble_self_text",   dm ? 0xFFE8E8F0 : 0xFF000000);
+        sBubbleOtherText= p.getInt(dm ? "ls_tc_bubble_other_text_dark" : "ls_tc_bubble_other_text", dm ? 0xFFE8E8F0 : 0xFF000000);
+        sTabBg          = p.getInt(dm ? "ls_tc_tab_bg_dark" : "ls_tc_tab_bg",                   dm ? 0xFF252540 : 0xFFF7F7F7);
+        sTabSelected    = p.getInt(dm ? "ls_tc_tab_selected_dark" : "ls_tc_tab_selected",       dm ? 0xFFFF6098 : 0xFFFF4298);
+        sTabUnselected  = p.getInt(dm ? "ls_tc_tab_unselected_dark" : "ls_tc_tab_unselected",   dm ? 0xFF6A6A80 : 0xFF999999);
+        sTextPrimary    = p.getInt(dm ? "ls_tc_text_primary_dark" : "ls_tc_text_primary",       dm ? 0xFFE8E8F0 : 0xFF191919);
+        sTextSecondary  = p.getInt(dm ? "ls_tc_text_secondary_dark" : "ls_tc_text_secondary",   dm ? 0xFF9A9AB0 : 0xFF888888);
         sBubbleImagePath = p.getString("ls_bubble_image", null);
         sBubbleBitmap = null;
         LogWriter.log(TAG, "loadColors done");
     }
 
-    public static void applyMonetPalette(int[] palette) {
-        if (palette == null || palette.length < 15) return;
+    public static void applyMonetPalette(int[] light, int[] dark) {
+        if (light == null || light.length < 15 || dark == null || dark.length < 15) return;
         SharedPreferences p = ContextManager.getPrefs();
         if (p == null) return;
         p.edit()
-            .putInt("ls_tc_actionbar_bg",       palette[1])
-            .putInt("ls_tc_actionbar_title",    palette[14])
-            .putInt("ls_tc_page_bg",            palette[5])
-            .putInt("ls_tc_chat_bg",            palette[7])
-            .putInt("ls_tc_bubble_self_bg",     palette[0])
-            .putInt("ls_tc_bubble_other_bg",    palette[14])
-            .putInt("ls_tc_bubble_self_text",   palette[12])
-            .putInt("ls_tc_bubble_other_text",  palette[13])
-            .putInt("ls_tc_tab_bg",             palette[6])
-            .putInt("ls_tc_tab_selected",       palette[0])
-            .putInt("ls_tc_tab_unselected",     palette[13])
-            .putInt("ls_tc_text_primary",       palette[12])
-            .putInt("ls_tc_text_secondary",     palette[13])
+            .putInt("ls_tc_actionbar_bg",       light[1])
+            .putInt("ls_tc_actionbar_title",    light[14])
+            .putInt("ls_tc_page_bg",            light[5])
+            .putInt("ls_tc_chat_bg",            light[7])
+            .putInt("ls_tc_bubble_self_bg",     light[0])
+            .putInt("ls_tc_bubble_other_bg",    light[14])
+            .putInt("ls_tc_bubble_self_text",   light[12])
+            .putInt("ls_tc_bubble_other_text",  light[13])
+            .putInt("ls_tc_tab_bg",             light[6])
+            .putInt("ls_tc_tab_selected",       light[0])
+            .putInt("ls_tc_tab_unselected",     light[13])
+            .putInt("ls_tc_text_primary",       light[12])
+            .putInt("ls_tc_text_secondary",     light[13])
+            .putInt("ls_tc_actionbar_bg_dark",       dark[1])
+            .putInt("ls_tc_actionbar_title_dark",    dark[14])
+            .putInt("ls_tc_page_bg_dark",            dark[5])
+            .putInt("ls_tc_chat_bg_dark",            dark[7])
+            .putInt("ls_tc_bubble_self_bg_dark",     dark[0])
+            .putInt("ls_tc_bubble_other_bg_dark",    dark[14])
+            .putInt("ls_tc_bubble_self_text_dark",   dark[12])
+            .putInt("ls_tc_bubble_other_text_dark",  dark[13])
+            .putInt("ls_tc_tab_bg_dark",             dark[6])
+            .putInt("ls_tc_tab_selected_dark",       dark[0])
+            .putInt("ls_tc_tab_unselected_dark",     dark[13])
+            .putInt("ls_tc_text_primary_dark",       dark[12])
+            .putInt("ls_tc_text_secondary_dark",     dark[13])
             .apply();
         loadColors();
     }
