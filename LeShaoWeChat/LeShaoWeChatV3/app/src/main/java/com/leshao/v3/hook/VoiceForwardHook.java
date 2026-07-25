@@ -836,13 +836,7 @@ public class VoiceForwardHook {
                 java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             LogWriter.log(TAG, "SceneVoice: md5 copy ok");
 
-            // Step 5: ★ t(targetTalker, 34, duration, msgObj) → 写 DB
-            boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
-                    targetWxid, 34, duration, origE9);
-            LogWriter.log(TAG, "SceneVoice: DB t(talker,34," + duration + ",e9) → " + ok);
-            if (!ok) { LogWriter.log(TAG, "SceneVoice: DB write failed"); return false; }
-
-            // Step 6: y21.p0.kj().e() 刷新 → tl.t0后台线程自动捡起上传
+            // Step 5: y21.p0.kj().e() 刷新 → tl.t0自动发现voice2/XX/YY/msg_xxx.amr → b31.j/l上传
             Class<?> y21p0 = XposedHelpers.findClass("y21.p0", cl);
             Object q0 = XposedHelpers.callStaticMethod(y21p0, "kj");
             XposedHelpers.callMethod(q0, "e");
