@@ -30,6 +30,7 @@ public class ContactChangeLog {
     private static volatile boolean sEnabled = true;
     private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     private static final ConcurrentHashMap<String, ContactSnapshot> lastSnapshot = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Long> debounce = new ConcurrentHashMap<>();
     private static volatile boolean sFieldDumped = false;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
@@ -47,21 +48,6 @@ public class ContactChangeLog {
         }
 
         LogWriter.log(TAG, "hook START");
-
-        try {
-            Class<?> contactInfoUI = XposedHelpers.findClass(
-                "com.tencent.mm.plugin.profile.ui.ContactInfoUI", cl);
-
-            XposedBridge.hookAllMethods(contactInfoUI, "D2", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    detectChanges(param.thisObject);
-                }
-            });
-            LogWriter.log(TAG, "hook D2 OK");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "hook D2 FAIL: " + t.getClass().getSimpleName() + " " + t.getMessage());
-        }
 
         try {
             Class<?> contactInfoUI = XposedHelpers.findClass(
@@ -100,17 +86,22 @@ public class ContactChangeLog {
         try {
             Object contact = getContactField(activity);
             if (contact == null) {
-                LogWriter.log(TAG, "detect: contact=null, dumping activity fields...");
-                dumpObjectFields(activity, "Activity");
+                LogWriter.log(TAG, "detect: contact=null");
                 return;
             }
 
             String username = readStringField(contact, "field_username");
             if (username == null || username.isEmpty()) {
-                LogWriter.log(TAG, "detect: username empty, dumping contact fields...");
-                dumpObjectFields(contact, "Contact");
+                LogWriter.log(TAG, "detect: username empty");
                 return;
             }
+
+            long now = System.currentTimeMillis();
+            Long last = debounce.get(username);
+            if (last != null && (now - last) < 500) {
+                return;
+            }
+            debounce.put(username, now);
 
             String nickname = readStringField(contact, "field_nickname");
             String alias   = readStringField(contact, "field_alias");
@@ -126,7 +117,6 @@ public class ContactChangeLog {
             ContactSnapshot previous = lastSnapshot.get(username);
 
             if (previous != null) {
-                long now = System.currentTimeMillis();
                 compareAndRecord(now, username, nickname, "昵称", previous.nickname, current.nickname);
                 compareAndRecord(now, username, nickname, "备注", previous.remark, current.remark);
                 compareAndRecord(now, username, nickname, "微信号", previous.alias, current.alias);
