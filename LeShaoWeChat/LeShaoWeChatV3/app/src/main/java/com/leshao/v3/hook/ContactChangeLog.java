@@ -39,14 +39,11 @@ public class ContactChangeLog {
 
             Class<?> vClass = XposedHelpers.findClass(
                 "com.tencent.mm.plugin.messenger.foundation.v", cl);
-            LogWriter.log(TAG, "v class methods:");
-            for (java.lang.reflect.Method m : vClass.getDeclaredMethods()) {
-                LogWriter.log(TAG, "  v." + m.getName());
-            }
 
             XposedBridge.hookAllMethods(vClass, "b", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
+                    LogWriter.log(TAG, "[v.b] fired args=" + param.args.length);
                     try {
                         processModContact(param.args[0]);
                     } catch (Throwable t) {
@@ -54,6 +51,37 @@ public class ContactChangeLog {
                     }
                 }
             });
+
+            XposedBridge.hookAllMethods(vClass, "a", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    LogWriter.log(TAG, "[v.a] fired args=" + param.args.length);
+                }
+            });
+
+            try {
+                Class<?> gcs = XposedHelpers.findClass(
+                    "com.tencent.mm.plugin.getcontact.l11.h", cl);
+                XposedBridge.hookAllMethods(gcs, "a", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        if (param.args.length > 0 && param.args[0] instanceof String) {
+                            LogWriter.log(TAG, "[GetContact.a] queued: " + param.args[0]);
+                        }
+                    }
+                });
+                XposedBridge.hookAllMethods(gcs, "b", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        if (param.args.length > 0 && param.args[0] instanceof String) {
+                            LogWriter.log(TAG, "[GetContact.b] queued: " + param.args[0]);
+                        }
+                    }
+                });
+                LogWriter.log(TAG, "GetContactService hook ok");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "GetContactService not found: " + t.getMessage());
+            }
             LogWriter.log(TAG, "[v.b] hook ok");
 
             Class<?> storageClass = XposedHelpers.findClass(
