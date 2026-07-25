@@ -774,12 +774,12 @@ public class VoiceForwardHook {
     }
 
     /**
-     * 发送语音消息到目标会话 — 显示为语音气泡
+     * 发送语音消息到目标会话 — WeKit方案
      *
-     * y21.x0.r(talker, srcPath, duration) 内部:
-     *   ① g(talker,"amr_") → 创建 w0 记录
-     *   ② copyFile → 复制到 voice2 目录
-     *   ③ t(newName,duration,flag,null) → 创建 e9 + 写 DB
+     * g(target,"amr_") → 创建 w0，返回新文件名
+     * 手动复制文件到 voice2/msg_{newName}.amr
+     * t(newName, duration, 0, null) → 创建 e9 + 写 DB
+     * b31.w 上传
      */
     private static boolean sendViaSceneVoice(Activity act, ClassLoader cl, String targetWxid, String voiceFile, int duration, Object origE9) {
         try {
@@ -787,22 +787,47 @@ public class VoiceForwardHook {
 
             Class<?> y21x0 = XposedHelpers.findClass("y21.x0", cl);
 
-            // r()第二参数要文件名(非完整路径)，内部Mj()会拼voice2目录
-            String fileName = new java.io.File(voiceFile).getName();
-            LogWriter.log(TAG, "SceneVoice: fileName=" + fileName);
-            String result = (String) XposedHelpers.callStaticMethod(y21x0, "r",
-                    targetWxid, fileName, duration);
-            LogWriter.log(TAG, "SceneVoice: r(" + targetWxid + "," + fileName + "," + duration + ") → " + result);
-            if (result == null) { LogWriter.log(TAG, "SceneVoice: r() null"); return false; }
+            // Step 1: g(talker, "amr_") → 创建 w0 + 生成新文件名(VoiceHelper.getVoiceFileName)
+            String newName = (String) XposedHelpers.callStaticMethod(y21x0, "g", targetWxid, "amr_");
+            LogWriter.log(TAG, "SceneVoice: g() → " + newName);
+            if (newName == null) { LogWriter.log(TAG, "SceneVoice: g() null"); return false; }
 
-            // b31.w 上传语音文件
-            trySendViaB31(cl, targetWxid, voiceFile, duration);
+            // Step 2: 手动复制文件到 voice2/msg_{newName}.amr (WeKit做法，不依赖Mj/Nj)
+            String voice2Dir = getVoice2Dir(voiceFile);
+            String destPath = voice2Dir + "msg_" + newName + ".amr";
+            LogWriter.log(TAG, "SceneVoice: copy " + voiceFile + " → " + destPath);
+            java.io.File srcFile = new java.io.File(voiceFile);
+            java.io.File destFile = new java.io.File(destPath);
+            destFile.getParentFile().mkdirs();
+            java.io.FileInputStream fis = new java.io.FileInputStream(srcFile);
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(destFile);
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = fis.read(buf)) > 0) fos.write(buf, 0, len);
+            fis.close();
+            fos.close();
+            LogWriter.log(TAG, "SceneVoice: copy ok " + destFile.length() + " bytes");
+
+            // Step 3: t(newName, duration, 0, null) → VoiceLogic.setVoice → v0.d()测时长 → 创建 e9 + 写 DB
+            boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
+                    newName, duration, 0, null);
+            LogWriter.log(TAG, "SceneVoice: t(" + newName + "," + duration + ") → " + ok);
+            if (!ok) { LogWriter.log(TAG, "SceneVoice: t() false"); return false; }
+
+            // Step 4: b31.w 上传语音文件
+            trySendViaB31(cl, targetWxid, newName, duration);
             return true;
 
         } catch (Throwable t) {
             LogWriter.log(TAG, "SceneVoice error: " + t.getClass().getSimpleName() + " " + t.getMessage());
             return false;
         }
+    }
+
+    private static String getVoice2Dir(String voiceFile) {
+        int idx = voiceFile.indexOf("/voice2/");
+        if (idx >= 0) return voiceFile.substring(0, idx + 8);
+        return voiceFile.substring(0, voiceFile.lastIndexOf('/') + 1);
     }
 
     private static Object sMsgStorage;
