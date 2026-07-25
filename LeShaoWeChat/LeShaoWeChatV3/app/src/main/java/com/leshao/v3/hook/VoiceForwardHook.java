@@ -845,7 +845,7 @@ public class VoiceForwardHook {
             boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
                     newName, duration, 0, null);
             LogWriter.log(TAG, "SceneVoice: t(" + newName + "," + duration + ",0,null) → " + ok);
-            if (!ok) { LogWriter.log(TAG, "SceneVoice: t() false"); return false; }
+            if (!ok) LogWriter.log(TAG, "SceneVoice: t() false, continuing (WeKit ignores too)");
 
             // Step 5: b31.w 上传语音文件
             trySendViaB31(cl, targetWxid, newName, duration);
