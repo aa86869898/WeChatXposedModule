@@ -844,7 +844,7 @@ public class VoiceForwardHook {
             // Step 4: t(newName, duration, 0, null) → VoiceLogic.setVoice → v0.d()测时长 → 创建 e9 + 写 DB
             boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
                     newName, duration, 0, null);
-            LogWriter.log(TAG, "SceneVoice: t(" + newName + "," + duration + ") → " + ok);
+            LogWriter.log(TAG, "SceneVoice: t(" + newName + "," + duration + ",0,null) → " + ok);
             if (!ok) { LogWriter.log(TAG, "SceneVoice: t() false"); return false; }
 
             // Step 5: b31.w 上传语音文件
