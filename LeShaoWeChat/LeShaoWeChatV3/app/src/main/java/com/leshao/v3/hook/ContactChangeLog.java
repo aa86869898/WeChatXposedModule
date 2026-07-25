@@ -39,6 +39,10 @@ public class ContactChangeLog {
 
             Class<?> vClass = XposedHelpers.findClass(
                 "com.tencent.mm.plugin.messenger.foundation.v", cl);
+            LogWriter.log(TAG, "v class methods:");
+            for (java.lang.reflect.Method m : vClass.getDeclaredMethods()) {
+                LogWriter.log(TAG, "  v." + m.getName());
+            }
 
             XposedBridge.hookAllMethods(vClass, "b", new XC_MethodHook() {
                 @Override
@@ -304,18 +308,23 @@ public class ContactChangeLog {
         }
     }
 
+    private static File sLogFile;
+
     private static File getLogFile() {
+        if (sLogFile != null) return sLogFile;
         Context ctx = ContextManager.getAppContext();
         if (ctx != null) {
             try {
                 File dir = ctx.getExternalFilesDir(null);
                 if (dir != null) {
                     dir.mkdirs();
-                    return new File(dir, "contact_changes.json");
+                    sLogFile = new File(dir, "contact_changes.json");
+                    return sLogFile;
                 }
             } catch (Throwable ignored) {}
         }
-        return new File("/sdcard/LeShaoV3Logs/contact_changes.json");
+        sLogFile = new File("/sdcard/Android/data/com.tencent.mm/files/contact_changes.json");
+        return sLogFile;
     }
 
     private static class ContactSnapshot {

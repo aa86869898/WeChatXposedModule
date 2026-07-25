@@ -1,6 +1,7 @@
 package com.leshao.v3.ui;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.view.Gravity;
@@ -64,6 +65,31 @@ public class ContactChangeLogPageView {
         }
 
         body.addView(card);
+
+        LinearLayout btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setPadding(0, (int)(12*d), 0, 0);
+        btnRow.setGravity(Gravity.CENTER);
+
+        TextView clearBtn = new TextView(ctx);
+        clearBtn.setText("清除记录");
+        clearBtn.setTextSize(14);
+        clearBtn.setTextColor(AppColors.accent());
+        clearBtn.setPadding((int)(20*d), (int)(10*d), (int)(20*d), (int)(10*d));
+        clearBtn.setOnClickListener(v -> {
+            new AlertDialog.Builder(parentAct)
+                .setTitle("确认清除")
+                .setMessage("确定要清除所有通讯录变更记录吗？")
+                .setPositiveButton("清除", (dialog, which) -> {
+                    ContactChangeLog.clearRecords();
+                    if (parentAct != null) parentAct.recreate();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+        });
+        btnRow.addView(clearBtn);
+        body.addView(btnRow);
+
         return body;
     }
 
