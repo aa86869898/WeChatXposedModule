@@ -787,7 +787,7 @@ public class VoiceForwardHook {
             // 创建新的语音消息
             Object newMsg = XposedHelpers.newInstance(e9Class, targetWxid);
             XposedHelpers.callMethod(newMsg, "A1", 34);   // setType=语音(34)
-            XposedHelpers.callMethod(newMsg, "L1", System.currentTimeMillis());
+            XposedHelpers.callMethod(newMsg, "e1", System.currentTimeMillis()); // setCreateTime
 
             // 设 talker
             try { XposedHelpers.setObjectField(newMsg, "field_talker", targetWxid); } catch (Throwable ignored) {}
