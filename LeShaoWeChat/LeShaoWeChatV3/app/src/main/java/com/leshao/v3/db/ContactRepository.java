@@ -190,7 +190,7 @@ public class ContactRepository {
         return DatabaseProvider.getDatabase();
     }
 
-    // ===== Strategy A: WCDB SQLiteDatabase.openDatabase 直接打开加密库 =====
+    // ===== Strategy A: ka5.f.s 打开 + Cursor 原生 API + type=0 & verifyFlag>0 =====
 
     private static boolean loadViaDirectDb() {
         ClassLoader cl = ContextManager.getClassLoader();
@@ -204,49 +204,24 @@ public class ContactRepository {
             long uin = Long.parseLong(uv.toString());
             LogWriter.log(TAG, "Strategy A: uin=" + uin);
 
-            // 1. IMEI
             String imei = "1234567890ABCDEF";
             try {
                 String s = (String) cl.loadClass("wo.w0").getMethod("g", boolean.class).invoke(null, true);
-                if (s != null && !s.isEmpty() && !"1234567890ABCDEF".equals(s)) imei = s;
+                if (s != null && !s.isEmpty()) imei = s;
             } catch (Throwable e) {}
 
-            // 2. dbPath
             String dbPath = getDbPath(cl, ctx, uin);
             if (dbPath == null) return false;
-            LogWriter.log(TAG, "Strategy A: dbPath=" + dbPath);
-
-            // 3. Password: md5(imei + uin).substring(0,7) → WCDB 需要 byte[]
             String pwd = md5(imei + String.valueOf(uin)).substring(0, 7);
-            LogWriter.log(TAG, "Strategy A: pwd(censored), opening via WCDB SQLiteDatabase...");
 
-            // 4. 用 ka5.f.s 打开加密数据库
-            Object rawDb = null;
-            try {
-                Method sMethod = cl.loadClass("ka5.f").getMethod("s",
-                    String.class, String.class, int.class, boolean.class);
-                rawDb = sMethod.invoke(null, dbPath, pwd, 0, true);
-            } catch (Throwable e) {
-                LogWriter.log(TAG, "Strategy A: ka5.f.s failed: " + e.getMessage());
-                return false;
-            }
-            if (rawDb == null) { LogWriter.log(TAG, "Strategy A: ka5.f.s returned null"); return false; }
+            // 打开数据库
+            Class<?> ka5f = cl.loadClass("ka5.f");
+            Object db = XposedHelpers.callStaticMethod(ka5f, "s", dbPath, pwd, 0, true);
+            if (db == null) { LogWriter.log(TAG, "Strategy A: ka5.f.s returned null"); return false; }
 
-            // 5. Validate
-            try {
-                Object cursor = rawDb.getClass().getMethod("u", String.class, String[].class)
-                    .invoke(rawDb, "SELECT name FROM sqlite_master WHERE type='table' AND name='rcontact'", null);
-                boolean ok = (Boolean) cursor.getClass().getMethod("moveToFirst").invoke(cursor);
-                cursor.getClass().getMethod("close").invoke(cursor);
-                if (!ok) { LogWriter.log(TAG, "Strategy A: rcontact not found"); return false; }
-            } catch (Throwable e) {
-                LogWriter.log(TAG, "Strategy A: validate failed: " + e.getMessage());
-                return false;
-            }
-
-            LogWriter.log(TAG, "Strategy A: WCDB SQLiteDatabase opened, querying...");
-            boolean result = queryContactsWcdb(rawDb);
-            closeWcdb(rawDb);
+            LogWriter.log(TAG, "Strategy A: DB opened via ka5.f.s");
+            boolean result = queryContactsWcdb(db);
+            try { XposedHelpers.callMethod(db, "c"); } catch (Throwable ignored) {}
             return result;
         } catch (Throwable e) {
             LogWriter.log(TAG, "Strategy A ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
@@ -254,101 +229,71 @@ public class ContactRepository {
         }
     }
 
-    private static void closeWcdb(Object db) {
-        try { db.getClass().getMethod("c").invoke(db); } catch (Throwable ignored) {}
-    }
-
     private static boolean queryContactsWcdb(Object db) {
         List<Contact> all = new ArrayList<>();
         List<Contact> friends = new ArrayList<>();
         List<Contact> groups = new ArrayList<>();
+        Cursor c = null;
 
         try {
-            // 好友: type=0 + verifyFlag>0 (verified real friends only)
-            String friendsSql = "SELECT username, nickname, alias, conRemark, type, verifyFlag, showHead"
-                + " FROM rcontact"
+            // 好友: type=0 + verifyFlag>0 = 真实好友, 排除fake_/公众号/群聊
+            String friendsSql = "SELECT * FROM rcontact"
                 + " WHERE type = 0 AND verifyFlag > 0 AND deleteFlag = 0"
+                + " AND username NOT LIKE '%@chatroom'"
+                + " AND username NOT LIKE 'gh_%'"
                 + " ORDER BY CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END,"
                 + " nickname";
 
-            Object cursor = db.getClass().getMethod("u", String.class, String[].class)
-                .invoke(db, friendsSql, null);
-
-            int ciU = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "username");
-            int ciN = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "nickname");
-            int ciA = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "alias");
-            int ciR = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "conRemark");
-            int ciT = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "type");
-            int ciV = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "verifyFlag");
-            int ciSh = -1;
-            try { ciSh = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "showHead"); } catch (Throwable ignored) {}
-
-            while ((Boolean) cursor.getClass().getMethod("moveToNext").invoke(cursor)) {
-                String wxid = strFromCursor(cursor, ciU);
+            c = (Cursor) XposedHelpers.callMethod(db, "u", friendsSql, null);
+            while (c.moveToNext()) {
+                String wxid = c.getString(c.getColumnIndex("username"));
                 if (wxid == null || wxid.isEmpty()) continue;
-                String nickname = strFromCursor(cursor, ciN);
-                String alias = strFromCursor(cursor, ciA);
-                String remark = strFromCursor(cursor, ciR);
-                int type = intFromCursor(cursor, ciT);
-                int verifyFlag = intFromCursor(cursor, ciV);
-
-                if (categorize(wxid, type) == CAT_OFFICIAL) continue;
-                if (skipWxid(wxid)) continue;
+                int type = c.getInt(c.getColumnIndex("type"));
+                int verifyFlag = c.getInt(c.getColumnIndex("verifyFlag"));
+                String nickname = c.getString(c.getColumnIndex("nickname"));
+                String alias = c.getString(c.getColumnIndex("alias"));
+                String remark = c.getString(c.getColumnIndex("conRemark"));
 
                 Contact contact = new Contact(wxid, nickname, remark, alias, type, 0, 0);
                 contact.verifyFlag = verifyFlag;
                 all.add(contact);
                 friends.add(contact);
             }
-            cursor.getClass().getMethod("close").invoke(cursor);
-            cursor = null;
+            c.close();
+            c = null;
 
             // 群聊
             String groupsSql = "SELECT username, nickname, conRemark, type, createTime"
                 + " FROM rcontact"
                 + " WHERE username LIKE '%@chatroom' AND deleteFlag = 0"
-                + " ORDER BY nickname ASC";
+                + " ORDER BY nickname";
 
-            cursor = db.getClass().getMethod("u", String.class, String[].class)
-                .invoke(db, groupsSql, null);
-
-            ciU = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "username");
-            ciN = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "nickname");
-            ciR = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "conRemark");
-            ciT = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "type");
-
-            while ((Boolean) cursor.getClass().getMethod("moveToNext").invoke(cursor)) {
-                String wxid = strFromCursor(cursor, ciU);
+            c = (Cursor) XposedHelpers.callMethod(db, "u", groupsSql, null);
+            while (c.moveToNext()) {
+                String wxid = c.getString(c.getColumnIndex("username"));
                 if (wxid == null || wxid.isEmpty()) continue;
-                String nickname = strFromCursor(cursor, ciN);
-                String remark = strFromCursor(cursor, ciR);
-                int type = intFromCursor(cursor, ciT);
+                int type = c.getInt(c.getColumnIndex("type"));
+                String nickname = c.getString(c.getColumnIndex("nickname"));
+                String remark = c.getString(c.getColumnIndex("conRemark"));
 
                 Contact contact = new Contact(wxid, nickname, remark, null, type, 0, 0);
                 all.add(contact);
                 groups.add(contact);
             }
-            cursor.getClass().getMethod("close").invoke(cursor);
+            c.close();
 
-            LogWriter.log(TAG, "queryContactsWcdb friends=" + friends.size()
+            LogWriter.log(TAG, "queryContactsWcdb: friends=" + friends.size()
                 + " groups=" + groups.size() + " total=" + all.size());
 
             if (all.isEmpty()) return false;
-            sAllContacts = all;
-            sFriends = friends;
-            sGroups = groups;
+            sAllContacts = all; sFriends = friends; sGroups = groups;
             return true;
         } catch (Throwable e) {
             LogWriter.log(TAG, "queryContactsWcdb ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
             return false;
+        } finally {
+            if (c != null) try { c.close(); } catch (Throwable ignored) {}
         }
-    }
-
-    private static String strFromCursor(Object cursor, int index) throws Exception {
-        return (String) cursor.getClass().getMethod("getString", int.class).invoke(cursor, index);
-    }
-    private static int intFromCursor(Object cursor, int index) throws Exception {
-        return (Integer) cursor.getClass().getMethod("getInt", int.class).invoke(cursor, index);
     }
 
     private static String computeDisplayName(String remark, String alias, String nick, String wxid) {
