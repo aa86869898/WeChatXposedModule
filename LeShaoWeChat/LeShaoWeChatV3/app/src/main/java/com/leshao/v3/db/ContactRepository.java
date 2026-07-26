@@ -168,7 +168,10 @@ public class ContactRepository {
             + " WHERE deleteFlag = 0"
             + " AND username NOT LIKE 'gh_%'"
             + " AND username NOT LIKE 'qqmail_%'"
-            + " AND (username LIKE '%@chatroom' OR type = 4)"
+            + " AND username NOT LIKE '%@openim'"
+            + " AND username NOT LIKE '%@lbsroom'"
+            + " AND type NOT IN (1, 33, 2049)"
+            + " AND type > 0"
             + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, username");
     }
 
@@ -331,9 +334,13 @@ public class ContactRepository {
                 + " FROM rcontact r"
                 + " LEFT JOIN contact c ON r.username = c.username"
                 + " WHERE r.deleteFlag = 0"
+                + " AND r.username NOT LIKE 'gh_%'"
+                + " AND r.username NOT LIKE 'qqmail_%'"
                 + " AND r.username NOT LIKE '%@openim'"
-                + " AND (r.username LIKE '%@chatroom'"
-                + "   OR r.type = 4)"
+                + " AND r.username NOT LIKE '%@lbsroom'"
+                + " AND r.username NOT LIKE '%@im.chatroom'"
+                + " AND r.type NOT IN (1, 33, 2049)"
+                + " AND r.type > 0"
                 + " ORDER BY CASE WHEN r.username LIKE '%@chatroom' THEN 1 ELSE 0 END, r.nickname";
             Cursor c = (Cursor) u.invoke(db, sql, null);
             if (c == null) return false;
@@ -504,18 +511,14 @@ public class ContactRepository {
             String wxid = resolveObjWxid(conv);
             if (skipWxid(wxid)) return false;
 
+            if (!wxid.endsWith("@chatroom")) return false;
+
             String name = resolveObjName(conv);
             if (name == null || name.isEmpty()) name = wxid;
 
-            boolean isGroup = wxid.endsWith("@chatroom");
-            boolean excluded = !isGroup && (wxid.startsWith("gh_") || wxid.endsWith("@openim")
-                || wxid.contains("@lbsroom") || wxid.startsWith("qqmail_")
-                || wxid.contains("@im.chatroom"));
-            if (excluded) return false;
-
-            Contact c = new Contact(wxid, name, name, wxid, isGroup ? 1 : 0);
+            Contact c = new Contact(wxid, name, name, wxid, 1);
             all.add(c);
-            if (isGroup) groups.add(c);
+            groups.add(c);
             return true;
         } catch (Throwable e) { return false; }
     }
