@@ -81,9 +81,11 @@ public class ContactRepository {
         if ("filehelper".equals(wxid)) return CAT_SPECIAL;
         if (wxid.endsWith("@chatroom")) return CAT_GROUP;
         if (wxid.startsWith("gh_")) return CAT_OFFICIAL;
+        if (wxid.endsWith("@openim")) return CAT_OPENIM;
+        if (wxid.endsWith("@app") || wxid.endsWith("@talkroom")
+            || wxid.endsWith("@lbsroom") || wxid.endsWith("@stranger")) return CAT_EXCLUDED;
         if (type == 33) return CAT_SYSTEM;
         if (type == 0) return CAT_FRIEND;
-        if (wxid.endsWith("@openim")) return CAT_OPENIM;
         return CAT_EXCLUDED;
     }
 
