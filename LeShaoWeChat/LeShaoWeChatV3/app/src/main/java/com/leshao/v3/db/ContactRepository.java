@@ -82,11 +82,9 @@ public class ContactRepository {
         if (wxid.endsWith("@chatroom")) return CAT_GROUP;
         if (wxid.startsWith("gh_")) return CAT_OFFICIAL;
         if (type == 33) return CAT_SYSTEM;
-        if (type == 0) return CAT_FRIEND;
-        if (type == 2) return CAT_STRANGER;
         if (type == 4) return CAT_EXCLUDED;
         if (wxid.endsWith("@openim")) return CAT_OPENIM;
-        return CAT_EXCLUDED;
+        return CAT_FRIEND;
     }
 
     private static final int CAT_FRIEND = 0;
@@ -163,7 +161,7 @@ public class ContactRepository {
         return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag"
             + " FROM rcontact"
             + " WHERE deleteFlag = 0"
-            + " AND (username LIKE '%@chatroom' OR type = 0)"
+            + " AND username NOT LIKE 'gh_%'"
             + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, username");
     }
 
@@ -324,7 +322,7 @@ public class ContactRepository {
             String sql = "SELECT username, alias, conRemark, nickname, type, createTime"
                 + " FROM rcontact"
                 + " WHERE deleteFlag = 0"
-                + " AND (username LIKE '%@chatroom' OR type = 0)"
+                + " AND username NOT LIKE 'gh_%'"
                 + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, nickname";
             Cursor c = (Cursor) u.invoke(db, sql, null);
             if (c == null) return false;
