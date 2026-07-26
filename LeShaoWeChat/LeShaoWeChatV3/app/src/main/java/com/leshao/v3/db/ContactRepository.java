@@ -190,7 +190,7 @@ public class ContactRepository {
         return DatabaseProvider.getDatabase();
     }
 
-    // ===== Strategy A: ka5.f.s 打开 WCDB 加密数据库，type=4好友 =====
+    // ===== Strategy A: WCDB SQLiteDatabase.openDatabase 直接打开加密库 =====
 
     private static boolean loadViaDirectDb() {
         ClassLoader cl = ContextManager.getClassLoader();
@@ -210,42 +210,50 @@ public class ContactRepository {
                 String s = (String) cl.loadClass("wo.w0").getMethod("g", boolean.class).invoke(null, true);
                 if (s != null && !s.isEmpty() && !"1234567890ABCDEF".equals(s)) imei = s;
             } catch (Throwable e) {}
-            LogWriter.log(TAG, "Strategy A: imei=" + imei);
 
-            // 2. dbPath: mp0.b.X() + MicroMsg/ + hm0.b0.e(int uin) + /EnMicroMsg.db
+            // 2. dbPath
             String dbPath = getDbPath(cl, ctx, uin);
             if (dbPath == null) return false;
             LogWriter.log(TAG, "Strategy A: dbPath=" + dbPath);
 
-            // 3. Password: md5(imei + uin).substring(0, 7)
+            // 3. Password: md5(imei + uin).substring(0,7) → WCDB 需要 byte[]
             String pwd = md5(imei + String.valueOf(uin)).substring(0, 7);
-            LogWriter.log(TAG, "Strategy A: pwd(censored) calculated, opening...");
+            LogWriter.log(TAG, "Strategy A: pwd(censored), opening via WCDB SQLiteDatabase...");
 
-            // 4. Open via ka5.f.s(String dbPath, String pwd, int flags, boolean)
+            // 4. 用 WeChat WCDB 的 SQLiteDatabase.openDatabase(dbPath, byte[] password, factory, flags)
+            Class<?> wcdbDb = cl.loadClass("com.tencent.wcdb.database.SQLiteDatabase");
             Object rawDb = null;
             try {
-                Method sMethod = cl.loadClass("ka5.f").getMethod("s",
-                    String.class, String.class, int.class, boolean.class);
-                rawDb = sMethod.invoke(null, dbPath, pwd, 0, true);
+                // openDatabase(String path, byte[] password, CursorFactory factory, int flags)
+                rawDb = wcdbDb.getMethod("openDatabase",
+                    String.class, byte[].class, Object.class, int.class)
+                    .invoke(null, dbPath, pwd.getBytes("UTF-8"), null, 1 /* OPEN_READONLY */);
             } catch (Throwable e) {
-                LogWriter.log(TAG, "Strategy A: ka5.f.s failed: " + e.getMessage());
-                return false;
+                try {
+                    // openDatabase(String path, byte[] password, CursorFactory factory, int flags, DatabaseErrorHandler)
+                    rawDb = wcdbDb.getMethod("openDatabase",
+                        String.class, byte[].class, Object.class, int.class, Object.class)
+                        .invoke(null, dbPath, pwd.getBytes("UTF-8"), null, 1, null);
+                } catch (Throwable e2) {
+                    LogWriter.log(TAG, "Strategy A: WCDB openDatabase failed: " + e2.getMessage());
+                    return false;
+                }
             }
-            if (rawDb == null) { LogWriter.log(TAG, "Strategy A: ka5.f.s returned null"); return false; }
+            if (rawDb == null) { LogWriter.log(TAG, "Strategy A: openDatabase returned null"); return false; }
 
-            // 5. Validate: check if rcontact exists
+            // 5. Validate
             try {
-                Object checkCursor = rawDb.getClass().getMethod("u", String.class, String[].class)
+                Object cursor = rawDb.getClass().getMethod("rawQuery", String.class, String[].class)
                     .invoke(rawDb, "SELECT name FROM sqlite_master WHERE type='table' AND name='rcontact'", null);
-                boolean ok = (Boolean) checkCursor.getClass().getMethod("moveToFirst").invoke(checkCursor);
-                checkCursor.getClass().getMethod("close").invoke(checkCursor);
-                if (!ok) { LogWriter.log(TAG, "Strategy A: rcontact table not found"); return false; }
+                boolean ok = (Boolean) cursor.getClass().getMethod("moveToFirst").invoke(cursor);
+                cursor.getClass().getMethod("close").invoke(cursor);
+                if (!ok) { LogWriter.log(TAG, "Strategy A: rcontact not found"); return false; }
             } catch (Throwable e) {
                 LogWriter.log(TAG, "Strategy A: validate failed: " + e.getMessage());
                 return false;
             }
 
-            LogWriter.log(TAG, "Strategy A: DB opened via ka5.f.s, querying...");
+            LogWriter.log(TAG, "Strategy A: WCDB SQLiteDatabase opened, querying...");
             boolean result = queryContactsWcdb(rawDb);
             closeWcdb(rawDb);
             return result;
@@ -256,7 +264,7 @@ public class ContactRepository {
     }
 
     private static void closeWcdb(Object db) {
-        try { db.getClass().getMethod("c").invoke(db); } catch (Throwable ignored) {}
+        try { db.getClass().getMethod("close").invoke(db); } catch (Throwable ignored) {}
     }
 
     private static boolean queryContactsWcdb(Object db) {
@@ -265,14 +273,14 @@ public class ContactRepository {
         List<Contact> groups = new ArrayList<>();
 
         try {
-            // 好友: type=4 (文档确认) + deleteFlag=0
+            // 好友: type=0 + verifyFlag>0 (verified real friends only)
             String friendsSql = "SELECT username, nickname, alias, conRemark, type, verifyFlag, showHead"
                 + " FROM rcontact"
                 + " WHERE type = 0 AND verifyFlag > 0 AND deleteFlag = 0"
                 + " ORDER BY CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END,"
                 + " nickname";
 
-            Object cursor = db.getClass().getMethod("u", String.class, String[].class)
+            Object cursor = db.getClass().getMethod("rawQuery", String.class, String[].class)
                 .invoke(db, friendsSql, null);
 
             int ciU = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "username");
@@ -292,7 +300,6 @@ public class ContactRepository {
                 String remark = strFromCursor(cursor, ciR);
                 int type = intFromCursor(cursor, ciT);
                 int verifyFlag = intFromCursor(cursor, ciV);
-                int showHead = ciSh >= 0 ? intFromCursor(cursor, ciSh) : 32;
 
                 if (categorize(wxid, type) == CAT_OFFICIAL) continue;
                 if (skipWxid(wxid)) continue;
@@ -305,15 +312,13 @@ public class ContactRepository {
             cursor.getClass().getMethod("close").invoke(cursor);
             cursor = null;
 
-            LogWriter.log(TAG, "queryContactsWcdb friends=" + friends.size());
-
-            // 群聊: username LIKE '%@chatroom'
+            // 群聊
             String groupsSql = "SELECT username, nickname, conRemark, type, createTime"
                 + " FROM rcontact"
                 + " WHERE username LIKE '%@chatroom' AND deleteFlag = 0"
                 + " ORDER BY nickname ASC";
 
-            cursor = db.getClass().getMethod("u", String.class, String[].class)
+            cursor = db.getClass().getMethod("rawQuery", String.class, String[].class)
                 .invoke(db, groupsSql, null);
 
             ciU = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "username");
@@ -328,14 +333,14 @@ public class ContactRepository {
                 String remark = strFromCursor(cursor, ciR);
                 int type = intFromCursor(cursor, ciT);
 
-                String display = computeDisplayName(remark, null, nickname, wxid);
                 Contact contact = new Contact(wxid, nickname, remark, null, type, 0, 0);
                 all.add(contact);
                 groups.add(contact);
             }
             cursor.getClass().getMethod("close").invoke(cursor);
 
-            LogWriter.log(TAG, "queryContactsWcdb groups=" + groups.size() + " total=" + all.size());
+            LogWriter.log(TAG, "queryContactsWcdb friends=" + friends.size()
+                + " groups=" + groups.size() + " total=" + all.size());
 
             if (all.isEmpty()) return false;
             sAllContacts = all;
@@ -414,99 +419,6 @@ public class ContactRepository {
         } catch (Throwable e) {
             return null;
         }
-    }
-
-    private static Object openKa5Db(ClassLoader cl, String dbPath, String password) {
-        try {
-            Class<?> ka5f = cl.loadClass("ka5.f");
-            Method s = ka5f.getDeclaredMethod("s",
-                    String.class, String.class, int.class, boolean.class);
-            Object db = s.invoke(null, dbPath, password, 0, true);
-            if (db == null) return null;
-
-            // 验证：查询 sqlite_master 确认 rcontact 表存在
-            Method u = db.getClass().getDeclaredMethod("u", String.class, String[].class);
-            Cursor c = (Cursor) u.invoke(db,
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='rcontact'",
-                    null);
-            if (c != null && c.moveToFirst()) {
-                c.close();
-                LogWriter.log(TAG, "Strategy A: DB opened, rcontact table confirmed");
-                return db;
-            }
-            if (c != null) c.close();
-            // 密码不对，关闭这个库
-            try { db.getClass().getMethod("c").invoke(db); } catch (Throwable ignored) {}
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "Strategy A: openKa5Db failed: " + e.getClass().getSimpleName());
-        }
-        return null;
-    }
-
-    // ===== 好友过滤: type=0=好友, type=2=被删, type=4=拉黑 =====
-
-    private static boolean queryViaKa5(Object db) {
-        try {
-            Method u = db.getClass().getDeclaredMethod("u", String.class, String[].class);
-
-            String sql = "SELECT username, alias, conRemark, nickname, type, createTime"
-                + " FROM rcontact"
-                + " WHERE deleteFlag = 0"
-                + " AND type = 0"
-                + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, nickname";
-            Cursor c = (Cursor) u.invoke(db, sql, null);
-            if (c == null) return false;
-
-            List<Contact> all = new ArrayList<>();
-            List<Contact> friends = new ArrayList<>();
-            List<Contact> groups = new ArrayList<>();
-
-            int ciU = c.getColumnIndex("username");
-            int ciA = c.getColumnIndex("alias");
-            int ciR = c.getColumnIndex("conRemark");
-            int ciN = c.getColumnIndex("nickname");
-            int ciT = c.getColumnIndex("type");
-            int ciCr = c.getColumnIndex("createTime");
-
-            while (c.moveToNext()) {
-                String wxid = c.getString(ciU);
-                if (wxid == null || wxid.isEmpty()) continue;
-                int type = c.getInt(ciT);
-
-                int cat = categorize(wxid, type);
-                if (cat == CAT_OFFICIAL || cat == CAT_EXCLUDED || cat == CAT_SPECIAL) continue;
-
-                String name = c.getString(ciR);
-                if (name == null || name.isEmpty()) name = c.getString(ciA);
-                if (name == null || name.isEmpty()) name = c.getString(ciN);
-                if (name == null || name.isEmpty()) name = wxid;
-
-                long createTime = ciCr >= 0 ? c.getLong(ciCr) : 0;
-                Contact contact = new Contact(wxid, name, name, wxid, type, 0, createTime);
-                all.add(contact);
-                if (cat == CAT_GROUP) groups.add(contact);
-                else friends.add(contact);
-            }
-            c.close();
-
-            LogWriter.log(TAG, "Strategy A: query OK, all=" + all.size()
-                + " f=" + friends.size() + " g=" + groups.size());
-
-            if (all.isEmpty()) return false;
-            sAllContacts = all; sFriends = friends; sGroups = groups;
-            return true;
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "Strategy A: query ERROR: " + e.getClass().getSimpleName()
-                + ": " + e.getMessage());
-            return false;
-        }
-    }
-
-    private static void closeKa5Db(Object db) {
-        try {
-            Method c = db.getClass().getDeclaredMethod("c");
-            c.invoke(db);
-        } catch (Throwable ignored) {}
     }
 
     private static String md5(String input) {
@@ -1011,12 +923,18 @@ public class ContactRepository {
                 }
 
                 String[] imeiCandidates = getImeiCandidates(cl);
+                Class<?> wcdbDb = cl.loadClass("com.tencent.wcdb.database.SQLiteDatabase");
                 for (String imei : imeiCandidates) {
                     if (imei == null || imei.isEmpty()) continue;
                     String password = calcPassword(cl, imei, uin);
                     if (password == null || password.length() != 7) continue;
 
-                    Object db = openKa5Db(cl, dbPath, password);
+                    Object db = null;
+                    try {
+                        db = wcdbDb.getMethod("openDatabase",
+                            String.class, byte[].class, Object.class, int.class)
+                            .invoke(null, dbPath, password.getBytes("UTF-8"), null, 1);
+                    } catch (Throwable e) {}
                     if (db != null) {
                         sDirDb = db;
                         LogWriter.log(TAG, "ensureDirDb OK");
