@@ -150,51 +150,68 @@ public class SettingsInjectProvider extends ContentProvider {
     private static View buildPluginSection(Activity activity, float d) {
         Context ctx = activity;
 
-        LinearLayout card = new LinearLayout(ctx);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(0, 0, 0, (int)(16 * d));
-        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(-1, -2);
-        cardLp.setMargins((int)(16 * d), (int)(12 * d), (int)(16 * d), 0);
-        card.setLayoutParams(cardLp);
+        // 外层容器，透明无背景，紧贴设置列表风格
+        LinearLayout container = new LinearLayout(ctx);
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setPadding((int)(16 * d), (int)(4 * d), (int)(16 * d), (int)(4 * d));
+        container.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        container.setClickable(true);
+        container.setFocusable(true);
+        container.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
 
-        android.graphics.drawable.GradientDrawable cardBg = new android.graphics.drawable.GradientDrawable();
-        cardBg.setCornerRadius(10 * d);
-        cardBg.setColor(AppColors.card());
-        card.setBackground(cardBg);
+        // 标题行: 插件  +  版本号(右)
+        LinearLayout headerRow = new LinearLayout(ctx);
+        headerRow.setOrientation(LinearLayout.HORIZONTAL);
+        headerRow.setGravity(Gravity.CENTER_VERTICAL);
+        headerRow.setPadding(0, 0, 0, (int)(2 * d));
+        headerRow.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
 
-        TextView header = new TextView(ctx);
-        header.setText("插件");
-        header.setTextSize(13);
-        header.setTextColor(AppColors.text2());
-        header.setPadding((int)(16 * d), (int)(14 * d), (int)(16 * d), (int)(8 * d));
-        card.addView(header);
+        TextView pluginLabel = new TextView(ctx);
+        pluginLabel.setText("插件");
+        pluginLabel.setTextSize(13);
+        pluginLabel.setTextColor(AppColors.text2());
+        headerRow.addView(pluginLabel);
 
-        LinearLayout entry = new LinearLayout(ctx);
-        entry.setOrientation(LinearLayout.HORIZONTAL);
-        entry.setGravity(Gravity.CENTER_VERTICAL);
-        entry.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(12 * d));
-        entry.setClickable(true);
-        entry.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+        // 占位撑开
+        View spacer = new View(ctx);
+        spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 0, 1.0f));
+        headerRow.addView(spacer);
 
-        android.graphics.drawable.GradientDrawable entryBg = new android.graphics.drawable.GradientDrawable();
-        entryBg.setCornerRadius(8 * d);
-        entryBg.setColor(AppColors.accent());
-        entry.setBackground(entryBg);
+        String ver = "1.2.106";
+        try { ver = com.leshao.v3.BuildConfig.VERSION_NAME; } catch (Throwable ignored) {}
+        TextView verView = new TextView(ctx);
+        verView.setText(ver);
+        verView.setTextSize(11);
+        verView.setTextColor(AppColors.text2());
+        headerRow.addView(verView);
+        container.addView(headerRow);
 
-        entry.setOnClickListener(v -> {
+        // 入口行: 七彩霓虹粗体 "乐少助手"
+        TextView title = new TextView(ctx) {
+            @Override
+            protected void onSizeChanged(int w, int h, int ow, int oh) {
+                super.onSizeChanged(w, h, ow, oh);
+                if (w > 0) {
+                    getPaint().setShader(new android.graphics.LinearGradient(
+                        0, 0, w, 0,
+                        new int[]{0xFFFF6BD6, 0xFFC44DFF, 0xFF6B9DFF,
+                                  0xFF4DFFC4, 0xFFFFC44D, 0xFFFF4D6B, 0xFFFF6B9D},
+                        null, android.graphics.Shader.TileMode.CLAMP));
+                }
+            }
+        };
+        title.setText("乐少助手");
+        title.setTextSize(15);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setPadding(0, 0, 0, 0);
+        title.setLayoutParams(new LinearLayout.LayoutParams(-2, -2));
+        container.addView(title);
+
+        container.setOnClickListener(v -> {
             try { MainActivity.open(activity); }
             catch (Throwable t) { LogWriter.log(TAG, "open: " + t.getMessage()); }
         });
 
-        TextView title = new TextView(ctx);
-        title.setText("乐少助手");
-        title.setTextSize(15);
-        title.setTextColor(AppColors.whiteTextOnAccent());
-        title.setGravity(Gravity.CENTER);
-        title.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-        entry.addView(title);
-
-        card.addView(entry);
-        return card;
+        return container;
     }
 }

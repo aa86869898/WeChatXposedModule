@@ -544,7 +544,7 @@ public class SettingsEntryHook {
 
             Context ctx = act;
             float d = act.getResources().getDisplayMetrics().density;
-            int p = dpC(ctx, 16);
+            int p = dpC(ctx, 10);
 
             ScrollView sv = new ScrollView(ctx);
             sv.setFillViewport(true);
@@ -556,11 +556,11 @@ public class SettingsEntryHook {
 
             TextView title = new TextView(ctx);
         title.setText("乐少多功能助手");
-            title.setTextSize(20);
+            title.setTextSize(18);
             title.setTextColor(CLR_ACCENT);
             title.setTypeface(null, Typeface.BOLD);
             title.setGravity(Gravity.CENTER);
-            title.setPadding(0, dpC(ctx, 8), 0, dpC(ctx, 4));
+            title.setPadding(0, dpC(ctx, 4), 0, dpC(ctx, 2));
             root.addView(title);
 
             TextView ver = new TextView(ctx);
@@ -568,7 +568,7 @@ public class SettingsEntryHook {
             ver.setTextSize(11);
             ver.setTextColor(CLR_TEXT2);
             ver.setGravity(Gravity.CENTER);
-            ver.setPadding(0, 0, 0, dpC(ctx, 10));
+            ver.setPadding(0, 0, 0, dpC(ctx, 6));
             root.addView(ver);
 
             buildAllContent(ctx, root);
@@ -576,7 +576,7 @@ public class SettingsEntryHook {
             LinearLayout btns = new LinearLayout(ctx);
             btns.setOrientation(LinearLayout.HORIZONTAL);
             btns.setGravity(Gravity.CENTER);
-            btns.setPadding(0, dpC(ctx, 12), 0, dpC(ctx, 4));
+            btns.setPadding(0, dpC(ctx, 6), 0, dpC(ctx, 2));
 
             SharedPreferences prefs = ContextManager.getPrefs();
             final ModuleConfig cfg = ModuleConfig.load(prefs);
@@ -670,14 +670,15 @@ public class SettingsEntryHook {
 
     private static void addSection(Context ctx, LinearLayout r, String t) {
         LinearLayout h = new LinearLayout(ctx);
-        h.setPadding(dpC(ctx, 12), dpC(ctx, 6), dpC(ctx, 12), dpC(ctx, 6));
+        h.setPadding(dpC(ctx, 10), dpC(ctx, 3), dpC(ctx, 10), dpC(ctx, 3));
         GradientDrawable g = new GradientDrawable();
-        g.setCornerRadius(dpC(ctx, 8));
+        g.setCornerRadius(dpC(ctx, 6));
         g.setColor(CLR_CARD);
         h.setBackground(g);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.topMargin = dpC(ctx, 8);
+        lp.topMargin = dpC(ctx, 4);
         h.setLayoutParams(lp);
+
         TextView tv = new TextView(ctx);
         tv.setText(t);
         tv.setTextSize(15);
@@ -693,7 +694,7 @@ public class SettingsEntryHook {
         LinearLayout r = new LinearLayout(ctx);
         r.setOrientation(LinearLayout.HORIZONTAL);
         r.setGravity(Gravity.CENTER_VERTICAL);
-        r.setPadding(dpC(ctx, 16), dpC(ctx, 12), dpC(ctx, 16), dpC(ctx, 12));
+        r.setPadding(dpC(ctx, 12), dpC(ctx, 6), dpC(ctx, 12), dpC(ctx, 6));
         TextView tv = new TextView(ctx);
         tv.setText(l);
         tv.setTextSize(12);

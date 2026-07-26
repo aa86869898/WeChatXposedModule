@@ -95,11 +95,11 @@ public class ContactPickerDialog {
 
         TextView titleBar = new TextView(ctx);
         titleBar.setText("选择对象");
-        titleBar.setTextSize(16);
+        titleBar.setTextSize(15);
         titleBar.setTextColor(AppColors.accent());
         titleBar.setTypeface(null, Typeface.BOLD);
         titleBar.setGravity(Gravity.CENTER);
-        titleBar.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(8 * d));
+        titleBar.setPadding((int)(14 * d), (int)(6 * d), (int)(14 * d), (int)(4 * d));
         root.addView(titleBar);
 
         View titleSep = new View(ctx);
@@ -113,10 +113,10 @@ public class ContactPickerDialog {
         searchBox.setTextSize(14);
         searchBox.setTextColor(AppColors.text1());
         searchBox.setSingleLine(true);
-        searchBox.setPadding((int)(14 * d), (int)(10 * d), (int)(14 * d), (int)(10 * d));
+        searchBox.setPadding((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
         searchBox.setBackgroundColor(AppColors.whiteCard());
         LinearLayout.LayoutParams sblp = new LinearLayout.LayoutParams(-1, -2);
-        sblp.setMargins((int)(12 * d), (int)(10 * d), (int)(12 * d), 0);
+        sblp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), 0);
         searchBox.setLayoutParams(sblp);
         root.addView(searchBox);
 
@@ -124,7 +124,7 @@ public class ContactPickerDialog {
         tabBar.setOrientation(LinearLayout.HORIZONTAL);
         tabBar.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams tblp = new LinearLayout.LayoutParams(-1, -2);
-        tblp.setMargins((int)(12 * d), (int)(8 * d), (int)(12 * d), 0);
+        tblp.setMargins((int)(12 * d), (int)(4 * d), (int)(12 * d), 0);
         tabBar.setLayoutParams(tblp);
 
         final TextView[] tabViews = new TextView[2];
@@ -136,7 +136,7 @@ public class ContactPickerDialog {
             tabItem.setOrientation(LinearLayout.VERTICAL);
             tabItem.setGravity(Gravity.CENTER);
             tabItem.setClickable(true);
-            tabItem.setPadding((int)(20 * d), (int)(8 * d), (int)(20 * d), (int)(2 * d));
+            tabItem.setPadding((int)(16 * d), (int)(4 * d), (int)(16 * d), (int)(1 * d));
             tabItem.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
 
             TextView tabTv = new TextView(ctx);
@@ -182,7 +182,7 @@ public class ContactPickerDialog {
         final LinearLayout bottomBar = new LinearLayout(ctx);
         bottomBar.setOrientation(LinearLayout.HORIZONTAL);
         bottomBar.setGravity(Gravity.CENTER_VERTICAL);
-        bottomBar.setPadding((int)(12 * d), (int)(8 * d), (int)(12 * d), (int)(8 * d));
+        bottomBar.setPadding((int)(12 * d), (int)(4 * d), (int)(12 * d), (int)(4 * d));
         bottomBar.setBackgroundColor(AppColors.card());
         bottomBar.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
 
@@ -385,7 +385,7 @@ public class ContactPickerDialog {
             LinearLayout row = new LinearLayout(ctx);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding((int)(14 * d), (int)(8 * d), (int)(14 * d), (int)(8 * d));
+            row.setPadding((int)(12 * d), (int)(4 * d), (int)(12 * d), (int)(4 * d));
             row.setBackgroundColor(AppColors.whiteCard());
             row.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
 
