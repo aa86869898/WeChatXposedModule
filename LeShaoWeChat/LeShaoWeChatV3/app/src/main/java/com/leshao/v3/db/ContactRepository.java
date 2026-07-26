@@ -129,7 +129,6 @@ public class ContactRepository {
         LogWriter.log(TAG, "loadContacts START");
 
         try {
-            // ka5.f.s 的 u() cursor 列映射全返 -1, 直接用 DatabaseProvider rawQuery
             LogWriter.log(TAG, "waiting for DatabaseProvider rawQuery (max 15s)...");
             Object db = waitForDatabase(15000);
             if (db != null && queryContacts(db)) {
@@ -163,50 +162,48 @@ public class ContactRepository {
 
             cursor = XposedHelpers.callMethod(db, "rawQuery", sql, null);
 
-            int idxU = colIdx(cursor, "username");
-            int idxN = colIdx(cursor, "nickname");
-            int idxA = colIdx(cursor, "alias");
-            int idxR = colIdx(cursor, "conRemark");
-            int idxT = colIdx(cursor, "type");
-            int idxV = colIdx(cursor, "verifyFlag");
+            int ciU = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "username");
+            int ciT = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "type");
+            int ciN = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "nickname");
+            int ciR = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "conRemark");
+            int ciA = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "alias");
+            LogWriter.log(TAG, "queryContacts columnIndex: u=" + ciU + " t=" + ciT
+                + " n=" + ciN + " r=" + ciR + " a=" + ciA);
 
+            int rowCount = 0;
             while ((Boolean) XposedHelpers.callMethod(cursor, "moveToNext")) {
-                String wxid = colStr(cursor, idxU);
+                rowCount++;
+                String wxid = (String) XposedHelpers.callMethod(cursor, "getString", ciU);
                 if (wxid == null || wxid.isEmpty()) continue;
 
-                String nickname = colStr(cursor, idxN);
-                String alias = colStr(cursor, idxA);
-                String remark = colStr(cursor, idxR);
-                int type = colInt(cursor, idxT);
-                int verifyFlag = colInt(cursor, idxV);
-
-                Contact contact = new Contact(wxid, nickname, remark, alias, type, 0, 0);
-                contact.verifyFlag = verifyFlag;
-
-                if (isGroup(wxid)) {
-                    groups.add(contact);
-                } else if (isFriend(wxid)) {
-                    friends.add(contact);
-                } else {
+                // 内联排除常用系统账号
+                if (wxid.equals("weixin") || wxid.equals("filehelper") || wxid.equals("medianote")
+                    || wxid.equals("newsapp") || wxid.equals("floatbottle") || wxid.equals("tmessage")
+                    || wxid.equals("qmessage") || wxid.startsWith("gh_") || wxid.startsWith("qqmail_"))
                     continue;
-                }
-                all.add(contact);
+
+                int type = (Integer) XposedHelpers.callMethod(cursor, "getInt", ciT);
+                String nickname = (String) XposedHelpers.callMethod(cursor, "getString", ciN);
+                String remark = (String) XposedHelpers.callMethod(cursor, "getString", ciR);
+                String alias = (String) XposedHelpers.callMethod(cursor, "getString", ciA);
+
+                Contact c = new Contact(wxid, nickname, remark, alias, type, 0, 0);
+                all.add(c);
+                if (wxid.endsWith("@chatroom")) groups.add(c);
+                else friends.add(c);
             }
             XposedHelpers.callMethod(cursor, "close");
-
-            LogWriter.log(TAG, "queryContacts: friends=" + friends.size()
-                + " groups=" + groups.size() + " total=" + all.size());
+            LogWriter.log(TAG, "queryContacts: rows=" + rowCount
+                + " friends=" + friends.size() + " groups=" + groups.size());
 
             for (int i = 0; i < Math.min(5, friends.size()); i++) {
                 Contact c = friends.get(i);
                 LogWriter.log(TAG, "  friend[" + i + "] " + c.displayName()
-                    + " (" + c.wxid + ") type=" + c.type + " vf=" + c.verifyFlag);
+                    + " (" + c.wxid + ") type=" + c.type);
             }
 
             if (all.isEmpty()) return false;
-            sAllContacts = all;
-            sFriends = friends;
-            sGroups = groups;
+            sAllContacts = all; sFriends = friends; sGroups = groups;
             return true;
         } catch (Throwable e) {
             LogWriter.log(TAG, "queryContacts ERROR: " + e.getMessage());
