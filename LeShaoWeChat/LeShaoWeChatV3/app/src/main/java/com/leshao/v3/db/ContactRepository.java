@@ -82,10 +82,11 @@ public class ContactRepository {
         if (wxid.endsWith("@chatroom")) return CAT_GROUP;
         if (wxid.startsWith("gh_")) return CAT_OFFICIAL;
         if (type == 33) return CAT_SYSTEM;
-        if (type == 1) return CAT_STRANGER;
+        if (type == 0) return CAT_FRIEND;
+        if (type == 2) return CAT_STRANGER;
+        if (type == 4) return CAT_EXCLUDED;
         if (wxid.endsWith("@openim")) return CAT_OPENIM;
-        if (type == 4) return CAT_FRIEND;
-        return CAT_FRIEND;
+        return CAT_EXCLUDED;
     }
 
     private static final int CAT_FRIEND = 0;
@@ -159,10 +160,10 @@ public class ContactRepository {
     }
 
     private static boolean tryQueries(Object db) {
-        return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag"
+        return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag, sex, chatroomFlag"
             + " FROM rcontact"
             + " WHERE deleteFlag = 0"
-            + " AND (username LIKE '%@chatroom' OR type = 4)"
+            + " AND (username LIKE '%@chatroom' OR type = 0)"
             + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, username");
     }
 
@@ -314,16 +315,16 @@ public class ContactRepository {
         return null;
     }
 
-    // ===== WeChat friend filter: type=4=好友 (微信联系人数据库完整技术文档) =====
+    // ===== 好友过滤: type=0=好友, type=2=被删, type=4=拉黑 =====
 
     private static boolean queryViaKa5(Object db) {
         try {
             Method u = db.getClass().getDeclaredMethod("u", String.class, String[].class);
 
-            String sql = "SELECT username, alias, conRemark, nickname, type, createTime"
+            String sql = "SELECT username, alias, conRemark, nickname, type, createTime, sex, chatroomFlag"
                 + " FROM rcontact"
                 + " WHERE deleteFlag = 0"
-                + " AND (username LIKE '%@chatroom' OR type = 4)"
+                + " AND (username LIKE '%@chatroom' OR type = 0)"
                 + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, nickname";
             Cursor c = (Cursor) u.invoke(db, sql, null);
             if (c == null) return false;
@@ -339,6 +340,7 @@ public class ContactRepository {
             int ciT = c.getColumnIndex("type");
             int ciCr = c.getColumnIndex("createTime");
             int ciS = c.getColumnIndex("sex");
+            int ciCh = c.getColumnIndex("chatroomFlag");
 
             int sexCount = 0;
             while (c.moveToNext()) {
@@ -348,6 +350,9 @@ public class ContactRepository {
 
                 int cat = categorize(wxid, type);
                 if (cat == CAT_OFFICIAL || cat == CAT_EXCLUDED || cat == CAT_SPECIAL) continue;
+
+                int chatroomFlag = ciCh >= 0 ? c.getInt(ciCh) : 0;
+                if (cat == CAT_FRIEND && chatroomFlag > 0) continue;
 
                 String name = c.getString(ciR);
                 if (name == null || name.isEmpty()) name = c.getString(ciA);
@@ -667,8 +672,9 @@ public class ContactRepository {
             int ciN = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "nickname");
             int ciT = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "type");
             int ciS = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "sex");
+            int ciCh = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "chatroomFlag");
             LogWriter.log(TAG, "queryContacts columns: u=" + ciU + " r=" + ciR + " n=" + ciN
-                + " a=" + ciA + " t=" + ciT + " s=" + ciS);
+                + " a=" + ciA + " t=" + ciT + " s=" + ciS + " ch=" + ciCh);
 
             int fb = 0, gb = 0;
             while ((Boolean) XposedHelpers.callMethod(cursor, "moveToNext")) {
@@ -676,6 +682,10 @@ public class ContactRepository {
                 int type = colInt(cursor, ciT);
                 int cat = categorize(wxid, type);
                 if (cat == CAT_OFFICIAL || cat == CAT_EXCLUDED || cat == CAT_SPECIAL) continue;
+
+                int chatroomFlag = ciCh >= 0 ? colInt(cursor, ciCh) : 0;
+                if (cat == CAT_FRIEND && chatroomFlag > 0) continue;
+
                 int sex = ciS >= 0 ? colInt(cursor, ciS) : 0;
                 Contact c = new Contact(wxid, colStr(cursor, ciN), colStr(cursor, ciR), colStr(cursor, ciA), type, sex, 0);
 
