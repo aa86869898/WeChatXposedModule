@@ -270,25 +270,33 @@ public class ContactRepository {
         List<Contact> groups = new ArrayList<>();
 
         try {
-            // 诊断: contactLabelIds 非空 = 用户打过标签 = 真实好友
+            // ALL TABLES
             try {
-                String dlSql = "SELECT COUNT(*) FROM rcontact"
-                    + " WHERE type=4 AND deleteFlag=0"
-                    + " AND username NOT LIKE 'gh_%' AND username NOT LIKE '%@chatroom'"
-                    + " AND contactLabelIds IS NOT NULL AND contactLabelIds != ''";
-                Object dc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, dlSql, null);
-                if ((Boolean) dc.getClass().getMethod("moveToFirst").invoke(dc)) {
-                    LogWriter.log(TAG, "DIAG labeledFriends=" + (Integer) dc.getClass().getMethod("getInt", int.class).invoke(dc, 0));
+                String ts = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name";
+                Object tc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, ts, null);
+                StringBuilder sb = new StringBuilder("ALL_TABLES ");
+                while ((Boolean) tc.getClass().getMethod("moveToNext").invoke(tc)) {
+                    sb.append((String) tc.getClass().getMethod("getString", int.class).invoke(tc, 0)).append(" ");
                 }
-                dc.getClass().getMethod("close").invoke(dc);
-            } catch (Throwable e) { LogWriter.log(TAG, "DIAG labeled skip"); }
+                tc.getClass().getMethod("close").invoke(tc);
+                LogWriter.log(TAG, sb.toString());
+            } catch (Throwable e) { LogWriter.log(TAG, "ALL_TABLES skip"); }
 
-            // 查询: type=4好友, 但按contactLabelIds排序(有标签的排前面=真实好友优先)
-            String friendsSql = "SELECT username, nickname, alias, conRemark, type, verifyFlag, contactLabelIds"
+            // contact 表的结构
+            try {
+                String sq = "SELECT sql FROM sqlite_master WHERE type='table' AND name IN ('contact','Contact','verifycontact','bizcontact')";
+                Object sc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, sq, null);
+                while ((Boolean) sc.getClass().getMethod("moveToNext").invoke(sc)) {
+                    LogWriter.log(TAG, "  " + (String) sc.getClass().getMethod("getString", int.class).invoke(sc, 0));
+                }
+                sc.getClass().getMethod("close").invoke(sc);
+            } catch (Throwable e) { LogWriter.log(TAG, "schema skip"); }
+
+            // 好友: type=4(文档确认的好友类型) + 含备注优先排序
+            String friendsSql = "SELECT username, nickname, alias, conRemark, type, verifyFlag, showHead"
                 + " FROM rcontact"
                 + " WHERE type = 4 AND deleteFlag = 0"
-                + " ORDER BY CASE WHEN contactLabelIds IS NOT NULL AND contactLabelIds != '' THEN 0 ELSE 1 END,"
-                + " CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END, nickname"
+                + " ORDER BY CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END, nickname"
                 + " LIMIT 500";
 
             Object cursor = db.getClass().getMethod("u", String.class, String[].class)
