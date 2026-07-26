@@ -323,7 +323,7 @@ public class ContactSelectorView {
         public void onBindViewHolder(VH holder, int position) {
             Contact contact = mData.get(position);
             holder.nameTv.setText(contact.displayName());
-            holder.subTv.setText(contact.wxid);
+            holder.subTv.setText(contact.wxAlias());
             holder.avatar.setInitials(getInitials(contact.displayName()));
             holder.avatar.setIsGroup(contact.isGroup());
 

@@ -467,8 +467,8 @@ public class ContactPickerDialog {
             holder.checkTv.setTextColor(sel ? AppColors.green() : AppColors.arrow());
             holder.nameTv.setText(c.displayName());
 
-            if (c.wxid != null && !c.wxid.isEmpty() && !c.wxid.equals(c.displayName())) {
-                holder.wxidTv.setText(c.wxid);
+            if (c.alias != null && !c.alias.isEmpty() && !c.alias.startsWith("wxid_")) {
+                holder.wxidTv.setText(c.alias);
                 holder.wxidTv.setVisibility(View.VISIBLE);
             } else {
                 holder.wxidTv.setVisibility(View.GONE);

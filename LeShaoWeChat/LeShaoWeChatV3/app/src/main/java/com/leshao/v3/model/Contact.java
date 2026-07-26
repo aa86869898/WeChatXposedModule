@@ -43,6 +43,11 @@ public class Contact {
         return wxid;
     }
 
+    public String wxAlias() {
+        if (alias != null && !alias.isEmpty() && !alias.startsWith("wxid_")) return alias;
+        return wxid;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
