@@ -127,13 +127,8 @@ public class ContactRepository {
         LogWriter.log(TAG, "loadContacts START");
 
         try {
-            // Strategy A: 直接打开 EnMicroMsg.db，反射 ka5.f.s()（最可靠，0 延迟）
-            LogWriter.log(TAG, "Strategy A: trying direct DB (ka5.f.s)...");
-            if (loadViaDirectDb()) {
-                sLoaded = true; sLoading = false;
-                LogWriter.log(TAG, "loadContacts OK via Strategy A (direct DB)");
-                return true;
-            }
+            // Strategy A: 暂跳过（rcontact type=4非双向好友），先试WeChat自身API
+            // if (loadViaDirectDb()) { ... }
 
             // Strategy B: 反射遍历 model.aj（纯内存，零延迟，无需 Hook）
             LogWriter.log(TAG, "Strategy B: trying model.aj reflection...");
@@ -148,6 +143,14 @@ public class ContactRepository {
             if (loadViaMessagingPlugin()) {
                 sLoaded = true; sLoading = false;
                 LogWriter.log(TAG, "loadContacts OK via Strategy C (messaging plugin)");
+                return true;
+            }
+
+            // Strategy A: 直接打开 EnMicroMsg.db（兜底）
+            LogWriter.log(TAG, "Strategy A: trying direct DB (ka5.f.s)...");
+            if (loadViaDirectDb()) {
+                sLoaded = true; sLoading = false;
+                LogWriter.log(TAG, "loadContacts OK via Strategy A (direct DB)");
                 return true;
             }
 
