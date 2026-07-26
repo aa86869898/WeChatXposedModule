@@ -157,10 +157,11 @@ public class ContactRepository {
     }
 
     private static boolean tryQueries(Object db) {
-        return queryContacts(db, "SELECT username, nickname, conRemark, alias, type"
+        return queryContacts(db, "SELECT username, nickname, conRemark, alias, verifyFlag"
             + " FROM rcontact"
             + " WHERE deleteFlag = 0"
-            + " AND (type = 0 OR username LIKE '%@chatroom')"
+            + " AND (username NOT LIKE '%@chatroom'"
+            + "   OR username LIKE '%@chatroom')"
             + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END,"
             + " nickname");
     }
@@ -209,8 +210,8 @@ public class ContactRepository {
             LogWriter.log(TAG, "Strategy A: DB opened via ka5.f.s, dbPath=" + dbPath + " pwd=" + pwd);
 
             // ═══════════ 修复1: 先用测试SQL验证基本功能 ═══════════
-            String testSql = "SELECT username, nickname, type FROM rcontact"
-                + " WHERE type = 0 AND deleteFlag = 0"
+            String testSql = "SELECT username, nickname, verifyFlag FROM rcontact"
+                + " WHERE deleteFlag = 0 AND verifyFlag > 0"
                 + " AND username NOT LIKE '%@chatroom'"
                 + " AND username NOT LIKE 'gh_%'"
                 + " LIMIT 5";
@@ -225,12 +226,12 @@ public class ContactRepository {
                         XposedHelpers.callMethod(testCursor, "getColumnIndex", "username"));
                     String nick = (String) XposedHelpers.callMethod(testCursor, "getString",
                         XposedHelpers.callMethod(testCursor, "getColumnIndex", "nickname"));
-                    int type = (Integer) XposedHelpers.callMethod(testCursor, "getInt",
-                        XposedHelpers.callMethod(testCursor, "getColumnIndex", "type"));
+                    int vf = (Integer) XposedHelpers.callMethod(testCursor, "getInt",
+                        XposedHelpers.callMethod(testCursor, "getColumnIndex", "verifyFlag"));
                     count++;
                     LogWriter.log(TAG, "  TEST[" + count + "] wxid=" + wxid
                         + " nick=" + (nick != null ? nick.substring(0, Math.min(20, nick.length())) : "null")
-                        + " type=" + type);
+                        + " vf=" + vf);
                 }
                 LogWriter.log(TAG, "Strategy A: test query returned " + count + " rows");
                 if (count == 0) {
@@ -264,9 +265,10 @@ public class ContactRepository {
         Object cursor = null;
 
         try {
-            // ═══════════ 好友查询 ═══════════
+            // ═══════════ 好友: 排除群聊/公众号/系统账号, 不用type过滤(rawQuery列映射可能不可靠) ═══════════
             String friendsSql = "SELECT * FROM rcontact"
-                + " WHERE type = 0 AND deleteFlag = 0"
+                + " WHERE deleteFlag = 0"
+                + " AND verifyFlag > 0"
                 + " AND username NOT LIKE '%@chatroom'"
                 + " AND username NOT LIKE 'gh_%'"
                 + " AND username NOT IN ('weixin','filehelper','medianote','newsapp','floatbottle')"
