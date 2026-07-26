@@ -10,6 +10,8 @@ public class Contact {
     public final int type;
     public int sex;
     public final long createTime;
+    public int verifyFlag;
+    public int chatroomFlag;
 
     public Contact(String wxid, String nickname, String remarkName, String alias, int type) {
         this(wxid, nickname, remarkName, alias, type, 0, 0);
@@ -23,6 +25,8 @@ public class Contact {
         this.type = type;
         this.sex = sex;
         this.createTime = createTime;
+        this.verifyFlag = 0;
+        this.chatroomFlag = 0;
     }
 
     public boolean isGroup() {
@@ -34,7 +38,7 @@ public class Contact {
 
     public String displayName() {
         if (remarkName != null && !remarkName.isEmpty()) return remarkName;
-        if (alias != null && !alias.isEmpty()) return alias;
+        if (alias != null && !alias.isEmpty() && !alias.startsWith("wxid_")) return alias;
         if (nickname != null && !nickname.isEmpty()) return nickname;
         return wxid;
     }

@@ -189,12 +189,9 @@ public class ContactRepository {
         return DatabaseProvider.getDatabase();
     }
 
-    // ===== Strategy A: 标准 SQLiteDatabase 优先, 失败则 Ka5 兜底 =====
+    // ===== Strategy A: 标准 SQLiteDatabase 按文档精准过滤 =====
 
     private static boolean loadViaDirectDb() {
-        ClassLoader cl = ContextManager.getClassLoader();
-        if (cl == null) return false;
-
         android.content.Context ctx = ContextManager.getAppContext();
         if (ctx == null) return false;
 
@@ -205,30 +202,25 @@ public class ContactRepository {
             long uin = Long.parseLong(uv.toString());
             LogWriter.log(TAG, "Strategy A: uin=" + uin);
 
-            // 用 WeChat 的 hm0.b0.e(int) 算正确的 hash 路径
-            String dbPath = getDbPath(cl, ctx, uin);
-            if (dbPath == null) return false;
+            // 路径: md5(uin), 尝试多种 baseDir
+            String hash = md5(String.valueOf(uin));
+            String dbPath = findDbPath(hash);
+            if (dbPath == null) {
+                LogWriter.log(TAG, "Strategy A: ALL db path candidates not found");
+                return false;
+            }
             LogWriter.log(TAG, "Strategy A: dbPath=" + dbPath);
 
-            // 优先: 标准 SQLiteDatabase (绕过 Ka5 混淆)
-            if (tryStandardSqlite(dbPath)) return true;
+            // 打开标准 SQLiteDatabase
+            SQLiteDatabase db = null;
+            try {
+                db = SQLiteDatabase.openDatabase(dbPath, null, SQLiteDatabase.OPEN_READONLY);
+                if (db == null) return false;
+                LogWriter.log(TAG, "Strategy A: DB opened via standard SQLite");
 
-            // 标准 SQLite 失败, 尝试 Ka5 密码方式
-            LogWriter.log(TAG, "Strategy A: standard SQLite failed, trying Ka5...");
-            String[] imeiCandidates = getImeiCandidates(cl);
-            for (String imei : imeiCandidates) {
-                if (imei == null || imei.isEmpty()) continue;
-                String password = calcPassword(cl, imei, uin);
-                if (password == null || password.length() != 7) continue;
-                LogWriter.log(TAG, "Strategy A: Ka5 trying imei=" + imei + " pwd=" + password);
-                Object db = openKa5Db(cl, dbPath, password);
-                if (db == null) continue;
-                if (queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag"
-                    + " FROM rcontact WHERE type=0 ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, username")) {
-                    closeKa5Db(db);
-                    return true;
-                }
-                closeKa5Db(db);
+                if (queryFriendsAndGroups(db)) return true;
+            } finally {
+                if (db != null) try { db.close(); } catch (Throwable ignored) {}
             }
             return false;
         } catch (Throwable e) {
@@ -237,63 +229,88 @@ public class ContactRepository {
         }
     }
 
-    private static boolean tryStandardSqlite(String dbPath) {
-        File f = new File(dbPath);
-        if (!f.exists()) {
-            LogWriter.log(TAG, "Strategy A: db file not found: " + dbPath);
-            return false;
+    private static String findDbPath(String hash) {
+        for (String base : new String[]{
+            "/data/user/0/com.tencent.mm/MicroMsg/",
+            "/data/data/com.tencent.mm/MicroMsg/",
+        }) {
+            String path = base + hash + "/EnMicroMsg.db";
+            if (new File(path).exists()) return path;
         }
-        SQLiteDatabase db = null;
+        return null;
+    }
+
+    private static boolean queryFriendsAndGroups(SQLiteDatabase db) {
+        List<Contact> all = new ArrayList<>();
+        List<Contact> friends = new ArrayList<>();
+        List<Contact> groups = new ArrayList<>();
         Cursor c = null;
+
         try {
-            db = SQLiteDatabase.openDatabase(dbPath, null, SQLiteDatabase.OPEN_READONLY);
-            if (db == null) return false;
-
-            c = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='rcontact'", null);
-            if (c == null || !c.moveToFirst()) {
-                LogWriter.log(TAG, "Strategy A: rcontact not found in standard SQLite");
-                return false;
-            }
-            c.close();
-            c = null;
-            LogWriter.log(TAG, "Strategy A: DB opened via standard SQLite");
-
-            // 查询
-            String sql = "SELECT username, alias, conRemark, nickname, type, sex"
+            String friendsSql = "SELECT username, alias, conRemark, nickname, type, sex, verifyFlag"
                 + " FROM rcontact"
-                + " WHERE deleteFlag = 0 AND type = 0"
-                + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, nickname";
-            c = db.rawQuery(sql, null);
-            if (c == null) return false;
+                + " WHERE deleteFlag = 0"
+                + " AND type = 0"
+                + " AND verifyFlag > 0"
+                + " AND username NOT LIKE '%@chatroom'"
+                + " AND username NOT LIKE 'gh_%'"
+                + " AND username NOT IN ('weixin','filehelper','medianote','newsapp','floatbottle')"
+                + " AND username NOT LIKE 'qmessage%'"
+                + " AND username NOT LIKE 'tmessage%'"
+                + " AND username NOT LIKE '%@openim'"
+                + " AND username NOT LIKE '%@stranger'"
+                + " AND username NOT LIKE '%@app'"
+                + " AND username NOT LIKE '%@talkroom'"
+                + " AND username NOT LIKE '%@lbsroom'"
+                + " ORDER BY"
+                + " CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END,"
+                + " nickname";
 
-            List<Contact> all = new ArrayList<>();
-            List<Contact> friends = new ArrayList<>();
-            List<Contact> groups = new ArrayList<>();
-
+            c = db.rawQuery(friendsSql, null);
             int ciU = c.getColumnIndex("username");
             int ciA = c.getColumnIndex("alias");
             int ciR = c.getColumnIndex("conRemark");
             int ciN = c.getColumnIndex("nickname");
             int ciT = c.getColumnIndex("type");
             int ciS = c.getColumnIndex("sex");
+            int ciV = c.getColumnIndex("verifyFlag");
 
             while (c.moveToNext()) {
                 String wxid = c.getString(ciU);
                 if (wxid == null || wxid.isEmpty()) continue;
                 int type = c.getInt(ciT);
-                int cat = categorize(wxid, type);
-                if (cat == CAT_OFFICIAL || cat == CAT_EXCLUDED || cat == CAT_SPECIAL) continue;
+                int verifyFlag = ciV >= 0 ? c.getInt(ciV) : 0;
+                if (categorize(wxid, type) == CAT_OFFICIAL) continue;
+                if (skipWxid(wxid)) continue;
 
-                String name = c.getString(ciR);
-                if (name == null || name.isEmpty()) name = c.getString(ciA);
-                if (name == null || name.isEmpty()) name = c.getString(ciN);
-                if (name == null || name.isEmpty()) name = wxid;
-
+                String name = computeDisplayName(c.getString(ciR), c.getString(ciA), c.getString(ciN), wxid);
                 int sex = ciS >= 0 ? c.getInt(ciS) : 0;
                 Contact contact = new Contact(wxid, name, name, wxid, type, sex, 0);
+                contact.verifyFlag = verifyFlag;
                 all.add(contact);
-                if (cat == CAT_GROUP) groups.add(contact);
-                else friends.add(contact);
+                friends.add(contact);
+            }
+            c.close();
+            c = null;
+
+            String groupsSql = "SELECT username, alias, conRemark, nickname, type"
+                + " FROM rcontact"
+                + " WHERE type = 0 AND username LIKE '%@chatroom'"
+                + " ORDER BY nickname";
+            c = db.rawQuery(groupsSql, null);
+            ciU = c.getColumnIndex("username");
+            ciA = c.getColumnIndex("alias");
+            ciR = c.getColumnIndex("conRemark");
+            ciN = c.getColumnIndex("nickname");
+
+            while (c.moveToNext()) {
+                String wxid = c.getString(ciU);
+                if (wxid == null || wxid.isEmpty()) continue;
+                String name = computeDisplayName(c.getString(ciR), c.getString(ciA), c.getString(ciN), wxid);
+                Contact contact = new Contact(wxid, name, name, wxid, 0);
+                contact.verifyFlag = 1;
+                all.add(contact);
+                groups.add(contact);
             }
             c.close();
 
@@ -304,13 +321,19 @@ public class ContactRepository {
             sAllContacts = all; sFriends = friends; sGroups = groups;
             return true;
         } catch (Throwable e) {
-            LogWriter.log(TAG, "Strategy A: standard SQLite ERROR: " + e.getClass().getSimpleName()
+            LogWriter.log(TAG, "Strategy A: query ERROR: " + e.getClass().getSimpleName()
                 + ": " + e.getMessage());
             return false;
         } finally {
             if (c != null) try { c.close(); } catch (Throwable ignored) {}
-            if (db != null) try { db.close(); } catch (Throwable ignored) {}
         }
+    }
+
+    private static String computeDisplayName(String remark, String alias, String nick, String wxid) {
+        if (remark != null && !remark.isEmpty()) return remark;
+        if (alias != null && !alias.isEmpty() && !alias.startsWith("wxid_")) return alias;
+        if (nick != null && !nick.isEmpty()) return nick;
+        return wxid;
     }
 
     private static String[] getImeiCandidates(ClassLoader cl) {
