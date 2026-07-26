@@ -29,6 +29,7 @@ public class ContactRepository {
     private static volatile boolean sLoaded = false;
     private static volatile boolean sLoading = false;
     private static volatile boolean sListenerRegistered = false;
+    private static long sCurrentUin = -1;
 
     private static Object sDirDb;
     private static final Map<String, String> sNickCache = new HashMap<>();
@@ -51,8 +52,28 @@ public class ContactRepository {
 
     public static void forceReload() {
         if (sLoading) return;
-        sLoaded = false;
+        long currentUin = getCurrentUin();
+        if (currentUin > 0 && currentUin != sCurrentUin) {
+            LogWriter.log(TAG, "UIN changed: " + sCurrentUin + " -> " + currentUin + ", clearing cache");
+            sAllContacts = null;
+            sFriends = null;
+            sGroups = null;
+            sLoaded = false;
+        }
+        if (sLoaded) return;
+        sCurrentUin = currentUin;
         loadContacts();
+    }
+
+    private static long getCurrentUin() {
+        try {
+            android.content.Context ctx = ContextManager.getAppContext();
+            if (ctx == null) return -1;
+            SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
+            Object uv = sp.getAll().get("default_uin");
+            if (uv == null) return -1;
+            return Long.parseLong(uv.toString());
+        } catch (Throwable t) { return -1; }
     }
 
     // ===== 分类常量 (按手册第13章 WeChat j4.t() 位掩码) =====
@@ -65,10 +86,21 @@ public class ContactRepository {
         if (wxid.contains("@lbsroom")) return CAT_EXCLUDED;
         if (wxid.startsWith("qqmail_")) return CAT_EXCLUDED;
         if (wxid.contains("@im.chatroom")) return CAT_EXCLUDED;
-        if (type == 0) return CAT_FRIEND;
         if ((type & 1) == 0) return CAT_EXCLUDED;
         if ((type & 32) != 0) return CAT_OFFICIAL;
         if ((type & 8) != 0) return CAT_EXCLUDED;
+        return CAT_FRIEND;
+    }
+
+    private static int categorizeByWxid(String wxid) {
+        if (wxid == null) return CAT_EXCLUDED;
+        if ("filehelper".equals(wxid)) return CAT_SPECIAL;
+        if (wxid.endsWith("@chatroom")) return CAT_GROUP;
+        if (wxid.startsWith("gh_")) return CAT_OFFICIAL;
+        if (wxid.endsWith("@openim")) return CAT_OPENIM;
+        if (wxid.contains("@lbsroom")) return CAT_EXCLUDED;
+        if (wxid.startsWith("qqmail_")) return CAT_EXCLUDED;
+        if (wxid.contains("@im.chatroom")) return CAT_EXCLUDED;
         return CAT_FRIEND;
     }
 
@@ -488,7 +520,7 @@ public class ContactRepository {
             String name = resolveObjName(conv);
             if (name == null || name.isEmpty()) name = wxid;
 
-            int cat = categorize(wxid, 0);
+            int cat = categorizeByWxid(wxid);
             if (cat == CAT_OFFICIAL || cat == CAT_SPECIAL || cat == CAT_EXCLUDED || cat == CAT_OPENIM) return false;
 
             int type = wxid.endsWith("@chatroom") ? 1 : 0;
