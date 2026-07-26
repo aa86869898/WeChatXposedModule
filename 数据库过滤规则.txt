@@ -1,0 +1,157 @@
+================================================================================
+ 微信 8.0.76 rcontact 表过滤规则 — 精确版
+ 基于 dm.f2 / y3 反编译验证
+================================================================================
+
+一、rcontact 表完整字段
+================================================================================
+
+  字段名               类型      说明
+  ──────────────────  ────────  ──────────────────────
+  username            TEXT      用户ID (主键)
+  nickname            TEXT      昵称
+  alias               TEXT      微信号
+  conRemark           TEXT      备注名
+  conRemarkPYFull     TEXT      备注全拼
+  conRemarkPYShort    TEXT      备注简拼
+  pyInitial           TEXT      拼音首字母
+  quanPin             TEXT      全拼
+  type                INT       联系人类型 ★
+  verifyFlag          INT       验证标志
+  deleteFlag          INT       删除标志
+  chatroomFlag        INT       群聊标志
+  showHead            INT       显示头像标志
+  weiboFlag           INT       微博标志
+  domainList          TEXT      域名列表
+  lvbuff              BLOB      扩展数据(protobuf)
+  encryptUsername     TEXT      加密用户名
+  contactLabelIds     TEXT      标签ID列表
+  descWordingId       TEXT      描述文本ID
+  openImAppid         TEXT      OpenIM应用ID
+  sourceExtInfo       TEXT      来源扩展信息
+  sex                 INT       性别 (0=未知 1=男 2=女)
+  contactExtra        BLOB      联系人扩展
+  createTime          LONG      创建时间
+  uiType              LONG      UI类型
+  usernameFlag        LONG      用户名标志
+
+二、type 值含义 (从微信源码验证)
+================================================================================
+
+  getType() 返回 this.field_type，在 rcontact 表中:
+
+  type  │ 含义               │ 过滤策略
+  ──────┼───────────────────┼────────────────
+    0   │ 正常好友 ✓        │ 保留
+    1   │ 对方未添加         │ 过滤(非好友)
+    2   │ 被对方删除         │ 过滤(非好友)
+    3   │ 已删除对方         │ 过滤(非好友)
+    4   │ 已拉黑对方         │ 过滤(非好友)
+
+三、精准 SQL 过滤规则
+================================================================================
+
+  [规则1] 仅好友 (type=0, 排除群聊账户和公众号)
+  ───────────────────────────────────────────
+  SELECT username, nickname, alias, conRemark, type, sex
+  FROM rcontact
+  WHERE deleteFlag=0
+    AND type=0
+    AND username NOT LIKE '%@chatroom'
+    AND username NOT LIKE 'gh_%'
+  ORDER BY nickname
+
+  [规则2] 好友 + 性别筛选
+  ──────────────────────
+  WHERE deleteFlag=0 AND type=0
+    AND username NOT LIKE '%@chatroom'
+    AND sex=1              -- 1=男, 2=女, 0=未知
+
+  [规则3] 仅群聊账户
+  ──────────────────
+  WHERE type=0 AND username LIKE '%@chatroom'
+
+  [规则4] 已删除/拉黑的人
+  ─────────────────────
+  WHERE deleteFlag=0 AND type IN (2,4)
+
+  [规则5] 全部联系人(含非好友, 排除群和公众号)
+  ─────────────────────────────────────────
+  WHERE deleteFlag=0
+    AND username NOT LIKE '%@chatroom'
+    AND username NOT LIKE 'gh_%'
+
+四、username 后缀规则
+================================================================================
+
+  后缀              │ 类型           │ 过滤策略
+  ──────────────────┼───────────────┼──────────
+  @chatroom         │ 群聊账户       │ 排除
+  gh_               │ 公众号         │ 排除
+  @openim           │ OpenIM账户     │ 排除
+  @stranger         │ 陌生人         │ 排除
+  @app              │ 应用账户       │ 排除
+  @talkroom         │ 语音聊天室     │ 排除
+  @lbsroom          │ LBS聊天室      │ 排除
+  wxid_             │ 好友/非好友    │ 保留(正常用户)
+  其他自定义号       │ 好友/非好友    │ 保留
+
+五、Xposed 代码 — 读取 rcontact 过滤联系人
+================================================================================
+
+  // === 获取数据库路径 ===
+  long uin = ctx.getSharedPreferences("system_config_prefs", 0)
+      .getLong("default_uin", 0);
+  if (uin == 0) uin = ctx.getSharedPreferences("system_config_prefs", 0)
+      .getInt("default_uin", 0);
+  String hash = md5(String.valueOf(uin));
+  String dbPath = "/data/user/0/com.tencent.mm/MicroMsg/" + hash + "/EnMicroMsg.db";
+
+  // === 查询仅好友 ===
+  SQLiteDatabase db = SQLiteDatabase.openDatabase(dbPath, null, SQLiteDatabase.OPEN_READONLY);
+  Cursor c = db.rawQuery(
+      "SELECT username, nickname, alias, conRemark, type, sex " +
+      "FROM rcontact WHERE deleteFlag=0 AND type=0 " +
+      "AND username NOT LIKE '%@chatroom' " +
+      "AND username NOT LIKE 'gh_%' " +
+      "ORDER BY nickname", null);
+
+  List<ContactItem> friends = new ArrayList<>();
+  while (c.moveToNext()) {
+      ContactItem item = new ContactItem();
+      item.username  = c.getString(0);
+      item.nickname  = c.getString(1);
+      item.alias     = c.getString(2);
+      item.remark    = c.getString(3);
+      item.type      = c.getInt(4);
+      item.sex       = c.getInt(5);
+      friends.add(item);
+  }
+  c.close();
+  db.close();
+
+  // friends 就是所有好友列表
+
+六、dm.f2.getType() 方法 (Xposed读取)
+================================================================================
+
+  // 从 y3 对象读 type (y3 继承 dm.f2)
+  int type = (Integer) XposedHelpers.callMethod(y3Obj, "getType");
+  // type=0 → 好友, type=2 → 被删, type=4 → 拉黑
+
+  // 其他可读字段
+  String username = (String) XposedHelpers.getObjectField(y3Obj, "field_username");
+  String nickname = (String) XposedHelpers.getObjectField(y3Obj, "field_nickname");
+  String alias    = (String) XposedHelpers.getObjectField(y3Obj, "field_alias");
+  String remark   = (String) XposedHelpers.getObjectField(y3Obj, "field_conRemark");
+  int chatroomFlag = XposedHelpers.getIntField(y3Obj, "field_chatroomFlag");
+  int deleteFlag   = XposedHelpers.getIntField(y3Obj, "field_deleteFlag");
+  int verifyFlag   = XposedHelpers.getIntField(y3Obj, "field_verifyFlag");
+
+七、你的实际数据参考 (从日志提取)
+================================================================================
+
+  日志: "query OK, all=127 f=51 g=75 sex=0"
+  解读: 总126人, 好友51人, 群75个, 性别未知
+
+================================================================================
