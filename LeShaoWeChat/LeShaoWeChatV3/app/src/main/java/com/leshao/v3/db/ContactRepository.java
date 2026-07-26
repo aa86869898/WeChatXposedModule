@@ -192,8 +192,9 @@ public class ContactRepository {
     // ===== Strategy A: 标准 SQLiteDatabase 按文档精准过滤 =====
 
     private static boolean loadViaDirectDb() {
+        ClassLoader cl = ContextManager.getClassLoader();
         android.content.Context ctx = ContextManager.getAppContext();
-        if (ctx == null) return false;
+        if (cl == null || ctx == null) return false;
 
         try {
             SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
@@ -202,13 +203,9 @@ public class ContactRepository {
             long uin = Long.parseLong(uv.toString());
             LogWriter.log(TAG, "Strategy A: uin=" + uin);
 
-            // 路径: md5(uin), 尝试多种 baseDir
-            String hash = md5(String.valueOf(uin));
-            String dbPath = findDbPath(hash);
-            if (dbPath == null) {
-                LogWriter.log(TAG, "Strategy A: ALL db path candidates not found");
-                return false;
-            }
+            // 用 WeChat 的 hm0.b0.e(int) 获取正确的 hash 路径
+            String dbPath = getDbPath(cl, ctx, uin);
+            if (dbPath == null) return false;
             LogWriter.log(TAG, "Strategy A: dbPath=" + dbPath);
 
             // 打开标准 SQLiteDatabase
