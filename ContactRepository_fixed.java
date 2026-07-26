@@ -286,7 +286,10 @@ public class ContactRepository {
                 String alias = colStr(cursor, colIdx(cursor, "alias"));
                 String remark = colStr(cursor, colIdx(cursor, "conRemark"));
 
+                String displayName = computeDisplayName(remark, alias, nickname, wxid);
+
                 Contact contact = new Contact(wxid, nickname, remark, alias, type, 0, 0);
+                contact.displayName = displayName;
                 all.add(contact);
                 friends.add(contact);
             }
@@ -308,6 +311,7 @@ public class ContactRepository {
                 String remark = colStr(cursor, colIdx(cursor, "conRemark"));
 
                 Contact contact = new Contact(wxid, nickname, remark, null, type, 0, 0);
+                contact.displayName = (remark != null && !remark.isEmpty()) ? remark : nickname;
                 all.add(contact);
                 groups.add(contact);
             }
@@ -329,7 +333,7 @@ public class ContactRepository {
             // 打印前3条好友验证
             for (int i = 0; i < Math.min(3, friends.size()); i++) {
                 Contact c = friends.get(i);
-                LogWriter.log(TAG, "  friend[" + i + "] " + c.displayName() + " (" + c.wxid + ")");
+                LogWriter.log(TAG, "  friend[" + i + "] " + c.displayName + " (" + c.wxid + ")");
             }
             return true;
         } catch (Throwable e) {
