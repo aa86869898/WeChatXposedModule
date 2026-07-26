@@ -92,18 +92,6 @@ public class ContactRepository {
         return CAT_FRIEND;
     }
 
-    private static int categorizeByWxid(String wxid) {
-        if (wxid == null) return CAT_EXCLUDED;
-        if ("filehelper".equals(wxid)) return CAT_SPECIAL;
-        if (wxid.endsWith("@chatroom")) return CAT_GROUP;
-        if (wxid.startsWith("gh_")) return CAT_OFFICIAL;
-        if (wxid.endsWith("@openim")) return CAT_OPENIM;
-        if (wxid.contains("@lbsroom")) return CAT_EXCLUDED;
-        if (wxid.startsWith("qqmail_")) return CAT_EXCLUDED;
-        if (wxid.contains("@im.chatroom")) return CAT_EXCLUDED;
-        return CAT_FRIEND;
-    }
-
     private static final int CAT_FRIEND = 0;
     private static final int CAT_GROUP = 1;
     private static final int CAT_OFFICIAL = 2;
@@ -519,14 +507,15 @@ public class ContactRepository {
             String name = resolveObjName(conv);
             if (name == null || name.isEmpty()) name = wxid;
 
-            int cat = categorizeByWxid(wxid);
-            if (cat == CAT_OFFICIAL || cat == CAT_SPECIAL || cat == CAT_EXCLUDED || cat == CAT_OPENIM || cat == CAT_SYSTEM || cat == CAT_STRANGER) return false;
+            boolean isGroup = wxid.endsWith("@chatroom");
+            boolean excluded = !isGroup && (wxid.startsWith("gh_") || wxid.endsWith("@openim")
+                || wxid.contains("@lbsroom") || wxid.startsWith("qqmail_")
+                || wxid.contains("@im.chatroom"));
+            if (excluded) return false;
 
-            int type = wxid.endsWith("@chatroom") ? 1 : 0;
-            Contact c = new Contact(wxid, name, name, wxid, type);
+            Contact c = new Contact(wxid, name, name, wxid, isGroup ? 1 : 0);
             all.add(c);
-            if (cat == CAT_GROUP) groups.add(c);
-            else friends.add(c);
+            if (isGroup) groups.add(c);
             return true;
         } catch (Throwable e) { return false; }
     }
