@@ -1,729 +1,293 @@
-07-26 15:46:10.242 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-26 15:46:10.244 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-26 15:46:10.245 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-26 15:46:10.245 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-26 15:46:10.246 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-26 15:46:10.304 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-26 15:46:10.306 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-26 15:46:10.306 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-26 15:46:10.307 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-26 15:46:10.308 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-26 15:46:10.473 [[GT]ColdPool#12] MessageHook: #10 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:10.505 [[GT]ColdPool#12] MessageHook: #11 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:10.523 [[GT]ColdPool#12] MessageHook: #12 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:10.550 [[GT]ColdPool#12] MessageHook: #13 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-@姐妹们👭，看过来～
-OCC卫生巾付邮试用啦！
+07-26 15:54:43.474 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-26 15:54:43.476 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-26 15:54:43.477 [main] ContactRepository: init: DB ready listener registered
+07-26 15:54:43.478 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-26 15:54:43.479 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-26 15:54:43.480 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-26 15:54:43.480 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-26 15:54:43.490 [main] SettingsEntryHook: LauncherUI entry hooks ok
+07-26 15:54:43.490 [main] SettingsEntryHook: INIT: hooks registered ok
+07-26 15:54:43.492 [main] MessageHook: n(e9,p0) OK
+07-26 15:54:43.492 [main] MessageHook: C(e9) OK
+07-26 15:54:43.499 [main] ContextManager: attachBaseContext DONE, ready=true
+07-26 15:54:43.500 [main] DatabaseProvider: init: already hooked via initEarly, skipping
+07-26 15:54:43.501 [main] SettingsInject: INIT: registered
+07-26 15:54:43.506 [main] TTSBroadcaster: TTS init done
+07-26 15:54:43.512 [main] LeShaoV3: [MainHook] activateAll() START, pendingTasks=31
+07-26 15:54:43.513 [main] AntiRecallHook: [XML] Hooked: af5.a.run()
+07-26 15:54:43.514 [main] AntiRecallHook: [Proto] Hooked: e01.u.f()
+07-26 15:54:43.517 [main] AntiRecallHook: [协程] Hooked: bd0.s.invokeSuspend()
+07-26 15:54:43.517 [main] AntiRecallHook: anti-recall hooks installed (4 paths)
+07-26 15:54:43.520 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewReceiveUI.initView()
+07-26 15:54:43.522 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI.initView()
+07-26 15:54:43.522 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI.onCreate()
+07-26 15:54:43.523 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2.onCreate()
+07-26 15:54:43.524 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI.onCreate()
+07-26 15:54:43.525 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKBeforeDetailUI.onCreate()
+07-26 15:54:43.526 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewDetailUI.onCreate()
+07-26 15:54:43.526 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI.onCreate()
+07-26 15:54:43.528 [main] RedPacket: [OK] ChattingUI.onResume()
+07-26 15:54:43.529 [main] RedPacket: RP OK
+07-26 15:54:43.529 [main] RedPacket: hooks installed (open result + UI auto-click + TTS UI)
+07-26 15:54:43.532 [main] AutoCollect: [OK] com.tencent.mm.plugin.wallet.pay.ui.WalletPayUI.onCreate()
+07-26 15:54:43.533 [main] AutoCollect: [OK] ChattingUI.onResume()
+07-26 15:54:43.534 [main] AutoCollect: AC OK
+07-26 15:54:43.534 [main] AutoCollect: hooks installed (transfer result + UI auto-collect)
+07-26 15:54:43.540 [main] LeShaoV3: [Footer] 字数限制已解除 (返回'0')
+07-26 15:54:43.547 [main] LeShaoV3: --- [6] 定时发送 ---
+07-26 15:54:43.548 [main] LeShaoV3:   ChatFooter.F(e9,a35.g)→boolean ✓
+07-26 15:54:43.549 [main] LeShaoV3:   ChatFooterCustom.r(10 params) ✓
+07-26 15:54:43.550 [main] LeShaoV3:   ChatFooterCustom.onClick(View) ✓
+07-26 15:54:43.554 [main] LeShaoV3: [Search] 语音搜索(字段扫描)已启用
+07-26 15:54:43.555 [main] LeShaoV3: [Search] FTSBaseVoiceSearchUI Hook完成
+07-26 15:54:43.556 [main] LeShaoV3: [Badge] MainTabUI.b() Hook完成
+07-26 15:54:43.562 [main] LeShaoV3: [Shake] ShakeReportUI Hook完成 (14个方法)
+07-26 15:54:43.564 [main] LeShaoV3: [CallRecord] widget.k.g() Hook完成
+07-26 15:54:43.565 [main] LeShaoV3: [CallRecord] model.c0.d() Hook完成
+07-26 15:54:43.565 [main] LeShaoV3: [AutoAnswer] CheckVoipCSIsStartedEvent Hook完成
+07-26 15:54:43.566 [main] LeShaoV3: [CallFeatures] 通话录音+自动接听 Hook完成
+07-26 15:54:43.577 [main] LeShaoV3: [LoginMonitor] LauncherUI.onCreate Hook完成
+07-26 15:54:43.579 [main] HideFields: hook initView OK
+07-26 15:54:43.580 [main] LeShaoV3: [ConvPrivacy] notification.m0.a() Hook完成 (level=1)
+07-26 15:54:43.580 [main] LeShaoV3: [ConvPrivacy] MvvmConvList Hook完成
+07-26 15:54:43.583 [main] ContactChangeLog: hook installing...
+07-26 15:54:43.585 [main] ContactChangeLog: GetContactService not found: java.lang.ClassNotFoundException: com$tencent$mm$plugin$getcontact$l11$h
+07-26 15:54:43.585 [main] ContactChangeLog: [v.b] hook ok
+07-26 15:54:43.587 [main] ContactChangeLog: hook installed OK
+07-26 15:54:43.593 [main] MsgExport: menu hook OK
+07-26 15:54:43.596 [main] ChatBackup: daily backup scheduled at 02:00
+07-26 15:54:43.597 [main] ChatBackup: hook OK
+07-26 15:54:43.601 [main] ThemeHook: loadColors done
+07-26 15:54:43.602 [main] ThemeHook: state: m=true bar=false page=false chatBg=false bubble=false tab=false text=false
+07-26 15:54:43.603 [main] ThemeHook: [A] ok
+07-26 15:54:43.605 [main] ThemeHook: [B] ok
+07-26 15:54:43.606 [main] ThemeHook: [C] ga.E0 title ok
+07-26 15:54:43.607 [main] ThemeHook: [C] dim-scan ok
+07-26 15:54:43.608 [main] ThemeHook: [D] ok
+07-26 15:54:43.609 [main] ThemeHook: [E] com.tencent.mm.ui.conversation.MainUI ok
+07-26 15:54:43.611 [main] ThemeHook: [F] p0 extra hook ok
+07-26 15:54:43.611 [main] ThemeHook: [F] DyeTemplate l0+n0 ok
+07-26 15:54:43.613 [main] ThemeHook: [H] ok
+07-26 15:54:43.616 [main] ThemeHook: [X] addView scan ok
+07-26 15:54:43.616 [main] ThemeHook: [G] ChattingUI ok
+07-26 15:54:43.617 [main] ThemeHook: [L] dark sync ok
+07-26 15:54:43.617 [main] ThemeHook: [M] settings bg ok
+07-26 15:54:43.619 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivity ok
+07-26 15:54:43.619 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivityJava ok
+07-26 15:54:43.620 [main] ThemeHook: [O] MMFragment ok
+07-26 15:54:43.621 [main] ThemeHook: [O] MMFragmentActivity ok
+07-26 15:54:43.621 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooter ok
+07-26 15:54:43.622 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooterBottom ok
+07-26 15:54:43.623 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.ChatFooterPanel ok
+07-26 15:54:43.624 [main] ThemeHook: [P] com.tencent.mm.ui.chatting.ChattingFooterMoreBtnBar ok
+07-26 15:54:43.624 [main] ThemeHook: [P] ChattingImageBGView ok
+07-26 15:54:43.625 [main] ThemeHook: [Q] SnsTimeLineUI ok
+07-26 15:54:43.626 [main] ThemeHook: [Q] ImproveSnsTimelineUI ok
+07-26 15:54:43.626 [main] ThemeHook: [Q] ContactInfoUI ok
+07-26 15:54:43.626 [main] ThemeHook: [Q] AddressUI ok
+07-26 15:54:43.627 [main] ThemeHook: [Q] FindMoreFriendsUI ok
+07-26 15:54:43.628 [main] ThemeHook: [Q] WebViewUI ok
+07-26 15:54:43.628 [main] ThemeHook: [Q] MainSettingsUI ok
+07-26 15:54:43.629 [main] ThemeHook: [Q] CommonSettingsUI ok
+07-26 15:54:43.629 [main] ThemeHook: [Q] BizConversationUI ok
+07-26 15:54:43.630 [main] ThemeHook: [Q] SnsUserUI ok
+07-26 15:54:43.630 [main] ThemeHook: [Q] SnsCommentUI ok
+07-26 15:54:43.631 [main] ThemeHook: [Q] SnsUploadUI ok
+07-26 15:54:43.632 [main] ThemeHook: [Q] ContactProfileUI ok
+07-26 15:54:43.633 [main] ThemeHook: [Q] ConversationListView ok
+07-26 15:54:43.634 [main] ThemeHook: [Q] ConversationFolderItemView ok
+07-26 15:54:43.635 [main] ThemeHook: [Q] MainUIView ok
+07-26 15:54:43.635 [main] ThemeHook: [Q] ChattingItemFooter ok
+07-26 15:54:43.636 [main] ThemeHook: [Q] SnsHeader ok
+07-26 15:54:43.639 [main] ThemeHook: [Q] SnsCollapsibleTextView ok
+07-26 15:54:43.640 [main] ThemeHook: [Q] TimelineCommentView ok
+07-26 15:54:43.641 [main] ThemeHook: [Q] LauncherUIBottomTabView ok
+07-26 15:54:43.642 [main] ThemeHook: all hooks installed
+07-26 15:54:44.913 [main] VF: scan [com.tencent.mm.ui.chatting.viewitems, com.tencent.mm.ui.chatting.component]: 2076 classes, 1161 methods
+07-26 15:54:44.914 [main] VF: Menu.add fail: Cannot hook abstract methods: public abstract android.view.MenuItem android.view.Menu.add(int)
+07-26 15:54:44.916 [main] VF: viewitems+component+Menu.add hooks installed
+07-26 15:54:46.170 [main] VF: ◆discovered g(): y21.x0.g(String,String)→String (trusted, ITE on init)
+07-26 15:54:46.172 [main] VF: ◆discovered t(): y21.x0.t(t(String,int,int,e9)→boolean)
+07-26 15:54:46.191 [main] VF: discoverVoiceApi: g=y21.x0.g t=y21.x0.t path=null.null
+07-26 15:54:46.211 [main] VF: ready — do a native forward to trace API
+07-26 15:54:46.212 [main] LeShaoV3: [MainHook] activateAll() DONE
+07-26 15:54:46.213 [leshao-scheduler] SchedulerService: scheduler started
+07-26 15:54:46.522 [main] TtsEngine: TTS init OK
+07-26 15:54:47.705 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-26 15:54:47.710 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-26 15:54:47.711 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-26 15:54:47.720 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-26 15:54:47.722 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-26 15:54:47.797 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-26 15:54:47.804 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-26 15:54:47.805 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-26 15:54:47.820 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-26 15:54:47.824 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-26 15:54:48.061 [main] LeShaoV3: [Badge] Tab[0] count=3 → 3 (style=0)
+07-26 15:54:48.559 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-26 15:54:48.566 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-26 15:54:48.568 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-26 15:54:48.569 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-26 15:54:48.571 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-26 15:54:48.816 [main] ThemeHook: loadColors done
+07-26 15:54:48.817 [main] ThemeHook: dark sync: true
+07-26 15:54:49.112 [main] SettingsInject: Plugin section injected in LinearLayout
+07-26 15:54:49.747 [main] MainActivity: uin=295734952
+07-26 15:54:49.748 [main] MainActivity:   com.tencent.mm_preferences/login_weixin_username=wxid_qf3ok46p08v922
+07-26 15:54:49.748 [main] MainActivity: wxid=wxid_qf3ok46p08v922
+07-26 15:54:49.764 [main] MainActivity: raw nickname=A乐少助手 alias=HK82883
+07-26 15:54:49.788 [[GT]ColdPool#15] MessageHook: #1 type=47->47 isSend=8025 talker=48987999757@chatroom content=wxid_u59wcw30im3y22:0:1:7934b6d52900e44a...
+07-26 15:54:49.840 [[GT]ColdPool#15] MessageHook: #2 type=47->47 isSend=3717 talker=48338996712@chatroom content=wxid_u59wcw30im3y22:0:0:6a2504721ee43ec4...
+07-26 15:54:49.858 [[GT]ColdPool#15] MessageHook: #3 type=1->1 isSend=29 talker=11021177242@chatroom content=zhou296755:
+车找人
+时间：    随 时 出 发
 
-专利抑...
-07-26 15:46:10.584 [[GT]ColdPool#12] MessageHook: #14 type=1->1 isSend=12227 talker=58408603454@chatroom content=wxid_zmiz3feprfbc22:
-各位帅哥美女
-07-26 15:46:10.612 [[GT]ColdPool#12] MessageHook: #15 type=1->1 isSend=13774 talker=7824133803@chatroom content=wxid_7msy461p2zo322:
-没见查了
-07-26 15:46:10.627 [[GT]ColdPool#12] MessageHook: #16 type=1->1 isSend=12227 talker=58408603454@chatroom content=wxid_zmiz3feprfbc22:
-查车吗
-07-26 15:46:10.642 [[GT]ColdPool#12] MessageHook: #17 type=1->1 isSend=27 talker=34831702152@chatroom content=YANGJIAZHEN520:
+起点  :   ...
+07-26 15:54:49.878 [[GT]ColdPool#15] MessageHook: #4 type=1->1 isSend=27 talker=34831702152@chatroom content=zhou296755:
 车找人
-时间:  4点左右
-起点:   新安
-终...
-07-26 15:46:10.660 [[GT]ColdPool#12] MessageHook: #18 type=1->1 isSend=36 talker=7215621333@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  4点左右
-起点:   新安
-终...
-07-26 15:46:10.670 [[GT]ColdPool#12] MessageHook: #19 type=1->1 isSend=29 talker=11021177242@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  4点左右
-起点:   新安
-终...
-07-26 15:46:10.710 [[GT]ColdPool#12] MessageHook: #20 type=1->1 isSend=35 talker=17402151153@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  4点左右
-起点:   新安
-终...
-07-26 15:46:10.728 [[GT]ColdPool#12] MessageHook: #21 type=1->1 isSend=37 talker=23818285582@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  4点左右
-起点:   新安
-终...
-07-26 15:46:10.762 [[GT]ColdPool#12] MessageHook: #22 type=1->1 isSend=34 talker=4543198331@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  4点左右
-起点:   新安
-终...
-07-26 15:46:10.806 [[GT]ColdPool#12] MessageHook: #23 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:10.831 [[GT]ColdPool#12] MessageHook: #24 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:10.848 [[GT]ColdPool#12] MessageHook: #25 type=1->1 isSend=9200 talker=23552094189@chatroom content=wxid_ws84ukldsi1j29:
-[色] 正宗潮汕牛肉丸！厂家直发，零售...
-07-26 15:46:10.867 [[GT]ColdPool#12] MessageHook: #26 type=3->3 isSend=9200 talker=23552094189@chatroom content=wxid_ws84ukldsi1j29:
-<?xml version="1.0"...
-07-26 15:46:10.890 [[GT]ColdPool#12] MessageHook: #27 type=1->1 isSend=7400 talker=49744470922@chatroom content=wxid_yhi1t3qluh8l22:
-刚刚回到，现摘现卖，在杨梅卫生院门口这...
-07-26 15:46:10.912 [[GT]ColdPool#12] MessageHook: #28 type=43->43 isSend=7400 talker=49744470922@chatroom content=wxid_yhi1t3qluh8l22:0:0
+时间：    随 时 出 发
 
-07-26 15:46:10.933 [[GT]ColdPool#12] MessageHook: #29 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:10.981 [[GT]ColdPool#12] MessageHook: #30 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-群里反复回购的沐浴露🔥～
-1.3L超大瓶，只要19.9?...
-07-26 15:46:11.066 [[GT]ColdPool#12] MessageHook: #31 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:11.110 [[GT]ColdPool#12] MessageHook: #32 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:11.147 [[GT]ColdPool#12] MessageHook: #33 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:11.159 [[GT]ColdPool#12] MessageHook: #34 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-头发干枯、烫染受损安排上～
-洁碧泉发膜，16.9💰秒大容...
-07-26 15:46:11.209 [[GT]ColdPool#12] MessageHook: #35 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:11.232 [[GT]ColdPool#12] MessageHook: #36 type=1->1 isSend=27 talker=34831702152@chatroom content=wxid_bzwphetn9iy722:
+起点  :   ...
+07-26 15:54:49.894 [[GT]ColdPool#15] MessageHook: #5 type=1->1 isSend=43 talker=49222549277@chatroom content=zhou296755:
 车找人
-准备出发新安上化州有位
-电话1...
-07-26 15:46:11.267 [[GT]ColdPool#12] MessageHook: #37 type=1->1 isSend=43 talker=49222549277@chatroom content=wxid_bzwphetn9iy722:
-车找人
-准备出发新安上化州有位
-电话1...
-07-26 15:46:11.304 [[GT]ColdPool#12] MessageHook: #38 type=1->1 isSend=2299 talker=22271795842@chatroom content=wxid_ws84ukldsi1j29:
-[色] 正宗潮汕牛肉丸！厂家直发，零售...
-07-26 15:46:11.348 [[GT]ColdPool#12] MessageHook: #39 type=3->3 isSend=2299 talker=22271795842@chatroom content=wxid_ws84ukldsi1j29:
-<?xml version="1.0"...
-07-26 15:46:11.482 [[GT]ColdPool#12] MessageHook: #40 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:11.570 [[GT]ColdPool#12] MessageHook: #41 type=3->3 isSend=38 talker=25536537447@chatroom content=wxid_hbu6qafuielm12:
-<?xml version="1.0"...
-07-26 15:46:11.605 [[GT]ColdPool#12] MessageHook: #42 type=1->1 isSend=38 talker=25536537447@chatroom content=wxid_hbu6qafuielm12:
-#暑假搏击特训298元
-放下手机📲锻...
-07-26 15:46:11.621 [[GT]ColdPool#12] MessageHook: #43 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:11.643 [[GT]ColdPool#12] MessageHook: #44 type=49->49 isSend=3717 talker=48338996712@chatroom content=wxid_rguyqfbfgtz622:
-<?xml version="1.0"...
-07-26 15:46:11.659 [[GT]ColdPool#12] MessageHook: #45 type=1->1 isSend=6209 talker=21916245815@chatroom content=wxid_xt0ynq6vx05x12:
-【🚗 类型🚗 】车找人（私家车）
-...
-07-26 15:46:11.671 [[GT]ColdPool#12] MessageHook: #46 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:11.734 [[GT]ColdPool#12] MessageHook: #47 type=436207665->49 isSend=3717 talker=48338996712@chatroom content=wxid_rguyqfbfgtz622:
-<msg>
-	<appmsg appi...
-07-26 15:46:11.801 [[GT]ColdPool#12] MessageHook: #48 type=436207665->49 isSend=-1 talker=48926319356@chatroom content=wxid_rguyqfbfgtz622:
-<msg>
-	<appmsg appi...
-07-26 15:46:11.803 [[GT]ColdPool#12] ContactChangeLog: [j4.h0] fired
-07-26 15:46:11.807 [[GT]ColdPool#12] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:11.807 [[GT]ColdPool#12] ContactChangeLog: [j4.i0] fired
-07-26 15:46:11.829 [[GT]ColdPool#12] MessageHook: #49 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:11.842 [[GT]ColdPool#12] MessageHook: #50 type=49->49 isSend=8025 talker=48987999757@chatroom content=wxid_rguyqfbfgtz622:
-<?xml version="1.0"...
-07-26 15:46:11.852 [[GT]ColdPool#12] MessageHook: #51 type=1->1 isSend=8185 talker=21725686477@chatroom content=wxid_7uxdyq4x9w6622:
-🔥收一切不能过户的车辆🔥
-👉✨✅...
-07-26 15:46:11.877 [[GT]ColdPool#12] MessageHook: #52 type=3->3 isSend=1749 talker=22758609081@chatroom content=wxid_hbu6qafuielm12:
-<?xml version="1.0"...
-07-26 15:46:11.887 [[GT]ColdPool#12] MessageHook: #53 type=1->1 isSend=1749 talker=22758609081@chatroom content=wxid_hbu6qafuielm12:
-#暑假搏击特训298元
-放下手机📲锻...
-07-26 15:46:11.896 [[GT]ColdPool#12] MessageHook: #54 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-夏天雨水多发～
-晴雨伞任选两件仅29.9💰！
+时间：    随 时 出 发
 
-家里、工...
-07-26 15:46:11.921 [[GT]ColdPool#12] MessageHook: #55 type=436207665->49 isSend=8025 talker=48987999757@chatroom content=wxid_rguyqfbfgtz622:
-<msg>
-	<appmsg appi...
-07-26 15:46:11.952 [[GT]ColdPool#12] MessageHook: #56 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:11.966 [[GT]ColdPool#12] MessageHook: #57 type=47->47 isSend=8025 talker=48987999757@chatroom content=wxid_yh2p2k09u34722:0:1:62bfe33bf732b057...
-07-26 15:46:11.979 [[GT]ColdPool#12] MessageHook: #58 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:11.993 [[GT]ColdPool#12] MessageHook: #59 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:12.006 [[GT]ColdPool#12] MessageHook: #60 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:12.022 [[GT]ColdPool#12] MessageHook: #61 type=3->3 isSend=52 talker=49735108879@chatroom content=wxid_hbu6qafuielm12:
-<?xml version="1.0"...
-07-26 15:46:12.035 [[GT]ColdPool#12] MessageHook: #62 type=1->1 isSend=52 talker=49735108879@chatroom content=wxid_hbu6qafuielm12:
-#暑假搏击特训298元
-放下手机📲锻...
-07-26 15:46:12.042 [[GT]ColdPool#12] MessageHook: #63 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-暑假安排上！闪光双头马克笔～
-48支96色，自带细闪✨！
+起点  :   ...
+07-26 15:54:49.905 [[GT]ColdPool#15] MessageHook: #6 type=1->1 isSend=12661 talker=43571142695@chatroom content=wxid_pnkpre9p1cea22:
+🔥急招暑期泳池救生员｜坡头奥体中心
 ...
-07-26 15:46:12.057 [[GT]ColdPool#12] MessageHook: #64 type=49->49 isSend=53 talker=11586179019@chatroom content=oulele002:
-<msg><appmsg><title>【🔥低至9.9元...
-07-26 15:46:12.067 [[GT]ColdPool#12] MessageHook: #65 type=49->49 isSend=53 talker=11586179019@chatroom content=oulele002:
-<msg><appmsg><title>【🔥全场2件29...
-07-26 15:46:12.084 [[GT]ColdPool#12] MessageHook: #66 type=49->49 isSend=1024 talker=25346744122@chatroom content=wxid_gpprt99qnq522:
-<?xml version="1.0"?...
-07-26 15:46:12.098 [[GT]ColdPool#12] MessageHook: #67 type=3->3 isSend=53 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-26 15:46:12.106 [[GT]ColdPool#12] MessageHook: #68 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-双头闪光马克笔都在抢👆～
-趁着活动，快点安排上‼️
-07-26 15:46:12.111 [[GT]ColdPool#12] MessageHook: #69 type=1->1 isSend=1749 talker=22758609081@chatroom content=wxid_ws84ukldsi1j29:
-[色] 正宗潮汕牛肉丸！厂家直发，零售...
-07-26 15:46:12.119 [[GT]ColdPool#12] MessageHook: #70 type=3->3 isSend=1749 talker=22758609081@chatroom content=wxid_ws84ukldsi1j29:
-<?xml version="1.0"...
-07-26 15:46:12.127 [[GT]ColdPool#12] MessageHook: #71 type=1->1 isSend=37 talker=23818285582@chatroom content=wxid_jcnbhtbly19o22:
-车找人  
-时间ii：准备出发
-起点:...
-07-26 15:46:12.134 [[GT]ColdPool#12] MessageHook: #72 type=1->1 isSend=29 talker=11021177242@chatroom content=wxid_jcnbhtbly19o22:
-车找人  
-时间ii：准备出发
-起点:...
-07-26 15:46:12.142 [[GT]ColdPool#12] MessageHook: #73 type=42->42 isSend=38 talker=25536537447@chatroom content=wxid_14plvq9xekfq22:
-<?xml version="1.0"...
-07-26 15:46:12.147 [[GT]ColdPool#12] MessageHook: #74 type=1->1 isSend=38 talker=25536537447@chatroom content=wxid_14plvq9xekfq22:
-推个卖高品质莆田鞋，潮衣的主营潮鞋 表...
-07-26 15:46:12.856 [[D]#worker] ContactChangeLog: [v.b] fired args=6
-07-26 15:46:12.858 [[D]#worker] ContactChangeLog: [v.b] all np4 fields: A(String) B(int) C(int) D(int) E(String) F(int) G(int) H(String) I(String) J(String) J1(int) K(String) K1(int) L(String) L1(az) M(int) M1(int) N(int) N1(String) O1(String) P(int) P1(String) Q(String) Q1(z95) R(fd6) R1(String) S(String) S1(int) T(String) T1(int) U(String) U1(int) V(String) V1(int) W(hb0) W1(String) X(String) X1(String) Y(String) Y1(long) Z(String) Z1(String) a2(String) b2(String) c2(int) d(ew5) d2(iv5) e(ew5) e2(long) f(ew5) f2(long) g(ew5) g2(dw5) h(int) h2(int) i(dw5) i2(int) j2(int) k2(int) l1(String) l2(ys0) m(int) n(int) o(int) p(ew5) p0(String) p1(b5) q(ew5) r(ew5) s(int) t(int) u(LinkedList) v(ew5) w(int) x(int) x0(String) x1(int) y(String) y0(String) y1(String) z(String) 
-07-26 15:46:12.875 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.879 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.879 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.891 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.894 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.895 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.897 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.900 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.901 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.904 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.906 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.907 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.908 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.911 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.912 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.913 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.916 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.917 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.919 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.921 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.922 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.923 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.926 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.927 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.929 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.931 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.932 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.934 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.936 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.937 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.939 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.941 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.941 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.942 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.944 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.944 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.945 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.947 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.947 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.948 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.952 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.953 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.954 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.956 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.957 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.959 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.961 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.961 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.962 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.964 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.964 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.966 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.967 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.968 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.969 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.970 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.971 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.972 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.973 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.974 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.974 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.976 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.976 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.978 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.979 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.980 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.981 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.983 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.983 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.984 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.986 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.987 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.988 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.990 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.990 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.991 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.993 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.994 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.994 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.996 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.996 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:12.997 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:12.999 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:12.999 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.000 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.001 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.002 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.003 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.005 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.005 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.006 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.008 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.008 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.009 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.011 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.012 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.013 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.015 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.015 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.016 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.018 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.018 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.019 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.020 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.021 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.022 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.024 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.025 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.026 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.028 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.029 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.030 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.033 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.033 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.035 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.037 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.037 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.038 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.040 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.041 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.042 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.043 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.044 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.045 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.047 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.048 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.049 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.051 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.052 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.053 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.054 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.055 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.056 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.058 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.058 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.059 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.061 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.061 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.062 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.064 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.065 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.066 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.068 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.069 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.070 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.073 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.074 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.075 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.077 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.078 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.079 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.081 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.082 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.083 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.085 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.086 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.087 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.089 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.090 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.092 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.093 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.094 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.095 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.097 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.097 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.098 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.100 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.101 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.102 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.104 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.104 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.106 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.108 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.109 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.110 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.112 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.113 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.115 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.117 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.118 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.121 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.124 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.124 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.127 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.130 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.131 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.133 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.136 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.137 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.140 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.143 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.143 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.146 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.149 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.150 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.153 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.156 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.156 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.159 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.161 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.162 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.163 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.165 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.165 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.166 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.168 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.169 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.170 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.172 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.173 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.174 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.176 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.177 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.178 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.180 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.181 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.185 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.187 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.188 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.191 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.193 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.193 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.194 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.196 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.196 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.197 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.199 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.199 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.201 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.203 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.204 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.205 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.207 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.208 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.209 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.211 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.211 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.213 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.215 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.215 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.217 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.219 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.221 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.223 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.227 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.227 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.229 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.232 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.233 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.234 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.236 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.237 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.238 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.240 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.241 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.243 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.245 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.245 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.247 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.249 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.250 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.251 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.253 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.253 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.254 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.257 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.257 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.259 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.261 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.262 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.263 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.266 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.267 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.268 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.271 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.272 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.274 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.277 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.278 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.279 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.282 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.282 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.285 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.288 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.288 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.290 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.293 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.294 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.297 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.300 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.300 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.302 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.305 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.306 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.307 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.310 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.311 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.312 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.315 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.316 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.318 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.321 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.322 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.325 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.327 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.327 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.329 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.332 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.339 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.342 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.350 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.351 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.355 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.360 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.363 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.368 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.371 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.372 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.374 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.376 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.377 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.379 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.381 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.381 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.383 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.386 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.386 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.388 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.390 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.390 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.391 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.394 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.394 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.396 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.397 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.398 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.399 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.401 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.402 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:13.402 [[D]#worker] ContactChangeLog: [j4.h0] fired
-07-26 15:46:13.404 [[D]#worker] ContactChangeLog: save snapshot err: FileNotFoundException
-07-26 15:46:13.405 [[D]#worker] ContactChangeLog: [j4.i0] fired
-07-26 15:46:17.702 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-26 15:46:17.703 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
-07-26 15:46:17.705 [main] ContactRepository: init: DB ready listener registered
-07-26 15:46:17.705 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-26 15:46:17.706 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-26 15:46:17.706 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-26 15:46:17.707 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-26 15:46:17.713 [main] SettingsEntryHook: LauncherUI entry hooks ok
-07-26 15:46:17.713 [main] SettingsEntryHook: INIT: hooks registered ok
-07-26 15:46:17.715 [main] MessageHook: n(e9,p0) OK
-07-26 15:46:17.715 [main] MessageHook: C(e9) OK
-07-26 15:46:17.722 [main] ContextManager: attachBaseContext DONE, ready=true
-07-26 15:46:17.722 [main] DatabaseProvider: init: already hooked via initEarly, skipping
-07-26 15:46:17.723 [main] SettingsInject: INIT: registered
-07-26 15:46:17.727 [main] TTSBroadcaster: TTS init done
-07-26 15:46:17.734 [main] LeShaoV3: [MainHook] activateAll() START, pendingTasks=31
-07-26 15:46:17.735 [main] AntiRecallHook: [XML] Hooked: af5.a.run()
-07-26 15:46:17.736 [main] AntiRecallHook: [Proto] Hooked: e01.u.f()
-07-26 15:46:17.738 [main] AntiRecallHook: [协程] Hooked: bd0.s.invokeSuspend()
-07-26 15:46:17.739 [main] AntiRecallHook: anti-recall hooks installed (4 paths)
-07-26 15:46:17.741 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewReceiveUI.initView()
-07-26 15:46:17.742 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI.initView()
-07-26 15:46:17.743 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI.onCreate()
-07-26 15:46:17.744 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2.onCreate()
-07-26 15:46:17.744 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI.onCreate()
-07-26 15:46:17.745 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKBeforeDetailUI.onCreate()
-07-26 15:46:17.746 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewDetailUI.onCreate()
-07-26 15:46:17.747 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI.onCreate()
-07-26 15:46:17.748 [main] RedPacket: [OK] ChattingUI.onResume()
-07-26 15:46:17.749 [main] RedPacket: RP OK
-07-26 15:46:17.749 [main] RedPacket: hooks installed (open result + UI auto-click + TTS UI)
-07-26 15:46:17.752 [main] AutoCollect: [OK] com.tencent.mm.plugin.wallet.pay.ui.WalletPayUI.onCreate()
-07-26 15:46:17.753 [main] AutoCollect: [OK] ChattingUI.onResume()
-07-26 15:46:17.754 [main] AutoCollect: AC OK
-07-26 15:46:17.754 [main] AutoCollect: hooks installed (transfer result + UI auto-collect)
-07-26 15:46:17.759 [main] LeShaoV3: [Footer] 字数限制已解除 (返回'0')
-07-26 15:46:17.765 [main] LeShaoV3: --- [6] 定时发送 ---
-07-26 15:46:17.766 [main] LeShaoV3:   ChatFooter.F(e9,a35.g)→boolean ✓
-07-26 15:46:17.767 [main] LeShaoV3:   ChatFooterCustom.r(10 params) ✓
-07-26 15:46:17.767 [main] LeShaoV3:   ChatFooterCustom.onClick(View) ✓
-07-26 15:46:17.770 [main] LeShaoV3: [Search] 语音搜索(字段扫描)已启用
-07-26 15:46:17.772 [main] LeShaoV3: [Search] FTSBaseVoiceSearchUI Hook完成
-07-26 15:46:17.773 [main] LeShaoV3: [Badge] MainTabUI.b() Hook完成
-07-26 15:46:17.779 [main] LeShaoV3: [Shake] ShakeReportUI Hook完成 (14个方法)
-07-26 15:46:17.782 [main] LeShaoV3: [CallRecord] widget.k.g() Hook完成
-07-26 15:46:17.782 [main] LeShaoV3: [CallRecord] model.c0.d() Hook完成
-07-26 15:46:17.783 [main] LeShaoV3: [AutoAnswer] CheckVoipCSIsStartedEvent Hook完成
-07-26 15:46:17.783 [main] LeShaoV3: [CallFeatures] 通话录音+自动接听 Hook完成
-07-26 15:46:17.792 [main] LeShaoV3: [LoginMonitor] LauncherUI.onCreate Hook完成
-07-26 15:46:17.793 [main] HideFields: hook initView OK
-07-26 15:46:17.794 [main] LeShaoV3: [ConvPrivacy] notification.m0.a() Hook完成 (level=1)
-07-26 15:46:17.795 [main] LeShaoV3: [ConvPrivacy] MvvmConvList Hook完成
-07-26 15:46:17.798 [main] ContactChangeLog: hook installing...
-07-26 15:46:17.800 [main] ContactChangeLog: GetContactService not found: java.lang.ClassNotFoundException: com$tencent$mm$plugin$getcontact$l11$h
-07-26 15:46:17.800 [main] ContactChangeLog: [v.b] hook ok
-07-26 15:46:17.802 [main] ContactChangeLog: hook installed OK
-07-26 15:46:17.808 [main] MsgExport: menu hook OK
-07-26 15:46:17.811 [main] ChatBackup: daily backup scheduled at 02:00
-07-26 15:46:17.811 [main] ChatBackup: hook OK
-07-26 15:46:17.815 [main] ThemeHook: loadColors done
-07-26 15:46:17.816 [main] ThemeHook: state: m=true bar=false page=false chatBg=false bubble=false tab=false text=false
-07-26 15:46:17.817 [main] ThemeHook: [A] ok
-07-26 15:46:17.819 [main] ThemeHook: [B] ok
-07-26 15:46:17.820 [main] ThemeHook: [C] ga.E0 title ok
-07-26 15:46:17.821 [main] ThemeHook: [C] dim-scan ok
-07-26 15:46:17.823 [main] ThemeHook: [D] ok
-07-26 15:46:17.824 [main] ThemeHook: [E] com.tencent.mm.ui.conversation.MainUI ok
-07-26 15:46:17.826 [main] ThemeHook: [F] p0 extra hook ok
-07-26 15:46:17.826 [main] ThemeHook: [F] DyeTemplate l0+n0 ok
-07-26 15:46:17.828 [main] ThemeHook: [H] ok
-07-26 15:46:17.831 [main] ThemeHook: [X] addView scan ok
-07-26 15:46:17.832 [main] ThemeHook: [G] ChattingUI ok
-07-26 15:46:17.833 [main] ThemeHook: [L] dark sync ok
-07-26 15:46:17.833 [main] ThemeHook: [M] settings bg ok
-07-26 15:46:17.835 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivity ok
-07-26 15:46:17.835 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivityJava ok
-07-26 15:46:17.836 [main] ThemeHook: [O] MMFragment ok
-07-26 15:46:17.836 [main] ThemeHook: [O] MMFragmentActivity ok
-07-26 15:46:17.837 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooter ok
-07-26 15:46:17.838 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooterBottom ok
-07-26 15:46:17.839 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.ChatFooterPanel ok
-07-26 15:46:17.840 [main] ThemeHook: [P] com.tencent.mm.ui.chatting.ChattingFooterMoreBtnBar ok
-07-26 15:46:17.840 [main] ThemeHook: [P] ChattingImageBGView ok
-07-26 15:46:17.841 [main] ThemeHook: [Q] SnsTimeLineUI ok
-07-26 15:46:17.842 [main] ThemeHook: [Q] ImproveSnsTimelineUI ok
-07-26 15:46:17.842 [main] ThemeHook: [Q] ContactInfoUI ok
-07-26 15:46:17.842 [main] ThemeHook: [Q] AddressUI ok
-07-26 15:46:17.843 [main] ThemeHook: [Q] FindMoreFriendsUI ok
-07-26 15:46:17.844 [main] ThemeHook: [Q] WebViewUI ok
-07-26 15:46:17.844 [main] ThemeHook: [Q] MainSettingsUI ok
-07-26 15:46:17.844 [main] ThemeHook: [Q] CommonSettingsUI ok
-07-26 15:46:17.845 [main] ThemeHook: [Q] BizConversationUI ok
-07-26 15:46:17.846 [main] ThemeHook: [Q] SnsUserUI ok
-07-26 15:46:17.846 [main] ThemeHook: [Q] SnsCommentUI ok
-07-26 15:46:17.847 [main] ThemeHook: [Q] SnsUploadUI ok
-07-26 15:46:17.847 [main] ThemeHook: [Q] ContactProfileUI ok
-07-26 15:46:17.849 [main] ThemeHook: [Q] ConversationListView ok
-07-26 15:46:17.850 [main] ThemeHook: [Q] ConversationFolderItemView ok
-07-26 15:46:17.850 [main] ThemeHook: [Q] MainUIView ok
-07-26 15:46:17.851 [main] ThemeHook: [Q] ChattingItemFooter ok
-07-26 15:46:17.852 [main] ThemeHook: [Q] SnsHeader ok
-07-26 15:46:17.853 [main] ThemeHook: [Q] SnsCollapsibleTextView ok
-07-26 15:46:17.854 [main] ThemeHook: [Q] TimelineCommentView ok
-07-26 15:46:17.856 [main] ThemeHook: [Q] LauncherUIBottomTabView ok
-07-26 15:46:17.857 [main] ThemeHook: all hooks installed
-07-26 15:46:19.123 [main] VF: scan [com.tencent.mm.ui.chatting.viewitems, com.tencent.mm.ui.chatting.component]: 2076 classes, 1161 methods
-07-26 15:46:19.125 [main] VF: Menu.add fail: Cannot hook abstract methods: public abstract android.view.MenuItem android.view.Menu.add(int)
-07-26 15:46:19.126 [main] VF: viewitems+component+Menu.add hooks installed
-07-26 15:46:20.317 [main] VF: ◆discovered g(): y21.x0.g(String,String)→String (trusted, ITE on init)
-07-26 15:46:20.318 [main] VF: ◆discovered t(): y21.x0.t(t(String,int,int,e9)→boolean)
-07-26 15:46:20.338 [main] VF: discoverVoiceApi: g=y21.x0.g t=y21.x0.t path=null.null
-07-26 15:46:20.357 [main] VF: ready — do a native forward to trace API
-07-26 15:46:20.359 [main] LeShaoV3: [MainHook] activateAll() DONE
-07-26 15:46:20.361 [leshao-scheduler] SchedulerService: scheduler started
-07-26 15:46:20.587 [main] TtsEngine: TTS init OK
-07-26 15:46:21.724 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-26 15:46:21.749 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-26 15:46:21.752 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-26 15:46:21.754 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-26 15:46:21.755 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-26 15:46:21.756 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-26 15:46:21.757 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-26 15:46:21.759 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-26 15:46:21.760 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-26 15:46:21.769 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-26 15:46:21.776 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-26 15:46:21.778 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-26 15:46:21.779 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-26 15:46:21.780 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-26 15:46:21.783 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-26 15:46:21.929 [main] LeShaoV3: [Badge] Tab[0] count=3 → 3 (style=0)
-07-26 15:46:22.688 [main] ThemeHook: loadColors done
-07-26 15:46:22.689 [main] ThemeHook: dark sync: true
-07-26 15:46:22.983 [main] SettingsInject: Plugin section injected in LinearLayout
-07-26 15:46:23.690 [main] MainActivity: uin=295734952
-07-26 15:46:23.691 [main] MainActivity:   com.tencent.mm_preferences/login_weixin_username=wxid_qf3ok46p08v922
-07-26 15:46:23.692 [main] MainActivity: wxid=wxid_qf3ok46p08v922
-07-26 15:46:23.708 [main] MainActivity: raw nickname=A乐少助手 alias=HK82883
-07-26 15:46:24.643 [[GT]ColdPool#10] MessageHook: #1 type=1->1 isSend=54 talker=25295891650@chatroom content=wxid_xt0ynq6vx05x12:
-【🚗 类型🚗 】车找人（私家车）
+07-26 15:54:49.913 [[GT]ColdPool#15] MessageHook: #7 type=1->1 isSend=12661 talker=43571142695@chatroom content=wxid_pnkpre9p1cea22:
+🔥急聘楼杂｜招 1人 女性优先🔥
 ...
-07-26 15:46:26.910 [main] ContactRepository: UIN changed: -1 -> 295734952, clearing cache
-07-26 15:46:26.911 [main] ContactRepository: loadContacts START
-07-26 15:46:26.911 [main] ContactRepository: Strategy A: trying direct DB (ka5.f.s)...
-07-26 15:46:26.912 [main] ContactRepository: Strategy A: uin=295734952
-07-26 15:46:26.916 [main] ContactRepository: Strategy A: imei=1234567890ABCDEF
-07-26 15:46:26.917 [main] ContactRepository: Strategy A: dbPath=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db
-07-26 15:46:26.918 [main] ContactRepository: Strategy A: pwd(censored) calculated, opening...
-07-26 15:46:26.926 [main] ContactRepository: Strategy A: DB opened via ka5.f.s, querying...
-07-26 15:46:26.935 [main] ContactRepository: DIAG [type,verifyFlag]=count: [4,0]=14916 [3,0]=48 [33,0]=24 [1,0]=1 [3,56]=1 [259,0]=1 [2049,0]=1 [2051,0]=1
-07-26 15:46:26.935 [main] ContactRepository: queryContactsWcdb friends=0
-07-26 15:46:26.940 [main] ContactRepository: queryContactsWcdb groups=78 total=78
-07-26 15:46:26.942 [main] ContactRepository: loadContacts OK via Strategy A (direct DB)
-07-26 15:46:28.943 [main] ChatBackup: found DB at /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
-07-26 15:46:28.954 [main] ChatBackup: backup err: /sdcard/leshao_v3_logs/backup/EnMicroMsg_20260726_154628.db: open failed: ENOENT (No such file or directory)
-07-26 15:46:30.529 [[GT]ColdPool#13] DatabaseProvider: DB captured via rawQuery (EnMicroMsg: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db)
-07-26 15:46:32.775 [main] MainActivity: uin=295734952
-07-26 15:46:32.776 [main] MainActivity:   com.tencent.mm_preferences/login_weixin_username=wxid_qf3ok46p08v922
-07-26 15:46:32.777 [main] MainActivity: wxid=wxid_qf3ok46p08v922
-07-26 15:46:32.787 [main] MainActivity: raw nickname=A乐少助手 alias=HK82883
+07-26 15:54:49.918 [[GT]ColdPool#15] MessageHook: #8 type=1->1 isSend=12661 talker=43571142695@chatroom content=wxid_pnkpre9p1cea22:
+🔥湛江急聘｜户外巡检员
+📌工作内容...
+07-26 15:54:49.924 [[GT]ColdPool#15] MessageHook: #9 type=1->1 isSend=35 talker=17402151153@chatroom content=zhou296755:
+车找人
+时间：    随 时 出 发
+
+起点  :   ...
+07-26 15:54:49.932 [[GT]ColdPool#15] MessageHook: #10 type=1->1 isSend=45 talker=21730591086@chatroom content=zhou296755:
+车找人
+时间：    随 时 出 发
+
+起点  :   ...
+07-26 15:54:49.940 [[GT]ColdPool#15] MessageHook: #11 type=1->1 isSend=46 talker=2097769708@chatroom content=zhou296755:
+车找人
+时间：    随 时 出 发
+
+起点  :   ...
+07-26 15:54:49.949 [[GT]ColdPool#15] MessageHook: #12 type=1->1 isSend=36 talker=7215621333@chatroom content=wxid_as0qlhk12bmv12:
+类型，五座油车找人
+
+时间，日日🈶车...
+07-26 15:54:49.959 [[GT]ColdPool#15] MessageHook: #13 type=1->1 isSend=49 talker=48321925870@chatroom content=wxid_dlcx6pue4jg222:
+支付宝红包，真实有效
+07-26 15:54:49.982 [[GT]ColdPool#15] MessageHook: #14 type=3->3 isSend=49 talker=48321925870@chatroom content=wxid_dlcx6pue4jg222:
+<?xml version="1.0"...
+07-26 15:54:49.994 [[GT]ColdPool#15] MessageHook: #15 type=1->1 isSend=37 talker=23818285582@chatroom content=YANGJIAZHEN520:
+车找人
+时间:  准备出发
+起点:   新安
+终...
+07-26 15:54:50.007 [[GT]ColdPool#15] MessageHook: #16 type=1->1 isSend=36 talker=7215621333@chatroom content=YANGJIAZHEN520:
+车找人
+时间:  准备出发
+起点:   新安
+终...
+07-26 15:54:50.024 [[GT]ColdPool#15] MessageHook: #17 type=1->1 isSend=35 talker=17402151153@chatroom content=YANGJIAZHEN520:
+车找人
+时间:  准备出发
+起点:   新安
+终...
+07-26 15:54:50.031 [[GT]ColdPool#15] MessageHook: #18 type=1->1 isSend=29 talker=11021177242@chatroom content=YANGJIAZHEN520:
+车找人
+时间:  准备出发
+起点:   新安
+终...
+07-26 15:54:50.038 [[GT]ColdPool#15] MessageHook: #19 type=1->1 isSend=27 talker=34831702152@chatroom content=YANGJIAZHEN520:
+车找人
+时间:  准备出发
+起点:   新安
+终...
+07-26 15:54:50.044 [[GT]ColdPool#15] MessageHook: #20 type=1->1 isSend=34 talker=4543198331@chatroom content=YANGJIAZHEN520:
+车找人
+时间:  准备出发
+起点:   新安
+终...
+07-26 15:54:50.051 [[GT]ColdPool#15] MessageHook: #21 type=1->1 isSend=30 talker=22918947217@chatroom content=wxid_3lrpc6ddcl2822:
+收 芬    
+07-26 15:54:50.062 [[GT]ColdPool#15] MessageHook: #22 type=3->3 isSend=30 talker=22918947217@chatroom content=wxid_rdcgyrygslbc12:
+<?xml version="1.0"...
+07-26 15:54:50.075 [[GT]ColdPool#15] MessageHook: #23 type=1->1 isSend=9200 talker=23552094189@chatroom content=wxid_3lrpc6ddcl2822:
+收 芬    
+07-26 15:54:50.087 [[GT]ColdPool#15] MessageHook: #24 type=1->1 isSend=8185 talker=21725686477@chatroom content=wxid_3lrpc6ddcl2822:
+收 芬    
+07-26 15:54:50.096 [[GT]ColdPool#15] MessageHook: #25 type=1->1 isSend=29 talker=11021177242@chatroom content=wxid_3lrpc6ddcl2822:
+收 芬    
+07-26 15:54:50.102 [[GT]ColdPool#15] MessageHook: #26 type=1->1 isSend=26 talker=22110637730@chatroom content=wxid_3lrpc6ddcl2822:
+收 芬    
+07-26 15:54:50.108 [[GT]ColdPool#15] MessageHook: #27 type=1->1 isSend=28 talker=18244170776@chatroom content=wxid_3lrpc6ddcl2822:
+收 芬    
+07-26 15:54:50.116 [[GT]ColdPool#15] MessageHook: #28 type=1->1 isSend=50 talker=17286001415@chatroom content=wxid_3lrpc6ddcl2822:
+收 芬    
+07-26 15:54:50.123 [[GT]ColdPool#15] MessageHook: #29 type=1->1 isSend=51 talker=23149434800@chatroom content=wxid_3lrpc6ddcl2822:
+收 芬    
+07-26 15:54:50.129 [[GT]ColdPool#15] MessageHook: #30 type=1->1 isSend=4689 talker=18249563796@chatroom content=wxid_3lrpc6ddcl2822:
+收 芬    
+07-26 15:54:51.018 [[GT]ColdPool#14] MessageHook: #31 type=1->1 isSend=1749 talker=22758609081@chatroom content=wxid_3lrpc6ddcl2822:
+收 芬    
+07-26 15:54:52.555 [main] ContactRepository: UIN changed: -1 -> 295734952, clearing cache
+07-26 15:54:52.557 [main] ContactRepository: loadContacts START
+07-26 15:54:52.557 [main] ContactRepository: Strategy A: trying direct DB (ka5.f.s)...
+07-26 15:54:52.558 [main] ContactRepository: Strategy A: uin=295734952
+07-26 15:54:52.558 [main] ContactRepository: Strategy A: imei=1234567890ABCDEF
+07-26 15:54:52.559 [main] ContactRepository: Strategy A: dbPath=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db
+07-26 15:54:52.559 [main] ContactRepository: Strategy A: pwd(censored) calculated, opening...
+07-26 15:54:52.571 [main] ContactRepository: Strategy A: DB opened via ka5.f.s, querying...
+07-26 15:54:52.572 [main] ContactRepository: SCHEMA: CREATE TABLE rcontact (  username TEXT default ''  PRIMARY KEY ,  alias TEXT default '' ,  conRemark TEXT default '' ,  domainList TEXT default '' ,  nickname TEXT default '' ,  pyInitial TEXT default '' ,  quanPin TEXT default '' ,  showHead INTEGER default '0' ,  type INTEGER default '0' ,  uiType LONG default '0' ,  weiboFlag INTEGER default '0' ,  weiboNickname TEXT default '' ,  conRemarkPYFull TEXT default '' ,  conRemarkPYShort TEXT default '' ,  lvbuff BLOB,  verifyFlag INTEGER default '0' ,  encryptUsername TEXT default '' ,  chatroomFlag INTEGER,  deleteFlag INTEGER default '0' ,  contactLabelIds TEXT default '' ,  descWordingId TEXT default '' ,  openImAppid TEXT,  sourceExtInfo TEXT,  ticket TEXT default '' ,  usernameFlag LONG default '0' ,  contactExtra BLOB,  createTime LONG default '0' )
+07-26 15:54:52.572 [main] ContactRepository:   COL idx username=0
+07-26 15:54:52.573 [main] ContactRepository:   COL idx alias=1
+07-26 15:54:52.573 [main] ContactRepository:   COL idx conRemark=2
+07-26 15:54:52.573 [main] ContactRepository:   COL idx nickname=4
+07-26 15:54:52.573 [main] ContactRepository:   COL idx type=8
+07-26 15:54:52.574 [main] ContactRepository:   COL idx verifyFlag=15
+07-26 15:54:52.574 [main] ContactRepository:   COL idx showHead=7
+07-26 15:54:52.574 [main] ContactRepository:   COL idx userType=-1
+07-26 15:54:52.575 [main] ContactRepository:   COL idx typeExt=-1
+07-26 15:54:52.575 [main] ContactRepository:   COL idx chatroomFlag=17
+07-26 15:54:52.575 [main] ContactRepository:   COL idx encryptUsername=16
+07-26 15:54:52.575 [main] ContactRepository:   COL idx source=-1
+07-26 15:54:52.576 [main] ContactRepository:   COL idx addScene=-1
+07-26 15:54:52.576 [main] ContactRepository:   COL idx contactType=-1
+07-26 15:54:52.577 [main] ContactRepository:   ROW1 u=wxid_orwrp8xryw6c22 n=杨家饺子673891（惠广超市对面） t=4 vf=0
+07-26 15:54:52.577 [main] ContactRepository:   ROW2 u=wxid_gpktmss4sush22 n=红清 t=4 vf=0
+07-26 15:54:52.577 [main] ContactRepository:   ROW3 u=wxid_ina7dbq6o5hp22 n=马兴，模具数控精密放电 t=4 vf=0
+07-26 15:54:52.577 [main] ContactRepository:   ROW4 u=wxid_f0zy83p7h13l22 n=@往事随风，爱恨随意！ t=4 vf=0
+07-26 15:54:52.578 [main] ContactRepository:   ROW5 u=wxid_tm5j1ii7y58y22 n=喵喵 t=4 vf=0
+07-26 15:54:52.578 [main] ContactRepository:   ROW6 u=wxid_rj8nnpa5ihv222 n=彭景贵 t=4 vf=0
+07-26 15:54:52.578 [main] ContactRepository:   ROW7 u=wxid_qjxqshrbxkfd22 n=蓝冰颖特产专卖店🍑银妃水果 t=4 vf=0
+07-26 15:54:52.579 [main] ContactRepository:   ROW8 u=chenpeng6002 n=君 莫 笑 t=4 vf=0
+07-26 15:54:52.579 [main] ContactRepository:   ROW9 u=wxid_0kxy249ntrwv22 n=可爱的女孩 t=4 vf=0
+07-26 15:54:52.579 [main] ContactRepository:   ROW10 u=wxid_g65x14et4lp622 n=坤：婚庆策划：灯光音响舞台出租 t=4 vf=0
+07-26 15:54:52.594 [main] ContactRepository: queryContactsWcdb friends=500
+07-26 15:54:52.600 [main] ContactRepository: queryContactsWcdb groups=78 total=578
+07-26 15:54:52.602 [main] ContactRepository: loadContacts OK via Strategy A (direct DB)
+07-26 15:54:52.785 [Thread-17] AvatarHelper: j1 Class not available: Didn't find class "j1" on path: DexPathList[[zip file "/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/lib/arm64, /data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk!/lib/arm64-v8a, /system/lib64, /system_ext/lib64]]
+07-26 15:54:52.786 [Thread-17] AvatarHelper: MethodB: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
+07-26 15:54:52.786 [Thread-17] AvatarHelper: init OK, dir=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
+07-26 15:54:55.020 [main] ChatBackup: found DB at /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
+07-26 15:54:55.025 [main] ChatBackup: backup err: /sdcard/leshao_v3_logs/backup/EnMicroMsg_20260726_155455.db: open failed: ENOENT (No such file or directory)
+07-26 15:54:56.490 [[GT]ColdPool#6] DatabaseProvider: DB captured via rawQuery (EnMicroMsg: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db)
+07-26 15:55:09.227 [[GT]ColdPool#0] MessageHook: #32 type=1->1 isSend=14833 talker=21320118492@chatroom content=wxid_3lrpc6ddcl2822:
+收 芬    
+07-26 15:55:10.392 [[GT]ColdPool#17] MessageHook: #33 type=1->1 isSend=5932 talker=23465839772@chatroom content=wxid_3lrpc6ddcl2822:
+收 芬    
+07-26 15:55:11.433 [[GT]ColdPool#8] MessageHook: #34 type=1->1 isSend=34 talker=4543198331@chatroom content=wxid_3lrpc6ddcl2822:
+收 芬    
+07-26 15:55:11.439 [[GT]ColdPool#8] MessageHook: #35 type=1->1 isSend=52 talker=49735108879@chatroom content=wxid_3lrpc6ddcl2822:
+收 芬    
+07-26 15:55:16.149 [main] MainActivity: uin=295734952
+07-26 15:55:16.150 [main] MainActivity:   com.tencent.mm_preferences/login_weixin_username=wxid_qf3ok46p08v922
+07-26 15:55:16.150 [main] MainActivity: wxid=wxid_qf3ok46p08v922
+07-26 15:55:16.165 [main] MainActivity: raw nickname=A乐少助手 alias=HK82883

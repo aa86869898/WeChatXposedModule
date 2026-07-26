@@ -267,43 +267,63 @@ public class ContactRepository {
         List<Contact> groups = new ArrayList<>();
 
         try {
-            // 诊断: rcontact表的列名
+            // 诊断: 列出含friend/contact/biz/label关键字的table
             try {
-                String colSql = "SELECT sql FROM sqlite_master WHERE type='table' AND name='rcontact'";
-                Object cc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, colSql, null);
-                if ((Boolean) cc.getClass().getMethod("moveToFirst").invoke(cc)) {
-                    String schema = (String) cc.getClass().getMethod("getString", int.class).invoke(cc, 0);
-                    LogWriter.log(TAG, "SCHEMA: " + schema);
+                String tSql = "SELECT name FROM sqlite_master WHERE type='table'"
+                    + " AND (name LIKE '%friend%' OR name LIKE '%contact%' OR name LIKE '%label%' OR name LIKE '%add%')"
+                    + " ORDER BY name";
+                Object tc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, tSql, null);
+                StringBuilder tbn = new StringBuilder("TABLES: ");
+                while ((Boolean) tc.getClass().getMethod("moveToNext").invoke(tc)) {
+                    tbn.append((String) tc.getClass().getMethod("getString", int.class).invoke(tc, 0)).append(" ");
                 }
-                cc.getClass().getMethod("close").invoke(cc);
+                tc.getClass().getMethod("close").invoke(tc);
+                LogWriter.log(TAG, tbn.toString());
             } catch (Throwable e) {
-                LogWriter.log(TAG, "SCHEMA failed: " + e.getMessage());
+                LogWriter.log(TAG, "TABLES failed: " + e.getMessage());
             }
 
-            // 诊断: 随机20行type=4，打印所有字段的原生值
+            // 诊断: 查chatroomFlag+encryptUsername分布
             try {
-                String rSql = "SELECT * FROM rcontact WHERE type=4 AND deleteFlag=0 LIMIT 20";
-                Object rc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, rSql, null);
-                String[] cols = {"username","alias","conRemark","nickname","type","verifyFlag","showHead",
-                    "userType","typeExt","chatroomFlag","encryptUsername","source","addScene","contactType"};
-                for (String cn : cols) {
-                    try {
-                        int idx = (Integer) rc.getClass().getMethod("getColumnIndex", String.class).invoke(rc, cn);
-                        LogWriter.log(TAG, "  COL idx " + cn + "=" + idx);
-                    } catch (Throwable e) {}
+                String diagSql = "SELECT chatroomFlag, verifyFlag, encryptUsername IS NOT NULL AS hasEnc,"
+                    + " COUNT(*) AS cnt"
+                    + " FROM rcontact"
+                    + " WHERE type=4 AND deleteFlag=0"
+                    + " AND username NOT LIKE 'gh_%' AND username NOT LIKE '%@chatroom'"
+                    + " GROUP BY chatroomFlag, verifyFlag, hasEnc"
+                    + " ORDER BY cnt DESC LIMIT 20";
+                Object dc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, diagSql, null);
+                int dciC = (Integer) dc.getClass().getMethod("getColumnIndex", String.class).invoke(dc, "chatroomFlag");
+                int dciV = (Integer) dc.getClass().getMethod("getColumnIndex", String.class).invoke(dc, "verifyFlag");
+                int dciE = (Integer) dc.getClass().getMethod("getColumnIndex", String.class).invoke(dc, "hasEnc");
+                int dciCnt = (Integer) dc.getClass().getMethod("getColumnIndex", String.class).invoke(dc, "cnt");
+                StringBuilder sb = new StringBuilder("DIAG2 ");
+                int n = 0;
+                while ((Boolean) dc.getClass().getMethod("moveToNext").invoke(dc) && ++n <= 15) {
+                    sb.append(" [cf=").append(intFromCursor(dc, dciC))
+                        .append(",vf=").append(intFromCursor(dc, dciV))
+                        .append(",enc=").append(intFromCursor(dc, dciE) > 0 ? "Y" : "N")
+                        .append("]=").append(intFromCursor(dc, dciCnt));
                 }
-                int rowCount = 0;
-                int cu = (Integer) rc.getClass().getMethod("getColumnIndex", String.class).invoke(rc, "username");
-                int cn = (Integer) rc.getClass().getMethod("getColumnIndex", String.class).invoke(rc, "nickname");
-                int ct = (Integer) rc.getClass().getMethod("getColumnIndex", String.class).invoke(rc, "type");
-                int cv = (Integer) rc.getClass().getMethod("getColumnIndex", String.class).invoke(rc, "verifyFlag");
-                while ((Boolean) rc.getClass().getMethod("moveToNext").invoke(rc) && ++rowCount <= 10) {
-                    LogWriter.log(TAG, "  ROW" + rowCount + " u=" + strFromCursor(rc, cu)
-                        + " n=" + trunc(strFromCursor(rc, cn), 20) + " t=" + intFromCursor(rc, ct) + " vf=" + intFromCursor(rc, cv));
+                dc.getClass().getMethod("close").invoke(dc);
+                LogWriter.log(TAG, sb.toString());
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "DIAG2 failed: " + e.getMessage());
+            }
+
+            // 诊断: 有备注(conRemark)的视为真实好友——打印confirm
+            try {
+                String rmSql = "SELECT COUNT(*) FROM rcontact"
+                    + " WHERE type=4 AND deleteFlag=0 AND conRemark IS NOT NULL AND conRemark != ''"
+                    + " AND username NOT LIKE 'gh_%' AND username NOT LIKE '%@chatroom'";
+                Object rc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, rmSql, null);
+                if ((Boolean) rc.getClass().getMethod("moveToFirst").invoke(rc)) {
+                    int cnt = (Integer) rc.getClass().getMethod("getInt", int.class).invoke(rc, 0);
+                    LogWriter.log(TAG, "DIAG2 hasRemark=" + cnt + " from type=4");
                 }
                 rc.getClass().getMethod("close").invoke(rc);
             } catch (Throwable e) {
-                LogWriter.log(TAG, "SAMPLE failed: " + e.getMessage());
+                LogWriter.log(TAG, "DIAG2 remark query failed: " + e.getMessage());
             }
 
             // 好友: 不做verifyFlag过滤，全部type=4都取，Java侧过滤
