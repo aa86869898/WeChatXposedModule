@@ -16,7 +16,6 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import com.leshao.v3.BuildConfig;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.MainActivity;
@@ -179,7 +178,6 @@ public class SettingsInjectProvider extends ContentProvider {
         headerRow.addView(spacer);
 
         String ver = "1.2.106";
-        try { ver = com.leshao.v3.BuildConfig.VERSION_NAME; } catch (Throwable ignored) {}
         TextView verView = new TextView(ctx);
         verView.setText(ver);
         verView.setTextSize(11);
