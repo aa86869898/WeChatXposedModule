@@ -552,7 +552,7 @@ public class SettingsEntryHook {
             LinearLayout root = new LinearLayout(ctx);
             root.setOrientation(LinearLayout.VERTICAL);
             root.setPadding(p, p, p, p);
-            root.setBackground(createGlassBg(ctx, 14));
+            root.setBackgroundColor(com.leshao.v3.ui.AppColors.bg());
 
             TextView title = new TextView(ctx);
         title.setText("乐少多功能助手");

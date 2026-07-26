@@ -150,42 +150,17 @@ public class SettingsInjectProvider extends ContentProvider {
     private static View buildPluginSection(Activity activity, float d) {
         Context ctx = activity;
 
-        // 外层容器，透明无背景，紧贴设置列表风格
+        // 单行透明容器，完全跟随微信设置原生风格，不受模块主题影响
         LinearLayout container = new LinearLayout(ctx);
-        container.setOrientation(LinearLayout.VERTICAL);
-        container.setPadding((int)(16 * d), (int)(4 * d), (int)(16 * d), (int)(4 * d));
-        container.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        container.setOrientation(LinearLayout.HORIZONTAL);
+        container.setGravity(Gravity.CENTER_VERTICAL);
+        container.setPadding((int)(16 * d), (int)(10 * d), (int)(16 * d), (int)(10 * d));
         container.setClickable(true);
         container.setFocusable(true);
+        container.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         container.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
 
-        // 标题行: 插件  +  版本号(右)
-        LinearLayout headerRow = new LinearLayout(ctx);
-        headerRow.setOrientation(LinearLayout.HORIZONTAL);
-        headerRow.setGravity(Gravity.CENTER_VERTICAL);
-        headerRow.setPadding(0, 0, 0, (int)(2 * d));
-        headerRow.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-
-        TextView pluginLabel = new TextView(ctx);
-        pluginLabel.setText("插件");
-        pluginLabel.setTextSize(13);
-        pluginLabel.setTextColor(AppColors.text2());
-        headerRow.addView(pluginLabel);
-
-        // 占位撑开
-        View spacer = new View(ctx);
-        spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 0, 1.0f));
-        headerRow.addView(spacer);
-
-        String ver = "1.2.106";
-        TextView verView = new TextView(ctx);
-        verView.setText(ver);
-        verView.setTextSize(11);
-        verView.setTextColor(AppColors.text2());
-        headerRow.addView(verView);
-        container.addView(headerRow);
-
-        // 入口行: 七彩霓虹粗体 "乐少助手"
+        // 七彩霓虹粗体 "乐少助手"
         TextView title = new TextView(ctx) {
             @Override
             protected void onSizeChanged(int w, int h, int ow, int oh) {
@@ -200,11 +175,21 @@ public class SettingsInjectProvider extends ContentProvider {
             }
         };
         title.setText("乐少助手");
-        title.setTextSize(15);
+        title.setTextSize(19);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setPadding(0, 0, 0, 0);
-        title.setLayoutParams(new LinearLayout.LayoutParams(-2, -2));
+        title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         container.addView(title);
+
+        // 版本号右侧对齐
+        TextView verView = new TextView(ctx);
+        verView.setText("1.2.106");
+        verView.setTextSize(12);
+        verView.setTextColor(AppColors.text2());
+        verView.setGravity(Gravity.CENTER_VERTICAL);
+        verView.setPadding((int)(8 * d), 0, 0, 0);
+        verView.setLayoutParams(new LinearLayout.LayoutParams(-2, -2));
+        container.addView(verView);
 
         container.setOnClickListener(v -> {
             try { MainActivity.open(activity); }
