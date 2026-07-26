@@ -301,6 +301,12 @@ public class ContactRepository {
                 int verifyFlag = intFromCursor(cursor, ciV);
                 int showHead = ciSh >= 0 ? intFromCursor(cursor, ciSh) : 32;
 
+                // 诊断: 前5行打印全部字段
+                if (friends.size() < 5) {
+                    LogWriter.log(TAG, "  F" + friends.size() + " u=" + wxid + " n=" + trunc(nickname, 16)
+                        + " a=" + trunc(alias, 16) + " r=" + trunc(remark, 16) + " t=" + type);
+                }
+
                 if (skipWxid(wxid)) continue;
 
                 Contact contact = new Contact(wxid, nickname, remark, alias, type, 0, 0);
