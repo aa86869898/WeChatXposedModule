@@ -174,9 +174,13 @@ public class ContactRepository {
             while ((Boolean) XposedHelpers.callMethod(cursor, "moveToNext")) {
                 rowCount++;
                 String wxid = (String) XposedHelpers.callMethod(cursor, "getString", ciU);
+                String nick = (String) XposedHelpers.callMethod(cursor, "getString", ciN);
+                int type = (Integer) XposedHelpers.callMethod(cursor, "getInt", ciT);
+                LogWriter.log(TAG, "  RAW[" + rowCount + "] wxid=" + wxid
+                    + " nick=" + (nick != null ? nick.substring(0, Math.min(20, nick.length())) : "null")
+                    + " type=" + type);
                 if (wxid == null || wxid.isEmpty()) continue;
 
-                // 内联排除常用系统账号
                 if (wxid.equals("weixin") || wxid.equals("filehelper") || wxid.equals("medianote")
                     || wxid.equals("newsapp") || wxid.equals("floatbottle") || wxid.equals("tmessage")
                     || wxid.equals("qmessage") || wxid.startsWith("gh_") || wxid.startsWith("qqmail_"))
