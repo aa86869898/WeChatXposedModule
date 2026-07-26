@@ -220,30 +220,21 @@ public class ContactRepository {
             String pwd = md5(imei + String.valueOf(uin)).substring(0, 7);
             LogWriter.log(TAG, "Strategy A: pwd(censored), opening via WCDB SQLiteDatabase...");
 
-            // 4. 用 WeChat WCDB 的 SQLiteDatabase.openDatabase(dbPath, byte[] password, factory, flags)
-            Class<?> wcdbDb = cl.loadClass("com.tencent.wcdb.database.SQLiteDatabase");
+            // 4. 用 ka5.f.s 打开加密数据库
             Object rawDb = null;
             try {
-                // openDatabase(String path, byte[] password, CursorFactory factory, int flags)
-                rawDb = wcdbDb.getMethod("openDatabase",
-                    String.class, byte[].class, Object.class, int.class)
-                    .invoke(null, dbPath, pwd.getBytes("UTF-8"), null, 1 /* OPEN_READONLY */);
+                Method sMethod = cl.loadClass("ka5.f").getMethod("s",
+                    String.class, String.class, int.class, boolean.class);
+                rawDb = sMethod.invoke(null, dbPath, pwd, 0, true);
             } catch (Throwable e) {
-                try {
-                    // openDatabase(String path, byte[] password, CursorFactory factory, int flags, DatabaseErrorHandler)
-                    rawDb = wcdbDb.getMethod("openDatabase",
-                        String.class, byte[].class, Object.class, int.class, Object.class)
-                        .invoke(null, dbPath, pwd.getBytes("UTF-8"), null, 1, null);
-                } catch (Throwable e2) {
-                    LogWriter.log(TAG, "Strategy A: WCDB openDatabase failed: " + e2.getMessage());
-                    return false;
-                }
+                LogWriter.log(TAG, "Strategy A: ka5.f.s failed: " + e.getMessage());
+                return false;
             }
-            if (rawDb == null) { LogWriter.log(TAG, "Strategy A: openDatabase returned null"); return false; }
+            if (rawDb == null) { LogWriter.log(TAG, "Strategy A: ka5.f.s returned null"); return false; }
 
             // 5. Validate
             try {
-                Object cursor = rawDb.getClass().getMethod("rawQuery", String.class, String[].class)
+                Object cursor = rawDb.getClass().getMethod("u", String.class, String[].class)
                     .invoke(rawDb, "SELECT name FROM sqlite_master WHERE type='table' AND name='rcontact'", null);
                 boolean ok = (Boolean) cursor.getClass().getMethod("moveToFirst").invoke(cursor);
                 cursor.getClass().getMethod("close").invoke(cursor);
@@ -264,7 +255,7 @@ public class ContactRepository {
     }
 
     private static void closeWcdb(Object db) {
-        try { db.getClass().getMethod("close").invoke(db); } catch (Throwable ignored) {}
+        try { db.getClass().getMethod("c").invoke(db); } catch (Throwable ignored) {}
     }
 
     private static boolean queryContactsWcdb(Object db) {
@@ -280,7 +271,7 @@ public class ContactRepository {
                 + " ORDER BY CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END,"
                 + " nickname";
 
-            Object cursor = db.getClass().getMethod("rawQuery", String.class, String[].class)
+            Object cursor = db.getClass().getMethod("u", String.class, String[].class)
                 .invoke(db, friendsSql, null);
 
             int ciU = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "username");
@@ -318,7 +309,7 @@ public class ContactRepository {
                 + " WHERE username LIKE '%@chatroom' AND deleteFlag = 0"
                 + " ORDER BY nickname ASC";
 
-            cursor = db.getClass().getMethod("rawQuery", String.class, String[].class)
+            cursor = db.getClass().getMethod("u", String.class, String[].class)
                 .invoke(db, groupsSql, null);
 
             ciU = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "username");
@@ -923,7 +914,6 @@ public class ContactRepository {
                 }
 
                 String[] imeiCandidates = getImeiCandidates(cl);
-                Class<?> wcdbDb = cl.loadClass("com.tencent.wcdb.database.SQLiteDatabase");
                 for (String imei : imeiCandidates) {
                     if (imei == null || imei.isEmpty()) continue;
                     String password = calcPassword(cl, imei, uin);
@@ -931,9 +921,9 @@ public class ContactRepository {
 
                     Object db = null;
                     try {
-                        db = wcdbDb.getMethod("openDatabase",
-                            String.class, byte[].class, Object.class, int.class)
-                            .invoke(null, dbPath, password.getBytes("UTF-8"), null, 1);
+                        Method sMethod = cl.loadClass("ka5.f").getMethod("s",
+                            String.class, String.class, int.class, boolean.class);
+                        db = sMethod.invoke(null, dbPath, password, 0, true);
                     } catch (Throwable e) {}
                     if (db != null) {
                         sDirDb = db;
