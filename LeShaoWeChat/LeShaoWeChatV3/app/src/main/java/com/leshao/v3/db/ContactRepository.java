@@ -76,19 +76,19 @@ public class ContactRepository {
         } catch (Throwable t) { return -1; }
     }
 
-    // ===== 分类常量 (按手册第13章 WeChat j4.t() 位掩码) =====
+    // ===== 分类常量 (按微信联系人数据库完整技术文档: type=4=好友, type=1=陌生人, type=33=系统号) =====
     public static int categorize(String wxid, int type) {
         if (wxid == null) return CAT_EXCLUDED;
         if ("filehelper".equals(wxid)) return CAT_SPECIAL;
         if (wxid.endsWith("@chatroom")) return CAT_GROUP;
         if (wxid.startsWith("gh_")) return CAT_OFFICIAL;
+        if (type == 33) return CAT_SYSTEM;
+        if (type == 1) return CAT_STRANGER;
         if (wxid.endsWith("@openim")) return CAT_OPENIM;
         if (wxid.contains("@lbsroom")) return CAT_EXCLUDED;
         if (wxid.startsWith("qqmail_")) return CAT_EXCLUDED;
         if (wxid.contains("@im.chatroom")) return CAT_EXCLUDED;
-        if ((type & 1) == 0) return CAT_EXCLUDED;
-        if ((type & 32) != 0) return CAT_OFFICIAL;
-        if ((type & 8) != 0) return CAT_EXCLUDED;
+        if (type == 4) return CAT_FRIEND;
         return CAT_FRIEND;
     }
 
@@ -110,6 +110,8 @@ public class ContactRepository {
     private static final int CAT_SPECIAL = 3;
     private static final int CAT_OPENIM = 4;
     private static final int CAT_EXCLUDED = 5;
+    private static final int CAT_SYSTEM = 6;
+    private static final int CAT_STRANGER = 7;
     public static void init() {
         if (sListenerRegistered) return;
         sListenerRegistered = true;
@@ -173,13 +175,12 @@ public class ContactRepository {
     }
 
     private static boolean tryQueries(Object db) {
-        return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag"
+        return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag, 0 AS sex"
             + " FROM rcontact"
             + " WHERE deleteFlag = 0"
             + " AND username NOT LIKE 'gh_%'"
             + " AND username NOT LIKE 'qqmail_%'"
-            + " AND (username LIKE '%@chatroom' OR ("
-            + FRIEND_BITMASK + "))"
+            + " AND (username LIKE '%@chatroom' OR type = 4)"
             + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, username");
     }
 
@@ -331,22 +332,20 @@ public class ContactRepository {
         return null;
     }
 
-    // ===== WeChat native friend filter (来自 j4.t() 源码, 手册第13章) =====
-    private static final String FRIEND_BITMASK =
-        "(r.type & 1) != 0 AND (r.type & 32) = 0 AND (r.type & 8) = 0 AND (r.verifyFlag & 8) = 0";
+    // ===== WeChat friend filter: type=4=好友 (微信联系人数据库完整技术文档) =====
 
     private static boolean queryViaKa5(Object db) {
         try {
             Method u = db.getClass().getDeclaredMethod("u", String.class, String[].class);
 
-            // ★ 手册第13章: 用 WeChat 原生位掩码 + LEFT JOIN contact 一次性获取好友/群聊/性别
             String sql = "SELECT r.username, r.alias, r.conRemark, r.nickname, r.type, r.createTime,"
                 + " COALESCE(c.sex, 0) AS sex"
                 + " FROM rcontact r"
                 + " LEFT JOIN contact c ON r.username = c.username"
                 + " WHERE r.deleteFlag = 0"
+                + " AND r.username NOT LIKE '%@openim'"
                 + " AND (r.username LIKE '%@chatroom'"
-                + "   OR (" + FRIEND_BITMASK + "))"
+                + "   OR r.type = 4)"
                 + " ORDER BY CASE WHEN r.username LIKE '%@chatroom' THEN 1 ELSE 0 END, r.nickname";
             Cursor c = (Cursor) u.invoke(db, sql, null);
             if (c == null) return false;
@@ -370,7 +369,7 @@ public class ContactRepository {
                 int type = c.getInt(ciT);
 
                 int cat = categorize(wxid, type);
-                if (cat == CAT_EXCLUDED || cat == CAT_SPECIAL) continue;
+                if (cat == CAT_EXCLUDED || cat == CAT_SPECIAL || cat == CAT_SYSTEM || cat == CAT_STRANGER) continue;
 
                 String name = c.getString(ciR);
                 if (name == null || name.isEmpty()) name = c.getString(ciA);
@@ -521,7 +520,7 @@ public class ContactRepository {
             if (name == null || name.isEmpty()) name = wxid;
 
             int cat = categorizeByWxid(wxid);
-            if (cat == CAT_OFFICIAL || cat == CAT_SPECIAL || cat == CAT_EXCLUDED || cat == CAT_OPENIM) return false;
+            if (cat == CAT_OFFICIAL || cat == CAT_SPECIAL || cat == CAT_EXCLUDED || cat == CAT_OPENIM || cat == CAT_SYSTEM || cat == CAT_STRANGER) return false;
 
             int type = wxid.endsWith("@chatroom") ? 1 : 0;
             Contact c = new Contact(wxid, name, name, wxid, type);
@@ -692,16 +691,18 @@ public class ContactRepository {
             int ciR = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "conRemark");
             int ciN = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "nickname");
             int ciT = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "type");
+            int ciS = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "sex");
             LogWriter.log(TAG, "queryContacts columns: u=" + ciU + " r=" + ciR + " n=" + ciN
-                + " a=" + ciA + " t=" + ciT);
+                + " a=" + ciA + " t=" + ciT + " s=" + ciS);
 
             int fb = 0, gb = 0;
             while ((Boolean) XposedHelpers.callMethod(cursor, "moveToNext")) {
                 String wxid = colStr(cursor, ciU);
                 int type = colInt(cursor, ciT);
                 int cat = categorize(wxid, type);
-                if (cat == CAT_OFFICIAL || cat == CAT_SPECIAL || cat == CAT_EXCLUDED || cat == CAT_OPENIM) continue;
-                Contact c = new Contact(wxid, colStr(cursor, ciN), colStr(cursor, ciR), colStr(cursor, ciA), type);
+                if (cat == CAT_OFFICIAL || cat == CAT_SPECIAL || cat == CAT_EXCLUDED || cat == CAT_OPENIM || cat == CAT_SYSTEM || cat == CAT_STRANGER) continue;
+                int sex = ciS >= 0 ? colInt(cursor, ciS) : 0;
+                Contact c = new Contact(wxid, colStr(cursor, ciN), colStr(cursor, ciR), colStr(cursor, ciA), type, sex, 0);
 
                 all.add(c);
                 if (cat == CAT_GROUP) { groups.add(c); gb++; }
