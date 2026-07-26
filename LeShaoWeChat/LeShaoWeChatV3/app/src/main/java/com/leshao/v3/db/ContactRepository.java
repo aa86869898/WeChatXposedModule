@@ -175,8 +175,10 @@ public class ContactRepository {
         return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag"
             + " FROM rcontact"
             + " WHERE deleteFlag = 0"
-            + " AND type = 0"
-            + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, username");
+            + " AND (type = 4 OR username LIKE '%@chatroom')"
+            + " ORDER BY CASE WHEN type=4 THEN 0 ELSE 1 END,"
+            + " CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END,"
+            + " nickname");
     }
 
     private static Object waitForDatabase(long timeoutMs) {
@@ -189,7 +191,7 @@ public class ContactRepository {
         return DatabaseProvider.getDatabase();
     }
 
-    // ===== Strategy A: 标准 SQLiteDatabase 按文档精准过滤 =====
+    // ===== Strategy A: ka5.f.s 打开 WCDB 加密数据库，type=4好友 =====
 
     private static boolean loadViaDirectDb() {
         ClassLoader cl = ContextManager.getClassLoader();
@@ -203,127 +205,155 @@ public class ContactRepository {
             long uin = Long.parseLong(uv.toString());
             LogWriter.log(TAG, "Strategy A: uin=" + uin);
 
-            // 用 WeChat 的 hm0.b0.e(int) 获取正确的 hash 路径
+            // 1. IMEI
+            String imei = "1234567890ABCDEF";
+            try {
+                String s = (String) cl.loadClass("wo.w0").getMethod("g", boolean.class).invoke(null, true);
+                if (s != null && !s.isEmpty() && !"1234567890ABCDEF".equals(s)) imei = s;
+            } catch (Throwable e) {}
+            LogWriter.log(TAG, "Strategy A: imei=" + imei);
+
+            // 2. dbPath: mp0.b.X() + MicroMsg/ + hm0.b0.e(int uin) + /EnMicroMsg.db
             String dbPath = getDbPath(cl, ctx, uin);
             if (dbPath == null) return false;
             LogWriter.log(TAG, "Strategy A: dbPath=" + dbPath);
 
-            // 打开标准 SQLiteDatabase
-            SQLiteDatabase db = null;
-            try {
-                db = SQLiteDatabase.openDatabase(dbPath, null, SQLiteDatabase.OPEN_READONLY);
-                if (db == null) return false;
-                LogWriter.log(TAG, "Strategy A: DB opened via standard SQLite");
+            // 3. Password: md5(imei + uin).substring(0, 7)
+            String pwd = md5(imei + String.valueOf(uin)).substring(0, 7);
+            LogWriter.log(TAG, "Strategy A: pwd(censored) calculated, opening...");
 
-                if (queryFriendsAndGroups(db)) return true;
-            } finally {
-                if (db != null) try { db.close(); } catch (Throwable ignored) {}
+            // 4. Open via ka5.f.s(String dbPath, String pwd, int flags, boolean)
+            Object rawDb = null;
+            try {
+                Method sMethod = cl.loadClass("ka5.f").getMethod("s",
+                    String.class, String.class, int.class, boolean.class);
+                rawDb = sMethod.invoke(null, dbPath, pwd, 0, true);
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "Strategy A: ka5.f.s failed: " + e.getMessage());
+                return false;
             }
-            return false;
+            if (rawDb == null) { LogWriter.log(TAG, "Strategy A: ka5.f.s returned null"); return false; }
+
+            // 5. Validate: check if rcontact exists
+            try {
+                Object checkCursor = rawDb.getClass().getMethod("u", String.class, String[].class)
+                    .invoke(rawDb, "SELECT name FROM sqlite_master WHERE type='table' AND name='rcontact'", null);
+                boolean ok = (Boolean) checkCursor.getClass().getMethod("moveToFirst").invoke(checkCursor);
+                checkCursor.getClass().getMethod("close").invoke(checkCursor);
+                if (!ok) { LogWriter.log(TAG, "Strategy A: rcontact table not found"); return false; }
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "Strategy A: validate failed: " + e.getMessage());
+                return false;
+            }
+
+            LogWriter.log(TAG, "Strategy A: DB opened via ka5.f.s, querying...");
+            boolean result = queryContactsWcdb(rawDb);
+            closeWcdb(rawDb);
+            return result;
         } catch (Throwable e) {
             LogWriter.log(TAG, "Strategy A ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
             return false;
         }
     }
 
-    private static String findDbPath(String hash) {
-        for (String base : new String[]{
-            "/data/user/0/com.tencent.mm/MicroMsg/",
-            "/data/data/com.tencent.mm/MicroMsg/",
-        }) {
-            String path = base + hash + "/EnMicroMsg.db";
-            if (new File(path).exists()) return path;
-        }
-        return null;
+    private static void closeWcdb(Object db) {
+        try { db.getClass().getMethod("c").invoke(db); } catch (Throwable ignored) {}
     }
 
-    private static boolean queryFriendsAndGroups(SQLiteDatabase db) {
+    private static boolean queryContactsWcdb(Object db) {
         List<Contact> all = new ArrayList<>();
         List<Contact> friends = new ArrayList<>();
         List<Contact> groups = new ArrayList<>();
-        Cursor c = null;
 
         try {
-            String friendsSql = "SELECT username, alias, conRemark, nickname, type, sex, verifyFlag"
+            // 好友: type=4 (文档确认) + deleteFlag=0
+            String friendsSql = "SELECT username, nickname, alias, conRemark, type, verifyFlag, showHead"
                 + " FROM rcontact"
-                + " WHERE deleteFlag = 0"
-                + " AND type = 0"
-                + " AND verifyFlag > 0"
-                + " AND username NOT LIKE '%@chatroom'"
-                + " AND username NOT LIKE 'gh_%'"
-                + " AND username NOT IN ('weixin','filehelper','medianote','newsapp','floatbottle')"
-                + " AND username NOT LIKE 'qmessage%'"
-                + " AND username NOT LIKE 'tmessage%'"
-                + " AND username NOT LIKE '%@openim'"
-                + " AND username NOT LIKE '%@stranger'"
-                + " AND username NOT LIKE '%@app'"
-                + " AND username NOT LIKE '%@talkroom'"
-                + " AND username NOT LIKE '%@lbsroom'"
-                + " ORDER BY"
-                + " CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END,"
-                + " nickname";
+                + " WHERE type = 4 AND deleteFlag = 0"
+                + " ORDER BY CASE WHEN length(conRemarkPYFull) > 0"
+                + " THEN upper(conRemarkPYFull) ELSE upper(quanPin) END ASC";
 
-            c = db.rawQuery(friendsSql, null);
-            int ciU = c.getColumnIndex("username");
-            int ciA = c.getColumnIndex("alias");
-            int ciR = c.getColumnIndex("conRemark");
-            int ciN = c.getColumnIndex("nickname");
-            int ciT = c.getColumnIndex("type");
-            int ciS = c.getColumnIndex("sex");
-            int ciV = c.getColumnIndex("verifyFlag");
+            Object cursor = db.getClass().getMethod("u", String.class, String[].class)
+                .invoke(db, friendsSql, null);
 
-            while (c.moveToNext()) {
-                String wxid = c.getString(ciU);
+            int ciU = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "username");
+            int ciN = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "nickname");
+            int ciA = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "alias");
+            int ciR = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "conRemark");
+            int ciT = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "type");
+            int ciV = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "verifyFlag");
+            int ciSh = -1;
+            try { ciSh = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "showHead"); } catch (Throwable ignored) {}
+
+            while ((Boolean) cursor.getClass().getMethod("moveToNext").invoke(cursor)) {
+                String wxid = strFromCursor(cursor, ciU);
                 if (wxid == null || wxid.isEmpty()) continue;
-                int type = c.getInt(ciT);
-                int verifyFlag = ciV >= 0 ? c.getInt(ciV) : 0;
+                String nickname = strFromCursor(cursor, ciN);
+                String alias = strFromCursor(cursor, ciA);
+                String remark = strFromCursor(cursor, ciR);
+                int type = intFromCursor(cursor, ciT);
+                int verifyFlag = intFromCursor(cursor, ciV);
+                int showHead = ciSh >= 0 ? intFromCursor(cursor, ciSh) : 32;
+
                 if (categorize(wxid, type) == CAT_OFFICIAL) continue;
                 if (skipWxid(wxid)) continue;
 
-                String name = computeDisplayName(c.getString(ciR), c.getString(ciA), c.getString(ciN), wxid);
-                int sex = ciS >= 0 ? c.getInt(ciS) : 0;
-                Contact contact = new Contact(wxid, name, name, wxid, type, sex, 0);
+                Contact contact = new Contact(wxid, nickname, remark, alias, type, 0, 0);
                 contact.verifyFlag = verifyFlag;
                 all.add(contact);
                 friends.add(contact);
             }
-            c.close();
-            c = null;
+            cursor.getClass().getMethod("close").invoke(cursor);
+            cursor = null;
 
-            String groupsSql = "SELECT username, alias, conRemark, nickname, type"
+            LogWriter.log(TAG, "queryContactsWcdb friends=" + friends.size());
+
+            // 群聊: username LIKE '%@chatroom'
+            String groupsSql = "SELECT username, nickname, conRemark, type, createTime"
                 + " FROM rcontact"
-                + " WHERE type = 0 AND username LIKE '%@chatroom'"
-                + " ORDER BY nickname";
-            c = db.rawQuery(groupsSql, null);
-            ciU = c.getColumnIndex("username");
-            ciA = c.getColumnIndex("alias");
-            ciR = c.getColumnIndex("conRemark");
-            ciN = c.getColumnIndex("nickname");
+                + " WHERE username LIKE '%@chatroom' AND deleteFlag = 0"
+                + " ORDER BY nickname ASC";
 
-            while (c.moveToNext()) {
-                String wxid = c.getString(ciU);
+            cursor = db.getClass().getMethod("u", String.class, String[].class)
+                .invoke(db, groupsSql, null);
+
+            ciU = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "username");
+            ciN = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "nickname");
+            ciR = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "conRemark");
+            ciT = (Integer) cursor.getClass().getMethod("getColumnIndex", String.class).invoke(cursor, "type");
+
+            while ((Boolean) cursor.getClass().getMethod("moveToNext").invoke(cursor)) {
+                String wxid = strFromCursor(cursor, ciU);
                 if (wxid == null || wxid.isEmpty()) continue;
-                String name = computeDisplayName(c.getString(ciR), c.getString(ciA), c.getString(ciN), wxid);
-                Contact contact = new Contact(wxid, name, name, wxid, 0);
-                contact.verifyFlag = 1;
+                String nickname = strFromCursor(cursor, ciN);
+                String remark = strFromCursor(cursor, ciR);
+                int type = intFromCursor(cursor, ciT);
+
+                String display = computeDisplayName(remark, null, nickname, wxid);
+                Contact contact = new Contact(wxid, nickname, remark, null, type, 0, 0);
                 all.add(contact);
                 groups.add(contact);
             }
-            c.close();
+            cursor.getClass().getMethod("close").invoke(cursor);
 
-            LogWriter.log(TAG, "Strategy A: standard SQLite OK, all=" + all.size()
-                + " f=" + friends.size() + " g=" + groups.size());
+            LogWriter.log(TAG, "queryContactsWcdb groups=" + groups.size() + " total=" + all.size());
 
             if (all.isEmpty()) return false;
-            sAllContacts = all; sFriends = friends; sGroups = groups;
+            sAllContacts = all;
+            sFriends = friends;
+            sGroups = groups;
             return true;
         } catch (Throwable e) {
-            LogWriter.log(TAG, "Strategy A: query ERROR: " + e.getClass().getSimpleName()
-                + ": " + e.getMessage());
+            LogWriter.log(TAG, "queryContactsWcdb ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
             return false;
-        } finally {
-            if (c != null) try { c.close(); } catch (Throwable ignored) {}
         }
+    }
+
+    private static String strFromCursor(Object cursor, int index) throws Exception {
+        return (String) cursor.getClass().getMethod("getString", int.class).invoke(cursor, index);
+    }
+    private static int intFromCursor(Object cursor, int index) throws Exception {
+        return (Integer) cursor.getClass().getMethod("getInt", int.class).invoke(cursor, index);
     }
 
     private static String computeDisplayName(String remark, String alias, String nick, String wxid) {
