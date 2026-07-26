@@ -571,6 +571,20 @@ public class SettingsEntryHook {
             ver.setPadding(0, 0, 0, dpC(ctx, 6));
             root.addView(ver);
 
+            Button btnProfile = createBtn(ctx, "个人中心");
+            styleButton(btnProfile);
+            btnProfile.setTextSize(13);
+            btnProfile.setPadding(dpC(ctx, 24), dpC(ctx, 6), dpC(ctx, 24), dpC(ctx, 6));
+            LinearLayout.LayoutParams pflp = new LinearLayout.LayoutParams(-2, -2);
+            pflp.gravity = Gravity.CENTER;
+            pflp.bottomMargin = dpC(ctx, 4);
+            btnProfile.setLayoutParams(pflp);
+            btnProfile.setOnClickListener(v -> {
+                try { com.leshao.v3.ui.MainActivity.open(act); }
+                catch (Throwable t) { LogWriter.log("SettingsEntry", "open: " + t.getMessage()); }
+            });
+            root.addView(btnProfile);
+
             buildAllContent(ctx, root);
 
             LinearLayout btns = new LinearLayout(ctx);
