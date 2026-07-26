@@ -76,7 +76,6 @@ public class ContactRepository {
         } catch (Throwable t) { return -1; }
     }
 
-    // ===== 分类常量 (按微信联系人数据库完整技术文档: type=4=好友, type=1=陌生人, type=33=系统号) =====
     public static int categorize(String wxid, int type) {
         if (wxid == null) return CAT_EXCLUDED;
         if ("filehelper".equals(wxid)) return CAT_SPECIAL;
@@ -85,9 +84,6 @@ public class ContactRepository {
         if (type == 33) return CAT_SYSTEM;
         if (type == 1) return CAT_STRANGER;
         if (wxid.endsWith("@openim")) return CAT_OPENIM;
-        if (wxid.contains("@lbsroom")) return CAT_EXCLUDED;
-        if (wxid.startsWith("qqmail_")) return CAT_EXCLUDED;
-        if (wxid.contains("@im.chatroom")) return CAT_EXCLUDED;
         if (type == 4) return CAT_FRIEND;
         return CAT_FRIEND;
     }
@@ -163,15 +159,10 @@ public class ContactRepository {
     }
 
     private static boolean tryQueries(Object db) {
-        return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag, 0 AS sex"
+        return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag"
             + " FROM rcontact"
             + " WHERE deleteFlag = 0"
-            + " AND username NOT LIKE 'gh_%'"
-            + " AND username NOT LIKE 'qqmail_%'"
-            + " AND username NOT LIKE '%@openim'"
-            + " AND username NOT LIKE '%@lbsroom'"
-            + " AND type NOT IN (1, 33, 2049)"
-            + " AND type > 0"
+            + " AND (username LIKE '%@chatroom' OR type = 4)"
             + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, username");
     }
 
@@ -329,19 +320,11 @@ public class ContactRepository {
         try {
             Method u = db.getClass().getDeclaredMethod("u", String.class, String[].class);
 
-            String sql = "SELECT r.username, r.alias, r.conRemark, r.nickname, r.type, r.createTime,"
-                + " COALESCE(c.sex, 0) AS sex"
-                + " FROM rcontact r"
-                + " LEFT JOIN contact c ON r.username = c.username"
-                + " WHERE r.deleteFlag = 0"
-                + " AND r.username NOT LIKE 'gh_%'"
-                + " AND r.username NOT LIKE 'qqmail_%'"
-                + " AND r.username NOT LIKE '%@openim'"
-                + " AND r.username NOT LIKE '%@lbsroom'"
-                + " AND r.username NOT LIKE '%@im.chatroom'"
-                + " AND r.type NOT IN (1, 33, 2049)"
-                + " AND r.type > 0"
-                + " ORDER BY CASE WHEN r.username LIKE '%@chatroom' THEN 1 ELSE 0 END, r.nickname";
+            String sql = "SELECT username, alias, conRemark, nickname, type, createTime"
+                + " FROM rcontact"
+                + " WHERE deleteFlag = 0"
+                + " AND (username LIKE '%@chatroom' OR type = 4)"
+                + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, nickname";
             Cursor c = (Cursor) u.invoke(db, sql, null);
             if (c == null) return false;
 
@@ -364,7 +347,7 @@ public class ContactRepository {
                 int type = c.getInt(ciT);
 
                 int cat = categorize(wxid, type);
-                if (cat == CAT_EXCLUDED || cat == CAT_SPECIAL || cat == CAT_SYSTEM || cat == CAT_STRANGER) continue;
+                if (cat == CAT_OFFICIAL || cat == CAT_EXCLUDED || cat == CAT_SPECIAL) continue;
 
                 String name = c.getString(ciR);
                 if (name == null || name.isEmpty()) name = c.getString(ciA);
@@ -692,7 +675,7 @@ public class ContactRepository {
                 String wxid = colStr(cursor, ciU);
                 int type = colInt(cursor, ciT);
                 int cat = categorize(wxid, type);
-                if (cat == CAT_OFFICIAL || cat == CAT_SPECIAL || cat == CAT_EXCLUDED || cat == CAT_OPENIM || cat == CAT_SYSTEM || cat == CAT_STRANGER) continue;
+                if (cat == CAT_OFFICIAL || cat == CAT_EXCLUDED || cat == CAT_SPECIAL) continue;
                 int sex = ciS >= 0 ? colInt(cursor, ciS) : 0;
                 Contact c = new Contact(wxid, colStr(cursor, ciN), colStr(cursor, ciR), colStr(cursor, ciA), type, sex, 0);
 
