@@ -43,8 +43,11 @@ public class Contact {
         return wxid;
     }
 
-    public String wxAlias() {
-        if (alias != null && !alias.isEmpty() && !alias.startsWith("wxid_")) return alias;
+    public String detailInfo() {
+        if (alias != null && !alias.isEmpty() && !alias.startsWith("wxid_")
+                && !alias.equals(wxid) && !alias.equalsIgnoreCase(remarkName)) {
+            return wxid + " | " + alias;
+        }
         return wxid;
     }
 

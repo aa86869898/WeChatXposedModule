@@ -300,7 +300,7 @@ public class ContactPickerFragment extends Fragment {
             TextView wxidView = (TextView) tags[2];
 
             nameView.setText(c.displayName());
-            wxidView.setText(c.wxAlias() + (c.isGroup() ? " [群聊]" : ""));
+            wxidView.setText(c.detailInfo() + (c.isGroup() ? " [群聊]" : ""));
             cb.setOnCheckedChangeListener(null);
             cb.setChecked(false);
             cb.setOnCheckedChangeListener((btn, checked) -> { /* 后续扩展多选 */ });
