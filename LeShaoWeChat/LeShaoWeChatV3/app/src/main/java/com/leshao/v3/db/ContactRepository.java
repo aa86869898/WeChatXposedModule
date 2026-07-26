@@ -177,7 +177,46 @@ public class ContactRepository {
     }
 
     // ═══════════════════════════════════════════════════
-    // Strategy A: ka5.f.s 打开 + rawQuery 查询
+    // 核心过滤规则 — 用 username 后缀,不用 type 字段
+    // ═══════════════════════════════════════════════════
+
+    public static boolean isFriend(String username) {
+        if (username == null || username.isEmpty()) return false;
+        if (username.endsWith("@chatroom")) return false;
+        if (username.startsWith("gh_")) return false;
+        if (username.equals("weixin")) return false;
+        if (username.equals("filehelper")) return false;
+        if (username.equals("medianote")) return false;
+        if (username.equals("newsapp")) return false;
+        if (username.equals("floatbottle")) return false;
+        if (username.equals("blog_app")) return false;
+        if (username.equals("masssendapp")) return false;
+        if (username.equals("meishiapp")) return false;
+        if (username.equals("fmessage")) return false;
+        if (username.equals("voipapp")) return false;
+        if (username.equals("officialaccounts")) return false;
+        if (username.equals("helper_entry")) return false;
+        if (username.equals("pc_share")) return false;
+        if (username.equals("cardpackage")) return false;
+        if (username.equals("googlecontact")) return false;
+        if (username.equals("linkedincontact")) return false;
+        if (username.equals("mobileconta")) return false;
+        if (username.startsWith("qqmail_")) return false;
+        if (username.contains("@lbsroom")) return false;
+        if (username.contains("@openim")) return false;
+        if (username.contains("@im.chatroom")) return false;
+        if (username.endsWith("@stranger")) return false;
+        if (username.endsWith("@app")) return false;
+        if (username.endsWith("@talkroom")) return false;
+        return true;
+    }
+
+    public static boolean isGroup(String username) {
+        return username != null && username.endsWith("@chatroom");
+    }
+
+    // ═══════════════════════════════════════════════════
+    // Strategy A: ka5.f.s 打开 + u() 查询 + Java侧过滤
     // ═══════════════════════════════════════════════════
 
     private static boolean loadViaDirectDb() {
@@ -202,48 +241,11 @@ public class ContactRepository {
             if (dbPath == null) return false;
             String pwd = md5(imei + String.valueOf(uin)).substring(0, 7);
 
-            // 打开数据库
             Class<?> ka5f = cl.loadClass("ka5.f");
             Object db = XposedHelpers.callStaticMethod(ka5f, "s", dbPath, pwd, 0, true);
             if (db == null) { LogWriter.log(TAG, "Strategy A: ka5.f.s returned null"); return false; }
 
-            LogWriter.log(TAG, "Strategy A: DB opened via ka5.f.s, dbPath=" + dbPath + " pwd=" + pwd);
-
-            // ═══════════ 修复1: 先用测试SQL验证基本功能 ═══════════
-            String testSql = "SELECT username, nickname, verifyFlag FROM rcontact"
-                + " WHERE deleteFlag = 0 AND verifyFlag > 0"
-                + " AND username NOT LIKE '%@chatroom'"
-                + " AND username NOT LIKE 'gh_%'"
-                + " LIMIT 5";
-
-            Object testCursor = null;
-            try {
-                // ⚠️ 修复: 改用 rawQuery 而不是 u()
-                testCursor = XposedHelpers.callMethod(db, "rawQuery", testSql, null);
-                int count = 0;
-                while ((Boolean) XposedHelpers.callMethod(testCursor, "moveToNext")) {
-                    String wxid = (String) XposedHelpers.callMethod(testCursor, "getString",
-                        XposedHelpers.callMethod(testCursor, "getColumnIndex", "username"));
-                    String nick = (String) XposedHelpers.callMethod(testCursor, "getString",
-                        XposedHelpers.callMethod(testCursor, "getColumnIndex", "nickname"));
-                    int vf = (Integer) XposedHelpers.callMethod(testCursor, "getInt",
-                        XposedHelpers.callMethod(testCursor, "getColumnIndex", "verifyFlag"));
-                    count++;
-                    LogWriter.log(TAG, "  TEST[" + count + "] wxid=" + wxid
-                        + " nick=" + (nick != null ? nick.substring(0, Math.min(20, nick.length())) : "null")
-                        + " vf=" + vf);
-                }
-                LogWriter.log(TAG, "Strategy A: test query returned " + count + " rows");
-                if (count == 0) {
-                    LogWriter.log(TAG, "Strategy A: test query returned 0, DB may be empty or wrong path");
-                }
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "Strategy A: test query failed: " + t.getMessage());
-            } finally {
-                if (testCursor != null) try { XposedHelpers.callMethod(testCursor, "close"); } catch (Throwable ignored) {}
-            }
-
-            // ═══════════ 修复2: 完整查询 (rawQuery) ═══════════
+            LogWriter.log(TAG, "Strategy A: DB opened via ka5.f.s");
             boolean result = queryContactsWcdb(db);
             try { XposedHelpers.callMethod(db, "c"); } catch (Throwable ignored) {}
             return result;
@@ -253,11 +255,6 @@ public class ContactRepository {
         }
     }
 
-    /**
-     * ═══════════ 修复: 用 rawQuery 替代 u() ═══════════
-     * u() 返回的 Cursor 列名映射与 rawQuery() 不同
-     * rawQuery() 返回标准 Android Cursor
-     */
     private static boolean queryContactsWcdb(Object db) {
         List<Contact> all = new ArrayList<>();
         List<Contact> friends = new ArrayList<>();
@@ -265,83 +262,67 @@ public class ContactRepository {
         Object cursor = null;
 
         try {
-            // ═══════════ 好友: 排除群聊/公众号/系统账号, 不用type过滤(rawQuery列映射可能不可靠) ═══════════
-            String friendsSql = "SELECT * FROM rcontact"
-                + " WHERE deleteFlag = 0"
-                + " AND verifyFlag > 0"
-                + " AND username NOT LIKE '%@chatroom'"
-                + " AND username NOT LIKE 'gh_%'"
-                + " AND username NOT IN ('weixin','filehelper','medianote','newsapp','floatbottle')"
-                + " AND username NOT LIKE 'qmessage%'"
-                + " AND username NOT LIKE 'tmessage%'"
-                + " ORDER BY CASE WHEN conRemark IS NOT NULL AND conRemark != ''"
-                + " THEN 0 ELSE 1 END, nickname";
+            // ka5 wrapper 只有 u() 方法，没有 rawQuery()
+            String sql = "SELECT * FROM rcontact"
+                + " WHERE deleteFlag = 0 AND verifyFlag > 0"
+                + " ORDER BY"
+                + "   CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END,"
+                + "   CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END,"
+                + "   nickname";
 
-            // ⚠️ 修复: rawQuery 而不是 u()
-            cursor = XposedHelpers.callMethod(db, "rawQuery", friendsSql, null);
+            cursor = XposedHelpers.callMethod(db, "u", sql, null);
 
+            int idxU = colIdx(cursor, "username");
+            int idxN = colIdx(cursor, "nickname");
+            int idxA = colIdx(cursor, "alias");
+            int idxR = colIdx(cursor, "conRemark");
+            int idxT = colIdx(cursor, "type");
+            int idxV = colIdx(cursor, "verifyFlag");
+
+            int friendCount = 0, groupCount = 0;
             while ((Boolean) XposedHelpers.callMethod(cursor, "moveToNext")) {
-                String wxid = colStr(cursor, colIdx(cursor, "username"));
+                String wxid = colStr(cursor, idxU);
                 if (wxid == null || wxid.isEmpty()) continue;
-                int type = colInt(cursor, colIdx(cursor, "type"));
-                String nickname = colStr(cursor, colIdx(cursor, "nickname"));
-                String alias = colStr(cursor, colIdx(cursor, "alias"));
-                String remark = colStr(cursor, colIdx(cursor, "conRemark"));
+
+                String nickname = colStr(cursor, idxN);
+                String alias = colStr(cursor, idxA);
+                String remark = colStr(cursor, idxR);
+                int type = colInt(cursor, idxT);
+                int verifyFlag = colInt(cursor, idxV);
 
                 Contact contact = new Contact(wxid, nickname, remark, alias, type, 0, 0);
+                contact.verifyFlag = verifyFlag;
+
+                if (isGroup(wxid)) {
+                    groups.add(contact);
+                    groupCount++;
+                } else if (isFriend(wxid)) {
+                    friends.add(contact);
+                    friendCount++;
+                }
                 all.add(contact);
-                friends.add(contact);
             }
             XposedHelpers.callMethod(cursor, "close");
-            cursor = null;
 
-            // ═══════════ 群聊查询 ═══════════
-            String groupsSql = "SELECT * FROM rcontact"
-                + " WHERE username LIKE '%@chatroom' AND deleteFlag = 0"
-                + " ORDER BY nickname";
+            LogWriter.log(TAG, "queryContactsWcdb: friends=" + friendCount
+                + " groups=" + groupCount + " total=" + all.size());
 
-            cursor = XposedHelpers.callMethod(db, "rawQuery", groupsSql, null);
-
-            while ((Boolean) XposedHelpers.callMethod(cursor, "moveToNext")) {
-                String wxid = colStr(cursor, colIdx(cursor, "username"));
-                if (wxid == null || wxid.isEmpty()) continue;
-                int type = colInt(cursor, colIdx(cursor, "type"));
-                String nickname = colStr(cursor, colIdx(cursor, "nickname"));
-                String remark = colStr(cursor, colIdx(cursor, "conRemark"));
-
-                Contact contact = new Contact(wxid, nickname, remark, null, type, 0, 0);
-                all.add(contact);
-                groups.add(contact);
-            }
-            XposedHelpers.callMethod(cursor, "close");
-            cursor = null;
-
-            LogWriter.log(TAG, "queryContactsWcdb: friends=" + friends.size()
-                + " groups=" + groups.size() + " total=" + all.size());
-
-            if (all.isEmpty()) {
-                LogWriter.log(TAG, "queryContactsWcdb: ALL EMPTY — check SQL or DB content");
-                return false;
+            for (int i = 0; i < Math.min(5, friends.size()); i++) {
+                Contact c = friends.get(i);
+                LogWriter.log(TAG, "  friend[" + i + "] " + c.displayName()
+                    + " (" + c.wxid + ") type=" + c.type + " vf=" + c.verifyFlag);
             }
 
+            if (all.isEmpty()) return false;
             sAllContacts = all;
             sFriends = friends;
             sGroups = groups;
-
-            // 打印前3条好友验证
-            for (int i = 0; i < Math.min(3, friends.size()); i++) {
-                Contact c = friends.get(i);
-                LogWriter.log(TAG, "  friend[" + i + "] " + c.displayName() + " (" + c.wxid + ")");
-            }
             return true;
         } catch (Throwable e) {
-            LogWriter.log(TAG, "queryContactsWcdb ERROR: " + e.getClass().getSimpleName()
-                + ": " + e.getMessage());
+            LogWriter.log(TAG, "queryContactsWcdb ERROR: " + e.getMessage());
             return false;
         } finally {
-            if (cursor != null) {
-                try { XposedHelpers.callMethod(cursor, "close"); } catch (Throwable ignored) {}
-            }
+            if (cursor != null) try { XposedHelpers.callMethod(cursor, "close"); } catch (Throwable ignored) {}
         }
     }
 
