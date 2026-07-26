@@ -175,14 +175,15 @@ public class ContactRepository {
     }
 
     private static boolean tryQueries(Object db) {
+        // 双向好友: (type & 3) = 3 (双方互加), 排除bit5公众号
+        // 群聊: username LIKE '%@chatroom'
         return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag"
             + " FROM rcontact"
             + " WHERE deleteFlag = 0"
-            + " AND (type = 0 OR username LIKE '%@chatroom')"
-            + " AND (type != 0 OR verifyFlag > 0)"
-            + " ORDER BY CASE WHEN type=0 THEN 0 ELSE 1 END,"
-            + " CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END,"
-            + " nickname");
+            + " AND ((type & 3) = 3 AND (type & 32) = 0"
+            + " AND username NOT LIKE 'gh_%'"
+            + " OR username LIKE '%@chatroom')"
+            + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, nickname");
     }
 
     private static Object waitForDatabase(long timeoutMs) {
@@ -270,49 +271,13 @@ public class ContactRepository {
         List<Contact> groups = new ArrayList<>();
 
         try {
-            // type是位掩码 — 测试各bit位的行数
-            int[] bits = {1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096};
-            StringBuilder bs = new StringBuilder("BITMASK ");
-            for (int b : bits) {
-                try {
-                    String bSql = "SELECT COUNT(*) FROM rcontact"
-                        + " WHERE deleteFlag=0 AND username NOT LIKE '%@chatroom' AND username NOT LIKE 'gh_%'"
-                        + " AND (type & " + b + ") != 0";
-                    Object bc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, bSql, null);
-                    if ((Boolean) bc.getClass().getMethod("moveToFirst").invoke(bc)) {
-                        int cnt = (Integer) bc.getClass().getMethod("getInt", int.class).invoke(bc, 0);
-                        if (cnt > 0) bs.append(" b").append(b).append("=").append(cnt);
-                    }
-                    bc.getClass().getMethod("close").invoke(bc);
-                } catch (Throwable e) {}
-            }
-            // 关键组合
-            int[][] combos = {{4}, {1,4}, {2,4}, {8,4}};
-            for (int[] combo : combos) {
-                StringBuilder cond = new StringBuilder();
-                for (int b : combo) cond.append("(type & ").append(b).append(") != 0 AND ");
-                String sql = "SELECT COUNT(*) FROM rcontact WHERE deleteFlag=0"
-                    + " AND username NOT LIKE 'gh_%' AND username NOT LIKE '%@chatroom'"
-                    + " AND " + cond.substring(0, cond.length() - 5);
-                try {
-                    Object cc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, sql, null);
-                    if ((Boolean) cc.getClass().getMethod("moveToFirst").invoke(cc)) {
-                        int cnt = (Integer) cc.getClass().getMethod("getInt", int.class).invoke(cc, 0);
-                        bs.append(" combo");
-                        for (int b : combo) bs.append(b);
-                        bs.append("=").append(cnt);
-                    }
-                    cc.getClass().getMethod("close").invoke(cc);
-                } catch (Throwable e) {}
-            }
-            LogWriter.log(TAG, bs.toString());
-
-            // 好友: type=4(文档确认的好友类型) + 含备注优先排序
+            // type位掩码: bit0=我加了对方, bit1=对方加了我, bit2=关系存在, bit5=公众号
+            // 双向好友 = (type & 3) = 3 (双方互加) +排除bit5公众号 +排除群聊
             String friendsSql = "SELECT username, nickname, alias, conRemark, type, verifyFlag, showHead"
                 + " FROM rcontact"
-                + " WHERE type = 4 AND deleteFlag = 0"
-                + " ORDER BY CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END, nickname"
-                + " LIMIT 500";
+                + " WHERE (type & 3) = 3 AND (type & 32) = 0 AND deleteFlag = 0"
+                + " AND username NOT LIKE 'gh_%' AND username NOT LIKE '%@chatroom'"
+                + " ORDER BY CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END, nickname";
 
             Object cursor = db.getClass().getMethod("u", String.class, String[].class)
                 .invoke(db, friendsSql, null);
