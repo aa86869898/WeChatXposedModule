@@ -118,6 +118,7 @@ public class AutoReplyHook {
             String content = (String) XposedHelpers.getObjectField(msgInfo, "field_content");
             String talker = (String) XposedHelpers.getObjectField(msgInfo, "field_talker");
             if (content == null || talker == null) return;
+            if (isSkippableTalker(talker)) return;
 
             Long last = cooldowns.get(talker);
             long now = System.currentTimeMillis();
@@ -131,6 +132,24 @@ public class AutoReplyHook {
                 }
             }
         } catch (Throwable ignored) {}
+    }
+
+    private static boolean isSkippableTalker(String talker) {
+        if (talker == null || talker.isEmpty()) return true;
+        if (talker.startsWith("gh_")) return true;
+        if (talker.contains("@lbsroom")) return true;
+        if (talker.contains("@openim")) return true;
+        if (talker.startsWith("qqmail_")) return true;
+        if (talker.contains("@im.chatroom")) return true;
+        if ("filehelper".equals(talker)) return true;
+        if ("weixin".equals(talker)) return true;
+        if ("notifymessage".equals(talker)) return true;
+        if ("medianote".equals(talker)) return true;
+        if ("wechat".equals(talker)) return true;
+        if ("tmessage".equals(talker)) return true;
+        if ("qmessage".equals(talker)) return true;
+        if ("newsapp".equals(talker)) return true;
+        return false;
     }
 
     /**

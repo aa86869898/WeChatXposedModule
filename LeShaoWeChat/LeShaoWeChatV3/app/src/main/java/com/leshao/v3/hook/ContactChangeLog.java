@@ -1,6 +1,7 @@
 package com.leshao.v3.hook;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
@@ -27,8 +28,50 @@ public class ContactChangeLog {
     private static final ConcurrentHashMap<String, ContactSnapshot> lastSnapshot = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Long> debounce = new ConcurrentHashMap<>();
     private static ClassLoader sCL;
+    private static long sCurrentUin = -1;
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
+
+    private static long getCurrentUin() {
+        try {
+            Context ctx = ContextManager.getAppContext();
+            if (ctx == null) return -1;
+            SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
+            Object uv = sp.getAll().get("default_uin");
+            if (uv == null) return -1;
+            return Long.parseLong(uv.toString());
+        } catch (Throwable t) { return -1; }
+    }
+
+    private static boolean isSkippableContact(String wxid) {
+        if (wxid == null || wxid.isEmpty()) return true;
+        if (wxid.startsWith("gh_")) return true;
+        if (wxid.contains("@lbsroom")) return true;
+        if (wxid.contains("@openim")) return true;
+        if (wxid.startsWith("qqmail_")) return true;
+        if (wxid.contains("@im.chatroom")) return true;
+        if ("filehelper".equals(wxid)) return true;
+        if ("weixin".equals(wxid)) return true;
+        if ("notifymessage".equals(wxid)) return true;
+        if ("medianote".equals(wxid)) return true;
+        if ("wechat".equals(wxid)) return true;
+        if ("tmessage".equals(wxid)) return true;
+        if ("qmessage".equals(wxid)) return true;
+        if ("newsapp".equals(wxid)) return true;
+        return false;
+    }
+
+    private static void ensureUinSnapshot() {
+        long uin = getCurrentUin();
+        if (uin == -1) return;
+        if (uin != sCurrentUin) {
+            LogWriter.log(TAG, "UIN changed: " + sCurrentUin + " -> " + uin + ", clearing snapshots");
+            sCurrentUin = uin;
+            lastSnapshot.clear();
+            sLogFile = null;
+            loadSnapshots();
+        }
+    }
 
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;
@@ -126,6 +169,7 @@ public class ContactChangeLog {
 
             LogWriter.log(TAG, "hook installed OK");
 
+            sCurrentUin = getCurrentUin();
             loadSnapshots();
         } catch (Throwable t) {
             LogWriter.log(TAG, "hook FAIL: " + t.getClass().getSimpleName() + " " + t.getMessage());
@@ -158,6 +202,9 @@ public class ContactChangeLog {
                 LogWriter.log(TAG, "[v.b] skip: username empty (d/Z1/Z all empty)");
                 return;
             }
+            if (isSkippableContact(username)) return;
+
+            ensureUinSnapshot();
 
             long now = System.currentTimeMillis();
             Long last = debounce.get(username);
@@ -231,6 +278,9 @@ public class ContactChangeLog {
 
             String username = VersionCompat.getContactUsername(contact);
             if (username == null || username.isEmpty()) return;
+            if (isSkippableContact(username)) return;
+
+            ensureUinSnapshot();
 
             now = System.currentTimeMillis();
             Long last = debounce.get(username);
@@ -361,13 +411,15 @@ public class ContactChangeLog {
 
     private static File getLogFile() {
         if (sLogFile != null) return sLogFile;
-        sLogFile = new File("/sdcard/leshao_v3_logs/contact_changes.json");
+        String uinSuffix = sCurrentUin > 0 ? "_" + sCurrentUin : "";
+        sLogFile = new File("/sdcard/leshao_v3_logs/contact_changes" + uinSuffix + ".json");
         sLogFile.getParentFile().mkdirs();
         return sLogFile;
     }
 
     private static File getSnapshotFile() {
-        return new File(getLogFile().getParentFile(), "contact_snapshots.json");
+        String uinSuffix = sCurrentUin > 0 ? "_" + sCurrentUin : "";
+        return new File(getLogFile().getParentFile(), "contact_snapshots" + uinSuffix + ".json");
     }
 
     private static void loadSnapshots() {

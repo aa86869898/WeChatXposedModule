@@ -196,11 +196,21 @@ public class ContactPickerFragment extends Fragment {
         for (Contact c : all) {
             switch (mode) {
                 case 0: result.add(c); break;
-                case 1: if (!c.isGroup()) result.add(c); break;
+                case 1: if (!c.isGroup() && !isSkippableContact(c)) result.add(c); break;
                 case 2: if (c.isGroup()) result.add(c); break;
             }
         }
         return result;
+    }
+
+    private static boolean isSkippableContact(Contact c) {
+        if (c == null || c.wxid == null) return true;
+        if (c.wxid.startsWith("gh_")) return true;
+        if (c.wxid.startsWith("qqmail_")) return true;
+        if (c.wxid.contains("@lbsroom")) return true;
+        if (c.wxid.contains("@openim")) return true;
+        if (c.wxid.contains("@im.chatroom")) return true;
+        return false;
     }
 
     private int dp(int dp) {

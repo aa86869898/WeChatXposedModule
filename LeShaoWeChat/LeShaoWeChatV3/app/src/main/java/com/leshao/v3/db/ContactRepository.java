@@ -62,8 +62,10 @@ public class ContactRepository {
         if (wxid.endsWith("@chatroom")) return CAT_GROUP;
         if (wxid.startsWith("gh_")) return CAT_OFFICIAL;
         if (wxid.endsWith("@openim")) return CAT_OPENIM;
-        // ★ WeChat native friend filter: (type & 1) != 0 才是联系人
-        // type=4 (二进制100) → type & 1 = 0 → 不是好友，排除
+        if (wxid.contains("@lbsroom")) return CAT_EXCLUDED;
+        if (wxid.startsWith("qqmail_")) return CAT_EXCLUDED;
+        if (wxid.contains("@im.chatroom")) return CAT_EXCLUDED;
+        if (type == 0) return CAT_FRIEND;
         if ((type & 1) == 0) return CAT_EXCLUDED;
         if ((type & 32) != 0) return CAT_OFFICIAL;
         if ((type & 8) != 0) return CAT_EXCLUDED;
@@ -141,8 +143,11 @@ public class ContactRepository {
     private static boolean tryQueries(Object db) {
         return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag"
             + " FROM rcontact"
-            + " WHERE type IN (0,1) AND verifyFlag=0"
+            + " WHERE deleteFlag = 0"
             + " AND username NOT LIKE 'gh_%'"
+            + " AND username NOT LIKE 'qqmail_%'"
+            + " AND (username LIKE '%@chatroom' OR ("
+            + FRIEND_BITMASK + "))"
             + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, username");
     }
 

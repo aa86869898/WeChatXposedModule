@@ -330,6 +330,8 @@ public class ContactPickerDialog {
         String q = currentQuery[0].toLowerCase().trim();
 
         for (Contact c : source) {
+            if (currentTab[0] == MODE_FRIEND && !isValidFriend(c)) continue;
+            if (currentTab[0] == MODE_GROUP && !isValidGroup(c)) continue;
             if (currentTab[0] == MODE_FRIEND && currentGender[0] == GENDER_MALE && !c.isMale()) continue;
             if (currentTab[0] == MODE_FRIEND && currentGender[0] == GENDER_FEMALE && !c.isFemale()) continue;
             if (!q.isEmpty() && !matchesSearch(c, q)) continue;

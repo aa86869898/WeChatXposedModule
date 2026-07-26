@@ -193,7 +193,12 @@ public class ContactExport {
             cursor = db.rawQuery(
                     "SELECT username, nickname, alias, conRemark, type, verifyFlag, " +
                     "deleteFlag, contactLabelList, chatroomFlag, sex " +
-                    "FROM rcontact ORDER BY type, nickname", null);
+                    "FROM rcontact " +
+                    "WHERE deleteFlag = 0 " +
+                    "AND username NOT LIKE 'gh_%' " +
+                    "AND username NOT LIKE 'qqmail_%' " +
+                    "AND (username LIKE '%@chatroom' OR ((type & 1) != 0 AND (type & 32) = 0 AND (type & 8) = 0)) " +
+                    "ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, nickname", null);
             if (cursor == null || cursor.getCount() == 0) {
                 XposedBridge.log("[ContactExport] rcontact表为空");
                 if (db != null) db.close();
@@ -272,8 +277,9 @@ public class ContactExport {
                 } catch (Throwable ignored) {}
                 return null;
             }
-            String hash = md5(String.valueOf(uin));
-            return "/data/data/com.tencent.mm/MicroMsg/" + hash + "/EnMicroMsg.db";
+            String hash = md5("mm" + uin);
+            String base = ctx.getFilesDir().getParentFile().getAbsolutePath() + "/";
+            return base + "MicroMsg/" + hash + "/EnMicroMsg.db";
         } catch (Throwable t) { return null; }
     }
 
