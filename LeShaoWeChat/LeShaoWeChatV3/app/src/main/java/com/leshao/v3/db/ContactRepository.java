@@ -270,47 +270,25 @@ public class ContactRepository {
         List<Contact> groups = new ArrayList<>();
 
         try {
-            // 诊断: 查询FriendUser, contact, verifycontact, friend_ext
-            String[] diagTables = {"FriendUser", "contact", "verifycontact", "friend_ext", "rcontact"};
-            for (String tbl : diagTables) {
-                try {
-                    String cntSql = "SELECT COUNT(*) FROM " + tbl;
-                    Object c1 = db.getClass().getMethod("u", String.class, String[].class).invoke(db, cntSql, null);
-                    if ((Boolean) c1.getClass().getMethod("moveToFirst").invoke(c1)) {
-                        int cnt = (Integer) c1.getClass().getMethod("getInt", int.class).invoke(c1, 0);
-                        LogWriter.log(TAG, "TABLE " + tbl + " rows=" + cnt);
-                    }
-                    c1.getClass().getMethod("close").invoke(c1);
-                } catch (Throwable e) {
-                    LogWriter.log(TAG, "TABLE " + tbl + " skip");
-                }
-            }
-            // FriendUser schema + 3 sample rows
+            // 诊断: contactLabelIds 非空 = 用户打过标签 = 真实好友
             try {
-                String sq = "SELECT sql FROM sqlite_master WHERE type='table' AND name='FriendUser'";
-                Object sc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, sq, null);
-                if ((Boolean) sc.getClass().getMethod("moveToFirst").invoke(sc)) {
-                    LogWriter.log(TAG, "FriendUser schema: " + trunc((String) sc.getClass().getMethod("getString", int.class).invoke(sc, 0), 300));
+                String dlSql = "SELECT COUNT(*) FROM rcontact"
+                    + " WHERE type=4 AND deleteFlag=0"
+                    + " AND username NOT LIKE 'gh_%' AND username NOT LIKE '%@chatroom'"
+                    + " AND contactLabelIds IS NOT NULL AND contactLabelIds != ''";
+                Object dc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, dlSql, null);
+                if ((Boolean) dc.getClass().getMethod("moveToFirst").invoke(dc)) {
+                    LogWriter.log(TAG, "DIAG labeledFriends=" + (Integer) dc.getClass().getMethod("getInt", int.class).invoke(dc, 0));
                 }
-                sc.getClass().getMethod("close").invoke(sc);
-            } catch (Throwable e) { LogWriter.log(TAG, "FriendUser schema skip"); }
-            try {
-                Object rc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, "SELECT * FROM FriendUser LIMIT 5", null);
-                int cu = (Integer) rc.getClass().getMethod("getColumnIndex", String.class).invoke(rc, "username");
-                int cn = (Integer) rc.getClass().getMethod("getColumnIndex", String.class).invoke(rc, "nickname");
-                int i = 0;
-                while ((Boolean) rc.getClass().getMethod("moveToNext").invoke(rc) && ++i <= 3) {
-                    LogWriter.log(TAG, "  F" + i + " u=" + strFromCursor(rc, cu) + " n=" + trunc(strFromCursor(rc, cn), 16));
-                }
-                rc.getClass().getMethod("close").invoke(rc);
-            } catch (Throwable e) { LogWriter.log(TAG, "FriendUser sample skip: " + e.getMessage()); }
+                dc.getClass().getMethod("close").invoke(dc);
+            } catch (Throwable e) { LogWriter.log(TAG, "DIAG labeled skip"); }
 
-            // 好友: 不做verifyFlag过滤，全部type=4都取，Java侧过滤
-            String friendsSql = "SELECT username, nickname, alias, conRemark, type, verifyFlag, showHead"
+            // 查询: type=4好友, 但按contactLabelIds排序(有标签的排前面=真实好友优先)
+            String friendsSql = "SELECT username, nickname, alias, conRemark, type, verifyFlag, contactLabelIds"
                 + " FROM rcontact"
                 + " WHERE type = 4 AND deleteFlag = 0"
-                + " ORDER BY CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END,"
-                + " nickname"
+                + " ORDER BY CASE WHEN contactLabelIds IS NOT NULL AND contactLabelIds != '' THEN 0 ELSE 1 END,"
+                + " CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END, nickname"
                 + " LIMIT 500";
 
             Object cursor = db.getClass().getMethod("u", String.class, String[].class)
