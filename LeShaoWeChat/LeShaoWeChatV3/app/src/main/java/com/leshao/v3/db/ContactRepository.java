@@ -175,10 +175,10 @@ public class ContactRepository {
                 rowCount++;
                 String wxid = (String) XposedHelpers.callMethod(cursor, "getString", ciU);
                 String nick = (String) XposedHelpers.callMethod(cursor, "getString", ciN);
-                int type = (Integer) XposedHelpers.callMethod(cursor, "getInt", ciT);
+                int t = (Integer) XposedHelpers.callMethod(cursor, "getInt", ciT);
                 LogWriter.log(TAG, "  RAW[" + rowCount + "] wxid=" + wxid
                     + " nick=" + (nick != null ? nick.substring(0, Math.min(20, nick.length())) : "null")
-                    + " type=" + type);
+                    + " type=" + t);
                 if (wxid == null || wxid.isEmpty()) continue;
 
                 if (wxid.equals("weixin") || wxid.equals("filehelper") || wxid.equals("medianote")
