@@ -160,7 +160,7 @@ public class ContactRepository {
     }
 
     private static boolean tryQueries(Object db) {
-        return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag, sex, chatroomFlag"
+        return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag"
             + " FROM rcontact"
             + " WHERE deleteFlag = 0"
             + " AND (username LIKE '%@chatroom' OR type = 0)"
@@ -321,7 +321,7 @@ public class ContactRepository {
         try {
             Method u = db.getClass().getDeclaredMethod("u", String.class, String[].class);
 
-            String sql = "SELECT username, alias, conRemark, nickname, type, createTime, sex, chatroomFlag"
+            String sql = "SELECT username, alias, conRemark, nickname, type, createTime"
                 + " FROM rcontact"
                 + " WHERE deleteFlag = 0"
                 + " AND (username LIKE '%@chatroom' OR type = 0)"
@@ -339,10 +339,7 @@ public class ContactRepository {
             int ciN = c.getColumnIndex("nickname");
             int ciT = c.getColumnIndex("type");
             int ciCr = c.getColumnIndex("createTime");
-            int ciS = c.getColumnIndex("sex");
-            int ciCh = c.getColumnIndex("chatroomFlag");
 
-            int sexCount = 0;
             while (c.moveToNext()) {
                 String wxid = c.getString(ciU);
                 if (wxid == null || wxid.isEmpty()) continue;
@@ -351,19 +348,13 @@ public class ContactRepository {
                 int cat = categorize(wxid, type);
                 if (cat == CAT_OFFICIAL || cat == CAT_EXCLUDED || cat == CAT_SPECIAL) continue;
 
-                int chatroomFlag = ciCh >= 0 ? c.getInt(ciCh) : 0;
-                if (cat == CAT_FRIEND && chatroomFlag > 0) continue;
-
                 String name = c.getString(ciR);
                 if (name == null || name.isEmpty()) name = c.getString(ciA);
                 if (name == null || name.isEmpty()) name = c.getString(ciN);
                 if (name == null || name.isEmpty()) name = wxid;
 
                 long createTime = ciCr >= 0 ? c.getLong(ciCr) : 0;
-                int sex = ciS >= 0 ? c.getInt(ciS) : 0;
-                if (sex != 0) sexCount++;
-
-                Contact contact = new Contact(wxid, name, name, wxid, type, sex, createTime);
+                Contact contact = new Contact(wxid, name, name, wxid, type, 0, createTime);
                 all.add(contact);
                 if (cat == CAT_GROUP) groups.add(contact);
                 else friends.add(contact);
@@ -371,7 +362,7 @@ public class ContactRepository {
             c.close();
 
             LogWriter.log(TAG, "Strategy A: query OK, all=" + all.size()
-                + " f=" + friends.size() + " g=" + groups.size() + " sex=" + sexCount);
+                + " f=" + friends.size() + " g=" + groups.size());
 
             if (all.isEmpty()) return false;
             sAllContacts = all; sFriends = friends; sGroups = groups;
@@ -671,10 +662,8 @@ public class ContactRepository {
             int ciR = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "conRemark");
             int ciN = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "nickname");
             int ciT = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "type");
-            int ciS = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "sex");
-            int ciCh = (Integer) XposedHelpers.callMethod(cursor, "getColumnIndex", "chatroomFlag");
             LogWriter.log(TAG, "queryContacts columns: u=" + ciU + " r=" + ciR + " n=" + ciN
-                + " a=" + ciA + " t=" + ciT + " s=" + ciS + " ch=" + ciCh);
+                + " a=" + ciA + " t=" + ciT);
 
             int fb = 0, gb = 0;
             while ((Boolean) XposedHelpers.callMethod(cursor, "moveToNext")) {
@@ -682,12 +671,7 @@ public class ContactRepository {
                 int type = colInt(cursor, ciT);
                 int cat = categorize(wxid, type);
                 if (cat == CAT_OFFICIAL || cat == CAT_EXCLUDED || cat == CAT_SPECIAL) continue;
-
-                int chatroomFlag = ciCh >= 0 ? colInt(cursor, ciCh) : 0;
-                if (cat == CAT_FRIEND && chatroomFlag > 0) continue;
-
-                int sex = ciS >= 0 ? colInt(cursor, ciS) : 0;
-                Contact c = new Contact(wxid, colStr(cursor, ciN), colStr(cursor, ciR), colStr(cursor, ciA), type, sex, 0);
+                Contact c = new Contact(wxid, colStr(cursor, ciN), colStr(cursor, ciR), colStr(cursor, ciA), type, 0, 0);
 
                 all.add(c);
                 if (cat == CAT_GROUP) { groups.add(c); gb++; }
