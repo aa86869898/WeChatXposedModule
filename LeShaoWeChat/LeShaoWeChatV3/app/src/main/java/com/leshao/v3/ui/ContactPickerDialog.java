@@ -38,9 +38,6 @@ public class ContactPickerDialog {
 
     public static final int MODE_FRIEND = 0;
     public static final int MODE_GROUP = 1;
-    public static final int GENDER_ALL = 0;
-    public static final int GENDER_MALE = 1;
-    public static final int GENDER_FEMALE = 2;
 
     public interface OnContactsSelected {
         void onSelected(Set<String> wxids, String display);
@@ -91,11 +88,24 @@ public class ContactPickerDialog {
         final List<Contact> filteredList = new ArrayList<>();
         final int[] currentTab = { initialMode };
         final String[] currentQuery = { "" };
-        final int[] currentGender = { GENDER_ALL };
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(AppColors.bg());
+
+        TextView titleBar = new TextView(ctx);
+        titleBar.setText("选择对象");
+        titleBar.setTextSize(16);
+        titleBar.setTextColor(AppColors.accent());
+        titleBar.setTypeface(null, Typeface.BOLD);
+        titleBar.setGravity(Gravity.CENTER);
+        titleBar.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(8 * d));
+        root.addView(titleBar);
+
+        View titleSep = new View(ctx);
+        titleSep.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
+        titleSep.setBackgroundColor(AppColors.divider());
+        root.addView(titleSep);
 
         EditText searchBox = new EditText(ctx);
         searchBox.setHint("搜索" + (currentTab[0] == MODE_FRIEND ? "好友" : "群聊"));
@@ -149,34 +159,7 @@ public class ContactPickerDialog {
         }
         root.addView(tabBar);
 
-        LinearLayout genderBar = new LinearLayout(ctx);
-        genderBar.setOrientation(LinearLayout.HORIZONTAL);
-        genderBar.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams gblp = new LinearLayout.LayoutParams(-1, -2);
-        gblp.setMargins((int)(12 * d), (int)(4 * d), (int)(12 * d), 0);
-        genderBar.setLayoutParams(gblp);
-
-        final TextView[] genderViews = new TextView[3];
-        for (int g = 0; g < 3; g++) {
-            boolean active = (g == currentGender[0]);
-            TextView gv = new TextView(ctx);
-            gv.setText(g == 0 ? "全部" : (g == 1 ? "男" : "女"));
-            gv.setTextSize(12);
-            gv.setTextColor(active ? AppColors.accent() : AppColors.text2());
-            gv.setTypeface(null, active ? Typeface.BOLD : Typeface.NORMAL);
-            GradientDrawable gbg = new GradientDrawable();
-            gbg.setCornerRadius(4 * d);
-            gbg.setColor(active ? (AppColors.accent() & 0x00FFFFFF | 0x18000000) : android.graphics.Color.TRANSPARENT);
-            gv.setBackground(gbg);
-            gv.setPadding((int)(12 * d), (int)(4 * d), (int)(12 * d), (int)(4 * d));
-            LinearLayout.LayoutParams gvlp = new LinearLayout.LayoutParams((int)(48 * d), -2);
-            gv.setGravity(Gravity.CENTER);
-            gv.setLayoutParams(gvlp);
-            genderViews[g] = gv;
-            genderBar.addView(gv);
-        }
-        root.addView(genderBar);
-
+        // 移除性别栏，保留分隔线
         View sep = new View(ctx);
         sep.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
         sep.setBackgroundColor(AppColors.divider());
@@ -217,7 +200,7 @@ public class ContactPickerDialog {
             if (allSelected) { selected.clear(); selectAllBtn.setText("全部勾选"); }
             else { for (Contact c : filteredList) selected.add(c.wxid); selectAllBtn.setText("取消勾选"); }
             updateDoneBtn(bottomBar, selected);
-            rebuildList(ctx, d, filteredList, allFriends, allGroups, currentTab, currentQuery, currentGender,
+            rebuildList(ctx, d, filteredList, allFriends, allGroups, currentTab, currentQuery,
                 selected, adapter, selectAllBtn, bottomBar, handler);
         });
         bottomBar.addView(selectAllBtn);
@@ -239,25 +222,6 @@ public class ContactPickerDialog {
         adapter.setBottomBar(bottomBar);
         adapter.setSelectAllBtn(selectAllBtn);
 
-        for (int g = 0; g < 3; g++) {
-            final int gi = g;
-            genderViews[g].setOnClickListener(v -> {
-                if (gi == currentGender[0]) return;
-                currentGender[0] = gi;
-                for (int i = 0; i < 3; i++) {
-                    boolean act = (i == gi);
-                    genderViews[i].setTextColor(act ? AppColors.accent() : AppColors.text2());
-                    genderViews[i].setTypeface(null, act ? Typeface.BOLD : Typeface.NORMAL);
-                    GradientDrawable bg = new GradientDrawable();
-                    bg.setCornerRadius(4 * d);
-                    bg.setColor(act ? (AppColors.accent() & 0x00FFFFFF | 0x18000000) : android.graphics.Color.TRANSPARENT);
-                    genderViews[i].setBackground(bg);
-                }
-                rebuildList(ctx, d, filteredList, allFriends, allGroups, currentTab, currentQuery, currentGender,
-                    selected, adapter, selectAllBtn, bottomBar, handler);
-            });
-        }
-
         for (int t = 0; t < 2; t++) {
             final int ti = t;
             tabItems[t].setOnClickListener(v -> {
@@ -271,7 +235,7 @@ public class ContactPickerDialog {
                     tabViews[i].setTypeface(null, i == ti ? Typeface.BOLD : Typeface.NORMAL);
                     tabIndicators[i].setBackgroundColor(i == ti ? AppColors.accent() : android.graphics.Color.TRANSPARENT);
                 }
-                rebuildList(ctx, d, filteredList, allFriends, allGroups, currentTab, currentQuery, currentGender,
+                rebuildList(ctx, d, filteredList, allFriends, allGroups, currentTab, currentQuery,
                     selected, adapter, selectAllBtn, bottomBar, handler);
             });
         }
@@ -285,7 +249,7 @@ public class ContactPickerDialog {
                 String q = s.toString().trim();
                 if (!q.equals(currentQuery[0])) {
                     currentQuery[0] = q;
-                    rebuildList(ctx, d, filteredList, allFriends, allGroups, currentTab, currentQuery, currentGender,
+                    rebuildList(ctx, d, filteredList, allFriends, allGroups, currentTab, currentQuery,
                         selected, adapter, selectAllBtn, bottomBar, handler);
                 }
             }
@@ -304,7 +268,7 @@ public class ContactPickerDialog {
         dlgRef[0] = dlg;
         Window w = dlg.getWindow();
         if (w != null) {
-            w.setLayout((int)(ctx.getResources().getDisplayMetrics().widthPixels * 0.92),
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
                         (int)(ctx.getResources().getDisplayMetrics().heightPixels * 0.78));
             w.setGravity(Gravity.CENTER);
         }
@@ -314,7 +278,7 @@ public class ContactPickerDialog {
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
-                rebuildList(ctx, d, filteredList, allFriends, allGroups, currentTab, currentQuery, currentGender,
+                rebuildList(ctx, d, filteredList, allFriends, allGroups, currentTab, currentQuery,
                     selected, adapter, selectAllBtn, bottomBar, handler);
             }
         }, 150);
@@ -323,7 +287,7 @@ public class ContactPickerDialog {
     private static void rebuildList(Context ctx, float d, List<Contact> filteredList,
                                      List<Contact> allFriends, List<Contact> allGroups,
                                      int[] currentTab, String[] currentQuery,
-                                     int[] currentGender, Set<String> selected, ContactAdapter adapter,
+                                     Set<String> selected, ContactAdapter adapter,
                                      TextView selectAllBtn, View bottomBar, Handler handler) {
         filteredList.clear();
         List<Contact> source = currentTab[0] == MODE_FRIEND ? allFriends : allGroups;
@@ -332,8 +296,6 @@ public class ContactPickerDialog {
         for (Contact c : source) {
             if (currentTab[0] == MODE_FRIEND && !isValidFriend(c)) continue;
             if (currentTab[0] == MODE_GROUP && !isValidGroup(c)) continue;
-            if (currentTab[0] == MODE_FRIEND && currentGender[0] == GENDER_MALE && !c.isMale()) continue;
-            if (currentTab[0] == MODE_FRIEND && currentGender[0] == GENDER_FEMALE && !c.isFemale()) continue;
             if (!q.isEmpty() && !matchesSearch(c, q)) continue;
             filteredList.add(c);
         }
@@ -451,12 +413,17 @@ public class ContactPickerDialog {
             wxidTv.setTextSize(11);
             wxidTv.setTextColor(AppColors.text2());
             wxidTv.setPadding(0, (int)(2 * d), 0, 0);
-            wxidTv.setVisibility(View.GONE);
             textCol.addView(wxidTv);
+
+            TextView aliasTv = new TextView(ctx);
+            aliasTv.setTextSize(11);
+            aliasTv.setTextColor(android.graphics.Color.argb(255, 170, 153, 136));
+            aliasTv.setPadding(0, (int)(2 * d), 0, 0);
+            textCol.addView(aliasTv);
 
             row.addView(textCol);
 
-            return new VH(row, checkTv, avatar, nameTv, wxidTv);
+            return new VH(row, checkTv, avatar, nameTv, wxidTv, aliasTv);
         }
 
         @Override
@@ -466,9 +433,9 @@ public class ContactPickerDialog {
             holder.checkTv.setText(sel ? "\u2713" : "");
             holder.checkTv.setTextColor(sel ? AppColors.green() : AppColors.arrow());
             holder.nameTv.setText(c.displayName());
-
-            holder.wxidTv.setText(c.detailInfo());
-            holder.wxidTv.setVisibility(View.VISIBLE);
+            holder.wxidTv.setText(c.wxid);
+            holder.aliasTv.setText(c.alias != null && !c.alias.isEmpty() && !c.alias.startsWith("wxid_") ? c.alias : "");
+            holder.aliasTv.setVisibility(c.alias != null && !c.alias.isEmpty() && !c.alias.startsWith("wxid_") ? View.VISIBLE : View.GONE);
 
             holder.avatar.setLetter(c.displayName(), c.wxid);
 
@@ -502,13 +469,15 @@ public class ContactPickerDialog {
             TextAvatarView avatar;
             TextView nameTv;
             TextView wxidTv;
+            TextView aliasTv;
 
-            VH(View itemView, TextView checkTv, TextAvatarView avatar, TextView nameTv, TextView wxidTv) {
+            VH(View itemView, TextView checkTv, TextAvatarView avatar, TextView nameTv, TextView wxidTv, TextView aliasTv) {
                 super(itemView);
                 this.checkTv = checkTv;
                 this.avatar = avatar;
                 this.nameTv = nameTv;
                 this.wxidTv = wxidTv;
+                this.aliasTv = aliasTv;
             }
         }
     }

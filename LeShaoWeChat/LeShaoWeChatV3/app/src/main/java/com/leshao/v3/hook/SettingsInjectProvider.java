@@ -83,13 +83,15 @@ public class SettingsInjectProvider extends ContentProvider {
             View decor = activity.getWindow().getDecorView();
             if (!(decor instanceof ViewGroup)) return;
 
-            View personal = findTextView((ViewGroup) decor, "个人资料");
-            if (personal == null) personal = findTextView((ViewGroup) decor, "个人信息");
-            if (personal == null) personal = findTextView((ViewGroup) decor, "通用");
-            if (personal == null) return;
+            View target = findTextView((ViewGroup) decor, "账号");
+            if (target == null) target = findTextView((ViewGroup) decor, "个人资料");
+            if (target == null) target = findTextView((ViewGroup) decor, "通用");
+            if (target == null) return;
 
-            ViewGroup listParent = walkUpToLinearLayout(personal);
+            ViewGroup listParent = walkUpToLinearLayout(target);
             if (listParent == null) return;
+
+            int insertPos = findInsertPosition(listParent, target);
 
             for (int i = 0; i < listParent.getChildCount(); i++) {
                 Object tag = listParent.getChildAt(i).getTag();
@@ -100,9 +102,10 @@ public class SettingsInjectProvider extends ContentProvider {
             View section = buildPluginSection(activity, d);
             section.setTag(ENTRY_TAG);
 
-            listParent.addView(section, 0);
+            listParent.addView(section, insertPos);
             sInjected.add(id);
-            LogWriter.log(TAG, "Plugin section injected in " + listParent.getClass().getSimpleName());
+            LogWriter.log(TAG, "Plugin section injected at pos " + insertPos
+                + " in " + listParent.getClass().getSimpleName());
         } catch (Throwable t) {
             LogWriter.log(TAG, "err: " + t.getClass().getSimpleName() + " " + t.getMessage());
         }
@@ -116,6 +119,17 @@ public class SettingsInjectProvider extends ContentProvider {
             else break;
         }
         return null;
+    }
+
+    private static int findInsertPosition(ViewGroup parent, View target) {
+        View v = target;
+        while (v != null && v.getParent() != parent && v.getParent() instanceof ViewGroup) {
+            v = (ViewGroup) v.getParent();
+        }
+        if (v != null && v.getParent() == parent) {
+            return parent.indexOfChild(v);
+        }
+        return 0;
     }
 
     private static View findTextView(ViewGroup vg, String search) {
