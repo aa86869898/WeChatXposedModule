@@ -157,7 +157,7 @@ public class SettingsInjectProvider extends ContentProvider {
         container.setPadding((int)(16 * d), (int)(10 * d), (int)(16 * d), (int)(10 * d));
         container.setClickable(true);
         container.setFocusable(true);
-        container.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        container.setBackgroundColor(0xFFFFFFFF);
         container.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
 
         // 七彩霓虹粗体 "乐少助手"
@@ -175,8 +175,9 @@ public class SettingsInjectProvider extends ContentProvider {
             }
         };
         title.setText("乐少助手");
-        title.setTextSize(19);
+        title.setTextSize(17);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setLetterSpacing(0.1f);
         title.setPadding(0, 0, 0, 0);
         title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         container.addView(title);
