@@ -16,6 +16,7 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.leshao.v3.BuildConfig;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.MainActivity;
