@@ -267,12 +267,52 @@ public class ContactRepository {
         List<Contact> groups = new ArrayList<>();
 
         try {
-            // 好友: type=0(真实好友) + verifyFlag>0(排fake_) + deleteFlag=0
+            // 诊断: rcontact表的列名
+            try {
+                String colSql = "SELECT sql FROM sqlite_master WHERE type='table' AND name='rcontact'";
+                Object cc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, colSql, null);
+                if ((Boolean) cc.getClass().getMethod("moveToFirst").invoke(cc)) {
+                    String schema = (String) cc.getClass().getMethod("getString", int.class).invoke(cc, 0);
+                    LogWriter.log(TAG, "SCHEMA: " + schema);
+                }
+                cc.getClass().getMethod("close").invoke(cc);
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "SCHEMA failed: " + e.getMessage());
+            }
+
+            // 诊断: 随机20行type=4，打印所有字段的原生值
+            try {
+                String rSql = "SELECT * FROM rcontact WHERE type=4 AND deleteFlag=0 LIMIT 20";
+                Object rc = db.getClass().getMethod("u", String.class, String[].class).invoke(db, rSql, null);
+                String[] cols = {"username","alias","conRemark","nickname","type","verifyFlag","showHead",
+                    "userType","typeExt","chatroomFlag","encryptUsername","source","addScene","contactType"};
+                for (String cn : cols) {
+                    try {
+                        int idx = (Integer) rc.getClass().getMethod("getColumnIndex", String.class).invoke(rc, cn);
+                        LogWriter.log(TAG, "  COL idx " + cn + "=" + idx);
+                    } catch (Throwable e) {}
+                }
+                int rowCount = 0;
+                int cu = (Integer) rc.getClass().getMethod("getColumnIndex", String.class).invoke(rc, "username");
+                int cn = (Integer) rc.getClass().getMethod("getColumnIndex", String.class).invoke(rc, "nickname");
+                int ct = (Integer) rc.getClass().getMethod("getColumnIndex", String.class).invoke(rc, "type");
+                int cv = (Integer) rc.getClass().getMethod("getColumnIndex", String.class).invoke(rc, "verifyFlag");
+                while ((Boolean) rc.getClass().getMethod("moveToNext").invoke(rc) && ++rowCount <= 10) {
+                    LogWriter.log(TAG, "  ROW" + rowCount + " u=" + strFromCursor(rc, cu)
+                        + " n=" + trunc(strFromCursor(rc, cn), 20) + " t=" + intFromCursor(rc, ct) + " vf=" + intFromCursor(rc, cv));
+                }
+                rc.getClass().getMethod("close").invoke(rc);
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "SAMPLE failed: " + e.getMessage());
+            }
+
+            // 好友: 不做verifyFlag过滤，全部type=4都取，Java侧过滤
             String friendsSql = "SELECT username, nickname, alias, conRemark, type, verifyFlag, showHead"
                 + " FROM rcontact"
-                + " WHERE type = 0 AND verifyFlag > 0 AND deleteFlag = 0"
+                + " WHERE type = 4 AND deleteFlag = 0"
                 + " ORDER BY CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END,"
-                + " nickname";
+                + " nickname"
+                + " LIMIT 500";
 
             Object cursor = db.getClass().getMethod("u", String.class, String[].class)
                 .invoke(db, friendsSql, null);
@@ -354,6 +394,11 @@ public class ContactRepository {
     }
     private static int intFromCursor(Object cursor, int index) throws Exception {
         return (Integer) cursor.getClass().getMethod("getInt", int.class).invoke(cursor, index);
+    }
+    private static String trunc(String s, int maxLen) {
+        if (s == null) return "null";
+        if (s.length() <= maxLen) return s;
+        return s.substring(0, maxLen) + "...";
     }
 
     private static String computeDisplayName(String remark, String alias, String nick, String wxid) {
