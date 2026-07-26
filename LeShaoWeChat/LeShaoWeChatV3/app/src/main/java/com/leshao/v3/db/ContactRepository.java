@@ -2,11 +2,13 @@ package com.leshao.v3.db;
 
 import android.content.SharedPreferences;
 import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.model.Contact;
 
+import java.io.File;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.security.MessageDigest;
@@ -65,6 +67,16 @@ public class ContactRepository {
         loadContacts();
     }
 
+    public static void onContactChanged() {
+        if (!sLoaded || sLoading) return;
+        LogWriter.log(TAG, "onContactChanged: scheduling reload");
+        new Thread(() -> {
+            try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+            sLoaded = false;
+            loadContacts();
+        }, "leshao-contact-change").start();
+    }
+
     private static long getCurrentUin() {
         try {
             android.content.Context ctx = ContextManager.getAppContext();
@@ -84,8 +96,8 @@ public class ContactRepository {
         if (wxid.endsWith("@openim")) return CAT_OPENIM;
         if (wxid.endsWith("@app") || wxid.endsWith("@talkroom")
             || wxid.endsWith("@lbsroom") || wxid.endsWith("@stranger")) return CAT_EXCLUDED;
-        if (type == 33) return CAT_SYSTEM;
         if (type == 0) return CAT_FRIEND;
+        if (type == 1 || type == 2 || type == 3 || type == 4) return CAT_EXCLUDED;
         return CAT_EXCLUDED;
     }
 
@@ -177,59 +189,148 @@ public class ContactRepository {
         return DatabaseProvider.getDatabase();
     }
 
-    // ===== Strategy A: 直接打开 EnMicroMsg.db（反射 ka5.f.s，无需 Hook，0 延迟）=====
+    // ===== Strategy A: 标准 SQLiteDatabase 直接打开 EnMicroMsg.db，绕过 Ka5 混淆 =====
 
     private static boolean loadViaDirectDb() {
-        ClassLoader cl = ContextManager.getClassLoader();
-        if (cl == null) return false;
+        android.content.Context ctx = ContextManager.getAppContext();
+        if (ctx == null) {
+            LogWriter.log(TAG, "Strategy A: Context is null");
+            return false;
+        }
 
         try {
-            // 1. 获取 uin
-            android.content.Context ctx = ContextManager.getAppContext();
-            if (ctx == null) {
-                LogWriter.log(TAG, "Strategy A: Context is null");
-                return false;
-            }
             SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
             Object uv = sp.getAll().get("default_uin");
             if (uv == null) {
-                LogWriter.log(TAG, "Strategy A: uin not found in SharedPreferences");
+                LogWriter.log(TAG, "Strategy A: uin not found");
                 return false;
             }
             long uin = Long.parseLong(uv.toString());
             LogWriter.log(TAG, "Strategy A: uin=" + uin);
 
-            // 2. 获取 IMEI 并计算密码（多候选重试）
-            String dbPath = getDbPath(cl, ctx, uin);
-            if (dbPath == null) {
-                LogWriter.log(TAG, "Strategy A: dbPath is null");
+            String hash = md5(String.valueOf(uin));
+            String dbPath = "/data/user/0/com.tencent.mm/MicroMsg/" + hash + "/EnMicroMsg.db";
+            if (!new File(dbPath).exists()) {
+                LogWriter.log(TAG, "Strategy A: db file not found: " + dbPath);
                 return false;
             }
             LogWriter.log(TAG, "Strategy A: dbPath=" + dbPath);
 
-            // 3. 尝试多个密码候打开数据库
+            SQLiteDatabase db = null;
+            Cursor c = null;
+            try {
+                db = SQLiteDatabase.openDatabase(dbPath, null, SQLiteDatabase.OPEN_READONLY);
+                if (db == null) return false;
+
+                c = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='rcontact'", null);
+                if (c == null || !c.moveToFirst()) {
+                    LogWriter.log(TAG, "Strategy A: rcontact table not found");
+                    return false;
+                }
+                c.close();
+                c = null;
+                LogWriter.log(TAG, "Strategy A: DB opened, rcontact table confirmed (standard SQLite)");
+
+                if (queryViaStandardSqlite(db)) return true;
+            } finally {
+                if (c != null) try { c.close(); } catch (Throwable ignored) {}
+                if (db != null) try { db.close(); } catch (Throwable ignored) {}
+            }
+            return false;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "Strategy A: standard SQLite ERROR: " + e.getClass().getSimpleName()
+                + ": " + e.getMessage());
+        }
+
+        // 兜底: Ka5 方式
+        LogWriter.log(TAG, "Strategy A: falling back to Ka5...");
+        return tryKa5Fallback();
+    }
+
+    private static boolean tryKa5Fallback() {
+        ClassLoader cl = ContextManager.getClassLoader();
+        if (cl == null) return false;
+        try {
+            android.content.Context ctx = ContextManager.getAppContext();
+            if (ctx == null) return false;
+            SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
+            Object uv = sp.getAll().get("default_uin");
+            if (uv == null) return false;
+            long uin = Long.parseLong(uv.toString());
+            String dbPath = getDbPath(cl, ctx, uin);
+            if (dbPath == null) return false;
+
             String[] imeiCandidates = getImeiCandidates(cl);
             for (String imei : imeiCandidates) {
                 if (imei == null || imei.isEmpty()) continue;
                 String password = calcPassword(cl, imei, uin);
                 if (password == null || password.length() != 7) continue;
-                LogWriter.log(TAG, "Strategy A: trying imei=" + imei + " pwd=" + password);
-
                 Object db = openKa5Db(cl, dbPath, password);
                 if (db == null) continue;
-
-                // 4. 查询联系人
-                if (queryViaKa5(db)) {
+                if (queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag"
+                    + " FROM rcontact WHERE type=0 ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, username")) {
                     closeKa5Db(db);
                     return true;
                 }
                 closeKa5Db(db);
             }
+        } catch (Throwable e) {}
+        return false;
+    }
 
-            LogWriter.log(TAG, "Strategy A: all password candidates failed");
-            return false;
+    private static boolean queryViaStandardSqlite(SQLiteDatabase db) {
+        try {
+            String sql = "SELECT username, alias, conRemark, nickname, type, sex"
+                + " FROM rcontact"
+                + " WHERE deleteFlag = 0 AND type = 0"
+                + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, nickname";
+            Cursor c = db.rawQuery(sql, null);
+            if (c == null) return false;
+
+            List<Contact> all = new ArrayList<>();
+            List<Contact> friends = new ArrayList<>();
+            List<Contact> groups = new ArrayList<>();
+
+            int ciU = c.getColumnIndex("username");
+            int ciA = c.getColumnIndex("alias");
+            int ciR = c.getColumnIndex("conRemark");
+            int ciN = c.getColumnIndex("nickname");
+            int ciT = c.getColumnIndex("type");
+            int ciS = c.getColumnIndex("sex");
+
+            int sexCount = 0;
+            while (c.moveToNext()) {
+                String wxid = c.getString(ciU);
+                if (wxid == null || wxid.isEmpty()) continue;
+                int type = c.getInt(ciT);
+
+                int cat = categorize(wxid, type);
+                if (cat == CAT_OFFICIAL || cat == CAT_EXCLUDED || cat == CAT_SPECIAL) continue;
+
+                String name = c.getString(ciR);
+                if (name == null || name.isEmpty()) name = c.getString(ciA);
+                if (name == null || name.isEmpty()) name = c.getString(ciN);
+                if (name == null || name.isEmpty()) name = wxid;
+
+                int sex = ciS >= 0 ? c.getInt(ciS) : 0;
+                if (sex != 0) sexCount++;
+
+                Contact contact = new Contact(wxid, name, name, wxid, type, sex, 0);
+                all.add(contact);
+                if (cat == CAT_GROUP) groups.add(contact);
+                else friends.add(contact);
+            }
+            c.close();
+
+            LogWriter.log(TAG, "Strategy A: standard SQLite OK, all=" + all.size()
+                + " f=" + friends.size() + " g=" + groups.size() + " sex=" + sexCount);
+
+            if (all.isEmpty()) return false;
+            sAllContacts = all; sFriends = friends; sGroups = groups;
+            return true;
         } catch (Throwable e) {
-            LogWriter.log(TAG, "Strategy A ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            LogWriter.log(TAG, "Strategy A: standard SQLite query ERROR: " + e.getClass().getSimpleName()
+                + ": " + e.getMessage());
             return false;
         }
     }

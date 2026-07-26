@@ -186,11 +186,25 @@ public class DatabaseProvider {
                             }
                         } catch (Throwable ignored) {}
                     }
+
+                    // 检测 rcontact 表写操作，触发联系人刷新
+                    String sql = (String) param.args[0];
+                    if (sql != null && sDatabase != null) {
+                        String low = sql.toLowerCase().trim();
+                        if (low.contains("rcontact") && (low.startsWith("insert") || low.startsWith("update") || low.startsWith("delete"))) {
+                            LogWriter.log(TAG, "rawQuery: detected rcontact change: " + truncateSql(sql));
+                            ContactRepository.onContactChanged();
+                        }
+                    }
                 }
             });
             return;
         }
         LogWriter.log(TAG, "hookRawQuery FAILED: no matching rawQuery(String, ...) found");
+    }
+
+    private static String truncateSql(String sql) {
+        return sql.length() > 80 ? sql.substring(0, 77) + "..." : sql;
     }
 
     private static void notifyDbReady() {
