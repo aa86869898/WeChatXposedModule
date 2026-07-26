@@ -129,20 +129,12 @@ public class ContactRepository {
         LogWriter.log(TAG, "loadContacts START");
 
         try {
-            // Strategy A: 直接打开 EnMicroMsg.db，反射 ka5.f.s()
-            LogWriter.log(TAG, "Strategy A: trying direct DB (ka5.f.s)...");
-            if (loadViaDirectDb()) {
-                sLoaded = true; sLoading = false;
-                LogWriter.log(TAG, "loadContacts OK via Strategy A (direct DB)");
-                return true;
-            }
-
-            // Strategy D: DatabaseProvider hooks 兜底
-            LogWriter.log(TAG, "Strategy D: waiting for DB hooks (max 15s)...");
+            // ka5.f.s 的 u() cursor 列映射全返 -1, 直接用 DatabaseProvider rawQuery
+            LogWriter.log(TAG, "waiting for DatabaseProvider rawQuery (max 15s)...");
             Object db = waitForDatabase(15000);
-            if (db != null && tryQueries(db)) {
+            if (db != null && queryContacts(db)) {
                 sLoaded = true; sLoading = false;
-                LogWriter.log(TAG, "loadContacts OK via Strategy D (DB hooks)");
+                LogWriter.log(TAG, "loadContacts OK via rawQuery");
                 return true;
             }
 
@@ -156,14 +148,72 @@ public class ContactRepository {
         }
     }
 
-    private static boolean tryQueries(Object db) {
-        return queryContacts(db, "SELECT username, nickname, conRemark, alias, verifyFlag"
-            + " FROM rcontact"
-            + " WHERE deleteFlag = 0"
-            + " AND (username NOT LIKE '%@chatroom'"
-            + "   OR username LIKE '%@chatroom')"
-            + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END,"
-            + " nickname");
+    private static boolean queryContacts(Object db) {
+        List<Contact> all = new ArrayList<>();
+        List<Contact> friends = new ArrayList<>();
+        List<Contact> groups = new ArrayList<>();
+        Object cursor = null;
+        try {
+            String sql = "SELECT * FROM rcontact"
+                + " WHERE deleteFlag = 0 AND verifyFlag > 0"
+                + " ORDER BY"
+                + "   CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END,"
+                + "   CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END,"
+                + "   nickname";
+
+            cursor = XposedHelpers.callMethod(db, "rawQuery", sql, null);
+
+            int idxU = colIdx(cursor, "username");
+            int idxN = colIdx(cursor, "nickname");
+            int idxA = colIdx(cursor, "alias");
+            int idxR = colIdx(cursor, "conRemark");
+            int idxT = colIdx(cursor, "type");
+            int idxV = colIdx(cursor, "verifyFlag");
+
+            while ((Boolean) XposedHelpers.callMethod(cursor, "moveToNext")) {
+                String wxid = colStr(cursor, idxU);
+                if (wxid == null || wxid.isEmpty()) continue;
+
+                String nickname = colStr(cursor, idxN);
+                String alias = colStr(cursor, idxA);
+                String remark = colStr(cursor, idxR);
+                int type = colInt(cursor, idxT);
+                int verifyFlag = colInt(cursor, idxV);
+
+                Contact contact = new Contact(wxid, nickname, remark, alias, type, 0, 0);
+                contact.verifyFlag = verifyFlag;
+
+                if (isGroup(wxid)) {
+                    groups.add(contact);
+                } else if (isFriend(wxid)) {
+                    friends.add(contact);
+                } else {
+                    continue;
+                }
+                all.add(contact);
+            }
+            XposedHelpers.callMethod(cursor, "close");
+
+            LogWriter.log(TAG, "queryContacts: friends=" + friends.size()
+                + " groups=" + groups.size() + " total=" + all.size());
+
+            for (int i = 0; i < Math.min(5, friends.size()); i++) {
+                Contact c = friends.get(i);
+                LogWriter.log(TAG, "  friend[" + i + "] " + c.displayName()
+                    + " (" + c.wxid + ") type=" + c.type + " vf=" + c.verifyFlag);
+            }
+
+            if (all.isEmpty()) return false;
+            sAllContacts = all;
+            sFriends = friends;
+            sGroups = groups;
+            return true;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "queryContacts ERROR: " + e.getMessage());
+            return false;
+        } finally {
+            if (cursor != null) try { XposedHelpers.callMethod(cursor, "close"); } catch (Throwable ignored) {}
+        }
     }
 
     private static Object waitForDatabase(long timeoutMs) {
@@ -184,35 +234,40 @@ public class ContactRepository {
         if (username == null || username.isEmpty()) return false;
         if (username.endsWith("@chatroom")) return false;
         if (username.startsWith("gh_")) return false;
-        if (username.equals("weixin")) return false;
-        if (username.equals("filehelper")) return false;
-        if (username.equals("medianote")) return false;
-        if (username.equals("newsapp")) return false;
-        if (username.equals("floatbottle")) return false;
-        if (username.equals("blog_app")) return false;
-        if (username.equals("masssendapp")) return false;
-        if (username.equals("meishiapp")) return false;
-        if (username.equals("fmessage")) return false;
-        if (username.equals("voipapp")) return false;
-        if (username.equals("officialaccounts")) return false;
-        if (username.equals("helper_entry")) return false;
-        if (username.equals("pc_share")) return false;
-        if (username.equals("cardpackage")) return false;
-        if (username.equals("googlecontact")) return false;
-        if (username.equals("linkedincontact")) return false;
-        if (username.equals("mobileconta")) return false;
-        if (username.startsWith("qqmail_")) return false;
-        if (username.contains("@lbsroom")) return false;
-        if (username.contains("@openim")) return false;
-        if (username.contains("@im.chatroom")) return false;
-        if (username.endsWith("@stranger")) return false;
-        if (username.endsWith("@app")) return false;
-        if (username.endsWith("@talkroom")) return false;
-        return true;
+        if (isSystemAccount(username)) return false;
+        return username.startsWith("wxid_") || Character.isLetterOrDigit(username.charAt(0));
     }
 
     public static boolean isGroup(String username) {
         return username != null && username.endsWith("@chatroom");
+    }
+
+    private static boolean isSystemAccount(String username) {
+        if (username.equals("weixin")) return true;
+        if (username.equals("filehelper")) return true;
+        if (username.equals("medianote")) return true;
+        if (username.equals("newsapp")) return true;
+        if (username.equals("floatbottle")) return true;
+        if (username.equals("blog_app")) return true;
+        if (username.equals("masssendapp")) return true;
+        if (username.equals("meishiapp")) return true;
+        if (username.equals("fmessage")) return true;
+        if (username.equals("voipapp")) return true;
+        if (username.equals("officialaccounts")) return true;
+        if (username.equals("helper_entry")) return true;
+        if (username.equals("pc_share")) return true;
+        if (username.equals("cardpackage")) return true;
+        if (username.equals("googlecontact")) return true;
+        if (username.equals("linkedincontact")) return true;
+        if (username.equals("mobileconta")) return true;
+        if (username.startsWith("qqmail_")) return true;
+        if (username.contains("@lbsroom")) return true;
+        if (username.contains("@openim")) return true;
+        if (username.contains("@im.chatroom")) return true;
+        if (username.endsWith("@stranger")) return true;
+        if (username.endsWith("@app")) return true;
+        if (username.endsWith("@talkroom")) return true;
+        return false;
     }
 
     // ═══════════════════════════════════════════════════
