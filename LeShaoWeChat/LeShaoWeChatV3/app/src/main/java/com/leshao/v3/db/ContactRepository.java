@@ -175,8 +175,9 @@ public class ContactRepository {
         return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag"
             + " FROM rcontact"
             + " WHERE deleteFlag = 0"
-            + " AND (type = 4 OR username LIKE '%@chatroom')"
-            + " ORDER BY CASE WHEN type=4 THEN 0 ELSE 1 END,"
+            + " AND (type = 0 OR username LIKE '%@chatroom')"
+            + " AND (type != 0 OR verifyFlag > 0)"
+            + " ORDER BY CASE WHEN type=0 THEN 0 ELSE 1 END,"
             + " CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END,"
             + " nickname");
     }
@@ -266,12 +267,12 @@ public class ContactRepository {
         List<Contact> groups = new ArrayList<>();
 
         try {
-            // 好友: type=4 (文档确认) + deleteFlag=0
+            // 好友: type=0(真实好友) + verifyFlag>0(排fake_) + deleteFlag=0
             String friendsSql = "SELECT username, nickname, alias, conRemark, type, verifyFlag, showHead"
                 + " FROM rcontact"
-                + " WHERE type = 4 AND deleteFlag = 0"
-                + " ORDER BY CASE WHEN length(conRemarkPYFull) > 0"
-                + " THEN upper(conRemarkPYFull) ELSE upper(quanPin) END ASC";
+                + " WHERE type = 0 AND verifyFlag > 0 AND deleteFlag = 0"
+                + " ORDER BY CASE WHEN conRemark IS NOT NULL AND conRemark != '' THEN 0 ELSE 1 END,"
+                + " nickname";
 
             Object cursor = db.getClass().getMethod("u", String.class, String[].class)
                 .invoke(db, friendsSql, null);
@@ -295,7 +296,6 @@ public class ContactRepository {
                 int verifyFlag = intFromCursor(cursor, ciV);
                 int showHead = ciSh >= 0 ? intFromCursor(cursor, ciSh) : 32;
 
-                if (categorize(wxid, type) == CAT_OFFICIAL) continue;
                 if (skipWxid(wxid)) continue;
 
                 Contact contact = new Contact(wxid, nickname, remark, alias, type, 0, 0);
