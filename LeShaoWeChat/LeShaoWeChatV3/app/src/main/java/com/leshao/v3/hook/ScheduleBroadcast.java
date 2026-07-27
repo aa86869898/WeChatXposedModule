@@ -421,27 +421,78 @@ public class ScheduleBroadcast {
             log("DIAG: chatting.a21.q.i hook OK");
         } catch (Throwable t) { log("DIAG: chatting.a21.q.i fail: " + t.getMessage()); }
 
-        // Hook z/g/c0 构造器: a21.q.i 的参数类型
-        // 注意: z 和 c0 可能有包名, 但 g 是裸类名可找到
-        for (String clsName : new String[]{"z", "g", "c0"}) {
-            try {
-                Class<?> cls = XposedHelpers.findClass(clsName, sClassLoader);
-                for (java.lang.reflect.Constructor<?> c : cls.getDeclaredConstructors()) {
-                    XposedBridge.hookMethod(c, new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            StringBuilder sb = new StringBuilder("DIAG: new ").append(clsName).append("(").append(param.args.length).append(")");
-                            for (int i = 0; i < param.args.length; i++) {
-                                sb.append(" p").append(i).append("=");
-                                sb.append(param.args[i] == null ? "null" : param.args[i].getClass().getName());
+        // Hook n85.c0: 所有方法 — 看 I9 之后 Continuation 做了什么
+        try {
+            Class<?> n85c0 = XposedHelpers.findClass("n85.c0", sClassLoader);
+            for (java.lang.reflect.Method m : n85c0.getDeclaredMethods()) {
+                if (m.getName().length() <= 1) continue;
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        String mName = param.method.getName();
+                        if (param.args.length == 0) return;
+                        log("DIAG: n85.c0." + mName + "(" + param.args.length + ") p0="
+                            + (param.args[0] == null ? "null" : param.args[0].getClass().getName()));
+                        StackTraceElement[] st = Thread.currentThread().getStackTrace();
+                        log("  n85.c0栈:");
+                        for (int i = 3; i < Math.min(st.length, 12); i++) {
+                            String cls = st[i].getClassName();
+                            if (!cls.startsWith("java.") && !cls.startsWith("android.") && !cls.startsWith("dalvik.")
+                                && !cls.startsWith("de.robv.android.xposed")) {
+                                log("    " + cls + "." + st[i].getMethodName() + ":" + st[i].getLineNumber());
                             }
-                            log(sb.toString());
                         }
-                    });
+                    }
+                });
+            }
+            log("DIAG: n85.c0 hooks OK");
+        } catch (Throwable t) { log("DIAG: n85.c0 fail: " + t.getMessage()); }
+
+        // Hook a21.g 构造器: 看参数
+        try {
+            Class<?> a21g = XposedHelpers.findClass("a21.g", sClassLoader);
+            for (java.lang.reflect.Constructor<?> c : a21g.getDeclaredConstructors()) {
+                XposedBridge.hookMethod(c, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        StringBuilder sb = new StringBuilder("DIAG: new a21.g(").append(param.args.length).append(")");
+                        for (int i = 0; i < param.args.length; i++) {
+                            sb.append(" p").append(i).append("=");
+                            sb.append(param.args[i] == null ? "null" : param.args[i].getClass().getName());
+                        }
+                        log(sb.toString());
+                    }
+                });
+            }
+            log("DIAG: a21.g ctor hooks OK");
+        } catch (Throwable t) { log("DIAG: a21.g fail: " + t.getMessage()); }
+
+        // Hook a2.b: 看是否也用于发送（之前的同步栈用它）
+        try {
+            Class<?> a2 = XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.a2", sClassLoader);
+            XposedBridge.hookAllMethods(a2, "b", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Object[] args = param.args;
+                    StringBuilder sb = new StringBuilder("DIAG: a2.b(").append(args.length).append(")");
+                    for (int i = 0; i < args.length; i++) {
+                        sb.append(" p").append(i).append("=");
+                        sb.append(args[i] == null ? "null" : args[i].getClass().getName());
+                    }
+                    log(sb.toString());
+                    log("  a2.b栈(" + Thread.currentThread().getName() + "):");
+                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
+                    for (int i = 3; i < Math.min(st.length, 10); i++) {
+                        String cls = st[i].getClassName();
+                        if (!cls.startsWith("java.") && !cls.startsWith("android.") && !cls.startsWith("dalvik.")
+                            && !cls.startsWith("de.robv.android.xposed")) {
+                            log("    " + cls + "." + st[i].getMethodName() + ":" + st[i].getLineNumber());
+                        }
+                    }
                 }
-                log("DIAG: " + clsName + " constructor hooks OK");
-            } catch (Throwable t) { log("DIAG: " + clsName + " hook fail: " + t.getMessage()); }
-        }
+            });
+            log("DIAG: a2.b hook OK");
+        } catch (Throwable t) { log("DIAG: a2.b fail: " + t.getMessage()); }
     }
 
     private static int safeInt(Object obj, String[] methods) {
