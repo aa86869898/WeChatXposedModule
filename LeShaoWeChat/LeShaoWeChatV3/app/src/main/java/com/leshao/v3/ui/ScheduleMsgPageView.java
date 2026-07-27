@@ -167,7 +167,7 @@ public class ScheduleMsgPageView {
         sEmergencyBtn.setTypeface(null, Typeface.BOLD);
         sEmergencyBtn.setPadding(PX(d, 10), PX(d, 4), PX(d, 10), PX(d, 4));
         GradientDrawable stopBg = new GradientDrawable();
-        stopBg.setCornerRadius(PX(d, 4));
+        stopBg.setCornerRadius(PX(d, 2));
         stopBg.setColor(CLR_RED);
         sEmergencyBtn.setBackground(stopBg);
         sEmergencyBtn.setVisibility(View.GONE);
@@ -243,7 +243,7 @@ public class ScheduleMsgPageView {
         sEmergencyBtn.setTypeface(null, Typeface.BOLD);
         sEmergencyBtn.setPadding(PX(d, 10), PX(d, 4), PX(d, 10), PX(d, 4));
         GradientDrawable stopBg = new GradientDrawable();
-        stopBg.setCornerRadius(PX(d, 4));
+        stopBg.setCornerRadius(PX(d, 2));
         stopBg.setColor(CLR_RED);
         sEmergencyBtn.setBackground(stopBg);
         sEmergencyBtn.setVisibility(View.GONE);
@@ -291,7 +291,7 @@ public class ScheduleMsgPageView {
     private static View buildCard1(Context ctx, float d, Activity act) {
         LinearLayout card = makeCard(ctx, d, "任务基础信息");
 
-        final EditText nameEt = editText(ctx, d, "请输入任务名称", CLR_HIGHLIGHT);
+        final EditText nameEt = borderedEditText(ctx, d, "请输入任务名称", CLR_HIGHLIGHT);
         nameEt.setText(sTaskNameCache);
         card.addView(rowLabel(ctx, d, "任务名称", nameEt));
         card.addView(hSep(ctx, d));
@@ -300,24 +300,26 @@ public class ScheduleMsgPageView {
         timeRow.setOrientation(LinearLayout.HORIZONTAL);
         timeRow.setGravity(Gravity.CENTER_VERTICAL);
         TextView timeLabel = label(ctx, d, "发送时间");
-        timeLabel.setLayoutParams(lpFixW(PX(d, 80)));
+        timeLabel.setLayoutParams(lpFixW(PX(d, 72)));
         timeRow.addView(timeLabel);
 
-        final NumberPicker hourPk = new NumberPicker(ctx);
-        hourPk.setMinValue(0); hourPk.setMaxValue(23); hourPk.setValue(sHourCache);
-        styleNp(hourPk, ctx, d);
-        timeRow.addView(hourPk);
+        final EditText hourEt = borderedEditText(ctx, d, String.format("%02d", sHourCache), CLR_HIGHLIGHT);
+        hourEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+        hourEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 42), -2));
+        hourEt.setText(String.format("%02d", sHourCache));
+        timeRow.addView(hourEt);
 
         TextView colon = new TextView(ctx);
         colon.setText(":");
-        colon.setTextSize(16); colon.setTextColor(CLR_WHITE); colon.setTypeface(null, Typeface.BOLD);
+        colon.setTextSize(13); colon.setTextColor(CLR_WHITE); colon.setTypeface(null, Typeface.BOLD);
         colon.setPadding(PX(d, 4), 0, PX(d, 4), 0);
         timeRow.addView(colon);
 
-        final NumberPicker minPk = new NumberPicker(ctx);
-        minPk.setMinValue(0); minPk.setMaxValue(59); minPk.setValue(sMinuteCache);
-        styleNp(minPk, ctx, d);
-        timeRow.addView(minPk);
+        final EditText minEt = borderedEditText(ctx, d, String.format("%02d", sMinuteCache), CLR_HIGHLIGHT);
+        minEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+        minEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 42), -2));
+        minEt.setText(String.format("%02d", sMinuteCache));
+        timeRow.addView(minEt);
 
         View spT = new View(ctx); spT.setLayoutParams(lpWeight(1)); timeRow.addView(spT);
 
@@ -328,12 +330,12 @@ public class ScheduleMsgPageView {
         repeatRow.setOrientation(LinearLayout.HORIZONTAL);
         repeatRow.setGravity(Gravity.CENTER_VERTICAL);
         TextView rpLabel = label(ctx, d, "重复规则");
-        rpLabel.setLayoutParams(lpFixW(PX(d, 80)));
+        rpLabel.setLayoutParams(lpFixW(PX(d, 72)));
         repeatRow.addView(rpLabel);
 
         final Spinner repeatSp = new Spinner(ctx);
         repeatSp.setAdapter(new ArrayAdapter<String>(ctx, android.R.layout.simple_spinner_item, REPEAT_MODES) {
-            @Override public View getView(int pos, View v, ViewGroup p) { View tv = super.getView(pos, v, p); ((TextView)tv).setTextColor(CLR_HIGHLIGHT); ((TextView)tv).setTextSize(12); return tv; }
+            @Override public View getView(int pos, View v, ViewGroup p) { View tv = super.getView(pos, v, p); ((TextView)tv).setTextColor(CLR_HIGHLIGHT); ((TextView)tv).setTextSize(11); return tv; }
             @Override public View getDropDownView(int pos, View v, ViewGroup p) { View tv = super.getDropDownView(pos, v, p); ((TextView)tv).setTextColor(CLR_WHITE); ((TextView)tv).setBackgroundColor(CLR_CARD); return tv; }
         });
         for (int i = 0; i < REPEAT_MODES.length; i++) { if (REPEAT_MODES[i].equals(sRepeatCache)) { repeatSp.setSelection(i); break; } }
@@ -342,10 +344,10 @@ public class ScheduleMsgPageView {
         card.addView(repeatRow);
         card.addView(hSep(ctx, d));
 
-        final CheckBox enableCb = checkBox(ctx, d, "启用此任务");
-        card.addView(enableCb);
+        TextView enableTg = cardToggle(ctx, d, "已启用", "未启用", false);
+        card.addView(rowLabel(ctx, d, "任务状态", enableTg));
 
-        card.setTag(new Object[]{nameEt, hourPk, minPk, repeatSp, enableCb});
+        card.setTag(new Object[]{nameEt, hourEt, minEt, repeatSp, enableTg});
         return card;
     }
 
@@ -402,7 +404,7 @@ public class ScheduleMsgPageView {
         previewBtn.setTextColor(CLR_NEON);
         previewBtn.setPadding(PX(d, 14), PX(d, 6), PX(d, 14), PX(d, 6));
         GradientDrawable prevBg = new GradientDrawable();
-        prevBg.setCornerRadius(PX(d, 14));
+        prevBg.setCornerRadius(PX(d, 2));
         prevBg.setStroke(PX(d, 1), CLR_NEON);
         prevBg.setColor(Color.TRANSPARENT);
         previewBtn.setBackground(prevBg);
@@ -424,7 +426,7 @@ public class ScheduleMsgPageView {
                     ((TextView) child).setTextColor(sel ? Color.BLACK : CLR_NEON);
                     ((TextView) child).setTypeface(null, sel ? Typeface.BOLD : Typeface.NORMAL);
                     GradientDrawable bg = new GradientDrawable();
-                    bg.setCornerRadius(PX(dp(child.getContext()), 8));
+                    bg.setCornerRadius(PX(dp(child.getContext()), 2));
                     bg.setColor(sel ? CLR_NEON : CLR_CARD);
                     if (!sel) bg.setStroke(PX(dp(child.getContext()), 1), CLR_NEON);
                     child.setBackground(bg);
@@ -450,7 +452,7 @@ public class ScheduleMsgPageView {
         btn.setGravity(Gravity.CENTER);
         btn.setPadding(PX(d, 4), PX(d, 6), PX(d, 4), PX(d, 6));
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(PX(d, 6));
+        bg.setCornerRadius(PX(d, 2));
         bg.setColor(selected ? CLR_NEON : CLR_CARD);
         if (!selected) bg.setStroke(PX(d, 1), CLR_NEON);
         btn.setBackground(bg);
@@ -481,7 +483,7 @@ public class ScheduleMsgPageView {
         contentTv.setTextSize(13); contentTv.setTextColor(CLR_WHITE);
         contentTv.setPadding(PX(d, 12), PX(d, 12), PX(d, 12), PX(d, 12));
         GradientDrawable cbg = new GradientDrawable();
-        cbg.setCornerRadius(PX(d, 8));
+        cbg.setCornerRadius(PX(d, 2));
         cbg.setColor(CLR_CARD);
         contentTv.setBackground(cbg);
         root.addView(contentTv);
@@ -509,7 +511,7 @@ public class ScheduleMsgPageView {
         uploadBtn.setTextColor(CLR_NEON);
         uploadBtn.setPadding(PX(d, 14), PX(d, 8), PX(d, 14), PX(d, 8));
         GradientDrawable upBg = new GradientDrawable();
-        upBg.setCornerRadius(PX(d, 6));
+        upBg.setCornerRadius(PX(d, 2));
         upBg.setStroke(PX(d, 1), CLR_NEON);
         upBg.setColor(Color.TRANSPARENT);
         uploadBtn.setBackground(upBg);
@@ -609,7 +611,7 @@ public class ScheduleMsgPageView {
                 item.setGravity(Gravity.CENTER);
                 item.setPadding(PX(d, 6), PX(d, 4), PX(d, 6), PX(d, 4));
                 GradientDrawable itemBg = new GradientDrawable();
-                itemBg.setCornerRadius(PX(d, 6));
+                itemBg.setCornerRadius(PX(d, 2));
                 itemBg.setColor(CLR_CARD);
                 itemBg.setStroke(PX(d, 1), 0x33336655);
                 item.setBackground(itemBg);
@@ -675,7 +677,7 @@ public class ScheduleMsgPageView {
             cb.setGravity(Gravity.CENTER);
             cb.setPadding(PX(d, 8), PX(d, 8), PX(d, 8), PX(d, 8));
             GradientDrawable cbg = new GradientDrawable();
-            cbg.setCornerRadius(PX(d, 6));
+            cbg.setCornerRadius(PX(d, 2));
             cbg.setColor(i == sSelectedChannel ? CLR_NEON : CLR_CARD);
             if (i != sSelectedChannel) cbg.setStroke(PX(d, 1), CLR_NEON);
             cb.setBackground(cbg);
@@ -686,7 +688,7 @@ public class ScheduleMsgPageView {
                     chButtons[j].setTextColor(j == ci ? Color.BLACK : CLR_NEON);
                     chButtons[j].setTypeface(null, j == ci ? Typeface.BOLD : Typeface.NORMAL);
                     GradientDrawable g = new GradientDrawable();
-                    g.setCornerRadius(PX(d, 6));
+                    g.setCornerRadius(PX(d, 2));
                     g.setColor(j == ci ? CLR_NEON : CLR_CARD);
                     if (j != ci) g.setStroke(PX(d, 1), CLR_NEON);
                     chButtons[j].setBackground(g);
@@ -710,7 +712,7 @@ public class ScheduleMsgPageView {
         selBtn.setTextColor(CLR_NEON);
         selBtn.setPadding(PX(d, 14), PX(d, 8), PX(d, 14), PX(d, 8));
         GradientDrawable selBg = new GradientDrawable();
-        selBg.setCornerRadius(PX(d, 6));
+        selBg.setCornerRadius(PX(d, 2));
         selBg.setStroke(PX(d, 1), CLR_NEON);
         selBg.setColor(Color.TRANSPARENT);
         selBtn.setBackground(selBg);
@@ -747,7 +749,7 @@ public class ScheduleMsgPageView {
         excBtn.setTextColor(CLR_RED);
         excBtn.setPadding(PX(d, 14), PX(d, 8), PX(d, 14), PX(d, 8));
         GradientDrawable excBg = new GradientDrawable();
-        excBg.setCornerRadius(PX(d, 6));
+        excBg.setCornerRadius(PX(d, 2));
         excBg.setStroke(PX(d, 1), CLR_RED);
         excBg.setColor(Color.TRANSPARENT);
         excBtn.setBackground(excBg);
@@ -793,11 +795,11 @@ public class ScheduleMsgPageView {
         commentEt.setPadding(0, PX(d, 8), 0, 0);
         momentsExtra.addView(commentEt);
 
-        final CheckBox autoDeleteCb = checkBox(ctx, d, "定时自动删除动态（24小时后）");
-        momentsExtra.addView(autoDeleteCb);
+        TextView autoDeleteTg = cardToggle(ctx, d, "已开启", "已关闭", false);
+        momentsExtra.addView(rowLabel(ctx, d, "24h自动删除", autoDeleteTg));
 
         card.addView(momentsExtra);
-        card.setTag(new Object[]{countTv, excCountTv, momentsExtra, visibleEt, locationEt, commentEt, autoDeleteCb});
+        card.setTag(new Object[]{countTv, excCountTv, momentsExtra, visibleEt, locationEt, commentEt, autoDeleteTg});
 
         return card;
     }
@@ -814,39 +816,78 @@ public class ScheduleMsgPageView {
     private static View buildCard5(Context ctx, float d, Activity act) {
         LinearLayout card = makeCard(ctx, d, "风控间隔策略");
 
-        final EditText intervalEt = editText(ctx, d, "5", CLR_HIGHLIGHT);
+        final EditText intervalEt = borderedEditText(ctx, d, "5", CLR_HIGHLIGHT);
         intervalEt.setInputType(InputType.TYPE_CLASS_NUMBER);
         card.addView(rowLabel(ctx, d, "发送间隔(秒)", intervalEt));
         card.addView(hSep(ctx, d));
 
-        final CheckBox randomCb = checkBox(ctx, d, "开启随机浮动延迟（实际间隔在设定值±30%范围随机）");
-        card.addView(randomCb);
+        TextView randomTg = cardToggle(ctx, d, "已开启", "已关闭", false);
+        card.addView(rowLabel(ctx, d, "随机浮动延迟", randomTg));
         card.addView(hSep(ctx, d));
 
         LinearLayout batchRow = new LinearLayout(ctx);
         batchRow.setOrientation(LinearLayout.HORIZONTAL);
         batchRow.setGravity(Gravity.CENTER_VERTICAL);
 
-        final EditText batchSizeEt = editText(ctx, d, "10", CLR_HIGHLIGHT);
+        TextView bsLabel = new TextView(ctx);
+        bsLabel.setText("每次发送");
+        bsLabel.setTextSize(11); bsLabel.setTextColor(CLR_WHITE);
+        batchRow.addView(bsLabel);
+
+        final EditText batchSizeEt = borderedEditText(ctx, d, "10", CLR_HIGHLIGHT);
         batchSizeEt.setInputType(InputType.TYPE_CLASS_NUMBER);
-        batchSizeEt.setLayoutParams(lpWeight(1));
-        batchRow.addView(rowLabel(ctx, d, "每批发送", batchSizeEt));
+        batchSizeEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 50), -2));
+        batchRow.addView(batchSizeEt);
 
-        View spB1 = new View(ctx); spB1.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 12), 0)); batchRow.addView(spB1);
+        TextView bsUnit = new TextView(ctx);
+        bsUnit.setText(" 个  ");
+        bsUnit.setTextSize(11); bsUnit.setTextColor(CLR_WHITE);
+        batchRow.addView(bsUnit);
 
-        final EditText batchIntEt = editText(ctx, d, "60", CLR_HIGHLIGHT);
+        TextView biLabel = new TextView(ctx);
+        biLabel.setText("批次间隔");
+        biLabel.setTextSize(11); biLabel.setTextColor(CLR_WHITE);
+        batchRow.addView(biLabel);
+
+        final EditText batchIntEt = borderedEditText(ctx, d, "1", CLR_HIGHLIGHT);
         batchIntEt.setInputType(InputType.TYPE_CLASS_NUMBER);
-        batchIntEt.setLayoutParams(lpWeight(1));
-        batchRow.addView(rowLabel(ctx, d, "批次间隔(秒)", batchIntEt));
+        batchIntEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 46), -2));
+        batchRow.addView(batchIntEt);
+
+        TextView biUnit = new TextView(ctx);
+        biUnit.setText(" 分");
+        biUnit.setTextSize(11); biUnit.setTextColor(CLR_WHITE);
+        batchRow.addView(biUnit);
+
+        View spB = new View(ctx); spB.setLayoutParams(lpWeight(1)); batchRow.addView(spB);
 
         card.addView(batchRow);
         card.addView(hSep(ctx, d));
 
-        final EditText maxSendEt = editText(ctx, d, "200", CLR_HIGHLIGHT);
-        maxSendEt.setInputType(InputType.TYPE_CLASS_NUMBER);
-        card.addView(rowLabel(ctx, d, "单次任务最大发送", maxSendEt));
+        LinearLayout maxRow = new LinearLayout(ctx);
+        maxRow.setOrientation(LinearLayout.HORIZONTAL);
+        maxRow.setGravity(Gravity.CENTER_VERTICAL);
 
-        card.setTag(new Object[]{intervalEt, randomCb, batchSizeEt, batchIntEt, maxSendEt});
+        TextView msLabel = new TextView(ctx);
+        msLabel.setText("单次任务最大发送");
+        msLabel.setTextSize(11); msLabel.setTextColor(CLR_WHITE);
+        maxRow.addView(msLabel);
+
+        final EditText maxSendEt = borderedEditText(ctx, d, "200", CLR_HIGHLIGHT);
+        maxSendEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+        maxSendEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 54), -2));
+        maxRow.addView(maxSendEt);
+
+        TextView msUnit = new TextView(ctx);
+        msUnit.setText(" 个目标");
+        msUnit.setTextSize(11); msUnit.setTextColor(CLR_WHITE);
+        maxRow.addView(msUnit);
+
+        View spM = new View(ctx); spM.setLayoutParams(lpWeight(1)); maxRow.addView(spM);
+
+        card.addView(maxRow);
+
+        card.setTag(new Object[]{intervalEt, randomTg, batchSizeEt, batchIntEt, maxSendEt});
         return card;
     }
 
@@ -855,19 +896,43 @@ public class ScheduleMsgPageView {
     private static View buildCard6(Context ctx, float d, Activity act) {
         LinearLayout card = makeCard(ctx, d, "高级策略设置");
 
-        final EditText retryTimesEt = editText(ctx, d, "3", CLR_HIGHLIGHT);
-        retryTimesEt.setInputType(InputType.TYPE_CLASS_NUMBER);
-        card.addView(rowLabel(ctx, d, "最大重试次数", retryTimesEt));
-        card.addView(hSep(ctx, d));
+        LinearLayout retryRow = new LinearLayout(ctx);
+        retryRow.setOrientation(LinearLayout.HORIZONTAL);
+        retryRow.setGravity(Gravity.CENTER_VERTICAL);
 
-        final EditText retryIntEt = editText(ctx, d, "60", CLR_HIGHLIGHT);
+        TextView rtLabel = new TextView(ctx);
+        rtLabel.setText("最大重试次数");
+        rtLabel.setTextSize(11); rtLabel.setTextColor(CLR_WHITE);
+        retryRow.addView(rtLabel);
+
+        final EditText retryTimesEt = borderedEditText(ctx, d, "3", CLR_HIGHLIGHT);
+        retryTimesEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+        retryTimesEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 42), -2));
+        retryRow.addView(retryTimesEt);
+
+        TextView spR = new TextView(ctx);
+        spR.setText("   重试等待时间");
+        spR.setTextSize(11); spR.setTextColor(CLR_WHITE);
+        retryRow.addView(spR);
+
+        final EditText retryIntEt = borderedEditText(ctx, d, "60", CLR_HIGHLIGHT);
         retryIntEt.setInputType(InputType.TYPE_CLASS_NUMBER);
-        card.addView(rowLabel(ctx, d, "重试等待间隔(秒)", retryIntEt));
+        retryIntEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 42), -2));
+        retryRow.addView(retryIntEt);
+
+        TextView riUnit = new TextView(ctx);
+        riUnit.setText(" 秒");
+        riUnit.setTextSize(11); riUnit.setTextColor(CLR_WHITE);
+        retryRow.addView(riUnit);
+
+        View sp = new View(ctx); sp.setLayoutParams(lpWeight(1)); retryRow.addView(sp);
+
+        card.addView(retryRow);
 
         TextView hint = new TextView(ctx);
         hint.setText("多次重试失败将自动标记该对象跳过，不阻断整体群发队列");
         hint.setTextSize(10); hint.setTextColor(CLR_GRAY);
-        hint.setPadding(0, PX(d, 8), 0, 0);
+        hint.setPadding(0, PX(d, 6), 0, 0);
         card.addView(hint);
 
         card.setTag(new Object[]{retryTimesEt, retryIntEt});
@@ -879,66 +944,34 @@ public class ScheduleMsgPageView {
     private static View buildCard7(Context ctx, float d, Activity act) {
         LinearLayout card = makeCard(ctx, d, "模板与历史日志");
 
-        LinearLayout tplRow = new LinearLayout(ctx);
-        tplRow.setOrientation(LinearLayout.HORIZONTAL);
-        tplRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setGravity(Gravity.CENTER);
 
-        TextView saveTplBtn = new TextView(ctx);
-        saveTplBtn.setText("保存为模板");
-        saveTplBtn.setTextSize(12);
-        saveTplBtn.setTextColor(CLR_NEON);
-        saveTplBtn.setPadding(PX(d, 12), PX(d, 8), PX(d, 12), PX(d, 8));
-        GradientDrawable stBg = new GradientDrawable();
-        stBg.setCornerRadius(PX(d, 6));
-        stBg.setStroke(PX(d, 1), CLR_NEON);
-        stBg.setColor(Color.TRANSPARENT);
-        saveTplBtn.setBackground(stBg);
-        tplRow.addView(saveTplBtn);
+        TextView saveTplBtn = textBtn(ctx, d, "保存为模板", CLR_NEON);
+        btnRow.addView(saveTplBtn);
 
-        View spT1 = new View(ctx); spT1.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 8), 0)); tplRow.addView(spT1);
+        View sp1 = new View(ctx); sp1.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 6), 0)); btnRow.addView(sp1);
 
-        TextView loadTplBtn = new TextView(ctx);
-        loadTplBtn.setText("加载模板");
-        loadTplBtn.setTextSize(12);
-        loadTplBtn.setTextColor(CLR_WHITE);
-        loadTplBtn.setPadding(PX(d, 12), PX(d, 8), PX(d, 12), PX(d, 8));
-        GradientDrawable ltBg = new GradientDrawable();
-        ltBg.setCornerRadius(PX(d, 6));
-        ltBg.setStroke(PX(d, 1), CLR_WHITE);
-        ltBg.setColor(Color.TRANSPARENT);
-        loadTplBtn.setBackground(ltBg);
-        tplRow.addView(loadTplBtn);
+        TextView loadTplBtn = textBtn(ctx, d, "加载模板", CLR_WHITE);
+        btnRow.addView(loadTplBtn);
 
-        card.addView(tplRow);
+        View sp2 = new View(ctx); sp2.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 6), 0)); btnRow.addView(sp2);
+
+        TextView logBtn = textBtn(ctx, d, "日志", CLR_YELLOW);
+        btnRow.addView(logBtn);
+
+        card.addView(btnRow);
         card.addView(hSep(ctx, d));
-
-        LinearLayout logRow = new LinearLayout(ctx);
-        logRow.setOrientation(LinearLayout.HORIZONTAL);
-        logRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView logBtn = new TextView(ctx);
-        logBtn.setText("发送历史日志");
-        logBtn.setTextSize(12);
-        logBtn.setTextColor(CLR_YELLOW);
-        logBtn.setPadding(PX(d, 12), PX(d, 8), PX(d, 12), PX(d, 8));
-        GradientDrawable lbBg = new GradientDrawable();
-        lbBg.setCornerRadius(PX(d, 6));
-        lbBg.setStroke(PX(d, 1), CLR_YELLOW);
-        lbBg.setColor(Color.TRANSPARENT);
-        logBtn.setBackground(lbBg);
-        logRow.addView(logBtn);
-
-        View spL = new View(ctx); spL.setLayoutParams(lpWeight(1)); logRow.addView(spL);
 
         final TextView logCount = new TextView(ctx);
         List<SendLogEntry> logs = ScheduleBroadcast.getSendLogs();
         List<SendLogEntry> failed = ScheduleBroadcast.getFailedLogs();
-        logCount.setText("共" + logs.size() + "条 / 失败" + failed.size() + "条");
-        logCount.setTextSize(10);
+        logCount.setText("共" + logs.size() + "条  失败" + failed.size() + "条");
+        logCount.setTextSize(11);
         logCount.setTextColor(CLR_HIGHLIGHT);
-        logRow.addView(logCount);
-
-        card.addView(logRow);
+        logCount.setGravity(Gravity.CENTER);
+        card.addView(logCount);
 
         saveTplBtn.setOnClickListener(v -> showSaveTemplate(ctx, d, act));
         loadTplBtn.setOnClickListener(v -> showLoadTemplate(ctx, d, act));
@@ -946,6 +979,21 @@ public class ScheduleMsgPageView {
 
         card.setTag(logCount);
         return card;
+    }
+
+    private static TextView textBtn(Context ctx, float d, String text, int color) {
+        TextView btn = new TextView(ctx);
+        btn.setText(text);
+        btn.setTextSize(10);
+        btn.setTextColor(color);
+        btn.setGravity(Gravity.CENTER);
+        btn.setPadding(PX(d, 10), PX(d, 6), PX(d, 10), PX(d, 6));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(PX(d, 2));
+        bg.setStroke(PX(d, 1), color);
+        bg.setColor(Color.TRANSPARENT);
+        btn.setBackground(bg);
+        return btn;
     }
 
     private static void showSaveTemplate(Context ctx, float d, Activity act) {
@@ -1042,7 +1090,7 @@ public class ScheduleMsgPageView {
             loadBtn.setTextSize(11); loadBtn.setTextColor(CLR_NEON);
             loadBtn.setPadding(PX(d, 10), PX(d, 6), PX(d, 10), PX(d, 6));
             GradientDrawable ldBg = new GradientDrawable();
-            ldBg.setCornerRadius(PX(d, 4));
+            ldBg.setCornerRadius(PX(d, 2));
             ldBg.setStroke(PX(d, 1), CLR_NEON);
             ldBg.setColor(Color.TRANSPARENT);
             loadBtn.setBackground(ldBg);
@@ -1117,7 +1165,7 @@ public class ScheduleMsgPageView {
             resendBtn.setTextColor(CLR_RED);
             resendBtn.setPadding(PX(d, 14), PX(d, 8), PX(d, 14), PX(d, 8));
             GradientDrawable rsBg = new GradientDrawable();
-            rsBg.setCornerRadius(PX(d, 6));
+            rsBg.setCornerRadius(PX(d, 2));
             rsBg.setStroke(PX(d, 1), CLR_RED);
             rsBg.setColor(Color.TRANSPARENT);
             resendBtn.setBackground(rsBg);
@@ -1230,7 +1278,7 @@ public class ScheduleMsgPageView {
         btn.setGravity(Gravity.CENTER);
         btn.setPadding(PX(d, 20), PX(d, 14), PX(d, 20), PX(d, 14));
         GradientDrawable btnBg = new GradientDrawable();
-        btnBg.setCornerRadius(PX(d, 24));
+        btnBg.setCornerRadius(PX(d, 2));
         btnBg.setColor(CLR_NEON);
         btn.setBackground(btnBg);
 
@@ -1364,7 +1412,7 @@ public class ScheduleMsgPageView {
         card.setClipToOutline(true);
 
         GradientDrawable cardBg = new GradientDrawable();
-        cardBg.setCornerRadius(PX(d, 10));
+        cardBg.setCornerRadius(PX(d, 2));
         cardBg.setStroke(PX(d, 1), CLR_NEON);
         cardBg.setColor(CLR_CARD);
         card.setBackground(cardBg);
@@ -1440,13 +1488,52 @@ public class ScheduleMsgPageView {
         return et;
     }
 
-    private static CheckBox checkBox(Context ctx, float d, String text) {
-        CheckBox cb = new CheckBox(ctx);
-        cb.setText(text);
-        cb.setTextSize(12);
-        cb.setTextColor(CLR_WHITE);
-        return cb;
+    private static EditText borderedEditText(Context ctx, float d, String hint, int textColor) {
+        EditText et = new EditText(ctx);
+        et.setHint(hint);
+        et.setHintTextColor(CLR_GRAY);
+        et.setTextColor(textColor);
+        et.setPadding(PX(d, 8), PX(d, 4), PX(d, 8), PX(d, 4));
+        et.setTextSize(11);
+        et.setSingleLine(true);
+        GradientDrawable etBg = new GradientDrawable();
+        etBg.setCornerRadius(PX(d, 2));
+        etBg.setStroke(PX(d, 1), CLR_NEON);
+        etBg.setColor(Color.TRANSPARENT);
+        et.setBackground(etBg);
+        return et;
     }
+
+    private static TextView cardToggle(Context ctx, float d, String onText, String offText, boolean initial) {
+        final boolean[] state = {initial};
+        final int[] clr = {initial ? Color.BLACK : CLR_NEON};
+        TextView tv = new TextView(ctx);
+        tv.setText((initial ? " " : "") + (initial ? offText : onText));
+        tv.setTextSize(10);
+        tv.setTextColor(clr[0]);
+        tv.setTypeface(null, Typeface.BOLD);
+        tv.setGravity(Gravity.CENTER);
+        tv.setPadding(PX(d, 8), PX(d, 6), PX(d, 8), PX(d, 6));
+        GradientDrawable tg = new GradientDrawable();
+        tg.setCornerRadius(PX(d, 2));
+        if (initial) { tg.setColor(CLR_NEON); } else { tg.setStroke(PX(d, 1), CLR_NEON); tg.setColor(Color.TRANSPARENT); }
+        tv.setBackground(tg);
+        tv.setOnClickListener(v -> {
+            state[0] = !state[0];
+            clr[0] = state[0] ? Color.BLACK : CLR_NEON;
+            tv.setTextColor(clr[0]);
+            GradientDrawable g = new GradientDrawable();
+            g.setCornerRadius(PX(d, 2));
+            if (state[0]) { g.setColor(CLR_NEON); } else { g.setStroke(PX(d, 1), CLR_NEON); g.setColor(Color.TRANSPARENT); }
+            tv.setBackground(g);
+            tv.setText((state[0] ? " " : "") + (state[0] ? offText : onText));
+            tv.setTag(state[0]);
+        });
+        tv.setTag(state[0]);
+        return tv;
+    }
+
+    private static boolean isCardToggled(View cardToggle) { Object t = cardToggle.getTag(); return t instanceof Boolean && (Boolean) t; }
 
     private static View hSep(Context ctx, float d) {
         View v = new View(ctx);
