@@ -79,27 +79,28 @@ public class ScheduleMsgPageView {
             LogWriter.log("SCHEDULE_MSG", "create: buildCard1...");
             body.addView(vSpacer(ctx, d, 10));
             body.addView(buildCard1(ctx, d, parentAct));
+            // 逐步添加测试
             LogWriter.log("SCHEDULE_MSG", "create: buildCard2...");
             body.addView(vSpacer(ctx, d, 10));
             body.addView(buildCard2(ctx, d, parentAct));
-            LogWriter.log("SCHEDULE_MSG", "create: buildCard3...");
-            body.addView(vSpacer(ctx, d, 10));
-            body.addView(buildCard3(ctx, d, parentAct));
-            LogWriter.log("SCHEDULE_MSG", "create: buildCard4...");
-            body.addView(vSpacer(ctx, d, 10));
-            body.addView(buildCard4(ctx, d, parentAct));
-            LogWriter.log("SCHEDULE_MSG", "create: buildCard5...");
-            body.addView(vSpacer(ctx, d, 10));
-            body.addView(buildCard5(ctx, d, parentAct));
-            LogWriter.log("SCHEDULE_MSG", "create: buildCard6...");
-            body.addView(vSpacer(ctx, d, 10));
-            body.addView(buildCard6(ctx, d, parentAct));
-            LogWriter.log("SCHEDULE_MSG", "create: buildCard7...");
-            body.addView(vSpacer(ctx, d, 10));
-            body.addView(buildCard7(ctx, d, parentAct));
-            LogWriter.log("SCHEDULE_MSG", "create: buildBottomBtn...");
-            body.addView(vSpacer(ctx, d, 16));
-            body.addView(buildBottomBtn(ctx, d, parentAct));
+            //LogWriter.log("SCHEDULE_MSG", "create: buildCard3...");
+            //body.addView(vSpacer(ctx, d, 10));
+            //body.addView(buildCard3(ctx, d, parentAct));
+            //LogWriter.log("SCHEDULE_MSG", "create: buildCard4...");
+            //body.addView(vSpacer(ctx, d, 10));
+            //body.addView(buildCard4(ctx, d, parentAct));
+            //LogWriter.log("SCHEDULE_MSG", "create: buildCard5...");
+            //body.addView(vSpacer(ctx, d, 10));
+            //body.addView(buildCard5(ctx, d, parentAct));
+            //LogWriter.log("SCHEDULE_MSG", "create: buildCard6...");
+            //body.addView(vSpacer(ctx, d, 10));
+            //body.addView(buildCard6(ctx, d, parentAct));
+            //LogWriter.log("SCHEDULE_MSG", "create: buildCard7...");
+            //body.addView(vSpacer(ctx, d, 10));
+            //body.addView(buildCard7(ctx, d, parentAct));
+            //LogWriter.log("SCHEDULE_MSG", "create: buildBottomBtn...");
+            //body.addView(vSpacer(ctx, d, 16));
+            //body.addView(buildBottomBtn(ctx, d, parentAct));
 
             loadDraft(ctx);
 
