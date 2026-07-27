@@ -11,11 +11,13 @@ import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.InputType;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.*;
+import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.ScheduleBroadcast;
 import com.leshao.v3.hook.ScheduleBroadcast.*;
 import java.text.SimpleDateFormat;
@@ -62,39 +64,55 @@ public class ScheduleMsgPageView {
     // ===== 主入口 =====
 
     public static View create(Context ctx, Activity parentAct) {
-        sParentActivity = parentAct;
-        float d = dp(ctx);
+        try {
+            sParentActivity = parentAct;
+            float d = dp(ctx);
+            LogWriter.log("SCHEDULE_MSG", "create: START, d=" + d);
 
-        LinearLayout body = new LinearLayout(ctx);
-        body.setOrientation(LinearLayout.VERTICAL);
-        body.setBackgroundColor(CLR_BG);
-        body.setPadding(PX(d, 10), PX(d, 10), PX(d, 10), PX(d, 16));
+            LinearLayout body = new LinearLayout(ctx);
+            body.setOrientation(LinearLayout.VERTICAL);
+            body.setBackgroundColor(CLR_BG);
+            body.setPadding(PX(d, 10), PX(d, 10), PX(d, 10), PX(d, 16));
 
-        body.addView(buildProgressBar(ctx, d));
-        body.addView(vSpacer(ctx, d, 10));
+            LogWriter.log("SCHEDULE_MSG", "create: buildProgressBar...");
+            body.addView(buildProgressBar(ctx, d));
+            LogWriter.log("SCHEDULE_MSG", "create: buildCard1...");
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildCard1(ctx, d, parentAct));
+            LogWriter.log("SCHEDULE_MSG", "create: buildCard2...");
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildCard2(ctx, d, parentAct));
+            LogWriter.log("SCHEDULE_MSG", "create: buildCard3...");
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildCard3(ctx, d, parentAct));
+            LogWriter.log("SCHEDULE_MSG", "create: buildCard4...");
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildCard4(ctx, d, parentAct));
+            LogWriter.log("SCHEDULE_MSG", "create: buildCard5...");
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildCard5(ctx, d, parentAct));
+            LogWriter.log("SCHEDULE_MSG", "create: buildCard6...");
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildCard6(ctx, d, parentAct));
+            LogWriter.log("SCHEDULE_MSG", "create: buildCard7...");
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildCard7(ctx, d, parentAct));
+            LogWriter.log("SCHEDULE_MSG", "create: buildBottomBtn...");
+            body.addView(vSpacer(ctx, d, 16));
+            body.addView(buildBottomBtn(ctx, d, parentAct));
 
-        body.addView(buildCard1(ctx, d, parentAct));
-        body.addView(vSpacer(ctx, d, 10));
-        body.addView(buildCard2(ctx, d, parentAct));
-        body.addView(vSpacer(ctx, d, 10));
-        body.addView(buildCard3(ctx, d, parentAct));
-        body.addView(vSpacer(ctx, d, 10));
-        body.addView(buildCard4(ctx, d, parentAct));
-        body.addView(vSpacer(ctx, d, 10));
-        body.addView(buildCard5(ctx, d, parentAct));
-        body.addView(vSpacer(ctx, d, 10));
-        body.addView(buildCard6(ctx, d, parentAct));
-        body.addView(vSpacer(ctx, d, 10));
-        body.addView(buildCard7(ctx, d, parentAct));
-        body.addView(vSpacer(ctx, d, 16));
-        body.addView(buildBottomBtn(ctx, d, parentAct));
+            loadDraft(ctx);
 
-        loadDraft(ctx);
-
-        ScrollView sv = new ScrollView(ctx);
-        sv.setBackgroundColor(CLR_BG);
-        sv.addView(body);
-        return sv;
+            ScrollView sv = new ScrollView(ctx);
+            sv.setBackgroundColor(CLR_BG);
+            sv.addView(body);
+            LogWriter.log("SCHEDULE_MSG", "create: DONE OK");
+            return sv;
+        } catch (Throwable t) {
+            LogWriter.log("SCHEDULE_MSG", "create: CRASH: " + t.getClass().getName() + ": " + t.getMessage());
+            LogWriter.log("SCHEDULE_MSG", "create: STACK: " + android.util.Log.getStackTraceString(t));
+            throw new RuntimeException(t);
+        }
     }
 
     // ===== 进度状态栏 =====
