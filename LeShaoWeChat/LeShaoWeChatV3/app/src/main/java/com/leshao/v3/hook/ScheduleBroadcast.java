@@ -405,6 +405,27 @@ public class ScheduleBroadcast {
             });
             log("DIAG: chatting.a21.q.i hook OK");
         } catch (Throwable t) { log("DIAG: chatting.a21.q.i fail: " + t.getMessage()); }
+
+        // Hook z/g/c0 构造器: a21.q.i 的参数类型
+        for (String clsName : new String[]{"z", "g", "c0"}) {
+            try {
+                Class<?> cls = XposedHelpers.findClass(clsName, sClassLoader);
+                for (java.lang.reflect.Constructor<?> c : cls.getDeclaredConstructors()) {
+                    XposedBridge.hookMethod(c, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            StringBuilder sb = new StringBuilder("DIAG: new ").append(clsName).append("(").append(param.args.length).append(")");
+                            for (int i = 0; i < param.args.length; i++) {
+                                sb.append(" p").append(i).append("=");
+                                sb.append(param.args[i] == null ? "null" : param.args[i].getClass().getSimpleName());
+                            }
+                            log(sb.toString());
+                        }
+                    });
+                }
+                log("DIAG: " + clsName + " constructor hooks OK");
+            } catch (Throwable t) { log("DIAG: " + clsName + " hook fail: " + t.getMessage()); }
+        }
     }
 
     private static int safeInt(Object obj, String[] methods) {
