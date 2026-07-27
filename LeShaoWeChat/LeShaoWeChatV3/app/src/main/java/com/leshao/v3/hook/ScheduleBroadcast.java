@@ -380,9 +380,24 @@ public class ScheduleBroadcast {
                     StringBuilder sb = new StringBuilder("DIAG: a21.q.i(").append(args.length).append(")");
                     for (int i = 0; i < args.length; i++) {
                         sb.append(" p").append(i).append("=");
-                        sb.append(args[i] == null ? "null" : args[i].getClass().getSimpleName());
+                        if (args[i] == null) {
+                            sb.append("null");
+                        } else {
+                            sb.append(args[i].getClass().getName()); // 全类名
+                        }
                     }
                     log(sb.toString());
+                    // 额外打印参数类型名和构造器签名
+                    for (int i = 0; i < args.length; i++) {
+                        if (args[i] != null) {
+                            Class<?> ac = args[i].getClass();
+                            StringBuilder csb = new StringBuilder("  a21.q.i p").append(i).append(" ").append(ac.getName()).append(" ctors:");
+                            for (java.lang.reflect.Constructor<?> c : ac.getDeclaredConstructors()) {
+                                csb.append(" (").append(c.getParameterCount()).append(")");
+                            }
+                            log(csb.toString());
+                        }
+                    }
                 }
             });
             log("DIAG: a21.q.i hook OK");
@@ -398,7 +413,7 @@ public class ScheduleBroadcast {
                     StringBuilder sb = new StringBuilder("DIAG: chatting.a21.q.i(").append(args.length).append(")");
                     for (int i = 0; i < args.length; i++) {
                         sb.append(" p").append(i).append("=");
-                        sb.append(args[i] == null ? "null" : args[i].getClass().getSimpleName());
+                        sb.append(args[i] == null ? "null" : args[i].getClass().getName());
                     }
                     log(sb.toString());
                 }
@@ -407,6 +422,7 @@ public class ScheduleBroadcast {
         } catch (Throwable t) { log("DIAG: chatting.a21.q.i fail: " + t.getMessage()); }
 
         // Hook z/g/c0 构造器: a21.q.i 的参数类型
+        // 注意: z 和 c0 可能有包名, 但 g 是裸类名可找到
         for (String clsName : new String[]{"z", "g", "c0"}) {
             try {
                 Class<?> cls = XposedHelpers.findClass(clsName, sClassLoader);
@@ -417,7 +433,7 @@ public class ScheduleBroadcast {
                             StringBuilder sb = new StringBuilder("DIAG: new ").append(clsName).append("(").append(param.args.length).append(")");
                             for (int i = 0; i < param.args.length; i++) {
                                 sb.append(" p").append(i).append("=");
-                                sb.append(param.args[i] == null ? "null" : param.args[i].getClass().getSimpleName());
+                                sb.append(param.args[i] == null ? "null" : param.args[i].getClass().getName());
                             }
                             log(sb.toString());
                         }
