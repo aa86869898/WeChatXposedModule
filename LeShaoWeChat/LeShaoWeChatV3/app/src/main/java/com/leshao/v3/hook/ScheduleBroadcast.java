@@ -814,6 +814,7 @@ public class ScheduleBroadcast {
                     XposedHelpers.callMethod(msg, "X0", task.content);
                     XposedHelpers.callMethod(msg, "e1", now);
                     XposedHelpers.callMethod(msg, "k1", 1);
+                    try { XposedHelpers.callMethod(msg, "H1", 3); } catch (Throwable ignored) {}
                     break;
 
                 case 3: // 图片
@@ -859,8 +860,92 @@ public class ScheduleBroadcast {
             }
 
             long msgId = (Long) XposedHelpers.callMethod(ms, "H9", msg);
-            return msgId > 0;
+            if (msgId > 0) {
+                triggerSend(msgId, talker);
+                return true;
+            }
+            return false;
         } catch (Throwable t) { return false; }
+    }
+
+    // ===== 触发消息真正发送(联网) =====
+
+    private static void triggerSend(long msgId, String talker) {
+        try {
+            Object ms = getMsgStorage();
+            if (ms == null) { log("triggerSend: msgStorage=null"); return; }
+            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", sClassLoader);
+
+            // 1. 先从DB取出刚写入的消息
+            Object msg = XposedHelpers.callMethod(ms, "vo", msgId);
+            if (msg == null) msg = XposedHelpers.callMethod(ms, "j1", msgId);
+            if (msg == null) { log("triggerSend: 取消息失败 msgId=" + msgId); return; }
+
+            // 2. 设置发送状态: isSend=1, status=3(发送中)
+            try { XposedHelpers.callMethod(msg, "k1", 1); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(msg, "O0", 3); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(msg, "H1", 3); } catch (Throwable ignored) {}
+            XposedHelpers.callMethod(ms, "Ra", msgId, msg);
+
+            // 3. 通过 a2 (MessageSyncExtension) 触发联网发送
+            try {
+                Class<?> a2 = XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.a2", sClassLoader);
+                Class<?> j4 = XposedHelpers.findClass("j4", sClassLoader);
+                // 尝试从 e9 获取关联的 j4
+                Object j4Obj = null;
+                try { j4Obj = XposedHelpers.callMethod(msg, "J"); } catch (Throwable ignored) {}
+                if (j4Obj == null) {
+                    // 手动构造最小 j4: 从 msg 提取字段
+                    try {
+                        j4Obj = XposedHelpers.newInstance(j4);
+                        XposedHelpers.callMethod(j4Obj, "d", "1"); // setType
+                        XposedHelpers.callMethod(j4Obj, "w", msgId); // setMsgId
+                    } catch (Throwable ignored) {}
+                }
+                if (j4Obj != null) {
+                    try {
+                        Object a2Inst = XposedHelpers.newInstance(a2);
+                        XposedHelpers.callMethod(a2Inst, "c", j4Obj, null, 5, null, null);
+                        log("triggerSend: a2.c() OK msgId=" + msgId);
+                        return;
+                    } catch (Throwable t) { log("triggerSend: a2.c() fail: " + t.getMessage()); }
+                }
+            } catch (Throwable t) { log("triggerSend: a2/j4 fail: " + t.getMessage()); }
+
+            // 4. fallback: 尝试 p7 的各种方法
+            try {
+                Class<?> p7 = XposedHelpers.findClass("p7", sClassLoader);
+                for (String m : new String[]{"kq","jI","dx","bX","xy","kC","vb","bU"}) {
+                    try {
+                        Object svc = XposedHelpers.callStaticMethod(p7, m);
+                        if (svc != null) {
+                            XposedHelpers.callMethod(svc, "a", msgId);
+                            log("triggerSend: p7." + m + "().a() OK msgId=" + msgId);
+                            return;
+                        }
+                    } catch (Throwable ignored) {}
+                }
+                log("triggerSend: p7 methods all failed");
+            } catch (Throwable t) { log("triggerSend: p7 fail: " + t.getMessage()); }
+
+            // 5. 最后fallback: 用 rv5.t0.d 分发
+            try {
+                Class<?> rv5t0 = XposedHelpers.findClass("rv5.t0", sClassLoader);
+                Object d = XposedHelpers.getStaticObjectField(rv5t0, "d");
+                if (d != null) {
+                    // 构造一个 z1(this, b, obj, i, j4) Runnnable
+                    Class<?> z1 = XposedHelpers.findClass("rv5.z1", sClassLoader);
+                    Object runnable = XposedHelpers.newInstance(z1, null, null, null, 5, null);
+                    XposedHelpers.callMethod(d, "g", runnable);
+                    log("triggerSend: rv5.t0.d.g() dispatched msgId=" + msgId);
+                    return;
+                }
+            } catch (Throwable t) { log("triggerSend: rv5 fallback fail: " + t.getMessage()); }
+
+            log("triggerSend: 所有方法均失败 msgId=" + msgId);
+        } catch (Throwable t) {
+            log("triggerSend异常: " + t.getClass().getSimpleName() + " - " + t.getMessage());
+        }
     }
 
     // ===== 语音发送 =====
