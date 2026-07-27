@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="xposed_scope">
+        <item>com.tencent.mm</item>
+    </string-array>
+    <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">#07C160</item>
+        <item name="colorPrimaryDark">#06AD56</item>
+        <item name="colorAccent">#07C160</item>
+    </style>
+</resources>

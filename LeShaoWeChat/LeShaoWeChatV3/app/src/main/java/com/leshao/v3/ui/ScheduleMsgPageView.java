@@ -207,8 +207,6 @@ public class ScheduleMsgPageView {
             LogWriter.log("SCHEDULE_MSG", "create: buildBottomBtn...");
             body.addView(vSpacer(ctx, d, 10));
             body.addView(buildBottomBtn(ctx, d, parentAct));
-            body.addView(vSpacer(ctx, d, 10));
-            body.addView(buildActiveTasksIndicator(ctx, d));
 
             loadDraft(ctx);
 
@@ -1570,7 +1568,7 @@ public class ScheduleMsgPageView {
         final TextView logCount = new TextView(ctx);
         List<SendLogEntry> logs = ScheduleBroadcast.getSendLogs();
         List<SendLogEntry> failed = ScheduleBroadcast.getFailedLogs();
-        logCount.setText("共" + logs.size() + "条  失败" + failed.size() + "条");
+        logCount.setText("进行中 " + countActiveTasks() + " 个   共" + logs.size() + "条  失败" + failed.size() + "条");
         logCount.setTextSize(11);
         logCount.setTextColor(CLR_HIGHLIGHT);
         logCount.setGravity(Gravity.CENTER);

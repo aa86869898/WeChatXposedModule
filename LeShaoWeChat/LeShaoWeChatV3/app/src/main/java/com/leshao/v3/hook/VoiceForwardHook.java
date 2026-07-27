@@ -105,6 +105,33 @@ public class VoiceForwardHook {
                 }
             });
         } catch (Throwable ignored) {}
+
+        // 捕获长按事件: 当用户在聊天中长按消息时, 提取消息数据
+        try {
+            XposedBridge.hookAllMethods(View.class, "performLongClick", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam param) {
+                    if (sChatAct == null) return;
+                    View v = (View) param.thisObject;
+                    Object tag = v.getTag();
+                    if (tag != null && tag.getClass().getName().contains("mm")) {
+                        sPendingView = v;
+                        sPendingMsg = tag;
+                        LogWriter.log(TAG, "LongClick: tag=" + tag.getClass().getSimpleName() + " msgId=" + extractMsgId(tag));
+                        for (int i = 0; i < 4; i++) {
+                            View p = (View) v.getParent();
+                            if (p == null) break;
+                            Object pt = p.getTag();
+                            if (pt != null && pt.getClass().getName().contains("mm")) {
+                                sPendingMsg = pt;
+                                LogWriter.log(TAG, "LongClick: parent[" + i + "] tag=" + pt.getClass().getSimpleName() + " msgId=" + extractMsgId(pt));
+                            }
+                            v = p;
+                            if (p instanceof RecyclerView) break;
+                        }
+                    }
+                }
+            });
+        } catch (Throwable ignored) {}
     }
 
     // ===== WeKit 方案: 精准扫描 viewitems + component + Menu.add 拦截 =====
@@ -116,24 +143,8 @@ public class VoiceForwardHook {
         };
         hookAllClassesInPackages(cl, pkgs);
 
-        // 策略 B: hook android.view.Menu.add (拦截所有菜单项添加)
-        try {
-            Class<?> menuIf = android.view.Menu.class;
-            for (Method m : menuIf.getDeclaredMethods()) {
-                if (m.getName().equals("add")) {
-                    XposedBridge.hookMethod(m, new XC_MethodHook() {
-                        @Override protected void afterHookedMethod(MethodHookParam param) {
-                            int n = sCallCount.incrementAndGet();
-                            if (n > 20) return;
-                            LogWriter.log(TAG, "Menu.add id=" + param.args[1] + " title=" + param.args[3] + " @" + param.thisObject.getClass().getSimpleName());
-                        }
-                    });
-                }
-            }
-            LogWriter.log(TAG, "Menu.add hooked");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "Menu.add fail: " + t.getMessage());
-        }
+        // 策略 B: hook MenuBuilder.add (拦截上下文菜单创建, 注入"语音转发"菜单项)
+        hookMenuBuilder(cl);
 
         // 策略 C: Activity.onContextItemSelected (click handler)
         try {
@@ -151,7 +162,60 @@ public class VoiceForwardHook {
             });
         } catch (Throwable ignored) {}
 
-        LogWriter.log(TAG, "viewitems+component+Menu.add hooks installed");
+        LogWriter.log(TAG, "viewitems+component+MenuBuilder hooks installed");
+    }
+
+    private static final AtomicInteger sMenuAddBatch = new AtomicInteger(0);
+    private static volatile long sMenuAddLastTime = 0;
+
+    private static void hookMenuBuilder(ClassLoader cl) {
+        try {
+            Class<?> menuBuilder = cl.loadClass("com.android.internal.view.menu.MenuBuilder");
+            for (Method m : menuBuilder.getDeclaredMethods()) {
+                if (!m.getName().equals("add")) continue;
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length >= 3 && pts[pts.length - 1] == CharSequence.class) {
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override protected void afterHookedMethod(MethodHookParam param) {
+                            long now = System.currentTimeMillis();
+                            long gap = now - sMenuAddLastTime;
+                            if (gap > 2000) sMenuAddBatch.set(0);
+                            sMenuAddLastTime = now;
+                            int n = sMenuAddBatch.incrementAndGet();
+                            if (n > 15) return;
+                            LogWriter.log(TAG, "MenuBuilder.add #" + n + " id=" + param.args[1] + " title=" + param.args[pts.length - 1] + " gap=" + gap + "ms");
+                            if (n == 1 && gap > 500) {
+                                sPendingMsg = null;
+                                sPendingView = null;
+                            }
+                            if (n > 2 && n <= 12 && !sMenuInjected) {
+                                for (Object arg : param.args) {
+                                    if (arg instanceof CharSequence && arg.toString().contains("文字")) {
+                                        sMenuInjected = true;
+                                        sMenuInjectedTime = now;
+                                        injectIntoMenuBuilder(param.thisObject);
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+            LogWriter.log(TAG, "MenuBuilder.add hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "MenuBuilder hook fail: " + t.getMessage());
+        }
+    }
+
+    private static void injectIntoMenuBuilder(Object menu) {
+        try {
+            Method add = menu.getClass().getMethod("add", int.class, int.class, int.class, CharSequence.class);
+            add.invoke(menu, 0, MENU_ID, 0, "语音转发");
+            LogWriter.log(TAG, "injected 语音转发 into MenuBuilder");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "MenuBuilder inject fail: " + t.getMessage());
+        }
     }
 
     private static void hookAllClassesInPackages(ClassLoader cl, String[] pkgs) {
