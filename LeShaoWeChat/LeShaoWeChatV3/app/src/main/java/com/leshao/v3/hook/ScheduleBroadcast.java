@@ -268,6 +268,10 @@ public class ScheduleBroadcast {
         if (!sInitialized.compareAndSet(false, true)) return;
         sAppContext = ctx.getApplicationContext();
         sClassLoader = cl;
+
+        // ★★ 版本标记: 确认最新代码在运行
+        log("DIAG: init V2 开始");
+
         loadConfig();
         initMsgStorage();
         loadExcludeGroups();
@@ -277,33 +281,9 @@ public class ScheduleBroadcast {
         loadTemplates();
         loadLogs();
         resetCounters();
-        // ★ DIAGNOSTIC: hook a2 全部方法抓真实调用参数
-        try {
-            Class<?> a2Cls = XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.a2", sClassLoader);
-            XposedBridge.hookAllMethods(a2Cls, "c", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    Object[] args = param.args;
-                    StringBuilder sb = new StringBuilder(">>>>>> a2.c() 被调用, 参数类型: ");
-                    sb.append("[").append(args.length).append("] ");
-                    for (int i = 0; i < args.length; i++) {
-                        Object a = args[i];
-                        sb.append("arg").append(i).append("=");
-                        sb.append(a == null ? "null" : a.getClass().getName() + ":" + a);
-                        sb.append("; ");
-                    }
-                    log(sb.toString());
-                    // 打印调用栈
-                    StackTraceElement[] stack = Thread.currentThread().getStackTrace();
-                    for (int i = 2; i < Math.min(stack.length, 8); i++) {
-                        log("  ↳ " + stack[i]);
-                    }
-                }
-            });
-            log("DIAG: a2.c() hook installed OK");
-        } catch (Throwable t) {
-            log("DIAG: a2 hook失败: " + t.getMessage());
-        }
+
+        // ★★ DIAG: hook 所有发消息相关的类
+        installDiagHooks();
 
         String permInfo = "";
         if (Build.VERSION.SDK_INT >= 31) {
@@ -311,6 +291,95 @@ public class ScheduleBroadcast {
             permInfo = am != null && am.canScheduleExactAlarms() ? "精确闹钟:OK" : "精确闹钟:NO(回退setAlarmClock)";
         }
         log("定时消息群发初始化完成, 任务=" + sTaskQueue.size() + " " + permInfo);
+    }
+
+    private static void installDiagHooks() {
+        // Hook f9.H9 看谁在写入DB (抓 e9 参数)
+        try {
+            Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", sClassLoader);
+            XposedBridge.hookAllMethods(f9, "H9", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Object e9 = param.args.length > 0 ? param.args[0] : null;
+                    if (e9 == null) return;
+                    int type = -1;
+                    try { type = (Integer) XposedHelpers.callMethod(e9, "A1"); } catch (Throwable ignored) {}
+                    String content = "";
+                    try { content = (String) XposedHelpers.callMethod(e9, "X0"); } catch (Throwable ignored) {}
+                    if (content == null) content = "";
+                    log("DIAG: f9.H9() type=" + type + " talker="
+                        + safeStr(e9, "Y0") + " content="
+                        + content.substring(0, Math.min(content.length(), 40)));
+                }
+            });
+            log("DIAG: f9.H9 hook OK");
+        } catch (Throwable t) { log("DIAG: f9.H9 fail: " + t.getMessage()); }
+
+        // Hook a2 (MessageSyncExtension) 抓发送调用
+        String[] a2Paths = {
+            "com.tencent.mm.plugin.messenger.foundation.a2",
+            "a2", // 可能是短名(混稀/deobfuscated)
+        };
+        for (String path : a2Paths) {
+            try {
+                Class<?> a2 = XposedHelpers.findClass(path, sClassLoader);
+                XposedBridge.hookAllMethods(a2, "c", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        Object[] args = param.args;
+                        StringBuilder sb = new StringBuilder("DIAG: a2.c()[");
+                        sb.append(args.length).append("] ");
+                        for (int i = 0; i < args.length; i++) {
+                            Object a = args[i];
+                            sb.append("a").append(i).append("=");
+                            sb.append(a == null ? "null" : a.getClass().getSimpleName() + "@" + System.identityHashCode(a));
+                            sb.append("; ");
+                        }
+                        log(sb.toString());
+                    }
+                });
+                XposedBridge.hookAllMethods(a2, "b", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        Object[] args = param.args;
+                        StringBuilder sb = new StringBuilder("DIAG: a2.b()[");
+                        sb.append(args.length).append("] ");
+                        for (int i = 0; i < args.length; i++) {
+                            Object a = args[i];
+                            sb.append("a").append(i).append("=");
+                            sb.append(a == null ? "null" : a.getClass().getSimpleName() + "@" + System.identityHashCode(a));
+                            sb.append("; ");
+                        }
+                        log(sb.toString());
+                    }
+                });
+                log("DIAG: a2 hook OK path=" + path);
+                return;
+            } catch (Throwable t) { log("DIAG: a2 fail " + path + ": " + t.getMessage()); }
+        }
+
+        // fallback: hook j4 看看什么时候被构造
+        try {
+            Class<?> j4 = XposedHelpers.findClass("j4", sClassLoader);
+            XposedBridge.hookAllConstructors(j4, new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Object[] args = param.args;
+                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
+                    StringBuilder sb = new StringBuilder("DIAG: new j4(");
+                    sb.append(args.length).append(") from ");
+                    for (int i = 2; i < Math.min(st.length, 4); i++) {
+                        sb.append(st[i].getClassName()).append(".").append(st[i].getMethodName()).append("; ");
+                    }
+                    log(sb.toString());
+                }
+            });
+            log("DIAG: j4 constructor hook OK");
+        } catch (Throwable t) { log("DIAG: j4 fail: " + t.getMessage()); }
+    }
+
+    private static String safeStr(Object obj, String method) {
+        try { Object v = XposedHelpers.callMethod(obj, method); return v == null ? "null" : v.toString(); } catch (Throwable t) { return "err:" + t.getMessage(); }
     }
 
     private static void loadConfig() {
