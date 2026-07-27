@@ -77,28 +77,28 @@ public class ScheduleMsgPageView {
             LogWriter.log("SCHEDULE_MSG", "create: buildProgressBar...");
             body.addView(buildProgressBar(ctx, d));
             LogWriter.log("SCHEDULE_MSG", "create: buildCard1...");
-            body.addView(vSpacer(ctx, d, 10));
+            body.addView(vSpacer(ctx, d, 6));
             body.addView(buildCard1(ctx, d, parentAct));
             LogWriter.log("SCHEDULE_MSG", "create: buildCard2...");
-            body.addView(vSpacer(ctx, d, 10));
+            body.addView(vSpacer(ctx, d, 6));
             body.addView(buildCard2(ctx, d, parentAct));
             LogWriter.log("SCHEDULE_MSG", "create: buildCard3...");
-            body.addView(vSpacer(ctx, d, 10));
+            body.addView(vSpacer(ctx, d, 6));
             body.addView(buildCard3(ctx, d, parentAct));
             LogWriter.log("SCHEDULE_MSG", "create: buildCard4...");
-            body.addView(vSpacer(ctx, d, 10));
+            body.addView(vSpacer(ctx, d, 6));
             body.addView(buildCard4(ctx, d, parentAct));
             LogWriter.log("SCHEDULE_MSG", "create: buildCard5...");
-            body.addView(vSpacer(ctx, d, 10));
+            body.addView(vSpacer(ctx, d, 6));
             body.addView(buildCard5(ctx, d, parentAct));
             LogWriter.log("SCHEDULE_MSG", "create: buildCard6...");
-            body.addView(vSpacer(ctx, d, 10));
+            body.addView(vSpacer(ctx, d, 6));
             body.addView(buildCard6(ctx, d, parentAct));
             LogWriter.log("SCHEDULE_MSG", "create: buildCard7...");
-            body.addView(vSpacer(ctx, d, 10));
+            body.addView(vSpacer(ctx, d, 6));
             body.addView(buildCard7(ctx, d, parentAct));
             LogWriter.log("SCHEDULE_MSG", "create: buildBottomBtn...");
-            body.addView(vSpacer(ctx, d, 16));
+            body.addView(vSpacer(ctx, d, 10));
             body.addView(buildBottomBtn(ctx, d, parentAct));
 
             loadDraft(ctx);
@@ -356,10 +356,10 @@ public class ScheduleMsgPageView {
 
         TextView typeTitle = new TextView(ctx);
         typeTitle.setText("选择消息类型");
-        typeTitle.setTextSize(13);
+        typeTitle.setTextSize(11);
         typeTitle.setTextColor(CLR_WHITE);
         typeTitle.setTypeface(null, Typeface.BOLD);
-        typeTitle.setPadding(0, 0, 0, PX(d, 10));
+        typeTitle.setPadding(0, 0, 0, PX(d, 6));
         card.addView(typeTitle);
 
         LinearLayout grid = new LinearLayout(ctx);
@@ -369,7 +369,7 @@ public class ScheduleMsgPageView {
         for (int r = 0; r < 4; r++) {
             rows[r] = new LinearLayout(ctx);
             rows[r].setOrientation(LinearLayout.HORIZONTAL);
-            rows[r].setPadding(0, 0, 0, r < 3 ? PX(d, 6) : 0);
+            rows[r].setPadding(0, 0, 0, r < 3 ? PX(d, 4) : 0);
             for (int c = 0; c < 3; c++) {
                 final int idx = r * 3 + c;
                 TextView btn = messageTypeButton(ctx, d, MSG_TYPES[idx], idx == sSelectedMsgType);
@@ -386,8 +386,8 @@ public class ScheduleMsgPageView {
         card.addView(grid);
         card.addView(hSep(ctx, d));
 
-        final EditText contentEt = editText(ctx, d, "输入消息内容...\n支持Emoji、{昵称}{群名称}{当前时间}变量\n多条文案用 | 分隔，发送时随机选取", CLR_WHITE);
-        contentEt.setMinLines(3);
+        final EditText contentEt = editText(ctx, d, "输入消息内容...支持Emoji、{昵称}{群名称}{当前时间}变量 | 多文案用竖线分隔随机发送", CLR_WHITE);
+        contentEt.setMinLines(2);
         contentEt.setText(sContentCache);
         card.addView(contentEt);
 
@@ -444,13 +444,13 @@ public class ScheduleMsgPageView {
     private static TextView messageTypeButton(Context ctx, float d, String text, boolean selected) {
         TextView btn = new TextView(ctx);
         btn.setText(selected ? "  " + text : text);
-        btn.setTextSize(11);
+        btn.setTextSize(10);
         btn.setTextColor(selected ? Color.BLACK : CLR_NEON);
         btn.setTypeface(null, selected ? Typeface.BOLD : Typeface.NORMAL);
         btn.setGravity(Gravity.CENTER);
-        btn.setPadding(PX(d, 6), PX(d, 10), PX(d, 6), PX(d, 10));
+        btn.setPadding(PX(d, 4), PX(d, 6), PX(d, 4), PX(d, 6));
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(PX(d, 8));
+        bg.setCornerRadius(PX(d, 6));
         bg.setColor(selected ? CLR_NEON : CLR_CARD);
         if (!selected) bg.setStroke(PX(d, 1), CLR_NEON);
         btn.setBackground(bg);
@@ -1360,11 +1360,11 @@ public class ScheduleMsgPageView {
     private static LinearLayout makeCard(Context ctx, float d, String title) {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(PX(d, 14), PX(d, 14), PX(d, 14), PX(d, 14));
+        card.setPadding(PX(d, 10), PX(d, 10), PX(d, 10), PX(d, 10));
         card.setClipToOutline(true);
 
         GradientDrawable cardBg = new GradientDrawable();
-        cardBg.setCornerRadius(PX(d, 12));
+        cardBg.setCornerRadius(PX(d, 10));
         cardBg.setStroke(PX(d, 1), CLR_NEON);
         cardBg.setColor(CLR_CARD);
         card.setBackground(cardBg);
@@ -1376,7 +1376,7 @@ public class ScheduleMsgPageView {
         TextView iv = new TextView(ctx);
         iv.setTextColor(CLR_NEON);
         iv.setTextSize(10);
-        iv.setPadding(0, 0, PX(d, 8), 0);
+        iv.setPadding(0, 0, PX(d, 6), 0);
         String icon = title.contains("任务基础") ? "\u2139" : title.contains("消息内容") ? "\u2709" :
             title.contains("素材文件") ? "\uD83D\uDCC1" : title.contains("发送目标") ? "\uD83C\uDFAF" :
             title.contains("风控") ? "\u26A1" : title.contains("高级") ? "\u2699" : "\uD83D\uDCCB";
@@ -1385,7 +1385,7 @@ public class ScheduleMsgPageView {
 
         TextView t = new TextView(ctx);
         t.setText(title);
-        t.setTextSize(14);
+        t.setTextSize(13);
         t.setTextColor(CLR_WHITE);
         t.setTypeface(null, Typeface.BOLD);
         t.setLayoutParams(lpWeight(1));
@@ -1397,7 +1397,7 @@ public class ScheduleMsgPageView {
         div.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
         div.setBackgroundColor(0x22336655);
         LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-1, 1);
-        dlp.setMargins(0, PX(d, 8), 0, PX(d, 10));
+        dlp.setMargins(0, PX(d, 6), 0, PX(d, 8));
         div.setLayoutParams(dlp);
         card.addView(div);
 
@@ -1408,10 +1408,10 @@ public class ScheduleMsgPageView {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, PX(d, 4), 0, PX(d, 4));
+        row.setPadding(0, PX(d, 3), 0, PX(d, 3));
 
         TextView tv = label(ctx, d, labelText);
-        tv.setLayoutParams(lpFixW(PX(d, 80)));
+        tv.setLayoutParams(lpFixW(PX(d, 72)));
         row.addView(tv);
 
         row.addView(widget);
@@ -1421,9 +1421,9 @@ public class ScheduleMsgPageView {
     private static TextView label(Context ctx, float d, String text) {
         TextView tv = new TextView(ctx);
         tv.setText(text);
-        tv.setTextSize(12);
+        tv.setTextSize(11);
         tv.setTextColor(CLR_WHITE);
-        tv.setPadding(0, 0, PX(d, 8), 0);
+        tv.setPadding(0, 0, PX(d, 6), 0);
         return tv;
     }
 
@@ -1433,8 +1433,8 @@ public class ScheduleMsgPageView {
         et.setHintTextColor(CLR_GRAY);
         et.setTextColor(textColor);
         et.setBackgroundColor(Color.TRANSPARENT);
-        et.setPadding(PX(d, 10), PX(d, 6), PX(d, 10), PX(d, 6));
-        et.setTextSize(12);
+        et.setPadding(PX(d, 8), PX(d, 4), PX(d, 8), PX(d, 4));
+        et.setTextSize(11);
         et.setSingleLine(false);
         et.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         return et;
