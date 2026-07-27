@@ -69,15 +69,21 @@ public class ScheduleMsgPageView {
             float d = dp(ctx);
             LogWriter.log("SCHEDULE_MSG", "create: START, d=" + d);
 
-            LogWriter.log("SCHEDULE_MSG", "create: return EMPTY view (bare minimum)");
-            TextView tv = new TextView(ctx);
-            tv.setText("定时群发模块加载成功");
-            tv.setTextSize(16);
-            tv.setTextColor(CLR_NEON);
-            tv.setGravity(Gravity.CENTER);
-            tv.setPadding(PX(d, 20), PX(d, 40), PX(d, 20), PX(d, 40));
-            LogWriter.log("SCHEDULE_MSG", "create: DONE OK (bare)");
-            return tv;
+            LinearLayout body = new LinearLayout(ctx);
+            body.setOrientation(LinearLayout.VERTICAL);
+            body.setBackgroundColor(CLR_BG);
+            body.setPadding(PX(d, 10), PX(d, 10), PX(d, 10), PX(d, 16));
+
+            LogWriter.log("SCHEDULE_MSG", "create: buildProgressBar...");
+            body.addView(buildProgressBar(ctx, d));
+            LogWriter.log("SCHEDULE_MSG", "create: buildCard1...");
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildCard1(ctx, d, parentAct));
+
+            loadDraft(ctx);
+
+            LogWriter.log("SCHEDULE_MSG", "create: DONE OK");
+            return body;
         } catch (Throwable t) {
             LogWriter.log("SCHEDULE_MSG", "create: CRASH: " + t.getClass().getName() + ": " + t.getMessage());
             throw new RuntimeException(t);
