@@ -813,7 +813,11 @@ public class ScheduleBroadcast {
                     }
                     Task task = getTask(taskId);
                     if (task == null || !task.enabled) { log("任务无效或已停用: " + taskId); return; }
-                    if (!canSend()) { log("发送条件不满足: " + taskId); return; }
+                    if (!canSend()) {
+                        log("发送条件不满足: " + taskId + " (推迟60s重试)");
+                        task.triggerTime = System.currentTimeMillis() + 60000;
+                        return;
+                    }
 
                     task.lastExecTime = System.currentTimeMillis();
                     List<String> groups;
