@@ -25,7 +25,7 @@ public class PrivacyPageView {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(AppColors.bg());
-        root.setPadding((int)(16 * d), (int)(16 * d), (int)(16 * d), (int)(16 * d));
+        root.setPadding((int)(8 * d), (int)(16 * d), (int)(8 * d), (int)(16 * d));
 
         root.addView(sectionLabel(ctx, "隐私与安全"));
 

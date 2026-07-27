@@ -50,7 +50,7 @@ public class TTSPageView {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(AppColors.bg());
-        root.setPadding((int)(16 * d), (int)(16 * d), (int)(16 * d), (int)(16 * d));
+        root.setPadding((int)(8 * d), (int)(16 * d), (int)(8 * d), (int)(16 * d));
 
         boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true);
         boolean announceImage = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_IMAGE, true);

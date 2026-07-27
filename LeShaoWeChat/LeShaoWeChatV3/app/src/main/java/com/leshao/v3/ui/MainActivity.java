@@ -472,8 +472,8 @@ public class MainActivity {
         Window w = dlg.getWindow();
         if (w != null) {
             w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            w.setLayout((int)(ctx.getResources().getDisplayMetrics().widthPixels * 0.90),
-                        (int)(ctx.getResources().getDisplayMetrics().heightPixels * 0.82));
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                        (int)(ctx.getResources().getDisplayMetrics().heightPixels * 0.90));
             w.setGravity(Gravity.CENTER);
         }
         dlg.show();

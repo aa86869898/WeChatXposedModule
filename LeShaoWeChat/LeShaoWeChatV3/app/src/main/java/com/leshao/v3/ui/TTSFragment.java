@@ -29,7 +29,7 @@ public class TTSFragment extends Fragment {
         LinearLayout root = new LinearLayout(getContext());
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(AppColors.bg());
-        root.setPadding((int)(16*d), (int)(16*d), (int)(16*d), (int)(16*d));
+        root.setPadding((int)(8*d), (int)(16*d), (int)(8*d), (int)(16*d));
 
         root.addView(sectionLabel("语音播报设置", d));
 
@@ -81,20 +81,36 @@ public class TTSFragment extends Fragment {
         root.addView(card4);
 
         root.addView(spacerV(d, 12));
-        root.addView(sectionLabel("免打扰设置", d));
+        root.addView(sectionLabel("特殊消息播报", d));
         LinearLayout card5 = makeCard(d);
-        card5.addView(switchRow(d, "开启免打扰", "启用后在指定时间段内暂停语音播报", mCfg.quietEnabled, (v, on) -> {
-            mCfg.quietEnabled = on; mCfg.save(mPrefs);
-        }, null));
-        card5.addView(itemDivider(d));
-        card5.addView(editRow(d, "开始时间(HH:MM)", mCfg.quietStart, s -> {
-            mCfg.quietStart = s; mCfg.save(mPrefs);
+        card5.addView(subSwitchRow(d, "被@时播报", mCfg.announceAt, (v, checked) -> {
+            mCfg.announceAt = checked; mCfg.save(mPrefs);
         }));
         card5.addView(itemDivider(d));
-        card5.addView(editRow(d, "结束时间(HH:MM)", mCfg.quietEnd, s -> {
-            mCfg.quietEnd = s; mCfg.save(mPrefs);
+        card5.addView(subSwitchRow(d, "小程序消息播报", mCfg.announceMiniProgram, (v, checked) -> {
+            mCfg.announceMiniProgram = checked; mCfg.save(mPrefs);
+        }));
+        card5.addView(itemDivider(d));
+        card5.addView(subSwitchRow(d, "视频号消息播报", mCfg.announceVideoChannel, (v, checked) -> {
+            mCfg.announceVideoChannel = checked; mCfg.save(mPrefs);
         }));
         root.addView(card5);
+
+        root.addView(spacerV(d, 12));
+        root.addView(sectionLabel("免打扰设置", d));
+        LinearLayout card6 = makeCard(d);
+        card6.addView(switchRow(d, "开启免打扰", "启用后在指定时间段内暂停语音播报", mCfg.quietEnabled, (v, on) -> {
+            mCfg.quietEnabled = on; mCfg.save(mPrefs);
+        }, null));
+        card6.addView(itemDivider(d));
+        card6.addView(editRow(d, "开始时间(HH:MM)", mCfg.quietStart, s -> {
+            mCfg.quietStart = s; mCfg.save(mPrefs);
+        }));
+        card6.addView(itemDivider(d));
+        card6.addView(editRow(d, "结束时间(HH:MM)", mCfg.quietEnd, s -> {
+            mCfg.quietEnd = s; mCfg.save(mPrefs);
+        }));
+        root.addView(card6);
 
         ScrollView sv = new ScrollView(getContext());
         sv.addView(root);

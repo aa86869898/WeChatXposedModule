@@ -38,7 +38,7 @@ public class ChatEnhanceFragment extends Fragment {
 
         LinearLayout root = new LinearLayout(getContext());
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding((int)(16 * d), (int)(16 * d), (int)(16 * d), (int)(16 * d));
+        root.setPadding((int)(8 * d), (int)(16 * d), (int)(8 * d), (int)(16 * d));
 
         root.addView(sLabel(d, "聊天增强"));
 

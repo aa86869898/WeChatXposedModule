@@ -26,7 +26,7 @@ public class ChatPageView {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(AppColors.bg());
-        root.setPadding((int)(16 * d), (int)(16 * d), (int)(16 * d), (int)(16 * d));
+        root.setPadding((int)(8 * d), (int)(16 * d), (int)(8 * d), (int)(16 * d));
 
         boolean recallOn = prefs != null && prefs.getBoolean("ls_recall_enabled", false);
         boolean vfOn = prefs != null && prefs.getBoolean("ls_voice_forward", false);

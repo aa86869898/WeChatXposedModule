@@ -48,7 +48,7 @@ public class ThemePageView {
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding((int)(16*d), (int)(12*d), (int)(16*d), (int)(24*d));
+        root.setPadding((int)(8*d), (int)(12*d), (int)(8*d), (int)(24*d));
 
         SharedPreferences prefs = ContextManager.getPrefs();
         boolean masterOn = prefs != null && prefs.getBoolean("ls_theme_enabled", false);
@@ -135,7 +135,7 @@ public class ThemePageView {
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding((int)(16*d), (int)(12*d), (int)(16*d), (int)(24*d));
+        root.setPadding((int)(8*d), (int)(12*d), (int)(8*d), (int)(24*d));
 
         switch (pageId) {
             case 21:

@@ -209,7 +209,7 @@ public class ContactSelectorView {
 
         Window window = dialog.getWindow();
         if (window != null) {
-            window.setLayout(dp(340), dp(600));
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, dp(600));
         }
     }
 

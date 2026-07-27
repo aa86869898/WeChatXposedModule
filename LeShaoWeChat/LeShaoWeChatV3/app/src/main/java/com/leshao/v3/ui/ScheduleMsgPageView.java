@@ -179,7 +179,7 @@ public class ScheduleMsgPageView {
             LinearLayout body = new LinearLayout(ctx);
             body.setOrientation(LinearLayout.VERTICAL);
             body.setBackgroundColor(CLR_BG);
-            body.setPadding(PX(d, 10), PX(d, 10), PX(d, 10), PX(d, 16));
+            body.setPadding(PX(d, 8), PX(d, 10), PX(d, 8), PX(d, 16));
 
             LogWriter.log("SCHEDULE_MSG", "create: buildProgressBar...");
             body.addView(buildProgressBar(ctx, d));
@@ -1879,7 +1879,7 @@ public class ScheduleMsgPageView {
         Window w = dlg.getWindow();
         if (w != null) {
             w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
-            w.setLayout((int)(ctx.getResources().getDisplayMetrics().widthPixels * 0.90), -2);
+            w.setLayout(ctx.getResources().getDisplayMetrics().widthPixels - (int)(16 * d), -2);
         }
         dlg.show();
     }

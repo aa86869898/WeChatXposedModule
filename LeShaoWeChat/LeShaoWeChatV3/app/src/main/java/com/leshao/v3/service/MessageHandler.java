@@ -2,6 +2,7 @@ package com.leshao.v3.service;
 
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.model.ModuleConfig;
+import com.leshao.v3.ui.MainActivity;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -48,19 +49,39 @@ public class MessageHandler {
         LogWriter.log("MessageHandler", "handle type=" + msgType + " talker=" + talker + " name=" + displayName);
 
         switch (msgType) {
-            case 1:  handleText(displayName, effectiveContent, cfg); break;
+            case 1:  handleText(displayName, effectiveContent, talker, isGroup, cfg); break;
             case 3:  handleImage(displayName); break;
             case 34: handleVoice(displayName); VoiceRelay.process(talker, msgType); break;
             case 42: handleCard(displayName); break;
             case 43: handleVideo(displayName); break;
             case 47: handleSticker(displayName); break;
             case 48: handleLocation(displayName, effectiveContent); break;
-            case 49: handleAppMsg(displayName, effectiveContent, isGroup); break;
+            case 49: handleAppMsg(displayName, effectiveContent, isGroup, cfg); break;
             case 50: handleVoip(displayName); break;
         }
     }
 
-    private void handleText(String name, String text, ModuleConfig cfg) {
+    private void handleText(String name, String text, String talker, boolean isGroup, ModuleConfig cfg) {
+        if (isGroup && cfg.announceAt) {
+            String userNickname = MainActivity.getUserNickname();
+            if (userNickname != null && !userNickname.isEmpty() && text.contains("@" + userNickname)) {
+                String cleaned = cleanText(text);
+                if (!cleaned.isEmpty()) {
+                    String groupName = mNick.resolveDisplayName(talker);
+                    String senderName = name;
+                    String prefix = groupName + "群";
+                    if (senderName.startsWith(prefix)) {
+                        senderName = senderName.substring(prefix.length());
+                    }
+                    if (cfg.textTruncateEnabled && cfg.textCutoffLen > 0 && cleaned.length() > cfg.textCutoffLen) {
+                        cleaned = cleaned.substring(0, cfg.textCutoffLen) + "等长内容";
+                    }
+                    mTts.speak(senderName + "在" + groupName + "群艾特了我说：" + cleaned);
+                    return;
+                }
+            }
+        }
+
         String cleaned = cleanText(text);
         if (cleaned.isEmpty()) return;
 
@@ -100,7 +121,7 @@ public class MessageHandler {
         mTts.speak(name + "发起语音/视频通话");
     }
 
-    private void handleAppMsg(String name, String content, boolean isGroup) {
+    private void handleAppMsg(String name, String content, boolean isGroup, ModuleConfig cfg) {
         if (content == null) return;
         if (content.contains("<location")) {
             handleLocation(name, content);
@@ -112,6 +133,14 @@ public class MessageHandler {
         }
         if (content.contains("<type>57</type>")) {
             handleQuote(name, content, isGroup);
+            return;
+        }
+        if (cfg.announceMiniProgram && (content.contains("<weappinfo>") || content.contains("<type>33</type>"))) {
+            mTts.speak(name + "发来小程序消息");
+            return;
+        }
+        if (cfg.announceVideoChannel && (content.contains("<finderFeed>") || content.contains("<type>2001</type>"))) {
+            mTts.speak(name + "发来视频号消息");
             return;
         }
         LogWriter.log("MessageHandler", "handleAppMsg unknown: " + (content.length() > 200 ? content.substring(0, 200) + "..." : content));

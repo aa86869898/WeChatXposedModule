@@ -23,6 +23,9 @@ public class ModuleConfig {
     public boolean announceFile = true, announceLocation = true, announceSticker = false;
     public boolean announceCall = true, announceNickname = true, announceGroup = false;
     public boolean announceQuote = true;
+    public boolean announceAt = true;
+    public boolean announceMiniProgram = true;
+    public boolean announceVideoChannel = true;
     public boolean autoPlayVoice = true;
 
     public String customAnnounceFormat = "{sender}: {content}";
@@ -264,6 +267,9 @@ public class ModuleConfig {
         cfg.announceQuote = prefs.getBoolean("ls_announce_quote", true);
         cfg.announceNickname = prefs.getBoolean("ls_announce_nickname", true);
         cfg.announceGroup = prefs.getBoolean("ls_announce_group", false);
+        cfg.announceAt = prefs.getBoolean("ls_announce_at", true);
+        cfg.announceMiniProgram = prefs.getBoolean("ls_announce_miniprogram", true);
+        cfg.announceVideoChannel = prefs.getBoolean("ls_announce_videochannel", true);
         cfg.autoPlayVoice = prefs.getBoolean("ls_auto_voice", true);
 
         cfg.announceIntervalMs = parseInt(prefs.getString("ls_announce_interval_ms", "0"), 0);
@@ -515,6 +521,9 @@ public class ModuleConfig {
         cfg.announceSticker = false;
         cfg.announceCall = false;
         cfg.announceQuote = false;
+        cfg.announceAt = false;
+        cfg.announceMiniProgram = false;
+        cfg.announceVideoChannel = false;
         cfg.announceNickname = false;
         cfg.announceGroup = false;
         cfg.autoPlayVoice = false;
@@ -653,6 +662,9 @@ public class ModuleConfig {
         e.putBoolean("ls_announce_quote", announceQuote);
         e.putBoolean("ls_announce_nickname", announceNickname);
         e.putBoolean("ls_announce_group", announceGroup);
+        e.putBoolean("ls_announce_at", announceAt);
+        e.putBoolean("ls_announce_miniprogram", announceMiniProgram);
+        e.putBoolean("ls_announce_videochannel", announceVideoChannel);
         e.putBoolean("ls_auto_voice", autoPlayVoice);
         e.putString("ls_announce_interval_ms", String.valueOf(announceIntervalMs));
         e.putString("ls_announce_fmt", customAnnounceFormat);
