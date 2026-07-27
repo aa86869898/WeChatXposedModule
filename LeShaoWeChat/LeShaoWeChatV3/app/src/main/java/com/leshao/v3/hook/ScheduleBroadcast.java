@@ -129,6 +129,7 @@ public class ScheduleBroadcast {
     private static Object sMsgStorage;
     private static volatile Thread sScheduleThread;
     private static final AtomicBoolean sInitialized = new AtomicBoolean(false);
+    private static final SimpleDateFormat sdfDateTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
 
     private static final SimpleDateFormat sdfLog = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
     private static final SimpleDateFormat sdfDate = new SimpleDateFormat("yyyyMMdd", Locale.getDefault());
@@ -276,7 +277,12 @@ public class ScheduleBroadcast {
         loadTemplates();
         loadLogs();
         resetCounters();
-        log("定时消息群发初始化完成");
+        String permInfo = "";
+        if (Build.VERSION.SDK_INT >= 31) {
+            AlarmManager am = (AlarmManager) sAppContext.getSystemService(Context.ALARM_SERVICE);
+            permInfo = am != null && am.canScheduleExactAlarms() ? "精确闹钟:OK" : "精确闹钟:NO(回退setAlarmClock)";
+        }
+        log("定时消息群发初始化完成, 任务=" + sTaskQueue.size() + " " + permInfo);
     }
 
     private static void loadConfig() {
@@ -347,17 +353,27 @@ public class ScheduleBroadcast {
 
     public static void scheduleTask(Task task) {
         if (task == null || task.triggerTime <= 0) return;
+        if (sAppContext == null) { log("scheduleTask: sAppContext null!"); return; }
         Intent i = new Intent("com.leshao.v3.SCHEDULE_EXEC");
+        i.setPackage(sAppContext.getPackageName());
         i.putExtra("taskId", task.id);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
         PendingIntent pi = PendingIntent.getBroadcast(sAppContext, task.id.hashCode(), i, flags);
         AlarmManager am = (AlarmManager) sAppContext.getSystemService(Context.ALARM_SERVICE);
         if (am != null) {
             try {
-                am.setExact(AlarmManager.RTC_WAKEUP, task.triggerTime, pi);
+                if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) {
+                    log("无精确闹钟权限(SCHEDULE_EXACT_ALARM), 尝试使用setAlarmClock回退");
+                    am.setAlarmClock(new AlarmManager.AlarmClockInfo(task.triggerTime, pi), pi);
+                } else {
+                    am.setExact(AlarmManager.RTC_WAKEUP, task.triggerTime, pi);
+                }
+                log("闹钟已设置: id=" + task.id + " trigger=" + sdfDateTime.format(new Date(task.triggerTime)));
             } catch (Throwable t) {
-                log("Alarm failed: " + t.getMessage());
+                log("Alarm失败: " + t.getClass().getSimpleName() + " - " + t.getMessage());
             }
+        } else {
+            log("AlarmManager获取失败!");
         }
     }
 
@@ -381,7 +397,7 @@ public class ScheduleBroadcast {
         sTaskQueue.add(task);
         if (task.enabled && task.triggerTime > System.currentTimeMillis()) scheduleTask(task);
         saveTasks();
-        log("任务已添加: " + task.id);
+        log("任务已添加: " + task.id + " 触发=" + sdfDateTime.format(new Date(task.triggerTime)) + " 类型=" + task.msgType + " 目标数=" + (task.targetGroups != null ? task.targetGroups.size() : 0));
     }
 
     public static void removeTask(String id) {
@@ -413,12 +429,27 @@ public class ScheduleBroadcast {
         String json = sp.getString("task_list", "");
         if (json == null || json.isEmpty()) return;
         try {
+            long now = System.currentTimeMillis();
+            int lostCount = 0;
             JSONArray a = new JSONArray(json);
             for (int i = 0; i < a.length(); i++) {
                 Task t = Task.fromJson(a.getJSONObject(i));
-                if (t != null) { sTaskQueue.add(t); if (t.enabled && t.triggerTime > System.currentTimeMillis()) scheduleTask(t); }
+                if (t != null) {
+                    sTaskQueue.add(t);
+                    if (t.enabled && t.triggerTime > now) {
+                        scheduleTask(t);
+                    } else if (t.enabled && t.triggerTime <= now && t.triggerTime > now - 7200000L) {
+                        log("补偿执行过期任务: id=" + t.id + " 原定=" + sdfDateTime.format(new Date(t.triggerTime)));
+                        executeTask(t.id);
+                        lostCount++;
+                    } else if (t.enabled && t.triggerTime <= now) {
+                        log("任务已过期超2小时, 标记无效: id=" + t.id);
+                        t.enabled = false;
+                    }
+                }
             }
-        } catch (Throwable ignored) {}
+            if (lostCount > 0) { saveTasks(); log("共补偿执行 " + lostCount + " 个过期任务"); }
+        } catch (Throwable t) { log("loadTasks异常: " + t.getMessage()); }
     }
 
     private static void saveTasks() {
@@ -427,7 +458,7 @@ public class ScheduleBroadcast {
             for (Task t : sTaskQueue) a.put(t.toJson());
             sAppContext.getSharedPreferences("schedule_tasks", Context.MODE_PRIVATE)
                 .edit().putString("task_list", a.toString()).commit();
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) { log("saveTasks失败: " + t.getMessage()); }
     }
 
     // ===== 草稿箱 =====
@@ -553,14 +584,20 @@ public class ScheduleBroadcast {
     // ===== 任务执行引擎 =====
 
     private static void executeTask(final String taskId) {
-        if (sRunning.get()) return;
+        if (sRunning.get()) { log("已有任务执行中, 跳过: " + taskId); return; }
         sRunning.set(true);
         sScheduleThread = new Thread(new Runnable() {
             @Override public void run() {
+                PowerManager.WakeLock wl = null;
                 try {
+                    PowerManager pm = (PowerManager) sAppContext.getSystemService(Context.POWER_SERVICE);
+                    if (pm != null) {
+                        wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LeShao:Schedule-" + taskId);
+                        if (wl != null) wl.acquire(600000L);
+                    }
                     Task task = getTask(taskId);
-                    if (task == null || !task.enabled) { return; }
-                    if (!canSend()) { return; }
+                    if (task == null || !task.enabled) { log("任务无效或已停用: " + taskId); return; }
+                    if (!canSend()) { log("发送条件不满足: " + taskId); return; }
 
                     task.lastExecTime = System.currentTimeMillis();
                     List<String> groups;
@@ -654,8 +691,10 @@ public class ScheduleBroadcast {
                     } else if (task.triggerTime < System.currentTimeMillis()) {
                         task.enabled = false; saveTasks();
                     }
-                } catch (Throwable t) { log("异常: " + t.getMessage()); }
-                finally { sRunning.set(false); sScheduleThread = null; }
+                } catch (Throwable t) { log("执行异常: " + t.getClass().getSimpleName() + " - " + t.getMessage()); }
+                finally {
+                    if (wl != null) { try { wl.release(); } catch (Throwable ignored) {} }
+                    sRunning.set(false); sScheduleThread = null; }
             }
         }, "Schedule-" + taskId);
         sScheduleThread.start();
