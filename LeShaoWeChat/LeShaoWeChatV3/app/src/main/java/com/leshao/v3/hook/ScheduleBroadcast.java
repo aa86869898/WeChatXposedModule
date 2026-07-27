@@ -294,7 +294,7 @@ public class ScheduleBroadcast {
     }
 
     private static void installDiagHooks() {
-        // Hook f9.H9 after: 打印调用栈找上层调用者
+        // Hook f9.H9: 不过滤调用栈
         try {
             Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", sClassLoader);
             XposedBridge.hookAllMethods(f9, "H9", new XC_MethodHook() {
@@ -307,12 +307,11 @@ public class ScheduleBroadcast {
                     String content = safeStr(e9, new String[]{"X0", "x0", "getContent", "d1", "D1", "I0"});
                     log("DIAG: H9 type=" + type + " talker=" + talker + " content="
                         + (content != null ? content.substring(0, Math.min(content.length(), 50)) : "null"));
-                    // 打印调用栈（在 before 里打，保证不是来自我们的代码）
+                    // 不过滤，全打（排除系统类）
                     StackTraceElement[] st = Thread.currentThread().getStackTrace();
-                    for (int i = 3; i < Math.min(st.length, 10); i++) {
+                    for (int i = 3; i < Math.min(st.length, 12); i++) {
                         String cls = st[i].getClassName();
-                        // 过滤掉系统/框架类，只看微信的
-                        if (cls.startsWith("com.tencent")) {
+                        if (!cls.startsWith("java.") && !cls.startsWith("android.") && !cls.startsWith("dalvik.")) {
                             log("  H9栈: " + cls + "." + st[i].getMethodName() + ":" + st[i].getLineNumber());
                         }
                     }
@@ -321,33 +320,44 @@ public class ScheduleBroadcast {
             log("DIAG: f9.H9 hook OK");
         } catch (Throwable t) { log("DIAG: f9.H9 fail: " + t.getMessage()); }
 
-        // Hook a2.c after: 也打印调用栈
+        // Hook a2.a (a2.c 的调用者) + z2.a
         try {
             Class<?> a2 = XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.a2", sClassLoader);
-            XposedBridge.hookAllMethods(a2, "c", new XC_MethodHook() {
+            XposedBridge.hookAllMethods(a2, "a", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     Object[] args = param.args;
-                    StringBuilder sb = new StringBuilder("DIAG: a2.c()[");
+                    StringBuilder sb = new StringBuilder("DIAG: a2.a()[");
                     sb.append(args.length).append("] ");
                     for (int i = 0; i < args.length; i++) {
-                        Object a = args[i];
-                        sb.append("a").append(i).append("=");
-                        sb.append(a == null ? "null" : a.getClass().getName() + "@" + Integer.toHexString(System.identityHashCode(a)));
+                        sb.append("p").append(i).append("=");
+                        sb.append(args[i] == null ? "null" : args[i].getClass().getSimpleName());
                         sb.append("; ");
                     }
                     log(sb.toString());
-                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
-                    for (int i = 3; i < Math.min(st.length, 8); i++) {
-                        String cls = st[i].getClassName();
-                        if (cls.contains("tencent")) {
-                            log("  a2栈: " + cls + "." + st[i].getMethodName());
-                        }
-                    }
                 }
             });
-            log("DIAG: a2 hook OK");
-        } catch (Throwable t) { log("DIAG: a2 fail: " + t.getMessage()); }
+            log("DIAG: a2.a hook OK");
+        } catch (Throwable t) { log("DIAG: a2.a fail: " + t.getMessage()); }
+
+        try {
+            Class<?> z2 = XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.z2", sClassLoader);
+            XposedBridge.hookAllMethods(z2, "a", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Object[] args = param.args;
+                    StringBuilder sb = new StringBuilder("DIAG: z2.a()[");
+                    sb.append(args.length).append("] ");
+                    for (int i = 0; i < args.length; i++) {
+                        sb.append("p").append(i).append("=");
+                        sb.append(args[i] == null ? "null" : args[i].getClass().getSimpleName());
+                        sb.append("; ");
+                    }
+                    log(sb.toString());
+                }
+            });
+            log("DIAG: z2.a hook OK");
+        } catch (Throwable t) { log("DIAG: z2.a fail: " + t.getMessage()); }
     }
 
     private static int safeInt(Object obj, String[] methods) {
