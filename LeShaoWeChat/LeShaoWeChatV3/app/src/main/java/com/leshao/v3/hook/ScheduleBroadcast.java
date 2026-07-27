@@ -1,8 +1,5 @@
 package com.leshao.v3.hook;
 
-import android.app.AlarmManager;
-import android.app.PendingIntent;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -10,7 +7,9 @@ import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.BatteryManager;
-import android.os.Build;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.text.TextUtils;
 
@@ -129,6 +128,8 @@ public class ScheduleBroadcast {
     private static Object sMsgStorage;
     private static volatile Thread sScheduleThread;
     private static final AtomicBoolean sInitialized = new AtomicBoolean(false);
+    private static HandlerThread sHandlerThread;
+    private static Handler sHandler;
     private static final SimpleDateFormat sdfDateTime = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
 
     private static final SimpleDateFormat sdfLog = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
@@ -269,28 +270,23 @@ public class ScheduleBroadcast {
         sAppContext = ctx.getApplicationContext();
         sClassLoader = cl;
 
-        // ★★ 版本标记: 确认最新代码在运行
-        log("DIAG: init V2 开始");
+        log("DIAG: init V3 开始(rv5.t0.d调度)");
 
         loadConfig();
         initMsgStorage();
         loadExcludeGroups();
-        registerAlarmReceiver();
         loadTasks();
         loadDrafts();
         loadTemplates();
         loadLogs();
         resetCounters();
 
+        startWxScheduler();
+
         // ★★ DIAG: hook 所有发消息相关的类
         installDiagHooks();
 
-        String permInfo = "";
-        if (Build.VERSION.SDK_INT >= 31) {
-            AlarmManager am = (AlarmManager) sAppContext.getSystemService(Context.ALARM_SERVICE);
-            permInfo = am != null && am.canScheduleExactAlarms() ? "精确闹钟:OK" : "精确闹钟:NO(回退setAlarmClock)";
-        }
-        log("定时消息群发初始化完成, 任务=" + sTaskQueue.size() + " " + permInfo);
+        log("定时消息群发初始化完成(微信线程池模式), 任务=" + sTaskQueue.size());
     }
 
     private static void installDiagHooks() {
@@ -549,72 +545,68 @@ public class ScheduleBroadcast {
         return sMsgStorage;
     }
 
-    // ===== AlarmManager =====
+    // ===== 微信线程池调度器 (rv5.t0.d) =====
 
-    private static BroadcastReceiver sAlarmReceiver;
+    private static Object sWxThreadPool;
+    private static Object sSchedFuture;
 
-    private static void registerAlarmReceiver() {
-        if (sAlarmReceiver != null) return;
-        sAlarmReceiver = new BroadcastReceiver() {
-            @Override public void onReceive(Context c, Intent i) {
-                String action = i.getAction();
-                if ("com.leshao.v3.SCHEDULE_EXEC".equals(action)) {
-                    executeTask(i.getStringExtra("taskId"));
-                } else if ("com.leshao.v3.SCHEDULE_STOP".equals(action)) {
-                    sStopFlag.set(true);
-                    log("紧急停止!");
-                } else if ("com.leshao.v3.SCHEDULE_RESET".equals(action)) {
-                    resetCounters();
-                    log("计数器已重置");
+    private static void startWxScheduler() {
+        try {
+            Class<?> t0 = XposedHelpers.findClass("rv5.t0", sClassLoader);
+            sWxThreadPool = XposedHelpers.getStaticObjectField(t0, "d");
+            if (sWxThreadPool == null) {
+                log("rv5.t0.d=null, 回退到HandlerThread");
+                fallbackHandlerThread();
+                return;
+            }
+            Runnable r = new Runnable() {
+                @Override public void run() {
+                    if (sStopFlag.get()) return;
+                    checkScheduledTasks();
                 }
+            };
+            sSchedFuture = XposedHelpers.callMethod(sWxThreadPool, "d", r, 1000L, 15000L);
+            log("微信线程池调度器启动(rv5.t0.d), 轮询间隔15s");
+        } catch (Throwable t) {
+            log("微信调度器启动失败: " + t.getMessage() + " -> HandlerThread");
+            fallbackHandlerThread();
+        }
+    }
+
+    private static void checkScheduledTasks() {
+        if (sRunning.get()) return;
+        long now = System.currentTimeMillis();
+        for (Task task : sTaskQueue) {
+            if (task.enabled && task.triggerTime > 0 && task.triggerTime <= now) {
+                executeTask(task.id);
+                break;
+            }
+        }
+    }
+
+    private static void fallbackHandlerThread() {
+        if (sHandlerThread != null) return;
+        sHandlerThread = new HandlerThread("leshao-scheduler");
+        sHandlerThread.start();
+        sHandler = new Handler(sHandlerThread.getLooper());
+        Runnable r = new Runnable() {
+            @Override public void run() {
+                if (sStopFlag.get()) return;
+                checkScheduledTasks();
+                if (sHandler != null) sHandler.postDelayed(this, 15000);
             }
         };
-        IntentFilter f = new IntentFilter();
-        f.addAction("com.leshao.v3.SCHEDULE_EXEC");
-        f.addAction("com.leshao.v3.SCHEDULE_STOP");
-        f.addAction("com.leshao.v3.SCHEDULE_RESET");
-        if (Build.VERSION.SDK_INT >= 33) {
-            sAppContext.registerReceiver(sAlarmReceiver, f, Context.RECEIVER_EXPORTED);
-        } else {
-            sAppContext.registerReceiver(sAlarmReceiver, f);
-        }
+        sHandler.postDelayed(r, 1000);
+        log("HandlerThread调度器启动, 轮询间隔15s");
     }
 
-    public static void scheduleTask(Task task) {
-        if (task == null || task.triggerTime <= 0) return;
-        if (sAppContext == null) { log("scheduleTask: sAppContext null!"); return; }
-        Intent i = new Intent("com.leshao.v3.SCHEDULE_EXEC");
-        i.setPackage(sAppContext.getPackageName());
-        i.putExtra("taskId", task.id);
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE;
-        PendingIntent pi = PendingIntent.getBroadcast(sAppContext, task.id.hashCode(), i, flags);
-        AlarmManager am = (AlarmManager) sAppContext.getSystemService(Context.ALARM_SERVICE);
-        if (am != null) {
-            try {
-                if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) {
-                    log("无精确闹钟权限(SCHEDULE_EXACT_ALARM), 尝试使用setAlarmClock回退");
-                    am.setAlarmClock(new AlarmManager.AlarmClockInfo(task.triggerTime, pi), pi);
-                } else {
-                    am.setExact(AlarmManager.RTC_WAKEUP, task.triggerTime, pi);
-                }
-                log("闹钟已设置: id=" + task.id + " trigger=" + sdfDateTime.format(new Date(task.triggerTime)));
-            } catch (Throwable t) {
-                log("Alarm失败: " + t.getClass().getSimpleName() + " - " + t.getMessage());
-            }
-        } else {
-            log("AlarmManager获取失败!");
-        }
-    }
+    // ===== 兼容旧接口 (已弃用AlarmManager, 轮询器自动接管) =====
 
-    public static void cancelSchedule(Task task) {
-        if (task == null) return;
-        Intent i = new Intent("com.leshao.v3.SCHEDULE_EXEC");
-        i.putExtra("taskId", task.id);
-        PendingIntent pi = PendingIntent.getBroadcast(sAppContext, task.id.hashCode(),
-                i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        AlarmManager am = (AlarmManager) sAppContext.getSystemService(Context.ALARM_SERVICE);
-        if (am != null) am.cancel(pi);
-    }
+    @Deprecated
+    public static void scheduleTask(Task task) { /* 轮询器接管 */ }
+
+    @Deprecated
+    public static void cancelSchedule(Task task) { /* 轮询器接管 */ }
 
     // ===== 任务管理 =====
 
@@ -624,7 +616,6 @@ public class ScheduleBroadcast {
     public static void addTask(Task task) {
         if (task == null) return;
         sTaskQueue.add(task);
-        if (task.enabled && task.triggerTime > System.currentTimeMillis()) scheduleTask(task);
         saveTasks();
         log("任务已添加: " + task.id + " 触发=" + sdfDateTime.format(new Date(task.triggerTime)) + " 类型=" + task.msgType + " 目标数=" + (task.targetGroups != null ? task.targetGroups.size() : 0));
     }
@@ -633,15 +624,13 @@ public class ScheduleBroadcast {
         Task r = null;
         Iterator<Task> it = sTaskQueue.iterator();
         while (it.hasNext()) { Task t = it.next(); if (t.id.equals(id)) { r = t; it.remove(); break; } }
-        if (r != null) { cancelSchedule(r); saveTasks(); log("任务已删除: " + id); }
+        if (r != null) { saveTasks(); log("任务已删除: " + id); }
     }
 
     public static void updateTask(Task u) {
         for (int i = 0; i < sTaskQueue.size(); i++) {
             if (sTaskQueue.get(i).id.equals(u.id)) {
-                cancelSchedule(sTaskQueue.get(i));
                 sTaskQueue.set(i, u);
-                if (u.enabled && u.triggerTime > System.currentTimeMillis()) scheduleTask(u);
                 saveTasks(); return;
             }
         }
@@ -649,7 +638,7 @@ public class ScheduleBroadcast {
 
     public static void enableTask(String id, boolean en) {
         Task t = getTask(id);
-        if (t != null) { t.enabled = en; if (en && t.triggerTime > System.currentTimeMillis()) scheduleTask(t); else cancelSchedule(t); saveTasks(); }
+        if (t != null) { t.enabled = en; saveTasks(); }
     }
 
     private static void loadTasks() {
@@ -665,9 +654,7 @@ public class ScheduleBroadcast {
                 Task t = Task.fromJson(a.getJSONObject(i));
                 if (t != null) {
                     sTaskQueue.add(t);
-                    if (t.enabled && t.triggerTime > now) {
-                        scheduleTask(t);
-                    } else if (t.enabled && t.triggerTime <= now && t.triggerTime > now - 7200000L) {
+                    if (t.enabled && t.triggerTime <= now && t.triggerTime > now - 7200000L) {
                         log("补偿执行过期任务: id=" + t.id + " 原定=" + sdfDateTime.format(new Date(t.triggerTime)));
                         executeTask(t.id);
                         lostCount++;
@@ -912,11 +899,10 @@ public class ScheduleBroadcast {
 
                     if (task.repeatInterval > 0 && task.enabled) {
                         task.triggerTime = System.currentTimeMillis() + task.repeatInterval;
-                        scheduleTask(task);
                         saveTasks();
                     } else if (fail > 0 && task.failCount < sRetryTimes && task.enabled) {
                         task.triggerTime = System.currentTimeMillis() + sRetryIntervalSec * 1000L;
-                        scheduleTask(task); saveTasks();
+                        saveTasks();
                     } else if (task.triggerTime < System.currentTimeMillis()) {
                         task.enabled = false; saveTasks();
                     }
