@@ -159,7 +159,7 @@ public class SettingsInjectProvider extends ContentProvider {
         container.setPadding((int)(16 * d), (int)(10 * d), (int)(16 * d), (int)(10 * d));
         container.setClickable(true);
         container.setFocusable(true);
-        container.setBackgroundColor(AppColors.card());
+        container.setBackgroundColor(AppColors.whiteCard());
         container.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
 
         // 七彩霓虹粗体 "乐少助手"

@@ -9,6 +9,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
+import android.view.Window;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -419,11 +420,16 @@ public class ThemePageView {
         ScrollView wrap = new ScrollView(ctx);
         wrap.addView(grid);
 
-        new AlertDialog.Builder(ctx)
+        AlertDialog dlg = new AlertDialog.Builder(ctx)
             .setTitle("选择颜色: " + label)
             .setView(wrap)
             .setPositiveButton("关闭", null)
-            .show();
+            .create();
+        Window w = dlg.getWindow();
+        if (w != null) {
+            w.setGravity(Gravity.CENTER);
+        }
+        dlg.show();
     }
 
     interface OnColorPick { void onPick(int color); }

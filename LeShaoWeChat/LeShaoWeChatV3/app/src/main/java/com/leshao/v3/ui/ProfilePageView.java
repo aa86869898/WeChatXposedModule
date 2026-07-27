@@ -2,10 +2,13 @@ package com.leshao.v3.ui;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.EditText;
@@ -19,6 +22,9 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.service.ActivationManager;
 
 import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class ProfilePageView {
 
@@ -73,9 +79,9 @@ public class ProfilePageView {
             infoCard.addView(itemDivider(ctx, d));
         }
 
-        // 用户类型
-        String level = MainActivity.getVipLevel();
-        infoCard.addView(profileRow(ctx, d, "用户类型", level));
+        // 会员到期
+        String expireText = getExpireTime();
+        infoCard.addView(profileRow(ctx, d, "会员到期", expireText));
 
         root.addView(infoCard);
 
@@ -84,14 +90,14 @@ public class ProfilePageView {
         root.addView(sectionLabel(ctx, d, "激活码"));
         LinearLayout actCard = makeCard(ctx, d);
 
-        // 当前激活状态
+        // 会员状态
         boolean isActive = ActivationManager.isActivated();
         String currentLevel = ActivationManager.getLevelName();
         String boundWxid = ActivationManager.getBoundWxid();
         String currentWxid = MainActivity.getUserWxid();
 
         TextView statusLabel = new TextView(ctx);
-        statusLabel.setText("当前状态: " + currentLevel + (isActive && boundWxid.equals(currentWxid) ? " (已激活)" : ""));
+        statusLabel.setText("会员状态: " + currentLevel + (isActive && boundWxid.equals(currentWxid) ? " (已激活)" : ""));
         statusLabel.setTextSize(13);
         statusLabel.setTextColor(isActive ? AppColors.green() : AppColors.accent());
         statusLabel.setTypeface(null, Typeface.BOLD);
@@ -100,10 +106,10 @@ public class ProfilePageView {
 
         if (isActive) {
             TextView wxidLabel = new TextView(ctx);
-            wxidLabel.setText("绑定wxid: " + boundWxid);
+            wxidLabel.setText("绑定ID: " + boundWxid);
             wxidLabel.setTextSize(11);
             wxidLabel.setTextColor(AppColors.text2());
-            wxidLabel.setPadding((int)(16 * d), 0, (int)(16 * d), (int)(8 * d));
+            wxidLabel.setPadding((int)(16 * d), (int)(2 * d), (int)(16 * d), (int)(8 * d));
             actCard.addView(wxidLabel);
 
             // 管理员配置入口 (仅管理员可见)
@@ -200,6 +206,83 @@ public class ProfilePageView {
 
         root.addView(actCard);
 
+        // ===== 日志导出 =====
+        root.addView(spacerV(ctx, d, 16));
+        root.addView(sectionLabel(ctx, d, "日志导出"));
+        LinearLayout logCard = makeCard(ctx, d);
+
+        TextView logDesc = new TextView(ctx);
+        logDesc.setText("将乐少助手运行日志导出到 /sdcard/leshao_v3_logs/");
+        logDesc.setTextSize(12);
+        logDesc.setTextColor(AppColors.text2());
+        logDesc.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(4 * d));
+        logCard.addView(logDesc);
+
+        LinearLayout logBtnRow = new LinearLayout(ctx);
+        logBtnRow.setOrientation(LinearLayout.HORIZONTAL);
+        logBtnRow.setGravity(Gravity.CENTER);
+        logBtnRow.setPadding((int)(16 * d), (int)(4 * d), (int)(16 * d), (int)(12 * d));
+
+        TextView btnExport = makeSmallBtn(ctx, d, "导出日志", 0xFF27AE60);
+        btnExport.setOnClickListener(v -> {
+            try {
+                String ts = String.valueOf(System.currentTimeMillis());
+                java.io.File destDir = new java.io.File("/sdcard/leshao_v3_logs");
+                if (!destDir.exists()) destDir.mkdirs();
+
+                int count = 0;
+                String[] logDirs = {
+                    "/data/data/com.tencent.mm/files/leshao_v3",
+                    "/sdcard/leshao_v3_logs"
+                };
+                for (String logDir : logDirs) {
+                    java.io.File dir = new java.io.File(logDir);
+                    if (!dir.exists() || !dir.isDirectory()) continue;
+                    java.io.File[] files = dir.listFiles();
+                    if (files == null) continue;
+                    for (java.io.File src : files) {
+                        if (!src.isFile() || src.length() == 0) continue;
+                        String destName = src.getName().replace(".", "_" + ts + ".");
+                        java.io.File dest = new java.io.File(destDir, destName);
+                        try (java.io.FileInputStream fis = new java.io.FileInputStream(src);
+                             java.io.FileOutputStream fos = new java.io.FileOutputStream(dest)) {
+                            byte[] buf = new byte[8192];
+                            int n;
+                            while ((n = fis.read(buf)) > 0) fos.write(buf, 0, n);
+                        }
+                        count++;
+                    }
+                }
+                Toast.makeText(ctx, "已导出 " + count + " 个日志到 /sdcard/leshao_v3_logs/", Toast.LENGTH_LONG).show();
+            } catch (Throwable t) {
+                Toast.makeText(ctx, "导出失败: " + t.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
+        logBtnRow.addView(btnExport);
+
+        View btnSpacer = new View(ctx);
+        btnSpacer.setLayoutParams(new LinearLayout.LayoutParams((int)(12*d), 0));
+        logBtnRow.addView(btnSpacer);
+
+        TextView btnOpenDir = makeSmallBtn(ctx, d, "打开日志目录", 0xFF607D8B);
+        btnOpenDir.setOnClickListener(v -> {
+            try {
+                java.io.File logDir = new java.io.File("/sdcard/leshao_v3_logs");
+                if (!logDir.exists()) logDir.mkdirs();
+                android.net.Uri uri = android.net.Uri.parse("content://com.android.externalstorage.documents/tree/primary%3Aleshao_v3_logs");
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setDataAndType(uri, "resource/folder");
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                ctx.startActivity(intent);
+            } catch (Throwable t) {
+                Toast.makeText(ctx, "日志目录: /sdcard/leshao_v3_logs", Toast.LENGTH_LONG).show();
+            }
+        });
+        logBtnRow.addView(btnOpenDir);
+
+        logCard.addView(logBtnRow);
+        root.addView(logCard);
+
         return root;
     }
 
@@ -247,6 +330,23 @@ public class ProfilePageView {
         return btn;
     }
 
+    private static TextView makeSmallBtn(Context ctx, float d, String text, int color) {
+        TextView btn = new TextView(ctx);
+        btn.setText(text);
+        btn.setTextSize(12);
+        btn.setTextColor(0xFFFFFFFF);
+        btn.setTypeface(null, Typeface.BOLD);
+        btn.setPadding((int)(14 * d), (int)(6 * d), (int)(14 * d), (int)(6 * d));
+        btn.setGravity(Gravity.CENTER);
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius((int)(6 * d));
+        bg.setColor(color);
+        btn.setBackground(bg);
+
+        return btn;
+    }
+
     private static TextView sectionLabel(Context ctx, float d, String text) {
         TextView tv = new TextView(ctx);
         tv.setText(text);
@@ -275,5 +375,24 @@ public class ProfilePageView {
         View v = new View(ctx);
         v.setLayoutParams(new LinearLayout.LayoutParams(-1, (int)(dpVal * d)));
         return v;
+    }
+
+    private static String getExpireTime() {
+        try {
+            SharedPreferences prefs = ContextManager.getPrefs();
+            if (prefs == null) return "未激活";
+            String actTimeStr = prefs.getString("ls_act_time", "");
+            String expireStr = prefs.getString("ls_act_expire", "0");
+            if (actTimeStr.isEmpty()) return "未激活";
+            long actTime = Long.parseLong(actTimeStr);
+            int expireHours = Integer.parseInt(expireStr);
+            if (expireHours <= 0) return "永久有效";
+            long expireTime = actTime + expireHours * 3600000L;
+            if (System.currentTimeMillis() > expireTime) return "已过期";
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy年MM月dd日 HH:mm:ss", Locale.getDefault());
+            return sdf.format(new Date(expireTime));
+        } catch (Throwable t) {
+            return "未激活";
+        }
     }
 }

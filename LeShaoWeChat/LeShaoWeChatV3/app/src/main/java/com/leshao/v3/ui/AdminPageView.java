@@ -12,6 +12,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
@@ -26,7 +27,7 @@ public class AdminPageView {
     private static TextView sOutputTv;
     private static Switch[] sFeatureBoxes;
     private static Spinner sLevelSpinner;
-    private static TextView sWxidEdit;
+    private static EditText sWxidEdit;
     private static int sSelectedHours = 0;
 
     private static final int[] HOUR_OPTIONS = {1, 12, 24, 72, 168, 720, 2160, 8760, 0};
@@ -209,7 +210,7 @@ public class AdminPageView {
         textCol.addView(label);
         row.addView(textCol);
 
-        sWxidEdit = new TextView(ctx);
+        sWxidEdit = new EditText(ctx);
         sWxidEdit.setHint("wxid_xxx");
         sWxidEdit.setTextSize(13);
         sWxidEdit.setTextColor(AppColors.text1());

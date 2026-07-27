@@ -382,6 +382,9 @@ public class TTSPageView {
         row.addView(textCol);
         Switch sw = new Switch(ctx);
         sw.setChecked(checked);
+        try {
+            if (checked) sw.setThumbResource(android.R.drawable.btn_star_big_on);
+        } catch (Throwable ignored) {}
         sw.setOnCheckedChangeListener(listener);
         row.addView(sw);
         return row;

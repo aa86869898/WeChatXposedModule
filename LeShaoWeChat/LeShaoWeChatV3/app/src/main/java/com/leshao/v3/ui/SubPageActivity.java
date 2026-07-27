@@ -134,7 +134,7 @@ public class SubPageActivity {
                 return ContactGroupPageView.create(ctx, parentAct);
             case 6:  // 定时消息助手
                 return SchedulerPageView.create(ctx, parentAct);
-            case 8:  // TTS播报转语音
+            case 8:  // TTS语音播报
                 return TTSPageView.create(ctx, parentAct);
             case 9:  // 红包转账
                 return RedPacketPageView.create(ctx, parentAct);
@@ -146,6 +146,8 @@ public class SubPageActivity {
                 return DataToolsPageView.create(ctx, parentAct);
             case 13: // 通讯录更新日志
                 return ContactChangeLogPageView.create(ctx, parentAct);
+            case 14: // 定时消息群发
+                return ScheduleMsgPageView.create(ctx, parentAct);
             case 91: // 红包转账 > 自动秒抢红包
                 return RedPacketConfigView.create(ctx, parentAct);
             case 92: // 红包转账 > 自动收款

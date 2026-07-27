@@ -738,6 +738,41 @@ public class SettingsEntryHook {
         p.addView(r);
     }
 
+    private static void swStar(Context ctx, LinearLayout p, String l, boolean c, boolean enabled, final SwitchCB cb) {
+        LinearLayout r = new LinearLayout(ctx);
+        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setPadding(dpC(ctx, 12), dpC(ctx, 6), dpC(ctx, 12), dpC(ctx, 6));
+        TextView tv = new TextView(ctx);
+        tv.setText(l);
+        tv.setTextSize(12);
+        tv.setTextColor(enabled ? CLR_TEXT : CLR_TEXT2);
+        tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
+        r.addView(tv);
+
+        Switch s = new Switch(ctx);
+        s.setChecked(c);
+        s.setEnabled(enabled);
+        styleSwitch(s, c && enabled, ctx);
+        try {
+            if (c && enabled) s.setThumbResource(android.R.drawable.btn_star_big_on);
+        } catch (Throwable ignored) {}
+        s.setOnCheckedChangeListener((btn, v) -> {
+            if (!enabled) {
+                s.setChecked(!v);
+                Toast.makeText(ctx, "当前激活码未授权此功能", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            styleSwitch(s, v, ctx);
+            try {
+                s.setThumbResource(v ? android.R.drawable.btn_star_big_on : 0);
+            } catch (Throwable ignored) {}
+            if (cb != null) cb.onChange(v);
+        });
+        r.addView(s);
+        p.addView(r);
+    }
+
     private interface EditCB { void onChange(String s); }
 
     private static void ed(Context ctx, LinearLayout p, String l, String v, final EditCB cb) {
@@ -803,7 +838,7 @@ public class SettingsEntryHook {
 
         sw(ctx, root, "总开关", cfg.masterSwitch, isBit(mask, 0),
             v -> { cfg.masterSwitch = v; cfg.save(prefs); });
-        sw(ctx, root, "防撤回", cfg.antiRecall, isBit(mask, 13),
+        swStar(ctx, root, "防撤回", cfg.antiRecall, isBit(mask, 13),
             v -> { cfg.antiRecall = v; cfg.save(prefs); });
         sw(ctx, root, "红包助手", cfg.redPacketGrab, isBit(mask, 14),
             v -> { cfg.redPacketGrab = v; cfg.save(prefs); });
@@ -818,9 +853,7 @@ public class SettingsEntryHook {
         final ModuleConfig cfg = ModuleConfig.load(prefs);
         int mask = ActivationManager.getFeatureMask();
 
-        sw(ctx, root, "总开关", cfg.masterSwitch, isBit(mask, 0),
-            v -> { cfg.masterSwitch = v; cfg.save(prefs); });
-        sw(ctx, root, "免打扰", cfg.quietEnabled, true,
+        swStar(ctx, root, "免打扰", cfg.quietEnabled, true,
             v -> { cfg.quietEnabled = v; cfg.save(prefs); });
 
         final String[] engines = {"系统", "配音阁", "五声"};
@@ -832,18 +865,18 @@ public class SettingsEntryHook {
                 cfg.save(prefs);
             });
 
-        sw(ctx, root, "文字", cfg.announceText, isBit(mask, 2),
-            v -> { prefs.edit().putBoolean("ls_announce_text", v).apply(); });
-        sw(ctx, root, "图片", cfg.announceImage, isBit(mask, 4),
-            v -> { prefs.edit().putBoolean("ls_announce_image", v).apply(); });
-        sw(ctx, root, "视频", cfg.announceVideo, isBit(mask, 5),
-            v -> { prefs.edit().putBoolean("ls_announce_video", v).apply(); });
-        sw(ctx, root, "红包", cfg.announceRedBag, isBit(mask, 7),
-            v -> { prefs.edit().putBoolean("ls_announce_redbag", v).apply(); });
-        sw(ctx, root, "转账", cfg.announceTransfer, isBit(mask, 8),
-            v -> { prefs.edit().putBoolean("ls_announce_transfer", v).apply(); });
-        sw(ctx, root, "名片", cfg.announceCard, isBit(mask, 9),
-            v -> { prefs.edit().putBoolean("ls_announce_card", v).apply(); });
+        swStar(ctx, root, "文字播报", cfg.announceText, isBit(mask, 2),
+            v -> { cfg.announceText = v; cfg.save(prefs); });
+        swStar(ctx, root, "图片播报", cfg.announceImage, isBit(mask, 4),
+            v -> { cfg.announceImage = v; cfg.save(prefs); });
+        swStar(ctx, root, "视频播报", cfg.announceVideo, isBit(mask, 5),
+            v -> { cfg.announceVideo = v; cfg.save(prefs); });
+        swStar(ctx, root, "红包播报", cfg.announceRedBag, isBit(mask, 7),
+            v -> { cfg.announceRedBag = v; cfg.save(prefs); });
+        swStar(ctx, root, "转账播报", cfg.announceTransfer, isBit(mask, 8),
+            v -> { cfg.announceTransfer = v; cfg.save(prefs); });
+        swStar(ctx, root, "名片播报", cfg.announceCard, isBit(mask, 9),
+            v -> { cfg.announceCard = v; cfg.save(prefs); });
     }
 
     private static void buildDingDongSection(Context ctx, LinearLayout root) {

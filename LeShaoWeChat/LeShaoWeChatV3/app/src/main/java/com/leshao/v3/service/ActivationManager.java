@@ -390,6 +390,8 @@ public class ActivationManager {
                 return isAnyBit(mask, F_DATA_BACKUP);
             case 13: // 娱乐助手: 叮咚
                 return isAnyBit(mask, F_DINGDONG);
+            case 14: // 定时消息群发: 定时发送
+                return isAnyBit(mask, F_SCHEDULED_SEND);
             default:
                 return true;
         }
