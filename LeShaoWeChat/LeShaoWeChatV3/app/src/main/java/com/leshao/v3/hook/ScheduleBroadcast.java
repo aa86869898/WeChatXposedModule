@@ -1105,6 +1105,22 @@ public class ScheduleBroadcast {
         try {
             Object ms = getMsgStorage();
 
+            // 0. 尝试 a21.q.i: 用户手动发消息的真正入口
+            try {
+                Class<?> a21q = XposedHelpers.findClass("a21.q", sClassLoader);
+                Class<?> n85z = XposedHelpers.findClass("n85.z", sClassLoader);
+                Class<?> a21g = XposedHelpers.findClass("a21.g", sClassLoader);
+                Object zObj = XposedHelpers.newInstance(n85z);
+                Object gObj = XposedHelpers.newInstance(a21g, e9msg);
+                Object result = XposedHelpers.callMethod(
+                    XposedHelpers.newInstance(a21q),
+                    "i", zObj, gObj, null);
+                log("triggerSend: a21.q.i() OK msgId=" + msgId + " result=" + result);
+                return;
+            } catch (Throwable t) {
+                log("triggerSend: a21.q.i fail: " + t.getMessage());
+            }
+
             // 1. 设置发送状态: isSend=1, status=3(发送中)
             try { XposedHelpers.callMethod(e9msg, "k1", 1); } catch (Throwable ignored) {}
             try { XposedHelpers.callMethod(e9msg, "O0", 3); } catch (Throwable ignored) {}
