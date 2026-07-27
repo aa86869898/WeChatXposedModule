@@ -69,46 +69,17 @@ public class ScheduleMsgPageView {
             float d = dp(ctx);
             LogWriter.log("SCHEDULE_MSG", "create: START, d=" + d);
 
-            LinearLayout body = new LinearLayout(ctx);
-            body.setOrientation(LinearLayout.VERTICAL);
-            body.setBackgroundColor(CLR_BG);
-            body.setPadding(PX(d, 10), PX(d, 10), PX(d, 10), PX(d, 16));
-
-            LogWriter.log("SCHEDULE_MSG", "create: buildProgressBar...");
-            body.addView(buildProgressBar(ctx, d));
-            // 逐步添加测试 - 仅进度栏
-            //LogWriter.log("SCHEDULE_MSG", "create: buildCard1...");
-            //body.addView(vSpacer(ctx, d, 10));
-            //body.addView(buildCard1(ctx, d, parentAct));
-            //LogWriter.log("SCHEDULE_MSG", "create: buildCard2...");
-            //body.addView(vSpacer(ctx, d, 10));
-            //body.addView(buildCard2(ctx, d, parentAct));
-            //LogWriter.log("SCHEDULE_MSG", "create: buildCard3...");
-            //body.addView(vSpacer(ctx, d, 10));
-            //body.addView(buildCard3(ctx, d, parentAct));
-            //LogWriter.log("SCHEDULE_MSG", "create: buildCard4...");
-            //body.addView(vSpacer(ctx, d, 10));
-            //body.addView(buildCard4(ctx, d, parentAct));
-            //LogWriter.log("SCHEDULE_MSG", "create: buildCard5...");
-            //body.addView(vSpacer(ctx, d, 10));
-            //body.addView(buildCard5(ctx, d, parentAct));
-            //LogWriter.log("SCHEDULE_MSG", "create: buildCard6...");
-            //body.addView(vSpacer(ctx, d, 10));
-            //body.addView(buildCard6(ctx, d, parentAct));
-            //LogWriter.log("SCHEDULE_MSG", "create: buildCard7...");
-            //body.addView(vSpacer(ctx, d, 10));
-            //body.addView(buildCard7(ctx, d, parentAct));
-            //LogWriter.log("SCHEDULE_MSG", "create: buildBottomBtn...");
-            //body.addView(vSpacer(ctx, d, 16));
-            //body.addView(buildBottomBtn(ctx, d, parentAct));
-
-            loadDraft(ctx);
-
-            LogWriter.log("SCHEDULE_MSG", "create: DONE OK");
-            return body;
+            LogWriter.log("SCHEDULE_MSG", "create: return EMPTY view (bare minimum)");
+            TextView tv = new TextView(ctx);
+            tv.setText("定时群发模块加载成功");
+            tv.setTextSize(16);
+            tv.setTextColor(CLR_NEON);
+            tv.setGravity(Gravity.CENTER);
+            tv.setPadding(PX(d, 20), PX(d, 40), PX(d, 20), PX(d, 40));
+            LogWriter.log("SCHEDULE_MSG", "create: DONE OK (bare)");
+            return tv;
         } catch (Throwable t) {
             LogWriter.log("SCHEDULE_MSG", "create: CRASH: " + t.getClass().getName() + ": " + t.getMessage());
-            LogWriter.log("SCHEDULE_MSG", "create: STACK: " + android.util.Log.getStackTraceString(t));
             throw new RuntimeException(t);
         }
     }
