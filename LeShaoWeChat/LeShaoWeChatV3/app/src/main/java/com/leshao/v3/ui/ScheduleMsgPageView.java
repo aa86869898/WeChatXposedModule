@@ -58,17 +58,115 @@ public class ScheduleMsgPageView {
     private static TextView sProgressCount;
     private static TextView sEmergencyBtn;
     private static FrameLayout sProgressRoot;
+    private static LinearLayout sTypeContentContainer;
+    private static java.lang.ref.WeakReference<Activity> sActRef;
 
     private static ContactPickerDialog.OnContactsSelected sLastContactsCallback;
     private static Activity sParentActivity;
 
-    // ===== 主入口 =====
+    // ===== 文件/图片选取拦截 =====
+    private static final int REQ_IMAGE_PICK = 9010;
+    private static final int REQ_FILE_PICK = 9011;
+    private static final int REQ_MATERIAL_PICK = 9012;
+    private static final List<String> sPickedFiles = new ArrayList<>();
+    private static Runnable sOnFilePicked;
+    private static java.io.File sHookFileDest;
+    private static boolean sHookRegistered = false;
+
+    private static void registerFilePickHook() {
+        if (sHookRegistered) return;
+        sHookRegistered = true;
+        try {
+            java.lang.reflect.Method method = Activity.class.getDeclaredMethod("onActivityResult", int.class, int.class, android.content.Intent.class);
+            de.robv.android.xposed.XposedBridge.hookMethod(method, new de.robv.android.xposed.XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        int req = (int) param.args[0];
+                        int res = (int) param.args[1];
+                        android.content.Intent data = (android.content.Intent) param.args[2];
+                        if (res != Activity.RESULT_OK || data == null) return;
+                        Activity act = (Activity) param.thisObject;
+
+                        if (req == REQ_IMAGE_PICK || req == REQ_FILE_PICK || req == REQ_MATERIAL_PICK) {
+                            handleFilePickResult(act, data, req);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+        } catch (Throwable t) { LogWriter.log("SCHEDULE_MSG", "hook err: " + t.getMessage()); }
+    }
+
+    private static void handleFilePickResult(Activity act, android.content.Intent data, int req) {
+        try {
+            List<android.net.Uri> uris = new ArrayList<>();
+            if (data.getClipData() != null) {
+                for (int i = 0; i < data.getClipData().getItemCount(); i++) {
+                    uris.add(data.getClipData().getItemAt(i).getUri());
+                }
+            } else if (data.getData() != null) {
+                uris.add(data.getData());
+            }
+            for (android.net.Uri uri : uris) {
+                String path = copyUriToFile(act, uri, "leshao_pick_" + System.currentTimeMillis() + "_" + sPickedFiles.size());
+                if (path != null && !path.isEmpty()) sPickedFiles.add(path);
+            }
+            if (sOnFilePicked != null) sOnFilePicked.run();
+        } catch (Throwable t) { LogWriter.log("SCHEDULE_MSG", "pick err: " + t.getMessage()); }
+    }
+
+    private static String copyUriToFile(Context ctx, android.net.Uri uri, String name) {
+        try {
+            java.io.File dir = new java.io.File(ctx.getFilesDir(), "leshao_files");
+            dir.mkdirs();
+            java.io.File dest = new java.io.File(dir, name);
+            java.io.InputStream is = ctx.getContentResolver().openInputStream(uri);
+            if (is == null) return null;
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(dest);
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
+            fos.close(); is.close();
+            return dest.getAbsolutePath();
+        } catch (Throwable t) { return null; }
+    }
+
+    private static void startImagePicker(Activity act) {
+        try {
+            android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_PICK,
+                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+            i.setType("image/*");
+            act.startActivityForResult(i, REQ_IMAGE_PICK);
+        } catch (Throwable t) { Toast.makeText(act, "无法打开相册", Toast.LENGTH_SHORT).show(); }
+    }
+
+    private static void startFilePicker(Activity act, String mime) {
+        try {
+            android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(android.content.Intent.CATEGORY_OPENABLE);
+            i.setType(mime != null ? mime : "*/*");
+            act.startActivityForResult(i, REQ_FILE_PICK);
+        } catch (Throwable t) { Toast.makeText(act, "无法打开文件管理器", Toast.LENGTH_SHORT).show(); }
+    }
+
+    private static void startMaterialPicker(Activity act) {
+        try {
+            android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(android.content.Intent.CATEGORY_OPENABLE);
+            i.setType("*/*");
+            i.putExtra(android.content.Intent.EXTRA_ALLOW_MULTIPLE, true);
+            act.startActivityForResult(i, REQ_MATERIAL_PICK);
+        } catch (Throwable t) { Toast.makeText(act, "无法打开文件管理器", Toast.LENGTH_SHORT).show(); }
+    }
 
     public static View create(Context ctx, Activity parentAct) {
         try {
             sParentActivity = parentAct;
+            sActRef = new java.lang.ref.WeakReference<>(parentAct);
             float d = dp(ctx);
             LogWriter.log("SCHEDULE_MSG", "create: START, d=" + d);
+
+            registerFilePickHook();
 
             LinearLayout body = new LinearLayout(ctx);
             body.setOrientation(LinearLayout.VERTICAL);
@@ -383,6 +481,7 @@ public class ScheduleMsgPageView {
                 btn.setOnClickListener(v -> {
                     sSelectedMsgType = idx;
                     refreshMsgTypeGrid(rows);
+                    refreshTypeContent(ctx, d, act);
                     checkXmlWarning(ctx, idx);
                 });
                 rows[r].addView(btn);
@@ -392,10 +491,37 @@ public class ScheduleMsgPageView {
         card.addView(grid);
         card.addView(hSep(ctx, d));
 
-        final EditText contentEt = editText(ctx, d, "输入消息内容...支持Emoji、{昵称}{群名称}{当前时间}变量 | 多文案用竖线分隔随机发送", CLR_WHITE);
-        contentEt.setMinLines(2);
-        contentEt.setText(sContentCache);
-        card.addView(contentEt);
+        sTypeContentContainer = new LinearLayout(ctx);
+        sTypeContentContainer.setOrientation(LinearLayout.VERTICAL);
+        card.addView(sTypeContentContainer);
+        refreshTypeContent(ctx, d, act);
+
+        card.setTag(new Object[]{rows});
+        return card;
+    }
+
+    private static void refreshTypeContent(Context ctx, float d, Activity act) {
+        if (sTypeContentContainer == null) return;
+        sTypeContentContainer.removeAllViews();
+
+        switch (sSelectedMsgType) {
+            case 0: case 4: case 7: case 8: case 11:
+                buildTextMsgContent(ctx, d); break;
+            case 1:
+                buildImageMsgContent(ctx, d, act); break;
+            case 2:
+                buildVideoMsgContent(ctx, d, act); break;
+            case 3:
+                buildLinkCardMsgContent(ctx, d, act); break;
+            case 5:
+                buildAudioMsgContent(ctx, d, act); break;
+            case 6:
+                buildLocationMsgContent(ctx, d); break;
+            case 9:
+                buildContactMsgContent(ctx, d, act); break;
+            case 10:
+                buildFileMsgContent(ctx, d, act); break;
+        }
 
         LinearLayout previewRow = new LinearLayout(ctx);
         previewRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -412,12 +538,210 @@ public class ScheduleMsgPageView {
         prevBg.setStroke(PX(d, 1), CLR_NEON);
         prevBg.setColor(Color.TRANSPARENT);
         previewBtn.setBackground(prevBg);
-        previewBtn.setOnClickListener(v -> showPreview(ctx, d, contentEt.getText().toString().trim(), sSelectedMsgType));
+        previewBtn.setOnClickListener(v -> showPreview(ctx, d, sContentCache, sSelectedMsgType));
         previewRow.addView(previewBtn);
-        card.addView(previewRow);
+        sTypeContentContainer.addView(previewRow);
+    }
 
-        card.setTag(new Object[]{rows, contentEt});
-        return card;
+    private static void buildTextMsgContent(Context ctx, float d) {
+        int w = ctx.getResources().getDisplayMetrics().widthPixels - PX(d, 20);
+        final EditText et = new EditText(ctx);
+        et.setHint("输入消息内容...支持Emoji、{昵称}{群名称}{当前时间}变量");
+        et.setHintTextColor(CLR_GRAY);
+        et.setTextColor(CLR_WHITE);
+        et.setTextSize(11);
+        et.setSingleLine(false);
+        et.setMinLines(2);
+        et.setMaxLines(6);
+        et.setPadding(PX(d, 8), PX(d, 6), PX(d, 8), PX(d, 6));
+        GradientDrawable etBg = new GradientDrawable();
+        etBg.setCornerRadius(PX(d, 2));
+        etBg.setStroke(PX(d, 1), CLR_NEON);
+        etBg.setColor(Color.TRANSPARENT);
+        et.setBackground(etBg);
+        et.setText(sContentCache);
+        et.setLayoutParams(new LinearLayout.LayoutParams(w, PX(d, 40)));
+        et.addTextChangedListener(new android.text.TextWatcher() {
+            public void afterTextChanged(android.text.Editable e) { sContentCache = e.toString(); }
+            public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+            public void onTextChanged(CharSequence s, int st, int b, int c) {}
+        });
+        sTypeContentContainer.addView(et);
+    }
+
+    private static void buildImageMsgContent(Context ctx, float d, Activity act) {
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER);
+
+        TextView albumBtn = textBtn(ctx, d, "相册选择", CLR_NEON);
+        albumBtn.setOnClickListener(v -> startImagePicker(act));
+        row.addView(albumBtn);
+
+        View sp = new View(ctx); sp.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 8), 0)); row.addView(sp);
+
+        TextView fileBtn = textBtn(ctx, d, "文件选取", CLR_WHITE);
+        fileBtn.setOnClickListener(v -> startFilePicker(act, "image/*"));
+        row.addView(fileBtn);
+
+        View fr = new View(ctx); fr.setLayoutParams(lpWeight(1)); row.addView(fr);
+
+        sTypeContentContainer.addView(row);
+
+        if (!sPickedFiles.isEmpty()) {
+            String path = sPickedFiles.get(sPickedFiles.size() - 1);
+            String name = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
+            TextView picked = new TextView(ctx);
+            picked.setText("已选: " + name);
+            picked.setTextSize(10);
+            picked.setTextColor(CLR_HIGHLIGHT);
+            picked.setPadding(0, PX(d, 6), 0, 0);
+            sTypeContentContainer.addView(picked);
+        }
+    }
+
+    private static void buildVideoMsgContent(Context ctx, float d, Activity act) {
+        TextView fileBtn = textBtn(ctx, d, "选取视频文件", CLR_NEON);
+        fileBtn.setOnClickListener(v -> startFilePicker(act, "video/*"));
+        sTypeContentContainer.addView(fileBtn);
+        if (!sPickedFiles.isEmpty()) {
+            String path = sPickedFiles.get(sPickedFiles.size() - 1);
+            String name = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
+            TextView picked = new TextView(ctx);
+            picked.setText("已选: " + name);
+            picked.setTextSize(10);
+            picked.setTextColor(CLR_HIGHLIGHT);
+            picked.setPadding(0, PX(d, 6), 0, 0);
+            sTypeContentContainer.addView(picked);
+        }
+    }
+
+    private static void buildLinkCardMsgContent(Context ctx, float d, Activity act) {
+        final EditText titleEt = new EditText(ctx);
+        titleEt.setHint("请输入图文标题");
+        titleEt.setHintTextColor(CLR_GRAY);
+        titleEt.setTextColor(CLR_WHITE);
+        titleEt.setTextSize(11);
+        titleEt.setSingleLine(true);
+        titleEt.setPadding(PX(d, 8), PX(d, 6), PX(d, 8), PX(d, 6));
+        GradientDrawable etBg = new GradientDrawable();
+        etBg.setCornerRadius(PX(d, 2));
+        etBg.setStroke(PX(d, 1), CLR_NEON);
+        etBg.setColor(Color.TRANSPARENT);
+        titleEt.setBackground(etBg);
+        sTypeContentContainer.addView(titleEt);
+
+        View sp = new View(ctx); sp.setLayoutParams(new LinearLayout.LayoutParams(-1, PX(d, 4))); sTypeContentContainer.addView(sp);
+
+        final EditText descEt = new EditText(ctx);
+        descEt.setHint("请输入图文摘要");
+        descEt.setHintTextColor(CLR_GRAY);
+        descEt.setTextColor(CLR_WHITE);
+        descEt.setTextSize(11);
+        descEt.setSingleLine(true);
+        descEt.setPadding(PX(d, 8), PX(d, 6), PX(d, 8), PX(d, 6));
+        GradientDrawable descBg = new GradientDrawable();
+        descBg.setCornerRadius(PX(d, 2));
+        descBg.setStroke(PX(d, 1), CLR_NEON);
+        descBg.setColor(Color.TRANSPARENT);
+        descEt.setBackground(descBg);
+        sTypeContentContainer.addView(descEt);
+
+        LinearLayout urlRow = new LinearLayout(ctx);
+        urlRow.setOrientation(LinearLayout.HORIZONTAL);
+        urlRow.setGravity(Gravity.CENTER_VERTICAL);
+        urlRow.setPadding(0, PX(d, 4), 0, 0);
+        final EditText urlEt = new EditText(ctx);
+        urlEt.setHint("输入跳转链接(可选)");
+        urlEt.setHintTextColor(CLR_GRAY);
+        urlEt.setTextColor(CLR_WHITE);
+        urlEt.setTextSize(11);
+        urlEt.setSingleLine(true);
+        urlEt.setPadding(PX(d, 8), PX(d, 6), PX(d, 8), PX(d, 6));
+        GradientDrawable urlBg = new GradientDrawable();
+        urlBg.setCornerRadius(PX(d, 2));
+        urlBg.setStroke(PX(d, 1), CLR_NEON);
+        urlBg.setColor(Color.TRANSPARENT);
+        urlEt.setBackground(urlBg);
+        urlEt.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        urlRow.addView(urlEt);
+
+        View spU = new View(ctx); spU.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 8), 0)); urlRow.addView(spU);
+
+        TextView thumbBtn = textBtn(ctx, d, "选取缩略图", CLR_WHITE);
+        thumbBtn.setOnClickListener(v -> startImagePicker(act));
+        urlRow.addView(thumbBtn);
+        sTypeContentContainer.addView(urlRow);
+    }
+
+    private static void buildAudioMsgContent(Context ctx, float d, Activity act) {
+        TextView fileBtn = textBtn(ctx, d, "选取音频文件(.mp3/.wav)", CLR_NEON);
+        fileBtn.setOnClickListener(v -> startFilePicker(act, "audio/*"));
+        sTypeContentContainer.addView(fileBtn);
+    }
+
+    private static void buildLocationMsgContent(Context ctx, float d) {
+        final EditText latEt = new EditText(ctx);
+        latEt.setHint("纬度 (如 39.9042)");
+        latEt.setHintTextColor(CLR_GRAY);
+        latEt.setTextColor(CLR_WHITE);
+        latEt.setTextSize(11);
+        latEt.setSingleLine(true);
+        latEt.setPadding(PX(d, 8), PX(d, 6), PX(d, 8), PX(d, 6));
+        GradientDrawable etBg = new GradientDrawable();
+        etBg.setCornerRadius(PX(d, 2));
+        etBg.setStroke(PX(d, 1), CLR_NEON);
+        etBg.setColor(Color.TRANSPARENT);
+        latEt.setBackground(etBg);
+        sTypeContentContainer.addView(latEt);
+
+        View sp = new View(ctx); sp.setLayoutParams(new LinearLayout.LayoutParams(-1, PX(d, 4))); sTypeContentContainer.addView(sp);
+
+        final EditText lngEt = new EditText(ctx);
+        lngEt.setHint("经度 (如 116.4074)");
+        lngEt.setHintTextColor(CLR_GRAY);
+        lngEt.setTextColor(CLR_WHITE);
+        lngEt.setTextSize(11);
+        lngEt.setSingleLine(true);
+        lngEt.setPadding(PX(d, 8), PX(d, 6), PX(d, 8), PX(d, 6));
+        GradientDrawable lngBg = new GradientDrawable();
+        lngBg.setCornerRadius(PX(d, 2));
+        lngBg.setStroke(PX(d, 1), CLR_NEON);
+        lngBg.setColor(Color.TRANSPARENT);
+        lngEt.setBackground(lngBg);
+        sTypeContentContainer.addView(lngEt);
+    }
+
+    private static void buildContactMsgContent(Context ctx, float d, Activity act) {
+        final EditText wxidEt = new EditText(ctx);
+        wxidEt.setHint("输入目标 wxid");
+        wxidEt.setHintTextColor(CLR_GRAY);
+        wxidEt.setTextColor(CLR_WHITE);
+        wxidEt.setTextSize(11);
+        wxidEt.setSingleLine(true);
+        wxidEt.setPadding(PX(d, 8), PX(d, 6), PX(d, 8), PX(d, 6));
+        GradientDrawable etBg = new GradientDrawable();
+        etBg.setCornerRadius(PX(d, 2));
+        etBg.setStroke(PX(d, 1), CLR_NEON);
+        etBg.setColor(Color.TRANSPARENT);
+        wxidEt.setBackground(etBg);
+        sTypeContentContainer.addView(wxidEt);
+    }
+
+    private static void buildFileMsgContent(Context ctx, float d, Activity act) {
+        TextView fileBtn = textBtn(ctx, d, "选取文件", CLR_NEON);
+        fileBtn.setOnClickListener(v -> startFilePicker(act, "*/*"));
+        sTypeContentContainer.addView(fileBtn);
+        if (!sPickedFiles.isEmpty()) {
+            String path = sPickedFiles.get(sPickedFiles.size() - 1);
+            String name = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
+            TextView picked = new TextView(ctx);
+            picked.setText("已选: " + name);
+            picked.setTextSize(10);
+            picked.setTextColor(CLR_HIGHLIGHT);
+            picked.setPadding(0, PX(d, 6), 0, 0);
+            sTypeContentContainer.addView(picked);
+        }
     }
 
     private static void refreshMsgTypeGrid(LinearLayout[] rows) {
@@ -536,7 +860,20 @@ public class ScheduleMsgPageView {
         previewArea.setPadding(0, PX(d, 8), 0, 0);
         card.addView(previewArea);
 
-        uploadBtn.setOnClickListener(v -> showMaterialInput(ctx, d, previewArea, countLabel));
+        uploadBtn.setOnClickListener(v -> {
+            sOnFilePicked = () -> {
+                sOnFilePicked = null;
+                for (String p : sPickedFiles) {
+                    if (!sMaterialFiles.contains(p)) sMaterialFiles.add(p);
+                }
+                sPickedFiles.clear();
+                if (sActRef != null) {
+                    Activity a = sActRef.get();
+                    if (a != null) a.runOnUiThread(() -> refreshMaterialPreviews(ctx, d, previewArea, countLabel));
+                }
+            };
+            startMaterialPicker(act);
+        });
         refreshMaterialPreviews(ctx, d, previewArea, countLabel);
 
         card.setTag(new Object[]{previewArea, countLabel});
