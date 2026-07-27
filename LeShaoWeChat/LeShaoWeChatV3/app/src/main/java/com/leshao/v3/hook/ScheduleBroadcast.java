@@ -294,7 +294,7 @@ public class ScheduleBroadcast {
     }
 
     private static void installDiagHooks() {
-        // Hook f9.H9 看谁在写入DB (抓 e9 参数)
+        // Hook f9.H9 打印更多字段
         try {
             Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", sClassLoader);
             XposedBridge.hookAllMethods(f9, "H9", new XC_MethodHook() {
@@ -302,24 +302,21 @@ public class ScheduleBroadcast {
                 protected void beforeHookedMethod(MethodHookParam param) {
                     Object e9 = param.args.length > 0 ? param.args[0] : null;
                     if (e9 == null) return;
-                    int type = -1;
-                    try { type = (Integer) XposedHelpers.callMethod(e9, "A1"); } catch (Throwable ignored) {}
-                    String content = "";
-                    try { content = (String) XposedHelpers.callMethod(e9, "X0"); } catch (Throwable ignored) {}
-                    if (content == null) content = "";
-                    log("DIAG: f9.H9() type=" + type + " talker="
-                        + safeStr(e9, "Y0") + " content="
-                        + content.substring(0, Math.min(content.length(), 40)));
+                    // 尝试多种方法名获取字段
+                    int type = safeInt(e9, new String[]{"A1", "a1", "getType", "B0"});
+                    String talker = safeStr(e9, new String[]{"Y0", "y0", "getTalker", "x0", "X0"});
+                    String content = safeStr(e9, new String[]{"X0", "x0", "getContent", "d1", "D1", "I0"});
+                    long msgId = safeLong(e9, new String[]{"G0", "g0", "getMsgId", "I0"});
+                    log("DIAG: H9 type=" + type + " talker=" + talker + " content="
+                        + (content != null ? content.substring(0, Math.min(content.length(), 50)) : "null")
+                        + " msgId=" + msgId);
                 }
             });
             log("DIAG: f9.H9 hook OK");
         } catch (Throwable t) { log("DIAG: f9.H9 fail: " + t.getMessage()); }
 
-        // Hook a2 (MessageSyncExtension) 抓发送调用
-        String[] a2Paths = {
-            "com.tencent.mm.plugin.messenger.foundation.a2",
-            "a2", // 可能是短名(混稀/deobfuscated)
-        };
+        // Hook a2.c/b 打印全路径类名 + 调用栈
+        String[] a2Paths = {"com.tencent.mm.plugin.messenger.foundation.a2"};
         for (String path : a2Paths) {
             try {
                 Class<?> a2 = XposedHelpers.findClass(path, sClassLoader);
@@ -332,10 +329,14 @@ public class ScheduleBroadcast {
                         for (int i = 0; i < args.length; i++) {
                             Object a = args[i];
                             sb.append("a").append(i).append("=");
-                            sb.append(a == null ? "null" : a.getClass().getSimpleName() + "@" + System.identityHashCode(a));
+                            sb.append(a == null ? "null" : a.getClass().getName() + "@" + Integer.toHexString(System.identityHashCode(a)));
                             sb.append("; ");
                         }
                         log(sb.toString());
+                        // 打印 a2 实例来源
+                        try {
+                            log("  a2.this=" + param.thisObject.getClass().getName());
+                        } catch (Throwable ignored) {}
                     }
                 });
                 XposedBridge.hookAllMethods(a2, "b", new XC_MethodHook() {
@@ -347,7 +348,7 @@ public class ScheduleBroadcast {
                         for (int i = 0; i < args.length; i++) {
                             Object a = args[i];
                             sb.append("a").append(i).append("=");
-                            sb.append(a == null ? "null" : a.getClass().getSimpleName() + "@" + System.identityHashCode(a));
+                            sb.append(a == null ? "null" : a.getClass().getName() + "@" + Integer.toHexString(System.identityHashCode(a)));
                             sb.append("; ");
                         }
                         log(sb.toString());
@@ -358,28 +359,84 @@ public class ScheduleBroadcast {
             } catch (Throwable t) { log("DIAG: a2 fail " + path + ": " + t.getMessage()); }
         }
 
-        // fallback: hook j4 看看什么时候被构造
+        // Hook j4 所有构造器 (多路径尝试)
+        String[] j4Paths = {"j4", "com.tencent.mm.model.j4", "com.tencent.mm.autogen.mmdata.rpc.j4"};
+        for (String p : j4Paths) {
+            try {
+                Class<?> j4 = XposedHelpers.findClass(p, sClassLoader);
+                XposedBridge.hookAllConstructors(j4, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        Object[] args = param.args;
+                        StringBuilder sb = new StringBuilder("DIAG: new j4(").append(args.length).append("):");
+                        for (int i = 0; i < args.length; i++) {
+                            sb.append(" p").append(i).append("=");
+                            sb.append(args[i] == null ? "null" : args[i].getClass().getName());
+                        }
+                        log(sb.toString());
+                    }
+                });
+                log("DIAG: j4 constructor hook OK path=" + p);
+                break;
+            } catch (Throwable t) { log("DIAG: j4 fail " + p + ": " + t.getMessage()); }
+        }
+
+        // Hook a2 的所有其他方法 (发现其他发送入口)
         try {
-            Class<?> j4 = XposedHelpers.findClass("j4", sClassLoader);
-            XposedBridge.hookAllConstructors(j4, new XC_MethodHook() {
+            Class<?> a2 = XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.a2", sClassLoader);
+            java.lang.reflect.Method[] allMethods = a2.getDeclaredMethods();
+            for (java.lang.reflect.Method m : allMethods) {
+                if (m.getName().equals("c") || m.getName().equals("b")) continue;
+                try {
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            log("DIAG: a2." + m.getName() + "() 被调用 args=" + param.args.length);
+                        }
+                    });
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {}
+
+        // ★ 关键: hook b5 (消息同步扩展接口) 看有哪些实现类在使用
+        try {
+            Class<?> b5 = XposedHelpers.findClass("sh3.b5", sClassLoader);
+            XposedBridge.hookAllMethods(b5, "c", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     Object[] args = param.args;
-                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
-                    StringBuilder sb = new StringBuilder("DIAG: new j4(");
-                    sb.append(args.length).append(") from ");
-                    for (int i = 2; i < Math.min(st.length, 4); i++) {
-                        sb.append(st[i].getClassName()).append(".").append(st[i].getMethodName()).append("; ");
+                    StringBuilder sb = new StringBuilder("DIAG: b5.c()[");
+                    sb.append(args.length).append("] from=");
+                    sb.append(param.thisObject.getClass().getName()).append(" ");
+                    for (int i = 0; i < args.length; i++) {
+                        sb.append("p").append(i).append("=");
+                        sb.append(args[i] == null ? "null" : args[i].getClass().getSimpleName());
+                        sb.append("; ");
                     }
                     log(sb.toString());
                 }
             });
-            log("DIAG: j4 constructor hook OK");
-        } catch (Throwable t) { log("DIAG: j4 fail: " + t.getMessage()); }
+            log("DIAG: b5.c hook OK");
+        } catch (Throwable t) { log("DIAG: b5 fail: " + t.getMessage()); }
     }
 
-    private static String safeStr(Object obj, String method) {
-        try { Object v = XposedHelpers.callMethod(obj, method); return v == null ? "null" : v.toString(); } catch (Throwable t) { return "err:" + t.getMessage(); }
+    private static int safeInt(Object obj, String[] methods) {
+        for (String m : methods) {
+            try { Object v = XposedHelpers.callMethod(obj, m); return v instanceof Integer ? (Integer) v : -1; } catch (Throwable ignored) {}
+        }
+        return -1;
+    }
+    private static String safeStr(Object obj, String[] methods) {
+        for (String m : methods) {
+            try { Object v = XposedHelpers.callMethod(obj, m); return v == null ? "null" : v.toString(); } catch (Throwable ignored) {}
+        }
+        return "err";
+    }
+    private static long safeLong(Object obj, String[] methods) {
+        for (String m : methods) {
+            try { Object v = XposedHelpers.callMethod(obj, m); return v instanceof Long ? (Long) v : -1; } catch (Throwable ignored) {}
+        }
+        return -1;
     }
 
     private static void loadConfig() {
