@@ -369,6 +369,42 @@ public class ScheduleBroadcast {
             });
             log("DIAG: ChatFooter.F hook OK");
         } catch (Throwable t) { log("DIAG: ChatFooter.F fail: " + t.getMessage()); }
+
+        // Hook a21.q.i: 用户手动发消息的真正入口（协程回调）
+        try {
+            Class<?> a21q = XposedHelpers.findClass("a21.q", sClassLoader);
+            XposedBridge.hookAllMethods(a21q, "i", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Object[] args = param.args;
+                    StringBuilder sb = new StringBuilder("DIAG: a21.q.i(").append(args.length).append(")");
+                    for (int i = 0; i < args.length; i++) {
+                        sb.append(" p").append(i).append("=");
+                        sb.append(args[i] == null ? "null" : args[i].getClass().getSimpleName());
+                    }
+                    log(sb.toString());
+                }
+            });
+            log("DIAG: a21.q.i hook OK");
+        } catch (Throwable t) { log("DIAG: a21.q.i fail: " + t.getMessage()); }
+
+        // 尝试包前缀搜索 a21.q
+        try {
+            Class<?> a21q2 = XposedHelpers.findClass("com.tencent.mm.plugin.chatting.a21.q", sClassLoader);
+            XposedBridge.hookAllMethods(a21q2, "i", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Object[] args = param.args;
+                    StringBuilder sb = new StringBuilder("DIAG: chatting.a21.q.i(").append(args.length).append(")");
+                    for (int i = 0; i < args.length; i++) {
+                        sb.append(" p").append(i).append("=");
+                        sb.append(args[i] == null ? "null" : args[i].getClass().getSimpleName());
+                    }
+                    log(sb.toString());
+                }
+            });
+            log("DIAG: chatting.a21.q.i hook OK");
+        } catch (Throwable t) { log("DIAG: chatting.a21.q.i fail: " + t.getMessage()); }
     }
 
     private static int safeInt(Object obj, String[] methods) {
@@ -966,6 +1002,8 @@ public class ScheduleBroadcast {
 
             long msgId = (Long) XposedHelpers.callMethod(ms, "H9", msg);
             if (msgId > 0) {
+                // 尝试 I9(e9, true): 第二个Boolean=true表示写入后直接触发联网发送
+                try { XposedHelpers.callMethod(ms, "I9", msg, Boolean.TRUE); } catch (Throwable ignored) {}
                 triggerSend(msgId, msg, talker);
                 return true;
             }
