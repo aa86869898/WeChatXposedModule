@@ -93,10 +93,26 @@ public class ScheduleMsgPageView {
     // ===== 进度状态栏 =====
 
     private static View buildProgressBar(Context ctx, float d) {
-        // 极简占位
-        View bar = new View(ctx);
-        bar.setBackgroundColor(CLR_NEON);
-        bar.setLayoutParams(new LinearLayout.LayoutParams(-1, PX(d, 36)));
+        // Step 1: 只加 bar 结构 + 自定义 Canvas 绘制，排除 overlay 和 post
+        LinearLayout bar = new LinearLayout(ctx);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(PX(d, 6), PX(d, 8), PX(d, 6), PX(d, 8));
+
+        int barW = ctx.getResources().getDisplayMetrics().widthPixels - PX(d, 20);
+        int barH = PX(d, 36);
+
+        sProgressBar = new View(ctx) {
+            @Override
+            protected void onDraw(Canvas canvas) {
+                Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+                p.setColor(CLR_DARK);
+                Path path = buildChamferPath(new RectF(0, 0, getWidth(), getHeight()), PX(d, 8));
+                canvas.drawPath(path, p);
+            }
+        };
+        sProgressBar.setLayoutParams(new LinearLayout.LayoutParams(barW, barH));
+        bar.addView(sProgressBar);
         return bar;
     }
 
