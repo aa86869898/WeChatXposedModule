@@ -294,70 +294,64 @@ public class ScheduleBroadcast {
     }
 
     private static void installDiagHooks() {
-        // Hook f9.H9: 不过滤调用栈
+        // Hook f9 全部方法: 看用户发文本时到底哪个方法写了DB
         try {
             Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", sClassLoader);
-            XposedBridge.hookAllMethods(f9, "H9", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    Object e9 = param.args.length > 0 ? param.args[0] : null;
-                    if (e9 == null) return;
-                    int type = safeInt(e9, new String[]{"A1", "a1", "getType", "B0"});
-                    String talker = safeStr(e9, new String[]{"Y0", "y0", "getTalker", "x0"});
-                    String content = safeStr(e9, new String[]{"X0", "x0", "getContent", "d1", "D1", "I0"});
-                    log("DIAG: H9 type=" + type + " talker=" + talker + " content="
-                        + (content != null ? content.substring(0, Math.min(content.length(), 50)) : "null"));
-                    // 不过滤，全打（排除系统类）
-                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
-                    for (int i = 3; i < Math.min(st.length, 12); i++) {
-                        String cls = st[i].getClassName();
-                        if (!cls.startsWith("java.") && !cls.startsWith("android.") && !cls.startsWith("dalvik.")) {
-                            log("  H9栈: " + cls + "." + st[i].getMethodName() + ":" + st[i].getLineNumber());
+            for (java.lang.reflect.Method m : f9.getDeclaredMethods()) {
+                String name = m.getName();
+                // 跳过仅1字符的方法 (大概率是 getter/setter field)
+                if (name.length() <= 1) continue;
+                try {
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            int ac = param.args.length;
+                            if (ac == 0) return;
+                            String a0type = param.args[0] != null ? param.args[0].getClass().getSimpleName() : "null";
+                            log("DIAG: f9." + name + "(" + ac + ") a0=" + a0type);
                         }
-                    }
-                }
-            });
-            log("DIAG: f9.H9 hook OK");
-        } catch (Throwable t) { log("DIAG: f9.H9 fail: " + t.getMessage()); }
+                    });
+                } catch (Throwable ignored) {}
+            }
+            log("DIAG: f9 all hooks OK");
+        } catch (Throwable t) { log("DIAG: f9 hooks fail: " + t.getMessage()); }
 
-        // Hook a2.a (a2.c 的调用者) + z2.a
+        // Hook m50 构造 (z2.a的参数)
         try {
-            Class<?> a2 = XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.a2", sClassLoader);
-            XposedBridge.hookAllMethods(a2, "a", new XC_MethodHook() {
+            Class<?> m50 = XposedHelpers.findClass("m50", sClassLoader);
+            XposedBridge.hookAllConstructors(m50, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    Object[] args = param.args;
-                    StringBuilder sb = new StringBuilder("DIAG: a2.a()[");
-                    sb.append(args.length).append("] ");
-                    for (int i = 0; i < args.length; i++) {
-                        sb.append("p").append(i).append("=");
-                        sb.append(args[i] == null ? "null" : args[i].getClass().getSimpleName());
-                        sb.append("; ");
+                    StringBuilder sb = new StringBuilder("DIAG: new m50(").append(param.args.length).append(")");
+                    for (int i = 0; i < param.args.length; i++) {
+                        sb.append(" p").append(i).append("=");
+                        sb.append(param.args[i] == null ? "null" : param.args[i].getClass().getSimpleName());
                     }
                     log(sb.toString());
                 }
             });
-            log("DIAG: a2.a hook OK");
-        } catch (Throwable t) { log("DIAG: a2.a fail: " + t.getMessage()); }
+            log("DIAG: m50 hook OK");
+        } catch (Throwable t) { log("DIAG: m50 fail: " + t.getMessage()); }
 
+        // Hook ChatFooter 消息发送方法 (用户手动发消息的入口)
         try {
-            Class<?> z2 = XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.z2", sClassLoader);
-            XposedBridge.hookAllMethods(z2, "a", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    Object[] args = param.args;
-                    StringBuilder sb = new StringBuilder("DIAG: z2.a()[");
-                    sb.append(args.length).append("] ");
-                    for (int i = 0; i < args.length; i++) {
-                        sb.append("p").append(i).append("=");
-                        sb.append(args[i] == null ? "null" : args[i].getClass().getSimpleName());
-                        sb.append("; ");
-                    }
-                    log(sb.toString());
-                }
-            });
-            log("DIAG: z2.a hook OK");
-        } catch (Throwable t) { log("DIAG: z2.a fail: " + t.getMessage()); }
+            Class<?> cf = XposedHelpers.findClass("com.tencent.mm.pluginsdk.ui.chat.ChatFooter", sClassLoader);
+            for (java.lang.reflect.Method m : cf.getDeclaredMethods()) {
+                String name = m.getName();
+                if (name.length() <= 1) continue;
+                try {
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            int ac = param.args.length;
+                            if (ac == 0) return;
+                            log("DIAG: ChatFooter." + name + "(" + ac + ")");
+                        }
+                    });
+                } catch (Throwable ignored) {}
+            }
+            log("DIAG: ChatFooter hooks OK");
+        } catch (Throwable t) { log("DIAG: ChatFooter fail: " + t.getMessage()); }
     }
 
     private static int safeInt(Object obj, String[] methods) {
