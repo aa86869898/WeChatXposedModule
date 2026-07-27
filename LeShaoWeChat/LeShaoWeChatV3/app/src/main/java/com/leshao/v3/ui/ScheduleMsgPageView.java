@@ -57,6 +57,7 @@ public class ScheduleMsgPageView {
     private static TextView sProgressText;
     private static TextView sProgressCount;
     private static TextView sEmergencyBtn;
+    private static FrameLayout sProgressRoot;
 
     private static ContactPickerDialog.OnContactsSelected sLastContactsCallback;
     private static Activity sParentActivity;
@@ -120,6 +121,8 @@ public class ScheduleMsgPageView {
         FrameLayout root = new FrameLayout(ctx);
         root.setLayoutParams(new LinearLayout.LayoutParams(barW, barH));
         root.setClipToOutline(true);
+        root.setVisibility(View.GONE);
+        sProgressRoot = root;
 
         sProgressBar = new View(ctx) {
             @Override
@@ -272,6 +275,7 @@ public class ScheduleMsgPageView {
 
     private static void updateProgressState(int current, int total, boolean running) {
         if (sProgressBar == null || sProgressFill == null || sProgressText == null || sProgressCount == null) return;
+        if (sProgressRoot != null) sProgressRoot.setVisibility(running ? View.VISIBLE : View.GONE);
         sProgressBar.post(() -> {
             float ratio = total > 0 ? (float)current / total : 0f;
             LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) sProgressFill.getLayoutParams();
