@@ -277,6 +277,34 @@ public class ScheduleBroadcast {
         loadTemplates();
         loadLogs();
         resetCounters();
+        // ★ DIAGNOSTIC: hook a2 全部方法抓真实调用参数
+        try {
+            Class<?> a2Cls = XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.a2", sClassLoader);
+            XposedBridge.hookAllMethods(a2Cls, "c", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Object[] args = param.args;
+                    StringBuilder sb = new StringBuilder(">>>>>> a2.c() 被调用, 参数类型: ");
+                    sb.append("[").append(args.length).append("] ");
+                    for (int i = 0; i < args.length; i++) {
+                        Object a = args[i];
+                        sb.append("arg").append(i).append("=");
+                        sb.append(a == null ? "null" : a.getClass().getName() + ":" + a);
+                        sb.append("; ");
+                    }
+                    log(sb.toString());
+                    // 打印调用栈
+                    StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+                    for (int i = 2; i < Math.min(stack.length, 8); i++) {
+                        log("  ↳ " + stack[i]);
+                    }
+                }
+            });
+            log("DIAG: a2.c() hook installed OK");
+        } catch (Throwable t) {
+            log("DIAG: a2 hook失败: " + t.getMessage());
+        }
+
         String permInfo = "";
         if (Build.VERSION.SDK_INT >= 31) {
             AlarmManager am = (AlarmManager) sAppContext.getSystemService(Context.ALARM_SERVICE);
