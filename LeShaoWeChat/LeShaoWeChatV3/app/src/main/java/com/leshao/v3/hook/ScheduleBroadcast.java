@@ -82,7 +82,7 @@ public class ScheduleBroadcast {
     private static boolean sChargingOnly = false;
     private static boolean sNightSilent = true;
     private static boolean sLockScreenPause = true;
-    private static String sTimeWindow = "06:00-23:59";
+    private static String sTimeWindow = "";
     private static String sNightSlowWindow = "22:00-06:00";
     private static int sNightSlowIntervalSec = 300;
 
@@ -523,7 +523,7 @@ public class ScheduleBroadcast {
         sChargingOnly = sp.getBoolean("charging_only", false);
         sNightSilent = sp.getBoolean("night_silent", true);
         sLockScreenPause = sp.getBoolean("lock_screen_pause", true);
-        sTimeWindow = sp.getString("time_window", "06:00-23:59");
+        sTimeWindow = sp.getString("time_window", "");
         sNightSlowWindow = sp.getString("night_slow_window", "22:00-06:00");
         sNightSlowIntervalSec = sp.getInt("night_slow_interval", 300);
     }
