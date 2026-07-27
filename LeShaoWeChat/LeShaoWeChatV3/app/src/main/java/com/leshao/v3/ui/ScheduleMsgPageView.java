@@ -93,11 +93,12 @@ public class ScheduleMsgPageView {
     // ===== 进度状态栏 =====
 
     private static View buildProgressBar(Context ctx, float d) {
-        // Step 1: 只加 bar 结构 + 自定义 Canvas 绘制，排除 overlay 和 post
+        // Step 2: bar + Canvas + overlay (不加 post FrameLayout 替换)
         LinearLayout bar = new LinearLayout(ctx);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(PX(d, 6), PX(d, 8), PX(d, 6), PX(d, 8));
+        bar.setClipToOutline(true);
 
         int barW = ctx.getResources().getDisplayMetrics().widthPixels - PX(d, 20);
         int barH = PX(d, 36);
@@ -113,6 +114,58 @@ public class ScheduleMsgPageView {
         };
         sProgressBar.setLayoutParams(new LinearLayout.LayoutParams(barW, barH));
         bar.addView(sProgressBar);
+
+        LinearLayout overlay = new LinearLayout(ctx);
+        overlay.setOrientation(LinearLayout.HORIZONTAL);
+        overlay.setGravity(Gravity.CENTER_VERTICAL);
+        overlay.setPadding(PX(d, 14), 0, PX(d, 10), 0);
+        overlay.setLayoutParams(new LinearLayout.LayoutParams(barW, barH));
+
+        sProgressFill = new View(ctx);
+        sProgressFill.setBackgroundColor(CLR_NEON);
+        sProgressFill.setLayoutParams(new LinearLayout.LayoutParams(0, PX(d, 6), 0.0f));
+        overlay.addView(sProgressFill);
+
+        View sp1 = new View(ctx); sp1.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 8), 0)); overlay.addView(sp1);
+
+        sProgressText = new TextView(ctx);
+        sProgressText.setText("空闲");
+        sProgressText.setTextSize(10);
+        sProgressText.setTextColor(CLR_GRAY);
+        sProgressText.setTypeface(null, Typeface.BOLD);
+        overlay.addView(sProgressText);
+
+        View sp2 = new View(ctx); sp2.setLayoutParams(new LinearLayout.LayoutParams(0, 0, 1.0f)); overlay.addView(sp2);
+
+        sProgressCount = new TextView(ctx);
+        sProgressCount.setText("第0/0");
+        sProgressCount.setTextSize(10);
+        sProgressCount.setTextColor(CLR_GRAY);
+        sProgressCount.setPadding(0, 0, PX(d, 8), 0);
+        overlay.addView(sProgressCount);
+
+        sEmergencyBtn = new TextView(ctx);
+        sEmergencyBtn.setText("停止");
+        sEmergencyBtn.setTextSize(9);
+        sEmergencyBtn.setTextColor(CLR_WHITE);
+        sEmergencyBtn.setTypeface(null, Typeface.BOLD);
+        sEmergencyBtn.setPadding(PX(d, 10), PX(d, 4), PX(d, 10), PX(d, 4));
+        GradientDrawable stopBg = new GradientDrawable();
+        stopBg.setCornerRadius(PX(d, 4));
+        stopBg.setColor(CLR_RED);
+        sEmergencyBtn.setBackground(stopBg);
+        sEmergencyBtn.setVisibility(View.GONE);
+        sEmergencyBtn.setOnClickListener(v -> {
+            for (ScheduleBroadcast.Task t : ScheduleBroadcast.getAllTasks()) {
+                ScheduleBroadcast.cancelSchedule(t);
+            }
+            sEmergencyBtn.setVisibility(View.GONE);
+            updateProgressState(0, 0, false);
+        });
+        overlay.addView(sEmergencyBtn);
+
+        sProgressBar.setVisibility(View.GONE);
+        bar.addView(overlay);
         return bar;
     }
 
