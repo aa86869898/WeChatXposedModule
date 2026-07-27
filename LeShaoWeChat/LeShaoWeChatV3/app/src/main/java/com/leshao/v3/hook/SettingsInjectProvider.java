@@ -83,9 +83,9 @@ public class SettingsInjectProvider extends ContentProvider {
             View decor = activity.getWindow().getDecorView();
             if (!(decor instanceof ViewGroup)) return;
 
-            View target = findTextView((ViewGroup) decor, "账号");
-            if (target == null) target = findTextView((ViewGroup) decor, "个人资料");
-            if (target == null) target = findTextView((ViewGroup) decor, "通用");
+            View target = findTextView((ViewGroup) decor, "账号", "Accounts", "Account");
+            if (target == null) target = findTextView((ViewGroup) decor, "个人资料", "Profile", "Personal Info");
+            if (target == null) target = findTextView((ViewGroup) decor, "通用", "General", "Common");
             if (target == null) return;
 
             ViewGroup listParent = walkUpToLinearLayout(target);
@@ -132,15 +132,17 @@ public class SettingsInjectProvider extends ContentProvider {
         return 0;
     }
 
-    private static View findTextView(ViewGroup vg, String search) {
+    private static View findTextView(ViewGroup vg, String... searches) {
         for (int i = 0; i < vg.getChildCount(); i++) {
             View child = vg.getChildAt(i);
             if (child instanceof TextView) {
                 String text = ((TextView) child).getText().toString();
-                if (text != null && text.equals(search)) return child;
+                for (String s : searches) {
+                    if (text != null && text.contains(s)) return child;
+                }
             }
             if (child instanceof ViewGroup) {
-                View found = findTextView((ViewGroup) child, search);
+                View found = findTextView((ViewGroup) child, searches);
                 if (found != null) return found;
             }
         }
@@ -157,7 +159,7 @@ public class SettingsInjectProvider extends ContentProvider {
         container.setPadding((int)(16 * d), (int)(10 * d), (int)(16 * d), (int)(10 * d));
         container.setClickable(true);
         container.setFocusable(true);
-        container.setBackgroundColor(0xFFFFFFFF);
+        container.setBackgroundColor(AppColors.card());
         container.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
 
         // 七彩霓虹粗体 "乐少助手"

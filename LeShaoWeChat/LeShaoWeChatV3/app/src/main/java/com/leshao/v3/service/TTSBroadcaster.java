@@ -36,7 +36,10 @@ public class TTSBroadcaster {
     }
 
     public static void handleMessageRaw(int msgType, String talker, String content) {
-        if (sHandler == null) return;
+        if (sHandler == null) {
+            LogWriter.log(TAG, "handleMessageRaw: sHandler==null, dropping msg type=" + msgType + " from=" + talker);
+            return;
+        }
         try {
             ModuleConfig cfg = ModuleConfig.load(ContextManager.getPrefs());
             sHandler.handle(null, msgType, talker, content, cfg);

@@ -10,10 +10,10 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public class ContextManager {
 
     private static final String TAG = "ContextManager";
-    private static ClassLoader sClassLoader;
-    private static String sApkPath;
-    private static boolean sReady = false;
-    private static Context sAppContext;
+    private static volatile ClassLoader sClassLoader;
+    private static volatile String sApkPath;
+    private static volatile boolean sReady = false;
+    private static volatile Context sAppContext;
     private static Runnable sOnReadyCallback;
     private static volatile boolean sCallbackFired = false;
 

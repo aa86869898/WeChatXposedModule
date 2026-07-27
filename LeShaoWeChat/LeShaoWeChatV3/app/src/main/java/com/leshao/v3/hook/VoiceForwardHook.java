@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.service.ActivationManager;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -50,8 +51,12 @@ public class VoiceForwardHook {
     private static final int MAX_LOG = 30;
 
     public static void setEnabled(boolean v) {
-        sEnabled = v;
-        LogWriter.log(TAG, "setEnabled=" + v);
+        sEnabled = v && ActivationManager.isFeatureEnabled(ActivationManager.F_VOICE_FORWARD);
+        LogWriter.log(TAG, "setEnabled=" + v + " actual=" + sEnabled + " permitted=" + ActivationManager.isFeatureEnabled(ActivationManager.F_VOICE_FORWARD));
+    }
+
+    public static boolean isFeaturePermitted() {
+        return ActivationManager.isFeatureEnabled(ActivationManager.F_VOICE_FORWARD);
     }
 
     private static volatile boolean sForwarding = false;
@@ -398,6 +403,7 @@ public class VoiceForwardHook {
     }
 
     private static void injectForwardMenuItem(Object menuObj, View itemView) {
+        if (!ActivationManager.isFeatureEnabled(ActivationManager.F_VOICE_FORWARD)) return;
         try {
             // WeKit 文档: addMenuItem(int, CharSequence, Drawable)
             Object tag = itemView.getTag();
@@ -473,7 +479,7 @@ public class VoiceForwardHook {
 
     // ===== 转发执行 — 使用自己的联系人选择器 ====
     private static void executeForward() {
-        if (!sEnabled || sForwarding) return;
+        if (!sEnabled || sForwarding || !ActivationManager.isFeatureEnabled(ActivationManager.F_VOICE_FORWARD)) return;
         sForwarding = true;
         try {
             final Object msg = sPendingMsg;

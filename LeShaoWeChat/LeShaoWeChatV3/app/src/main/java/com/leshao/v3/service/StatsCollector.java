@@ -4,6 +4,7 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.model.WeChatMessage;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,7 +13,7 @@ public class StatsCollector {
 
     private static final String TAG = "StatsCollector";
     private static final Map<String, GroupStats> sGroupStats = new ConcurrentHashMap<>();
-    private static final List<String> sRecallRecords = new ArrayList<>();
+    private static final List<String> sRecallRecords = Collections.synchronizedList(new ArrayList<>());
 
     public static void record(WeChatMessage msg) {
         if (msg == null) return;

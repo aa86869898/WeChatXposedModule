@@ -33,6 +33,7 @@ public class FilterManager {
             case com.leshao.v3.model.WeChatMessage.TYPE_APPMSG:
                 if (content == null) return true;
                 if (content.contains("<location")) return cfg.announceLocation;
+                if (content.contains("<type>57</type>")) return cfg.announceQuote;
                 return true;
             case com.leshao.v3.model.WeChatMessage.TYPE_STICKER:
                 return cfg.announceSticker;

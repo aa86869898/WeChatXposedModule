@@ -22,7 +22,10 @@ public class MessageHandler {
     }
 
     public void handle(Object msgInfo, int msgType, String talker, String content, ModuleConfig cfg) {
-        if (!mFilter.shouldProcess(talker, msgType, content, cfg)) return;
+        if (!mFilter.shouldProcess(talker, msgType, content, cfg)) {
+            LogWriter.log("MessageHandler", "DROPPED by filter: type=" + msgType + " from=" + talker + " masterSwitch=" + cfg.masterSwitch + " announceText=" + cfg.announceText);
+            return;
+        }
 
         boolean isGroup = talker != null && talker.endsWith("@chatroom");
         String displayName;
@@ -50,8 +53,10 @@ public class MessageHandler {
             case 34: handleVoice(displayName); VoiceRelay.process(talker, msgType); break;
             case 42: handleCard(displayName); break;
             case 43: handleVideo(displayName); break;
+            case 47: handleSticker(displayName); break;
             case 48: handleLocation(displayName, effectiveContent); break;
-            case 49: handleAppMsg(displayName, effectiveContent); break;
+            case 49: handleAppMsg(displayName, effectiveContent, isGroup); break;
+            case 50: handleVoip(displayName); break;
         }
     }
 
@@ -87,7 +92,15 @@ public class MessageHandler {
         mTts.speak(name + "发来定位在：" + loc);
     }
 
-    private void handleAppMsg(String name, String content) {
+    private void handleSticker(String name) {
+        mTts.speak(name + "发来一个表情");
+    }
+
+    private void handleVoip(String name) {
+        mTts.speak(name + "发起语音/视频通话");
+    }
+
+    private void handleAppMsg(String name, String content, boolean isGroup) {
         if (content == null) return;
         if (content.contains("<location")) {
             handleLocation(name, content);
@@ -97,7 +110,121 @@ public class MessageHandler {
             mTts.speak(name + "发来一个红包");
             return;
         }
+        if (content.contains("<type>57</type>")) {
+            handleQuote(name, content, isGroup);
+            return;
+        }
         LogWriter.log("MessageHandler", "handleAppMsg unknown: " + (content.length() > 200 ? content.substring(0, 200) + "..." : content));
+    }
+
+    private void handleQuote(String name, String content, boolean isGroup) {
+        String myWxid = ModuleConfig.getCurrentWxid();
+        if (myWxid == null || myWxid.isEmpty()) return;
+
+        String referBlock = extractXmlBlock(content, "refermsg");
+        if (referBlock.isEmpty()) {
+            LogWriter.log("MessageHandler", "handleQuote: referBlock empty, fallback speech");
+            mTts.speak(name + "发来一条引用消息");
+            return;
+        }
+
+        String fromUsr = extractXmlTag(referBlock, "fromusr");
+        if (fromUsr.isEmpty()) {
+            LogWriter.log("MessageHandler", "handleQuote: fromUsr empty, skip");
+            return;
+        }
+
+        boolean isSelfQuote = myWxid.equals(fromUsr);
+        if (!isSelfQuote && !isGroup) {
+            LogWriter.log("MessageHandler", "handleQuote: not self-quote and not group, skip. from=" + fromUsr + " my=" + myWxid);
+            return;
+        }
+
+        String quotedName = extractXmlTag(referBlock, "displayname");
+        String quoteContent = extractXmlTag(referBlock, "content");
+        String refType = extractXmlTag(referBlock, "type");
+        String title = extractXmlTag(content, "title");
+
+        LogWriter.log("MessageHandler", "handleQuote: self=" + isSelfQuote + " refType=[" + refType + "] quoteContent=[" + trunc(quoteContent) + "] title=[" + trunc(title) + "]");
+
+        String mediaDesc = resolveMediaDesc(refType, quoteContent);
+        String replyText = cleanText(title);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(name);
+        if (isSelfQuote) {
+            sb.append("引用你");
+        } else {
+            sb.append("在群引用");
+            if (!quotedName.isEmpty()) {
+                sb.append(quotedName);
+            }
+        }
+        if (!mediaDesc.isEmpty()) {
+            sb.append("发的").append(mediaDesc);
+        }
+        if (!replyText.isEmpty()) {
+            sb.append(" 说：").append(replyText);
+        }
+
+        LogWriter.log("MessageHandler", "handleQuote: speech=[" + sb.toString() + "]");
+        mTts.speak(sb.toString());
+    }
+
+    private String resolveMediaDesc(String refType, String quoteContent) {
+        if (refType.equals("1")) {
+            String cleaned = cleanText(quoteContent);
+            if (cleaned.length() > 50) {
+                cleaned = cleaned.substring(0, 50) + "等";
+            }
+            return cleaned;
+        }
+        switch (refType) {
+            case "3":  return "照片";
+            case "34": return "语音";
+            case "43": return "视频";
+            case "47": return "表情";
+            case "49": return "链接";
+            default:   return "消息";
+        }
+    }
+
+    private static String trunc(String s) {
+        if (s == null) return "null";
+        return s.length() > 100 ? s.substring(0, 100) + "..." : s;
+    }
+
+    private static String extractXmlBlock(String xml, String tagName) {
+        if (xml == null || tagName == null) return "";
+        int start = xml.indexOf("<" + tagName + ">");
+        if (start < 0) {
+            start = xml.indexOf("<" + tagName + " ");
+            if (start < 0) return "";
+        }
+        start = xml.indexOf(">", start);
+        if (start < 0) return "";
+        start++;
+        int end = xml.indexOf("</" + tagName + ">", start);
+        if (end < 0) return "";
+        return xml.substring(start, end);
+    }
+
+    private static String extractXmlTag(String xml, String tagName) {
+        if (xml == null || tagName == null) return "";
+        int startIdx = xml.indexOf("<" + tagName + ">");
+        if (startIdx < 0) {
+            // 尝试自闭合标签格式
+            startIdx = xml.indexOf("<" + tagName + " ");
+            if (startIdx < 0) return "";
+            int valStart = xml.indexOf(">", startIdx) + 1;
+            int valEnd = xml.indexOf("</" + tagName + ">", valStart);
+            if (valEnd < 0) return "";
+            return xml.substring(valStart, valEnd);
+        }
+        startIdx += tagName.length() + 2;
+        int endIdx = xml.indexOf("</" + tagName + ">", startIdx);
+        if (endIdx < 0) return "";
+        return xml.substring(startIdx, endIdx);
     }
 
     public void announceRedPacket(String sender, String chatroom, String wishing, String amount) {

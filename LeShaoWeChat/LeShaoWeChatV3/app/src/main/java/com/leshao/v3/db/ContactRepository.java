@@ -15,9 +15,9 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import dalvik.system.DexFile;
 import de.robv.android.xposed.XposedHelpers;
@@ -25,16 +25,16 @@ import de.robv.android.xposed.XposedHelpers;
 public class ContactRepository {
 
     private static final String TAG = "ContactRepository";
-    private static List<Contact> sAllContacts;
-    private static List<Contact> sFriends;
-    private static List<Contact> sGroups;
+    private static volatile List<Contact> sAllContacts;
+    private static volatile List<Contact> sFriends;
+    private static volatile List<Contact> sGroups;
     private static volatile boolean sLoaded = false;
     private static volatile boolean sLoading = false;
     private static volatile boolean sListenerRegistered = false;
     private static long sCurrentUin = -1;
 
     private static Object sDirDb;
-    private static final Map<String, String> sNickCache = new HashMap<>();
+    private static final Map<String, String> sNickCache = new ConcurrentHashMap<>();
     private static final Object sDirLock = new Object();
 
     public static List<Contact> getAll() { return sAllContacts != null ? sAllContacts : Collections.<Contact>emptyList(); }

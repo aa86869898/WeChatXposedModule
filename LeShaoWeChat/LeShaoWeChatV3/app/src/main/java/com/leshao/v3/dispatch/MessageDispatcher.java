@@ -10,9 +10,17 @@ import com.leshao.v3.service.StatsCollector;
 import com.leshao.v3.service.TTSBroadcaster;
 import com.leshao.v3.service.AIService;
 
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+
 public class MessageDispatcher {
 
     private static final String TAG = "MessageDispatcher";
+    private static final ExecutorService sExecutor = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "leshao-dispatch");
+        t.setDaemon(true);
+        return t;
+    });
 
     public static void dispatch(WeChatMessage msg, ModuleConfig cfg) {
         if (msg == null) return;
@@ -24,14 +32,14 @@ public class MessageDispatcher {
         LogWriter.log(TAG, "dispatch msg type=" + msg.type + " from=" + msg.talker + " text="
             + (msg.content != null ? msg.content.substring(0, Math.min(30, msg.content.length())) : "null"));
 
-        new Thread(() -> {
+        sExecutor.execute(() -> {
             try {
                 Pipeline pipeline = buildPipeline(msg, cfg);
                 pipeline.process(msg, cfg);
             } catch (Throwable t) {
                 LogWriter.log(TAG, "dispatch FAILED: " + t.getMessage());
             }
-        }, "leshao-dispatch").start();
+        });
     }
 
     private static Pipeline buildPipeline(WeChatMessage msg, ModuleConfig cfg) {

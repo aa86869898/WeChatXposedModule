@@ -15,7 +15,8 @@ public class SchedulerService {
 
     private static final String TAG = "SchedulerService";
     private static volatile boolean sRunning = false;
-    private static Thread sThread;
+    private static volatile Thread sThread;
+    private static String sLastExecuted = "";
 
     public static void start(ModuleConfig cfg) {
         if (sRunning) return;
@@ -70,6 +71,10 @@ public class SchedulerService {
             int dow = now.get(Calendar.DAY_OF_WEEK);
             int dayBit = 1 << (dow - 1);
             if (task.repeatDays != 0 && (task.repeatDays & dayBit) == 0) continue;
+
+            String taskKey = task.targetWxid + "|" + task.hour + ":" + task.minute + "|" + task.content;
+            if (taskKey.equals(sLastExecuted)) continue;
+            sLastExecuted = taskKey;
 
             execute(task);
         }

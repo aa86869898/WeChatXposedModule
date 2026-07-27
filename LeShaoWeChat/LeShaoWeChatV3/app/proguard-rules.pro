@@ -5,7 +5,6 @@
 
 # ========== 2. 完整保留模块入口 ==========
 -keep class com.leshao.v3.MainHook { *; }
--keep class com.leshao.v3.LeShaoV3 { *; }
 
 # ========== 3. 保留 hook 包下所有类 + 全部内部类（带$的回调类）==========
 -keep class com.leshao.v3.hook.** { *; }

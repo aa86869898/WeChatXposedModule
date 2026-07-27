@@ -1,6 +1,9 @@
 package com.leshao.v3.model;
 
+import android.content.Context;
 import android.content.SharedPreferences;
+
+import com.leshao.v3.LogWriter;
 import java.util.*;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -19,6 +22,7 @@ public class ModuleConfig {
     public boolean announceRedBag = true, announceTransfer = true, announceCard = true;
     public boolean announceFile = true, announceLocation = true, announceSticker = false;
     public boolean announceCall = true, announceNickname = true, announceGroup = false;
+    public boolean announceQuote = true;
     public boolean autoPlayVoice = true;
 
     public String customAnnounceFormat = "{sender}: {content}";
@@ -132,6 +136,9 @@ public class ModuleConfig {
     // 视频解析
     public boolean videoParseEnabled = true;
 
+    // 语音转发
+    public boolean voiceForwardEnabled = true;
+
     // 群发
     public Set<String> massSendTargetWxids = new HashSet<>();
     public String massSendTextContent = "";
@@ -188,9 +195,53 @@ public class ModuleConfig {
 
     public ModuleConfig() {}
 
+    private static String sCurrentWxid = null;
+
+    public static void initWxid(Context ctx) {
+        sCurrentWxid = null;
+        String[] prefNames = {
+            "system_config_prefs", "com.tencent.mm_preferences",
+            "notify_sync_pref", "auth_info_key_prefs",
+            "app_brand_global_sp", "exdevice_pref",
+        };
+        String[] keyNames = {
+            "login_weixin_username", "login_user_name", "last_login_username",
+            "auth_uin", "username", "uin", "_auth_uin",
+        };
+        for (String pn : prefNames) {
+            try {
+                java.util.Map<String, ?> all = ctx.getSharedPreferences(pn, 0).getAll();
+                for (String key : keyNames) {
+                    Object v = all.get(key);
+                    if (v != null && v.toString().startsWith("wxid_")) {
+                        sCurrentWxid = v.toString();
+                        LogWriter.log("ModuleConfig", "initWxid: " + sCurrentWxid);
+                        return;
+                    }
+                }
+                for (java.util.Map.Entry<String, ?> entry : all.entrySet()) {
+                    Object v = entry.getValue();
+                    if (v != null) {
+                        String val = v.toString();
+                        if (val.startsWith("wxid_") && !val.contains("@")) {
+                            sCurrentWxid = val;
+                            LogWriter.log("ModuleConfig", "initWxid scan: " + sCurrentWxid);
+                            return;
+                        }
+                    }
+                }
+            } catch (Throwable e) {}
+        }
+    }
+
+    public static String getCurrentWxid() { return sCurrentWxid; }
+
     public static ModuleConfig load(SharedPreferences prefs) {
         ModuleConfig cfg = new ModuleConfig();
         if (prefs == null) return cfg;
+
+        // 激活门控: 未激活时所有功能默认关闭
+        boolean activated = isActivatedCheck(prefs);
 
         cfg.masterSwitch = prefs.getBoolean("ls_master_switch", true);
         cfg.ttsEngine = prefs.getString("ls_tts_engine", "system");
@@ -210,6 +261,7 @@ public class ModuleConfig {
         cfg.announceLocation = prefs.getBoolean("ls_announce_location", true);
         cfg.announceSticker = prefs.getBoolean("ls_announce_sticker", false);
         cfg.announceCall = prefs.getBoolean("ls_announce_call", true);
+        cfg.announceQuote = prefs.getBoolean("ls_announce_quote", true);
         cfg.announceNickname = prefs.getBoolean("ls_announce_nickname", true);
         cfg.announceGroup = prefs.getBoolean("ls_announce_group", false);
         cfg.autoPlayVoice = prefs.getBoolean("ls_auto_voice", true);
@@ -375,7 +427,207 @@ public class ModuleConfig {
             }
         }
 
+        if (!activated) {
+            applyActivationGate(cfg);
+        } else {
+            cfg.masterSwitch = true;
+            applyFeatureMask(cfg, prefs);
+        }
+
         return cfg;
+    }
+
+    private static boolean isActivatedCheck(SharedPreferences prefs) {
+        boolean testMode = com.leshao.v3.service.ActivationManager.isTestMode();
+
+        if (!testMode) {
+            Context ctx = com.leshao.v3.ContextManager.getAppContext();
+            if (ctx != null) initWxid(ctx);
+            if (sCurrentWxid != null && com.leshao.v3.service.ActivationManager.isAdmin(sCurrentWxid)) {
+                com.leshao.v3.LogWriter.log("ModuleConfig", "isActivatedCheck: admin exempt, return true");
+                return true;
+            }
+        }
+
+        String code = prefs.getString("ls_act_code", "");
+        String wxid = prefs.getString("ls_act_wxid", "");
+        if (code.isEmpty() || wxid.isEmpty()) {
+            com.leshao.v3.LogWriter.log("ModuleConfig", "isActivatedCheck: no code/wxid, code=[" + code + "] wxid=[" + wxid + "], return false");
+            return false;
+        }
+
+        String crcS = prefs.getString("ls_act_crc", "");
+        if (crcS.isEmpty()) {
+            com.leshao.v3.LogWriter.log("ModuleConfig", "isActivatedCheck: no CRC, return false");
+            return false;
+        }
+        try {
+            String levelS = prefs.getString("ls_act_level", "");
+            String expireS = prefs.getString("ls_act_expire", "");
+            String featS = prefs.getString("ls_act_feature_mask", "");
+            String data = code + "|" + wxid + "|" + levelS + "|" + expireS + "|" + featS;
+            long storedCrc = Long.parseLong(crcS);
+            long computedCrc = crc32Static(data);
+            if (storedCrc != computedCrc) {
+                com.leshao.v3.LogWriter.log("ModuleConfig", "isActivatedCheck: CRC mismatch stored=" + storedCrc + " computed=" + computedCrc + " data=[" + data + "], return false");
+                return false;
+            }
+        } catch (Throwable t) {
+            com.leshao.v3.LogWriter.log("ModuleConfig", "isActivatedCheck: CRC exception " + t.getMessage());
+            return false;
+        }
+
+        try {
+            int expireDays = Integer.parseInt(prefs.getString("ls_act_expire", "0"));
+            if (expireDays > 0) {
+                String actTimeStr = prefs.getString("ls_act_time", "");
+                if (!actTimeStr.isEmpty()) {
+                    long actTime = Long.parseLong(actTimeStr);
+                    if (System.currentTimeMillis() > actTime + expireDays * 86400000L) {
+                        com.leshao.v3.LogWriter.log("ModuleConfig", "isActivatedCheck: expired, return false");
+                        return false;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+
+        com.leshao.v3.LogWriter.log("ModuleConfig", "isActivatedCheck: OK, return true");
+        return true;
+    }
+
+    private static long crc32Static(String data) {
+        java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+        crc.update(data.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return crc.getValue();
+    }
+
+    private static void applyActivationGate(ModuleConfig cfg) {
+        // 未激活: 所有功能关闭
+        cfg.masterSwitch = false;
+        cfg.announceText = false;
+        cfg.announceImage = false;
+        cfg.announceVideo = false;
+        cfg.announceRedBag = false;
+        cfg.announceTransfer = false;
+        cfg.announceCard = false;
+        cfg.announceFile = false;
+        cfg.announceLocation = false;
+        cfg.announceSticker = false;
+        cfg.announceCall = false;
+        cfg.announceQuote = false;
+        cfg.announceNickname = false;
+        cfg.announceGroup = false;
+        cfg.autoPlayVoice = false;
+        cfg.textTruncateEnabled = false;
+        cfg.quietEnabled = false;
+        cfg.dianGeEnabled = false;
+        cfg.ddMusicEnabled = false;
+        cfg.ddVoiceSongEnabled = false;
+        cfg.ddVideoAudioEnabled = false;
+        cfg.ddVideoMsgEnabled = false;
+        cfg.ddLyricsEnabled = false;
+        cfg.ddWeatherEnabled = false;
+        cfg.ddFunEnabled = false;
+        cfg.ddSelfTrigger = false;
+        cfg.autoAcceptFriend = false;
+        cfg.groupInviteEnabled = false;
+        cfg.leftGroupTipEnabled = false;
+        cfg.aiToolboxEnabled = false;
+        cfg.imageGenEnabled = false;
+        cfg.videoGenEnabled = false;
+        cfg.deepseekEnabled = false;
+        cfg.deepseekSmartReply = false;
+        cfg.deepseekTranslate = false;
+        cfg.deepseekSummary = false;
+        cfg.deepseekAtReply = false;
+        cfg.antiRecall = false;
+        cfg.redPacketGrab = false;
+        cfg.redPacketAlertEnabled = false;
+        cfg.typingIndicatorEnabled = false;
+        cfg.chatUICustomEnabled = false;
+        cfg.batchMessageEnabled = false;
+        cfg.scheduledSendEnabled = false;
+        cfg.autoRemarkEnabled = false;
+        cfg.autoReplyEnabled = false;
+        cfg.snsFeaturesEnabled = false;
+        cfg.privacyFeaturesEnabled = false;
+        cfg.deleteDetectEnabled = false;
+        cfg.contactExportEnabled = false;
+        cfg.contactChangeLogEnabled = false;
+        cfg.groupFeaturesEnabled = false;
+        cfg.keywordReplyEnabled = false;
+        cfg.antiAdEnabled = false;
+        cfg.autoKickEnabled = false;
+        cfg.sensitiveFilterEnabled = false;
+        cfg.welcomeEnabled = false;
+        cfg.voiceToTextEnabled = false;
+        cfg.loginMonitorEnabled = false;
+        cfg.hideContactFieldsEnabled = false;
+        cfg.convPrivacyEnabled = false;
+        cfg.stickyEnhanceEnabled = false;
+        cfg.unreadBadgeEnabled = false;
+        cfg.tabCustomEnabled = false;
+        cfg.callFeaturesEnabled = false;
+        cfg.msgExportEnabled = false;
+        cfg.chatBackupEnabled = false;
+        cfg.shakeCustomEnabled = false;
+        cfg.videoParseEnabled = false;
+        cfg.chatFooterEnhanceEnabled = false;
+        cfg.searchEnhanceEnabled = false;
+        cfg.notifyCustomEnabled = false;
+        cfg.activityStatsEnabled = false;
+        cfg.voteEnabled = false;
+        cfg.scheduleEnabled = false;
+        cfg.schedAnnounceEnabled = false;
+    }
+
+    private static void applyFeatureMask(ModuleConfig cfg, SharedPreferences prefs) {
+        int mask = 0;
+        try {
+            mask = Integer.parseInt(prefs.getString("ls_act_feature_mask", "0"));
+        } catch (Throwable ignored) {}
+        if (mask == 0) {
+            applyActivationGate(cfg);
+            return;
+        }
+        // 仅强制关闭未授权的功能；已授权的功能保留用户设定，不强制开启
+        int f = com.leshao.v3.service.ActivationManager.F_MASTER;
+        if (!isBit(mask, f)) cfg.masterSwitch = false;  f++;
+        if (!isBit(mask, f)) cfg.announceQuote = false;  f++;
+        if (!isBit(mask, f)) cfg.announceText = false;  f++;
+        f++; // F_VOICE(3) — voice playback handled by autoPlayVoice
+        if (!isBit(mask, f)) cfg.announceImage = false;  f++;
+        if (!isBit(mask, f)) cfg.announceVideo = false;  f++;
+        if (!isBit(mask, f)) cfg.announceLocation = false;  f++;
+        if (!isBit(mask, f)) cfg.announceRedBag = false;  f++;
+        if (!isBit(mask, f)) cfg.announceTransfer = false;  f++;
+        if (!isBit(mask, f)) cfg.announceCard = false;  f++;
+        if (!isBit(mask, f)) cfg.announceFile = false;  f++;
+        if (!isBit(mask, f)) cfg.announceSticker = false;  f++;
+        if (!isBit(mask, f)) cfg.announceGroup = false;  f++;
+        if (!isBit(mask, f)) cfg.antiRecall = false;  f++;
+        if (!isBit(mask, f)) cfg.redPacketGrab = false;  f++;
+        if (!isBit(mask, f)) cfg.autoReplyEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.keywordReplyEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.voiceForwardEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.typingIndicatorEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.chatFooterEnhanceEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.chatUICustomEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.batchMessageEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.scheduledSendEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.autoRemarkEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.deleteDetectEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.contactExportEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.snsFeaturesEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.privacyFeaturesEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.chatBackupEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.aiToolboxEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.deepseekEnabled = false;  f++;
+        if (!isBit(mask, f)) cfg.dianGeEnabled = false;  f++;
+    }
+
+    private static boolean isBit(int mask, int bit) {
+        return (mask & (1 << bit)) != 0;
     }
 
     public void save(SharedPreferences prefs) {
@@ -398,6 +650,7 @@ public class ModuleConfig {
         e.putBoolean("ls_announce_location", announceLocation);
         e.putBoolean("ls_announce_sticker", announceSticker);
         e.putBoolean("ls_announce_call", announceCall);
+        e.putBoolean("ls_announce_quote", announceQuote);
         e.putBoolean("ls_announce_nickname", announceNickname);
         e.putBoolean("ls_announce_group", announceGroup);
         e.putBoolean("ls_auto_voice", autoPlayVoice);

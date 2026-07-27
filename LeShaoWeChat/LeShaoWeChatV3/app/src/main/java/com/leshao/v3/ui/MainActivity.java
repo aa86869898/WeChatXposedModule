@@ -4,8 +4,6 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -17,15 +15,16 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.EditText;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.model.Contact;
+import com.leshao.v3.service.ActivationManager;
 
 import java.io.File;
 import java.lang.reflect.Method;
@@ -46,6 +45,12 @@ public class MainActivity {
     private static String sUserWxid;
     private static String sAvatarPath;
     private static String sVipLevel = "王者VIP";
+
+    public static String getUserNickname() { return sUserNickname; }
+    public static String getUserAlias() { return sUserAlias; }
+    public static String getUserWxid() { return sUserWxid; }
+    public static String getAvatarPath() { return sAvatarPath; }
+    public static String getVipLevel() { return sVipLevel; }
 
     public static void open(Activity act) {
         long now = System.currentTimeMillis();
@@ -333,7 +338,26 @@ public class MainActivity {
         root.setBackgroundColor(AppColors.bg());
 
         // 标题栏
-        root.addView(makeTitleBar(ctx, "乐少多功能助手", false, null));
+        View titleBar = makeTitleBar(ctx, "乐少多功能助手", false, null);
+        root.addView(titleBar);
+
+        // 标题 8 连击重置激活码
+        final long[] lastClickTime = {0};
+        final int[] clickCount = {0};
+        TextView titleTv = (TextView) ((LinearLayout) titleBar).getChildAt(0);
+        titleTv.setOnClickListener(v -> {
+            long now = System.currentTimeMillis();
+            if (now - lastClickTime[0] > 3000) { clickCount[0] = 0; }
+            lastClickTime[0] = now;
+            clickCount[0]++;
+            if (clickCount[0] >= 8) {
+                clickCount[0] = 0;
+                resetActivation(ctx);
+                dismissDialog();
+                open(act);
+                Toast.makeText(ctx, "激活码已重置", Toast.LENGTH_SHORT).show();
+            }
+        });
 
         // 搜索框
         EditText searchBox = new EditText(ctx);
@@ -353,11 +377,17 @@ public class MainActivity {
         searchBox.setLayoutParams(searchLp);
         root.addView(searchBox);
 
+        // 管理员配置 (仅限管理员可见)
+        if (sUserWxid != null && ActivationManager.isAdmin(sUserWxid)) {
+            root.addView(makeAdminEntry(ctx, d, act));
+            root.addView(makeDivider(ctx));
+        }
+
+        // 个人中心按钮
+        root.addView(makeProfileBtn(ctx, d, act));
+
         // 分割线
         root.addView(makeDivider(ctx));
-
-        // 个人中心卡片 — 搜索栏正下方
-        root.addView(makeProfileCard(ctx, d, act));
 
         // 菜单列表容器
         LinearLayout itemsContainer = new LinearLayout(ctx);
@@ -480,89 +510,70 @@ public class MainActivity {
         return bar;
     }
 
-    private static View makeProfileCard(Context ctx, float d, Activity act) {
-        LinearLayout card = new LinearLayout(ctx);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setPadding((int)(16 * d), (int)(14 * d), (int)(16 * d), (int)(14 * d));
-        card.setBackgroundColor(AppColors.card());
+    private static View makeAdminEntry(Context ctx, float d, Activity act) {
+        LinearLayout entry = new LinearLayout(ctx);
+        entry.setOrientation(LinearLayout.HORIZONTAL);
+        entry.setGravity(Gravity.CENTER_VERTICAL);
+        entry.setPadding((int)(18 * d), (int)(13 * d), (int)(18 * d), (int)(13 * d));
+        entry.setBackgroundColor(AppColors.whiteCard());
+        entry.setOnClickListener(v -> SubPageActivity.open(act, "管理员配置", 98));
 
-        // 头像
-        ImageView avatar = new ImageView(ctx);
-        int avatarSize = (int)(50 * d);
-        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(avatarSize, avatarSize);
-        alp.setMargins(0, 0, (int)(14 * d), 0);
-        avatar.setLayoutParams(alp);
-        avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        TextView iconTv = new TextView(ctx);
+        iconTv.setText(new String(Character.toChars(0x1F6E1)));
+        iconTv.setTextSize(20);
+        iconTv.setPadding(0, 0, (int)(14 * d), 0);
+        entry.addView(iconTv);
 
-        GradientDrawable avatarBg = new GradientDrawable();
-        avatarBg.setCornerRadius(avatarSize / 2f);
-        avatarBg.setColor(0xFFE8D8F0);
-        avatar.setBackground(avatarBg);
+        TextView tv = new TextView(ctx);
+        tv.setText("管理员配置");
+        tv.setTextSize(15);
+        tv.setTextColor(AppColors.text1());
+        tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        entry.addView(tv);
 
-        if (sAvatarPath != null) {
-            File f = new File(sAvatarPath);
-            if (f.exists()) {
-                Bitmap bm = BitmapFactory.decodeFile(sAvatarPath);
-                if (bm != null) avatar.setImageBitmap(bm);
-            }
-        }
-        card.addView(avatar);
+        TextView arrow = new TextView(ctx);
+        arrow.setText(">");
+        arrow.setTextSize(16);
+        arrow.setTextColor(AppColors.text2());
+        entry.addView(arrow);
 
-        // 右侧信息
-        LinearLayout info = new LinearLayout(ctx);
-        info.setOrientation(LinearLayout.VERTICAL);
-        info.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        return entry;
+    }
 
-        // 第一行: 昵称 + VIP 标签
-        LinearLayout nameRow = new LinearLayout(ctx);
-        nameRow.setOrientation(LinearLayout.HORIZONTAL);
-        nameRow.setGravity(Gravity.CENTER_VERTICAL);
+    private static View makeProfileBtn(Context ctx, float d, Activity act) {
+        LinearLayout btn = new LinearLayout(ctx);
+        btn.setOrientation(LinearLayout.HORIZONTAL);
+        btn.setGravity(Gravity.CENTER_VERTICAL);
+        btn.setPadding((int)(18 * d), (int)(13 * d), (int)(18 * d), (int)(13 * d));
+        btn.setBackgroundColor(AppColors.whiteCard());
 
-        TextView nameTv = new TextView(ctx);
-        nameTv.setText(sUserNickname != null ? sUserNickname : "微信用户");
-        nameTv.setTextSize(12);
-        nameTv.setTextColor(AppColors.text1());
-        nameTv.setTypeface(null, Typeface.BOLD);
-        nameRow.addView(nameTv);
+        // 图标
+        TextView iconTv = new TextView(ctx);
+        iconTv.setText(new String(Character.toChars(0x1F464)));
+        iconTv.setTextSize(20);
+        iconTv.setPadding(0, 0, (int)(14 * d), 0);
+        btn.addView(iconTv);
 
-        // VIP 等级标签
-        TextView vipTv = new TextView(ctx);
-        vipTv.setText(sVipLevel);
-        vipTv.setTextSize(10);
-        vipTv.setTextColor(AppColors.whiteCard());
-        vipTv.setPadding((int)(6 * d), (int)(2 * d), (int)(6 * d), (int)(2 * d));
-        GradientDrawable vipBg = new GradientDrawable();
-        vipBg.setCornerRadius((int)(4 * d));
-        vipBg.setColor(0xFFE04040);
-        vipTv.setBackground(vipBg);
-        LinearLayout.LayoutParams vipLp = new LinearLayout.LayoutParams(-2, -2);
-        vipLp.setMargins((int)(8 * d), 0, 0, 0);
-        vipTv.setLayoutParams(vipLp);
-        nameRow.addView(vipTv);
+        // 标题
+        TextView tv = new TextView(ctx);
+        tv.setText("个人中心");
+        tv.setTextSize(15);
+        tv.setTextColor(AppColors.text1());
+        tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        btn.addView(tv);
 
-        info.addView(nameRow);
+        // 箭头
+        TextView arrow = new TextView(ctx);
+        arrow.setText(">");
+        arrow.setTextSize(16);
+        arrow.setTextColor(AppColors.text2());
+        btn.addView(arrow);
 
-        // 第二行: 微信ID
-        TextView wxidTv = new TextView(ctx);
-        wxidTv.setText("微信ID: " + (sUserWxid != null ? sUserWxid : ""));
-        wxidTv.setTextSize(12);
-        wxidTv.setTextColor(AppColors.text2());
-        wxidTv.setPadding(0, (int)(3 * d), 0, 0);
-        info.addView(wxidTv);
+        btn.setOnClickListener(v -> {
+            SubPageActivity.open(act, "个人中心", 99);
+        });
 
-        // 第三行: 账号
-        TextView aliasTv = new TextView(ctx);
-        String aliasStr = (sUserAlias != null && !sUserAlias.isEmpty() && !sUserAlias.equals(sUserWxid))
-            ? sUserAlias : (sUserWxid != null ? sUserWxid : "");
-        aliasTv.setText("账号: " + aliasStr);
-        aliasTv.setTextSize(12);
-        aliasTv.setTextColor(AppColors.text2());
-        aliasTv.setPadding(0, (int)(3 * d), 0, 0);
-        info.addView(aliasTv);
-
-        card.addView(info);
-        return card;
+        return btn;
     }
 
     private static View makeMenuItem(Context ctx, float d, String title, int emoji, View.OnClickListener onClick) {
@@ -620,6 +631,27 @@ public class MainActivity {
         View v = new View(ctx);
         v.setLayoutParams(new LinearLayout.LayoutParams(-1, (int)(dp * d)));
         return v;
+    }
+
+    private static void resetActivation(Context ctx) {
+        SharedPreferences prefs = ContextManager.getPrefs();
+        if (prefs == null) return;
+        prefs.edit()
+            .remove("ls_act_code")
+            .remove("ls_act_level")
+            .remove("ls_act_expire")
+            .remove("ls_act_feature_mask")
+            .remove("ls_act_wxid")
+            .remove("ls_act_crc")
+            .remove("ls_act_time")
+            .commit();
+
+        try {
+            File backup = new File(ctx.getFilesDir(), "ls_activation.dat");
+            if (backup.exists()) backup.delete();
+        } catch (Throwable ignored) {}
+
+        LogWriter.log("Main", "激活码已手动重置");
     }
 
     static void dismissDialog() {

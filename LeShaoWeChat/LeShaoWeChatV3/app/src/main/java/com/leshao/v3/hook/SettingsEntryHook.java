@@ -30,6 +30,8 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.leshao.v3.ui.MainActivity;
+import com.leshao.v3.ui.SubPageActivity;
+import com.leshao.v3.service.ActivationManager;
 
 import com.leshao.v3.ContactPickerFragment;
 import com.leshao.v3.ContextManager;
@@ -254,7 +256,7 @@ public class SettingsEntryHook {
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
         card.setPadding((int)(16*d), (int)(12*d), (int)(16*d), (int)(12*d));
-        card.setBackground(createPrimaryBtnBg(ctx));
+        card.setBackgroundColor(com.leshao.v3.ui.AppColors.whiteCard());
         card.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
         View.OnClickListener listener = v -> openSettingsFromContext(ctx);
         card.setOnClickListener(listener);
@@ -262,7 +264,7 @@ public class SettingsEntryHook {
         TextView title = new TextView(ctx);
         title.setText("乐少助手 V3");
         title.setTextSize(15);
-        title.setTextColor(com.leshao.v3.ui.AppColors.whiteCard());
+        title.setTextColor(com.leshao.v3.ui.AppColors.text1());
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, -2, 1.0f);
         tlp.gravity = Gravity.CENTER_VERTICAL;
         title.setLayoutParams(tlp);
@@ -270,7 +272,7 @@ public class SettingsEntryHook {
 
         Button btn = createBtn(ctx, "进入");
         btn.setTextSize(12);
-        btn.setTextColor(com.leshao.v3.ui.AppColors.whiteCard());
+        btn.setTextColor(com.leshao.v3.ui.AppColors.accent());
         btn.setBackground(createOutlineBtnBg(ctx));
         btn.setPadding((int)(10*d), (int)(5*d), (int)(10*d), (int)(5*d));
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-2, -2);
@@ -705,6 +707,10 @@ public class SettingsEntryHook {
     private interface SwitchCB { void onChange(boolean v); }
 
     private static void sw(Context ctx, LinearLayout p, String l, boolean c, final SwitchCB cb) {
+        sw(ctx, p, l, c, true, cb);
+    }
+
+    private static void sw(Context ctx, LinearLayout p, String l, boolean c, boolean enabled, final SwitchCB cb) {
         LinearLayout r = new LinearLayout(ctx);
         r.setOrientation(LinearLayout.HORIZONTAL);
         r.setGravity(Gravity.CENTER_VERTICAL);
@@ -712,13 +718,19 @@ public class SettingsEntryHook {
         TextView tv = new TextView(ctx);
         tv.setText(l);
         tv.setTextSize(12);
-        tv.setTextColor(CLR_TEXT);
+        tv.setTextColor(enabled ? CLR_TEXT : CLR_TEXT2);
         tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
         r.addView(tv);
         Switch s = new Switch(ctx);
         s.setChecked(c);
-        styleSwitch(s, c, ctx);
+        s.setEnabled(enabled);
+        styleSwitch(s, c && enabled, ctx);
         s.setOnCheckedChangeListener((btn, v) -> {
+            if (!enabled) {
+                s.setChecked(!v);
+                Toast.makeText(ctx, "当前激活码未授权此功能", Toast.LENGTH_SHORT).show();
+                return;
+            }
             styleSwitch(s, v, ctx);
             if (cb != null) cb.onChange(v);
         });
@@ -787,14 +799,15 @@ public class SettingsEntryHook {
     private static void buildSwitchesSection(Context ctx, LinearLayout root) {
         SharedPreferences prefs = ContextManager.getPrefs();
         final ModuleConfig cfg = ModuleConfig.load(prefs);
+        int mask = ActivationManager.getFeatureMask();
 
-        sw(ctx, root, "总开关", cfg.masterSwitch,
+        sw(ctx, root, "总开关", cfg.masterSwitch, isBit(mask, 0),
             v -> { cfg.masterSwitch = v; cfg.save(prefs); });
-        sw(ctx, root, "防撤回", cfg.antiRecall,
+        sw(ctx, root, "防撤回", cfg.antiRecall, isBit(mask, 13),
             v -> { cfg.antiRecall = v; cfg.save(prefs); });
-        sw(ctx, root, "红包助手", cfg.redPacketGrab,
+        sw(ctx, root, "红包助手", cfg.redPacketGrab, isBit(mask, 14),
             v -> { cfg.redPacketGrab = v; cfg.save(prefs); });
-        sw(ctx, root, "自动通过好友", cfg.autoAcceptFriend,
+        sw(ctx, root, "自动通过好友", cfg.autoAcceptFriend, true,
             v -> { cfg.autoAcceptFriend = v; cfg.save(prefs); });
         ed(ctx, root, "欢迎语", cfg.welcomeMsg,
             s -> { cfg.welcomeMsg = s; cfg.save(prefs); });
@@ -803,10 +816,11 @@ public class SettingsEntryHook {
     private static void buildTtsSection(Context ctx, LinearLayout root) {
         SharedPreferences prefs = ContextManager.getPrefs();
         final ModuleConfig cfg = ModuleConfig.load(prefs);
+        int mask = ActivationManager.getFeatureMask();
 
-        sw(ctx, root, "总开关", cfg.masterSwitch,
+        sw(ctx, root, "总开关", cfg.masterSwitch, isBit(mask, 0),
             v -> { cfg.masterSwitch = v; cfg.save(prefs); });
-        sw(ctx, root, "免打扰", cfg.quietEnabled,
+        sw(ctx, root, "免打扰", cfg.quietEnabled, true,
             v -> { cfg.quietEnabled = v; cfg.save(prefs); });
 
         final String[] engines = {"系统", "配音阁", "五声"};
@@ -818,25 +832,26 @@ public class SettingsEntryHook {
                 cfg.save(prefs);
             });
 
-        sw(ctx, root, "文字", cfg.announceText,
+        sw(ctx, root, "文字", cfg.announceText, isBit(mask, 2),
             v -> { prefs.edit().putBoolean("ls_announce_text", v).apply(); });
-        sw(ctx, root, "图片", cfg.announceImage,
+        sw(ctx, root, "图片", cfg.announceImage, isBit(mask, 4),
             v -> { prefs.edit().putBoolean("ls_announce_image", v).apply(); });
-        sw(ctx, root, "视频", cfg.announceVideo,
+        sw(ctx, root, "视频", cfg.announceVideo, isBit(mask, 5),
             v -> { prefs.edit().putBoolean("ls_announce_video", v).apply(); });
-        sw(ctx, root, "红包", cfg.announceRedBag,
+        sw(ctx, root, "红包", cfg.announceRedBag, isBit(mask, 7),
             v -> { prefs.edit().putBoolean("ls_announce_redbag", v).apply(); });
-        sw(ctx, root, "转账", cfg.announceTransfer,
+        sw(ctx, root, "转账", cfg.announceTransfer, isBit(mask, 8),
             v -> { prefs.edit().putBoolean("ls_announce_transfer", v).apply(); });
-        sw(ctx, root, "名片", cfg.announceCard,
+        sw(ctx, root, "名片", cfg.announceCard, isBit(mask, 9),
             v -> { prefs.edit().putBoolean("ls_announce_card", v).apply(); });
     }
 
     private static void buildDingDongSection(Context ctx, LinearLayout root) {
         SharedPreferences prefs = ContextManager.getPrefs();
         final ModuleConfig cfg = ModuleConfig.load(prefs);
+        int mask = ActivationManager.getFeatureMask();
 
-        sw(ctx, root, "启用叮咚", cfg.dianGeEnabled,
+        sw(ctx, root, "启用叮咚", cfg.dianGeEnabled, isBit(mask, 31),
             v -> { cfg.dianGeEnabled = v; cfg.save(prefs); });
 
         TextView info = new TextView(ctx);
@@ -892,32 +907,78 @@ public class SettingsEntryHook {
         root.addView(info);
     }
 
-    private static void buildSchedulerSection(Context ctx, LinearLayout root) {
-        SharedPreferences prefs = ContextManager.getPrefs();
-        final ModuleConfig cfg = ModuleConfig.load(prefs);
+    private static void buildSchedulerSection(final Context ctx, LinearLayout root) {
+        float d = ctx.getResources().getDisplayMetrics().density;
 
-        if (cfg.scheduledTasks.isEmpty()) {
+        TextView stats = new TextView(ctx);
+        stats.setTextSize(11);
+        stats.setTextColor(CLR_TEXT);
+        stats.setPadding(dpC(ctx, 16), dpC(ctx, 6), dpC(ctx, 16), dpC(ctx, 2));
+        stats.setText("任务:" + ScheduleBroadcast.getTaskCount()
+                + "  草稿:" + ScheduleBroadcast.getDraftCount()
+                + "  今日已发:" + ScheduleBroadcast.getDailyCount()
+                + "  状态:" + (ScheduleBroadcast.isEnabled() ? "运行中" : "已暂停"));
+        root.addView(stats);
+
+        if (ScheduleBroadcast.getTaskCount() == 0) {
             TextView empty = new TextView(ctx);
             empty.setText("暂无定时任务");
             empty.setTextSize(12);
             empty.setTextColor(CLR_TEXT2);
-            empty.setPadding(dpC(ctx, 16), dpC(ctx, 6), dpC(ctx, 16), dpC(ctx, 6));
+            empty.setPadding(dpC(ctx, 16), dpC(ctx, 4), dpC(ctx, 16), dpC(ctx, 4));
             root.addView(empty);
         } else {
-            for (int i = 0; i < cfg.scheduledTasks.size(); i++) {
-                ScheduledTask t = cfg.scheduledTasks.get(i);
+            java.util.List<ScheduleBroadcast.Task> tasks = ScheduleBroadcast.getAllTasks();
+            int show = Math.min(tasks.size(), 5);
+            for (int i = 0; i < show; i++) {
+                ScheduleBroadcast.Task t = tasks.get(i);
                 TextView info = new TextView(ctx);
-                info.setText(String.format("%02d:%02d -> %s: %s", t.hour, t.minute, t.targetWxid, t.content));
                 info.setTextSize(11);
-                info.setTextColor(CLR_TEXT);
-                info.setPadding(dpC(ctx, 16), dpC(ctx, 3), dpC(ctx, 16), dpC(ctx, 3));
+                info.setTextColor(CLR_TEXT2);
+                info.setPadding(dpC(ctx, 16), dpC(ctx, 2), dpC(ctx, 16), dpC(ctx, 2));
+                String typeLabel;
+                switch (t.msgType) {
+                    case 1: typeLabel = "文本"; break;
+                    case 3: typeLabel = "图片"; break;
+                    case 34: typeLabel = "语音"; break;
+                    case 43: typeLabel = "视频"; break;
+                    case 47: typeLabel = "表情"; break;
+                    case 49: typeLabel = "AppMsg"; break;
+                    default: typeLabel = "类型" + t.msgType;
+                }
+                String content = t.content != null && t.content.length() > 20 ? t.content.substring(0, 20) + "..." : t.content;
+                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
+                info.setText("[" + (t.enabled ? "启用" : "暂停") + "][" + typeLabel + "] "
+                        + (t.triggerTime > 0 ? sdf.format(new java.util.Date(t.triggerTime)) : "即时")
+                        + " " + content);
                 root.addView(info);
+            }
+            if (tasks.size() > 5) {
+                TextView more = new TextView(ctx);
+                more.setText("... 还有" + (tasks.size() - 5) + "条任务");
+                more.setTextSize(10);
+                more.setTextColor(CLR_TEXT2);
+                more.setPadding(dpC(ctx, 16), dpC(ctx, 2), dpC(ctx, 16), dpC(ctx, 2));
+                root.addView(more);
             }
         }
 
-        btn(ctx, root, "添加任务", "打开", v -> {
-            showSchedulerDialog(ctx);
+        LinearLayout btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setPadding(dpC(ctx, 16), dpC(ctx, 8), dpC(ctx, 16), dpC(ctx, 4));
+
+        btn(ctx, btnRow, "打开定时管理", "管理", v -> {
+            try {
+                SubPageActivity.open((android.app.Activity) ctx, "定时消息助手", 6);
+            } catch (Throwable ignored) {}
         });
+
+        btn(ctx, btnRow, "紧急停止", "停止", v -> {
+            ScheduleBroadcast.emergencyStop();
+            android.widget.Toast.makeText(ctx, "已停止所有任务", android.widget.Toast.LENGTH_SHORT).show();
+        });
+
+        root.addView(btnRow);
     }
 
     private static void buildStatsSection(Context ctx, LinearLayout root) {
@@ -1325,6 +1386,10 @@ public class SettingsEntryHook {
             w.setLayout((int)(ctx.getResources().getDisplayMetrics().widthPixels * 0.9), -2);
         }
         dlg.show();
+    }
+
+    private static boolean isBit(int mask, int bit) {
+        return (mask & (1 << bit)) != 0;
     }
 
     private static View spacerV(Context ctx, int hDp) {

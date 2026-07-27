@@ -9,6 +9,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CheckBox;
+import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -111,20 +112,25 @@ public class ContactPickerFragment extends Fragment {
         tabBar.addView(tabGroup);
         root.addView(tabBar);
 
-        // 联系人管理功能
-        SharedPreferences prefs = ContextManager.getPrefs();
-        ModuleConfig cfg = ModuleConfig.load(prefs);
-
-        LinearLayout featRow = new LinearLayout(getContext());
-        featRow.setOrientation(LinearLayout.HORIZONTAL);
-        featRow.setPadding(dp(8), dp(4), dp(8), dp(4));
-        featRow.addView(makeToggle("通讯录导出", cfg.contactExportEnabled, (v, on) -> {
-            cfg.contactExportEnabled = on; cfg.save(prefs); ContactExport.setEnabled(on);
-        }));
-        featRow.addView(makeToggle("联系人变更日志", cfg.contactChangeLogEnabled, (v, on) -> {
-            cfg.contactChangeLogEnabled = on; cfg.save(prefs); ContactChangeLog.setEnabled(on);
-        }));
-        root.addView(featRow);
+        // 个人中心按钮
+        Button btnProfile = new Button(getContext());
+        btnProfile.setText("个人中心");
+        btnProfile.setTextSize(12);
+        btnProfile.setPadding(dp(16), dp(4), dp(16), dp(4));
+        GradientDrawable pg = new GradientDrawable();
+        pg.setCornerRadius(dp(6));
+        pg.setColor(0xFF4CAF50);
+        btnProfile.setBackground(pg);
+        btnProfile.setTextColor(0xFFFFFFFF);
+        LinearLayout.LayoutParams bplp = new LinearLayout.LayoutParams(-2, -2);
+        bplp.gravity = android.view.Gravity.CENTER;
+        bplp.bottomMargin = dp(4);
+        btnProfile.setLayoutParams(bplp);
+        btnProfile.setOnClickListener(v -> {
+            try { com.leshao.v3.ui.MainActivity.open(getActivity()); }
+            catch (Throwable ignored) {}
+        });
+        root.addView(btnProfile);
 
         // RecyclerView
         mRecyclerView = new RecyclerView(getContext());

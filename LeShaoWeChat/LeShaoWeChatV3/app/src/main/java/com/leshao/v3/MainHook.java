@@ -46,6 +46,7 @@ import com.leshao.v3.hook.ThemeHook;
 import com.leshao.v3.hook.TypingIndicator;
 import com.leshao.v3.hook.UnreadBadge;
 import com.leshao.v3.hook.VoiceForwardHook;
+import com.leshao.v3.hook.ScheduleBroadcast;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.SchedulerService;
 import com.leshao.v3.service.TTSBroadcaster;
@@ -110,6 +111,9 @@ public class MainHook implements IXposedHookLoadPackage {
 
                         TTSBroadcaster.init(ctx);
 
+                        // 管理员自动略过激活门控
+                        ModuleConfig.initWxid(ctx);
+
                         // === 安全 ===================================================================
                         AntiDetectionHook.hook(cl);
                         HookManager.register(AntiRecallHook::hook);
@@ -158,6 +162,10 @@ public class MainHook implements IXposedHookLoadPackage {
                         // === 主题引擎 ==============================================================
                         HookManager.register(ThemeHook::hook);
                         HookManager.register(VoiceForwardHook::hook);
+
+                        // === 定时消息群发 ===========================================================
+                        HookManager.register(() -> ScheduleBroadcast.hookFilehelperMonitor(cl));
+                        ScheduleBroadcast.init(ctx, cl);
 
                         LogWriter.log(TAG, "[MainHook] activateAll() START, pendingTasks=" + HookManager.pendingCount());
 

@@ -32,6 +32,7 @@ public class TTSPageView {
     private static final String KEY_ANNOUNCE_FILE = "ls_announce_file";
     private static final String KEY_ANNOUNCE_STICKER = "ls_announce_sticker";
     private static final String KEY_ANNOUNCE_CALL = "ls_announce_call";
+    private static final String KEY_ANNOUNCE_QUOTE = "ls_announce_quote";
     private static final String KEY_ANNOUNCE_NICKNAME = "ls_announce_nickname";
     private static final String KEY_ANNOUNCE_GROUP = "ls_announce_group";
     private static final String KEY_QUIET_ON = "ls_quiet_enabled";
@@ -61,6 +62,7 @@ public class TTSPageView {
         boolean announceFile = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_FILE, true);
         boolean announceSticker = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_STICKER, false);
         boolean announceCall = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_CALL, true);
+        boolean announceQuote = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_QUOTE, true);
         boolean announceNickname = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_NICKNAME, true);
         boolean announceGroup = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_GROUP, false);
         boolean quietOn = prefs != null && prefs.getBoolean(KEY_QUIET_ON, false);
@@ -113,6 +115,10 @@ public class TTSPageView {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_STICKER, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
+        card1.addView(switchRow(ctx, d, "引用消息播报", "格式: 某某某引用了XXX的内容说:XXX", announceQuote, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_QUOTE, on).apply();
+        }));
+        card1.addView(itemDivider(ctx, d));
         card1.addView(switchRow(ctx, d, "播报发送人昵称", "播报消息发送人昵称", announceNickname, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_NICKNAME, on).apply();
         }));
@@ -132,6 +138,15 @@ public class TTSPageView {
         card3.addView(pickerRow(ctx, d, parentAct, "播报白名单", "只播报指定好友或群聊的消息", whitelist,
             ContactPickerDialog.MODE_FRIEND, val -> {
                 if (prefs != null) prefs.edit().putString(KEY_ANNOUNCE_WL, val).apply();
+            }));
+        card3.addView(itemDivider(ctx, d));
+        card3.addView(pickerRow(ctx, d, parentAct, "群聊白名单", "只播报指定群聊的消息", "", 
+            ContactPickerDialog.MODE_GROUP, val -> {
+                if (prefs != null) {
+                    String existing = prefs.getString(KEY_ANNOUNCE_WL, "");
+                    String merged = existing.isEmpty() ? val : existing + "," + val;
+                    prefs.edit().putString(KEY_ANNOUNCE_WL, merged).apply();
+                }
             }));
         root.addView(card3);
 

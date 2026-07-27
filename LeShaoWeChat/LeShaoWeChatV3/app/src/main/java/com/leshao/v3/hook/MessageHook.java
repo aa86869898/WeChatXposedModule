@@ -20,8 +20,19 @@ public class MessageHook {
         sMainHandler = new Handler(Looper.getMainLooper());
 
         try {
-            Class<?> x9Cls = cl.loadClass("e01.x9");
-            Class<?> e9Cls = cl.loadClass("com.tencent.mm.storage.e9");
+            Class<?> x9Cls = null;
+            for (String name : new String[]{"e01.x9", "e02.x9", "e00.x9", "e01.x8", "e01.y9"}) {
+                try { x9Cls = cl.loadClass(name); break; } catch (Throwable ignored) {}
+            }
+            if (x9Cls == null) {
+                LogWriter.log(TAG, "FAIL: dispatch class not found");
+                return;
+            }
+            Class<?> e9Cls = VersionCompat.findMsgInfoStorageClass(cl);
+            if (e9Cls == null) {
+                LogWriter.log(TAG, "FAIL: storage class not found");
+                return;
+            }
 
             for (java.lang.reflect.Method m : x9Cls.getDeclaredMethods()) {
                 if (m.getName().equals("n") && m.getParameterCount() == 2
