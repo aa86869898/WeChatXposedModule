@@ -294,64 +294,81 @@ public class ScheduleBroadcast {
     }
 
     private static void installDiagHooks() {
-        // Hook f9 全部方法: 看用户发文本时到底哪个方法写了DB
+        // Hook f9.I9 / f9.H9: 消息写入 — 全栈跟踪
         try {
             Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", sClassLoader);
-            for (java.lang.reflect.Method m : f9.getDeclaredMethods()) {
-                String name = m.getName();
-                // 跳过仅1字符的方法 (大概率是 getter/setter field)
-                if (name.length() <= 1) continue;
-                try {
-                    XposedBridge.hookMethod(m, new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            int ac = param.args.length;
-                            if (ac == 0) return;
-                            String a0type = param.args[0] != null ? param.args[0].getClass().getSimpleName() : "null";
-                            log("DIAG: f9." + name + "(" + ac + ") a0=" + a0type);
-                        }
-                    });
-                } catch (Throwable ignored) {}
-            }
-            log("DIAG: f9 all hooks OK");
-        } catch (Throwable t) { log("DIAG: f9 hooks fail: " + t.getMessage()); }
 
-        // Hook m50 构造 (z2.a的参数)
-        try {
-            Class<?> m50 = XposedHelpers.findClass("m50", sClassLoader);
-            XposedBridge.hookAllConstructors(m50, new XC_MethodHook() {
+            XposedBridge.hookAllMethods(f9, "I9", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    StringBuilder sb = new StringBuilder("DIAG: new m50(").append(param.args.length).append(")");
-                    for (int i = 0; i < param.args.length; i++) {
+                    Object[] args = param.args;
+                    StringBuilder sb = new StringBuilder("DIAG: I9(").append(args.length).append(")");
+                    for (int i = 0; i < args.length; i++) {
                         sb.append(" p").append(i).append("=");
-                        sb.append(param.args[i] == null ? "null" : param.args[i].getClass().getSimpleName());
+                        sb.append(args[i] == null ? "null" : args[i].getClass().getSimpleName());
                     }
                     log(sb.toString());
+                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
+                    log("  I9栈(" + Thread.currentThread().getName() + "):");
+                    for (int i = 3; i < Math.min(st.length, 20); i++) {
+                        String cls = st[i].getClassName();
+                        if (!cls.startsWith("java.") && !cls.startsWith("android.") && !cls.startsWith("dalvik.")
+                            && !cls.startsWith("de.robv.android.xposed")) {
+                            log("    " + cls + "." + st[i].getMethodName() + ":" + st[i].getLineNumber());
+                        }
+                    }
                 }
             });
-            log("DIAG: m50 hook OK");
-        } catch (Throwable t) { log("DIAG: m50 fail: " + t.getMessage()); }
 
-        // Hook ChatFooter 消息发送方法 (用户手动发消息的入口)
+            XposedBridge.hookAllMethods(f9, "H9", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Object[] args = param.args;
+                    StringBuilder sb = new StringBuilder("DIAG: H9(").append(args.length).append(")");
+                    for (int i = 0; i < args.length; i++) {
+                        sb.append(" p").append(i).append("=");
+                        sb.append(args[i] == null ? "null" : args[i].getClass().getSimpleName());
+                    }
+                    log(sb.toString());
+                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
+                    log("  H9栈(" + Thread.currentThread().getName() + "):");
+                    for (int i = 3; i < Math.min(st.length, 15); i++) {
+                        String cls = st[i].getClassName();
+                        if (!cls.startsWith("java.") && !cls.startsWith("android.") && !cls.startsWith("dalvik.")
+                            && !cls.startsWith("de.robv.android.xposed")) {
+                            log("    " + cls + "." + st[i].getMethodName() + ":" + st[i].getLineNumber());
+                        }
+                    }
+                }
+            });
+
+            log("DIAG: f9.I9+H9 hooks OK");
+        } catch (Throwable t) { log("DIAG: f9 hooks fail: " + t.getMessage()); }
+
+        // Hook ChatFooter.F: 发送消息的入口（after hook）
         try {
             Class<?> cf = XposedHelpers.findClass("com.tencent.mm.pluginsdk.ui.chat.ChatFooter", sClassLoader);
-            for (java.lang.reflect.Method m : cf.getDeclaredMethods()) {
-                String name = m.getName();
-                if (name.length() <= 1) continue;
-                try {
-                    XposedBridge.hookMethod(m, new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            int ac = param.args.length;
-                            if (ac == 0) return;
-                            log("DIAG: ChatFooter." + name + "(" + ac + ")");
+            XposedBridge.hookAllMethods(cf, "F", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Object[] args = param.args;
+                    log("DIAG: ChatFooter.F(" + args.length + ") CALLED");
+                    for (int i = 0; i < args.length; i++) {
+                        log("  ChatFooter.F p" + i + "=" + (args[i] == null ? "null" : args[i].getClass().getSimpleName()));
+                    }
+                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
+                    log("  ChatFooter.F栈:");
+                    for (int i = 3; i < Math.min(st.length, 12); i++) {
+                        String cls = st[i].getClassName();
+                        if (!cls.startsWith("java.") && !cls.startsWith("android.") && !cls.startsWith("dalvik.")
+                            && !cls.startsWith("de.robv.android.xposed")) {
+                            log("    " + cls + "." + st[i].getMethodName() + ":" + st[i].getLineNumber());
                         }
-                    });
-                } catch (Throwable ignored) {}
-            }
-            log("DIAG: ChatFooter hooks OK");
-        } catch (Throwable t) { log("DIAG: ChatFooter fail: " + t.getMessage()); }
+                    }
+                }
+            });
+            log("DIAG: ChatFooter.F hook OK");
+        } catch (Throwable t) { log("DIAG: ChatFooter.F fail: " + t.getMessage()); }
     }
 
     private static int safeInt(Object obj, String[] methods) {
