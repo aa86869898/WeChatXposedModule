@@ -1095,16 +1095,14 @@ public class ScheduleBroadcast {
         try {
             Object ms = getMsgStorage();
 
-            // 0. 尝试 a21.q.i: 用户手动发消息的真正入口
+            // 0. 尝试 a21.q.i: 用户手动发消息的真正入口 (静态方法)
             try {
                 Class<?> a21q = XposedHelpers.findClass("a21.q", sClassLoader);
                 Class<?> n85z = XposedHelpers.findClass("n85.z", sClassLoader);
                 Class<?> a21g = XposedHelpers.findClass("a21.g", sClassLoader);
                 Object zObj = XposedHelpers.newInstance(n85z);
                 Object gObj = XposedHelpers.newInstance(a21g, e9msg);
-                Object result = XposedHelpers.callMethod(
-                    XposedHelpers.newInstance(a21q),
-                    "i", zObj, gObj, null);
+                Object result = XposedHelpers.callStaticMethod(a21q, "i", zObj, gObj, null);
                 log("triggerSend: a21.q.i() OK msgId=" + msgId + " result=" + result);
                 return;
             } catch (Throwable t) {
@@ -1125,7 +1123,7 @@ public class ScheduleBroadcast {
             String a2Err = null;
             try {
                 Class<?> a2Cls = XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.a2", sClassLoader);
-                Class<?> j4Cls = XposedHelpers.findClass("j4", sClassLoader);
+                Class<?> j4Cls = XposedHelpers.findClass("a65.j4", sClassLoader);
                 Object j4Obj = null;
                 try { j4Obj = XposedHelpers.callMethod(e9msg, "J"); } catch (Throwable ignored) {}
                 if (j4Obj == null) {
