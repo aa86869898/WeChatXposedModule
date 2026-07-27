@@ -126,6 +126,7 @@ public class ScheduleBroadcast {
     private static Context sAppContext;
     private static ClassLoader sClassLoader;
     private static Object sMsgStorage;
+    private static Object sCapturedA21q;
     private static volatile Thread sScheduleThread;
     private static final AtomicBoolean sInitialized = new AtomicBoolean(false);
     private static HandlerThread sHandlerThread;
@@ -369,6 +370,20 @@ public class ScheduleBroadcast {
         // Hook a21.q.i: 用户手动发消息的真正入口（协程回调）
         try {
             Class<?> a21q = XposedHelpers.findClass("a21.q", sClassLoader);
+
+            // 捕获a21.q实例 — 构造器hook
+            XposedBridge.hookAllConstructors(a21q, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    sCapturedA21q = param.thisObject;
+                    Object[] args = param.args;
+                    StringBuilder sb = new StringBuilder("DIAG: a21.q ctor(").append(args.length).append(")");
+                    for (int i = 0; i < args.length; i++)
+                        sb.append(" p").append(i).append("=").append(args[i] == null ? "null" : args[i].getClass().getName());
+                    log(sb.toString());
+                }
+            });
+
             XposedBridge.hookAllMethods(a21q, "i", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
@@ -1078,9 +1093,26 @@ public class ScheduleBroadcast {
                 default: return false;
             }
 
+            // 主路径: I9(e9, Boolean.TRUE) = 写DB + 触发联网发送
+            try {
+                Object i9Result = XposedHelpers.callMethod(ms, "I9", msg, Boolean.TRUE);
+                long msgId = 0;
+                if (i9Result instanceof Long) msgId = (Long) i9Result;
+                else { try { msgId = (Long) XposedHelpers.callMethod(msg, "F0"); } catch (Throwable ignored) {} }
+                if (msgId > 0) {
+                    log("sendMessage: I9(true) OK msgId=" + msgId);
+                    return true;
+                }
+                log("sendMessage: I9(true) result=" + i9Result + " msgId=" + msgId + ", 尝试triggerSend");
+                triggerSend(msgId > 0 ? msgId : -1, msg, talker);
+                return true;
+            } catch (Throwable t) {
+                log("sendMessage: I9(true) fail: " + t.getMessage() + ", 回退H9");
+            }
+
+            // 回退: H9 写DB
             long msgId = (Long) XposedHelpers.callMethod(ms, "H9", msg);
             if (msgId > 0) {
-                // 尝试 I9(e9, true): 第二个Boolean=true表示写入后直接触发联网发送
                 try { XposedHelpers.callMethod(ms, "I9", msg, Boolean.TRUE); } catch (Throwable ignored) {}
                 triggerSend(msgId, msg, talker);
                 return true;
@@ -1095,16 +1127,18 @@ public class ScheduleBroadcast {
         try {
             Object ms = getMsgStorage();
 
-            // 0. 尝试 a21.q.i: 用户手动发消息的真正入口 (静态方法)
+            // 0. 尝试 a21.q.i: 用户手动发消息的真正入口
             try {
-                Class<?> a21q = XposedHelpers.findClass("a21.q", sClassLoader);
-                Class<?> n85z = XposedHelpers.findClass("n85.z", sClassLoader);
-                Class<?> a21g = XposedHelpers.findClass("a21.g", sClassLoader);
-                Object zObj = XposedHelpers.newInstance(n85z);
-                Object gObj = XposedHelpers.newInstance(a21g, e9msg);
-                Object result = XposedHelpers.callStaticMethod(a21q, "i", zObj, gObj, null);
-                log("triggerSend: a21.q.i() OK msgId=" + msgId + " result=" + result);
-                return;
+                if (sCapturedA21q != null) {
+                    Class<?> n85z = XposedHelpers.findClass("n85.z", sClassLoader);
+                    Class<?> a21g = XposedHelpers.findClass("a21.g", sClassLoader);
+                    Object zObj = XposedHelpers.newInstance(n85z);
+                    Object gObj = XposedHelpers.newInstance(a21g, e9msg);
+                    Object result = XposedHelpers.callMethod(sCapturedA21q, "i", zObj, gObj, null);
+                    log("triggerSend: a21.q.i() OK msgId=" + msgId + " result=" + result);
+                    return;
+                }
+                log("triggerSend: sCapturedA21q=null, 跳过a21.q.i");
             } catch (Throwable t) {
                 log("triggerSend: a21.q.i fail: " + t.getMessage());
             }
