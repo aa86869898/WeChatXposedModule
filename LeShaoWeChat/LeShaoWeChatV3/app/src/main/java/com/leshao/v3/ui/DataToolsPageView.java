@@ -167,6 +167,69 @@ public class DataToolsPageView {
         header.setPadding(0, 0, 0, (int)(8*d));
         root.addView(header);
 
+        // 自定义路径输入
+        android.widget.EditText pathInput = new android.widget.EditText(ctx);
+        pathInput.setHint("或输入自定义路径 (如 /sdcard/Download/backup.db)");
+        pathInput.setTextSize(12);
+        pathInput.setTextColor(AppColors.text1());
+        pathInput.setHintTextColor(AppColors.text2());
+        pathInput.setSingleLine(true);
+        pathInput.setPadding((int)(12*d), (int)(10*d), (int)(12*d), (int)(10*d));
+        pathInput.setBackgroundColor(AppColors.inputBg());
+        android.graphics.drawable.GradientDrawable ib = new android.graphics.drawable.GradientDrawable();
+        ib.setCornerRadius((int)(4*d));
+        ib.setStroke(1, AppColors.border());
+        pathInput.setBackground(ib);
+        LinearLayout.LayoutParams pilp = new LinearLayout.LayoutParams(-1, -2);
+        pilp.setMargins(0, 0, 0, (int)(10*d));
+        pathInput.setLayoutParams(pilp);
+        root.addView(pathInput);
+
+        android.widget.TextView customBtn = new android.widget.TextView(ctx);
+        customBtn.setText("从自定义路径导入");
+        customBtn.setTextSize(12);
+        customBtn.setTextColor(0xFF4A90D9);
+        customBtn.setGravity(Gravity.CENTER);
+        customBtn.setPadding((int)(14*d), (int)(8*d), (int)(14*d), (int)(8*d));
+        android.graphics.drawable.GradientDrawable cbg = new android.graphics.drawable.GradientDrawable();
+        cbg.setCornerRadius((int)(4*d));
+        cbg.setStroke((int)(1*d), 0xFF4A90D9);
+        cbg.setColor(android.graphics.Color.TRANSPARENT);
+        customBtn.setBackground(cbg);
+        LinearLayout.LayoutParams cblp = new LinearLayout.LayoutParams(-1, -2);
+        cblp.setMargins(0, 0, 0, (int)(12*d));
+        customBtn.setLayoutParams(cblp);
+        customBtn.setOnClickListener(v -> {
+            String p = pathInput.getText().toString().trim();
+            if (p.isEmpty()) {
+                Toast.makeText(ctx, "请输入文件路径", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            java.io.File cf = new java.io.File(p);
+            if (!cf.exists()) {
+                Toast.makeText(ctx, "文件不存在: " + p, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            new AlertDialog.Builder(ctx)
+                .setTitle("确认导入")
+                .setMessage("将导入 " + cf.getName() + " 到微信数据库?\n操作可能覆盖当前聊天记录。")
+                .setPositiveButton("导入", (dialog, which) -> {
+                    ChatBackup.triggerRestore(cf.getAbsolutePath());
+                    Toast.makeText(ctx, "已触发导入", Toast.LENGTH_LONG).show();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+        });
+        root.addView(customBtn);
+
+        TextView sep = new TextView(ctx);
+        sep.setText("-- 或从下方扫描的文件中选择 --");
+        sep.setTextSize(11);
+        sep.setTextColor(AppColors.text2());
+        sep.setGravity(Gravity.CENTER);
+        sep.setPadding(0, 0, 0, (int)(8*d));
+        root.addView(sep);
+
         LinearLayout card = makeCard(ctx, d);
         int count = 0;
         for (File f : dbFiles) {

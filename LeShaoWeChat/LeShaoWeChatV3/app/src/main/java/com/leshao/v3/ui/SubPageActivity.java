@@ -25,6 +25,7 @@ public class SubPageActivity {
     private static String sTitle;
     private static int sPageId;
     private static int sThemeFeaturePageId = 0;
+    private static final java.util.Stack<Integer> sNavStack = new java.util.Stack<>();
 
     private static boolean sIsThemeSubPage;
 
@@ -33,10 +34,20 @@ public class SubPageActivity {
     }
 
     public static void open(Activity parentAct, String title, int pageId) {
+        openInternal(parentAct, title, pageId, true);
+    }
+
+    public static void openFromMain(Activity parentAct, String title, int pageId) {
+        sNavStack.clear();
+        openInternal(parentAct, title, pageId, false);
+    }
+
+    private static void openInternal(Activity parentAct, String title, int pageId, boolean pushCurrent) {
+        if (pushCurrent && sPageId != 0) sNavStack.push(sPageId);
         sParentAct = parentAct;
         sTitle = title;
         sPageId = pageId;
-        sIsThemeSubPage = (pageId == 20);
+        sIsThemeSubPage = false;
         show(parentAct, title, pageId);
     }
 
@@ -93,9 +104,9 @@ public class SubPageActivity {
 
     private static void goBack(Activity parentAct) {
         dismissSub();
-        if (sIsThemeSubPage) {
-            sIsThemeSubPage = false;
-            open(parentAct, "主题美化", 2);
+        if (!sNavStack.isEmpty()) {
+            int prevPageId = sNavStack.pop();
+            openInternal(parentAct, "返回", prevPageId, false);
         } else {
             MainActivity.open(parentAct);
         }

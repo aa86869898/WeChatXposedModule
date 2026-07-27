@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -50,6 +52,9 @@ public class ScheduleMsgPageView {
     private static String sContentCache = "";
     private static int sHourCache = 8;
     private static int sMinuteCache = 0;
+    private static int sYearCache = 0;
+    private static int sMonthCache = 0;
+    private static int sDayCache = 0;
     private static String sRepeatCache = "仅一次";
 
     private static View sProgressBar;
@@ -60,6 +65,7 @@ public class ScheduleMsgPageView {
     private static FrameLayout sProgressRoot;
     private static LinearLayout sTypeContentContainer;
     private static java.lang.ref.WeakReference<Activity> sActRef;
+    private static EditText sNameEt, sYearEt, sMonEt, sDayEt, sHourEt, sMinEt, sSecEt;
 
     private static ContactPickerDialog.OnContactsSelected sLastContactsCallback;
     private static Activity sParentActivity;
@@ -136,6 +142,7 @@ public class ScheduleMsgPageView {
             android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_PICK,
                 android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
             i.setType("image/*");
+            i.putExtra(android.content.Intent.EXTRA_ALLOW_MULTIPLE, true);
             act.startActivityForResult(i, REQ_IMAGE_PICK);
         } catch (Throwable t) { Toast.makeText(act, "无法打开相册", Toast.LENGTH_SHORT).show(); }
     }
@@ -145,6 +152,7 @@ public class ScheduleMsgPageView {
             android.content.Intent i = new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT);
             i.addCategory(android.content.Intent.CATEGORY_OPENABLE);
             i.setType(mime != null ? mime : "*/*");
+            i.putExtra(android.content.Intent.EXTRA_ALLOW_MULTIPLE, true);
             act.startActivityForResult(i, REQ_FILE_PICK);
         } catch (Throwable t) { Toast.makeText(act, "无法打开文件管理器", Toast.LENGTH_SHORT).show(); }
     }
@@ -203,7 +211,11 @@ public class ScheduleMsgPageView {
             loadDraft(ctx);
 
             LogWriter.log("SCHEDULE_MSG", "create: DONE OK");
-            return body;
+            ScrollView sv = new ScrollView(ctx);
+            sv.setFillViewport(true);
+            sv.setBackgroundColor(CLR_BG);
+            sv.addView(body);
+            return sv;
         } catch (Throwable t) {
             LogWriter.log("SCHEDULE_MSG", "create: CRASH: " + t.getClass().getName() + ": " + t.getMessage());
             throw new RuntimeException(t);
@@ -391,11 +403,11 @@ public class ScheduleMsgPageView {
     // ===== 卡片1: 任务基础信息 =====
 
     private static View buildCard1(Context ctx, float d, Activity act) {
-        LinearLayout card = makeCard(ctx, d, "任务基础信息");
+        LinearLayout card = makeCard(ctx, d, "");
 
         final EditText nameEt = borderedEditText(ctx, d, "请输入任务名称", CLR_HIGHLIGHT);
         nameEt.setText(sTaskNameCache);
-        card.addView(rowLabel(ctx, d, "任务名称", nameEt));
+        card.addView(rowLabelW(ctx, d, "任务名称", nameEt, 52));
         card.addView(hSep(ctx, d));
 
         LinearLayout timeRow = new LinearLayout(ctx);
@@ -404,27 +416,49 @@ public class ScheduleMsgPageView {
         TextView timeLabel = label(ctx, d, "发送时间");
         timeLabel.setLayoutParams(lpFixW(PX(d, 72)));
         timeRow.addView(timeLabel);
+        View tsp1 = new View(ctx); tsp1.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 4), 0)); timeRow.addView(tsp1);
 
-        final EditText hourEt = borderedEditText(ctx, d, String.format("%02d", sHourCache), CLR_HIGHLIGHT);
+        Calendar now = Calendar.getInstance();
+        if (sYearCache == 0) { sYearCache = now.get(Calendar.YEAR); sMonthCache = now.get(Calendar.MONTH)+1; sDayCache = now.get(Calendar.DAY_OF_MONTH); }
+
+        final EditText yearEt = smallBorderedEdit(ctx, d, String.valueOf(sYearCache), CLR_HIGHLIGHT);
+        yearEt.setLayoutParams(lpFixW(PX(d, 40)));
+        timeRow.addView(yearEt);
+        TextView yUnit = new TextView(ctx); yUnit.setText("年"); yUnit.setTextSize(10); yUnit.setTextColor(CLR_WHITE);
+        timeRow.addView(yUnit);
+        final EditText monEt = smallBorderedEdit(ctx, d, String.format("%02d", sMonthCache), CLR_HIGHLIGHT);
+        monEt.setLayoutParams(lpFixW(PX(d, 32)));
+        timeRow.addView(monEt);
+        TextView mUnit = new TextView(ctx); mUnit.setText("月"); mUnit.setTextSize(10); mUnit.setTextColor(CLR_WHITE);
+        timeRow.addView(mUnit);
+        final EditText dayEt = smallBorderedEdit(ctx, d, String.format("%02d", sDayCache), CLR_HIGHLIGHT);
+        dayEt.setLayoutParams(lpFixW(PX(d, 32)));
+        timeRow.addView(dayEt);
+        TextView dUnit = new TextView(ctx); dUnit.setText("日 "); dUnit.setTextSize(10); dUnit.setTextColor(CLR_WHITE);
+        timeRow.addView(dUnit);
+
+        final EditText hourEt = smallBorderedEdit(ctx, d, String.format("%02d", sHourCache), CLR_HIGHLIGHT);
         hourEt.setInputType(InputType.TYPE_CLASS_NUMBER);
-        hourEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 42), -2));
+        hourEt.setLayoutParams(lpFixW(PX(d, 32)));
         hourEt.setText(String.format("%02d", sHourCache));
         timeRow.addView(hourEt);
-
-        TextView colon = new TextView(ctx);
-        colon.setText(":");
-        colon.setTextSize(13); colon.setTextColor(CLR_WHITE); colon.setTypeface(null, Typeface.BOLD);
-        colon.setPadding(PX(d, 4), 0, PX(d, 4), 0);
-        timeRow.addView(colon);
-
-        final EditText minEt = borderedEditText(ctx, d, String.format("%02d", sMinuteCache), CLR_HIGHLIGHT);
+        TextView hUnit = new TextView(ctx); hUnit.setText("时"); hUnit.setTextSize(10); hUnit.setTextColor(CLR_WHITE);
+        timeRow.addView(hUnit);
+        final EditText minEt = smallBorderedEdit(ctx, d, String.format("%02d", sMinuteCache), CLR_HIGHLIGHT);
         minEt.setInputType(InputType.TYPE_CLASS_NUMBER);
-        minEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 42), -2));
+        minEt.setLayoutParams(lpFixW(PX(d, 32)));
         minEt.setText(String.format("%02d", sMinuteCache));
         timeRow.addView(minEt);
+        TextView miUnit = new TextView(ctx); miUnit.setText("分"); miUnit.setTextSize(10); miUnit.setTextColor(CLR_WHITE);
+        timeRow.addView(miUnit);
+        final EditText secEt = smallBorderedEdit(ctx, d, "00", CLR_HIGHLIGHT);
+        secEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+        secEt.setLayoutParams(lpFixW(PX(d, 32)));
+        timeRow.addView(secEt);
+        TextView sUnit = new TextView(ctx); sUnit.setText("秒"); sUnit.setTextSize(10); sUnit.setTextColor(CLR_WHITE);
+        timeRow.addView(sUnit);
 
         View spT = new View(ctx); spT.setLayoutParams(lpWeight(1)); timeRow.addView(spT);
-
         card.addView(timeRow);
         card.addView(hSep(ctx, d));
 
@@ -434,6 +468,7 @@ public class ScheduleMsgPageView {
         TextView rpLabel = label(ctx, d, "重复规则");
         rpLabel.setLayoutParams(lpFixW(PX(d, 72)));
         repeatRow.addView(rpLabel);
+        View rsp1 = new View(ctx); rsp1.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 4), 0)); repeatRow.addView(rsp1);
 
         final Spinner repeatSp = new Spinner(ctx);
         repeatSp.setAdapter(new ArrayAdapter<String>(ctx, android.R.layout.simple_spinner_item, REPEAT_MODES) {
@@ -449,14 +484,15 @@ public class ScheduleMsgPageView {
         TextView enableTg = cardToggle(ctx, d, "已启用", "未启用", false);
         card.addView(rowLabel(ctx, d, "任务状态", enableTg));
 
-        card.setTag(new Object[]{nameEt, hourEt, minEt, repeatSp, enableTg});
+        card.setTag(new Object[]{nameEt, yearEt, monEt, dayEt, hourEt, minEt, secEt, repeatSp, enableTg});
+        sNameEt = nameEt; sYearEt = yearEt; sMonEt = monEt; sDayEt = dayEt; sHourEt = hourEt; sMinEt = minEt; sSecEt = secEt;
         return card;
     }
 
     // ===== 卡片2: 消息内容配置 =====
 
     private static View buildCard2(Context ctx, float d, Activity act) {
-        LinearLayout card = makeCard(ctx, d, "消息内容配置");
+        LinearLayout card = makeCard(ctx, d, "");
 
         TextView typeTitle = new TextView(ctx);
         typeTitle.setText("选择消息类型");
@@ -579,8 +615,27 @@ public class ScheduleMsgPageView {
         });
         sTypeContentContainer.addView(et);
 
+        LinearLayout varRow = new LinearLayout(ctx);
+        varRow.setOrientation(LinearLayout.HORIZONTAL);
+        varRow.setGravity(Gravity.CENTER);
+        varRow.setPadding(0, PX(d, 6), 0, 0);
+        String[] vars = {"{昵称}","{群名称}","{当前时间}"};
+        int[] varColors = {CLR_HIGHLIGHT, CLR_YELLOW, CLR_NEON};
+        for (int i = 0; i < vars.length; i++) {
+            final String var = vars[i];
+            TextView vb = varBtn(ctx, d, var, varColors[i]);
+            vb.setOnClickListener(v -> {
+                int sel = Math.max(et.getSelectionStart(), 0);
+                et.getText().insert(sel, var);
+            });
+            varRow.addView(vb);
+            if (i < vars.length - 1) { View sp = new View(ctx); sp.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 6), 0)); varRow.addView(sp); }
+        }
+        View spV = new View(ctx); spV.setLayoutParams(lpWeight(1)); varRow.addView(spV);
+        sTypeContentContainer.addView(varRow);
+
         TextView hint = new TextView(ctx);
-        hint.setText("支持 {昵称}{群名称}{当前时间} 变量替换");
+        hint.setText("点击按钮即可自动填入变量，多条文案用 | 分隔随机发送");
         hint.setTextSize(9);
         hint.setTextColor(CLR_GRAY);
         hint.setPadding(0, PX(d, 4), 0, 0);
@@ -591,26 +646,50 @@ public class ScheduleMsgPageView {
             if (act != null) {
                 TextView imgBtn = textBtn(ctx, d, "点击选择手机图片", CLR_NEON);
                 imgBtn.setPadding(PX(d, 16), PX(d, 8), PX(d, 16), PX(d, 8));
-                imgBtn.setLayoutParams(new LinearLayout.LayoutParams(-2, -2));
-                imgBtn.setOnClickListener(v -> startImagePicker(act));
+                imgBtn.setOnClickListener(v -> {
+                    sPickedFiles.clear();
+                    sOnFilePicked = () -> {
+                        sOnFilePicked = null;
+                        Activity a = sActRef != null ? sActRef.get() : null;
+                        if (a != null) a.runOnUiThread(() -> refreshTypeContent(ctx, d, a));
+                    };
+                    startImagePicker(act);
+                });
                 LinearLayout wrap = new LinearLayout(ctx);
                 wrap.setOrientation(LinearLayout.HORIZONTAL);
                 wrap.setGravity(Gravity.CENTER);
                 wrap.setPadding(0, PX(d, 6), 0, 0);
                 wrap.addView(imgBtn);
+                sTypeContentContainer.addView(wrap);
 
                 if (!sPickedFiles.isEmpty()) {
-                    String path = sPickedFiles.get(sPickedFiles.size() - 1);
-                    String name = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
-                    TextView picked = new TextView(ctx);
-                    picked.setText("\n已选: " + name);
-                    picked.setTextSize(9);
-                    picked.setTextColor(CLR_HIGHLIGHT);
-                    wrap.addView(picked);
+                    for (String path : sPickedFiles) {
+                        String name = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
+                        if (name.length() > 30) name = name.substring(0, 30) + "...";
+                        TextView picked = new TextView(ctx);
+                        picked.setText("已选: " + name);
+                        picked.setTextSize(10);
+                        picked.setTextColor(CLR_HIGHLIGHT);
+                        picked.setPadding(0, PX(d, 4), 0, 0);
+                        sTypeContentContainer.addView(picked);
+                    }
                 }
-                sTypeContentContainer.addView(wrap);
             }
         }
+    }
+
+    private static TextView varBtn(Context ctx, float d, String text, int color) {
+        TextView btn = new TextView(ctx);
+        btn.setText(text);
+        btn.setTextSize(10);
+        btn.setTextColor(color);
+        btn.setPadding(PX(d, 8), PX(d, 4), PX(d, 8), PX(d, 4));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(PX(d, 2));
+        bg.setStroke(PX(d, 1), color);
+        bg.setColor(Color.TRANSPARENT);
+        btn.setBackground(bg);
+        return btn;
     }
 
     // 图片消息 = 两个按钮
@@ -657,8 +736,7 @@ public class ScheduleMsgPageView {
     }
 
     private static void showPickedFile(Context ctx, float d) {
-        if (!sPickedFiles.isEmpty()) {
-            String path = sPickedFiles.get(sPickedFiles.size() - 1);
+        for (String path : sPickedFiles) {
             String name = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
             if (name.length() > 30) name = name.substring(0, 30) + "...";
             TextView picked = new TextView(ctx);
@@ -821,7 +899,7 @@ public class ScheduleMsgPageView {
         card.addView(uploadRow);
 
         final LinearLayout previewArea = new LinearLayout(ctx);
-        previewArea.setOrientation(LinearLayout.HORIZONTAL);
+        previewArea.setOrientation(LinearLayout.VERTICAL);
         previewArea.setPadding(0, PX(d, 8), 0, 0);
         card.addView(previewArea);
 
@@ -902,55 +980,243 @@ public class ScheduleMsgPageView {
         area.removeAllViews();
         if (sMaterialFiles.isEmpty()) {
             TextView empty = new TextView(ctx);
-            empty.setText("暂无素材");
+            empty.setText("暂无素材，点击上方按钮上传");
             empty.setTextSize(11); empty.setTextColor(CLR_GRAY);
+            empty.setPadding(0, PX(d, 4), 0, 0);
             area.addView(empty);
-        } else {
-            for (int i = 0; i < sMaterialFiles.size(); i++) {
-                final String path = sMaterialFiles.get(i);
-                String name = path.substring(path.lastIndexOf('/') + 1);
-                if (name.length() > 12) name = name.substring(0, 12) + "...";
-                final int idx = i;
+            countLabel.setText("0 个素材");
+            return;
+        }
 
-                LinearLayout item = new LinearLayout(ctx);
-                item.setOrientation(LinearLayout.VERTICAL);
-                item.setGravity(Gravity.CENTER);
-                item.setPadding(PX(d, 6), PX(d, 4), PX(d, 6), PX(d, 4));
-                GradientDrawable itemBg = new GradientDrawable();
-                itemBg.setCornerRadius(PX(d, 2));
-                itemBg.setColor(CLR_CARD);
-                itemBg.setStroke(PX(d, 1), 0x33336655);
-                item.setBackground(itemBg);
+        // Separate images, audio, and others
+        List<String> images = new ArrayList<>();
+        List<String> audios = new ArrayList<>();
+        List<String> others = new ArrayList<>();
+        for (String p : sMaterialFiles) {
+            String l = p.toLowerCase();
+            if (l.endsWith(".jpg") || l.endsWith(".jpeg") || l.endsWith(".png") || l.endsWith(".gif") || l.endsWith(".webp") || l.endsWith(".bmp")) {
+                images.add(p);
+            } else if (l.endsWith(".mp3") || l.endsWith(".wav") || l.endsWith(".ogg") || l.endsWith(".aac") || l.endsWith(".m4a") || l.endsWith(".flac") || l.endsWith(".amr") || l.endsWith(".wma")) {
+                audios.add(p);
+            } else {
+                others.add(p);
+            }
+        }
 
-                TextView icon = new TextView(ctx);
-                icon.setText(fileIcon(path));
-                icon.setTextSize(20);
-                icon.setPadding(0, 0, 0, PX(d, 2));
-                item.addView(icon);
+        // Image grid: 3 per row
+        int COLS = 3;
+        int thumbW = PX(d, 72);
+        int thumbH = PX(d, 72);
+        int gap = PX(d, 4);
+        for (int row = 0; row * COLS < images.size(); row++) {
+            LinearLayout imgRow = new LinearLayout(ctx);
+            imgRow.setOrientation(LinearLayout.HORIZONTAL);
+            imgRow.setPadding(0, 0, 0, gap);
+            for (int col = 0; col < COLS; col++) {
+                int idx = row * COLS + col;
+                if (idx >= images.size()) break;
+                final String path = images.get(idx);
+                final int fi = idx;
 
+                LinearLayout cell = new LinearLayout(ctx);
+                cell.setOrientation(LinearLayout.VERTICAL);
+                cell.setGravity(Gravity.CENTER);
+                cell.setPadding(PX(d, 1), PX(d, 1), PX(d, 1), PX(d, 1));
+                LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-2, -2);
+                if (col < COLS - 1) clp.setMargins(0, 0, gap, 0);
+                cell.setLayoutParams(clp);
+
+                // Thumbnail
+                ImageView thumb = new ImageView(ctx);
+                thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                try {
+                    BitmapFactory.Options opt = new BitmapFactory.Options();
+                    opt.inSampleSize = 4;
+                    Bitmap bm = BitmapFactory.decodeFile(path, opt);
+                    if (bm != null) thumb.setImageBitmap(bm);
+                } catch (Exception ignored) {}
+                GradientDrawable thumbBg = new GradientDrawable();
+                thumbBg.setCornerRadius(PX(d, 2));
+                thumbBg.setStroke(PX(d, 1), 0x33336655);
+                thumbBg.setColor(CLR_CARD);
+                thumb.setBackground(thumbBg);
+                LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(thumbW, thumbH);
+                cell.addView(thumb, tlp);
+
+                // File name below
+                String name = new java.io.File(path).getName();
+                if (name.length() > 10) name = name.substring(0, 9) + "…";
                 TextView fname = new TextView(ctx);
                 fname.setText(name);
-                fname.setTextSize(9);
-                fname.setTextColor(CLR_WHITE);
-                fname.setMaxWidth(PX(d, 60));
-                item.addView(fname);
+                fname.setTextSize(9); fname.setTextColor(CLR_GRAY);
+                fname.setMaxWidth(thumbW);
+                fname.setPadding(0, PX(d, 2), 0, 0);
+                cell.addView(fname);
 
-                item.setOnClickListener(v -> {
-                    sMaterialFiles.remove(idx);
+                // Click to remove
+                cell.setOnClickListener(v -> {
+                    sMaterialFiles.remove(fi);
                     refreshMaterialPreviews(ctx, d, area, countLabel);
                 });
-                item.setOnLongClickListener(v -> {
+                cell.setOnLongClickListener(v -> {
                     Toast.makeText(ctx, path, Toast.LENGTH_SHORT).show();
                     return true;
                 });
+                imgRow.addView(cell);
+            }
+            area.addView(imgRow);
+        }
 
-                LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(-2, -2);
-                ilp.setMargins(0, 0, PX(d, 6), 0);
-                item.setLayoutParams(ilp);
-                area.addView(item);
+        // Audio items: filename + play/pause button
+        for (int i = 0; i < audios.size(); i++) {
+            final String path = audios.get(i);
+            final int ai = images.size() + i;
+
+            LinearLayout audioItem = new LinearLayout(ctx);
+            audioItem.setOrientation(LinearLayout.HORIZONTAL);
+            audioItem.setGravity(Gravity.CENTER_VERTICAL);
+            audioItem.setPadding(PX(d, 8), PX(d, 4), PX(d, 8), PX(d, 4));
+            GradientDrawable aibg = new GradientDrawable();
+            aibg.setCornerRadius(PX(d, 2));
+            aibg.setStroke(PX(d, 1), 0x33336655);
+            aibg.setColor(CLR_CARD);
+            audioItem.setBackground(aibg);
+            LinearLayout.LayoutParams ailp = new LinearLayout.LayoutParams(-1, -2);
+            ailp.setMargins(0, 0, 0, gap);
+            audioItem.setLayoutParams(ailp);
+
+            TextView audioIcon = new TextView(ctx);
+            audioIcon.setText("♪");
+            audioIcon.setTextSize(16); audioIcon.setTextColor(CLR_NEON);
+            audioItem.addView(audioIcon);
+
+            String aname = new java.io.File(path).getName();
+            if (aname.length() > 24) aname = aname.substring(0, 23) + "…";
+            TextView aText = new TextView(ctx);
+            aText.setText(aname);
+            aText.setTextSize(10); aText.setTextColor(CLR_WHITE);
+            aText.setPadding(PX(d, 6), 0, PX(d, 6), 0);
+            LinearLayout.LayoutParams atlp = new LinearLayout.LayoutParams(0, -2, 1);
+            audioItem.addView(aText, atlp);
+
+            TextView playBtn = new TextView(ctx);
+            playBtn.setText("▶ 播放");
+            playBtn.setTextSize(10);
+            playBtn.setTextColor(CLR_YELLOW);
+            playBtn.setPadding(PX(d, 8), PX(d, 3), PX(d, 8), PX(d, 3));
+            GradientDrawable pbg = new GradientDrawable();
+            pbg.setCornerRadius(PX(d, 2));
+            pbg.setStroke(PX(d, 1), CLR_YELLOW);
+            pbg.setColor(Color.TRANSPARENT);
+            playBtn.setBackground(pbg);
+            playBtn.setTag(Boolean.FALSE); // isPlaying flag
+            playBtn.setOnClickListener(v -> toggleAudioPlayback(ctx, path, playBtn));
+            audioItem.addView(playBtn);
+
+            audioItem.setOnLongClickListener(v -> {
+                sMaterialFiles.remove(ai);
+                refreshMaterialPreviews(ctx, d, area, countLabel);
+                return true;
+            });
+            area.addView(audioItem);
+        }
+
+        // Other file types: simple icon + name row
+        for (int i = 0; i < others.size(); i++) {
+            final String path = others.get(i);
+            final int oi = images.size() + audios.size() + i;
+
+            LinearLayout otherItem = new LinearLayout(ctx);
+            otherItem.setOrientation(LinearLayout.HORIZONTAL);
+            otherItem.setGravity(Gravity.CENTER_VERTICAL);
+            otherItem.setPadding(PX(d, 8), PX(d, 4), PX(d, 8), PX(d, 4));
+            GradientDrawable oibg = new GradientDrawable();
+            oibg.setCornerRadius(PX(d, 2));
+            oibg.setStroke(PX(d, 1), 0x33336655);
+            oibg.setColor(CLR_CARD);
+            otherItem.setBackground(oibg);
+            LinearLayout.LayoutParams oilp = new LinearLayout.LayoutParams(-1, -2);
+            oilp.setMargins(0, 0, 0, gap);
+            otherItem.setLayoutParams(oilp);
+
+            TextView oicon = new TextView(ctx);
+            oicon.setText(fileIcon(path));
+            oicon.setTextSize(14); oicon.setTextColor(CLR_HIGHLIGHT);
+            otherItem.addView(oicon);
+
+            String oname = new java.io.File(path).getName();
+            if (oname.length() > 28) oname = oname.substring(0, 27) + "…";
+            TextView oText = new TextView(ctx);
+            oText.setText(oname);
+            oText.setTextSize(10); oText.setTextColor(CLR_WHITE);
+            oText.setPadding(PX(d, 6), 0, PX(d, 6), 0);
+            LinearLayout.LayoutParams otlp = new LinearLayout.LayoutParams(0, -2, 1);
+            otherItem.addView(oText, otlp);
+
+            otherItem.setOnClickListener(v -> {
+                sMaterialFiles.remove(oi);
+                refreshMaterialPreviews(ctx, d, area, countLabel);
+            });
+            otherItem.setOnLongClickListener(v -> {
+                Toast.makeText(ctx, path, Toast.LENGTH_SHORT).show();
+                return true;
+            });
+            area.addView(otherItem);
+        }
+
+        countLabel.setText(sMaterialFiles.size() + " 个素材");
+    }
+
+    private static android.media.MediaPlayer sMediaPlayer = null;
+    private static String sCurrentAudioPath = null;
+
+    private static void toggleAudioPlayback(Context ctx, String path, TextView btn) {
+        boolean playing = Boolean.TRUE.equals(btn.getTag());
+        if (playing) {
+            if (sMediaPlayer != null) {
+                sMediaPlayer.stop();
+                sMediaPlayer.release();
+                sMediaPlayer = null;
+            }
+            sCurrentAudioPath = null;
+            btn.setText("▶ 播放");
+            btn.setTextColor(CLR_YELLOW);
+            GradientDrawable bg = (GradientDrawable) btn.getBackground();
+            bg.setStroke(PX(ctx.getResources().getDisplayMetrics().density, 1), CLR_YELLOW);
+            btn.setTag(Boolean.FALSE);
+        } else {
+            if (sMediaPlayer != null) {
+                sMediaPlayer.stop();
+                sMediaPlayer.release();
+                sMediaPlayer = null;
+            }
+            try {
+                sMediaPlayer = new android.media.MediaPlayer();
+                sMediaPlayer.setDataSource(path);
+                sMediaPlayer.prepare();
+                sMediaPlayer.start();
+                sMediaPlayer.setOnCompletionListener(mp -> {
+                    mp.release();
+                    sMediaPlayer = null;
+                    sCurrentAudioPath = null;
+                    btn.post(() -> {
+                        btn.setText("▶ 播放");
+                        btn.setTextColor(CLR_YELLOW);
+                        GradientDrawable bbg = (GradientDrawable) btn.getBackground();
+                        bbg.setStroke(PX(ctx.getResources().getDisplayMetrics().density, 1), CLR_YELLOW);
+                        btn.setTag(Boolean.FALSE);
+                    });
+                });
+                sCurrentAudioPath = path;
+                btn.setText("⏸ 暂停");
+                btn.setTextColor(CLR_NEON);
+                GradientDrawable nbg = (GradientDrawable) btn.getBackground();
+                nbg.setStroke(PX(ctx.getResources().getDisplayMetrics().density, 1), CLR_NEON);
+                btn.setTag(Boolean.TRUE);
+            } catch (Exception e) {
+                Toast.makeText(ctx, "播放失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
             }
         }
-        countLabel.setText(sMaterialFiles.size() + " 个素材");
     }
 
     private static String fileIcon(String path) {
@@ -1010,7 +1276,7 @@ public class ScheduleMsgPageView {
 
         LinearLayout selRow = new LinearLayout(ctx);
         selRow.setOrientation(LinearLayout.HORIZONTAL);
-        selRow.setGravity(Gravity.CENTER_VERTICAL);
+        selRow.setGravity(Gravity.CENTER);
 
         TextView selBtn = new TextView(ctx);
         selBtn.setText("选择联系人");
@@ -1028,10 +1294,10 @@ public class ScheduleMsgPageView {
         countTv.setText(sSelectedContacts.size() + "人");
         countTv.setTextSize(10);
         countTv.setTextColor(CLR_HIGHLIGHT);
-        countTv.setPadding(PX(d, 4), 0, 0, 0);
+        countTv.setPadding(PX(d, 6), 0, 0, 0);
         selRow.addView(countTv);
 
-        View spM = new View(ctx); spM.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 10), 0)); selRow.addView(spM);
+        View spMid = new View(ctx); spMid.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 14), 0)); selRow.addView(spMid);
 
         TextView excBtn = new TextView(ctx);
         excBtn.setText("排除名单");
@@ -1049,12 +1315,20 @@ public class ScheduleMsgPageView {
         excCountTv.setText(sExcludeContacts.size() + "人");
         excCountTv.setTextSize(10);
         excCountTv.setTextColor(CLR_RED);
-        excCountTv.setPadding(PX(d, 4), 0, 0, 0);
+        excCountTv.setPadding(PX(d, 6), 0, 0, 0);
         selRow.addView(excCountTv);
 
-        View spE1 = new View(ctx); spE1.setLayoutParams(lpWeight(1)); selRow.addView(spE1);
-
         card.addView(selRow);
+
+        selBtn.setOnClickListener(v -> {
+            ContactPickerDialog.show(act, joinSet(",", sSelectedContacts),
+                sSelectedChannel == 1 ? 1 : 0,
+                (wxids, display) -> {
+                    sSelectedContacts.clear();
+                    sSelectedContacts.addAll(wxids);
+                    countTv.setText(sSelectedContacts.size() + "人");
+                });
+        });
 
         excBtn.setOnClickListener(v -> {
             ContactPickerDialog.show(act, joinSet(",", sExcludeContacts),
@@ -1118,9 +1392,9 @@ public class ScheduleMsgPageView {
         intLabel.setPadding(0, 0, PX(d, 6), 0);
         intRow.addView(intLabel);
 
-        final EditText intervalEt = borderedEditText(ctx, d, "5", CLR_HIGHLIGHT);
+        final EditText intervalEt = smallBorderedEdit(ctx, d, "5", CLR_HIGHLIGHT);
         intervalEt.setInputType(InputType.TYPE_CLASS_NUMBER);
-        intervalEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 70), -2));
+        intervalEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 52), -2));
         intRow.addView(intervalEt);
 
         TextView intUnit = new TextView(ctx);
@@ -1133,8 +1407,19 @@ public class ScheduleMsgPageView {
         card.addView(intRow);
         card.addView(hSep(ctx, d));
 
-        TextView randomTg = cardToggle(ctx, d, "已开启", "已关闭", false);
-        card.addView(rowLabel(ctx, d, "随机浮动延迟", randomTg));
+        LinearLayout ranRow = new LinearLayout(ctx);
+        ranRow.setOrientation(LinearLayout.HORIZONTAL);
+        ranRow.setGravity(Gravity.CENTER_VERTICAL);
+        ranRow.setPadding(0, PX(d, 3), 0, PX(d, 3));
+        TextView ranLabel = new TextView(ctx);
+        ranLabel.setText("随机浮动延迟");
+        ranLabel.setTextSize(11); ranLabel.setTextColor(CLR_WHITE);
+        ranRow.addView(ranLabel);
+        View spRan = new View(ctx); spRan.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 10), 0)); ranRow.addView(spRan);
+        TextView randomTg = cardToggle(ctx, d, "ON", "OFF", false);
+        ranRow.addView(randomTg);
+        View spR2 = new View(ctx); spR2.setLayoutParams(lpWeight(1)); ranRow.addView(spR2);
+        card.addView(ranRow);
         card.addView(hSep(ctx, d));
 
         LinearLayout batchRow = new LinearLayout(ctx);
@@ -1146,9 +1431,9 @@ public class ScheduleMsgPageView {
         bsLabel.setTextSize(11); bsLabel.setTextColor(CLR_WHITE);
         batchRow.addView(bsLabel);
 
-        final EditText batchSizeEt = borderedEditText(ctx, d, "10", CLR_HIGHLIGHT);
+        final EditText batchSizeEt = smallBorderedEdit(ctx, d, "10", CLR_HIGHLIGHT);
         batchSizeEt.setInputType(InputType.TYPE_CLASS_NUMBER);
-        batchSizeEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 50), -2));
+        batchSizeEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 52), -2));
         batchRow.addView(batchSizeEt);
 
         TextView bsUnit = new TextView(ctx);
@@ -1156,14 +1441,16 @@ public class ScheduleMsgPageView {
         bsUnit.setTextSize(11); bsUnit.setTextColor(CLR_WHITE);
         batchRow.addView(bsUnit);
 
+        View bsp1 = new View(ctx); bsp1.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 8), 0)); batchRow.addView(bsp1);
+
         TextView biLabel = new TextView(ctx);
         biLabel.setText("批次间隔");
         biLabel.setTextSize(11); biLabel.setTextColor(CLR_WHITE);
         batchRow.addView(biLabel);
 
-        final EditText batchIntEt = borderedEditText(ctx, d, "1", CLR_HIGHLIGHT);
+        final EditText batchIntEt = smallBorderedEdit(ctx, d, "1", CLR_HIGHLIGHT);
         batchIntEt.setInputType(InputType.TYPE_CLASS_NUMBER);
-        batchIntEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 46), -2));
+        batchIntEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 52), -2));
         batchRow.addView(batchIntEt);
 
         TextView biUnit = new TextView(ctx);
@@ -1185,9 +1472,9 @@ public class ScheduleMsgPageView {
         msLabel.setTextSize(11); msLabel.setTextColor(CLR_WHITE);
         maxRow.addView(msLabel);
 
-        final EditText maxSendEt = borderedEditText(ctx, d, "200", CLR_HIGHLIGHT);
+        final EditText maxSendEt = smallBorderedEdit(ctx, d, "200", CLR_HIGHLIGHT);
         maxSendEt.setInputType(InputType.TYPE_CLASS_NUMBER);
-        maxSendEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 54), -2));
+        maxSendEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 52), -2));
         maxRow.addView(maxSendEt);
 
         TextView msUnit = new TextView(ctx);
@@ -1213,23 +1500,25 @@ public class ScheduleMsgPageView {
         retryRow.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView rtLabel = new TextView(ctx);
-        rtLabel.setText("最大重试次数");
+        rtLabel.setText("最大重试次数(次)");
         rtLabel.setTextSize(11); rtLabel.setTextColor(CLR_WHITE);
         retryRow.addView(rtLabel);
 
-        final EditText retryTimesEt = borderedEditText(ctx, d, "3", CLR_HIGHLIGHT);
+        final EditText retryTimesEt = smallBorderedEdit(ctx, d, "3", CLR_HIGHLIGHT);
         retryTimesEt.setInputType(InputType.TYPE_CLASS_NUMBER);
-        retryTimesEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 42), -2));
+        retryTimesEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 52), -2));
         retryRow.addView(retryTimesEt);
 
         TextView spR = new TextView(ctx);
-        spR.setText("   重试等待时间");
+        spR.setText("   重试等待");
         spR.setTextSize(11); spR.setTextColor(CLR_WHITE);
         retryRow.addView(spR);
 
-        final EditText retryIntEt = borderedEditText(ctx, d, "60", CLR_HIGHLIGHT);
+        View rsp1 = new View(ctx); rsp1.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 6), 0)); retryRow.addView(rsp1);
+
+        final EditText retryIntEt = smallBorderedEdit(ctx, d, "60", CLR_HIGHLIGHT);
         retryIntEt.setInputType(InputType.TYPE_CLASS_NUMBER);
-        retryIntEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 42), -2));
+        retryIntEt.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 52), -2));
         retryRow.addView(retryIntEt);
 
         TextView riUnit = new TextView(ctx);
@@ -1270,7 +1559,7 @@ public class ScheduleMsgPageView {
 
         View sp2 = new View(ctx); sp2.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 6), 0)); btnRow.addView(sp2);
 
-        TextView logBtn = textBtn(ctx, d, "日志", CLR_YELLOW);
+        TextView logBtn = textBtn(ctx, d, "发送历史", CLR_YELLOW);
         btnRow.addView(logBtn);
 
         card.addView(btnRow);
@@ -1453,6 +1742,22 @@ public class ScheduleMsgPageView {
         List<SendLogEntry> logs = ScheduleBroadcast.getSendLogs();
         List<SendLogEntry> failed = ScheduleBroadcast.getFailedLogs();
 
+        // 持久化保存
+        android.content.SharedPreferences sp = ctx.getSharedPreferences("leshao_send_logs", Context.MODE_PRIVATE);
+        StringBuilder sb = new StringBuilder();
+        String FS = "\u0001"; String RS = "\u0002";
+        for (SendLogEntry e : logs) {
+            if (sb.length() > 0) sb.append(RS);
+            sb.append(e.success ? "1" : "0").append(FS)
+              .append(e.timestamp).append(FS)
+              .append(nullToEmpty(e.targetWxid)).append(FS)
+              .append(nullToEmpty(e.targetName)).append(FS)
+              .append(nullToEmpty(e.taskName)).append(FS)
+              .append(nullToEmpty(e.content)).append(FS)
+              .append(nullToEmpty(e.error));
+        }
+        if (sb.length() > 0) sp.edit().putString("logs_persist", sb.toString()).apply();
+
         AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert);
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -1460,7 +1765,7 @@ public class ScheduleMsgPageView {
         root.setBackgroundColor(CLR_BG);
 
         TextView title = new TextView(ctx);
-        title.setText("发送历史日志"); title.setTextSize(14); title.setTextColor(CLR_WHITE);
+        title.setText("发送历史"); title.setTextSize(14); title.setTextColor(CLR_WHITE);
         title.setTypeface(null, Typeface.BOLD); title.setPadding(0, 0, 0, PX(d, 6));
         root.addView(title);
 
@@ -1645,9 +1950,18 @@ public class ScheduleMsgPageView {
 
             // 计算触发时间
             Calendar cal = Calendar.getInstance();
-            cal.set(Calendar.HOUR_OF_DAY, sHourCache);
-            cal.set(Calendar.MINUTE, sMinuteCache);
-            cal.set(Calendar.SECOND, 0);
+            int year = parseInt(getTextOrHint(sYearEt), sYearCache);
+            int month = parseInt(getTextOrHint(sMonEt), sMonthCache) - 1;
+            int day = parseInt(getTextOrHint(sDayEt), sDayCache);
+            int hour = parseInt(getTextOrHint(sHourEt), sHourCache);
+            int minute = parseInt(getTextOrHint(sMinEt), sMinuteCache);
+            int second = parseInt(getTextOrHint(sSecEt), 0);
+            cal.set(Calendar.YEAR, year);
+            cal.set(Calendar.MONTH, month);
+            cal.set(Calendar.DAY_OF_MONTH, day);
+            cal.set(Calendar.HOUR_OF_DAY, hour);
+            cal.set(Calendar.MINUTE, minute);
+            cal.set(Calendar.SECOND, second);
             cal.set(Calendar.MILLISECOND, 0);
             if (cal.getTimeInMillis() <= System.currentTimeMillis()) cal.add(Calendar.DAY_OF_MONTH, 1);
             task.triggerTime = cal.getTimeInMillis();
@@ -1732,37 +2046,39 @@ public class ScheduleMsgPageView {
         cardBg.setColor(CLR_CARD);
         card.setBackground(cardBg);
 
-        LinearLayout header = new LinearLayout(ctx);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
+        if (title != null && !title.isEmpty()) {
+            LinearLayout header = new LinearLayout(ctx);
+            header.setOrientation(LinearLayout.HORIZONTAL);
+            header.setGravity(Gravity.CENTER_VERTICAL);
 
-        TextView iv = new TextView(ctx);
-        iv.setTextColor(CLR_NEON);
-        iv.setTextSize(10);
-        iv.setPadding(0, 0, PX(d, 6), 0);
-        String icon = title.contains("任务基础") ? "\u2139" : title.contains("消息内容") ? "\u2709" :
-            title.contains("素材文件") ? "\uD83D\uDCC1" : title.contains("发送目标") ? "\uD83C\uDFAF" :
-            title.contains("风控") ? "\u26A1" : title.contains("高级") ? "\u2699" : "\uD83D\uDCCB";
-        iv.setText(icon);
-        header.addView(iv);
+            TextView iv = new TextView(ctx);
+            iv.setTextColor(CLR_NEON);
+            iv.setTextSize(10);
+            iv.setPadding(0, 0, PX(d, 6), 0);
+            String icon = title.contains("任务基础") ? "\u2139" : title.contains("消息内容") ? "\u2709" :
+                title.contains("素材文件") ? "\uD83D\uDCC1" : title.contains("发送目标") ? "\uD83C\uDFAF" :
+                title.contains("风控") ? "\u26A1" : title.contains("高级") ? "\u2699" : "\uD83D\uDCCB";
+            iv.setText(icon);
+            header.addView(iv);
 
-        TextView t = new TextView(ctx);
-        t.setText(title);
-        t.setTextSize(13);
-        t.setTextColor(CLR_WHITE);
-        t.setTypeface(null, Typeface.BOLD);
-        t.setLayoutParams(lpWeight(1));
-        header.addView(t);
+            TextView t = new TextView(ctx);
+            t.setText(title);
+            t.setTextSize(13);
+            t.setTextColor(CLR_WHITE);
+            t.setTypeface(null, Typeface.BOLD);
+            t.setLayoutParams(lpWeight(1));
+            header.addView(t);
 
-        card.addView(header);
+            card.addView(header);
 
-        View div = new View(ctx);
-        div.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
-        div.setBackgroundColor(0x22336655);
-        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-1, 1);
-        dlp.setMargins(0, PX(d, 6), 0, PX(d, 8));
-        div.setLayoutParams(dlp);
-        card.addView(div);
+            View div = new View(ctx);
+            div.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
+            div.setBackgroundColor(0x22336655);
+            LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-1, 1);
+            dlp.setMargins(0, PX(d, 6), 0, PX(d, 8));
+            div.setLayoutParams(dlp);
+            card.addView(div);
+        }
 
         return card;
     }
@@ -1776,6 +2092,8 @@ public class ScheduleMsgPageView {
         TextView tv = label(ctx, d, labelText);
         tv.setLayoutParams(lpFixW(PX(d, 72)));
         row.addView(tv);
+
+        View sp = new View(ctx); sp.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 4), 0)); row.addView(sp);
 
         row.addView(widget);
         return row;
@@ -1808,7 +2126,7 @@ public class ScheduleMsgPageView {
         et.setHint(hint);
         et.setHintTextColor(CLR_GRAY);
         et.setTextColor(textColor);
-        et.setPadding(PX(d, 8), PX(d, 4), PX(d, 8), PX(d, 4));
+        et.setPadding(PX(d, 10), PX(d, 6), PX(d, 10), PX(d, 6));
         et.setTextSize(11);
         et.setSingleLine(true);
         GradientDrawable etBg = new GradientDrawable();
@@ -1885,9 +2203,41 @@ public class ScheduleMsgPageView {
     private static LinearLayout.LayoutParams lpWeight(int weight) { return new LinearLayout.LayoutParams(0, -2, weight); }
     private static LinearLayout.LayoutParams lpWeight(float weight) { return new LinearLayout.LayoutParams(0, -2, weight); }
     private static LinearLayout.LayoutParams lpFixW(int w) { return new LinearLayout.LayoutParams(w, -2); }
+    private static String nullToEmpty(String s) { return s != null ? s : ""; }
     private static int PX(float d, int dp) { return (int)(dp * d); }
     private static float dp(Context ctx) { return ctx.getResources().getDisplayMetrics().density; }
     private static String nvl(String s) { return s == null ? "" : s; }
+    private static int parseInt(String s, int def) { if (s == null || s.isEmpty()) return def; try { return Integer.parseInt(s.trim()); } catch (Throwable t) { return def; } }
+    private static String getTextOrHint(EditText et) { if (et == null) return ""; String t = et.getText().toString().trim(); return t.isEmpty() ? et.getHint().toString() : t; }
+
+    private static LinearLayout rowLabelW(Context ctx, float d, String labelText, View widget, int labelW) {
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, PX(d, 3), 0, PX(d, 3));
+        TextView tv = label(ctx, d, labelText);
+        tv.setLayoutParams(lpFixW(PX(d, labelW)));
+        row.addView(tv);
+        View sp = new View(ctx); sp.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 4), 0)); row.addView(sp);
+        row.addView(widget);
+        return row;
+    }
+
+    private static EditText smallBorderedEdit(Context ctx, float d, String hint, int textColor) {
+        EditText et = new EditText(ctx);
+        et.setHint(hint);
+        et.setHintTextColor(CLR_GRAY);
+        et.setTextColor(textColor);
+        et.setPadding(PX(d, 6), PX(d, 3), PX(d, 6), PX(d, 3));
+        et.setTextSize(10);
+        et.setSingleLine(true);
+        GradientDrawable etBg = new GradientDrawable();
+        etBg.setCornerRadius(PX(d, 2));
+        etBg.setStroke(PX(d, 1), CLR_NEON);
+        etBg.setColor(Color.TRANSPARENT);
+        et.setBackground(etBg);
+        return et;
+    }
 
     private static String joinSet(CharSequence delimiter, Set<String> tokens) {
         StringBuilder sb = new StringBuilder();

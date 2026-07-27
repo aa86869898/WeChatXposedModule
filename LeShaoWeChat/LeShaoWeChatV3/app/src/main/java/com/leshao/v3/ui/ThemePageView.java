@@ -56,34 +56,8 @@ public class ThemePageView {
         root.addView(masterSwitchCard(ctx, parentAct, prefs, d, masterOn));
         root.addView(spacer(ctx, d, 10));
 
-        root.addView(section(ctx, d, "导航栏"));
-        root.addView(featureRow(ctx, parentAct, d, "标题栏美化", 21));
-
-        root.addView(spacer(ctx, d, 6));
-        root.addView(section(ctx, d, "页面"));
-        root.addView(featureRow(ctx, parentAct, d, "页面背景色", 22));
-        root.addView(featureRow(ctx, parentAct, d, "聊天背景色", 23));
-
-        root.addView(spacer(ctx, d, 6));
-        root.addView(section(ctx, d, "底部Tab"));
-        root.addView(featureRow(ctx, parentAct, d, "底部Tab美化", 24));
-
-        root.addView(spacer(ctx, d, 6));
-        root.addView(section(ctx, d, "聊天气泡"));
-        root.addView(featureRow(ctx, parentAct, d, "自己聊天气泡", 25));
-        root.addView(featureRow(ctx, parentAct, d, "对方聊天气泡", 26));
-
-        root.addView(spacer(ctx, d, 6));
-        root.addView(section(ctx, d, "文字"));
-        root.addView(featureRow(ctx, parentAct, d, "文字颜色", 27));
-
-        root.addView(spacer(ctx, d, 6));
         root.addView(section(ctx, d, "主题引擎"));
         root.addView(featureRow(ctx, parentAct, d, "Monet 主题引擎", 28));
-
-        root.addView(spacer(ctx, d, 6));
-        root.addView(section(ctx, d, "图片气泡"));
-        root.addView(featureRow(ctx, parentAct, d, "自定义聊天气泡", 29));
 
         sv.addView(root);
         return sv;

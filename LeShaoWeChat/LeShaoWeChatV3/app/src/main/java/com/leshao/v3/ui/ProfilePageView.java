@@ -40,20 +40,23 @@ public class ProfilePageView {
         root.addView(sectionLabel(ctx, d, "用户信息"));
         LinearLayout infoCard = makeCard(ctx, d);
 
-        // 头像
+        // 头像+昵称/ID 水平布局
+        LinearLayout userRow = new LinearLayout(ctx);
+        userRow.setOrientation(LinearLayout.HORIZONTAL);
+        userRow.setGravity(Gravity.CENTER_VERTICAL);
+        userRow.setPadding((int)(16 * d), (int)(14 * d), (int)(16 * d), (int)(14 * d));
+
+        // 头像左侧
         ImageView avatar = new ImageView(ctx);
-        int avatarSize = (int)(60 * d);
+        int avatarSize = (int)(56 * d);
         LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(avatarSize, avatarSize);
-        alp.gravity = Gravity.CENTER;
-        alp.bottomMargin = (int)(12 * d);
+        alp.setMargins(0, 0, (int)(14 * d), 0);
         avatar.setLayoutParams(alp);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-
         GradientDrawable avatarBg = new GradientDrawable();
         avatarBg.setCornerRadius(avatarSize / 2f);
         avatarBg.setColor(0xFFE8D8F0);
         avatar.setBackground(avatarBg);
-
         String avatarPath = MainActivity.getAvatarPath();
         if (avatarPath != null) {
             File f = new File(avatarPath);
@@ -62,14 +65,53 @@ public class ProfilePageView {
                 if (bm != null) avatar.setImageBitmap(bm);
             }
         }
-        infoCard.addView(avatar);
+        userRow.addView(avatar);
 
-        // 昵称
-        infoCard.addView(profileRow(ctx, d, "昵称", MainActivity.getUserNickname()));
-        infoCard.addView(itemDivider(ctx, d));
+        // 昵称+wxid 右侧
+        LinearLayout textCol = new LinearLayout(ctx);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        textCol.setGravity(Gravity.CENTER_VERTICAL);
 
-        // 微信ID
-        infoCard.addView(profileRow(ctx, d, "微信ID", MainActivity.getUserWxid()));
+        TextView nickTv = new TextView(ctx);
+        nickTv.setText(MainActivity.getUserNickname());
+        nickTv.setTextSize(16);
+        nickTv.setTextColor(AppColors.text1());
+        nickTv.setTypeface(null, Typeface.BOLD);
+        nickTv.setPadding(0, 0, 0, (int)(6 * d));
+        textCol.addView(nickTv);
+
+        LinearLayout wxidRow = new LinearLayout(ctx);
+        wxidRow.setOrientation(LinearLayout.HORIZONTAL);
+        wxidRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView wxidTv = new TextView(ctx);
+        wxidTv.setText(MainActivity.getUserWxid());
+        wxidTv.setTextSize(12);
+        wxidTv.setTextColor(AppColors.text2());
+        wxidRow.addView(wxidTv);
+
+        TextView copyBtn = new TextView(ctx);
+        copyBtn.setText("复制");
+        copyBtn.setTextSize(10);
+        copyBtn.setTextColor(0xFF4A90D9);
+        copyBtn.setPadding((int)(8 * d), (int)(3 * d), (int)(8 * d), (int)(3 * d));
+        GradientDrawable cpBg = new GradientDrawable();
+        cpBg.setCornerRadius((int)(3 * d));
+        cpBg.setStroke((int)(1 * d), 0xFF4A90D9);
+        cpBg.setColor(android.graphics.Color.TRANSPARENT);
+        copyBtn.setBackground(cpBg);
+        copyBtn.setOnClickListener(v -> {
+            android.content.ClipboardManager cm = (android.content.ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+            android.content.ClipData cd = android.content.ClipData.newPlainText("wxid", MainActivity.getUserWxid());
+            cm.setPrimaryClip(cd);
+            Toast.makeText(ctx, "微信ID已复制", Toast.LENGTH_SHORT).show();
+        });
+        wxidRow.addView(copyBtn);
+
+        textCol.addView(wxidRow);
+        userRow.addView(textCol);
+        infoCard.addView(userRow);
+
         infoCard.addView(itemDivider(ctx, d));
 
         // 微信号
@@ -205,6 +247,56 @@ public class ProfilePageView {
         }
 
         root.addView(actCard);
+
+        final SharedPreferences prefs = ContextManager.getPrefs();
+
+        // ===== Monet 主题 =====
+        root.addView(spacerV(ctx, d, 16));
+        root.addView(sectionLabel(ctx, d, "主题美化"));
+        LinearLayout themeCard = makeCard(ctx, d);
+
+        LinearLayout monRow = new LinearLayout(ctx);
+        monRow.setOrientation(LinearLayout.HORIZONTAL);
+        monRow.setGravity(Gravity.CENTER_VERTICAL);
+        monRow.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(12 * d));
+
+        TextView monLabel = new TextView(ctx);
+        monLabel.setText("Monet 主题引擎");
+        monLabel.setTextSize(13);
+        monLabel.setTextColor(AppColors.text1());
+        monLabel.setTypeface(null, Typeface.BOLD);
+        monLabel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        monRow.addView(monLabel);
+
+        boolean monOn = prefs != null && prefs.getBoolean("ls_theme_enabled", false);
+        TextView monTg = new TextView(ctx);
+        monTg.setText(monOn ? "  关闭  " : "开启");
+        monTg.setTextSize(12);
+        monTg.setTextColor(monOn ? android.graphics.Color.WHITE : 0xFF27AE60);
+        monTg.setTypeface(null, Typeface.BOLD);
+        monTg.setPadding((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+        android.graphics.drawable.GradientDrawable mt = new android.graphics.drawable.GradientDrawable();
+        mt.setCornerRadius((int)(4 * d));
+        mt.setColor(monOn ? 0xFF27AE60 : android.graphics.Color.TRANSPARENT);
+        if (!monOn) mt.setStroke((int)(1 * d), 0xFF27AE60);
+        monTg.setBackground(mt);
+        monTg.setTag(monOn);
+        monTg.setOnClickListener(v -> {
+            boolean cur = !Boolean.TRUE.equals(v.getTag());
+            v.setTag(cur);
+            ((TextView) v).setText(cur ? "  关闭  " : "开启");
+            ((TextView) v).setTextColor(cur ? android.graphics.Color.WHITE : 0xFF27AE60);
+            android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+            g.setCornerRadius((int)(4 * d));
+            g.setColor(cur ? 0xFF27AE60 : android.graphics.Color.TRANSPARENT);
+            if (!cur) g.setStroke((int)(1 * d), 0xFF27AE60);
+            v.setBackground(g);
+            if (prefs != null) prefs.edit().putBoolean("ls_theme_enabled", cur).apply();
+            try { com.leshao.v3.hook.ThemeHook.setMasterEnabled(cur); } catch (Throwable ignored) {}
+        });
+        monRow.addView(monTg);
+        themeCard.addView(monRow);
+        root.addView(themeCard);
 
         // ===== 日志导出 =====
         root.addView(spacerV(ctx, d, 16));
