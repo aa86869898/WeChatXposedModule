@@ -481,7 +481,7 @@ public class ProfilePageView {
             if (expireHours <= 0) return "永久有效";
             long expireTime = actTime + expireHours * 3600000L;
             if (System.currentTimeMillis() > expireTime) return "已过期";
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy年MM月dd日 HH:mm:ss", Locale.getDefault());
+            SimpleDateFormat sdf = new SimpleDateFormat("MM月dd日 HH:mm:ss", Locale.getDefault());
             return sdf.format(new Date(expireTime));
         } catch (Throwable t) {
             return "未激活";
