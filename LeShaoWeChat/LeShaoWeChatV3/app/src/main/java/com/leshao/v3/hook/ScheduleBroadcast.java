@@ -1048,7 +1048,12 @@ public class ScheduleBroadcast {
                     XposedHelpers.callMethod(msg, "X0", task.content);
                     XposedHelpers.callMethod(msg, "e1", now);
                     XposedHelpers.callMethod(msg, "k1", 1);
-                    try { XposedHelpers.callMethod(msg, "H1", 3); } catch (Throwable ignored) {}
+                    try {
+                        log("DIAG: 文本 msg type=" + XposedHelpers.callMethod(msg, "B0")
+                            + " content=" + XposedHelpers.callMethod(msg, "X1")
+                            + " isSend=" + XposedHelpers.callMethod(msg, "G1")
+                            + " talker=" + XposedHelpers.callMethod(msg, "L"));
+                    } catch (Throwable ignored) {}
                     break;
 
                 case 3: // 图片
