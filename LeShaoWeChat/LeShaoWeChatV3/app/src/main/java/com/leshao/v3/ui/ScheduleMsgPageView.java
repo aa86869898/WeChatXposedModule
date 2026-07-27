@@ -103,11 +103,8 @@ public class ScheduleMsgPageView {
 
             loadDraft(ctx);
 
-            ScrollView sv = new ScrollView(ctx);
-            sv.setBackgroundColor(CLR_BG);
-            sv.addView(body);
             LogWriter.log("SCHEDULE_MSG", "create: DONE OK");
-            return sv;
+            return body;
         } catch (Throwable t) {
             LogWriter.log("SCHEDULE_MSG", "create: CRASH: " + t.getClass().getName() + ": " + t.getMessage());
             LogWriter.log("SCHEDULE_MSG", "create: STACK: " + android.util.Log.getStackTraceString(t));
