@@ -65,7 +65,7 @@ public class ScheduleMsgPageView {
     private static FrameLayout sProgressRoot;
     private static LinearLayout sTypeContentContainer;
     private static java.lang.ref.WeakReference<Activity> sActRef;
-    private static EditText sNameEt, sYearEt, sMonEt, sDayEt, sHourEt, sMinEt, sSecEt;
+    private static EditText sNameEt, sMonEt, sDayEt, sHourEt, sMinEt, sSecEt;
 
     private static ContactPickerDialog.OnContactsSelected sLastContactsCallback;
     private static Activity sParentActivity;
@@ -421,11 +421,6 @@ public class ScheduleMsgPageView {
         Calendar now = Calendar.getInstance();
         if (sYearCache == 0) { sYearCache = now.get(Calendar.YEAR); sMonthCache = now.get(Calendar.MONTH)+1; sDayCache = now.get(Calendar.DAY_OF_MONTH); }
 
-        final EditText yearEt = smallBorderedEdit(ctx, d, String.valueOf(sYearCache), CLR_HIGHLIGHT);
-        yearEt.setLayoutParams(lpFixW(PX(d, 40)));
-        timeRow.addView(yearEt);
-        TextView yUnit = new TextView(ctx); yUnit.setText("年"); yUnit.setTextSize(10); yUnit.setTextColor(CLR_WHITE);
-        timeRow.addView(yUnit);
         final EditText monEt = smallBorderedEdit(ctx, d, String.format("%02d", sMonthCache), CLR_HIGHLIGHT);
         monEt.setLayoutParams(lpFixW(PX(d, 32)));
         timeRow.addView(monEt);
@@ -483,9 +478,9 @@ public class ScheduleMsgPageView {
 
         TextView enableTg = cardToggle(ctx, d, "已启用", "未启用", false);
         card.addView(rowLabel(ctx, d, "任务状态", enableTg));
+        card.setTag(new Object[]{nameEt, monEt, dayEt, hourEt, minEt, secEt, repeatSp, enableTg});
 
-        card.setTag(new Object[]{nameEt, yearEt, monEt, dayEt, hourEt, minEt, secEt, repeatSp, enableTg});
-        sNameEt = nameEt; sYearEt = yearEt; sMonEt = monEt; sDayEt = dayEt; sHourEt = hourEt; sMinEt = minEt; sSecEt = secEt;
+        sNameEt = nameEt; sMonEt = monEt; sDayEt = dayEt; sHourEt = hourEt; sMinEt = minEt; sSecEt = secEt;
         return card;
     }
 
@@ -1979,7 +1974,7 @@ public class ScheduleMsgPageView {
 
             // 计算触发时间
             Calendar cal = Calendar.getInstance();
-            int year = parseInt(getTextOrHint(sYearEt), sYearCache);
+            int year = sYearCache;
             int month = parseInt(getTextOrHint(sMonEt), sMonthCache) - 1;
             int day = parseInt(getTextOrHint(sDayEt), sDayCache);
             int hour = parseInt(getTextOrHint(sHourEt), sHourCache);
