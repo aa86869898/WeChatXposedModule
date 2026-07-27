@@ -3,8 +3,10 @@ package com.leshao.v3;
 import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
+import java.lang.reflect.Method;
+
 import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedHelpers;
+import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class ContextManager {
@@ -29,29 +31,25 @@ public class ContextManager {
 
     public static void hookAttachBaseContext(XC_LoadPackage.LoadPackageParam lpp) {
         try {
-            XposedHelpers.findAndHookMethod(
-                android.content.ContextWrapper.class,
-                "attachBaseContext",
-                Context.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        sAppContext = (Context) param.thisObject;
-                        if (!sReady) {
-                            sReady = true;
-                            LogWriter.log(TAG, "attachBaseContext DONE, ready=true");
-                        }
-                        if (sOnReadyCallback != null && !sCallbackFired) {
-                            sCallbackFired = true;
-                            try {
-                                sOnReadyCallback.run();
-                            } catch (Throwable t) {
-                                LogWriter.log(TAG, "onReady callback FAILED: " + t.getMessage());
-                            }
+            Method attachMethod = android.content.ContextWrapper.class.getDeclaredMethod("attachBaseContext", Context.class);
+            XposedBridge.hookMethod(attachMethod, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    sAppContext = (Context) param.thisObject;
+                    if (!sReady) {
+                        sReady = true;
+                        LogWriter.log(TAG, "attachBaseContext DONE, ready=true");
+                    }
+                    if (sOnReadyCallback != null && !sCallbackFired) {
+                        sCallbackFired = true;
+                        try {
+                            sOnReadyCallback.run();
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "onReady callback FAILED: " + t.getMessage());
                         }
                     }
                 }
-            );
+            });
         } catch (Throwable t) {
             LogWriter.log(TAG, "hookAttachBaseContext FAILED: " + t.getMessage());
         }

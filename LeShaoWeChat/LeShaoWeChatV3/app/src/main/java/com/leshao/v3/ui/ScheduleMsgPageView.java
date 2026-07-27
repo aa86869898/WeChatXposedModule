@@ -3,10 +3,14 @@ package com.leshao.v3.ui;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.text.TextUtils;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -19,435 +23,1293 @@ import java.util.*;
 
 public class ScheduleMsgPageView {
 
+    private static final int CLR_BG = 0xFF0A1814;
+    private static final int CLR_CARD = 0xFF142420;
+    private static final int CLR_NEON = 0xFF39FF88;
+    private static final int CLR_WHITE = 0xFFFFFFFF;
+    private static final int CLR_HIGHLIGHT = 0xFF6DFFAA;
+    private static final int CLR_YELLOW = 0xFFFFD02E;
+    private static final int CLR_GRAY = 0xFF888888;
+    private static final int CLR_DARK = 0xFF333333;
+    private static final int CLR_RED = 0xFFFF5252;
+
+    private static final String[] MSG_TYPES = {"文本消息","图片消息","视频消息","图文消息","收藏消息","语音消息","位置消息","程序消息","艾特公告","名片消息","文件消息","XML消息"};
+    private static final int[] MSG_TYPE_CODES = {1, 3, 43, 49, 100, 34, 48, 1001, 1, 42, 6, 49};
+    private static final String[] REPEAT_MODES = {"仅一次", "每日循环", "每周循环", "间隔N天循环"};
+    private static final String[] CHANNELS = {"转发好友", "转发群聊", "发布朋友圈"};
+
+    private static int sSelectedMsgType = 0;
+    private static int sSelectedChannel = 1;
+    private static Set<String> sSelectedContacts = new LinkedHashSet<>();
+    private static Set<String> sExcludeContacts = new LinkedHashSet<>();
+    private static List<String> sMaterialFiles = new ArrayList<>();
+    private static String sEditingTaskId = null;
+    private static String sTaskNameCache = "";
+    private static String sContentCache = "";
+    private static int sHourCache = 8;
+    private static int sMinuteCache = 0;
+    private static String sRepeatCache = "仅一次";
+
+    private static View sProgressBar;
+    private static View sProgressFill;
+    private static TextView sProgressText;
+    private static TextView sProgressCount;
+    private static TextView sEmergencyBtn;
+
+    private static ContactPickerDialog.OnContactsSelected sLastContactsCallback;
+    private static Activity sParentActivity;
+
+    // ===== 主入口 =====
+
     public static View create(Context ctx, Activity parentAct) {
+        sParentActivity = parentAct;
         float d = dp(ctx);
 
-        LinearLayout root = new LinearLayout(ctx);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(AppColors.bg());
-        root.setPadding(PX(d, 14), PX(d, 14), PX(d, 14), PX(d, 40));
+        LinearLayout body = new LinearLayout(ctx);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setBackgroundColor(CLR_BG);
+        body.setPadding(PX(d, 10), PX(d, 10), PX(d, 10), PX(d, 16));
 
-        // ============================================================
-        // 1. 全局控制区
-        // ============================================================
-        root.addView(buildBanner(ctx, d));
+        body.addView(buildProgressBar(ctx, d));
+        body.addView(vSpacer(ctx, d, 10));
 
-        // ============================================================
-        // 2. 消息配置
-        // ============================================================
-        LinearLayout msgCard = card(ctx, d, 0x1F4DD, "消息配置");
-        final Spinner typeSpinner = spinner(ctx, d,
-            "文本消息", "图片消息", "语音消息", "视频消息", "文件消息", "微信名片", "链接/小程序", "@所有人公告");
-        msgCard.addView(typeSpinner);
+        body.addView(buildCard1(ctx, d, parentAct));
+        body.addView(vSpacer(ctx, d, 10));
+        body.addView(buildCard2(ctx, d, parentAct));
+        body.addView(vSpacer(ctx, d, 10));
+        body.addView(buildCard3(ctx, d, parentAct));
+        body.addView(vSpacer(ctx, d, 10));
+        body.addView(buildCard4(ctx, d, parentAct));
+        body.addView(vSpacer(ctx, d, 10));
+        body.addView(buildCard5(ctx, d, parentAct));
+        body.addView(vSpacer(ctx, d, 10));
+        body.addView(buildCard6(ctx, d, parentAct));
+        body.addView(vSpacer(ctx, d, 10));
+        body.addView(buildCard7(ctx, d, parentAct));
+        body.addView(vSpacer(ctx, d, 16));
+        body.addView(buildBottomBtn(ctx, d, parentAct));
 
-        final EditText contentEdit = editText(ctx, d, "输入发送内容...\n支持模板变量: {date} {weekday} {time} {group_name} {member_count} {nickname}");
-        contentEdit.setMinLines(4);
-        msgCard.addView(contentEdit);
-
-        // 模板快捷按钮
-        LinearLayout tplRow = new LinearLayout(ctx);
-        tplRow.setOrientation(LinearLayout.HORIZONTAL);
-        for (Map.Entry<String, String> e : ScheduleBroadcast.TEMPLATE_LIBRARY.entrySet()) {
-            tplRow.addView(tagBtn(ctx, d, e.getKey(), () -> contentEdit.append(e.getValue())));
-        }
-        msgCard.addView(tplRow);
-
-        // 变量和选项勾选
-        LinearLayout varRow = new LinearLayout(ctx);
-        varRow.setOrientation(LinearLayout.HORIZONTAL);
-        final CheckBox cbNickname = check(ctx, "昵称");
-        final CheckBox cbDate = check(ctx, "日期");
-        final CheckBox cbTime = check(ctx, "时间");
-        final CheckBox cbGroup = check(ctx, "群名");
-        final CheckBox cbMember = check(ctx, "人数");
-        final CheckBox cbEmoji = check(ctx, "随机表情");
-        varRow.addView(cbNickname); varRow.addView(cbDate); varRow.addView(cbTime);
-        varRow.addView(cbGroup); varRow.addView(cbMember); varRow.addView(cbEmoji);
-        msgCard.addView(varRow);
-
-        // 内容池、随机文案
-        LinearLayout poolRow = new LinearLayout(ctx);
-        poolRow.setOrientation(LinearLayout.HORIZONTAL);
-        final EditText poolEdit = editText(ctx, d, "随机文案池（用 | 分隔多条文案）");
-        poolEdit.setLayoutParams(lp(0, -2, 1));
-        poolRow.addView(poolEdit);
-        msgCard.addView(poolRow);
-
-        root.addView(msgCard);
-        root.addView(space(ctx, d));
-
-        // ============================================================
-        // 3. 定时设置
-        // ============================================================
-        LinearLayout timeCard = card(ctx, d, 0x1F552, "定时设置");
-
-        LinearLayout timeInputRow = new LinearLayout(ctx);
-        timeInputRow.setOrientation(LinearLayout.HORIZONTAL);
-
-        final EditText hourEt = miniInput(ctx, d, "时");
-        final EditText minEt = miniInput(ctx, d, "分");
-        final EditText dateEt = miniInput(ctx, d, "MM-dd");
-
-        timeInputRow.addView(label(ctx, d, "时间", 0.20f));
-        timeInputRow.addView(hourEt); timeInputRow.addView(text(ctx, ":"));
-        timeInputRow.addView(minEt); timeInputRow.addView(label(ctx, d, "日期", 0.30f));
-        timeInputRow.addView(dateEt);
-        timeCard.addView(timeInputRow);
-
-        final Spinner repeatSp = spinner(ctx, d, "一次性", "每天循环", "每周循环", "自定义间隔(秒)");
-        timeCard.addView(wrap(ctx, d, "重复模式", repeatSp));
-
-        final EditText intervalEt = editText(ctx, d, "自定义间隔（秒），如 3600 = 每小时");
-        intervalEt.setVisibility(View.GONE);
-        timeCard.addView(intervalEt);
-
-        repeatSp.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(AdapterView<?> p, View v, int pos, long id) {
-                intervalEt.setVisibility(pos == 3 ? View.VISIBLE : View.GONE);
-            }
-            @Override public void onNothingSelected(AdapterView<?> p) {}
-        });
-
-        root.addView(timeCard);
-        root.addView(space(ctx, d));
-
-        // ============================================================
-        // 4. 群组选择
-        // ============================================================
-        LinearLayout groupCard = card(ctx, d, 0x1F465, "群组选择");
-
-        final CheckBox allGroupCb = check(ctx, "发送到全部群聊");
-        allGroupCb.setChecked(true);
-        groupCard.addView(allGroupCb);
-
-        final CheckBox randCb = check(ctx, "群组随机顺序发送");
-        groupCard.addView(randCb);
-
-        final EditText groupEt = editText(ctx, d, "指定群 wxid（逗号分隔多个）\n留空 = 全部群");
-        groupCard.addView(groupEt);
-
-        final EditText excludeEt = editText(ctx, d, "排除群 wxid（逗号分隔，黑名单）");
-        groupCard.addView(excludeEt);
-
-        allGroupCb.setOnCheckedChangeListener((b, v) -> {
-            groupEt.setEnabled(!v);
-            groupEt.setAlpha(v ? 0.5f : 1.0f);
-        });
-
-        root.addView(groupCard);
-        root.addView(space(ctx, d));
-
-        // ============================================================
-        // 5. 文件素材
-        // ============================================================
-        LinearLayout fileCard = card(ctx, d, 0x1F4C1, "文件素材");
-
-        final EditText fileEt = editText(ctx, d, "文件路径（图片/音频/视频/文档的本地绝对路径）");
-        fileCard.addView(fileEt);
-
-        final TextView fileHint = new TextView(ctx);
-        fileHint.setText("提示：请先将文件放入手机存储，然后填入完整路径\n如 /sdcard/Download/image.jpg");
-        fileHint.setTextSize(10);
-        fileHint.setTextColor(AppColors.text2());
-        fileHint.setPadding(0, PX(d, 4), 0, 0);
-        fileCard.addView(fileHint);
-
-        root.addView(fileCard);
-        root.addView(space(ctx, d));
-
-        // ============================================================
-        // 6. 发送策略
-        // ============================================================
-        LinearLayout strategyCard = card(ctx, d, 0x2699, "发送策略");
-
-        final Spinner intervalSp = spinner(ctx, d, "5秒", "10秒", "15秒", "30秒", "60秒", "120秒");
-        strategyCard.addView(wrap(ctx, d, "群间最小间隔", intervalSp));
-
-        final Spinner retrySp = spinner(ctx, d, "不重试", "重试1次", "重试2次", "重试3次", "重试5次");
-        strategyCard.addView(wrap(ctx, d, "失败重试次数", retrySp));
-
-        final Spinner dailySp = spinner(ctx, d, "50", "100", "200", "500", "1000", "9999(不限制)");
-        strategyCard.addView(wrap(ctx, d, "每日发送上限", dailySp));
-
-        // 条件开关行
-        LinearLayout condRow = new LinearLayout(ctx);
-        condRow.setOrientation(LinearLayout.HORIZONTAL);
-        final CheckBox wifiCb = check(ctx, "仅WiFi");
-        final CheckBox chargeCb = check(ctx, "仅充电");
-        final CheckBox nightCb = check(ctx, "夜间限速");
-        condRow.addView(wifiCb); condRow.addView(chargeCb); condRow.addView(nightCb);
-        strategyCard.addView(condRow);
-
-        root.addView(strategyCard);
-        root.addView(space(ctx, d));
-
-        // ============================================================
-        // 保存按钮
-        // ============================================================
-        LinearLayout saveRow = new LinearLayout(ctx);
-        saveRow.setOrientation(LinearLayout.HORIZONTAL);
-        saveRow.setGravity(Gravity.CENTER);
-
-        Button saveTaskBtn = bigBtn(ctx, d, "保存定时任务", AppColors.accent());
-        saveTaskBtn.setOnClickListener(v -> {
-            saveTask(ctx, d, typeSpinner, contentEdit, cbNickname, cbDate, cbTime, cbGroup, cbMember,
-                    cbEmoji, poolEdit, hourEt, minEt, dateEt, repeatSp, intervalEt,
-                    allGroupCb, randCb, groupEt, excludeEt, fileEt,
-                    intervalSp, retrySp, dailySp, wifiCb, chargeCb, nightCb);
-            refreshTaskList(ctx, d);
-        });
-        saveRow.addView(saveTaskBtn, lp(0, -2, 1));
-
-        View svg = new View(ctx); svg.setLayoutParams(lp(PX(d, 10), 0)); saveRow.addView(svg);
-
-        Button saveDraftBtn = bigBtn(ctx, d, "保存为草稿", 0xFF607D8B);
-        saveDraftBtn.setOnClickListener(v -> {
-            saveDraft(ctx, d, contentEdit);
-            refreshDraftList(ctx, d);
-        });
-        saveRow.addView(saveDraftBtn, lp(0, -2, 1));
-
-        root.addView(saveRow);
-        root.addView(space(ctx, d));
-
-        // ============================================================
-        // 7. 任务列表 & 草稿箱 & 日志
-        // ============================================================
-        taskContainer = new LinearLayout(ctx);
-        taskContainer.setOrientation(LinearLayout.VERTICAL);
-        draftContainer = new LinearLayout(ctx);
-        draftContainer.setOrientation(LinearLayout.VERTICAL);
-
-        // 标签栏
-        LinearLayout contentTabs = new LinearLayout(ctx);
-        contentTabs.setOrientation(LinearLayout.HORIZONTAL);
-        contentTabs.setBackgroundColor(AppColors.whiteCard());
-        GradientDrawable tabsBg = new GradientDrawable();
-        tabsBg.setCornerRadius(PX(d, 10));
-        tabsBg.setColor(AppColors.whiteCard());
-        contentTabs.setBackground(tabsBg);
-        contentTabs.setPadding(PX(d, 14), PX(d, 12), PX(d, 14), PX(d, 12));
-
-        Button[] tabBtns = new Button[3];
-        final View[] tabViews = {taskContainer, draftContainer, new LinearLayout(ctx)};
-        for (int i = 0; i < 3; i++) {
-            final int idx = i;
-            String[] labels = {"任务列表", "草稿箱", "运行日志"};
-            tabBtns[i] = tabButton(ctx, d, labels[i], i == 0);
-            tabBtns[i].setOnClickListener(v -> {
-                for (int j = 0; j < 3; j++) {
-                    tabBtns[j].setTextColor(j == idx ? Color.WHITE : AppColors.text1());
-                    GradientDrawable g = (GradientDrawable) tabBtns[j].getBackground();
-                    g.setColor(j == idx ? AppColors.accent() : Color.TRANSPARENT);
-                    tabViews[j].setVisibility(j == idx ? View.VISIBLE : View.GONE);
-                }
-            });
-            contentTabs.addView(tabBtns[i]);
-            View sp = new View(ctx); sp.setLayoutParams(lp(PX(d, 8), 0)); contentTabs.addView(sp);
-        }
-        root.addView(contentTabs);
-
-        root.addView(taskContainer);
-        root.addView(draftContainer);
-        draftContainer.setVisibility(View.GONE);
-        root.addView(tabViews[2]);
-        tabViews[2].setVisibility(View.GONE);
-
-        // 初始化日志面板
-        refreshLogPanel(ctx, d, (LinearLayout) tabViews[2]);
-        refreshTaskList(ctx, d);
-        refreshDraftList(ctx, d);
+        loadDraft(ctx);
 
         ScrollView sv = new ScrollView(ctx);
-        sv.addView(root);
+        sv.setBackgroundColor(CLR_BG);
+        sv.addView(body);
         return sv;
     }
 
-    // ================================================================
-    // 保存逻辑
-    // ================================================================
+    // ===== 进度状态栏 =====
 
-    static LinearLayout taskContainer, draftContainer;
-    static int[] TYPE_CODES = {1, 3, 34, 43, 47, 42, 49, 1};
-    static long[] REPEAT_MS = {0, 86400000L, 604800000L, -1};
-    static String[] INTERVAL_VALS = {"5","10","15","30","60","120"};
-    static int[] RETRY_VALS = {0, 1, 2, 3, 5};
-    static String[] DAILY_VALS = {"50","100","200","500","1000","9999"};
+    private static View buildProgressBar(Context ctx, float d) {
+        LinearLayout bar = new LinearLayout(ctx);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(PX(d, 6), PX(d, 8), PX(d, 6), PX(d, 8));
+        bar.setClipToOutline(true);
 
-    private static void saveTask(Context ctx, float d, Spinner typeSp, EditText contentEt,
-            CheckBox cbNick, CheckBox cbDate, CheckBox cbTime, CheckBox cbGroup, CheckBox cbMember,
-            CheckBox cbEmoji, EditText poolEt, EditText hourEt, EditText minEt, EditText dateEt,
-            Spinner repeatSp, EditText intervalEt, CheckBox allGroupCb, CheckBox randCb,
-            EditText groupEt, EditText excludeEt, EditText fileEt,
-            Spinner intervalSp, Spinner retrySp, Spinner dailySp,
-            CheckBox wifiCb, CheckBox chargeCb, CheckBox nightCb) {
-        try {
-            Task t = new Task();
-            t.msgType = TYPE_CODES[typeSp.getSelectedItemPosition()];
-            t.content = contentEt.getText().toString().trim();
-            t.varNickname = cbNick.isChecked();
-            t.varDate = cbDate.isChecked();
-            t.varTime = cbTime.isChecked();
-            t.varGroupName = cbGroup.isChecked();
-            t.varMemberCount = cbMember.isChecked();
-            t.randomEmoji = cbEmoji.isChecked();
+        int barW = ctx.getResources().getDisplayMetrics().widthPixels - PX(d, 20);
+        int barH = PX(d, 36);
 
-            String pool = poolEt.getText().toString().trim();
-            if (!pool.isEmpty()) t.contentPool = new ArrayList<>(Arrays.asList(pool.split("\\s*\\|\\s*")));
-
-            t.sendAllGroups = allGroupCb.isChecked();
-            t.randomOrder = randCb.isChecked();
-
-            String wxids = groupEt.getText().toString().trim();
-            if (!wxids.isEmpty()) for (String w : wxids.split(",")) {
-                String tr = w.trim(); if (!tr.isEmpty()) t.targetGroups.add(tr);
+        sProgressBar = new View(ctx) {
+            @Override
+            protected void onDraw(Canvas canvas) {
+                Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+                p.setColor(CLR_DARK);
+                Path path = buildChamferPath(new RectF(0, 0, getWidth(), getHeight()), PX(d, 8));
+                canvas.drawPath(path, p);
             }
+        };
+        sProgressBar.setLayoutParams(new LinearLayout.LayoutParams(barW, barH));
+        bar.addView(sProgressBar);
 
-            String file = fileEt.getText().toString().trim();
-            if (!file.isEmpty()) t.filePath = file;
+        LinearLayout overlay = new LinearLayout(ctx);
+        overlay.setOrientation(LinearLayout.HORIZONTAL);
+        overlay.setGravity(Gravity.CENTER_VERTICAL);
+        overlay.setPadding(PX(d, 14), 0, PX(d, 10), 0);
+        overlay.setLayoutParams(new LinearLayout.LayoutParams(barW, barH));
 
-            // 时间
-            String h = hourEt.getText().toString().trim();
-            String m = minEt.getText().toString().trim();
-            int hour = h.isEmpty() ? 8 : Integer.parseInt(h);
-            int min = m.isEmpty() ? 0 : Integer.parseInt(m);
-            Calendar cal = Calendar.getInstance();
-            String ds = dateEt.getText().toString().trim();
-            if (!ds.isEmpty()) {
-                String[] ps = ds.split("-");
-                cal.set(Calendar.MONTH, Integer.parseInt(ps[0]) - 1);
-                cal.set(Calendar.DAY_OF_MONTH, Integer.parseInt(ps[1]));
+        sProgressFill = new View(ctx);
+        sProgressFill.setBackgroundColor(CLR_NEON);
+        sProgressFill.setLayoutParams(new LinearLayout.LayoutParams(0, PX(d, 6), 0.0f));
+        overlay.addView(sProgressFill);
+
+        View sp1 = new View(ctx); sp1.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 8), 0)); overlay.addView(sp1);
+
+        sProgressText = new TextView(ctx);
+        sProgressText.setText("空闲");
+        sProgressText.setTextSize(10);
+        sProgressText.setTextColor(CLR_GRAY);
+        sProgressText.setTypeface(null, Typeface.BOLD);
+        overlay.addView(sProgressText);
+
+        View sp2 = new View(ctx); sp2.setLayoutParams(new LinearLayout.LayoutParams(0, 0, 1.0f)); overlay.addView(sp2);
+
+        sProgressCount = new TextView(ctx);
+        sProgressCount.setText("第0/0");
+        sProgressCount.setTextSize(10);
+        sProgressCount.setTextColor(CLR_GRAY);
+        sProgressCount.setPadding(0, 0, PX(d, 8), 0);
+        overlay.addView(sProgressCount);
+
+        sEmergencyBtn = new TextView(ctx);
+        sEmergencyBtn.setText("停止");
+        sEmergencyBtn.setTextSize(9);
+        sEmergencyBtn.setTextColor(CLR_WHITE);
+        sEmergencyBtn.setTypeface(null, Typeface.BOLD);
+        sEmergencyBtn.setPadding(PX(d, 10), PX(d, 4), PX(d, 10), PX(d, 4));
+        GradientDrawable stopBg = new GradientDrawable();
+        stopBg.setCornerRadius(PX(d, 4));
+        stopBg.setColor(CLR_RED);
+        sEmergencyBtn.setBackground(stopBg);
+        sEmergencyBtn.setVisibility(View.GONE);
+        sEmergencyBtn.setOnClickListener(v -> {
+            ScheduleBroadcast.emergencyStop();
+            sEmergencyBtn.setVisibility(View.GONE);
+            updateProgressState(0, 0, false);
+        });
+        overlay.addView(sEmergencyBtn);
+
+        ((ViewGroup)bar.getParent() != null ? bar : bar).post(() -> {
+            FrameLayout f = new FrameLayout(ctx);
+            f.setLayoutParams(new LinearLayout.LayoutParams(barW, barH));
+            f.addView(sProgressBar);
+            f.addView(overlay);
+            LinearLayout par = (LinearLayout) bar.getParent();
+            if (par != null) {
+                int idx = par.indexOfChild(bar);
+                par.removeView(bar);
+                par.addView(f, idx);
             }
-            cal.set(Calendar.HOUR_OF_DAY, hour);
-            cal.set(Calendar.MINUTE, min);
-            cal.set(Calendar.SECOND, 0);
-            cal.set(Calendar.MILLISECOND, 0);
-            t.triggerTime = cal.getTimeInMillis();
-            if (t.triggerTime <= System.currentTimeMillis()) t.triggerTime += 86400000;
+        });
 
-            // 重复
-            int rp = repeatSp.getSelectedItemPosition();
-            if (rp == 3) {
-                String iv = intervalEt.getText().toString().trim();
-                t.repeatInterval = iv.isEmpty() ? 3600 : Integer.parseInt(iv) * 1000L;
-            } else t.repeatInterval = REPEAT_MS[rp];
+        return bar;
+    }
 
-            // 策略
-            int ival = Integer.parseInt(INTERVAL_VALS[intervalSp.getSelectedItemPosition()]);
-            ScheduleBroadcast.setMinInterval(ival);
-            ScheduleBroadcast.setDailyMax(Integer.parseInt(DAILY_VALS[dailySp.getSelectedItemPosition()].replaceAll("[^0-9]", "")));
-            ScheduleBroadcast.setWifiOnly(wifiCb.isChecked());
-            ScheduleBroadcast.setChargingOnly(chargeCb.isChecked());
-            ScheduleBroadcast.setNightSilent(nightCb.isChecked());
+    private static void updateProgressState(int current, int total, boolean running) {
+        if (sProgressBar == null || sProgressFill == null || sProgressText == null || sProgressCount == null) return;
+        sProgressBar.post(() -> {
+            float ratio = total > 0 ? (float)current / total : 0f;
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) sProgressFill.getLayoutParams();
+            lp.weight = ratio;
+            sProgressFill.setLayoutParams(lp);
+            sProgressFill.setBackgroundColor(running ? CLR_NEON : CLR_GRAY);
+            sProgressText.setText(running ? "运行中" : "空闲");
+            sProgressText.setTextColor(running ? CLR_NEON : CLR_GRAY);
+            sProgressCount.setText("第" + current + "/" + total);
+            sProgressCount.setTextColor(running ? CLR_HIGHLIGHT : CLR_GRAY);
+            sEmergencyBtn.setVisibility(running ? View.VISIBLE : View.GONE);
+        });
+    }
 
-            // 排除群
-            String ex = excludeEt.getText().toString().trim();
-            if (!ex.isEmpty()) {
-                Set<String> exSet = new HashSet<>();
-                for (String w : ex.split(",")) { String tr = w.trim(); if (!tr.isEmpty()) exSet.add(tr); }
-                // Use reflection for setExcludeGroups since it's package-private
-                try { ScheduleBroadcast.class.getMethod("setExcludeGroups", Set.class).invoke(null, exSet); } catch (Throwable ignored) {}
+    // ===== 卡片1: 任务基础信息 =====
+
+    private static View buildCard1(Context ctx, float d, Activity act) {
+        LinearLayout card = makeCard(ctx, d, "任务基础信息");
+
+        final EditText nameEt = editText(ctx, d, "请输入任务名称", CLR_HIGHLIGHT);
+        nameEt.setText(sTaskNameCache);
+        card.addView(rowLabel(ctx, d, "任务名称", nameEt));
+        card.addView(hSep(ctx, d));
+
+        LinearLayout timeRow = new LinearLayout(ctx);
+        timeRow.setOrientation(LinearLayout.HORIZONTAL);
+        timeRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView timeLabel = label(ctx, d, "发送时间");
+        timeLabel.setLayoutParams(lpFixW(PX(d, 80)));
+        timeRow.addView(timeLabel);
+
+        final NumberPicker hourPk = new NumberPicker(ctx);
+        hourPk.setMinValue(0); hourPk.setMaxValue(23); hourPk.setValue(sHourCache);
+        styleNp(hourPk, ctx, d);
+        timeRow.addView(hourPk);
+
+        TextView colon = new TextView(ctx);
+        colon.setText(":");
+        colon.setTextSize(16); colon.setTextColor(CLR_WHITE); colon.setTypeface(null, Typeface.BOLD);
+        colon.setPadding(PX(d, 4), 0, PX(d, 4), 0);
+        timeRow.addView(colon);
+
+        final NumberPicker minPk = new NumberPicker(ctx);
+        minPk.setMinValue(0); minPk.setMaxValue(59); minPk.setValue(sMinuteCache);
+        styleNp(minPk, ctx, d);
+        timeRow.addView(minPk);
+
+        View spT = new View(ctx); spT.setLayoutParams(lpWeight(1)); timeRow.addView(spT);
+
+        card.addView(timeRow);
+        card.addView(hSep(ctx, d));
+
+        LinearLayout repeatRow = new LinearLayout(ctx);
+        repeatRow.setOrientation(LinearLayout.HORIZONTAL);
+        repeatRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView rpLabel = label(ctx, d, "重复规则");
+        rpLabel.setLayoutParams(lpFixW(PX(d, 80)));
+        repeatRow.addView(rpLabel);
+
+        final Spinner repeatSp = new Spinner(ctx);
+        repeatSp.setAdapter(new ArrayAdapter<String>(ctx, android.R.layout.simple_spinner_item, REPEAT_MODES) {
+            @Override public View getView(int pos, View v, ViewGroup p) { View tv = super.getView(pos, v, p); ((TextView)tv).setTextColor(CLR_HIGHLIGHT); ((TextView)tv).setTextSize(12); return tv; }
+            @Override public View getDropDownView(int pos, View v, ViewGroup p) { View tv = super.getDropDownView(pos, v, p); ((TextView)tv).setTextColor(CLR_WHITE); ((TextView)tv).setBackgroundColor(CLR_CARD); return tv; }
+        });
+        for (int i = 0; i < REPEAT_MODES.length; i++) { if (REPEAT_MODES[i].equals(sRepeatCache)) { repeatSp.setSelection(i); break; } }
+        repeatRow.addView(repeatSp);
+        View spR = new View(ctx); spR.setLayoutParams(lpWeight(1)); repeatRow.addView(spR);
+        card.addView(repeatRow);
+        card.addView(hSep(ctx, d));
+
+        final CheckBox enableCb = checkBox(ctx, d, "启用此任务");
+        card.addView(enableCb);
+
+        card.setTag(new Object[]{nameEt, hourPk, minPk, repeatSp, enableCb});
+        return card;
+    }
+
+    // ===== 卡片2: 消息内容配置 =====
+
+    private static View buildCard2(Context ctx, float d, Activity act) {
+        LinearLayout card = makeCard(ctx, d, "消息内容配置");
+
+        TextView typeTitle = new TextView(ctx);
+        typeTitle.setText("选择消息类型");
+        typeTitle.setTextSize(13);
+        typeTitle.setTextColor(CLR_WHITE);
+        typeTitle.setTypeface(null, Typeface.BOLD);
+        typeTitle.setPadding(0, 0, 0, PX(d, 10));
+        card.addView(typeTitle);
+
+        LinearLayout grid = new LinearLayout(ctx);
+        grid.setOrientation(LinearLayout.VERTICAL);
+
+        LinearLayout[] rows = new LinearLayout[4];
+        for (int r = 0; r < 4; r++) {
+            rows[r] = new LinearLayout(ctx);
+            rows[r].setOrientation(LinearLayout.HORIZONTAL);
+            rows[r].setPadding(0, 0, 0, r < 3 ? PX(d, 6) : 0);
+            for (int c = 0; c < 3; c++) {
+                final int idx = r * 3 + c;
+                TextView btn = messageTypeButton(ctx, d, MSG_TYPES[idx], idx == sSelectedMsgType);
+                btn.setLayoutParams(lpWeight(1));
+                btn.setOnClickListener(v -> {
+                    sSelectedMsgType = idx;
+                    refreshMsgTypeGrid(rows);
+                    checkXmlWarning(ctx, idx);
+                });
+                rows[r].addView(btn);
             }
+            grid.addView(rows[r]);
+        }
+        card.addView(grid);
+        card.addView(hSep(ctx, d));
 
-            ScheduleBroadcast.addTask(t);
-            clearForm(contentEt, poolEt, hourEt, minEt, dateEt, groupEt, fileEt, intervalEt);
-            toast(ctx, "定时任务已创建");
-        } catch (Throwable ex) {
-            toast(ctx, "数据格式有误，请检查输入");
+        final EditText contentEt = editText(ctx, d, "输入消息内容...\n支持Emoji、{昵称}{群名称}{当前时间}变量\n多条文案用 | 分隔，发送时随机选取", CLR_WHITE);
+        contentEt.setMinLines(3);
+        contentEt.setText(sContentCache);
+        card.addView(contentEt);
+
+        LinearLayout previewRow = new LinearLayout(ctx);
+        previewRow.setOrientation(LinearLayout.HORIZONTAL);
+        previewRow.setGravity(Gravity.RIGHT);
+        previewRow.setPadding(0, PX(d, 8), 0, 0);
+
+        TextView previewBtn = new TextView(ctx);
+        previewBtn.setText("预览消息");
+        previewBtn.setTextSize(11);
+        previewBtn.setTextColor(CLR_NEON);
+        previewBtn.setPadding(PX(d, 14), PX(d, 6), PX(d, 14), PX(d, 6));
+        GradientDrawable prevBg = new GradientDrawable();
+        prevBg.setCornerRadius(PX(d, 14));
+        prevBg.setStroke(PX(d, 1), CLR_NEON);
+        prevBg.setColor(Color.TRANSPARENT);
+        previewBtn.setBackground(prevBg);
+        previewBtn.setOnClickListener(v -> showPreview(ctx, d, contentEt.getText().toString().trim(), sSelectedMsgType));
+        previewRow.addView(previewBtn);
+        card.addView(previewRow);
+
+        card.setTag(new Object[]{rows, contentEt});
+        return card;
+    }
+
+    private static void refreshMsgTypeGrid(LinearLayout[] rows) {
+        for (int r = 0; r < 4; r++) {
+            for (int c = 0; c < 3; c++) {
+                final int idx = r * 3 + c;
+                View child = rows[r].getChildAt(c);
+                if (child instanceof TextView) {
+                    boolean sel = (idx == sSelectedMsgType);
+                    ((TextView) child).setTextColor(sel ? Color.BLACK : CLR_NEON);
+                    ((TextView) child).setTypeface(null, sel ? Typeface.BOLD : Typeface.NORMAL);
+                    GradientDrawable bg = new GradientDrawable();
+                    bg.setCornerRadius(PX(dp(child.getContext()), 8));
+                    bg.setColor(sel ? CLR_NEON : CLR_CARD);
+                    if (!sel) bg.setStroke(PX(dp(child.getContext()), 1), CLR_NEON);
+                    child.setBackground(bg);
+                    String txt = MSG_TYPES[idx];
+                    ((TextView) child).setText(sel ? "  " + txt : txt);
+                }
+            }
         }
     }
 
-    private static void saveDraft(Context ctx, float d, EditText contentEt) {
-        String text = contentEt.getText().toString().trim();
-        if (text.isEmpty()) { toast(ctx, "请输入消息内容"); return; }
-        Task t = new Task();
-        t.content = text;
-        ScheduleBroadcast.saveDraft(t);
-        contentEt.setText("");
-        toast(ctx, "草稿已保存");
+    private static void checkXmlWarning(Context ctx, int msgType) {
+        if (msgType == 11) {
+            Toast.makeText(ctx, "提示: XML消息发送频率需谨慎控制，建议设置较长发送间隔", Toast.LENGTH_LONG).show();
+        }
     }
 
-    private static void clearForm(EditText... fields) {
-        for (EditText f : fields) f.setText("");
+    private static TextView messageTypeButton(Context ctx, float d, String text, boolean selected) {
+        TextView btn = new TextView(ctx);
+        btn.setText(selected ? "  " + text : text);
+        btn.setTextSize(11);
+        btn.setTextColor(selected ? Color.BLACK : CLR_NEON);
+        btn.setTypeface(null, selected ? Typeface.BOLD : Typeface.NORMAL);
+        btn.setGravity(Gravity.CENTER);
+        btn.setPadding(PX(d, 6), PX(d, 10), PX(d, 6), PX(d, 10));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(PX(d, 8));
+        bg.setColor(selected ? CLR_NEON : CLR_CARD);
+        if (!selected) bg.setStroke(PX(d, 1), CLR_NEON);
+        btn.setBackground(bg);
+        return btn;
     }
 
-    // ================================================================
-    // UI 组件工厂
-    // ================================================================
-
-    private static View buildBanner(Context ctx, float d) {
-        LinearLayout banner = new LinearLayout(ctx);
-        banner.setOrientation(LinearLayout.HORIZONTAL);
-        banner.setGravity(Gravity.CENTER_VERTICAL);
-        banner.setPadding(PX(d, 16), PX(d, 16), PX(d, 16), PX(d, 16));
-        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{0xFF667eea, 0xFF764ba2});
-        bg.setCornerRadius(PX(d, 14));
-        banner.setBackground(bg);
-
-        LinearLayout col = new LinearLayout(ctx);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setLayoutParams(lp(0, -2, 1));
+    private static void showPreview(Context ctx, float d, String content, int msgType) {
+        AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(PX(d, 20), PX(d, 20), PX(d, 20), PX(d, 20));
+        root.setBackgroundColor(CLR_BG);
 
         TextView title = new TextView(ctx);
-        title.setText("定时消息群发");
-        title.setTextSize(18);
-        title.setTextColor(Color.WHITE);
-        title.setTypeface(null, Typeface.BOLD);
-        col.addView(title);
+        title.setText("消息预览");
+        title.setTextSize(15); title.setTextColor(CLR_WHITE); title.setTypeface(null, Typeface.BOLD);
+        title.setPadding(0, 0, 0, PX(d, 14));
+        root.addView(title);
 
-        TextView status = new TextView(ctx);
-        boolean running = ScheduleBroadcast.isRunning();
-        int tasks = ScheduleBroadcast.getTaskCount(), today = ScheduleBroadcast.getDailyCount();
-        status.setText((running ? "运行中" : "已停止") + " | " + tasks + "任务 | 今日" + today + " | "
-                + ScheduleBroadcast.getGroupCount() + "群");
-        status.setTextSize(11);
-        status.setTextColor(0xCCFFFFFF);
-        status.setPadding(0, PX(d, 4), 0, 0);
-        col.addView(status);
+        TextView typeTv = new TextView(ctx);
+        typeTv.setText("类型: " + MSG_TYPES[msgType]);
+        typeTv.setTextSize(12); typeTv.setTextColor(CLR_HIGHLIGHT);
+        typeTv.setPadding(0, 0, 0, PX(d, 10));
+        root.addView(typeTv);
 
-        banner.addView(col);
+        TextView contentTv = new TextView(ctx);
+        contentTv.setText(content.isEmpty() ? "(空消息)" : content);
+        contentTv.setTextSize(13); contentTv.setTextColor(CLR_WHITE);
+        contentTv.setPadding(PX(d, 12), PX(d, 12), PX(d, 12), PX(d, 12));
+        GradientDrawable cbg = new GradientDrawable();
+        cbg.setCornerRadius(PX(d, 8));
+        cbg.setColor(CLR_CARD);
+        contentTv.setBackground(cbg);
+        root.addView(contentTv);
 
-        Switch sw = new Switch(ctx);
-        sw.setChecked(ScheduleBroadcast.isEnabled());
-        sw.setOnCheckedChangeListener((b, v) -> ScheduleBroadcast.setEnabled(v));
-        banner.addView(sw);
-
-        return banner;
+        b.setView(root);
+        b.setCancelable(true);
+        AlertDialog dlg = b.create();
+        Window w = dlg.getWindow();
+        if (w != null) { w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)); }
+        dlg.show();
     }
 
-    private static LinearLayout card(Context ctx, float d, int icon, String title) {
+    // ===== 卡片3: 素材文件管理 =====
+
+    private static View buildCard3(Context ctx, float d, Activity act) {
+        LinearLayout card = makeCard(ctx, d, "素材文件管理");
+
+        LinearLayout uploadRow = new LinearLayout(ctx);
+        uploadRow.setOrientation(LinearLayout.HORIZONTAL);
+        uploadRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView uploadBtn = new TextView(ctx);
+        uploadBtn.setText("+ 上传素材");
+        uploadBtn.setTextSize(12);
+        uploadBtn.setTextColor(CLR_NEON);
+        uploadBtn.setPadding(PX(d, 14), PX(d, 8), PX(d, 14), PX(d, 8));
+        GradientDrawable upBg = new GradientDrawable();
+        upBg.setCornerRadius(PX(d, 6));
+        upBg.setStroke(PX(d, 1), CLR_NEON);
+        upBg.setColor(Color.TRANSPARENT);
+        uploadBtn.setBackground(upBg);
+        uploadRow.addView(uploadBtn);
+
+        View spU = new View(ctx); spU.setLayoutParams(lpWeight(1)); uploadRow.addView(spU);
+
+        final TextView countLabel = new TextView(ctx);
+        countLabel.setText(sMaterialFiles.size() + " 个素材");
+        countLabel.setTextSize(11);
+        countLabel.setTextColor(CLR_HIGHLIGHT);
+        uploadRow.addView(countLabel);
+
+        card.addView(uploadRow);
+
+        final LinearLayout previewArea = new LinearLayout(ctx);
+        previewArea.setOrientation(LinearLayout.HORIZONTAL);
+        previewArea.setPadding(0, PX(d, 8), 0, 0);
+        card.addView(previewArea);
+
+        uploadBtn.setOnClickListener(v -> showMaterialInput(ctx, d, previewArea, countLabel));
+        refreshMaterialPreviews(ctx, d, previewArea, countLabel);
+
+        card.setTag(new Object[]{previewArea, countLabel});
+        return card;
+    }
+
+    private static void showMaterialInput(Context ctx, float d, LinearLayout previewArea, TextView countLabel) {
+        AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(PX(d, 16), PX(d, 16), PX(d, 16), PX(d, 16));
+        root.setBackgroundColor(CLR_BG);
+
+        TextView title = new TextView(ctx);
+        title.setText("添加素材文件路径");
+        title.setTextSize(14); title.setTextColor(CLR_WHITE); title.setTypeface(null, Typeface.BOLD);
+        title.setPadding(0, 0, 0, PX(d, 10));
+        root.addView(title);
+
+        final EditText pathEt = editText(ctx, d, "输入文件完整路径\n多个文件用换行分隔\n如 /sdcard/Download/img.jpg", CLR_HIGHLIGHT);
+        pathEt.setMinLines(3);
+        root.addView(pathEt);
+
+        LinearLayout btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setGravity(Gravity.RIGHT);
+        btnRow.setPadding(0, PX(d, 10), 0, 0);
+
+        TextView cancelBtn = new TextView(ctx);
+        cancelBtn.setText("取消"); cancelBtn.setTextSize(12); cancelBtn.setTextColor(CLR_GRAY);
+        cancelBtn.setPadding(PX(d, 14), PX(d, 8), PX(d, 14), PX(d, 8));
+        btnRow.addView(cancelBtn);
+
+        TextView okBtn = new TextView(ctx);
+        okBtn.setText("添加"); okBtn.setTextSize(12); okBtn.setTextColor(CLR_NEON);
+        okBtn.setPadding(PX(d, 14), PX(d, 8), PX(d, 14), PX(d, 8));
+        btnRow.addView(okBtn);
+
+        root.addView(btnRow);
+        b.setView(root);
+        AlertDialog dlg = b.create();
+        Window w = dlg.getWindow();
+        if (w != null) w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+
+        cancelBtn.setOnClickListener(v2 -> dlg.dismiss());
+        okBtn.setOnClickListener(v2 -> {
+            String paths = pathEt.getText().toString().trim();
+            if (!paths.isEmpty()) {
+                for (String line : paths.split("\\n")) {
+                    String t = line.trim();
+                    if (!t.isEmpty() && !sMaterialFiles.contains(t)) sMaterialFiles.add(t);
+                }
+                refreshMaterialPreviews(ctx, d, previewArea, countLabel);
+            }
+            dlg.dismiss();
+        });
+        dlg.show();
+    }
+
+    private static void refreshMaterialPreviews(Context ctx, float d, LinearLayout area, TextView countLabel) {
+        area.removeAllViews();
+        if (sMaterialFiles.isEmpty()) {
+            TextView empty = new TextView(ctx);
+            empty.setText("暂无素材");
+            empty.setTextSize(11); empty.setTextColor(CLR_GRAY);
+            area.addView(empty);
+        } else {
+            for (int i = 0; i < sMaterialFiles.size(); i++) {
+                final String path = sMaterialFiles.get(i);
+                String name = path.substring(path.lastIndexOf('/') + 1);
+                if (name.length() > 12) name = name.substring(0, 12) + "...";
+                final int idx = i;
+
+                LinearLayout item = new LinearLayout(ctx);
+                item.setOrientation(LinearLayout.VERTICAL);
+                item.setGravity(Gravity.CENTER);
+                item.setPadding(PX(d, 6), PX(d, 4), PX(d, 6), PX(d, 4));
+                GradientDrawable itemBg = new GradientDrawable();
+                itemBg.setCornerRadius(PX(d, 6));
+                itemBg.setColor(CLR_CARD);
+                itemBg.setStroke(PX(d, 1), 0x33336655);
+                item.setBackground(itemBg);
+
+                TextView icon = new TextView(ctx);
+                icon.setText(fileIcon(path));
+                icon.setTextSize(20);
+                icon.setPadding(0, 0, 0, PX(d, 2));
+                item.addView(icon);
+
+                TextView fname = new TextView(ctx);
+                fname.setText(name);
+                fname.setTextSize(9);
+                fname.setTextColor(CLR_WHITE);
+                fname.setMaxWidth(PX(d, 60));
+                item.addView(fname);
+
+                item.setOnClickListener(v -> {
+                    sMaterialFiles.remove(idx);
+                    refreshMaterialPreviews(ctx, d, area, countLabel);
+                });
+                item.setOnLongClickListener(v -> {
+                    Toast.makeText(ctx, path, Toast.LENGTH_SHORT).show();
+                    return true;
+                });
+
+                LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(-2, -2);
+                ilp.setMargins(0, 0, PX(d, 6), 0);
+                item.setLayoutParams(ilp);
+                area.addView(item);
+            }
+        }
+        countLabel.setText(sMaterialFiles.size() + " 个素材");
+    }
+
+    private static String fileIcon(String path) {
+        String lower = path.toLowerCase();
+        if (lower.endsWith(".jpg") || lower.endsWith(".png") || lower.endsWith(".gif") || lower.endsWith(".jpeg")) return "\uD83D\uDDBC";
+        if (lower.endsWith(".mp4") || lower.endsWith(".avi") || lower.endsWith(".mkv")) return "\uD83C\uDFAC";
+        if (lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".amr")) return "\uD83C\uDFB5";
+        if (lower.endsWith(".pdf")) return "\uD83D\uDCC4";
+        if (lower.endsWith(".doc") || lower.endsWith(".docx")) return "\uD83D\uDCC3";
+        return "\uD83D\uDCC1";
+    }
+
+    // ===== 卡片4: 发送目标渠道 =====
+
+    private static View buildCard4(Context ctx, float d, Activity act) {
+        LinearLayout card = makeCard(ctx, d, "发送目标渠道");
+
+        LinearLayout channelRow = new LinearLayout(ctx);
+        channelRow.setOrientation(LinearLayout.HORIZONTAL);
+        channelRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView[] chButtons = new TextView[3];
+        for (int i = 0; i < 3; i++) {
+            final int ci = i;
+            TextView cb = new TextView(ctx);
+            cb.setText(CHANNELS[i]);
+            cb.setTextSize(12);
+            cb.setTextColor(i == sSelectedChannel ? Color.BLACK : CLR_NEON);
+            cb.setTypeface(null, i == sSelectedChannel ? Typeface.BOLD : Typeface.NORMAL);
+            cb.setGravity(Gravity.CENTER);
+            cb.setPadding(PX(d, 8), PX(d, 8), PX(d, 8), PX(d, 8));
+            GradientDrawable cbg = new GradientDrawable();
+            cbg.setCornerRadius(PX(d, 6));
+            cbg.setColor(i == sSelectedChannel ? CLR_NEON : CLR_CARD);
+            if (i != sSelectedChannel) cbg.setStroke(PX(d, 1), CLR_NEON);
+            cb.setBackground(cbg);
+            cb.setLayoutParams(lpWeight(1));
+            cb.setOnClickListener(v -> {
+                sSelectedChannel = ci;
+                for (int j = 0; j < 3; j++) {
+                    chButtons[j].setTextColor(j == ci ? Color.BLACK : CLR_NEON);
+                    chButtons[j].setTypeface(null, j == ci ? Typeface.BOLD : Typeface.NORMAL);
+                    GradientDrawable g = new GradientDrawable();
+                    g.setCornerRadius(PX(d, 6));
+                    g.setColor(j == ci ? CLR_NEON : CLR_CARD);
+                    if (j != ci) g.setStroke(PX(d, 1), CLR_NEON);
+                    chButtons[j].setBackground(g);
+                }
+                refreshContactDisplay(ctx, d, card);
+            });
+            if (i > 0) { View sp = new View(ctx); sp.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 6), 0)); channelRow.addView(sp); }
+            channelRow.addView(cb);
+            chButtons[i] = cb;
+        }
+        card.addView(channelRow);
+        card.addView(hSep(ctx, d));
+
+        LinearLayout selRow = new LinearLayout(ctx);
+        selRow.setOrientation(LinearLayout.HORIZONTAL);
+        selRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView selBtn = new TextView(ctx);
+        selBtn.setText("选择联系人");
+        selBtn.setTextSize(12);
+        selBtn.setTextColor(CLR_NEON);
+        selBtn.setPadding(PX(d, 14), PX(d, 8), PX(d, 14), PX(d, 8));
+        GradientDrawable selBg = new GradientDrawable();
+        selBg.setCornerRadius(PX(d, 6));
+        selBg.setStroke(PX(d, 1), CLR_NEON);
+        selBg.setColor(Color.TRANSPARENT);
+        selBtn.setBackground(selBg);
+        selRow.addView(selBtn);
+
+        View spC = new View(ctx); spC.setLayoutParams(lpWeight(1)); selRow.addView(spC);
+
+        final TextView countTv = new TextView(ctx);
+        countTv.setText(sSelectedContacts.size() + " 个选中");
+        countTv.setTextSize(11);
+        countTv.setTextColor(CLR_HIGHLIGHT);
+        selRow.addView(countTv);
+
+        card.addView(selRow);
+
+        selBtn.setOnClickListener(v -> {
+            ContactPickerDialog.show(act, joinSet(",", sSelectedContacts),
+                sSelectedChannel == 1 ? 1 : 0,
+                (wxids, display) -> {
+                    sSelectedContacts.clear();
+                    sSelectedContacts.addAll(wxids);
+                    countTv.setText(sSelectedContacts.size() + " 个选中");
+                });
+        });
+
+        LinearLayout excRow = new LinearLayout(ctx);
+        excRow.setOrientation(LinearLayout.HORIZONTAL);
+        excRow.setGravity(Gravity.CENTER_VERTICAL);
+        excRow.setPadding(0, PX(d, 8), 0, 0);
+
+        TextView excBtn = new TextView(ctx);
+        excBtn.setText("排除名单");
+        excBtn.setTextSize(12);
+        excBtn.setTextColor(CLR_RED);
+        excBtn.setPadding(PX(d, 14), PX(d, 8), PX(d, 14), PX(d, 8));
+        GradientDrawable excBg = new GradientDrawable();
+        excBg.setCornerRadius(PX(d, 6));
+        excBg.setStroke(PX(d, 1), CLR_RED);
+        excBg.setColor(Color.TRANSPARENT);
+        excBtn.setBackground(excBg);
+        excRow.addView(excBtn);
+
+        View spE = new View(ctx); spE.setLayoutParams(lpWeight(1)); excRow.addView(spE);
+
+        final TextView excCountTv = new TextView(ctx);
+        excCountTv.setText(sExcludeContacts.size() + " 个排除");
+        excCountTv.setTextSize(11);
+        excCountTv.setTextColor(CLR_RED);
+        excRow.addView(excCountTv);
+
+        card.addView(excRow);
+
+        excBtn.setOnClickListener(v -> {
+            ContactPickerDialog.show(act, joinSet(",", sExcludeContacts),
+                sSelectedChannel == 1 ? 1 : 0,
+                (wxids, display) -> {
+                    sExcludeContacts.clear();
+                    sExcludeContacts.addAll(wxids);
+                    excCountTv.setText(sExcludeContacts.size() + " 个排除");
+                });
+        });
+
+        // 朋友圈额外配置
+        LinearLayout momentsExtra = new LinearLayout(ctx);
+        momentsExtra.setOrientation(LinearLayout.VERTICAL);
+        momentsExtra.setVisibility(sSelectedChannel == 2 ? View.VISIBLE : View.GONE);
+        momentsExtra.setPadding(0, PX(d, 10), 0, 0);
+
+        final EditText visibleEt = editText(ctx, d, "自定义可见范围（wxid逗号分隔，留空=全部好友可见）", CLR_HIGHLIGHT);
+        visibleEt.setMinLines(1);
+        momentsExtra.addView(visibleEt);
+
+        final EditText locationEt = editText(ctx, d, "自定义虚拟定位（如: 北京市朝阳区XX路）", CLR_HIGHLIGHT);
+        locationEt.setMinLines(1);
+        locationEt.setPadding(0, PX(d, 8), 0, 0);
+        momentsExtra.addView(locationEt);
+
+        final EditText commentEt = editText(ctx, d, "发布完成后延时自动评论内容（留空=不评论）", CLR_HIGHLIGHT);
+        commentEt.setMinLines(1);
+        commentEt.setPadding(0, PX(d, 8), 0, 0);
+        momentsExtra.addView(commentEt);
+
+        final CheckBox autoDeleteCb = checkBox(ctx, d, "定时自动删除动态（24小时后）");
+        momentsExtra.addView(autoDeleteCb);
+
+        card.addView(momentsExtra);
+        card.setTag(new Object[]{countTv, excCountTv, momentsExtra, visibleEt, locationEt, commentEt, autoDeleteCb});
+
+        return card;
+    }
+
+    private static void refreshContactDisplay(Context ctx, float d, LinearLayout card) {
+        Object[] tag = (Object[]) card.getTag();
+        if (tag != null && tag.length >= 3 && tag[2] instanceof LinearLayout) {
+            ((LinearLayout)tag[2]).setVisibility(sSelectedChannel == 2 ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    // ===== 卡片5: 风控间隔策略 =====
+
+    private static View buildCard5(Context ctx, float d, Activity act) {
+        LinearLayout card = makeCard(ctx, d, "风控间隔策略");
+
+        final EditText intervalEt = editText(ctx, d, "5", CLR_HIGHLIGHT);
+        intervalEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+        card.addView(rowLabel(ctx, d, "发送间隔(秒)", intervalEt));
+        card.addView(hSep(ctx, d));
+
+        final CheckBox randomCb = checkBox(ctx, d, "开启随机浮动延迟（实际间隔在设定值±30%范围随机）");
+        card.addView(randomCb);
+        card.addView(hSep(ctx, d));
+
+        LinearLayout batchRow = new LinearLayout(ctx);
+        batchRow.setOrientation(LinearLayout.HORIZONTAL);
+        batchRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        final EditText batchSizeEt = editText(ctx, d, "10", CLR_HIGHLIGHT);
+        batchSizeEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+        batchSizeEt.setLayoutParams(lpWeight(1));
+        batchRow.addView(rowLabel(ctx, d, "每批发送", batchSizeEt));
+
+        View spB1 = new View(ctx); spB1.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 12), 0)); batchRow.addView(spB1);
+
+        final EditText batchIntEt = editText(ctx, d, "60", CLR_HIGHLIGHT);
+        batchIntEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+        batchIntEt.setLayoutParams(lpWeight(1));
+        batchRow.addView(rowLabel(ctx, d, "批次间隔(秒)", batchIntEt));
+
+        card.addView(batchRow);
+        card.addView(hSep(ctx, d));
+
+        final EditText maxSendEt = editText(ctx, d, "200", CLR_HIGHLIGHT);
+        maxSendEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+        card.addView(rowLabel(ctx, d, "单次任务最大发送", maxSendEt));
+
+        card.setTag(new Object[]{intervalEt, randomCb, batchSizeEt, batchIntEt, maxSendEt});
+        return card;
+    }
+
+    // ===== 卡片6: 高级策略设置 =====
+
+    private static View buildCard6(Context ctx, float d, Activity act) {
+        LinearLayout card = makeCard(ctx, d, "高级策略设置");
+
+        final EditText retryTimesEt = editText(ctx, d, "3", CLR_HIGHLIGHT);
+        retryTimesEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+        card.addView(rowLabel(ctx, d, "最大重试次数", retryTimesEt));
+        card.addView(hSep(ctx, d));
+
+        final EditText retryIntEt = editText(ctx, d, "60", CLR_HIGHLIGHT);
+        retryIntEt.setInputType(InputType.TYPE_CLASS_NUMBER);
+        card.addView(rowLabel(ctx, d, "重试等待间隔(秒)", retryIntEt));
+
+        TextView hint = new TextView(ctx);
+        hint.setText("多次重试失败将自动标记该对象跳过，不阻断整体群发队列");
+        hint.setTextSize(10); hint.setTextColor(CLR_GRAY);
+        hint.setPadding(0, PX(d, 8), 0, 0);
+        card.addView(hint);
+
+        card.setTag(new Object[]{retryTimesEt, retryIntEt});
+        return card;
+    }
+
+    // ===== 卡片7: 模板与历史日志 =====
+
+    private static View buildCard7(Context ctx, float d, Activity act) {
+        LinearLayout card = makeCard(ctx, d, "模板与历史日志");
+
+        LinearLayout tplRow = new LinearLayout(ctx);
+        tplRow.setOrientation(LinearLayout.HORIZONTAL);
+        tplRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView saveTplBtn = new TextView(ctx);
+        saveTplBtn.setText("保存为模板");
+        saveTplBtn.setTextSize(12);
+        saveTplBtn.setTextColor(CLR_NEON);
+        saveTplBtn.setPadding(PX(d, 12), PX(d, 8), PX(d, 12), PX(d, 8));
+        GradientDrawable stBg = new GradientDrawable();
+        stBg.setCornerRadius(PX(d, 6));
+        stBg.setStroke(PX(d, 1), CLR_NEON);
+        stBg.setColor(Color.TRANSPARENT);
+        saveTplBtn.setBackground(stBg);
+        tplRow.addView(saveTplBtn);
+
+        View spT1 = new View(ctx); spT1.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 8), 0)); tplRow.addView(spT1);
+
+        TextView loadTplBtn = new TextView(ctx);
+        loadTplBtn.setText("加载模板");
+        loadTplBtn.setTextSize(12);
+        loadTplBtn.setTextColor(CLR_WHITE);
+        loadTplBtn.setPadding(PX(d, 12), PX(d, 8), PX(d, 12), PX(d, 8));
+        GradientDrawable ltBg = new GradientDrawable();
+        ltBg.setCornerRadius(PX(d, 6));
+        ltBg.setStroke(PX(d, 1), CLR_WHITE);
+        ltBg.setColor(Color.TRANSPARENT);
+        loadTplBtn.setBackground(ltBg);
+        tplRow.addView(loadTplBtn);
+
+        card.addView(tplRow);
+        card.addView(hSep(ctx, d));
+
+        LinearLayout logRow = new LinearLayout(ctx);
+        logRow.setOrientation(LinearLayout.HORIZONTAL);
+        logRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView logBtn = new TextView(ctx);
+        logBtn.setText("发送历史日志");
+        logBtn.setTextSize(12);
+        logBtn.setTextColor(CLR_YELLOW);
+        logBtn.setPadding(PX(d, 12), PX(d, 8), PX(d, 12), PX(d, 8));
+        GradientDrawable lbBg = new GradientDrawable();
+        lbBg.setCornerRadius(PX(d, 6));
+        lbBg.setStroke(PX(d, 1), CLR_YELLOW);
+        lbBg.setColor(Color.TRANSPARENT);
+        logBtn.setBackground(lbBg);
+        logRow.addView(logBtn);
+
+        View spL = new View(ctx); spL.setLayoutParams(lpWeight(1)); logRow.addView(spL);
+
+        final TextView logCount = new TextView(ctx);
+        List<SendLogEntry> logs = ScheduleBroadcast.getSendLogs();
+        List<SendLogEntry> failed = ScheduleBroadcast.getFailedLogs();
+        logCount.setText("共" + logs.size() + "条 / 失败" + failed.size() + "条");
+        logCount.setTextSize(10);
+        logCount.setTextColor(CLR_HIGHLIGHT);
+        logRow.addView(logCount);
+
+        card.addView(logRow);
+
+        saveTplBtn.setOnClickListener(v -> showSaveTemplate(ctx, d, act));
+        loadTplBtn.setOnClickListener(v -> showLoadTemplate(ctx, d, act));
+        logBtn.setOnClickListener(v -> showSendLogs(ctx, d, act));
+
+        card.setTag(logCount);
+        return card;
+    }
+
+    private static void showSaveTemplate(Context ctx, float d, Activity act) {
+        AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(PX(d, 16), PX(d, 16), PX(d, 16), PX(d, 16));
+        root.setBackgroundColor(CLR_BG);
+
+        TextView title = new TextView(ctx);
+        title.setText("保存消息模板"); title.setTextSize(14); title.setTextColor(CLR_WHITE);
+        title.setTypeface(null, Typeface.BOLD); title.setPadding(0, 0, 0, PX(d, 10));
+        root.addView(title);
+
+        final EditText nameEt = editText(ctx, d, "模板名称", CLR_HIGHLIGHT);
+        root.addView(nameEt);
+
+        LinearLayout btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setGravity(Gravity.RIGHT);
+        btnRow.setPadding(0, PX(d, 10), 0, 0);
+        TextView cancel = new TextView(ctx);
+        cancel.setText("取消"); cancel.setTextSize(12); cancel.setTextColor(CLR_GRAY);
+        cancel.setPadding(PX(d, 14), PX(d, 8), PX(d, 14), PX(d, 8));
+        btnRow.addView(cancel);
+        TextView ok = new TextView(ctx);
+        ok.setText("保存"); ok.setTextSize(12); ok.setTextColor(CLR_NEON);
+        ok.setPadding(PX(d, 14), PX(d, 8), PX(d, 14), PX(d, 8));
+        btnRow.addView(ok);
+        root.addView(btnRow);
+
+        b.setView(root);
+        AlertDialog dlg = b.create();
+        Window w = dlg.getWindow();
+        if (w != null) w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+
+        cancel.setOnClickListener(v2 -> dlg.dismiss());
+        ok.setOnClickListener(v2 -> {
+            String name = nameEt.getText().toString().trim();
+            if (name.isEmpty()) { Toast.makeText(ctx, "请输入模板名称", Toast.LENGTH_SHORT).show(); return; }
+            TemplateData tpl = new TemplateData();
+            tpl.name = name;
+            tpl.content = sContentCache;
+            tpl.msgType = MSG_TYPE_CODES[sSelectedMsgType];
+            tpl.channel = sSelectedChannel;
+            tpl.targetWxids = joinSet(",", sSelectedContacts);
+            tpl.excludeWxids = joinSet(",", sExcludeContacts);
+            ScheduleBroadcast.saveTemplate(tpl);
+            Toast.makeText(ctx, "模板已保存", Toast.LENGTH_SHORT).show();
+            dlg.dismiss();
+        });
+        dlg.show();
+    }
+
+    private static void showLoadTemplate(Context ctx, float d, Activity act) {
+        List<TemplateData> templates = ScheduleBroadcast.getAllTemplates();
+        if (templates.isEmpty()) { Toast.makeText(ctx, "暂无模板", Toast.LENGTH_SHORT).show(); return; }
+
+        AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(PX(d, 16), PX(d, 16), PX(d, 16), PX(d, 16));
+        root.setBackgroundColor(CLR_BG);
+
+        TextView title = new TextView(ctx);
+        title.setText("加载模板"); title.setTextSize(14); title.setTextColor(CLR_WHITE);
+        title.setTypeface(null, Typeface.BOLD); title.setPadding(0, 0, 0, PX(d, 10));
+        root.addView(title);
+
+        for (final TemplateData tpl : templates) {
+            LinearLayout row = new LinearLayout(ctx);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(PX(d, 10), PX(d, 8), PX(d, 10), PX(d, 8));
+
+            LinearLayout col = new LinearLayout(ctx);
+            col.setOrientation(LinearLayout.VERTICAL);
+            col.setLayoutParams(lpWeight(1));
+
+            TextView tname = new TextView(ctx);
+            tname.setText(tpl.name);
+            tname.setTextSize(13); tname.setTextColor(CLR_WHITE);
+            col.addView(tname);
+
+            TextView ttype = new TextView(ctx);
+            ttype.setText(MSG_TYPES[Math.min(sSelectedMsgType, 11)] + " | " + CHANNELS[Math.max(0, Math.min(2, tpl.channel))]);
+            ttype.setTextSize(10); ttype.setTextColor(CLR_GRAY);
+            col.addView(ttype);
+
+            row.addView(col);
+
+            TextView loadBtn = new TextView(ctx);
+            loadBtn.setText("加载");
+            loadBtn.setTextSize(11); loadBtn.setTextColor(CLR_NEON);
+            loadBtn.setPadding(PX(d, 10), PX(d, 6), PX(d, 10), PX(d, 6));
+            GradientDrawable ldBg = new GradientDrawable();
+            ldBg.setCornerRadius(PX(d, 4));
+            ldBg.setStroke(PX(d, 1), CLR_NEON);
+            ldBg.setColor(Color.TRANSPARENT);
+            loadBtn.setBackground(ldBg);
+
+            final String tplId = tpl.id;
+            loadBtn.setOnClickListener(v -> {
+                sContentCache = tpl.content != null ? tpl.content : "";
+                sSelectedChannel = tpl.channel;
+                if (tpl.targetWxids != null && !tpl.targetWxids.isEmpty()) {
+                    sSelectedContacts.clear();
+                    for (String w : tpl.targetWxids.split(",")) { String tr = w.trim(); if (!tr.isEmpty()) sSelectedContacts.add(tr); }
+                }
+                if (tpl.excludeWxids != null && !tpl.excludeWxids.isEmpty()) {
+                    sExcludeContacts.clear();
+                    for (String w : tpl.excludeWxids.split(",")) { String tr = w.trim(); if (!tr.isEmpty()) sExcludeContacts.add(tr); }
+                }
+                SubPageActivity.open(act, "定时消息群发", 14);
+            });
+            row.addView(loadBtn);
+
+            View spD = new View(ctx); spD.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 6), 0)); row.addView(spD);
+
+            TextView delBtn = new TextView(ctx);
+            delBtn.setText("删");
+            delBtn.setTextSize(11); delBtn.setTextColor(CLR_RED);
+            delBtn.setPadding(PX(d, 10), PX(d, 6), PX(d, 10), PX(d, 6));
+            delBtn.setOnClickListener(v2 -> {
+                ScheduleBroadcast.deleteTemplate(tplId);
+                SubPageActivity.open(act, "定时消息群发", 14);
+            });
+            row.addView(delBtn);
+
+            root.addView(row);
+            View sep = new View(ctx);
+            sep.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
+            sep.setBackgroundColor(0x22336655);
+            root.addView(sep);
+        }
+
+        b.setView(root);
+        AlertDialog dlg = b.create();
+        Window w = dlg.getWindow();
+        if (w != null) w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        dlg.show();
+    }
+
+    private static void showSendLogs(Context ctx, float d, Activity act) {
+        List<SendLogEntry> logs = ScheduleBroadcast.getSendLogs();
+        List<SendLogEntry> failed = ScheduleBroadcast.getFailedLogs();
+
+        AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(PX(d, 16), PX(d, 16), PX(d, 16), PX(d, 16));
+        root.setBackgroundColor(CLR_BG);
+
+        TextView title = new TextView(ctx);
+        title.setText("发送历史日志"); title.setTextSize(14); title.setTextColor(CLR_WHITE);
+        title.setTypeface(null, Typeface.BOLD); title.setPadding(0, 0, 0, PX(d, 6));
+        root.addView(title);
+
+        TextView summary = new TextView(ctx);
+        summary.setText("全部: " + logs.size() + "条 失败: " + failed.size() + "条");
+        summary.setTextSize(11); summary.setTextColor(CLR_HIGHLIGHT);
+        summary.setPadding(0, 0, 0, PX(d, 10));
+        root.addView(summary);
+
+        if (failed.size() > 0) {
+            TextView resendBtn = new TextView(ctx);
+            resendBtn.setText("一键补发全部失败对象");
+            resendBtn.setTextSize(12);
+            resendBtn.setTextColor(CLR_RED);
+            resendBtn.setPadding(PX(d, 14), PX(d, 8), PX(d, 14), PX(d, 8));
+            GradientDrawable rsBg = new GradientDrawable();
+            rsBg.setCornerRadius(PX(d, 6));
+            rsBg.setStroke(PX(d, 1), CLR_RED);
+            rsBg.setColor(Color.TRANSPARENT);
+            resendBtn.setBackground(rsBg);
+            resendBtn.setOnClickListener(v -> {
+                for (SendLogEntry e : failed) {
+                    Task retryTask = new Task();
+                    retryTask.msgType = MSG_TYPE_CODES[sSelectedMsgType];
+                    retryTask.content = e.content;
+                    retryTask.targetGroups.add(e.targetWxid);
+                    retryTask.sendAllGroups = false;
+                    ScheduleBroadcast.addTask(retryTask);
+                }
+                ScheduleBroadcast.clearSendLogs();
+                Toast.makeText(ctx, "已创建补发任务", Toast.LENGTH_SHORT).show();
+            });
+            root.addView(resendBtn);
+            View lsep = new View(ctx);
+            lsep.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
+            lsep.setBackgroundColor(0x22336655);
+            ((LinearLayout.LayoutParams)lsep.getLayoutParams()).setMargins(0, PX(d, 8), 0, PX(d, 8));
+            root.addView(lsep);
+        }
+
+        ScrollView logSv = new ScrollView(ctx);
+        logSv.setLayoutParams(new LinearLayout.LayoutParams(-1, PX(d, 350)));
+
+        LinearLayout logList = new LinearLayout(ctx);
+        logList.setOrientation(LinearLayout.VERTICAL);
+
+        if (logs.isEmpty()) {
+            TextView empty = new TextView(ctx);
+            empty.setText("暂无发送记录");
+            empty.setTextSize(12); empty.setTextColor(CLR_GRAY);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(0, PX(d, 30), 0, 0);
+            logList.addView(empty);
+        }
+
+        int shown = 0;
+        java.text.SimpleDateFormat sdfLog = new java.text.SimpleDateFormat("MM-dd HH:mm:ss", Locale.getDefault());
+        for (SendLogEntry e : logs) {
+            if (shown++ >= 100) break;
+            LinearLayout item = new LinearLayout(ctx);
+            item.setOrientation(LinearLayout.VERTICAL);
+            item.setPadding(PX(d, 8), PX(d, 6), PX(d, 8), PX(d, 6));
+
+            LinearLayout top = new LinearLayout(ctx);
+            top.setOrientation(LinearLayout.HORIZONTAL);
+            top.setGravity(Gravity.CENTER_VERTICAL);
+
+            TextView statusIcon = new TextView(ctx);
+            statusIcon.setText(e.success ? "\u2713" : "\u2717");
+            statusIcon.setTextSize(12);
+            statusIcon.setTextColor(e.success ? CLR_NEON : CLR_RED);
+            statusIcon.setPadding(0, 0, PX(d, 8), 0);
+            top.addView(statusIcon);
+
+            TextView tname = new TextView(ctx);
+            tname.setText((e.taskName != null && !e.taskName.isEmpty() ? e.taskName : "任务") + " -> " + (e.targetName != null ? e.targetName : e.targetWxid));
+            tname.setTextSize(11);
+            tname.setTextColor(CLR_WHITE);
+            tname.setLayoutParams(lpWeight(1));
+            top.addView(tname);
+
+            TextView timeTv = new TextView(ctx);
+            timeTv.setText(sdfLog.format(new Date(e.timestamp)));
+            timeTv.setTextSize(9);
+            timeTv.setTextColor(CLR_GRAY);
+            top.addView(timeTv);
+
+            item.addView(top);
+
+            if (e.error != null && !e.error.isEmpty()) {
+                TextView errTv = new TextView(ctx);
+                errTv.setText("错误: " + e.error);
+                errTv.setTextSize(10);
+                errTv.setTextColor(CLR_RED);
+                errTv.setPadding(PX(d, 20), PX(d, 2), 0, 0);
+                item.addView(errTv);
+            }
+
+            logList.addView(item);
+            View sep = new View(ctx);
+            sep.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
+            sep.setBackgroundColor(0x15336655);
+            logList.addView(sep);
+        }
+
+        logSv.addView(logList);
+        root.addView(logSv);
+
+        b.setView(root);
+        AlertDialog dlg = b.create();
+        Window w = dlg.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+            w.setLayout((int)(ctx.getResources().getDisplayMetrics().widthPixels * 0.90), -2);
+        }
+        dlg.show();
+    }
+
+    // ===== 底部操作按钮 =====
+
+    private static View buildBottomBtn(Context ctx, float d, Activity act) {
+        TextView btn = new TextView(ctx);
+        btn.setText(sEditingTaskId != null ? "   更新并启用" : "   保存并启用");
+        btn.setTextSize(15);
+        btn.setTextColor(Color.BLACK);
+        btn.setTypeface(null, Typeface.BOLD);
+        btn.setGravity(Gravity.CENTER);
+        btn.setPadding(PX(d, 20), PX(d, 14), PX(d, 20), PX(d, 14));
+        GradientDrawable btnBg = new GradientDrawable();
+        btnBg.setCornerRadius(PX(d, 24));
+        btnBg.setColor(CLR_NEON);
+        btn.setBackground(btnBg);
+
+        btn.setOnClickListener(v -> saveAndStart(ctx, d, act));
+        return btn;
+    }
+
+    // ===== 保存并启动任务 =====
+
+    private static void saveAndStart(Context ctx, float d, Activity act) {
+        try {
+            Task task;
+            if (sEditingTaskId != null) {
+                task = ScheduleBroadcast.getTask(sEditingTaskId);
+                if (task == null) task = new Task();
+            } else {
+                task = new Task();
+            }
+
+            task.msgType = MSG_TYPE_CODES[sSelectedMsgType];
+
+            String content = sContentCache;
+            if (content.isEmpty()) { Toast.makeText(ctx, "请输入消息内容", Toast.LENGTH_SHORT).show(); return; }
+            task.content = content;
+
+            String name = sTaskNameCache;
+            if (name.isEmpty()) name = "定时任务_" + new SimpleDateFormat("MMddHHmm", Locale.getDefault()).format(new Date());
+
+            task.targetGroups = new ArrayList<>();
+            if (sSelectedChannel == 0) {
+                for (String w : sSelectedContacts) { if (!w.endsWith("@chatroom")) task.targetGroups.add(w); }
+            } else if (sSelectedChannel == 1) {
+                for (String w : sSelectedContacts) { task.targetGroups.add(w); }
+            }
+            task.sendAllGroups = sSelectedContacts.isEmpty() && sSelectedChannel == 1;
+
+            if (!task.sendAllGroups && task.targetGroups.isEmpty()) { Toast.makeText(ctx, "请选择发送目标", Toast.LENGTH_SHORT).show(); return; }
+
+            // 素材文件路径
+            if (!sMaterialFiles.isEmpty()) {
+                task.filePath = sMaterialFiles.get(0);
+            }
+
+            // 语言设置
+            task.varNickname = content.contains("{昵称}");
+            task.varGroupName = content.contains("{群名称}");
+            task.varTime = content.contains("{当前时间}");
+            task.varDate = content.contains("{date}");
+
+            // 计算触发时间
+            Calendar cal = Calendar.getInstance();
+            cal.set(Calendar.HOUR_OF_DAY, sHourCache);
+            cal.set(Calendar.MINUTE, sMinuteCache);
+            cal.set(Calendar.SECOND, 0);
+            cal.set(Calendar.MILLISECOND, 0);
+            if (cal.getTimeInMillis() <= System.currentTimeMillis()) cal.add(Calendar.DAY_OF_MONTH, 1);
+            task.triggerTime = cal.getTimeInMillis();
+
+            // 重复模式
+            if ("每日循环".equals(sRepeatCache)) task.repeatInterval = 86400000L;
+            else if ("每周循环".equals(sRepeatCache)) task.repeatInterval = 604800000L;
+            else task.repeatInterval = 0;
+
+            task.enabled = true;
+            task.totalSendCount = 0;
+            task.failCount = 0;
+
+            if (sEditingTaskId != null) {
+                task.id = sEditingTaskId;
+                ScheduleBroadcast.updateTask(task);
+                Toast.makeText(ctx, "任务已更新", Toast.LENGTH_SHORT).show();
+            } else {
+                ScheduleBroadcast.addTask(task);
+                Toast.makeText(ctx, "任务已保存并启用", Toast.LENGTH_SHORT).show();
+            }
+
+            autoSaveDraft(ctx);
+            sEditingTaskId = null;
+
+            SubPageActivity.open(act, "定时消息群发", 14);
+
+        } catch (Throwable t) {
+            Toast.makeText(ctx, "保存失败: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // ===== 草稿自动保存 =====
+
+    private static void autoSaveDraft(Context ctx) {
+        try {
+            android.content.SharedPreferences sp = ctx.getSharedPreferences("schedule_draft_auto", Context.MODE_PRIVATE);
+            sp.edit()
+                .putString("taskName", sTaskNameCache)
+                .putString("content", sContentCache)
+                .putInt("hour", sHourCache)
+                .putInt("minute", sMinuteCache)
+                .putString("repeat", sRepeatCache)
+                .putInt("msgType", sSelectedMsgType)
+                .putInt("channel", sSelectedChannel)
+                .putString("contacts", joinSet(",", sSelectedContacts))
+                .putString("exclude", joinSet(",", sExcludeContacts))
+                .commit();
+        } catch (Throwable ignored) {}
+    }
+
+    private static void loadDraft(Context ctx) {
+        try {
+            android.content.SharedPreferences sp = ctx.getSharedPreferences("schedule_draft_auto", Context.MODE_PRIVATE);
+            sTaskNameCache = sp.getString("taskName", "");
+            sContentCache = sp.getString("content", "");
+            sHourCache = sp.getInt("hour", 8);
+            sMinuteCache = sp.getInt("minute", 0);
+            sRepeatCache = sp.getString("repeat", "仅一次");
+            sSelectedMsgType = sp.getInt("msgType", 0);
+            sSelectedChannel = sp.getInt("channel", 1);
+            String cs = sp.getString("contacts", "");
+            sSelectedContacts.clear();
+            if (cs != null && !cs.isEmpty()) for (String w : cs.split(",")) { String t = w.trim(); if (!t.isEmpty()) sSelectedContacts.add(t); }
+            String ex = sp.getString("exclude", "");
+            sExcludeContacts.clear();
+            if (ex != null && !ex.isEmpty()) for (String w : ex.split(",")) { String t = w.trim(); if (!t.isEmpty()) sExcludeContacts.add(t); }
+        } catch (Throwable ignored) {}
+    }
+
+    // ===== UI 构建工具 =====
+
+    private static LinearLayout makeCard(Context ctx, float d, String title) {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(PX(d, 14), PX(d, 14), PX(d, 14), PX(d, 14));
-        card.setBackgroundColor(AppColors.whiteCard());
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(PX(d, 12));
-        bg.setColor(AppColors.whiteCard());
-        card.setBackground(bg);
+        card.setClipToOutline(true);
+
+        GradientDrawable cardBg = new GradientDrawable();
+        cardBg.setCornerRadius(PX(d, 12));
+        cardBg.setStroke(PX(d, 1), CLR_NEON);
+        cardBg.setColor(CLR_CARD);
+        card.setBackground(cardBg);
 
         LinearLayout header = new LinearLayout(ctx);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
 
-        TextView ic = new TextView(ctx);
-        ic.setText(new String(Character.toChars(icon)));
-        ic.setTextSize(16);
-        header.addView(ic);
+        TextView iv = new TextView(ctx);
+        iv.setTextColor(CLR_NEON);
+        iv.setTextSize(10);
+        iv.setPadding(0, 0, PX(d, 8), 0);
+        String icon = title.contains("任务基础") ? "\u2139" : title.contains("消息内容") ? "\u2709" :
+            title.contains("素材文件") ? "\uD83D\uDCC1" : title.contains("发送目标") ? "\uD83C\uDFAF" :
+            title.contains("风控") ? "\u26A1" : title.contains("高级") ? "\u2699" : "\uD83D\uDCCB";
+        iv.setText(icon);
+        header.addView(iv);
 
         TextView t = new TextView(ctx);
         t.setText(title);
         t.setTextSize(14);
-        t.setTextColor(AppColors.text1());
+        t.setTextColor(CLR_WHITE);
         t.setTypeface(null, Typeface.BOLD);
-        t.setPadding(PX(d, 8), 0, 0, 0);
+        t.setLayoutParams(lpWeight(1));
         header.addView(t);
 
         card.addView(header);
 
         View div = new View(ctx);
-        div.setLayoutParams(lp(-1, 1));
-        div.setBackgroundColor(AppColors.divider());
+        div.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
+        div.setBackgroundColor(0x22336655);
         LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-1, 1);
         dlp.setMargins(0, PX(d, 8), 0, PX(d, 10));
         div.setLayoutParams(dlp);
@@ -456,393 +1318,96 @@ public class ScheduleMsgPageView {
         return card;
     }
 
-    private static View wrap(Context ctx, float d, String label, View child) {
+    private static LinearLayout rowLabel(Context ctx, float d, String labelText, View widget) {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, PX(d, 6), 0, PX(d, 2));
+        row.setPadding(0, PX(d, 4), 0, PX(d, 4));
 
-        TextView tv = new TextView(ctx);
-        tv.setText(label);
-        tv.setTextSize(12);
-        tv.setTextColor(AppColors.text1());
-        row.addView(tv, lp(0, -2, 0.35f));
+        TextView tv = label(ctx, d, labelText);
+        tv.setLayoutParams(lpFixW(PX(d, 80)));
+        row.addView(tv);
 
-        child.setLayoutParams(lp(0, -2, 0.65f));
-        row.addView(child);
+        row.addView(widget);
         return row;
     }
 
-    private static Spinner spinner(Context ctx, float d, String... items) {
-        Spinner sp = new Spinner(ctx);
-        sp.setAdapter(new ArrayAdapter<>(ctx, android.R.layout.simple_spinner_item, items));
-        sp.setPadding(0, 0, 0, 0);
-        return sp;
-    }
-
-    private static EditText editText(Context ctx, float d, String hint) {
-        EditText et = new EditText(ctx);
-        et.setHint(hint);
-        et.setTextColor(AppColors.text1());
-        et.setHintTextColor(AppColors.text2());
-        et.setBackgroundColor(AppColors.bg());
-        et.setPadding(PX(d, 12), PX(d, 10), PX(d, 12), PX(d, 10));
-        et.setTextSize(13);
-        et.setSingleLine(false);
-        GradientDrawable etBg = new GradientDrawable();
-        etBg.setCornerRadius(PX(d, 8));
-        etBg.setColor(AppColors.bg());
-        et.setBackground(etBg);
-        LinearLayout.LayoutParams etlp = new LinearLayout.LayoutParams(-1, -2);
-        etlp.setMargins(0, PX(d, 6), 0, 0);
-        et.setLayoutParams(etlp);
-        return et;
-    }
-
-    private static EditText miniInput(Context ctx, float d, String hint) {
-        EditText et = new EditText(ctx);
-        et.setHint(hint);
-        et.setTextColor(AppColors.text1());
-        et.setHintTextColor(AppColors.text2());
-        et.setBackgroundColor(AppColors.bg());
-        et.setPadding(PX(d, 8), PX(d, 8), PX(d, 8), PX(d, 8));
-        et.setTextSize(12);
-        et.setSingleLine(true);
-        et.setGravity(Gravity.CENTER);
-        GradientDrawable etBg = new GradientDrawable();
-        etBg.setCornerRadius(PX(d, 6));
-        etBg.setColor(AppColors.bg());
-        et.setBackground(etBg);
-        et.setLayoutParams(lp(PX(d, 48), -2));
-        return et;
-    }
-
-    private static TextView label(Context ctx, float d, String text, float weight) {
-        TextView tv = new TextView(ctx);
-        tv.setText(text);
-        tv.setTextSize(11);
-        tv.setTextColor(AppColors.text2());
-        tv.setPadding(PX(d, 8), 0, PX(d, 4), 0);
-        tv.setLayoutParams(lp(0, -2, weight));
-        return tv;
-    }
-
-    private static TextView text(Context ctx, String s) {
-        TextView tv = new TextView(ctx);
-        tv.setText(s);
-        tv.setTextSize(14);
-        tv.setTextColor(AppColors.text1());
-        tv.setGravity(Gravity.CENTER);
-        return tv;
-    }
-
-    private static Button tagBtn(Context ctx, float d, String text, Runnable onClick) {
-        Button b = new Button(ctx);
-        b.setText(text);
-        b.setTextSize(10);
-        b.setTextColor(Color.WHITE);
-        b.setPadding(PX(d, 8), PX(d, 4), PX(d, 8), PX(d, 4));
-        b.setAllCaps(false);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(PX(d, 12));
-        bg.setColor(0xFF8E44AD);
-        b.setBackground(bg);
-        b.setOnClickListener(v -> onClick.run());
-        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-2, -2);
-        blp.setMargins(0, PX(d, 6), PX(d, 6), 0);
-        b.setLayoutParams(blp);
-        return b;
-    }
-
-    private static CheckBox check(Context ctx, String text) {
-        CheckBox cb = new CheckBox(ctx);
-        cb.setText(text);
-        cb.setTextSize(11);
-        cb.setTextColor(AppColors.text1());
-        return cb;
-    }
-
-    private static Button bigBtn(Context ctx, float d, String text, int color) {
-        Button b = new Button(ctx);
-        b.setText(text);
-        b.setTextSize(13);
-        b.setTextColor(Color.WHITE);
-        b.setTypeface(null, Typeface.BOLD);
-        b.setPadding(PX(d, 16), PX(d, 12), PX(d, 16), PX(d, 12));
-        b.setAllCaps(false);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(PX(d, 24));
-        bg.setColor(color);
-        b.setBackground(bg);
-        return b;
-    }
-
-    private static Button tabButton(Context ctx, float d, String text, boolean active) {
-        Button b = new Button(ctx);
-        b.setText(text);
-        b.setTextSize(11);
-        b.setTextColor(active ? Color.WHITE : AppColors.text1());
-        b.setPadding(PX(d, 12), PX(d, 6), PX(d, 12), PX(d, 6));
-        b.setAllCaps(false);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(PX(d, 16));
-        bg.setColor(active ? AppColors.accent() : Color.TRANSPARENT);
-        b.setBackground(bg);
-        return b;
-    }
-
-    private static View space(Context ctx, float d) {
-        View v = new View(ctx);
-        v.setLayoutParams(lp(-1, PX(d, 12)));
-        return v;
-    }
-
-    // ================================================================
-    // 列表刷新
-    // ================================================================
-
-    private static void refreshTaskList(Context ctx, float d) {
-        if (taskContainer == null) return;
-        taskContainer.removeAllViews();
-        List<Task> tasks = ScheduleBroadcast.getAllTasks();
-
-        if (tasks.isEmpty()) {
-            taskContainer.addView(emptyText(ctx, d, "暂无定时任务，请先创建"));
-            return;
-        }
-
-        for (Task t : tasks) {
-            taskContainer.addView(taskItem(ctx, d, t));
-        }
-    }
-
-    private static View taskItem(Context ctx, float d, Task t) {
-        LinearLayout item = new LinearLayout(ctx);
-        item.setOrientation(LinearLayout.VERTICAL);
-        item.setPadding(PX(d, 14), PX(d, 12), PX(d, 14), PX(d, 12));
-        item.setBackgroundColor(AppColors.whiteCard());
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(PX(d, 10));
-        bg.setColor(AppColors.whiteCard());
-        item.setBackground(bg);
-        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(-1, -2);
-        ilp.setMargins(0, 0, 0, PX(d, 8));
-        item.setLayoutParams(ilp);
-
-        // Top: type + time
-        LinearLayout topRow = new LinearLayout(ctx);
-        topRow.setOrientation(LinearLayout.HORIZONTAL);
-        topRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        int color = t.enabled ? 0xFF27AE60 : 0xFF95A5A6;
-        TextView typeTv = new TextView(ctx);
-        typeTv.setText((t.enabled ? "" : "[暂停] ") + typeName(t.msgType) + " · " + repeatLabel(t.repeatInterval));
-        typeTv.setTextSize(12);
-        typeTv.setTextColor(color);
-        typeTv.setTypeface(null, Typeface.BOLD);
-        typeTv.setLayoutParams(lp(0, -2, 1));
-        topRow.addView(typeTv);
-
-        TextView timeTv = new TextView(ctx);
-        timeTv.setText(new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(new Date(t.triggerTime)));
-        timeTv.setTextSize(11);
-        timeTv.setTextColor(AppColors.text2());
-        topRow.addView(timeTv);
-        item.addView(topRow);
-
-        // Content
-        if (t.content != null && !t.content.isEmpty()) {
-            TextView contentTv = new TextView(ctx);
-            contentTv.setText(t.content.length() > 60 ? t.content.substring(0, 60) + "…" : t.content);
-            contentTv.setTextSize(11);
-            contentTv.setTextColor(AppColors.text2());
-            contentTv.setPadding(0, PX(d, 4), 0, 0);
-            item.addView(contentTv);
-        }
-
-        // File path
-        if (t.filePath != null && !t.filePath.isEmpty()) {
-            TextView fileTv = new TextView(ctx);
-            fileTv.setText("文件: " + t.filePath);
-            fileTv.setTextSize(10);
-            fileTv.setTextColor(0xFF3498DB);
-            fileTv.setPadding(0, PX(d, 2), 0, 0);
-            item.addView(fileTv);
-        }
-
-        // Bottom: stats + actions
-        LinearLayout botRow = new LinearLayout(ctx);
-        botRow.setOrientation(LinearLayout.HORIZONTAL);
-        botRow.setGravity(Gravity.CENTER_VERTICAL);
-        botRow.setPadding(0, PX(d, 8), 0, 0);
-
-        String meta = "群:" + (t.sendAllGroups ? "全部" : t.targetGroups.size())
-                + " | 已发:" + t.totalSendCount + " | 失败:" + t.failCount;
-        if (t.randomOrder) meta += " | 随机";
-        if (t.randomEmoji) meta += " | 表情";
-        TextView metaTv = new TextView(ctx);
-        metaTv.setText(meta);
-        metaTv.setTextSize(10);
-        metaTv.setTextColor(AppColors.text2());
-        metaTv.setLayoutParams(lp(0, -2, 1));
-        botRow.addView(metaTv);
-
-        // 按键
-        botRow.addView(miniButton(ctx, d, "启用", 0xFF27AE60, () -> {
-            ScheduleBroadcast.enableTask(t.id, true);
-            refreshTaskList(ctx, d);
-        }));
-        botRow.addView(miniButton(ctx, d, "禁用", 0xFF95A5A6, () -> {
-            ScheduleBroadcast.enableTask(t.id, false);
-            refreshTaskList(ctx, d);
-        }));
-        botRow.addView(miniButton(ctx, d, "删除", 0xFFE74C3C, () -> {
-            ScheduleBroadcast.removeTask(t.id);
-            refreshTaskList(ctx, d);
-            toast(ctx, "已删除");
-        }));
-
-        item.addView(botRow);
-        return item;
-    }
-
-    private static Button miniButton(Context ctx, float d, String text, int color, Runnable onClick) {
-        Button b = new Button(ctx);
-        b.setText(text);
-        b.setTextSize(9);
-        b.setTextColor(Color.WHITE);
-        b.setPadding(PX(d, 8), PX(d, 3), PX(d, 8), PX(d, 3));
-        b.setAllCaps(false);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(PX(d, 8));
-        bg.setColor(color);
-        b.setBackground(bg);
-        b.setOnClickListener(v -> onClick.run());
-        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-2, -2);
-        blp.setMargins(PX(d, 4), 0, 0, 0);
-        b.setLayoutParams(blp);
-        return b;
-    }
-
-    private static void refreshDraftList(Context ctx, float d) {
-        if (draftContainer == null) return;
-        draftContainer.removeAllViews();
-        List<Task> drafts = ScheduleBroadcast.getDrafts();
-
-        if (drafts.isEmpty()) {
-            draftContainer.addView(emptyText(ctx, d, "草稿箱为空"));
-            return;
-        }
-
-        for (Task t : drafts) {
-            LinearLayout row = new LinearLayout(ctx);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(PX(d, 14), PX(d, 10), PX(d, 14), PX(d, 10));
-            row.setBackgroundColor(AppColors.whiteCard());
-            GradientDrawable bg = new GradientDrawable();
-            bg.setCornerRadius(PX(d, 8));
-            bg.setColor(AppColors.whiteCard());
-            row.setBackground(bg);
-            LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-1, -2);
-            rlp.setMargins(0, 0, 0, PX(d, 6));
-            row.setLayoutParams(rlp);
-
-            TextView tv = new TextView(ctx);
-            String txt = t.content != null ? t.content : "(空)";
-            tv.setText(txt.length() > 30 ? txt.substring(0, 30) + "…" : txt);
-            tv.setTextSize(11);
-            tv.setTextColor(AppColors.text1());
-            tv.setLayoutParams(lp(0, -2, 1));
-            row.addView(tv);
-
-            row.addView(miniButton(ctx, d, "使用", 0xFF2980B9, () -> {
-                t.triggerTime = System.currentTimeMillis() + 60000;
-                t.enabled = true;
-                ScheduleBroadcast.addTask(t);
-                ScheduleBroadcast.removeDraft(t.id);
-                refreshTaskList(ctx, d);
-                refreshDraftList(ctx, d);
-                toast(ctx, "草稿已转为任务");
-            }));
-            row.addView(miniButton(ctx, d, "删", 0xFFE74C3C, () -> {
-                ScheduleBroadcast.removeDraft(t.id);
-                refreshDraftList(ctx, d);
-                toast(ctx, "已删除");
-            }));
-            draftContainer.addView(row);
-        }
-    }
-
-    private static void refreshLogPanel(Context ctx, float d, LinearLayout panel) {
-        panel.removeAllViews();
-        panel.setPadding(PX(d, 14), PX(d, 14), PX(d, 14), PX(d, 14));
-        panel.setBackgroundColor(AppColors.whiteCard());
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(PX(d, 10));
-        bg.setColor(AppColors.whiteCard());
-        panel.setBackground(bg);
-
-        boolean running = ScheduleBroadcast.isRunning();
-        int tasks = ScheduleBroadcast.getTaskCount();
-        int drafts = ScheduleBroadcast.getDraftCount();
-        int groups = ScheduleBroadcast.getGroupCount();
-        int today = ScheduleBroadcast.getDailyCount();
-        int week = ScheduleBroadcast.getWeeklyCount();
-
-        String[] lines = {
-            "引擎状态: " + (running ? "运行中" : "已停止"),
-            "全局开关: " + (ScheduleBroadcast.isEnabled() ? "已启用" : "已禁用"),
-            "",
-            "总任务数: " + tasks,
-            "草稿数量: " + drafts,
-            "群组数量: " + groups,
-            "",
-            "今日已发: " + today,
-            "本周已发: " + week,
-            "",
-            "支持的消息类型: 文本/图片/语音/视频/文件/名片/链接/公告",
-            "支持的循环模式: 一次性/每日/每周/自定义间隔",
-        };
-
-        for (String line : lines) {
-            TextView tv = new TextView(ctx);
-            tv.setText(line.isEmpty() ? " " : line);
-            tv.setTextSize(11);
-            tv.setTextColor(line.startsWith("引擎") ? 0xFF27AE60 :
-                            line.startsWith("全局") ? (ScheduleBroadcast.isEnabled() ? 0xFF27AE60 : 0xFFE74C3C) :
-                            AppColors.text2());
-            tv.setPadding(0, PX(d, 2), 0, 0);
-            panel.addView(tv);
-        }
-    }
-
-    // ================================================================
-    // 工具方法
-    // ================================================================
-
-    private static View emptyText(Context ctx, float d, String text) {
+    private static TextView label(Context ctx, float d, String text) {
         TextView tv = new TextView(ctx);
         tv.setText(text);
         tv.setTextSize(12);
-        tv.setTextColor(AppColors.text2());
-        tv.setPadding(PX(d, 10), PX(d, 16), 0, 0);
+        tv.setTextColor(CLR_WHITE);
+        tv.setPadding(0, 0, PX(d, 8), 0);
         return tv;
     }
 
-    private static String typeName(int t) {
-        switch (t) { case 1: return "文本"; case 3: return "图片"; case 34: return "语音";
-            case 43: return "视频"; case 47: return "表情"; case 42: return "名片"; case 49: return "链接"; default: return "消息"; }
+    private static EditText editText(Context ctx, float d, String hint, int textColor) {
+        EditText et = new EditText(ctx);
+        et.setHint(hint);
+        et.setHintTextColor(CLR_GRAY);
+        et.setTextColor(textColor);
+        et.setBackgroundColor(Color.TRANSPARENT);
+        et.setPadding(PX(d, 10), PX(d, 6), PX(d, 10), PX(d, 6));
+        et.setTextSize(12);
+        et.setSingleLine(false);
+        et.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        return et;
     }
 
-    private static String repeatLabel(long ms) {
-        if (ms == 0) return "一次性"; if (ms == 86400000L) return "每日";
-        if (ms == 604800000L) return "每周"; return (ms / 1000) + "秒";
+    private static CheckBox checkBox(Context ctx, float d, String text) {
+        CheckBox cb = new CheckBox(ctx);
+        cb.setText(text);
+        cb.setTextSize(12);
+        cb.setTextColor(CLR_WHITE);
+        return cb;
     }
 
-    private static LinearLayout.LayoutParams lp(int w, int h) { return new LinearLayout.LayoutParams(w, h); }
-    private static LinearLayout.LayoutParams lp(int w, int h, float weight) { return new LinearLayout.LayoutParams(w, h, weight); }
+    private static View hSep(Context ctx, float d) {
+        View v = new View(ctx);
+        v.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
+        v.setBackgroundColor(0x18336655);
+        LinearLayout.LayoutParams vlp = new LinearLayout.LayoutParams(-1, 1);
+        vlp.setMargins(0, PX(d, 6), 0, PX(d, 6));
+        v.setLayoutParams(vlp);
+        return v;
+    }
+
+    private static View vSpacer(Context ctx, float d, int dp) {
+        View v = new View(ctx);
+        v.setLayoutParams(new LinearLayout.LayoutParams(-1, PX(d, dp)));
+        return v;
+    }
+
+    private static void styleNp(NumberPicker np, Context ctx, float d) {
+        np.setLayoutParams(new LinearLayout.LayoutParams(PX(d, 60), -2));
+    }
+
+    private static Path buildChamferPath(RectF rect, float chamfer) {
+        Path path = new Path();
+        path.moveTo(rect.left + chamfer, rect.top);
+        path.lineTo(rect.right, rect.top);
+        path.lineTo(rect.right - chamfer, rect.bottom);
+        path.lineTo(rect.left, rect.bottom);
+        path.close();
+        return path;
+    }
+
+    // ===== 工具方法 =====
+
+    private static LinearLayout.LayoutParams lpWeight(int weight) { return new LinearLayout.LayoutParams(0, -2, weight); }
+    private static LinearLayout.LayoutParams lpWeight(float weight) { return new LinearLayout.LayoutParams(0, -2, weight); }
+    private static LinearLayout.LayoutParams lpFixW(int w) { return new LinearLayout.LayoutParams(w, -2); }
     private static int PX(float d, int dp) { return (int)(dp * d); }
     private static float dp(Context ctx) { return ctx.getResources().getDisplayMetrics().density; }
-    private static void toast(Context ctx, String msg) { Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show(); }
+    private static String nvl(String s) { return s == null ? "" : s; }
+
+    private static String joinSet(CharSequence delimiter, Set<String> tokens) {
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (String token : tokens) {
+            if (first) first = false; else sb.append(delimiter);
+            sb.append(token);
+        }
+        return sb.toString();
+    }
 }

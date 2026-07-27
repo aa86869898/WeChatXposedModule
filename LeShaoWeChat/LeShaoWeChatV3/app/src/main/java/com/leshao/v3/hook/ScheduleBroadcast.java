@@ -273,6 +273,8 @@ public class ScheduleBroadcast {
         registerAlarmReceiver();
         loadTasks();
         loadDrafts();
+        loadTemplates();
+        loadLogs();
         resetCounters();
         log("定时消息群发初始化完成");
     }
@@ -1085,5 +1087,282 @@ public class ScheduleBroadcast {
             for (byte b : d) sb.append(String.format("%02x", b));
             return sb.toString();
         } catch (Throwable t) { return ""; }
+    }
+
+    // ===== 好友列表 =====
+
+    public static List<String> getAllFriends() {
+        List<String> list = new ArrayList<>();
+        android.database.sqlite.SQLiteDatabase db = null;
+        android.database.Cursor c = null;
+        try {
+            long uin = getCurrentUin();
+            if (uin == 0) return list;
+            String hash = md5(String.valueOf(uin));
+            String dbPath = "/data/user/0/com.tencent.mm/MicroMsg/" + hash + "/EnMicroMsg.db";
+            if (!new File(dbPath).exists()) dbPath = "/data/data/com.tencent.mm/MicroMsg/" + hash + "/EnMicroMsg.db";
+            if (!new File(dbPath).exists()) return list;
+            db = android.database.sqlite.SQLiteDatabase.openDatabase(dbPath, null, android.database.sqlite.SQLiteDatabase.OPEN_READONLY);
+            c = db.rawQuery("SELECT username FROM rcontact WHERE type=0 AND username NOT LIKE '%@chatroom' AND username NOT LIKE 'gh_%' AND username NOT LIKE '%@lbsroom' AND username NOT LIKE '%@openim' AND verifyFlag=0 ORDER BY nickname", null);
+            while (c.moveToNext()) list.add(c.getString(0));
+        } catch (Throwable t) { log("获取好友列表失败: " + t.getMessage()); }
+        finally {
+            if (c != null && !c.isClosed()) try { c.close(); } catch (Throwable ignored) {}
+            if (db != null && db.isOpen()) try { db.close(); } catch (Throwable ignored) {}
+        }
+        return list;
+    }
+
+    // ===== 任务模板管理 =====
+
+    public static class TemplateData {
+        public String id;
+        public String name;
+        public String content;
+        public int msgType;
+        public String filePath;
+        public String targetWxids;
+        public String excludeWxids;
+        public int channel; // 0=好友 1=群聊 2=朋友圈
+        public int minIntervalSec;
+        public int maxIntervalSec;
+        public int batchSize;
+        public int batchIntervalSec;
+        public int maxSendCount;
+        public int retryTimes;
+        public int retryIntervalSec;
+        public String repeatMode; // once/daily/weekly/interval_N
+        public int hour;
+        public int minute;
+        public long createTime;
+        public boolean randomInterval;
+        public String momentsVisible;
+        public String momentsLocation;
+
+        public TemplateData() {
+            this.id = String.valueOf(System.currentTimeMillis());
+            this.msgType = 1;
+            this.channel = 1;
+            this.minIntervalSec = 5;
+            this.maxIntervalSec = 30;
+            this.batchSize = 10;
+            this.batchIntervalSec = 60;
+            this.maxSendCount = 200;
+            this.retryTimes = 3;
+            this.retryIntervalSec = 60;
+            this.repeatMode = "once";
+            this.createTime = System.currentTimeMillis();
+        }
+
+        public JSONObject toJson() {
+            try {
+                JSONObject j = new JSONObject();
+                j.put("id", id);
+                j.put("name", nvl(name));
+                j.put("content", nvl(content));
+                j.put("msgType", msgType);
+                j.put("filePath", nvl(filePath));
+                j.put("targetWxids", nvl(targetWxids));
+                j.put("excludeWxids", nvl(excludeWxids));
+                j.put("channel", channel);
+                j.put("minIntervalSec", minIntervalSec);
+                j.put("maxIntervalSec", maxIntervalSec);
+                j.put("batchSize", batchSize);
+                j.put("batchIntervalSec", batchIntervalSec);
+                j.put("maxSendCount", maxSendCount);
+                j.put("retryTimes", retryTimes);
+                j.put("retryIntervalSec", retryIntervalSec);
+                j.put("repeatMode", nvl(repeatMode));
+                j.put("hour", hour);
+                j.put("minute", minute);
+                j.put("createTime", createTime);
+                j.put("randomInterval", randomInterval);
+                j.put("momentsVisible", nvl(momentsVisible));
+                j.put("momentsLocation", nvl(momentsLocation));
+                return j;
+            } catch (Throwable t) { return new JSONObject(); }
+        }
+
+        public static TemplateData fromJson(JSONObject j) {
+            try {
+                TemplateData t = new TemplateData();
+                t.id = j.optString("id", t.id);
+                t.name = j.optString("name", "");
+                t.content = j.optString("content", "");
+                t.msgType = j.optInt("msgType", 1);
+                t.filePath = j.optString("filePath", "");
+                t.targetWxids = j.optString("targetWxids", "");
+                t.excludeWxids = j.optString("excludeWxids", "");
+                t.channel = j.optInt("channel", 1);
+                t.minIntervalSec = j.optInt("minIntervalSec", 5);
+                t.maxIntervalSec = j.optInt("maxIntervalSec", 30);
+                t.batchSize = j.optInt("batchSize", 10);
+                t.batchIntervalSec = j.optInt("batchIntervalSec", 60);
+                t.maxSendCount = j.optInt("maxSendCount", 200);
+                t.retryTimes = j.optInt("retryTimes", 3);
+                t.retryIntervalSec = j.optInt("retryIntervalSec", 60);
+                t.repeatMode = j.optString("repeatMode", "once");
+                t.hour = j.optInt("hour", 0);
+                t.minute = j.optInt("minute", 0);
+                t.createTime = j.optLong("createTime", System.currentTimeMillis());
+                t.randomInterval = j.optBoolean("randomInterval", false);
+                t.momentsVisible = j.optString("momentsVisible", "");
+                t.momentsLocation = j.optString("momentsLocation", "");
+                return t;
+            } catch (Throwable tr) { return null; }
+        }
+    }
+
+    private static final List<TemplateData> sTemplates = new CopyOnWriteArrayList<>();
+
+    public static List<TemplateData> getAllTemplates() { return new ArrayList<>(sTemplates); }
+
+    public static void saveTemplate(TemplateData tpl) {
+        sTemplates.add(tpl);
+        persistTemplates();
+    }
+
+    public static void updateTemplate(TemplateData tpl) {
+        for (int i = 0; i < sTemplates.size(); i++) {
+            if (sTemplates.get(i).id.equals(tpl.id)) { sTemplates.set(i, tpl); persistTemplates(); return; }
+        }
+    }
+
+    public static void deleteTemplate(String id) {
+        Iterator<TemplateData> it = sTemplates.iterator();
+        while (it.hasNext()) { if (it.next().id.equals(id)) { it.remove(); break; } }
+        persistTemplates();
+    }
+
+    private static void loadTemplates() {
+        sTemplates.clear();
+        String json = sAppContext != null ? sAppContext.getSharedPreferences("schedule_templates", Context.MODE_PRIVATE).getString("tpl_list", "") : "";
+        if (json == null || json.isEmpty()) return;
+        try {
+            JSONArray a = new JSONArray(json);
+            for (int i = 0; i < a.length(); i++) {
+                TemplateData t = TemplateData.fromJson(a.getJSONObject(i));
+                if (t != null) sTemplates.add(t);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static void persistTemplates() {
+        if (sAppContext == null) return;
+        try {
+            JSONArray a = new JSONArray();
+            for (TemplateData t : sTemplates) a.put(t.toJson());
+            sAppContext.getSharedPreferences("schedule_templates", Context.MODE_PRIVATE).edit().putString("tpl_list", a.toString()).commit();
+        } catch (Throwable ignored) {}
+    }
+
+    // ===== 发送日志管理 =====
+
+    public static class SendLogEntry {
+        public String logId;
+        public String taskId;
+        public String taskName;
+        public String targetWxid;
+        public String targetName;
+        public boolean success;
+        public String error;
+        public long timestamp;
+        public String content;
+
+        public SendLogEntry() {
+            this.logId = String.valueOf(System.currentTimeMillis()) + "_" + (int)(Math.random() * 10000);
+            this.timestamp = System.currentTimeMillis();
+        }
+
+        public JSONObject toJson() {
+            try {
+                JSONObject j = new JSONObject();
+                j.put("logId", logId);
+                j.put("taskId", nvl(taskId));
+                j.put("taskName", nvl(taskName));
+                j.put("targetWxid", nvl(targetWxid));
+                j.put("targetName", nvl(targetName));
+                j.put("success", success);
+                j.put("error", nvl(error));
+                j.put("timestamp", timestamp);
+                j.put("content", nvl(content));
+                return j;
+            } catch (Throwable t) { return new JSONObject(); }
+        }
+
+        public static SendLogEntry fromJson(JSONObject j) {
+            try {
+                SendLogEntry e = new SendLogEntry();
+                e.logId = j.optString("logId", e.logId);
+                e.taskId = j.optString("taskId", "");
+                e.taskName = j.optString("taskName", "");
+                e.targetWxid = j.optString("targetWxid", "");
+                e.targetName = j.optString("targetName", "");
+                e.success = j.optBoolean("success", false);
+                e.error = j.optString("error", "");
+                e.timestamp = j.optLong("timestamp", System.currentTimeMillis());
+                e.content = j.optString("content", "");
+                return e;
+            } catch (Throwable tr) { return null; }
+        }
+    }
+
+    private static final List<SendLogEntry> sSendLogs = new CopyOnWriteArrayList<>();
+
+    public static void addSendLog(SendLogEntry entry) {
+        sSendLogs.add(0, entry);
+        if (sSendLogs.size() > 1000) {
+            while (sSendLogs.size() > 1000) sSendLogs.remove(sSendLogs.size() - 1);
+        }
+        persistLogs();
+    }
+
+    public static List<SendLogEntry> getSendLogs() { return new ArrayList<>(sSendLogs); }
+
+    public static List<SendLogEntry> getFailedLogs() {
+        List<SendLogEntry> failed = new ArrayList<>();
+        for (SendLogEntry e : sSendLogs) { if (!e.success) failed.add(e); }
+        return failed;
+    }
+
+    public static void clearSendLogs() { sSendLogs.clear(); persistLogs(); }
+
+    private static void loadLogs() {
+        sSendLogs.clear();
+        String json = sAppContext != null ? sAppContext.getSharedPreferences("schedule_logs", Context.MODE_PRIVATE).getString("log_list", "") : "";
+        if (json == null || json.isEmpty()) return;
+        try {
+            JSONArray a = new JSONArray(json);
+            for (int i = 0; i < a.length(); i++) {
+                SendLogEntry e = SendLogEntry.fromJson(a.getJSONObject(i));
+                if (e != null) sSendLogs.add(e);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static void persistLogs() {
+        if (sAppContext == null) return;
+        try {
+            JSONArray a = new JSONArray();
+            for (SendLogEntry e : sSendLogs) a.put(e.toJson());
+            sAppContext.getSharedPreferences("schedule_logs", Context.MODE_PRIVATE).edit().putString("log_list", a.toString()).commit();
+        } catch (Throwable ignored) {}
+    }
+
+    // ===== 克隆任务 =====
+
+    public static Task cloneTask(String taskId) {
+        Task src = getTask(taskId);
+        if (src == null) return null;
+        try {
+            Task clone = Task.fromJson(src.toJson());
+            clone.id = String.valueOf(System.currentTimeMillis());
+            clone.enabled = false;
+            clone.totalSendCount = 0;
+            clone.failCount = 0;
+            clone.lastExecTime = 0;
+            clone.triggerTime = src.triggerTime > 0 ? src.triggerTime + 86400000 : System.currentTimeMillis() + 3600000;
+            return clone;
+        } catch (Throwable t) { return null; }
     }
 }
