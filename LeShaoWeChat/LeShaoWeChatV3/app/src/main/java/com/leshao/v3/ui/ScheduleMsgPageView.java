@@ -79,6 +79,27 @@ public class ScheduleMsgPageView {
             LogWriter.log("SCHEDULE_MSG", "create: buildCard1...");
             body.addView(vSpacer(ctx, d, 10));
             body.addView(buildCard1(ctx, d, parentAct));
+            LogWriter.log("SCHEDULE_MSG", "create: buildCard2...");
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildCard2(ctx, d, parentAct));
+            LogWriter.log("SCHEDULE_MSG", "create: buildCard3...");
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildCard3(ctx, d, parentAct));
+            LogWriter.log("SCHEDULE_MSG", "create: buildCard4...");
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildCard4(ctx, d, parentAct));
+            LogWriter.log("SCHEDULE_MSG", "create: buildCard5...");
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildCard5(ctx, d, parentAct));
+            LogWriter.log("SCHEDULE_MSG", "create: buildCard6...");
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildCard6(ctx, d, parentAct));
+            LogWriter.log("SCHEDULE_MSG", "create: buildCard7...");
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildCard7(ctx, d, parentAct));
+            LogWriter.log("SCHEDULE_MSG", "create: buildBottomBtn...");
+            body.addView(vSpacer(ctx, d, 16));
+            body.addView(buildBottomBtn(ctx, d, parentAct));
 
             loadDraft(ctx);
 
@@ -93,15 +114,12 @@ public class ScheduleMsgPageView {
     // ===== 进度状态栏 =====
 
     private static View buildProgressBar(Context ctx, float d) {
-        // Step 2: bar + Canvas + overlay (不加 post FrameLayout 替换)
-        LinearLayout bar = new LinearLayout(ctx);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(PX(d, 6), PX(d, 8), PX(d, 6), PX(d, 8));
-        bar.setClipToOutline(true);
-
         int barW = ctx.getResources().getDisplayMetrics().widthPixels - PX(d, 20);
         int barH = PX(d, 36);
+
+        FrameLayout root = new FrameLayout(ctx);
+        root.setLayoutParams(new LinearLayout.LayoutParams(barW, barH));
+        root.setClipToOutline(true);
 
         sProgressBar = new View(ctx) {
             @Override
@@ -112,14 +130,12 @@ public class ScheduleMsgPageView {
                 canvas.drawPath(path, p);
             }
         };
-        sProgressBar.setLayoutParams(new LinearLayout.LayoutParams(barW, barH));
-        bar.addView(sProgressBar);
+        root.addView(sProgressBar, new FrameLayout.LayoutParams(-1, -1));
 
         LinearLayout overlay = new LinearLayout(ctx);
         overlay.setOrientation(LinearLayout.HORIZONTAL);
         overlay.setGravity(Gravity.CENTER_VERTICAL);
         overlay.setPadding(PX(d, 14), 0, PX(d, 10), 0);
-        overlay.setLayoutParams(new LinearLayout.LayoutParams(barW, barH));
 
         sProgressFill = new View(ctx);
         sProgressFill.setBackgroundColor(CLR_NEON);
@@ -164,9 +180,8 @@ public class ScheduleMsgPageView {
         });
         overlay.addView(sEmergencyBtn);
 
-        sProgressBar.setVisibility(View.GONE);
-        bar.addView(overlay);
-        return bar;
+        root.addView(overlay, new FrameLayout.LayoutParams(-1, -1));
+        return root;
     }
 
     // 原始 buildProgressBar 保留备查
