@@ -207,6 +207,8 @@ public class ScheduleMsgPageView {
             LogWriter.log("SCHEDULE_MSG", "create: buildBottomBtn...");
             body.addView(vSpacer(ctx, d, 10));
             body.addView(buildBottomBtn(ctx, d, parentAct));
+            body.addView(vSpacer(ctx, d, 10));
+            body.addView(buildActiveTasksIndicator(ctx, d));
 
             loadDraft(ctx);
 
@@ -1882,6 +1884,35 @@ public class ScheduleMsgPageView {
             w.setLayout(ctx.getResources().getDisplayMetrics().widthPixels - (int)(16 * d), -2);
         }
         dlg.show();
+    }
+
+    // ===== 进行中任务指示器 =====
+
+    private static int countActiveTasks() {
+        int count = 0;
+        long now = System.currentTimeMillis();
+        for (ScheduleBroadcast.Task t : ScheduleBroadcast.getAllTasks()) {
+            if (t.enabled && t.triggerTime > now) count++;
+        }
+        return count;
+    }
+
+    private static View buildActiveTasksIndicator(Context ctx, float d) {
+        int activeCount = countActiveTasks();
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER);
+        row.setPadding(PX(d, 10), PX(d, 6), PX(d, 10), PX(d, 6));
+
+        TextView label = new TextView(ctx);
+        label.setText("进行中 " + activeCount + " 个");
+        label.setTextSize(11);
+        label.setTextColor(CLR_GRAY);
+        if (activeCount > 0) label.setTextColor(CLR_NEON);
+        label.setTypeface(null, Typeface.BOLD);
+        row.addView(label);
+
+        return row;
     }
 
     // ===== 底部操作按钮 =====
