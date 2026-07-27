@@ -93,6 +93,15 @@ public class ScheduleMsgPageView {
     // ===== 进度状态栏 =====
 
     private static View buildProgressBar(Context ctx, float d) {
+        // 极简占位
+        View bar = new View(ctx);
+        bar.setBackgroundColor(CLR_NEON);
+        bar.setLayoutParams(new LinearLayout.LayoutParams(-1, PX(d, 36)));
+        return bar;
+    }
+
+    // 原始 buildProgressBar 保留备查
+    private static View _buildProgressBar(Context ctx, float d) {
         LinearLayout bar = new LinearLayout(ctx);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
