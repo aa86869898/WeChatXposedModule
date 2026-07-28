@@ -41,21 +41,73 @@ public class VoiceAutoPlay {
     }
 
     /**
-     * 主 hook: dq.c(View, ChattingContext, e9)
-     * 语音气泡每次渲染时调用，是最可靠且最及时的触发点
+     * 主 hook: 扫描 viewitems 包中语音气泡渲染方法
+     * 参考: dq.c(View, ChattingContext, e9) — 但 WeChat 混淆名随版本变化
+     * 策略: 扫描所有两字母类, 找到有 c() 且含 Message 参数的就 hook
      */
     private static void hookDqClass(ClassLoader cl) {
-        try {
-            Class<?> dq = XposedHelpers.findClass("com.tencent.mm.ui.chatting.viewitems.dq", cl);
-            XposedBridge.hookAllMethods(dq, "c", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    onVoiceBubbleRender(param);
+        String[] shortNames = new String[26 * 26];
+        int idx = 0;
+        for (char c1 = 'a'; c1 <= 'z'; c1++) {
+            for (char c2 = 'a'; c2 <= 'z'; c2++) {
+                shortNames[idx++] = String.valueOf(c1) + String.valueOf(c2);
+            }
+        }
+        String pkg = "com.tencent.mm.ui.chatting.viewitems.";
+
+        boolean found = false;
+        for (String name : shortNames) {
+            try {
+                Class<?> cls = cl.loadClass(pkg + name);
+                for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+                    if (!m.getName().equals("c")) continue;
+                    if (m.getParameterTypes().length < 3) continue;
+                    // 检查第3个参数是否为消息类型
+                    Class<?>[] pts = m.getParameterTypes();
+                    String thirdName = pts[2].getName();
+                    if (!thirdName.contains("storage")) continue;
+
+                    // 找到了！hook 这个类
+                    XposedBridge.hookAllMethods(cls, "c", new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            onVoiceBubbleRender(param);
+                        }
+                    });
+                    LogWriter.log(TAG, "dq.c() hooked OK on " + pkg + name + " (3rd param: " + thirdName + ")");
+                    found = true;
+                    return;
                 }
-            });
-            LogWriter.log(TAG, "dq.c() hooked OK");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "dq.c() hook fail: " + t.getMessage());
+            } catch (Throwable ignored) {}
+        }
+
+        if (!found) {
+            // fallback: try direct findClass on dq
+            try {
+                Class<?> dq = XposedHelpers.findClass("com.tencent.mm.ui.chatting.viewitems.dq", cl);
+                LogWriter.log(TAG, "dq class exists but no c() with 3+ params, listing methods:");
+                for (java.lang.reflect.Method m : dq.getDeclaredMethods()) {
+                    if (m.getName().equals("c")) {
+                        StringBuilder sb = new StringBuilder("  c(");
+                        Class<?>[] pts = m.getParameterTypes();
+                        for (int i = 0; i < pts.length; i++) {
+                            if (i > 0) sb.append(",");
+                            sb.append(pts[i].getSimpleName());
+                        }
+                        sb.append(")");
+                        LogWriter.log(TAG, sb.toString());
+                    }
+                }
+                XposedBridge.hookAllMethods(dq, "c", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        onVoiceBubbleRender(param);
+                    }
+                });
+                LogWriter.log(TAG, "dq.c() hooked OK (fallback direct)");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "dq.c() hook fail: " + t.getMessage());
+            }
         }
     }
 
@@ -112,6 +164,8 @@ public class VoiceAutoPlay {
      */
     private static void onVoiceBubbleRender(XC_MethodHook.MethodHookParam param) {
         try {
+            LogWriter.log(TAG, "onVoiceBubbleRender called, args=" + param.args.length);
+
             if (!sEnabled) return;
             boolean activated = ModuleConfig.load(
                 com.leshao.v3.ContextManager.getPrefs()
@@ -128,6 +182,7 @@ public class VoiceAutoPlay {
 
             // 过滤1: 只处理语音消息 (type == 34)
             int msgType = (Integer) XposedHelpers.callMethod(msg, "getType");
+            LogWriter.log(TAG, "onVoiceBubbleRender: type=" + msgType);
             if (msgType != 34) return;
 
             // 过滤2: 跳过自己发送的消息
