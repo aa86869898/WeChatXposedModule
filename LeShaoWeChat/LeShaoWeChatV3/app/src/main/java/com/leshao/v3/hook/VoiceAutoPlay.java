@@ -377,6 +377,12 @@ public class VoiceAutoPlay {
 
     // ============ 供 MessageHook 调用 ============
 
+    public static void notifyChattingUIResume(android.app.Activity activity) {
+        try {
+            refreshChattingContext(activity);
+        } catch (Throwable ignored) {}
+    }
+
     public static void tryAutoPlayVoice(Object msg, long msgId, Object p0) {
         try {
             if (!sEnabled) return;

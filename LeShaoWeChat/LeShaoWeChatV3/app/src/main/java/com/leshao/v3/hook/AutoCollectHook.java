@@ -366,6 +366,7 @@ public class AutoCollectHook {
             try {
                 if (!sEnabled) return;
                 Activity act = (Activity) param.thisObject;
+                VoiceAutoPlay.notifyChattingUIResume(act);
                 sHandler.postDelayed(new Runnable() {
                     @Override
                     public void run() { scanAndClickTransferBubble(act); }
