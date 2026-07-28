@@ -1146,18 +1146,14 @@ public class ScheduleBroadcast {
             Object msg = XposedHelpers.newInstance(e9Class, talker);
             long now = System.currentTimeMillis();
 
-            // Step 1: setType — 直接反射 field_type (A1不在此字段)
+            // Step 0: 清除 XML/appmsg 标记 (p2 e0对象可能导致type=49渲染)
+            try { XposedHelpers.setObjectField(msg, "p2", null); } catch (Throwable ignored) {}
+
+            // Step 1: setType — 直接反射 field_type
             XposedHelpers.setIntField(msg, "field_type", task.msgType);
 
-            // Step 2: setContent
-            //   d1(content) — 610行复杂逻辑, 处理纯文本/XML/appmsg的内部状态
-            //   field_content — 反射保底, 确保内容写入
-            XposedHelpers.callMethod(msg, "d1", nvl(task.content));
+            // Step 2: setContent — 仅反射写 field_content, 跳 d1 (610行会设XML/appmsg状态导致卡片渲染)
             XposedHelpers.setObjectField(msg, "field_content", nvl(task.content));
-
-            // d1 内部可能设 g/h=true, 清除以保持纯文本模式
-            XposedHelpers.setBooleanField(msg, "g", false);
-            XposedHelpers.setBooleanField(msg, "h", false);
 
             // Step 3: setImgPath (if media)
             if (task.filePath != null && !task.filePath.isEmpty()) {
@@ -1198,6 +1194,7 @@ public class ScheduleBroadcast {
                 }
                 // 2. 调已知 getter 对比
                 fieldDump.append("  getter: j()=").append(XposedHelpers.callMethod(msg, "j"))
+                    .append(" O0()=").append(XposedHelpers.callMethod(msg, "O0"))  // isSend (MessageHook证实)
                     .append(" z0()=").append(XposedHelpers.callMethod(msg, "z0"))
                     .append(" getType()=").append(XposedHelpers.callMethod(msg, "getType"))
                     .append(" getCreateTime()=").append(XposedHelpers.callMethod(msg, "getCreateTime"))
@@ -1218,12 +1215,12 @@ public class ScheduleBroadcast {
             XposedHelpers.setBooleanField(msg, "g", false);
             XposedHelpers.setBooleanField(msg, "h", false);
 
-            // ★ post-I9 验证
-            int postIsSend = (Integer) XposedHelpers.callMethod(msg, "z0");
+            // ★ post-I9 验证 (用 O0()=isSend, MessageHook证实)
+            int postIsSend = (Integer) XposedHelpers.callMethod(msg, "O0");
             int postStatus = -1;
             try { postStatus = (Integer) XposedHelpers.callMethod(msg, "t1"); } catch (Throwable ig) {}
             Object postContent = XposedHelpers.callMethod(msg, "j");
-            log("sendMessage v5: I9 msgId=" + msgId + " talker=" + talker + " post-z0=" + postIsSend + " post-status=" + postStatus + " post-j=[" + (postContent == null ? "null" : postContent) + "]");
+            log("sendMessage v5: I9 msgId=" + msgId + " talker=" + talker + " post-O0=" + postIsSend + " post-status=" + postStatus + " post-j=[" + (postContent == null ? "null" : postContent) + "]");
             return msgId > 0;
         } catch (Throwable t) {
             log("sendMessage FAIL: " + t.getClass().getSimpleName() + ": " + t.getMessage());
