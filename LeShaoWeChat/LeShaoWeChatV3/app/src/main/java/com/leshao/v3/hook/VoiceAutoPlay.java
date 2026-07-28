@@ -35,6 +35,7 @@ public class VoiceAutoPlay {
 
     private static ClassLoader sClassLoader;
     private static Class<?> sVoiceComponentClass;
+    private static final java.util.List<Class<?>> sVoiceComponentCandidates = new java.util.ArrayList<>();
     private static Class<?> sH5Class;
     private static Class<?> sV0Class;
 
@@ -45,8 +46,14 @@ public class VoiceAutoPlay {
         findH5Class(cl);
         findV0Class(cl);
 
-        if (sVoiceComponentClass != null) {
-            hookVoiceComponent();
+        if (!sVoiceComponentCandidates.isEmpty()) {
+            for (Class<?> cls : sVoiceComponentCandidates) {
+                try {
+                    hookVoiceComponentOnClass(cls);
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "VoiceComponent hook fail on " + cls.getSimpleName() + ": " + t.getMessage());
+                }
+            }
         } else {
             LogWriter.log(TAG, "VoiceComponent class not found, skipping layer 1");
         }
@@ -82,19 +89,23 @@ public class VoiceAutoPlay {
                     if (m.getName().equals("n0") && m.getParameterCount() == 0) hasN0 = true;
                 }
                 if (hasY && hasL0 && hasN0) {
-                    sVoiceComponentClass = cls;
-                    LogWriter.log(TAG, "found VoiceComponent: " + pkg + name);
-                    return;
+                    sVoiceComponentCandidates.add(cls);
+                    LogWriter.log(TAG, "found candidate VoiceComponent: " + pkg + name);
                 }
             } catch (Throwable ignored) {}
         }
 
-        try {
-            Class<?> cls = XposedHelpers.findClass("com.tencent.mm.ui.chatting.component.so", cl);
-            sVoiceComponentClass = cls;
-            LogWriter.log(TAG, "found VoiceComponent: so (direct)");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "VoiceComponent not found: all candidates failed");
+        if (!sVoiceComponentCandidates.isEmpty()) {
+            sVoiceComponentClass = sVoiceComponentCandidates.get(0);
+        } else {
+            try {
+                Class<?> cls = XposedHelpers.findClass("com.tencent.mm.ui.chatting.component.so", cl);
+                sVoiceComponentClass = cls;
+                sVoiceComponentCandidates.add(cls);
+                LogWriter.log(TAG, "found VoiceComponent: so (direct)");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "VoiceComponent not found: all candidates failed");
+            }
         }
     }
 
@@ -116,22 +127,24 @@ public class VoiceAutoPlay {
         }
     }
 
-    private static void hookVoiceComponent() {
+    private static void hookVoiceComponentOnClass(Class<?> cls) {
+        final String clsName = cls.getSimpleName();
         try {
-            XposedBridge.hookAllMethods(sVoiceComponentClass, "y", new XC_MethodHook() {
+            XposedBridge.hookAllMethods(cls, "y", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     if (((java.lang.reflect.Method) param.method).getParameterTypes().length != 0) return;
+                    LogWriter.log(TAG, "y() triggered on " + clsName);
                     onResetAutoPlay(param.thisObject);
                 }
             });
-            LogWriter.log(TAG, "y() hooked OK (all overloads)");
+            LogWriter.log(TAG, "y() hooked OK on " + clsName);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "hook y() fail: " + t.getMessage());
+            LogWriter.log(TAG, "hook y() fail on " + clsName + ": " + t.getMessage());
         }
 
         try {
-            XposedBridge.hookAllMethods(sVoiceComponentClass, "l0", new XC_MethodHook() {
+            XposedBridge.hookAllMethods(cls, "l0", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     if (((java.lang.reflect.Method) param.method).getParameterTypes().length != 1) return;
@@ -142,30 +155,33 @@ public class VoiceAutoPlay {
                     } catch (Throwable ignored) {}
                 }
             });
-            LogWriter.log(TAG, "l0() hooked OK (all overloads)");
+            LogWriter.log(TAG, "l0() hooked OK on " + clsName);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "hook l0() fail: " + t.getMessage());
+            LogWriter.log(TAG, "hook l0() fail on " + clsName + ": " + t.getMessage());
         }
 
-        LogWriter.log(TAG, "VoiceComponent hooks installed");
+        LogWriter.log(TAG, "VoiceComponent hooks installed on " + clsName);
     }
 
     private static void hookH5() {
+        final String clsName = sH5Class.getSimpleName();
         try {
             XposedBridge.hookAllMethods(sH5Class, "m", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     if (((java.lang.reflect.Method) param.method).getParameterTypes().length < 3) return;
+                    LogWriter.log(TAG, "h5.m() triggered on " + clsName);
                     onVoiceBubbleRendered(param);
                 }
             });
-            LogWriter.log(TAG, "h5.m hooked (all overloads)");
+            LogWriter.log(TAG, "h5.m hooked (all overloads) on " + clsName);
         } catch (Throwable t) {
             LogWriter.log(TAG, "h5.m hook fail: " + t.getMessage());
         }
     }
 
     private static void hookV0() {
+        final String clsName = sV0Class.getSimpleName();
         try {
             XposedBridge.hookAllMethods(sV0Class, "t", new XC_MethodHook() {
                 @Override
@@ -173,7 +189,7 @@ public class VoiceAutoPlay {
                     try {
                         Object player = param.thisObject;
                         long msgId = XposedHelpers.getLongField(player, "i");
-                        LogWriter.log(TAG, "player.t() msgId=" + msgId);
+                        LogWriter.log(TAG, "player.t() msgId=" + msgId + " on " + clsName);
                     } catch (Throwable ignored) {}
                 }
             });
@@ -185,12 +201,12 @@ public class VoiceAutoPlay {
                         Object player = param.thisObject;
                         long msgId = XposedHelpers.getLongField(player, "i");
                         sPlayedMsgIds.add(String.valueOf(msgId));
-                        LogWriter.log(TAG, "v0.onClick() msgId=" + msgId);
+                        LogWriter.log(TAG, "v0.onClick() msgId=" + msgId + " on " + clsName);
                     } catch (Throwable ignored) {}
                 }
             });
 
-            LogWriter.log(TAG, "v0 hooks installed (all overloads)");
+            LogWriter.log(TAG, "v0 hooks installed (all overloads) on " + clsName);
         } catch (Throwable t) {
             LogWriter.log(TAG, "v0 hook fail: " + t.getMessage());
         }
