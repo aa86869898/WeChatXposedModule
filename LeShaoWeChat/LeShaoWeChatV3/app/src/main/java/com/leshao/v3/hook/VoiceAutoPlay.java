@@ -1,5 +1,6 @@
 package com.leshao.v3.hook;
 
+import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -8,6 +9,7 @@ import com.leshao.v3.LogWriter;
 import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -18,10 +20,10 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /**
- * 语音消息自动播放 v46
- * - 收到语音 → 入队(保存msg对象引用)
- * - so.y() → 直接调用 player.I(savedMsg, false) 播放队列中所有语音
- * - 不再尝试后台解码SILK → 借助微信自有播放器,不崩溃
+ * 语音消息自动播放 v48
+ * - 后台: SilkDecoder库 SILK→WAV→MediaPlayer 后台播放
+ * - 聊天内: so.y()→v0.I(msg) 直接微信播放
+ * - 双路径并行,后台优先
  */
 public class VoiceAutoPlay {
 
@@ -39,7 +41,8 @@ public class VoiceAutoPlay {
     private static Class<?> sSoClass;
     private static String sVoice2Dir;
 
-    private static volatile Object sCurrentVoiceComp;
+    private static volatile Object sCurrentSo;
+    private static volatile Object sCurrentPlayer;
 
     private static class PendingVoiceMsg {
         final Object msg;
@@ -63,7 +66,7 @@ public class VoiceAutoPlay {
         catch (Throwable t) { LogWriter.log(TAG, "so class NOT found: " + t.getMessage()); }
 
         LogWriter.log(TAG, "init: k0=" + (sK0Class != null) + " so=" + (sSoClass != null));
-        LogWriter.log(TAG, "init: strat=savedMsg→v0.I()");
+        LogWriter.log(TAG, "init: v48 SilkDecoder bg + v0.I chat");
 
         findVoice2Dir();
         hookVoiceComponent(cl);
@@ -72,36 +75,19 @@ public class VoiceAutoPlay {
     // ========== so.y() hook ==========
 
     private static void hookVoiceComponent(ClassLoader cl) {
-        if (sSoClass == null) {
-            LogWriter.log(TAG, "so class null, skip so.y() hook");
-            return;
-        }
+        if (sSoClass == null) return;
         try {
             XposedBridge.hookAllMethods(sSoClass, "y", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     try {
                         Object so = param.thisObject;
-                        sCurrentVoiceComp = so;
+                        sCurrentSo = so;
                         LogWriter.log(TAG, "so.y() fired, q=" + sPendingQueue.size());
-
-                        Object context = XposedHelpers.getObjectField(so, "d");
-                        if (context == null) {
-                            LogWriter.log(TAG, "so.d null");
-                            return;
+                        sCurrentPlayer = getPlayer(so);
+                        if (!sPendingQueue.isEmpty()) {
+                            sHandler.postDelayed(() -> playAllFromQueue(), 800);
                         }
-
-                        String talker = extractTalkerFromContext(context);
-                        LogWriter.log(TAG, "so.y() talker=" + talker);
-                        if (talker == null || talker.isEmpty()) {
-                            dumpContextInfo(context);
-                            LogWriter.log(TAG, "so.y() talker null, try playAll");
-                            sHandler.postDelayed(() -> playAllVoices(so), 500);
-                            return;
-                        }
-
-                        sHandler.postDelayed(() -> playQueuedVoices(talker, so), 500);
-
                     } catch (Throwable e) {
                         LogWriter.log(TAG, "so.y() err: " + e.getMessage());
                     }
@@ -148,20 +134,19 @@ public class VoiceAutoPlay {
 
             LogWriter.log(TAG, "recv: msgId=" + msgId + " talker=" + talker);
 
-            sPendingQueue.offer(new PendingVoiceMsg(e9, msgId, talker));
-            LogWriter.log(TAG, "enqueue: msgId=" + msgId + " q=" + sPendingQueue.size());
-
-            final Object so = sCurrentVoiceComp;
-            if (so != null) {
-                try {
-                    String curTalker = extractTalkerFromContext(
-                            XposedHelpers.getObjectField(so, "d"));
-                    if (talker.equals(curTalker)) {
-                        final String fTalker = talker;
-                        sHandler.post(() -> playQueuedVoices(fTalker, so));
+            // 后台 SILK→WAV→MediaPlayer 播放
+            final String tTalker = talker;
+            new Thread(() -> {
+                boolean bgOk = playBackground(e9, tTalker, msgId);
+                if (!bgOk) {
+                    // 后台失败 → 入队等聊天时播放
+                    sPendingQueue.offer(new PendingVoiceMsg(e9, msgId, tTalker));
+                    LogWriter.log(TAG, "bgFail→queue: msgId=" + msgId + " q=" + sPendingQueue.size());
+                    if (sCurrentSo != null) {
+                        sHandler.post(() -> playAllFromQueue());
                     }
-                } catch (Throwable ignored) {}
-            }
+                }
+            }, "VAP-bg-decode").start();
 
         } catch (Throwable e) {
             LogWriter.log(TAG, "onVoiceMsg err: " + e.getMessage());
@@ -172,74 +157,102 @@ public class VoiceAutoPlay {
         onVoiceMsg(e9, msgId, p0);
     }
 
-    // ========== Talker 提取 ==========
+    // ========== 后台 SILK→WAV→MediaPlayer ==========
 
-    private static String extractTalkerFromContext(Object context) {
-        if (context == null) return null;
-        return extractStringFromObj(context);
+    private static boolean playBackground(Object msg, String talker, long msgId) {
+        try {
+            String path = getVoicePath(msg);
+            if (path == null) {
+                LogWriter.log(TAG, "bg: no path msgId=" + msgId);
+                return false;
+            }
+            File f = new File(path);
+            if (!f.exists()) {
+                LogWriter.log(TAG, "bg: file not exist: " + path);
+                return false;
+            }
+
+            LogWriter.log(TAG, "bg: path=" + path + " size=" + f.length() + " msgId=" + msgId);
+
+            // SILK → WAV
+            String wavPath = path + ".dec.wav";
+            File wavFile = new File(wavPath);
+            if (wavFile.exists()) wavFile.delete();
+
+            xyz.xxin.silkdecoder.SilkDecoder.decodeToWav(path, wavPath);
+            if (!wavFile.exists() || wavFile.length() == 0) {
+                LogWriter.log(TAG, "bg: decode failed, wav not created");
+                return false;
+            }
+
+            LogWriter.log(TAG, "bg: wav=" + wavPath + " size=" + wavFile.length());
+
+            // MediaPlayer 播放
+            MediaPlayer mp = new MediaPlayer();
+            mp.setDataSource(wavPath);
+            mp.prepare();
+            final String fWav = wavPath;
+            mp.setOnCompletionListener(m -> {
+                LogWriter.log(TAG, "bgDone: msgId=" + msgId);
+                m.release();
+                new File(fWav).delete();
+            });
+            mp.setOnErrorListener((m, what, extra) -> {
+                LogWriter.log(TAG, "bgErr: msgId=" + msgId + " what=" + what);
+                m.release();
+                new File(fWav).delete();
+                return true;
+            });
+            mp.start();
+            LogWriter.log(TAG, "bgStarted: msgId=" + msgId);
+
+            return true;
+
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "bg err: " + e.getMessage());
+            return false;
+        }
     }
 
-    private static String extractStringFromObj(Object obj) {
-        if (obj == null) return null;
-        for (String m : new String[]{"getTalkerUserName", "getTalker", "GT", "M0", "d1", "getUsername"}) {
-            try { Object r = XposedHelpers.callMethod(obj, m); if (r instanceof String)
-            return (String) r; } catch (Throwable ignored) {}
-        }
-        for (String f : new String[]{"field_talker", "talker", "mTalker", "a", "e"}) {
-            try { Object r = XposedHelpers.getObjectField(obj, f); if (r instanceof String)
-            return (String) r; } catch (Throwable ignored) {}
-        }
-        return walkStringFields(obj);
-    }
+    // ========== 路径解析 ==========
 
-    private static String walkStringFields(Object obj) {
-        for (Class<?> c = obj.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
-            try {
-                for (Field f : c.getDeclaredFields()) {
-                    if (f.getType() == String.class) {
-                        String fn = f.getName().toLowerCase();
-                        if (fn.contains("talker") || fn.contains("username") || fn.contains("fromuser")) {
-                            f.setAccessible(true);
-                            Object v = f.get(obj);
-                            if (v instanceof String && !((String) v).isEmpty()) return (String) v;
-                        }
-                    }
-                }
-            } catch (Throwable ignored) {}
+    private static String getVoicePath(Object msg) {
+        try {
+            String cid = (String) XposedHelpers.callMethod(msg, "y0");
+            if (cid != null && !cid.isEmpty()) {
+                String path = resolveClientMsgIdPath(cid);
+                if (path != null) return path;
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "getVoicePath: y0() err: " + e.getMessage());
         }
         return null;
     }
 
-    private static void dumpContextInfo(Object context) {
-        try {
-            StringBuilder sb = new StringBuilder("ctx[class=").append(context.getClass().getName())
-                    .append(" super=").append(context.getClass().getSuperclass().getSimpleName());
-            for (Class<?> c = context.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
-                for (Field f : c.getDeclaredFields()) {
-                    f.setAccessible(true);
-                    sb.append(" ").append(f.getName()).append(":");
-                    try {
-                        Object v = f.get(context);
-                        if (v instanceof String) sb.append("'").append(v.toString().substring(0, Math.min(20, v.toString().length()))).append("'");
-                        else if (v != null) sb.append(v.getClass().getSimpleName());
-                        else sb.append("null");
-                    } catch (Throwable t) { sb.append("err"); }
-                }
-            }
-            sb.append("]");
-            LogWriter.log(TAG, sb.toString());
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "dumpContext err: " + t.getMessage());
-        }
+    private static String resolveClientMsgIdPath(String cid) {
+        if (sVoice2Dir == null) return null;
+        String md5 = md5(cid);
+        if (md5 == null || md5.length() < 4) return null;
+        String path = sVoice2Dir + "/" + md5.substring(0, 2) + "/" + md5.substring(2, 4) + "/msg_" + cid + ".amr";
+        if (new File(path).exists()) return path;
+        return null;
     }
 
-    // ========== so.y() → v0.I(msg) 播放 ==========
+    private static String md5(String s) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] d = md.digest(s.getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : d) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Throwable t) { return null; }
+    }
+
+    // ========== Player 获取 (聊天内) ==========
 
     private static Object getPlayer(Object so) {
         if (so == null) return null;
-
-        // 尝试方法: n0, getPlayer, N0, getVoicePlayer, p0, o0
-        for (String method : new String[]{"n0", "getPlayer", "N0", "getVoicePlayer", "p0", "o0", "k0"}) {
+        for (String method : new String[]{"n0", "getPlayer", "N0", "getVoicePlayer", "p0", "o0", "k0", "I0"}) {
             try {
                 Object r = XposedHelpers.callMethod(so, method);
                 if (r != null) {
@@ -248,9 +261,7 @@ public class VoiceAutoPlay {
                 }
             } catch (Throwable ignored) {}
         }
-
-        // 尝试字段: p, player, n0, mPlayer, m, N
-        for (String field : new String[]{"p", "player", "n0", "mPlayer", "m", "N", "e", "f"}) {
+        for (String field : new String[]{"p", "player", "n0", "mPlayer", "m", "N", "e", "f", "g"}) {
             try {
                 Object r = XposedHelpers.getObjectField(so, field);
                 if (r != null) {
@@ -259,21 +270,19 @@ public class VoiceAutoPlay {
                 }
             } catch (Throwable ignored) {}
         }
-
-        // dump so 的方法列表来定位
         dumpSoMethods(so);
         return null;
     }
 
     private static void dumpSoMethods(Object so) {
         try {
-            StringBuilder sb = new StringBuilder("so[");
+            StringBuilder sb = new StringBuilder("so[methods:");
             int count = 0;
             for (Method m : so.getClass().getDeclaredMethods()) {
-                if (count >= 30) break;
+                if (count >= 40) break;
                 Class<?>[] p = m.getParameterTypes();
                 if (p.length <= 2) {
-                    sb.append(m.getName()).append("(").append(p.length).append(") ");
+                    sb.append(" ").append(m.getName()).append("(").append(p.length).append(")");
                     count++;
                 }
             }
@@ -284,49 +293,27 @@ public class VoiceAutoPlay {
         }
     }
 
-    private static void playQueuedVoices(String talker, Object so) {
-        try {
-            List<PendingVoiceMsg> pending = dequeue(talker);
-            if (pending.isEmpty()) return;
-            LogWriter.log(TAG, "playQueued: pending=" + pending.size() + " talker=" + talker);
+    // ========== 聊天内播放 ==========
 
-            Object player = getPlayer(so);
-            if (player == null) {
-                LogWriter.log(TAG, "playQueued: player null");
-                return;
-            }
-
-            for (PendingVoiceMsg pvm : pending) {
-                try {
-                    XposedHelpers.callMethod(player, "I", pvm.msg, false);
-                    LogWriter.log(TAG, "PLAY id=" + pvm.msgId);
-                    Thread.sleep(200);
-                } catch (Throwable e) {
-                    LogWriter.log(TAG, "playQueued: play err id=" + pvm.msgId + " " + e.getMessage());
-                }
-            }
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "playQueuedVoices err: " + e.getMessage());
-        }
-    }
-
-    private static void playAllVoices(Object so) {
+    private static void playAllFromQueue() {
         try {
             List<PendingVoiceMsg> pending = dequeue(null);
             if (pending.isEmpty()) return;
             LogWriter.log(TAG, "playAll: pending=" + pending.size());
 
-            Object player = getPlayer(so);
-            if (player == null) {
+            if (sCurrentPlayer == null && sCurrentSo != null) {
+                sCurrentPlayer = getPlayer(sCurrentSo);
+            }
+            if (sCurrentPlayer == null) {
                 LogWriter.log(TAG, "playAll: player null");
                 return;
             }
 
             for (PendingVoiceMsg pvm : pending) {
                 try {
-                    XposedHelpers.callMethod(player, "I", pvm.msg, false);
-                    LogWriter.log(TAG, "PLAY (all) id=" + pvm.msgId + " talker=" + pvm.talker);
-                    Thread.sleep(200);
+                    XposedHelpers.callMethod(sCurrentPlayer, "I", pvm.msg, false);
+                    LogWriter.log(TAG, "PLAY id=" + pvm.msgId);
+                    Thread.sleep(250);
                 } catch (Throwable e) {
                     LogWriter.log(TAG, "playAll: play err id=" + pvm.msgId + " " + e.getMessage());
                 }
@@ -340,24 +327,21 @@ public class VoiceAutoPlay {
 
     public static void playPendingVoice(String talker) {
         try {
-            Object so = sCurrentVoiceComp;
-            if (so == null) return;
-
+            if (sCurrentSo == null) return;
             List<PendingVoiceMsg> pending = dequeue(talker);
             if (pending.isEmpty()) return;
+            if (sCurrentPlayer == null) sCurrentPlayer = getPlayer(sCurrentSo);
+            if (sCurrentPlayer == null) return;
 
-            Object player = getPlayer(so);
-            if (player == null) return;
-
-            for (PendingVoiceMsg pvm : pending) {                try {
-                    XposedHelpers.callMethod(player, "I", pvm.msg, false);
+            for (PendingVoiceMsg pvm : pending) {
+                try {
+                    XposedHelpers.callMethod(sCurrentPlayer, "I", pvm.msg, false);
                     LogWriter.log(TAG, "PLAY (tts) id=" + pvm.msgId);
                     Thread.sleep(200);
                 } catch (Throwable e) {
                     LogWriter.log(TAG, "playPendingVoice: play err id=" + pvm.msgId);
                 }
             }
-
         } catch (Throwable e) {
             LogWriter.log(TAG, "playPendingVoice err: " + e.getMessage());
         }
@@ -407,8 +391,6 @@ public class VoiceAutoPlay {
         }
         LogWriter.log(TAG, "voice2 NOT found");
     }
-
-    // ========== ChattingUI 辅助 ==========
 
     public static void notifyChattingUIResume(android.app.Activity activity) {}
 }
