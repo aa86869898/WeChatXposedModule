@@ -13,6 +13,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.util.Locale;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -22,10 +23,10 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /**
- * TTS 语音发送 v35
- * - ChatFooter.F 无条件裸日志（诊断 F 是否被调用）
- * - e01.x9 全方法扫描（找出真正的发送入口）
- * - 兼容 MessageHook 中已有的 #tts 检测（C(e9) 入库后额外发送语音）
+ * TTS 语音发送 v37
+ * - SendMsgSuccessEvent.callback 检测 #tts 前缀
+ * - 枚举 data 字段找到 e9 消息对象
+ * - 保留 ChatFooter.F 诊断日志
  */
 public class TtsVoiceSender {
 
@@ -46,139 +47,104 @@ public class TtsVoiceSender {
             }
         });
 
-        hookChatFooterSend(cl);
-        hookMsgLogicScan(cl);
+        hookSendMsgSuccessEvent(cl);
     }
 
-    // ========== ChatFooter.F 诊断 hook ==========
+    // ========== SendMsgSuccessEvent.callback ==========
 
-    private static void hookChatFooterSend(ClassLoader cl) {
+    private static void hookSendMsgSuccessEvent(ClassLoader cl) {
         try {
-            Class<?> chatFooter = XposedHelpers.findClass(
-                    "com.tencent.mm.pluginsdk.ui.chat.ChatFooter", cl);
+            Class<?> eventClass = XposedHelpers.findClass(
+                    "com.tencent.mm.autogen.events.SendMsgSuccessEvent", cl);
 
-            XposedBridge.hookAllMethods(chatFooter, "F", new XC_MethodHook() {
+            XposedBridge.hookAllMethods(eventClass, "callback", new XC_MethodHook() {
                 @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    XposedBridge.log("[TTS] ChatFooter.F CALLED");
+                protected void afterHookedMethod(MethodHookParam param) {
                     try {
-                        if (param.args.length >= 1 && param.args[0] != null) {
-                            Object msgInfo = param.args[0];
-                            String content = null;
-                            try { content = (String) XposedHelpers.getObjectField(msgInfo, "field_content"); }
-                            catch (Throwable ignored) {}
-                            if (content == null) try { content = (String) XposedHelpers.callMethod(msgInfo, "I0"); }
-                            catch (Throwable ignored) {}
-                            if (content == null) try { content = (String) XposedHelpers.callMethod(msgInfo, "j"); }
-                            catch (Throwable ignored) {}
+                        Object event = param.args[0];
+                        Object data = XposedHelpers.getObjectField(event, "data");
+                        if (data == null) return;
 
-                            XposedBridge.log("[TTS] ChatFooter.F content=[" + (content != null ? content.substring(0, Math.min(content.length(), 40)) : "null") + "]");
-
-                            if (content != null && content.startsWith(TTS_PREFIX)) {
-                                String talker = null;
-                                try { talker = (String) XposedHelpers.getObjectField(msgInfo, "field_talker"); }
-                                catch (Throwable ignored) {}
-                                if (talker == null) try { talker = (String) XposedHelpers.callMethod(msgInfo, "N0"); }
-                                catch (Throwable ignored) {}
-
-                                if (talker == null || talker.isEmpty()) {
-                                    XposedBridge.log("[TTS] ChatFooter.F #tts but talker is null");
-                                    return;
-                                }
-
-                                String text = content.substring(TTS_PREFIX.length()).trim();
-                                if (text.isEmpty()) return;
-
-                                XposedBridge.log("[TTS] ChatFooter.F #tts DETECTED: text=" + text.substring(0, Math.min(text.length(), 40)) + " talker=" + talker);
-                                LogWriter.log(TAG, "F #tts: " + text.substring(0, Math.min(text.length(), 60)) + " talker=" + talker);
-
-                                param.setResult(false);
-
-                                final String fText = text;
-                                final String fTalker = talker;
-                                new Thread(() -> synthesizeAndSend(fText, fTalker)).start();
-                            }
+                        LogWriter.log(TAG, "SendMsgSuccess callback, data fields:");
+                        for (Field f : data.getClass().getDeclaredFields()) {
+                            f.setAccessible(true);
+                            try {
+                                LogWriter.log(TAG, "  data." + f.getName() + " type=" + f.getType().getSimpleName());
+                            } catch (Throwable ignored) {}
                         }
+
+                        Object e9 = findE9InData(data);
+                        if (e9 == null) {
+                            LogWriter.log(TAG, "e9 not found in SendMsgSuccessEvent.data");
+                            return;
+                        }
+
+                        String content = null;
+                        try { content = (String) XposedHelpers.callMethod(e9, "I0"); }
+                        catch (Throwable ignored) {}
+                        if (content == null) try { content = (String) XposedHelpers.callMethod(e9, "j"); }
+                        catch (Throwable ignored) {}
+                        if (content == null) try { content = (String) XposedHelpers.getObjectField(e9, "field_content"); }
+                        catch (Throwable ignored) {}
+
+                        if (content == null) {
+                            LogWriter.log(TAG, "SendMsgSuccess: content null");
+                            return;
+                        }
+
+                        LogWriter.log(TAG, "SendMsgSuccess: content=[" + content.substring(0, Math.min(content.length(), 40)) + "]");
+
+                        if (!content.startsWith(TTS_PREFIX)) return;
+
+                        String talker = null;
+                        try { talker = (String) XposedHelpers.callMethod(e9, "N0"); }
+                        catch (Throwable ignored) {}
+                        if (talker == null) try { talker = (String) XposedHelpers.getObjectField(e9, "field_talker"); }
+                        catch (Throwable ignored) {}
+
+                        if (talker == null || talker.isEmpty()) {
+                            LogWriter.log(TAG, "#tts detected but talker null");
+                            return;
+                        }
+
+                        String text = content.substring(TTS_PREFIX.length()).trim();
+                        if (text.isEmpty()) return;
+
+                        XposedBridge.log("[TTS] SendMsgSuccess #tts: " + text + " -> " + talker);
+                        LogWriter.log(TAG, "#tts detected via SendMsgSuccess: " + text.substring(0, Math.min(text.length(), 40)) + " talker=" + talker);
+
+                        final String fText = text;
+                        final String fTalker = talker;
+                        new Thread(() -> synthesizeAndSend(fText, fTalker)).start();
+
                     } catch (Throwable e) {
-                        XposedBridge.log("[TTS] ChatFooter.F err: " + e.getMessage());
-                        LogWriter.log(TAG, "F err: " + e.getMessage());
+                        XposedBridge.log("[TTS] SendMsgSuccess err: " + e.getMessage());
                     }
                 }
             });
-            XposedBridge.log("[TTS] ChatFooter.F hooked OK");
-            LogWriter.log(TAG, "ChatFooter.F hooked OK");
+
+            XposedBridge.log("[TTS] SendMsgSuccessEvent hooked OK");
+            LogWriter.log(TAG, "SendMsgSuccessEvent hooked OK");
         } catch (Throwable t) {
-            XposedBridge.log("[TTS] ChatFooter.F FAIL: " + t.getMessage());
-            LogWriter.log(TAG, "ChatFooter.F fail: " + t.getMessage());
+            XposedBridge.log("[TTS] SendMsgSuccessEvent FAIL: " + t.getMessage());
+            LogWriter.log(TAG, "SendMsgSuccessEvent fail: " + t.getMessage());
         }
     }
 
-    // ========== e01.x9 全方法扫描 (诊断发送入口) ==========
-
-    private static void hookMsgLogicScan(ClassLoader cl) {
-        try {
-            Class<?> x9Cls = null;
-            for (String name : new String[]{"e01.x9", "e02.x9", "e00.x9", "e01.x8", "e01.y9"}) {
-                try { x9Cls = cl.loadClass(name); break; } catch (Throwable ignored) {}
-            }
-            if (x9Cls == null) {
-                XposedBridge.log("[TTS] scan: x9 class not found");
-                return;
-            }
-            Class<?> e9Cls = VersionCompat.findMsgInfoStorageClass(cl);
-            if (e9Cls == null) {
-                XposedBridge.log("[TTS] scan: e9 class not found");
-                return;
-            }
-
-            int hooked = 0;
-            for (java.lang.reflect.Method m : x9Cls.getDeclaredMethods()) {
-                // 只 hook 参数中含 e9 的方法
-                boolean hasE9 = false;
-                for (Class<?> pt : m.getParameterTypes()) {
-                    if (pt == e9Cls) { hasE9 = true; break; }
-                }
-                if (!hasE9) continue;
-
-                String mName = m.getName();
-                if (mName.equals("n") || mName.equals("C")) continue; // MessageHook 已 hook
-
-                final String fName = mName;
-                XposedBridge.hookMethod(m, new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        StringBuilder sb = new StringBuilder("[TTS] e01.x9." + fName + "(");
-                        for (int i = 0; i < param.args.length; i++) {
-                            if (i > 0) sb.append(",");
-                            sb.append(param.args[i] == null ? "null" : param.args[i].getClass().getSimpleName());
-                        }
-                        sb.append(")");
-                        XposedBridge.log(sb.toString());
-
-                        // 检测 #tts
-                        for (Object arg : param.args) {
-                            if (arg == null || arg.getClass() != e9Cls) continue;
-                            try {
-                                String content = null;
-                                try { content = (String) XposedHelpers.callMethod(arg, "I0"); }
-                                catch (Throwable ignored) {}
-                                if (content == null) try { content = (String) XposedHelpers.callMethod(arg, "j"); }
-                                catch (Throwable ignored) {}
-                                if (content != null && content.startsWith(TTS_PREFIX)) {
-                                    XposedBridge.log("[TTS] e01.x9." + fName + " #tts content=[" + content + "]");
-                                }
-                            } catch (Throwable ignored) {}
-                        }
-                    }
-                });
-                hooked++;
-            }
-            XposedBridge.log("[TTS] e01.x9 scan: hooked " + hooked + " methods with e9 param");
-            LogWriter.log(TAG, "e01.x9 scan: " + hooked + " methods hooked");
-        } catch (Throwable t) {
-            XposedBridge.log("[TTS] scan err: " + t.getMessage());
-            LogWriter.log(TAG, "e01.x9 scan fail: " + t.getMessage());
+    private static Object findE9InData(Object data) {
+        for (Field f : data.getClass().getDeclaredFields()) {
+            try {
+                f.setAccessible(true);
+                Object val = f.get(data);
+                if (val == null) continue;
+                try {
+                    XposedHelpers.callMethod(val, "getType");
+                    LogWriter.log(TAG, "e9 found in data." + f.getName() + ": " + val.getClass().getName());
+                    return val;
+                } catch (Throwable ignored) {}
+            } catch (Throwable ignored) {}
         }
+        return null;
     }
 
     // ========== TTS 合成与发送 ==========
