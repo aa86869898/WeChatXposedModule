@@ -486,6 +486,59 @@ public class ScheduleBroadcast {
             log("TRACE: a21.q OK");
         } catch (Throwable t) { log("TRACE: a21.q fail: " + t.getMessage()); }
 
+        // === CGI 自动发送链路 (SendMsgService → vj → CGI) ===
+
+        // jm.y — SendMsgService (从栈: jm.y.tj:17)
+        try {
+            Class<?> jmy = XposedHelpers.findClass("jm.y", sClassLoader);
+            for (java.lang.reflect.Method m : jmy.getDeclaredMethods()) {
+                final String mName = m.getName();
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam param) {
+                        log("TRACE jm.y." + mName + "(" + param.args.length + ")");
+                        if (mName.equals("vj")) {
+                            log("  >>> SendMsgService.vj: args[0]=" + (param.args.length > 0 ? (param.args[0] == null ? "null" : param.args[0].getClass().getSimpleName() + " size=" + ((java.util.List)param.args[0]).size()) : "-"));
+                        }
+                    }
+                });
+            }
+            log("TRACE: jm.y OK methods=" + jmy.getDeclaredMethods().length);
+        } catch (Throwable t) { log("TRACE: jm.y fail: " + t.getMessage()); }
+
+        // fh5.w — 异步发送action (从栈: fh5.w.k:215)
+        try {
+            Class<?> fh5w = XposedHelpers.findClass("fh5.w", sClassLoader);
+            for (java.lang.reflect.Method m : fh5w.getDeclaredMethods()) {
+                final String mName = m.getName();
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam param) {
+                        log("TRACE fh5.w." + mName + "(" + param.args.length + ")");
+                    }
+                });
+            }
+            log("TRACE: fh5.w OK methods=" + fh5w.getDeclaredMethods().length);
+        } catch (Throwable t) { log("TRACE: fh5.w fail: " + t.getMessage()); }
+
+        // sm0.h — CGI 请求处理器 (CmdID=522 newsendmsg)
+        try {
+            Class<?> sm0h = XposedHelpers.findClass("sm0.h", sClassLoader);
+            for (java.lang.reflect.Method m : sm0h.getDeclaredMethods()) {
+                final String mName = m.getName();
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam param) {
+                        StringBuilder sb = new StringBuilder("TRACE sm0.h." + mName + "(" + param.args.length + ")");
+                        for (int i = 0; i < param.args.length; i++)
+                            sb.append(" p").append(i).append("=").append(param.args[i] == null ? "null" : param.args[i].getClass().getSimpleName());
+                        log(sb.toString());
+                    }
+                    @Override protected void afterHookedMethod(MethodHookParam param) {
+                        log("TRACE sm0.h." + mName + " → result=" + (param.getResult() == null ? "null" : param.getResult().getClass().getSimpleName()));
+                    }
+                });
+            }
+            log("TRACE: sm0.h OK methods=" + sm0h.getDeclaredMethods().length);
+        } catch (Throwable t) { log("TRACE: sm0.h fail: " + t.getMessage()); }
+
         // n85.z — 消息payload, n85.d0.invoke的参数
         try {
             Class<?> n85z = XposedHelpers.findClass("n85.z", sClassLoader);
