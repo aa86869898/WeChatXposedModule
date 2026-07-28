@@ -1209,8 +1209,8 @@ public class ScheduleBroadcast {
 
             log("sendMessage v5: talker=" + talker + " content=" + nvl(task.content).substring(0, Math.min(30, nvl(task.content).length())) + " type=" + task.msgType);
 
-            // Step 7: insert DB — Guide: msgStorage.I9(msg, true)
-            long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
+            // Step 7: insert DB — 用 false 尝试 (true=标记为接收/setSend→0)
+            long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, false);
 
             // ★ I9 内部可能重置 isSend, 插入后再次确保; 同时清除 XML/appmsg 标记
             XposedHelpers.callMethod(msg, "k1", 1);
@@ -1218,7 +1218,12 @@ public class ScheduleBroadcast {
             XposedHelpers.setBooleanField(msg, "g", false);
             XposedHelpers.setBooleanField(msg, "h", false);
 
-            log("sendMessage v5: I9 msgId=" + msgId + " talker=" + talker);
+            // ★ post-I9 验证
+            int postIsSend = (Integer) XposedHelpers.callMethod(msg, "z0");
+            int postStatus = -1;
+            try { postStatus = (Integer) XposedHelpers.callMethod(msg, "t1"); } catch (Throwable ig) {}
+            Object postContent = XposedHelpers.callMethod(msg, "j");
+            log("sendMessage v5: I9 msgId=" + msgId + " talker=" + talker + " post-z0=" + postIsSend + " post-status=" + postStatus + " post-j=[" + (postContent == null ? "null" : postContent) + "]");
             return msgId > 0;
         } catch (Throwable t) {
             log("sendMessage FAIL: " + t.getClass().getSimpleName() + ": " + t.getMessage());
