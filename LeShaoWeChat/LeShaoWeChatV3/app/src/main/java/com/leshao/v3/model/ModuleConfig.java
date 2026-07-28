@@ -260,7 +260,7 @@ public class ModuleConfig {
         cfg.announceMiniProgram = prefs.getBoolean("ls_announce_miniprogram", true);
         cfg.announceVideoChannel = prefs.getBoolean("ls_announce_videochannel", true);
         cfg.announceChatHistory = prefs.getBoolean("ls_announce_chathistory", true);
-        cfg.autoPlayVoice = prefs.getBoolean("ls_auto_voice", true);
+        cfg.autoPlayVoice = true;
 
         cfg.announceIntervalMs = parseInt(prefs.getString("ls_announce_interval_ms", "0"), 0);
         cfg.textTruncateEnabled = prefs.getBoolean("ls_text_truncate", true);
@@ -644,7 +644,6 @@ public class ModuleConfig {
         e.putBoolean("ls_announce_miniprogram", announceMiniProgram);
         e.putBoolean("ls_announce_videochannel", announceVideoChannel);
         e.putBoolean("ls_announce_chathistory", announceChatHistory);
-        e.putBoolean("ls_auto_voice", autoPlayVoice);
         e.putString("ls_announce_interval_ms", String.valueOf(announceIntervalMs));
         e.putString("ls_announce_fmt", customAnnounceFormat);
         e.putBoolean("ls_text_truncate", textTruncateEnabled);
