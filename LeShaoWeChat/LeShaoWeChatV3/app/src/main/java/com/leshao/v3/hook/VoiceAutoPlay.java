@@ -377,7 +377,7 @@ public class VoiceAutoPlay {
 
     // ============ 供 MessageHook 调用 ============
 
-    public static void tryAutoPlayVoice(Object msg, long msgId) {
+    public static void tryAutoPlayVoice(Object msg, long msgId, Object p0) {
         try {
             if (!sEnabled) return;
             boolean activated = ModuleConfig.load(
@@ -395,20 +395,24 @@ public class VoiceAutoPlay {
                 return;
             }
 
-            // 跳过自己发的
             try {
                 boolean isSend = (Boolean) XposedHelpers.callMethod(msg, "G1");
                 if (isSend) return;
             } catch (Throwable ignored) {}
 
-            // 跳过正在发送中的
             try {
                 if ((Integer) XposedHelpers.callMethod(msg, "M0") == 5) return;
             } catch (Throwable ignored) {}
 
             Object voiceComp = sCurrentVoiceComp;
+            if (voiceComp == null && p0 != null) {
+                voiceComp = sCurrentVoiceComp = getVoiceComponent(p0);
+                if (voiceComp != null) {
+                    LogWriter.log(TAG, "VoiceComponent from p0 OK");
+                }
+            }
             if (voiceComp == null) {
-                LogWriter.log(TAG, "tryAutoPlay: no VoiceComponent stored, msgId=" + msgId);
+                LogWriter.log(TAG, "tryAutoPlay: no VoiceComponent, msgId=" + msgId);
                 return;
             }
 

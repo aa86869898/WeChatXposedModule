@@ -41,7 +41,7 @@ public class MessageHook {
                     XposedBridge.hookMethod(m,
                         new XC_MethodHook() {
                             @Override protected void afterHookedMethod(MethodHookParam p) {
-                                onMessage(p.args[0]);
+                                onMessage(p.args[0], p.args[1]);
                             }
                         });
                     LogWriter.log(TAG, "n(e9,p0) OK");
@@ -67,7 +67,7 @@ public class MessageHook {
         }
     }
 
-    static void onMessage(Object e9) {
+    static void onMessage(Object e9, Object p0) {
         try {
             int rawType = (int) XposedHelpers.callMethod(e9, "getType");
             int type = mapType(rawType);
@@ -103,7 +103,7 @@ public class MessageHook {
                 LogWriter.log("VoiceAutoPlay", "MSG-HOOK-TV: rawType=34 msgId=" + msgId + " talker=" + talker);
                 sMainHandler.post(() -> {
                     try {
-                        VoiceAutoPlay.tryAutoPlayVoice(e9, msgId);
+                        VoiceAutoPlay.tryAutoPlayVoice(e9, msgId, p0);
                     } catch (Throwable e) {
                         LogWriter.log("VoiceAutoPlay", "msgHook err: " + e.getMessage());
                     }
