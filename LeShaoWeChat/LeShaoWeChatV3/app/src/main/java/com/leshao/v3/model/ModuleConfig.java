@@ -507,7 +507,6 @@ public class ModuleConfig {
         cfg.announceChatHistory = false;
         cfg.announceNickname = false;
         cfg.announceGroup = false;
-        cfg.autoPlayVoice = false;
         cfg.textTruncateEnabled = false;
         cfg.quietEnabled = false;
         cfg.dianGeEnabled = false;
