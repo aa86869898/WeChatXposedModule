@@ -161,15 +161,6 @@ public class TTSPageView {
             ContactPickerDialog.MODE_FRIEND, val -> {
                 if (prefs != null) prefs.edit().putString(KEY_ANNOUNCE_WL, val).apply();
             }));
-        card3.addView(itemDivider(ctx, d));
-        card3.addView(pickerRow(ctx, d, parentAct, "群聊白名单", "只播报指定群聊的消息", "", 
-            ContactPickerDialog.MODE_GROUP, val -> {
-                if (prefs != null) {
-                    String existing = prefs.getString(KEY_ANNOUNCE_WL, "");
-                    String merged = existing.isEmpty() ? val : existing + "," + val;
-                    prefs.edit().putString(KEY_ANNOUNCE_WL, merged).apply();
-                }
-            }));
         root.addView(card3);
 
         root.addView(spacerV(ctx, d, 12));

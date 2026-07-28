@@ -7,6 +7,7 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.service.TTSBroadcaster;
 
 import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 public class MessageHook {
@@ -37,8 +38,7 @@ public class MessageHook {
             for (java.lang.reflect.Method m : x9Cls.getDeclaredMethods()) {
                 if (m.getName().equals("n") && m.getParameterCount() == 2
                     && m.getParameterTypes()[0] == e9Cls) {
-                    Class<?> p0Cls = m.getParameterTypes()[1];
-                    XposedHelpers.findAndHookMethod(x9Cls, "n", e9Cls, p0Cls,
+                    XposedBridge.hookMethod(m,
                         new XC_MethodHook() {
                             @Override protected void afterHookedMethod(MethodHookParam p) {
                                 onMessage(p.args[0]);
@@ -52,7 +52,7 @@ public class MessageHook {
             for (java.lang.reflect.Method m : x9Cls.getDeclaredMethods()) {
                 if (m.getName().equals("C") && m.getParameterCount() == 1
                     && m.getParameterTypes()[0] == e9Cls) {
-                    XposedHelpers.findAndHookMethod(x9Cls, "C", e9Cls,
+                    XposedBridge.hookMethod(m,
                         new XC_MethodHook() {
                             @Override protected void afterHookedMethod(MethodHookParam p) {
                                 onMessage(p.args[0]);
