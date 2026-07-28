@@ -1055,8 +1055,15 @@ public class ScheduleBroadcast {
             // Step 1: setType — 直接反射 field_type (A1不在此字段)
             XposedHelpers.setIntField(msg, "field_type", task.msgType);
 
-            // Step 2: setContent — 直接反射 field_content (X0不在此字段)
+            // Step 2: setContent
+            //   d1(content) — 610行复杂逻辑, 处理纯文本/XML/appmsg的内部状态
+            //   field_content — 反射保底, 确保内容写入
+            XposedHelpers.callMethod(msg, "d1", nvl(task.content));
             XposedHelpers.setObjectField(msg, "field_content", nvl(task.content));
+
+            // Step 2.5: 清除XML/appmsg标记 (g/h=true 可能导致消息被当成卡片)
+            try { XposedHelpers.setBooleanField(msg, "g", false); } catch (Throwable ignored) {}
+            try { XposedHelpers.setBooleanField(msg, "h", false); } catch (Throwable ignored) {}
 
             // Step 3: setImgPath (if media)
             if (task.filePath != null && !task.filePath.isEmpty()) {
