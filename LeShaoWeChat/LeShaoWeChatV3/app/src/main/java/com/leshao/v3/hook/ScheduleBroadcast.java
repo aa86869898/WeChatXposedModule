@@ -22,6 +22,8 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1099,6 +1101,7 @@ public class ScheduleBroadcast {
 
     private static void triggerSend(long msgId, Object e9msg, String talker) {
         try {
+            log("[triggerSend:1] 开始 build en4, talker=" + talker);
             // 1. 构建 a65.en4 (MsgCommand) — 单条消息体
             Class<?> en4Cls = XposedHelpers.findClass("a65.en4", sClassLoader);
             Object en4 = XposedHelpers.newInstance(en4Cls);
@@ -1113,7 +1116,16 @@ public class ScheduleBroadcast {
             // 1b. 时间戳 + 类型 + 内容
             try { XposedHelpers.setIntField(en4, "g", (int)(System.currentTimeMillis() / 1000)); } catch (Throwable ignored) {}
             try { XposedHelpers.setIntField(en4, "f", 1); } catch (Throwable ignored) {}
-            try { XposedHelpers.setObjectField(en4, "e", XposedHelpers.callMethod(e9msg, "X1")); } catch (Throwable ignored) {}
+            // 获取消息内容 — 正确的 getter 是 j()，X1 是 setter
+            String content = "";
+            try { content = (String) XposedHelpers.callMethod(e9msg, "j"); } catch (Throwable t1) {
+                try { content = (String) XposedHelpers.callMethod(e9msg, "X1"); } catch (Throwable t2) {
+                    log("[triggerSend:1] 无法获取消息内容: " + t1.getMessage());
+                }
+            }
+            try { XposedHelpers.setObjectField(en4, "e", content); } catch (Throwable ignored) {}
+            log("[triggerSend:1] en4.e content len=" + (content != null ? content.length() : 0));
+
             // newmsgid
             try {
                 Class<?> y1Cls = XposedHelpers.findClass("y1", sClassLoader);
@@ -1123,6 +1135,7 @@ public class ScheduleBroadcast {
                 XposedHelpers.setIntField(en4, "h", hash);
             } catch (Throwable ignored) {}
 
+            log("[triggerSend:2] 构建 f16");
             // 2. 构建 a65.f16 (NewSendMsgRequest)
             Class<?> f16Cls = XposedHelpers.findClass("a65.f16", sClassLoader);
             Object f16 = XposedHelpers.newInstance(f16Cls);
@@ -1136,16 +1149,21 @@ public class ScheduleBroadcast {
             f16e.add(en4);
             try { XposedHelpers.setIntField(f16, "d", f16e.size()); } catch (Throwable ignored) {}
 
+            log("[triggerSend:3] f16.b() → CGI task");
             // 3. f16.b() → i (CGI task) — b() 内部已构建 o + i.p(o)，CmdID=522/URL/Resp 已硬编码
             Object i = XposedHelpers.callMethod(f16, "b");
 
+            log("[triggerSend:4] sm0.h.b(i, null) 联网发送");
             // 4. 调用 sm0.h.b(i, null) 联网发送
             Class<?> sm0h = XposedHelpers.findClass("sm0.h", sClassLoader);
             Object result = XposedHelpers.callStaticMethod(sm0h, "b", i, null);
             log("triggerSend: sm0.h.b() OK msgId=" + msgId + " result=" + result);
         } catch (Throwable t) {
-            log("triggerSend: a21.b0.vj fail: " + t.getMessage());
-            log("triggerSend: 所有方法均失败 msgId=" + msgId);
+            log("triggerSend FAIL msgId=" + msgId + " exc=" + t.getClass().getSimpleName() + ": " + t.getMessage());
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            t.printStackTrace(pw);
+            log("triggerSend 堆栈:\n" + sw.toString());
         }
     }
 
