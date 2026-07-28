@@ -56,6 +56,10 @@ public class TTSBroadcaster {
         if (sHandler != null) sHandler.announceTransfer(sender, chatroom, amount, desc);
     }
 
+    public static boolean isSpeaking() {
+        return sEngine != null && sEngine.isSpeaking();
+    }
+
     public static void stopAll() {
         if (sEngine != null) sEngine.stop();
     }

@@ -17,6 +17,7 @@ public class TtsEngine {
 
     private TextToSpeech mTts;
     private volatile boolean mReady = false;
+    private volatile boolean mSpeaking = false;
     private final Queue<String> mQueue = new LinkedList<>();
     private PowerManager.WakeLock mWakeLock;
     private volatile int mErrorCount = 0;
@@ -38,13 +39,17 @@ public class TtsEngine {
             }
         });
         mTts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-            @Override public void onStart(String utteranceId) {}
+            @Override public void onStart(String utteranceId) {
+                mSpeaking = true;
+            }
             @Override public void onDone(String utteranceId) {
+                mSpeaking = false;
                 mErrorCount = 0;
                 releaseWakeLock();
                 flushQueue();
             }
             @Override public void onError(String utteranceId) {
+                mSpeaking = false;
                 mErrorCount++;
                 LogWriter.log(TAG, "TTS onError count=" + mErrorCount);
                 releaseWakeLock();
@@ -55,6 +60,10 @@ public class TtsEngine {
                 }
             }
         });
+    }
+
+    public boolean isSpeaking() {
+        return mSpeaking;
     }
 
     public void speak(String text) {
