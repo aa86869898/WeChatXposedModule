@@ -1136,7 +1136,7 @@ public class ScheduleBroadcast {
         return false;
     }
 
-    // ===== 核心发送引擎 (v6: H9模式, 复用 sendToFilehelper 已验证的正确格式) =====
+    // ===== 核心发送引擎 (v7: H9+Ra 两步法, H9后I9重置字段, 反射修复后Ra写回DB) =====
 
     static boolean sendMessage(String talker, Task task) {
         try {
@@ -1146,12 +1146,10 @@ public class ScheduleBroadcast {
             Object msg = XposedHelpers.newInstance(e9Class, talker);
             long now = System.currentTimeMillis();
 
-            // v6: 完全复用 sendToFilehelper 已验证的正确模式
-            //     A1(int)    = setType     (不是 field_type)
-            //     X0(String) = setContent  (不是 field_content)
-            //     k1(int)    = setIsSend   (有效)
-            //     e1(long)   = setCreateTime
-            //     H9(msg)    = 简单插入 (不触发 I9 内部的 XML/appmsg 包装)
+            // v7 策略:
+            //   1. A1/X0 setter before H9 (初始化内部状态)
+            //   2. H9(msg) 写DB — 对群聊 talker, 内部 I9 会重置 type/content/设置g/h
+            //   3. After H9: 反射强制写 field_type/field_content, 清零 g/h, 调 Ra 更新DB
             XposedHelpers.callMethod(msg, "A1", task.msgType);
             XposedHelpers.callMethod(msg, "X0", nvl(task.content));
             XposedHelpers.callMethod(msg, "e1", now);
@@ -1161,30 +1159,33 @@ public class ScheduleBroadcast {
                 try { XposedHelpers.callMethod(msg, "j1", task.filePath); } catch (Throwable ignored) {}
             }
 
-            log("sendMessage v6: talker=" + talker + " content=" + nvl(task.content).substring(0, Math.min(30, nvl(task.content).length())) + " type=" + task.msgType);
+            log("sendMessage v7: talker=" + talker + " content=" + nvl(task.content).substring(0, Math.min(30, nvl(task.content).length())) + " type=" + task.msgType);
 
-            // H9 插入 — 不触发 XML/appmsg，与 sendToFilehelper 一致
+            // Step 1: H9 插入 (内部 I9 会重置群聊字段)
             long msgId = (Long) XposedHelpers.callMethod(ms, "H9", msg);
+            log("v7: H9 returned msgId=" + msgId);
 
-            // H9 后补充 status=1 + isSend=1, 供 SendMsgService 拉取发送
-            XposedHelpers.callMethod(msg, "t1", 1);
-            XposedHelpers.callMethod(msg, "k1", 1);
-            try { XposedHelpers.setIntField(msg, "field_isSend", 1); } catch (Throwable ignored) {}
+            // Step 2: 反射修复被 I9 重置的字段 + 清零 XML 标记
+            XposedHelpers.setIntField(msg, "field_type", task.msgType);
+            XposedHelpers.setObjectField(msg, "field_content", nvl(task.content));
+            XposedHelpers.setIntField(msg, "field_isSend", 1);
+            XposedHelpers.setBooleanField(msg, "g", false);
+            XposedHelpers.setBooleanField(msg, "h", false);
+            try { XposedHelpers.setObjectField(msg, "p2", null); } catch (Throwable ignored) {}
 
-            // post-H9 验证
-            int postType = (Integer) XposedHelpers.callMethod(msg, "getType");
-            int postIsSend = (Integer) XposedHelpers.callMethod(msg, "z0");
-            Object postContent = XposedHelpers.callMethod(msg, "j");
-            log("sendMessage v6: H9 msgId=" + msgId + " post-type=" + postType + " post-z0=" + postIsSend + " post-j=[" + (postContent == null ? "null" : postContent) + "]");
+            // Step 3: Ra 写回 DB
+            int raResult = (Integer) XposedHelpers.callMethod(ms, "Ra", msgId, msg);
+            log("v7: Ra returned " + raResult);
 
-            // Dump key fields for diagnostic
-            try {
-                log("DIAG v6: type=" + XposedHelpers.getIntField(msg, "field_type")
-                    + " isSend=" + XposedHelpers.getIntField(msg, "field_isSend")
-                    + " status=" + XposedHelpers.getIntField(msg, "field_status")
-                    + " g=" + XposedHelpers.getBooleanField(msg, "g")
-                    + " h=" + XposedHelpers.getBooleanField(msg, "h"));
-            } catch (Throwable ig) {}
+            // Step 4: 验证 (读 DB 级字段确认)
+            int postType = (Integer) XposedHelpers.getIntField(msg, "field_type");
+            Object postContent = XposedHelpers.getObjectField(msg, "field_content");
+            int postIsSend = (Integer) XposedHelpers.getIntField(msg, "field_isSend");
+            boolean postG = XposedHelpers.getBooleanField(msg, "g");
+            boolean postH = XposedHelpers.getBooleanField(msg, "h");
+            log("v7: post-Ra type=" + postType + " isSend=" + postIsSend
+                + " content=[" + (postContent == null ? "null" : postContent.toString().substring(0, Math.min(40, postContent.toString().length()))) + "]"
+                + " g=" + postG + " h=" + postH);
 
             return msgId > 0;
         } catch (Throwable t) {
