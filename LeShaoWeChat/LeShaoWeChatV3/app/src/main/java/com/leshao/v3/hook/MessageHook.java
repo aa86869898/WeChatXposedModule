@@ -15,9 +15,11 @@ public class MessageHook {
     private static final String TAG = "MessageHook";
     private static int sCount = 0;
     private static Handler sMainHandler;
+    private static ClassLoader sClassLoader;
     private static java.lang.reflect.Method sTypeMapper;
 
     public static void hook(ClassLoader cl) {
+        sClassLoader = cl;
         sMainHandler = new Handler(Looper.getMainLooper());
 
         try {
@@ -101,6 +103,17 @@ public class MessageHook {
             if (rawType == 34) {
                 final long msgId = (Long) XposedHelpers.callMethod(e9, "H0");
                 LogWriter.log("VoiceAutoPlay", "MSG-HOOK-TV: rawType=34 msgId=" + msgId + " talker=" + talker);
+
+                // 诊断: y21.x0.g() path
+                try {
+                    String gPath = (String) XposedHelpers.callStaticMethod(
+                            sClassLoader.loadClass("y21.x0"), "g", talker, String.valueOf(msgId));
+                    android.util.Log.e("VoiceAutoPlay", "!!! MH y21.x0.g("+talker+","+msgId+") = " + gPath);
+                    LogWriter.log("VoiceAutoPlay", "MH y21.x0.g=" + gPath);
+                } catch (Throwable err) {
+                    android.util.Log.e("VoiceAutoPlay", "!!! MH y21.x0.g err: " + err.getMessage());
+                }
+
                 sMainHandler.post(() -> {
                     try {
                         VoiceAutoPlay.tryAutoPlayVoice(e9, msgId, p0);

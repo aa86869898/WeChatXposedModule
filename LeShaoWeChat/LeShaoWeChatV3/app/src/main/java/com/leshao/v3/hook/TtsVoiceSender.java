@@ -24,10 +24,10 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /**
- * TTS 语音发送 v37
- * - SendMsgSuccessEvent.callback 检测 #tts 前缀
- * - 枚举 data 字段找到 e9 消息对象
- * - 保留 ChatFooter.F 诊断日志
+ * TTS 语音发送 v43
+ * - 持久 UtteranceProgressListener，不覆盖
+ * - triggerVoiceAutoPlay: tts.speak("语音") → onDone → playPendingVoice
+ * - synthesizeAndSend: synthesizeToFile + latch 等待
  */
 public class TtsVoiceSender {
 
@@ -36,6 +36,8 @@ public class TtsVoiceSender {
     private static TextToSpeech sTts;
     private static ClassLoader sClassLoader;
     private static boolean sReady;
+    private static volatile CountDownLatch sSynthesisLatch;
+    private static volatile int sSynthesisResult;
 
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
@@ -45,10 +47,77 @@ public class TtsVoiceSender {
                 int result = sTts.setLanguage(Locale.CHINESE);
                 sReady = (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED);
                 LogWriter.log(TAG, "TTS init: " + (sReady ? "OK" : "FAIL"));
+
+                if (sReady) {
+                    setPersistentListener();
+                }
             }
         });
 
         hookSendMsgSuccessEvent(cl);
+    }
+
+    // ========== 持久 UtteranceProgressListener ==========
+
+    private static void setPersistentListener() {
+        if (sTts == null) return;
+        sTts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+            @Override public void onStart(String uid) {}
+
+            @Override
+            public void onDone(String uid) {
+                android.util.Log.e(TAG, ">>> onDone uid=" + uid);
+                LogWriter.log(TAG, "onDone: " + uid);
+
+                // 语音自动播放
+                if (uid != null && uid.startsWith("tts_")) {
+                    String talker = uid.substring(4);
+                    android.util.Log.e(TAG, ">>> triggering voice play for " + talker);
+                    VoiceAutoPlay.playPendingVoice(talker);
+                }
+
+                // 合成完成信号
+                if (sSynthesisLatch != null) {
+                    sSynthesisResult = TextToSpeech.SUCCESS;
+                    sSynthesisLatch.countDown();
+                }
+            }
+
+            @Override
+            public void onError(String uid) {
+                android.util.Log.e(TAG, ">>> onError uid=" + uid);
+                LogWriter.log(TAG, "onError: " + uid);
+
+                if (uid != null && uid.startsWith("tts_")) {
+                    String talker = uid.substring(4);
+                    VoiceAutoPlay.playPendingVoice(talker);
+                }
+
+                if (sSynthesisLatch != null) {
+                    sSynthesisResult = TextToSpeech.ERROR;
+                    sSynthesisLatch.countDown();
+                }
+            }
+        });
+        android.util.Log.e(TAG, ">>> persistent listener set OK");
+    }
+
+    // ========== VoiceAutoPlay 触发 ==========
+
+    public static void triggerVoiceAutoPlay(String talker) {
+        try {
+            if (!sReady || sTts == null) {
+                android.util.Log.e(TAG, ">>> trigger: TTS not ready");
+                return;
+            }
+            Bundle params = new Bundle();
+            String uid = "tts_" + talker;
+            params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, uid);
+            sTts.speak("语音", TextToSpeech.QUEUE_ADD, params, uid);
+            android.util.Log.e(TAG, ">>> trigger ok uid=" + uid);
+        } catch (Throwable e) {
+            android.util.Log.e(TAG, ">>> trigger err: " + e.getMessage());
+        }
     }
 
     // ========== SendMsgSuccessEvent.callback ==========
@@ -176,44 +245,28 @@ public class TtsVoiceSender {
             File amrFile = new File(tmpDir, "tts_" + System.currentTimeMillis() + ".amr");
 
             CountDownLatch latch = new CountDownLatch(1);
-            final int[] synthResult = {TextToSpeech.ERROR};
-            final String utteranceId = "tts_" + talker;
-
-            sTts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                @Override public void onStart(String uid) {}
-                @Override
-                public void onDone(String uid) {
-                    synthResult[0] = TextToSpeech.SUCCESS;
-                    latch.countDown();
-                    if (uid != null && uid.startsWith("tts_")) {
-                        String ttsTalker = uid.substring(4);
-                        android.util.Log.e(TAG, ">>> TTS synthesis done, triggering voice play for " + ttsTalker);
-                        VoiceAutoPlay.playPendingVoice(ttsTalker);
-                    }
-                }
-                @Override
-                public void onError(String uid) {
-                    LogWriter.log(TAG, "synth error: " + uid);
-                    latch.countDown();
-                }
-            });
+            sSynthesisLatch = latch;
+            sSynthesisResult = TextToSpeech.ERROR;
+            String utteranceId = "synth_" + talker;
 
             Bundle params = new Bundle();
             params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId);
             int result = sTts.synthesizeToFile(text, params, wavFile, utteranceId);
             if (result != TextToSpeech.SUCCESS) {
+                sSynthesisLatch = null;
                 LogWriter.log(TAG, "synthesizeToFile failed: " + result);
                 wavFile.delete();
                 return;
             }
 
             boolean finished = latch.await(30, TimeUnit.SECONDS);
+            sSynthesisLatch = null;
             if (!finished) {
                 LogWriter.log(TAG, "synth timeout");
                 wavFile.delete();
                 return;
             }
-            if (synthResult[0] != TextToSpeech.SUCCESS) {
+            if (sSynthesisResult != TextToSpeech.SUCCESS) {
                 LogWriter.log(TAG, "synth failed");
                 wavFile.delete();
                 return;
@@ -258,7 +311,7 @@ public class TtsVoiceSender {
         }
     }
 
-    // ========== WAV → AMR ==========
+    // ========== WAV -> AMR ==========
 
     private static int wavToAmr(File wavFile, File amrFile) {
         try (FileInputStream fis = new FileInputStream(wavFile)) {

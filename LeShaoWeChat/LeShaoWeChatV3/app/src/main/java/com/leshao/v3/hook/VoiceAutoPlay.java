@@ -1,5 +1,6 @@
 package com.leshao.v3.hook;
 
+import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -13,16 +14,13 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
-import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /**
- * 语音消息自动播放 v41
- * - hook so.y() 获取 VoiceComponent
- * - voiceComp.d.x() = talker
- * - voiceComp.n0().I(msg, false) = play
- * - loadMsgById 从 ConcurrentHashMap 取原始 e9
+ * 语音消息自动播放 v43
+ * - 废弃 so.y()，改用 TTS onDone → MediaPlayer 直接播文件
+ * - y21.x0.g(talker, msgId) 取语音文件路径
  */
 public class VoiceAutoPlay {
 
@@ -32,7 +30,6 @@ public class VoiceAutoPlay {
     private static long sLastPlayedMsgId = -1L;
 
     private static ClassLoader sClassLoader;
-    private static volatile Object sCurrentVoiceComp;
 
     private static final Queue<PendingVoiceMsg> sPendingQueue = new ConcurrentLinkedQueue<>();
     private static final ConcurrentHashMap<Long, Object> sMsgMap = new ConcurrentHashMap<>();
@@ -50,71 +47,6 @@ public class VoiceAutoPlay {
 
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
-        hookVoiceComponentReset();
-    }
-
-    // =========== so.y() (resetAutoPlay, 进入聊天时触发) ===========
-
-    private static void hookVoiceComponentReset() {
-        try {
-            Class<?> soCls = sClassLoader.loadClass("com.tencent.mm.ui.chatting.component.so");
-            XposedBridge.hookAllMethods(soCls, "y", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    android.util.Log.e(TAG, "!!! so.y() FIRED");
-                    try {
-                        Object voiceComp = param.thisObject;
-                        sCurrentVoiceComp = voiceComp;
-                        XposedBridge.log("[VAP] so.y() VC: " + voiceComp.getClass().getName());
-
-                        Object cc = XposedHelpers.getObjectField(voiceComp, "d");
-                        if (cc == null) {
-                            XposedBridge.log("[VAP] so.d is null");
-                            return;
-                        }
-
-                        String talker = null;
-                        try { talker = (String) XposedHelpers.callMethod(cc, "x"); }
-                        catch (Throwable ignored) {}
-
-                        android.util.Log.e(TAG, "!!! so.y() talker=" + talker + " pending=" + sPendingQueue.size());
-                        XposedBridge.log("[VAP] talker=" + talker + " pending=" + sPendingQueue.size());
-                        LogWriter.log(TAG, "so.y: talker=" + talker + " pending=" + sPendingQueue.size());
-
-                        List<Long> pending = dequeue(talker);
-                        if (pending.isEmpty()) return;
-
-                        Object player = XposedHelpers.callMethod(voiceComp, "n0");
-                        if (player == null) {
-                            android.util.Log.e(TAG, "!!! player is null");
-                            return;
-                        }
-
-                        for (long msgId : pending) {
-                            Object msg = loadMsgById(msgId);
-                            if (msg != null) {
-                                try {
-                                    XposedHelpers.callMethod(player, "I", msg, false);
-                                    android.util.Log.e(TAG, ">>> PLAY msgId=" + msgId);
-                                    LogWriter.log(TAG, "PLAY msgId=" + msgId);
-                                } catch (Throwable e) {
-                                    android.util.Log.e(TAG, ">>> PLAY FAIL msgId=" + msgId + " err=" + e.getMessage());
-                                    LogWriter.log(TAG, "play err: " + e.getMessage());
-                                }
-                            }
-                        }
-                    } catch (Throwable e) {
-                        android.util.Log.e(TAG, "so.y err: " + e.getMessage());
-                        XposedBridge.log("[VAP] so.y err: " + e.getMessage());
-                    }
-                }
-            });
-            XposedBridge.log("[VAP] so.y() hooked OK");
-            LogWriter.log(TAG, "so.y() hooked OK");
-        } catch (Throwable t) {
-            XposedBridge.log("[VAP] so.y() FAIL: " + t.getMessage());
-            LogWriter.log(TAG, "so.y() fail: " + t.getMessage());
-        }
     }
 
     // =========== 队列与查找 ===========
@@ -133,14 +65,10 @@ public class VoiceAutoPlay {
     }
 
     private static Object loadMsgById(long msgId) {
-        Object msg = sMsgMap.get(msgId);
-        if (msg == null) {
-            android.util.Log.e(TAG, "!!! loadMsgById NULL for " + msgId);
-        }
-        return msg;
+        return sMsgMap.get(msgId);
     }
 
-    // =========== 供 MessageHook 调用 ===========
+    // =========== 供 MessageHook / TtsVoiceSender 调用 ===========
 
     public static void setEnabled(boolean enabled) {
         sEnabled = enabled;
@@ -169,39 +97,24 @@ public class VoiceAutoPlay {
             try { talker = (String) XposedHelpers.callMethod(msg, "N0"); } catch (Throwable ignored) {}
             if (talker == null) try { talker = (String) XposedHelpers.getObjectField(msg, "field_talker"); } catch (Throwable ignored) {}
 
-            XposedBridge.log("[VAP] enqueue msgId=" + msgId + " talker=" + trunc(talker));
             LogWriter.log(TAG, "enqueue: msgId=" + msgId + " talker=" + trunc(talker));
+
+            // 诊断: 打印 y21.x0.g() 路径
+            try {
+                Class<?> y21x0 = XposedHelpers.findClass("y21.x0", sClassLoader);
+                String path = (String) XposedHelpers.callStaticMethod(y21x0, "g", talker, String.valueOf(msgId));
+                android.util.Log.e(TAG, "!!! y21.x0.g() path=" + path);
+                LogWriter.log(TAG, "y21.x0.g(" + talker + "," + msgId + ") = " + path);
+            } catch (Throwable e) {
+                android.util.Log.e(TAG, "!!! y21.x0.g() err: " + e.getMessage());
+            }
 
             sMsgMap.put(msgId, msg);
             sPendingQueue.offer(new PendingVoiceMsg(msgId, talker));
 
-            sHandler.post(() -> {
-                if (sCurrentVoiceComp != null) {
-                    Object cc = null;
-                    try { cc = XposedHelpers.getObjectField(sCurrentVoiceComp, "d"); } catch (Throwable ignored) {}
-                    String ct = null;
-                    if (cc != null) try { ct = (String) XposedHelpers.callMethod(cc, "x"); } catch (Throwable ignored) {}
-                    List<Long> pending = dequeue(ct);
-                    if (!pending.isEmpty()) {
-                        try {
-                            Object player = XposedHelpers.callMethod(sCurrentVoiceComp, "n0");
-                            if (player != null) {
-                                for (long mid : pending) {
-                                    Object m = loadMsgById(mid);
-                                    if (m != null) {
-                                        XposedHelpers.callMethod(player, "I", m, false);
-                                        LogWriter.log(TAG, "immediate PLAY msgId=" + mid);
-                                    }
-                                }
-                            }
-                        } catch (Throwable e) {
-                            LogWriter.log(TAG, "immediate play err: " + e.getMessage());
-                        }
-                    }
-                } else {
-                    LogWriter.log(TAG, "VC not ready, queued for so.y()");
-                }
-            });
+            // 通过 TTS 链触发播放: speak → onDone → playPendingVoice → MediaPlayer
+            TtsVoiceSender.triggerVoiceAutoPlay(talker);
+
         } catch (Throwable e) {
             LogWriter.log(TAG, "tryAutoPlay err: " + e.getMessage());
         }
@@ -210,26 +123,63 @@ public class VoiceAutoPlay {
     public static void notifyChattingUIResume(android.app.Activity activity) {}
 
     /**
-     * 供 TtsVoiceSender TTS 完成后触发语音播放
+     * 供 TtsVoiceSender TTS onDone 回调 → MediaPlayer 播放
      */
     public static void playPendingVoice(String talker) {
         android.util.Log.e(TAG, ">>> playPendingVoice talker=" + talker);
-        if (sCurrentVoiceComp == null) return;
         try {
             List<Long> pending = dequeue(talker);
-            if (pending.isEmpty()) return;
-            Object player = XposedHelpers.callMethod(sCurrentVoiceComp, "n0");
-            if (player == null) return;
-            for (long msgId : pending) {
-                Object msg = loadMsgById(msgId);
-                if (msg != null) {
-                    XposedHelpers.callMethod(player, "I", msg, false);
-                    android.util.Log.e(TAG, ">>> playPendingVoice PLAY msgId=" + msgId);
-                    LogWriter.log(TAG, "playPendingVoice PLAY msgId=" + msgId);
-                }
+            if (pending.isEmpty()) {
+                android.util.Log.e(TAG, ">>> no pending voice for talker=" + talker);
+                return;
             }
+
+            sHandler.post(() -> {
+                for (long msgId : pending) {
+                    try {
+                        playVoiceFile(talker, msgId);
+                    } catch (Throwable e) {
+                        android.util.Log.e(TAG, ">>> playVoiceFile err: " + e.getMessage());
+                    }
+                }
+            });
         } catch (Throwable e) {
             android.util.Log.e(TAG, "playPendingVoice err: " + e.getMessage());
+        }
+    }
+
+    private static void playVoiceFile(String talker, long msgId) {
+        try {
+            Class<?> y21x0 = XposedHelpers.findClass("y21.x0", sClassLoader);
+            String path = (String) XposedHelpers.callStaticMethod(y21x0, "g", talker, String.valueOf(msgId));
+
+            android.util.Log.e(TAG, ">>> playVoiceFile path=" + path);
+            LogWriter.log(TAG, "playVoiceFile: msgId=" + msgId + " path=" + path);
+
+            if (path == null || path.isEmpty()) {
+                android.util.Log.e(TAG, ">>> path is null/empty for msgId=" + msgId);
+                return;
+            }
+
+            android.media.MediaPlayer mp = new android.media.MediaPlayer();
+            mp.setDataSource(path);
+            mp.prepare();
+            mp.setOnCompletionListener(m -> {
+                android.util.Log.e(TAG, ">>> playback completed msgId=" + msgId);
+                LogWriter.log(TAG, "play done msgId=" + msgId);
+                m.release();
+            });
+            mp.setOnErrorListener((m, what, extra) -> {
+                android.util.Log.e(TAG, ">>> playback error msgId=" + msgId + " what=" + what + " extra=" + extra);
+                LogWriter.log(TAG, "play error msgId=" + msgId);
+                m.release();
+                return true;
+            });
+            mp.start();
+            android.util.Log.e(TAG, ">>> PLAY START msgId=" + msgId);
+        } catch (Throwable e) {
+            android.util.Log.e(TAG, ">>> playVoiceFile err: " + e.getMessage());
+            LogWriter.log(TAG, "playVoiceFile err: " + e.getMessage());
         }
     }
 
