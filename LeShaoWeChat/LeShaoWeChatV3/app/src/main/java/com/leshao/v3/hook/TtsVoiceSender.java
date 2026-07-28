@@ -60,67 +60,16 @@ public class TtsVoiceSender {
             XposedBridge.hookAllMethods(eventClass, "callback", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    android.util.Log.e(TAG, "!!! SendMsgSuccessEvent RAW FIRED");
-                    try {
-                        Object event = param.args[0];
-                        Object data = XposedHelpers.getObjectField(event, "data");
-                        if (data == null) return;
+                    android.util.Log.e(TAG, "!!! SendMsgSuccessEvent.callback RAW FIRED");
+                    handleEvent(param.args[0]);
+                }
+            });
 
-                        LogWriter.log(TAG, "SendMsgSuccess callback, data fields:");
-                        for (Field f : data.getClass().getDeclaredFields()) {
-                            f.setAccessible(true);
-                            try {
-                                LogWriter.log(TAG, "  data." + f.getName() + " type=" + f.getType().getSimpleName());
-                            } catch (Throwable ignored) {}
-                        }
-
-                        Object e9 = findE9InData(data);
-                        if (e9 == null) {
-                            LogWriter.log(TAG, "e9 not found in SendMsgSuccessEvent.data");
-                            return;
-                        }
-
-                        String content = null;
-                        try { content = (String) XposedHelpers.callMethod(e9, "I0"); }
-                        catch (Throwable ignored) {}
-                        if (content == null) try { content = (String) XposedHelpers.callMethod(e9, "j"); }
-                        catch (Throwable ignored) {}
-                        if (content == null) try { content = (String) XposedHelpers.getObjectField(e9, "field_content"); }
-                        catch (Throwable ignored) {}
-
-                        if (content == null) {
-                            LogWriter.log(TAG, "SendMsgSuccess: content null");
-                            return;
-                        }
-
-                        LogWriter.log(TAG, "SendMsgSuccess: content=[" + content.substring(0, Math.min(content.length(), 40)) + "]");
-
-                        if (!content.startsWith(TTS_PREFIX)) return;
-
-                        String talker = null;
-                        try { talker = (String) XposedHelpers.callMethod(e9, "N0"); }
-                        catch (Throwable ignored) {}
-                        if (talker == null) try { talker = (String) XposedHelpers.getObjectField(e9, "field_talker"); }
-                        catch (Throwable ignored) {}
-
-                        if (talker == null || talker.isEmpty()) {
-                            LogWriter.log(TAG, "#tts detected but talker null");
-                            return;
-                        }
-
-                        String text = content.substring(TTS_PREFIX.length()).trim();
-                        if (text.isEmpty()) return;
-
-                        XposedBridge.log("[TTS] SendMsgSuccess #tts: " + text + " -> " + talker);
-                        LogWriter.log(TAG, "#tts detected via SendMsgSuccess: " + text.substring(0, Math.min(text.length(), 40)) + " talker=" + talker);
-
-                        final String fText = text;
-                        final String fTalker = talker;
-                        new Thread(() -> synthesizeAndSend(fText, fTalker)).start();
-
-                    } catch (Throwable e) {
-                        XposedBridge.log("[TTS] SendMsgSuccess err: " + e.getMessage());
-                    }
+            XposedBridge.hookAllMethods(eventClass, "publish", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    android.util.Log.e(TAG, "!!! SendMsgSuccessEvent.publish RAW FIRED");
+                    handleEvent(param.args[0]);
                 }
             });
 
@@ -129,6 +78,68 @@ public class TtsVoiceSender {
         } catch (Throwable t) {
             XposedBridge.log("[TTS] SendMsgSuccessEvent FAIL: " + t.getMessage());
             LogWriter.log(TAG, "SendMsgSuccessEvent fail: " + t.getMessage());
+        }
+    }
+
+    private static void handleEvent(Object event) {
+        try {
+            Object data = XposedHelpers.getObjectField(event, "data");
+            if (data == null) return;
+
+            LogWriter.log(TAG, "SendMsgSuccess, data fields:");
+            for (Field f : data.getClass().getDeclaredFields()) {
+                f.setAccessible(true);
+                try {
+                    LogWriter.log(TAG, "  data." + f.getName() + " type=" + f.getType().getSimpleName());
+                } catch (Throwable ignored) {}
+            }
+
+            Object e9 = findE9InData(data);
+            if (e9 == null) {
+                LogWriter.log(TAG, "e9 not found in SendMsgSuccessEvent.data");
+                return;
+            }
+
+            String content = null;
+            try { content = (String) XposedHelpers.callMethod(e9, "I0"); }
+            catch (Throwable ignored) {}
+            if (content == null) try { content = (String) XposedHelpers.callMethod(e9, "j"); }
+            catch (Throwable ignored) {}
+            if (content == null) try { content = (String) XposedHelpers.getObjectField(e9, "field_content"); }
+            catch (Throwable ignored) {}
+
+            if (content == null) {
+                LogWriter.log(TAG, "SendMsgSuccess: content null");
+                return;
+            }
+
+            LogWriter.log(TAG, "SendMsgSuccess: content=[" + content.substring(0, Math.min(content.length(), 40)) + "]");
+
+            if (!content.startsWith(TTS_PREFIX)) return;
+
+            String talker = null;
+            try { talker = (String) XposedHelpers.callMethod(e9, "N0"); }
+            catch (Throwable ignored) {}
+            if (talker == null) try { talker = (String) XposedHelpers.getObjectField(e9, "field_talker"); }
+            catch (Throwable ignored) {}
+
+            if (talker == null || talker.isEmpty()) {
+                LogWriter.log(TAG, "#tts detected but talker null");
+                return;
+            }
+
+            String text = content.substring(TTS_PREFIX.length()).trim();
+            if (text.isEmpty()) return;
+
+            XposedBridge.log("[TTS] SendMsgSuccess #tts: " + text + " -> " + talker);
+            LogWriter.log(TAG, "#tts detected via SendMsgSuccess: " + text + " talker=" + talker);
+
+            final String fText = text;
+            final String fTalker = talker;
+            new Thread(() -> synthesizeAndSend(fText, fTalker)).start();
+
+        } catch (Throwable e) {
+            XposedBridge.log("[TTS] handleEvent err: " + e.getMessage());
         }
     }
 

@@ -55,7 +55,8 @@ public class VoiceAutoPlay {
 
     private static void hookActivityOnResume() {
         try {
-            XposedBridge.hookAllMethods(Activity.class, "onResume", new XC_MethodHook() {
+            Class<?> activityCls = sClassLoader.loadClass("android.app.Activity");
+            XposedBridge.hookAllMethods(activityCls, "onResume", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     Activity act = (Activity) param.thisObject;
