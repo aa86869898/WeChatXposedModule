@@ -128,6 +128,8 @@ public class ScheduleBroadcast {
     private static Object sMsgStorage;
     private static Object sCapturedA21q;
     private static Object sCapturedN85r;
+    private static Object sN85d0InvokeArg;
+    private static Object sN85d0Inst;
     private static volatile Thread sScheduleThread;
     private static final AtomicBoolean sInitialized = new AtomicBoolean(false);
     private static HandlerThread sHandlerThread;
@@ -529,7 +531,24 @@ public class ScheduleBroadcast {
             Class<?> n85d0 = XposedHelpers.findClass("n85.d0", sClassLoader);
             for (java.lang.reflect.Method m : n85d0.getDeclaredMethods()) {
                 log("DIAG: n85.d0 has method: " + m.getName() + "(" + m.getParameterTypes().length + ")");
+                for (Class<?> pt : m.getParameterTypes()) log("  paramType: " + pt.getName());
             }
+            // Hook invoke method to capture argument
+            XposedBridge.hookAllMethods(n85d0, "invoke", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    Object[] args = param.args;
+                    StringBuilder sb = new StringBuilder("DIAG: n85.d0.invoke called args[0]=");
+                    sb.append(args[0] == null ? "null" : args[0].getClass().getName() + "=" + args[0].toString());
+                    sb.append(" this=").append(param.thisObject == null ? "null" : param.thisObject.getClass().getName());
+                    log(sb.toString());
+                    // Capture the invoke argument for reuse
+                    if (args.length > 0 && args[0] != null) {
+                        sN85d0InvokeArg = args[0];
+                        sN85d0Inst = param.thisObject;
+                    }
+                }
+            });
             log("DIAG: n85.d0 hook OK");
         } catch (Throwable t) { log("DIAG: n85.d0 fail: " + t.getMessage()); }
 
@@ -1159,7 +1178,23 @@ public class ScheduleBroadcast {
         try {
             Object ms = getMsgStorage();
 
-            // 0. 尝试 a21.q.i: 创建新的a21.q实例
+            // 0. n85.d0.invoke: 微信发送入口lambda, 直接调用
+
+            try {
+                if (sN85d0Inst != null && sN85d0InvokeArg != null) {
+                    XposedHelpers.callMethod(sN85d0Inst, "invoke", sN85d0InvokeArg);
+                    log("triggerSend: n85.d0.invoke() OK msgId=" + msgId);
+                    return;
+                }
+                if (sN85d0InvokeArg != null)
+                    log("triggerSend: sN85d0Inst=null");
+                else
+                    log("triggerSend: sN85d0InvokeArg=null, 跳过n85.d0");
+            } catch (Throwable t) {
+                log("triggerSend: n85.d0 fail: " + t.getMessage());
+            }
+
+            // 1. 尝试 a21.q.i: 创建新的a21.q实例
             try {
                 Class<?> a21q = XposedHelpers.findClass("a21.q", sClassLoader);
                 Class<?> n85rCls = XposedHelpers.findClass("n85.r", sClassLoader);
