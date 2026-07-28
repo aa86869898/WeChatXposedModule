@@ -411,7 +411,10 @@ public class ScheduleBroadcast {
             XposedBridge.hookAllMethods(n85c0, "create", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    log("TRACE n85.c0.create(" + param.args.length + ")");
+                    StringBuilder sb = new StringBuilder("TRACE n85.c0.create(").append(param.args.length).append(")");
+                    for (int i = 0; i < param.args.length; i++)
+                        sb.append(" a").append(i).append("=").append(param.args[i] == null ? "null" : param.args[i].getClass().getName());
+                    log(sb.toString());
                     printStack("n85.c0.create", Thread.currentThread().getStackTrace(), 12);
                 }
                 @Override
@@ -1097,7 +1100,7 @@ public class ScheduleBroadcast {
             long msgId = (Long) XposedHelpers.callMethod(ms, "H9", msg);
             if (msgId > 0) {
                 log("sendMessage v2: H9 OK msgId=" + msgId + " content=" + nvl(task.content));
-                triggerSend(msgId, msg, talker);
+                triggerSend(msgId, nvl(task.content), task.msgType, talker);
                 return true;
             }
             return false;
@@ -1106,9 +1109,9 @@ public class ScheduleBroadcast {
 
     // ===== 触发消息真正发送(联网) =====
 
-    private static void triggerSend(long msgId, Object e9msg, String talker) {
+    private static void triggerSend(long msgId, String content, int msgType, String talker) {
         try {
-            log("[triggerSend:1] 开始 build en4, talker=" + talker);
+            log("[triggerSend:1] 开始 build en4, talker=" + talker + " contentLen=" + content.length() + " msgType=" + msgType);
             // 1. 构建 a65.en4 (MsgCommand) — 单条消息体
             Class<?> en4Cls = XposedHelpers.findClass("a65.en4", sClassLoader);
             Object en4 = XposedHelpers.newInstance(en4Cls);
@@ -1120,38 +1123,14 @@ public class ScheduleBroadcast {
             try { XposedHelpers.setBooleanField(ew5, "e", true); } catch (Throwable ignored) {}
             try { XposedHelpers.setObjectField(en4, "d", ew5); } catch (Throwable ignored) {}
 
-            // 1b. 时间戳 + 类型 + 内容
+            // 1b. 时间戳
             try { XposedHelpers.setIntField(en4, "g", (int)(System.currentTimeMillis() / 1000)); } catch (Throwable ignored) {}
-
-            // 从 e9 获取 type（用 getType() 而非硬编码 1）
-            int msgType = 1;
-            try { msgType = (Integer) XposedHelpers.callMethod(e9msg, "getType"); } catch (Throwable ignored) {}
             try { XposedHelpers.setIntField(en4, "f", msgType); } catch (Throwable ignored) {}
-
-            // 获取消息内容 — 依次尝试所有可能 getter
-            String content = "";
-            String lastTry = "none";
-            try { content = (String) XposedHelpers.callMethod(e9msg, "j"); lastTry = "j()=" + (content != null ? content.length() : -1); } catch (Throwable t1) { lastTry = "j() fail: " + t1.getMessage(); }
-            if (content == null || content.isEmpty()) {
-                try { content = (String) XposedHelpers.callMethod(e9msg, "X1"); lastTry = "X1()=" + (content != null ? content.length() : -1); } catch (Throwable t2) { lastTry = "X1() fail: " + t2.getMessage(); }
-            }
-            if (content == null || content.isEmpty()) {
-                try { content = (String) XposedHelpers.callMethod(e9msg, "W"); lastTry = "W()=" + (content != null ? content.length() : -1); } catch (Throwable t3) { lastTry = "W() fail: " + t3.getMessage(); }
-            }
-            if (content == null || content.isEmpty()) {
-                try { content = (String) XposedHelpers.callMethod(e9msg, "getContent"); lastTry = "getContent()=" + (content != null ? content.length() : -1); } catch (Throwable t4) { lastTry = "getContent() fail: " + t4.getMessage(); }
-            }
             try { XposedHelpers.setObjectField(en4, "e", content != null ? content : ""); } catch (Throwable ignored) {}
-            log("[triggerSend:1] en4 type=" + msgType + " contentLen=" + (content != null ? content.length() : -1) + " via " + lastTry);
+            log("[triggerSend:1] en4 type=" + msgType + " contentLen=" + (content != null ? content.length() : -1));
 
-            // newmsgid
-            try {
-                Class<?> y1Cls = XposedHelpers.findClass("y1", sClassLoader);
-                long createTime = (Long) XposedHelpers.callMethod(e9msg, "getCreateTime");
-                Object y1Val = XposedHelpers.callStaticMethod(y1Cls, "a", talker, createTime);
-                int hash = (Integer) XposedHelpers.callMethod(y1Val, "hashCode");
-                XposedHelpers.setIntField(en4, "h", hash);
-            } catch (Throwable ignored) {}
+            // newmsgid — 直接用 timestamp hash，不依赖 e9
+            try { XposedHelpers.setIntField(en4, "h", (int)(System.currentTimeMillis())); } catch (Throwable ignored) {}
 
             log("[triggerSend:2] 构建 f16");
             // 2. 构建 a65.f16 (NewSendMsgRequest)
@@ -1192,17 +1171,23 @@ public class ScheduleBroadcast {
     private static Object buildEmptyContinuation() {
         try {
             // Plan A: 用 d85.i scope 的 coroutineContext (active Job)
+            log("buildEmptyCont: sD85iInst=" + (sD85iInst != null ? sD85iInst.getClass().getSimpleName() : "null"));
             if (sD85iInst != null) {
                 java.lang.reflect.Method getCC = null;
-                for (java.lang.reflect.Method m : sD85iInst.getClass().getMethods()) {
-                    if (("getCoroutineContext".equals(m.getName()) || "getContext".equals(m.getName()))
+                java.lang.reflect.Method[] methods = sD85iInst.getClass().getMethods();
+                for (java.lang.reflect.Method m : methods) {
+                    String mn = m.getName();
+                    if (mn.contains("Context") || mn.contains("context")) {
+                        log("buildEmptyCont: found method " + mn + " pcount=" + m.getParameterCount());
+                    }
+                    if (("getCoroutineContext".equals(mn) || "getContext".equals(mn))
                             && m.getParameterCount() == 0) {
                         getCC = m; break;
                     }
                 }
                 if (getCC != null) {
                     final Object activeContext = getCC.invoke(sD85iInst);
-                    log("buildEmptyCont: d85.i context=" + activeContext.getClass().getSimpleName());
+                    log("buildEmptyCont: d85.i context=" + (activeContext != null ? activeContext.getClass().getSimpleName() : "null"));
 
                     // n85.c0 ifaces[0] = f16.p (obfuscated Continuation)
                     if (sCapturedN85c0 != null) {
