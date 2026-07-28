@@ -127,6 +127,7 @@ public class ScheduleBroadcast {
     private static ClassLoader sClassLoader;
     private static Object sMsgStorage;
     private static Object sCapturedA21q;
+    private static Object sCapturedN85r;
     private static volatile Thread sScheduleThread;
     private static final AtomicBoolean sInitialized = new AtomicBoolean(false);
     private static HandlerThread sHandlerThread;
@@ -377,6 +378,7 @@ public class ScheduleBroadcast {
                 protected void afterHookedMethod(MethodHookParam param) {
                     sCapturedA21q = param.thisObject;
                     Object[] args = param.args;
+                    if (args.length > 0) sCapturedN85r = args[0];
                     StringBuilder sb = new StringBuilder("DIAG: a21.q ctor(").append(args.length).append(")");
                     for (int i = 0; i < args.length; i++)
                         sb.append(" p").append(i).append("=").append(args[i] == null ? "null" : args[i].getClass().getName());
@@ -504,6 +506,48 @@ public class ScheduleBroadcast {
             });
             log("DIAG: a2.b hook OK");
         } catch (Throwable t) { log("DIAG: a2.b fail: " + t.getMessage()); }
+
+        // Hook n85.r: a21.q 构造器参数
+        try {
+            Class<?> n85r = XposedHelpers.findClass("n85.r", sClassLoader);
+            XposedBridge.hookAllConstructors(n85r, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    sCapturedN85r = param.thisObject;
+                    Object[] args = param.args;
+                    StringBuilder sb = new StringBuilder("DIAG: n85.r ctor(").append(args.length).append(")");
+                    for (int i = 0; i < args.length; i++)
+                        sb.append(" p").append(i).append("=").append(args[i] == null ? "null" : args[i].getClass().getName());
+                    log(sb.toString());
+                }
+            });
+            log("DIAG: n85.r hook OK");
+        } catch (Throwable t) { log("DIAG: n85.r fail: " + t.getMessage()); }
+
+        // Hook n85.d0: 发送入口
+        try {
+            Class<?> n85d0 = XposedHelpers.findClass("n85.d0", sClassLoader);
+            for (java.lang.reflect.Method m : n85d0.getDeclaredMethods()) {
+                log("DIAG: n85.d0 has method: " + m.getName() + "(" + m.getParameterTypes().length + ")");
+            }
+            log("DIAG: n85.d0 hook OK");
+        } catch (Throwable t) { log("DIAG: n85.d0 fail: " + t.getMessage()); }
+
+        // Hook a21.h: a21.q.i 返回值类型
+        try {
+            Class<?> a21h = XposedHelpers.findClass("a21.h", sClassLoader);
+            XposedBridge.hookAllConstructors(a21h, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    Object[] args = param.args;
+                    StringBuilder sb = new StringBuilder("DIAG: a21.h ctor(").append(args.length).append(")");
+                    for (int i = 0; i < args.length; i++)
+                        sb.append(" p").append(i).append("=").append(args[i] == null ? "null" : args[i].getClass().getName());
+                    log(sb.toString());
+                }
+            });
+            log("DIAG: a21.h hook OK");
+        } catch (Throwable t) { log("DIAG: a21.h fail: " + t.getMessage()); }
     }
 
     private static int safeInt(Object obj, String[] methods) {
@@ -1115,18 +1159,30 @@ public class ScheduleBroadcast {
         try {
             Object ms = getMsgStorage();
 
-            // 0. 尝试 a21.q.i: 用户手动发消息的真正入口
+            // 0. 尝试 a21.q.i: 创建新的a21.q实例
             try {
-                if (sCapturedA21q != null) {
-                    Class<?> n85z = XposedHelpers.findClass("n85.z", sClassLoader);
-                    Class<?> a21g = XposedHelpers.findClass("a21.g", sClassLoader);
-                    Object zObj = XposedHelpers.newInstance(n85z);
-                    Object gObj = XposedHelpers.newInstance(a21g, e9msg);
-                    Object result = XposedHelpers.callMethod(sCapturedA21q, "i", zObj, gObj, null);
-                    log("triggerSend: a21.q.i() OK msgId=" + msgId + " result=" + result);
-                    return;
+                Class<?> a21q = XposedHelpers.findClass("a21.q", sClassLoader);
+                Class<?> n85rCls = XposedHelpers.findClass("n85.r", sClassLoader);
+                Class<?> n85z = XposedHelpers.findClass("n85.z", sClassLoader);
+                Class<?> a21g = XposedHelpers.findClass("a21.g", sClassLoader);
+
+                // 尝试用捕获的n85.r创建新a21.q实例
+                Object a21qInst = null;
+                if (sCapturedN85r != null) {
+                    try { a21qInst = XposedHelpers.newInstance(a21q, sCapturedN85r); }
+                    catch (Throwable t) { log("triggerSend: new a21.q(n85r) fail: " + t.getMessage()); }
                 }
-                log("triggerSend: sCapturedA21q=null, 跳过a21.q.i");
+                if (a21qInst == null) {
+                    // fallback: 用复用的sCapturedA21q
+                    a21qInst = sCapturedA21q;
+                    if (a21qInst == null) { log("triggerSend: a21.q实例缺失"); return; }
+                }
+
+                Object zObj = XposedHelpers.newInstance(n85z);
+                Object gObj = XposedHelpers.newInstance(a21g, e9msg);
+                Object result = XposedHelpers.callMethod(a21qInst, "i", zObj, gObj, null);
+                log("triggerSend: a21.q.i() OK msgId=" + msgId + " result=" + result);
+                return;
             } catch (Throwable t) {
                 log("triggerSend: a21.q.i fail: " + t.getMessage());
             }
