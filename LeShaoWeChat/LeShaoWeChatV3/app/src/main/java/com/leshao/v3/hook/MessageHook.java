@@ -55,7 +55,7 @@ public class MessageHook {
                     XposedBridge.hookMethod(m,
                         new XC_MethodHook() {
                             @Override protected void afterHookedMethod(MethodHookParam p) {
-                                onMessage(p.args[0]);
+                                onMessage(p.args[0], null);
                             }
                         });
                     LogWriter.log(TAG, "C(e9) OK");
