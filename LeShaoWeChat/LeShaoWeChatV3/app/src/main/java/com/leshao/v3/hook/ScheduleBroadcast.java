@@ -1061,9 +1061,9 @@ public class ScheduleBroadcast {
             XposedHelpers.callMethod(msg, "d1", nvl(task.content));
             XposedHelpers.setObjectField(msg, "field_content", nvl(task.content));
 
-            // Step 2.5: 清除XML/appmsg标记 (g/h=true 可能导致消息被当成卡片)
-            try { XposedHelpers.setBooleanField(msg, "g", false); } catch (Throwable ignored) {}
-            try { XposedHelpers.setBooleanField(msg, "h", false); } catch (Throwable ignored) {}
+            // d1 内部可能设 g/h=true, 清除以保持纯文本模式
+            XposedHelpers.setBooleanField(msg, "g", false);
+            XposedHelpers.setBooleanField(msg, "h", false);
 
             // Step 3: setImgPath (if media)
             if (task.filePath != null && !task.filePath.isEmpty()) {
@@ -1113,9 +1113,11 @@ public class ScheduleBroadcast {
             // Step 7: insert DB — Guide: msgStorage.I9(msg, true)
             long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
 
-            // ★ I9 内部可能重置 isSend, 插入后再次确保
+            // ★ I9 内部可能重置 isSend, 插入后再次确保; 同时清除 XML/appmsg 标记
             XposedHelpers.callMethod(msg, "k1", 1);
             try { XposedHelpers.setIntField(msg, "field_isSend", 1); } catch (Throwable ignored) {}
+            XposedHelpers.setBooleanField(msg, "g", false);
+            XposedHelpers.setBooleanField(msg, "h", false);
 
             log("sendMessage v5: I9 msgId=" + msgId + " talker=" + talker);
             return msgId > 0;
