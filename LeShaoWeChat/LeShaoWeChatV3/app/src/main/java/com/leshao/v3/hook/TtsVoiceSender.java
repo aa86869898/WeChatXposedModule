@@ -112,7 +112,7 @@ public class TtsVoiceSender {
         }
     }
 
-    private static void synthesizeAndSend(String text, String talker) {
+    static void synthesizeAndSend(String text, String talker) {
         try {
             if (!sReady || sTts == null) {
                 LogWriter.log(TAG, "TTS not ready");

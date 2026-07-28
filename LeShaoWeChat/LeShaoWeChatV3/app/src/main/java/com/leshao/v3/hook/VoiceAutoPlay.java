@@ -509,9 +509,24 @@ public class VoiceAutoPlay {
     }
 
     private static String getVoiceFilePath(Object msg) {
-        try { return (String) XposedHelpers.getObjectField(msg, "field_imgPath"); } catch (Throwable ignored) {}
-        try { return (String) XposedHelpers.callMethod(msg, "Q0"); } catch (Throwable ignored) {}
-        try { return (String) XposedHelpers.callMethod(msg, "P0"); } catch (Throwable ignored) {}
+        try {
+            String cid = (String) XposedHelpers.callMethod(msg, "y0");
+            if (cid == null || cid.isEmpty()) return null;
+            String md5 = md5(cid);
+            if (md5.isEmpty()) return null;
+            String path = md5.substring(0, 2) + "/" + md5.substring(2, 4) + "/msg_" + cid + ".amr";
+            return path;
+        } catch (Throwable ignored) {}
         return null;
+    }
+
+    private static String md5(String s) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+            byte[] d = md.digest(s.getBytes());
+            StringBuilder sb = new StringBuilder();
+            for (byte b : d) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Throwable t) { return ""; }
     }
 }

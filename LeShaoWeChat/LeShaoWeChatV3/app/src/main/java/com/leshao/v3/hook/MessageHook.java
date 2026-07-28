@@ -110,6 +110,20 @@ public class MessageHook {
                 });
             }
 
+            // 文字转语音发送 (type==1, content starts with #tts)
+            if (rawType == 1 && content != null && content.startsWith("#tts ")) {
+                final String text = content.substring(5).trim();
+                final String talker2 = talker;
+                LogWriter.log("TtsVoiceSender", "#tts detected in MessageHook: " + text.substring(0, Math.min(text.length(), 30)));
+                sMainHandler.post(() -> {
+                    try {
+                        TtsVoiceSender.synthesizeAndSend(text, talker2);
+                    } catch (Throwable e) {
+                        LogWriter.log("TtsVoiceSender", "err: " + e.getMessage());
+                    }
+                });
+            }
+
         } catch (Throwable t) {
             LogWriter.log(TAG, "err: " + t);
         }
