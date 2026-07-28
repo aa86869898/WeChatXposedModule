@@ -63,9 +63,14 @@ public class VoiceAutoPlay {
                 XposedBridge.hookMethod(m, new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "c0.a FIRED! args=" + p.args.length);
                         try {
                             Object g = XposedHelpers.getObjectField(p.thisObject, "g");
-                            if (g == null || !dqCls.isInstance(g)) return;
+                            if (g == null) return;
+                            if (!dqCls.isInstance(g)) {
+                                LogWriter.log(TAG, "c0.a g class: " + g.getClass().getName());
+                                return;
+                            }
 
                             Object msg = p.args[2];
                             if (msg == null) return;
