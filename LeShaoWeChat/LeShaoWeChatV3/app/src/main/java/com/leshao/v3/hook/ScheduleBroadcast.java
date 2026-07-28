@@ -1136,22 +1136,10 @@ public class ScheduleBroadcast {
             f16e.add(en4);
             try { XposedHelpers.setIntField(f16, "d", f16e.size()); } catch (Throwable ignored) {}
 
-            // 3. f16.b() → i (CGI task)
+            // 3. f16.b() → i (CGI task) — b() 内部已构建 o + i.p(o)，CmdID=522/URL/Resp 已硬编码
             Object i = XposedHelpers.callMethod(f16, "b");
 
-            // 4. 构建 o (CGI request wrapper)
-            Class<?> oCls = XposedHelpers.findClass("com.tencent.mm.modelbase.o", sClassLoader);
-            Object o = XposedHelpers.newInstance(oCls);
-            // o.c = CGI URL, o.d = CmdID, o.e = RespID, o.f = FuncID
-            try { XposedHelpers.setObjectField(o, "c", "/cgi-bin/micromsg-bin/newsendmsg"); } catch (Throwable ignored) {}
-            try { XposedHelpers.setIntField(o, "d", 522); } catch (Throwable ignored) {}
-            try { XposedHelpers.setIntField(o, "e", 237); } catch (Throwable ignored) {}
-            try { XposedHelpers.setIntField(o, "f", 1000000237); } catch (Throwable ignored) {}
-
-            // i.p(o) — 设置请求包装
-            XposedHelpers.callMethod(i, "p", o);
-
-            // 5. 调用 sm0.h.b(i, null) 联网发送
+            // 4. 调用 sm0.h.b(i, null) 联网发送
             Class<?> sm0h = XposedHelpers.findClass("sm0.h", sClassLoader);
             Object result = XposedHelpers.callStaticMethod(sm0h, "b", i, null);
             log("triggerSend: sm0.h.b() OK msgId=" + msgId + " result=" + result);
