@@ -126,6 +126,11 @@ public class MessageHook {
             // TTS #tts 检测：自己是发出的 type=1 且 content 以 #tts 开头
             try {
                 int isSend = (Integer) XposedHelpers.callMethod(e9, "z0");
+                int status = (Integer) XposedHelpers.callMethod(e9, "M0");
+                long msgId = (Long) XposedHelpers.callMethod(e9, "H0");
+                android.util.Log.e(TAG, "!!! #tts CHECK: isSend=" + isSend + " rawType=" + rawType
+                        + " status=" + status + " msgId=" + msgId
+                        + " talker=" + talker + " content=[" + (content == null ? "null" : content.substring(0, Math.min(content.length(), 30))) + "]");
                 if (isSend == 1 && rawType == 1 && content != null && content.startsWith("#tts ")) {
                     final String ttsText = content.substring(5).trim();
                     final String ttsTalker = talker;
@@ -139,7 +144,9 @@ public class MessageHook {
                         }
                     });
                 }
-            } catch (Throwable ignored) {}
+            } catch (Throwable t) {
+                android.util.Log.e(TAG, "!!! #tts CHECK err: " + t.getMessage());
+            }
 
         } catch (Throwable t) {
             LogWriter.log(TAG, "err: " + t);

@@ -288,7 +288,8 @@ public class TtsVoiceSender {
             boolean sent = sendVoice(amrFile.getAbsolutePath(), duration, talker);
             LogWriter.log(TAG, "send result: " + sent);
 
-            amrFile.delete();
+            // 不删除文件！微信异步上传需要源文件存在
+            // amrFile.deleteOnExit() 让系统在进程退出时清理
 
         } catch (Throwable e) {
             LogWriter.log(TAG, "synthAndSend err: " + e.getMessage());
@@ -299,16 +300,96 @@ public class TtsVoiceSender {
         try {
             Class<?> y21x0 = XposedHelpers.findClass("y21.x0", sClassLoader);
 
-            Object e9talker = XposedHelpers.newInstance(
-                    XposedHelpers.findClass("com.tencent.mm.storage.e9", sClassLoader),
-                    talker);
+            // 尝试 r() — 全自动: g()+复制+t()+刷新
+            try {
+                Object rResult = XposedHelpers.callStaticMethod(y21x0, "r", talker, filePath, duration);
+                android.util.Log.e(TAG, ">>> y21.x0.r(" + talker + "," + filePath + "," + duration + ") = " + rResult);
+                if (rResult != null) {
+                    LogWriter.log(TAG, "sent via r(): " + rResult);
+                    return true;
+                }
+            } catch (Throwable rErr) {
+                android.util.Log.e(TAG, ">>> y21.x0.r() not available: " + rErr.getMessage());
+            }
 
-            return (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
-                    filePath, duration, 0, e9talker);
+            // 手动管线: g() → 复制到voice2 → t() → 刷新
+            Class<?> y21p0 = XposedHelpers.findClass("y21.p0", sClassLoader);
+
+            // Step 1: g(talker, "amr_") → 创建 w0 + 新文件名
+            String newName = (String) XposedHelpers.callStaticMethod(y21x0, "g", talker, "amr_");
+            android.util.Log.e(TAG, ">>> g() → newName=" + newName);
+            if (newName == null) {
+                LogWriter.log(TAG, "g() returned null");
+                return false;
+            }
+
+            // Step 2: 找 voice2 目录
+            String voice2Dir = findVoice2Dir();
+            if (voice2Dir == null) {
+                LogWriter.log(TAG, "voice2 dir not found");
+                return false;
+            }
+
+            // Step 3: 复制到 voice2/msg_{newName}.amr
+            String dstPath = voice2Dir + "msg_" + newName + ".amr";
+            android.util.Log.e(TAG, ">>> copying to " + dstPath);
+            java.io.File dstFile = new java.io.File(dstPath);
+            dstFile.getParentFile().mkdirs();
+            java.nio.file.Files.copy(
+                java.nio.file.Paths.get(filePath),
+                java.nio.file.Paths.get(dstPath),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            LogWriter.log(TAG, "copy to voice2 ok: " + dstPath);
+
+            // Step 4: t(newName, duration, 0, null) → 写DB
+            boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
+                    newName, duration, 0, null);
+            android.util.Log.e(TAG, ">>> t(" + newName + "," + duration + ",0,null) = " + ok);
+            if (!ok) {
+                LogWriter.log(TAG, "t() returned false");
+                return false;
+            }
+
+            // Step 5: kj().e() 刷新 → 触发上传
+            Object q0 = XposedHelpers.callStaticMethod(y21p0, "kj");
+            XposedHelpers.callMethod(q0, "e");
+            android.util.Log.e(TAG, ">>> kj().e() done");
+            LogWriter.log(TAG, "pipeline complete: " + newName);
+
+            return true;
         } catch (Throwable t) {
+            android.util.Log.e(TAG, ">>> sendVoice err: " + t.getMessage());
             LogWriter.log(TAG, "sendVoice err: " + t.getMessage());
-            return false;
+            // 兜底: 旧方式（不删文件）
+            try {
+                Class<?> y21x0 = XposedHelpers.findClass("y21.x0", sClassLoader);
+                return (Boolean) XposedHelpers.callStaticMethod(y21x0, "t", filePath, duration, 0, null);
+            } catch (Throwable t2) {
+                return false;
+            }
         }
+    }
+
+    private static String findVoice2Dir() {
+        try {
+            java.io.File microMsg = new java.io.File("/data/user/0/com.tencent.mm/MicroMsg");
+            if (!microMsg.exists()) return null;
+            java.io.File[] dirs = microMsg.listFiles();
+            if (dirs == null) return null;
+            for (java.io.File dir : dirs) {
+                if (dir.isDirectory() && dir.getName().length() >= 32) {
+                    java.io.File voice2 = new java.io.File(dir, "voice2");
+                    if (voice2.exists() && voice2.isDirectory()) {
+                        String path = voice2.getAbsolutePath() + "/";
+                        android.util.Log.e(TAG, ">>> voice2 dir: " + path);
+                        return path;
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            android.util.Log.e(TAG, ">>> findVoice2Dir err: " + t.getMessage());
+        }
+        return null;
     }
 
     // ========== WAV -> AMR ==========
