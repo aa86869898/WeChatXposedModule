@@ -59,6 +59,7 @@ public class VoiceAutoPlay {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     Activity act = (Activity) param.thisObject;
+                    android.util.Log.e(TAG, "!!! onResume RAW: activity=" + act.getClass().getName());
                     if (!act.getClass().getName().contains("ChattingUI")) return;
 
                     XposedBridge.log("[VAP] onResume FIRED " + act.getClass().getSimpleName());

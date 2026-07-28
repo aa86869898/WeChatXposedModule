@@ -60,6 +60,7 @@ public class TtsVoiceSender {
             XposedBridge.hookAllMethods(eventClass, "callback", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
+                    android.util.Log.e(TAG, "!!! SendMsgSuccessEvent RAW FIRED");
                     try {
                         Object event = param.args[0];
                         Object data = XposedHelpers.getObjectField(event, "data");
