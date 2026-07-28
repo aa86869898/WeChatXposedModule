@@ -6,6 +6,7 @@ import android.os.Looper;
 import com.leshao.v3.LogWriter;
 
 import java.io.File;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -91,7 +92,12 @@ public class VoiceAutoPlay {
 
                         String talker = extractTalkerFromContext(context);
                         LogWriter.log(TAG, "so.y() talker=" + talker);
-                        if (talker == null || talker.isEmpty()) return;
+                        if (talker == null || talker.isEmpty()) {
+                            dumpContextInfo(context);
+                            LogWriter.log(TAG, "so.y() talker null, try playAll");
+                            sHandler.postDelayed(() -> playAllVoices(so), 500);
+                            return;
+                        }
 
                         sHandler.postDelayed(() -> playQueuedVoices(talker, so), 500);
 
@@ -104,18 +110,6 @@ public class VoiceAutoPlay {
         } catch (Throwable e) {
             LogWriter.log(TAG, "so.y() hook fail: " + e.getMessage());
         }
-    }
-
-    private static String extractTalkerFromContext(Object context) {
-        for (String m : new String[]{"getTalker", "GT", "M0", "d1", "getUsername"}) {
-            try { return (String) XposedHelpers.callMethod(context, m); }
-            catch (Throwable ignored) {}
-        }
-        for (String f : new String[]{"field_talker", "talker", "mTalker", "a"}) {
-            try { return (String) XposedHelpers.getObjectField(context, f); }
-            catch (Throwable ignored) {}
-        }
-        return null;
     }
 
     // ========== 供 MessageHook 调用 ==========
@@ -153,11 +147,9 @@ public class VoiceAutoPlay {
 
             LogWriter.log(TAG, "recv: msgId=" + msgId + " talker=" + talker);
 
-            // 入队,保存 msg 对象引用供 so.y() 时直接播放
             sPendingQueue.offer(new PendingVoiceMsg(e9, msgId, talker));
             LogWriter.log(TAG, "enqueue: msgId=" + msgId + " q=" + sPendingQueue.size());
 
-            // 如果正在聊天页面,sCurrentVoiceComp 存在 → 直接播放
             final Object so = sCurrentVoiceComp;
             if (so != null) {
                 try {
@@ -177,6 +169,67 @@ public class VoiceAutoPlay {
 
     public static void tryAutoPlayVoice(Object e9, long msgId, Object p0) {
         onVoiceMsg(e9, msgId, p0);
+    }
+
+    // ========== Talker 提取 ==========
+
+    private static String extractTalkerFromContext(Object context) {
+        if (context == null) return null;
+        return extractStringFromObj(context);
+    }
+
+    private static String extractStringFromObj(Object obj) {
+        if (obj == null) return null;
+        for (String m : new String[]{"getTalkerUserName", "getTalker", "GT", "M0", "d1", "getUsername"}) {
+            try { Object r = XposedHelpers.callMethod(obj, m); if (r instanceof String)
+            return (String) r; } catch (Throwable ignored) {}
+        }
+        for (String f : new String[]{"field_talker", "talker", "mTalker", "a", "e"}) {
+            try { Object r = XposedHelpers.getObjectField(obj, f); if (r instanceof String)
+            return (String) r; } catch (Throwable ignored) {}
+        }
+        return walkStringFields(obj);
+    }
+
+    private static String walkStringFields(Object obj) {
+        for (Class<?> c = obj.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            try {
+                for (Field f : c.getDeclaredFields()) {
+                    if (f.getType() == String.class) {
+                        String fn = f.getName().toLowerCase();
+                        if (fn.contains("talker") || fn.contains("username") || fn.contains("fromuser")) {
+                            f.setAccessible(true);
+                            Object v = f.get(obj);
+                            if (v instanceof String && !((String) v).isEmpty()) return (String) v;
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    private static void dumpContextInfo(Object context) {
+        try {
+            StringBuilder sb = new StringBuilder("ctx[class=").append(context.getClass().getName())
+                    .append(" super=").append(context.getClass().getSuperclass().getSimpleName());
+            for (Class<?> c = context.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                for (Field f : c.getDeclaredFields()) {
+                    f.setAccessible(true);
+                    sb.append(" ").append(f.getName()).append(":");
+                    try {
+                        Object v = f.get(context);
+                        if (v instanceof String) sb.append("'").append(v.toString().substring(0, Math.min(20, v.toString().length()))).append("'");
+                        else if (v != null) sb.append(v.getClass().getSimpleName());
+                        else sb.append("null");
+                    } catch (Throwable t) { sb.append("err"); }
+                }
+            }
+            sb.append("]");
+            LogWriter.log(TAG, sb.toString());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "dumpContext err: " + t.getMessage());
+        }
     }
 
     // ========== so.y() → v0.I(msg) 播放 ==========
@@ -202,9 +255,34 @@ public class VoiceAutoPlay {
                     LogWriter.log(TAG, "playQueued: play err id=" + pvm.msgId + " " + e.getMessage());
                 }
             }
-
         } catch (Throwable e) {
             LogWriter.log(TAG, "playQueuedVoices err: " + e.getMessage());
+        }
+    }
+
+    private static void playAllVoices(Object so) {
+        try {
+            List<PendingVoiceMsg> pending = dequeue(null);
+            if (pending.isEmpty()) return;
+            LogWriter.log(TAG, "playAll: pending=" + pending.size());
+
+            Object player = XposedHelpers.callMethod(so, "n0");
+            if (player == null) {
+                LogWriter.log(TAG, "playAll: player null");
+                return;
+            }
+
+            for (PendingVoiceMsg pvm : pending) {
+                try {
+                    XposedHelpers.callMethod(player, "I", pvm.msg, false);
+                    LogWriter.log(TAG, "PLAY (all) id=" + pvm.msgId + " talker=" + pvm.talker);
+                    Thread.sleep(200);
+                } catch (Throwable e) {
+                    LogWriter.log(TAG, "playAll: play err id=" + pvm.msgId + " " + e.getMessage());
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "playAll err: " + e.getMessage());
         }
     }
 
