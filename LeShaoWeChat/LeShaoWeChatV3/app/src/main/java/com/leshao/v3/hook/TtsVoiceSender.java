@@ -54,40 +54,61 @@ public class TtsVoiceSender {
         try {
             Class<?> chatFooter = XposedHelpers.findClass(
                     "com.tencent.mm.pluginsdk.ui.chat.ChatFooter", cl);
+            Class<?> e9Cls = cl.loadClass("com.tencent.mm.storage.e9");
+            Class<?> a35g = XposedHelpers.findClass("a35.g", cl);
 
+            for (java.lang.reflect.Method m : chatFooter.getDeclaredMethods()) {
+                if (!m.getName().equals("F") || m.getParameterCount() != 2) continue;
+                if (m.getParameterTypes()[0] != e9Cls) continue;
+                if (m.getParameterTypes()[1] == a35g) {
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            interceptSend(param);
+                        }
+                    });
+                    LogWriter.log(TAG, "ChatFooter.F hooked OK via hookMethod");
+                    return;
+                }
+            }
+            LogWriter.log(TAG, "ChatFooter.F: exact match not found, fallback hookAllMethods");
             XposedBridge.hookAllMethods(chatFooter, "F", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    try {
-                        Object msgInfo = param.args[0];
-                        String content = (String) XposedHelpers.getObjectField(msgInfo, "field_content");
-                        if (content == null || !content.startsWith(TTS_PREFIX)) return;
-
-                        String text = content.substring(TTS_PREFIX.length()).trim();
-                        if (text.isEmpty()) return;
-
-                        LogWriter.log(TAG, "#tts detected: " + text.substring(0, Math.min(text.length(), 50)));
-
-                        String talker = (String) XposedHelpers.getObjectField(msgInfo, "field_talker");
-                        if (talker == null || talker.isEmpty()) {
-                            LogWriter.log(TAG, "talker is empty");
-                            return;
-                        }
-
-                        param.setResult(null);
-
-                        final String fText = text;
-                        final String fTalker = talker;
-                        new Thread(() -> synthesizeAndSend(fText, fTalker)).start();
-
-                    } catch (Throwable e) {
-                        LogWriter.log(TAG, "hook err: " + e.getMessage());
-                    }
+                    interceptSend(param);
                 }
             });
-            LogWriter.log(TAG, "ChatFooter.F hooked OK");
+            LogWriter.log(TAG, "ChatFooter.F hooked OK via hookAllMethods");
         } catch (Throwable t) {
             LogWriter.log(TAG, "ChatFooter.F hook fail: " + t.getMessage());
+        }
+    }
+
+    private static void interceptSend(XC_MethodHook.MethodHookParam param) {
+        try {
+            Object msgInfo = param.args[0];
+            String content = (String) XposedHelpers.getObjectField(msgInfo, "field_content");
+            if (content == null || !content.startsWith(TTS_PREFIX)) return;
+
+            String text = content.substring(TTS_PREFIX.length()).trim();
+            if (text.isEmpty()) return;
+
+            LogWriter.log(TAG, "#tts detected: " + text.substring(0, Math.min(text.length(), 50)));
+
+            String talker = (String) XposedHelpers.getObjectField(msgInfo, "field_talker");
+            if (talker == null || talker.isEmpty()) {
+                LogWriter.log(TAG, "talker is empty");
+                return;
+            }
+
+            param.setResult(null);
+
+            final String fText = text;
+            final String fTalker = talker;
+            new Thread(() -> synthesizeAndSend(fText, fTalker)).start();
+
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "hook err: " + e.getMessage());
         }
     }
 

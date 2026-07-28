@@ -35,13 +35,66 @@ public class VoiceAutoPlay {
     private static volatile Object sCurrentVoiceComp;
     private static volatile Object sCurrentChattingContext;
 
+    private static String sVoice2BasePath;
+
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
 
+        findVoice2BasePath();
         hookDqClass(cl);
         hookChattingUIResume(cl);
         hookMessageListener(cl);
         findVoiceComponentClass(cl);
+        registerActivityCallback();
+    }
+
+    private static void findVoice2BasePath() {
+        try {
+            java.io.File microMsgDir = new java.io.File(
+                    com.leshao.v3.ContextManager.getAppContext().getDataDir(), "MicroMsg");
+            if (!microMsgDir.exists()) return;
+            java.io.File[] subdirs = microMsgDir.listFiles();
+            if (subdirs == null) return;
+            for (java.io.File dir : subdirs) {
+                if (dir.isDirectory() && dir.getName().length() == 32) {
+                    java.io.File voice2 = new java.io.File(dir, "voice2");
+                    if (voice2.exists()) {
+                        sVoice2BasePath = voice2.getAbsolutePath();
+                        LogWriter.log(TAG, "voice2 base: " + sVoice2BasePath);
+                        return;
+                    }
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findVoice2BasePath fail: " + e.getMessage());
+        }
+    }
+
+    private static void registerActivityCallback() {
+        try {
+            android.app.Application app = (android.app.Application)
+                    com.leshao.v3.ContextManager.getAppContext();
+            app.registerActivityLifecycleCallbacks(new android.app.Application.ActivityLifecycleCallbacks() {
+                @Override public void onActivityCreated(Activity a, android.os.Bundle b) {}
+                @Override public void onActivityStarted(Activity a) {}
+                @Override
+                public void onActivityResumed(Activity a) {
+                    try {
+                        if (a.getClass().getName().contains("ChattingUI")) {
+                            LogWriter.log(TAG, "ActivityLC: ChattingUI resumed, refreshing context");
+                            refreshChattingContext(a);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+                @Override public void onActivityPaused(Activity a) {}
+                @Override public void onActivityStopped(Activity a) {}
+                @Override public void onActivitySaveInstanceState(Activity a, android.os.Bundle b) {}
+                @Override public void onActivityDestroyed(Activity a) {}
+            });
+            LogWriter.log(TAG, "ActivityLifecycleCallbacks registered OK");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "ActivityLifecycleCallbacks fail: " + t.getMessage());
+        }
     }
 
     // ============ 层1: c0.a() — 消息视图绑定调度器 (参考 LSPilot) ============
@@ -292,81 +345,12 @@ public class VoiceAutoPlay {
     private static void onMessageReceived(Object msg) {
         try {
             int type = (Integer) XposedHelpers.callMethod(msg, "getType");
-            if (type != 34) return; // 只处理语音消息
-
-            if (!sEnabled) return;
-            boolean activated = ModuleConfig.load(
-                com.leshao.v3.ContextManager.getPrefs()
-            ).autoPlayVoice;
-            if (!activated) return;
+            if (type != 34) return;
 
             long msgId = (Long) XposedHelpers.callMethod(msg, "H0");
-            if (msgId == sLastPlayedMsgId) return;
-
-            // 跳过自己发的 (G1() = isSend, 1=自己发的)
-            try {
-                boolean isSend = (Boolean) XposedHelpers.callMethod(msg, "G1");
-                if (isSend) return;
-            } catch (Throwable ignored) {}
-
-            // 跳过正在发送中的
-            try {
-                if ((Integer) XposedHelpers.callMethod(msg, "M0") == 5) return;
-            } catch (Throwable ignored) {}
-
-            LogWriter.log(TAG, "voice msg detected: msgId=" + msgId + " talker="
-                + XposedHelpers.callMethod(msg, "N0"));
-
-            // 等待 TTS 结束再播放
-            if (TTSBroadcaster.isSpeaking()) {
-                LogWriter.log(TAG, "TTS speaking, defer voice play for msgId=" + msgId);
-                sLastPlayedMsgId = msgId;
-                final long fMsgId = msgId;
-                sMainHandler.postDelayed(() -> {
-                    if (!TTSBroadcaster.isSpeaking()) {
-                        tryPlayVoice(msg, fMsgId);
-                    }
-                }, 500);
-                return;
-            }
-
-            tryPlayVoice(msg, msgId);
-
+            tryAutoPlayVoice(msg, msgId, null);
         } catch (Throwable e) {
-            LogWriter.log(TAG, "onMessageReceived error: " + e.getMessage());
-        }
-    }
-
-    private static void tryPlayVoice(Object msg, long msgId) {
-        try {
-            Object voiceComp = sCurrentVoiceComp;
-            if (voiceComp == null) {
-                LogWriter.log(TAG, "no VoiceComponent stored, skip msgId=" + msgId);
-                return;
-            }
-
-            Object player = XposedHelpers.callMethod(voiceComp, "n0");
-            if (player == null) {
-                LogWriter.log(TAG, "n0() returned null player for msgId=" + msgId);
-                return;
-            }
-
-            // 不打断当前播放
-            try {
-                boolean isPlaying = (Boolean) XposedHelpers.callMethod(player, "o");
-                if (isPlaying) {
-                    LogWriter.log(TAG, "player already playing, skip msgId=" + msgId);
-                    return;
-                }
-            } catch (Throwable ignored) {}
-
-            // 调用 I(msg, false) 播放
-            XposedHelpers.callMethod(player, "I", msg, false);
-            sLastPlayedMsgId = msgId;
-            LogWriter.log(TAG, "auto-play voice OK! msgId=" + msgId);
-
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "tryPlayVoice error: " + e.getMessage());
+            LogWriter.log(TAG, "onMessageReceived err: " + e.getMessage());
         }
     }
 
@@ -471,20 +455,11 @@ public class VoiceAutoPlay {
     public static void tryAutoPlayVoice(Object msg, long msgId, Object p0) {
         try {
             if (!sEnabled) return;
-            boolean activated = ModuleConfig.load(
+            if (!ModuleConfig.load(
                 com.leshao.v3.ContextManager.getPrefs()
-            ).autoPlayVoice;
-            if (!activated) {
-                LogWriter.log(TAG, "autoPlayVoice disabled");
-                return;
-            }
+            ).autoPlayVoice) return;
 
-            LogWriter.log(TAG, "tryAutoPlay: enter msgId=" + msgId + " lastId=" + sLastPlayedMsgId);
-
-            if (msgId == sLastPlayedMsgId) {
-                LogWriter.log(TAG, "tryAutoPlay: skip dup msgId=" + msgId);
-                return;
-            }
+            if (msgId == sLastPlayedMsgId) return;
 
             try {
                 boolean isSend = (Boolean) XposedHelpers.callMethod(msg, "G1");
@@ -495,35 +470,48 @@ public class VoiceAutoPlay {
                 if ((Integer) XposedHelpers.callMethod(msg, "M0") == 5) return;
             } catch (Throwable ignored) {}
 
-            Object voiceComp = sCurrentVoiceComp;
-            if (voiceComp == null && p0 != null) {
-                voiceComp = sCurrentVoiceComp = getVoiceComponent(p0);
-                if (voiceComp != null) {
-                    LogWriter.log(TAG, "VoiceComponent from p0 OK");
-                }
-            }
-            if (voiceComp == null) {
-                LogWriter.log(TAG, "tryAutoPlay: no VoiceComponent, msgId=" + msgId);
+            String voicePath = getVoiceFilePath(msg);
+            if (voicePath == null || voicePath.isEmpty()) {
+                LogWriter.log(TAG, "no voice path for msgId=" + msgId);
                 return;
             }
 
-            Object player = XposedHelpers.callMethod(voiceComp, "n0");
-            if (player == null) {
-                LogWriter.log(TAG, "tryAutoPlay: n0() null, msgId=" + msgId);
+            String fullPath = new java.io.File(sVoice2BasePath, voicePath).getAbsolutePath();
+            java.io.File f = new java.io.File(fullPath);
+            if (!f.exists()) {
+                LogWriter.log(TAG, "voice file not found: " + fullPath);
                 return;
             }
 
-            try {
-                if ((Boolean) XposedHelpers.callMethod(player, "o")) return;
-            } catch (Throwable ignored) {}
-
-            XposedHelpers.callMethod(player, "I", msg, false);
             sLastPlayedMsgId = msgId;
-            LogWriter.log(TAG, "auto-play OK! msgId=" + msgId
-                + " talker=" + XposedHelpers.callMethod(msg, "N0"));
+
+            final String fPath = fullPath;
+            sMainHandler.post(() -> {
+                try {
+                    android.media.MediaPlayer mp = new android.media.MediaPlayer();
+                    mp.setDataSource(fPath);
+                    mp.setOnCompletionListener(android.media.MediaPlayer::release);
+                    mp.setOnErrorListener((p, what, extra) -> {
+                        p.release();
+                        return true;
+                    });
+                    mp.prepare();
+                    mp.start();
+                    LogWriter.log(TAG, "MediaPlayer started: msgId=" + msgId);
+                } catch (Throwable e) {
+                    LogWriter.log(TAG, "MediaPlayer fail: " + e.getMessage());
+                }
+            });
 
         } catch (Throwable e) {
             LogWriter.log(TAG, "tryAutoPlayVoice error: " + e.getMessage());
         }
+    }
+
+    private static String getVoiceFilePath(Object msg) {
+        try { return (String) XposedHelpers.getObjectField(msg, "field_imgPath"); } catch (Throwable ignored) {}
+        try { return (String) XposedHelpers.callMethod(msg, "Q0"); } catch (Throwable ignored) {}
+        try { return (String) XposedHelpers.callMethod(msg, "P0"); } catch (Throwable ignored) {}
+        return null;
     }
 }
