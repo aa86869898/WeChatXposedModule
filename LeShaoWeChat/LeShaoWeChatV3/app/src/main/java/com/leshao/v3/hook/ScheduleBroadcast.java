@@ -284,12 +284,22 @@ public class ScheduleBroadcast {
         sAppContext = ctx.getApplicationContext();
         sClassLoader = cl;
 
-        log("DIAG: init V3 开始(rv5.t0.d调度)");
+        log("========== DIAG: init V3 开始 ==========");
 
         loadConfig();
+        log("DIAG: loadConfig done, 任务数=" + sTaskQueue.size());
+
         initMsgStorage();
+        log("DIAG: initMsgStorage done, f9=" + (sMsgStorage != null ? "OK" : "NULL"));
+
         loadExcludeGroups();
         loadTasks();
+        log("DIAG: loadTasks done, 队列任务=" + sTaskQueue.size() + " 草稿=" + sDraftBox.size());
+        for (int i = 0; i < Math.min(sTaskQueue.size(), 5); i++) {
+            Task t = sTaskQueue.get(i);
+            log("DIAG: 任务[" + i + "] id=" + t.id + " content=" + nvl(t.content).substring(0, Math.min(20, nvl(t.content).length())) + " triggerTime=" + sdfDateTime.format(new Date(t.triggerTime)) + " enabled=" + t.enabled);
+        }
+
         loadDrafts();
         loadTemplates();
         loadLogs();
@@ -300,7 +310,7 @@ public class ScheduleBroadcast {
         // ★★ DIAG: hook 所有发消息相关的类
         installDiagHooks();
 
-        log("定时消息群发初始化完成(微信线程池模式), 任务=" + sTaskQueue.size());
+        log("========== DIAG: init V3 完成 任务=" + sTaskQueue.size() + " ==========");
     }
 
     private static void installDiagHooks() {
@@ -589,8 +599,10 @@ public class ScheduleBroadcast {
     private static void checkScheduledTasks() {
         if (sRunning.get()) return;
         long now = System.currentTimeMillis();
+        log("DIAG: checkScheduledTasks now=" + sdfDateTime.format(new Date(now)) + " 任务数=" + sTaskQueue.size() + " running=" + sRunning.get());
         for (Task task : sTaskQueue) {
             if (task.enabled && task.triggerTime > 0 && task.triggerTime <= now) {
+                log("DIAG: 触发任务 id=" + task.id + " content=" + nvl(task.content).substring(0, Math.min(30, nvl(task.content).length())));
                 executeTask(task.id);
                 break;
             }
@@ -1040,64 +1052,41 @@ public class ScheduleBroadcast {
             Object msg = XposedHelpers.newInstance(e9Class, talker);
             long now = System.currentTimeMillis();
 
-            switch (task.msgType) {
-                case 1: // 文本
-                    XposedHelpers.callMethod(msg, "setType", 1);
-                    XposedHelpers.callMethod(msg, "d1", nvl(task.content));  // d1 = setContent (dm.c8 parent)
-                    break;
+            // type
+            XposedHelpers.callMethod(msg, "A1", task.msgType);
 
-                case 3: // 图片
-                    XposedHelpers.callMethod(msg, "setType", 3);
-                    if (task.filePath != null) XposedHelpers.callMethod(msg, "j1", task.filePath);
-                    XposedHelpers.callMethod(msg, "d1", nvl(task.content));
-                    copyMediaToWxDir(task.filePath, msg);
-                    break;
+            // content — 用已验证的 X0 (sendToFilehelper 同款)
+            XposedHelpers.callMethod(msg, "X0", nvl(task.content));
 
-                case 34: // 语音
-                    return sendVoiceMessage(talker, task);
-
-                case 43: // 视频
-                    XposedHelpers.callMethod(msg, "setType", 43);
-                    if (task.filePath != null) XposedHelpers.callMethod(msg, "j1", task.filePath);
-                    XposedHelpers.callMethod(msg, "d1", nvl(task.content));
-                    copyMediaToWxDir(task.filePath, msg);
-                    break;
-
-                case 47: // 表情
-                    XposedHelpers.callMethod(msg, "setType", 47);
-                    if (task.filePath != null) XposedHelpers.callMethod(msg, "j1", task.filePath);
-                    XposedHelpers.callMethod(msg, "d1", nvl(task.content));
-                    break;
-
-                case 49: // AppMsg
-                    XposedHelpers.callMethod(msg, "setType", 49);
-                    XposedHelpers.callMethod(msg, "d1", task.content);
-                    if (task.filePath != null && new File(task.filePath).exists()) {
-                        XposedHelpers.callMethod(msg, "j1", task.filePath);
-                    }
-                    break;
-
-                default: return false;
+            // 附加媒体路径
+            if (task.filePath != null && !task.filePath.isEmpty()) {
+                try { XposedHelpers.callMethod(msg, "j1", task.filePath); } catch (Throwable ignored) {}
             }
 
-            // ★ 正确设置必填字段（参照 WeChat_Xposed_SendMsg_Guide.md）
-            // field_isSend = 1 (反射，无公开setter)
+            // createTime (sendToFilehelper 同款)
+            XposedHelpers.callMethod(msg, "e1", now);
+
+            // isSend = 1 (sendToFilehelper 用 k1, 我们也用)
+            XposedHelpers.callMethod(msg, "k1", 1);
+
+            // ★ 额外反射 field_isSend 确保
             try { XposedHelpers.setIntField(msg, "field_isSend", 1); } catch (Throwable t) {
                 try { XposedHelpers.setIntField(msg, "A", 1); } catch (Throwable ignored) {}
             }
-            // status = 1 (待发送)
-            try { XposedHelpers.callMethod(msg, "t1", 1); } catch (Throwable ignored) {}
-            // createTime
-            try { XposedHelpers.callMethod(msg, "setCreateTime", now); } catch (Throwable ignored) {}
 
-            // ★ I9(msg, true) — 写入DB + 触发 SendMsgService 自动发送
-            // SendMsgService (a21.b0.tj) 协程轮询 status=1+isSend=1 → 自动走 vj→CGI
-            long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
-            if (msgId > 0) {
-                log("sendMessage v3: I9 OK msgId=" + msgId + " content=" + nvl(task.content) + " type=" + task.msgType);
-                return true;
+            log("sendMessage: talker=" + talker + " content=" + nvl(task.content).substring(0, Math.min(30, nvl(task.content).length())) + " type=" + task.msgType);
+
+            // H9 插入 (已验证可用); 若需自动发送尝试 I9
+            try {
+                XposedHelpers.callMethod(ms, "H9", msg);
+                log("sendMessage v4: H9 OK talker=" + talker);
+            } catch (Throwable h9Err) {
+                log("sendMessage: H9 FAIL, 降级 I9 — " + h9Err.getMessage());
+                long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
+                log("sendMessage v4: I9 fallback msgId=" + msgId + " talker=" + talker);
             }
-            return false;
+
+            return true;
         } catch (Throwable t) {
             log("sendMessage FAIL: " + t.getClass().getSimpleName() + ": " + t.getMessage());
             StringWriter sw = new StringWriter();
