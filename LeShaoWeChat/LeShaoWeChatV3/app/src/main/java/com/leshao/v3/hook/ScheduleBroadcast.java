@@ -1136,7 +1136,7 @@ public class ScheduleBroadcast {
         return false;
     }
 
-    // ===== 核心发送引擎 (匹配 WeChat_Xposed_SendMsg_Guide.md §3.1) =====
+    // ===== 核心发送引擎 (v6: H9模式, 复用 sendToFilehelper 已验证的正确格式) =====
 
     static boolean sendMessage(String talker, Task task) {
         try {
@@ -1146,81 +1146,46 @@ public class ScheduleBroadcast {
             Object msg = XposedHelpers.newInstance(e9Class, talker);
             long now = System.currentTimeMillis();
 
-            // Step 0: 清除 XML/appmsg 标记 (p2 e0对象可能导致type=49渲染)
-            try { XposedHelpers.setObjectField(msg, "p2", null); } catch (Throwable ignored) {}
+            // v6: 完全复用 sendToFilehelper 已验证的正确模式
+            //     A1(int)    = setType     (不是 field_type)
+            //     X0(String) = setContent  (不是 field_content)
+            //     k1(int)    = setIsSend   (有效)
+            //     e1(long)   = setCreateTime
+            //     H9(msg)    = 简单插入 (不触发 I9 内部的 XML/appmsg 包装)
+            XposedHelpers.callMethod(msg, "A1", task.msgType);
+            XposedHelpers.callMethod(msg, "X0", nvl(task.content));
+            XposedHelpers.callMethod(msg, "e1", now);
+            XposedHelpers.callMethod(msg, "k1", 1);
 
-            // Step 1: setType — 直接反射 field_type
-            XposedHelpers.setIntField(msg, "field_type", task.msgType);
-
-            // Step 2: setContent — 仅反射写 field_content, 跳 d1 (610行会设XML/appmsg状态导致卡片渲染)
-            XposedHelpers.setObjectField(msg, "field_content", nvl(task.content));
-
-            // Step 3: setImgPath (if media)
             if (task.filePath != null && !task.filePath.isEmpty()) {
                 try { XposedHelpers.callMethod(msg, "j1", task.filePath); } catch (Throwable ignored) {}
             }
 
-            // Step 4: setIsSend — sendToFilehelper 验证: k1(1) 有效; Guide: 反射 field_isSend
-            XposedHelpers.callMethod(msg, "k1", 1);
-            try { XposedHelpers.setIntField(msg, "field_isSend", 1); } catch (Throwable ignored) {}
+            log("sendMessage v6: talker=" + talker + " content=" + nvl(task.content).substring(0, Math.min(30, nvl(task.content).length())) + " type=" + task.msgType);
 
-            // Step 5: setStatus — Guide: msg.t1(1)
+            // H9 插入 — 不触发 XML/appmsg，与 sendToFilehelper 一致
+            long msgId = (Long) XposedHelpers.callMethod(ms, "H9", msg);
+
+            // H9 后补充 status=1 + isSend=1, 供 SendMsgService 拉取发送
             XposedHelpers.callMethod(msg, "t1", 1);
-
-            // Step 6: setCreateTime — Guide: msg.setCreateTime(now) → obfuscated e1
-            XposedHelpers.callMethod(msg, "e1", now);
-
-            // ★ 所有 setter 之后, 再次清除 XML/appmsg 标记 (k1/t1/e1 可能内部重置)
-            XposedHelpers.setBooleanField(msg, "g", false);
-            XposedHelpers.setBooleanField(msg, "h", false);
-            log("sendMessage: g/h after all setters g=" + XposedHelpers.getBooleanField(msg, "g") + " h=" + XposedHelpers.getBooleanField(msg, "h"));
-
-            // ★★★ DIAG: 枚举 e9 全部字段找到内容字段真名 ★★★
-            try {
-                StringBuilder fieldDump = new StringBuilder("DIAG: e9 字段诊断:\n");
-                // 1. 枚举所有声明的字段
-                Class<?> c = e9Class;
-                while (c != null && c != Object.class) {
-                    for (java.lang.reflect.Field f : c.getDeclaredFields()) {
-                        f.setAccessible(true);
-                        try {
-                            Object v = f.get(msg);
-                            String vStr = v == null ? "null" : (v instanceof String ? ("\"" + v.toString().substring(0, Math.min(50, v.toString().length())) + "\"") : v.toString());
-                            fieldDump.append("  ").append(c.getSimpleName()).append(".").append(f.getName())
-                                .append("(").append(f.getType().getSimpleName()).append(")=").append(vStr).append("\n");
-                        } catch (Exception ignored) {}
-                    }
-                    c = c.getSuperclass();
-                }
-                // 2. 调已知 getter 对比
-                fieldDump.append("  getter: j()=").append(XposedHelpers.callMethod(msg, "j"))
-                    .append(" O0()=").append(XposedHelpers.callMethod(msg, "O0"))  // isSend (MessageHook证实)
-                    .append(" z0()=").append(XposedHelpers.callMethod(msg, "z0"))
-                    .append(" getType()=").append(XposedHelpers.callMethod(msg, "getType"))
-                    .append(" getCreateTime()=").append(XposedHelpers.callMethod(msg, "getCreateTime"))
-                    .append(" N0()=").append(XposedHelpers.callMethod(msg, "N0"));
-                log(fieldDump.toString());
-            } catch (Throwable dumpErr) {
-                log("DIAG: 字段诊断异常: " + dumpErr.getMessage());
-            }
-
-            log("sendMessage v5: talker=" + talker + " content=" + nvl(task.content).substring(0, Math.min(30, nvl(task.content).length())) + " type=" + task.msgType);
-
-            // Step 7: insert DB — 用 false 尝试 (true=标记为接收/setSend→0)
-            long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, false);
-
-            // ★ I9 内部可能重置 isSend, 插入后再次确保; 同时清除 XML/appmsg 标记
             XposedHelpers.callMethod(msg, "k1", 1);
             try { XposedHelpers.setIntField(msg, "field_isSend", 1); } catch (Throwable ignored) {}
-            XposedHelpers.setBooleanField(msg, "g", false);
-            XposedHelpers.setBooleanField(msg, "h", false);
 
-            // ★ post-I9 验证 (用 O0()=isSend, MessageHook证实)
-            int postIsSend = (Integer) XposedHelpers.callMethod(msg, "O0");
-            int postStatus = -1;
-            try { postStatus = (Integer) XposedHelpers.callMethod(msg, "t1"); } catch (Throwable ig) {}
+            // post-H9 验证
+            int postType = (Integer) XposedHelpers.callMethod(msg, "getType");
+            int postIsSend = (Integer) XposedHelpers.callMethod(msg, "z0");
             Object postContent = XposedHelpers.callMethod(msg, "j");
-            log("sendMessage v5: I9 msgId=" + msgId + " talker=" + talker + " post-O0=" + postIsSend + " post-status=" + postStatus + " post-j=[" + (postContent == null ? "null" : postContent) + "]");
+            log("sendMessage v6: H9 msgId=" + msgId + " post-type=" + postType + " post-z0=" + postIsSend + " post-j=[" + (postContent == null ? "null" : postContent) + "]");
+
+            // Dump key fields for diagnostic
+            try {
+                log("DIAG v6: type=" + XposedHelpers.getIntField(msg, "field_type")
+                    + " isSend=" + XposedHelpers.getIntField(msg, "field_isSend")
+                    + " status=" + XposedHelpers.getIntField(msg, "field_status")
+                    + " g=" + XposedHelpers.getBooleanField(msg, "g")
+                    + " h=" + XposedHelpers.getBooleanField(msg, "h"));
+            } catch (Throwable ig) {}
+
             return msgId > 0;
         } catch (Throwable t) {
             log("sendMessage FAIL: " + t.getClass().getSimpleName() + ": " + t.getMessage());
