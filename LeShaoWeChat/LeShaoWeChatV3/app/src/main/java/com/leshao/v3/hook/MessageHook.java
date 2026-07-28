@@ -99,7 +99,7 @@ public class MessageHook {
 
             // 语音自动播放 (type==34)
             if (rawType == 34) {
-                final long msgId = (Long) XposedHelpers.callMethod(e9, "getMsgId");
+                final long msgId = (Long) XposedHelpers.callMethod(e9, "H0");
                 LogWriter.log("VoiceAutoPlay", "MSG-HOOK-TV: rawType=34 msgId=" + msgId + " talker=" + talker);
                 sMainHandler.post(() -> {
                     try {

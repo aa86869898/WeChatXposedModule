@@ -29,7 +29,7 @@ public class VoiceAutoPlay {
     private static final Handler sMainHandler = new Handler(Looper.getMainLooper());
 
     private static boolean sEnabled = true;
-    private static long sLastPlayedMsgId = 0L;
+    private static long sLastPlayedMsgId = -1L;
 
     private static ClassLoader sClassLoader;
     private static volatile Object sCurrentVoiceComp;
@@ -215,7 +215,7 @@ public class VoiceAutoPlay {
             ).autoPlayVoice;
             if (!activated) return;
 
-            long msgId = (Long) XposedHelpers.callMethod(msg, "getMsgId");
+            long msgId = (Long) XposedHelpers.callMethod(msg, "H0");
             if (msgId == sLastPlayedMsgId) return;
 
             // 跳过自己发的 (G1() = isSend, 1=自己发的)
@@ -307,7 +307,7 @@ public class VoiceAutoPlay {
                 if (isSend == 1) return;
             } catch (Throwable ignored) {}
 
-            long msgId = (Long) XposedHelpers.callMethod(msg, "getMsgId");
+            long msgId = (Long) XposedHelpers.callMethod(msg, "H0");
             if (msgId == sLastPlayedMsgId) return;
 
             try {
@@ -383,9 +383,17 @@ public class VoiceAutoPlay {
             boolean activated = ModuleConfig.load(
                 com.leshao.v3.ContextManager.getPrefs()
             ).autoPlayVoice;
-            if (!activated) return;
+            if (!activated) {
+                LogWriter.log(TAG, "autoPlayVoice disabled");
+                return;
+            }
 
-            if (msgId == sLastPlayedMsgId) return;
+            LogWriter.log(TAG, "tryAutoPlay: enter msgId=" + msgId + " lastId=" + sLastPlayedMsgId);
+
+            if (msgId == sLastPlayedMsgId) {
+                LogWriter.log(TAG, "tryAutoPlay: skip dup msgId=" + msgId);
+                return;
+            }
 
             // 跳过自己发的
             try {
