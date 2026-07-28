@@ -414,6 +414,13 @@ public class ScheduleBroadcast {
                     log("TRACE n85.c0.create(" + param.args.length + ")");
                     printStack("n85.c0.create", Thread.currentThread().getStackTrace(), 12);
                 }
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    if (param.getResult() != null) {
+                        sCapturedN85c0 = param.getResult();
+                        log("TRACE n85.c0.create → captured");
+                    }
+                }
             });
             XposedBridge.hookAllMethods(n85c0, "invokeSuspend", new XC_MethodHook() {
                 @Override
@@ -1169,23 +1176,49 @@ public class ScheduleBroadcast {
         }
     }
 
-    // 构建一个空的 Kotlin Continuation<Object>
+    // 构建一个有效的 Kotlin Continuation<Object>，带非空 CoroutineContext
     private static Object buildEmptyContinuation() {
         try {
-            // 方式1: kotlin.coroutines.EmptyCoroutineContext.INSTANCE
-            Class<?> emptyCC = XposedHelpers.findClass("kotlin.coroutines.EmptyCoroutineContext", null);
-            Object context = XposedHelpers.getStaticObjectField(emptyCC, "INSTANCE");
-            // 方式2: 创建 kotlin.coroutines.Continuation 匿名实现
-            Class<?> contIFace = XposedHelpers.findClass("kotlin.coroutines.Continuation", null);
+            // 尝试 SafeContinuation(RESUMED)
             Class<?> safeCont = XposedHelpers.findClass("kotlin.coroutines.SafeContinuation", null);
-            if (safeCont != null) {
-                // SafeContinuation(result) with RESULT_ATOMIC
-                return XposedHelpers.newInstance(safeCont,
-                    XposedHelpers.getStaticObjectField(safeCont, "RESUMED"));
-            }
-        } catch (Throwable t) {
-            log("buildEmptyContinuation fail: " + t.getMessage());
+            Object resumed = XposedHelpers.getStaticObjectField(safeCont, "RESUMED");
+            Object result = XposedHelpers.newInstance(safeCont, resumed);
+            log("buildEmptyCont: SafeContinuation OK");
+            return result;
+        } catch (Throwable t1) {
+            log("buildEmptyCont: SafeContinuation fail: " + t1.getMessage());
         }
+
+        try {
+            // Plan B: 用 Proxy 创建 Continuation + CoroutineContext
+            Class<?> ccCls = XposedHelpers.findClass("kotlin.coroutines.CoroutineContext", null);
+            Class<?> contCls = XposedHelpers.findClass("kotlin.coroutines.Continuation", null);
+
+            // Proxy CoroutineContext — 任意非空对象
+            final Object dummyContext = java.lang.reflect.Proxy.newProxyInstance(
+                ccCls.getClassLoader(), new Class<?>[]{ccCls},
+                (proxy, method, args) -> null);
+
+            // Proxy Continuation — getContext() 返回 dummyContext
+            Object cont = java.lang.reflect.Proxy.newProxyInstance(
+                contCls.getClassLoader(), new Class<?>[]{contCls},
+                (proxy, method, args) -> {
+                    if ("getContext".equals(method.getName())) return dummyContext;
+                    return null;
+                });
+            log("buildEmptyCont: Proxy Continuation OK");
+            return cont;
+        } catch (Throwable t2) {
+            log("buildEmptyCont: Proxy fail: " + t2.getMessage());
+        }
+
+        // Plan C: 使用之前捕获的 n85.c0 continuation
+        if (sCapturedN85c0 != null) {
+            log("buildEmptyCont: using captured n85.c0");
+            return sCapturedN85c0;
+        }
+
+        log("buildEmptyCont: ALL methods failed");
         return null;
     }
 
