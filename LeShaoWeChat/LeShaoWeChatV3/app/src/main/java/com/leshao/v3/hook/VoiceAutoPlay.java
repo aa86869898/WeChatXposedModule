@@ -1,5 +1,8 @@
 package com.leshao.v3.hook;
 
+import android.media.AudioFormat;
+import android.media.AudioManager;
+import android.media.AudioTrack;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Looper;
@@ -20,10 +23,10 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /**
- * 语音消息自动播放 v48
- * - 后台: SilkDecoder库 SILK→WAV→MediaPlayer 后台播放
- * - 聊天内: so.y()→v0.I(msg) 直接微信播放
- * - 双路径并行,后台优先
+ * 语音消息自动播放 v49
+ * - 方案A(首选): 微信CDN流式API y21.x0.h(e9,voiceId)→y21.j→AudioTrack 后台播放
+ * - 方案B(回退): SilkDecoder库 SILK→WAV→MediaPlayer 后台播放
+ * - 方案C(回退): so.y()→v0.I(msg) 聊天内播放
  */
 public class VoiceAutoPlay {
 
@@ -40,6 +43,11 @@ public class VoiceAutoPlay {
     private static Class<?> sK0Class;
     private static Class<?> sSoClass;
     private static String sVoice2Dir;
+
+    // 微信CDN流式API类
+    private static Class<?> sU0Cls;       // y21.u0 — 解析voice内容
+    private static Class<?> sX0Cls;       // y21.x0 — 下载+解码
+    private static Class<?> sJCls;       // y21.j  — 音频流
 
     private static volatile Object sCurrentSo;
     private static volatile Object sCurrentPlayer;
@@ -65,8 +73,16 @@ public class VoiceAutoPlay {
         try { sSoClass = XposedHelpers.findClass("com.tencent.mm.ui.chatting.component.so", cl); }
         catch (Throwable t) { LogWriter.log(TAG, "so class NOT found: " + t.getMessage()); }
 
-        LogWriter.log(TAG, "init: k0=" + (sK0Class != null) + " so=" + (sSoClass != null));
-        LogWriter.log(TAG, "init: v48 SilkDecoder bg + v0.I chat");
+        // 微信CDN流式API类
+        try { sU0Cls = cl.loadClass("y21.u0"); }
+        catch (Throwable t) { LogWriter.log(TAG, "y21.u0 NOT found: " + t.getMessage()); }
+        try { sX0Cls = cl.loadClass("y21.x0"); }
+        catch (Throwable t) { LogWriter.log(TAG, "y21.x0 NOT found: " + t.getMessage()); }
+        try { sJCls = cl.loadClass("y21.j"); }
+        catch (Throwable t) { LogWriter.log(TAG, "y21.j NOT found: " + t.getMessage()); }
+
+        LogWriter.log(TAG, "init: k0=" + (sK0Class != null) + " so=" + (sSoClass != null)
+            + " u0=" + (sU0Cls != null) + " x0=" + (sX0Cls != null) + " j=" + (sJCls != null));
 
         findVoice2Dir();
         hookVoiceComponent(cl);
@@ -134,19 +150,24 @@ public class VoiceAutoPlay {
 
             LogWriter.log(TAG, "recv: msgId=" + msgId + " talker=" + talker);
 
-            // 后台 SILK→WAV→MediaPlayer 播放
             final String tTalker = talker;
+
+            // 方案A: 微信CDN流式API — 下载+解码PCM → AudioTrack
             new Thread(() -> {
-                boolean bgOk = playBackground(e9, tTalker, msgId);
-                if (!bgOk) {
-                    // 后台失败 → 入队等聊天时播放
-                    sPendingQueue.offer(new PendingVoiceMsg(e9, msgId, tTalker));
-                    LogWriter.log(TAG, "bgFail→queue: msgId=" + msgId + " q=" + sPendingQueue.size());
-                    if (sCurrentSo != null) {
-                        sHandler.post(() -> playAllFromQueue());
+                boolean streamOk = playViaWxStream(e9, tTalker, msgId);
+                if (!streamOk) {
+                    // 方案B: SilkDecoder库 SILK→WAV→MediaPlayer
+                    boolean bgOk = playBackground(e9, tTalker, msgId);
+                    if (!bgOk) {
+                        // 方案C: 入队等聊天时播放
+                        sPendingQueue.offer(new PendingVoiceMsg(e9, msgId, tTalker));
+                        LogWriter.log(TAG, "queue: msgId=" + msgId + " q=" + sPendingQueue.size());
+                        if (sCurrentSo != null) {
+                            sHandler.post(() -> playAllFromQueue());
+                        }
                     }
                 }
-            }, "VAP-bg-decode").start();
+            }, "VAP-bg").start();
 
         } catch (Throwable e) {
             LogWriter.log(TAG, "onVoiceMsg err: " + e.getMessage());
@@ -157,7 +178,115 @@ public class VoiceAutoPlay {
         onVoiceMsg(e9, msgId, p0);
     }
 
-    // ========== 后台 SILK→WAV→MediaPlayer ==========
+    // ========== 方案A: 微信CDN流式API ==========
+
+    private static boolean playViaWxStream(Object e9, String talker, long msgId) {
+        try {
+            // Step 1: 提取 voiceId
+            String voiceId = extractVoiceId(e9);
+            if (voiceId == null) {
+                LogWriter.log(TAG, "stream: voiceId null msgId=" + msgId);
+                return false;
+            }
+            LogWriter.log(TAG, "stream: voiceId=" + voiceId + " msgId=" + msgId);
+
+            if (sX0Cls == null) {
+                LogWriter.log(TAG, "stream: y21.x0 class not found, cannot download");
+                return false;
+            }
+
+            // Step 2: y21.x0.h(e9, voiceId) → y21.j 音频流
+            Object stream = XposedHelpers.callStaticMethod(sX0Cls, "h", e9, voiceId);
+            if (stream == null) {
+                LogWriter.log(TAG, "stream: y21.x0.h() returned null msgId=" + msgId);
+                return false;
+            }
+            LogWriter.log(TAG, "stream: got stream class=" + stream.getClass().getName());
+
+            // Step 3: 读取PCM → AudioTrack播放
+            // 微信语音采样率16kHz,单声道,16bit PCM
+            int sampleRate = 16000;
+            int channelConfig = AudioFormat.CHANNEL_OUT_MONO;
+            int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
+            int bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat);
+
+            AudioTrack track = new AudioTrack(
+                AudioManager.STREAM_MUSIC,
+                sampleRate,
+                channelConfig,
+                audioFormat,
+                Math.max(bufferSize, 8192),
+                AudioTrack.MODE_STREAM
+            );
+            track.play();
+
+            byte[] buffer = new byte[4096];
+            int totalBytes = 0;
+            int read;
+            while ((read = (Integer) XposedHelpers.callMethod(stream, "c", buffer, 0, buffer.length)) > 0) {
+                track.write(buffer, 0, read);
+                totalBytes += read;
+            }
+
+            LogWriter.log(TAG, "streamDone: msgId=" + msgId + " pcmBytes=" + totalBytes);
+
+            // Step 4: 清理
+            try { XposedHelpers.callMethod(stream, "b"); } catch (Throwable ignored) {}
+            track.stop();
+            track.release();
+
+            return totalBytes > 0;
+
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "stream err: " + e.getMessage());
+            return false;
+        }
+    }
+
+    // ========== voiceId 提取 ==========
+
+    private static String extractVoiceId(Object e9) {
+        try {
+            // 方法1: e9.j() → y21.u0(content) → u0.a()
+            String content = (String) XposedHelpers.callMethod(e9, "j");
+            if (content != null && sU0Cls != null) {
+                LogWriter.log(TAG, "voice content=[" + content + "]");
+                Object u0Obj = XposedHelpers.newInstance(sU0Cls, content);
+                String voiceId = (String) XposedHelpers.callMethod(u0Obj, "a");
+                if (voiceId != null && !voiceId.isEmpty()) {
+                    LogWriter.log(TAG, "voiceId(from u0)=[" + voiceId + "]");
+                    return voiceId;
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "extractVoiceId: u0 err: " + e.getMessage());
+        }
+
+        try {
+            // 方法2: e9.j() → 直接解析 "voiceId:duration:flag:\n"
+            String content = (String) XposedHelpers.callMethod(e9, "j");
+            if (content != null) {
+                int colon = content.indexOf(':');
+                if (colon > 0) {
+                    String voiceId = content.substring(0, colon);
+                    LogWriter.log(TAG, "voiceId(from parse)=[" + voiceId + "]");
+                    return voiceId;
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "extractVoiceId: parse err: " + e.getMessage());
+        }
+
+        try {
+            // 方法3: e9.I0() 内容
+            String content = (String) XposedHelpers.callMethod(e9, "I0");
+            LogWriter.log(TAG, "voice I0 content=[" + content + "]");
+        } catch (Throwable ignored) {}
+
+        return null;
+    }
+
+    // ========== 方案B: SilkDecoder SILK→WAV→MediaPlayer ==========
 
     private static boolean playBackground(Object msg, String talker, long msgId) {
         try {
