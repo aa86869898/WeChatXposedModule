@@ -46,6 +46,7 @@ import com.leshao.v3.hook.ThemeHook;
 import com.leshao.v3.hook.TypingIndicator;
 import com.leshao.v3.hook.UnreadBadge;
 import com.leshao.v3.hook.VoiceForwardHook;
+import com.leshao.v3.hook.VoiceAutoPlay;
 import com.leshao.v3.hook.ScheduleBroadcast;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.SchedulerService;
@@ -110,6 +111,7 @@ public class MainHook implements IXposedHookLoadPackage {
                         }
 
                         TTSBroadcaster.init(ctx);
+                        VoiceAutoPlay.hook(cl);
 
                         // 管理员自动略过激活门控
                         ModuleConfig.initWxid(ctx);
