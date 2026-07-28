@@ -131,6 +131,8 @@ public class ScheduleBroadcast {
     private static Object sN85d0InvokeArg;
     private static Object sN85d0Inst;
     private static Object sCapturedN85z;  // n85.z from normal send
+    private static Object sCapturedN85c0;  // n85.c0 Continuation
+    private static Object sCapturedScope;  // SequenceLifecycleScope
     private static Object sD85i_cArg;
     private static Object sD85iInst;
     private static Object sD85d_jArg;
@@ -1097,74 +1099,49 @@ public class ScheduleBroadcast {
 
     private static void triggerSend(long msgId, Object e9msg, String talker) {
         try {
-            Object ms = getMsgStorage();
+            // 1. 获取 a21.b0 ViewModel 实例 (SendMsgService)
+            Class<?> n0Cls = XposedHelpers.findClass("n0", sClassLoader);
+            Class<?> a21b0Cls = XposedHelpers.findClass("a21.b0", sClassLoader);
+            Object a21b0 = XposedHelpers.callStaticMethod(n0Cls, "c", a21b0Cls);
+            if (a21b0 == null) {
+                log("triggerSend: a21.b0=null");
+                return;
+            }
 
-            // 0. d85.d.j: 最顶层发送入口
-            try {
-                if (sD85d_jInst != null && sD85d_jArg != null) {
-                    XposedHelpers.callMethod(sD85d_jInst, "j", sD85d_jArg);
-                    log("triggerSend: d85.d.j() OK msgId=" + msgId);
-                    return;
-                }
-            } catch (Throwable t) { log("triggerSend: d85.d.j fail: " + t.getMessage()); }
+            // 2. 构建 List<e9>
+            java.util.List<Object> msgList = new java.util.ArrayList<>();
+            msgList.add(e9msg);
 
-            // 1. d85.i.c: 发送中间层
-            try {
-                if (sD85iInst != null && sD85i_cArg != null) {
-                    XposedHelpers.callMethod(sD85iInst, "c", sD85i_cArg);
-                    log("triggerSend: d85.i.c() OK msgId=" + msgId);
-                    return;
-                }
-            } catch (Throwable t) { log("triggerSend: d85.i.c fail: " + t.getMessage()); }
+            // 3. 构建 Kotlin Continuation (empty — 仅触发发送不等待结果)
+            Object continuation = buildEmptyContinuation();
 
-            // 2. n85.d0.invoke: 先构建proper n85.z, 然后用captured n85.d0实例发送
-            try {
-                // Build n85.z with message data
-                Class<?> n85zCls = XposedHelpers.findClass("n85.z", sClassLoader);
-                Object zObj = XposedHelpers.newInstance(n85zCls);
-                // Try to copy e9msg fields into n85.z
-                try { XposedHelpers.callMethod(zObj, "a", e9msg); } catch (Throwable ignored) {}
-                try { XposedHelpers.callMethod(zObj, "b", e9msg); } catch (Throwable ignored) {}
-                try { XposedHelpers.callMethod(zObj, "setMsgInfo", e9msg); } catch (Throwable ignored) {}
-                try { XposedHelpers.callMethod(zObj, "setMessage", e9msg); } catch (Throwable ignored) {}
-
-                // Try creating new n85.d0 from captured a21.q
-                Object a21qInst = sCapturedA21q;
-                if (a21qInst != null) {
-                    try {
-                        Class<?> n85d0Cls = XposedHelpers.findClass("n85.d0", sClassLoader);
-                        Object d0 = XposedHelpers.newInstance(n85d0Cls, a21qInst);
-                        XposedHelpers.callMethod(d0, "invoke", zObj);
-                        log("triggerSend: new n85.d0(a21q).invoke(n85z) OK msgId=" + msgId);
-                        return;
-                    } catch (Throwable t2) { log("triggerSend: new n85.d0 fail: " + t2.getMessage()); }
-                }
-
-                // Fallback: use captured n85.d0 instance
-                if (sN85d0Inst != null) {
-                    XposedHelpers.callMethod(sN85d0Inst, "invoke", zObj);
-                    log("triggerSend: n85.d0.invoke(populated z) OK msgId=" + msgId);
-                    return;
-                }
-            } catch (Throwable t) { log("triggerSend: n85.d0 invoke fail: " + t.getMessage()); }
-
-            // 3. a21.q.i with captured instance + Continuation=null (只写DB)
-            try {
-                if (sCapturedA21q != null) {
-                    Class<?> n85z = XposedHelpers.findClass("n85.z", sClassLoader);
-                    Class<?> a21g = XposedHelpers.findClass("a21.g", sClassLoader);
-                    Object zObj = XposedHelpers.newInstance(n85z);
-                    Object gObj = XposedHelpers.newInstance(a21g, e9msg);
-                    XposedHelpers.callMethod(sCapturedA21q, "i", zObj, gObj, null);
-                    log("triggerSend: a21.q.i() OK msgId=" + msgId);
-                    return;
-                }
-            } catch (Throwable t) { log("triggerSend: a21.q.i fail: " + t.getMessage()); }
-
-            log("triggerSend: 所有方法均失败 msgId=" + msgId);
+            // 4. 调用 a21.b0.vj(List, Continuation) 联网发送
+            XposedHelpers.callMethod(a21b0, "vj", msgList, continuation);
+            log("triggerSend: a21.b0.vj() OK msgId=" + msgId);
         } catch (Throwable t) {
-            log("triggerSend异常: " + t.getClass().getSimpleName() + " - " + t.getMessage());
+            log("triggerSend: a21.b0.vj fail: " + t.getMessage());
+            log("triggerSend: 所有方法均失败 msgId=" + msgId);
         }
+    }
+
+    // 构建一个空的 Kotlin Continuation<Object>
+    private static Object buildEmptyContinuation() {
+        try {
+            // 方式1: kotlin.coroutines.EmptyCoroutineContext.INSTANCE
+            Class<?> emptyCC = XposedHelpers.findClass("kotlin.coroutines.EmptyCoroutineContext", null);
+            Object context = XposedHelpers.getStaticObjectField(emptyCC, "INSTANCE");
+            // 方式2: 创建 kotlin.coroutines.Continuation 匿名实现
+            Class<?> contIFace = XposedHelpers.findClass("kotlin.coroutines.Continuation", null);
+            Class<?> safeCont = XposedHelpers.findClass("kotlin.coroutines.SafeContinuation", null);
+            if (safeCont != null) {
+                // SafeContinuation(result) with RESULT_ATOMIC
+                return XposedHelpers.newInstance(safeCont,
+                    XposedHelpers.getStaticObjectField(safeCont, "RESUMED"));
+            }
+        } catch (Throwable t) {
+            log("buildEmptyContinuation fail: " + t.getMessage());
+        }
+        return null;
     }
 
     // ===== 语音发送 =====
