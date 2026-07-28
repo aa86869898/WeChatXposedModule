@@ -69,6 +69,8 @@ public class VoiceAutoPlay {
         } else {
             LogWriter.log(TAG, "v0 class not found, skipping layer 3");
         }
+
+        hookChattingUIResume(cl);
     }
 
     private static void findVoiceComponentClass(ClassLoader cl) {
@@ -169,8 +171,10 @@ public class VoiceAutoPlay {
             XposedBridge.hookAllMethods(sH5Class, "m", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    if (((java.lang.reflect.Method) param.method).getParameterTypes().length < 3) return;
-                    LogWriter.log(TAG, "h5.m() triggered on " + clsName);
+                    int paramCount = ((java.lang.reflect.Method) param.method).getParameterTypes().length;
+                    LogWriter.log(TAG, "h5.m() called, paramCount=" + paramCount);
+                    if (paramCount < 3) return;
+                    LogWriter.log(TAG, "h5.m() >=3 params triggered on " + clsName);
                     onVoiceBubbleRendered(param);
                 }
             });
@@ -186,23 +190,29 @@ public class VoiceAutoPlay {
             XposedBridge.hookAllMethods(sV0Class, "t", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
+                    LogWriter.log(TAG, "v0.t() called on " + clsName);
                     try {
                         Object player = param.thisObject;
                         long msgId = XposedHelpers.getLongField(player, "i");
                         LogWriter.log(TAG, "player.t() msgId=" + msgId + " on " + clsName);
-                    } catch (Throwable ignored) {}
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "v0.t() field 'i' error: " + e.getMessage());
+                    }
                 }
             });
 
             XposedBridge.hookAllMethods(sV0Class, "onClick", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
+                    LogWriter.log(TAG, "v0.onClick() called on " + clsName);
                     try {
                         Object player = param.thisObject;
                         long msgId = XposedHelpers.getLongField(player, "i");
                         sPlayedMsgIds.add(String.valueOf(msgId));
                         LogWriter.log(TAG, "v0.onClick() msgId=" + msgId + " on " + clsName);
-                    } catch (Throwable ignored) {}
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "v0.onClick() field 'i' error: " + e.getMessage());
+                    }
                 }
             });
 
@@ -321,6 +331,90 @@ public class VoiceAutoPlay {
             }
         } catch (Throwable e) {
             LogWriter.log(TAG, "autoPlayLatestVoice error: " + e.getMessage());
+        }
+    }
+
+    private static void hookChattingUIResume(ClassLoader cl) {
+        try {
+            Class<?> chattingUI = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUI", cl);
+            XposedBridge.hookAllMethods(chattingUI, "onResume", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        android.app.Activity activity = (android.app.Activity) param.thisObject;
+                        LogWriter.log(TAG, "ChattingUI.onResume triggered");
+                        if (!sEnabled) return;
+                        boolean activated = ModuleConfig.load(
+                            com.leshao.v3.ContextManager.getPrefs()
+                        ).autoPlayVoice;
+                        if (!activated) return;
+                        sMainHandler.postDelayed(() -> {
+                            try {
+                                findAndClickLatestVoice(activity);
+                            } catch (Throwable e) {
+                                LogWriter.log(TAG, "findAndClickLatestVoice error: " + e.getMessage());
+                            }
+                        }, sPlayDelay);
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "ChattingUI.onResume hook error: " + e.getMessage());
+                    }
+                }
+            });
+            LogWriter.log(TAG, "ChattingUI.onResume hooked OK");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "ChattingUI.onResume hook fail: " + t.getMessage());
+        }
+    }
+
+    private static void findAndClickLatestVoice(android.app.Activity activity) {
+        try {
+            View root = activity.getWindow().getDecorView();
+            java.util.List<View> voices = new java.util.ArrayList<>();
+            findVoiceViews(root, voices);
+
+            if (voices.isEmpty()) {
+                LogWriter.log(TAG, "findAndClickLatestVoice: no voice views found");
+                return;
+            }
+
+            View latest = voices.get(voices.size() - 1);
+            LogWriter.log(TAG, "findAndClickLatestVoice: found " + voices.size() + " voice views, clicking latest");
+            latest.performClick();
+
+            try {
+                long msgId = (Long) latest.getTag();
+                String msgIdStr = String.valueOf(msgId);
+                if (msgId > 0) {
+                    sPlayedMsgIds.add(msgIdStr);
+                    LogWriter.log(TAG, "findAndClickLatestVoice: clicked msgId=" + msgIdStr);
+                }
+            } catch (Throwable ignored) {}
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findAndClickLatestVoice error: " + e.getMessage());
+        }
+    }
+
+    private static void findVoiceViews(View view, java.util.List<View> out) {
+        if (view == null) return;
+        String clsName = view.getClass().getName();
+        if (clsName.contains("Voice") || clsName.contains("voice")
+            || clsName.contains("Audio") || clsName.contains("audio")) {
+            try {
+                View clickable = view;
+                if (!view.isClickable()) {
+                    for (int i = 0; i < ((android.view.ViewGroup) view).getChildCount(); i++) {
+                        View child = ((android.view.ViewGroup) view).getChildAt(i);
+                        if (child.isClickable()) { clickable = child; break; }
+                    }
+                }
+                out.add(clickable);
+            } catch (Throwable ignored) {}
+        }
+        if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup vg = (android.view.ViewGroup) view;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                findVoiceViews(vg.getChildAt(i), out);
+            }
         }
     }
 
