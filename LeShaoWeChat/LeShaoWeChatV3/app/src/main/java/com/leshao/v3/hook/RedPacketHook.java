@@ -79,7 +79,8 @@ public class RedPacketHook {
     public static void hookRedPacketUI(ClassLoader cl) {
         try {
             Class<?> cls = cl.loadClass(PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyDetailUI");
-            XposedHelpers.findAndHookMethod(cls, "onResume", new XC_MethodHook() {
+            java.lang.reflect.Method m = cls.getDeclaredMethod("onResume");
+            XposedBridge.hookMethod(m, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam p) {
                     Activity act = (Activity) p.thisObject;

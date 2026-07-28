@@ -87,7 +87,8 @@ public class AutoCollectHook {
             Class<?> uiCls = cl.loadClass(PKG_WECHAT + ".plugin.remittance.ui.RemittanceDetailUI");
 
             // onResume — 自动点收款
-            XposedHelpers.findAndHookMethod(uiCls, "onResume", new XC_MethodHook() {
+            java.lang.reflect.Method mResume = uiCls.getDeclaredMethod("onResume");
+            XposedBridge.hookMethod(mResume, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam p) {
                     autoClickCollect((Activity) p.thisObject, 800);
@@ -95,9 +96,9 @@ public class AutoCollectHook {
             });
 
             // onSceneEnd — TTS播报
-            XposedHelpers.findAndHookMethod(uiCls, "onSceneEnd",
-                int.class, int.class, String.class, m1Cls,
-                new XC_MethodHook() {
+            java.lang.reflect.Method mSceneEnd = uiCls.getDeclaredMethod("onSceneEnd",
+                int.class, int.class, String.class, m1Cls);
+            XposedBridge.hookMethod(mSceneEnd, new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam p) {
                         int et = (int) p.args[0], ec = (int) p.args[1];

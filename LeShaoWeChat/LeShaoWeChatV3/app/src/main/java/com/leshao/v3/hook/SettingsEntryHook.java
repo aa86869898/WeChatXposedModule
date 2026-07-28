@@ -215,9 +215,9 @@ public class SettingsEntryHook {
 
     private static void hookLayoutInflater() {
         try {
-            XposedHelpers.findAndHookMethod(
-                android.view.LayoutInflater.class,
-                "inflate", int.class, ViewGroup.class, boolean.class,
+            java.lang.reflect.Method m = android.view.LayoutInflater.class.getDeclaredMethod(
+                "inflate", int.class, ViewGroup.class, boolean.class);
+            XposedBridge.hookMethod(m,
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
@@ -420,7 +420,8 @@ public class SettingsEntryHook {
         if (backPressHooked) return;
         backPressHooked = true;
         try {
-            XposedHelpers.findAndHookMethod(Activity.class, "onBackPressed",
+            java.lang.reflect.Method m = Activity.class.getDeclaredMethod("onBackPressed");
+            XposedBridge.hookMethod(m,
                 new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {

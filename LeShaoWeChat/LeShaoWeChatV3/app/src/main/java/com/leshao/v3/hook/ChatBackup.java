@@ -204,7 +204,10 @@ public class ChatBackup {
             }
 
             File backupDir = new File("/sdcard/leshao_v3_logs/backup/");
-            backupDir.mkdirs();
+            if (!backupDir.exists() && !backupDir.mkdirs()) {
+                LogWriter.log(TAG, "backup err: cannot create dir " + backupDir.getAbsolutePath());
+                return false;
+            }
             String timeStr = sdf.format(new Date());
 
             String[] dbs = {"EnMicroMsg.db", "EnMicroMsg.db-wal", "EnMicroMsg.db-shm"};
