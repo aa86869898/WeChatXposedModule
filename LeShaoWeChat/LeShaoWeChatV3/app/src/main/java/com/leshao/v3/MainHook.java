@@ -47,9 +47,7 @@ import com.leshao.v3.hook.TypingIndicator;
 import com.leshao.v3.hook.UnreadBadge;
 import com.leshao.v3.hook.VoiceForwardHook;
 import com.leshao.v3.hook.VoiceAutoPlay;
-import com.leshao.v3.hook.ScheduleBroadcast;
 import com.leshao.v3.model.ModuleConfig;
-import com.leshao.v3.service.SchedulerService;
 import com.leshao.v3.service.TTSBroadcaster;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
@@ -165,17 +163,11 @@ public class MainHook implements IXposedHookLoadPackage {
                         HookManager.register(ThemeHook::hook);
                         HookManager.register(VoiceForwardHook::hook);
 
-                        // === 定时消息群发 ===========================================================
-                        HookManager.register(() -> ScheduleBroadcast.hookFilehelperMonitor(cl));
-                        ScheduleBroadcast.init(ctx, cl);
-
                         LogWriter.log(TAG, "[MainHook] activateAll() START, pendingTasks=" + HookManager.pendingCount());
 
                         HookManager.activateAll();
 
                         LogWriter.log(TAG, "[MainHook] activateAll() DONE");
-
-                        SchedulerService.start(ModuleConfig.load(ContextManager.getPrefs()));
                     } catch (Throwable t) {
                         LogWriter.log(TAG, "[MainHook] FATAL in onReadyCallback: " + t.getClass().getSimpleName()
                             + " " + t.getMessage());

@@ -39,7 +39,6 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.model.Contact;
 import com.leshao.v3.model.ModuleConfig;
-import com.leshao.v3.model.ScheduledTask;
 
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -673,9 +672,6 @@ public class SettingsEntryHook {
         addSection(ctx, root, "AI 助手");
         buildAISection(ctx, root);
 
-        addSection(ctx, root, "定时任务");
-        buildSchedulerSection(ctx, root);
-
         addSection(ctx, root, "数据统计");
         buildStatsSection(ctx, root);
     }
@@ -938,80 +934,6 @@ public class SettingsEntryHook {
         info.setPadding(dpC(ctx, 16), dpC(ctx, 4), dpC(ctx, 16), dpC(ctx, 2));
         info.setText("群聊 @机器人 提问 | 私聊发送 AI+内容");
         root.addView(info);
-    }
-
-    private static void buildSchedulerSection(final Context ctx, LinearLayout root) {
-        float d = ctx.getResources().getDisplayMetrics().density;
-
-        TextView stats = new TextView(ctx);
-        stats.setTextSize(11);
-        stats.setTextColor(CLR_TEXT);
-        stats.setPadding(dpC(ctx, 16), dpC(ctx, 6), dpC(ctx, 16), dpC(ctx, 2));
-        stats.setText("任务:" + ScheduleBroadcast.getTaskCount()
-                + "  草稿:" + ScheduleBroadcast.getDraftCount()
-                + "  今日已发:" + ScheduleBroadcast.getDailyCount()
-                + "  状态:" + (ScheduleBroadcast.isEnabled() ? "运行中" : "已暂停"));
-        root.addView(stats);
-
-        if (ScheduleBroadcast.getTaskCount() == 0) {
-            TextView empty = new TextView(ctx);
-            empty.setText("暂无定时任务");
-            empty.setTextSize(12);
-            empty.setTextColor(CLR_TEXT2);
-            empty.setPadding(dpC(ctx, 16), dpC(ctx, 4), dpC(ctx, 16), dpC(ctx, 4));
-            root.addView(empty);
-        } else {
-            java.util.List<ScheduleBroadcast.Task> tasks = ScheduleBroadcast.getAllTasks();
-            int show = Math.min(tasks.size(), 5);
-            for (int i = 0; i < show; i++) {
-                ScheduleBroadcast.Task t = tasks.get(i);
-                TextView info = new TextView(ctx);
-                info.setTextSize(11);
-                info.setTextColor(CLR_TEXT2);
-                info.setPadding(dpC(ctx, 16), dpC(ctx, 2), dpC(ctx, 16), dpC(ctx, 2));
-                String typeLabel;
-                switch (t.msgType) {
-                    case 1: typeLabel = "文本"; break;
-                    case 3: typeLabel = "图片"; break;
-                    case 34: typeLabel = "语音"; break;
-                    case 43: typeLabel = "视频"; break;
-                    case 47: typeLabel = "表情"; break;
-                    case 49: typeLabel = "AppMsg"; break;
-                    default: typeLabel = "类型" + t.msgType;
-                }
-                String content = t.content != null && t.content.length() > 20 ? t.content.substring(0, 20) + "..." : t.content;
-                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault());
-                info.setText("[" + (t.enabled ? "启用" : "暂停") + "][" + typeLabel + "] "
-                        + (t.triggerTime > 0 ? sdf.format(new java.util.Date(t.triggerTime)) : "即时")
-                        + " " + content);
-                root.addView(info);
-            }
-            if (tasks.size() > 5) {
-                TextView more = new TextView(ctx);
-                more.setText("... 还有" + (tasks.size() - 5) + "条任务");
-                more.setTextSize(10);
-                more.setTextColor(CLR_TEXT2);
-                more.setPadding(dpC(ctx, 16), dpC(ctx, 2), dpC(ctx, 16), dpC(ctx, 2));
-                root.addView(more);
-            }
-        }
-
-        LinearLayout btnRow = new LinearLayout(ctx);
-        btnRow.setOrientation(LinearLayout.HORIZONTAL);
-        btnRow.setPadding(dpC(ctx, 16), dpC(ctx, 8), dpC(ctx, 16), dpC(ctx, 4));
-
-        btn(ctx, btnRow, "打开定时管理", "管理", v -> {
-            try {
-                SubPageActivity.open((android.app.Activity) ctx, "定时消息助手", 6);
-            } catch (Throwable ignored) {}
-        });
-
-        btn(ctx, btnRow, "紧急停止", "停止", v -> {
-            ScheduleBroadcast.emergencyStop();
-            android.widget.Toast.makeText(ctx, "已停止所有任务", android.widget.Toast.LENGTH_SHORT).show();
-        });
-
-        root.addView(btnRow);
     }
 
     private static void buildStatsSection(Context ctx, LinearLayout root) {
@@ -1333,85 +1255,6 @@ public class SettingsEntryHook {
             if (dlg != null && dlg.isShowing()) dlg.dismiss();
         });
         root.addView(saveBtn);
-
-        Window w = dlg.getWindow();
-        if (w != null) {
-            w.setBackgroundDrawable(new ColorDrawable(CLR_BG));
-            w.setLayout((int)(ctx.getResources().getDisplayMetrics().widthPixels * 0.9), -2);
-        }
-        dlg.show();
-    }
-
-    private static void showSchedulerDialog(Context ctx) {
-        SharedPreferences prefs = ContextManager.getPrefs();
-        final ModuleConfig cfg = ModuleConfig.load(prefs);
-
-        LinearLayout root = new LinearLayout(ctx);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dpC(ctx, 14), dpC(ctx, 10), dpC(ctx, 14), dpC(ctx, 10));
-        root.setBackground(new ColorDrawable(CLR_BG));
-
-        TextView tv = new TextView(ctx);
-        tv.setText("添加定时任务");
-        tv.setTextSize(16);
-        tv.setTextColor(CLR_ACCENT);
-        tv.setTypeface(null, Typeface.BOLD);
-        tv.setGravity(Gravity.CENTER);
-        tv.setPadding(0, 0, 0, dpC(ctx, 8));
-        root.addView(tv);
-
-        final EditText wxidEdit = new EditText(ctx);
-        wxidEdit.setHint("目标 wxid");
-        styleInput(wxidEdit);
-        wxidEdit.setTextSize(12);
-        root.addView(wxidEdit);
-        root.addView(spacerV(ctx, 4));
-
-        final EditText contentEdit = new EditText(ctx);
-        contentEdit.setHint("发送内容");
-        styleInput(contentEdit);
-        contentEdit.setTextSize(12);
-        root.addView(contentEdit);
-        root.addView(spacerV(ctx, 4));
-
-        LinearLayout timeRow = new LinearLayout(ctx);
-        timeRow.setOrientation(LinearLayout.HORIZONTAL);
-        final EditText hourEdit = new EditText(ctx);
-        hourEdit.setHint("小时(0-23)");
-        styleInput(hourEdit);
-        hourEdit.setTextSize(12);
-        hourEdit.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
-        timeRow.addView(hourEdit);
-        timeRow.addView(spacerH(ctx, 4));
-        final EditText minEdit = new EditText(ctx);
-        minEdit.setHint("分钟(0-59)");
-        styleInput(minEdit);
-        minEdit.setTextSize(12);
-        minEdit.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
-        timeRow.addView(minEdit);
-        root.addView(timeRow);
-        root.addView(spacerV(ctx, 8));
-
-        Button addBtn = createBtn(ctx, "添加任务");
-        styleButton(addBtn);
-
-        AlertDialog dlg = new AlertDialog.Builder(ctx).setView(root).setCancelable(true).create();
-        addBtn.setOnClickListener(v2 -> {
-            try {
-                String wxid = wxidEdit.getText().toString().trim();
-                String content = contentEdit.getText().toString().trim();
-                int h = Integer.parseInt(hourEdit.getText().toString().trim());
-                int m = Integer.parseInt(minEdit.getText().toString().trim());
-                if (!wxid.isEmpty() && !content.isEmpty()) {
-                    ScheduledTask t = new ScheduledTask(null, wxid, content, h, m, 127, true);
-                    cfg.scheduledTasks.add(t);
-                    cfg.save(prefs);
-                    wxidEdit.setText(""); contentEdit.setText(""); hourEdit.setText(""); minEdit.setText("");
-                    if (dlg != null && dlg.isShowing()) dlg.dismiss();
-                }
-            } catch (Throwable ignored) {}
-        });
-        root.addView(addBtn);
 
         Window w = dlg.getWindow();
         if (w != null) {

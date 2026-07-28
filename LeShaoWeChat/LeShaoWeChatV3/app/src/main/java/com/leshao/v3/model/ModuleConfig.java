@@ -148,17 +148,6 @@ public class ModuleConfig {
     public String massSendTextContent = "";
     public long massSendInterval = 3000;
 
-    // 定时
-    public boolean scheduleEnabled = false;
-    public int scheduleHour = 8, scheduleMin = 0;
-    public int scheduleDayMask = 0x7F;
-
-    // 定时公告
-    public boolean schedAnnounceEnabled = false;
-    public String schedAnnounceGroup = "", schedAnnounceMsg = "";
-    public long schedAnnounceInterval = 3600L;
-    public int schedAnnounceHour = 9, schedAnnounceMinute = 0;
-
     // 统计/投票
     public boolean activityStatsEnabled = false, voteEnabled = false;
     public List<String> groupManageList = new ArrayList<>();
@@ -168,7 +157,6 @@ public class ModuleConfig {
 
     // 关键词规则列表
     public List<KeywordRule> keywordRules = new ArrayList<>();
-    public List<ScheduledTask> scheduledTasks = new ArrayList<>();
 
     // ===== 离线笑话/金句库 (V2.1 原版) =====
     public static final String[] JOKE_LIB = {
@@ -406,16 +394,6 @@ public class ModuleConfig {
         cfg.videoParseEnabled = prefs.getBoolean("ls_video_parse_enabled", true);
         cfg.voiceToTextEnabled = prefs.getBoolean("ls_v2t_enabled", false);
         cfg.customAnnounceFormat = prefs.getString("ls_announce_fmt", "{sender}: {content}");
-        cfg.scheduleEnabled = prefs.getBoolean("ls_schedule_enabled", false);
-        cfg.scheduleHour = parseInt(prefs.getString("ls_schedule_hour", "8"), 8);
-        cfg.scheduleMin = parseInt(prefs.getString("ls_schedule_start_min", "0"), 0);
-        cfg.scheduleDayMask = parseInt(prefs.getString("ls_schedule_daymask", "127"), 0x7F);
-        cfg.schedAnnounceEnabled = prefs.getBoolean("ls_schedanno_enabled", false);
-        cfg.schedAnnounceGroup = prefs.getString("ls_schedanno_group", "");
-        cfg.schedAnnounceMsg = prefs.getString("ls_schedanno_msg", "");
-        cfg.schedAnnounceInterval = Long.parseLong(prefs.getString("ls_schedanno_interval", "3600"));
-        cfg.schedAnnounceHour = parseInt(prefs.getString("ls_schedanno_hour", "9"), 9);
-        cfg.schedAnnounceMinute = parseInt(prefs.getString("ls_schedanno_minute", "0"), 0);
         cfg.activityStatsEnabled = prefs.getBoolean("ls_activity_enabled", false);
         cfg.voteEnabled = prefs.getBoolean("ls_vote_enabled", false);
         cfg.groupManageList.clear();
@@ -589,8 +567,6 @@ public class ModuleConfig {
         cfg.notifyCustomEnabled = false;
         cfg.activityStatsEnabled = false;
         cfg.voteEnabled = false;
-        cfg.scheduleEnabled = false;
-        cfg.schedAnnounceEnabled = false;
     }
 
     private static void applyFeatureMask(ModuleConfig cfg, SharedPreferences prefs) {
@@ -780,16 +756,6 @@ public class ModuleConfig {
         e.putString("ls_blacklist", blArr.toString());
         e.putBoolean("ls_video_parse_enabled", videoParseEnabled);
         e.putBoolean("ls_v2t_enabled", voiceToTextEnabled);
-        e.putBoolean("ls_schedule_enabled", scheduleEnabled);
-        e.putString("ls_schedule_hour", String.valueOf(scheduleHour));
-        e.putString("ls_schedule_start_min", String.valueOf(scheduleMin));
-        e.putString("ls_schedule_daymask", String.valueOf(scheduleDayMask));
-        e.putBoolean("ls_schedanno_enabled", schedAnnounceEnabled);
-        e.putString("ls_schedanno_group", schedAnnounceGroup);
-        e.putString("ls_schedanno_msg", schedAnnounceMsg);
-        e.putString("ls_schedanno_interval", String.valueOf(schedAnnounceInterval));
-        e.putString("ls_schedanno_hour", String.valueOf(schedAnnounceHour));
-        e.putString("ls_schedanno_minute", String.valueOf(schedAnnounceMinute));
         e.putBoolean("ls_activity_enabled", activityStatsEnabled);
         e.putBoolean("ls_vote_enabled", voteEnabled);
         JSONArray gmArr = new JSONArray();

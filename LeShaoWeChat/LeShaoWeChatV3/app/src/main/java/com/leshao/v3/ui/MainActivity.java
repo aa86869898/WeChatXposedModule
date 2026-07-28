@@ -26,7 +26,6 @@ import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.model.Contact;
-import com.leshao.v3.hook.ScheduleBroadcast;
 import com.leshao.v3.service.ActivationManager;
 
 import java.io.File;
@@ -301,13 +300,13 @@ public class MainActivity {
         "聊天功能", "主题美化", "联系人和群聊", "群管理助手", "万群自动转发",
         "定时消息助手", "AI智慧助手", "TTS语音播报",
         "红包转账", "朋友圈增强", "隐私安全",
-        "数据备份", "娱乐助手", "定时消息群发"
+        "数据备份", "娱乐助手"
     };
     private static final int[] ITEM_ICONS = {
         0x1F4AC, 0x1F3A8, 0x1F465, 0x1F6E1, 0x1F4E4,
         0x23F0, 0x1F916, 0x1F50A,
         0x1F4B0, 0x1F4F1, 0x1F512,
-        0x1F4BE, 0x1F3AE, 0x1F4E3
+        0x1F4BE, 0x1F3AE
     };
 
     private static final java.util.Map<Integer, String> PAGE_FEATURES = new java.util.HashMap<>();
@@ -325,7 +324,7 @@ public class MainActivity {
         PAGE_FEATURES.put(11, "隐私保护|截图检测|剪贴板|WebView|指纹锁定|登录监控|会话隐私|隐私|安全|指纹|登录设备监控|设备管理");
         PAGE_FEATURES.put(12, "消息导出|聊天备份|导出聊天|备份数据|查看记录|清除记录|数据备份|导出|自动每日备份|导入外部记录|通讯录变更|变更日志");
         PAGE_FEATURES.put(13, "娱乐|游戏|助手");
-        PAGE_FEATURES.put(14, "定时群发|群发消息|批量定时|消息群发|群发助手|任务管理|发送历史|素材管理|文件选取|变量替换");
+
     }
 
     private static void showMainPanel(Activity act) {
@@ -408,14 +407,10 @@ public class MainActivity {
             final int pageId = i + 1;
 
             View item;
-            if (idx == 13) {
-                item = makeScheduleEntry(ctx, d, act);
-            } else {
-                item = makeMenuItem(ctx, d, ITEM_NAMES[i], ITEM_ICONS[i], v -> {
-                    dismissDialog();
-                    SubPageActivity.openFromMain(act, ITEM_NAMES[idx], pageId);
-                });
-            }
+            item = makeMenuItem(ctx, d, ITEM_NAMES[i], ITEM_ICONS[i], v -> {
+                dismissDialog();
+                SubPageActivity.openFromMain(act, ITEM_NAMES[idx], pageId);
+            });
             item.setTag("menu_item");
 
             String features = PAGE_FEATURES.get(pageId);
@@ -619,51 +614,6 @@ public class MainActivity {
         row.addView(arrow);
 
         return row;
-    }
-
-    private static View makeScheduleEntry(Context ctx, float d, Activity act) {
-        LinearLayout row = new LinearLayout(ctx);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding((int)(18 * d), (int)(13 * d), (int)(12 * d), (int)(13 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
-
-        TextView icon = new TextView(ctx);
-        icon.setText(new String(Character.toChars(0x1F4E3)));
-        icon.setTextSize(20);
-        icon.setPadding(0, 0, (int)(14 * d), 0);
-        row.addView(icon);
-
-        TextView tv = new TextView(ctx);
-        tv.setText("定时消息群发");
-        tv.setTextSize(15);
-        tv.setTextColor(AppColors.text1());
-        LinearLayout.LayoutParams tvlp = new LinearLayout.LayoutParams(0, -2, 1.0f);
-        tv.setLayoutParams(tvlp);
-        row.addView(tv);
-
-        Switch sw = new Switch(ctx);
-        sw.setChecked(ScheduleBroadcast.isEnabled());
-        updateScheduleSwitchThumb(sw, ScheduleBroadcast.isEnabled());
-        sw.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            ScheduleBroadcast.setEnabled(isChecked);
-            updateScheduleSwitchThumb(sw, isChecked);
-        });
-
-        row.setOnClickListener(v -> {
-            SubPageActivity.openFromMain(act, "定时消息群发", 14);
-        });
-        row.addView(sw);
-
-        return row;
-    }
-
-    private static void updateScheduleSwitchThumb(Switch sw, boolean on) {
-        if (on) {
-            sw.setThumbResource(android.R.drawable.btn_star_big_on);
-        } else {
-            sw.setThumbResource(android.R.drawable.btn_default);
-        }
     }
 
     static View makeDivider(Context ctx) {

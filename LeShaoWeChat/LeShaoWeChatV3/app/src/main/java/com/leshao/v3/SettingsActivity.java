@@ -12,7 +12,7 @@ import com.leshao.v3.ui.TTSFragment;
 import com.leshao.v3.ui.DingDongFragment;
 import com.leshao.v3.ui.GroupGuardFragment;
 import com.leshao.v3.ui.AIFragment;
-import com.leshao.v3.ui.SchedulerFragment;
+
 import com.leshao.v3.ui.StatsFragment;
 import com.leshao.v3.ui.ChatEnhanceFragment;
 import com.leshao.v3.ui.SnsFragment;
@@ -56,12 +56,11 @@ public class SettingsActivity extends FragmentActivity {
                     case 6: return new DingDongFragment();
                     case 7: return new GroupGuardFragment();
                     case 8: return new AIFragment();
-                    case 9: return new SchedulerFragment();
-                    case 10: return new StatsFragment();
+                    case 9: return new StatsFragment();
                     default: return new SettingsFragment();
                 }
             }
-            @Override public int getItemCount() { return 11; }
+            @Override public int getItemCount() { return 10; }
         });
 
         new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
@@ -75,8 +74,7 @@ public class SettingsActivity extends FragmentActivity {
                 case 6: tab.setText("叮咚"); break;
                 case 7: tab.setText("群管"); break;
                 case 8: tab.setText("AI"); break;
-                case 9: tab.setText("定时"); break;
-                case 10: tab.setText("统计"); break;
+                case 9: tab.setText("统计"); break;
             }
         }).attach();
     }
