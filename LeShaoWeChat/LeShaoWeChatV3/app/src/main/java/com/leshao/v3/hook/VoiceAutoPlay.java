@@ -7,6 +7,7 @@ import com.leshao.v3.LogWriter;
 
 import java.io.File;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -234,13 +235,62 @@ public class VoiceAutoPlay {
 
     // ========== so.y() → v0.I(msg) 播放 ==========
 
+    private static Object getPlayer(Object so) {
+        if (so == null) return null;
+
+        // 尝试方法: n0, getPlayer, N0, getVoicePlayer, p0, o0
+        for (String method : new String[]{"n0", "getPlayer", "N0", "getVoicePlayer", "p0", "o0", "k0"}) {
+            try {
+                Object r = XposedHelpers.callMethod(so, method);
+                if (r != null) {
+                    LogWriter.log(TAG, "getPlayer: so." + method + "()=" + r.getClass().getSimpleName());
+                    return r;
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // 尝试字段: p, player, n0, mPlayer, m, N
+        for (String field : new String[]{"p", "player", "n0", "mPlayer", "m", "N", "e", "f"}) {
+            try {
+                Object r = XposedHelpers.getObjectField(so, field);
+                if (r != null) {
+                    LogWriter.log(TAG, "getPlayer: so." + field + "=" + r.getClass().getSimpleName());
+                    return r;
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // dump so 的方法列表来定位
+        dumpSoMethods(so);
+        return null;
+    }
+
+    private static void dumpSoMethods(Object so) {
+        try {
+            StringBuilder sb = new StringBuilder("so[");
+            int count = 0;
+            for (Method m : so.getClass().getDeclaredMethods()) {
+                if (count >= 30) break;
+                Class<?>[] p = m.getParameterTypes();
+                if (p.length <= 2) {
+                    sb.append(m.getName()).append("(").append(p.length).append(") ");
+                    count++;
+                }
+            }
+            sb.append("]");
+            LogWriter.log(TAG, sb.toString());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "dumpSoMethods err: " + t.getMessage());
+        }
+    }
+
     private static void playQueuedVoices(String talker, Object so) {
         try {
             List<PendingVoiceMsg> pending = dequeue(talker);
             if (pending.isEmpty()) return;
             LogWriter.log(TAG, "playQueued: pending=" + pending.size() + " talker=" + talker);
 
-            Object player = XposedHelpers.callMethod(so, "n0");
+            Object player = getPlayer(so);
             if (player == null) {
                 LogWriter.log(TAG, "playQueued: player null");
                 return;
@@ -266,7 +316,7 @@ public class VoiceAutoPlay {
             if (pending.isEmpty()) return;
             LogWriter.log(TAG, "playAll: pending=" + pending.size());
 
-            Object player = XposedHelpers.callMethod(so, "n0");
+            Object player = getPlayer(so);
             if (player == null) {
                 LogWriter.log(TAG, "playAll: player null");
                 return;
@@ -296,11 +346,10 @@ public class VoiceAutoPlay {
             List<PendingVoiceMsg> pending = dequeue(talker);
             if (pending.isEmpty()) return;
 
-            Object player = XposedHelpers.callMethod(so, "n0");
+            Object player = getPlayer(so);
             if (player == null) return;
 
-            for (PendingVoiceMsg pvm : pending) {
-                try {
+            for (PendingVoiceMsg pvm : pending) {                try {
                     XposedHelpers.callMethod(player, "I", pvm.msg, false);
                     LogWriter.log(TAG, "PLAY (tts) id=" + pvm.msgId);
                     Thread.sleep(200);
