@@ -1,237 +1,188 @@
-07-28 18:50:15.207 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-28 18:50:15.209 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
-07-28 18:50:15.212 [main] ContactRepository: init: DB ready listener registered
-07-28 18:50:15.213 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-28 18:50:15.215 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-28 18:50:15.217 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-28 18:50:15.219 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-28 18:50:15.238 [main] SettingsEntryHook: LauncherUI entry hooks ok
-07-28 18:50:15.239 [main] SettingsEntryHook: INIT: hooks registered ok
-07-28 18:50:15.243 [main] MessageHook: n(e9,p0) OK
-07-28 18:50:15.244 [main] MessageHook: C(e9) OK
-07-28 18:50:15.257 [main] ContextManager: attachBaseContext DONE, ready=true
-07-28 18:50:15.258 [main] DatabaseProvider: init: already hooked via initEarly, skipping
-07-28 18:50:15.259 [main] SettingsInject: INIT: registered
-07-28 18:50:15.267 [main] TTSBroadcaster: TTS init done
-07-28 18:50:15.272 [main] VoiceAutoPlay: found voice bubble binder: com.tencent.mm.ui.chatting.viewitems.an.c(View,d,e9)
-07-28 18:50:15.274 [main] VoiceAutoPlay: voice bubble hook OK on com.tencent.mm.ui.chatting.viewitems.an.c
-07-28 18:50:15.277 [main] VoiceAutoPlay: ChattingUI.onResume hooked OK
-07-28 18:50:15.278 [main] VoiceAutoPlay: VoiceAutoPlay hooked e01.x9.n(e9,p0) OK
-07-28 18:50:15.279 [main] VoiceAutoPlay: VoiceComponent so loaded OK
-07-28 18:50:15.282 [main] ModuleConfig: initWxid: wxid_qf3ok46p08v922
-07-28 18:50:15.291 [main] LeShaoV3: [MainHook] activateAll() START, pendingTasks=31
-07-28 18:50:15.293 [main] AntiRecallHook: [XML] Hooked: af5.a.run()
-07-28 18:50:15.294 [main] AntiRecallHook: [Proto] Hooked: e01.u.f()
-07-28 18:50:15.296 [main] AntiRecallHook: [协程] Hooked: bd0.s.invokeSuspend()
-07-28 18:50:15.297 [main] AntiRecallHook: anti-recall hooks installed (4 paths)
-07-28 18:50:15.300 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewReceiveUI.initView()
-07-28 18:50:15.302 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI.initView()
-07-28 18:50:15.303 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI.onCreate()
-07-28 18:50:15.304 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2.onCreate()
-07-28 18:50:15.305 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI.onCreate()
-07-28 18:50:15.306 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKBeforeDetailUI.onCreate()
-07-28 18:50:15.307 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewDetailUI.onCreate()
-07-28 18:50:15.309 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI.onCreate()
-07-28 18:50:15.310 [main] RedPacket: [OK] ChattingUI.onResume()
-07-28 18:50:15.311 [main] RedPacket: RP OK
-07-28 18:50:15.311 [main] RedPacket: hooks installed (open result + UI auto-click + TTS UI)
-07-28 18:50:15.315 [main] AutoCollect: [OK] com.tencent.mm.plugin.wallet.pay.ui.WalletPayUI.onCreate()
-07-28 18:50:15.316 [main] AutoCollect: [OK] ChattingUI.onResume()
-07-28 18:50:15.318 [main] AutoCollect: AC OK
-07-28 18:50:15.318 [main] AutoCollect: hooks installed (transfer result + UI auto-collect)
-07-28 18:50:15.319 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.325 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.327 [main] LeShaoV3: [Footer] 字数限制已解除 (返回'0')
-07-28 18:50:15.329 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.333 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.338 [main] LeShaoV3: --- [6] 定时发送 ---
-07-28 18:50:15.339 [main] LeShaoV3:   ChatFooter.F(e9,a35.g)→boolean ✓
-07-28 18:50:15.340 [main] LeShaoV3:   ChatFooterCustom.r(10 params) ✓
-07-28 18:50:15.341 [main] LeShaoV3:   ChatFooterCustom.onClick(View) ✓
-07-28 18:50:15.342 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.345 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.346 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.347 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.348 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.349 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.349 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.350 [main] LeShaoV3: --- [10] 好友删除检测 ---
-07-28 18:50:15.350 [main] LeShaoV3:   ContactInfoUI.D2() + onResume() ✓
-07-28 18:50:15.351 [main] LeShaoV3:   SendMsgSuccessEvent ✓
-07-28 18:50:15.352 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.360 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.361 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.363 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.366 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.367 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.369 [main] HideFields: hook initView OK
-07-28 18:50:15.369 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.371 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.374 [main] ContactChangeLog: hook installing...
-07-28 18:50:15.376 [main] ContactChangeLog: GetContactService not found: java.lang.ClassNotFoundException: com$tencent$mm$plugin$getcontact$l11$h
-07-28 18:50:15.376 [main] ContactChangeLog: [v.b] hook ok
-07-28 18:50:15.379 [main] ContactChangeLog: hook installed OK
-07-28 18:50:15.393 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.394 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.398 [main] ChatBackup: daily backup scheduled at 02:00
-07-28 18:50:15.399 [main] ChatBackup: hook OK
-07-28 18:50:15.400 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:15.403 [main] ThemeHook: loadColors done
-07-28 18:50:15.404 [main] ThemeHook: state: m=true bar=false page=false chatBg=false bubble=false tab=false text=false
-07-28 18:50:15.405 [main] ThemeHook: [A] ok
-07-28 18:50:15.407 [main] ThemeHook: [B] ok
-07-28 18:50:15.409 [main] ThemeHook: [C] ga.E0 title ok
-07-28 18:50:15.411 [main] ThemeHook: [C] dim-scan ok
-07-28 18:50:15.412 [main] ThemeHook: [D] ok
-07-28 18:50:15.413 [main] ThemeHook: [E] com.tencent.mm.ui.conversation.MainUI ok
-07-28 18:50:15.416 [main] ThemeHook: [F] p0 extra hook ok
-07-28 18:50:15.416 [main] ThemeHook: [F] DyeTemplate l0+n0 ok
-07-28 18:50:15.419 [main] ThemeHook: [H] ok
-07-28 18:50:15.423 [main] ThemeHook: [X] addView scan ok
-07-28 18:50:15.423 [main] ThemeHook: [G] ChattingUI ok
-07-28 18:50:15.424 [main] ThemeHook: [L] dark sync ok
-07-28 18:50:15.425 [main] ThemeHook: [M] settings bg ok
-07-28 18:50:15.427 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivity ok
-07-28 18:50:15.427 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivityJava ok
-07-28 18:50:15.428 [main] ThemeHook: [O] MMFragment ok
-07-28 18:50:15.429 [main] ThemeHook: [O] MMFragmentActivity ok
-07-28 18:50:15.431 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooter ok
-07-28 18:50:15.432 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooterBottom ok
-07-28 18:50:15.433 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.ChatFooterPanel ok
-07-28 18:50:15.434 [main] ThemeHook: [P] com.tencent.mm.ui.chatting.ChattingFooterMoreBtnBar ok
-07-28 18:50:15.434 [main] ThemeHook: [P] ChattingImageBGView ok
-07-28 18:50:15.435 [main] ThemeHook: [Q] SnsTimeLineUI ok
-07-28 18:50:15.437 [main] ThemeHook: [Q] ImproveSnsTimelineUI ok
-07-28 18:50:15.438 [main] ThemeHook: [Q] ContactInfoUI ok
-07-28 18:50:15.438 [main] ThemeHook: [Q] AddressUI ok
-07-28 18:50:15.439 [main] ThemeHook: [Q] FindMoreFriendsUI ok
-07-28 18:50:15.440 [main] ThemeHook: [Q] WebViewUI ok
-07-28 18:50:15.441 [main] ThemeHook: [Q] MainSettingsUI ok
-07-28 18:50:15.441 [main] ThemeHook: [Q] CommonSettingsUI ok
-07-28 18:50:15.442 [main] ThemeHook: [Q] BizConversationUI ok
-07-28 18:50:15.443 [main] ThemeHook: [Q] SnsUserUI ok
-07-28 18:50:15.444 [main] ThemeHook: [Q] SnsCommentUI ok
-07-28 18:50:15.445 [main] ThemeHook: [Q] SnsUploadUI ok
-07-28 18:50:15.445 [main] ThemeHook: [Q] ContactProfileUI ok
-07-28 18:50:15.447 [main] ThemeHook: [Q] ConversationListView ok
-07-28 18:50:15.448 [main] ThemeHook: [Q] ConversationFolderItemView ok
-07-28 18:50:15.449 [main] ThemeHook: [Q] MainUIView ok
-07-28 18:50:15.450 [main] ThemeHook: [Q] ChattingItemFooter ok
-07-28 18:50:15.451 [main] ThemeHook: [Q] SnsHeader ok
-07-28 18:50:15.454 [main] ThemeHook: [Q] SnsCollapsibleTextView ok
-07-28 18:50:15.455 [main] ThemeHook: [Q] TimelineCommentView ok
-07-28 18:50:15.457 [main] ThemeHook: [Q] LauncherUIBottomTabView ok
-07-28 18:50:15.459 [main] ThemeHook: gallery hook err: No static method findAndHookMethod(Ljava/lang/Class;Ljava/lang/String;[Ljava/lang/Object;)V in class Lde/robv/android/xposed/XposedHelpers; or its super classes (declaration of 'de.robv.android.xposed.XposedHelpers' appears in Anonymous-DexFile@732009187)
-07-28 18:50:15.459 [main] ThemeHook: all hooks installed
-07-28 18:50:16.731 [main] VF: scan [com.tencent.mm.ui.chatting.viewitems, com.tencent.mm.ui.chatting.component]: 2076 classes, 1161 methods
-07-28 18:50:16.733 [main] VF: MenuBuilder.add hooked
-07-28 18:50:16.734 [main] VF: viewitems+component+MenuBuilder hooks installed
-07-28 18:50:18.259 [main] VF: ◆discovered g(): y21.x0.g(String,String)→String (trusted, ITE on init)
-07-28 18:50:18.261 [main] VF: ◆discovered t(): y21.x0.t(t(String,int,int,e9)→boolean)
-07-28 18:50:18.275 [main] VF: discoverVoiceApi: g=y21.x0.g t=y21.x0.t path=null.null
-07-28 18:50:18.295 [main] VF: ready — do a native forward to trace API
-07-28 18:50:18.297 [main] LeShaoV3: [MainHook] activateAll() DONE
-07-28 18:50:18.617 [main] TtsEngine: TTS init OK
-07-28 18:50:20.266 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-28 18:50:20.272 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-28 18:50:20.273 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-28 18:50:20.275 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-28 18:50:20.277 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-28 18:50:20.312 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-28 18:50:20.315 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-28 18:50:20.316 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-28 18:50:20.318 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-28 18:50:20.320 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-28 18:50:21.281 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-28 18:50:21.283 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-28 18:50:21.285 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-28 18:50:21.286 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-28 18:50:21.289 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-28 18:50:24.467 [[GT]ColdPool#5] MessageHook: #1 type=1->1 isSend=53 talker=11586179019@chatroom content=oulele002:
-娅丽达，品质好，口碑好👍
-
-一口价💰69、99～
-07-28 18:50:24.480 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:24.481 [main] MessageHandler: DROPPED by filter: type=1 from=11586179019@chatroom masterSwitch=true announceText=true
-07-28 18:50:24.523 [[GT]ColdPool#5] MessageHook: #2 type=1->1 isSend=37 talker=23818285582@chatroom content=wxid_ar0gd8tzmd2s41:
-车找人  🚄  直达快车
-时间:  ...
-07-28 18:50:24.538 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:24.544 [main] MessageHandler: DROPPED by filter: type=1 from=23818285582@chatroom masterSwitch=true announceText=true
-07-28 18:50:24.558 [[GT]ColdPool#5] MessageHook: #3 type=1->1 isSend=7400 talker=49744470922@chatroom content=wxid_ru4yvkbc2igp22:
-严正声明
-
-各位家长、同学、各界朋友：...
-07-28 18:50:24.560 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:24.561 [main] MessageHandler: DROPPED by filter: type=1 from=49744470922@chatroom masterSwitch=true announceText=true
-07-28 18:50:26.969 [main] ChatBackup: found DB at /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
-07-28 18:50:26.992 [main] ChatBackup: backup err: cannot create dir /sdcard/leshao_v3_logs/backup
-07-28 18:50:28.551 [[GT]ColdPool#8] DatabaseProvider: DB captured via rawQuery (EnMicroMsg: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db)
-07-28 18:50:28.553 [[GT]ColdPool#8] ContactRepository: DB ready callback, loading contacts...
-07-28 18:50:28.554 [[GT]ColdPool#8] ContactRepository: loadContacts START
-07-28 18:50:28.554 [[GT]ColdPool#8] ContactRepository: Strategy B: trying model.aj reflection...
-07-28 18:50:28.556 [[GT]ColdPool#8] ContactRepository: Strategy B ERROR: ClassNotFoundException: Didn't find class "com.tencent.mm.model.aj" on path: DexPathList[[zip file "/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/lib/arm64, /data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk!/lib/arm64-v8a, /system/lib64, /system_ext/lib64]]
-07-28 18:50:28.557 [[GT]ColdPool#8] ContactRepository: Strategy C: trying findKernelClass...
-07-28 18:50:28.973 [[GT]ColdPool#5] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:28.974 [[GT]ColdPool#5] MessageHook: #4 type=34->34 isSend=228 talker=wxid_9ohhf82mrlgc22 content=
-07-28 18:50:28.975 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:28.997 [main] ContactRepository: Strategy A: DB opened, rcontact table confirmed
-07-28 18:50:28.998 [main] ContactRepository: ensureDirDb OK
-07-28 18:50:28.999 [main] MessageHandler: handle type=34 talker=wxid_9ohhf82mrlgc22 name=乐少
-07-28 18:50:29.001 [main] VoiceRelay: voice msg from: wxid_9ohhf82mrlgc22 (handled by VoiceAutoPlay hooks)
-07-28 18:50:30.184 [[GT]ColdPool#8] ContactRepository: findKernel: DexFile scanned=477 no match
-07-28 18:50:30.185 [[GT]ColdPool#8] ContactRepository: Strategy C: kernel class not found
-07-28 18:50:30.186 [[GT]ColdPool#8] ContactRepository: Strategy A: trying direct DB (ka5.f.s)...
-07-28 18:50:30.187 [[GT]ColdPool#8] ContactRepository: Strategy A: uin=295734952
-07-28 18:50:30.188 [[GT]ColdPool#8] ContactRepository: Strategy A: imei=1234567890ABCDEF
-07-28 18:50:30.188 [[GT]ColdPool#8] ContactRepository: Strategy A: dbPath=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db
-07-28 18:50:30.189 [[GT]ColdPool#8] ContactRepository: Strategy A: pwd(censored) calculated, opening...
-07-28 18:50:30.204 [[GT]ColdPool#8] ContactRepository: Strategy A: DB opened via ka5.f.s, querying...
-07-28 18:50:30.296 [[GT]ColdPool#8] ContactRepository:   F0 u=wxid_geem9dw5nwb212 n=. a=iii_____vip r=曹琪琳 t=3
-07-28 18:50:30.298 [[GT]ColdPool#8] ContactRepository:   F1 u=wxid_p38c7u9teq3o22 n=A0树影剑南 a=suenan520 r=AA t=3
-07-28 18:50:30.298 [[GT]ColdPool#8] ContactRepository:   F2 u=wxid_9ohhf82mrlgc22 n=A💯新安联通乐少 131260... a=HK93993 r=乐少 t=2051
-07-28 18:50:30.299 [[GT]ColdPool#8] ContactRepository:   F3 u=wxid_7695996953612 n=N a=Z577923324 r=N (260713) t=3
-07-28 18:50:30.300 [[GT]ColdPool#8] ContactRepository:   F4 u=wxid_a9ubk72b9jvj22 n=এ᭄随心随缘ོꦿృ༊ a=pp15766352806 r=少华 t=3
-07-28 18:50:30.301 [[GT]ColdPool#8] ContactRepository: queryContactsWcdb friends=50
-07-28 18:50:30.314 [[GT]ColdPool#8] ContactRepository: queryContactsWcdb groups=83 total=133
-07-28 18:50:30.316 [[GT]ColdPool#8] ContactRepository: loadContacts OK via Strategy A (direct DB)
-07-28 18:50:34.950 [[GT]ColdPool#10] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:34.952 [[GT]ColdPool#10] MessageHook: #5 type=34->34 isSend=228 talker=wxid_9ohhf82mrlgc22 content=
-07-28 18:50:34.953 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-28 18:50:34.953 [main] MessageHandler: handle type=34 talker=wxid_9ohhf82mrlgc22 name=乐少
-07-28 18:50:34.955 [main] VoiceRelay: voice msg from: wxid_9ohhf82mrlgc22 (handled by VoiceAutoPlay hooks)
-07-28 18:50:41.367 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-28 18:50:41.368 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-28 18:50:41.370 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-28 18:50:41.371 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-28 18:50:41.373 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-28 18:50:41.591 [main] VF: qe.v0(V:Toolbar)
-07-28 18:50:41.595 [main] VF: TranslateControllerView.a(V:TranslateControllerView,Integer)
-07-28 18:50:41.678 [main] VF: zm.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-28 18:50:41.680 [main] VF: ym.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-28 18:50:41.681 [main] VF: a1.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-28 18:50:41.682 [main] VF: so.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-28 18:50:41.683 [main] VF: sf.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-28 18:50:41.684 [main] VF: s2.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-28 18:50:41.685 [main] VF: h6.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-28 18:50:41.686 [main] VF: cj.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-28 18:50:41.687 [main] VF: n7.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-28 18:50:41.688 [main] VF: g9.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-28 18:50:41.689 [main] VF: c0.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-28 18:50:41.690 [main] VF: k.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-28 18:50:41.690 [main] VF: k1.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-28 18:50:41.691 [main] VF: g7.h0(V:ScrollControlRecyclerView,Integer,Integer,Integer)
-07-28 18:50:41.706 [main] VF: TranslateControllerView.a(V:TranslateControllerView,Integer)
-07-28 18:50:41.722 [main] VF: qe.v0(V:Toolbar)
-07-28 18:50:41.739 [main] VF: TranslateControllerView.a(V:TranslateControllerView,Integer)
-07-28 18:50:41.748 [main] VF: g0.create(V:fh)
-07-28 18:50:41.751 [main] VF: hq.b(V:fh,Boolean,Boolean)
-07-28 18:50:41.753 [main] VF: wp.G(gd,null)
-07-28 18:50:41.756 [main] VF: a0.U(V:ChattingAvatarImageView,String,null)
-07-28 18:50:41.773 [main] VF: g0.create(V:fh)
-07-28 18:50:41.777 [main] VF: hq.b(V:fh,Boolean,Boolean)
-07-28 18:50:41.778 [main] VF: wp.G(gd,null)
-07-28 18:50:41.780 [main] VF: a0.U(V:ChattingAvatarImageView,String,null)
-07-28 18:50:41.792 [main] VF: g0.create(V:fh)
-07-28 18:50:41.794 [main] VF: hq.b(V:fh,Boolean,Boolean)
-07-28 18:50:41.795 [main] VF: wp.G(gd,null)
+07-28 18:53:37.912 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-28 18:53:37.913 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-28 18:53:37.914 [main] ContactRepository: init: DB ready listener registered
+07-28 18:53:37.915 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-28 18:53:37.916 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-28 18:53:37.917 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-28 18:53:37.918 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-28 18:53:37.925 [main] SettingsEntryHook: LauncherUI entry hooks ok
+07-28 18:53:37.926 [main] SettingsEntryHook: INIT: hooks registered ok
+07-28 18:53:37.927 [main] MessageHook: n(e9,p0) OK
+07-28 18:53:37.928 [main] MessageHook: C(e9) OK
+07-28 18:53:37.934 [main] ContextManager: attachBaseContext DONE, ready=true
+07-28 18:53:37.934 [main] DatabaseProvider: init: already hooked via initEarly, skipping
+07-28 18:53:37.935 [main] SettingsInject: INIT: registered
+07-28 18:53:37.940 [main] TTSBroadcaster: TTS init done
+07-28 18:53:37.942 [main] VoiceAutoPlay: found voice bubble binder: com.tencent.mm.ui.chatting.viewitems.an.c(View,d,e9)
+07-28 18:53:37.943 [main] VoiceAutoPlay: voice bubble hook install fail: No static method findAndHookMethod(Ljava/lang/String;Ljava/lang/ClassLoader;Ljava/lang/String;[Ljava/lang/Object;)V in class Lde/robv/android/xposed/XposedHelpers; or its super classes (declaration of 'de.robv.android.xposed.XposedHelpers' appears in Anonymous-DexFile@732009187)
+07-28 18:53:37.944 [main] VoiceAutoPlay: ChattingUI.onResume hooked OK
+07-28 18:53:37.945 [main] VoiceAutoPlay: VoiceAutoPlay message hook fail: No static method findAndHookMethod(Ljava/lang/Class;Ljava/lang/String;[Ljava/lang/Object;)V in class Lde/robv/android/xposed/XposedHelpers; or its super classes (declaration of 'de.robv.android.xposed.XposedHelpers' appears in Anonymous-DexFile@732009187)
+07-28 18:53:37.945 [main] VoiceAutoPlay: VoiceComponent so loaded OK
+07-28 18:53:37.947 [main] ModuleConfig: initWxid: wxid_qf3ok46p08v922
+07-28 18:53:37.953 [main] LeShaoV3: [MainHook] activateAll() START, pendingTasks=31
+07-28 18:53:37.954 [main] AntiRecallHook: [XML] Hooked: af5.a.run()
+07-28 18:53:37.955 [main] AntiRecallHook: [Proto] Hooked: e01.u.f()
+07-28 18:53:37.957 [main] AntiRecallHook: [协程] Hooked: bd0.s.invokeSuspend()
+07-28 18:53:37.958 [main] AntiRecallHook: anti-recall hooks installed (4 paths)
+07-28 18:53:37.960 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewReceiveUI.initView()
+07-28 18:53:37.961 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI.initView()
+07-28 18:53:37.962 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI.onCreate()
+07-28 18:53:37.962 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2.onCreate()
+07-28 18:53:37.963 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI.onCreate()
+07-28 18:53:37.964 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKBeforeDetailUI.onCreate()
+07-28 18:53:37.965 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewDetailUI.onCreate()
+07-28 18:53:37.965 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI.onCreate()
+07-28 18:53:37.966 [main] RedPacket: [OK] ChattingUI.onResume()
+07-28 18:53:37.967 [main] RedPacket: RP OK
+07-28 18:53:37.967 [main] RedPacket: hooks installed (open result + UI auto-click + TTS UI)
+07-28 18:53:37.970 [main] AutoCollect: [OK] com.tencent.mm.plugin.wallet.pay.ui.WalletPayUI.onCreate()
+07-28 18:53:37.970 [main] AutoCollect: [OK] ChattingUI.onResume()
+07-28 18:53:37.972 [main] AutoCollect: AC OK
+07-28 18:53:37.972 [main] AutoCollect: hooks installed (transfer result + UI auto-collect)
+07-28 18:53:37.973 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:37.977 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:37.978 [main] LeShaoV3: [Footer] 字数限制已解除 (返回'0')
+07-28 18:53:37.980 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:37.982 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:37.986 [main] LeShaoV3: --- [6] 定时发送 ---
+07-28 18:53:37.986 [main] LeShaoV3:   ChatFooter.F(e9,a35.g)→boolean ✓
+07-28 18:53:37.988 [main] LeShaoV3:   ChatFooterCustom.r(10 params) ✓
+07-28 18:53:37.988 [main] LeShaoV3:   ChatFooterCustom.onClick(View) ✓
+07-28 18:53:37.989 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:37.991 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:37.992 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:37.993 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:37.994 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:37.994 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:37.995 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:37.995 [main] LeShaoV3: --- [10] 好友删除检测 ---
+07-28 18:53:37.996 [main] LeShaoV3:   ContactInfoUI.D2() + onResume() ✓
+07-28 18:53:37.996 [main] LeShaoV3:   SendMsgSuccessEvent ✓
+07-28 18:53:37.997 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:38.002 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:38.003 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:38.004 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:38.007 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:38.007 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:38.008 [main] HideFields: hook initView OK
+07-28 18:53:38.009 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:38.010 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:38.012 [main] ContactChangeLog: hook installing...
+07-28 18:53:38.014 [main] ContactChangeLog: GetContactService not found: java.lang.ClassNotFoundException: com$tencent$mm$plugin$getcontact$l11$h
+07-28 18:53:38.014 [main] ContactChangeLog: [v.b] hook ok
+07-28 18:53:38.016 [main] ContactChangeLog: hook installed OK
+07-28 18:53:38.025 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:38.026 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:38.029 [main] ChatBackup: daily backup scheduled at 02:00
+07-28 18:53:38.029 [main] ChatBackup: hook OK
+07-28 18:53:38.030 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:38.032 [main] ThemeHook: loadColors done
+07-28 18:53:38.033 [main] ThemeHook: state: m=true bar=false page=false chatBg=false bubble=false tab=false text=false
+07-28 18:53:38.034 [main] ThemeHook: [A] ok
+07-28 18:53:38.035 [main] ThemeHook: [B] ok
+07-28 18:53:38.036 [main] ThemeHook: [C] ga.E0 title ok
+07-28 18:53:38.038 [main] ThemeHook: [C] dim-scan ok
+07-28 18:53:38.038 [main] ThemeHook: [D] ok
+07-28 18:53:38.039 [main] ThemeHook: [E] com.tencent.mm.ui.conversation.MainUI ok
+07-28 18:53:38.041 [main] ThemeHook: [F] p0 extra hook ok
+07-28 18:53:38.041 [main] ThemeHook: [F] DyeTemplate l0+n0 ok
+07-28 18:53:38.044 [main] ThemeHook: [H] ok
+07-28 18:53:38.046 [main] ThemeHook: [X] addView scan ok
+07-28 18:53:38.047 [main] ThemeHook: [G] ChattingUI ok
+07-28 18:53:38.047 [main] ThemeHook: [L] dark sync ok
+07-28 18:53:38.048 [main] ThemeHook: [M] settings bg ok
+07-28 18:53:38.049 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivity ok
+07-28 18:53:38.049 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivityJava ok
+07-28 18:53:38.050 [main] ThemeHook: [O] MMFragment ok
+07-28 18:53:38.051 [main] ThemeHook: [O] MMFragmentActivity ok
+07-28 18:53:38.052 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooter ok
+07-28 18:53:38.054 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooterBottom ok
+07-28 18:53:38.054 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.ChatFooterPanel ok
+07-28 18:53:38.055 [main] ThemeHook: [P] com.tencent.mm.ui.chatting.ChattingFooterMoreBtnBar ok
+07-28 18:53:38.056 [main] ThemeHook: [P] ChattingImageBGView ok
+07-28 18:53:38.056 [main] ThemeHook: [Q] SnsTimeLineUI ok
+07-28 18:53:38.057 [main] ThemeHook: [Q] ImproveSnsTimelineUI ok
+07-28 18:53:38.057 [main] ThemeHook: [Q] ContactInfoUI ok
+07-28 18:53:38.058 [main] ThemeHook: [Q] AddressUI ok
+07-28 18:53:38.058 [main] ThemeHook: [Q] FindMoreFriendsUI ok
+07-28 18:53:38.059 [main] ThemeHook: [Q] WebViewUI ok
+07-28 18:53:38.059 [main] ThemeHook: [Q] MainSettingsUI ok
+07-28 18:53:38.060 [main] ThemeHook: [Q] CommonSettingsUI ok
+07-28 18:53:38.060 [main] ThemeHook: [Q] BizConversationUI ok
+07-28 18:53:38.061 [main] ThemeHook: [Q] SnsUserUI ok
+07-28 18:53:38.061 [main] ThemeHook: [Q] SnsCommentUI ok
+07-28 18:53:38.062 [main] ThemeHook: [Q] SnsUploadUI ok
+07-28 18:53:38.063 [main] ThemeHook: [Q] ContactProfileUI ok
+07-28 18:53:38.064 [main] ThemeHook: [Q] ConversationListView ok
+07-28 18:53:38.064 [main] ThemeHook: [Q] ConversationFolderItemView ok
+07-28 18:53:38.065 [main] ThemeHook: [Q] MainUIView ok
+07-28 18:53:38.066 [main] ThemeHook: [Q] ChattingItemFooter ok
+07-28 18:53:38.067 [main] ThemeHook: [Q] SnsHeader ok
+07-28 18:53:38.069 [main] ThemeHook: [Q] SnsCollapsibleTextView ok
+07-28 18:53:38.070 [main] ThemeHook: [Q] TimelineCommentView ok
+07-28 18:53:38.071 [main] ThemeHook: [Q] LauncherUIBottomTabView ok
+07-28 18:53:38.072 [main] ThemeHook: gallery hook err: No static method findAndHookMethod(Ljava/lang/Class;Ljava/lang/String;[Ljava/lang/Object;)V in class Lde/robv/android/xposed/XposedHelpers; or its super classes (declaration of 'de.robv.android.xposed.XposedHelpers' appears in Anonymous-DexFile@732009187)
+07-28 18:53:38.072 [main] ThemeHook: all hooks installed
+07-28 18:53:39.326 [main] VF: scan [com.tencent.mm.ui.chatting.viewitems, com.tencent.mm.ui.chatting.component]: 2076 classes, 1161 methods
+07-28 18:53:39.328 [main] VF: MenuBuilder.add hooked
+07-28 18:53:39.329 [main] VF: viewitems+component+MenuBuilder hooks installed
+07-28 18:53:40.710 [main] VF: ◆discovered g(): y21.x0.g(String,String)→String (trusted, ITE on init)
+07-28 18:53:40.711 [main] VF: ◆discovered t(): y21.x0.t(t(String,int,int,e9)→boolean)
+07-28 18:53:40.727 [main] VF: discoverVoiceApi: g=y21.x0.g t=y21.x0.t path=null.null
+07-28 18:53:40.747 [main] VF: ready — do a native forward to trace API
+07-28 18:53:40.749 [main] LeShaoV3: [MainHook] activateAll() DONE
+07-28 18:53:41.046 [main] TtsEngine: TTS init OK
+07-28 18:53:42.665 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-28 18:53:42.668 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-28 18:53:42.669 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-28 18:53:42.670 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-28 18:53:42.672 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-28 18:53:42.687 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-28 18:53:42.689 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-28 18:53:42.690 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-28 18:53:42.692 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-28 18:53:42.695 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-28 18:53:43.664 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-28 18:53:43.666 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-28 18:53:43.667 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-28 18:53:43.668 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-28 18:53:43.670 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-28 18:53:49.102 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-28 18:53:49.104 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-28 18:53:49.105 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-28 18:53:49.106 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-28 18:53:49.109 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-28 18:53:49.361 [main] ChatBackup: found DB at /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
+07-28 18:53:49.365 [main] ChatBackup: backup err: cannot create dir /sdcard/leshao_v3_logs/backup
+07-28 18:53:50.974 [[GT]ColdPool#16] DatabaseProvider: DB captured via rawQuery (EnMicroMsg: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db)
+07-28 18:53:50.977 [[GT]ColdPool#16] ContactRepository: DB ready callback, loading contacts...
+07-28 18:53:50.977 [[GT]ColdPool#16] ContactRepository: loadContacts START
+07-28 18:53:50.978 [[GT]ColdPool#16] ContactRepository: Strategy B: trying model.aj reflection...
+07-28 18:53:50.980 [[GT]ColdPool#16] ContactRepository: Strategy B ERROR: ClassNotFoundException: Didn't find class "com.tencent.mm.model.aj" on path: DexPathList[[zip file "/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/lib/arm64, /data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk!/lib/arm64-v8a, /system/lib64, /system_ext/lib64]]
+07-28 18:53:50.981 [[GT]ColdPool#16] ContactRepository: Strategy C: trying findKernelClass...
+07-28 18:53:51.364 [[GT]ColdPool#8] MessageHook: #1 type=34->34 isSend=228 talker=wxid_9ohhf82mrlgc22 content=
+07-28 18:53:51.366 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:51.386 [main] ContactRepository: Strategy A: DB opened, rcontact table confirmed
+07-28 18:53:51.388 [main] ContactRepository: ensureDirDb OK
+07-28 18:53:51.390 [main] MessageHandler: handle type=34 talker=wxid_9ohhf82mrlgc22 name=乐少
+07-28 18:53:51.394 [main] VoiceRelay: voice msg from: wxid_9ohhf82mrlgc22 (handled by VoiceAutoPlay hooks)
+07-28 18:53:52.547 [[GT]ColdPool#16] ContactRepository: findKernel: DexFile scanned=477 no match
+07-28 18:53:52.549 [[GT]ColdPool#16] ContactRepository: Strategy C: kernel class not found
+07-28 18:53:52.549 [[GT]ColdPool#16] ContactRepository: Strategy A: trying direct DB (ka5.f.s)...
+07-28 18:53:52.550 [[GT]ColdPool#16] ContactRepository: Strategy A: uin=295734952
+07-28 18:53:52.551 [[GT]ColdPool#16] ContactRepository: Strategy A: imei=1234567890ABCDEF
+07-28 18:53:52.552 [[GT]ColdPool#16] ContactRepository: Strategy A: dbPath=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db
+07-28 18:53:52.552 [[GT]ColdPool#16] ContactRepository: Strategy A: pwd(censored) calculated, opening...
+07-28 18:53:52.567 [[GT]ColdPool#16] ContactRepository: Strategy A: DB opened via ka5.f.s, querying...
+07-28 18:53:52.661 [[GT]ColdPool#16] ContactRepository:   F0 u=wxid_geem9dw5nwb212 n=. a=iii_____vip r=曹琪琳 t=3
+07-28 18:53:52.666 [[GT]ColdPool#16] ContactRepository:   F1 u=wxid_p38c7u9teq3o22 n=A0树影剑南 a=suenan520 r=AA t=3
+07-28 18:53:52.670 [[GT]ColdPool#16] ContactRepository:   F2 u=wxid_9ohhf82mrlgc22 n=A💯新安联通乐少 131260... a=HK93993 r=乐少 t=2051
+07-28 18:53:52.670 [[GT]ColdPool#16] ContactRepository:   F3 u=wxid_7695996953612 n=N a=Z577923324 r=N (260713) t=3
+07-28 18:53:52.671 [[GT]ColdPool#16] ContactRepository:   F4 u=wxid_a9ubk72b9jvj22 n=এ᭄随心随缘ོꦿృ༊ a=pp15766352806 r=少华 t=3
+07-28 18:53:52.673 [[GT]ColdPool#16] ContactRepository: queryContactsWcdb friends=50
+07-28 18:53:52.691 [[GT]ColdPool#16] ContactRepository: queryContactsWcdb groups=83 total=133
+07-28 18:53:52.695 [[GT]ColdPool#16] ContactRepository: loadContacts OK via Strategy A (direct DB)
+07-28 18:53:58.750 [[GT]ColdPool#8] MessageHook: #2 type=34->34 isSend=228 talker=wxid_9ohhf82mrlgc22 content=
+07-28 18:53:58.751 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-28 18:53:58.752 [main] MessageHandler: handle type=34 talker=wxid_9ohhf82mrlgc22 name=乐少
+07-28 18:53:58.754 [main] VoiceRelay: voice msg from: wxid_9ohhf82mrlgc22 (handled by VoiceAutoPlay hooks)
