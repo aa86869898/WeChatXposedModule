@@ -374,4 +374,53 @@ public class VoiceAutoPlay {
     public static void setEnabled(boolean enabled) {
         sEnabled = enabled;
     }
+
+    // ============ 供 MessageHook 调用 ============
+
+    public static void tryAutoPlayVoice(Object msg, long msgId) {
+        try {
+            if (!sEnabled) return;
+            boolean activated = ModuleConfig.load(
+                com.leshao.v3.ContextManager.getPrefs()
+            ).autoPlayVoice;
+            if (!activated) return;
+
+            if (msgId == sLastPlayedMsgId) return;
+
+            // 跳过自己发的
+            try {
+                boolean isSend = (Boolean) XposedHelpers.callMethod(msg, "G1");
+                if (isSend) return;
+            } catch (Throwable ignored) {}
+
+            // 跳过正在发送中的
+            try {
+                if ((Integer) XposedHelpers.callMethod(msg, "M0") == 5) return;
+            } catch (Throwable ignored) {}
+
+            Object voiceComp = sCurrentVoiceComp;
+            if (voiceComp == null) {
+                LogWriter.log(TAG, "tryAutoPlay: no VoiceComponent stored, msgId=" + msgId);
+                return;
+            }
+
+            Object player = XposedHelpers.callMethod(voiceComp, "n0");
+            if (player == null) {
+                LogWriter.log(TAG, "tryAutoPlay: n0() null, msgId=" + msgId);
+                return;
+            }
+
+            try {
+                if ((Boolean) XposedHelpers.callMethod(player, "o")) return;
+            } catch (Throwable ignored) {}
+
+            XposedHelpers.callMethod(player, "I", msg, false);
+            sLastPlayedMsgId = msgId;
+            LogWriter.log(TAG, "auto-play OK! msgId=" + msgId
+                + " talker=" + XposedHelpers.callMethod(msg, "N0"));
+
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "tryAutoPlayVoice error: " + e.getMessage());
+        }
+    }
 }
