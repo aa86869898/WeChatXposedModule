@@ -130,7 +130,12 @@ public class ScheduleBroadcast {
     private static Object sCapturedN85r;
     private static Object sN85d0InvokeArg;
     private static Object sN85d0Inst;
+    private static Object sD85i_cArg;
+    private static Object sD85iInst;
+    private static Object sD85d_jArg;
+    private static Object sD85d_jInst;
     private static volatile Thread sScheduleThread;
+    private static final java.util.Set<String> sSendingTasks = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
     private static final AtomicBoolean sInitialized = new AtomicBoolean(false);
     private static HandlerThread sHandlerThread;
     private static Handler sHandler;
@@ -294,222 +299,122 @@ public class ScheduleBroadcast {
     }
 
     private static void installDiagHooks() {
-        // Hook f9.I9 / f9.H9: 消息写入 — 全栈跟踪
+        // === 完整发送链路追踪 ===
+        // 链路: d85.d.j → d85.i.c → n85.d0.invoke → n85.c0.create → invokeSuspend → n85.r → a21.q → a21.q.i → I9 → 联网
         try {
             Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", sClassLoader);
-
-            XposedBridge.hookAllMethods(f9, "I9", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    Object[] args = param.args;
-                    StringBuilder sb = new StringBuilder("DIAG: I9(").append(args.length).append(")");
-                    for (int i = 0; i < args.length; i++) {
-                        sb.append(" p").append(i).append("=");
-                        sb.append(args[i] == null ? "null" : args[i].getClass().getSimpleName());
-                    }
-                    log(sb.toString());
-                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
-                    log("  I9栈(" + Thread.currentThread().getName() + "):");
-                    for (int i = 3; i < Math.min(st.length, 20); i++) {
-                        String cls = st[i].getClassName();
-                        if (!cls.startsWith("java.") && !cls.startsWith("android.") && !cls.startsWith("dalvik.")
-                            && !cls.startsWith("de.robv.android.xposed")) {
-                            log("    " + cls + "." + st[i].getMethodName() + ":" + st[i].getLineNumber());
-                        }
-                    }
-                }
-            });
-
             XposedBridge.hookAllMethods(f9, "H9", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    Object[] args = param.args;
-                    StringBuilder sb = new StringBuilder("DIAG: H9(").append(args.length).append(")");
-                    for (int i = 0; i < args.length; i++) {
-                        sb.append(" p").append(i).append("=");
-                        sb.append(args[i] == null ? "null" : args[i].getClass().getSimpleName());
-                    }
-                    log(sb.toString());
-                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
-                    log("  H9栈(" + Thread.currentThread().getName() + "):");
-                    for (int i = 3; i < Math.min(st.length, 15); i++) {
-                        String cls = st[i].getClassName();
-                        if (!cls.startsWith("java.") && !cls.startsWith("android.") && !cls.startsWith("dalvik.")
-                            && !cls.startsWith("de.robv.android.xposed")) {
-                            log("    " + cls + "." + st[i].getMethodName() + ":" + st[i].getLineNumber());
-                        }
-                    }
+                    log("TRACE H9(" + param.args.length + ") p0="
+                        + (param.args[0] == null ? "null" : param.args[0].getClass().getSimpleName()));
                 }
             });
-
-            log("DIAG: f9.I9+H9 hooks OK");
-        } catch (Throwable t) { log("DIAG: f9 hooks fail: " + t.getMessage()); }
-
-        // Hook ChatFooter.F: 发送消息的入口（after hook）
-        try {
-            Class<?> cf = XposedHelpers.findClass("com.tencent.mm.pluginsdk.ui.chat.ChatFooter", sClassLoader);
-            XposedBridge.hookAllMethods(cf, "F", new XC_MethodHook() {
+            XposedBridge.hookAllMethods(f9, "I9", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    Object[] args = param.args;
-                    log("DIAG: ChatFooter.F(" + args.length + ") CALLED");
-                    for (int i = 0; i < args.length; i++) {
-                        log("  ChatFooter.F p" + i + "=" + (args[i] == null ? "null" : args[i].getClass().getSimpleName()));
-                    }
-                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
-                    log("  ChatFooter.F栈:");
-                    for (int i = 3; i < Math.min(st.length, 12); i++) {
-                        String cls = st[i].getClassName();
-                        if (!cls.startsWith("java.") && !cls.startsWith("android.") && !cls.startsWith("dalvik.")
-                            && !cls.startsWith("de.robv.android.xposed")) {
-                            log("    " + cls + "." + st[i].getMethodName() + ":" + st[i].getLineNumber());
-                        }
-                    }
+                    log("TRACE I9(" + param.args.length + ") "
+                        + (param.args[0] == null ? "null" : param.args[0].getClass().getSimpleName())
+                        + " " + (param.args.length > 1 ? param.args[1] : ""));
                 }
             });
-            log("DIAG: ChatFooter.F hook OK");
-        } catch (Throwable t) { log("DIAG: ChatFooter.F fail: " + t.getMessage()); }
+            log("TRACE: f9 OK");
+        } catch (Throwable t) { log("TRACE: f9 fail: " + t.getMessage()); }
 
-        // Hook a21.q.i: 用户手动发消息的真正入口（协程回调）
+        // d85.d.j — 发送流程最顶层入口(可能在SendBtnMgr或InputController)
         try {
-            Class<?> a21q = XposedHelpers.findClass("a21.q", sClassLoader);
+            Class<?> d85d = XposedHelpers.findClass("d85.d", sClassLoader);
+            XposedBridge.hookAllMethods(d85d, "j", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    sD85d_jInst = param.thisObject;
+                    Object[] args = param.args;
+                    StringBuilder sb = new StringBuilder("TRACE d85.d.j(").append(args.length).append(")");
+                    for (int i = 0; i < args.length; i++)
+                        sb.append(" p").append(i).append("=").append(args[i] == null ? "null" : args[i].getClass().getName());
+                    if (args.length > 0) sD85d_jArg = args[0];
+                    log(sb.toString());
+                    printStack("d85.d.j", Thread.currentThread().getStackTrace(), 20);
+                }
+            });
+            log("TRACE: d85.d.j OK");
+        } catch (Throwable t) { log("TRACE: d85.d.j fail: " + t.getMessage()); }
 
-            // 捕获a21.q实例 — 构造器hook
-            XposedBridge.hookAllConstructors(a21q, new XC_MethodHook() {
+        // d85.i.c — 调用 n85.d0.invoke 的中间层
+        try {
+            Class<?> d85i = XposedHelpers.findClass("d85.i", sClassLoader);
+            XposedBridge.hookAllMethods(d85i, "c", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    sD85iInst = param.thisObject;
+                    Object[] args = param.args;
+                    StringBuilder sb = new StringBuilder("TRACE d85.i.c(").append(args.length).append(")");
+                    for (int i = 0; i < args.length; i++)
+                        sb.append(" p").append(i).append("=").append(args[i] == null ? "null" : args[i].getClass().getName());
+                    if (args.length > 0) sD85i_cArg = args[0];
+                    log(sb.toString());
+                    printStack("d85.i.c", Thread.currentThread().getStackTrace(), 15);
+                }
+            });
+            log("TRACE: d85.i.c OK");
+        } catch (Throwable t) { log("TRACE: d85.i.c fail: " + t.getMessage()); }
+
+        // n85.d0 — 核心入口: Function1<MessageObj, Unit>
+        try {
+            Class<?> n85d0 = XposedHelpers.findClass("n85.d0", sClassLoader);
+            XposedBridge.hookAllConstructors(n85d0, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    sCapturedA21q = param.thisObject;
+                    sN85d0Inst = param.thisObject;
                     Object[] args = param.args;
-                    if (args.length > 0) sCapturedN85r = args[0];
-                    StringBuilder sb = new StringBuilder("DIAG: a21.q ctor(").append(args.length).append(")");
+                    StringBuilder sb = new StringBuilder("TRACE n85.d0 ctor(").append(args.length).append(")");
                     for (int i = 0; i < args.length; i++)
                         sb.append(" p").append(i).append("=").append(args[i] == null ? "null" : args[i].getClass().getName());
                     log(sb.toString());
                 }
             });
-
-            XposedBridge.hookAllMethods(a21q, "i", new XC_MethodHook() {
+            // Also hook invoke via kotlin Function1 interface
+            XposedBridge.hookAllMethods(n85d0, "invoke", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
+                    sN85d0Inst = param.thisObject;
                     Object[] args = param.args;
-                    StringBuilder sb = new StringBuilder("DIAG: a21.q.i(").append(args.length).append(")");
+                    StringBuilder sb = new StringBuilder("TRACE n85.d0.invoke(").append(args.length).append(")");
                     for (int i = 0; i < args.length; i++) {
                         sb.append(" p").append(i).append("=");
-                        if (args[i] == null) {
-                            sb.append("null");
-                        } else {
-                            sb.append(args[i].getClass().getName()); // 全类名
-                        }
+                        sb.append(args[i] == null ? "null" : args[i].getClass().getName() + "=" + args[i].toString().substring(0, Math.min(80, args[i].toString().length())));
                     }
+                    if (args.length > 0 && args[0] != null) sN85d0InvokeArg = args[0];
                     log(sb.toString());
-                    // 额外打印参数类型名和构造器签名
-                    for (int i = 0; i < args.length; i++) {
-                        if (args[i] != null) {
-                            Class<?> ac = args[i].getClass();
-                            StringBuilder csb = new StringBuilder("  a21.q.i p").append(i).append(" ").append(ac.getName()).append(" ctors:");
-                            for (java.lang.reflect.Constructor<?> c : ac.getDeclaredConstructors()) {
-                                csb.append(" (").append(c.getParameterCount()).append(")");
-                            }
-                            log(csb.toString());
-                        }
-                    }
+                    printStack("n85.d0.invoke", Thread.currentThread().getStackTrace(), 20);
                 }
             });
-            log("DIAG: a21.q.i hook OK");
-        } catch (Throwable t) { log("DIAG: a21.q.i fail: " + t.getMessage()); }
+            log("TRACE: n85.d0 OK methods=" + n85d0.getDeclaredMethods().length
+                + " super=" + n85d0.getSuperclass().getName()
+                + " ifaces=" + java.util.Arrays.toString(n85d0.getInterfaces()));
+        } catch (Throwable t) { log("TRACE: n85.d0 fail: " + t.getMessage()); }
 
-        // 尝试包前缀搜索 a21.q
-        try {
-            Class<?> a21q2 = XposedHelpers.findClass("com.tencent.mm.plugin.chatting.a21.q", sClassLoader);
-            XposedBridge.hookAllMethods(a21q2, "i", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    Object[] args = param.args;
-                    StringBuilder sb = new StringBuilder("DIAG: chatting.a21.q.i(").append(args.length).append(")");
-                    for (int i = 0; i < args.length; i++) {
-                        sb.append(" p").append(i).append("=");
-                        sb.append(args[i] == null ? "null" : args[i].getClass().getName());
-                    }
-                    log(sb.toString());
-                }
-            });
-            log("DIAG: chatting.a21.q.i hook OK");
-        } catch (Throwable t) { log("DIAG: chatting.a21.q.i fail: " + t.getMessage()); }
-
-        // Hook n85.c0: 所有方法 — 看 I9 之后 Continuation 做了什么
+        // n85.c0 — Continuation (协程)
         try {
             Class<?> n85c0 = XposedHelpers.findClass("n85.c0", sClassLoader);
-            for (java.lang.reflect.Method m : n85c0.getDeclaredMethods()) {
-                if (m.getName().length() <= 1) continue;
-                XposedBridge.hookMethod(m, new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        String mName = param.method.getName();
-                        if (param.args.length == 0) return;
-                        log("DIAG: n85.c0." + mName + "(" + param.args.length + ") p0="
-                            + (param.args[0] == null ? "null" : param.args[0].getClass().getName()));
-                        StackTraceElement[] st = Thread.currentThread().getStackTrace();
-                        log("  n85.c0栈:");
-                        for (int i = 3; i < Math.min(st.length, 12); i++) {
-                            String cls = st[i].getClassName();
-                            if (!cls.startsWith("java.") && !cls.startsWith("android.") && !cls.startsWith("dalvik.")
-                                && !cls.startsWith("de.robv.android.xposed")) {
-                                log("    " + cls + "." + st[i].getMethodName() + ":" + st[i].getLineNumber());
-                            }
-                        }
-                    }
-                });
-            }
-            log("DIAG: n85.c0 hooks OK");
-        } catch (Throwable t) { log("DIAG: n85.c0 fail: " + t.getMessage()); }
-
-        // Hook a21.g 构造器: 看参数
-        try {
-            Class<?> a21g = XposedHelpers.findClass("a21.g", sClassLoader);
-            for (java.lang.reflect.Constructor<?> c : a21g.getDeclaredConstructors()) {
-                XposedBridge.hookMethod(c, new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        StringBuilder sb = new StringBuilder("DIAG: new a21.g(").append(param.args.length).append(")");
-                        for (int i = 0; i < param.args.length; i++) {
-                            sb.append(" p").append(i).append("=");
-                            sb.append(param.args[i] == null ? "null" : param.args[i].getClass().getName());
-                        }
-                        log(sb.toString());
-                    }
-                });
-            }
-            log("DIAG: a21.g ctor hooks OK");
-        } catch (Throwable t) { log("DIAG: a21.g fail: " + t.getMessage()); }
-
-        // Hook a2.b: 看是否也用于发送（之前的同步栈用它）
-        try {
-            Class<?> a2 = XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.a2", sClassLoader);
-            XposedBridge.hookAllMethods(a2, "b", new XC_MethodHook() {
+            XposedBridge.hookAllMethods(n85c0, "create", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    Object[] args = param.args;
-                    StringBuilder sb = new StringBuilder("DIAG: a2.b(").append(args.length).append(")");
-                    for (int i = 0; i < args.length; i++) {
-                        sb.append(" p").append(i).append("=");
-                        sb.append(args[i] == null ? "null" : args[i].getClass().getName());
-                    }
-                    log(sb.toString());
-                    log("  a2.b栈(" + Thread.currentThread().getName() + "):");
-                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
-                    for (int i = 3; i < Math.min(st.length, 10); i++) {
-                        String cls = st[i].getClassName();
-                        if (!cls.startsWith("java.") && !cls.startsWith("android.") && !cls.startsWith("dalvik.")
-                            && !cls.startsWith("de.robv.android.xposed")) {
-                            log("    " + cls + "." + st[i].getMethodName() + ":" + st[i].getLineNumber());
-                        }
-                    }
+                    log("TRACE n85.c0.create(" + param.args.length + ")");
+                    printStack("n85.c0.create", Thread.currentThread().getStackTrace(), 12);
                 }
             });
-            log("DIAG: a2.b hook OK");
-        } catch (Throwable t) { log("DIAG: a2.b fail: " + t.getMessage()); }
+            XposedBridge.hookAllMethods(n85c0, "invokeSuspend", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    log("TRACE n85.c0.invokeSuspend(" + param.args.length + ")");
+                    printStack("n85.c0.invokeSuspend", Thread.currentThread().getStackTrace(), 12);
+                }
+            });
+            log("TRACE: n85.c0 OK");
+        } catch (Throwable t) { log("TRACE: n85.c0 fail: " + t.getMessage()); }
 
-        // Hook n85.r: a21.q 构造器参数
+        // n85.r — 发送上下文
         try {
             Class<?> n85r = XposedHelpers.findClass("n85.r", sClassLoader);
             XposedBridge.hookAllConstructors(n85r, new XC_MethodHook() {
@@ -517,56 +422,50 @@ public class ScheduleBroadcast {
                 protected void afterHookedMethod(MethodHookParam param) {
                     sCapturedN85r = param.thisObject;
                     Object[] args = param.args;
-                    StringBuilder sb = new StringBuilder("DIAG: n85.r ctor(").append(args.length).append(")");
+                    StringBuilder sb = new StringBuilder("TRACE n85.r ctor(").append(args.length).append(")");
                     for (int i = 0; i < args.length; i++)
                         sb.append(" p").append(i).append("=").append(args[i] == null ? "null" : args[i].getClass().getName());
                     log(sb.toString());
                 }
             });
-            log("DIAG: n85.r hook OK");
-        } catch (Throwable t) { log("DIAG: n85.r fail: " + t.getMessage()); }
+            log("TRACE: n85.r OK ctors=" + n85r.getDeclaredConstructors().length);
+        } catch (Throwable t) { log("TRACE: n85.r fail: " + t.getMessage()); }
 
-        // Hook n85.d0: 发送入口
+        // a21.q — 发送消息逻辑, 构造器 + i方法
         try {
-            Class<?> n85d0 = XposedHelpers.findClass("n85.d0", sClassLoader);
-            for (java.lang.reflect.Method m : n85d0.getDeclaredMethods()) {
-                log("DIAG: n85.d0 has method: " + m.getName() + "(" + m.getParameterTypes().length + ")");
-                for (Class<?> pt : m.getParameterTypes()) log("  paramType: " + pt.getName());
-            }
-            // Hook invoke method to capture argument
-            XposedBridge.hookAllMethods(n85d0, "invoke", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    Object[] args = param.args;
-                    StringBuilder sb = new StringBuilder("DIAG: n85.d0.invoke called args[0]=");
-                    sb.append(args[0] == null ? "null" : args[0].getClass().getName() + "=" + args[0].toString());
-                    sb.append(" this=").append(param.thisObject == null ? "null" : param.thisObject.getClass().getName());
-                    log(sb.toString());
-                    // Capture the invoke argument for reuse
-                    if (args.length > 0 && args[0] != null) {
-                        sN85d0InvokeArg = args[0];
-                        sN85d0Inst = param.thisObject;
-                    }
-                }
-            });
-            log("DIAG: n85.d0 hook OK");
-        } catch (Throwable t) { log("DIAG: n85.d0 fail: " + t.getMessage()); }
-
-        // Hook a21.h: a21.q.i 返回值类型
-        try {
-            Class<?> a21h = XposedHelpers.findClass("a21.h", sClassLoader);
-            XposedBridge.hookAllConstructors(a21h, new XC_MethodHook() {
+            Class<?> a21q = XposedHelpers.findClass("a21.q", sClassLoader);
+            XposedBridge.hookAllConstructors(a21q, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
+                    sCapturedA21q = param.thisObject;
                     Object[] args = param.args;
-                    StringBuilder sb = new StringBuilder("DIAG: a21.h ctor(").append(args.length).append(")");
-                    for (int i = 0; i < args.length; i++)
-                        sb.append(" p").append(i).append("=").append(args[i] == null ? "null" : args[i].getClass().getName());
-                    log(sb.toString());
+                    if (args.length > 0) sCapturedN85r = args[0];
+                    log("TRACE a21.q ctor(" + args.length + ")");
                 }
             });
-            log("DIAG: a21.h hook OK");
-        } catch (Throwable t) { log("DIAG: a21.h fail: " + t.getMessage()); }
+            XposedBridge.hookAllMethods(a21q, "i", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    log("TRACE a21.q.i(" + param.args.length + ") p0="
+                        + (param.args[0] == null ? "null" : param.args[0].getClass().getSimpleName())
+                        + " p1=" + (param.args.length > 1 ? (param.args[1] == null ? "null" : param.args[1].getClass().getSimpleName()) : "-")
+                        + " p2=" + (param.args.length > 2 ? (param.args[2] == null ? "null" : param.args[2].getClass().getSimpleName()) : "-"));
+                }
+            });
+            log("TRACE: a21.q OK");
+        } catch (Throwable t) { log("TRACE: a21.q fail: " + t.getMessage()); }
+    }
+
+    private static void printStack(String label, StackTraceElement[] st, int max) {
+        StringBuilder sb = new StringBuilder("  ").append(label).append("栈(").append(Thread.currentThread().getName()).append("):");
+        for (int i = 3; i < Math.min(st.length, max); i++) {
+            String cls = st[i].getClassName();
+            if (!cls.startsWith("java.lang.") && !cls.startsWith("android.") && !cls.startsWith("dalvik.")
+                && !cls.startsWith("de.robv.android.xposed")) {
+                sb.append("\n    ").append(cls).append(".").append(st[i].getMethodName()).append(":").append(st[i].getLineNumber());
+            }
+        }
+        log(sb.toString());
     }
 
     private static int safeInt(Object obj, String[] methods) {
@@ -1178,114 +1077,45 @@ public class ScheduleBroadcast {
         try {
             Object ms = getMsgStorage();
 
-            // 0. n85.d0.invoke: 微信发送入口lambda, 直接调用
+            // 0. d85.d.j: 最顶层发送入口
+            try {
+                if (sD85d_jInst != null && sD85d_jArg != null) {
+                    XposedHelpers.callMethod(sD85d_jInst, "j", sD85d_jArg);
+                    log("triggerSend: d85.d.j() OK msgId=" + msgId);
+                    return;
+                }
+            } catch (Throwable t) { log("triggerSend: d85.d.j fail: " + t.getMessage()); }
 
+            // 1. d85.i.c: 发送中间层
+            try {
+                if (sD85iInst != null && sD85i_cArg != null) {
+                    XposedHelpers.callMethod(sD85iInst, "c", sD85i_cArg);
+                    log("triggerSend: d85.i.c() OK msgId=" + msgId);
+                    return;
+                }
+            } catch (Throwable t) { log("triggerSend: d85.i.c fail: " + t.getMessage()); }
+
+            // 2. n85.d0.invoke: Function1 send entry
             try {
                 if (sN85d0Inst != null && sN85d0InvokeArg != null) {
                     XposedHelpers.callMethod(sN85d0Inst, "invoke", sN85d0InvokeArg);
                     log("triggerSend: n85.d0.invoke() OK msgId=" + msgId);
                     return;
                 }
-                if (sN85d0InvokeArg != null)
-                    log("triggerSend: sN85d0Inst=null");
-                else
-                    log("triggerSend: sN85d0InvokeArg=null, 跳过n85.d0");
-            } catch (Throwable t) {
-                log("triggerSend: n85.d0 fail: " + t.getMessage());
-            }
+            } catch (Throwable t) { log("triggerSend: n85.d0 fail: " + t.getMessage()); }
 
-            // 1. 尝试 a21.q.i: 创建新的a21.q实例
+            // 3. a21.q.i with captured instance + Continuation=null (只写DB)
             try {
-                Class<?> a21q = XposedHelpers.findClass("a21.q", sClassLoader);
-                Class<?> n85rCls = XposedHelpers.findClass("n85.r", sClassLoader);
-                Class<?> n85z = XposedHelpers.findClass("n85.z", sClassLoader);
-                Class<?> a21g = XposedHelpers.findClass("a21.g", sClassLoader);
-
-                // 尝试用捕获的n85.r创建新a21.q实例
-                Object a21qInst = null;
-                if (sCapturedN85r != null) {
-                    try { a21qInst = XposedHelpers.newInstance(a21q, sCapturedN85r); }
-                    catch (Throwable t) { log("triggerSend: new a21.q(n85r) fail: " + t.getMessage()); }
-                }
-                if (a21qInst == null) {
-                    // fallback: 用复用的sCapturedA21q
-                    a21qInst = sCapturedA21q;
-                    if (a21qInst == null) { log("triggerSend: a21.q实例缺失"); return; }
-                }
-
-                Object zObj = XposedHelpers.newInstance(n85z);
-                Object gObj = XposedHelpers.newInstance(a21g, e9msg);
-                Object result = XposedHelpers.callMethod(a21qInst, "i", zObj, gObj, null);
-                log("triggerSend: a21.q.i() OK msgId=" + msgId + " result=" + result);
-                return;
-            } catch (Throwable t) {
-                log("triggerSend: a21.q.i fail: " + t.getMessage());
-            }
-
-            // 1. 设置发送状态: isSend=1, status=3(发送中)
-            try { XposedHelpers.callMethod(e9msg, "k1", 1); } catch (Throwable ignored) {}
-            try { XposedHelpers.callMethod(e9msg, "O0", 3); } catch (Throwable ignored) {}
-            try { XposedHelpers.callMethod(e9msg, "H1", 3); } catch (Throwable ignored) {}
-            if (ms != null) {
-                try { XposedHelpers.callMethod(ms, "Ra", msgId, e9msg); } catch (Throwable t) {
-                    log("triggerSend: Ra失败: " + t.getMessage());
-                }
-            }
-
-            // 2. 尝试 a2 (MessageSyncExtension) 触发联网发送
-            String a2Err = null;
-            try {
-                Class<?> a2Cls = XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.a2", sClassLoader);
-                Class<?> j4Cls = XposedHelpers.findClass("a65.j4", sClassLoader);
-                Object j4Obj = null;
-                try { j4Obj = XposedHelpers.callMethod(e9msg, "J"); } catch (Throwable ignored) {}
-                if (j4Obj == null) {
-                    try {
-                        j4Obj = XposedHelpers.newInstance(j4Cls);
-                        try { XposedHelpers.callMethod(j4Obj, "d", "1"); } catch (Throwable ignored) {}
-                        try { XposedHelpers.callMethod(j4Obj, "w", msgId); } catch (Throwable ignored) {}
-                    } catch (Throwable ignored) {}
-                }
-                if (j4Obj != null) {
-                    try {
-                        Object a2Inst = XposedHelpers.newInstance(a2Cls);
-                        XposedHelpers.callMethod(a2Inst, "c", j4Obj, null, 5, null, null);
-                        log("triggerSend: a2.c() OK msgId=" + msgId);
-                        return;
-                    } catch (Throwable t) { a2Err = "a2.c(): " + t.getMessage(); }
-                } else { a2Err = "j4=null"; }
-            } catch (Throwable t) { a2Err = "a2/j4: " + t.getMessage(); }
-            if (a2Err != null) log("triggerSend: " + a2Err);
-
-            // 3. fallback: p7 服务定位器
-            try {
-                Class<?> p7Cls = XposedHelpers.findClass("p7", sClassLoader);
-                for (String m : new String[]{"kq","jI","dx","bX","xy","kC","vb","bU"}) {
-                    try {
-                        Object svc = XposedHelpers.callStaticMethod(p7Cls, m);
-                        if (svc != null) {
-                            XposedHelpers.callMethod(svc, "a", msgId);
-                            log("triggerSend: p7." + m + "().a() OK msgId=" + msgId);
-                            return;
-                        }
-                    } catch (Throwable ignored) {}
-                }
-                log("triggerSend: p7 all failed");
-            } catch (Throwable t) { log("triggerSend: p7 fail: " + t.getMessage()); }
-
-            // 4. fallback: rv5.t0.d 分发
-            try {
-                Class<?> rv5t0 = XposedHelpers.findClass("rv5.t0", sClassLoader);
-                Object d = XposedHelpers.getStaticObjectField(rv5t0, "d");
-                if (d != null) {
-                    Class<?> z1 = XposedHelpers.findClass("rv5.z1", sClassLoader);
-                    Object runnable = XposedHelpers.newInstance(z1, null, null, null, 5, null);
-                    XposedHelpers.callMethod(d, "g", runnable);
-                    log("triggerSend: rv5.t0.d.g() dispatched msgId=" + msgId);
+                if (sCapturedA21q != null) {
+                    Class<?> n85z = XposedHelpers.findClass("n85.z", sClassLoader);
+                    Class<?> a21g = XposedHelpers.findClass("a21.g", sClassLoader);
+                    Object zObj = XposedHelpers.newInstance(n85z);
+                    Object gObj = XposedHelpers.newInstance(a21g, e9msg);
+                    XposedHelpers.callMethod(sCapturedA21q, "i", zObj, gObj, null);
+                    log("triggerSend: a21.q.i() OK msgId=" + msgId);
                     return;
                 }
-                log("triggerSend: rv5.t0.d=null");
-            } catch (Throwable t) { log("triggerSend: rv5 fail: " + t.getMessage()); }
+            } catch (Throwable t) { log("triggerSend: a21.q.i fail: " + t.getMessage()); }
 
             log("triggerSend: 所有方法均失败 msgId=" + msgId);
         } catch (Throwable t) {
