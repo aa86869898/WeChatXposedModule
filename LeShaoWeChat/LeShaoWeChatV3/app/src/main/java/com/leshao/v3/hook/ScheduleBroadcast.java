@@ -1052,11 +1052,11 @@ public class ScheduleBroadcast {
             Object msg = XposedHelpers.newInstance(e9Class, talker);
             long now = System.currentTimeMillis();
 
-            // Step 1: setType — Guide: msg.setType(1) → obfuscated A1
-            XposedHelpers.callMethod(msg, "A1", task.msgType);
+            // Step 1: setType — 直接反射 field_type (A1不在此字段)
+            XposedHelpers.setIntField(msg, "field_type", task.msgType);
 
-            // Step 2: setContent — X0 已验证(sendToFilehelper), 非 d1(仅限AppMsg XML)
-            XposedHelpers.callMethod(msg, "X0", nvl(task.content));
+            // Step 2: setContent — 直接反射 field_content (X0不在此字段)
+            XposedHelpers.setObjectField(msg, "field_content", nvl(task.content));
 
             // Step 3: setImgPath (if media)
             if (task.filePath != null && !task.filePath.isEmpty()) {
