@@ -1098,27 +1098,10 @@ public class ScheduleBroadcast {
                 default: return false;
             }
 
-            // 主路径: I9(e9, Boolean.TRUE) = 写DB + 触发联网发送
-            try {
-                Object i9Result = XposedHelpers.callMethod(ms, "I9", msg, Boolean.TRUE);
-                long msgId = 0;
-                if (i9Result instanceof Long) msgId = (Long) i9Result;
-                else { try { msgId = (Long) XposedHelpers.callMethod(msg, "F0"); } catch (Throwable ignored) {} }
-                if (msgId > 0) {
-                    log("sendMessage: I9(true) OK msgId=" + msgId);
-                    return true;
-                }
-                log("sendMessage: I9(true) result=" + i9Result + " msgId=" + msgId + ", 尝试triggerSend");
-                triggerSend(msgId > 0 ? msgId : -1, msg, talker);
-                return true;
-            } catch (Throwable t) {
-                log("sendMessage: I9(true) fail: " + t.getMessage() + ", 回退H9");
-            }
-
-            // 回退: H9 写DB
+            // 主路径: H9写DB拿到msgId, 然后triggerSend触发联网发送
             long msgId = (Long) XposedHelpers.callMethod(ms, "H9", msg);
             if (msgId > 0) {
-                try { XposedHelpers.callMethod(ms, "I9", msg, Boolean.TRUE); } catch (Throwable ignored) {}
+                log("sendMessage: H9 OK msgId=" + msgId + " capturedA21q=" + (sCapturedA21q != null));
                 triggerSend(msgId, msg, talker);
                 return true;
             }
