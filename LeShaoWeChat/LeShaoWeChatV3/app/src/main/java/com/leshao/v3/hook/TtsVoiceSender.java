@@ -27,6 +27,7 @@ public class TtsVoiceSender {
     private static TextToSpeech sTts;
     private static ClassLoader sClassLoader;
     private static boolean sReady;
+    private static Object sMsgStorage;
 
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
@@ -47,68 +48,102 @@ public class TtsVoiceSender {
             }
         });
 
-        hookChatFooterSend(cl);
+        initMsgStorage(cl);
+        hookF9Insert(cl);
     }
 
-    private static void hookChatFooterSend(ClassLoader cl) {
+    private static void initMsgStorage(ClassLoader cl) {
         try {
-            Class<?> chatFooter = XposedHelpers.findClass(
-                    "com.tencent.mm.pluginsdk.ui.chat.ChatFooter", cl);
-            Class<?> e9Cls = cl.loadClass("com.tencent.mm.storage.e9");
-            Class<?> a35g = XposedHelpers.findClass("a35.g", cl);
-
-            for (java.lang.reflect.Method m : chatFooter.getDeclaredMethods()) {
-                if (!m.getName().equals("F") || m.getParameterCount() != 2) continue;
-                if (m.getParameterTypes()[0] != e9Cls) continue;
-                if (m.getParameterTypes()[1] == a35g) {
-                    XposedBridge.hookMethod(m, new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            interceptSend(param);
-                        }
-                    });
-                    LogWriter.log(TAG, "ChatFooter.F hooked OK via hookMethod");
-                    return;
-                }
+            Class<?> e01d9 = XposedHelpers.findClass("e01.d9", cl);
+            Object service = XposedHelpers.callStaticMethod(e01d9, "b");
+            if (service != null) {
+                sMsgStorage = XposedHelpers.callMethod(service, "u");
+                LogWriter.log(TAG, "f9 storage: OK");
             }
-            LogWriter.log(TAG, "ChatFooter.F: exact match not found, fallback hookAllMethods");
-            XposedBridge.hookAllMethods(chatFooter, "F", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    interceptSend(param);
-                }
-            });
-            LogWriter.log(TAG, "ChatFooter.F hooked OK via hookAllMethods");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "ChatFooter.F hook fail: " + t.getMessage());
+            LogWriter.log(TAG, "f9 storage fail: " + t.getMessage());
         }
     }
 
-    private static void interceptSend(XC_MethodHook.MethodHookParam param) {
+    private static void hookF9Insert(ClassLoader cl) {
         try {
+            Class<?> f9Cls = null;
+            for (String name : new String[]{"com.tencent.mm.storage.f9",
+                    "com.tencent.mm.storage.g9"}) {
+                try { f9Cls = XposedHelpers.findClass(name, cl); break; }
+                catch (Throwable ignored) {}
+            }
+            if (f9Cls == null) {
+                LogWriter.log(TAG, "f9 class not found");
+                return;
+            }
+
+            XposedBridge.hookAllMethods(f9Cls, "I9", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    interceptInsert(param);
+                }
+            });
+            XposedBridge.hookAllMethods(f9Cls, "H9", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    interceptInsert(param);
+                }
+            });
+            XposedBridge.hookAllMethods(f9Cls, "O8", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    interceptInsert(param);
+                }
+            });
+            XposedBridge.hookAllMethods(f9Cls, "X9", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    interceptInsert(param);
+                }
+            });
+            LogWriter.log(TAG, "f9 I9/H9/O8/X9 hooked OK");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "f9 hook fail: " + t.getMessage());
+        }
+    }
+
+    private static void interceptInsert(XC_MethodHook.MethodHookParam param) {
+        try {
+            if (param.args.length == 0) return;
             Object msgInfo = param.args[0];
+            if (msgInfo == null) return;
+
+            int type;
+            try { type = (Integer) XposedHelpers.callMethod(msgInfo, "getType"); }
+            catch (Throwable e) { return; }
+            if (type != 1) return;
+
+            try {
+                boolean isSend = (Boolean) XposedHelpers.callMethod(msgInfo, "G1");
+                if (!isSend) return;
+            } catch (Throwable e) { return; }
 
             String content = null;
-            // 尝试多种方式读取 content
-            try { content = (String) XposedHelpers.getObjectField(msgInfo, "field_content"); } catch (Throwable ignored) {}
-            if (content == null) try { content = (String) XposedHelpers.callMethod(msgInfo, "I0"); } catch (Throwable ignored) {}
-            if (content == null) try { content = (String) XposedHelpers.callMethod(msgInfo, "j"); } catch (Throwable ignored) {}
+            try { content = (String) XposedHelpers.getObjectField(msgInfo, "field_content"); }
+            catch (Throwable ignored) {}
+            if (content == null) try { content = (String) XposedHelpers.callMethod(msgInfo, "I0"); }
+            catch (Throwable ignored) {}
+            if (content == null) return;
 
-            LogWriter.log(TAG, "ChatFooter.F fired, content=" + (content != null ? content.substring(0, Math.min(content.length(), 40)) : "null"));
-            if (content == null || !content.startsWith(TTS_PREFIX)) return;
+            if (!content.startsWith(TTS_PREFIX)) return;
 
             String text = content.substring(TTS_PREFIX.length()).trim();
             if (text.isEmpty()) return;
 
-            LogWriter.log(TAG, "#tts detected: " + text.substring(0, Math.min(text.length(), 50)));
-
             String talker = null;
-            try { talker = (String) XposedHelpers.getObjectField(msgInfo, "field_talker"); } catch (Throwable ignored) {}
-            if (talker == null) try { talker = (String) XposedHelpers.callMethod(msgInfo, "N0"); } catch (Throwable ignored) {}
-            if (talker == null || talker.isEmpty()) {
-                LogWriter.log(TAG, "talker is empty");
-                return;
-            }
+            try { talker = (String) XposedHelpers.getObjectField(msgInfo, "field_talker"); }
+            catch (Throwable ignored) {}
+            if (talker == null) try { talker = (String) XposedHelpers.callMethod(msgInfo, "N0"); }
+            catch (Throwable ignored) {}
+            if (talker == null || talker.isEmpty()) return;
+
+            LogWriter.log(TAG, "f9 insert #tts: text=" + text.substring(0, Math.min(text.length(), 40)) + " talker=" + talker);
 
             param.setResult(null);
 
@@ -117,7 +152,7 @@ public class TtsVoiceSender {
             new Thread(() -> synthesizeAndSend(fText, fTalker)).start();
 
         } catch (Throwable e) {
-            LogWriter.log(TAG, "hook err: " + e.getMessage());
+            LogWriter.log(TAG, "interceptInsert err: " + e.getMessage());
         }
     }
 
@@ -177,9 +212,7 @@ public class TtsVoiceSender {
 
             LogWriter.log(TAG, "AMR: " + amrFile.length() + " bytes, " + duration + "ms");
 
-            boolean sent = VoiceForwardHook.sendViaSceneVoice(
-                    null, sClassLoader, talker, amrFile.getAbsolutePath(), duration, null);
-
+            boolean sent = sendVoice(amrFile.getAbsolutePath(), duration, talker);
             LogWriter.log(TAG, "send result: " + sent);
 
             wavFile.delete();
@@ -187,6 +220,24 @@ public class TtsVoiceSender {
 
         } catch (Throwable e) {
             LogWriter.log(TAG, "synthAndSend err: " + e.getMessage());
+        }
+    }
+
+    private static boolean sendVoice(String filePath, int duration, String talker) {
+        try {
+            Class<?> y21x0 = XposedHelpers.findClass("y21.x0", sClassLoader);
+
+            Object e9talker = XposedHelpers.newInstance(
+                    XposedHelpers.findClass("com.tencent.mm.storage.e9", sClassLoader),
+                    talker);
+
+            boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
+                    filePath, duration, 0, e9talker);
+
+            return ok;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "sendVoice err: " + t.getMessage());
+            return false;
         }
     }
 
@@ -211,16 +262,13 @@ public class TtsVoiceSender {
                 totalRead += r;
             }
 
-            int srcSampleRate = sampleRate;
-            int srcChannels = channels;
             byte[] mono8000Pcm;
-
-            if (srcSampleRate == 8000 && srcChannels == 1 && bitsPerSample == 16) {
+            if (sampleRate == 8000 && channels == 1 && bitsPerSample == 16) {
                 mono8000Pcm = pcmBytes;
             } else {
-                int srcFrameSize = srcChannels * (bitsPerSample / 8);
+                int srcFrameSize = channels * (bitsPerSample / 8);
                 int srcFrames = totalRead / srcFrameSize;
-                double ratio = (double) srcSampleRate / 8000.0;
+                double ratio = (double) sampleRate / 8000.0;
 
                 ByteArrayOutputStream resampled = new ByteArrayOutputStream();
                 for (int i = 0; i < srcFrames; i++) {
@@ -232,9 +280,6 @@ public class TtsVoiceSender {
                 }
                 mono8000Pcm = resampled.toByteArray();
             }
-
-            LogWriter.log(TAG, "PCM: srcRate=" + srcSampleRate + " ch=" + srcChannels
-                    + " bits=" + bitsPerSample + " → mono 8kHz " + mono8000Pcm.length + " bytes");
 
             ByteArrayOutputStream amrBaos = new ByteArrayOutputStream();
             ByteArrayInputStream pcmBais = new ByteArrayInputStream(mono8000Pcm);

@@ -34,6 +34,7 @@ public class VoiceAutoPlay {
     private static ClassLoader sClassLoader;
     private static volatile Object sCurrentVoiceComp;
     private static volatile Object sCurrentChattingContext;
+    private static volatile Activity sChatAct;
 
     private static String sVoice2BasePath;
 
@@ -46,6 +47,28 @@ public class VoiceAutoPlay {
         hookMessageListener(cl);
         findVoiceComponentClass(cl);
         registerActivityCallback();
+        hookAllActivityResume();
+    }
+
+    private static void hookAllActivityResume() {
+        try {
+            XposedBridge.hookAllMethods(android.app.Activity.class, "onResume", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        String clsName = param.thisObject.getClass().getName();
+                        if (!clsName.contains("ChattingUI")) return;
+                        Activity act = (Activity) param.thisObject;
+                        sChatAct = act;
+                        LogWriter.log(TAG, "GLOBAL: ChattingUI detected, refreshing context");
+                        sMainHandler.postDelayed(() -> refreshChattingContext(act), 300);
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "Global Activity.onResume hooked OK");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "Global Activity.onResume fail: " + t.getMessage());
+        }
     }
 
     private static void findVoice2BasePath() {
@@ -97,139 +120,71 @@ public class VoiceAutoPlay {
         }
     }
 
-    // ============ 层1: c0.a() — 消息视图绑定调度器 (参考 LSPilot) ============
+    // ============ 层1: dq.c() — 语音气泡视图绑定 (参考 lspilot 验证方案) ============
 
     private static void hookDqClass(ClassLoader cl) {
         try {
-            Class<?> c0 = XposedHelpers.findClass("com.tencent.mm.ui.chatting.viewitems.c0", cl);
-            Class<?> fd5_d = XposedHelpers.findClass("fd5.d", cl);
-            Class<?> e9Cls = cl.loadClass("com.tencent.mm.storage.e9");
             Class<?> dqCls = XposedHelpers.findClass("com.tencent.mm.ui.chatting.viewitems.dq", cl);
+            Class<?> fd5dCls = XposedHelpers.findClass("fd5.d", cl);
+            Class<?> e9Cls = cl.loadClass("com.tencent.mm.storage.e9");
 
-            for (java.lang.reflect.Method m : c0.getDeclaredMethods()) {
-                if (!m.getName().equals("a") || m.getParameterCount() != 3) continue;
+            for (java.lang.reflect.Method m : dqCls.getDeclaredMethods()) {
+                if (!m.getName().equals("c") || m.getParameterCount() != 3) continue;
                 Class<?>[] pts = m.getParameterTypes();
                 if (pts[0] != android.view.View.class) continue;
-                if (pts[1] != fd5_d) continue;
+                if (pts[1] != fd5dCls) continue;
                 if (pts[2] != e9Cls) continue;
 
                 XposedBridge.hookMethod(m, new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam p) {
-                        LogWriter.log(TAG, "c0.a FIRED! args=" + p.args.length);
                         try {
-                            Object g = XposedHelpers.getObjectField(p.thisObject, "g");
-                            if (g == null) return;
-                            if (!dqCls.isInstance(g)) {
-                                LogWriter.log(TAG, "c0.a g class: " + g.getClass().getName());
-                                return;
-                            }
-
                             Object msg = p.args[2];
                             if (msg == null) return;
 
                             int type = (Integer) XposedHelpers.callMethod(msg, "getType");
                             if (type != 34) return;
 
-                            long msgId = (Long) XposedHelpers.callMethod(msg, "H0");
-                            String talker = (String) XposedHelpers.callMethod(msg, "N0");
+                            try {
+                                int isSend = XposedHelpers.getIntField(msg, "field_isSend");
+                                if (isSend == 1) return;
+                            } catch (Throwable ignored) {}
 
+                            if ((Integer) XposedHelpers.callMethod(msg, "M0") == 5) return;
+
+                            long msgId = (Long) XposedHelpers.callMethod(msg, "H0");
                             if (msgId == sLastPlayedMsgId) return;
 
-                            try {
-                                boolean isSend = (Boolean) XposedHelpers.callMethod(msg, "G1");
-                                if (isSend) return;
-                            } catch (Throwable ignored) {}
+                            Object chattingContext = p.args[1];
+                            if (chattingContext == null) return;
+                            sCurrentChattingContext = chattingContext;
 
-                            try {
-                                if ((Integer) XposedHelpers.callMethod(msg, "M0") == 5) return;
-                            } catch (Throwable ignored) {}
-
-                            // ChattingContext → manager → VoiceComponent
-                            Object cc = p.args[1];
-                            if (cc == null) return;
-
-                            Object mgr = XposedHelpers.getObjectField(cc, "c");
+                            Object mgr = XposedHelpers.getObjectField(chattingContext, "c");
                             if (mgr == null) return;
-
                             Class<?> q2Cls = XposedHelpers.findClass("zc5.q2", sClassLoader);
                             Object vc = XposedHelpers.callMethod(mgr, "a", q2Cls);
                             if (vc == null) return;
-
-                            sCurrentChattingContext = cc;
                             sCurrentVoiceComp = vc;
 
                             Object player = XposedHelpers.callMethod(vc, "n0");
                             if (player == null) return;
-
                             if ((Boolean) XposedHelpers.callMethod(player, "o")) return;
 
                             XposedHelpers.callMethod(player, "I", msg, false);
                             sLastPlayedMsgId = msgId;
-                            LogWriter.log(TAG, "auto-play OK! msgId=" + msgId + " talker=" + talker);
-
+                            LogWriter.log(TAG, "auto-play via dq.c: msgId=" + msgId);
                         } catch (Throwable e) {
-                            LogWriter.log(TAG, "c0.a err: " + e.getMessage());
+                            LogWriter.log(TAG, "dq.c err: " + e.getMessage());
                         }
                     }
                 });
-                LogWriter.log(TAG, "c0.a(View,fd5.d,e9) hooked OK");
+                LogWriter.log(TAG, "dq.c(View,fd5.d,e9) hooked OK");
                 return;
             }
-            LogWriter.log(TAG, "c0.a: method not found, fallback to scan");
-            fallbackScanDq(cl);
+            LogWriter.log(TAG, "dq.c: method not found");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "c0.a hook fail: " + t.getMessage() + ", fallback scan");
-            fallbackScanDq(cl);
+            LogWriter.log(TAG, "dq.c hook fail: " + t.getMessage());
         }
-    }
-
-    private static void fallbackScanDq(ClassLoader cl) {
-        String[] shortNames = new String[26 * 26];
-        int idx = 0;
-        for (char c1 = 'a'; c1 <= 'z'; c1++) {
-            for (char c2 = 'a'; c2 <= 'z'; c2++) {
-                shortNames[idx++] = String.valueOf(c1) + String.valueOf(c2);
-            }
-        }
-        String pkg = "com.tencent.mm.ui.chatting.viewitems.";
-        String[] methodNames = {"c", "b", "d", "e", "a"};
-
-        for (String name : shortNames) {
-            try {
-                Class<?> cls = cl.loadClass(pkg + name);
-                for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
-                    boolean rightName = false;
-                    for (String mn : methodNames) {
-                        if (m.getName().equals(mn)) { rightName = true; break; }
-                    }
-                    if (!rightName) continue;
-                    if (m.getParameterTypes().length < 3) continue;
-                    Class<?>[] pts = m.getParameterTypes();
-                    String thirdName = pts[2].getName();
-                    if (!thirdName.contains("storage")) continue;
-
-                    LogWriter.log(TAG, "found voice bubble binder: " + pkg + name
-                        + "." + m.getName() + "(View," + pts[1].getSimpleName() + "," + pts[2].getSimpleName() + ")");
-
-                    // 直接 XposedBridge.hookMethod，不依赖 findAndHookMethod/hookAllMethods
-                    try {
-                        XposedBridge.hookMethod(m, new XC_MethodHook() {
-                            @Override
-                            protected void afterHookedMethod(MethodHookParam param) {
-                                onVoiceBubbleRender(param);
-                            }
-                        });
-                        LogWriter.log(TAG, "voice bubble hook OK on " + pkg + name + "." + m.getName());
-                    } catch (Throwable t) {
-                        LogWriter.log(TAG, "voice bubble hook install fail: " + t.getMessage());
-                    }
-                    return;
-                }
-            } catch (Throwable ignored) {}
-        }
-
-        LogWriter.log(TAG, "no voice bubble binder found by scan, using ChattingUI+MessageHook fallback");
     }
 
     // ============ 层2: ChattingUI.onResume() — 获取 VoiceComponent ============
@@ -448,6 +403,7 @@ public class VoiceAutoPlay {
 
     public static void notifyChattingUIResume(android.app.Activity activity) {
         try {
+            sChatAct = activity;
             refreshChattingContext(activity);
         } catch (Throwable ignored) {}
     }
@@ -480,6 +436,26 @@ public class VoiceAutoPlay {
                 try {
                     if (tryPlayViaInternalPlayer(finalMsg, finalP0, finalMsgId)) {
                         return;
+                    }
+                    // p0 为 null, 尝试用已保存的 ChattingUI 获取 ChattingContext
+                    Object cc = sCurrentChattingContext;
+                    Object vc = sCurrentVoiceComp;
+                    if (cc == null && sChatAct != null) {
+                        refreshChattingContext(sChatAct);
+                        cc = sCurrentChattingContext;
+                        vc = sCurrentVoiceComp;
+                    }
+                    if (cc != null && vc != null) {
+                        try {
+                            Object player = XposedHelpers.callMethod(vc, "n0");
+                            if (player != null && !(Boolean)XposedHelpers.callMethod(player, "o")) {
+                                XposedHelpers.callMethod(player, "I", finalMsg, false);
+                                LogWriter.log(TAG, "internal player via saved ChattingUI: msgId=" + finalMsgId);
+                                return;
+                            }
+                        } catch (Throwable e) {
+                            LogWriter.log(TAG, "saved ChattingUI play fail: " + e.getMessage());
+                        }
                     }
                 } catch (Throwable e) {
                     LogWriter.log(TAG, "internal player fail: " + e.getMessage());
