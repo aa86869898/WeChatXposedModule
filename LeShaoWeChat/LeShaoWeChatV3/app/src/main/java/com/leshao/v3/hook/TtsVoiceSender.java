@@ -10,6 +10,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.util.Locale;
@@ -27,7 +28,6 @@ public class TtsVoiceSender {
     private static TextToSpeech sTts;
     private static ClassLoader sClassLoader;
     private static boolean sReady;
-    private static Object sMsgStorage;
 
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
@@ -40,119 +40,52 @@ public class TtsVoiceSender {
             }
         });
 
-        sTts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-            @Override public void onStart(String utteranceId) {}
-            @Override public void onDone(String utteranceId) {}
-            @Override public void onError(String utteranceId) {
-                LogWriter.log(TAG, "TTS synth error: " + utteranceId);
-            }
-        });
-
-        initMsgStorage(cl);
-        hookF9Insert(cl);
+        hookChatFooterSend(cl);
     }
 
-    private static void initMsgStorage(ClassLoader cl) {
+    private static void hookChatFooterSend(ClassLoader cl) {
         try {
-            Class<?> e01d9 = XposedHelpers.findClass("e01.d9", cl);
-            Object service = XposedHelpers.callStaticMethod(e01d9, "b");
-            if (service != null) {
-                sMsgStorage = XposedHelpers.callMethod(service, "u");
-                LogWriter.log(TAG, "f9 storage: OK");
-            }
+            Class<?> chatFooter = XposedHelpers.findClass(
+                    "com.tencent.mm.pluginsdk.ui.chat.ChatFooter", cl);
+
+            XposedBridge.hookAllMethods(chatFooter, "F", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (param.args.length < 1 || param.args[0] == null) return;
+                        Object msgInfo = param.args[0];
+
+                        String content = null;
+                        try { content = (String) XposedHelpers.getObjectField(msgInfo, "field_content"); }
+                        catch (Throwable ignored) {}
+                        if (content == null) return;
+
+                        if (!content.startsWith(TTS_PREFIX)) return;
+
+                        String text = content.substring(TTS_PREFIX.length()).trim();
+                        if (text.isEmpty()) return;
+
+                        String talker = null;
+                        try { talker = (String) XposedHelpers.getObjectField(msgInfo, "field_talker"); }
+                        catch (Throwable ignored) {}
+                        if (talker == null || talker.isEmpty()) return;
+
+                        LogWriter.log(TAG, "ChatFooter.F #tts: text=" + text.substring(0, Math.min(text.length(), 40)) + " talker=" + talker);
+
+                        param.setResult(false);
+
+                        final String fText = text;
+                        final String fTalker = talker;
+                        new Thread(() -> synthesizeAndSend(fText, fTalker)).start();
+
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "intercept err: " + e.getMessage());
+                    }
+                }
+            });
+            LogWriter.log(TAG, "ChatFooter.F hooked OK");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "f9 storage fail: " + t.getMessage());
-        }
-    }
-
-    private static void hookF9Insert(ClassLoader cl) {
-        try {
-            Class<?> f9Cls = null;
-            for (String name : new String[]{"com.tencent.mm.storage.f9",
-                    "com.tencent.mm.storage.g9"}) {
-                try { f9Cls = XposedHelpers.findClass(name, cl); break; }
-                catch (Throwable ignored) {}
-            }
-            if (f9Cls == null) {
-                LogWriter.log(TAG, "f9 class not found");
-                return;
-            }
-
-            XposedBridge.hookAllMethods(f9Cls, "I9", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    interceptInsert(param);
-                }
-            });
-            XposedBridge.hookAllMethods(f9Cls, "H9", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    interceptInsert(param);
-                }
-            });
-            XposedBridge.hookAllMethods(f9Cls, "O8", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    interceptInsert(param);
-                }
-            });
-            XposedBridge.hookAllMethods(f9Cls, "X9", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    interceptInsert(param);
-                }
-            });
-            LogWriter.log(TAG, "f9 I9/H9/O8/X9 hooked OK");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "f9 hook fail: " + t.getMessage());
-        }
-    }
-
-    private static void interceptInsert(XC_MethodHook.MethodHookParam param) {
-        try {
-            if (param.args.length == 0) return;
-            Object msgInfo = param.args[0];
-            if (msgInfo == null) return;
-
-            int type;
-            try { type = (Integer) XposedHelpers.callMethod(msgInfo, "getType"); }
-            catch (Throwable e) { return; }
-            if (type != 1) return;
-
-            try {
-                boolean isSend = (Boolean) XposedHelpers.callMethod(msgInfo, "G1");
-                if (!isSend) return;
-            } catch (Throwable e) { return; }
-
-            String content = null;
-            try { content = (String) XposedHelpers.getObjectField(msgInfo, "field_content"); }
-            catch (Throwable ignored) {}
-            if (content == null) try { content = (String) XposedHelpers.callMethod(msgInfo, "I0"); }
-            catch (Throwable ignored) {}
-            if (content == null) return;
-
-            if (!content.startsWith(TTS_PREFIX)) return;
-
-            String text = content.substring(TTS_PREFIX.length()).trim();
-            if (text.isEmpty()) return;
-
-            String talker = null;
-            try { talker = (String) XposedHelpers.getObjectField(msgInfo, "field_talker"); }
-            catch (Throwable ignored) {}
-            if (talker == null) try { talker = (String) XposedHelpers.callMethod(msgInfo, "N0"); }
-            catch (Throwable ignored) {}
-            if (talker == null || talker.isEmpty()) return;
-
-            LogWriter.log(TAG, "f9 insert #tts: text=" + text.substring(0, Math.min(text.length(), 40)) + " talker=" + talker);
-
-            param.setResult(null);
-
-            final String fText = text;
-            final String fTalker = talker;
-            new Thread(() -> synthesizeAndSend(fText, fTalker)).start();
-
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "interceptInsert err: " + e.getMessage());
+            LogWriter.log(TAG, "ChatFooter.F hook fail: " + t.getMessage());
         }
     }
 
@@ -189,24 +122,30 @@ public class TtsVoiceSender {
             int result = sTts.synthesizeToFile(text, null, wavFile, "tts_voice");
             if (result != TextToSpeech.SUCCESS) {
                 LogWriter.log(TAG, "synthesizeToFile failed: " + result);
+                wavFile.delete();
                 return;
             }
 
             boolean finished = latch.await(30, TimeUnit.SECONDS);
             if (!finished) {
                 LogWriter.log(TAG, "synth timeout");
+                wavFile.delete();
                 return;
             }
             if (synthResult[0] != TextToSpeech.SUCCESS) {
                 LogWriter.log(TAG, "synth failed");
+                wavFile.delete();
                 return;
             }
 
             LogWriter.log(TAG, "WAV generated: " + wavFile.length() + " bytes");
 
             int duration = wavToAmr(wavFile, amrFile);
-            if (duration <= 0 || amrFile.length() == 0) {
-                LogWriter.log(TAG, "AMR encode failed");
+            wavFile.delete();
+
+            if (duration <= 0 || amrFile.length() < 50) {
+                LogWriter.log(TAG, "AMR encode failed, size=" + amrFile.length());
+                amrFile.delete();
                 return;
             }
 
@@ -215,7 +154,6 @@ public class TtsVoiceSender {
             boolean sent = sendVoice(amrFile.getAbsolutePath(), duration, talker);
             LogWriter.log(TAG, "send result: " + sent);
 
-            wavFile.delete();
             amrFile.delete();
 
         } catch (Throwable e) {
@@ -281,24 +219,11 @@ public class TtsVoiceSender {
                 mono8000Pcm = resampled.toByteArray();
             }
 
-            ByteArrayOutputStream amrBaos = new ByteArrayOutputStream();
-            ByteArrayInputStream pcmBais = new ByteArrayInputStream(mono8000Pcm);
+            LogWriter.log(TAG, "PCM: " + sampleRate + "Hz " + channels + "ch " + bitsPerSample + "bit → mono8kHz " + mono8000Pcm.length + " bytes");
 
-            Class<?> amrClass = Class.forName("android.media.AmrInputStream");
-            Constructor<?> ctor = amrClass.getDeclaredConstructor(InputStream.class);
-            ctor.setAccessible(true);
-            InputStream amrStream = (InputStream) ctor.newInstance(pcmBais);
+            byte[] amrData = encodeAmr(mono8000Pcm);
 
-            byte[] buf = new byte[512];
-            int len;
-            while ((len = amrStream.read(buf)) > 0) {
-                amrBaos.write(buf, 0, len);
-            }
-            amrStream.close();
-
-            byte[] amrData = amrBaos.toByteArray();
-
-            java.io.FileOutputStream fos = new java.io.FileOutputStream(amrFile);
+            FileOutputStream fos = new FileOutputStream(amrFile);
             fos.write("#!AMR\n".getBytes());
             fos.write(amrData);
             fos.close();
@@ -311,6 +236,86 @@ public class TtsVoiceSender {
         } catch (Throwable e) {
             LogWriter.log(TAG, "wavToAmr err: " + e.getMessage());
             return -1;
+        }
+    }
+
+    private static byte[] encodeAmr(byte[] pcm8000) {
+        try {
+            android.media.MediaCodec codec = android.media.MediaCodec.createEncoderByType("audio/3gpp");
+            android.media.MediaFormat fmt = android.media.MediaFormat.createAudioFormat("audio/3gpp", 8000, 1);
+            fmt.setInteger(android.media.MediaFormat.KEY_BIT_RATE, 12200);
+            fmt.setInteger(android.media.MediaFormat.KEY_MAX_INPUT_SIZE, 16384);
+
+            codec.configure(fmt, null, null, android.media.MediaCodec.CONFIGURE_FLAG_ENCODE);
+            codec.start();
+
+            java.nio.ByteBuffer[] inBufs = codec.getInputBuffers();
+            android.media.MediaCodec.BufferInfo info = new android.media.MediaCodec.BufferInfo();
+
+            int offset = 0;
+            int frameSize = 320;
+            boolean eosSent = false;
+            ByteArrayOutputStream amrBaos = new ByteArrayOutputStream();
+
+            while (!eosSent) {
+                int inIdx = codec.dequeueInputBuffer(10000);
+                if (inIdx < 0) continue;
+
+                java.nio.ByteBuffer inBuf = inBufs[inIdx];
+                inBuf.clear();
+
+                int remaining = pcm8000.length - offset;
+                if (remaining <= 0) {
+                    codec.queueInputBuffer(inIdx, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                    eosSent = true;
+                } else {
+                    int chunk = Math.min(remaining, frameSize);
+                    inBuf.put(pcm8000, offset, chunk);
+                    codec.queueInputBuffer(inIdx, 0, chunk, 0, 0);
+                    offset += chunk;
+                }
+
+                int outIdx = codec.dequeueOutputBuffer(info, 10000);
+                while (outIdx >= 0) {
+                    java.nio.ByteBuffer outBuf = codec.getOutputBuffers()[outIdx];
+                    byte[] outData = new byte[info.size];
+                    outBuf.position(info.offset);
+                    outBuf.get(outData, 0, info.size);
+                    amrBaos.write(outData);
+                    codec.releaseOutputBuffer(outIdx, false);
+                    outIdx = codec.dequeueOutputBuffer(info, 0);
+                }
+            }
+
+            codec.stop();
+            codec.release();
+
+            byte[] result = amrBaos.toByteArray();
+            LogWriter.log(TAG, "AMR encoded via MediaCodec: " + result.length + " bytes");
+            return result;
+
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "MediaCodec AMR fail: " + e.getMessage() + ", try reflection");
+            try {
+                Class<?> amrClass = Class.forName("android.media.AmrInputStream");
+                Constructor<?> ctor = amrClass.getDeclaredConstructor(InputStream.class);
+                ctor.setAccessible(true);
+                InputStream amrStream = (InputStream) ctor.newInstance(new ByteArrayInputStream(pcm8000));
+
+                ByteArrayOutputStream amrBaos = new ByteArrayOutputStream();
+                byte[] buf = new byte[512];
+                int len;
+                while ((len = amrStream.read(buf)) > 0) {
+                    amrBaos.write(buf, 0, len);
+                }
+                amrStream.close();
+                byte[] result = amrBaos.toByteArray();
+                LogWriter.log(TAG, "AMR encoded via AmrInputStream: " + result.length + " bytes");
+                return result;
+            } catch (Throwable e2) {
+                LogWriter.log(TAG, "AmrInputStream fail: " + e2.getMessage() + ", raw PCM fallback");
+                return pcm8000;
+            }
         }
     }
 }

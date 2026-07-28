@@ -125,63 +125,44 @@ public class VoiceAutoPlay {
     private static void hookDqClass(ClassLoader cl) {
         try {
             Class<?> dqCls = XposedHelpers.findClass("com.tencent.mm.ui.chatting.viewitems.dq", cl);
-            Class<?> fd5dCls = XposedHelpers.findClass("fd5.d", cl);
-            Class<?> e9Cls = cl.loadClass("com.tencent.mm.storage.e9");
 
-            for (java.lang.reflect.Method m : dqCls.getDeclaredMethods()) {
-                if (!m.getName().equals("c") || m.getParameterCount() != 3) continue;
-                Class<?>[] pts = m.getParameterTypes();
-                if (pts[0] != android.view.View.class) continue;
-                if (pts[1] != fd5dCls) continue;
-                if (pts[2] != e9Cls) continue;
+            XposedBridge.hookAllMethods(dqCls, "c", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam p) {
+                    try {
+                        LogWriter.log(TAG, "dq.c() called, args=" + p.args.length);
+                        if (p.args.length < 2) return;
 
-                XposedBridge.hookMethod(m, new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam p) {
-                        try {
-                            Object msg = p.args[2];
-                            if (msg == null) return;
+                        Object msg = null;
+                        Object chattingContext = null;
 
-                            int type = (Integer) XposedHelpers.callMethod(msg, "getType");
-                            if (type != 34) return;
-
+                        for (int i = 0; i < p.args.length; i++) {
+                            Object arg = p.args[i];
+                            if (arg == null) continue;
                             try {
-                                int isSend = XposedHelpers.getIntField(msg, "field_isSend");
-                                if (isSend == 1) return;
+                                int t = (Integer) XposedHelpers.callMethod(arg, "getType");
+                                if (t == 34 || t == 1) {
+                                    msg = arg;
+                                    continue;
+                                }
                             } catch (Throwable ignored) {}
-
-                            if ((Integer) XposedHelpers.callMethod(msg, "M0") == 5) return;
-
-                            long msgId = (Long) XposedHelpers.callMethod(msg, "H0");
-                            if (msgId == sLastPlayedMsgId) return;
-
-                            Object chattingContext = p.args[1];
-                            if (chattingContext == null) return;
-                            sCurrentChattingContext = chattingContext;
-
-                            Object mgr = XposedHelpers.getObjectField(chattingContext, "c");
-                            if (mgr == null) return;
-                            Class<?> q2Cls = XposedHelpers.findClass("zc5.q2", sClassLoader);
-                            Object vc = XposedHelpers.callMethod(mgr, "a", q2Cls);
-                            if (vc == null) return;
-                            sCurrentVoiceComp = vc;
-
-                            Object player = XposedHelpers.callMethod(vc, "n0");
-                            if (player == null) return;
-                            if ((Boolean) XposedHelpers.callMethod(player, "o")) return;
-
-                            XposedHelpers.callMethod(player, "I", msg, false);
-                            sLastPlayedMsgId = msgId;
-                            LogWriter.log(TAG, "auto-play via dq.c: msgId=" + msgId);
-                        } catch (Throwable e) {
-                            LogWriter.log(TAG, "dq.c err: " + e.getMessage());
+                            try {
+                                Object mgr = XposedHelpers.getObjectField(arg, "c");
+                                if (mgr != null) {
+                                    chattingContext = arg;
+                                }
+                            } catch (Throwable ignored) {}
                         }
+
+                        if (msg != null && chattingContext != null) {
+                            tryPlayViaChattingContext(msg, chattingContext);
+                        }
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "dq.c err: " + e.getMessage());
                     }
-                });
-                LogWriter.log(TAG, "dq.c(View,fd5.d,e9) hooked OK");
-                return;
-            }
-            LogWriter.log(TAG, "dq.c: method not found");
+                }
+            });
+            LogWriter.log(TAG, "dq.c hookAllMethods OK");
         } catch (Throwable t) {
             LogWriter.log(TAG, "dq.c hook fail: " + t.getMessage());
         }
@@ -309,63 +290,46 @@ public class VoiceAutoPlay {
         }
     }
 
-    // ============ dq.c() 回调 (如果扫描到的话) ============
+    // ============ 共享: 通过 ChattingContext 用微信内置播放器自动播放 ============
 
-    private static void onVoiceBubbleRender(XC_MethodHook.MethodHookParam param) {
+    private static void tryPlayViaChattingContext(Object msg, Object chattingContext) {
         try {
             if (!sEnabled) return;
-            boolean activated = ModuleConfig.load(
-                com.leshao.v3.ContextManager.getPrefs()
-            ).autoPlayVoice;
-            if (!activated) return;
+            if (!ModuleConfig.load(com.leshao.v3.ContextManager.getPrefs()).autoPlayVoice) return;
 
-            if (param.args.length < 3) return;
-            Object msg = param.args[2];
-            if (msg == null) return;
-
-            int msgType = (Integer) XposedHelpers.callMethod(msg, "getType");
-            if (msgType != 34) return;
+            int type = (Integer) XposedHelpers.callMethod(msg, "getType");
+            if (type != 34) return;
 
             try {
-                int isSend = XposedHelpers.getIntField(msg, "field_isSend");
-                if (isSend == 1) return;
+                boolean isSend = (Boolean) XposedHelpers.callMethod(msg, "G1");
+                if (isSend) return;
             } catch (Throwable ignored) {}
-
-            long msgId = (Long) XposedHelpers.callMethod(msg, "H0");
-            if (msgId == sLastPlayedMsgId) return;
 
             try {
                 if ((Integer) XposedHelpers.callMethod(msg, "M0") == 5) return;
             } catch (Throwable ignored) {}
 
-            Object chattingContext = param.args[1];
-            if (chattingContext != null) {
-                sCurrentChattingContext = chattingContext;
-                Object voiceComp = getVoiceComponent(chattingContext);
-                if (voiceComp != null) sCurrentVoiceComp = voiceComp;
-            }
+            long msgId = (Long) XposedHelpers.callMethod(msg, "H0");
+            if (msgId == sLastPlayedMsgId) return;
+            sLastPlayedMsgId = msgId;
 
-            Object voiceComp = sCurrentVoiceComp;
-            if (voiceComp == null) return;
+            sCurrentChattingContext = chattingContext;
 
-            Object player = XposedHelpers.callMethod(voiceComp, "n0");
+            Object mgr = XposedHelpers.getObjectField(chattingContext, "c");
+            if (mgr == null) return;
+            Class<?> q2Cls = XposedHelpers.findClass("zc5.q2", sClassLoader);
+            Object vc = XposedHelpers.callMethod(mgr, "a", q2Cls);
+            if (vc == null) return;
+            sCurrentVoiceComp = vc;
+
+            Object player = XposedHelpers.callMethod(vc, "n0");
             if (player == null) return;
-
-            try {
-                if ((Boolean) XposedHelpers.callMethod(player, "o")) return;
-            } catch (Throwable ignored) {}
-
-            if (TTSBroadcaster.isSpeaking()) {
-                sLastPlayedMsgId = msgId;
-                return;
-            }
+            if ((Boolean) XposedHelpers.callMethod(player, "o")) return;
 
             XposedHelpers.callMethod(player, "I", msg, false);
-            sLastPlayedMsgId = msgId;
-            LogWriter.log(TAG, "auto-play via dq.c: msgId=" + msgId);
-
+            LogWriter.log(TAG, "auto-play via chattingContext: msgId=" + msgId);
         } catch (Throwable e) {
-            LogWriter.log(TAG, "onVoiceBubbleRender error: " + e.getMessage());
+            LogWriter.log(TAG, "tryPlayViaChattingContext err: " + e.getMessage());
         }
     }
 
@@ -428,16 +392,12 @@ public class VoiceAutoPlay {
 
             sLastPlayedMsgId = msgId;
 
-            // 尝试通过 p0 (ChattingContext/dispatch context) 使用微信内部播放器
-            final Object finalP0 = p0;
             final Object finalMsg = msg;
+            final Object finalP0 = p0;
             final long finalMsgId = msgId;
             sMainHandler.post(() -> {
                 try {
-                    if (tryPlayViaInternalPlayer(finalMsg, finalP0, finalMsgId)) {
-                        return;
-                    }
-                    // p0 为 null, 尝试用已保存的 ChattingUI 获取 ChattingContext
+                    // 优先使用缓存的 ChattingContext/VoiceComponent (ChattingUI.onResume 时刷新)
                     Object cc = sCurrentChattingContext;
                     Object vc = sCurrentVoiceComp;
                     if (cc == null && sChatAct != null) {
@@ -445,16 +405,35 @@ public class VoiceAutoPlay {
                         cc = sCurrentChattingContext;
                         vc = sCurrentVoiceComp;
                     }
-                    if (cc != null && vc != null) {
+                    if (vc != null) {
+                        Object player = XposedHelpers.callMethod(vc, "n0");
+                        if (player != null && !(Boolean)XposedHelpers.callMethod(player, "o")) {
+                            XposedHelpers.callMethod(player, "I", finalMsg, false);
+                            LogWriter.log(TAG, "auto-play via saved context: msgId=" + finalMsgId);
+                            return;
+                        }
+                    }
+
+                    // p0 可能有值: 尝试通过 p0 获取 ChattingContext
+                    if (finalP0 != null) {
                         try {
-                            Object player = XposedHelpers.callMethod(vc, "n0");
-                            if (player != null && !(Boolean)XposedHelpers.callMethod(player, "o")) {
-                                XposedHelpers.callMethod(player, "I", finalMsg, false);
-                                LogWriter.log(TAG, "internal player via saved ChattingUI: msgId=" + finalMsgId);
-                                return;
+                            Object mgr = XposedHelpers.getObjectField(finalP0, "c");
+                            if (mgr != null) {
+                                Class<?> q2Cls = XposedHelpers.findClass("zc5.q2", sClassLoader);
+                                Object vc2 = XposedHelpers.callMethod(mgr, "a", q2Cls);
+                                if (vc2 != null) {
+                                    Object player = XposedHelpers.callMethod(vc2, "n0");
+                                    if (player != null && !(Boolean)XposedHelpers.callMethod(player, "o")) {
+                                        sCurrentChattingContext = finalP0;
+                                        sCurrentVoiceComp = vc2;
+                                        XposedHelpers.callMethod(player, "I", finalMsg, false);
+                                        LogWriter.log(TAG, "auto-play via p0: msgId=" + finalMsgId);
+                                        return;
+                                    }
+                                }
                             }
                         } catch (Throwable e) {
-                            LogWriter.log(TAG, "saved ChattingUI play fail: " + e.getMessage());
+                            LogWriter.log(TAG, "p0 internal player play fail: " + e.getMessage());
                         }
                     }
                 } catch (Throwable e) {
@@ -465,13 +444,11 @@ public class VoiceAutoPlay {
                 try {
                     String voicePath = getVoiceFilePath(finalMsg);
                     if (voicePath == null || voicePath.isEmpty()) {
-                        LogWriter.log(TAG, "no voice path for msgId=" + finalMsgId);
                         return;
                     }
                     String fullPath = new java.io.File(sVoice2BasePath, voicePath).getAbsolutePath();
                     java.io.File f = new java.io.File(fullPath);
                     if (!f.exists()) {
-                        LogWriter.log(TAG, "voice file not found: " + fullPath);
                         return;
                     }
                     android.media.MediaPlayer mp = new android.media.MediaPlayer();
