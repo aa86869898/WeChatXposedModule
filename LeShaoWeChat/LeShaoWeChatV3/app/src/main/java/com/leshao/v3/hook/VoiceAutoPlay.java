@@ -14,14 +14,14 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /**
- * 语音消息自动播放 — ChattingUI + MessageHook 双 Hook 方案
+ * 语音消息自动播放
  *
  * 方案:
- *   1. Hook ChattingUI.onResume() → 获取 ChattingContext → VoiceComponent
- *   2. Hook e01.x9.n(e9,p0) → 检测 type==34 → 自动播放
- *   3. Hook dq.c() 扫描 → 如果在当前版本存在则作为更早的触发点
+ *   1. Hook c0.a(View,fd5.d,e9) → 过滤 dq 实例 → 自动播放 (参考 LSPilot)
+ *   2. Hook ChattingUI.onResume() → 获取 ChattingContext → VoiceComponent (备用)
+ *   3. Hook e01.x9.n(e9,p0) → 检测 type==34 → 自动播放 (备用)
  *
- * 参考: WeChatVoiceAutoPlay (dq.c 方案) + MsgInfo_ANALYSIS (e9 分析)
+ * 参考: 语音播放.zip (已验证方案)
  */
 public class VoiceAutoPlay {
 
@@ -44,9 +44,89 @@ public class VoiceAutoPlay {
         findVoiceComponentClass(cl);
     }
 
-    // ============ 层1: dq.c() 扫描 (语音气泡渲染 — 最理想的触发点) ============
+    // ============ 层1: c0.a() — 消息视图绑定调度器 (参考 LSPilot) ============
 
     private static void hookDqClass(ClassLoader cl) {
+        try {
+            Class<?> c0 = XposedHelpers.findClass("com.tencent.mm.ui.chatting.viewitems.c0", cl);
+            Class<?> fd5_d = XposedHelpers.findClass("fd5.d", cl);
+            Class<?> e9Cls = cl.loadClass("com.tencent.mm.storage.e9");
+            Class<?> dqCls = XposedHelpers.findClass("com.tencent.mm.ui.chatting.viewitems.dq", cl);
+
+            for (java.lang.reflect.Method m : c0.getDeclaredMethods()) {
+                if (!m.getName().equals("a") || m.getParameterCount() != 3) continue;
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts[0] != android.view.View.class) continue;
+                if (pts[1] != fd5_d) continue;
+                if (pts[2] != e9Cls) continue;
+
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        try {
+                            Object g = XposedHelpers.getObjectField(p.thisObject, "g");
+                            if (g == null || !dqCls.isInstance(g)) return;
+
+                            Object msg = p.args[2];
+                            if (msg == null) return;
+
+                            int type = (Integer) XposedHelpers.callMethod(msg, "getType");
+                            if (type != 34) return;
+
+                            long msgId = (Long) XposedHelpers.callMethod(msg, "H0");
+                            String talker = (String) XposedHelpers.callMethod(msg, "N0");
+
+                            if (msgId == sLastPlayedMsgId) return;
+
+                            try {
+                                boolean isSend = (Boolean) XposedHelpers.callMethod(msg, "G1");
+                                if (isSend) return;
+                            } catch (Throwable ignored) {}
+
+                            try {
+                                if ((Integer) XposedHelpers.callMethod(msg, "M0") == 5) return;
+                            } catch (Throwable ignored) {}
+
+                            // ChattingContext → manager → VoiceComponent
+                            Object cc = p.args[1];
+                            if (cc == null) return;
+
+                            Object mgr = XposedHelpers.getObjectField(cc, "c");
+                            if (mgr == null) return;
+
+                            Class<?> q2Cls = XposedHelpers.findClass("zc5.q2", sClassLoader);
+                            Object vc = XposedHelpers.callMethod(mgr, "a", q2Cls);
+                            if (vc == null) return;
+
+                            sCurrentChattingContext = cc;
+                            sCurrentVoiceComp = vc;
+
+                            Object player = XposedHelpers.callMethod(vc, "n0");
+                            if (player == null) return;
+
+                            if ((Boolean) XposedHelpers.callMethod(player, "o")) return;
+
+                            XposedHelpers.callMethod(player, "I", msg, false);
+                            sLastPlayedMsgId = msgId;
+                            LogWriter.log(TAG, "auto-play OK! msgId=" + msgId + " talker=" + talker);
+
+                        } catch (Throwable e) {
+                            LogWriter.log(TAG, "c0.a err: " + e.getMessage());
+                        }
+                    }
+                });
+                LogWriter.log(TAG, "c0.a(View,fd5.d,e9) hooked OK");
+                return;
+            }
+            LogWriter.log(TAG, "c0.a: method not found, fallback to scan");
+            fallbackScanDq(cl);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "c0.a hook fail: " + t.getMessage() + ", fallback scan");
+            fallbackScanDq(cl);
+        }
+    }
+
+    private static void fallbackScanDq(ClassLoader cl) {
         String[] shortNames = new String[26 * 26];
         int idx = 0;
         for (char c1 = 'a'; c1 <= 'z'; c1++) {
