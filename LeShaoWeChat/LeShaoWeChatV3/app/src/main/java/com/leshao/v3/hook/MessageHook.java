@@ -82,11 +82,21 @@ public class MessageHook {
                 || content.startsWith("<pushcontent")))
                 return;
 
+            // 取 isSend/h0
+            int isSend = -1;
+            try { isSend = (Integer) XposedHelpers.callMethod(e9, "z0"); } catch (Throwable ignored) {}
+            long msgId = 0;
+            try { msgId = (Long) XposedHelpers.callMethod(e9, "H0"); } catch (Throwable ignored) {}
+
             sCount++;
             LogWriter.log(TAG, "#" + sCount
                 + " type=" + rawType + "->" + type
+                + " isSend=" + isSend + " msgId=" + msgId
                 + " talker=" + trunc(talker, 20)
                 + " content=" + trunc(content, 40));
+            android.util.Log.e(TAG, "!!! RAW #" + sCount + ": isSend=" + isSend + " rawType=" + rawType
+                    + " msgId=" + msgId + " talker=" + talker
+                    + " content=[" + (content == null ? "null" : content.substring(0, Math.min(content.length(), 60))) + "]");
 
             final int fType = type;
             final String fTalker = talker;
@@ -99,53 +109,32 @@ public class MessageHook {
                 }
             });
 
-            // 语音自动播放 (type==34)
+            // 语音自动播放 (type==34) — 只入队，等 so.y() 触发 v0.I(msg)
             if (rawType == 34) {
-                final long msgId = (Long) XposedHelpers.callMethod(e9, "H0");
-                LogWriter.log("VoiceAutoPlay", "MSG-HOOK-TV: rawType=34 msgId=" + msgId + " talker=" + talker);
-
-                // 诊断: y21.x0.g() path
-                try {
-                    String gPath = (String) XposedHelpers.callStaticMethod(
-                            sClassLoader.loadClass("y21.x0"), "g", talker, String.valueOf(msgId));
-                    android.util.Log.e("VoiceAutoPlay", "!!! MH y21.x0.g("+talker+","+msgId+") = " + gPath);
-                    LogWriter.log("VoiceAutoPlay", "MH y21.x0.g=" + gPath);
-                } catch (Throwable err) {
-                    android.util.Log.e("VoiceAutoPlay", "!!! MH y21.x0.g err: " + err.getMessage());
-                }
-
+                final long voiceMsgId = msgId;
+                LogWriter.log("VoiceAutoPlay", "rawType=34 msgId=" + voiceMsgId + " talker=" + talker);
                 sMainHandler.post(() -> {
                     try {
-                        VoiceAutoPlay.tryAutoPlayVoice(e9, msgId, p0);
+                        VoiceAutoPlay.onVoiceMsg(e9, voiceMsgId, p0);
                     } catch (Throwable e) {
                         LogWriter.log("VoiceAutoPlay", "msgHook err: " + e.getMessage());
                     }
                 });
             }
 
-            // TTS #tts 检测：自己是发出的 type=1 且 content 以 #tts 开头
-            try {
-                int isSend = (Integer) XposedHelpers.callMethod(e9, "z0");
-                int status = (Integer) XposedHelpers.callMethod(e9, "M0");
-                long msgId = (Long) XposedHelpers.callMethod(e9, "H0");
-                android.util.Log.e(TAG, "!!! #tts CHECK: isSend=" + isSend + " rawType=" + rawType
-                        + " status=" + status + " msgId=" + msgId
-                        + " talker=" + talker + " content=[" + (content == null ? "null" : content.substring(0, Math.min(content.length(), 30))) + "]");
-                if (isSend == 1 && rawType == 1 && content != null && content.startsWith("#tts ")) {
-                    final String ttsText = content.substring(5).trim();
-                    final String ttsTalker = talker;
-                    android.util.Log.e(TAG, "!!! #tts outgoing: " + ttsText + " talker=" + ttsTalker);
-                    LogWriter.log("TtsVoiceSender", "#tts detected in outgoing: " + ttsText.substring(0, Math.min(ttsText.length(), 40)) + " talker=" + ttsTalker);
-                    sMainHandler.post(() -> {
-                        try {
-                            TtsVoiceSender.synthesizeAndSend(ttsText, ttsTalker);
-                        } catch (Throwable e) {
-                            LogWriter.log("TtsVoiceSender", "err: " + e.getMessage());
-                        }
-                    });
-                }
-            } catch (Throwable t) {
-                android.util.Log.e(TAG, "!!! #tts CHECK err: " + t.getMessage());
+            // TTS #tts 检测：自己发出的 type=1 且 content 以 #tts 开头
+            if (isSend == 1 && rawType == 1 && content != null && content.startsWith("#tts ")) {
+                final String ttsText = content.substring(5).trim();
+                final String ttsTalker = talker;
+                android.util.Log.e(TAG, "*** #tts DETECTED: " + ttsText + " talker=" + ttsTalker);
+                LogWriter.log("TtsVoiceSender", "#tts: " + ttsText.substring(0, Math.min(ttsText.length(), 40)) + " talker=" + ttsTalker);
+                sMainHandler.post(() -> {
+                    try {
+                        TtsVoiceSender.synthesizeAndSend(ttsText, ttsTalker);
+                    } catch (Throwable e) {
+                        LogWriter.log("TtsVoiceSender", "err: " + e.getMessage());
+                    }
+                });
             }
 
         } catch (Throwable t) {
