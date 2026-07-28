@@ -470,34 +470,44 @@ public class VoiceAutoPlay {
                 if ((Integer) XposedHelpers.callMethod(msg, "M0") == 5) return;
             } catch (Throwable ignored) {}
 
-            String voicePath = getVoiceFilePath(msg);
-            if (voicePath == null || voicePath.isEmpty()) {
-                LogWriter.log(TAG, "no voice path for msgId=" + msgId);
-                return;
-            }
-
-            String fullPath = new java.io.File(sVoice2BasePath, voicePath).getAbsolutePath();
-            java.io.File f = new java.io.File(fullPath);
-            if (!f.exists()) {
-                LogWriter.log(TAG, "voice file not found: " + fullPath);
-                return;
-            }
-
             sLastPlayedMsgId = msgId;
 
-            final String fPath = fullPath;
+            // 尝试通过 p0 (ChattingContext/dispatch context) 使用微信内部播放器
+            final Object finalP0 = p0;
+            final Object finalMsg = msg;
+            final long finalMsgId = msgId;
             sMainHandler.post(() -> {
                 try {
+                    if (tryPlayViaInternalPlayer(finalMsg, finalP0, finalMsgId)) {
+                        return;
+                    }
+                } catch (Throwable e) {
+                    LogWriter.log(TAG, "internal player fail: " + e.getMessage());
+                }
+
+                // 回退: 用 MediaPlayer (不支持微信 AMR/SILK 格式, 仅供调试)
+                try {
+                    String voicePath = getVoiceFilePath(finalMsg);
+                    if (voicePath == null || voicePath.isEmpty()) {
+                        LogWriter.log(TAG, "no voice path for msgId=" + finalMsgId);
+                        return;
+                    }
+                    String fullPath = new java.io.File(sVoice2BasePath, voicePath).getAbsolutePath();
+                    java.io.File f = new java.io.File(fullPath);
+                    if (!f.exists()) {
+                        LogWriter.log(TAG, "voice file not found: " + fullPath);
+                        return;
+                    }
                     android.media.MediaPlayer mp = new android.media.MediaPlayer();
-                    mp.setDataSource(fPath);
+                    mp.setDataSource(fullPath);
                     mp.setOnCompletionListener(android.media.MediaPlayer::release);
-                    mp.setOnErrorListener((p, what, extra) -> {
-                        p.release();
+                    mp.setOnErrorListener((mp1, what, extra) -> {
+                        mp1.release();
                         return true;
                     });
                     mp.prepare();
                     mp.start();
-                    LogWriter.log(TAG, "MediaPlayer started: msgId=" + msgId);
+                    LogWriter.log(TAG, "MediaPlayer started: msgId=" + finalMsgId);
                 } catch (Throwable e) {
                     LogWriter.log(TAG, "MediaPlayer fail: " + e.getMessage());
                 }
@@ -505,6 +515,53 @@ public class VoiceAutoPlay {
 
         } catch (Throwable e) {
             LogWriter.log(TAG, "tryAutoPlayVoice error: " + e.getMessage());
+        }
+    }
+
+    private static boolean tryPlayViaInternalPlayer(Object msg, Object p0, long msgId) {
+        try {
+            Object cc = p0;
+            if (cc == null) {
+                LogWriter.log(TAG, "p0 is null, no ChattingContext");
+                return false;
+            }
+
+            LogWriter.log(TAG, "p0 class: " + cc.getClass().getName());
+
+            Object mgr = XposedHelpers.getObjectField(cc, "c");
+            if (mgr == null) {
+                LogWriter.log(TAG, "p0.c (manager) is null");
+                return false;
+            }
+
+            Class<?> q2Cls = XposedHelpers.findClass("zc5.q2", sClassLoader);
+            Object vc = XposedHelpers.callMethod(mgr, "a", q2Cls);
+            if (vc == null) {
+                LogWriter.log(TAG, "VoiceComponent is null");
+                return false;
+            }
+
+            sCurrentChattingContext = cc;
+            sCurrentVoiceComp = vc;
+
+            Object player = XposedHelpers.callMethod(vc, "n0");
+            if (player == null) {
+                LogWriter.log(TAG, "n0() player is null");
+                return false;
+            }
+
+            if ((Boolean) XposedHelpers.callMethod(player, "o")) {
+                LogWriter.log(TAG, "player already playing");
+                return false;
+            }
+
+            XposedHelpers.callMethod(player, "I", msg, false);
+            LogWriter.log(TAG, "internal player started: msgId=" + msgId);
+            return true;
+
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "tryPlayViaInternalPlayer: " + e.getMessage());
+            return false;
         }
     }
 

@@ -71,9 +71,10 @@ public class MessageHook {
         try {
             int rawType = (int) XposedHelpers.callMethod(e9, "getType");
             int type = mapType(rawType);
-            int isSend = (int) XposedHelpers.callMethod(e9, "O0");
             String talker = (String) XposedHelpers.callMethod(e9, "N0");
-            String content = (String) XposedHelpers.callMethod(e9, "j");
+            String content = null;
+            try { content = (String) XposedHelpers.callMethod(e9, "I0"); } catch (Throwable ignored) {}
+            if (content == null) try { content = (String) XposedHelpers.callMethod(e9, "j"); } catch (Throwable ignored) {}
 
             if (content != null && (content.startsWith("<msgsource")
                 || content.startsWith("<pushcontent")))
@@ -82,7 +83,6 @@ public class MessageHook {
             sCount++;
             LogWriter.log(TAG, "#" + sCount
                 + " type=" + rawType + "->" + type
-                + " isSend=" + isSend
                 + " talker=" + trunc(talker, 20)
                 + " content=" + trunc(content, 40));
 
@@ -111,6 +111,9 @@ public class MessageHook {
             }
 
             // 文字转语音发送 (type==1, content starts with #tts)
+            if (rawType == 1 && content != null) {
+                LogWriter.log(TAG, "#tts-check: content=" + trunc(content, 60));
+            }
             if (rawType == 1 && content != null && content.startsWith("#tts ")) {
                 final String text = content.substring(5).trim();
                 final String talker2 = talker;

@@ -87,7 +87,14 @@ public class TtsVoiceSender {
     private static void interceptSend(XC_MethodHook.MethodHookParam param) {
         try {
             Object msgInfo = param.args[0];
-            String content = (String) XposedHelpers.getObjectField(msgInfo, "field_content");
+
+            String content = null;
+            // 尝试多种方式读取 content
+            try { content = (String) XposedHelpers.getObjectField(msgInfo, "field_content"); } catch (Throwable ignored) {}
+            if (content == null) try { content = (String) XposedHelpers.callMethod(msgInfo, "I0"); } catch (Throwable ignored) {}
+            if (content == null) try { content = (String) XposedHelpers.callMethod(msgInfo, "j"); } catch (Throwable ignored) {}
+
+            LogWriter.log(TAG, "ChatFooter.F fired, content=" + (content != null ? content.substring(0, Math.min(content.length(), 40)) : "null"));
             if (content == null || !content.startsWith(TTS_PREFIX)) return;
 
             String text = content.substring(TTS_PREFIX.length()).trim();
@@ -95,7 +102,9 @@ public class TtsVoiceSender {
 
             LogWriter.log(TAG, "#tts detected: " + text.substring(0, Math.min(text.length(), 50)));
 
-            String talker = (String) XposedHelpers.getObjectField(msgInfo, "field_talker");
+            String talker = null;
+            try { talker = (String) XposedHelpers.getObjectField(msgInfo, "field_talker"); } catch (Throwable ignored) {}
+            if (talker == null) try { talker = (String) XposedHelpers.callMethod(msgInfo, "N0"); } catch (Throwable ignored) {}
             if (talker == null || talker.isEmpty()) {
                 LogWriter.log(TAG, "talker is empty");
                 return;
