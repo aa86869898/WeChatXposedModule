@@ -1176,54 +1176,48 @@ public class ScheduleBroadcast {
         }
     }
 
-    private static Object createFreshJob(Class<?> f3Cls) {
-        try {
-            return XposedHelpers.newInstance(f3Cls);
-        } catch (Throwable t) {
-            log("createFreshJob: no-arg fail, try parent=null: " + t.getMessage());
-            return XposedHelpers.newInstance(f3Cls, new Object[]{null});
-        }
-    }
-
     // 构建一个有效的 Kotlin Continuation<Object>
-    // 堆栈显示 kotlin.coroutines 接口被混淆，用捕获的 n85.c0 接口 + Proxy 重写 getContext
+    // 策略: 从活跃的 d85.i (SequenceLifecycleScope) 获取 coroutineContext
     private static Object buildEmptyContinuation() {
         try {
-            // Plan A: 创建 fresh f3(Job) + Proxy Continuation wrapping captured
-            if (sCapturedN85c0 != null) {
-                Class<?> n85c0Cls = sCapturedN85c0.getClass();
-                Class<?>[] ifaces = n85c0Cls.getInterfaces();
-                log("buildEmptyCont: n85.c0 ifaces=" + java.util.Arrays.toString(ifaces));
+            // Plan A: 用 d85.i scope 的 coroutineContext (active Job)
+            if (sD85iInst != null) {
+                java.lang.reflect.Method getCC = null;
+                for (java.lang.reflect.Method m : sD85iInst.getClass().getMethods()) {
+                    if (("getCoroutineContext".equals(m.getName()) || "getContext".equals(m.getName()))
+                            && m.getParameterCount() == 0) {
+                        getCC = m; break;
+                    }
+                }
+                if (getCC != null) {
+                    final Object activeContext = getCC.invoke(sD85iInst);
+                    log("buildEmptyCont: d85.i context=" + activeContext.getClass().getSimpleName());
 
-                if (ifaces.length > 0) {
-                    // f3 = kotlinx.coroutines.Job (obfuscated)
-                    Class<?> f3Cls = XposedHelpers.findClass("f3", sClassLoader);
-                    final Object freshJob = createFreshJob(f3Cls);
-                    log("buildEmptyCont: freshJob=" + freshJob.getClass().getSimpleName());
-
-                    // Proxy Continuation: getContext() → freshJob (Job IS CoroutineContext.Element)
-                    Object proxyCont = java.lang.reflect.Proxy.newProxyInstance(
-                        ifaces[0].getClassLoader(), new Class<?>[]{ifaces[0]},
-                        (proxy, method, args) -> {
-                            String mn = method.getName();
-                            if ("getContext".equals(mn)) return freshJob;
-                            if ("resumeWith".equals(mn)) return null;
-                            if ("toString".equals(mn)) return "ProxyCont";
-                            if ("hashCode".equals(mn)) return System.identityHashCode(proxy);
-                            return null;
-                        });
-                    log("buildEmptyCont: Proxy with freshJob OK");
-                    return proxyCont;
+                    // n85.c0 ifaces[0] = f16.p (obfuscated Continuation)
+                    if (sCapturedN85c0 != null) {
+                        Class<?>[] contIfaces = sCapturedN85c0.getClass().getInterfaces();
+                        if (contIfaces.length > 0) {
+                            Object proxyCont = java.lang.reflect.Proxy.newProxyInstance(
+                                contIfaces[0].getClassLoader(), new Class<?>[]{contIfaces[0]},
+                                (proxy, method, args) -> {
+                                    if ("getContext".equals(method.getName())) return activeContext;
+                                    if ("resumeWith".equals(method.getName())) return null;
+                                    return null;
+                                });
+                            log("buildEmptyCont: Proxy with d85.i context OK");
+                            return proxyCont;
+                        }
+                    }
                 }
             }
         } catch (Throwable t) {
-            log("buildEmptyCont: freshJob fail: " + t.getClass().getSimpleName() + ": " + t.getMessage());
-            StringWriter sw2 = new StringWriter();
-            t.printStackTrace(new PrintWriter(sw2));
-            log("buildEmptyCont 堆栈:\n" + sw2.toString());
+            log("buildEmptyCont: d85.i fail: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+            StringWriter sw = new StringWriter();
+            t.printStackTrace(new PrintWriter(sw));
+            log("buildEmptyCont 堆栈:\n" + sw.toString());
         }
 
-        // Plan B: captured n85.c0 (fallback)
+        // Plan B: captured n85.c0
         if (sCapturedN85c0 != null) {
             log("buildEmptyCont: using captured n85.c0 (fallback)");
             return sCapturedN85c0;
