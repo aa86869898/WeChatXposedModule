@@ -1073,16 +1073,32 @@ public class ScheduleBroadcast {
             // Step 6: setCreateTime — Guide: msg.setCreateTime(now) → obfuscated e1
             XposedHelpers.callMethod(msg, "e1", now);
 
-            // ★ 自检: 确认内容已写入 (j() = getContent)
+            // ★★★ DIAG: 枚举 e9 全部字段找到内容字段真名 ★★★
             try {
-                Object chk = XposedHelpers.callMethod(msg, "j");
-                int chkType = (Integer) XposedHelpers.callMethod(msg, "getType");
-                int chkIsSend = (Integer) XposedHelpers.callMethod(msg, "z0");
-                int chkStatus = -1;
-                try { chkStatus = (Integer) XposedHelpers.callMethod(msg, "t1"); } catch (Throwable ig) {}
-                log("sendMessage v5: 自检 type=" + chkType + " isSend=" + chkIsSend + " content=[" + (chk == null ? "NULL" : chk) + "] len=" + (chk == null ? 0 : chk.toString().length()) + " status=" + chkStatus);
-            } catch (Throwable ig) {
-                log("sendMessage v5: 自检失败 " + ig.getMessage());
+                StringBuilder fieldDump = new StringBuilder("DIAG: e9 字段诊断:\n");
+                // 1. 枚举所有声明的字段
+                Class<?> c = e9Class;
+                while (c != null && c != Object.class) {
+                    for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                        f.setAccessible(true);
+                        try {
+                            Object v = f.get(msg);
+                            String vStr = v == null ? "null" : (v instanceof String ? ("\"" + v.toString().substring(0, Math.min(50, v.toString().length())) + "\"") : v.toString());
+                            fieldDump.append("  ").append(c.getSimpleName()).append(".").append(f.getName())
+                                .append("(").append(f.getType().getSimpleName()).append(")=").append(vStr).append("\n");
+                        } catch (Exception ignored) {}
+                    }
+                    c = c.getSuperclass();
+                }
+                // 2. 调已知 getter 对比
+                fieldDump.append("  getter: j()=").append(XposedHelpers.callMethod(msg, "j"))
+                    .append(" z0()=").append(XposedHelpers.callMethod(msg, "z0"))
+                    .append(" getType()=").append(XposedHelpers.callMethod(msg, "getType"))
+                    .append(" getCreateTime()=").append(XposedHelpers.callMethod(msg, "getCreateTime"))
+                    .append(" N0()=").append(XposedHelpers.callMethod(msg, "N0"));
+                log(fieldDump.toString());
+            } catch (Throwable dumpErr) {
+                log("DIAG: 字段诊断异常: " + dumpErr.getMessage());
             }
 
             log("sendMessage v5: talker=" + talker + " content=" + nvl(task.content).substring(0, Math.min(30, nvl(task.content).length())) + " type=" + task.msgType);
