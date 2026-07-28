@@ -1,6 +1,5 @@
 package com.leshao.v3.hook;
 
-import android.app.Activity;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -16,9 +15,10 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /**
- * 语音消息自动播放 v37
- * - 全局 hook Activity.onResume()，按类名过滤 ChattingUI
- * - 消息到达无 VC 时用 ActivityThread 主动扫描
+ * 语音消息自动播放 v40
+ * - hook so.y() (VoiceComponent.resetAutoPlay) 替代 Activity.onResume
+ * - so 继承 a，a.d = fd5.d (ChattingContext)
+ * - 消息到达入队，so.y() 触发时出队播放
  */
 public class VoiceAutoPlay {
 
@@ -48,67 +48,61 @@ public class VoiceAutoPlay {
 
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
-        hookActivityOnResume();
+        hookVoiceComponentReset();
     }
 
-    // =========== 全局 Activity.onResume（ThemeHook 已验证可用） ===========
+    // =========== so.y() (resetAutoPlay, 进入聊天时触发) ===========
 
-    private static void hookActivityOnResume() {
+    private static void hookVoiceComponentReset() {
         try {
-            Class<?> activityCls = sClassLoader.loadClass("android.app.Activity");
-            XposedBridge.hookAllMethods(activityCls, "onResume", new XC_MethodHook() {
+            Class<?> soCls = sClassLoader.loadClass("com.tencent.mm.ui.chatting.component.so");
+            XposedBridge.hookAllMethods(soCls, "y", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    Activity act = (Activity) param.thisObject;
-                    android.util.Log.e(TAG, "!!! onResume RAW: activity=" + act.getClass().getName());
-                    if (!act.getClass().getName().contains("ChattingUI")) return;
+                    android.util.Log.e(TAG, "!!! so.y() FIRED");
+                    try {
+                        Object so = param.thisObject;
+                        sCurrentVoiceComp = so;
+                        XposedBridge.log("[VAP] so.y() fired, VC=" + so.getClass().getName());
 
-                    XposedBridge.log("[VAP] onResume FIRED " + act.getClass().getSimpleName());
-                    LogWriter.log(TAG, "onResume: " + act.getClass().getSimpleName());
-                    sHandler.postDelayed(() -> onChatResume(act, 0), 300);
+                        Object cc = XposedHelpers.getObjectField(so, "d");
+                        if (cc != null) {
+                            sCurrentChattingContext = cc;
+                            XposedBridge.log("[VAP] cc from so.d: " + cc.getClass().getName());
+
+                            String talker = null;
+                            try { talker = (String) XposedHelpers.getObjectField(cc, "k"); }
+                            catch (Throwable ignored) {}
+                            if (talker == null) try { talker = (String) XposedHelpers.callMethod(cc, "x"); }
+                            catch (Throwable ignored) {}
+
+                            XposedBridge.log("[VAP] talker=" + trunc(talker) + " pending=" + sPendingQueue.size());
+                            LogWriter.log(TAG, "so.y: talker=" + trunc(talker) + " pending=" + sPendingQueue.size());
+
+                            if (!sPendingQueue.isEmpty()) {
+                                playPendingForTalker(talker);
+                            }
+                        } else {
+                            XposedBridge.log("[VAP] so.d is null");
+                        }
+                    } catch (Throwable e) {
+                        android.util.Log.e(TAG, "so.y err: " + e.getMessage());
+                        XposedBridge.log("[VAP] so.y err: " + e.getMessage());
+                    }
                 }
             });
-            XposedBridge.log("[VAP] Activity.onResume hooked OK (global)");
-            LogWriter.log(TAG, "Activity.onResume hooked OK (global)");
+            XposedBridge.log("[VAP] so.y() hooked OK");
+            LogWriter.log(TAG, "so.y() hooked OK");
         } catch (Throwable t) {
-            XposedBridge.log("[VAP] Activity.onResume FAIL: " + t.getMessage());
+            XposedBridge.log("[VAP] so.y() FAIL: " + t.getMessage());
+            LogWriter.log(TAG, "so.y() fail: " + t.getMessage());
         }
     }
 
-    // =========== onResume 处理 ===========
+    // =========== 播放逻辑 ===========
 
-    private static void onChatResume(Activity activity, int retry) {
-        XposedBridge.log("[VAP] onChatResume retry=" + retry + " pending=" + sPendingQueue.size());
+    private static void playPendingForTalker(String currentTalker) {
         try {
-            if (!refreshChattingContext(activity)) return;
-            if (sCurrentVoiceComp == null && retry < 3) {
-                LogWriter.log(TAG, "VC null, retry " + (retry + 1) + "/3");
-                sHandler.postDelayed(() -> onChatResume(activity, retry + 1), 500);
-                return;
-            }
-            if (sCurrentVoiceComp == null) {
-                XposedBridge.log("[VAP] VC still null after retries");
-                return;
-            }
-
-            playPendingForCurrentTalker();
-        } catch (Throwable e) {
-            XposedBridge.log("[VAP] onChatResume err: " + e.getMessage());
-        }
-    }
-
-    private static void playPendingForCurrentTalker() {
-        try {
-            String currentTalker = null;
-            if (sCurrentChattingContext != null) {
-                try {
-                    currentTalker = (String) XposedHelpers.getObjectField(sCurrentChattingContext, "k");
-                } catch (Throwable ignored) {}
-            }
-
-            XposedBridge.log("[VAP] talker=" + trunc(currentTalker) + " pending=" + sPendingQueue.size());
-            LogWriter.log(TAG, "talker=" + trunc(currentTalker) + " queue=" + sPendingQueue.size());
-
             Iterator<PendingVoiceMsg> it = sPendingQueue.iterator();
             while (it.hasNext()) {
                 PendingVoiceMsg pvm = it.next();
@@ -132,50 +126,6 @@ public class VoiceAutoPlay {
         }
     }
 
-    // =========== ChattingContext / VoiceComponent ===========
-
-    private static boolean refreshChattingContext(Activity activity) {
-        try {
-            Object fragment;
-            try {
-                fragment = XposedHelpers.getObjectField(activity, "h");
-            } catch (Throwable e) {
-                LogWriter.log(TAG, "h not found: " + e.getMessage());
-                return false;
-            }
-            if (fragment == null) {
-                LogWriter.log(TAG, "h is null");
-                return false;
-            }
-
-            Object cc = findChattingContext(fragment);
-            if (cc == null) {
-                LogWriter.log(TAG, "cc not found");
-                return false;
-            }
-
-            sCurrentChattingContext = cc;
-            XposedBridge.log("[VAP] cc: " + cc.getClass().getName());
-
-            Object mgr = XposedHelpers.getObjectField(cc, "c");
-            if (mgr == null) return false;
-            Class<?> q2Cls = sClassLoader.loadClass("zc5.q2");
-            Object vc = XposedHelpers.callMethod(mgr, "a", q2Cls);
-            if (vc != null) {
-                sCurrentVoiceComp = vc;
-                XposedBridge.log("[VAP] VC: " + vc.getClass().getName());
-                LogWriter.log(TAG, "VC: " + vc.getClass().getName());
-                return true;
-            } else {
-                XposedBridge.log("[VAP] VC null from mgr.a");
-            }
-            return false;
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "refreshCC err: " + e.getMessage());
-            return false;
-        }
-    }
-
     private static boolean playVoiceViaComponent(Object msg, long msgId) {
         Object vc = sCurrentVoiceComp;
         if (vc == null) return false;
@@ -189,24 +139,6 @@ public class VoiceAutoPlay {
             LogWriter.log(TAG, "playVoice err: " + e.getMessage());
             return false;
         }
-    }
-
-    private static Object findChattingContext(Object fragment) {
-        for (java.lang.reflect.Field f : fragment.getClass().getDeclaredFields()) {
-            try {
-                f.setAccessible(true);
-                Object val = f.get(fragment);
-                if (val == null) continue;
-                try {
-                    Object mgrField = XposedHelpers.getObjectField(val, "c");
-                    if (mgrField == null) continue;
-                    XposedHelpers.callMethod(mgrField, "a", Class.class);
-                    LogWriter.log(TAG, "cc in " + f.getName() + ": " + val.getClass().getName());
-                    return val;
-                } catch (Throwable ignored) {}
-            } catch (Throwable ignored) {}
-        }
-        return null;
     }
 
     // =========== 供 MessageHook 调用 ===========
@@ -245,9 +177,14 @@ public class VoiceAutoPlay {
 
             sHandler.post(() -> {
                 if (sCurrentVoiceComp != null) {
-                    playPendingForCurrentTalker();
+                    String currentTalker = null;
+                    if (sCurrentChattingContext != null) {
+                        try { currentTalker = (String) XposedHelpers.getObjectField(sCurrentChattingContext, "k"); }
+                        catch (Throwable ignored) {}
+                    }
+                    playPendingForTalker(currentTalker);
                 } else {
-                    LogWriter.log(TAG, "VC not ready, queued for onResume");
+                    LogWriter.log(TAG, "VC not ready, queued for so.y()");
                 }
             });
         } catch (Throwable e) {
@@ -255,10 +192,8 @@ public class VoiceAutoPlay {
         }
     }
 
-    public static void notifyChattingUIResume(Activity activity) {
-        try {
-            onChatResume(activity, 0);
-        } catch (Throwable ignored) {}
+    public static void notifyChattingUIResume(android.app.Activity activity) {
+        // 不再需要，so.y() 替代了
     }
 
     private static String trunc(String s) {

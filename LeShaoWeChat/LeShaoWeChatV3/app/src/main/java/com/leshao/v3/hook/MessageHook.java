@@ -110,8 +110,23 @@ public class MessageHook {
                 });
             }
 
-            // #tts 检测已移至 TtsVoiceSender (SendMsgSuccessEvent.callback)
-            // 此处保留 content 日志用于诊断
+            // TTS #tts 检测：自己是发出的 type=1 且 content 以 #tts 开头
+            try {
+                int isSend = (Integer) XposedHelpers.callMethod(e9, "z0");
+                if (isSend == 1 && rawType == 1 && content != null && content.startsWith("#tts ")) {
+                    final String ttsText = content.substring(5).trim();
+                    final String ttsTalker = talker;
+                    android.util.Log.e(TAG, "!!! #tts outgoing: " + ttsText + " talker=" + ttsTalker);
+                    LogWriter.log("TtsVoiceSender", "#tts detected in outgoing: " + ttsText.substring(0, Math.min(ttsText.length(), 40)) + " talker=" + ttsTalker);
+                    sMainHandler.post(() -> {
+                        try {
+                            TtsVoiceSender.synthesizeAndSend(ttsText, ttsTalker);
+                        } catch (Throwable e) {
+                            LogWriter.log("TtsVoiceSender", "err: " + e.getMessage());
+                        }
+                    });
+                }
+            } catch (Throwable ignored) {}
 
         } catch (Throwable t) {
             LogWriter.log(TAG, "err: " + t);
