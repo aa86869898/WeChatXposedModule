@@ -1080,6 +1080,11 @@ public class ScheduleBroadcast {
             // Step 6: setCreateTime — Guide: msg.setCreateTime(now) → obfuscated e1
             XposedHelpers.callMethod(msg, "e1", now);
 
+            // ★ 所有 setter 之后, 再次清除 XML/appmsg 标记 (k1/t1/e1 可能内部重置)
+            XposedHelpers.setBooleanField(msg, "g", false);
+            XposedHelpers.setBooleanField(msg, "h", false);
+            log("sendMessage: g/h after all setters g=" + XposedHelpers.getBooleanField(msg, "g") + " h=" + XposedHelpers.getBooleanField(msg, "h"));
+
             // ★★★ DIAG: 枚举 e9 全部字段找到内容字段真名 ★★★
             try {
                 StringBuilder fieldDump = new StringBuilder("DIAG: e9 字段诊断:\n");
