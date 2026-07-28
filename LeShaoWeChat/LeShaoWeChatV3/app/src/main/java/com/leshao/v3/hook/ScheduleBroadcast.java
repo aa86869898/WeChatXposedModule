@@ -1042,24 +1042,14 @@ public class ScheduleBroadcast {
 
             switch (task.msgType) {
                 case 1: // 文本
-                    XposedHelpers.callMethod(msg, "A1", 1);
-                    XposedHelpers.callMethod(msg, "X0", task.content);
-                    XposedHelpers.callMethod(msg, "e1", now);
-                    XposedHelpers.callMethod(msg, "k1", 1);
-                    try {
-                        log("DIAG: 文本 msg type=" + XposedHelpers.callMethod(msg, "B0")
-                            + " content=" + XposedHelpers.callMethod(msg, "X1")
-                            + " isSend=" + XposedHelpers.callMethod(msg, "G1")
-                            + " talker=" + XposedHelpers.callMethod(msg, "L"));
-                    } catch (Throwable ignored) {}
+                    XposedHelpers.callMethod(msg, "setType", 1);
+                    XposedHelpers.callMethod(msg, "d1", nvl(task.content));  // d1 = setContent (dm.c8 parent)
                     break;
 
                 case 3: // 图片
-                    XposedHelpers.callMethod(msg, "A1", 3);
-                    XposedHelpers.callMethod(msg, "j1", task.filePath);
-                    XposedHelpers.callMethod(msg, "X0", nvl(task.content));
-                    XposedHelpers.callMethod(msg, "e1", now);
-                    XposedHelpers.callMethod(msg, "k1", 1);
+                    XposedHelpers.callMethod(msg, "setType", 3);
+                    if (task.filePath != null) XposedHelpers.callMethod(msg, "j1", task.filePath);
+                    XposedHelpers.callMethod(msg, "d1", nvl(task.content));
                     copyMediaToWxDir(task.filePath, msg);
                     break;
 
@@ -1067,27 +1057,21 @@ public class ScheduleBroadcast {
                     return sendVoiceMessage(talker, task);
 
                 case 43: // 视频
-                    XposedHelpers.callMethod(msg, "A1", 43);
-                    XposedHelpers.callMethod(msg, "j1", task.filePath);
-                    XposedHelpers.callMethod(msg, "X0", nvl(task.content));
-                    XposedHelpers.callMethod(msg, "e1", now);
-                    XposedHelpers.callMethod(msg, "k1", 1);
+                    XposedHelpers.callMethod(msg, "setType", 43);
+                    if (task.filePath != null) XposedHelpers.callMethod(msg, "j1", task.filePath);
+                    XposedHelpers.callMethod(msg, "d1", nvl(task.content));
                     copyMediaToWxDir(task.filePath, msg);
                     break;
 
                 case 47: // 表情
-                    XposedHelpers.callMethod(msg, "A1", 47);
-                    XposedHelpers.callMethod(msg, "j1", task.filePath);
-                    XposedHelpers.callMethod(msg, "X0", nvl(task.content));
-                    XposedHelpers.callMethod(msg, "e1", now);
-                    XposedHelpers.callMethod(msg, "k1", 1);
+                    XposedHelpers.callMethod(msg, "setType", 47);
+                    if (task.filePath != null) XposedHelpers.callMethod(msg, "j1", task.filePath);
+                    XposedHelpers.callMethod(msg, "d1", nvl(task.content));
                     break;
 
                 case 49: // AppMsg
-                    XposedHelpers.callMethod(msg, "A1", 49);
+                    XposedHelpers.callMethod(msg, "setType", 49);
                     XposedHelpers.callMethod(msg, "d1", task.content);
-                    XposedHelpers.callMethod(msg, "e1", now);
-                    XposedHelpers.callMethod(msg, "k1", 1);
                     if (task.filePath != null && new File(task.filePath).exists()) {
                         XposedHelpers.callMethod(msg, "j1", task.filePath);
                     }
@@ -1096,15 +1080,31 @@ public class ScheduleBroadcast {
                 default: return false;
             }
 
-            // 主路径: H9写DB拿到msgId, 然后triggerSend触发联网发送
-            long msgId = (Long) XposedHelpers.callMethod(ms, "H9", msg);
+            // ★ 正确设置必填字段（参照 WeChat_Xposed_SendMsg_Guide.md）
+            // field_isSend = 1 (反射，无公开setter)
+            try { XposedHelpers.setIntField(msg, "field_isSend", 1); } catch (Throwable t) {
+                try { XposedHelpers.setIntField(msg, "A", 1); } catch (Throwable ignored) {}
+            }
+            // status = 1 (待发送)
+            try { XposedHelpers.callMethod(msg, "t1", 1); } catch (Throwable ignored) {}
+            // createTime
+            try { XposedHelpers.callMethod(msg, "setCreateTime", now); } catch (Throwable ignored) {}
+
+            // ★ I9(msg, true) — 写入DB + 触发 SendMsgService 自动发送
+            // SendMsgService (a21.b0.tj) 协程轮询 status=1+isSend=1 → 自动走 vj→CGI
+            long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
             if (msgId > 0) {
-                log("sendMessage v2: H9 OK msgId=" + msgId + " content=" + nvl(task.content));
-                triggerSend(msgId, nvl(task.content), task.msgType, talker);
+                log("sendMessage v3: I9 OK msgId=" + msgId + " content=" + nvl(task.content) + " type=" + task.msgType);
                 return true;
             }
             return false;
-        } catch (Throwable t) { return false; }
+        } catch (Throwable t) {
+            log("sendMessage FAIL: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+            StringWriter sw = new StringWriter();
+            t.printStackTrace(new PrintWriter(sw));
+            log("sendMessage 堆栈:\n" + sw.toString());
+            return false;
+        }
     }
 
     // ===== 触发消息真正发送(联网) =====
