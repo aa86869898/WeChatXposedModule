@@ -94,6 +94,10 @@ public class TTSFragment extends Fragment {
         card5.addView(subSwitchRow(d, "视频号消息播报", mCfg.announceVideoChannel, (v, checked) -> {
             mCfg.announceVideoChannel = checked; mCfg.save(mPrefs);
         }));
+        card5.addView(itemDivider(d));
+        card5.addView(subSwitchRow(d, "聊天记录播报", mCfg.announceChatHistory, (v, checked) -> {
+            mCfg.announceChatHistory = checked; mCfg.save(mPrefs);
+        }));
         root.addView(card5);
 
         root.addView(spacerV(d, 12));

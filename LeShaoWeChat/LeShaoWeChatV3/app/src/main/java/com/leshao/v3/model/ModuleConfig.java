@@ -26,6 +26,7 @@ public class ModuleConfig {
     public boolean announceAt = true;
     public boolean announceMiniProgram = true;
     public boolean announceVideoChannel = true;
+    public boolean announceChatHistory = true;
     public boolean autoPlayVoice = true;
 
     public String customAnnounceFormat = "{sender}: {content}";
@@ -270,6 +271,7 @@ public class ModuleConfig {
         cfg.announceAt = prefs.getBoolean("ls_announce_at", true);
         cfg.announceMiniProgram = prefs.getBoolean("ls_announce_miniprogram", true);
         cfg.announceVideoChannel = prefs.getBoolean("ls_announce_videochannel", true);
+        cfg.announceChatHistory = prefs.getBoolean("ls_announce_chathistory", true);
         cfg.autoPlayVoice = prefs.getBoolean("ls_auto_voice", true);
 
         cfg.announceIntervalMs = parseInt(prefs.getString("ls_announce_interval_ms", "0"), 0);
@@ -524,6 +526,7 @@ public class ModuleConfig {
         cfg.announceAt = false;
         cfg.announceMiniProgram = false;
         cfg.announceVideoChannel = false;
+        cfg.announceChatHistory = false;
         cfg.announceNickname = false;
         cfg.announceGroup = false;
         cfg.autoPlayVoice = false;
@@ -665,6 +668,7 @@ public class ModuleConfig {
         e.putBoolean("ls_announce_at", announceAt);
         e.putBoolean("ls_announce_miniprogram", announceMiniProgram);
         e.putBoolean("ls_announce_videochannel", announceVideoChannel);
+        e.putBoolean("ls_announce_chathistory", announceChatHistory);
         e.putBoolean("ls_auto_voice", autoPlayVoice);
         e.putString("ls_announce_interval_ms", String.valueOf(announceIntervalMs));
         e.putString("ls_announce_fmt", customAnnounceFormat);

@@ -33,6 +33,9 @@ public class TTSPageView {
     private static final String KEY_ANNOUNCE_STICKER = "ls_announce_sticker";
     private static final String KEY_ANNOUNCE_CALL = "ls_announce_call";
     private static final String KEY_ANNOUNCE_QUOTE = "ls_announce_quote";
+    private static final String KEY_ANNOUNCE_MINIPROGRAM = "ls_announce_miniprogram";
+    private static final String KEY_ANNOUNCE_VIDEOCHANNEL = "ls_announce_videochannel";
+    private static final String KEY_ANNOUNCE_CHATHISTORY = "ls_announce_chathistory";
     private static final String KEY_ANNOUNCE_NICKNAME = "ls_announce_nickname";
     private static final String KEY_ANNOUNCE_GROUP = "ls_announce_group";
     private static final String KEY_QUIET_ON = "ls_quiet_enabled";
@@ -63,6 +66,9 @@ public class TTSPageView {
         boolean announceSticker = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_STICKER, false);
         boolean announceCall = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_CALL, true);
         boolean announceQuote = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_QUOTE, true);
+        boolean announceMiniProgram = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_MINIPROGRAM, true);
+        boolean announceVideoChannel = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_VIDEOCHANNEL, true);
+        boolean announceChatHistory = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_CHATHISTORY, true);
         boolean announceNickname = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_NICKNAME, true);
         boolean announceGroup = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_GROUP, false);
         boolean quietOn = prefs != null && prefs.getBoolean(KEY_QUIET_ON, false);
@@ -131,6 +137,22 @@ public class TTSPageView {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_GROUP, on).apply();
         }));
         root.addView(card2);
+
+        root.addView(spacerV(ctx, d, 12));
+        root.addView(sectionLabel(ctx, d, "特殊消息播报"));
+        LinearLayout cardSpecial = makeCard(ctx, d);
+        cardSpecial.addView(switchRow(ctx, d, "小程序消息播报", "播报小程序分享消息", announceMiniProgram, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_MINIPROGRAM, on).apply();
+        }));
+        cardSpecial.addView(itemDivider(ctx, d));
+        cardSpecial.addView(switchRow(ctx, d, "视频号消息播报", "播报视频号分享消息", announceVideoChannel, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_VIDEOCHANNEL, on).apply();
+        }));
+        cardSpecial.addView(itemDivider(ctx, d));
+        cardSpecial.addView(switchRow(ctx, d, "聊天记录播报", "播报合并转发的聊天记录消息", announceChatHistory, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_CHATHISTORY, on).apply();
+        }));
+        root.addView(cardSpecial);
 
         root.addView(spacerV(ctx, d, 12));
         root.addView(sectionLabel(ctx, d, "自定义播报名单"));

@@ -143,6 +143,14 @@ public class MessageHandler {
             mTts.speak(name + "发来视频号消息");
             return;
         }
+        if (cfg.announceChatHistory && (content.contains("<recorditem>") || content.contains("<type>19</type>"))) {
+            if (isGroup) {
+                mTts.speak(name + "分享了聊天记录");
+            } else {
+                mTts.speak(name + "发来聊天记录");
+            }
+            return;
+        }
         LogWriter.log("MessageHandler", "handleAppMsg unknown: " + (content.length() > 200 ? content.substring(0, 200) + "..." : content));
     }
 
