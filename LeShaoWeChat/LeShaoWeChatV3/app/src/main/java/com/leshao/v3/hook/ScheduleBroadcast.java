@@ -1099,47 +1099,62 @@ public class ScheduleBroadcast {
 
     private static void triggerSend(long msgId, Object e9msg, String talker) {
         try {
-            // 1. 获取 a21.b0 ViewModel 实例 (SendMsgService)
-            Class<?> a21b0Cls = XposedHelpers.findClass("a21.b0", sClassLoader);
-            Object a21b0 = null;
+            // 1. 构建 a65.en4 (MsgCommand) — 单条消息体
+            Class<?> en4Cls = XposedHelpers.findClass("a65.en4", sClassLoader);
+            Object en4 = XposedHelpers.newInstance(en4Cls);
 
-            // 尝试多种服务定位器
-            String[] locators = {"n0", "com.tencent.mm.kernel.h", "p7", "l5", "m5", "n5", "o5"};
-            for (String locCls : locators) {
-                try {
-                    Class<?> lc = XposedHelpers.findClass(locCls, sClassLoader);
-                    a21b0 = XposedHelpers.callStaticMethod(lc, "c", a21b0Cls);
-                    if (a21b0 != null) { log("triggerSend: a21.b0 found via " + locCls); break; }
-                    a21b0 = XposedHelpers.callStaticMethod(lc, "get", a21b0Cls);
-                    if (a21b0 != null) { log("triggerSend: a21.b0 found via " + locCls + ".get"); break; }
-                } catch (Throwable ignored) {}
+            // 1a. 收件人 ew5
+            Class<?> ew5Cls = XposedHelpers.findClass("a65.ew5", sClassLoader);
+            Object ew5 = XposedHelpers.newInstance(ew5Cls);
+            try { XposedHelpers.setObjectField(ew5, "d", talker); } catch (Throwable ignored) {}
+            try { XposedHelpers.setBooleanField(ew5, "e", true); } catch (Throwable ignored) {}
+            try { XposedHelpers.setObjectField(en4, "d", ew5); } catch (Throwable ignored) {}
+
+            // 1b. 时间戳 + 类型 + 内容
+            try { XposedHelpers.setIntField(en4, "g", (int)(System.currentTimeMillis() / 1000)); } catch (Throwable ignored) {}
+            try { XposedHelpers.setIntField(en4, "f", 1); } catch (Throwable ignored) {}
+            try { XposedHelpers.setObjectField(en4, "e", XposedHelpers.callMethod(e9msg, "X1")); } catch (Throwable ignored) {}
+            // newmsgid
+            try {
+                Class<?> y1Cls = XposedHelpers.findClass("y1", sClassLoader);
+                long createTime = (Long) XposedHelpers.callMethod(e9msg, "getCreateTime");
+                Object y1Val = XposedHelpers.callStaticMethod(y1Cls, "a", talker, createTime);
+                int hash = (Integer) XposedHelpers.callMethod(y1Val, "hashCode");
+                XposedHelpers.setIntField(en4, "h", hash);
+            } catch (Throwable ignored) {}
+
+            // 2. 构建 a65.f16 (NewSendMsgRequest)
+            Class<?> f16Cls = XposedHelpers.findClass("a65.f16", sClassLoader);
+            Object f16 = XposedHelpers.newInstance(f16Cls);
+
+            // f16.e = LinkedList<en4> — 添加消息
+            java.util.List<Object> f16e = (java.util.List<Object>) XposedHelpers.getObjectField(f16, "e");
+            if (f16e == null) {
+                f16e = new java.util.LinkedList<>();
+                try { XposedHelpers.setObjectField(f16, "e", f16e); } catch (Throwable ignored) {}
             }
+            f16e.add(en4);
+            try { XposedHelpers.setIntField(f16, "d", f16e.size()); } catch (Throwable ignored) {}
 
-            // fallback: 尝试通过 km0.o ViewModelStore 获取
-            if (a21b0 == null) {
-                try {
-                    Class<?> km0o = XposedHelpers.findClass("km0.o", sClassLoader);
-                    // 尝试 newInstance
-                    a21b0 = XposedHelpers.newInstance(a21b0Cls);
-                    log("triggerSend: a21.b0 created via newInstance");
-                } catch (Throwable ignored) {}
-            }
+            // 3. f16.b() → i (CGI task)
+            Object i = XposedHelpers.callMethod(f16, "b");
 
-            if (a21b0 == null) {
-                log("triggerSend: a21.b0=null (all locators failed)");
-                return;
-            }
+            // 4. 构建 o (CGI request wrapper)
+            Class<?> oCls = XposedHelpers.findClass("com.tencent.mm.modelbase.o", sClassLoader);
+            Object o = XposedHelpers.newInstance(oCls);
+            // o.c = CGI URL, o.d = CmdID, o.e = RespID, o.f = FuncID
+            try { XposedHelpers.setObjectField(o, "c", "/cgi-bin/micromsg-bin/newsendmsg"); } catch (Throwable ignored) {}
+            try { XposedHelpers.setIntField(o, "d", 522); } catch (Throwable ignored) {}
+            try { XposedHelpers.setIntField(o, "e", 237); } catch (Throwable ignored) {}
+            try { XposedHelpers.setIntField(o, "f", 1000000237); } catch (Throwable ignored) {}
 
-            // 2. 构建 List<e9>
-            java.util.List<Object> msgList = new java.util.ArrayList<>();
-            msgList.add(e9msg);
+            // i.p(o) — 设置请求包装
+            XposedHelpers.callMethod(i, "p", o);
 
-            // 3. 构建 Kotlin Continuation (empty — 仅触发发送不等待结果)
-            Object continuation = buildEmptyContinuation();
-
-            // 4. 调用 a21.b0.vj(List, Continuation) 联网发送
-            XposedHelpers.callMethod(a21b0, "vj", msgList, continuation);
-            log("triggerSend: a21.b0.vj() OK msgId=" + msgId);
+            // 5. 调用 sm0.h.b(i, null) 联网发送
+            Class<?> sm0h = XposedHelpers.findClass("sm0.h", sClassLoader);
+            Object result = XposedHelpers.callStaticMethod(sm0h, "b", i, null);
+            log("triggerSend: sm0.h.b() OK msgId=" + msgId + " result=" + result);
         } catch (Throwable t) {
             log("triggerSend: a21.b0.vj fail: " + t.getMessage());
             log("triggerSend: 所有方法均失败 msgId=" + msgId);
