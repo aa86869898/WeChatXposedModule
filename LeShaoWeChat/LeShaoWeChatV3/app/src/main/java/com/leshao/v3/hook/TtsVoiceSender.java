@@ -1,5 +1,6 @@
 package com.leshao.v3.hook;
 
+import android.os.Bundle;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 
@@ -176,22 +177,30 @@ public class TtsVoiceSender {
 
             CountDownLatch latch = new CountDownLatch(1);
             final int[] synthResult = {TextToSpeech.ERROR};
+            final String utteranceId = "tts_" + talker;
 
             sTts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                @Override public void onStart(String utteranceId) {}
+                @Override public void onStart(String uid) {}
                 @Override
-                public void onDone(String utteranceId) {
+                public void onDone(String uid) {
                     synthResult[0] = TextToSpeech.SUCCESS;
                     latch.countDown();
+                    if (uid != null && uid.startsWith("tts_")) {
+                        String ttsTalker = uid.substring(4);
+                        android.util.Log.e(TAG, ">>> TTS synthesis done, triggering voice play for " + ttsTalker);
+                        VoiceAutoPlay.playPendingVoice(ttsTalker);
+                    }
                 }
                 @Override
-                public void onError(String utteranceId) {
-                    LogWriter.log(TAG, "synth error: " + utteranceId);
+                public void onError(String uid) {
+                    LogWriter.log(TAG, "synth error: " + uid);
                     latch.countDown();
                 }
             });
 
-            int result = sTts.synthesizeToFile(text, null, wavFile, "tts_voice");
+            Bundle params = new Bundle();
+            params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId);
+            int result = sTts.synthesizeToFile(text, params, wavFile, utteranceId);
             if (result != TextToSpeech.SUCCESS) {
                 LogWriter.log(TAG, "synthesizeToFile failed: " + result);
                 wavFile.delete();

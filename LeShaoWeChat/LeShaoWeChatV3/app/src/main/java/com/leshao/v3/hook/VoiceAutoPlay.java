@@ -209,6 +209,30 @@ public class VoiceAutoPlay {
 
     public static void notifyChattingUIResume(android.app.Activity activity) {}
 
+    /**
+     * 供 TtsVoiceSender TTS 完成后触发语音播放
+     */
+    public static void playPendingVoice(String talker) {
+        android.util.Log.e(TAG, ">>> playPendingVoice talker=" + talker);
+        if (sCurrentVoiceComp == null) return;
+        try {
+            List<Long> pending = dequeue(talker);
+            if (pending.isEmpty()) return;
+            Object player = XposedHelpers.callMethod(sCurrentVoiceComp, "n0");
+            if (player == null) return;
+            for (long msgId : pending) {
+                Object msg = loadMsgById(msgId);
+                if (msg != null) {
+                    XposedHelpers.callMethod(player, "I", msg, false);
+                    android.util.Log.e(TAG, ">>> playPendingVoice PLAY msgId=" + msgId);
+                    LogWriter.log(TAG, "playPendingVoice PLAY msgId=" + msgId);
+                }
+            }
+        } catch (Throwable e) {
+            android.util.Log.e(TAG, "playPendingVoice err: " + e.getMessage());
+        }
+    }
+
     private static String trunc(String s) {
         return s == null ? "null" : s.length() > 15 ? s.substring(0, 15) + "..." : s;
     }
