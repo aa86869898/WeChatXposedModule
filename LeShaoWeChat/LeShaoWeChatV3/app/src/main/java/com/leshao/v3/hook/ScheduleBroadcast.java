@@ -1176,48 +1176,58 @@ public class ScheduleBroadcast {
         }
     }
 
-    // 构建一个有效的 Kotlin Continuation<Object>，带非空 CoroutineContext
+    private static Object createFreshJob(Class<?> f3Cls) {
+        try {
+            return XposedHelpers.newInstance(f3Cls);
+        } catch (Throwable t) {
+            log("createFreshJob: no-arg fail, try parent=null: " + t.getMessage());
+            return XposedHelpers.newInstance(f3Cls, new Object[]{null});
+        }
+    }
+
+    // 构建一个有效的 Kotlin Continuation<Object>
+    // 堆栈显示 kotlin.coroutines 接口被混淆，用捕获的 n85.c0 接口 + Proxy 重写 getContext
     private static Object buildEmptyContinuation() {
         try {
-            // 尝试 SafeContinuation(RESUMED)
-            Class<?> safeCont = XposedHelpers.findClass("kotlin.coroutines.SafeContinuation", null);
-            Object resumed = XposedHelpers.getStaticObjectField(safeCont, "RESUMED");
-            Object result = XposedHelpers.newInstance(safeCont, resumed);
-            log("buildEmptyCont: SafeContinuation OK");
-            return result;
-        } catch (Throwable t1) {
-            log("buildEmptyCont: SafeContinuation fail: " + t1.getMessage());
+            // Plan A: 创建 fresh f3(Job) + Proxy Continuation wrapping captured
+            if (sCapturedN85c0 != null) {
+                Class<?> n85c0Cls = sCapturedN85c0.getClass();
+                Class<?>[] ifaces = n85c0Cls.getInterfaces();
+                log("buildEmptyCont: n85.c0 ifaces=" + java.util.Arrays.toString(ifaces));
+
+                if (ifaces.length > 0) {
+                    // f3 = kotlinx.coroutines.Job (obfuscated)
+                    Class<?> f3Cls = XposedHelpers.findClass("f3", sClassLoader);
+                    final Object freshJob = createFreshJob(f3Cls);
+                    log("buildEmptyCont: freshJob=" + freshJob.getClass().getSimpleName());
+
+                    // Proxy Continuation: getContext() → freshJob (Job IS CoroutineContext.Element)
+                    Object proxyCont = java.lang.reflect.Proxy.newProxyInstance(
+                        ifaces[0].getClassLoader(), new Class<?>[]{ifaces[0]},
+                        (proxy, method, args) -> {
+                            String mn = method.getName();
+                            if ("getContext".equals(mn)) return freshJob;
+                            if ("resumeWith".equals(mn)) return null;
+                            if ("toString".equals(mn)) return "ProxyCont";
+                            if ("hashCode".equals(mn)) return System.identityHashCode(proxy);
+                            return null;
+                        });
+                    log("buildEmptyCont: Proxy with freshJob OK");
+                    return proxyCont;
+                }
+            }
+        } catch (Throwable t) {
+            log("buildEmptyCont: freshJob fail: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+            StringWriter sw2 = new StringWriter();
+            t.printStackTrace(new PrintWriter(sw2));
+            log("buildEmptyCont 堆栈:\n" + sw2.toString());
         }
 
-        try {
-            // Plan B: 用 Proxy 创建 Continuation + CoroutineContext
-            Class<?> ccCls = XposedHelpers.findClass("kotlin.coroutines.CoroutineContext", null);
-            Class<?> contCls = XposedHelpers.findClass("kotlin.coroutines.Continuation", null);
-
-            // Proxy CoroutineContext — 任意非空对象
-            final Object dummyContext = java.lang.reflect.Proxy.newProxyInstance(
-                ccCls.getClassLoader(), new Class<?>[]{ccCls},
-                (proxy, method, args) -> null);
-
-            // Proxy Continuation — getContext() 返回 dummyContext
-            Object cont = java.lang.reflect.Proxy.newProxyInstance(
-                contCls.getClassLoader(), new Class<?>[]{contCls},
-                (proxy, method, args) -> {
-                    if ("getContext".equals(method.getName())) return dummyContext;
-                    return null;
-                });
-            log("buildEmptyCont: Proxy Continuation OK");
-            return cont;
-        } catch (Throwable t2) {
-            log("buildEmptyCont: Proxy fail: " + t2.getMessage());
-        }
-
-        // Plan C: 使用之前捕获的 n85.c0 continuation
+        // Plan B: captured n85.c0 (fallback)
         if (sCapturedN85c0 != null) {
-            log("buildEmptyCont: using captured n85.c0");
+            log("buildEmptyCont: using captured n85.c0 (fallback)");
             return sCapturedN85c0;
         }
-
         log("buildEmptyCont: ALL methods failed");
         return null;
     }
