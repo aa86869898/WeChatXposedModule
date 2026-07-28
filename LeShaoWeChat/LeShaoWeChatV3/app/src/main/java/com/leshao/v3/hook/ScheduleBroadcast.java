@@ -1096,7 +1096,7 @@ public class ScheduleBroadcast {
             // 主路径: H9写DB拿到msgId, 然后triggerSend触发联网发送
             long msgId = (Long) XposedHelpers.callMethod(ms, "H9", msg);
             if (msgId > 0) {
-                log("sendMessage: H9 OK msgId=" + msgId + " capturedA21q=" + (sCapturedA21q != null));
+                log("sendMessage v2: H9 OK msgId=" + msgId + " content=" + nvl(task.content));
                 triggerSend(msgId, msg, talker);
                 return true;
             }
@@ -1122,16 +1122,27 @@ public class ScheduleBroadcast {
 
             // 1b. 时间戳 + 类型 + 内容
             try { XposedHelpers.setIntField(en4, "g", (int)(System.currentTimeMillis() / 1000)); } catch (Throwable ignored) {}
-            try { XposedHelpers.setIntField(en4, "f", 1); } catch (Throwable ignored) {}
-            // 获取消息内容 — 正确的 getter 是 j()，X1 是 setter
+
+            // 从 e9 获取 type（用 getType() 而非硬编码 1）
+            int msgType = 1;
+            try { msgType = (Integer) XposedHelpers.callMethod(e9msg, "getType"); } catch (Throwable ignored) {}
+            try { XposedHelpers.setIntField(en4, "f", msgType); } catch (Throwable ignored) {}
+
+            // 获取消息内容 — 依次尝试所有可能 getter
             String content = "";
-            try { content = (String) XposedHelpers.callMethod(e9msg, "j"); } catch (Throwable t1) {
-                try { content = (String) XposedHelpers.callMethod(e9msg, "X1"); } catch (Throwable t2) {
-                    log("[triggerSend:1] 无法获取消息内容: " + t1.getMessage());
-                }
+            String lastTry = "none";
+            try { content = (String) XposedHelpers.callMethod(e9msg, "j"); lastTry = "j()=" + (content != null ? content.length() : -1); } catch (Throwable t1) { lastTry = "j() fail: " + t1.getMessage(); }
+            if (content == null || content.isEmpty()) {
+                try { content = (String) XposedHelpers.callMethod(e9msg, "X1"); lastTry = "X1()=" + (content != null ? content.length() : -1); } catch (Throwable t2) { lastTry = "X1() fail: " + t2.getMessage(); }
             }
-            try { XposedHelpers.setObjectField(en4, "e", content); } catch (Throwable ignored) {}
-            log("[triggerSend:1] en4.e content len=" + (content != null ? content.length() : 0));
+            if (content == null || content.isEmpty()) {
+                try { content = (String) XposedHelpers.callMethod(e9msg, "W"); lastTry = "W()=" + (content != null ? content.length() : -1); } catch (Throwable t3) { lastTry = "W() fail: " + t3.getMessage(); }
+            }
+            if (content == null || content.isEmpty()) {
+                try { content = (String) XposedHelpers.callMethod(e9msg, "getContent"); lastTry = "getContent()=" + (content != null ? content.length() : -1); } catch (Throwable t4) { lastTry = "getContent() fail: " + t4.getMessage(); }
+            }
+            try { XposedHelpers.setObjectField(en4, "e", content != null ? content : ""); } catch (Throwable ignored) {}
+            log("[triggerSend:1] en4 type=" + msgType + " contentLen=" + (content != null ? content.length() : -1) + " via " + lastTry);
 
             // newmsgid
             try {
