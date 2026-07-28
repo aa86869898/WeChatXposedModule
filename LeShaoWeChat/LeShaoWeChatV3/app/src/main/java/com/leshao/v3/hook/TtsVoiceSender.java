@@ -62,6 +62,10 @@ public class TtsVoiceSender {
 
                         if (!content.startsWith(TTS_PREFIX)) return;
 
+                        int type;
+                        try { type = (Integer) XposedHelpers.callMethod(msgInfo, "getType");
+                        } catch (Throwable e) { type = -1; }
+
                         String text = content.substring(TTS_PREFIX.length()).trim();
                         if (text.isEmpty()) return;
 
@@ -70,7 +74,7 @@ public class TtsVoiceSender {
                         catch (Throwable ignored) {}
                         if (talker == null || talker.isEmpty()) return;
 
-                        LogWriter.log(TAG, "ChatFooter.F #tts: text=" + text.substring(0, Math.min(text.length(), 40)) + " talker=" + talker);
+                        LogWriter.log(TAG, "ChatFooter.F #tts: type=" + type + " text=" + text.substring(0, Math.min(text.length(), 60)) + " talker=" + talker);
 
                         param.setResult(false);
 
