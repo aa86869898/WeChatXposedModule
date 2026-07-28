@@ -1,338 +1,251 @@
-07-29 07:47:52.987 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-29 07:47:52.989 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-29 07:47:52.990 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-29 07:47:52.991 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-29 07:47:52.991 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-29 07:47:52.992 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
-07-29 07:47:52.992 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-29 07:47:52.994 [main] ContactRepository: init: DB ready listener registered
-07-29 07:47:52.994 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-29 07:47:52.995 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-29 07:47:52.996 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-29 07:47:52.997 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-29 07:47:53.006 [main] SettingsEntryHook: LauncherUI entry hooks ok
-07-29 07:47:53.006 [main] SettingsEntryHook: INIT: hooks registered ok
-07-29 07:47:53.009 [main] MessageHook: n(e9,p0) OK
-07-29 07:47:53.010 [main] MessageHook: C(e9) OK
-07-29 07:47:53.017 [main] ContextManager: attachBaseContext DONE, ready=true
-07-29 07:47:53.018 [main] DatabaseProvider: init: already hooked via initEarly, skipping
-07-29 07:47:53.019 [main] SettingsInject: INIT: registered
-07-29 07:47:53.024 [main] TTSBroadcaster: TTS init done
-07-29 07:47:53.026 [main] VAP: k0 class NOT found: java.lang.ClassNotFoundException: com$tencent$mm$model$k0
-07-29 07:47:53.028 [main] VAP: init: k0=false so=true u0=true x0=true j=true
-07-29 07:47:53.033 [main] VAP: voice2: /data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2
-07-29 07:47:53.035 [main] VAP: so.y() hook OK
-07-29 07:47:53.039 [main] ModuleConfig: initWxid: wxid_qf3ok46p08v922
-07-29 07:47:53.048 [main] LeShaoV3: [MainHook] activateAll() START, pendingTasks=32
-07-29 07:47:53.050 [main] AntiRecallHook: [XML] Hooked: af5.a.run()
-07-29 07:47:53.052 [main] AntiRecallHook: [Proto] Hooked: e01.u.f()
-07-29 07:47:53.055 [main] AntiRecallHook: [协程] Hooked: bd0.s.invokeSuspend()
-07-29 07:47:53.055 [main] AntiRecallHook: anti-recall hooks installed (4 paths)
-07-29 07:47:53.058 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewReceiveUI.initView()
-07-29 07:47:53.060 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI.initView()
-07-29 07:47:53.061 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI.onCreate()
-07-29 07:47:53.064 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2.onCreate()
-07-29 07:47:53.065 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI.onCreate()
-07-29 07:47:53.066 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKBeforeDetailUI.onCreate()
-07-29 07:47:53.067 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewDetailUI.onCreate()
-07-29 07:47:53.068 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI.onCreate()
-07-29 07:47:53.069 [main] RedPacket: [OK] ChattingUI.onResume()
-07-29 07:47:53.071 [main] RedPacket: RP OK
-07-29 07:47:53.072 [main] RedPacket: hooks installed (open result + UI auto-click + TTS UI)
-07-29 07:47:53.076 [main] AutoCollect: [OK] com.tencent.mm.plugin.wallet.pay.ui.WalletPayUI.onCreate()
-07-29 07:47:53.076 [main] AutoCollect: [OK] ChattingUI.onResume()
-07-29 07:47:53.078 [main] AutoCollect: AC OK
-07-29 07:47:53.079 [main] AutoCollect: hooks installed (transfer result + UI auto-collect)
-07-29 07:47:53.081 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.085 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.088 [main] LeShaoV3: [Footer] 字数限制已解除 (返回'0')
-07-29 07:47:53.090 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.093 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.097 [main] LeShaoV3: --- [6] 定时发送 ---
-07-29 07:47:53.098 [main] LeShaoV3:   ChatFooter.F(e9,a35.g)→boolean ✓
-07-29 07:47:53.099 [main] LeShaoV3:   ChatFooterCustom.r(10 params) ✓
-07-29 07:47:53.100 [main] LeShaoV3:   ChatFooterCustom.onClick(View) ✓
-07-29 07:47:53.101 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.104 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.105 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.106 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.107 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.108 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.109 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.109 [main] LeShaoV3: --- [10] 好友删除检测 ---
-07-29 07:47:53.110 [main] LeShaoV3:   ContactInfoUI.D2() + onResume() ✓
-07-29 07:47:53.110 [main] LeShaoV3:   SendMsgSuccessEvent ✓
-07-29 07:47:53.111 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.118 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.119 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.121 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.125 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.126 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.127 [main] HideFields: hook initView OK
-07-29 07:47:53.128 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.130 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.133 [main] ContactChangeLog: hook installing...
-07-29 07:47:53.135 [main] ContactChangeLog: GetContactService not found: java.lang.ClassNotFoundException: com$tencent$mm$plugin$getcontact$l11$h
-07-29 07:47:53.135 [main] ContactChangeLog: [v.b] hook ok
-07-29 07:47:53.138 [main] ContactChangeLog: hook installed OK
-07-29 07:47:53.150 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.153 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.157 [main] ChatBackup: daily backup scheduled at 02:00
-07-29 07:47:53.158 [main] ChatBackup: hook OK
-07-29 07:47:53.159 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:47:53.163 [main] ThemeHook: loadColors done
-07-29 07:47:53.164 [main] ThemeHook: state: m=true bar=false page=false chatBg=false bubble=false tab=false text=false
-07-29 07:47:53.166 [main] ThemeHook: [A] ok
-07-29 07:47:53.169 [main] ThemeHook: [B] ok
-07-29 07:47:53.171 [main] ThemeHook: [C] ga.E0 title ok
-07-29 07:47:53.173 [main] ThemeHook: [C] dim-scan ok
-07-29 07:47:53.174 [main] ThemeHook: [D] ok
-07-29 07:47:53.175 [main] ThemeHook: [E] com.tencent.mm.ui.conversation.MainUI ok
-07-29 07:47:53.178 [main] ThemeHook: [F] p0 extra hook ok
-07-29 07:47:53.178 [main] ThemeHook: [F] DyeTemplate l0+n0 ok
-07-29 07:47:53.181 [main] ThemeHook: [H] ok
-07-29 07:47:53.185 [main] ThemeHook: [X] addView scan ok
-07-29 07:47:53.186 [main] ThemeHook: [G] ChattingUI ok
-07-29 07:47:53.186 [main] ThemeHook: [L] dark sync ok
-07-29 07:47:53.187 [main] ThemeHook: [M] settings bg ok
-07-29 07:47:53.190 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivity ok
-07-29 07:47:53.191 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivityJava ok
-07-29 07:47:53.192 [main] ThemeHook: [O] MMFragment ok
-07-29 07:47:53.193 [main] ThemeHook: [O] MMFragmentActivity ok
-07-29 07:47:53.194 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooter ok
-07-29 07:47:53.196 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooterBottom ok
-07-29 07:47:53.197 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.ChatFooterPanel ok
-07-29 07:47:53.198 [main] ThemeHook: [P] com.tencent.mm.ui.chatting.ChattingFooterMoreBtnBar ok
-07-29 07:47:53.198 [main] ThemeHook: [P] ChattingImageBGView ok
-07-29 07:47:53.199 [main] ThemeHook: [Q] SnsTimeLineUI ok
-07-29 07:47:53.200 [main] ThemeHook: [Q] ImproveSnsTimelineUI ok
-07-29 07:47:53.201 [main] ThemeHook: [Q] ContactInfoUI ok
-07-29 07:47:53.201 [main] ThemeHook: [Q] AddressUI ok
-07-29 07:47:53.202 [main] ThemeHook: [Q] FindMoreFriendsUI ok
-07-29 07:47:53.204 [main] ThemeHook: [Q] WebViewUI ok
-07-29 07:47:53.205 [main] ThemeHook: [Q] MainSettingsUI ok
-07-29 07:47:53.205 [main] ThemeHook: [Q] CommonSettingsUI ok
-07-29 07:47:53.206 [main] ThemeHook: [Q] BizConversationUI ok
-07-29 07:47:53.207 [main] ThemeHook: [Q] SnsUserUI ok
-07-29 07:47:53.208 [main] ThemeHook: [Q] SnsCommentUI ok
-07-29 07:47:53.209 [main] ThemeHook: [Q] SnsUploadUI ok
-07-29 07:47:53.210 [main] ThemeHook: [Q] ContactProfileUI ok
-07-29 07:47:53.211 [main] ThemeHook: [Q] ConversationListView ok
-07-29 07:47:53.213 [main] ThemeHook: [Q] ConversationFolderItemView ok
-07-29 07:47:53.214 [main] ThemeHook: [Q] MainUIView ok
-07-29 07:47:53.215 [main] ThemeHook: [Q] ChattingItemFooter ok
-07-29 07:47:53.217 [main] ThemeHook: [Q] SnsHeader ok
-07-29 07:47:53.219 [main] ThemeHook: [Q] SnsCollapsibleTextView ok
-07-29 07:47:53.222 [main] ThemeHook: [Q] TimelineCommentView ok
-07-29 07:47:53.224 [main] ThemeHook: [Q] LauncherUIBottomTabView ok
-07-29 07:47:53.226 [main] ThemeHook: gallery hook err: No static method findAndHookMethod(Ljava/lang/Class;Ljava/lang/String;[Ljava/lang/Object;)V in class Lde/robv/android/xposed/XposedHelpers; or its super classes (declaration of 'de.robv.android.xposed.XposedHelpers' appears in Anonymous-DexFile@732009187)
-07-29 07:47:53.227 [main] ThemeHook: all hooks installed
-07-29 07:47:55.302 [main] VF: scan [com.tencent.mm.ui.chatting.viewitems, com.tencent.mm.ui.chatting.component]: 2076 classes, 1161 methods
-07-29 07:47:55.313 [main] VF: MenuBuilder.add hooked
-07-29 07:47:55.315 [main] VF: viewitems+component+MenuBuilder hooks installed
-07-29 07:47:57.227 [main] VF: ◆discovered g(): y21.x0.g(String,String)→String (trusted, ITE on init)
-07-29 07:47:57.228 [main] VF: ◆discovered t(): y21.x0.t(t(String,int,int,e9)→boolean)
-07-29 07:47:57.245 [main] VF: discoverVoiceApi: g=y21.x0.g t=y21.x0.t path=null.null
-07-29 07:47:57.266 [main] VF: ready — do a native forward to trace API
-07-29 07:47:57.271 [main] TtsVoiceSender: SendMsgSuccessEvent hooked OK
-07-29 07:47:57.273 [main] LeShaoV3: [MainHook] activateAll() DONE
-07-29 07:47:57.580 [main] TtsEngine: TTS init OK
-07-29 07:47:57.611 [main] TtsVoiceSender: TTS init: OK
-07-29 07:47:59.189 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-29 07:47:59.198 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-29 07:47:59.199 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-29 07:47:59.202 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-29 07:47:59.204 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-29 07:47:59.297 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-29 07:47:59.299 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-29 07:47:59.300 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-29 07:47:59.301 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-29 07:47:59.304 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-29 07:48:02.817 [[GT]ColdPool#1] MessageHook: #1 type=43->43 isSend=0 msgId=8229199230171219339 talker=47757372655@chatroom content=wxid_qikyjsnjslw212:0:0
-
-07-29 07:48:02.847 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:02.849 [main] MessageHandler: DROPPED by filter: type=43 from=47757372655@chatroom masterSwitch=true announceText=true
-07-29 07:48:02.917 [[GT]ColdPool#1] MessageHook: #2 type=43->43 isSend=0 msgId=8626129788629352307 talker=43882405797@chatroom content=wxid_qikyjsnjslw212:0:0
-
-07-29 07:48:02.924 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:02.927 [main] MessageHandler: DROPPED by filter: type=43 from=43882405797@chatroom masterSwitch=true announceText=true
-07-29 07:48:02.956 [[GT]ColdPool#1] MessageHook: #3 type=43->43 isSend=0 msgId=6520097242085461713 talker=24207296042@chatroom content=wxid_qikyjsnjslw212:0:0
-
-07-29 07:48:02.960 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:02.961 [main] MessageHandler: DROPPED by filter: type=43 from=24207296042@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.018 [[GT]ColdPool#1] MessageHook: #4 type=1->1 isSend=0 msgId=5350035307883778609 talker=25295891650@chatroom content=wxid_vb77buusxt0d22:
-【车找人】🚘
-时间:8点～8点半
-
+07-29 07:52:39.275 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-29 07:52:39.277 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-29 07:52:39.278 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-29 07:52:39.279 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-29 07:52:39.280 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-29 07:52:39.295 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-29 07:52:39.297 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-29 07:52:39.299 [main] ContactRepository: init: DB ready listener registered
+07-29 07:52:39.299 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-29 07:52:39.300 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-29 07:52:39.301 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-29 07:52:39.302 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-29 07:52:39.312 [main] SettingsEntryHook: LauncherUI entry hooks ok
+07-29 07:52:39.312 [main] SettingsEntryHook: INIT: hooks registered ok
+07-29 07:52:39.314 [main] MessageHook: n(e9,p0) OK
+07-29 07:52:39.315 [main] MessageHook: C(e9) OK
+07-29 07:52:39.322 [main] ContextManager: attachBaseContext DONE, ready=true
+07-29 07:52:39.323 [main] DatabaseProvider: init: already hooked via initEarly, skipping
+07-29 07:52:39.324 [main] SettingsInject: INIT: registered
+07-29 07:52:39.330 [main] TTSBroadcaster: TTS init done
+07-29 07:52:39.332 [main] VAP: k0 class NOT found: java.lang.ClassNotFoundException: com$tencent$mm$model$k0
+07-29 07:52:39.333 [main] VAP: init: k0=false so=true u0=true x0=true j=true
+07-29 07:52:39.335 [main] VAP: voice2: /data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2
+07-29 07:52:39.337 [main] VAP: so.y() hook OK
+07-29 07:52:39.339 [main] ModuleConfig: initWxid: wxid_qf3ok46p08v922
+07-29 07:52:39.347 [main] LeShaoV3: [MainHook] activateAll() START, pendingTasks=32
+07-29 07:52:39.349 [main] AntiRecallHook: [XML] Hooked: af5.a.run()
+07-29 07:52:39.351 [main] AntiRecallHook: [Proto] Hooked: e01.u.f()
+07-29 07:52:39.354 [main] AntiRecallHook: [协程] Hooked: bd0.s.invokeSuspend()
+07-29 07:52:39.355 [main] AntiRecallHook: anti-recall hooks installed (4 paths)
+07-29 07:52:39.358 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewReceiveUI.initView()
+07-29 07:52:39.359 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI.initView()
+07-29 07:52:39.360 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI.onCreate()
+07-29 07:52:39.361 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2.onCreate()
+07-29 07:52:39.362 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI.onCreate()
+07-29 07:52:39.363 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKBeforeDetailUI.onCreate()
+07-29 07:52:39.365 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewDetailUI.onCreate()
+07-29 07:52:39.366 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI.onCreate()
+07-29 07:52:39.368 [main] RedPacket: [OK] ChattingUI.onResume()
+07-29 07:52:39.369 [main] RedPacket: RP OK
+07-29 07:52:39.370 [main] RedPacket: hooks installed (open result + UI auto-click + TTS UI)
+07-29 07:52:39.375 [main] AutoCollect: [OK] com.tencent.mm.plugin.wallet.pay.ui.WalletPayUI.onCreate()
+07-29 07:52:39.375 [main] AutoCollect: [OK] ChattingUI.onResume()
+07-29 07:52:39.377 [main] AutoCollect: AC OK
+07-29 07:52:39.378 [main] AutoCollect: hooks installed (transfer result + UI auto-collect)
+07-29 07:52:39.379 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.384 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.386 [main] LeShaoV3: [Footer] 字数限制已解除 (返回'0')
+07-29 07:52:39.389 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.392 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.397 [main] LeShaoV3: --- [6] 定时发送 ---
+07-29 07:52:39.398 [main] LeShaoV3:   ChatFooter.F(e9,a35.g)→boolean ✓
+07-29 07:52:39.399 [main] LeShaoV3:   ChatFooterCustom.r(10 params) ✓
+07-29 07:52:39.400 [main] LeShaoV3:   ChatFooterCustom.onClick(View) ✓
+07-29 07:52:39.401 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.404 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.406 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.407 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.408 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.409 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.410 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.410 [main] LeShaoV3: --- [10] 好友删除检测 ---
+07-29 07:52:39.411 [main] LeShaoV3:   ContactInfoUI.D2() + onResume() ✓
+07-29 07:52:39.411 [main] LeShaoV3:   SendMsgSuccessEvent ✓
+07-29 07:52:39.412 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.420 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.421 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.423 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.426 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.427 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.429 [main] HideFields: hook initView OK
+07-29 07:52:39.430 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.431 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.434 [main] ContactChangeLog: hook installing...
+07-29 07:52:39.437 [main] ContactChangeLog: GetContactService not found: java.lang.ClassNotFoundException: com$tencent$mm$plugin$getcontact$l11$h
+07-29 07:52:39.437 [main] ContactChangeLog: [v.b] hook ok
+07-29 07:52:39.440 [main] ContactChangeLog: hook installed OK
+07-29 07:52:39.454 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.456 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.459 [main] ChatBackup: daily backup scheduled at 02:00
+07-29 07:52:39.459 [main] ChatBackup: hook OK
+07-29 07:52:39.460 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:39.464 [main] ThemeHook: loadColors done
+07-29 07:52:39.465 [main] ThemeHook: state: m=true bar=false page=false chatBg=false bubble=false tab=false text=false
+07-29 07:52:39.467 [main] ThemeHook: [A] ok
+07-29 07:52:39.470 [main] ThemeHook: [B] ok
+07-29 07:52:39.472 [main] ThemeHook: [C] ga.E0 title ok
+07-29 07:52:39.475 [main] ThemeHook: [C] dim-scan ok
+07-29 07:52:39.478 [main] ThemeHook: [D] ok
+07-29 07:52:39.480 [main] ThemeHook: [E] com.tencent.mm.ui.conversation.MainUI ok
+07-29 07:52:39.484 [main] ThemeHook: [F] p0 extra hook ok
+07-29 07:52:39.486 [main] ThemeHook: [F] DyeTemplate l0+n0 ok
+07-29 07:52:39.491 [main] ThemeHook: [H] ok
+07-29 07:52:39.495 [main] ThemeHook: [X] addView scan ok
+07-29 07:52:39.496 [main] ThemeHook: [G] ChattingUI ok
+07-29 07:52:39.497 [main] ThemeHook: [L] dark sync ok
+07-29 07:52:39.499 [main] ThemeHook: [M] settings bg ok
+07-29 07:52:39.502 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivity ok
+07-29 07:52:39.503 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivityJava ok
+07-29 07:52:39.505 [main] ThemeHook: [O] MMFragment ok
+07-29 07:52:39.506 [main] ThemeHook: [O] MMFragmentActivity ok
+07-29 07:52:39.509 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooter ok
+07-29 07:52:39.512 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooterBottom ok
+07-29 07:52:39.513 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.ChatFooterPanel ok
+07-29 07:52:39.514 [main] ThemeHook: [P] com.tencent.mm.ui.chatting.ChattingFooterMoreBtnBar ok
+07-29 07:52:39.516 [main] ThemeHook: [P] ChattingImageBGView ok
+07-29 07:52:39.517 [main] ThemeHook: [Q] SnsTimeLineUI ok
+07-29 07:52:39.519 [main] ThemeHook: [Q] ImproveSnsTimelineUI ok
+07-29 07:52:39.520 [main] ThemeHook: [Q] ContactInfoUI ok
+07-29 07:52:39.520 [main] ThemeHook: [Q] AddressUI ok
+07-29 07:52:39.521 [main] ThemeHook: [Q] FindMoreFriendsUI ok
+07-29 07:52:39.523 [main] ThemeHook: [Q] WebViewUI ok
+07-29 07:52:39.524 [main] ThemeHook: [Q] MainSettingsUI ok
+07-29 07:52:39.524 [main] ThemeHook: [Q] CommonSettingsUI ok
+07-29 07:52:39.525 [main] ThemeHook: [Q] BizConversationUI ok
+07-29 07:52:39.526 [main] ThemeHook: [Q] SnsUserUI ok
+07-29 07:52:39.527 [main] ThemeHook: [Q] SnsCommentUI ok
+07-29 07:52:39.528 [main] ThemeHook: [Q] SnsUploadUI ok
+07-29 07:52:39.529 [main] ThemeHook: [Q] ContactProfileUI ok
+07-29 07:52:39.531 [main] ThemeHook: [Q] ConversationListView ok
+07-29 07:52:39.533 [main] ThemeHook: [Q] ConversationFolderItemView ok
+07-29 07:52:39.535 [main] ThemeHook: [Q] MainUIView ok
+07-29 07:52:39.536 [main] ThemeHook: [Q] ChattingItemFooter ok
+07-29 07:52:39.537 [main] ThemeHook: [Q] SnsHeader ok
+07-29 07:52:39.539 [main] ThemeHook: [Q] SnsCollapsibleTextView ok
+07-29 07:52:39.542 [main] ThemeHook: [Q] TimelineCommentView ok
+07-29 07:52:39.544 [main] ThemeHook: [Q] LauncherUIBottomTabView ok
+07-29 07:52:39.547 [main] ThemeHook: gallery hook err: No static method findAndHookMethod(Ljava/lang/Class;Ljava/lang/String;[Ljava/lang/Object;)V in class Lde/robv/android/xposed/XposedHelpers; or its super classes (declaration of 'de.robv.android.xposed.XposedHelpers' appears in Anonymous-DexFile@732009187)
+07-29 07:52:39.548 [main] ThemeHook: all hooks installed
+07-29 07:52:41.585 [main] VF: scan [com.tencent.mm.ui.chatting.viewitems, com.tencent.mm.ui.chatting.component]: 2076 classes, 1161 methods
+07-29 07:52:41.594 [main] VF: MenuBuilder.add hooked
+07-29 07:52:41.596 [main] VF: viewitems+component+MenuBuilder hooks installed
+07-29 07:52:43.477 [main] VF: ◆discovered g(): y21.x0.g(String,String)→String (trusted, ITE on init)
+07-29 07:52:43.479 [main] VF: ◆discovered t(): y21.x0.t(t(String,int,int,e9)→boolean)
+07-29 07:52:43.491 [main] VF: discoverVoiceApi: g=y21.x0.g t=y21.x0.t path=null.null
+07-29 07:52:43.511 [main] VF: ready — do a native forward to trace API
+07-29 07:52:43.517 [main] TtsVoiceSender: SendMsgSuccessEvent hooked OK
+07-29 07:52:43.518 [main] LeShaoV3: [MainHook] activateAll() DONE
+07-29 07:52:43.809 [main] TtsEngine: TTS init OK
+07-29 07:52:43.839 [main] TtsVoiceSender: TTS init: OK
+07-29 07:52:45.217 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-29 07:52:45.226 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-29 07:52:45.228 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-29 07:52:45.231 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-29 07:52:45.234 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-29 07:52:45.369 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-29 07:52:45.372 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-29 07:52:45.373 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-29 07:52:45.375 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-29 07:52:45.377 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-29 07:52:48.489 [[GT]ColdPool#5] MessageHook: #1 type=1->1 isSend=0 msgId=6310339638141898295 talker=34831702152@chatroom content=wxid_x0jg4sg6bapn22:
+【🚙车找人】
+时间：8点半左右出发
 ...
-07-29 07:48:03.032 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.033 [main] MessageHandler: DROPPED by filter: type=1 from=25295891650@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.072 [[GT]ColdPool#1] MessageHook: #5 type=1->1 isSend=0 msgId=2945241924029499647 talker=17402151153@chatroom content=wxid_vb77buusxt0d22:
-【车找人】🚘
-时间:8点～8点半
-
+07-29 07:52:48.505 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:48.507 [main] MessageHandler: DROPPED by filter: type=1 from=34831702152@chatroom masterSwitch=true announceText=true
+07-29 07:52:48.522 [[GT]ColdPool#5] MessageHook: #2 type=1->1 isSend=0 msgId=554507582438447407 talker=17402151153@chatroom content=wxid_x0jg4sg6bapn22:
+【🚙车找人】
+时间：8点半左右出发
 ...
-07-29 07:48:03.078 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.080 [main] MessageHandler: DROPPED by filter: type=1 from=17402151153@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.101 [[GT]ColdPool#1] MessageHook: #6 type=1->1 isSend=0 msgId=5174478576046913421 talker=34831702152@chatroom content=wxid_vb77buusxt0d22:
-【车找人】🚘
-时间:8点～8点半
-
+07-29 07:52:48.525 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:48.527 [main] MessageHandler: DROPPED by filter: type=1 from=17402151153@chatroom masterSwitch=true announceText=true
+07-29 07:52:48.533 [[GT]ColdPool#5] MessageHook: #3 type=1->1 isSend=0 msgId=6881755062756256622 talker=11021177242@chatroom content=wxid_x0jg4sg6bapn22:
+【🚙车找人】
+时间：8点半左右出发
 ...
-07-29 07:48:03.106 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.112 [main] MessageHandler: DROPPED by filter: type=1 from=34831702152@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.121 [[GT]ColdPool#1] MessageHook: #7 type=1->1 isSend=0 msgId=6148979267805857730 talker=11021177242@chatroom content=wxid_vb77buusxt0d22:
-【车找人】🚘
-时间:8点～8点半
-
+07-29 07:52:48.534 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:48.535 [main] MessageHandler: DROPPED by filter: type=1 from=11021177242@chatroom masterSwitch=true announceText=true
+07-29 07:52:48.542 [[GT]ColdPool#5] MessageHook: #4 type=1->1 isSend=0 msgId=586302614819972232 talker=7937897945@chatroom content=wxid_x0jg4sg6bapn22:
+【🚙车找人】
+时间：8点半左右出发
 ...
-07-29 07:48:03.126 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.127 [main] MessageHandler: DROPPED by filter: type=1 from=11021177242@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.145 [[GT]ColdPool#1] MessageHook: #8 type=1->1 isSend=0 msgId=6158546134033340836 talker=7215621333@chatroom content=wxid_vb77buusxt0d22:
-【车找人】🚘
-时间:8点～8点半
-
+07-29 07:52:48.543 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:48.545 [main] MessageHandler: DROPPED by filter: type=1 from=7937897945@chatroom masterSwitch=true announceText=true
+07-29 07:52:48.559 [[GT]ColdPool#5] MessageHook: #5 type=1->1 isSend=0 msgId=7141967393379544369 talker=21916245815@chatroom content=wxid_xt0ynq6vx05x12:
+【🚗类型🚗 】车找人（私家车）
+【...
+07-29 07:52:48.560 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:48.561 [main] MessageHandler: DROPPED by filter: type=1 from=21916245815@chatroom masterSwitch=true announceText=true
+07-29 07:52:48.573 [[GT]ColdPool#5] MessageHook: #6 type=1->1 isSend=0 msgId=514853885003280611 talker=49222549277@chatroom content=wxid_x0jg4sg6bapn22:
+【🚙车找人】
+时间：8点半左右出发
 ...
-07-29 07:48:03.150 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.151 [main] MessageHandler: DROPPED by filter: type=1 from=7215621333@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.167 [[GT]ColdPool#1] MessageHook: #9 type=43->43 isSend=0 msgId=6809466846438312429 talker=49830920700@chatroom content=wxid_zpher75ag8bm21:0:0
-
-07-29 07:48:03.171 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.172 [main] MessageHandler: DROPPED by filter: type=43 from=49830920700@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.204 [[GT]ColdPool#1] MessageHook: #10 type=1->1 isSend=0 msgId=8081254986276129909 talker=49830920700@chatroom content=wxid_zpher75ag8bm21:
-农家豆角，炒好易能，2.5元1斤[勾引...
-07-29 07:48:03.206 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.213 [main] MessageHandler: DROPPED by filter: type=1 from=49830920700@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.214 [[GT]ColdPool#1] MessageHook: #11 type=1->1 isSend=0 msgId=8616233285320552816 talker=21730591086@chatroom content=wxid_vb77buusxt0d22:
-【车找人】🚘
-时间:8点～8点半
-
+07-29 07:52:48.576 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:48.578 [main] MessageHandler: DROPPED by filter: type=1 from=49222549277@chatroom masterSwitch=true announceText=true
+07-29 07:52:48.588 [[GT]ColdPool#5] MessageHook: #7 type=1->1 isSend=0 msgId=4881048891621243306 talker=21730591086@chatroom content=wxid_x0jg4sg6bapn22:
+【🚙车找人】
+时间：8点半左右出发
 ...
-07-29 07:48:03.228 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.230 [main] MessageHandler: DROPPED by filter: type=1 from=21730591086@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.237 [[GT]ColdPool#1] MessageHook: #12 type=43->43 isSend=0 msgId=5621954646422986557 talker=49830920700@chatroom content=wxid_zpher75ag8bm21:0:0
-
-07-29 07:48:03.248 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.250 [main] MessageHandler: DROPPED by filter: type=43 from=49830920700@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.273 [[GT]ColdPool#1] MessageHook: #13 type=1->1 isSend=0 msgId=4195243914455666834 talker=49830920700@chatroom content=wxid_zpher75ag8bm21:
- 农家香火米蕉，皮薄清甜[色]
-福利1...
-07-29 07:48:03.281 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.284 [main] MessageHandler: DROPPED by filter: type=1 from=49830920700@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.302 [[GT]ColdPool#1] MessageHook: #14 type=754974769->49 isSend=0 msgId=4672181318299259634 talker=48321925870@chatroom content=wxid_rm3oqz9cs87222:
-<?xml version="1.0"...
-07-29 07:48:03.306 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.307 [main] MessageHandler: DROPPED by filter: type=49 from=48321925870@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.331 [[GT]ColdPool#1] MessageHook: #15 type=1->1 isSend=0 msgId=8305609009144574106 talker=7215621333@chatroom content=wxid_if0f4yqk2ct721:
-车找人:
-         
-    ...
-07-29 07:48:03.336 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.337 [main] MessageHandler: DROPPED by filter: type=1 from=7215621333@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.342 [[GT]ColdPool#1] MessageHook: #16 type=1->1 isSend=0 msgId=5974965540188950559 talker=11021177242@chatroom content=wxid_if0f4yqk2ct721:
-车找人:
-         
-    ...
-07-29 07:48:03.343 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.344 [main] MessageHandler: DROPPED by filter: type=1 from=11021177242@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.350 [[GT]ColdPool#1] MessageHook: #17 type=1->1 isSend=0 msgId=190125518308390963 talker=17402151153@chatroom content=wxid_if0f4yqk2ct721:
-车找人:
-         
-    ...
-07-29 07:48:03.353 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.358 [main] MessageHandler: DROPPED by filter: type=1 from=17402151153@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.366 [[GT]ColdPool#1] MessageHook: #18 type=1->1 isSend=0 msgId=4870678344202781620 talker=49222549277@chatroom content=wxid_if0f4yqk2ct721:
-车找人:
-         
-    ...
-07-29 07:48:03.370 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.371 [main] MessageHandler: DROPPED by filter: type=1 from=49222549277@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.381 [[GT]ColdPool#1] MessageHook: #19 type=1->1 isSend=0 msgId=267890179167163153 talker=2097769708@chatroom content=wxid_if0f4yqk2ct721:
-车找人:
-         
-    ...
-07-29 07:48:03.391 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.395 [main] MessageHandler: DROPPED by filter: type=1 from=2097769708@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.410 [[GT]ColdPool#1] MessageHook: #20 type=1->1 isSend=0 msgId=1947596090805172501 talker=7937897945@chatroom content=wxid_if0f4yqk2ct721:
-车找人:
-         
-    ...
-07-29 07:48:03.413 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.413 [main] MessageHandler: DROPPED by filter: type=1 from=7937897945@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.422 [[GT]ColdPool#1] MessageHook: #21 type=1->1 isSend=0 msgId=3576764327582529468 talker=11021177242@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人 ，🚄  直达快车
-时间，待客...
-07-29 07:48:03.424 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.426 [main] MessageHandler: DROPPED by filter: type=1 from=11021177242@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.433 [[GT]ColdPool#1] MessageHook: #22 type=1->1 isSend=0 msgId=6930562285143083449 talker=2097769708@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人 ，🚄  直达快车
-时间，待客...
-07-29 07:48:03.434 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.435 [main] MessageHandler: DROPPED by filter: type=1 from=2097769708@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.445 [[GT]ColdPool#1] MessageHook: #23 type=1->1 isSend=0 msgId=7786979328949800478 talker=7215621333@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人 ，🚄  直达快车
-时间，待客...
-07-29 07:48:03.452 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.458 [main] MessageHandler: DROPPED by filter: type=1 from=7215621333@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.465 [[GT]ColdPool#1] MessageHook: #24 type=1->1 isSend=0 msgId=6831791889235976636 talker=11021177242@chatroom content=wxid_5rmgbt17r25d22:
-车找人 🚄  直达快车
-时间 ：8:...
-07-29 07:48:03.468 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.469 [main] MessageHandler: DROPPED by filter: type=1 from=11021177242@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.472 [[GT]ColdPool#1] MessageHook: #25 type=1->1 isSend=0 msgId=8620560602393831431 talker=17402151153@chatroom content=wxid_5rmgbt17r25d22:
-车找人 🚄  直达快车
-时间 ：8:...
-07-29 07:48:03.476 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.482 [main] MessageHandler: DROPPED by filter: type=1 from=17402151153@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.493 [[GT]ColdPool#1] MessageHook: #26 type=1->1 isSend=0 msgId=5905074628874419530 talker=34831702152@chatroom content=wxid_5rmgbt17r25d22:
-车找人 🚄  直达快车
-时间 ：8:...
-07-29 07:48:03.504 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.507 [main] MessageHandler: DROPPED by filter: type=1 from=34831702152@chatroom masterSwitch=true announceText=true
-07-29 07:48:03.512 [[GT]ColdPool#1] MessageHook: #27 type=1->1 isSend=0 msgId=1098187993941806170 talker=23818285582@chatroom content=wxid_5rmgbt17r25d22:
-车找人 🚄  直达快车
-时间 ：8:...
-07-29 07:48:03.513 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:03.514 [main] MessageHandler: DROPPED by filter: type=1 from=23818285582@chatroom masterSwitch=true announceText=true
-07-29 07:48:04.581 [[GT]ColdPool#11] MessageHook: #28 type=34->34 isSend=0 msgId=6687603778602678433 talker=wxid_9ohhf82mrlgc22 content=
-07-29 07:48:04.582 [[GT]ColdPool#11] VoiceAutoPlay: rawType=34 msgId=6687603778602678433 talker=wxid_9ohhf82mrlgc22
-07-29 07:48:04.582 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-29 07:48:04.599 [main] ContactRepository: Strategy A: DB opened, rcontact table confirmed
-07-29 07:48:04.600 [main] ContactRepository: ensureDirDb OK
-07-29 07:48:04.601 [main] MessageHandler: handle type=34 talker=wxid_9ohhf82mrlgc22 name=乐少
-07-29 07:48:04.605 [main] VoiceRelay: voice msg from: wxid_9ohhf82mrlgc22 (handled by VoiceAutoPlay hooks)
-07-29 07:48:04.606 [main] VAP: recv: msgId=6687603778602678433 talker=wxid_9ohhf82mrlgc22
-07-29 07:48:04.607 [VAP-bg] VAP: voice content=[wxid_9ohhf82mrlgc22:1002:0
+07-29 07:52:48.589 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:48.592 [main] MessageHandler: DROPPED by filter: type=1 from=21730591086@chatroom masterSwitch=true announceText=true
+07-29 07:52:50.422 [[GT]ColdPool#14] MessageHook: #8 type=34->34 isSend=0 msgId=8859388807579453809 talker=wxid_9ohhf82mrlgc22 content=
+07-29 07:52:50.423 [[GT]ColdPool#14] VoiceAutoPlay: rawType=34 msgId=8859388807579453809 talker=wxid_9ohhf82mrlgc22
+07-29 07:52:50.424 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:50.447 [main] ContactRepository: Strategy A: DB opened, rcontact table confirmed
+07-29 07:52:50.448 [main] ContactRepository: ensureDirDb OK
+07-29 07:52:50.449 [main] MessageHandler: handle type=34 talker=wxid_9ohhf82mrlgc22 name=乐少
+07-29 07:52:50.451 [main] VoiceRelay: voice msg from: wxid_9ohhf82mrlgc22 (handled by VoiceAutoPlay hooks)
+07-29 07:52:50.452 [main] VAP: recv: msgId=8859388807579453809 talker=wxid_9ohhf82mrlgc22
+07-29 07:52:50.452 [main] VAP: ttsSilent, starting bg playback msgId=8859388807579453809
+07-29 07:52:50.453 [VAP-bg] VAP: voice content=[wxid_9ohhf82mrlgc22:1002:0
 ]
-07-29 07:48:04.609 [VAP-bg] VAP: voiceId(from u0)=[wxid_9ohhf82mrlgc22]
-07-29 07:48:04.610 [VAP-bg] VAP: stream: voiceId=wxid_9ohhf82mrlgc22 msgId=6687603778602678433
-07-29 07:48:04.616 [VAP-bg] VAP: stream: got stream class=y21.l0
-07-29 07:48:04.630 [VAP-bg] VAP: stream err: p06.b
-07-29 07:48:04.631 [VAP-bg] VAP: bg: path=/data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2/db/63/msg_040748072926bea2cb88615106.amr size=2301 msgId=6687603778602678433
-07-29 07:48:04.641 [VAP-bg] VAP: bg: wav=/data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2/db/63/msg_040748072926bea2cb88615106.amr.dec.wav size=70124
-07-29 07:48:04.697 [VAP-bg] VAP: bgStarted: msgId=6687603778602678433
-07-29 07:48:06.011 [main] ChatBackup: found DB at /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
-07-29 07:48:06.018 [main] ChatBackup: backup err: cannot create dir /sdcard/leshao_v3_logs/backup
-07-29 07:48:06.319 [main] VAP: bgDone: msgId=6687603778602678433
-07-29 07:48:07.517 [[GT]ColdPool#12] DatabaseProvider: DB captured via rawQuery (EnMicroMsg: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db)
-07-29 07:48:07.521 [[GT]ColdPool#12] ContactRepository: DB ready callback, loading contacts...
-07-29 07:48:07.523 [[GT]ColdPool#12] ContactRepository: loadContacts START
-07-29 07:48:07.526 [[GT]ColdPool#12] ContactRepository: Strategy B: trying model.aj reflection...
-07-29 07:48:07.532 [[GT]ColdPool#12] ContactRepository: Strategy B ERROR: ClassNotFoundException: Didn't find class "com.tencent.mm.model.aj" on path: DexPathList[[zip file "/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/lib/arm64, /data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk!/lib/arm64-v8a, /system/lib64, /system_ext/lib64]]
-07-29 07:48:07.534 [[GT]ColdPool#12] ContactRepository: Strategy C: trying findKernelClass...
-07-29 07:48:09.090 [[GT]ColdPool#12] ContactRepository: findKernel: DexFile scanned=477 no match
-07-29 07:48:09.091 [[GT]ColdPool#12] ContactRepository: Strategy C: kernel class not found
-07-29 07:48:09.092 [[GT]ColdPool#12] ContactRepository: Strategy A: trying direct DB (ka5.f.s)...
-07-29 07:48:09.093 [[GT]ColdPool#12] ContactRepository: Strategy A: uin=295734952
-07-29 07:48:09.094 [[GT]ColdPool#12] ContactRepository: Strategy A: imei=1234567890ABCDEF
-07-29 07:48:09.095 [[GT]ColdPool#12] ContactRepository: Strategy A: dbPath=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db
-07-29 07:48:09.096 [[GT]ColdPool#12] ContactRepository: Strategy A: pwd(censored) calculated, opening...
-07-29 07:48:09.111 [[GT]ColdPool#12] ContactRepository: Strategy A: DB opened via ka5.f.s, querying...
-07-29 07:48:09.188 [[GT]ColdPool#12] ContactRepository:   F0 u=wxid_geem9dw5nwb212 n=. a=iii_____vip r=曹琪琳 t=3
-07-29 07:48:09.190 [[GT]ColdPool#12] ContactRepository:   F1 u=wxid_p38c7u9teq3o22 n=A0树影剑南 a=suenan520 r=AA t=3
-07-29 07:48:09.190 [[GT]ColdPool#12] ContactRepository:   F2 u=wxid_9ohhf82mrlgc22 n=A💯新安联通乐少 131260... a=HK93993 r=乐少 t=2051
-07-29 07:48:09.191 [[GT]ColdPool#12] ContactRepository:   F3 u=wxid_7695996953612 n=N a=Z577923324 r=N (260713) t=3
-07-29 07:48:09.192 [[GT]ColdPool#12] ContactRepository:   F4 u=wxid_a9ubk72b9jvj22 n=এ᭄随心随缘ོꦿృ༊ a=pp15766352806 r=少华 t=3
-07-29 07:48:09.193 [[GT]ColdPool#12] ContactRepository: queryContactsWcdb friends=50
-07-29 07:48:09.198 [[GT]ColdPool#12] ContactRepository: queryContactsWcdb groups=83 total=133
-07-29 07:48:09.202 [[GT]ColdPool#12] ContactRepository: loadContacts OK via Strategy A (direct DB)
+07-29 07:52:50.455 [VAP-bg] VAP: voiceId(from u0)=[wxid_9ohhf82mrlgc22]
+07-29 07:52:50.457 [VAP-bg] VAP: stream: voiceId=wxid_9ohhf82mrlgc22 msgId=8859388807579453809
+07-29 07:52:50.461 [VAP-bg] VAP: stream: got stream class=y21.l0
+07-29 07:52:50.496 [VAP-bg] VAP: stream err: p06.b
+07-29 07:52:50.497 [VAP-bg] VAP: bg: path=/data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2/60/0a/msg_500752072926bea2cb8e2ab103.amr size=2939 msgId=8859388807579453809
+07-29 07:52:50.505 [VAP-bg] VAP: bg: wav=/data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2/60/0a/msg_500752072926bea2cb8e2ab103.amr.dec.wav size=81644
+07-29 07:52:50.529 [VAP-bg] VAP: bgStarted: msgId=8859388807579453809
+07-29 07:52:52.137 [main] ChatBackup: found DB at /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
+07-29 07:52:52.155 [main] ChatBackup: backup err: cannot create dir /sdcard/leshao_v3_logs/backup
+07-29 07:52:52.378 [main] VAP: bgDone: msgId=8859388807579453809
+07-29 07:52:53.737 [[GT]ColdPool#1] DatabaseProvider: DB captured via rawQuery (EnMicroMsg: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db)
+07-29 07:52:53.740 [[GT]ColdPool#1] ContactRepository: DB ready callback, loading contacts...
+07-29 07:52:53.742 [[GT]ColdPool#1] ContactRepository: loadContacts START
+07-29 07:52:53.744 [[GT]ColdPool#1] ContactRepository: Strategy B: trying model.aj reflection...
+07-29 07:52:53.748 [[GT]ColdPool#1] ContactRepository: Strategy B ERROR: ClassNotFoundException: Didn't find class "com.tencent.mm.model.aj" on path: DexPathList[[zip file "/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/lib/arm64, /data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk!/lib/arm64-v8a, /system/lib64, /system_ext/lib64]]
+07-29 07:52:53.750 [[GT]ColdPool#1] ContactRepository: Strategy C: trying findKernelClass...
+07-29 07:52:55.395 [[GT]ColdPool#1] ContactRepository: findKernel: DexFile scanned=477 no match
+07-29 07:52:55.396 [[GT]ColdPool#1] ContactRepository: Strategy C: kernel class not found
+07-29 07:52:55.397 [[GT]ColdPool#1] ContactRepository: Strategy A: trying direct DB (ka5.f.s)...
+07-29 07:52:55.397 [[GT]ColdPool#1] ContactRepository: Strategy A: uin=295734952
+07-29 07:52:55.399 [[GT]ColdPool#1] ContactRepository: Strategy A: imei=1234567890ABCDEF
+07-29 07:52:55.399 [[GT]ColdPool#1] ContactRepository: Strategy A: dbPath=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db
+07-29 07:52:55.400 [[GT]ColdPool#1] ContactRepository: Strategy A: pwd(censored) calculated, opening...
+07-29 07:52:55.416 [[GT]ColdPool#1] ContactRepository: Strategy A: DB opened via ka5.f.s, querying...
+07-29 07:52:55.493 [[GT]ColdPool#1] ContactRepository:   F0 u=wxid_geem9dw5nwb212 n=. a=iii_____vip r=曹琪琳 t=3
+07-29 07:52:55.514 [[GT]ColdPool#1] ContactRepository:   F1 u=wxid_p38c7u9teq3o22 n=A0树影剑南 a=suenan520 r=AA t=3
+07-29 07:52:55.518 [[GT]ColdPool#1] ContactRepository:   F2 u=wxid_9ohhf82mrlgc22 n=A💯新安联通乐少 131260... a=HK93993 r=乐少 t=2051
+07-29 07:52:55.520 [[GT]ColdPool#1] ContactRepository:   F3 u=wxid_7695996953612 n=N a=Z577923324 r=N (260713) t=3
+07-29 07:52:55.523 [[GT]ColdPool#1] ContactRepository:   F4 u=wxid_a9ubk72b9jvj22 n=এ᭄随心随缘ོꦿృ༊ a=pp15766352806 r=少华 t=3
+07-29 07:52:55.526 [[GT]ColdPool#1] ContactRepository: queryContactsWcdb friends=50
+07-29 07:52:55.538 [[GT]ColdPool#1] ContactRepository: queryContactsWcdb groups=83 total=133
+07-29 07:52:55.545 [[GT]ColdPool#1] ContactRepository: loadContacts OK via Strategy A (direct DB)
+07-29 07:52:55.846 [[GT]ColdPool#8] MessageHook: #9 type=34->34 isSend=0 msgId=35281126195846693 talker=wxid_9ohhf82mrlgc22 content=
+07-29 07:52:55.848 [[GT]ColdPool#8] VoiceAutoPlay: rawType=34 msgId=35281126195846693 talker=wxid_9ohhf82mrlgc22
+07-29 07:52:55.848 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-29 07:52:55.850 [main] MessageHandler: handle type=34 talker=wxid_9ohhf82mrlgc22 name=乐少
+07-29 07:52:55.852 [main] VoiceRelay: voice msg from: wxid_9ohhf82mrlgc22 (handled by VoiceAutoPlay hooks)
+07-29 07:52:55.854 [main] VAP: recv: msgId=35281126195846693 talker=wxid_9ohhf82mrlgc22
+07-29 07:52:55.854 [main] VAP: ttsSilent, starting bg playback msgId=35281126195846693
+07-29 07:52:55.857 [VAP-bg] VAP: voice content=[wxid_9ohhf82mrlgc22:1002:0
+]
+07-29 07:52:55.858 [VAP-bg] VAP: voiceId(from u0)=[wxid_9ohhf82mrlgc22]
+07-29 07:52:55.859 [VAP-bg] VAP: stream: voiceId=wxid_9ohhf82mrlgc22 msgId=35281126195846693
+07-29 07:52:55.862 [VAP-bg] VAP: stream: got stream class=y21.l0
+07-29 07:52:55.887 [VAP-bg] VAP: stream err: p06.b
+07-29 07:52:55.888 [VAP-bg] VAP: bg: path=/data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2/e0/20/msg_550752072926bea2cb8f7df106.amr size=3204 msgId=35281126195846693
+07-29 07:52:55.893 [VAP-bg] VAP: bg: wav=/data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2/e0/20/msg_550752072926bea2cb8f7df106.amr.dec.wav size=87404
+07-29 07:52:55.905 [VAP-bg] VAP: bgStarted: msgId=35281126195846693
+07-29 07:52:57.857 [main] VAP: bgDone: msgId=35281126195846693

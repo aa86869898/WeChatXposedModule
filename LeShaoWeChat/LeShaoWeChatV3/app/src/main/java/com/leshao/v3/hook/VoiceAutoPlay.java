@@ -8,6 +8,7 @@ import android.os.Handler;
 import android.os.Looper;
 
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.service.TTSBroadcaster;
 
 import java.io.File;
 import java.lang.reflect.Field;
@@ -152,9 +153,16 @@ public class VoiceAutoPlay {
 
             final String tTalker = talker;
 
-            // 等 TTS 播完再播语音
-            TtsVoiceSender.waitForSilence(5000);
-            LogWriter.log(TAG, "ttsSilent, starting bg playback msgId=" + msgId);
+            // 等 TTS 播报完再播语音
+            long waitStart = System.currentTimeMillis();
+            while (TTSBroadcaster.isSpeaking() && (System.currentTimeMillis() - waitStart) < 8000) {
+                try { Thread.sleep(150); } catch (InterruptedException ignored) { break; }
+            }
+            if (TTSBroadcaster.isSpeaking()) {
+                LogWriter.log(TAG, "tts timeout, play anyway msgId=" + msgId);
+            } else {
+                LogWriter.log(TAG, "tts done, waited " + (System.currentTimeMillis() - waitStart) + "ms msgId=" + msgId);
+            }
 
             // 方案A: 微信CDN流式API — 下载+解码PCM → AudioTrack
             new Thread(() -> {
