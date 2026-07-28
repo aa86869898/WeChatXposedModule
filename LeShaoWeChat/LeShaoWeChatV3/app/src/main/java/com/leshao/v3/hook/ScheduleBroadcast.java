@@ -1153,10 +1153,12 @@ public class ScheduleBroadcast {
             // 3. f16.b() → i (CGI task) — b() 内部已构建 o + i.p(o)，CmdID=522/URL/Resp 已硬编码
             Object i = XposedHelpers.callMethod(f16, "b");
 
-            log("[triggerSend:4] sm0.h.b(i, null) 联网发送");
-            // 4. 调用 sm0.h.b(i, null) 联网发送
+            log("[triggerSend:4] sm0.h.b(i, cont) 联网发送");
+            // 4. 调用 sm0.h.b(i, continuation) 联网发送 — 不能传 null，协程需要 context
             Class<?> sm0h = XposedHelpers.findClass("sm0.h", sClassLoader);
-            Object result = XposedHelpers.callStaticMethod(sm0h, "b", i, null);
+            Object cont = buildEmptyContinuation();
+            log("[triggerSend:4] continuation=" + (cont != null ? cont.getClass().getSimpleName() : "null"));
+            Object result = XposedHelpers.callStaticMethod(sm0h, "b", i, cont);
             log("triggerSend: sm0.h.b() OK msgId=" + msgId + " result=" + result);
         } catch (Throwable t) {
             log("triggerSend FAIL msgId=" + msgId + " exc=" + t.getClass().getSimpleName() + ": " + t.getMessage());
