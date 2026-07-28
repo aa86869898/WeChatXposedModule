@@ -73,13 +73,21 @@ public class VoiceAutoPlay {
 
                     LogWriter.log(TAG, "found voice bubble binder: " + pkg + name
                         + "." + m.getName() + "(View," + pts[1].getSimpleName() + "," + pts[2].getSimpleName() + ")");
-                    XposedBridge.hookAllMethods(cls, m.getName(), new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            onVoiceBubbleRender(param);
-                        }
-                    });
-                    LogWriter.log(TAG, "voice bubble hook OK on " + pkg + name + "." + m.getName());
+
+                    // 用 findAndHookMethod (跟 MessageHook 一样的方式, 避免 hookAllMethods 冲突)
+                    try {
+                        XposedHelpers.findAndHookMethod(pkg + name, cl,
+                            m.getName(), pts[0], pts[1], pts[2],
+                            new XC_MethodHook() {
+                                @Override
+                                protected void afterHookedMethod(MethodHookParam param) {
+                                    onVoiceBubbleRender(param);
+                                }
+                            });
+                        LogWriter.log(TAG, "voice bubble hook OK on " + pkg + name + "." + m.getName());
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "voice bubble hook install fail: " + t.getMessage());
+                    }
                     return;
                 }
             } catch (Throwable ignored) {}
@@ -155,7 +163,7 @@ public class VoiceAutoPlay {
         try {
             Class<?> e9Cls = cl.loadClass("com.tencent.mm.storage.e9");
 
-            // 尝试找到 e01.x9 类
+            // 找到 e01.x9 类
             Class<?> x9Cls;
             try {
                 x9Cls = XposedHelpers.findClass("e01.x9", cl);
@@ -163,19 +171,20 @@ public class VoiceAutoPlay {
                 x9Cls = XposedHelpers.findClass("com.tencent.mm.model.x9", cl);
             }
 
-            // Hook n(e9, p0) — 主力消息入口
+            // 用 findAndHookMethod (跟 MessageHook 一样的方式)
             for (java.lang.reflect.Method m : x9Cls.getDeclaredMethods()) {
                 if (!m.getName().equals("n") || m.getParameterCount() != 2) continue;
                 if (m.getParameterTypes()[0] != e9Cls) continue;
 
                 Class<?> p0Cls = m.getParameterTypes()[1];
-                XposedBridge.hookAllMethods(x9Cls, "n", new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        onMessageReceived(param.args[0]);
-                    }
-                });
-                LogWriter.log(TAG, "VoiceAutoPlay hooked e01.x9.n(e9,p0) OK");
+                XposedHelpers.findAndHookMethod(x9Cls, "n", e9Cls, p0Cls,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            onMessageReceived(param.args[0]);
+                        }
+                    });
+                LogWriter.log(TAG, "VoiceAutoPlay hooked e01.x9.n(e9,p0) via findAndHookMethod OK");
                 return;
             }
 
@@ -184,13 +193,14 @@ public class VoiceAutoPlay {
                 if (!m.getName().equals("C") || m.getParameterCount() != 1) continue;
                 if (m.getParameterTypes()[0] != e9Cls) continue;
 
-                XposedBridge.hookAllMethods(x9Cls, "C", new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        onMessageReceived(param.args[0]);
-                    }
-                });
-                LogWriter.log(TAG, "VoiceAutoPlay hooked e01.x9.C(e9) OK");
+                XposedHelpers.findAndHookMethod(x9Cls, "C", e9Cls,
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            onMessageReceived(param.args[0]);
+                        }
+                    });
+                LogWriter.log(TAG, "VoiceAutoPlay hooked e01.x9.C(e9) via findAndHookMethod OK");
                 return;
             }
 
