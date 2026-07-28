@@ -130,6 +130,7 @@ public class ScheduleBroadcast {
     private static Object sCapturedN85r;
     private static Object sN85d0InvokeArg;
     private static Object sN85d0Inst;
+    private static Object sCapturedN85z;  // n85.z from normal send
     private static Object sD85i_cArg;
     private static Object sD85iInst;
     private static Object sD85d_jArg;
@@ -379,12 +380,18 @@ public class ScheduleBroadcast {
                 protected void beforeHookedMethod(MethodHookParam param) {
                     sN85d0Inst = param.thisObject;
                     Object[] args = param.args;
+                    if (args.length > 0 && args[0] != null) {
+                        sN85d0InvokeArg = args[0];
+                        // Capture n85.z if this is a real send (not our trigger)
+                        if (args[0].getClass().getName().equals("n85.z")) {
+                            sCapturedN85z = args[0];
+                        }
+                    }
                     StringBuilder sb = new StringBuilder("TRACE n85.d0.invoke(").append(args.length).append(")");
                     for (int i = 0; i < args.length; i++) {
                         sb.append(" p").append(i).append("=");
                         sb.append(args[i] == null ? "null" : args[i].getClass().getName() + "=" + args[i].toString().substring(0, Math.min(80, args[i].toString().length())));
                     }
-                    if (args.length > 0 && args[0] != null) sN85d0InvokeArg = args[0];
                     log(sb.toString());
                     printStack("n85.d0.invoke", Thread.currentThread().getStackTrace(), 20);
                 }
@@ -454,6 +461,21 @@ public class ScheduleBroadcast {
             });
             log("TRACE: a21.q OK");
         } catch (Throwable t) { log("TRACE: a21.q fail: " + t.getMessage()); }
+
+        // n85.z — 消息payload, n85.d0.invoke的参数
+        try {
+            Class<?> n85z = XposedHelpers.findClass("n85.z", sClassLoader);
+            log("TRACE: n85.z fields:");
+            for (java.lang.reflect.Field f : n85z.getDeclaredFields())
+                log("  field: " + f.getName() + " " + f.getType().getName());
+            log("TRACE: n85.z methods:");
+            for (java.lang.reflect.Method m : n85z.getDeclaredMethods()) {
+                if (m.getParameterTypes().length <= 2 && m.getReturnType() != void.class) {
+                    log("  method: " + m.getName() + "(" + m.getParameterTypes().length + ") -> " + m.getReturnType().getSimpleName());
+                }
+            }
+            log("TRACE: n85.z OK");
+        } catch (Throwable t) { log("TRACE: n85.z fail: " + t.getMessage()); }
     }
 
     private static void printStack(String label, StackTraceElement[] st, int max) {
@@ -1095,14 +1117,36 @@ public class ScheduleBroadcast {
                 }
             } catch (Throwable t) { log("triggerSend: d85.i.c fail: " + t.getMessage()); }
 
-            // 2. n85.d0.invoke: Function1 send entry
+            // 2. n85.d0.invoke: 先构建proper n85.z, 然后用captured n85.d0实例发送
             try {
-                if (sN85d0Inst != null && sN85d0InvokeArg != null) {
-                    XposedHelpers.callMethod(sN85d0Inst, "invoke", sN85d0InvokeArg);
-                    log("triggerSend: n85.d0.invoke() OK msgId=" + msgId);
+                // Build n85.z with message data
+                Class<?> n85zCls = XposedHelpers.findClass("n85.z", sClassLoader);
+                Object zObj = XposedHelpers.newInstance(n85zCls);
+                // Try to copy e9msg fields into n85.z
+                try { XposedHelpers.callMethod(zObj, "a", e9msg); } catch (Throwable ignored) {}
+                try { XposedHelpers.callMethod(zObj, "b", e9msg); } catch (Throwable ignored) {}
+                try { XposedHelpers.callMethod(zObj, "setMsgInfo", e9msg); } catch (Throwable ignored) {}
+                try { XposedHelpers.callMethod(zObj, "setMessage", e9msg); } catch (Throwable ignored) {}
+
+                // Try creating new n85.d0 from captured a21.q
+                Object a21qInst = sCapturedA21q;
+                if (a21qInst != null) {
+                    try {
+                        Class<?> n85d0Cls = XposedHelpers.findClass("n85.d0", sClassLoader);
+                        Object d0 = XposedHelpers.newInstance(n85d0Cls, a21qInst);
+                        XposedHelpers.callMethod(d0, "invoke", zObj);
+                        log("triggerSend: new n85.d0(a21q).invoke(n85z) OK msgId=" + msgId);
+                        return;
+                    } catch (Throwable t2) { log("triggerSend: new n85.d0 fail: " + t2.getMessage()); }
+                }
+
+                // Fallback: use captured n85.d0 instance
+                if (sN85d0Inst != null) {
+                    XposedHelpers.callMethod(sN85d0Inst, "invoke", zObj);
+                    log("triggerSend: n85.d0.invoke(populated z) OK msgId=" + msgId);
                     return;
                 }
-            } catch (Throwable t) { log("triggerSend: n85.d0 fail: " + t.getMessage()); }
+            } catch (Throwable t) { log("triggerSend: n85.d0 invoke fail: " + t.getMessage()); }
 
             // 3. a21.q.i with captured instance + Continuation=null (只写DB)
             try {
