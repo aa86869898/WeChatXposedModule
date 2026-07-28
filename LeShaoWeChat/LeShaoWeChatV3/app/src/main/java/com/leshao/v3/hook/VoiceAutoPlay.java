@@ -1,5 +1,6 @@
 package com.leshao.v3.hook;
 
+import android.app.Activity;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
@@ -8,332 +9,59 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.TTSBroadcaster;
 
-import java.lang.reflect.Method;
-import java.util.HashSet;
-import java.util.Set;
-
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /**
- * 语音消息自动播放 — 基于 语音消息自动播放.java 参考实现
+ * 语音消息自动播放 — 基于 WeChatVoiceAutoPlay 参考实现
  *
- * 微信语音由 VoiceComponent (so) 统一管理
- * 第1层: Hook VoiceComponent.y() → 进入聊天后自动播放
- * 第2层: Hook h5.m() → 检测新语音气泡, 模拟点击
- * 第3层: Hook v0 播放器 → 跟踪播放状态
+ * 核心思路: Hook dq.c(View, ChattingContext, Message)
+ * 这是微信语音气泡渲染时的回调, 每次语音消息出现在屏幕上时触发。
+ * 在回调中通过 ChattingContext 获取 VoiceComponent, 再调用播放器的 I() 方法播放。
  */
 public class VoiceAutoPlay {
 
     private static final String TAG = "VoiceAutoPlay";
     private static final Handler sMainHandler = new Handler(Looper.getMainLooper());
-    private static final Set<String> sPlayedMsgIds = new HashSet<>();
 
     private static boolean sEnabled = true;
     private static int sPlayDelay = 800;
+    private static long sLastPlayedMsgId = 0L;
 
     private static ClassLoader sClassLoader;
-    private static Class<?> sVoiceComponentClass;
-    private static final java.util.List<Class<?>> sVoiceComponentCandidates = new java.util.ArrayList<>();
-    private static Class<?> sH5Class;
-    private static Class<?> sV0Class;
+    private static Class<?> sVoiceComponentClass; // so
 
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
 
-        findVoiceComponentClass(cl);
-        findH5Class(cl);
-        findV0Class(cl);
-
-        if (!sVoiceComponentCandidates.isEmpty()) {
-            for (Class<?> cls : sVoiceComponentCandidates) {
-                try {
-                    hookVoiceComponentOnClass(cls);
-                } catch (Throwable t) {
-                    LogWriter.log(TAG, "VoiceComponent hook fail on " + cls.getSimpleName() + ": " + t.getMessage());
-                }
-            }
-        } else {
-            LogWriter.log(TAG, "VoiceComponent class not found, skipping layer 1");
-        }
-
-        if (sH5Class != null) {
-            hookH5();
-        } else {
-            LogWriter.log(TAG, "h5 class not found, skipping layer 2");
-        }
-
-        if (sV0Class != null) {
-            hookV0();
-        } else {
-            LogWriter.log(TAG, "v0 class not found, skipping layer 3");
-        }
-
+        hookDqClass(cl);
         hookChattingUIResume(cl);
+        findVoiceComponentClass(cl);
     }
 
-    private static void findVoiceComponentClass(ClassLoader cl) {
-        String[] candidates = {"so", "sp", "sn", "sq", "sr", "ss", "st", "su", "sv", "sw", "sx", "sy", "sz",
-            "co", "cp", "do", "dp", "eo", "ep", "fo", "fp", "go", "gp", "ho", "hp", "io", "ip",
-            "jo", "jp", "ko", "kp", "lo", "lp", "mo", "mp", "no", "np", "oo", "op", "po", "pp",
-            "qo", "qp", "ro", "rp", "to", "tp", "uo", "up", "vo", "vp", "wo", "wp", "xo", "xp",
-            "yo", "yp", "zo", "zp", "ao", "ap", "bo", "bp"};
-        String pkg = "com.tencent.mm.ui.chatting.component.";
-
-        for (String name : candidates) {
-            try {
-                Class<?> cls = cl.loadClass(pkg + name);
-                boolean hasY = false, hasL0 = false, hasN0 = false;
-                for (Method m : cls.getDeclaredMethods()) {
-                    if (m.getName().equals("y") && m.getParameterCount() == 0) hasY = true;
-                    if (m.getName().equals("l0") && m.getParameterCount() == 1) hasL0 = true;
-                    if (m.getName().equals("n0") && m.getParameterCount() == 0) hasN0 = true;
-                }
-                if (hasY && hasL0 && hasN0) {
-                    sVoiceComponentCandidates.add(cls);
-                    LogWriter.log(TAG, "found candidate VoiceComponent: " + pkg + name);
-                }
-            } catch (Throwable ignored) {}
-        }
-
-        if (!sVoiceComponentCandidates.isEmpty()) {
-            sVoiceComponentClass = sVoiceComponentCandidates.get(0);
-        } else {
-            try {
-                Class<?> cls = XposedHelpers.findClass("com.tencent.mm.ui.chatting.component.so", cl);
-                sVoiceComponentClass = cls;
-                sVoiceComponentCandidates.add(cls);
-                LogWriter.log(TAG, "found VoiceComponent: so (direct)");
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "VoiceComponent not found: all candidates failed");
-            }
-        }
-    }
-
-    private static void findH5Class(ClassLoader cl) {
+    /**
+     * 主 hook: dq.c(View, ChattingContext, e9)
+     * 语音气泡每次渲染时调用，是最可靠且最及时的触发点
+     */
+    private static void hookDqClass(ClassLoader cl) {
         try {
-            sH5Class = XposedHelpers.findClass("com.tencent.mm.ui.chatting.viewitems.h5", cl);
-            LogWriter.log(TAG, "found h5");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "h5 not found: " + t.getMessage());
-        }
-    }
-
-    private static void findV0Class(ClassLoader cl) {
-        try {
-            sV0Class = XposedHelpers.findClass("com.tencent.mm.ui.chatting.viewitems.v0", cl);
-            LogWriter.log(TAG, "found v0");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "v0 not found: " + t.getMessage());
-        }
-    }
-
-    private static void hookVoiceComponentOnClass(Class<?> cls) {
-        final String clsName = cls.getSimpleName();
-        try {
-            XposedBridge.hookAllMethods(cls, "y", new XC_MethodHook() {
+            Class<?> dq = XposedHelpers.findClass("com.tencent.mm.ui.chatting.viewitems.dq", cl);
+            XposedBridge.hookAllMethods(dq, "c", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    if (((java.lang.reflect.Method) param.method).getParameterTypes().length != 0) return;
-                    LogWriter.log(TAG, "y() triggered on " + clsName);
-                    onResetAutoPlay(param.thisObject);
+                    onVoiceBubbleRender(param);
                 }
             });
-            LogWriter.log(TAG, "y() hooked OK on " + clsName);
+            LogWriter.log(TAG, "dq.c() hooked OK");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "hook y() fail on " + clsName + ": " + t.getMessage());
-        }
-
-        try {
-            XposedBridge.hookAllMethods(cls, "l0", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    if (((java.lang.reflect.Method) param.method).getParameterTypes().length != 1) return;
-                    try {
-                        Object msg = param.args[0];
-                        long msgId = (Long) XposedHelpers.callMethod(msg, "getMsgId");
-                        sPlayedMsgIds.add(String.valueOf(msgId));
-                    } catch (Throwable ignored) {}
-                }
-            });
-            LogWriter.log(TAG, "l0() hooked OK on " + clsName);
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "hook l0() fail on " + clsName + ": " + t.getMessage());
-        }
-
-        LogWriter.log(TAG, "VoiceComponent hooks installed on " + clsName);
-    }
-
-    private static void hookH5() {
-        final String clsName = sH5Class.getSimpleName();
-        try {
-            XposedBridge.hookAllMethods(sH5Class, "m", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    int paramCount = ((java.lang.reflect.Method) param.method).getParameterTypes().length;
-                    LogWriter.log(TAG, "h5.m() called, paramCount=" + paramCount);
-                    if (paramCount < 3) return;
-                    LogWriter.log(TAG, "h5.m() >=3 params triggered on " + clsName);
-                    onVoiceBubbleRendered(param);
-                }
-            });
-            LogWriter.log(TAG, "h5.m hooked (all overloads) on " + clsName);
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "h5.m hook fail: " + t.getMessage());
+            LogWriter.log(TAG, "dq.c() hook fail: " + t.getMessage());
         }
     }
 
-    private static void hookV0() {
-        final String clsName = sV0Class.getSimpleName();
-        try {
-            XposedBridge.hookAllMethods(sV0Class, "t", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    LogWriter.log(TAG, "v0.t() called on " + clsName);
-                    try {
-                        Object player = param.thisObject;
-                        long msgId = XposedHelpers.getLongField(player, "i");
-                        LogWriter.log(TAG, "player.t() msgId=" + msgId + " on " + clsName);
-                    } catch (Throwable e) {
-                        LogWriter.log(TAG, "v0.t() field 'i' error: " + e.getMessage());
-                    }
-                }
-            });
-
-            XposedBridge.hookAllMethods(sV0Class, "onClick", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    LogWriter.log(TAG, "v0.onClick() called on " + clsName);
-                    try {
-                        Object player = param.thisObject;
-                        long msgId = XposedHelpers.getLongField(player, "i");
-                        sPlayedMsgIds.add(String.valueOf(msgId));
-                        LogWriter.log(TAG, "v0.onClick() msgId=" + msgId + " on " + clsName);
-                    } catch (Throwable e) {
-                        LogWriter.log(TAG, "v0.onClick() field 'i' error: " + e.getMessage());
-                    }
-                }
-            });
-
-            LogWriter.log(TAG, "v0 hooks installed (all overloads) on " + clsName);
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "v0 hook fail: " + t.getMessage());
-        }
-    }
-
-    private static void onResetAutoPlay(Object comp) {
-        if (!sEnabled) return;
-        try {
-            boolean activated = ModuleConfig.load(
-                com.leshao.v3.ContextManager.getPrefs()
-            ).autoPlayVoice;
-            if (!activated) {
-                LogWriter.log(TAG, "autoPlayVoice disabled in config");
-                return;
-            }
-        } catch (Throwable ignored) {}
-
-        try {
-            Object chatCtx = XposedHelpers.getObjectField(comp, "d");
-            if (chatCtx == null) return;
-            Object username = XposedHelpers.callMethod(chatCtx, "x");
-            if (username == null) return;
-            LogWriter.log(TAG, "enter chat: " + username);
-
-            sMainHandler.postDelayed(() -> {
-                try {
-                    autoPlayLatestVoice(comp, String.valueOf(username));
-                } catch (Throwable e) {
-                    LogWriter.log(TAG, "autoPlay error: " + e.getMessage());
-                }
-            }, sPlayDelay);
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "onResetAutoPlay error: " + e.getMessage());
-        }
-    }
-
-    private static void onVoiceBubbleRendered(XC_MethodHook.MethodHookParam param) {
-        if (!sEnabled) return;
-        try {
-            Object holder = param.args[0];
-            Object adapter = param.args.length > 2 ? param.args[2] : null;
-            if (adapter == null) return;
-
-            Object msgContainer = XposedHelpers.getObjectField(adapter, "d");
-            if (msgContainer == null) return;
-            Object msg = XposedHelpers.getObjectField(msgContainer, "b");
-            if (msg == null) return;
-
-            boolean isVoice = (Boolean) XposedHelpers.callMethod(msg, "d3");
-            if (!isVoice) return;
-
-            long msgId = (Long) XposedHelpers.callMethod(msg, "getMsgId");
-            String msgIdStr = String.valueOf(msgId);
-
-            if (sPlayedMsgIds.contains(msgIdStr)) return;
-
-            int isSend = (Integer) XposedHelpers.callMethod(msg, "O0");
-            if (isSend == 1) return;
-
-            View clickArea = null;
-            try { clickArea = (View) XposedHelpers.getObjectField(holder, "clickArea"); } catch (Throwable ignored) {}
-            if (clickArea == null) {
-                try { clickArea = (View) XposedHelpers.getObjectField(holder, "cy"); } catch (Throwable ignored) {}
-            }
-
-            if (clickArea != null) {
-                final View area = clickArea;
-                sPlayedMsgIds.add(msgIdStr);
-                LogWriter.log(TAG, "auto-click voice queued: msgId=" + msgIdStr);
-                performClickWhenTtsDone(area, msgIdStr, 0);
-            }
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "onVoiceBubble error: " + e.getMessage());
-        }
-    }
-
-    private static void performClickWhenTtsDone(View area, String msgIdStr, int retryCount) {
-        if (retryCount > 30) {
-            LogWriter.log(TAG, "click timeout, force click: msgId=" + msgIdStr);
-            area.performClick();
-            return;
-        }
-        if (!TTSBroadcaster.isSpeaking()) {
-            LogWriter.log(TAG, "TTS done, auto-click: msgId=" + msgIdStr);
-            area.performClick();
-        } else {
-            sMainHandler.postDelayed(() -> performClickWhenTtsDone(area, msgIdStr, retryCount + 1), 100);
-        }
-    }
-
-    private static void autoPlayLatestVoice(Object comp, String username) {
-        try {
-            Object player = XposedHelpers.callMethod(comp, "n0");
-            if (player == null) return;
-
-            boolean isPlaying = (Boolean) XposedHelpers.callMethod(player, "o");
-            if (isPlaying) return;
-
-            boolean isAlive = (Boolean) XposedHelpers.callMethod(player, "m");
-            if (!isAlive) return;
-
-            long currentMsgId = XposedHelpers.getLongField(player, "i");
-            if (currentMsgId > 0 && !sPlayedMsgIds.contains(String.valueOf(currentMsgId))) {
-                LogWriter.log(TAG, "direct play queued: msgId=" + currentMsgId);
-                sPlayedMsgIds.add(String.valueOf(currentMsgId));
-                final Object p = player;
-                sMainHandler.postDelayed(() -> {
-                    if (!TTSBroadcaster.isSpeaking()) {
-                        try { XposedHelpers.callMethod(p, "t"); } catch (Throwable ignored) {}
-                    }
-                }, sPlayDelay);
-            }
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "autoPlayLatestVoice error: " + e.getMessage());
-        }
-    }
-
+    /**
+     * 备用入口: ChattingUI.onResume() — 进入聊天时尝试播放最新语音
+     */
     private static void hookChattingUIResume(ClassLoader cl) {
         try {
             Class<?> chattingUI = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUI", cl);
@@ -341,7 +69,7 @@ public class VoiceAutoPlay {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     try {
-                        android.app.Activity activity = (android.app.Activity) param.thisObject;
+                        Activity activity = (Activity) param.thisObject;
                         LogWriter.log(TAG, "ChattingUI.onResume triggered");
                         if (!sEnabled) return;
                         boolean activated = ModuleConfig.load(
@@ -366,7 +94,144 @@ public class VoiceAutoPlay {
         }
     }
 
-    private static void findAndClickLatestVoice(android.app.Activity activity) {
+    private static void findVoiceComponentClass(ClassLoader cl) {
+        try {
+            sVoiceComponentClass = XposedHelpers.findClass("com.tencent.mm.ui.chatting.component.so", cl);
+            LogWriter.log(TAG, "VoiceComponent so loaded OK");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "VoiceComponent so not found: " + t.getMessage());
+        }
+    }
+
+    /**
+     * dq.c() 回调 — 语音气泡渲染时触发
+     *
+     * param.args[0]: View
+     * param.args[1]: fd5.d (ChattingContext)
+     * param.args[2]: e9 (Message)
+     */
+    private static void onVoiceBubbleRender(XC_MethodHook.MethodHookParam param) {
+        try {
+            if (!sEnabled) return;
+            boolean activated = ModuleConfig.load(
+                com.leshao.v3.ContextManager.getPrefs()
+            ).autoPlayVoice;
+            if (!activated) {
+                LogWriter.log(TAG, "autoPlayVoice disabled in config");
+                return;
+            }
+
+            if (param.args.length < 3) return;
+
+            Object msg = param.args[2];
+            if (msg == null) return;
+
+            // 过滤1: 只处理语音消息 (type == 34)
+            int msgType = (Integer) XposedHelpers.callMethod(msg, "getType");
+            if (msgType != 34) return;
+
+            // 过滤2: 跳过自己发送的消息
+            try {
+                int isSend = XposedHelpers.getIntField(msg, "field_isSend");
+                if (isSend == 1) return;
+            } catch (Throwable ignored) {}
+
+            // 过滤3: 去重
+            long msgId = (Long) XposedHelpers.callMethod(msg, "getMsgId");
+            if (msgId == sLastPlayedMsgId) return;
+
+            // 过滤4: 跳过正在发送中的消息 (M0() == 5)
+            try {
+                if ((Integer) XposedHelpers.callMethod(msg, "M0") == 5) return;
+            } catch (Throwable ignored) {}
+
+            // 获取 ChattingContext
+            Object chattingContext = param.args[1];
+            if (chattingContext == null) return;
+
+            // 获取 VoiceComponent 管理器 then 获取 VoiceComponent (so)
+            Object voiceComp = getVoiceComponent(chattingContext);
+            if (voiceComp == null) {
+                LogWriter.log(TAG, "VoiceComponent not found via context manager");
+                return;
+            }
+
+            // 获取 SceneVoicePlayer (v0)
+            Object player = XposedHelpers.callMethod(voiceComp, "n0");
+            if (player == null) {
+                LogWriter.log(TAG, "SceneVoicePlayer not found");
+                return;
+            }
+
+            // 如果正在播放，不打断
+            try {
+                boolean isPlaying = (Boolean) XposedHelpers.callMethod(player, "o");
+                if (isPlaying) return;
+            } catch (Throwable ignored) {}
+
+            // 等待 TTS 播完
+            if (TTSBroadcaster.isSpeaking()) {
+                final Object finalPlayer = player;
+                final long finalMsgId = msgId;
+                sMainHandler.postDelayed(() -> {
+                    if (!TTSBroadcaster.isSpeaking()) {
+                        playVoice(finalPlayer, msg, finalMsgId);
+                    }
+                }, 300);
+                sLastPlayedMsgId = msgId;
+                return;
+            }
+
+            playVoice(player, msg, msgId);
+
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "onVoiceBubbleRender error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 通过 ChattingContext 获取 VoiceComponent
+     *
+     * ChattingContext.c 是一个管理器, 调用其 a(zc5.q2) 方法返回 VoiceComponent
+     */
+    private static Object getVoiceComponent(Object chattingContext) {
+        try {
+            Object manager = XposedHelpers.getObjectField(chattingContext, "c");
+            if (manager == null) return null;
+
+            Class<?> q2Class = XposedHelpers.findClass("zc5.q2", sClassLoader);
+            if (q2Class == null) {
+                LogWriter.log(TAG, "zc5.q2 class not found in getVoiceComponent");
+                return null;
+            }
+
+            Object comp = XposedHelpers.callMethod(manager, "a", q2Class);
+            LogWriter.log(TAG, "VoiceComponent obtained via manager.a(zc5.q2)");
+            return comp;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "getVoiceComponent error: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 调用 player.I(msg, false) 播放语音
+     *
+     * v0.I(e9, boolean) — 第一个参数是消息, 第二个是是否从开头播放(false=正常)
+     */
+    private static void playVoice(Object player, Object msg, long msgId) {
+        try {
+            XposedHelpers.callMethod(player, "I", msg, false);
+            sLastPlayedMsgId = msgId;
+            LogWriter.log(TAG, "auto-play voice msgId=" + msgId);
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "playVoice error: " + e.getMessage());
+        }
+    }
+
+    // ============ 备用方案: View 扫描 click ============
+
+    private static void findAndClickLatestVoice(Activity activity) {
         try {
             View root = activity.getWindow().getDecorView();
             java.util.List<View> voices = new java.util.ArrayList<>();
@@ -380,15 +245,6 @@ public class VoiceAutoPlay {
             View latest = voices.get(voices.size() - 1);
             LogWriter.log(TAG, "findAndClickLatestVoice: found " + voices.size() + " voice views, clicking latest");
             latest.performClick();
-
-            try {
-                long msgId = (Long) latest.getTag();
-                String msgIdStr = String.valueOf(msgId);
-                if (msgId > 0) {
-                    sPlayedMsgIds.add(msgIdStr);
-                    LogWriter.log(TAG, "findAndClickLatestVoice: clicked msgId=" + msgIdStr);
-                }
-            } catch (Throwable ignored) {}
         } catch (Throwable e) {
             LogWriter.log(TAG, "findAndClickLatestVoice error: " + e.getMessage());
         }
@@ -401,9 +257,10 @@ public class VoiceAutoPlay {
             || clsName.contains("Audio") || clsName.contains("audio")) {
             try {
                 View clickable = view;
-                if (!view.isClickable()) {
-                    for (int i = 0; i < ((android.view.ViewGroup) view).getChildCount(); i++) {
-                        View child = ((android.view.ViewGroup) view).getChildAt(i);
+                if (!view.isClickable() && view instanceof android.view.ViewGroup) {
+                    android.view.ViewGroup vg = (android.view.ViewGroup) view;
+                    for (int i = 0; i < vg.getChildCount(); i++) {
+                        View child = vg.getChildAt(i);
                         if (child.isClickable()) { clickable = child; break; }
                     }
                 }
