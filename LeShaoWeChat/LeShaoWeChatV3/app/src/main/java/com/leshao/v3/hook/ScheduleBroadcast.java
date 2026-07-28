@@ -1100,11 +1100,33 @@ public class ScheduleBroadcast {
     private static void triggerSend(long msgId, Object e9msg, String talker) {
         try {
             // 1. 获取 a21.b0 ViewModel 实例 (SendMsgService)
-            Class<?> n0Cls = XposedHelpers.findClass("n0", sClassLoader);
             Class<?> a21b0Cls = XposedHelpers.findClass("a21.b0", sClassLoader);
-            Object a21b0 = XposedHelpers.callStaticMethod(n0Cls, "c", a21b0Cls);
+            Object a21b0 = null;
+
+            // 尝试多种服务定位器
+            String[] locators = {"n0", "com.tencent.mm.kernel.h", "p7", "l5", "m5", "n5", "o5"};
+            for (String locCls : locators) {
+                try {
+                    Class<?> lc = XposedHelpers.findClass(locCls, sClassLoader);
+                    a21b0 = XposedHelpers.callStaticMethod(lc, "c", a21b0Cls);
+                    if (a21b0 != null) { log("triggerSend: a21.b0 found via " + locCls); break; }
+                    a21b0 = XposedHelpers.callStaticMethod(lc, "get", a21b0Cls);
+                    if (a21b0 != null) { log("triggerSend: a21.b0 found via " + locCls + ".get"); break; }
+                } catch (Throwable ignored) {}
+            }
+
+            // fallback: 尝试通过 km0.o ViewModelStore 获取
             if (a21b0 == null) {
-                log("triggerSend: a21.b0=null");
+                try {
+                    Class<?> km0o = XposedHelpers.findClass("km0.o", sClassLoader);
+                    // 尝试 newInstance
+                    a21b0 = XposedHelpers.newInstance(a21b0Cls);
+                    log("triggerSend: a21.b0 created via newInstance");
+                } catch (Throwable ignored) {}
+            }
+
+            if (a21b0 == null) {
+                log("triggerSend: a21.b0=null (all locators failed)");
                 return;
             }
 
