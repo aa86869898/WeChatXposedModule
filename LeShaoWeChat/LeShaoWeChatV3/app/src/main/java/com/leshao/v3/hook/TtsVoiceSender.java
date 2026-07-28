@@ -52,13 +52,17 @@ public class TtsVoiceSender {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     try {
+                        XposedBridge.log("[TTSVoiceSender] ChatFooter.F CALLBACK FIRED");
                         if (param.args.length < 1 || param.args[0] == null) return;
                         Object msgInfo = param.args[0];
 
                         String content = null;
                         try { content = (String) XposedHelpers.getObjectField(msgInfo, "field_content"); }
                         catch (Throwable ignored) {}
-                        if (content == null) return;
+                        if (content == null) {
+                            XposedBridge.log("[TTSVoiceSender] field_content is null");
+                            return;
+                        }
 
                         if (!content.startsWith(TTS_PREFIX)) return;
 
@@ -87,8 +91,10 @@ public class TtsVoiceSender {
                     }
                 }
             });
+            XposedBridge.log("[TTSVoiceSender] ChatFooter.F hooked OK");
             LogWriter.log(TAG, "ChatFooter.F hooked OK");
         } catch (Throwable t) {
+            XposedBridge.log("[TTSVoiceSender] ChatFooter.F FAIL: " + t.getMessage());
             LogWriter.log(TAG, "ChatFooter.F hook fail: " + t.getMessage());
         }
     }
