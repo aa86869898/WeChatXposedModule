@@ -55,6 +55,7 @@ public class ScheduleMsgPageView {
     private static int sYearCache = 0;
     private static int sMonthCache = 0;
     private static int sDayCache = 0;
+    private static volatile boolean sTimeDefaultSet = false;
     private static String sRepeatCache = "仅一次";
 
     private static View sProgressBar;
@@ -420,14 +421,13 @@ public class ScheduleMsgPageView {
 
         Calendar now = Calendar.getInstance();
         if (sYearCache == 0) { sYearCache = now.get(Calendar.YEAR); sMonthCache = now.get(Calendar.MONTH)+1; sDayCache = now.get(Calendar.DAY_OF_MONTH); }
-        // 初次使用: 默认发送时间 = 当前时间 + 1 分钟
-        android.content.SharedPreferences sp = ctx.getSharedPreferences("schedule_ui_prefs", android.content.Context.MODE_PRIVATE);
-        if (!sp.getBoolean("time_initialized", false)) {
+        // 默认发送时间 = 当前时间 + 1 分钟（每次模块加载首次构建UI时设置）
+        if (!sTimeDefaultSet) {
+            sTimeDefaultSet = true;
             Calendar defCal = (Calendar) now.clone();
             defCal.add(Calendar.MINUTE, 1);
             sHourCache = defCal.get(Calendar.HOUR_OF_DAY);
             sMinuteCache = defCal.get(Calendar.MINUTE);
-            sp.edit().putBoolean("time_initialized", true).commit();
         }
 
         final EditText monEt = smallBorderedEdit(ctx, d, String.format("%02d", sMonthCache), CLR_HIGHLIGHT);
