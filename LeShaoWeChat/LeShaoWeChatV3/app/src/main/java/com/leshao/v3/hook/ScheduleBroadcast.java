@@ -1055,13 +1055,8 @@ public class ScheduleBroadcast {
             // Step 1: setType — Guide: msg.setType(1) → obfuscated A1
             XposedHelpers.callMethod(msg, "A1", task.msgType);
 
-            // Step 2: setContent — Guide 警告: d1 有 610 行复杂逻辑, 纯文本用反射 field_content
-            try {
-                XposedHelpers.setObjectField(msg, "field_content", nvl(task.content));
-            } catch (Throwable fc) {
-                log("sendMessage: field_content 反射失败, 降级 d1 — " + fc.getMessage());
-                XposedHelpers.callMethod(msg, "d1", nvl(task.content));
-            }
+            // Step 2: setContent — X0 已验证(sendToFilehelper), 非 d1(仅限AppMsg XML)
+            XposedHelpers.callMethod(msg, "X0", nvl(task.content));
 
             // Step 3: setImgPath (if media)
             if (task.filePath != null && !task.filePath.isEmpty()) {
@@ -1077,6 +1072,18 @@ public class ScheduleBroadcast {
 
             // Step 6: setCreateTime — Guide: msg.setCreateTime(now) → obfuscated e1
             XposedHelpers.callMethod(msg, "e1", now);
+
+            // ★ 自检: 确认内容已写入 (j() = getContent)
+            try {
+                Object chk = XposedHelpers.callMethod(msg, "j");
+                int chkType = (Integer) XposedHelpers.callMethod(msg, "getType");
+                int chkIsSend = (Integer) XposedHelpers.callMethod(msg, "z0");
+                int chkStatus = -1;
+                try { chkStatus = (Integer) XposedHelpers.callMethod(msg, "t1"); } catch (Throwable ig) {}
+                log("sendMessage v5: 自检 type=" + chkType + " isSend=" + chkIsSend + " content=[" + (chk == null ? "NULL" : chk) + "] len=" + (chk == null ? 0 : chk.toString().length()) + " status=" + chkStatus);
+            } catch (Throwable ig) {
+                log("sendMessage v5: 自检失败 " + ig.getMessage());
+            }
 
             log("sendMessage v5: talker=" + talker + " content=" + nvl(task.content).substring(0, Math.min(30, nvl(task.content).length())) + " type=" + task.msgType);
 
