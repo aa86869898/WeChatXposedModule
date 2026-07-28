@@ -21,6 +21,12 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
+/**
+ * TTS 语音发送 v35
+ * - ChatFooter.F 无条件裸日志（诊断 F 是否被调用）
+ * - e01.x9 全方法扫描（找出真正的发送入口）
+ * - 兼容 MessageHook 中已有的 #tts 检测（C(e9) 入库后额外发送语音）
+ */
 public class TtsVoiceSender {
 
     private static final String TAG = "TtsVoiceSender";
@@ -41,7 +47,10 @@ public class TtsVoiceSender {
         });
 
         hookChatFooterSend(cl);
+        hookMsgLogicScan(cl);
     }
+
+    // ========== ChatFooter.F 诊断 hook ==========
 
     private static void hookChatFooterSend(ClassLoader cl) {
         try {
@@ -51,55 +60,130 @@ public class TtsVoiceSender {
             XposedBridge.hookAllMethods(chatFooter, "F", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
+                    XposedBridge.log("[TTS] ChatFooter.F CALLED");
                     try {
-                        XposedBridge.log("[TTSVoiceSender] ChatFooter.F CALLBACK FIRED");
-                        if (param.args.length < 1 || param.args[0] == null) return;
-                        Object msgInfo = param.args[0];
+                        if (param.args.length >= 1 && param.args[0] != null) {
+                            Object msgInfo = param.args[0];
+                            String content = null;
+                            try { content = (String) XposedHelpers.getObjectField(msgInfo, "field_content"); }
+                            catch (Throwable ignored) {}
+                            if (content == null) try { content = (String) XposedHelpers.callMethod(msgInfo, "I0"); }
+                            catch (Throwable ignored) {}
+                            if (content == null) try { content = (String) XposedHelpers.callMethod(msgInfo, "j"); }
+                            catch (Throwable ignored) {}
 
-                        String content = null;
-                        try { content = (String) XposedHelpers.getObjectField(msgInfo, "field_content"); }
-                        catch (Throwable ignored) {}
-                        if (content == null) {
-                            XposedBridge.log("[TTSVoiceSender] field_content is null");
-                            return;
+                            XposedBridge.log("[TTS] ChatFooter.F content=[" + (content != null ? content.substring(0, Math.min(content.length(), 40)) : "null") + "]");
+
+                            if (content != null && content.startsWith(TTS_PREFIX)) {
+                                String talker = null;
+                                try { talker = (String) XposedHelpers.getObjectField(msgInfo, "field_talker"); }
+                                catch (Throwable ignored) {}
+                                if (talker == null) try { talker = (String) XposedHelpers.callMethod(msgInfo, "N0"); }
+                                catch (Throwable ignored) {}
+
+                                if (talker == null || talker.isEmpty()) {
+                                    XposedBridge.log("[TTS] ChatFooter.F #tts but talker is null");
+                                    return;
+                                }
+
+                                String text = content.substring(TTS_PREFIX.length()).trim();
+                                if (text.isEmpty()) return;
+
+                                XposedBridge.log("[TTS] ChatFooter.F #tts DETECTED: text=" + text.substring(0, Math.min(text.length(), 40)) + " talker=" + talker);
+                                LogWriter.log(TAG, "F #tts: " + text.substring(0, Math.min(text.length(), 60)) + " talker=" + talker);
+
+                                param.setResult(false);
+
+                                final String fText = text;
+                                final String fTalker = talker;
+                                new Thread(() -> synthesizeAndSend(fText, fTalker)).start();
+                            }
                         }
-
-                        if (!content.startsWith(TTS_PREFIX)) return;
-
-                        int type;
-                        try { type = (Integer) XposedHelpers.callMethod(msgInfo, "getType");
-                        } catch (Throwable e) { type = -1; }
-
-                        String text = content.substring(TTS_PREFIX.length()).trim();
-                        if (text.isEmpty()) return;
-
-                        String talker = null;
-                        try { talker = (String) XposedHelpers.getObjectField(msgInfo, "field_talker"); }
-                        catch (Throwable ignored) {}
-                        if (talker == null || talker.isEmpty()) return;
-
-                        LogWriter.log(TAG, "ChatFooter.F #tts: type=" + type + " text=" + text.substring(0, Math.min(text.length(), 60)) + " talker=" + talker);
-
-                        param.setResult(false);
-
-                        final String fText = text;
-                        final String fTalker = talker;
-                        new Thread(() -> synthesizeAndSend(fText, fTalker)).start();
-
                     } catch (Throwable e) {
-                        LogWriter.log(TAG, "intercept err: " + e.getMessage());
+                        XposedBridge.log("[TTS] ChatFooter.F err: " + e.getMessage());
+                        LogWriter.log(TAG, "F err: " + e.getMessage());
                     }
                 }
             });
-            XposedBridge.log("[TTSVoiceSender] ChatFooter.F hooked OK");
+            XposedBridge.log("[TTS] ChatFooter.F hooked OK");
             LogWriter.log(TAG, "ChatFooter.F hooked OK");
         } catch (Throwable t) {
-            XposedBridge.log("[TTSVoiceSender] ChatFooter.F FAIL: " + t.getMessage());
-            LogWriter.log(TAG, "ChatFooter.F hook fail: " + t.getMessage());
+            XposedBridge.log("[TTS] ChatFooter.F FAIL: " + t.getMessage());
+            LogWriter.log(TAG, "ChatFooter.F fail: " + t.getMessage());
         }
     }
 
-    static void synthesizeAndSend(String text, String talker) {
+    // ========== e01.x9 全方法扫描 (诊断发送入口) ==========
+
+    private static void hookMsgLogicScan(ClassLoader cl) {
+        try {
+            Class<?> x9Cls = null;
+            for (String name : new String[]{"e01.x9", "e02.x9", "e00.x9", "e01.x8", "e01.y9"}) {
+                try { x9Cls = cl.loadClass(name); break; } catch (Throwable ignored) {}
+            }
+            if (x9Cls == null) {
+                XposedBridge.log("[TTS] scan: x9 class not found");
+                return;
+            }
+            Class<?> e9Cls = VersionCompat.findMsgInfoStorageClass(cl);
+            if (e9Cls == null) {
+                XposedBridge.log("[TTS] scan: e9 class not found");
+                return;
+            }
+
+            int hooked = 0;
+            for (java.lang.reflect.Method m : x9Cls.getDeclaredMethods()) {
+                // 只 hook 参数中含 e9 的方法
+                boolean hasE9 = false;
+                for (Class<?> pt : m.getParameterTypes()) {
+                    if (pt == e9Cls) { hasE9 = true; break; }
+                }
+                if (!hasE9) continue;
+
+                String mName = m.getName();
+                if (mName.equals("n") || mName.equals("C")) continue; // MessageHook 已 hook
+
+                final String fName = mName;
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        StringBuilder sb = new StringBuilder("[TTS] e01.x9." + fName + "(");
+                        for (int i = 0; i < param.args.length; i++) {
+                            if (i > 0) sb.append(",");
+                            sb.append(param.args[i] == null ? "null" : param.args[i].getClass().getSimpleName());
+                        }
+                        sb.append(")");
+                        XposedBridge.log(sb.toString());
+
+                        // 检测 #tts
+                        for (Object arg : param.args) {
+                            if (arg == null || arg.getClass() != e9Cls) continue;
+                            try {
+                                String content = null;
+                                try { content = (String) XposedHelpers.callMethod(arg, "I0"); }
+                                catch (Throwable ignored) {}
+                                if (content == null) try { content = (String) XposedHelpers.callMethod(arg, "j"); }
+                                catch (Throwable ignored) {}
+                                if (content != null && content.startsWith(TTS_PREFIX)) {
+                                    XposedBridge.log("[TTS] e01.x9." + fName + " #tts content=[" + content + "]");
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    }
+                });
+                hooked++;
+            }
+            XposedBridge.log("[TTS] e01.x9 scan: hooked " + hooked + " methods with e9 param");
+            LogWriter.log(TAG, "e01.x9 scan: " + hooked + " methods hooked");
+        } catch (Throwable t) {
+            XposedBridge.log("[TTS] scan err: " + t.getMessage());
+            LogWriter.log(TAG, "e01.x9 scan fail: " + t.getMessage());
+        }
+    }
+
+    // ========== TTS 合成与发送 ==========
+
+    public static void synthesizeAndSend(String text, String talker) {
         try {
             if (!sReady || sTts == null) {
                 LogWriter.log(TAG, "TTS not ready");
@@ -148,13 +232,13 @@ public class TtsVoiceSender {
                 return;
             }
 
-            LogWriter.log(TAG, "WAV generated: " + wavFile.length() + " bytes");
+            LogWriter.log(TAG, "WAV: " + wavFile.length() + " bytes");
 
             int duration = wavToAmr(wavFile, amrFile);
             wavFile.delete();
 
             if (duration <= 0 || amrFile.length() < 50) {
-                LogWriter.log(TAG, "AMR encode failed, size=" + amrFile.length());
+                LogWriter.log(TAG, "AMR fail, size=" + amrFile.length());
                 amrFile.delete();
                 return;
             }
@@ -179,15 +263,15 @@ public class TtsVoiceSender {
                     XposedHelpers.findClass("com.tencent.mm.storage.e9", sClassLoader),
                     talker);
 
-            boolean ok = (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
+            return (Boolean) XposedHelpers.callStaticMethod(y21x0, "t",
                     filePath, duration, 0, e9talker);
-
-            return ok;
         } catch (Throwable t) {
             LogWriter.log(TAG, "sendVoice err: " + t.getMessage());
             return false;
         }
     }
+
+    // ========== WAV → AMR ==========
 
     private static int wavToAmr(File wavFile, File amrFile) {
         try (FileInputStream fis = new FileInputStream(wavFile)) {
@@ -229,7 +313,7 @@ public class TtsVoiceSender {
                 mono8000Pcm = resampled.toByteArray();
             }
 
-            LogWriter.log(TAG, "PCM: " + sampleRate + "Hz " + channels + "ch " + bitsPerSample + "bit → mono8kHz " + mono8000Pcm.length + " bytes");
+            LogWriter.log(TAG, "PCM: " + sampleRate + "Hz " + channels + "ch " + bitsPerSample + "bit -> mono8kHz " + mono8000Pcm.length + " bytes");
 
             byte[] amrData = encodeAmr(mono8000Pcm);
 
@@ -239,9 +323,7 @@ public class TtsVoiceSender {
             fos.close();
 
             int totalSamples = mono8000Pcm.length / 2;
-            int durationMs = (int) ((long) totalSamples * 1000 / 8000);
-
-            return durationMs;
+            return (int) ((long) totalSamples * 1000 / 8000);
 
         } catch (Throwable e) {
             LogWriter.log(TAG, "wavToAmr err: " + e.getMessage());
@@ -301,11 +383,11 @@ public class TtsVoiceSender {
             codec.release();
 
             byte[] result = amrBaos.toByteArray();
-            LogWriter.log(TAG, "AMR encoded via MediaCodec: " + result.length + " bytes");
+            LogWriter.log(TAG, "AMR MediaCodec: " + result.length + " bytes");
             return result;
 
         } catch (Throwable e) {
-            LogWriter.log(TAG, "MediaCodec AMR fail: " + e.getMessage() + ", try reflection");
+            LogWriter.log(TAG, "MediaCodec fail: " + e.getMessage() + ", try AmrInputStream");
             try {
                 Class<?> amrClass = Class.forName("android.media.AmrInputStream");
                 Constructor<?> ctor = amrClass.getDeclaredConstructor(InputStream.class);
@@ -320,7 +402,7 @@ public class TtsVoiceSender {
                 }
                 amrStream.close();
                 byte[] result = amrBaos.toByteArray();
-                LogWriter.log(TAG, "AMR encoded via AmrInputStream: " + result.length + " bytes");
+                LogWriter.log(TAG, "AMR AmrInputStream: " + result.length + " bytes");
                 return result;
             } catch (Throwable e2) {
                 LogWriter.log(TAG, "AmrInputStream fail: " + e2.getMessage() + ", raw PCM fallback");
