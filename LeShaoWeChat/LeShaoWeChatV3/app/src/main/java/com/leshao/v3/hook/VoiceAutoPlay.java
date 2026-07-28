@@ -112,8 +112,8 @@ public class VoiceAutoPlay {
             sMsgMap.put(msgId, msg);
             sPendingQueue.offer(new PendingVoiceMsg(msgId, talker));
 
-            // 通过 TTS 链触发播放: speak → onDone → playPendingVoice → MediaPlayer
-            TtsVoiceSender.triggerVoiceAutoPlay(talker);
+            // 直接播放语音文件，不走 TTS 通知
+            playPendingVoice(talker);
 
         } catch (Throwable e) {
             LogWriter.log(TAG, "tryAutoPlay err: " + e.getMessage());
