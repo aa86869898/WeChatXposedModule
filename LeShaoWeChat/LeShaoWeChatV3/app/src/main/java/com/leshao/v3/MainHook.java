@@ -162,6 +162,7 @@ public class MainHook implements IXposedHookLoadPackage {
                         // === 主题引擎 ==============================================================
                         HookManager.register(ThemeHook::hook);
                         HookManager.register(VoiceForwardHook::hook);
+                        HookManager.register(() -> com.leshao.v3.hook.TtsVoiceSender.hook(cl));
 
                         LogWriter.log(TAG, "[MainHook] activateAll() START, pendingTasks=" + HookManager.pendingCount());
 

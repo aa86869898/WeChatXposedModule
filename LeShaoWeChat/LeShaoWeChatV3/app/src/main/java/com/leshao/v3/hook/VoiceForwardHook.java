@@ -64,12 +64,12 @@ public class VoiceForwardHook {
     private static volatile String sVfsCreateMethod = null;
 
     // 动态发现的 API (版本无关)
-    private static volatile String sGClass = null;        // g(talker,prefix)→newName 所在类
-    private static volatile String sGMethod = null;        // 静态方法名
-    private static volatile String sTClass = null;         // t(name,dur,flag,e9)→bool 所在类
-    private static volatile String sTMethod = null;        // 静态方法名
-    private static volatile String sPathServiceClass = null; // Mj() 所在的 service 类
-    private static volatile String sPathMethod = null;     // Mj(vfsType,name,flag)→path
+    static volatile String sGClass = null;        // g(talker,prefix)→newName 所在类
+    static volatile String sGMethod = null;        // 静态方法名
+    static volatile String sTClass = null;         // t(name,dur,flag,e9)→bool 所在类
+    static volatile String sTMethod = null;        // 静态方法名
+    static volatile String sPathServiceClass = null; // Mj() 所在的 service 类
+    static volatile String sPathMethod = null;     // Mj(vfsType,name,flag)→path
 
     public static void hook() {
         if (sHooked) return;
@@ -933,7 +933,7 @@ public class VoiceForwardHook {
      * t(newName, duration, 0, null) → 创建 e9 + 写 DB
      * b31.w 上传
      */
-    private static boolean sendViaSceneVoice(Activity act, ClassLoader cl, String targetWxid, String voiceFile, int duration, Object origE9) {
+    static boolean sendViaSceneVoice(Activity act, ClassLoader cl, String targetWxid, String voiceFile, int duration, Object origE9) {
         try {
             LogWriter.log(TAG, "SceneVoice: target=" + targetWxid + " file=" + voiceFile + " dur=" + duration + "ms");
 
@@ -988,7 +988,7 @@ public class VoiceForwardHook {
         }
     }
 
-    private static String getVoice2Dir(String voiceFile) {
+    static String getVoice2Dir(String voiceFile) {
         int idx = voiceFile.indexOf("/voice2/");
         if (idx >= 0) return voiceFile.substring(0, idx + 8);
         return voiceFile.substring(0, voiceFile.lastIndexOf('/') + 1);
