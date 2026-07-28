@@ -38,6 +38,8 @@ public class TtsVoiceSender {
     private static boolean sReady;
     private static volatile CountDownLatch sSynthesisLatch;
     private static volatile int sSynthesisResult;
+    private static volatile boolean sIsSpeaking = false;
+    private static volatile long sLastSpeakTime = 0;
 
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
@@ -68,6 +70,7 @@ public class TtsVoiceSender {
             public void onDone(String uid) {
                 android.util.Log.e(TAG, ">>> onDone uid=" + uid);
                 LogWriter.log(TAG, "onDone: " + uid);
+                sIsSpeaking = false;
 
                 // 语音自动播放
                 if (uid != null && uid.startsWith("tts_")) {
@@ -87,6 +90,7 @@ public class TtsVoiceSender {
             public void onError(String uid) {
                 android.util.Log.e(TAG, ">>> onError uid=" + uid);
                 LogWriter.log(TAG, "onError: " + uid);
+                sIsSpeaking = false;
 
                 if (uid != null && uid.startsWith("tts_")) {
                     String talker = uid.substring(4);
@@ -113,10 +117,31 @@ public class TtsVoiceSender {
             Bundle params = new Bundle();
             String uid = "tts_" + talker;
             params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, uid);
+            sIsSpeaking = true;
+            sLastSpeakTime = System.currentTimeMillis();
             sTts.speak("语音", TextToSpeech.QUEUE_ADD, params, uid);
             android.util.Log.e(TAG, ">>> trigger ok uid=" + uid);
         } catch (Throwable e) {
             android.util.Log.e(TAG, ">>> trigger err: " + e.getMessage());
+        }
+    }
+
+    /** VoiceAutoPlay 用来等待 TTS 播完再开始后台播放 */
+    public static boolean isSpeaking() {
+        if (!sIsSpeaking) return false;
+        // 超时保护: 超过 10 秒自动重置
+        if (System.currentTimeMillis() - sLastSpeakTime > 10000) {
+            sIsSpeaking = false;
+            return false;
+        }
+        return true;
+    }
+
+    /** 阻塞等待 TTS 播完, maxWaitMs 最多等待毫秒数 */
+    public static void waitForSilence(long maxWaitMs) {
+        long start = System.currentTimeMillis();
+        while (isSpeaking() && (System.currentTimeMillis() - start) < maxWaitMs) {
+            try { Thread.sleep(100); } catch (InterruptedException ignored) { break; }
         }
     }
 

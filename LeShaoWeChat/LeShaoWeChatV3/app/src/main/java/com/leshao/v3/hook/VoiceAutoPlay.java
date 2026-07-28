@@ -152,6 +152,10 @@ public class VoiceAutoPlay {
 
             final String tTalker = talker;
 
+            // 等 TTS 播完再播语音
+            TtsVoiceSender.waitForSilence(5000);
+            LogWriter.log(TAG, "ttsSilent, starting bg playback msgId=" + msgId);
+
             // 方案A: 微信CDN流式API — 下载+解码PCM → AudioTrack
             new Thread(() -> {
                 boolean streamOk = playViaWxStream(e9, tTalker, msgId);
