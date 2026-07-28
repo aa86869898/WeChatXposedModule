@@ -1042,7 +1042,7 @@ public class ScheduleBroadcast {
         return false;
     }
 
-    // ===== 核心发送引擎 =====
+    // ===== 核心发送引擎 (匹配 WeChat_Xposed_SendMsg_Guide.md §3.1) =====
 
     static boolean sendMessage(String talker, Task task) {
         try {
@@ -1052,41 +1052,32 @@ public class ScheduleBroadcast {
             Object msg = XposedHelpers.newInstance(e9Class, talker);
             long now = System.currentTimeMillis();
 
-            // type
+            // Step 1: setType — Guide: msg.setType(1)
             XposedHelpers.callMethod(msg, "A1", task.msgType);
 
-            // content — 用已验证的 X0 (sendToFilehelper 同款)
-            XposedHelpers.callMethod(msg, "X0", nvl(task.content));
+            // Step 2: setContent — Guide: callMethod(msg, "d1", text)
+            XposedHelpers.callMethod(msg, "d1", nvl(task.content));
 
-            // 附加媒体路径
+            // Step 3: setImgPath (if media)
             if (task.filePath != null && !task.filePath.isEmpty()) {
                 try { XposedHelpers.callMethod(msg, "j1", task.filePath); } catch (Throwable ignored) {}
             }
 
-            // createTime (sendToFilehelper 同款)
+            // Step 4: setIsSend — Guide: setIntField(msg, "field_isSend", 1) (反射, 无公开setter)
+            XposedHelpers.setIntField(msg, "field_isSend", 1);
+
+            // Step 5: setStatus — Guide: msg.t1(1) ← ★ 关键! SendMsgService SQL: status=1 AND isSend=1
+            XposedHelpers.callMethod(msg, "t1", 1);
+
+            // Step 6: setCreateTime — Guide: msg.setCreateTime(now)
             XposedHelpers.callMethod(msg, "e1", now);
 
-            // isSend = 1 (sendToFilehelper 用 k1, 我们也用)
-            XposedHelpers.callMethod(msg, "k1", 1);
+            log("sendMessage v5: talker=" + talker + " content=" + nvl(task.content).substring(0, Math.min(30, nvl(task.content).length())) + " type=" + task.msgType);
 
-            // ★ 额外反射 field_isSend 确保
-            try { XposedHelpers.setIntField(msg, "field_isSend", 1); } catch (Throwable t) {
-                try { XposedHelpers.setIntField(msg, "A", 1); } catch (Throwable ignored) {}
-            }
-
-            log("sendMessage: talker=" + talker + " content=" + nvl(task.content).substring(0, Math.min(30, nvl(task.content).length())) + " type=" + task.msgType);
-
-            // H9 插入 (已验证可用); 若需自动发送尝试 I9
-            try {
-                XposedHelpers.callMethod(ms, "H9", msg);
-                log("sendMessage v4: H9 OK talker=" + talker);
-            } catch (Throwable h9Err) {
-                log("sendMessage: H9 FAIL, 降级 I9 — " + h9Err.getMessage());
-                long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
-                log("sendMessage v4: I9 fallback msgId=" + msgId + " talker=" + talker);
-            }
-
-            return true;
+            // Step 7: insert DB → Guide: msgStorage.I9(msg, true) ★ 触发 SendMsgService 自动发送
+            long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
+            log("sendMessage v5: I9 msgId=" + msgId + " talker=" + talker);
+            return msgId > 0;
         } catch (Throwable t) {
             log("sendMessage FAIL: " + t.getClass().getSimpleName() + ": " + t.getMessage());
             StringWriter sw = new StringWriter();
