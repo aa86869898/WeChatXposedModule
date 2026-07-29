@@ -8,12 +8,18 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
+import android.text.SpannableStringBuilder;
 import android.text.TextWatcher;
+import android.text.style.StyleSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -59,7 +65,13 @@ public class MainActivity {
         if (now - sLastOpenTime < 2000) return;
         sLastOpenTime = now;
         loadUserInfo();
-        showMainPanel(act);
+
+        SharedPreferences prefs = ContextManager.getPrefs();
+        if (prefs == null || !prefs.getBoolean("ls_disclaimer_accepted", false)) {
+            showDisclaimer(act);
+        } else {
+            showMainPanel(act);
+        }
     }
 
     private static void loadUserInfo() {
@@ -317,6 +329,152 @@ public class MainActivity {
         PAGE_FEATURES.put(8, "语音播报|TTS播报|排版引擎|配音|API|Voice|间隔|熔断|消息类型|免打扰|安静时段|播报参数|音量|语速|音调|TTS|文字消息播报|语音消息播报|图片消息播报|播报发送人昵称|播报群聊消息|截断长文字");
         PAGE_FEATURES.put(9, "自动抢红包|秒抢|红包震动|响铃|红包提醒|转账收款|私聊红包|群聊红包|时间段过滤|延时抢红包|排除群聊|目标群聊|播报金额|关键词过滤");
         PAGE_FEATURES.put(12, "消息导出|聊天备份|导出聊天|备份数据|查看记录|清除记录|数据备份|导出|自动每日备份|导入外部记录|通讯录变更|变更日志");
+    }
+
+    // ===== 免责声明弹窗 =====
+
+    private static void showDisclaimer(Activity act) {
+        dismissDialog();
+        float d = act.getResources().getDisplayMetrics().density;
+        Context ctx = act;
+
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(AppColors.bg());
+        root.setPadding((int)(16 * d), (int)(20 * d), (int)(16 * d), (int)(16 * d));
+
+        TextView titleTv = new TextView(ctx);
+        titleTv.setText("免责声明");
+        titleTv.setTextSize(20);
+        titleTv.setTextColor(AppColors.accent());
+        titleTv.setTypeface(null, Typeface.BOLD);
+        titleTv.setGravity(Gravity.CENTER);
+        titleTv.setPadding(0, 0, 0, (int)(14 * d));
+        root.addView(titleTv);
+
+        ScrollView sv = new ScrollView(ctx);
+        sv.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1.0f));
+        LinearLayout bodyCol = new LinearLayout(ctx);
+        bodyCol.setOrientation(LinearLayout.VERTICAL);
+        bodyCol.setBackgroundColor(AppColors.card());
+        bodyCol.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
+
+        SpannableStringBuilder ssb = new SpannableStringBuilder();
+
+        appendPara(ssb, "用户在使用本工具前，须完整阅读、充分理解并自愿同意本全部免责条款，开启及使用本软件即代表本人已完整阅读、完全知晓并自愿接受所有协议内容。");
+
+        appendPara(ssb, "乐少助手为完全免费的个人技术学习工具，面向所有用户免费使用。平台所有捐赠通道均为用户自愿支持行为，纯属个人心意赞助，不属于软件收费、功能购买、售后担保服务，捐赠与否不影响软件完整功能的正常使用。");
+
+        appendPara(ssb, "本工具依据《计算机软件保护条例》第十七条，仅供个人Android技术学习、开发研究、技术测试使用，仅可在本人持有完全使用权的设备上运行。本工具所有用户配置、任务数据、操作记录均仅在用户设备本地存储，不会私自收集、上传、泄露用户任何隐私数据与账号信息。");
+
+        appendPara(ssb, "本模块纯属个人技术学习作品，与腾讯公司及微信官方无任何合作、授权、关联关系。使用本工具可能存在违反对应平台用户协议的风险，可能导致账号限制、功能受限或封禁，所有风险由使用者自行预判并承担。");
+
+        appendBold(ssb, "严禁私自贩卖、倒卖、二次打包、商用分发本软件及相关衍生资源，严禁用于批量营销、骚扰引流、违规牟利、侵权破坏等违规违法场景。使用者需遵守国家法律法规，一切不当使用造成的账号后果、法律责任均由使用者自行承担，开发者不承担任何连带责任，亦不提供规避风控相关技术支持。");
+
+        TextView bodyTv = new TextView(ctx);
+        bodyTv.setText(ssb);
+        bodyTv.setTextSize(13);
+        bodyTv.setTextColor(AppColors.text1());
+        bodyTv.setLineSpacing((int)(4 * d), 1.2f);
+        bodyCol.addView(bodyTv);
+        sv.addView(bodyCol);
+        root.addView(sv);
+
+        root.addView(spacerV(ctx, 10));
+
+        CheckBox checkBox = new CheckBox(ctx);
+        checkBox.setText("我已完整阅读并同意以上全部条款");
+        checkBox.setTextSize(13);
+        checkBox.setTextColor(AppColors.text1());
+        checkBox.setPadding(0, (int)(8 * d), 0, (int)(8 * d));
+        root.addView(checkBox);
+
+        Button agreeBtn = new Button(ctx);
+        agreeBtn.setText("同意并继续 (30s)");
+        agreeBtn.setTextSize(14);
+        agreeBtn.setTextColor(Color.WHITE);
+        agreeBtn.setTypeface(null, Typeface.BOLD);
+        agreeBtn.setEnabled(false);
+        GradientDrawable btnBg = new GradientDrawable();
+        btnBg.setCornerRadius((int)(8 * d));
+        btnBg.setColor(0xFFCCCCCC);
+        agreeBtn.setBackground(btnBg);
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-1, (int)(44 * d));
+        btnLp.setMargins(0, (int)(8 * d), 0, 0);
+        agreeBtn.setLayoutParams(btnLp);
+        root.addView(agreeBtn);
+
+        AlertDialog dlg = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setView(root)
+            .setCancelable(false)
+            .create();
+
+        sActiveDialog = dlg;
+
+        Handler handler = new Handler(Looper.getMainLooper());
+        final long startTime = System.currentTimeMillis();
+        Runnable countdown = new Runnable() {
+            @Override
+            public void run() {
+                long elapsed = System.currentTimeMillis() - startTime;
+                int remaining = (int) Math.max(0, 30 - elapsed / 1000);
+                if (remaining > 0) {
+                    agreeBtn.setText("同意并继续 (" + remaining + "s)");
+                    handler.postDelayed(this, 200);
+                } else {
+                    agreeBtn.setText("同意并继续");
+                    agreeBtn.setEnabled(true);
+                    GradientDrawable activeBg = new GradientDrawable();
+                    activeBg.setCornerRadius((int)(8 * d));
+                    activeBg.setColor(AppColors.accent());
+                    agreeBtn.setBackground(activeBg);
+                }
+            }
+        };
+        handler.post(countdown);
+
+        agreeBtn.setOnClickListener(v -> {
+            if (!checkBox.isChecked()) {
+                Toast.makeText(ctx, "请先阅读并勾选同意条款", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            handler.removeCallbacks(countdown);
+            SharedPreferences prefs = ContextManager.getPrefs();
+            if (prefs != null) {
+                prefs.edit().putBoolean("ls_disclaimer_accepted", true).apply();
+            }
+            dlg.dismiss();
+            showMainPanel(act);
+        });
+
+        checkBox.setOnCheckedChangeListener((btn, checked) -> {
+            if (checked && agreeBtn.isEnabled()) {
+                // already enabled by countdown
+            }
+        });
+
+        Window w = dlg.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                        (int)(ctx.getResources().getDisplayMetrics().heightPixels * 0.88));
+            w.setGravity(Gravity.CENTER);
+        }
+        dlg.show();
+    }
+
+    private static int sParaIdx;
+
+    private static void appendPara(SpannableStringBuilder ssb, String text) {
+        if (ssb.length() > 0) ssb.append("\n\n");
+        ssb.append(text);
+    }
+
+    private static void appendBold(SpannableStringBuilder ssb, String text) {
+        if (ssb.length() > 0) ssb.append("\n\n");
+        int start = ssb.length();
+        ssb.append(text);
+        ssb.setSpan(new StyleSpan(Typeface.BOLD), start, ssb.length(), 0);
     }
 
     private static void showMainPanel(Activity act) {
