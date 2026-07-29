@@ -9,7 +9,7 @@ public class FilterManager {
 
     public boolean shouldProcess(String talker, int msgType, String content, ModuleConfig cfg) {
         if (!cfg.masterSwitch) return false;
-        if (!isInTimeRange(cfg)) return false;
+        if (isQuietTime(cfg)) return false;
 
         boolean isGroup = talker != null && talker.endsWith("@chatroom");
         if (isGroup && !cfg.announceGroup) return false;
@@ -44,8 +44,8 @@ public class FilterManager {
         }
     }
 
-    private boolean isInTimeRange(ModuleConfig cfg) {
-        if (!cfg.quietEnabled) return true;
+    private boolean isQuietTime(ModuleConfig cfg) {
+        if (!cfg.quietEnabled) return false;
         try {
             String[] ps = cfg.quietStart.split(":");
             String[] pe = cfg.quietEnd.split(":");
@@ -54,6 +54,6 @@ public class FilterManager {
             int now = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
             if (stHour < edHour) return now >= stHour && now < edHour;
             else return now >= stHour || now < edHour;
-        } catch (Throwable t) { return true; }
+        } catch (Throwable t) { return false; }
     }
 }

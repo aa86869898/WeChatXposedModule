@@ -81,47 +81,47 @@ public class TTSPageView {
 
         root.addView(sectionLabel(ctx, d, "消息播报类型"));
         LinearLayout card1 = makeCard(ctx, d);
-        card1.addView(switchRow(ctx, d, "文字消息播报", "格式: 某某某说:XXX内容", announceText, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "文字消息播报", "格式: XXX说:文字内容 / XXX在群说:文字内容", announceText, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_TEXT, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "语音消息播报", "格式: 某某某说:开始播放语音", announceCall, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "语音消息播报", "格式: XXX说:播放语音 / XXX在群说:播放语音", announceCall, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_CALL, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "图片消息播报", "格式: 某某某发来一张照片", announceImage, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "图片消息播报", "格式: XXX给你分享一张照片", announceImage, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_IMAGE, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "视频消息播报", "格式: 某某某发来一段视频", announceVideo, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "视频消息播报", "格式: XXX给你分享一段视频", announceVideo, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_VIDEO, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "位置消息播报", "格式: 某某某发来定位在:位置详细内容", announceLocation, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "位置消息播报", "格式: XXX给你分享定位:位置", announceLocation, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_LOCATION, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "红包消息播报", "播报红包消息", announceRedBag, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "红包消息播报", "格式: XXX给你发来一个红包 / 群正在发红包", announceRedBag, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_REDBAG, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "转账消息播报", "播报转账消息", announceTransfer, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "转账消息播报", "格式: XXX给你发来一笔转账", announceTransfer, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_TRANSFER, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "名片消息播报", "播报名片消息", announceCard, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "名片消息播报", "格式: XXX发来一张名片", announceCard, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_CARD, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "文件消息播报", "播报文件消息", announceFile, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "文件消息播报", "格式: XXX给你发来一个文件", announceFile, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_FILE, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "表情消息播报", "播报表情消息", announceSticker, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "表情消息播报", "格式: XXX发来一个表情", announceSticker, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_STICKER, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "引用消息播报", "格式: 某某某引用了XXX的内容说:XXX", announceQuote, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "引用消息播报", "格式: XXX引用你发的消息说:XXX", announceQuote, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_QUOTE, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
@@ -133,7 +133,7 @@ public class TTSPageView {
         root.addView(spacerV(ctx, d, 12));
         root.addView(sectionLabel(ctx, d, "群聊播报"));
         LinearLayout card2 = makeCard(ctx, d);
-        card2.addView(switchRow(ctx, d, "播报群聊消息", "打开后格式: XX群的XXX发来:XXX内容", announceGroup, (v, on) -> {
+        card2.addView(switchRow(ctx, d, "播报群聊消息", "打开后群内消息格式: XXX在XX群说:XXX内容", announceGroup, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_GROUP, on).apply();
         }));
         root.addView(card2);
@@ -214,8 +214,8 @@ public class TTSPageView {
         etStart.setTextSize(13);
         etStart.setTextColor(AppColors.text1());
         etStart.setSingleLine(true);
-        etStart.setInputType(InputType.TYPE_CLASS_DATETIME);
-        etStart.setWidth((int)(60 * d));
+        etStart.setInputType(InputType.TYPE_CLASS_TEXT);
+        etStart.setWidth((int)(80 * d));
         etStart.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
         etStart.setBackgroundColor(AppColors.card());
         row.addView(etStart);
@@ -231,8 +231,8 @@ public class TTSPageView {
         etEnd.setTextSize(13);
         etEnd.setTextColor(AppColors.text1());
         etEnd.setSingleLine(true);
-        etEnd.setInputType(InputType.TYPE_CLASS_DATETIME);
-        etEnd.setWidth((int)(60 * d));
+        etEnd.setInputType(InputType.TYPE_CLASS_TEXT);
+        etEnd.setWidth((int)(80 * d));
         etEnd.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
         etEnd.setBackgroundColor(AppColors.card());
         row.addView(etEnd);
@@ -396,7 +396,7 @@ public class TTSPageView {
         Switch sw = new Switch(ctx);
         sw.setChecked(checked);
         try {
-            if (checked) sw.setThumbResource(android.R.drawable.btn_star_big_on);
+            sw.setThumbResource(android.R.drawable.btn_star_big_on);
         } catch (Throwable ignored) {}
         sw.setOnCheckedChangeListener(listener);
         row.addView(sw);

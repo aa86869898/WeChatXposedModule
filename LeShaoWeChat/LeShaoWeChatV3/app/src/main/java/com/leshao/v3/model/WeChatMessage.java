@@ -6,6 +6,7 @@ public class WeChatMessage {
     public static final int TYPE_IMAGE = 3;
     public static final int TYPE_VOICE = 34;
     public static final int TYPE_CARD = 42;
+    public static final int TYPE_FILE = 6;
     public static final int TYPE_VIDEO = 43;
     public static final int TYPE_STICKER = 47;
     public static final int TYPE_APPMSG = 49;

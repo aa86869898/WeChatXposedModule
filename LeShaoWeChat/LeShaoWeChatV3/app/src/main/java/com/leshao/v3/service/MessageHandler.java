@@ -16,6 +16,10 @@ public class MessageHandler {
     private final FilterManager mFilter;
     private final NicknameResolver mNick;
 
+    // 当前消息的 sender/group 名称, 由 handle() 设置
+    private String mSenderName;
+    private String mGroupName;
+
     public MessageHandler(TtsEngine tts, FilterManager filter, NicknameResolver nick) {
         this.mTts = tts;
         this.mFilter = filter;
@@ -29,54 +33,48 @@ public class MessageHandler {
         }
 
         boolean isGroup = talker != null && talker.endsWith("@chatroom");
-        String displayName;
         String effectiveContent = content;
 
+        mGroupName = null;
+        mSenderName = null;
+
         if (isGroup) {
-            String groupName = mNick.resolveDisplayName(talker);
+            mGroupName = mNick.resolveDisplayName(talker);
             String senderWxid = extractSenderWxid(content);
             if (senderWxid != null) {
                 effectiveContent = removeSenderPrefix(content);
-                String senderName = mNick.resolveDisplayName(senderWxid);
-                displayName = groupName + "群" + senderName;
-            } else {
-                displayName = groupName + "群";
+                mSenderName = mNick.resolveDisplayName(senderWxid);
             }
         } else {
-            displayName = mNick.resolveDisplayName(talker);
+            mSenderName = mNick.resolveDisplayName(talker);
         }
 
-        LogWriter.log("MessageHandler", "handle type=" + msgType + " talker=" + talker + " name=" + displayName);
+        LogWriter.log("MessageHandler", "handle type=" + msgType + " talker=" + talker
+                + " sender=" + mSenderName + " group=" + mGroupName);
 
         switch (msgType) {
-            case 1:  handleText(displayName, effectiveContent, talker, isGroup, cfg); break;
-            case 3:  handleImage(displayName); break;
-            case 34: handleVoice(displayName); VoiceRelay.process(talker, msgType); break;
-            case 42: handleCard(displayName); break;
-            case 43: handleVideo(displayName); break;
-            case 47: handleSticker(displayName); break;
-            case 48: handleLocation(displayName, effectiveContent); break;
-            case 49: handleAppMsg(displayName, effectiveContent, isGroup, cfg); break;
-            case 50: handleVoip(displayName); break;
+            case 1:  handleText(effectiveContent, talker, isGroup, cfg); break;
+            case 3:  handleImage(); break;
+            case 6:  handleFile(); break;
+            case 34: handleVoice(); VoiceRelay.process(talker, msgType); break;
+            case 42: handleCard(); break;
+            case 43: handleVideo(); break;
+            case 47: handleSticker(); break;
+            case 48: handleLocation(effectiveContent); break;
+            case 49: handleAppMsg(effectiveContent, isGroup, cfg); break;
+            case 50: handleVoip(); break;
         }
     }
 
-    private void handleText(String name, String text, String talker, boolean isGroup, ModuleConfig cfg) {
+    private void handleText(String text, String talker, boolean isGroup, ModuleConfig cfg) {
         if (isGroup && cfg.announceAt) {
             String userNickname = MainActivity.getUserNickname();
             if (userNickname != null && !userNickname.isEmpty() && text.contains("@" + userNickname)) {
                 String cleaned = cleanText(text);
                 if (!cleaned.isEmpty()) {
-                    String groupName = mNick.resolveDisplayName(talker);
-                    String senderName = name;
-                    String prefix = groupName + "群";
-                    if (senderName.startsWith(prefix)) {
-                        senderName = senderName.substring(prefix.length());
-                    }
-                    if (cfg.textTruncateEnabled && cfg.textCutoffLen > 0 && cleaned.length() > cfg.textCutoffLen) {
+                    if (cfg.textTruncateEnabled && cfg.textCutoffLen > 0 && cleaned.length() > cfg.textCutoffLen)
                         cleaned = cleaned.substring(0, cfg.textCutoffLen) + "等长内容";
-                    }
-                    mTts.speak(senderName + "在" + groupName + "群艾特了我说：" + cleaned);
+                    mTts.speak(str(mSenderName) + "在" + str(mGroupName) + "群艾特了我说:" + cleaned);
                     return;
                 }
             }
@@ -85,83 +83,121 @@ public class MessageHandler {
         String cleaned = cleanText(text);
         if (cleaned.isEmpty()) return;
 
-        if (cfg.textTruncateEnabled && cfg.textCutoffLen > 0 && cleaned.length() > cfg.textCutoffLen) {
+        if (cfg.textTruncateEnabled && cfg.textCutoffLen > 0 && cleaned.length() > cfg.textCutoffLen)
             cleaned = cleaned.substring(0, cfg.textCutoffLen) + "等长内容";
-        }
 
-        mTts.speak(name + "说：" + cleaned);
+        if (isGroup)
+            mTts.speak(str(mSenderName) + "在" + str(mGroupName) + "群说:" + cleaned);
+        else
+            mTts.speak(str(mSenderName) + "说:" + cleaned);
     }
 
-    private void handleVoice(String name) {
-        mTts.speak(name + "发来语音");
+    private void handleVoice() {
+        if (mGroupName != null)
+            mTts.speak(str(mSenderName) + "在" + mGroupName + "群说:播放语音");
+        else
+            mTts.speak(str(mSenderName) + "说:播放语音");
     }
 
-    private void handleImage(String name) {
-        mTts.speak(name + "发来一张照片");
+    private void handleImage() {
+        if (mGroupName != null)
+            mTts.speak(str(mSenderName) + "在" + mGroupName + "群分享一张照片");
+        else
+            mTts.speak(str(mSenderName) + "给你分享一张照片");
     }
 
-    private void handleVideo(String name) {
-        mTts.speak(name + "发来一段视频");
+    private void handleVideo() {
+        if (mGroupName != null)
+            mTts.speak(str(mSenderName) + "在" + mGroupName + "群分享一段视频");
+        else
+            mTts.speak(str(mSenderName) + "给你分享一段视频");
     }
 
-    private void handleCard(String name) {
-        mTts.speak(name + "发来一张名片");
+    private void handleCard() {
+        if (mGroupName != null)
+            mTts.speak(str(mSenderName) + "在" + mGroupName + "群分享一张名片");
+        else
+            mTts.speak(str(mSenderName) + "发来一张名片");
     }
 
-    private void handleLocation(String name, String content) {
+    private void handleFile() {
+        if (mGroupName != null)
+            mTts.speak(str(mSenderName) + "在" + mGroupName + "群分享一个文件");
+        else
+            mTts.speak(str(mSenderName) + "给你发来一个文件");
+    }
+
+    private void handleLocation(String content) {
         String loc = parseLocation(content);
-        mTts.speak(name + "发来定位在：" + loc);
+        if (mGroupName != null)
+            mTts.speak(str(mSenderName) + "在" + mGroupName + "群分享定位:" + loc);
+        else
+            mTts.speak(str(mSenderName) + "给你分享定位:" + loc);
     }
 
-    private void handleSticker(String name) {
-        mTts.speak(name + "发来一个表情");
+    private void handleSticker() {
+        if (mGroupName != null)
+            mTts.speak(str(mSenderName) + "在" + mGroupName + "群发了一个表情");
+        else
+            mTts.speak(str(mSenderName) + "发来一个表情");
     }
 
-    private void handleVoip(String name) {
-        mTts.speak(name + "发起语音/视频通话");
+    private void handleVoip() {
+        if (mGroupName != null)
+            mTts.speak(str(mSenderName) + "在" + mGroupName + "群发起语音通话");
+        else
+            mTts.speak(str(mSenderName) + "给你发起语音通话");
     }
 
-    private void handleAppMsg(String name, String content, boolean isGroup, ModuleConfig cfg) {
+    private void handleAppMsg(String content, boolean isGroup, ModuleConfig cfg) {
         if (content == null) return;
         if (content.contains("<location")) {
-            handleLocation(name, content);
+            handleLocation(content);
             return;
         }
         if (content.contains("luckymoney") || content.contains("lucky money")) {
-            mTts.speak(name + "发来一个红包");
+            if (isGroup)
+                mTts.speak(str(mGroupName) + "群正在发红包");
+            else
+                mTts.speak(str(mSenderName) + "给你发来一个红包");
             return;
         }
         if (content.contains("<type>57</type>")) {
-            handleQuote(name, content, isGroup);
+            handleQuote(content, isGroup);
             return;
         }
         if (cfg.announceMiniProgram && (content.contains("<weappinfo>") || content.contains("<type>33</type>"))) {
-            mTts.speak(name + "发来小程序消息");
+            if (isGroup)
+                mTts.speak(str(mSenderName) + "在" + str(mGroupName) + "群分享一个小程序");
+            else
+                mTts.speak(str(mSenderName) + "给你分享一个小程序");
             return;
         }
         if (cfg.announceVideoChannel && (content.contains("<finderFeed>") || content.contains("<type>2001</type>"))) {
-            mTts.speak(name + "发来视频号消息");
+            if (isGroup)
+                mTts.speak(str(mSenderName) + "在" + str(mGroupName) + "群分享一个视频号");
+            else
+                mTts.speak(str(mSenderName) + "给你分享一个视频号");
             return;
         }
         if (cfg.announceChatHistory && (content.contains("<recorditem>") || content.contains("<type>19</type>"))) {
-            if (isGroup) {
-                mTts.speak(name + "分享了聊天记录");
-            } else {
-                mTts.speak(name + "发来聊天记录");
-            }
+            if (isGroup)
+                mTts.speak(str(mSenderName) + "在" + str(mGroupName) + "群分享了聊天记录");
+            else
+                mTts.speak(str(mSenderName) + "给你发来聊天记录");
             return;
         }
         LogWriter.log("MessageHandler", "handleAppMsg unknown: " + (content.length() > 200 ? content.substring(0, 200) + "..." : content));
     }
 
-    private void handleQuote(String name, String content, boolean isGroup) {
+    private void handleQuote(String content, boolean isGroup) {
         String myWxid = ModuleConfig.getCurrentWxid();
         if (myWxid == null || myWxid.isEmpty()) return;
 
         String referBlock = extractXmlBlock(content, "refermsg");
         if (referBlock.isEmpty()) {
             LogWriter.log("MessageHandler", "handleQuote: referBlock empty, fallback speech");
-            mTts.speak(name + "发来一条引用消息");
+            mTts.speak(str(mSenderName) + "发来一条引用消息");
             return;
         }
 
@@ -188,21 +224,15 @@ public class MessageHandler {
         String replyText = cleanText(title);
 
         StringBuilder sb = new StringBuilder();
-        sb.append(name);
+        sb.append(str(mSenderName));
         if (isSelfQuote) {
             sb.append("引用你");
         } else {
             sb.append("在群引用");
-            if (!quotedName.isEmpty()) {
-                sb.append(quotedName);
-            }
+            if (!quotedName.isEmpty()) sb.append(quotedName);
         }
-        if (!mediaDesc.isEmpty()) {
-            sb.append("发的").append(mediaDesc);
-        }
-        if (!replyText.isEmpty()) {
-            sb.append(" 说：").append(replyText);
-        }
+        if (!mediaDesc.isEmpty()) sb.append("发的").append(mediaDesc);
+        if (!replyText.isEmpty()) sb.append("说:").append(replyText);
 
         LogWriter.log("MessageHandler", "handleQuote: speech=[" + sb.toString() + "]");
         mTts.speak(sb.toString());
@@ -211,9 +241,7 @@ public class MessageHandler {
     private String resolveMediaDesc(String refType, String quoteContent) {
         if (refType.equals("1")) {
             String cleaned = cleanText(quoteContent);
-            if (cleaned.length() > 50) {
-                cleaned = cleaned.substring(0, 50) + "等";
-            }
+            if (cleaned.length() > 50) cleaned = cleaned.substring(0, 50) + "等";
             return cleaned;
         }
         switch (refType) {
@@ -226,43 +254,7 @@ public class MessageHandler {
         }
     }
 
-    private static String trunc(String s) {
-        if (s == null) return "null";
-        return s.length() > 100 ? s.substring(0, 100) + "..." : s;
-    }
-
-    private static String extractXmlBlock(String xml, String tagName) {
-        if (xml == null || tagName == null) return "";
-        int start = xml.indexOf("<" + tagName + ">");
-        if (start < 0) {
-            start = xml.indexOf("<" + tagName + " ");
-            if (start < 0) return "";
-        }
-        start = xml.indexOf(">", start);
-        if (start < 0) return "";
-        start++;
-        int end = xml.indexOf("</" + tagName + ">", start);
-        if (end < 0) return "";
-        return xml.substring(start, end);
-    }
-
-    private static String extractXmlTag(String xml, String tagName) {
-        if (xml == null || tagName == null) return "";
-        int startIdx = xml.indexOf("<" + tagName + ">");
-        if (startIdx < 0) {
-            // 尝试自闭合标签格式
-            startIdx = xml.indexOf("<" + tagName + " ");
-            if (startIdx < 0) return "";
-            int valStart = xml.indexOf(">", startIdx) + 1;
-            int valEnd = xml.indexOf("</" + tagName + ">", valStart);
-            if (valEnd < 0) return "";
-            return xml.substring(valStart, valEnd);
-        }
-        startIdx += tagName.length() + 2;
-        int endIdx = xml.indexOf("</" + tagName + ">", startIdx);
-        if (endIdx < 0) return "";
-        return xml.substring(startIdx, endIdx);
-    }
+    // ========== 红包/转账领取播报 ==========
 
     public void announceRedPacket(String sender, String chatroom, String wishing, String amount) {
         String senderName = sender != null ? mNick.resolveDisplayName(sender) : "好友";
@@ -270,16 +262,18 @@ public class MessageHandler {
 
         if (isGroup) {
             String groupName = mNick.resolveDisplayName(chatroom);
-            mTts.speak("成功抢到" + groupName + "群" + senderName + "发送的红包，金额" + amount + "元");
+            mTts.speak("成功抢到" + groupName + "群" + senderName + "发的红包，金额" + amount + "元");
         } else {
-            mTts.speak("成功领取" + senderName + "发来的红包，金额" + amount + "元");
+            mTts.speak("成功领取" + senderName + "给你的红包，金额" + amount + "元");
         }
     }
 
     public void announceTransfer(String sender, String chatroom, String amount, String desc) {
         String senderName = sender != null ? mNick.resolveDisplayName(sender) : "好友";
-        mTts.speak("成功领取" + senderName + "发来的转账，金额" + amount + "元");
+        mTts.speak("成功领取" + senderName + "给你的转账，金额" + amount + "元");
     }
+
+    // ========== 工具方法 ==========
 
     static String cleanText(String content) {
         if (content == null) return "";
@@ -304,6 +298,8 @@ public class MessageHandler {
         if (poiname.startsWith(label)) return poiname;
         return label + poiname;
     }
+
+    private static String str(String s) { return s != null ? s : ""; }
 
     private static String extractXmlAttr(String content, String name) {
         int i = content.indexOf(name + "=\"");
@@ -330,5 +326,42 @@ public class MessageHandler {
         m = SENDER_PREFIX_ANY.matcher(content);
         if (m.find()) return content.substring(m.end());
         return content;
+    }
+
+    private static String trunc(String s) {
+        if (s == null) return "null";
+        return s.length() > 100 ? s.substring(0, 100) + "..." : s;
+    }
+
+    private static String extractXmlBlock(String xml, String tagName) {
+        if (xml == null || tagName == null) return "";
+        int start = xml.indexOf("<" + tagName + ">");
+        if (start < 0) {
+            start = xml.indexOf("<" + tagName + " ");
+            if (start < 0) return "";
+        }
+        start = xml.indexOf(">", start);
+        if (start < 0) return "";
+        start++;
+        int end = xml.indexOf("</" + tagName + ">", start);
+        if (end < 0) return "";
+        return xml.substring(start, end);
+    }
+
+    private static String extractXmlTag(String xml, String tagName) {
+        if (xml == null || tagName == null) return "";
+        int startIdx = xml.indexOf("<" + tagName + ">");
+        if (startIdx < 0) {
+            startIdx = xml.indexOf("<" + tagName + " ");
+            if (startIdx < 0) return "";
+            int valStart = xml.indexOf(">", startIdx) + 1;
+            int valEnd = xml.indexOf("</" + tagName + ">", valStart);
+            if (valEnd < 0) return "";
+            return xml.substring(valStart, valEnd);
+        }
+        startIdx += tagName.length() + 2;
+        int endIdx = xml.indexOf("</" + tagName + ">", startIdx);
+        if (endIdx < 0) return "";
+        return xml.substring(startIdx, endIdx);
     }
 }
