@@ -23,22 +23,28 @@ public class MessageHook {
         sClassLoader = cl;
         sMainHandler = new Handler(Looper.getMainLooper());
 
+        hookX9Dispatch(cl);
+        hookIEventBus(cl);
+    }
+
+    // ====== x9 分发 (接收消息: TTS + 语音播放) ======
+
+    private static void hookX9Dispatch(ClassLoader cl) {
         try {
             Class<?> x9Cls = null;
             for (String name : new String[]{"e01.x9", "e02.x9", "e00.x9", "e01.x8", "e01.y9"}) {
                 try { x9Cls = cl.loadClass(name); break; } catch (Throwable ignored) {}
             }
             if (x9Cls == null) {
-                LogWriter.log(TAG, "FAIL: dispatch class not found");
+                LogWriter.log(TAG, "x9 class not found");
                 return;
             }
             Class<?> e9Cls = VersionCompat.findMsgInfoStorageClass(cl);
             if (e9Cls == null) {
-                LogWriter.log(TAG, "FAIL: storage class not found");
+                LogWriter.log(TAG, "e9 class not found");
                 return;
             }
 
-            // Hook 所有带 e9 参数的方法, 确保收入/发出消息都能捕获
             int hooked = 0;
             for (java.lang.reflect.Method m : x9Cls.getDeclaredMethods()) {
                 Class<?>[] pts = m.getParameterTypes();
@@ -47,7 +53,7 @@ public class MessageHook {
                     XposedBridge.hookMethod(m,
                         new XC_MethodHook() {
                             @Override protected void afterHookedMethod(MethodHookParam p) {
-                                onMessage(p.args[0], paramCount >= 2 ? p.args[1] : null);
+                                onX9Message(p.args[0], paramCount >= 2 ? p.args[1] : null);
                             }
                         });
                     LogWriter.log(TAG, "hooked x9." + m.getName() + "(" + pts.length + ")");
@@ -57,11 +63,11 @@ public class MessageHook {
             LogWriter.log(TAG, "x9 hooks installed: " + hooked + " methods");
 
         } catch (Throwable t) {
-            LogWriter.log(TAG, "FAIL: " + t);
+            LogWriter.log(TAG, "hookX9 FAIL: " + t.getMessage());
         }
     }
 
-    static void onMessage(Object e9, Object p0) {
+    static void onX9Message(Object e9, Object p0) {
         try {
             int rawType = (int) XposedHelpers.callMethod(e9, "getType");
             int type = mapType(rawType);
@@ -89,28 +95,6 @@ public class MessageHook {
                     + " msgId=" + msgId + " talker=" + talker
                     + " content=[" + (content == null ? "null" : content.substring(0, Math.min(content.length(), 60))) + "]");
 
-            // #tts 指令: 自己发出的文字消息 (需开关开启)
-            if (isSend == 1 && content != null && content.startsWith("#tts ")) {
-                SharedPreferences prefs = ContextManager.getPrefs();
-                if (prefs == null || !prefs.getBoolean("ls_tts_command", false)) {
-                    android.util.Log.e(TAG, "*** #tts ignored: ls_tts_command is OFF");
-                    return;
-                }
-                final String ttsText = content.substring(5).trim();
-                final String ttsTalker = talker;
-                android.util.Log.e(TAG, "*** #tts DETECTED: text=" + ttsText + " talker=" + ttsTalker);
-                LogWriter.log("TtsVoiceSender", "#tts: " + ttsText.substring(0, Math.min(ttsText.length(), 40)) + " talker=" + ttsTalker);
-                sMainHandler.post(() -> {
-                    try {
-                        TtsVoiceSender.synthesizeAndSend(ttsText, ttsTalker);
-                    } catch (Throwable e) {
-                        LogWriter.log("TtsVoiceSender", "err: " + e.getMessage());
-                    }
-                });
-                return;
-            }
-
-            // 收到的消息
             if (isSend != 1) {
                 final int fType = type;
                 final String fTalker = talker;
@@ -123,7 +107,6 @@ public class MessageHook {
                     }
                 });
 
-                // 语音自动播放
                 if (rawType == 34) {
                     final long voiceMsgId = msgId;
                     LogWriter.log("VoiceAutoPlay", "rawType=34 msgId=" + voiceMsgId + " talker=" + talker);
@@ -141,6 +124,69 @@ public class MessageHook {
             LogWriter.log(TAG, "err: " + t);
         }
     }
+
+    // ====== IEvent.e() 事件总线 (拦截自己发出的 #tts) ======
+
+    private static void hookIEventBus(ClassLoader cl) {
+        try {
+            Class<?> iEventClz = cl.loadClass("com.tencent.mm.sdk.event.IEvent");
+            Class<?> sendOkClz = cl.loadClass("com.tencent.mm.autogen.events.SendMsgSuccessEvent");
+
+            XposedHelpers.findAndHookMethod(iEventClz, "e", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sendOkClz.isInstance(param.thisObject)) return;
+
+                        Object data = XposedHelpers.getObjectField(param.thisObject, "g");
+                        if (data == null) return;
+                        Object e9 = XposedHelpers.getObjectField(data, "a");
+                        if (e9 == null) return;
+
+                        String content = (String) XposedHelpers.callMethod(e9, "j");
+                        String talker = (String) XposedHelpers.callMethod(e9, "N0");
+                        long msgId = (Long) XposedHelpers.callMethod(e9, "getMsgId");
+                        int type = (Integer) XposedHelpers.callMethod(e9, "getType");
+
+                        LogWriter.log(TAG, "IEvent.e: type=" + type + " talker=" + talker
+                            + " msgId=" + msgId + " content=" + trunc(content, 30));
+                        android.util.Log.e(TAG, ">>> IEvent.e SendMsgSuccess: type=" + type
+                            + " talker=" + talker + " msgId=" + msgId
+                            + " content=[" + (content == null ? "null" : content.substring(0, Math.min(content.length(), 60))) + "]");
+
+                        if (type != 1 || content == null || !content.startsWith("#tts ")) return;
+
+                        SharedPreferences prefs = ContextManager.getPrefs();
+                        if (prefs == null || !prefs.getBoolean("ls_tts_command", false)) {
+                            android.util.Log.e(TAG, ">>> #tts ignored: switch OFF");
+                            return;
+                        }
+
+                        String text = content.substring(5).trim();
+                        if (text.isEmpty()) return;
+
+                        android.util.Log.e(TAG, ">>> #tts DETECTED: " + text + " talker=" + talker);
+                        LogWriter.log(TAG, "#tts via IEvent: " + text + " talker=" + talker);
+
+                        final String fText = text;
+                        final String fTalker = talker;
+                        sMainHandler.post(() -> TtsVoiceSender.synthesizeAndSend(fText, fTalker));
+
+                    } catch (Throwable t) {
+                        android.util.Log.e(TAG, ">>> IEvent.e hook err: " + t.getMessage());
+                    }
+                }
+            });
+            LogWriter.log(TAG, "IEvent.e() hooked OK");
+            android.util.Log.e(TAG, ">>> IEvent.e() hooked OK");
+
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookIEventBus FAIL: " + t.getMessage());
+            android.util.Log.e(TAG, ">>> IEvent.e() FAIL: " + t.getMessage());
+        }
+    }
+
+    // ====== 工具方法 ======
 
     static String trunc(String s, int m) {
         return s == null ? "" : s.length() > m ? s.substring(0, m) + "..." : s;
