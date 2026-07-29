@@ -95,8 +95,9 @@ public class VoiceAutoPlay {
 
     private static void hookVolumeKeyPause(ClassLoader cl) {
         try {
-            XposedHelpers.findAndHookMethod(android.app.Activity.class, "dispatchKeyEvent",
-                KeyEvent.class, new XC_MethodHook() {
+            java.lang.reflect.Method dispatchKeyEvent = android.app.Activity.class
+                .getDeclaredMethod("dispatchKeyEvent", KeyEvent.class);
+            XposedBridge.hookMethod(dispatchKeyEvent, new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
                         try {
@@ -156,17 +157,30 @@ public class VoiceAutoPlay {
 
     public static void onVoiceMsg(Object e9, long msgId, Object p0) {
         try {
-            if (!sEnabled) return;
+            android.util.Log.e(TAG, ">>> onVoiceMsg ENTER msgId=" + msgId + " enabled=" + sEnabled + " lastPlayed=" + sLastPlayedMsgId);
+            if (!sEnabled) {
+                android.util.Log.e(TAG, ">>> onVoiceMsg: DISABLED");
+                return;
+            }
 
             try {
                 int isSend = (Integer) XposedHelpers.callMethod(e9, "z0");
-                if (isSend == 1) return;
+                if (isSend == 1) {
+                    android.util.Log.e(TAG, ">>> onVoiceMsg: isSend=1 SKIP");
+                    return;
+                }
             } catch (Throwable ignored) {}
 
-            if (msgId == sLastPlayedMsgId) return;
+            if (msgId == sLastPlayedMsgId) {
+                android.util.Log.e(TAG, ">>> onVoiceMsg: DUPLICATE msgId=" + msgId);
+                return;
+            }
 
             try {
-                if ((Integer) XposedHelpers.callMethod(e9, "M0") == 5) return;
+                if ((Integer) XposedHelpers.callMethod(e9, "M0") == 5) {
+                    android.util.Log.e(TAG, ">>> onVoiceMsg: M0==5 SKIP");
+                    return;
+                }
             } catch (Throwable ignored) {}
 
             sLastPlayedMsgId = msgId;
@@ -186,25 +200,30 @@ public class VoiceAutoPlay {
             final String tTalker = talker;
 
             // 等 TTS 播报完再播语音
+            android.util.Log.e(TAG, ">>> waitForTTS: isSpeaking=" + TTSBroadcaster.isSpeaking());
             long waitStart = System.currentTimeMillis();
             while (TTSBroadcaster.isSpeaking() && (System.currentTimeMillis() - waitStart) < 8000) {
                 try { Thread.sleep(150); } catch (InterruptedException ignored) { break; }
             }
             if (TTSBroadcaster.isSpeaking()) {
                 LogWriter.log(TAG, "tts timeout, play anyway msgId=" + msgId);
+                android.util.Log.e(TAG, ">>> tts timeout after " + (System.currentTimeMillis() - waitStart) + "ms");
             } else {
                 LogWriter.log(TAG, "tts done, waited " + (System.currentTimeMillis() - waitStart) + "ms msgId=" + msgId);
+                android.util.Log.e(TAG, ">>> tts done, waited " + (System.currentTimeMillis() - waitStart) + "ms");
             }
 
             // 方案A: 微信CDN流式API — 下载+解码PCM → AudioTrack
+            android.util.Log.e(TAG, ">>> starting play plans for msgId=" + msgId);
             new Thread(() -> {
                 boolean streamOk = playViaWxStream(e9, tTalker, msgId);
+                android.util.Log.e(TAG, ">>> planA stream result=" + streamOk + " msgId=" + msgId);
                 if (!streamOk) {
-                    // 方案B: SilkDecoder库 SILK→WAV→MediaPlayer
                     boolean bgOk = playBackground(e9, tTalker, msgId);
+                    android.util.Log.e(TAG, ">>> planB background result=" + bgOk + " msgId=" + msgId);
                     if (!bgOk) {
-                        // 方案C: 入队等聊天时播放
                         sPendingQueue.offer(new PendingVoiceMsg(e9, msgId, tTalker));
+                        android.util.Log.e(TAG, ">>> planC queue: msgId=" + msgId + " q=" + sPendingQueue.size() + " so=" + (sCurrentSo != null));
                         LogWriter.log(TAG, "queue: msgId=" + msgId + " q=" + sPendingQueue.size());
                         if (sCurrentSo != null) {
                             sHandler.post(() -> playAllFromQueue());

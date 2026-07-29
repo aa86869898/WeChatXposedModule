@@ -8,6 +8,9 @@ import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.service.TTSBroadcaster;
 
+import java.util.HashSet;
+import java.util.Set;
+
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
@@ -18,6 +21,7 @@ public class MessageHook {
     private static int sCount = 0;
     private static Handler sMainHandler;
     private static ClassLoader sClassLoader;
+    private static final Set<Long> sSeenMsgIds = new HashSet<>();
 
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
@@ -98,6 +102,16 @@ public class MessageHook {
                     + " msgId=" + msgId + " talker=" + talker
                     + " content=[" + (content == null ? "null" : content.substring(0, Math.min(content.length(), 60))) + "]");
 
+            // 去重: 同一个 msgId 只处理一次
+            synchronized (sSeenMsgIds) {
+                if (msgId != 0 && !sSeenMsgIds.add(msgId)) {
+                    android.util.Log.e(TAG, "!!! SKIP duplicate msgId=" + msgId);
+                    return;
+                }
+                // 防止内存膨胀: 超过 200 条就清理
+                if (sSeenMsgIds.size() > 200) sSeenMsgIds.clear();
+            }
+
             if (isSend != 1) {
                 final int fType = type;
                 final String fTalker = talker;
@@ -112,6 +126,7 @@ public class MessageHook {
 
                 if (rawType == 34) {
                     final long voiceMsgId = msgId;
+                    android.util.Log.e(TAG, ">>> VOICE msgId=" + voiceMsgId + " talker=" + talker + " isSend=" + isSend);
                     LogWriter.log("VoiceAutoPlay", "rawType=34 msgId=" + voiceMsgId + " talker=" + talker);
                     sMainHandler.post(() -> {
                         try {
@@ -135,7 +150,8 @@ public class MessageHook {
             Class<?> iEventClz = cl.loadClass("com.tencent.mm.sdk.event.IEvent");
             Class<?> sendOkClz = cl.loadClass("com.tencent.mm.autogen.events.SendMsgSuccessEvent");
 
-            XposedHelpers.findAndHookMethod(iEventClz, "e", new XC_MethodHook() {
+            java.lang.reflect.Method eMethod = iEventClz.getDeclaredMethod("e");
+            XposedBridge.hookMethod(eMethod, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     try {
