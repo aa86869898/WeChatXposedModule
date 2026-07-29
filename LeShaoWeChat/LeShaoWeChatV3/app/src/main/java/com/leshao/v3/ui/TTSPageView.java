@@ -1,12 +1,15 @@
 package com.leshao.v3.ui;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -78,6 +81,7 @@ public class TTSPageView {
         int interval = prefs != null ? Integer.parseInt(prefs.getString(KEY_ANNOUNCE_INTERVAL, "0")) : 0;
         boolean truncate = prefs != null && prefs.getBoolean(KEY_TEXT_TRUNCATE, true);
         int cutoff = prefs != null ? Integer.parseInt(prefs.getString(KEY_TEXT_CUTOFF, "150")) : 150;
+        float speechRate = prefs != null ? prefs.getFloat("ls_speech_rate", 1.1f) : 1.1f;
 
         root.addView(sectionLabel(ctx, d, "消息播报类型"));
         LinearLayout card1 = makeCard(ctx, d);
@@ -191,7 +195,41 @@ public class TTSPageView {
         card5.addView(intervalRow(ctx, d, interval, "播报间隔", "两次播报之间最小间隔(毫秒)", 0, 5000, val -> {
             if (prefs != null) prefs.edit().putString(KEY_ANNOUNCE_INTERVAL, String.valueOf(val)).apply();
         }));
+        card5.addView(itemDivider(ctx, d));
+        card5.addView(speedRateRow(ctx, d, speechRate, rate -> {
+            TTSBroadcaster.setSpeechRate(rate);
+            if (prefs != null) prefs.edit().putFloat("ls_speech_rate", rate).apply();
+        }));
         root.addView(card5);
+
+        // 文字转语音按钮
+        root.addView(spacerV(ctx, d, 16));
+        Button ttsBtn = new Button(ctx);
+        ttsBtn.setText("文字转语音");
+        ttsBtn.setTextSize(16);
+        ttsBtn.setTypeface(null, Typeface.BOLD);
+        ttsBtn.setTextColor(AppColors.whiteTextOnAccent());
+        ttsBtn.setBackgroundColor(AppColors.accent());
+        ttsBtn.setPadding((int)(16 * d), (int)(14 * d), (int)(16 * d), (int)(14 * d));
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-1, -2);
+        btnLp.setMargins((int)(8 * d), 0, (int)(8 * d), 0);
+        ttsBtn.setLayoutParams(btnLp);
+        ttsBtn.setOnClickListener(v -> {
+            EditText input = new EditText(ctx);
+            input.setHint("输入要转语音的文字...");
+            input.setMinLines(3);
+            input.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(12 * d));
+            new AlertDialog.Builder(ctx)
+                .setTitle("文字转语音")
+                .setView(input)
+                .setPositiveButton("播放", (d2, w) -> {
+                    String text = input.getText().toString().trim();
+                    if (!text.isEmpty()) TTSBroadcaster.speakText(text);
+                })
+                .setNegativeButton("取消", null)
+                .show();
+        });
+        root.addView(ttsBtn);
 
         return root;
     }
@@ -427,7 +465,54 @@ public class TTSPageView {
         return v;
     }
 
+    private static View speedRateRow(Context ctx, float d, float currentRate, FloatCallback cb) {
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
+        row.setBackgroundColor(AppColors.whiteCard());
+
+        LinearLayout header = new LinearLayout(ctx);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+
+        TextView label = new TextView(ctx);
+        label.setText("语速调节");
+        label.setTextSize(13);
+        label.setTextColor(AppColors.text1());
+        label.setTypeface(null, Typeface.BOLD);
+        header.addView(label);
+
+        TextView valueTv = new TextView(ctx);
+        valueTv.setText(String.format("%.1fx", currentRate));
+        valueTv.setTextSize(14);
+        valueTv.setTextColor(AppColors.accent());
+        valueTv.setTypeface(null, Typeface.BOLD);
+        valueTv.setPadding((int)(12 * d), 0, 0, 0);
+        header.addView(valueTv);
+
+        row.addView(header);
+
+        SeekBar sb = new SeekBar(ctx);
+        sb.setMax(20); // 0.5x ~ 2.5x, step 0.1
+        sb.setProgress(Math.round((currentRate - 0.5f) * 10));
+        sb.setPadding(0, (int)(8 * d), 0, 0);
+        sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                float rate = 0.5f + progress * 0.1f;
+                valueTv.setText(String.format("%.1fx", rate));
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {
+                float rate = 0.5f + seekBar.getProgress() * 0.1f;
+                if (cb != null) cb.onChange(rate);
+            }
+        });
+        row.addView(sb);
+
+        return row;
+    }
+
     public interface TimeCallback { void onChange(String start, String end); }
     public interface IntCallback { void onChange(int value); }
     public interface StringCallback { void onChange(String value); }
+    public interface FloatCallback { void onChange(float value); }
 }

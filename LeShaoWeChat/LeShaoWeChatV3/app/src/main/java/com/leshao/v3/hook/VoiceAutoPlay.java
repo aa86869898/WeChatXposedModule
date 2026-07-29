@@ -6,6 +6,7 @@ import android.media.AudioTrack;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.KeyEvent;
 
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.service.TTSBroadcaster;
@@ -87,6 +88,37 @@ public class VoiceAutoPlay {
 
         findVoice2Dir();
         hookVoiceComponent(cl);
+        hookVolumeKeyPause(cl);
+    }
+
+    // ========== 音量键暂停播报 ==========
+
+    private static void hookVolumeKeyPause(ClassLoader cl) {
+        try {
+            XposedHelpers.findAndHookMethod(android.app.Activity.class, "dispatchKeyEvent",
+                KeyEvent.class, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        try {
+                            KeyEvent event = (KeyEvent) param.args[0];
+                            int keyCode = event.getKeyCode();
+                            int action = event.getAction();
+                            if (action == KeyEvent.ACTION_DOWN
+                                && (keyCode == KeyEvent.KEYCODE_VOLUME_UP
+                                 || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+                                if (TTSBroadcaster.isSpeaking()) {
+                                    TTSBroadcaster.pause();
+                                    LogWriter.log(TAG, "volumeKeyPause: paused TTS");
+                                    param.setResult(true);
+                                }
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            LogWriter.log(TAG, "volumeKeyPause hook OK");
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "volumeKeyPause hook fail: " + e.getMessage());
+        }
     }
 
     // ========== so.y() hook ==========
