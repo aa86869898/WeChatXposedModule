@@ -38,27 +38,24 @@ public class ContactGroupPageView {
         cardContact.addView(switchRow(ctx, d, "联系人变更日志", null, cfg.contactChangeLogEnabled, (v, on) -> {
             cfg.contactChangeLogEnabled = on; cfg.save(prefs); ContactChangeLog.setEnabled(on);
         }, v -> SubPageActivity.open(act, "通讯录更新日志", 13)));
-        cardContact.addView(switchRow(ctx, d, "隐藏联系人敏感字段", null, cfg.hideContactFieldsEnabled, (v, on) -> {
-            cfg.hideContactFieldsEnabled = on; cfg.save(prefs); HideContactFields.setEnabled(on);
-        }, v -> ConfigPanels.showHideContactFields(act, prefs)));
         root.addView(cardContact);
 
         root.addView(spacerV(ctx, d, 12));
-        root.addView(sectionLabel(ctx, "群管理"));
+        root.addView(sectionLabel(ctx, "聊天功能"));
 
-        LinearLayout cardGroup = makeCard(ctx, d);
-        cardGroup.addView(switchRow(ctx, d, "群功能增强",
-                "关闭后所有群子功能均不生效", cfg.groupFeaturesEnabled, (v, on) -> {
-            cfg.groupFeaturesEnabled = on; cfg.save(prefs); GroupFeatures.setEnabled(on);
+        LinearLayout cardChat = makeCard(ctx, d);
+        boolean recallOn = prefs != null && prefs.getBoolean("ls_recall_enabled", false);
+        boolean vfOn = prefs != null && prefs.getBoolean("ls_voice_forward", false);
+
+        cardChat.addView(switchRow(ctx, d, "消息防撤回", null, recallOn, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean("ls_recall_enabled", on).apply();
+            AntiRecallHook.setEnabled(on);
         }, null));
-
-        cardGroup.addView(subSwitch(ctx, prefs, d, "group_member_log", "群成员变更日志",
-                "记录群内踢人/退群/邀请等操作", true));
-        cardGroup.addView(subSwitch(ctx, prefs, d, "group_announce", "群公告已读回执",
-                "进入群信息页时自动检测公告更新", true));
-        cardGroup.addView(subSwitch(ctx, prefs, d, "group_batch_op", "批量操作",
-                "批量踢人 + 导出成员列表", true));
-        root.addView(cardGroup);
+        cardChat.addView(switchRow(ctx, d, "语音消息转发", null, vfOn, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean("ls_voice_forward", on).apply();
+            VoiceForwardHook.setEnabled(on);
+        }, null));
+        root.addView(cardChat);
 
         return root;
     }

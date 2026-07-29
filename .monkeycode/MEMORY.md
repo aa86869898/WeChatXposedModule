@@ -58,4 +58,4 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 推送分支: 本地 master → 远程 main (强制推送)
   - 每次代码修改编译成功后，自动执行 git add + commit + push
   - APK 已解除 gitignore (!**/build/outputs/apk/debug/*.apk)，会随源码一起推送
-  - 推送命令: `git push https://<token>@github.com/aa86869898/WeChatXposedModule.git master:main --force`
+  - 推送命令: `git push` (推送到 master 分支)

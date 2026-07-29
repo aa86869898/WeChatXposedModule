@@ -478,6 +478,7 @@ public class ProfilePageView {
             if (actTimeStr.isEmpty()) return "未激活";
             long actTime = Long.parseLong(actTimeStr);
             int expireHours = Integer.parseInt(expireStr);
+            if (ActivationManager.isPermanentMember()) return "2099年12月31日 23:59:59";
             if (expireHours <= 0) return "永久有效";
             long expireTime = actTime + expireHours * 3600000L;
             if (System.currentTimeMillis() > expireTime) return "已过期";

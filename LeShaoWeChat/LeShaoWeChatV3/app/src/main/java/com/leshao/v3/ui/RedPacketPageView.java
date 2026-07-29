@@ -30,12 +30,6 @@ public class RedPacketPageView {
             "配置红包自动领取功能，支持私聊/群聊、时间段过滤、关键词过滤、秒抢名单",
             v -> SubPageActivity.open(parentAct, "自动秒抢红包", 91)));
 
-        root.addView(MainActivity.makeDivider(ctx));
-
-        root.addView(makeMenuEntry(ctx, d, 0x1F4B0, "自动收款",
-            "配置自动收款功能，支持私聊/群聊、时间段过滤、关键词过滤、快速收款名单",
-            v -> SubPageActivity.open(parentAct, "自动收款", 92)));
-
         root.addView(spacerV(ctx, d, 24));
 
         // 红包提醒开关

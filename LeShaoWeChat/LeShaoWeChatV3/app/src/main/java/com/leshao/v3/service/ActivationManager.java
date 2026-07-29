@@ -320,10 +320,34 @@ public class ActivationManager {
         SharedPreferences prefs = ContextManager.getPrefs();
         if (prefs == null) return "未激活";
         try {
-            int li = Integer.parseInt(prefs.getString(PREF_KEY_LEVEL, "-1"));
-            return li >= 0 ? levelName(li) : "未激活";
+            int expireHours = Integer.parseInt(prefs.getString(PREF_KEY_EXPIRE, "0"));
+            return derivedLevelName(expireHours);
         } catch (Throwable t) {
             return "未激活";
+        }
+    }
+
+    /**
+     * 根据过期时间推导会员等级名称:
+     *   30天以下=体验会员, 30天=月度会员, 90天=季度会员, 365天=年度会员, >365天=永久会员
+     */
+    public static String derivedLevelName(int expireHours) {
+        int expireDays = expireHours / 24;
+        if (expireHours == 0 || expireDays > 365) return "永久会员";
+        if (expireDays >= 365) return "年度会员";
+        if (expireDays >= 90) return "季度会员";
+        if (expireDays >= 30) return "月度会员";
+        return "体验会员";
+    }
+
+    public static boolean isPermanentMember() {
+        SharedPreferences prefs = ContextManager.getPrefs();
+        if (prefs == null) return false;
+        try {
+            int expireHours = Integer.parseInt(prefs.getString(PREF_KEY_EXPIRE, "0"));
+            return expireHours == 0 || (expireHours / 24) > 365;
+        } catch (Throwable t) {
+            return false;
         }
     }
 
@@ -410,7 +434,7 @@ public class ActivationManager {
             case 1: return "月度会员";
             case 2: return "季度会员";
             case 3: return "年度会员";
-            case 4: return "终身会员";
+            case 4: return "永久会员";
             default: return "等级" + idx;
         }
     }

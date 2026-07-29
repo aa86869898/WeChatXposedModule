@@ -138,8 +138,6 @@ public class SubPageActivity {
         }
 
         switch (pageId) {
-            case 1:  // 聊天功能
-                return ChatPageView.create(ctx, parentAct);
             case 2:  // 主题美化
                 return ThemePageView.create(ctx, parentAct);
             case 3:  // 联系人和群聊
@@ -148,18 +146,12 @@ public class SubPageActivity {
                 return TTSPageView.create(ctx, parentAct);
             case 9:  // 红包转账
                 return RedPacketPageView.create(ctx, parentAct);
-            case 10: // 朋友圈增强
-                return SnsPageView.create(ctx, parentAct);
-            case 11: // 隐私安全
-                return PrivacyPageView.create(ctx, parentAct);
             case 12: // 数据备份
                 return DataToolsPageView.create(ctx, parentAct);
             case 13: // 通讯录更新日志
                 return ContactChangeLogPageView.create(ctx, parentAct);
             case 91: // 红包转账 > 自动秒抢红包
                 return RedPacketConfigView.create(ctx, parentAct);
-            case 92: // 红包转账 > 自动收款
-                return AutoCollectConfigView.create(ctx, parentAct);
             case 99: // 个人中心
                 return ProfilePageView.create(ctx, parentAct);
             case 98: // 管理员工具
