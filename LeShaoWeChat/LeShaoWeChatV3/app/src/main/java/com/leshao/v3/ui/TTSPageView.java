@@ -1,15 +1,12 @@
 package com.leshao.v3.ui;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -19,9 +16,6 @@ import android.widget.TextView;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.service.TTSBroadcaster;
-
-import java.util.HashSet;
-import java.util.Set;
 
 public class TTSPageView {
 
@@ -48,6 +42,7 @@ public class TTSPageView {
     private static final String KEY_ANNOUNCE_INTERVAL = "ls_announce_interval_ms";
     private static final String KEY_TEXT_CUTOFF = "ls_text_truncate_len";
     private static final String KEY_TEXT_TRUNCATE = "ls_text_truncate";
+    private static final String KEY_TTS_COMMAND = "ls_tts_command";
 
     public static View create(Context ctx, Activity parentAct) {
         float d = ctx.getResources().getDisplayMetrics().density;
@@ -82,6 +77,7 @@ public class TTSPageView {
         boolean truncate = prefs != null && prefs.getBoolean(KEY_TEXT_TRUNCATE, true);
         int cutoff = prefs != null ? Integer.parseInt(prefs.getString(KEY_TEXT_CUTOFF, "150")) : 150;
         float speechRate = prefs != null ? prefs.getFloat("ls_speech_rate", 1.1f) : 1.1f;
+        boolean ttsCommand = prefs != null && prefs.getBoolean(KEY_TTS_COMMAND, false);
 
         root.addView(sectionLabel(ctx, d, "消息播报类型"));
         LinearLayout card1 = makeCard(ctx, d);
@@ -202,34 +198,14 @@ public class TTSPageView {
         }));
         root.addView(card5);
 
-        // 文字转语音按钮
-        root.addView(spacerV(ctx, d, 16));
-        Button ttsBtn = new Button(ctx);
-        ttsBtn.setText("文字转语音");
-        ttsBtn.setTextSize(16);
-        ttsBtn.setTypeface(null, Typeface.BOLD);
-        ttsBtn.setTextColor(AppColors.whiteTextOnAccent());
-        ttsBtn.setBackgroundColor(AppColors.accent());
-        ttsBtn.setPadding((int)(16 * d), (int)(14 * d), (int)(16 * d), (int)(14 * d));
-        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(-1, -2);
-        btnLp.setMargins((int)(8 * d), 0, (int)(8 * d), 0);
-        ttsBtn.setLayoutParams(btnLp);
-        ttsBtn.setOnClickListener(v -> {
-            EditText input = new EditText(ctx);
-            input.setHint("输入要转语音的文字...");
-            input.setMinLines(3);
-            input.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(12 * d));
-            new AlertDialog.Builder(ctx)
-                .setTitle("文字转语音")
-                .setView(input)
-                .setPositiveButton("播放", (d2, w) -> {
-                    String text = input.getText().toString().trim();
-                    if (!text.isEmpty()) TTSBroadcaster.speakText(text);
-                })
-                .setNegativeButton("取消", null)
-                .show();
-        });
-        root.addView(ttsBtn);
+        // 文字转语音开关
+        root.addView(spacerV(ctx, d, 12));
+        root.addView(sectionLabel(ctx, d, "文字转语音"));
+        LinearLayout cardTts = makeCard(ctx, d);
+        cardTts.addView(switchRow(ctx, d, "启用 #tts 指令", "在聊天窗口发送 #tts XXX内容, 自动将文字合成语音消息发出", ttsCommand, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean(KEY_TTS_COMMAND, on).apply();
+        }));
+        root.addView(cardTts);
 
         return root;
     }
