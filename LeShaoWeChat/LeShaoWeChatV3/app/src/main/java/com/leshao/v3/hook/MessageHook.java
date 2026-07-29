@@ -23,6 +23,9 @@ public class MessageHook {
         sClassLoader = cl;
         sMainHandler = new Handler(Looper.getMainLooper());
 
+        LogWriter.log(TAG, "=== v56 IEvent.e hook ===");
+        android.util.Log.e(TAG, "=== v56 IEvent.e hook ===");
+
         hookX9Dispatch(cl);
         hookIEventBus(cl);
     }
