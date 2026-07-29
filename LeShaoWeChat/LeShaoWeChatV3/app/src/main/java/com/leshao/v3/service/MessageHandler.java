@@ -94,9 +94,9 @@ public class MessageHandler {
 
     private void handleVoice() {
         if (mGroupName != null)
-            mTts.speak(str(mSenderName) + "在" + mGroupName + "群说:播放语音");
+            mTts.speak(str(mSenderName) + "在" + mGroupName + "群说:");
         else
-            mTts.speak(str(mSenderName) + "说:播放语音");
+            mTts.speak(str(mSenderName) + "说:");
     }
 
     private void handleImage() {
