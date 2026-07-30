@@ -36,6 +36,7 @@ public class MusicActivity extends Activity {
 
     static final Handler MAIN = new Handler(Looper.getMainLooper());
     static float sDensity;
+    static float sScale = 0.55f;
     static MusicPlayerManager sPlayer;
     static Activity sActivity;
     static MusicActivity sInstance;
@@ -93,7 +94,7 @@ public class MusicActivity extends Activity {
         mPlayerBar.setGravity(Gravity.CENTER_VERTICAL);
         mPlayerBar.setBackgroundColor(CLR_CARD);
         mPlayerBar.setPadding(dp(8), dp(4), dp(8), dp(4));
-        mPlayerBar.setVisibility(View.GONE);
+        mPlayerBar.setVisibility(View.VISIBLE);
         mPlayerBar.setElevation(dp(3));
         mPlayerBar.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(41)));
 
@@ -148,7 +149,13 @@ public class MusicActivity extends Activity {
 
     void refreshPlayerBar() {
         MusicSearchApi.Song song = sPlayer != null ? sPlayer.getCurrent() : null;
-        if (song == null) { mPlayerBar.setVisibility(View.GONE); return; }
+        if (song == null) {
+            mPlayerBar.setVisibility(View.VISIBLE);
+            mPlayerTitle.setText("未在播放");
+            mPlayerPlayBtn.setImageDrawable(emoji("\u25B6", dp(13)));
+            mPlayerCover.setImageBitmap(null);
+            return;
+        }
         mPlayerBar.setVisibility(View.VISIBLE);
         mPlayerTitle.setText(song.title + " - " + song.artist);
         boolean playing = sPlayer.isPlaying();
@@ -287,9 +294,9 @@ public class MusicActivity extends Activity {
         }).start();
     }
 
-    public static int dp(int dp) { return (int) (dp * sDensity + 0.5f); }
+    public static int dp(int dp) { return (int) (dp * sDensity * sScale + 0.5f); }
 
-    public static int dp(float dp) { return (int) (dp * sDensity + 0.5f); }
+    public static int dp(float dp) { return (int) (dp * sDensity * sScale + 0.5f); }
 
     public static GradientDrawable rd(int radius, int color) {
         GradientDrawable g = new GradientDrawable();

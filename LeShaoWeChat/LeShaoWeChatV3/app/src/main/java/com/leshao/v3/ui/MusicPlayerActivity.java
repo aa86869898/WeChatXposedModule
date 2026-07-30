@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15,8 +16,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
-
-import com.leshao.v3.LogWriter;
 
 public class MusicPlayerActivity extends Activity {
 
@@ -47,10 +46,9 @@ public class MusicPlayerActivity extends Activity {
         setContentView(mRoot);
         updateUI();
         startProgressRunner();
-        LogWriter.log("MusicPlayer", "onCreate OK, song=" + (MusicActivity.sPlayer != null ? 
-            (MusicActivity.sPlayer.getCurrent() != null ? MusicActivity.sPlayer.getCurrent().title : "no song") : "player null"));
+        Log.d("MusicPlayer", "onCreate OK");
         } catch (Throwable e) {
-            LogWriter.log("MusicPlayer", "onCreate CRASH: " + e.toString());
+            Log.e("MusicPlayer", "onCreate CRASH: " + Log.getStackTraceString(e));
             finish();
             throw new RuntimeException(e);
         }

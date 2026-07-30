@@ -95,13 +95,13 @@ public class MusicHomeView {
 
     private void buildBanner(LinearLayout parent) {
         FrameLayout banner = new FrameLayout(mActivity);
-        int bannerH = MusicActivity.dp(130);
+        int bannerH = MusicActivity.dp(70);
         LinearLayout.LayoutParams bannerLp = new LinearLayout.LayoutParams(-1, bannerH);
-        bannerLp.topMargin = MusicActivity.dp(8);
-        bannerLp.bottomMargin = MusicActivity.dp(8);
+        bannerLp.topMargin = MusicActivity.dp(4);
+        bannerLp.bottomMargin = MusicActivity.dp(6);
         banner.setLayoutParams(bannerLp);
         banner.setBackground(MusicActivity.gradientRounded(
-            new int[]{MusicActivity.CLR_ACCENT, 0xFF5B9EFF}, 11));
+            new int[]{MusicActivity.CLR_ACCENT, 0xFF5B9EFF}, 8));
         banner.setOnClickListener(v -> {
             if (MusicActivity.sInstance != null) MusicActivity.sInstance.showTab(3);
         });
@@ -110,36 +110,25 @@ public class MusicHomeView {
         inner.setOrientation(LinearLayout.VERTICAL);
         inner.setGravity(Gravity.CENTER);
         FrameLayout.LayoutParams innerLp = new FrameLayout.LayoutParams(-1, -1);
-        int innerPad = MusicActivity.dp(11);
-        inner.setPadding(innerPad, innerPad, innerPad, innerPad);
+        inner.setPadding(0, 0, 0, 0);
         inner.setLayoutParams(innerLp);
 
         TextView emojiView = new TextView(mActivity);
         emojiView.setText("\uD83C\uDFB5");
-        emojiView.setTextSize(25);
+        emojiView.setTextSize(18);
         emojiView.setGravity(Gravity.CENTER);
         inner.addView(emojiView);
 
         TextView title = new TextView(mActivity);
         title.setText("海量音乐 随心畅听");
-        title.setTextSize(13);
+        title.setTextSize(11);
         title.setTextColor(0xFFFFFFFF);
         title.setGravity(Gravity.CENTER);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(-2, -2);
-        titleLp.topMargin = MusicActivity.dp(6);
+        titleLp.topMargin = MusicActivity.dp(4);
         title.setLayoutParams(titleLp);
         inner.addView(title);
-
-        TextView sub = new TextView(mActivity);
-        sub.setText("点击搜索发现更多好音乐");
-        sub.setTextSize(12);
-        sub.setTextColor(0xFFFFFFFF);
-        sub.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(-2, -2);
-        subLp.topMargin = MusicActivity.dp(4);
-        sub.setLayoutParams(subLp);
-        inner.addView(sub);
 
         banner.addView(inner);
         parent.addView(banner);

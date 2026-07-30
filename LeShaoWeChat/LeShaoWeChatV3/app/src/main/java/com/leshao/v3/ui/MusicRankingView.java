@@ -48,9 +48,21 @@ public class MusicRankingView {
         mRoot.setOrientation(LinearLayout.VERTICAL);
         mRoot.setPadding(MusicActivity.dp(11), MusicActivity.dp(10), MusicActivity.dp(11), 0);
 
+        buildTitleBar();
         buildFilterChips();
+
+        mProgressBar = new ProgressBar(mActivity);
+        LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(-2, -2);
+        pbLp.gravity = Gravity.CENTER_HORIZONTAL;
+        pbLp.topMargin = MusicActivity.dp(20);
+        mProgressBar.setLayoutParams(pbLp);
+        mRoot.addView(mProgressBar);
+
         buildRankingList();
+        mRoot.addView(mRankingList);
+
         buildDetailView();
+        mRoot.addView(mDetailScroll);
 
         mRankingScroll.addView(mRoot);
         return mRankingScroll;
@@ -134,8 +146,11 @@ public class MusicRankingView {
     }
 
     private void buildDetailView() {
+        mDetailScroll = new ScrollView(mActivity);
+        mDetailScroll.setVisibility(View.GONE);
         mDetailList = new LinearLayout(mActivity);
         mDetailList.setOrientation(LinearLayout.VERTICAL);
+        mDetailScroll.addView(mDetailList);
     }
 
     private void loadData() {
