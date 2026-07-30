@@ -80,28 +80,28 @@ public class MusicPlayerActivity extends Activity {
         LinearLayout area = new LinearLayout(this);
         area.setOrientation(LinearLayout.VERTICAL);
         area.setGravity(Gravity.CENTER);
-        area.setPadding(0, MusicActivity.dp(20), 0, MusicActivity.dp(16));
+        area.setPadding(0, MusicActivity.dp(12), 0, MusicActivity.dp(10));
 
-        int coverSize = MusicActivity.dp(220);
+        int coverSize = MusicActivity.dp(140);
         mCover = new ImageView(this);
         mCover.setLayoutParams(new LinearLayout.LayoutParams(coverSize, coverSize));
         mCover.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable coverBg = new GradientDrawable();
-        coverBg.setCornerRadius(MusicActivity.dp(16));
+        coverBg.setCornerRadius(MusicActivity.dp(12));
         coverBg.setColor(0xFFDDDDDD);
         mCover.setBackground(coverBg);
         area.addView(mCover);
 
         mTitle = new TextView(this);
-        mTitle.setTextSize(20);
+        mTitle.setTextSize(16);
         mTitle.setTextColor(MusicActivity.CLR_TEXT);
         mTitle.setTypeface(null, Typeface.BOLD);
         mTitle.setSingleLine(true);
-        mTitle.setPadding(0, MusicActivity.dp(16), 0, MusicActivity.dp(6));
+        mTitle.setPadding(0, MusicActivity.dp(12), 0, MusicActivity.dp(4));
         area.addView(mTitle);
 
         mArtist = new TextView(this);
-        mArtist.setTextSize(14);
+        mArtist.setTextSize(12);
         mArtist.setTextColor(MusicActivity.CLR_TEXT2);
         mArtist.setSingleLine(true);
         area.addView(mArtist);
@@ -174,24 +174,24 @@ public class MusicPlayerActivity extends Activity {
         controls.setGravity(Gravity.CENTER);
         controls.setPadding(MusicActivity.dp(16), MusicActivity.dp(12), MusicActivity.dp(16), MusicActivity.dp(8));
 
-        mModeBtn = btn("🔀", 22);
+        mModeBtn = btn("🔀", 16);
         controls.addView(mModeBtn);
 
         View sp1 = new View(this);
         sp1.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1.0f));
         controls.addView(sp1);
 
-        mPrevBtn = btn("⏮", 24);
+        mPrevBtn = btn("⏮", 18);
         mPrevBtn.setOnClickListener(v -> {
             if (MusicActivity.sPlayer != null) { MusicActivity.sPlayer.prev(); updateUI(); }
         });
         controls.addView(mPrevBtn);
 
-        int playSize = MusicActivity.dp(64);
+        int playSize = MusicActivity.dp(44);
         GradientDrawable playBg = new GradientDrawable();
         playBg.setShape(GradientDrawable.OVAL);
         playBg.setColor(MusicActivity.CLR_ACCENT);
-        playBg.setStroke(MusicActivity.dp(3), MusicActivity.CLR_ACCENT);
+        playBg.setStroke(MusicActivity.dp(2), MusicActivity.CLR_ACCENT);
 
         mPlayBtn = new ImageView(this);
         mPlayBtn.setLayoutParams(new LinearLayout.LayoutParams(playSize, playSize));
@@ -202,7 +202,7 @@ public class MusicPlayerActivity extends Activity {
         });
         controls.addView(mPlayBtn);
 
-        mNextBtn = btn("⏭", 24);
+        mNextBtn = btn("⏭", 18);
         mNextBtn.setOnClickListener(v -> {
             if (MusicActivity.sPlayer != null) { MusicActivity.sPlayer.next(); updateUI(); }
         });
@@ -212,7 +212,7 @@ public class MusicPlayerActivity extends Activity {
         sp2.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1.0f));
         controls.addView(sp2);
 
-        TextView listBtn = btn("📋", 22);
+        TextView listBtn = btn("📋", 16);
         controls.addView(listBtn);
 
         mRoot.addView(controls);
@@ -220,7 +220,7 @@ public class MusicPlayerActivity extends Activity {
 
     TextView btn(String emoji, int sizeDp) {
         TextView tv = new TextView(this);
-        int pad = MusicActivity.dp(12);
+        int pad = MusicActivity.dp(8);
         tv.setPadding(pad, pad, pad, pad);
         tv.setText(emoji);
         tv.setTextSize(sizeDp);
@@ -242,7 +242,7 @@ public class MusicPlayerActivity extends Activity {
 
     void updatePlayBtn() {
         boolean playing = MusicActivity.sPlayer != null && MusicActivity.sPlayer.isPlaying();
-        mPlayBtn.setImageDrawable(MusicActivity.emoji(playing ? "\u23F8" : "\u25B6", MusicActivity.dp(22)));
+        mPlayBtn.setImageDrawable(MusicActivity.emoji(playing ? "\u23F8" : "\u25B6", MusicActivity.dp(18)));
     }
 
     void startProgressRunner() {

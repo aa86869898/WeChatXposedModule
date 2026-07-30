@@ -240,10 +240,16 @@ public class MusicActivity extends FragmentActivity {
     }
 
     public static void loadCover(ImageView iv, String url) {
-        if (url == null || url.isEmpty() || !url.startsWith("http")) return;
+        if (url == null || url.isEmpty()) return;
+        if (!url.startsWith("http")) {
+            url = url.startsWith("//") ? "https:" + url : url;
+            if (!url.startsWith("http")) return;
+        }
+        url = url.replace("{size}", "400");
+        String finalUrl = url;
         new Thread(() -> {
             try {
-                java.net.URL u = new java.net.URL(url.replace("{size}", "200"));
+                java.net.URL u = new java.net.URL(finalUrl);
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
                 conn.setConnectTimeout(5000);
                 conn.setReadTimeout(5000);
@@ -252,7 +258,10 @@ public class MusicActivity extends FragmentActivity {
                 android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
                 is.close();
                 conn.disconnect();
-                if (bmp != null) MAIN.post(() -> iv.setImageBitmap(bmp));
+                if (bmp != null) MAIN.post(() -> {
+                    iv.setImageBitmap(bmp);
+                    iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                });
             } catch (Throwable ignored) {}
         }).start();
     }
@@ -286,21 +295,19 @@ public class MusicActivity extends FragmentActivity {
     }
 
     public static android.graphics.drawable.Drawable emoji(String emoji, int sizePx) {
-        TextView tv = new TextView(sActivity);
-        tv.setText(emoji);
-        tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, sizePx);
-        tv.setGravity(Gravity.CENTER);
-        tv.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        tv.layout(0, 0, tv.getMeasuredWidth(), tv.getMeasuredHeight());
-        tv.setDrawingCacheEnabled(true);
-        tv.buildDrawingCache();
-        android.graphics.Bitmap bmp = tv.getDrawingCache();
-        if (bmp != null) {
-            return new android.graphics.drawable.BitmapDrawable(
-                sActivity.getResources(), android.graphics.Bitmap.createBitmap(bmp));
-        }
-        return null;
+        android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        paint.setTextSize(sizePx);
+        float w = paint.measureText(emoji);
+        android.graphics.Paint.FontMetrics fm = paint.getFontMetrics();
+        float h = fm.bottom - fm.top;
+        if (w <= 0 || h <= 0) { w = sizePx; h = sizePx; }
+        android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(
+            (int) Math.ceil(w) + 1, (int) Math.ceil(h) + 1,
+            android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(bmp);
+        canvas.drawText(emoji, 0, -fm.top, paint);
+        return new android.graphics.drawable.BitmapDrawable(
+            sActivity != null ? sActivity.getResources() : null, bmp);
     }
 
     public static void toast(String msg) {
