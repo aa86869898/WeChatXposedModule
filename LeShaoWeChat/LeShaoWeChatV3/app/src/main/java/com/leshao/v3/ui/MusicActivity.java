@@ -9,6 +9,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -19,6 +20,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
+import com.leshao.v3.LogWriter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -57,32 +59,41 @@ public class MusicActivity extends FragmentActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        sDensity = getResources().getDisplayMetrics().density;
-        sPlayer = MusicPlayerManager.get(this);
-        sActivity = this;
-        sInstance = this;
+        try {
+            sDensity = getResources().getDisplayMetrics().density;
+            sPlayer = MusicPlayerManager.get(this);
+            sActivity = this;
+            sInstance = this;
 
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(CLR_BG);
+            LinearLayout root = new LinearLayout(this);
+            root.setOrientation(LinearLayout.VERTICAL);
+            root.setBackgroundColor(CLR_BG);
 
-        mContent = new FrameLayout(this);
-        mContent.setId(View.generateViewId());
-        mContent.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1.0f));
-        root.addView(mContent);
+            mContent = new FrameLayout(this);
+            mContent.setId(View.generateViewId());
+            mContent.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1.0f));
+            root.addView(mContent);
 
-        buildPlayerBar();
-        root.addView(mPlayerBar);
+            buildPlayerBar();
+            root.addView(mPlayerBar);
 
-        buildBottomNav();
-        root.addView(mBottomNav);
+            buildBottomNav();
+            root.addView(mBottomNav);
 
-        setContentView(root);
+            setContentView(root);
 
-        getSupportFragmentManager().beginTransaction()
-            .replace(mContent.getId(), new MusicHomeFragment()).commit();
-        mCurrentFrag = new MusicHomeFragment();
-        mCurrentTab = 0;
+            getSupportFragmentManager().beginTransaction()
+                .replace(mContent.getId(), new MusicHomeFragment()).commit();
+            mCurrentFrag = new MusicHomeFragment();
+            mCurrentTab = 0;
+
+            LogWriter.log("MusicActivity", "onCreate OK");
+            Toast.makeText(this, "乐少音乐已启动", Toast.LENGTH_SHORT).show();
+        } catch (Throwable e) {
+            LogWriter.log("MusicActivity", "onCreate CRASH: " + Log.getStackTraceString(e));
+            Toast.makeText(this, "启动失败: " + e.toString(), Toast.LENGTH_LONG).show();
+            finish();
+        }
     }
 
     void buildPlayerBar() {
