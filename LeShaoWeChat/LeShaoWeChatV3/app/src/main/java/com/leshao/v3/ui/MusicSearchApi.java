@@ -24,10 +24,6 @@ public class MusicSearchApi {
     private static final ExecutorService sExecutor = Executors.newFixedThreadPool(4);
     private static final Handler sHandler = new Handler(Looper.getMainLooper());
 
-    static {
-        MusicLog.init();
-    }
-
     public static class Song {
         public String id;
         public String title;

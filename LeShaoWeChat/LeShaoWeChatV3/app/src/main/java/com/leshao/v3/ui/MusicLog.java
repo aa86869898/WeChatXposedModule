@@ -12,50 +12,21 @@ import java.util.Locale;
 
 public class MusicLog {
 
+    private static final String LOG_DIR = "/sdcard/leshao_v3_logs";
     private static final String LOG_FILE = "music_log.txt";
     private static final long MAX_SIZE = 256 * 1024;
     private static boolean sReady;
     private static File sLogFile;
-    private static String sExtDir;
-
-    public static synchronized void init() {
-        init((Context) null);
-    }
 
     public static synchronized void init(Context ctx) {
         if (sReady) return;
         try {
-            File bestFile = null;
-
-            // 1. 首选: app内部文件目录(免权限,永远可用)
-            if (ctx != null) {
-                File internalDir = ctx.getFilesDir();
-                if (internalDir != null && internalDir.exists()) {
-                    bestFile = new File(internalDir, LOG_FILE);
-                    i("MusicLog", "using internal: " + bestFile.getAbsolutePath());
-                }
-            }
-            // 2. 兜底: 硬编码 WeChat 内部路径
-            if (bestFile == null) {
-                File fallbackDir = new File("/data/data/com.tencent.mm/files");
-                fallbackDir.mkdirs();
-                bestFile = new File(fallbackDir, LOG_FILE);
-                i("MusicLog", "using fallback: " + bestFile.getAbsolutePath());
-            }
-
-            sLogFile = bestFile;
+            File dir = new File(LOG_DIR);
+            dir.mkdirs();
+            sLogFile = new File(dir, LOG_FILE);
             sReady = true;
-
-            // 同时尝试外部存储根目录(有权限时可用)
-            try {
-                File extDir = new File("/sdcard");
-                File extFile = new File(extDir, LOG_FILE);
-                if (extFile.exists() || extDir.canWrite()) {
-                    sExtDir = "/sdcard";
-                }
-            } catch (Throwable ignored) {}
-
-            write("I", "MusicLog", "init OK, primary=" + (sLogFile != null ? sLogFile.getAbsolutePath() : "null") + " ext=" + sExtDir);
+            Log.i("MusicLog", "init OK, path=" + sLogFile.getAbsolutePath());
+            writeRaw("MusicLog init OK, path=" + sLogFile.getAbsolutePath());
         } catch (Throwable t) {
             Log.e("MusicLog", "init FAILED", t);
         }
@@ -76,27 +47,31 @@ public class MusicLog {
 
     private static synchronized void write(String level, String tag, String msg) {
         Log.println(level.equals("E") ? Log.ERROR : Log.INFO, "Music:" + tag, msg);
-        if (!sReady || sLogFile == null) init();
         if (!sReady || sLogFile == null) return;
+        writeToFile(level, tag, msg);
+    }
+
+    private static void writeRaw(String msg) {
+        if (sLogFile == null) return;
         try {
-            writeToFile(sLogFile, level, tag, msg);
-            if (sExtDir != null) {
-                writeToFile(new File(sExtDir, LOG_FILE), level, tag, msg);
-            }
+            String ts = new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(new Date());
+            PrintWriter pw = new PrintWriter(new FileWriter(sLogFile, true));
+            pw.println(ts + " [main] " + msg);
+            pw.close();
         } catch (Throwable ignored) {}
     }
 
-    private static void writeToFile(File file, String level, String tag, String msg) {
+    private static void writeToFile(String level, String tag, String msg) {
         try {
-            if (file.exists() && file.length() > MAX_SIZE) {
-                File bak = new File(file.getParent(), LOG_FILE + ".bak");
+            if (sLogFile.exists() && sLogFile.length() > MAX_SIZE) {
+                File bak = new File(sLogFile.getParent(), LOG_FILE + ".bak");
                 bak.delete();
-                file.renameTo(bak);
+                sLogFile.renameTo(bak);
             }
             String ts = new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(new Date());
             String thread = Thread.currentThread().getName();
             String line = ts + " [" + thread + "] " + level + "/" + tag + ": " + msg;
-            PrintWriter pw = new PrintWriter(new FileWriter(file, true));
+            PrintWriter pw = new PrintWriter(new FileWriter(sLogFile, true));
             pw.println(line);
             pw.close();
         } catch (Throwable ignored) {}
@@ -104,6 +79,6 @@ public class MusicLog {
 
     public static String logPath() {
         if (sLogFile != null) return sLogFile.getAbsolutePath();
-        return "unknown";
+        return LOG_DIR + "/" + LOG_FILE;
     }
 }
