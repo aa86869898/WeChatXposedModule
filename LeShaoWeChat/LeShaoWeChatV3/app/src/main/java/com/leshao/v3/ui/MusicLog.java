@@ -12,7 +12,7 @@ import java.util.Locale;
 
 public class MusicLog {
 
-    private static final String LOG_DIR = "/sdcard/leshao_v3_logs";
+    private static final String LOG_DIR = "/data/data/com.tencent.mm/files/leshao_v3";
     private static final String LOG_FILE = "music_log.txt";
     private static final long MAX_SIZE = 256 * 1024;
     private static boolean sReady;
