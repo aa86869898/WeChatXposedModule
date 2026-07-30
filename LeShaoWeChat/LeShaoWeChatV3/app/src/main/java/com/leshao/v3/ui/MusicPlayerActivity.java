@@ -20,6 +20,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
+import android.widget.Toast;
 import java.util.List;
 import java.util.Locale;
 
@@ -46,6 +47,8 @@ public class MusicPlayerActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        MusicLog.init();
+        MusicLog.i("PlayerActivity", "onCreate start");
         try {
             mRoot = new LinearLayout(this);
             mRoot.setOrientation(LinearLayout.VERTICAL);
@@ -63,9 +66,11 @@ public class MusicPlayerActivity extends Activity {
             updateUI();
             startDiscAnim();
             startProgressRunner();
-            Log.d("MusicPlayer", "onCreate OK");
+            MusicLog.i("PlayerActivity", "onCreate OK");
         } catch (Throwable e) {
-            Log.e("MusicPlayer", "onCreate CRASH: " + Log.getStackTraceString(e));
+            MusicLog.e("PlayerActivity", "onCreate CRASH", e);
+            Log.e("MusicPlayer", "onCreate CRASH", e);
+            Toast.makeText(this, "播放器崩溃: " + e.toString(), Toast.LENGTH_LONG).show();
             finish();
         }
     }

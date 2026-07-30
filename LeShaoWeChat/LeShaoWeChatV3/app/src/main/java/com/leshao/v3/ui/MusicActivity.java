@@ -58,7 +58,7 @@ public class MusicActivity extends Activity {
         super.onCreate(savedInstanceState);
         try {
             MusicLog.init();
-            MusicLog.i("MusicActivity", "onCreate start, v=1.4.7-music");
+            MusicLog.i("MusicActivity", "onCreate start, v=1.4.8-music");
             sDensity = getResources().getDisplayMetrics().density;
             int rid = getResources().getIdentifier("status_bar_height", "dimen", "android");
             sStatusBarH = rid > 0 ? getResources().getDimensionPixelSize(rid) : dp(24);

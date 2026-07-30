@@ -11,8 +11,8 @@ android {
         applicationId = "com.leshao.v3"
         minSdk = 24
         targetSdk = 35
-        versionCode = 15
-        versionName = "1.4.7-music"
+        versionCode = 16
+        versionName = "1.4.8-music"
     }
 
     signingConfigs {
