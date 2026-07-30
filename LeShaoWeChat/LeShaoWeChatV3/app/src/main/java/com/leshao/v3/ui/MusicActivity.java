@@ -18,7 +18,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-import com.leshao.v3.LogWriter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -80,9 +79,9 @@ public class MusicActivity extends Activity {
 
             showTab(0);
 
-            LogWriter.log("MusicActivity", "onCreate OK");
+            Log.d("MusicActivity", "onCreate OK");
         } catch (Throwable e) {
-            LogWriter.log("MusicActivity", "onCreate CRASH: " + Log.getStackTraceString(e));
+            Log.e("MusicActivity", "onCreate CRASH: " + Log.getStackTraceString(e));
             Toast.makeText(this, "启动失败: " + e.toString(), Toast.LENGTH_LONG).show();
             finish();
         }

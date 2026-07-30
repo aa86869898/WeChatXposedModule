@@ -38,7 +38,7 @@ public class LogWriter {
         String ts = new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(new Date());
         String thread = Thread.currentThread().getName();
         String line = ts + " [" + thread + "] " + tag + ": " + msg;
-        XposedBridge.log("LeShaoV3: " + tag + ": " + msg);
+        try { XposedBridge.log("LeShaoV3: " + tag + ": " + msg); } catch (Throwable ignored) {}
         writeLine(line);
     }
 
