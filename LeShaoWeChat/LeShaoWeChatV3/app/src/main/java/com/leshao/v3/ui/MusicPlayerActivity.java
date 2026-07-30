@@ -16,6 +16,8 @@ import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
+import com.leshao.v3.LogWriter;
+
 public class MusicPlayerActivity extends Activity {
 
     private ImageView mCover, mPlayBtn;
@@ -30,7 +32,7 @@ public class MusicPlayerActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
+        try {
         mRoot = new LinearLayout(this);
         mRoot.setOrientation(LinearLayout.VERTICAL);
         mRoot.setBackgroundColor(MusicActivity.CLR_BG);
@@ -45,6 +47,13 @@ public class MusicPlayerActivity extends Activity {
         setContentView(mRoot);
         updateUI();
         startProgressRunner();
+        LogWriter.log("MusicPlayer", "onCreate OK, song=" + (MusicActivity.sPlayer != null ? 
+            (MusicActivity.sPlayer.getCurrent() != null ? MusicActivity.sPlayer.getCurrent().title : "no song") : "player null"));
+        } catch (Throwable e) {
+            LogWriter.log("MusicPlayer", "onCreate CRASH: " + e.toString());
+            finish();
+            throw new RuntimeException(e);
+        }
     }
 
     void buildHeader() {

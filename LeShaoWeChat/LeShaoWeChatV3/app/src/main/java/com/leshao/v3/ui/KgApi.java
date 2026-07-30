@@ -4,6 +4,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import com.leshao.v3.LogWriter;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -793,11 +795,13 @@ public class KgApi {
 
     private static void songListError(SongListCallback cb, String msg) {
         Log.e(TAG, msg);
+        LogWriter.log(TAG, msg);
         MAIN.post(() -> cb.onResult(new ArrayList<>(), 0));
     }
 
     private static void callbackError(Object cb, String msg) {
         Log.e(TAG, msg);
+        LogWriter.log(TAG, msg);
         if (cb instanceof PlaylistCallback) MAIN.post(() -> postEmptyPlaylists((PlaylistCallback) cb));
         else if (cb instanceof StringCallback) MAIN.post(() -> ((StringCallback) cb).onError(msg));
         else if (cb instanceof PlayUrlCallback) MAIN.post(() -> ((PlayUrlCallback) cb).onError(msg));

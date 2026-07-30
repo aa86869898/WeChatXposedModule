@@ -1,987 +1,354 @@
-07-30 09:27:39.604 [main] ChatBackup: found DB at /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
-07-30 09:27:39.618 [main] ChatBackup: backup err: cannot create dir /sdcard/leshao_v3_logs/backup
-07-30 09:30:38.348 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-30 09:30:38.353 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-30 09:30:38.355 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-30 09:30:38.355 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-30 09:30:38.356 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-30 09:30:38.357 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
-07-30 09:30:38.358 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-30 09:30:38.359 [main] ContactRepository: init: DB ready listener registered
-07-30 09:30:38.360 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-30 09:30:38.361 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-30 09:30:38.361 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-30 09:30:38.363 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-30 09:30:38.378 [main] SettingsEntryHook: LauncherUI entry hooks ok
-07-30 09:30:38.379 [main] SettingsEntryHook: INIT: hooks registered ok
-07-30 09:30:38.380 [main] MessageHook: === v56 IEvent.e hook ===
-07-30 09:30:38.382 [main] MessageHook: hooked x9.C(1)
-07-30 09:30:38.383 [main] MessageHook: hooked x9.e(2)
-07-30 09:30:38.384 [main] MessageHook: hooked x9.n(2)
-07-30 09:30:38.385 [main] MessageHook: hooked x9.x(1)
-07-30 09:30:38.385 [main] MessageHook: x9 hooks installed: 4 methods
-07-30 09:30:38.386 [main] MessageHook: IEvent.e() hooked OK
-07-30 09:30:38.390 [main] AutoJoinGroup: r0构造: int q0 p0 
-07-30 09:30:38.391 [main] AutoJoinGroup: jd0.f2构造: String 
-07-30 09:30:38.392 [main] AutoJoinGroup: RecogQBar构造: 
-07-30 09:30:38.392 [main] AutoJoinGroup: RecogQBarInnerClz: am.bq
-07-30 09:30:38.393 [main] AutoJoinGroup:   g.a : long
-07-30 09:30:38.393 [main] AutoJoinGroup:   g.b : String
-07-30 09:30:38.394 [main] AutoJoinGroup:   g.c : Bitmap
-07-30 09:30:38.394 [main] AutoJoinGroup:   g.d : Set
-07-30 09:30:38.395 [main] AutoJoinGroup:   g.e : boolean
-07-30 09:30:38.395 [main] AutoJoinGroup:   g.f : int
-07-30 09:30:38.396 [main] AutoJoinGroup:   g.g : boolean
-07-30 09:30:38.396 [main] AutoJoinGroup:   g.h : String
-07-30 09:30:38.397 [main] AutoJoinGroup:   g.i : ScanCodeInfo
-07-30 09:30:38.398 [main] AutoJoinGroup:   g.j : int
-07-30 09:30:38.398 [main] AutoJoinGroup: RecogQBarResult inner=am.dq
-07-30 09:30:38.399 [main] AutoJoinGroup:   rg.a : String
-07-30 09:30:38.400 [main] AutoJoinGroup:   rg.b : ArrayList
-07-30 09:30:38.400 [main] AutoJoinGroup:   rg.c : ArrayList
-07-30 09:30:38.400 [main] AutoJoinGroup:   rg.d : ArrayList
-07-30 09:30:38.401 [main] AutoJoinGroup:   rg.e : ArrayList
-07-30 09:30:38.401 [main] AutoJoinGroup:   rg.f : ArrayList
-07-30 09:30:38.402 [main] AutoJoinGroup:   rg.g : int
-07-30 09:30:38.402 [main] AutoJoinGroup:   rg.h : int
-07-30 09:30:38.403 [main] AutoJoinGroup:   rg.i : ArrayList
-07-30 09:30:38.403 [main] AutoJoinGroup:   rg.j : ArrayList
-07-30 09:30:38.404 [main] AutoJoinGroup:   rg.k : int
-07-30 09:30:38.404 [main] AutoJoinGroup:   rg.l : boolean
-07-30 09:30:38.405 [main] AutoJoinGroup:   rg.m : ArrayList
-07-30 09:30:38.405 [main] AutoJoinGroup:   rg.n : l
-07-30 09:30:38.406 [main] AutoJoinGroup: QR监听已挂载 + FileOutputStream hook OK
-07-30 09:30:38.413 [main] ContextManager: attachBaseContext DONE, ready=true
-07-30 09:30:38.414 [main] DatabaseProvider: init: already hooked via initEarly, skipping
-07-30 09:30:38.416 [main] SettingsInject: INIT: registered
-07-30 09:30:38.420 [main] TTSBroadcaster: TTS init done
-07-30 09:30:38.424 [main] VAP: k0 class NOT found: java.lang.ClassNotFoundException: com$tencent$mm$model$k0
-07-30 09:30:38.425 [main] VAP: init: k0=false so=true u0=true x0=true j=true
-07-30 09:30:38.431 [main] VAP: voice2: /data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2
-07-30 09:30:38.434 [main] VAP: so.y() hook OK
-07-30 09:30:38.435 [main] VAP: volumeKeyPause hook OK
-07-30 09:30:38.437 [main] ModuleConfig: initWxid: wxid_qf3ok46p08v922
-07-30 09:30:38.449 [main] LeShaoV3: [MainHook] activateAll() START, pendingTasks=31
-07-30 09:30:38.450 [main] LeShaoV3: !!! DEBUG: AutoJoinGroup about to hook, class=com.leshao.v3.AutoJoinGroup
-07-30 09:30:38.452 [main] AntiRecallHook: [XML] Hooked: af5.a.run()
-07-30 09:30:38.453 [main] AntiRecallHook: [Proto] Hooked: e01.u.f()
-07-30 09:30:38.456 [main] AntiRecallHook: [协程] Hooked: bd0.s.invokeSuspend()
-07-30 09:30:38.457 [main] AntiRecallHook: anti-recall hooks installed (4 paths)
-07-30 09:30:38.460 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewReceiveUI.initView()
-07-30 09:30:38.461 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI.initView()
-07-30 09:30:38.465 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI.onCreate()
-07-30 09:30:38.467 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2.onCreate()
-07-30 09:30:38.469 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI.onCreate()
-07-30 09:30:38.471 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKBeforeDetailUI.onCreate()
-07-30 09:30:38.483 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewDetailUI.onCreate()
-07-30 09:30:38.484 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI.onCreate()
-07-30 09:30:38.486 [main] RedPacket: [OK] ChattingUI.onResume()
-07-30 09:30:38.487 [main] RedPacket: RP OK
-07-30 09:30:38.489 [main] RedPacket: hooks installed (open result + UI auto-click + TTS UI)
-07-30 09:30:38.493 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.496 [main] LeShaoV3: [Footer] 字数限制已解除 (返回'0')
-07-30 09:30:38.500 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.504 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.509 [main] LeShaoV3: --- [6] 定时发送 ---
-07-30 09:30:38.509 [main] LeShaoV3:   ChatFooter.F(e9,a35.g)→boolean ✓
-07-30 09:30:38.511 [main] LeShaoV3:   ChatFooterCustom.r(10 params) ✓
-07-30 09:30:38.512 [main] LeShaoV3:   ChatFooterCustom.onClick(View) ✓
-07-30 09:30:38.513 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.516 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.518 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.519 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.520 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.521 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.522 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.522 [main] LeShaoV3: --- [10] 好友删除检测 ---
-07-30 09:30:38.523 [main] LeShaoV3:   ContactInfoUI.D2() + onResume() ✓
-07-30 09:30:38.523 [main] LeShaoV3:   SendMsgSuccessEvent ✓
-07-30 09:30:38.524 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.532 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.533 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.534 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.538 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.539 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.540 [main] HideFields: hook initView OK
-07-30 09:30:38.541 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.542 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.545 [main] ContactChangeLog: hook installing...
-07-30 09:30:38.547 [main] ContactChangeLog: GetContactService not found: java.lang.ClassNotFoundException: com$tencent$mm$plugin$getcontact$l11$h
-07-30 09:30:38.547 [main] ContactChangeLog: [v.b] hook ok
-07-30 09:30:38.549 [main] ContactChangeLog: hook installed OK
-07-30 09:30:38.566 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.567 [main] MsgExport: menu hook OK
-07-30 09:30:38.569 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.573 [main] ChatBackup: daily backup scheduled at 02:00
-07-30 09:30:38.573 [main] ChatBackup: hook OK
-07-30 09:30:38.575 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:38.579 [main] ThemeHook: loadColors done
-07-30 09:30:38.580 [main] ThemeHook: state: m=true bar=false page=false chatBg=false bubble=false tab=false text=false
-07-30 09:30:38.583 [main] ThemeHook: [A] ok
-07-30 09:30:38.585 [main] ThemeHook: [B] ok
-07-30 09:30:38.587 [main] ThemeHook: [C] ga.E0 title ok
-07-30 09:30:38.589 [main] ThemeHook: [C] dim-scan ok
-07-30 09:30:38.591 [main] ThemeHook: [D] ok
-07-30 09:30:38.592 [main] ThemeHook: [E] com.tencent.mm.ui.conversation.MainUI ok
-07-30 09:30:38.595 [main] ThemeHook: [F] p0 extra hook ok
-07-30 09:30:38.596 [main] ThemeHook: [F] DyeTemplate l0+n0 ok
-07-30 09:30:38.599 [main] ThemeHook: [H] ok
-07-30 09:30:38.602 [main] ThemeHook: [X] addView scan ok
-07-30 09:30:38.603 [main] ThemeHook: [G] ChattingUI ok
-07-30 09:30:38.603 [main] ThemeHook: [L] dark sync ok
-07-30 09:30:38.604 [main] ThemeHook: [M] settings bg ok
-07-30 09:30:38.606 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivity ok
-07-30 09:30:38.606 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivityJava ok
-07-30 09:30:38.607 [main] ThemeHook: [O] MMFragment ok
-07-30 09:30:38.608 [main] ThemeHook: [O] MMFragmentActivity ok
-07-30 09:30:38.610 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooter ok
-07-30 09:30:38.611 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooterBottom ok
-07-30 09:30:38.612 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.ChatFooterPanel ok
-07-30 09:30:38.613 [main] ThemeHook: [P] com.tencent.mm.ui.chatting.ChattingFooterMoreBtnBar ok
-07-30 09:30:38.614 [main] ThemeHook: [P] ChattingImageBGView ok
-07-30 09:30:38.615 [main] ThemeHook: [Q] SnsTimeLineUI ok
-07-30 09:30:38.616 [main] ThemeHook: [Q] ImproveSnsTimelineUI ok
-07-30 09:30:38.617 [main] ThemeHook: [Q] ContactInfoUI ok
-07-30 09:30:38.618 [main] ThemeHook: [Q] AddressUI ok
-07-30 09:30:38.620 [main] ThemeHook: [Q] FindMoreFriendsUI ok
-07-30 09:30:38.621 [main] ThemeHook: [Q] WebViewUI ok
-07-30 09:30:38.622 [main] ThemeHook: [Q] MainSettingsUI ok
-07-30 09:30:38.623 [main] ThemeHook: [Q] CommonSettingsUI ok
-07-30 09:30:38.623 [main] ThemeHook: [Q] BizConversationUI ok
-07-30 09:30:38.625 [main] ThemeHook: [Q] SnsUserUI ok
-07-30 09:30:38.626 [main] ThemeHook: [Q] SnsCommentUI ok
-07-30 09:30:38.627 [main] ThemeHook: [Q] SnsUploadUI ok
-07-30 09:30:38.628 [main] ThemeHook: [Q] ContactProfileUI ok
-07-30 09:30:38.630 [main] ThemeHook: [Q] ConversationListView ok
-07-30 09:30:38.633 [main] ThemeHook: [Q] ConversationFolderItemView ok
-07-30 09:30:38.635 [main] ThemeHook: [Q] MainUIView ok
-07-30 09:30:38.640 [main] ThemeHook: [Q] ChattingItemFooter ok
-07-30 09:30:38.642 [main] ThemeHook: [Q] SnsHeader ok
-07-30 09:30:38.644 [main] ThemeHook: [Q] SnsCollapsibleTextView ok
-07-30 09:30:38.646 [main] ThemeHook: [Q] TimelineCommentView ok
-07-30 09:30:38.648 [main] ThemeHook: [Q] LauncherUIBottomTabView ok
-07-30 09:30:38.649 [main] ThemeHook: all hooks installed
-07-30 09:30:43.967 [main] VF: scan [com.tencent.mm.ui.chatting.viewitems, com.tencent.mm.ui.chatting.component]: 2076 classes, 1161 methods
-07-30 09:30:43.969 [main] VF: MenuBuilder.add hooked
-07-30 09:30:43.971 [main] VF: viewitems+component+MenuBuilder hooks installed
-07-30 09:30:45.597 [main] VF: ◆discovered g(): y21.x0.g(String,String)→String (trusted, ITE on init)
-07-30 09:30:45.598 [main] VF: ◆discovered t(): y21.x0.t(t(String,int,int,e9)→boolean)
-07-30 09:30:45.614 [main] VF: discoverVoiceApi: g=y21.x0.g t=y21.x0.t path=null.null
-07-30 09:30:45.632 [main] VF: ready — do a native forward to trace API
-07-30 09:30:45.637 [main] TtsVoiceSender: SendMsgSuccessEvent hooked OK
-07-30 09:30:45.641 [main] LeShaoV3: [MainHook] activateAll() DONE
-07-30 09:30:46.088 [main] TtsEngine: TTS init OK rate=1.1
-07-30 09:30:46.097 [main] TtsVoiceSender: TTS init: OK
-07-30 09:30:53.605 [[GT]ColdPool#11] MessageHook: #1 type=754974769->49 isSend=0 msgId=2966923276826229552 talker=44509651297@chatroom content=wxid_hyh5uj7viecy21:
+07-30 09:57:54.207 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-30 09:57:54.208 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-30 09:57:54.211 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-30 09:57:54.213 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-30 09:57:54.215 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-30 09:57:54.216 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-30 09:57:54.217 [main] ContextManager: init: apk=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+07-30 09:57:54.219 [main] ContactRepository: init: DB ready listener registered
+07-30 09:57:54.219 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-30 09:57:54.220 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-30 09:57:54.221 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-30 09:57:54.222 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-30 09:57:54.248 [main] SettingsEntryHook: LauncherUI entry hooks ok
+07-30 09:57:54.248 [main] SettingsEntryHook: INIT: hooks registered ok
+07-30 09:57:54.249 [main] MessageHook: === v56 IEvent.e hook ===
+07-30 09:57:54.252 [main] MessageHook: hooked x9.C(1)
+07-30 09:57:54.253 [main] MessageHook: hooked x9.e(2)
+07-30 09:57:54.254 [main] MessageHook: hooked x9.n(2)
+07-30 09:57:54.255 [main] MessageHook: hooked x9.x(1)
+07-30 09:57:54.255 [main] MessageHook: x9 hooks installed: 4 methods
+07-30 09:57:54.256 [main] MessageHook: IEvent.e() hooked OK
+07-30 09:57:54.260 [main] AutoJoinGroup: r0构造: int q0 p0 
+07-30 09:57:54.261 [main] AutoJoinGroup: jd0.f2构造: String 
+07-30 09:57:54.262 [main] AutoJoinGroup: RecogQBar构造: 
+07-30 09:57:54.263 [main] AutoJoinGroup: RecogQBarInnerClz: am.bq
+07-30 09:57:54.264 [main] AutoJoinGroup:   g.a : long
+07-30 09:57:54.264 [main] AutoJoinGroup:   g.b : String
+07-30 09:57:54.265 [main] AutoJoinGroup:   g.c : Bitmap
+07-30 09:57:54.265 [main] AutoJoinGroup:   g.d : Set
+07-30 09:57:54.265 [main] AutoJoinGroup:   g.e : boolean
+07-30 09:57:54.266 [main] AutoJoinGroup:   g.f : int
+07-30 09:57:54.266 [main] AutoJoinGroup:   g.g : boolean
+07-30 09:57:54.267 [main] AutoJoinGroup:   g.h : String
+07-30 09:57:54.267 [main] AutoJoinGroup:   g.i : ScanCodeInfo
+07-30 09:57:54.267 [main] AutoJoinGroup:   g.j : int
+07-30 09:57:54.268 [main] AutoJoinGroup: RecogQBarResult inner=am.dq
+07-30 09:57:54.268 [main] AutoJoinGroup:   rg.a : String
+07-30 09:57:54.269 [main] AutoJoinGroup:   rg.b : ArrayList
+07-30 09:57:54.269 [main] AutoJoinGroup:   rg.c : ArrayList
+07-30 09:57:54.270 [main] AutoJoinGroup:   rg.d : ArrayList
+07-30 09:57:54.270 [main] AutoJoinGroup:   rg.e : ArrayList
+07-30 09:57:54.271 [main] AutoJoinGroup:   rg.f : ArrayList
+07-30 09:57:54.271 [main] AutoJoinGroup:   rg.g : int
+07-30 09:57:54.272 [main] AutoJoinGroup:   rg.h : int
+07-30 09:57:54.272 [main] AutoJoinGroup:   rg.i : ArrayList
+07-30 09:57:54.273 [main] AutoJoinGroup:   rg.j : ArrayList
+07-30 09:57:54.273 [main] AutoJoinGroup:   rg.k : int
+07-30 09:57:54.274 [main] AutoJoinGroup:   rg.l : boolean
+07-30 09:57:54.274 [main] AutoJoinGroup:   rg.m : ArrayList
+07-30 09:57:54.275 [main] AutoJoinGroup:   rg.n : l
+07-30 09:57:54.275 [main] AutoJoinGroup: QR监听已挂载 + FileOutputStream hook OK
+07-30 09:57:54.283 [main] ContextManager: attachBaseContext DONE, ready=true
+07-30 09:57:54.283 [main] DatabaseProvider: init: already hooked via initEarly, skipping
+07-30 09:57:54.284 [main] SettingsInject: INIT: registered
+07-30 09:57:54.291 [main] TTSBroadcaster: TTS init done
+07-30 09:57:54.293 [main] VAP: k0 class NOT found: java.lang.ClassNotFoundException: com$tencent$mm$model$k0
+07-30 09:57:54.295 [main] VAP: init: k0=false so=true u0=true x0=true j=true
+07-30 09:57:54.298 [main] VAP: voice2: /data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2
+07-30 09:57:54.299 [main] VAP: so.y() hook OK
+07-30 09:57:54.300 [main] VAP: volumeKeyPause hook OK
+07-30 09:57:54.302 [main] ModuleConfig: initWxid: wxid_qf3ok46p08v922
+07-30 09:57:54.308 [main] LeShaoV3: [MainHook] activateAll() START, pendingTasks=31
+07-30 09:57:54.309 [main] LeShaoV3: !!! DEBUG: AutoJoinGroup about to hook, class=com.leshao.v3.AutoJoinGroup
+07-30 09:57:54.311 [main] AntiRecallHook: [XML] Hooked: af5.a.run()
+07-30 09:57:54.312 [main] AntiRecallHook: [Proto] Hooked: e01.u.f()
+07-30 09:57:54.314 [main] AntiRecallHook: [协程] Hooked: bd0.s.invokeSuspend()
+07-30 09:57:54.315 [main] AntiRecallHook: anti-recall hooks installed (4 paths)
+07-30 09:57:54.317 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewReceiveUI.initView()
+07-30 09:57:54.319 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI.initView()
+07-30 09:57:54.320 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI.onCreate()
+07-30 09:57:54.321 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2.onCreate()
+07-30 09:57:54.322 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI.onCreate()
+07-30 09:57:54.323 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.hk.ui.LuckyMoneyHKBeforeDetailUI.onCreate()
+07-30 09:57:54.324 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyNewDetailUI.onCreate()
+07-30 09:57:54.325 [main] RedPacket: [OK] com.tencent.mm.plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI.onCreate()
+07-30 09:57:54.326 [main] RedPacket: [OK] ChattingUI.onResume()
+07-30 09:57:54.328 [main] RedPacket: RP OK
+07-30 09:57:54.328 [main] RedPacket: hooks installed (open result + UI auto-click + TTS UI)
+07-30 09:57:54.332 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.335 [main] LeShaoV3: [Footer] 字数限制已解除 (返回'0')
+07-30 09:57:54.337 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.341 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.347 [main] LeShaoV3: --- [6] 定时发送 ---
+07-30 09:57:54.348 [main] LeShaoV3:   ChatFooter.F(e9,a35.g)→boolean ✓
+07-30 09:57:54.352 [main] LeShaoV3:   ChatFooterCustom.r(10 params) ✓
+07-30 09:57:54.354 [main] LeShaoV3:   ChatFooterCustom.onClick(View) ✓
+07-30 09:57:54.355 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.359 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.361 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.362 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.364 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.366 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.367 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.367 [main] LeShaoV3: --- [10] 好友删除检测 ---
+07-30 09:57:54.368 [main] LeShaoV3:   ContactInfoUI.D2() + onResume() ✓
+07-30 09:57:54.368 [main] LeShaoV3:   SendMsgSuccessEvent ✓
+07-30 09:57:54.369 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.377 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.378 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.380 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.384 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.385 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.387 [main] HideFields: hook initView OK
+07-30 09:57:54.388 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.390 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.393 [main] ContactChangeLog: hook installing...
+07-30 09:57:54.396 [main] ContactChangeLog: GetContactService not found: java.lang.ClassNotFoundException: com$tencent$mm$plugin$getcontact$l11$h
+07-30 09:57:54.396 [main] ContactChangeLog: [v.b] hook ok
+07-30 09:57:54.399 [main] ContactChangeLog: hook installed OK
+07-30 09:57:54.416 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.417 [main] MsgExport: menu hook OK
+07-30 09:57:54.419 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.422 [main] ChatBackup: daily backup scheduled at 02:00
+07-30 09:57:54.422 [main] ChatBackup: hook OK
+07-30 09:57:54.423 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:57:54.426 [main] ThemeHook: loadColors done
+07-30 09:57:54.427 [main] ThemeHook: state: m=true bar=false page=false chatBg=false bubble=false tab=false text=false
+07-30 09:57:54.428 [main] ThemeHook: [A] ok
+07-30 09:57:54.430 [main] ThemeHook: [B] ok
+07-30 09:57:54.431 [main] ThemeHook: [C] ga.E0 title ok
+07-30 09:57:54.433 [main] ThemeHook: [C] dim-scan ok
+07-30 09:57:54.434 [main] ThemeHook: [D] ok
+07-30 09:57:54.435 [main] ThemeHook: [E] com.tencent.mm.ui.conversation.MainUI ok
+07-30 09:57:54.437 [main] ThemeHook: [F] p0 extra hook ok
+07-30 09:57:54.438 [main] ThemeHook: [F] DyeTemplate l0+n0 ok
+07-30 09:57:54.442 [main] ThemeHook: [H] ok
+07-30 09:57:54.446 [main] ThemeHook: [X] addView scan ok
+07-30 09:57:54.447 [main] ThemeHook: [G] ChattingUI ok
+07-30 09:57:54.448 [main] ThemeHook: [L] dark sync ok
+07-30 09:57:54.449 [main] ThemeHook: [M] settings bg ok
+07-30 09:57:54.450 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivity ok
+07-30 09:57:54.451 [main] ThemeHook: [N] com.tencent.mm.ui.vas.VASActivityJava ok
+07-30 09:57:54.452 [main] ThemeHook: [O] MMFragment ok
+07-30 09:57:54.453 [main] ThemeHook: [O] MMFragmentActivity ok
+07-30 09:57:54.455 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooter ok
+07-30 09:57:54.456 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.chat.ChatFooterBottom ok
+07-30 09:57:54.457 [main] ThemeHook: [P] com.tencent.mm.pluginsdk.ui.ChatFooterPanel ok
+07-30 09:57:54.458 [main] ThemeHook: [P] com.tencent.mm.ui.chatting.ChattingFooterMoreBtnBar ok
+07-30 09:57:54.458 [main] ThemeHook: [P] ChattingImageBGView ok
+07-30 09:57:54.459 [main] ThemeHook: [Q] SnsTimeLineUI ok
+07-30 09:57:54.460 [main] ThemeHook: [Q] ImproveSnsTimelineUI ok
+07-30 09:57:54.461 [main] ThemeHook: [Q] ContactInfoUI ok
+07-30 09:57:54.461 [main] ThemeHook: [Q] AddressUI ok
+07-30 09:57:54.463 [main] ThemeHook: [Q] FindMoreFriendsUI ok
+07-30 09:57:54.463 [main] ThemeHook: [Q] WebViewUI ok
+07-30 09:57:54.464 [main] ThemeHook: [Q] MainSettingsUI ok
+07-30 09:57:54.465 [main] ThemeHook: [Q] CommonSettingsUI ok
+07-30 09:57:54.465 [main] ThemeHook: [Q] BizConversationUI ok
+07-30 09:57:54.466 [main] ThemeHook: [Q] SnsUserUI ok
+07-30 09:57:54.467 [main] ThemeHook: [Q] SnsCommentUI ok
+07-30 09:57:54.468 [main] ThemeHook: [Q] SnsUploadUI ok
+07-30 09:57:54.469 [main] ThemeHook: [Q] ContactProfileUI ok
+07-30 09:57:54.471 [main] ThemeHook: [Q] ConversationListView ok
+07-30 09:57:54.472 [main] ThemeHook: [Q] ConversationFolderItemView ok
+07-30 09:57:54.474 [main] ThemeHook: [Q] MainUIView ok
+07-30 09:57:54.475 [main] ThemeHook: [Q] ChattingItemFooter ok
+07-30 09:57:54.476 [main] ThemeHook: [Q] SnsHeader ok
+07-30 09:57:54.478 [main] ThemeHook: [Q] SnsCollapsibleTextView ok
+07-30 09:57:54.480 [main] ThemeHook: [Q] TimelineCommentView ok
+07-30 09:57:54.482 [main] ThemeHook: [Q] LauncherUIBottomTabView ok
+07-30 09:57:54.484 [main] ThemeHook: all hooks installed
+07-30 09:57:56.812 [main] VF: scan [com.tencent.mm.ui.chatting.viewitems, com.tencent.mm.ui.chatting.component]: 2076 classes, 1161 methods
+07-30 09:57:56.815 [main] VF: MenuBuilder.add hooked
+07-30 09:57:56.817 [main] VF: viewitems+component+MenuBuilder hooks installed
+07-30 09:57:58.455 [main] VF: ◆discovered g(): y21.x0.g(String,String)→String (trusted, ITE on init)
+07-30 09:57:58.456 [main] VF: ◆discovered t(): y21.x0.t(t(String,int,int,e9)→boolean)
+07-30 09:57:58.469 [main] VF: discoverVoiceApi: g=y21.x0.g t=y21.x0.t path=null.null
+07-30 09:57:58.486 [main] VF: ready — do a native forward to trace API
+07-30 09:57:58.491 [main] TtsVoiceSender: SendMsgSuccessEvent hooked OK
+07-30 09:57:58.492 [main] LeShaoV3: [MainHook] activateAll() DONE
+07-30 09:57:58.757 [main] TtsEngine: TTS init OK rate=1.1
+07-30 09:57:58.759 [main] TtsVoiceSender: TTS init: OK
+07-30 09:58:06.718 [[GT]ColdPool#3] MessageHook: #1 type=47->47 isSend=0 msgId=930187591331619773 talker=49238754034@chatroom content=wxid_cxdl1t0l9mc822:0:0:f52b4707a0e2d088...
+07-30 09:58:06.719 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.719 [main] MessageHandler: DROPPED by filter: type=47 from=49238754034@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.724 [[GT]ColdPool#3] MessageHook: #2 type=47->47 isSend=0 msgId=930187591331619773 talker=49238754034@chatroom content=wxid_cxdl1t0l9mc822:0:0:f52b4707a0e2d088...
+07-30 09:58:06.736 [[GT]ColdPool#3] MessageHook: #3 type=1->1 isSend=0 msgId=5514763524881169092 talker=49735108879@chatroom content=wxid_4aw3xldlyruj22:
+今日系个呢货，有心水个联系得嗲，金枕榴...
+07-30 09:58:06.737 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.737 [main] MessageHandler: DROPPED by filter: type=1 from=49735108879@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.740 [[GT]ColdPool#3] MessageHook: #4 type=1->1 isSend=0 msgId=5514763524881169092 talker=49735108879@chatroom content=wxid_4aw3xldlyruj22:
+今日系个呢货，有心水个联系得嗲，金枕榴...
+07-30 09:58:06.758 [[GT]ColdPool#3] MessageHook: #5 type=3->3 isSend=0 msgId=7946203130964203457 talker=49735108879@chatroom content=wxid_4aw3xldlyruj22:
 <?xml version="1.0"...
-07-30 09:30:53.606 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:53.607 [main] MessageHandler: DROPPED by filter: type=49 from=44509651297@chatroom masterSwitch=true announceText=true
-07-30 09:30:53.610 [[GT]ColdPool#11] MessageHook: #2 type=754974769->49 isSend=0 msgId=2966923276826229552 talker=44509651297@chatroom content=wxid_hyh5uj7viecy21:
+07-30 09:58:06.760 [[GT]ColdPool#3] AutoJoinGroup: 图片: msgId=7946203130964203457 talker=49735108879@chatroom
+07-30 09:58:06.761 [[GT]ColdPool#3] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/b4/d9/th_b4d9399e9a99794c86b12eb079ee08dc exists=false size=0
+07-30 09:58:06.762 [[GT]ColdPool#3] AutoJoinGroup: CDN参数: aeskey=1a804206... mid=305f020100044b304902...
+07-30 09:58:06.763 [[GT]ColdPool#3] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/b4/d9/b4d9399e9a99794c86b12eb079ee08dc
+07-30 09:58:06.763 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.764 [main] MessageHandler: DROPPED by filter: type=3 from=49735108879@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.768 [[GT]ColdPool#3] MessageHook: #6 type=3->3 isSend=0 msgId=7946203130964203457 talker=49735108879@chatroom content=wxid_4aw3xldlyruj22:
 <?xml version="1.0"...
-07-30 09:30:53.621 [[GT]ColdPool#11] MessageHook: #3 type=1->1 isSend=0 msgId=2481168460556855174 talker=11021177242@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人 ，🚄  直达快车
-时间，待客...
-07-30 09:30:53.624 [[GT]ColdPool#11] MessageHook: #4 type=1->1 isSend=0 msgId=2481168460556855174 talker=11021177242@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人 ，🚄  直达快车
-时间，待客...
-07-30 09:30:53.625 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:53.625 [main] MessageHandler: DROPPED by filter: type=1 from=11021177242@chatroom masterSwitch=true announceText=true
-07-30 09:30:53.630 [[GT]ColdPool#11] MessageHook: #5 type=1->1 isSend=0 msgId=5203463559603071450 talker=2097769708@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人 ，🚄  直达快车
-时间，待客...
-07-30 09:30:53.631 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:53.632 [main] MessageHandler: DROPPED by filter: type=1 from=2097769708@chatroom masterSwitch=true announceText=true
-07-30 09:30:53.634 [[GT]ColdPool#11] MessageHook: #6 type=1->1 isSend=0 msgId=5203463559603071450 talker=2097769708@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人 ，🚄  直达快车
-时间，待客...
-07-30 09:30:53.638 [[GT]ColdPool#11] MessageHook: #7 type=1->1 isSend=0 msgId=7662090087777667128 talker=7215621333@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人 ，🚄  直达快车
-时间，待客...
-07-30 09:30:53.639 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:53.640 [main] MessageHandler: DROPPED by filter: type=1 from=7215621333@chatroom masterSwitch=true announceText=true
-07-30 09:30:53.643 [[GT]ColdPool#11] MessageHook: #8 type=1->1 isSend=0 msgId=7662090087777667128 talker=7215621333@chatroom content=wxid_qfwzd2q4ckwl22:
-车找人 ，🚄  直达快车
-时间，待客...
-07-30 09:30:53.647 [[GT]ColdPool#11] MessageHook: #9 type=1->1 isSend=0 msgId=1692541398665494 talker=23552094189@chatroom content=wxid_c4oa2vnu1eja12:
-金色年华 整车又到货
- 只要 100 ...
-07-30 09:30:53.651 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:53.653 [main] MessageHandler: DROPPED by filter: type=1 from=23552094189@chatroom masterSwitch=true announceText=true
-07-30 09:30:53.654 [[GT]ColdPool#11] MessageHook: #10 type=1->1 isSend=0 msgId=1692541398665494 talker=23552094189@chatroom content=wxid_c4oa2vnu1eja12:
-金色年华 整车又到货
- 只要 100 ...
-07-30 09:30:53.664 [[GT]ColdPool#11] MessageHook: #11 type=1->1 isSend=0 msgId=7073347313179711691 talker=11586179019@chatroom content=oulele002:
-—❤七匹狼超品日❤—
-07-30 09:30:53.665 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:30:53.666 [main] MessageHandler: DROPPED by filter: type=1 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:30:53.668 [[GT]ColdPool#11] MessageHook: #12 type=1->1 isSend=0 msgId=7073347313179711691 talker=11586179019@chatroom content=oulele002:
-—❤七匹狼超品日❤—
-07-30 09:30:55.902 [[GT]ColdPool#15] DatabaseProvider: DB captured via rawQuery (EnMicroMsg: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db)
-07-30 09:30:55.904 [[GT]ColdPool#15] ContactRepository: DB ready callback, loading contacts...
-07-30 09:30:55.904 [[GT]ColdPool#15] ContactRepository: loadContacts START
-07-30 09:30:55.905 [[GT]ColdPool#15] ContactRepository: Strategy B: trying model.aj reflection...
-07-30 09:30:55.906 [[GT]ColdPool#15] ContactRepository: Strategy B ERROR: ClassNotFoundException: Didn't find class "com.tencent.mm.model.aj" on path: DexPathList[[zip file "/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/lib/arm64, /data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk!/lib/arm64-v8a, /system/lib64, /system_ext/lib64]]
-07-30 09:30:55.906 [[GT]ColdPool#15] ContactRepository: Strategy C: trying findKernelClass...
-07-30 09:30:56.025 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-30 09:30:56.027 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-30 09:30:56.028 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-30 09:30:56.029 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-30 09:30:56.030 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-30 09:30:57.213 [[GT]ColdPool#15] ContactRepository: findKernel: DexFile scanned=477 no match
-07-30 09:30:57.216 [[GT]ColdPool#15] ContactRepository: Strategy C: kernel class not found
-07-30 09:30:57.217 [[GT]ColdPool#15] ContactRepository: Strategy A: trying direct DB (ka5.f.s)...
-07-30 09:30:57.217 [[GT]ColdPool#15] ContactRepository: Strategy A: uin=295734952
-07-30 09:30:57.219 [[GT]ColdPool#15] ContactRepository: Strategy A: imei=1234567890ABCDEF
-07-30 09:30:57.219 [[GT]ColdPool#15] ContactRepository: Strategy A: dbPath=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db
-07-30 09:30:57.220 [[GT]ColdPool#15] ContactRepository: Strategy A: pwd(censored) calculated, opening...
-07-30 09:30:57.233 [[GT]ColdPool#15] ContactRepository: Strategy A: DB opened via ka5.f.s, querying...
-07-30 09:30:57.243 [[GT]ColdPool#15] ContactRepository:   F0 u=wxid_geem9dw5nwb212 n=. a=iii_____vip r=曹琪琳 t=3
-07-30 09:30:57.244 [[GT]ColdPool#15] ContactRepository:   F1 u=wxid_p38c7u9teq3o22 n=A0树影剑南 a=suenan520 r=AA t=3
-07-30 09:30:57.245 [[GT]ColdPool#15] ContactRepository:   F2 u=wxid_9ohhf82mrlgc22 n=A💯乐少 a=HK93993 r=乐少 t=2051
-07-30 09:30:57.245 [[GT]ColdPool#15] ContactRepository:   F3 u=wxid_7695996953612 n=N a=Z577923324 r=N (260713) t=3
-07-30 09:30:57.246 [[GT]ColdPool#15] ContactRepository:   F4 u=wxid_a9ubk72b9jvj22 n=এ᭄随心随缘ོꦿృ༊ a=pp15766352806 r=少华 t=3
-07-30 09:30:57.247 [[GT]ColdPool#15] ContactRepository: queryContactsWcdb friends=50
-07-30 09:30:57.256 [[GT]ColdPool#15] ContactRepository: queryContactsWcdb groups=87 total=137
-07-30 09:30:57.259 [[GT]ColdPool#15] ContactRepository: loadContacts OK via Strategy A (direct DB)
-07-30 09:32:53.834 [[GT]ColdPool#6] MessageHook: #13 type=1->1 isSend=0 msgId=1816015736038093191 talker=7215621333@chatroom content=bin6437:
-车找人，化州回新安，马上出发。短号645，短号681800，长...
-07-30 09:32:53.838 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:32:53.840 [main] MessageHandler: DROPPED by filter: type=1 from=7215621333@chatroom masterSwitch=true announceText=true
-07-30 09:32:53.845 [[GT]ColdPool#6] MessageHook: #14 type=1->1 isSend=0 msgId=1816015736038093191 talker=7215621333@chatroom content=bin6437:
-车找人，化州回新安，马上出发。短号645，短号681800，长...
-07-30 09:32:53.874 [[GT]ColdPool#6] MessageHook: #15 type=3->3 isSend=0 msgId=8795870123065225489 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:32:53.876 [[GT]ColdPool#6] AutoJoinGroup: 图片: msgId=8795870123065225489 talker=11586179019@chatroom
-07-30 09:32:53.877 [[GT]ColdPool#6] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/32/00/th_3200a265bf34aaa7e0bd695d15e4bd1d exists=false size=0
-07-30 09:32:53.879 [[GT]ColdPool#6] AutoJoinGroup: CDN参数: aeskey=7763644b... mid=305f020100044b304902...
-07-30 09:32:53.880 [[GT]ColdPool#6] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/32/00/3200a265bf34aaa7e0bd695d15e4bd1d
-07-30 09:32:53.882 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:32:53.884 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:32:53.887 [[GT]ColdPool#6] MessageHook: #16 type=3->3 isSend=0 msgId=8795870123065225489 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:32:53.898 [[GT]ColdPool#6] MessageHook: #17 type=1->1 isSend=0 msgId=2610476202548632585 talker=2097769708@chatroom content=bin6437:
-车找人，化州回新安，马上出发。短号645，短号681800，长...
-07-30 09:32:53.899 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:32:53.900 [main] MessageHandler: DROPPED by filter: type=1 from=2097769708@chatroom masterSwitch=true announceText=true
-07-30 09:32:53.903 [[GT]ColdPool#6] MessageHook: #18 type=1->1 isSend=0 msgId=2610476202548632585 talker=2097769708@chatroom content=bin6437:
-车找人，化州回新安，马上出发。短号645，短号681800，长...
-07-30 09:32:53.908 [[GT]ColdPool#6] MessageHook: #19 type=1->1 isSend=0 msgId=3931594950554863576 talker=49222549277@chatroom content=bin6437:
-车找人，化州回新安，马上出发。短号645，短号681800，长...
-07-30 09:32:53.909 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:32:53.909 [main] MessageHandler: DROPPED by filter: type=1 from=49222549277@chatroom masterSwitch=true announceText=true
-07-30 09:32:53.913 [[GT]ColdPool#6] MessageHook: #20 type=1->1 isSend=0 msgId=3931594950554863576 talker=49222549277@chatroom content=bin6437:
-车找人，化州回新安，马上出发。短号645，短号681800，长...
-07-30 09:32:53.917 [[GT]ColdPool#6] MessageHook: #21 type=1->1 isSend=0 msgId=8761844302889673841 talker=34831702152@chatroom content=bin6437:
-车找人，化州回新安，马上出发。短号645，短号681800，长...
-07-30 09:32:53.918 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:32:53.919 [main] MessageHandler: DROPPED by filter: type=1 from=34831702152@chatroom masterSwitch=true announceText=true
-07-30 09:32:53.920 [[GT]ColdPool#6] MessageHook: #22 type=1->1 isSend=0 msgId=8761844302889673841 talker=34831702152@chatroom content=bin6437:
-车找人，化州回新安，马上出发。短号645，短号681800，长...
-07-30 09:32:53.923 [[GT]ColdPool#6] MessageHook: #23 type=1->1 isSend=0 msgId=2181074743173430401 talker=21730591086@chatroom content=bin6437:
-车找人，化州回新安，马上出发。短号645，短号681800，长...
-07-30 09:32:53.924 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:32:53.925 [main] MessageHandler: DROPPED by filter: type=1 from=21730591086@chatroom masterSwitch=true announceText=true
-07-30 09:32:53.927 [[GT]ColdPool#6] MessageHook: #24 type=1->1 isSend=0 msgId=2181074743173430401 talker=21730591086@chatroom content=bin6437:
-车找人，化州回新安，马上出发。短号645，短号681800，长...
-07-30 09:32:53.930 [[GT]ColdPool#6] MessageHook: #25 type=1->1 isSend=0 msgId=196858315309891415 talker=25295891650@chatroom content=bin6437:
-车找人，化州回新安，马上出发。短号645，短号681800，长...
-07-30 09:32:53.932 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:32:53.932 [main] MessageHandler: DROPPED by filter: type=1 from=25295891650@chatroom masterSwitch=true announceText=true
-07-30 09:32:53.935 [[GT]ColdPool#6] MessageHook: #26 type=1->1 isSend=0 msgId=196858315309891415 talker=25295891650@chatroom content=bin6437:
-车找人，化州回新安，马上出发。短号645，短号681800，长...
-07-30 09:32:53.941 [[GT]ColdPool#6] MessageHook: #27 type=1->1 isSend=0 msgId=4287866920685554493 talker=4543198331@chatroom content=bin6437:
-车找人，化州回新安，马上出发。短号645，短号681800，长...
-07-30 09:32:53.942 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:32:53.943 [main] MessageHandler: DROPPED by filter: type=1 from=4543198331@chatroom masterSwitch=true announceText=true
-07-30 09:32:53.945 [[GT]ColdPool#6] MessageHook: #28 type=1->1 isSend=0 msgId=4287866920685554493 talker=4543198331@chatroom content=bin6437:
-车找人，化州回新安，马上出发。短号645，短号681800，长...
-07-30 09:32:53.949 [[GT]ColdPool#6] MessageHook: #29 type=1->1 isSend=0 msgId=4254459908731815058 talker=34831702152@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  10点~半
-起点:   化州
-...
-07-30 09:32:53.950 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:32:53.951 [main] MessageHandler: DROPPED by filter: type=1 from=34831702152@chatroom masterSwitch=true announceText=true
-07-30 09:32:53.951 [[GT]ColdPool#6] MessageHook: #30 type=1->1 isSend=0 msgId=4254459908731815058 talker=34831702152@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  10点~半
-起点:   化州
-...
-07-30 09:32:53.955 [[GT]ColdPool#6] MessageHook: #31 type=1->1 isSend=0 msgId=2548791527490350754 talker=7215621333@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  10点~半
-起点:   化州
-...
-07-30 09:32:53.956 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:32:53.957 [main] MessageHandler: DROPPED by filter: type=1 from=7215621333@chatroom masterSwitch=true announceText=true
-07-30 09:32:53.958 [[GT]ColdPool#6] MessageHook: #32 type=1->1 isSend=0 msgId=2548791527490350754 talker=7215621333@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  10点~半
-起点:   化州
-...
-07-30 09:32:53.961 [[GT]ColdPool#6] MessageHook: #33 type=1->1 isSend=0 msgId=647511046778204378 talker=11021177242@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  10点~半
-起点:   化州
-...
-07-30 09:32:53.962 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:32:53.963 [main] MessageHandler: DROPPED by filter: type=1 from=11021177242@chatroom masterSwitch=true announceText=true
-07-30 09:32:53.965 [[GT]ColdPool#6] MessageHook: #34 type=1->1 isSend=0 msgId=647511046778204378 talker=11021177242@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  10点~半
-起点:   化州
-...
-07-30 09:32:53.969 [[GT]ColdPool#6] MessageHook: #35 type=1->1 isSend=0 msgId=3681521871827755636 talker=2097769708@chatroom content=wxid_j3rz0h4w4bjk22:
-化州至佛山，广州   每天有车返往
+07-30 09:58:06.778 [[GT]ColdPool#3] MessageHook: #7 type=1->1 isSend=0 msgId=5714535513024468501 talker=22271795842@chatroom content=wxid_l2q0mwogapvs22:
+维修补贴误工费300起一天
+上不封顶，...
+07-30 09:58:06.779 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.779 [main] MessageHandler: DROPPED by filter: type=1 from=22271795842@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.781 [[GT]ColdPool#3] MessageHook: #8 type=1->1 isSend=0 msgId=5714535513024468501 talker=22271795842@chatroom content=wxid_l2q0mwogapvs22:
+维修补贴误工费300起一天
+上不封顶，...
+07-30 09:58:06.805 [[GT]ColdPool#3] MessageHook: #9 type=43->43 isSend=0 msgId=3439471860891687472 talker=49830920700@chatroom content=wxid_c5sfps867m0q22:0:0
 
-...
-07-30 09:32:53.970 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:32:53.971 [main] MessageHandler: DROPPED by filter: type=1 from=2097769708@chatroom masterSwitch=true announceText=true
-07-30 09:32:53.973 [[GT]ColdPool#6] MessageHook: #36 type=1->1 isSend=0 msgId=3681521871827755636 talker=2097769708@chatroom content=wxid_j3rz0h4w4bjk22:
-化州至佛山，广州   每天有车返往
+07-30 09:58:06.806 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.807 [main] MessageHandler: DROPPED by filter: type=43 from=49830920700@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.809 [[GT]ColdPool#9] MessageHook: #10 type=922746929->49 isSend=0 msgId=8979894570231672900 talker=21916245815@chatroom content=<msg><appmsg appid="" sdkver="0"><title>...
+07-30 09:58:06.809 [[GT]ColdPool#3] MessageHook: #11 type=43->43 isSend=0 msgId=3439471860891687472 talker=49830920700@chatroom content=wxid_c5sfps867m0q22:0:0
 
-...
-07-30 09:32:53.977 [[GT]ColdPool#6] MessageHook: #37 type=1->1 isSend=0 msgId=1354677773999356287 talker=23818285582@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  10点~半
-起点:   化州
-...
-07-30 09:32:53.979 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:32:53.979 [main] MessageHandler: DROPPED by filter: type=1 from=23818285582@chatroom masterSwitch=true announceText=true
-07-30 09:32:53.981 [[GT]ColdPool#6] MessageHook: #38 type=1->1 isSend=0 msgId=1354677773999356287 talker=23818285582@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  10点~半
-起点:   化州
-...
-07-30 09:33:03.885 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:33:13.891 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:33:23.899 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:42:42.914 [[GT]ColdPool#15] MessageHook: #39 type=3->3 isSend=0 msgId=7136883781057715845 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:42.917 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=7136883781057715845 talker=11586179019@chatroom
-07-30 09:42:42.923 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/1a/64/th_1a6429e9f4978e4eb565d5c762556512 exists=false size=0
-07-30 09:42:42.924 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=54667974... mid=305f020100044b304902...
-07-30 09:42:42.925 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/1a/64/1a6429e9f4978e4eb565d5c762556512
-07-30 09:42:42.931 [[GT]ColdPool#5] AutoJoinGroup: ★原图写入: /storage/emulated/0/Android/data/com.tencent.mm/MicroMsg/00615c482986ec6f06ce8944abfb8e1e/image/test_writable
-07-30 09:42:42.932 [[GT]ColdPool#5] AutoJoinGroup: ★原图写入: /storage/emulated/0/Android/data/com.tencent.mm/MicroMsg/00615c482986ec6f06ce8944abfb8e1e/image/test_writable
-07-30 09:42:42.933 [[GT]ColdPool#5] AutoJoinGroup: ★原图写入: /storage/emulated/0/Android/data/com.tencent.mm/MicroMsg/00615c482986ec6f06ce8944abfb8e1e/image/test_writable
-07-30 09:42:42.935 [[GT]ColdPool#15] MessageHook: #40 type=3->3 isSend=0 msgId=7136883781057715845 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:42.938 [[GT]ColdPool#5] AutoJoinGroup: ★原图写入: /storage/emulated/0/Android/data/com.tencent.mm/MicroMsg/00615c482986ec6f06ce8944abfb8e1e/image/test_writable
-07-30 09:42:42.948 [[GT]ColdPool#15] MessageHook: #41 type=1->1 isSend=0 msgId=4350666987887945501 talker=17402151153@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  10点~半
-起点:   化州
-...
-07-30 09:42:42.957 [[GT]ColdPool#15] MessageHook: #42 type=1->1 isSend=0 msgId=4350666987887945501 talker=17402151153@chatroom content=YANGJIAZHEN520:
-车找人
-时间:  10点~半
-起点:   化州
-...
-07-30 09:42:42.971 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-30 09:42:42.973 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-30 09:42:42.975 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-30 09:42:42.976 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-30 09:42:42.976 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:42.977 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:42.978 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-30 09:42:42.981 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:42.982 [main] MessageHandler: DROPPED by filter: type=1 from=17402151153@chatroom masterSwitch=true announceText=true
-07-30 09:42:42.988 [[GT]ColdPool#15] MessageHook: #43 type=3->3 isSend=0 msgId=7500342137831587382 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:42.989 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=7500342137831587382 talker=11586179019@chatroom
-07-30 09:42:42.990 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/c2/1a/th_c21a806292d1d09875d3d6136b252ee5 exists=false size=0
-07-30 09:42:42.991 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=44447665... mid=305f020100044b304902...
-07-30 09:42:42.992 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/c2/1a/c21a806292d1d09875d3d6136b252ee5
-07-30 09:42:43.001 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.002 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.003 [[GT]ColdPool#15] MessageHook: #44 type=3->3 isSend=0 msgId=7500342137831587382 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:43.023 [[GT]ColdPool#15] MessageHook: #45 type=3->3 isSend=0 msgId=4371158556791599875 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:43.024 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=4371158556791599875 talker=11586179019@chatroom
-07-30 09:42:43.025 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/60/4e/th_604e2c6a0a2660caf9085860d0c52edb exists=false size=0
-07-30 09:42:43.025 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=54685738... mid=305f020100044b304902...
-07-30 09:42:43.026 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/60/4e/604e2c6a0a2660caf9085860d0c52edb
-07-30 09:42:43.027 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.028 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.030 [[GT]ColdPool#15] MessageHook: #46 type=3->3 isSend=0 msgId=4371158556791599875 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:43.043 [[GT]ColdPool#15] MessageHook: #47 type=1->1 isSend=0 msgId=8703993856942762986 talker=17402151153@chatroom content=wxid_2aq3fokhlux722:
-【车找人】
-时间：10点~半左右
-起点...
-07-30 09:42:43.050 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.052 [main] MessageHandler: DROPPED by filter: type=1 from=17402151153@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.053 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
-07-30 09:42:43.055 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
-07-30 09:42:43.056 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
-07-30 09:42:43.057 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
-07-30 09:42:43.052 [[GT]ColdPool#15] MessageHook: #48 type=1->1 isSend=0 msgId=8703993856942762986 talker=17402151153@chatroom content=wxid_2aq3fokhlux722:
-【车找人】
-时间：10点~半左右
-起点...
-07-30 09:42:43.058 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
-07-30 09:42:43.069 [[GT]ColdPool#15] MessageHook: #49 type=1->1 isSend=0 msgId=487493006689627434 talker=23818285582@chatroom content=wxid_2aq3fokhlux722:
-【车找人】
-时间：10点~半左右
-起点...
-07-30 09:42:43.072 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.073 [main] MessageHandler: DROPPED by filter: type=1 from=23818285582@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.079 [[GT]ColdPool#15] MessageHook: #50 type=1->1 isSend=0 msgId=487493006689627434 talker=23818285582@chatroom content=wxid_2aq3fokhlux722:
-【车找人】
-时间：10点~半左右
-起点...
-07-30 09:42:43.094 [[GT]ColdPool#15] MessageHook: #51 type=1->1 isSend=0 msgId=3411471840401853634 talker=48338996712@chatroom content=wxid_iuxo4fjb2vxk22:
-好吃的榴莲继续回货，可以随时私信我安排...
-07-30 09:42:43.126 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.127 [main] MessageHandler: DROPPED by filter: type=1 from=48338996712@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.129 [[GT]ColdPool#15] MessageHook: #52 type=1->1 isSend=0 msgId=3411471840401853634 talker=48338996712@chatroom content=wxid_iuxo4fjb2vxk22:
-好吃的榴莲继续回货，可以随时私信我安排...
-07-30 09:42:43.140 [[GT]ColdPool#15] MessageHook: #53 type=3->3 isSend=0 msgId=8877771849448721252 talker=48338996712@chatroom content=wxid_iuxo4fjb2vxk22:
+07-30 09:58:06.810 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.810 [main] MessageHandler: DROPPED by filter: type=49 from=21916245815@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.824 [[GT]ColdPool#3] MessageHook: #12 type=1->1 isSend=0 msgId=6980266634727571431 talker=7215621333@chatroom content=wxid_nd4fk1pw6xb222:
+车找人，[微笑] 🚄  直达快车
+时...
+07-30 09:58:06.825 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.826 [main] MessageHandler: DROPPED by filter: type=1 from=7215621333@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.829 [[GT]ColdPool#3] MessageHook: #13 type=1->1 isSend=0 msgId=6980266634727571431 talker=7215621333@chatroom content=wxid_nd4fk1pw6xb222:
+车找人，[微笑] 🚄  直达快车
+时...
+07-30 09:58:06.837 [[GT]ColdPool#3] MessageHook: #14 type=1->1 isSend=0 msgId=7562137728192997889 talker=7937897945@chatroom content=wxid_nd4fk1pw6xb222:
+车找人，[微笑] 🚄  直达快车
+时...
+07-30 09:58:06.838 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.838 [main] MessageHandler: DROPPED by filter: type=1 from=7937897945@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.841 [[GT]ColdPool#3] MessageHook: #15 type=1->1 isSend=0 msgId=7562137728192997889 talker=7937897945@chatroom content=wxid_nd4fk1pw6xb222:
+车找人，[微笑] 🚄  直达快车
+时...
+07-30 09:58:06.845 [[GT]ColdPool#3] MessageHook: #16 type=1->1 isSend=0 msgId=516403563390405669 talker=11021177242@chatroom content=wxid_nd4fk1pw6xb222:
+车找人，[微笑] 🚄  直达快车
+时...
+07-30 09:58:06.846 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.846 [main] MessageHandler: DROPPED by filter: type=1 from=11021177242@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.848 [[GT]ColdPool#3] MessageHook: #17 type=1->1 isSend=0 msgId=516403563390405669 talker=11021177242@chatroom content=wxid_nd4fk1pw6xb222:
+车找人，[微笑] 🚄  直达快车
+时...
+07-30 09:58:06.853 [[GT]ColdPool#3] MessageHook: #18 type=1->1 isSend=0 msgId=8167249564936596558 talker=17402151153@chatroom content=wxid_nd4fk1pw6xb222:
+车找人，[微笑] 🚄  直达快车
+时...
+07-30 09:58:06.854 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.854 [main] MessageHandler: DROPPED by filter: type=1 from=17402151153@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.856 [[GT]ColdPool#3] MessageHook: #19 type=1->1 isSend=0 msgId=8167249564936596558 talker=17402151153@chatroom content=wxid_nd4fk1pw6xb222:
+车找人，[微笑] 🚄  直达快车
+时...
+07-30 09:58:06.861 [[GT]ColdPool#3] MessageHook: #20 type=43->43 isSend=0 msgId=314796811246627631 talker=48811616092@chatroom content=wxid_c5sfps867m0q22:0:0
+
+07-30 09:58:06.862 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.862 [main] MessageHandler: DROPPED by filter: type=43 from=48811616092@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.864 [[GT]ColdPool#3] MessageHook: #21 type=43->43 isSend=0 msgId=314796811246627631 talker=48811616092@chatroom content=wxid_c5sfps867m0q22:0:0
+
+07-30 09:58:06.870 [[GT]ColdPool#3] MessageHook: #22 type=1->1 isSend=0 msgId=2803423816822710273 talker=21730591086@chatroom content=wxid_nd4fk1pw6xb222:
+车找人，[微笑] 🚄  直达快车
+时...
+07-30 09:58:06.871 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.872 [main] MessageHandler: DROPPED by filter: type=1 from=21730591086@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.874 [[GT]ColdPool#3] MessageHook: #23 type=1->1 isSend=0 msgId=2803423816822710273 talker=21730591086@chatroom content=wxid_nd4fk1pw6xb222:
+车找人，[微笑] 🚄  直达快车
+时...
+07-30 09:58:06.879 [[GT]ColdPool#3] MessageHook: #24 type=1->1 isSend=0 msgId=8403397902950432791 talker=49222549277@chatroom content=wxid_nd4fk1pw6xb222:
+车找人，[微笑] 🚄  直达快车
+时...
+07-30 09:58:06.880 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.881 [main] MessageHandler: DROPPED by filter: type=1 from=49222549277@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.882 [[GT]ColdPool#3] MessageHook: #25 type=1->1 isSend=0 msgId=8403397902950432791 talker=49222549277@chatroom content=wxid_nd4fk1pw6xb222:
+车找人，[微笑] 🚄  直达快车
+时...
+07-30 09:58:06.893 [[GT]ColdPool#3] MessageHook: #26 type=3->3 isSend=0 msgId=1211177679965408220 talker=49744470922@chatroom content=wxid_pv2rlik1s4xh22:
 <?xml version="1.0"...
-07-30 09:42:43.141 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=8877771849448721252 talker=48338996712@chatroom
-07-30 09:42:43.144 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/bb/40/th_bb400b4020e9aaa4553971165ca6a93c exists=false size=0
-07-30 09:42:43.146 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=b1639c60... mid=305f020100044b304902...
-07-30 09:42:43.148 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/bb/40/bb400b4020e9aaa4553971165ca6a93c
-07-30 09:42:43.158 [[GT]ColdPool#15] MessageHook: #54 type=3->3 isSend=0 msgId=8877771849448721252 talker=48338996712@chatroom content=wxid_iuxo4fjb2vxk22:
+07-30 09:58:06.894 [[GT]ColdPool#3] AutoJoinGroup: 图片: msgId=1211177679965408220 talker=49744470922@chatroom
+07-30 09:58:06.895 [[GT]ColdPool#3] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/98/f4/th_98f4c7025cf38a10dc571600c29bf1e8 exists=false size=0
+07-30 09:58:06.896 [[GT]ColdPool#3] AutoJoinGroup: CDN参数: aeskey=b3d314bf... mid=305f020100044b304902...
+07-30 09:58:06.896 [[GT]ColdPool#3] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/98/f4/98f4c7025cf38a10dc571600c29bf1e8
+07-30 09:58:06.897 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.898 [main] MessageHandler: DROPPED by filter: type=3 from=49744470922@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.899 [[GT]ColdPool#3] MessageHook: #27 type=3->3 isSend=0 msgId=1211177679965408220 talker=49744470922@chatroom content=wxid_pv2rlik1s4xh22:
 <?xml version="1.0"...
-07-30 09:42:43.162 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.163 [main] MessageHandler: DROPPED by filter: type=3 from=48338996712@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.180 [[GT]ColdPool#15] MessageHook: #55 type=3->3 isSend=0 msgId=691268668799946860 talker=48338996712@chatroom content=wxid_iuxo4fjb2vxk22:
-<?xml version="1.0"...
-07-30 09:42:43.187 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=691268668799946860 talker=48338996712@chatroom
-07-30 09:42:43.188 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/f1/c0/th_f1c087c44d12eb67663f1de532de99c6 exists=false size=0
-07-30 09:42:43.189 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=bf03f179... mid=305f020100044b304902...
-07-30 09:42:43.190 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/f1/c0/f1c087c44d12eb67663f1de532de99c6
-07-30 09:42:43.191 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.192 [main] MessageHandler: DROPPED by filter: type=3 from=48338996712@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.202 [[GT]ColdPool#15] MessageHook: #56 type=3->3 isSend=0 msgId=691268668799946860 talker=48338996712@chatroom content=wxid_iuxo4fjb2vxk22:
-<?xml version="1.0"...
-07-30 09:42:43.222 [[GT]ColdPool#15] MessageHook: #57 type=3->3 isSend=0 msgId=7504867134546588174 talker=48338996712@chatroom content=wxid_iuxo4fjb2vxk22:
-<?xml version="1.0"...
-07-30 09:42:43.227 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=7504867134546588174 talker=48338996712@chatroom
-07-30 09:42:43.231 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/5e/88/th_5e886d268ab5467174c5e0165444ab39 exists=false size=0
-07-30 09:42:43.242 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=5247fef8... mid=305f020100044b304902...
-07-30 09:42:43.253 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/5e/88/5e886d268ab5467174c5e0165444ab39
-07-30 09:42:43.262 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.266 [main] MessageHandler: DROPPED by filter: type=3 from=48338996712@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.274 [[GT]ColdPool#15] MessageHook: #58 type=3->3 isSend=0 msgId=7504867134546588174 talker=48338996712@chatroom content=wxid_iuxo4fjb2vxk22:
-<?xml version="1.0"...
-07-30 09:42:43.292 [[GT]ColdPool#15] MessageHook: #59 type=1->1 isSend=0 msgId=1708707608217961403 talker=11021177242@chatroom content=wxid_2aq3fokhlux722:
-【车找人】
-时间：10点~半左右
-起点...
-07-30 09:42:43.296 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.297 [main] MessageHandler: DROPPED by filter: type=1 from=11021177242@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.301 [[GT]ColdPool#15] MessageHook: #60 type=1->1 isSend=0 msgId=1708707608217961403 talker=11021177242@chatroom content=wxid_2aq3fokhlux722:
-【车找人】
-时间：10点~半左右
-起点...
-07-30 09:42:43.308 [[GT]ColdPool#15] MessageHook: #61 type=1->1 isSend=0 msgId=3972438358379501146 talker=7215621333@chatroom content=wxid_2aq3fokhlux722:
-【车找人】
-时间：10点~半左右
-起点...
-07-30 09:42:43.310 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.313 [main] MessageHandler: DROPPED by filter: type=1 from=7215621333@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.314 [[GT]ColdPool#15] MessageHook: #62 type=1->1 isSend=0 msgId=3972438358379501146 talker=7215621333@chatroom content=wxid_2aq3fokhlux722:
-【车找人】
-时间：10点~半左右
-起点...
-07-30 09:42:43.320 [[GT]ColdPool#15] MessageHook: #63 type=1->1 isSend=0 msgId=1127923839030420944 talker=34831702152@chatroom content=wxid_2aq3fokhlux722:
-【车找人】
-时间：10点~半左右
-起点...
-07-30 09:42:43.321 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.321 [main] MessageHandler: DROPPED by filter: type=1 from=34831702152@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.335 [[GT]ColdPool#15] MessageHook: #64 type=1->1 isSend=0 msgId=1127923839030420944 talker=34831702152@chatroom content=wxid_2aq3fokhlux722:
-【车找人】
-时间：10点~半左右
-起点...
-07-30 09:42:43.356 [[GT]ColdPool#15] MessageHook: #65 type=1->1 isSend=0 msgId=2824999901999053430 talker=4543198331@chatroom content=wxid_2aq3fokhlux722:
-【车找人】
-时间：10点~半左右
-起点...
-07-30 09:42:43.369 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.372 [main] MessageHandler: DROPPED by filter: type=1 from=4543198331@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.378 [[GT]ColdPool#15] MessageHook: #66 type=1->1 isSend=0 msgId=2824999901999053430 talker=4543198331@chatroom content=wxid_2aq3fokhlux722:
-【车找人】
-时间：10点~半左右
-起点...
-07-30 09:42:43.391 [[GT]ColdPool#15] MessageHook: #67 type=1->1 isSend=0 msgId=483102792626780040 talker=7937897945@chatroom content=wxid_2aq3fokhlux722:
-【车找人】
-时间：10点~半左右
-起点...
-07-30 09:42:43.393 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.394 [main] MessageHandler: DROPPED by filter: type=1 from=7937897945@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.431 [[GT]ColdPool#15] MessageHook: #68 type=1->1 isSend=0 msgId=483102792626780040 talker=7937897945@chatroom content=wxid_2aq3fokhlux722:
-【车找人】
-时间：10点~半左右
-起点...
-07-30 09:42:43.449 [[GT]ColdPool#15] MessageHook: #69 type=1->1 isSend=0 msgId=8167496866559925125 talker=24130456064@chatroom content=wxid_23wa1wl6nbjx22:
-,【🚗 类型🚗 】车找人（私家车）...
-07-30 09:42:43.451 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.452 [main] MessageHandler: DROPPED by filter: type=1 from=24130456064@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.457 [[GT]ColdPool#15] MessageHook: #70 type=1->1 isSend=0 msgId=8167496866559925125 talker=24130456064@chatroom content=wxid_23wa1wl6nbjx22:
-,【🚗 类型🚗 】车找人（私家车）...
-07-30 09:42:43.506 [[GT]ColdPool#15] MessageHook: #71 type=43->43 isSend=0 msgId=2956421411769668025 talker=23552094189@chatroom content=wxid_c4oa2vnu1eja12:0:0
+07-30 09:58:06.906 [[GT]ColdPool#3] MessageHook: #28 type=1->1 isSend=0 msgId=2670601281241887537 talker=43799566585@chatroom content=wxid_ghkei93krm1g22:
+今天有牛肉吗？
+07-30 09:58:06.907 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.907 [main] MessageHandler: DROPPED by filter: type=1 from=43799566585@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.910 [[GT]ColdPool#3] MessageHook: #29 type=1->1 isSend=0 msgId=2670601281241887537 talker=43799566585@chatroom content=wxid_ghkei93krm1g22:
+今天有牛肉吗？
+07-30 09:58:06.915 [[GT]ColdPool#3] MessageHook: #30 type=1->1 isSend=0 msgId=5617612830260294244 talker=18249563796@chatroom content=wxid_kv5t6thmgjj422:
+拼化州游乐场7元起，详情联系番茄189...
+07-30 09:58:06.916 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.916 [main] MessageHandler: DROPPED by filter: type=1 from=18249563796@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.918 [[GT]ColdPool#3] MessageHook: #31 type=1->1 isSend=0 msgId=5617612830260294244 talker=18249563796@chatroom content=wxid_kv5t6thmgjj422:
+拼化州游乐场7元起，详情联系番茄189...
+07-30 09:58:06.921 [[GT]ColdPool#3] MessageHook: #32 type=1->1 isSend=0 msgId=8066351643669668648 talker=49222549277@chatroom content=wxid_if0f4yqk2ct721:
+车找人:
 
-07-30 09:42:43.583 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.587 [main] MessageHandler: DROPPED by filter: type=43 from=23552094189@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.604 [[GT]ColdPool#15] MessageHook: #72 type=43->43 isSend=0 msgId=2956421411769668025 talker=23552094189@chatroom content=wxid_c4oa2vnu1eja12:0:0
+         马上发车...
+07-30 09:58:06.922 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.923 [main] MessageHandler: DROPPED by filter: type=1 from=49222549277@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.924 [[GT]ColdPool#3] MessageHook: #33 type=1->1 isSend=0 msgId=8066351643669668648 talker=49222549277@chatroom content=wxid_if0f4yqk2ct721:
+车找人:
 
-07-30 09:42:43.659 [[GT]ColdPool#15] MessageHook: #73 type=43->43 isSend=0 msgId=4692444112695599957 talker=23552094189@chatroom content=wxid_c4oa2vnu1eja12:0:0
+         马上发车...
+07-30 09:58:06.927 [[GT]ColdPool#3] MessageHook: #34 type=1->1 isSend=0 msgId=5506619039931201467 talker=17402151153@chatroom content=wxid_if0f4yqk2ct721:
+车找人:
 
-07-30 09:42:43.663 [[GT]ColdPool#15] MessageHook: #74 type=43->43 isSend=0 msgId=4692444112695599957 talker=23552094189@chatroom content=wxid_c4oa2vnu1eja12:0:0
+         马上发车...
+07-30 09:58:06.928 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.928 [main] MessageHandler: DROPPED by filter: type=1 from=17402151153@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.929 [[GT]ColdPool#3] MessageHook: #35 type=1->1 isSend=0 msgId=5506619039931201467 talker=17402151153@chatroom content=wxid_if0f4yqk2ct721:
+车找人:
 
-07-30 09:42:43.666 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.667 [main] MessageHandler: DROPPED by filter: type=43 from=23552094189@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.673 [[GT]ColdPool#15] MessageHook: #75 type=43->43 isSend=0 msgId=304835196504075752 talker=23552094189@chatroom content=wxid_c4oa2vnu1eja12:0:0
+         马上发车...
+07-30 09:58:06.932 [[GT]ColdPool#3] MessageHook: #36 type=1->1 isSend=0 msgId=4562299492038591725 talker=11021177242@chatroom content=wxid_if0f4yqk2ct721:
+车找人:
 
-07-30 09:42:43.683 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.683 [[GT]ColdPool#15] MessageHook: #76 type=43->43 isSend=0 msgId=304835196504075752 talker=23552094189@chatroom content=wxid_c4oa2vnu1eja12:0:0
+         马上发车...
+07-30 09:58:06.933 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.933 [main] MessageHandler: DROPPED by filter: type=1 from=11021177242@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.935 [[GT]ColdPool#3] MessageHook: #37 type=1->1 isSend=0 msgId=4562299492038591725 talker=11021177242@chatroom content=wxid_if0f4yqk2ct721:
+车找人:
 
-07-30 09:42:43.684 [main] MessageHandler: DROPPED by filter: type=43 from=23552094189@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.699 [[GT]ColdPool#15] MessageHook: #77 type=43->43 isSend=0 msgId=8716550028889548027 talker=23552094189@chatroom content=wxid_c4oa2vnu1eja12:0:0
+         马上发车...
+07-30 09:58:06.938 [[GT]ColdPool#3] MessageHook: #38 type=1->1 isSend=0 msgId=5474273449252763398 talker=7937897945@chatroom content=wxid_if0f4yqk2ct721:
+车找人:
 
-07-30 09:42:43.707 [[GT]ColdPool#15] MessageHook: #78 type=43->43 isSend=0 msgId=8716550028889548027 talker=23552094189@chatroom content=wxid_c4oa2vnu1eja12:0:0
+         马上发车...
+07-30 09:58:06.939 [main] ModuleConfig: isActivatedCheck: OK, return true
+07-30 09:58:06.940 [main] MessageHandler: DROPPED by filter: type=1 from=7937897945@chatroom masterSwitch=true announceText=true
+07-30 09:58:06.941 [[GT]ColdPool#3] MessageHook: #39 type=1->1 isSend=0 msgId=5474273449252763398 talker=7937897945@chatroom content=wxid_if0f4yqk2ct721:
+车找人:
 
-07-30 09:42:43.708 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.708 [main] MessageHandler: DROPPED by filter: type=43 from=23552094189@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.732 [[GT]ColdPool#15] MessageHook: #79 type=43->43 isSend=0 msgId=5148515123333514298 talker=23552094189@chatroom content=wxid_c4oa2vnu1eja12:0:0
-
-07-30 09:42:43.741 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.742 [main] MessageHandler: DROPPED by filter: type=43 from=23552094189@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.747 [[GT]ColdPool#15] MessageHook: #80 type=43->43 isSend=0 msgId=5148515123333514298 talker=23552094189@chatroom content=wxid_c4oa2vnu1eja12:0:0
-
-07-30 09:42:43.760 [[GT]ColdPool#15] MessageHook: #81 type=43->43 isSend=0 msgId=3630515694592965863 talker=23552094189@chatroom content=wxid_c4oa2vnu1eja12:0:0
-
-07-30 09:42:43.782 [[GT]ColdPool#15] MessageHook: #82 type=43->43 isSend=0 msgId=3630515694592965863 talker=23552094189@chatroom content=wxid_c4oa2vnu1eja12:0:0
-
-07-30 09:42:43.782 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.783 [main] MessageHandler: DROPPED by filter: type=43 from=23552094189@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.801 [[GT]ColdPool#15] MessageHook: #83 type=3->3 isSend=0 msgId=1341862702398725731 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:43.802 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=1341862702398725731 talker=11586179019@chatroom
-07-30 09:42:43.803 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/aa/d3/th_aad3042c94826fbb1b5db43d6f94bd32 exists=false size=0
-07-30 09:42:43.803 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=6f6f5858... mid=305f020100044b304902...
-07-30 09:42:43.804 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/aa/d3/aad3042c94826fbb1b5db43d6f94bd32
-07-30 09:42:43.806 [[GT]ColdPool#15] MessageHook: #84 type=3->3 isSend=0 msgId=1341862702398725731 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:43.807 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.808 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.827 [[GT]ColdPool#15] MessageHook: #85 type=1->1 isSend=0 msgId=8432696299458729559 talker=48321925870@chatroom content=wxid_gpr2ulvs746m22:
-离婚男78年1.7米，吴川人乡下建有两...
-07-30 09:42:43.829 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.832 [main] MessageHandler: DROPPED by filter: type=1 from=48321925870@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.838 [[GT]ColdPool#15] MessageHook: #86 type=1->1 isSend=0 msgId=8432696299458729559 talker=48321925870@chatroom content=wxid_gpr2ulvs746m22:
-离婚男78年1.7米，吴川人乡下建有两...
-07-30 09:42:43.852 [[GT]ColdPool#15] MessageHook: #87 type=3->3 isSend=0 msgId=56229968718949164 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:43.855 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=56229968718949164 talker=11586179019@chatroom
-07-30 09:42:43.856 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/e3/7f/th_e37fc07f9b44956460f566f6617427d8 exists=false size=0
-07-30 09:42:43.860 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=49546e75... mid=305f020100044b304902...
-07-30 09:42:43.861 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/e3/7f/e37fc07f9b44956460f566f6617427d8
-07-30 09:42:43.862 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.862 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.864 [[GT]ColdPool#15] MessageHook: #88 type=3->3 isSend=0 msgId=56229968718949164 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:43.876 [[GT]ColdPool#15] MessageHook: #89 type=3->3 isSend=0 msgId=2478442112706948537 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:43.878 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=2478442112706948537 talker=11586179019@chatroom
-07-30 09:42:43.879 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/80/1b/th_801b4bc12640a1a75277af00f0627f5f exists=false size=0
-07-30 09:42:43.885 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=64336147... mid=305f020100044b304902...
-07-30 09:42:43.893 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/80/1b/801b4bc12640a1a75277af00f0627f5f
-07-30 09:42:43.895 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.897 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.897 [[GT]ColdPool#15] MessageHook: #90 type=3->3 isSend=0 msgId=2478442112706948537 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:43.904 [[GT]ColdPool#15] MessageHook: #91 type=1->1 isSend=0 msgId=443900959505464031 talker=11586179019@chatroom content=oulele002:
-🔥七匹狼夏装清仓捡漏～
-爆款Polo衫大幅降价！
-
-经典...
-07-30 09:42:43.905 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.906 [main] MessageHandler: DROPPED by filter: type=1 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.909 [[GT]ColdPool#15] MessageHook: #92 type=1->1 isSend=0 msgId=443900959505464031 talker=11586179019@chatroom content=oulele002:
-🔥七匹狼夏装清仓捡漏～
-爆款Polo衫大幅降价！
-
-经典...
-07-30 09:42:43.920 [[GT]ColdPool#15] MessageHook: #93 type=3->3 isSend=0 msgId=1985670374629250573 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:43.924 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=1985670374629250573 talker=11586179019@chatroom
-07-30 09:42:43.926 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/91/d6/th_91d687f929516eb28a388f42780ff3cb exists=false size=0
-07-30 09:42:43.927 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=4e69784f... mid=305f020100044b304902...
-07-30 09:42:43.928 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/91/d6/91d687f929516eb28a388f42780ff3cb
-07-30 09:42:43.930 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.931 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.936 [[GT]ColdPool#15] MessageHook: #94 type=3->3 isSend=0 msgId=1985670374629250573 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:43.950 [[GT]ColdPool#15] MessageHook: #95 type=3->3 isSend=0 msgId=4688767466381696398 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:43.952 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=4688767466381696398 talker=11586179019@chatroom
-07-30 09:42:43.954 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/dc/91/th_dc91be3a7c7030e4978e6f588300fd32 exists=false size=0
-07-30 09:42:43.956 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=356f5347... mid=305f020100044b304902...
-07-30 09:42:43.961 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/dc/91/dc91be3a7c7030e4978e6f588300fd32
-07-30 09:42:43.965 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:43.966 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:43.967 [[GT]ColdPool#15] MessageHook: #96 type=3->3 isSend=0 msgId=4688767466381696398 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:43.987 [[GT]ColdPool#15] MessageHook: #97 type=3->3 isSend=0 msgId=5843719156745871463 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:43.991 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=5843719156745871463 talker=11586179019@chatroom
-07-30 09:42:43.992 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/72/57/th_7257ce8299cb046a6197edd6a416e692 exists=false size=0
-07-30 09:42:43.997 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=72686f67... mid=305f020100044b304902...
-07-30 09:42:44.002 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/72/57/7257ce8299cb046a6197edd6a416e692
-07-30 09:42:44.005 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.006 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.011 [[GT]ColdPool#15] MessageHook: #98 type=3->3 isSend=0 msgId=5843719156745871463 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.025 [[GT]ColdPool#15] MessageHook: #99 type=3->3 isSend=0 msgId=8334023706677906863 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.038 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=8334023706677906863 talker=11586179019@chatroom
-07-30 09:42:44.045 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/6b/51/th_6b51ab2925bbde5ae8feef61a2e73f42 exists=false size=0
-07-30 09:42:44.049 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=35346f52... mid=305f020100044b304902...
-07-30 09:42:44.054 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/6b/51/6b51ab2925bbde5ae8feef61a2e73f42
-07-30 09:42:44.067 [[GT]ColdPool#15] MessageHook: #100 type=3->3 isSend=0 msgId=8334023706677906863 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.075 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.083 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.095 [[GT]ColdPool#15] MessageHook: #101 type=3->3 isSend=0 msgId=2305044633203339572 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.098 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=2305044633203339572 talker=11586179019@chatroom
-07-30 09:42:44.104 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/af/f2/th_aff260d82df7f51c64805f9ade4f3314 exists=false size=0
-07-30 09:42:44.105 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=32464441... mid=305f020100044b304902...
-07-30 09:42:44.109 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/af/f2/aff260d82df7f51c64805f9ade4f3314
-07-30 09:42:44.112 [[GT]ColdPool#15] MessageHook: #102 type=3->3 isSend=0 msgId=2305044633203339572 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.134 [[GT]ColdPool#15] MessageHook: #103 type=3->3 isSend=0 msgId=7306308155600218915 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.136 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=7306308155600218915 talker=11586179019@chatroom
-07-30 09:42:44.137 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/28/dc/th_28dc6e2d8036852dfcf735a67ad63e13 exists=false size=0
-07-30 09:42:44.140 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=49516b34... mid=305f020100044b304902...
-07-30 09:42:44.140 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/28/dc/28dc6e2d8036852dfcf735a67ad63e13
-07-30 09:42:44.149 [[GT]ColdPool#15] MessageHook: #104 type=3->3 isSend=0 msgId=7306308155600218915 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.159 [[GT]ColdPool#15] MessageHook: #105 type=1->1 isSend=0 msgId=5148243616722735028 talker=11586179019@chatroom content=oulele002:
-三伏天刚需凉感短袖来啦✨～
-触感冰冰凉凉，告别闷热不适感！...
-07-30 09:42:44.161 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.162 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.165 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.168 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.164 [[GT]ColdPool#15] MessageHook: #106 type=1->1 isSend=0 msgId=5148243616722735028 talker=11586179019@chatroom content=oulele002:
-三伏天刚需凉感短袖来啦✨～
-触感冰冰凉凉，告别闷热不适感！...
-07-30 09:42:44.180 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.183 [main] MessageHandler: DROPPED by filter: type=1 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.204 [[GT]ColdPool#15] MessageHook: #107 type=3->3 isSend=0 msgId=2220044850300346823 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.237 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=2220044850300346823 talker=11586179019@chatroom
-07-30 09:42:44.243 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/00/53/th_005330d17c464a1de1c9db3675361794 exists=false size=0
-07-30 09:42:44.246 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=55725a69... mid=305f020100044b304902...
-07-30 09:42:44.257 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/00/53/005330d17c464a1de1c9db3675361794
-07-30 09:42:44.259 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.260 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.262 [[GT]ColdPool#15] MessageHook: #108 type=3->3 isSend=0 msgId=2220044850300346823 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.272 [[GT]ColdPool#15] MessageHook: #109 type=1->1 isSend=0 msgId=5617303006945748788 talker=7215621333@chatroom content=wxid_cxdl1t0l9mc822:
-今天继续收购黑白母猪，良种母猪，淘汰公...
-07-30 09:42:44.274 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.275 [main] MessageHandler: DROPPED by filter: type=1 from=7215621333@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.282 [[GT]ColdPool#15] MessageHook: #110 type=1->1 isSend=0 msgId=5617303006945748788 talker=7215621333@chatroom content=wxid_cxdl1t0l9mc822:
-今天继续收购黑白母猪，良种母猪，淘汰公...
-07-30 09:42:44.288 [[GT]ColdPool#15] MessageHook: #111 type=1->1 isSend=0 msgId=5009438075731867078 talker=25295891650@chatroom content=wxid_cxdl1t0l9mc822:
-今天继续收购黑白母猪，良种母猪，淘汰公...
-07-30 09:42:44.296 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.297 [main] MessageHandler: DROPPED by filter: type=1 from=25295891650@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.301 [[GT]ColdPool#15] MessageHook: #112 type=1->1 isSend=0 msgId=5009438075731867078 talker=25295891650@chatroom content=wxid_cxdl1t0l9mc822:
-今天继续收购黑白母猪，良种母猪，淘汰公...
-07-30 09:42:44.342 [[GT]ColdPool#15] MessageHook: #113 type=3->3 isSend=0 msgId=7790064738008519347 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.358 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=7790064738008519347 talker=11586179019@chatroom
-07-30 09:42:44.362 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/f8/be/th_f8be9780a8cbb0502a5955360fd0c02e exists=false size=0
-07-30 09:42:44.379 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=6d654e46... mid=305f020100044b304902...
-07-30 09:42:44.386 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/f8/be/f8be9780a8cbb0502a5955360fd0c02e
-07-30 09:42:44.388 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.388 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.393 [[GT]ColdPool#15] MessageHook: #114 type=3->3 isSend=0 msgId=7790064738008519347 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.420 [[GT]ColdPool#15] MessageHook: #115 type=47->47 isSend=0 msgId=2487054093500142096 talker=7215621333@chatroom content=wxid_cxdl1t0l9mc822:0:0:f52b4707a0e2d088...
-07-30 09:42:44.426 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.429 [main] MessageHandler: DROPPED by filter: type=47 from=7215621333@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.430 [[GT]ColdPool#15] MessageHook: #116 type=47->47 isSend=0 msgId=2487054093500142096 talker=7215621333@chatroom content=wxid_cxdl1t0l9mc822:0:0:f52b4707a0e2d088...
-07-30 09:42:44.449 [main] SettingsInject: Plugin section injected at pos 0 in LinearLayout
-07-30 09:42:44.452 [[GT]ColdPool#15] MessageHook: #117 type=3->3 isSend=0 msgId=4046599491493761055 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.454 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=4046599491493761055 talker=11586179019@chatroom
-07-30 09:42:44.455 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/55/80/th_55806848f7d29bc57dee7cf8fa8a29cc exists=false size=0
-07-30 09:42:44.456 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=68794c7a... mid=305f020100044b304902...
-07-30 09:42:44.457 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/55/80/55806848f7d29bc57dee7cf8fa8a29cc
-07-30 09:42:44.460 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.460 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.462 [[GT]ColdPool#15] MessageHook: #118 type=3->3 isSend=0 msgId=4046599491493761055 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.471 [[GT]ColdPool#15] MessageHook: #119 type=47->47 isSend=0 msgId=4741189774140623028 talker=25295891650@chatroom content=wxid_cxdl1t0l9mc822:0:0:f52b4707a0e2d088...
-07-30 09:42:44.474 [[GT]ColdPool#15] MessageHook: #120 type=47->47 isSend=0 msgId=4741189774140623028 talker=25295891650@chatroom content=wxid_cxdl1t0l9mc822:0:0:f52b4707a0e2d088...
-07-30 09:42:44.492 [[GT]ColdPool#15] MessageHook: #121 type=3->3 isSend=0 msgId=237512632001092202 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.495 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=237512632001092202 talker=11586179019@chatroom
-07-30 09:42:44.496 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/1a/ea/th_1aea9f6b3ccf85076237e370111b114e exists=false size=0
-07-30 09:42:44.497 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=754f3978... mid=305f020100044b304902...
-07-30 09:42:44.497 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/1a/ea/1aea9f6b3ccf85076237e370111b114e
-07-30 09:42:44.499 [[GT]ColdPool#15] MessageHook: #122 type=3->3 isSend=0 msgId=237512632001092202 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.508 [[GT]ColdPool#15] MessageHook: #123 type=1->1 isSend=0 msgId=4340021352575883438 talker=11586179019@chatroom content=oulele002:
-蓝衬衫配卡其短裤清爽满分💫～
-浅色系温柔耐看，拍照巨出片...
-07-30 09:42:44.514 [[GT]ColdPool#15] MessageHook: #124 type=1->1 isSend=0 msgId=4340021352575883438 talker=11586179019@chatroom content=oulele002:
-蓝衬衫配卡其短裤清爽满分💫～
-浅色系温柔耐看，拍照巨出片...
-07-30 09:42:44.530 [[GT]ColdPool#15] MessageHook: #125 type=3->3 isSend=0 msgId=1709826674353500176 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.531 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=1709826674353500176 talker=11586179019@chatroom
-07-30 09:42:44.534 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/93/b9/th_93b9988b2a3578f1d44eb3788ecd225f exists=false size=0
-07-30 09:42:44.535 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=4e693769... mid=305f020100044b304902...
-07-30 09:42:44.542 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/93/b9/93b9988b2a3578f1d44eb3788ecd225f
-07-30 09:42:44.547 [[GT]ColdPool#15] MessageHook: #126 type=3->3 isSend=0 msgId=1709826674353500176 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.560 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.564 [main] MessageHandler: DROPPED by filter: type=47 from=25295891650@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.566 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.566 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.568 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.568 [main] MessageHandler: DROPPED by filter: type=1 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.578 [[GT]ColdPool#15] MessageHook: #127 type=3->3 isSend=0 msgId=1862989254546225207 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.580 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.584 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.583 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=1862989254546225207 talker=11586179019@chatroom
-07-30 09:42:44.589 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/20/a0/th_20a066cfb7e31cbc0d719cd2eed731dd exists=false size=0
-07-30 09:42:44.590 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=6c315874... mid=305f020100044b304902...
-07-30 09:42:44.597 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/20/a0/20a066cfb7e31cbc0d719cd2eed731dd
-07-30 09:42:44.600 [[GT]ColdPool#15] MessageHook: #128 type=3->3 isSend=0 msgId=1862989254546225207 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.603 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.604 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.631 [[GT]ColdPool#15] MessageHook: #129 type=3->3 isSend=0 msgId=3867965147889991626 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.637 [[GT]ColdPool#15] AutoJoinGroup: 图片: msgId=3867965147889991626 talker=11586179019@chatroom
-07-30 09:42:44.638 [[GT]ColdPool#15] AutoJoinGroup: 缩略图: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image2/f7/ee/th_f7eefc68808fab400f1b4bb5321ea9c4 exists=false size=0
-07-30 09:42:44.639 [[GT]ColdPool#15] AutoJoinGroup: CDN参数: aeskey=6e365334... mid=305f020100044b304902...
-07-30 09:42:44.639 [[GT]ColdPool#15] AutoJoinGroup: 启动轮询: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/image/f7/ee/f7eefc68808fab400f1b4bb5321ea9c4
-07-30 09:42:44.640 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.641 [main] MessageHandler: DROPPED by filter: type=3 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.641 [[GT]ColdPool#15] MessageHook: #130 type=3->3 isSend=0 msgId=3867965147889991626 talker=11586179019@chatroom content=oulele002:
-<?xml version="1.0"?>
-<msg>
-	...
-07-30 09:42:44.657 [[GT]ColdPool#15] MessageHook: #131 type=49->49 isSend=0 msgId=743270071899618420 talker=11586179019@chatroom content=oulele002:
-<msg><appmsg><title>七匹狼超品</ti...
-07-30 09:42:44.669 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.670 [main] MessageHandler: DROPPED by filter: type=49 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.673 [[GT]ColdPool#15] MessageHook: #132 type=49->49 isSend=0 msgId=743270071899618420 talker=11586179019@chatroom content=oulele002:
-<msg><appmsg><title>七匹狼超品</ti...
-07-30 09:42:44.678 [[GT]ColdPool#15] MessageHook: #133 type=1->1 isSend=0 msgId=5606741298146823936 talker=11586179019@chatroom content=oulele002:
-七匹狼夏装破价直降～
-经典Polo衫几十块💰拿下‼️
-07-30 09:42:44.679 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.681 [[GT]ColdPool#15] MessageHook: #134 type=1->1 isSend=0 msgId=5606741298146823936 talker=11586179019@chatroom content=oulele002:
-七匹狼夏装破价直降～
-经典Polo衫几十块💰拿下‼️
-07-30 09:42:44.682 [main] MessageHandler: DROPPED by filter: type=1 from=11586179019@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.687 [[GT]ColdPool#15] MessageHook: #135 type=1->1 isSend=0 msgId=4889445096570175630 talker=23149434800@chatroom content=wxid_cxdl1t0l9mc822:
-今天继续收购黑白母猪，良种母猪，淘汰公...
-07-30 09:42:44.687 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.688 [main] MessageHandler: DROPPED by filter: type=1 from=23149434800@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.690 [[GT]ColdPool#15] MessageHook: #136 type=1->1 isSend=0 msgId=4889445096570175630 talker=23149434800@chatroom content=wxid_cxdl1t0l9mc822:
-今天继续收购黑白母猪，良种母猪，淘汰公...
-07-30 09:42:44.695 [[GT]ColdPool#15] MessageHook: #137 type=1->1 isSend=0 msgId=7036422470263286108 talker=43571142695@chatroom content=wxid_pnkpre9p1cea22:
-🔥急聘楼杂｜招 1人 女性优先🔥
-...
-07-30 09:42:44.696 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.697 [main] MessageHandler: DROPPED by filter: type=1 from=43571142695@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.700 [[GT]ColdPool#15] MessageHook: #138 type=1->1 isSend=0 msgId=7036422470263286108 talker=43571142695@chatroom content=wxid_pnkpre9p1cea22:
-🔥急聘楼杂｜招 1人 女性优先🔥
-...
-07-30 09:42:44.703 [[GT]ColdPool#15] MessageHook: #139 type=1->1 isSend=0 msgId=8608612964073683101 talker=43571142695@chatroom content=wxid_pnkpre9p1cea22:
-🔥湛江急聘｜户外巡检员
-📌工作内容...
-07-30 09:42:44.704 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.705 [main] MessageHandler: DROPPED by filter: type=1 from=43571142695@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.706 [[GT]ColdPool#15] MessageHook: #140 type=1->1 isSend=0 msgId=8608612964073683101 talker=43571142695@chatroom content=wxid_pnkpre9p1cea22:
-🔥湛江急聘｜户外巡检员
-📌工作内容...
-07-30 09:42:44.709 [[GT]ColdPool#15] MessageHook: #141 type=1->1 isSend=0 msgId=307071197356776581 talker=43571142695@chatroom content=wxid_pnkpre9p1cea22:
-🔥调顺电厂急招保洁、绿化工，欢迎推荐...
-07-30 09:42:44.709 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.710 [main] MessageHandler: DROPPED by filter: type=1 from=43571142695@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.710 [[GT]ColdPool#15] MessageHook: #142 type=1->1 isSend=0 msgId=307071197356776581 talker=43571142695@chatroom content=wxid_pnkpre9p1cea22:
-🔥调顺电厂急招保洁、绿化工，欢迎推荐...
-07-30 09:42:44.713 [[GT]ColdPool#15] MessageHook: #143 type=47->47 isSend=0 msgId=6966682504396169513 talker=23149434800@chatroom content=wxid_cxdl1t0l9mc822:0:0:f52b4707a0e2d088...
-07-30 09:42:44.715 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.716 [[GT]ColdPool#15] MessageHook: #144 type=47->47 isSend=0 msgId=6966682504396169513 talker=23149434800@chatroom content=wxid_cxdl1t0l9mc822:0:0:f52b4707a0e2d088...
-07-30 09:42:44.716 [main] MessageHandler: DROPPED by filter: type=47 from=23149434800@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.723 [[GT]ColdPool#15] MessageHook: #145 type=1->1 isSend=0 msgId=6794951748605299462 talker=18249563796@chatroom content=wxid_cxdl1t0l9mc822:
-今天继续收购黑白母猪，良种母猪，淘汰公...
-07-30 09:42:44.724 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.725 [main] MessageHandler: DROPPED by filter: type=1 from=18249563796@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.727 [[GT]ColdPool#15] MessageHook: #146 type=1->1 isSend=0 msgId=6794951748605299462 talker=18249563796@chatroom content=wxid_cxdl1t0l9mc822:
-今天继续收购黑白母猪，良种母猪，淘汰公...
-07-30 09:42:44.731 [[GT]ColdPool#15] MessageHook: #147 type=47->47 isSend=0 msgId=4978954039158113992 talker=18249563796@chatroom content=wxid_cxdl1t0l9mc822:0:0:f52b4707a0e2d088...
-07-30 09:42:44.732 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.733 [main] MessageHandler: DROPPED by filter: type=47 from=18249563796@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.734 [[GT]ColdPool#15] MessageHook: #148 type=47->47 isSend=0 msgId=4978954039158113992 talker=18249563796@chatroom content=wxid_cxdl1t0l9mc822:0:0:f52b4707a0e2d088...
-07-30 09:42:44.740 [[GT]ColdPool#15] MessageHook: #149 type=1->1 isSend=0 msgId=6047833085090675294 talker=49238754034@chatroom content=wxid_cxdl1t0l9mc822:
-今天继续收购黑白母猪，良种母猪，淘汰公...
-07-30 09:42:44.741 [main] ModuleConfig: isActivatedCheck: OK, return true
-07-30 09:42:44.741 [main] MessageHandler: DROPPED by filter: type=1 from=49238754034@chatroom masterSwitch=true announceText=true
-07-30 09:42:44.743 [[GT]ColdPool#15] MessageHook: #150 type=1->1 isSend=0 msgId=6047833085090675294 talker=49238754034@chatroom content=wxid_cxdl1t0l9mc822:
-今天继续收购黑白母猪，良种母猪，淘汰公...
-07-30 09:42:50.452 [main] ChatBackup: found DB at /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
-07-30 09:42:50.461 [main] ChatBackup: backup err: cannot create dir /sdcard/leshao_v3_logs/backup
-07-30 09:42:52.929 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:52.995 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:53.029 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:53.152 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:53.194 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:53.267 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:53.811 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:53.864 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:53.898 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:53.934 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:53.967 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:54.009 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:54.060 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:54.113 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:54.150 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:54.263 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:54.392 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:54.461 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:54.501 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:54.547 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:54.604 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:42:54.643 [qr-poller] AutoJoinGroup: 轮询中... 10s
-07-30 09:43:05.779 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.783 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.782 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.783 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.783 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.783 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.780 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.781 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.780 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.782 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.783 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.781 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.782 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.787 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.783 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.780 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.784 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.780 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.782 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.786 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.782 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:05.782 [qr-poller] AutoJoinGroup: 轮询中... 20s
-07-30 09:43:17.199 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.199 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.199 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.200 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.200 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.200 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.200 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.200 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.200 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.200 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.200 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.200 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.200 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.201 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.201 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.200 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.201 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.201 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.201 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.200 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.202 [qr-poller] AutoJoinGroup: 轮询中... 30s
-07-30 09:43:17.203 [qr-poller] AutoJoinGroup: 轮询中... 30s
+         马上发车...
+07-30 09:58:08.811 [[GT]ColdPool#8] DatabaseProvider: DB captured via rawQuery (EnMicroMsg: /data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db)
+07-30 09:58:08.812 [[GT]ColdPool#8] ContactRepository: DB ready callback, loading contacts...
+07-30 09:58:08.813 [[GT]ColdPool#8] ContactRepository: loadContacts START
+07-30 09:58:08.813 [[GT]ColdPool#8] ContactRepository: Strategy B: trying model.aj reflection...
+07-30 09:58:08.815 [[GT]ColdPool#8] ContactRepository: Strategy B ERROR: ClassNotFoundException: Didn't find class "com.tencent.mm.model.aj" on path: DexPathList[[zip file "/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk"],nativeLibraryDirectories=[/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/lib/arm64, /data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk!/lib/arm64-v8a, /system/lib64, /system_ext/lib64]]
+07-30 09:58:08.815 [[GT]ColdPool#8] ContactRepository: Strategy C: trying findKernelClass...
+07-30 09:58:08.952 [main] LogWriter: init OK, path=/data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt ext=/sdcard/leshao_v3_logs
+07-30 09:58:08.954 [main] DatabaseProvider: initEarly: START via handleLoadPackage classLoader
+07-30 09:58:08.955 [main] DatabaseProvider: STRATEGY A OK: loaded com.tencent.wcdb.database.SQLiteDatabase
+07-30 09:58:08.956 [main] DatabaseProvider: hookOpenDatabase: found openDatabase(6 params)
+07-30 09:58:08.958 [main] DatabaseProvider: hookRawQuery: found rawQuery(2 params)
+07-30 09:58:10.247 [[GT]ColdPool#8] ContactRepository: findKernel: DexFile scanned=477 no match
+07-30 09:58:10.248 [[GT]ColdPool#8] ContactRepository: Strategy C: kernel class not found
+07-30 09:58:10.248 [[GT]ColdPool#8] ContactRepository: Strategy A: trying direct DB (ka5.f.s)...
+07-30 09:58:10.249 [[GT]ColdPool#8] ContactRepository: Strategy A: uin=295734952
+07-30 09:58:10.250 [[GT]ColdPool#8] ContactRepository: Strategy A: imei=1234567890ABCDEF
+07-30 09:58:10.251 [[GT]ColdPool#8] ContactRepository: Strategy A: dbPath=/data/user/0/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/EnMicroMsg.db
+07-30 09:58:10.251 [[GT]ColdPool#8] ContactRepository: Strategy A: pwd(censored) calculated, opening...
+07-30 09:58:10.263 [[GT]ColdPool#8] ContactRepository: Strategy A: DB opened via ka5.f.s, querying...
+07-30 09:58:10.272 [[GT]ColdPool#8] ContactRepository:   F0 u=wxid_geem9dw5nwb212 n=. a=iii_____vip r=曹琪琳 t=3
+07-30 09:58:10.272 [[GT]ColdPool#8] ContactRepository:   F1 u=wxid_p38c7u9teq3o22 n=A0树影剑南 a=suenan520 r=AA t=3
+07-30 09:58:10.273 [[GT]ColdPool#8] ContactRepository:   F2 u=wxid_9ohhf82mrlgc22 n=A💯乐少 a=HK93993 r=乐少 t=2051
+07-30 09:58:10.273 [[GT]ColdPool#8] ContactRepository:   F3 u=wxid_7695996953612 n=N a=Z577923324 r=N (260713) t=3
+07-30 09:58:10.274 [[GT]ColdPool#8] ContactRepository:   F4 u=wxid_a9ubk72b9jvj22 n=এ᭄随心随缘ོꦿృ༊ a=pp15766352806 r=少华 t=3
+07-30 09:58:10.275 [[GT]ColdPool#8] ContactRepository: queryContactsWcdb friends=50
+07-30 09:58:10.283 [[GT]ColdPool#8] ContactRepository: queryContactsWcdb groups=87 total=137
+07-30 09:58:10.285 [[GT]ColdPool#8] ContactRepository: loadContacts OK via Strategy A (direct DB)
+07-30 09:58:16.767 [qr-poller] AutoJoinGroup: 轮询中... 10s
+07-30 09:58:16.899 [qr-poller] AutoJoinGroup: 轮询中... 10s
