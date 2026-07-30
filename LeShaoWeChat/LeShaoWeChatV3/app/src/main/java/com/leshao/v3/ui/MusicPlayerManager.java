@@ -123,32 +123,18 @@ public class MusicPlayerManager {
     private void loadAndPlay(final MusicSearchApi.Song song) {
         MusicLog.i("Player", "loadAndPlay: " + song.title + " - " + song.artist + " hash=" + song.hash + " platform=" + song.platform);
         if (song.platform == 0) {
-            KgApi.Song kgSong = new KgApi.Song();
-            kgSong.hash = song.hash;
-            kgSong.hash320 = song.hash320;
-            kgSong.sqHash = song.sqHash;
-            kgSong.originHash = song.originHash;
-            kgSong.id = song.id;
-            kgSong.title = song.title;
-            kgSong.artist = song.artist;
-            kgSong.albumId = song.albumId;
-            kgSong.albumAudioId = song.albumAudioId;
-            kgSong.duration = song.duration;
-            kgSong.cover = song.cover;
-            KgApi.getPlayUrl(kgSong, "standard", new KgApi.PlayUrlCallback() {
+            MusicSearchApi.getKugouPlayUrl(song.hash, "exhigh", new MusicSearchApi.PlayUrlCallback() {
                 @Override
                 public void onUrl(String url) {
-                    MusicLog.i("Player", "KgApi playUrl OK: " + url.substring(0, Math.min(60, url.length())));
+                    MusicLog.i("Player", "Kugou playUrl OK: " + url.substring(0, Math.min(60, url.length())));
                     if (mCurrent == song && url != null && !url.isEmpty()) {
                         playUrl(url);
                     }
                 }
                 @Override
                 public void onError(String msg) {
-                    MusicLog.e("Player", "KgApi playUrl failed: " + msg);
-                    MusicActivity.toast("播放失败: " + msg);
-                    stopProgressRunner();
-                    notifyStateChanged(false);
+                    MusicLog.e("Player", "Kugou playUrl failed, trying kuwo...");
+                    tryKuwoFallback(song);
                 }
             });
         } else {
@@ -169,6 +155,46 @@ public class MusicPlayerManager {
                 }
             });
         }
+    }
+
+    private void tryKuwoFallback(final MusicSearchApi.Song song) {
+        String q = song.title + " " + song.artist;
+        MusicSearchApi.searchKuwo(q, 1, new MusicSearchApi.SearchCallback() {
+            @Override
+            public void onResult(List<MusicSearchApi.Song> songs, int total, boolean hasPrev, boolean hasNext) {
+                if (songs.isEmpty()) {
+                    MusicLog.e("Player", "Kuwo fallback: no results");
+                    MusicActivity.toast("播放失败");
+                    stopProgressRunner();
+                    notifyStateChanged(false);
+                    return;
+                }
+                MusicSearchApi.Song kw = songs.get(0);
+                MusicSearchApi.getKuwoPlayUrl(kw.hash, "mp3", new MusicSearchApi.PlayUrlCallback() {
+                    @Override
+                    public void onUrl(String url) {
+                        MusicLog.i("Player", "Kuwo fallback OK: " + url.substring(0, Math.min(60, url.length())));
+                        if (mCurrent == song && url != null && !url.isEmpty()) {
+                            playUrl(url);
+                        }
+                    }
+                    @Override
+                    public void onError(String msg) {
+                        MusicLog.e("Player", "Kuwo fallback failed: " + msg);
+                        MusicActivity.toast("播放失败");
+                        stopProgressRunner();
+                        notifyStateChanged(false);
+                    }
+                });
+            }
+            @Override
+            public void onError(String msg) {
+                MusicLog.e("Player", "Kuwo search failed: " + msg);
+                MusicActivity.toast("播放失败");
+                stopProgressRunner();
+                notifyStateChanged(false);
+            }
+        });
     }
 
     public void togglePause() {
