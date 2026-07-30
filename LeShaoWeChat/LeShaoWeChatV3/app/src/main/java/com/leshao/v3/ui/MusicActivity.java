@@ -67,6 +67,7 @@ public class MusicActivity extends FragmentActivity {
         root.setBackgroundColor(CLR_BG);
 
         mContent = new FrameLayout(this);
+        mContent.setId(View.generateViewId());
         mContent.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1.0f));
         root.addView(mContent);
 
