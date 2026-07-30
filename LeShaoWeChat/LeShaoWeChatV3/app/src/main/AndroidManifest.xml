@@ -11,7 +11,8 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="乐少助手"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true">
 
         <meta-data
             android:name="xposedmodule"
@@ -34,6 +35,17 @@
             <intent-filter>
                 <action android:name="com.leshao.v3.action.SETTINGS" />
                 <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name="com.leshao.v3.ui.MusicActivity"
+            android:exported="true"
+            android:label="乐少音乐"
+            android:theme="@android:style/Theme.Holo.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
