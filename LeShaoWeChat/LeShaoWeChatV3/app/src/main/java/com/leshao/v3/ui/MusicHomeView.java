@@ -485,15 +485,7 @@ public class MusicHomeView {
     private List<MusicSearchApi.Song> convertToMs(List<KgApi.Song> kgSongs) {
         List<MusicSearchApi.Song> result = new ArrayList<>();
         for (KgApi.Song ks : kgSongs) {
-            MusicSearchApi.Song ms = new MusicSearchApi.Song();
-            ms.id = ks.hash.isEmpty() ? ks.id : ks.hash;
-            ms.hash = ks.hash;
-            ms.title = ks.title;
-            ms.artist = ks.artist;
-            ms.cover = ks.cover;
-            ms.duration = ks.duration;
-            ms.platform = 0;
-            result.add(ms);
+            result.add(convertSingle(ks));
         }
         return result;
     }
@@ -721,6 +713,11 @@ public class MusicHomeView {
         MusicSearchApi.Song ms = new MusicSearchApi.Song();
         ms.id = ks.hash.isEmpty() ? ks.id : ks.hash;
         ms.hash = ks.hash;
+        ms.hash320 = ks.hash320;
+        ms.sqHash = ks.sqHash;
+        ms.originHash = ks.originHash;
+        ms.albumId = ks.albumId;
+        ms.albumAudioId = ks.albumAudioId;
         ms.title = ks.title;
         ms.artist = ks.artist;
         ms.cover = ks.cover;

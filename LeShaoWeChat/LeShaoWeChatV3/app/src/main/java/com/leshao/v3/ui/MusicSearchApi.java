@@ -39,6 +39,11 @@ public class MusicSearchApi {
         public String lyric;
         public int platform; // 0=KuGou, 1=KuWo
         public String hash;
+        public String sqHash;
+        public String hash320;
+        public String originHash;
+        public String albumId;
+        public String albumAudioId;
     }
 
     public interface SearchCallback {

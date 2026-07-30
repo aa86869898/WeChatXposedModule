@@ -122,25 +122,52 @@ public class MusicPlayerManager {
 
     private void loadAndPlay(final MusicSearchApi.Song song) {
         MusicLog.i("Player", "loadAndPlay: " + song.title + " - " + song.artist + " hash=" + song.hash + " platform=" + song.platform);
-        MusicSearchApi.PlayUrlCallback cb = new MusicSearchApi.PlayUrlCallback() {
-            @Override
-            public void onUrl(String url) {
-                MusicLog.i("Player", "got playUrl for " + song.title + ": " + (url != null ? url.substring(0, Math.min(60, url.length())) + "..." : "null"));
-                if (mCurrent == song && url != null && !url.isEmpty()) {
-                    playUrl(url);
-                }
-            }
-            @Override
-            public void onError(String msg) {
-                MusicLog.e("Player", "playUrl failed for " + song.title + ": " + msg);
-                stopProgressRunner();
-                notifyStateChanged(false);
-            }
-        };
         if (song.platform == 0) {
-            MusicSearchApi.getKugouPlayUrl(song.hash, cb);
+            KgApi.Song kgSong = new KgApi.Song();
+            kgSong.hash = song.hash;
+            kgSong.hash320 = song.hash320;
+            kgSong.sqHash = song.sqHash;
+            kgSong.originHash = song.originHash;
+            kgSong.id = song.id;
+            kgSong.title = song.title;
+            kgSong.artist = song.artist;
+            kgSong.albumId = song.albumId;
+            kgSong.albumAudioId = song.albumAudioId;
+            kgSong.duration = song.duration;
+            kgSong.cover = song.cover;
+            KgApi.getPlayUrl(kgSong, "standard", new KgApi.PlayUrlCallback() {
+                @Override
+                public void onUrl(String url) {
+                    MusicLog.i("Player", "KgApi playUrl OK: " + url.substring(0, Math.min(60, url.length())));
+                    if (mCurrent == song && url != null && !url.isEmpty()) {
+                        playUrl(url);
+                    }
+                }
+                @Override
+                public void onError(String msg) {
+                    MusicLog.e("Player", "KgApi playUrl failed: " + msg);
+                    MusicActivity.toast("播放失败: " + msg);
+                    stopProgressRunner();
+                    notifyStateChanged(false);
+                }
+            });
         } else {
-            MusicSearchApi.getKuwoPlayUrl(song.hash, cb);
+            MusicSearchApi.getKuwoPlayUrl(song.hash, new MusicSearchApi.PlayUrlCallback() {
+                @Override
+                public void onUrl(String url) {
+                    MusicLog.i("Player", "Kuwo playUrl OK: " + url.substring(0, Math.min(60, url.length())));
+                    if (mCurrent == song && url != null && !url.isEmpty()) {
+                        playUrl(url);
+                    }
+                }
+                @Override
+                public void onError(String msg) {
+                    MusicLog.e("Player", "Kuwo playUrl failed: " + msg);
+                    MusicActivity.toast("播放失败: " + msg);
+                    stopProgressRunner();
+                    notifyStateChanged(false);
+                }
+            });
         }
     }
 

@@ -341,10 +341,16 @@ public class MusicRankingView {
                     MusicSearchApi.Song ms = new MusicSearchApi.Song();
                     ms.id = ks.hash.isEmpty() ? ks.id : ks.hash;
                     ms.hash = ks.hash;
+                    ms.hash320 = ks.hash320;
+                    ms.sqHash = ks.sqHash;
+                    ms.originHash = ks.originHash;
+                    ms.albumId = ks.albumId;
+                    ms.albumAudioId = ks.albumAudioId;
                     ms.title = ks.title;
                     ms.artist = ks.artist;
                     ms.cover = ks.cover;
                     ms.duration = ks.duration;
+                    ms.platform = 0;
                     msSongs.add(ms);
                 }
 

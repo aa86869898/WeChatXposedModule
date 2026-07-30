@@ -393,10 +393,16 @@ public class MusicSearchView {
             MusicSearchApi.Song ms = new MusicSearchApi.Song();
             ms.id = song.hash.isEmpty() ? song.id : song.hash;
             ms.hash = song.hash;
+            ms.hash320 = song.hash320;
+            ms.sqHash = song.sqHash;
+            ms.originHash = song.originHash;
+            ms.albumId = song.albumId;
+            ms.albumAudioId = song.albumAudioId;
             ms.title = song.title;
             ms.artist = song.artist;
             ms.cover = song.cover;
             ms.duration = song.duration;
+            ms.platform = 0;
             MusicActivity.playSong(ms);
         });
         item.addView(playBtn);
