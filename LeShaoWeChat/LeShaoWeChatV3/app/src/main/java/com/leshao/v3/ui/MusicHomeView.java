@@ -6,6 +6,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -35,6 +36,18 @@ public class MusicHomeView {
     private ProgressBar mArtistLoading;
     private LinearLayout mArtistGrid;
 
+    private View mNormalContent;
+    private LinearLayout mSearchOverlay;
+    private EditText mSearchInput;
+    private LinearLayout mSearchResults;
+    private LinearLayout mSearchTypes;
+    private int mSearchPage = 1;
+    private String mSearchType = "music";
+    private boolean mSearchHasMore;
+    private TextView mSearchMoreBtn;
+    private TextView mSearchNoMore;
+    private Runnable mSearchDebounce;
+
     private static final int[] CARD_COLORS = {
         0xFF3B8EFF, 0xFFF59E0B, 0xFFEF4444, 0xFF10B981, 0xFF8B5CF6
     };
@@ -42,23 +55,29 @@ public class MusicHomeView {
     public View createView(Activity activity) {
         mActivity = activity;
 
+        FrameLayout container = new FrameLayout(mActivity);
+        container.setBackgroundColor(MusicActivity.CLR_BG);
+
         ScrollView scroll = new ScrollView(mActivity);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(MusicActivity.CLR_BG);
-
-        LinearLayout root = new LinearLayout(mActivity);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(MusicActivity.dp(12), MusicActivity.sStatusBarH + MusicActivity.dp(8),
+        LinearLayout contentRoot = new LinearLayout(mActivity);
+        contentRoot.setOrientation(LinearLayout.VERTICAL);
+        contentRoot.setPadding(MusicActivity.dp(12), MusicActivity.sStatusBarH + MusicActivity.dp(8),
                 MusicActivity.dp(12), MusicActivity.dp(8));
+        buildHeader(contentRoot);
+        buildSearchBar(contentRoot);
+        buildRankingSection(contentRoot);
+        buildPlaylistSection(contentRoot);
+        buildArtistSection(contentRoot);
+        scroll.addView(contentRoot);
+        mNormalContent = scroll;
+        container.addView(scroll);
 
-        buildHeader(root);
-        buildSearchBar(root);
-        buildRankingSection(root);
-        buildPlaylistSection(root);
-        buildArtistSection(root);
+        mSearchOverlay = buildSearchOverlay();
+        mSearchOverlay.setVisibility(View.GONE);
+        container.addView(mSearchOverlay);
 
-        scroll.addView(root);
-        return scroll;
+        return container;
     }
 
     public void onViewReady() {
@@ -107,10 +126,7 @@ public class MusicHomeView {
         searchInput.setCursorVisible(false);
         searchInput.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         searchInput.setOnClickListener(v -> {
-            if (MusicActivity.sInstance != null) {
-                MusicActivity.sInstance.showTab(3);
-                bar.postDelayed(() -> searchInput.clearFocus(), 200);
-            }
+            showSearchOverlay();
         });
         bar.addView(searchInput);
 
@@ -476,8 +492,247 @@ public class MusicHomeView {
             ms.artist = ks.artist;
             ms.cover = ks.cover;
             ms.duration = ks.duration;
+            ms.platform = 0;
             result.add(ms);
         }
         return result;
+    }
+
+    // === Search Overlay ===
+
+    private LinearLayout buildSearchOverlay() {
+        LinearLayout overlay = new LinearLayout(mActivity);
+        overlay.setOrientation(LinearLayout.VERTICAL);
+        overlay.setBackgroundColor(MusicActivity.CLR_BG);
+        overlay.setPadding(0, MusicActivity.sStatusBarH, 0, 0);
+
+        // top bar: back + search input
+        LinearLayout topBar = new LinearLayout(mActivity);
+        topBar.setOrientation(LinearLayout.HORIZONTAL);
+        topBar.setGravity(Gravity.CENTER_VERTICAL);
+        topBar.setBackgroundColor(MusicActivity.CLR_CARD);
+        topBar.setPadding(MusicActivity.dp(8), MusicActivity.dp(6), MusicActivity.dp(8), MusicActivity.dp(6));
+
+        TextView backBtn = new TextView(mActivity);
+        backBtn.setText("\u2190");
+        backBtn.setTextSize(20);
+        backBtn.setTextColor(MusicActivity.CLR_TEXT);
+        backBtn.setPadding(MusicActivity.dp(4), MusicActivity.dp(2), MusicActivity.dp(8), MusicActivity.dp(2));
+        backBtn.setOnClickListener(v -> hideSearchOverlay());
+        topBar.addView(backBtn);
+
+        mSearchInput = new EditText(mActivity);
+        mSearchInput.setHint("\u641C\u7D22\u6B4C\u66F2/\u6B4C\u624B");
+        mSearchInput.setTextSize(13);
+        mSearchInput.setTextColor(MusicActivity.CLR_TEXT);
+        mSearchInput.setHintTextColor(MusicActivity.CLR_TEXT2);
+        mSearchInput.setBackground(MusicActivity.rd(18, MusicActivity.CLR_INPUT));
+        mSearchInput.setSingleLine(true);
+        mSearchInput.setPadding(MusicActivity.dp(10), MusicActivity.dp(6), MusicActivity.dp(10), MusicActivity.dp(6));
+        mSearchInput.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        mSearchInput.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            public void afterTextChanged(android.text.Editable s) {
+                if (mSearchDebounce != null) mHandler.removeCallbacks(mSearchDebounce);
+                String kw = s.toString().trim();
+                if (kw.isEmpty()) {
+                    mSearchResults.removeAllViews();
+                    mSearchMoreBtn.setVisibility(View.GONE);
+                    mSearchNoMore.setVisibility(View.GONE);
+                    return;
+                }
+                mSearchDebounce = () -> doSearch(kw, 1, false);
+                mHandler.postDelayed(mSearchDebounce, 400);
+            }
+        });
+        topBar.addView(mSearchInput);
+
+        overlay.addView(topBar);
+
+        // type chips
+        mSearchTypes = new LinearLayout(mActivity);
+        mSearchTypes.setOrientation(LinearLayout.HORIZONTAL);
+        mSearchTypes.setPadding(MusicActivity.dp(10), MusicActivity.dp(6), MusicActivity.dp(10), MusicActivity.dp(4));
+
+        String[][] typeDefs = {{"\u6B4C\u66F2", "music"}, {"\u6B4C\u624B", "artist"}, {"\u4E13\u8F91", "album"}, {"\u6B4C\u5355", "sheet"}};
+        for (int i = 0; i < typeDefs.length; i++) {
+            final String type = typeDefs[i][1];
+            TextView chip = new TextView(mActivity);
+            chip.setText(typeDefs[i][0]);
+            chip.setTextSize(11);
+            chip.setPadding(MusicActivity.dp(8), MusicActivity.dp(3), MusicActivity.dp(8), MusicActivity.dp(3));
+            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-2, -2);
+            if (i > 0) clp.leftMargin = MusicActivity.dp(6);
+            chip.setLayoutParams(clp);
+            chip.setBackground(MusicActivity.rd(12, i == 0 ? MusicActivity.CLR_ACCENT : MusicActivity.CLR_INPUT));
+            chip.setTextColor(i == 0 ? 0xFFFFFFFF : MusicActivity.CLR_TEXT2);
+            chip.setOnClickListener(v -> {
+                mSearchType = type;
+                for (int j = 0; j < mSearchTypes.getChildCount(); j++) {
+                    View c = mSearchTypes.getChildAt(j);
+                    c.setBackground(MusicActivity.rd(12, j == mSearchTypes.indexOfChild(v) ? MusicActivity.CLR_ACCENT : MusicActivity.CLR_INPUT));
+                    ((TextView) c).setTextColor(j == mSearchTypes.indexOfChild(v) ? 0xFFFFFFFF : MusicActivity.CLR_TEXT2);
+                }
+                String kw = mSearchInput.getText().toString().trim();
+                if (!kw.isEmpty()) doSearch(kw, 1, false);
+            });
+            mSearchTypes.addView(chip);
+        }
+        overlay.addView(mSearchTypes);
+
+        // results scroll
+        ScrollView resultScroll = new ScrollView(mActivity);
+        resultScroll.setFillViewport(true);
+        resultScroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1.0f));
+
+        LinearLayout resultRoot = new LinearLayout(mActivity);
+        resultRoot.setOrientation(LinearLayout.VERTICAL);
+        resultRoot.setPadding(MusicActivity.dp(10), MusicActivity.dp(8), MusicActivity.dp(10), MusicActivity.dp(16));
+
+        mSearchResults = new LinearLayout(mActivity);
+        mSearchResults.setOrientation(LinearLayout.VERTICAL);
+        resultRoot.addView(mSearchResults);
+
+        mSearchNoMore = new TextView(mActivity);
+        mSearchNoMore.setText("\u6CA1\u6709\u66F4\u591A\u7ED3\u679C\u4E86");
+        mSearchNoMore.setTextSize(11);
+        mSearchNoMore.setTextColor(MusicActivity.CLR_TEXT2);
+        mSearchNoMore.setGravity(Gravity.CENTER);
+        mSearchNoMore.setVisibility(View.GONE);
+        resultRoot.addView(mSearchNoMore);
+
+        mSearchMoreBtn = new TextView(mActivity);
+        mSearchMoreBtn.setText("\u52A0\u8F7D\u66F4\u591A");
+        mSearchMoreBtn.setTextSize(12);
+        mSearchMoreBtn.setTextColor(MusicActivity.CLR_ACCENT);
+        mSearchMoreBtn.setGravity(Gravity.CENTER);
+        mSearchMoreBtn.setPadding(0, MusicActivity.dp(6), 0, MusicActivity.dp(6));
+        mSearchMoreBtn.setVisibility(View.GONE);
+        mSearchMoreBtn.setOnClickListener(v -> {
+            String kw = mSearchInput.getText().toString().trim();
+            if (!kw.isEmpty()) doSearch(kw, mSearchPage + 1, true);
+        });
+        resultRoot.addView(mSearchMoreBtn);
+
+        resultScroll.addView(resultRoot);
+        overlay.addView(resultScroll);
+
+        return overlay;
+    }
+
+    private void showSearchOverlay() {
+        mNormalContent.setVisibility(View.GONE);
+        mSearchOverlay.setVisibility(View.VISIBLE);
+        mSearchInput.requestFocus();
+    }
+
+    private void hideSearchOverlay() {
+        mNormalContent.setVisibility(View.VISIBLE);
+        mSearchOverlay.setVisibility(View.GONE);
+        mSearchInput.setText("");
+        mSearchResults.removeAllViews();
+    }
+
+    private void doSearch(String kw, int page, boolean append) {
+        KgApi.search(kw, page, mSearchType, new KgApi.SongListCallback() {
+            public void onResult(List<KgApi.Song> songs, int total) {
+                mHandler.post(() -> {
+                    mSearchPage = page;
+                    if (!append) mSearchResults.removeAllViews();
+                    mSearchHasMore = songs.size() >= 20;
+
+                    for (KgApi.Song ks : songs) {
+                        mSearchResults.addView(buildSearchResultItem(ks));
+                    }
+
+                    if (mSearchHasMore) {
+                        mSearchMoreBtn.setVisibility(View.VISIBLE);
+                        mSearchNoMore.setVisibility(View.GONE);
+                    } else {
+                        mSearchMoreBtn.setVisibility(View.GONE);
+                        mSearchNoMore.setVisibility(page > 1 ? View.VISIBLE : View.GONE);
+                    }
+                });
+            }
+            public void onError(String msg) {
+                mHandler.post(() -> MusicActivity.toast("\u641C\u7D22\u5931\u8D25: " + msg));
+            }
+        });
+    }
+
+    private View buildSearchResultItem(KgApi.Song ks) {
+        MusicSearchApi.Song ms = convertSingle(ks);
+
+        LinearLayout item = new LinearLayout(mActivity);
+        item.setOrientation(LinearLayout.HORIZONTAL);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(MusicActivity.dp(4), MusicActivity.dp(6), MusicActivity.dp(4), MusicActivity.dp(6));
+        item.setBackground(MusicActivity.rd(8, MusicActivity.CLR_CARD));
+        LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(-1, -2);
+        ilp.bottomMargin = MusicActivity.dp(4);
+        item.setLayoutParams(ilp);
+        item.setOnClickListener(v -> { MusicActivity.playSong(ms); MusicActivity.toast("\u6B63\u5728\u64AD\u653E: " + ms.title); });
+
+        ImageView cover = new ImageView(mActivity);
+        int cs = MusicActivity.dp(38);
+        cover.setLayoutParams(new LinearLayout.LayoutParams(cs, cs));
+        cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        GradientDrawable cb = new GradientDrawable();
+        cb.setCornerRadius(MusicActivity.dp(3));
+        cb.setColor(0xFFE8ECF0);
+        cover.setBackground(cb);
+        MusicActivity.loadCover(cover, ks.cover);
+        item.addView(cover);
+
+        LinearLayout info = new LinearLayout(mActivity);
+        info.setOrientation(LinearLayout.VERTICAL);
+        info.setPadding(MusicActivity.dp(8), 0, 0, 0);
+        info.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+
+        TextView title = new TextView(mActivity);
+        title.setText(ks.title);
+        title.setTextSize(13);
+        title.setTextColor(MusicActivity.CLR_TEXT);
+        title.setSingleLine(true);
+        title.setTypeface(null, Typeface.BOLD);
+        info.addView(title);
+
+        TextView artist = new TextView(mActivity);
+        artist.setText(ks.artist + (ks.album != null && !ks.album.isEmpty() ? "  \u00B7  " + ks.album : ""));
+        artist.setTextSize(11);
+        artist.setTextColor(MusicActivity.CLR_TEXT2);
+        artist.setSingleLine(true);
+        artist.setPadding(0, MusicActivity.dp(1), 0, 0);
+        info.addView(artist);
+
+        item.addView(info);
+
+        TextView dur = new TextView(mActivity);
+        dur.setText(formatD(ks.duration));
+        dur.setTextSize(10);
+        dur.setTextColor(MusicActivity.CLR_TEXT2);
+        item.addView(dur);
+
+        return item;
+    }
+
+    private MusicSearchApi.Song convertSingle(KgApi.Song ks) {
+        MusicSearchApi.Song ms = new MusicSearchApi.Song();
+        ms.id = ks.hash.isEmpty() ? ks.id : ks.hash;
+        ms.hash = ks.hash;
+        ms.title = ks.title;
+        ms.artist = ks.artist;
+        ms.cover = ks.cover;
+        ms.duration = ks.duration;
+        ms.platform = 0;
+        return ms;
+    }
+
+    private String formatD(int sec) {
+        if (sec <= 0) return "--";
+        int m = sec / 60;
+        int s = sec % 60;
+        return String.format("%d:%02d", m, s);
     }
 }

@@ -22,16 +22,17 @@ import java.util.List;
 
 public class MusicActivity extends Activity {
 
-    static final int CLR_BG = 0xFFF5F7FA;
+    static final int CLR_BG = 0xFFF0F4FA;
     static final int CLR_CARD = 0xFFFFFFFF;
     static final int CLR_ACCENT = 0xFF3B8EFF;
     static final int CLR_ACCENT_LIGHT = 0xFFE8F0FE;
     static final int CLR_TEXT = 0xFF1A1A2E;
     static final int CLR_TEXT2 = 0xFF6B7280;
     static final int CLR_DIV = 0xFFE5E7EB;
-    static final int CLR_INPUT = 0xFFEEF0F4;
+    static final int CLR_INPUT = 0xFFEEF2F7;
     static final int CLR_GOLD = 0xFFF59E0B;
     static final int CLR_RED = 0xFFEF4444;
+    static final int CLR_ACCENT_DARK = 0xFF2E6FD4;
 
     static final Handler MAIN = new Handler(Looper.getMainLooper());
     static float sDensity;
@@ -56,6 +57,8 @@ public class MusicActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         try {
+            MusicLog.init();
+            MusicLog.i("MusicActivity", "onCreate start, v=1.4.2-music");
             sDensity = getResources().getDisplayMetrics().density;
             int rid = getResources().getIdentifier("status_bar_height", "dimen", "android");
             sStatusBarH = rid > 0 ? getResources().getDimensionPixelSize(rid) : dp(24);
@@ -150,9 +153,8 @@ public class MusicActivity extends Activity {
     }
 
     void openPlayer() {
-        if (sPlayer != null && sPlayer.getCurrent() != null) {
-            startActivity(new Intent(this, MusicPlayerActivity.class));
-        }
+        MusicLog.i("MusicActivity", "openPlayer called, player=" + (sPlayer != null) + ", current=" + (sPlayer != null ? sPlayer.getCurrent() : null));
+        startActivity(new Intent(this, MusicPlayerActivity.class));
     }
 
     void refreshPlayerBar() {
@@ -223,7 +225,6 @@ public class MusicActivity extends Activity {
             }
             case 2: {
                 openPlayer();
-                if (idx - 1 >= 0) showTab(idx - 1);
                 return;
             }
             case 3: {
@@ -280,13 +281,25 @@ public class MusicActivity extends Activity {
                 java.net.URL u = new java.net.URL(finalUrl);
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
                 conn.setConnectTimeout(8000); conn.setReadTimeout(8000);
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12)");
                 conn.setRequestProperty("Referer", "https://m.kugou.com");
+                int code = conn.getResponseCode();
+                if (code != 200) {
+                    MusicLog.e("cover", "HTTP " + code + " for " + finalUrl);
+                    conn.disconnect();
+                    return;
+                }
                 java.io.InputStream is = conn.getInputStream();
                 android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
                 is.close(); conn.disconnect();
-                if (bmp != null) MAIN.post(() -> iv.setImageBitmap(bmp));
-            } catch (Throwable ignored) {}
+                if (bmp != null) {
+                    MAIN.post(() -> iv.setImageBitmap(bmp));
+                } else {
+                    MusicLog.e("cover", "decode null for " + finalUrl);
+                }
+            } catch (Throwable t) {
+                MusicLog.e("cover", "load fail: " + finalUrl, t);
+            }
         }).start();
     }
 

@@ -24,6 +24,10 @@ public class MusicSearchApi {
     private static final ExecutorService sExecutor = Executors.newFixedThreadPool(4);
     private static final Handler sHandler = new Handler(Looper.getMainLooper());
 
+    static {
+        MusicLog.init();
+    }
+
     public static class Song {
         public String id;
         public String title;
@@ -54,10 +58,12 @@ public class MusicSearchApi {
 
     // ===== KuGou =====
     private static final String KG_SEARCH = "https://songsearch.kugou.com/song_search_v2";
-    private static final String KG_PLAY = "https://music.haitangw.cc/kgqq1/kg.php";
+    private static final String KG_PLAY = "https://wwwapi.kugou.com/yy/index.php?r=play/getdata&hash=";
+    private static final String KG_PLAY_FALLBACK = "https://music.haitangw.cc/kgqq1/kg.php";
     private static final String KG_LYRIC = "https://wwwapi.kugou.com/yy/index.php?r=play/getdata&hash=";
 
     public static void searchKugou(String query, int page, SearchCallback cb) {
+        MusicLog.i(TAG, "searchKugou q=" + query + " page=" + page);
         sExecutor.execute(() -> {
             try {
                 String urlStr = KG_SEARCH + "?keyword=" + URLEncoder.encode(query, "UTF-8")
@@ -66,7 +72,7 @@ public class MusicSearchApi {
                 String resp = httpGet(urlStr, "https://songsearch.kugou.com");
                 JSONObject json = new JSONObject(resp);
                 JSONObject data = json.optJSONObject("data");
-                if (data == null) { postError(cb, "无搜索结果"); return; }
+                if (data == null) { MusicLog.e(TAG, "searchKugou: no data"); postError(cb, "无搜索结果"); return; }
 
                 JSONArray lists = data.optJSONArray("lists");
                 JSONObject info = data.optJSONObject("info");
@@ -111,22 +117,57 @@ public class MusicSearchApi {
 
     public static void getKugouPlayUrl(String hash, String level, PlayUrlCallback cb) {
         sExecutor.execute(() -> {
-            try {
-                String url = KG_PLAY + "?id=" + hash + "&type=json&level=" + level;
-                String resp = httpGet(url, "https://music.haitangw.cc");
-                JSONObject json = new JSONObject(resp);
-                JSONObject data = json.optJSONObject("data");
-                final String playUrl = data != null ? data.optString("url", "") : "";
-                if (!playUrl.isEmpty()) {
-                    sHandler.post(() -> cb.onUrl(playUrl));
-                } else {
-                    postError(cb, "无法获取酷狗播放链接");
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "KG play error", e);
-                postError(cb, "获取播放链接失败: " + e.getMessage());
+            MusicLog.i(TAG, "getKugouPlayUrl hash=" + hash + " level=" + level);
+            // Primary: official Kugou API
+            String playUrl = fetchKugouOfficial(hash);
+            if (!playUrl.isEmpty()) {
+                MusicLog.i(TAG, "Kugou official OK: " + playUrl.substring(0, Math.min(80, playUrl.length())));
+                final String url = playUrl;
+                sHandler.post(() -> cb.onUrl(url));
+                return;
             }
+            // Fallback: third-party proxy
+            MusicLog.i(TAG, "Kugou official failed, trying fallback...");
+            playUrl = fetchKugouFallback(hash, level);
+            if (!playUrl.isEmpty()) {
+                MusicLog.i(TAG, "Kugou fallback OK: " + playUrl.substring(0, Math.min(80, playUrl.length())));
+                final String url = playUrl;
+                sHandler.post(() -> cb.onUrl(url));
+                return;
+            }
+            MusicLog.e(TAG, "All Kugou play sources failed for hash=" + hash);
+            postError(cb, "无法获取酷狗播放链接");
         });
+    }
+
+    private static String fetchKugouOfficial(String hash) {
+        try {
+            String url = KG_PLAY + hash;
+            String resp = httpGet(url, "https://wwwapi.kugou.com");
+            JSONObject json = new JSONObject(resp);
+            JSONObject data = json.optJSONObject("data");
+            if (data == null) return "";
+            String playUrl = data.optString("play_url", data.optString("play_backup_url", ""));
+            if (playUrl.isEmpty() || "null".equals(playUrl)) return "";
+            return playUrl;
+        } catch (Exception e) {
+            MusicLog.e(TAG, "fetchKugouOfficial error", e);
+            return "";
+        }
+    }
+
+    private static String fetchKugouFallback(String hash, String level) {
+        try {
+            String url = KG_PLAY_FALLBACK + "?id=" + hash + "&type=json&level=" + level;
+            String resp = httpGet(url, "https://music.haitangw.cc");
+            JSONObject json = new JSONObject(resp);
+            JSONObject data = json.optJSONObject("data");
+            String playUrl = data != null ? data.optString("url", "") : "";
+            return playUrl;
+        } catch (Exception e) {
+            MusicLog.e(TAG, "fetchKugouFallback error", e);
+            return "";
+        }
     }
 
     public static void getKugouLyric(String hash, LyricCallback cb) {

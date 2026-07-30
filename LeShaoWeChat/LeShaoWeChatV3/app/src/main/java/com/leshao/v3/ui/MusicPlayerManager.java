@@ -7,6 +7,7 @@ import android.net.Uri;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -86,6 +87,7 @@ public class MusicPlayerManager {
     }
 
     public void playUrl(String url) {
+        MusicLog.i("Player", "playUrl: " + url.substring(0, Math.min(60, url.length())));
         stopPlayer();
         mPlayer = new MediaPlayer();
         try {
@@ -94,36 +96,43 @@ public class MusicPlayerManager {
             mPlayer.setOnPreparedListener(mp -> {
                 mPaused = false;
                 mp.start();
+                MusicLog.i("Player", "prepared OK, started playback");
                 notifyStateChanged(true);
                 notifySongChanged();
                 startProgressRunner();
             });
             mPlayer.setOnCompletionListener(mp -> {
+                MusicLog.i("Player", "playback completed");
                 stopProgressRunner();
                 notifyStateChanged(false);
                 next();
             });
             mPlayer.setOnErrorListener((mp, what, extra) -> {
+                MusicLog.e("Player", "MediaPlayer error what=" + what + " extra=" + extra);
                 stopProgressRunner();
                 notifyStateChanged(false);
                 return false;
             });
             mPlayer.prepareAsync();
         } catch (Exception e) {
+            MusicLog.e("Player", "playUrl exception", e);
             mPlayer = null;
         }
     }
 
     private void loadAndPlay(final MusicSearchApi.Song song) {
+        MusicLog.i("Player", "loadAndPlay: " + song.title + " - " + song.artist + " hash=" + song.hash + " platform=" + song.platform);
         MusicSearchApi.PlayUrlCallback cb = new MusicSearchApi.PlayUrlCallback() {
             @Override
             public void onUrl(String url) {
+                MusicLog.i("Player", "got playUrl for " + song.title + ": " + (url != null ? url.substring(0, Math.min(60, url.length())) + "..." : "null"));
                 if (mCurrent == song && url != null && !url.isEmpty()) {
                     playUrl(url);
                 }
             }
             @Override
             public void onError(String msg) {
+                MusicLog.e("Player", "playUrl failed for " + song.title + ": " + msg);
                 stopProgressRunner();
                 notifyStateChanged(false);
             }
