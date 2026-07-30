@@ -12,14 +12,12 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
-import java.util.ArrayList;
 import java.util.List;
 
 public class MusicActivity extends Activity {
@@ -37,6 +35,7 @@ public class MusicActivity extends Activity {
 
     static final Handler MAIN = new Handler(Looper.getMainLooper());
     static float sDensity;
+    static int sStatusBarH;
     static MusicPlayerManager sPlayer;
     static Activity sActivity;
     static MusicActivity sInstance;
@@ -50,14 +49,21 @@ public class MusicActivity extends Activity {
     ImageView mPlayerNextBtn;
     int mCurrentTab = 0;
 
-    static final String[] TAB_LABELS = {"推荐", "排行", "歌单", "搜索"};
-    static final String[] TAB_ICONS = {"🏠", "🏆", "🎵", "🔍"};
+    static final String[] TAB_LABELS = {"推荐", "排行", "播放器", "搜索"};
+    static final String[] TAB_ICONS = {"\uD83C\uDFE0", "\uD83C\uDFC6", "\uD83C\uDFB5", "\uD83D\uDD0D"};
+
+    private MusicHomeView mHomeView;
+    private MusicRankingView mRankingView;
+    private MusicPlayerTabView mPlayerTabView;
+    private MusicSearchView mSearchView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         try {
             sDensity = getResources().getDisplayMetrics().density;
+            int rid = getResources().getIdentifier("status_bar_height", "dimen", "android");
+            sStatusBarH = rid > 0 ? getResources().getDimensionPixelSize(rid) : dp(24);
             sPlayer = MusicPlayerManager.get(this);
             sActivity = this;
             sInstance = this;
@@ -77,9 +83,8 @@ public class MusicActivity extends Activity {
             root.addView(mBottomNav);
 
             setContentView(root);
-
             showTab(0);
-
+            refreshPlayerBar();
             Log.d("MusicActivity", "onCreate OK");
         } catch (Throwable e) {
             Log.e("MusicActivity", "onCreate CRASH: " + Log.getStackTraceString(e));
@@ -88,15 +93,20 @@ public class MusicActivity extends Activity {
         }
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        refreshPlayerBar();
+    }
+
     void buildPlayerBar() {
         mPlayerBar = new LinearLayout(this);
         mPlayerBar.setOrientation(LinearLayout.HORIZONTAL);
         mPlayerBar.setGravity(Gravity.CENTER_VERTICAL);
         mPlayerBar.setBackgroundColor(CLR_CARD);
         mPlayerBar.setPadding(dp(8), dp(4), dp(8), dp(4));
-        mPlayerBar.setVisibility(View.VISIBLE);
-        mPlayerBar.setElevation(dp(3));
         mPlayerBar.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(40)));
+        mPlayerBar.setElevation(dp(3));
 
         GradientDrawable coverBg = new GradientDrawable();
         coverBg.setCornerRadius(dp(4));
@@ -108,11 +118,13 @@ public class MusicActivity extends Activity {
         mPlayerCover.setScaleType(ImageView.ScaleType.CENTER_CROP);
         mPlayerCover.setBackground(coverBg);
         mPlayerBar.addView(mPlayerCover);
+        mPlayerCover.setOnClickListener(v -> openPlayer());
 
         LinearLayout infoCol = new LinearLayout(this);
         infoCol.setOrientation(LinearLayout.VERTICAL);
         infoCol.setPadding(dp(7), 0, dp(6), 0);
         infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        infoCol.setOnClickListener(v -> openPlayer());
         mPlayerTitle = new TextView(this);
         mPlayerTitle.setTextSize(10);
         mPlayerTitle.setTextColor(CLR_TEXT);
@@ -121,42 +133,45 @@ public class MusicActivity extends Activity {
         infoCol.addView(mPlayerTitle);
         mPlayerBar.addView(infoCol);
 
-        mPlayerPlayBtn = new ImageView(this);
         int bs = dp(28);
+        mPlayerPlayBtn = new ImageView(this);
         mPlayerPlayBtn.setLayoutParams(new LinearLayout.LayoutParams(bs, bs));
-        mPlayerPlayBtn.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        mPlayerPlayBtn.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        mPlayerPlayBtn.setPadding(dp(4), dp(4), dp(4), dp(4));
         mPlayerPlayBtn.setOnClickListener(v -> {
-            if (sPlayer != null) sPlayer.togglePause();
-            refreshPlayerBar();
+            if (sPlayer != null && sPlayer.getCurrent() != null) {
+                if (sPlayer.isPlaying()) sPlayer.pause();
+                else sPlayer.resume();
+                refreshPlayerBar();
+            }
         });
+        mPlayerPlayBtn.setImageDrawable(emoji("\u25B6", dp(13)));
         mPlayerBar.addView(mPlayerPlayBtn);
 
         mPlayerNextBtn = new ImageView(this);
         mPlayerNextBtn.setLayoutParams(new LinearLayout.LayoutParams(bs, bs));
-        mPlayerNextBtn.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        mPlayerNextBtn.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        mPlayerNextBtn.setPadding(dp(4), dp(4), dp(4), dp(4));
         mPlayerNextBtn.setImageDrawable(emoji("\u23ED", dp(13)));
-        mPlayerNextBtn.setOnClickListener(v -> {
-            if (sPlayer != null) { sPlayer.next(); refreshPlayerBar(); }
-        });
+        mPlayerNextBtn.setOnClickListener(v -> { if (sPlayer != null) { sPlayer.next(); refreshPlayerBar(); } });
         mPlayerBar.addView(mPlayerNextBtn);
+    }
 
-        mPlayerBar.setOnClickListener(v -> {
-            if (sPlayer != null && sPlayer.getCurrent() != null) {
-                startActivity(new Intent(this, MusicPlayerActivity.class));
-            }
-        });
+    void openPlayer() {
+        if (sPlayer != null && sPlayer.getCurrent() != null) {
+            startActivity(new Intent(this, MusicPlayerActivity.class));
+        }
     }
 
     void refreshPlayerBar() {
+        if (mPlayerBar == null) return;
         MusicSearchApi.Song song = sPlayer != null ? sPlayer.getCurrent() : null;
         if (song == null) {
-            mPlayerBar.setVisibility(View.VISIBLE);
             mPlayerTitle.setText("未在播放");
             mPlayerPlayBtn.setImageDrawable(emoji("\u25B6", dp(13)));
             mPlayerCover.setImageBitmap(null);
             return;
         }
-        mPlayerBar.setVisibility(View.VISIBLE);
         mPlayerTitle.setText(song.title + " - " + song.artist);
         boolean playing = sPlayer.isPlaying();
         mPlayerPlayBtn.setImageDrawable(emoji(playing ? "\u23F8" : "\u25B6", dp(13)));
@@ -175,11 +190,11 @@ public class MusicActivity extends Activity {
             LinearLayout tab = new LinearLayout(this);
             tab.setOrientation(LinearLayout.VERTICAL);
             tab.setGravity(Gravity.CENTER);
-            tab.setLayoutParams(new LinearLayout.LayoutParams(0, dp(44), 1.0f));
+            tab.setLayoutParams(new LinearLayout.LayoutParams(0, dp(42), 1.0f));
 
             TextView icon = new TextView(this);
             icon.setText(TAB_ICONS[i]);
-            icon.setTextSize(16);
+            icon.setTextSize(15);
             icon.setGravity(Gravity.CENTER);
             tab.addView(icon);
 
@@ -191,7 +206,6 @@ public class MusicActivity extends Activity {
             tab.addView(label);
 
             tab.setTag(new View[]{icon, label});
-
             tab.setOnClickListener(v -> showTab(idx));
             mBottomNav.addView(tab);
         }
@@ -204,36 +218,30 @@ public class MusicActivity extends Activity {
 
         View view = null;
         switch (idx) {
-            case 0: {
-                MusicHomeView hv = new MusicHomeView();
-                view = hv.createView(this);
-                hv.onViewReady();
+            case 0:
+                if (mHomeView == null) mHomeView = new MusicHomeView();
+                view = mHomeView.createView(this);
+                mHomeView.onViewReady();
                 break;
-            }
-            case 1: {
-                MusicRankingView rv = new MusicRankingView();
-                view = rv.createView(this);
-                rv.onViewReady();
+            case 1:
+                if (mRankingView == null) mRankingView = new MusicRankingView();
+                view = mRankingView.createView(this);
+                mRankingView.onViewReady();
                 break;
-            }
-            case 2: {
-                MusicPlaylistView pv = new MusicPlaylistView();
-                view = pv.createView(this);
-                pv.onViewReady();
+            case 2:
+                if (mPlayerTabView == null) mPlayerTabView = new MusicPlayerTabView();
+                view = mPlayerTabView.createView(this);
+                mPlayerTabView.onViewReady();
                 break;
-            }
-            case 3: {
-                MusicSearchView sv = new MusicSearchView();
-                view = sv.createView(this);
-                sv.onViewReady();
+            case 3:
+                if (mSearchView == null) mSearchView = new MusicSearchView();
+                view = mSearchView.createView(this);
+                mSearchView.onViewReady();
                 break;
-            }
         }
         if (view != null) {
             mContent.addView(view);
-            if (view instanceof ScrollView) {
-                ((ScrollView) view).scrollTo(0, 0);
-            }
+            if (view instanceof ScrollView) ((ScrollView) view).scrollTo(0, 0);
         }
         updateNavHighlight();
     }
@@ -243,9 +251,8 @@ public class MusicActivity extends Activity {
             View child = mBottomNav.getChildAt(i);
             View[] views = (View[]) child.getTag();
             if (views != null) {
-                boolean sel = (i == mCurrentTab);
-                ((TextView) views[0]).setTextColor(sel ? CLR_ACCENT : CLR_TEXT2);
-                ((TextView) views[1]).setTextColor(sel ? CLR_ACCENT : CLR_TEXT2);
+                ((TextView) views[0]).setTextColor(i == mCurrentTab ? CLR_ACCENT : CLR_TEXT2);
+                ((TextView) views[1]).setTextColor(i == mCurrentTab ? CLR_ACCENT : CLR_TEXT2);
             }
         }
     }
@@ -253,12 +260,8 @@ public class MusicActivity extends Activity {
     public static void playSong(MusicSearchApi.Song song) {
         if (sPlayer == null) return;
         int idx = sPlayer.getPlaylist().indexOf(song);
-        if (idx >= 0) {
-            sPlayer.playFromPlaylist(idx);
-        } else {
-            sPlayer.getPlaylist().add(song);
-            sPlayer.play(song);
-        }
+        if (idx >= 0) sPlayer.playFromPlaylist(idx);
+        else { sPlayer.getPlaylist().add(song); sPlayer.play(song); }
         if (sInstance != null) sInstance.refreshPlayerBar();
     }
 
@@ -266,9 +269,7 @@ public class MusicActivity extends Activity {
         if (sPlayer == null) return;
         sPlayer.getPlaylist().clear();
         sPlayer.getPlaylist().addAll(songs);
-        if (startIdx >= 0 && startIdx < songs.size()) {
-            sPlayer.play(songs.get(startIdx));
-        }
+        if (startIdx >= 0 && startIdx < songs.size()) sPlayer.play(songs.get(startIdx));
         if (sInstance != null) sInstance.refreshPlayerBar();
     }
 
@@ -284,13 +285,11 @@ public class MusicActivity extends Activity {
             try {
                 java.net.URL u = new java.net.URL(finalUrl);
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
-                conn.setConnectTimeout(5000);
-                conn.setReadTimeout(5000);
+                conn.setConnectTimeout(5000); conn.setReadTimeout(5000);
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0");
                 java.io.InputStream is = conn.getInputStream();
                 android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
-                is.close();
-                conn.disconnect();
+                is.close(); conn.disconnect();
                 if (bmp != null) MAIN.post(() -> {
                     iv.setImageBitmap(bmp);
                     iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -300,31 +299,16 @@ public class MusicActivity extends Activity {
     }
 
     public static int dp(int dp) { return (int) (dp * sDensity + 0.5f); }
-
     public static int dp(float dp) { return (int) (dp * sDensity + 0.5f); }
 
     public static GradientDrawable rd(int radius, int color) {
         GradientDrawable g = new GradientDrawable();
-        g.setCornerRadius(dp(radius));
-        g.setColor(color);
-        return g;
-    }
-
-    public static GradientDrawable rd(float[] radii, int color) {
-        GradientDrawable g = new GradientDrawable();
-        g.setCornerRadii(radii);
-        g.setColor(color);
-        return g;
-    }
-
-    public static GradientDrawable gradient(int[] colors) {
-        return new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, colors);
+        g.setCornerRadius(dp(radius)); g.setColor(color); return g;
     }
 
     public static GradientDrawable gradientRounded(int[] colors, int radius) {
-        GradientDrawable g = gradient(colors);
-        g.setCornerRadius(dp(radius));
-        return g;
+        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, colors);
+        g.setCornerRadius(dp(radius)); return g;
     }
 
     public static android.graphics.drawable.Drawable emoji(String emoji, int sizePx) {
@@ -335,8 +319,7 @@ public class MusicActivity extends Activity {
         float h = fm.bottom - fm.top;
         if (w <= 0 || h <= 0) { w = sizePx; h = sizePx; }
         android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(
-            (int) Math.ceil(w) + 1, (int) Math.ceil(h) + 1,
-            android.graphics.Bitmap.Config.ARGB_8888);
+            (int) Math.ceil(w) + 1, (int) Math.ceil(h) + 1, android.graphics.Bitmap.Config.ARGB_8888);
         android.graphics.Canvas canvas = new android.graphics.Canvas(bmp);
         canvas.drawText(emoji, 0, -fm.top, paint);
         return new android.graphics.drawable.BitmapDrawable(
@@ -344,8 +327,6 @@ public class MusicActivity extends Activity {
     }
 
     public static void toast(String msg) {
-        MAIN.post(() -> {
-            if (sActivity != null) Toast.makeText(sActivity, msg, Toast.LENGTH_SHORT).show();
-        });
+        MAIN.post(() -> { if (sActivity != null) Toast.makeText(sActivity, msg, Toast.LENGTH_SHORT).show(); });
     }
 }

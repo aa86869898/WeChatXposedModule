@@ -22,6 +22,7 @@ public class MusicPlayerManager {
     private final List<MusicSearchApi.Song> mHistory = new ArrayList<>();
     private int mCurrentIndex = -1;
     private boolean mPaused = true;
+    private int mPlayMode = 0; // 0=列表循环, 1=单曲循环, 2=随机
     private Handler mHandler = new Handler(Looper.getMainLooper());
     private Runnable mProgressRunner;
 
@@ -137,16 +138,33 @@ public class MusicPlayerManager {
     public void togglePause() {
         if (mPlayer == null || mCurrent == null) return;
         if (mPlayer.isPlaying()) {
-            mPaused = true;
-            mPlayer.pause();
-            stopProgressRunner();
-            notifyStateChanged(false);
+            pause();
         } else {
-            mPaused = false;
-            mPlayer.start();
-            startProgressRunner();
-            notifyStateChanged(true);
+            resume();
         }
+    }
+
+    public void pause() {
+        if (mPlayer == null || !mPlayer.isPlaying()) return;
+        mPaused = true;
+        mPlayer.pause();
+        stopProgressRunner();
+        notifyStateChanged(false);
+    }
+
+    public void resume() {
+        if (mPlayer == null || !mPaused) return;
+        mPaused = false;
+        mPlayer.start();
+        startProgressRunner();
+        notifyStateChanged(true);
+    }
+
+    public int getPlayMode() { return mPlayMode; }
+
+    public void setPlayMode(int mode) {
+        mPlayMode = mode % 3;
+        if (mPlayer != null) mPlayer.setLooping(mPlayMode == 1);
     }
 
     public void next() {
