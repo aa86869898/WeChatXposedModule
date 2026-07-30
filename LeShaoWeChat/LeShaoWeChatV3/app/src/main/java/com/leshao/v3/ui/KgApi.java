@@ -336,16 +336,39 @@ public class KgApi {
                     "Android712-AndroidPhone-11451-376-0-FeeCacheUpdate-wifi",
                     "media.store.kugou.com");
 
-                JSONArray data = new JSONObject(resp).optJSONArray("data");
+                    JSONArray data = new JSONObject(resp).optJSONArray("data");
                 if (data != null) {
                     for (int i = 0; i < data.length() && i < songs.size(); i++) {
                         JSONObject d = data.getJSONObject(i);
                         Song s = songs.get(i);
-                        s.title = d.optString("songname", d.optString("name", s.title));
-                        s.artist = d.optString("singername", d.optString("singer_name", s.artist));
+
+                        String fname = d.optString("filename", d.optString("name", ""));
+                        if (!fname.isEmpty()) {
+                            int idx = fname.indexOf(" - ");
+                            if (idx > 0) {
+                                s.artist = fname.substring(0, idx);
+                                s.title = fname.substring(idx + 3).replace(".mp3", "");
+                            } else if (s.title == null || s.title.isEmpty()) {
+                                s.title = fname.replace(".mp3", "");
+                            }
+                        }
+                        if (s.title == null || s.title.isEmpty()) {
+                            s.title = d.optString("songname", d.optString("name", ""));
+                        }
+                        if (s.artist == null || s.artist.isEmpty()) {
+                            s.artist = d.optString("singername", d.optString("singer_name", ""));
+                        }
+
                         s.album = d.optString("album_name", d.optString("albumname", s.album));
                         s.duration = d.optInt("duration", d.optInt("timelength", s.duration)) / 1000;
-                        s.cover = d.optString("image", "");
+
+                        String cover = d.optString("album_sizable_cover", "");
+                        if (cover.isEmpty()) {
+                            JSONObject info = d.optJSONObject("info");
+                            if (info != null) cover = info.optString("image", "");
+                        }
+                        s.cover = cover.replace("{size}", "480");
+
                         s.albumId = d.optString("album_id", "");
                         s.albumAudioId = d.optString("album_audio_id", "");
                         s.sqHash = d.optString("sqhash", "");
@@ -417,9 +440,7 @@ public class KgApi {
             String sig = md5(SIGN_KEY_URL + noSep + SIGN_KEY_URL);
             String fullUrl = "https://gateway.kugou.com/v5/url?" + joined + "&signature=" + sig;
 
-            String resp = httpGet(fullUrl, "https://m.kugou.com",
-                "Android800-AndroidPhone-12029-56-0-starlive-ctnet(13)",
-                "tracker.kugou.com");
+            String resp = getPlayUrlRaw(fullUrl);
             JSONObject body = new JSONObject(resp);
             if (body.optInt("status") == 1) {
                 JSONArray urls = body.optJSONArray("url");
@@ -768,6 +789,24 @@ public class KgApi {
         } finally {
             conn.disconnect();
         }
+    }
+
+    private static String getPlayUrlRaw(String urlStr) throws Exception {
+        URL url = new URL(urlStr);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(10000);
+        conn.setReadTimeout(10000);
+        conn.setRequestProperty("User-Agent", "Android800-AndroidPhone-12029-56-0-starlive-ctnet(13)");
+        conn.setRequestProperty("Referer", "https://m.kugou.com");
+        conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+        conn.setRequestProperty("KG-THash", "595ff94");
+        conn.setRequestProperty("KG-FAKE", USER_ID);
+        conn.setRequestProperty("KG-Rec", "1");
+        conn.setRequestProperty("KG-RC", "1");
+        conn.setRequestProperty("x-router", "tracker.kugou.com");
+        conn.setInstanceFollowRedirects(true);
+        return readResponse(conn);
     }
 
     // ===== 工具 =====
