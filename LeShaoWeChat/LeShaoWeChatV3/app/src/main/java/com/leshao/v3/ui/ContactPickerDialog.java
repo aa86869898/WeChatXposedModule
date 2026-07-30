@@ -346,8 +346,8 @@ public class ContactPickerDialog {
     }
 
     private static int getColorFromName(String name) {
-        int[] colors = {0xFFE04040, 0xFF07C160, 0xFF576B95, 0xFFFFBE00, 0xFF10AEFF,
-                        0xFF7B2FBE, 0xFFFF4298, 0xFFFF8C00, 0xFF00C088, 0xFF576B95};
+        int[] colors = {0xFFE04040, 0xFF576B95, 0xFF576B95, 0xFFFFBE00, 0xFF10AEFF,
+                         0xFF7B2FBE, 0xFFFF4298, 0xFFFF8C00, 0xFF5856D6, 0xFF576B95};
         if (name == null || name.isEmpty()) return colors[0];
         int hash = 0;
         for (int i = 0; i < name.length(); i++) hash = hash * 31 + name.charAt(i);
@@ -431,7 +431,7 @@ public class ContactPickerDialog {
             Contact c = data.get(position);
             boolean sel = selected.contains(c.wxid);
             holder.checkTv.setText(sel ? "\u2713" : "");
-            holder.checkTv.setTextColor(sel ? AppColors.green() : AppColors.arrow());
+            holder.checkTv.setTextColor(sel ? AppColors.accent() : AppColors.arrow());
             holder.nameTv.setText(c.displayName());
             holder.wxidTv.setText(c.wxid);
             holder.aliasTv.setText(c.alias != null && !c.alias.isEmpty() && !c.alias.startsWith("wxid_") ? c.alias : "");

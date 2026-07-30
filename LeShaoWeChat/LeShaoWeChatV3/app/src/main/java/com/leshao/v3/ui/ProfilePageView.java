@@ -141,7 +141,7 @@ public class ProfilePageView {
         TextView statusLabel = new TextView(ctx);
         statusLabel.setText("会员状态: " + currentLevel + (isActive && boundWxid.equals(currentWxid) ? " (已激活)" : ""));
         statusLabel.setTextSize(13);
-        statusLabel.setTextColor(isActive ? AppColors.green() : AppColors.accent());
+        statusLabel.setTextColor(isActive ? AppColors.accent() : AppColors.arrow());
         statusLabel.setTypeface(null, Typeface.BOLD);
         statusLabel.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(4 * d));
         actCard.addView(statusLabel);
@@ -234,7 +234,7 @@ public class ProfilePageView {
                     ActivationManager.saveActivation(ctx, code, wxid,
                         result.levelIndex, result.expireHours, result.featureMask);
                     statusLabel.setText("当前状态: " + result.levelName + " (已激活)");
-                    statusLabel.setTextColor(AppColors.green());
+                    statusLabel.setTextColor(AppColors.accent());
                     Toast.makeText(ctx, "激活成功: " + result.levelName, Toast.LENGTH_SHORT).show();
                     // 刷新页面
                     SubPageActivity.open(parentAct, "个人中心", 99);
@@ -252,51 +252,6 @@ public class ProfilePageView {
 
         // ===== Monet 主题 =====
         root.addView(spacerV(ctx, d, 16));
-        root.addView(sectionLabel(ctx, d, "主题美化"));
-        LinearLayout themeCard = makeCard(ctx, d);
-
-        LinearLayout monRow = new LinearLayout(ctx);
-        monRow.setOrientation(LinearLayout.HORIZONTAL);
-        monRow.setGravity(Gravity.CENTER_VERTICAL);
-        monRow.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(12 * d));
-
-        TextView monLabel = new TextView(ctx);
-        monLabel.setText("Monet 主题引擎");
-        monLabel.setTextSize(13);
-        monLabel.setTextColor(AppColors.text1());
-        monLabel.setTypeface(null, Typeface.BOLD);
-        monLabel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-        monRow.addView(monLabel);
-
-        boolean monOn = prefs != null && prefs.getBoolean("ls_theme_enabled", false);
-        TextView monTg = new TextView(ctx);
-        monTg.setText(monOn ? "  关闭  " : "开启");
-        monTg.setTextSize(12);
-        monTg.setTextColor(monOn ? android.graphics.Color.WHITE : 0xFF27AE60);
-        monTg.setTypeface(null, Typeface.BOLD);
-        monTg.setPadding((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
-        android.graphics.drawable.GradientDrawable mt = new android.graphics.drawable.GradientDrawable();
-        mt.setCornerRadius((int)(4 * d));
-        mt.setColor(monOn ? 0xFF27AE60 : android.graphics.Color.TRANSPARENT);
-        if (!monOn) mt.setStroke((int)(1 * d), 0xFF27AE60);
-        monTg.setBackground(mt);
-        monTg.setTag(monOn);
-        monTg.setOnClickListener(v -> {
-            boolean cur = !Boolean.TRUE.equals(v.getTag());
-            v.setTag(cur);
-            ((TextView) v).setText(cur ? "  关闭  " : "开启");
-            ((TextView) v).setTextColor(cur ? android.graphics.Color.WHITE : 0xFF27AE60);
-            android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
-            g.setCornerRadius((int)(4 * d));
-            g.setColor(cur ? 0xFF27AE60 : android.graphics.Color.TRANSPARENT);
-            if (!cur) g.setStroke((int)(1 * d), 0xFF27AE60);
-            v.setBackground(g);
-            if (prefs != null) prefs.edit().putBoolean("ls_theme_enabled", cur).apply();
-            try { com.leshao.v3.hook.ThemeHook.setMasterEnabled(cur); } catch (Throwable ignored) {}
-        });
-        monRow.addView(monTg);
-        themeCard.addView(monRow);
-        root.addView(themeCard);
 
         // ===== 日志导出 =====
         root.addView(spacerV(ctx, d, 16));
@@ -315,7 +270,7 @@ public class ProfilePageView {
         logBtnRow.setGravity(Gravity.CENTER);
         logBtnRow.setPadding((int)(16 * d), (int)(4 * d), (int)(16 * d), (int)(12 * d));
 
-        TextView btnExport = makeSmallBtn(ctx, d, "导出日志", 0xFF27AE60);
+        TextView btnExport = makeSmallBtn(ctx, d, "导出日志", AppColors.accent());
         btnExport.setOnClickListener(v -> {
             try {
                 String ts = String.valueOf(System.currentTimeMillis());

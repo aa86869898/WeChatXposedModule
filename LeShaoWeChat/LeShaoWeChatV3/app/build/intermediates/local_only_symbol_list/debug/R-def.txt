@@ -1,5 +1,11 @@
 R_DEF: Internal format may change without notice
 local
 array xposed_scope
+drawable donate_alipay
+drawable donate_wechat
+drawable kugou_icon
+drawable kuwo_icon
+drawable qr_alipay
+drawable qr_wechat
 mipmap ic_launcher
 style AppTheme

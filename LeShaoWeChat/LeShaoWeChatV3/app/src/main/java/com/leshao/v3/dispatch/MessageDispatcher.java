@@ -4,7 +4,6 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.model.WeChatMessage;
 import com.leshao.v3.service.AutoReplyManager;
-import com.leshao.v3.service.DingDong;
 import com.leshao.v3.service.GroupGuard;
 import com.leshao.v3.service.StatsCollector;
 import com.leshao.v3.service.TTSBroadcaster;
@@ -53,11 +52,6 @@ public class MessageDispatcher {
 
         chain.setNext(new Pipeline("keyword", (m, c) -> {
             if (AutoReplyManager.matchAndReply(m, c)) return false;
-            return true;
-        }));
-
-        chain.setNext(new Pipeline("dingdong", (m, c) -> {
-            DingDong.process(m, c);
             return true;
         }));
 

@@ -48,8 +48,6 @@ public class DataToolsPageView {
         root.setBackgroundColor(AppColors.bg());
         root.setPadding((int)(8 * d), (int)(16 * d), (int)(8 * d), (int)(16 * d));
 
-        root.addView(sectionLabel(ctx, "数据与备份"));
-
         LinearLayout card1 = makeCard(ctx, d);
         card1.addView(switchRow(ctx, d, "消息导出", "在聊天窗口菜单导出会话记录为 TXT/HTML", cfg.msgExportEnabled, (v, on) -> {
             cfg.msgExportEnabled = on; cfg.save(prefs); MsgExport.setEnabled(on);
@@ -57,7 +55,6 @@ public class DataToolsPageView {
         root.addView(card1);
 
         root.addView(spacer(ctx, d, 8));
-        root.addView(sectionLabel(ctx, "聊天记录备份"));
 
         LinearLayout card2 = makeCard(ctx, d);
         card2.addView(switchRow(ctx, d, "自动每日备份", "每天 02:00 自动备份加密数据库文件", cfg.chatBackupEnabled, (v, on) -> {
@@ -71,29 +68,13 @@ public class DataToolsPageView {
         btnRow.setPadding((int)(2*d), 0, (int)(2*d), 0);
         btnRow.addView(actionButton(ctx, d, "立即备份", 1f, () -> {
             ChatBackup.triggerManualBackup();
-            Toast.makeText(ctx, "已触发备份,稍后微信打开时将自动执行", Toast.LENGTH_LONG).show();
+            Toast.makeText(ctx, "正在备份,请稍候...", Toast.LENGTH_LONG).show();
         }));
         View gap = new View(ctx);
         gap.setLayoutParams(new LinearLayout.LayoutParams((int)(8*d), -2));
         btnRow.addView(gap);
         btnRow.addView(actionButton(ctx, d, "查看备份", 1f, () -> showBackupList(ctx)));
         root.addView(btnRow);
-
-        root.addView(spacer(ctx, d, 12));
-        root.addView(sectionLabel(ctx, "聊天记录恢复"));
-
-        LinearLayout card3 = makeCard(ctx, d);
-        card3.addView(buttonRow(ctx, parentAct, d, "从备份恢复", () -> showRestoreDialog(ctx)));
-        card3.addView(buttonRow(ctx, parentAct, d, "导入外部记录", () -> showImportDialog(ctx)));
-        root.addView(card3);
-
-        root.addView(spacer(ctx, d, 12));
-        root.addView(sectionLabel(ctx, "导出记录管理"));
-
-        LinearLayout card4 = makeCard(ctx, d);
-        card4.addView(buttonRow(ctx, parentAct, d, "查看导出记录", () -> showExportList(ctx)));
-        card4.addView(buttonRow(ctx, parentAct, d, "通讯录变更记录", () -> SubPageActivity.open(parentAct, "通讯录更新日志", 13)));
-        root.addView(card4);
 
         root.addView(spacer(ctx, d, 8));
         btnRow = new LinearLayout(ctx);
@@ -142,7 +123,7 @@ public class DataToolsPageView {
                 .setMessage("将用 " + file.getName() + " 恢复聊天记录数据库?\n恢复后需重新打开微信生效。")
                 .setPositiveButton("恢复", (dialog, which) -> {
                     ChatBackup.triggerRestore(file.getAbsolutePath());
-                    Toast.makeText(ctx, "已触发恢复,稍后微信打开时将自动执行", Toast.LENGTH_LONG).show();
+                    Toast.makeText(ctx, "正在恢复,请稍候...", Toast.LENGTH_LONG).show();
                 })
                 .setNegativeButton("取消", null)
                 .show();
@@ -540,7 +521,7 @@ public class DataToolsPageView {
         row.addView(textCol);
 
         Switch sw = new Switch(ctx); sw.setChecked(checked);
-        try { if (checked) sw.setThumbResource(android.R.drawable.btn_star_big_on); } catch (Throwable ignored) {}
+        try { sw.setThumbResource(android.R.drawable.btn_star_big_on); } catch (Throwable ignored) {}
         sw.setOnCheckedChangeListener(listener);
         row.addView(sw);
         return row;

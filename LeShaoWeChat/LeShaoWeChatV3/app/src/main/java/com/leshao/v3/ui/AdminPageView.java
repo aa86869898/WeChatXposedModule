@@ -69,7 +69,7 @@ public class AdminPageView {
         selectAllBtn.setPadding((int)(10*d), (int)(3*d), (int)(10*d), (int)(3*d));
         GradientDrawable saBg = new GradientDrawable();
         saBg.setCornerRadius((int)(4*d));
-        saBg.setColor(0xFF27AE60);
+        saBg.setColor(AppColors.accent());
         selectAllBtn.setBackground(saBg);
         selectAllBtn.setOnClickListener(v -> { for (Switch sw : sFeatureBoxes) sw.setChecked(true); });
         selectRow.addView(selectAllBtn);

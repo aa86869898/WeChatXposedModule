@@ -47,8 +47,9 @@ public class ContactExport {
     private static void hookOnActivityResult() {
         if (sHookReady) return;
         try {
-            XposedHelpers.findAndHookMethod(Activity.class, "onActivityResult",
-                int.class, int.class, Intent.class, new XC_MethodHook() {
+            java.lang.reflect.Method m = Activity.class.getDeclaredMethod("onActivityResult",
+                int.class, int.class, Intent.class);
+            XposedBridge.hookMethod(m, new XC_MethodHook() {
                     @Override protected void afterHookedMethod(MethodHookParam param) {
                         int req = (int) param.args[0];
                         int res = (int) param.args[1];

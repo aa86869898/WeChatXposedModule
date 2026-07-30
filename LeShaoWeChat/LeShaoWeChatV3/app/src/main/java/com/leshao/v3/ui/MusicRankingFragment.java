@@ -61,7 +61,7 @@ public class MusicRankingFragment extends Fragment {
 
         mProgressBar = new ProgressBar(getContext());
         FrameLayout.LayoutParams pbLp = new FrameLayout.LayoutParams(
-                MusicActivity.dp(36), MusicActivity.dp(36));
+                MusicActivity.dp(25), MusicActivity.dp(25));
         pbLp.gravity = Gravity.CENTER;
         mProgressBar.setLayoutParams(pbLp);
         mProgressBar.setVisibility(View.VISIBLE);
@@ -89,13 +89,13 @@ public class MusicRankingFragment extends Fragment {
     private void buildTitleBar() {
         LinearLayout bar = new LinearLayout(getContext());
         bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setPadding(MusicActivity.dp(16), MusicActivity.dp(16),
-                MusicActivity.dp(16), MusicActivity.dp(8));
+        bar.setPadding(MusicActivity.dp(11), MusicActivity.dp(11),
+                MusicActivity.dp(11), MusicActivity.dp(6));
         bar.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView title = new TextView(getContext());
         title.setText("\u6392\u884C\u699C");
-        title.setTextSize(18);
+        title.setTextSize(13);
         title.setTextColor(MusicActivity.CLR_TEXT);
         title.setTypeface(null, Typeface.BOLD);
         bar.addView(title);
@@ -105,7 +105,7 @@ public class MusicRankingFragment extends Fragment {
 
     private void buildFilterChips() {
         HorizontalScrollView hsv = new HorizontalScrollView(getContext());
-        hsv.setPadding(MusicActivity.dp(12), 0, MusicActivity.dp(12), MusicActivity.dp(8));
+        hsv.setPadding(MusicActivity.dp(8), 0, MusicActivity.dp(8), MusicActivity.dp(6));
         hsv.setHorizontalScrollBarEnabled(false);
         LinearLayout chipContainer = new LinearLayout(getContext());
         chipContainer.setOrientation(LinearLayout.HORIZONTAL);
@@ -114,14 +114,14 @@ public class MusicRankingFragment extends Fragment {
             final int idx = i;
             TextView chip = new TextView(getContext());
             chip.setText(CHIP_LABELS[i]);
-            chip.setTextSize(13);
+            chip.setTextSize(12);
             chip.setGravity(Gravity.CENTER);
-            chip.setPadding(MusicActivity.dp(16), MusicActivity.dp(6),
-                    MusicActivity.dp(16), MusicActivity.dp(6));
+            chip.setPadding(MusicActivity.dp(12), MusicActivity.dp(5),
+                    MusicActivity.dp(12), MusicActivity.dp(5));
             chip.setTypeface(null, Typeface.BOLD);
 
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-            lp.setMargins(MusicActivity.dp(4), 0, MusicActivity.dp(4), 0);
+            lp.setMargins(MusicActivity.dp(3), 0, MusicActivity.dp(3), 0);
             chip.setLayoutParams(lp);
 
             chip.setOnClickListener(v -> {
@@ -144,10 +144,10 @@ public class MusicRankingFragment extends Fragment {
             TextView chip = mChipViews.get(i);
             boolean sel = (CHIP_CLASSIFIES[i] == mSelectedClassify);
             if (sel) {
-                chip.setBackground(MusicActivity.rd(20, MusicActivity.CLR_ACCENT));
+                chip.setBackground(MusicActivity.rd(14, MusicActivity.CLR_ACCENT));
                 chip.setTextColor(0xFFFFFFFF);
             } else {
-                chip.setBackground(MusicActivity.rd(20, MusicActivity.CLR_INPUT));
+                chip.setBackground(MusicActivity.rd(14, MusicActivity.CLR_INPUT));
                 chip.setTextColor(MusicActivity.CLR_TEXT2);
             }
         }
@@ -156,7 +156,7 @@ public class MusicRankingFragment extends Fragment {
     private void buildRankingList() {
         mRankingList = new LinearLayout(getContext());
         mRankingList.setOrientation(LinearLayout.VERTICAL);
-        mRankingList.setPadding(MusicActivity.dp(8), 0, MusicActivity.dp(8), MusicActivity.dp(8));
+        mRankingList.setPadding(MusicActivity.dp(6), 0, MusicActivity.dp(6), MusicActivity.dp(6));
     }
 
     private void buildDetailView() {
@@ -219,21 +219,21 @@ public class MusicRankingFragment extends Fragment {
         LinearLayout item = new LinearLayout(getContext());
         item.setOrientation(LinearLayout.HORIZONTAL);
         item.setGravity(Gravity.CENTER_VERTICAL);
-        item.setBackground(MusicActivity.rd(12, MusicActivity.CLR_CARD));
-        item.setPadding(MusicActivity.dp(12), MusicActivity.dp(12),
-                MusicActivity.dp(12), MusicActivity.dp(12));
+        item.setBackground(MusicActivity.rd(8, MusicActivity.CLR_CARD));
+        item.setPadding(MusicActivity.dp(8), MusicActivity.dp(8),
+                MusicActivity.dp(8), MusicActivity.dp(8));
 
-        int itemH = MusicActivity.dp(80);
+        int itemH = MusicActivity.dp(64);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, itemH);
-        lp.setMargins(0, MusicActivity.dp(4), 0, MusicActivity.dp(4));
+        lp.setMargins(0, MusicActivity.dp(3), 0, MusicActivity.dp(3));
         item.setLayoutParams(lp);
 
         TextView rankTv = new TextView(getContext());
         rankTv.setText(String.valueOf(position));
-        rankTv.setTextSize(18);
+        rankTv.setTextSize(16);
         rankTv.setTypeface(null, Typeface.BOLD);
         rankTv.setGravity(Gravity.CENTER);
-        rankTv.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(36), -1));
+        rankTv.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(25), -1));
 
         if (position == 1) {
             rankTv.setTextColor(MusicActivity.CLR_GOLD);
@@ -243,18 +243,18 @@ public class MusicRankingFragment extends Fragment {
             rankTv.setTextColor(CLR_BRONZE);
         } else {
             rankTv.setTextColor(MusicActivity.CLR_TEXT2);
-            rankTv.setTextSize(14);
+            rankTv.setTextSize(12);
         }
         item.addView(rankTv);
 
         ImageView cover = new ImageView(getContext());
-        int coverSize = MusicActivity.dp(56);
+        int coverSize = MusicActivity.dp(48);
         LinearLayout.LayoutParams covLp = new LinearLayout.LayoutParams(coverSize, coverSize);
-        covLp.setMargins(MusicActivity.dp(8), 0, MusicActivity.dp(10), 0);
+        covLp.setMargins(MusicActivity.dp(6), 0, MusicActivity.dp(7), 0);
         cover.setLayoutParams(covLp);
         cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable coverBg = new GradientDrawable();
-        coverBg.setCornerRadius(MusicActivity.dp(8));
+        coverBg.setCornerRadius(MusicActivity.dp(6));
         coverBg.setColor(MusicActivity.CLR_INPUT);
         cover.setBackground(coverBg);
         MusicActivity.loadCover(cover, rank.cover);
@@ -264,11 +264,11 @@ public class MusicRankingFragment extends Fragment {
         textCol.setOrientation(LinearLayout.VERTICAL);
         textCol.setGravity(Gravity.CENTER_VERTICAL);
         textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-        textCol.setPadding(MusicActivity.dp(2), 0, 0, 0);
+        textCol.setPadding(MusicActivity.dp(1), 0, 0, 0);
 
         TextView titleTv = new TextView(getContext());
         titleTv.setText(rank.title);
-        titleTv.setTextSize(15);
+        titleTv.setTextSize(14);
         titleTv.setTextColor(MusicActivity.CLR_TEXT);
         titleTv.setTypeface(null, Typeface.BOLD);
         titleTv.setSingleLine(true);
@@ -284,10 +284,10 @@ public class MusicRankingFragment extends Fragment {
 
         TextView arrow = new TextView(getContext());
         arrow.setText("\u25B6");
-        arrow.setTextSize(14);
+        arrow.setTextSize(10);
         arrow.setTextColor(MusicActivity.CLR_TEXT2);
         arrow.setGravity(Gravity.CENTER);
-        arrow.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(28), -1));
+        arrow.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(20), -1));
         item.addView(arrow);
 
         item.setOnClickListener(v -> openRankingDetail(rank));
@@ -300,21 +300,21 @@ public class MusicRankingFragment extends Fragment {
         LinearLayout backRow = new LinearLayout(getContext());
         backRow.setOrientation(LinearLayout.HORIZONTAL);
         backRow.setGravity(Gravity.CENTER_VERTICAL);
-        backRow.setPadding(MusicActivity.dp(12), MusicActivity.dp(12),
-                MusicActivity.dp(12), MusicActivity.dp(8));
+        backRow.setPadding(MusicActivity.dp(8), MusicActivity.dp(8),
+                MusicActivity.dp(8), MusicActivity.dp(6));
         backRow.setBackgroundColor(MusicActivity.CLR_CARD);
 
         TextView backBtn = new TextView(getContext());
         backBtn.setText("\u2190");
-        backBtn.setTextSize(20);
+        backBtn.setTextSize(14);
         backBtn.setTextColor(MusicActivity.CLR_TEXT);
-        backBtn.setPadding(0, 0, MusicActivity.dp(12), 0);
+        backBtn.setPadding(0, 0, MusicActivity.dp(8), 0);
         backBtn.setOnClickListener(v -> showRankingView());
         backRow.addView(backBtn);
 
         TextView detailTitle = new TextView(getContext());
         detailTitle.setText(rank.title);
-        detailTitle.setTextSize(17);
+        detailTitle.setTextSize(12);
         detailTitle.setTextColor(MusicActivity.CLR_TEXT);
         detailTitle.setTypeface(null, Typeface.BOLD);
         detailTitle.setSingleLine(true);
@@ -328,9 +328,9 @@ public class MusicRankingFragment extends Fragment {
 
         ProgressBar pb = new ProgressBar(getContext());
         LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(
-                MusicActivity.dp(28), MusicActivity.dp(28));
+                MusicActivity.dp(20), MusicActivity.dp(20));
         pbLp.gravity = Gravity.CENTER;
-        pbLp.topMargin = MusicActivity.dp(40);
+        pbLp.topMargin = MusicActivity.dp(28);
         pb.setLayoutParams(pbLp);
         mDetailList.addView(pb);
 
@@ -359,8 +359,8 @@ public class MusicRankingFragment extends Fragment {
         LinearLayout item = new LinearLayout(getContext());
         item.setOrientation(LinearLayout.HORIZONTAL);
         item.setGravity(Gravity.CENTER_VERTICAL);
-        item.setPadding(MusicActivity.dp(12), MusicActivity.dp(10),
-                MusicActivity.dp(12), MusicActivity.dp(10));
+        item.setPadding(MusicActivity.dp(8), MusicActivity.dp(7),
+                MusicActivity.dp(8), MusicActivity.dp(7));
         item.setBackgroundColor(MusicActivity.CLR_CARD);
 
         View sep = new View(getContext());
@@ -370,20 +370,20 @@ public class MusicRankingFragment extends Fragment {
 
         TextView idxTv = new TextView(getContext());
         idxTv.setText(String.valueOf(index));
-        idxTv.setTextSize(13);
+        idxTv.setTextSize(9);
         idxTv.setTextColor(MusicActivity.CLR_TEXT2);
         idxTv.setGravity(Gravity.CENTER);
-        idxTv.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(32), -2));
+        idxTv.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(22), -2));
         item.addView(idxTv);
 
         ImageView cover = new ImageView(getContext());
-        int cs = MusicActivity.dp(40);
+        int cs = MusicActivity.dp(36);
         LinearLayout.LayoutParams covLp = new LinearLayout.LayoutParams(cs, cs);
-        covLp.setMargins(MusicActivity.dp(6), 0, MusicActivity.dp(10), 0);
+        covLp.setMargins(MusicActivity.dp(4), 0, MusicActivity.dp(7), 0);
         cover.setLayoutParams(covLp);
         cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable coverBg = new GradientDrawable();
-        coverBg.setCornerRadius(MusicActivity.dp(4));
+        coverBg.setCornerRadius(MusicActivity.dp(3));
         coverBg.setColor(MusicActivity.CLR_INPUT);
         cover.setBackground(coverBg);
         MusicActivity.loadCover(cover, kgSong.cover);
@@ -412,10 +412,10 @@ public class MusicRankingFragment extends Fragment {
 
         TextView playBtn = new TextView(getContext());
         playBtn.setText("\u25B6");
-        playBtn.setTextSize(16);
+        playBtn.setTextSize(11);
         playBtn.setTextColor(MusicActivity.CLR_ACCENT);
         playBtn.setGravity(Gravity.CENTER);
-        playBtn.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(40), -1));
+        playBtn.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(28), -1));
         item.addView(playBtn);
 
         item.setOnClickListener(v -> {

@@ -11,9 +11,7 @@ import com.leshao.v3.db.DatabaseProvider;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.AntiRecallHook;
 import com.leshao.v3.hook.AntiDetectionHook;
-import com.leshao.v3.hook.AutoCollectHook;
 import com.leshao.v3.hook.AutoRemark;
-import com.leshao.v3.hook.AutoReplyHook;
 import com.leshao.v3.hook.BatchMessage;
 import com.leshao.v3.hook.CallFeatures;
 import com.leshao.v3.hook.ChatBackup;
@@ -96,6 +94,7 @@ public class MainHook implements IXposedHookLoadPackage {
 
             SettingsEntryHook.hook(cl);
             MessageHook.hook(cl);
+            AutoJoinGroup.hook(lpparam);
 
             ContextManager.setOnReadyCallback(new Runnable() {
                 @Override
@@ -118,11 +117,9 @@ public class MainHook implements IXposedHookLoadPackage {
                         AntiDetectionHook.hook(cl);
                         HookManager.register(AntiRecallHook::hook);
                         HookManager.register(RedPacketHook::hook);
-                        HookManager.register(AutoCollectHook::hook);
                         FriendRequestHook.hook(cl);
 
-                        // === WeChatPlus 聊天增强层 (24项) ============================================
-                        HookManager.register(() -> AutoReplyHook.hook(cl));
+                        // === WeChatPlus 聊天增强层 ============================================
                         HookManager.register(() -> TypingIndicator.hook(cl));
                         HookManager.register(() -> ChatFooterEnhance.hook(cl));
                         HookManager.register(() -> ChatUICustom.hook(cl));
@@ -151,6 +148,7 @@ public class MainHook implements IXposedHookLoadPackage {
                         HookManager.register(() -> ContactExport.hook(cl));
                         HookManager.register(() -> ContactChangeLog.hook(cl));
                         HookManager.register(() -> GroupFeatures.hook(cl));
+                        HookManager.register(() -> AutoJoinGroup.hook(lpparam));
 
                         // === 数据工具 ==============================================================
                         HookManager.register(() -> MsgExport.hook(cl));
@@ -165,6 +163,9 @@ public class MainHook implements IXposedHookLoadPackage {
                         HookManager.register(() -> com.leshao.v3.hook.TtsVoiceSender.hook(cl));
 
                         LogWriter.log(TAG, "[MainHook] activateAll() START, pendingTasks=" + HookManager.pendingCount());
+
+                        LogWriter.log("LeShaoV3", "!!! DEBUG: AutoJoinGroup about to hook, class=" + AutoJoinGroup.class.getName());
+                        AutoJoinGroup.hook(lpparam);
 
                         HookManager.activateAll();
 

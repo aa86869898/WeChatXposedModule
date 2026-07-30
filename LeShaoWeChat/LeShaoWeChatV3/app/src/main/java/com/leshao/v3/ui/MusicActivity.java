@@ -90,17 +90,17 @@ public class MusicActivity extends FragmentActivity {
         mPlayerBar.setOrientation(LinearLayout.HORIZONTAL);
         mPlayerBar.setGravity(Gravity.CENTER_VERTICAL);
         mPlayerBar.setBackgroundColor(CLR_CARD);
-        mPlayerBar.setPadding(dp(12), dp(6), dp(12), dp(6));
+        mPlayerBar.setPadding(dp(8), dp(4), dp(8), dp(4));
         mPlayerBar.setVisibility(View.GONE);
-        mPlayerBar.setElevation(dp(4));
-        mPlayerBar.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(58)));
+        mPlayerBar.setElevation(dp(3));
+        mPlayerBar.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(41)));
 
         GradientDrawable coverBg = new GradientDrawable();
-        coverBg.setCornerRadius(dp(6));
+        coverBg.setCornerRadius(dp(4));
         coverBg.setColor(0xFFDDDDDD);
 
         mPlayerCover = new ImageView(this);
-        int cs = dp(42);
+        int cs = dp(36);
         mPlayerCover.setLayoutParams(new LinearLayout.LayoutParams(cs, cs));
         mPlayerCover.setScaleType(ImageView.ScaleType.CENTER_CROP);
         mPlayerCover.setBackground(coverBg);
@@ -108,10 +108,10 @@ public class MusicActivity extends FragmentActivity {
 
         LinearLayout infoCol = new LinearLayout(this);
         infoCol.setOrientation(LinearLayout.VERTICAL);
-        infoCol.setPadding(dp(10), 0, dp(8), 0);
+        infoCol.setPadding(dp(7), 0, dp(6), 0);
         infoCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         mPlayerTitle = new TextView(this);
-        mPlayerTitle.setTextSize(14);
+        mPlayerTitle.setTextSize(10);
         mPlayerTitle.setTextColor(CLR_TEXT);
         mPlayerTitle.setSingleLine(true);
         mPlayerTitle.setTypeface(null, Typeface.BOLD);
@@ -119,7 +119,7 @@ public class MusicActivity extends FragmentActivity {
         mPlayerBar.addView(infoCol);
 
         mPlayerPlayBtn = new ImageView(this);
-        int bs = dp(36);
+        int bs = dp(32);
         mPlayerPlayBtn.setLayoutParams(new LinearLayout.LayoutParams(bs, bs));
         mPlayerPlayBtn.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         mPlayerPlayBtn.setOnClickListener(v -> {
@@ -131,7 +131,7 @@ public class MusicActivity extends FragmentActivity {
         mPlayerNextBtn = new ImageView(this);
         mPlayerNextBtn.setLayoutParams(new LinearLayout.LayoutParams(bs, bs));
         mPlayerNextBtn.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        mPlayerNextBtn.setImageDrawable(emoji("\u23ED", dp(18)));
+        mPlayerNextBtn.setImageDrawable(emoji("\u23ED", dp(13)));
         mPlayerNextBtn.setOnClickListener(v -> {
             if (sPlayer != null) { sPlayer.next(); refreshPlayerBar(); }
         });
@@ -150,7 +150,7 @@ public class MusicActivity extends FragmentActivity {
         mPlayerBar.setVisibility(View.VISIBLE);
         mPlayerTitle.setText(song.title + " - " + song.artist);
         boolean playing = sPlayer.isPlaying();
-        mPlayerPlayBtn.setImageDrawable(emoji(playing ? "\u23F8" : "\u25B6", dp(18)));
+        mPlayerPlayBtn.setImageDrawable(emoji(playing ? "\u23F8" : "\u25B6", dp(13)));
         loadCover(mPlayerCover, song.cover);
     }
 
@@ -158,25 +158,25 @@ public class MusicActivity extends FragmentActivity {
         mBottomNav = new LinearLayout(this);
         mBottomNav.setOrientation(LinearLayout.HORIZONTAL);
         mBottomNav.setBackgroundColor(CLR_CARD);
-        mBottomNav.setElevation(dp(8));
-        mBottomNav.setPadding(dp(4), dp(4), dp(4), dp(2));
+        mBottomNav.setElevation(dp(6));
+        mBottomNav.setPadding(dp(3), dp(3), dp(3), dp(1));
 
         for (int i = 0; i < 4; i++) {
             final int idx = i;
             LinearLayout tab = new LinearLayout(this);
             tab.setOrientation(LinearLayout.VERTICAL);
             tab.setGravity(Gravity.CENTER);
-            tab.setLayoutParams(new LinearLayout.LayoutParams(0, dp(52), 1.0f));
+            tab.setLayoutParams(new LinearLayout.LayoutParams(0, dp(48), 1.0f));
 
             TextView icon = new TextView(this);
             icon.setText(TAB_ICONS[i]);
-            icon.setTextSize(20);
+            icon.setTextSize(16);
             icon.setGravity(Gravity.CENTER);
             tab.addView(icon);
 
             TextView label = new TextView(this);
             label.setText(TAB_LABELS[i]);
-            label.setTextSize(11);
+            label.setTextSize(10);
             label.setGravity(Gravity.CENTER);
             label.setTypeface(null, Typeface.BOLD);
             tab.addView(label);

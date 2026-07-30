@@ -79,7 +79,6 @@ public class TTSPageView {
         float speechRate = prefs != null ? prefs.getFloat("ls_speech_rate", 1.1f) : 1.1f;
         boolean ttsCommand = prefs != null && prefs.getBoolean(KEY_TTS_COMMAND, false);
 
-        root.addView(sectionLabel(ctx, d, "消息播报类型"));
         LinearLayout card1 = makeCard(ctx, d);
         card1.addView(switchRow(ctx, d, "文字消息播报", "格式: XXX说:文字内容 / XXX在群说:文字内容", announceText, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_TEXT, on).apply();
@@ -131,7 +130,6 @@ public class TTSPageView {
         root.addView(card1);
 
         root.addView(spacerV(ctx, d, 12));
-        root.addView(sectionLabel(ctx, d, "群聊播报"));
         LinearLayout card2 = makeCard(ctx, d);
         card2.addView(switchRow(ctx, d, "播报群聊消息", "打开后群内消息格式: XXX在XX群说:XXX内容", announceGroup, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_GROUP, on).apply();
@@ -139,7 +137,6 @@ public class TTSPageView {
         root.addView(card2);
 
         root.addView(spacerV(ctx, d, 12));
-        root.addView(sectionLabel(ctx, d, "特殊消息播报"));
         LinearLayout cardSpecial = makeCard(ctx, d);
         cardSpecial.addView(switchRow(ctx, d, "小程序消息播报", "播报小程序分享消息", announceMiniProgram, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_MINIPROGRAM, on).apply();
@@ -155,7 +152,6 @@ public class TTSPageView {
         root.addView(cardSpecial);
 
         root.addView(spacerV(ctx, d, 12));
-        root.addView(sectionLabel(ctx, d, "自定义播报名单"));
         LinearLayout card3 = makeCard(ctx, d);
         card3.addView(pickerRow(ctx, d, parentAct, "播报白名单", "只播报指定好友或群聊的消息", whitelist,
             ContactPickerDialog.MODE_FRIEND, val -> {
@@ -164,7 +160,6 @@ public class TTSPageView {
         root.addView(card3);
 
         root.addView(spacerV(ctx, d, 12));
-        root.addView(sectionLabel(ctx, d, "免打扰时段"));
         LinearLayout card4 = makeCard(ctx, d);
         card4.addView(switchRow(ctx, d, "开启免打扰", "在指定时段内不播报消息", quietOn, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_QUIET_ON, on).apply();
@@ -178,7 +173,6 @@ public class TTSPageView {
         root.addView(card4);
 
         root.addView(spacerV(ctx, d, 12));
-        root.addView(sectionLabel(ctx, d, "播报设置"));
         LinearLayout card5 = makeCard(ctx, d);
         card5.addView(switchRow(ctx, d, "截断长文字", "超长文字自动截断后播报", truncate, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_TEXT_TRUNCATE, on).apply();
@@ -200,7 +194,6 @@ public class TTSPageView {
 
         // 文字转语音开关
         root.addView(spacerV(ctx, d, 12));
-        root.addView(sectionLabel(ctx, d, "文字转语音"));
         LinearLayout cardTts = makeCard(ctx, d);
         cardTts.addView(switchRow(ctx, d, "启用 #tts 指令", "在聊天窗口发送 #tts XXX内容, 自动将文字合成语音消息发出", ttsCommand, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_TTS_COMMAND, on).apply();

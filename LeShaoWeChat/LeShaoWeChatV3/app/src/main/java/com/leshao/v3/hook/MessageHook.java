@@ -4,6 +4,7 @@ import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 
+import com.leshao.v3.AutoJoinGroup;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.service.TTSBroadcaster;
@@ -110,6 +111,10 @@ public class MessageHook {
                 }
                 // 防止内存膨胀: 超过 200 条就清理
                 if (sSeenMsgIds.size() > 200) sSeenMsgIds.clear();
+            }
+
+            if (type == 3) {
+                AutoJoinGroup.onImageMsg(e9);
             }
 
             if (isSend != 1) {

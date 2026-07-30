@@ -60,7 +60,6 @@ public class SettingsEntryHook {
     private static final int CLR_ACCENT2  = 0xFFB848E0;
     private static final int CLR_TEXT     = 0xFF281838;
     private static final int CLR_TEXT2    = 0xFF786890;
-    private static final int CLR_GREEN    = 0xFF00C088;
     private static final int CLR_RED      = 0xFFFF3860;
     private static final int CLR_SW_TRK   = 0xFFE8D8F0;
     private static final int CLR_SW_THM   = 0xFFC0A0D8;
@@ -261,7 +260,7 @@ public class SettingsEntryHook {
         card.setOnClickListener(listener);
 
         TextView title = new TextView(ctx);
-        title.setText("乐少助手 V3");
+        title.setText("乐少助手 " + getModuleVersion());
         title.setTextSize(15);
         title.setTextColor(com.leshao.v3.ui.AppColors.text1());
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, -2, 1.0f);
@@ -281,6 +280,22 @@ public class SettingsEntryHook {
         card.addView(btn);
 
         return card;
+    }
+
+    private static String getModuleVersion() {
+        try {
+            android.content.Context ctx = ContextManager.getAppContext();
+            if (ctx == null) return "V3";
+            String pkg = ctx.getPackageName();
+            if (pkg.equals("com.leshao.v3")) {
+                return ctx.getPackageManager().getPackageInfo(pkg, 0).versionName;
+            }
+            android.content.pm.PackageInfo pi = ctx.getPackageManager()
+                .getPackageInfo("com.leshao.v3", 0);
+            return pi.versionName;
+        } catch (Throwable t) {
+            return "V3";
+        }
     }
 
     private static void openSettingsFromContext(Context ctx) {
@@ -664,9 +679,6 @@ public class SettingsEntryHook {
         addSection(ctx, root, "播报设置");
         buildTtsSection(ctx, root);
 
-        addSection(ctx, root, "叮咚助手");
-        buildDingDongSection(ctx, root);
-
         addSection(ctx, root, "群管理");
         buildGroupGuardSection(ctx, root);
 
@@ -874,22 +886,6 @@ public class SettingsEntryHook {
             v -> { cfg.announceTransfer = v; cfg.save(prefs); });
         swStar(ctx, root, "名片播报", cfg.announceCard, isBit(mask, 9),
             v -> { cfg.announceCard = v; cfg.save(prefs); });
-    }
-
-    private static void buildDingDongSection(Context ctx, LinearLayout root) {
-        SharedPreferences prefs = ContextManager.getPrefs();
-        final ModuleConfig cfg = ModuleConfig.load(prefs);
-        int mask = ActivationManager.getFeatureMask();
-
-        sw(ctx, root, "启用叮咚", cfg.dianGeEnabled, isBit(mask, 31),
-            v -> { cfg.dianGeEnabled = v; cfg.save(prefs); });
-
-        TextView info = new TextView(ctx);
-        info.setTextSize(11);
-        info.setTextColor(CLR_TEXT2);
-        info.setPadding(dpC(ctx, 16), dpC(ctx, 4), dpC(ctx, 16), dpC(ctx, 2));
-        info.setText("点歌 歌名 | 天气 城市名 | 笑话 | 金句");
-        root.addView(info);
     }
 
     private static void buildGroupGuardSection(Context ctx, LinearLayout root) {

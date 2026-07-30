@@ -9,7 +9,6 @@ import androidx.viewpager2.widget.ViewPager2;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
 import com.leshao.v3.ui.TTSFragment;
-import com.leshao.v3.ui.DingDongFragment;
 import com.leshao.v3.ui.GroupGuardFragment;
 import com.leshao.v3.ui.AIFragment;
 
@@ -52,15 +51,14 @@ public class SettingsActivity extends FragmentActivity {
                     case 2: return new ChatEnhanceFragment();
                     case 3: return new SnsFragment();
                     case 4: return new PrivacyFragment();
-                    case 5: return new TTSFragment();
-                    case 6: return new DingDongFragment();
-                    case 7: return new GroupGuardFragment();
-                    case 8: return new AIFragment();
-                    case 9: return new StatsFragment();
-                    default: return new SettingsFragment();
-                }
+                case 5: return new TTSFragment();
+                case 6: return new GroupGuardFragment();
+                case 7: return new AIFragment();
+                case 8: return new StatsFragment();
+                default: return new SettingsFragment();
             }
-            @Override public int getItemCount() { return 10; }
+        }
+        @Override public int getItemCount() { return 9; }
         });
 
         new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
@@ -70,11 +68,10 @@ public class SettingsActivity extends FragmentActivity {
                 case 2: tab.setText("聊天增强"); break;
                 case 3: tab.setText("朋友圈"); break;
                 case 4: tab.setText("隐私安全"); break;
-                case 5: tab.setText("播报"); break;
-                case 6: tab.setText("叮咚"); break;
-                case 7: tab.setText("群管"); break;
-                case 8: tab.setText("AI"); break;
-                case 9: tab.setText("统计"); break;
+            case 5: tab.setText("播报"); break;
+            case 6: tab.setText("群管"); break;
+            case 7: tab.setText("AI"); break;
+            case 8: tab.setText("统计"); break;
             }
         }).attach();
     }

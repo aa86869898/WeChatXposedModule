@@ -22,16 +22,16 @@ import com.leshao.v3.theme.MonetColorEngine;
 public class ThemePageView {
 
     private static final int[] PRESET_COLORS = {
-        0xFF2D2D2D, 0xFFF5F5F5, 0xFFFFFFFF, 0xFFEDEDED, 0xFF95EC69,
-        0xFFFF4298, 0xFF07C160, 0xFF576B95, 0xFF191919, 0xFF888888,
-        0xFF000000, 0xFFE04040, 0xFF3CC51F, 0xFFFFBE00, 0xFF10AEFF,
+        0xFF2D2D2D, 0xFFF5F5F5, 0xFFFFFFFF, 0xFFEDEDED, 0xFFE8E8E8,
+        0xFFFF4298, 0xFF576B95, 0xFF576B95, 0xFF191919, 0xFF888888,
+        0xFF000000, 0xFFE04040, 0xFFFF8C00, 0xFFFFBE00, 0xFF10AEFF,
         0xFF7B2FBE, 0xFFFF8C00, 0xFFC73E3A, 0xFFF2F2F2, 0xFFD43C33
     };
 
     private static final String[] COLOR_NAMES = {
-        "暗灰","暖白","纯白","浅灰","气泡绿",
-        "粉色","微信绿","链接蓝","深黑","浅灰字",
-        "纯黑","红色","翠绿","金色","天蓝",
+        "暗灰","暖白","纯白","浅灰","银白",
+        "粉色","链接蓝","链接蓝2","深黑","浅灰字",
+        "纯黑","红色","橙色","金色","天蓝",
         "紫色","橙色","暗红","灰白","微信红"
     };
 
@@ -175,7 +175,7 @@ public class ThemePageView {
                     "自己聊天气泡",
                     new String[]{"自己气泡背景","自己文字色"},
                     new String[]{"ls_tc_bubble_self_bg","ls_tc_bubble_self_text"},
-                    new int[]{0xFF95EC69,0xFF000000});
+                    new int[]{0xFFFFFFFF,0xFF000000});
                 break;
             case 26:
                 buildColorConfigBubble(ctx, parentAct, prefs, d, root,

@@ -50,7 +50,7 @@ public class ThemeHook {
     private static int sActionBarTitle  = 0xFFFFFFFF;
     private static int sPageBg          = 0xFFF5F5F5;
     private static int sChatBg          = 0xFFEDEDED;
-    private static int sBubbleSelfBg    = 0xFF95EC69;
+    private static int sBubbleSelfBg    = 0xFFFFFFFF;
     private static int sBubbleOtherBg   = 0xFFFFFFFF;
     private static int sBubbleSelfText  = 0xFF000000;
     private static int sBubbleOtherText = 0xFF000000;
@@ -90,7 +90,7 @@ public class ThemeHook {
         sActionBarTitle = p.getInt(dm ? "ls_tc_actionbar_title_dark" : "ls_tc_actionbar_title", dm ? 0xFFE8E8F0 : 0xFFFFFFFF);
         sPageBg         = p.getInt(dm ? "ls_tc_page_bg_dark" : "ls_tc_page_bg",                 dm ? 0xFF1A1A2E : 0xFFF5F5F5);
         sChatBg         = p.getInt(dm ? "ls_tc_chat_bg_dark" : "ls_tc_chat_bg",                 dm ? 0xFF202035 : 0xFFEDEDED);
-        sBubbleSelfBg   = p.getInt(dm ? "ls_tc_bubble_self_bg_dark" : "ls_tc_bubble_self_bg",   dm ? 0xFF2D8A4E : 0xFF95EC69);
+        sBubbleSelfBg   = p.getInt(dm ? "ls_tc_bubble_self_bg_dark" : "ls_tc_bubble_self_bg",   dm ? 0xFF2D2D44 : 0xFFFFFFFF);
         sBubbleOtherBg  = p.getInt(dm ? "ls_tc_bubble_other_bg_dark" : "ls_tc_bubble_other_bg", dm ? 0xFF2D2D44 : 0xFFFFFFFF);
         sBubbleSelfText = p.getInt(dm ? "ls_tc_bubble_self_text_dark" : "ls_tc_bubble_self_text",   dm ? 0xFFE8E8F0 : 0xFF000000);
         sBubbleOtherText= p.getInt(dm ? "ls_tc_bubble_other_text_dark" : "ls_tc_bubble_other_text", dm ? 0xFFE8E8F0 : 0xFF000000);
@@ -609,9 +609,9 @@ public class ThemeHook {
 
     private static void hookGalleryResult() {
         try {
-            XposedHelpers.findAndHookMethod(Activity.class, "onActivityResult",
-                int.class, int.class, android.content.Intent.class,
-                new XC_MethodHook() {
+            java.lang.reflect.Method m = Activity.class.getDeclaredMethod("onActivityResult",
+                int.class, int.class, android.content.Intent.class);
+            XposedBridge.hookMethod(m, new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         try {

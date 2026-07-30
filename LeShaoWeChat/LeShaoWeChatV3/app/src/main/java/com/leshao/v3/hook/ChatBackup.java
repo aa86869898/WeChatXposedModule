@@ -58,6 +58,12 @@ public class ChatBackup {
     private static void hookAppExit(ClassLoader cl) {
         try {
             Class<?> launcherUI = VersionCompat.findLauncherUIClass(cl);
+            if (launcherUI == null) {
+                launcherUI = VersionCompat.findClassMulti(cl,
+                    "com.tencent.mm.ui.MMLauncherUI",
+                    "com.tencent.mm.ui.LauncherUIActivity",
+                    "com.tencent.mm.ui.MainTabUI");
+            }
             if (launcherUI == null) return;
 
             XposedBridge.hookAllMethods(launcherUI, "onCreate", new XC_MethodHook() {
@@ -240,25 +246,53 @@ public class ChatBackup {
 
     public static void triggerManualBackup() {
         try {
-            File triggerDir = new File(TRIGGER_FILE).getParentFile();
-            if (triggerDir != null) triggerDir.mkdirs();
-            new FileWriter(TRIGGER_FILE).close();
-            LogWriter.log(TAG, "manual trigger written");
+            new Thread(() -> {
+                boolean ok = performBackup();
+                final String msg = ok ? "聊天记录备份完成" : "备份失败,请检查存储权限";
+                sMainHandler.post(() -> {
+                    try {
+                        Context ctx = ContextManager.getAppContext();
+                        if (ctx != null) Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show();
+                    } catch (Throwable ignored) {}
+                });
+                if (ok) {
+                    lastBackupDate = dateSdf.format(new Date());
+                    writeStatus("ok", formatSize(getBackupTotalSize()));
+                } else {
+                    writeStatus("fail", "DB not found");
+                }
+            }).start();
         } catch (Throwable t) {
-            LogWriter.log(TAG, "trigger write err: " + t.getMessage());
+            LogWriter.log(TAG, "triggerManualBackup err: " + t.getMessage());
         }
     }
 
     public static void triggerRestore(String backupPath) {
         try {
-            File triggerDir = new File(RESTORE_TRIGGER).getParentFile();
-            if (triggerDir != null) triggerDir.mkdirs();
-            FileWriter fw = new FileWriter(new File(RESTORE_TRIGGER));
-            fw.write(backupPath);
-            fw.close();
-            LogWriter.log(TAG, "restore trigger written: " + backupPath);
+            new Thread(() -> {
+                File src = new File(backupPath);
+                if (!src.exists() || !src.isFile()) {
+                    final String err = "恢复失败: 源文件不存在";
+                    sMainHandler.post(() -> {
+                        try {
+                            Context ctx = ContextManager.getAppContext();
+                            if (ctx != null) Toast.makeText(ctx, err, Toast.LENGTH_LONG).show();
+                        } catch (Throwable ignored) {}
+                    });
+                    return;
+                }
+                boolean ok = performRestore(src);
+                final String msg = ok ? "聊天记录恢复完成,请重新打开微信" : "恢复失败,请检查文件";
+                sMainHandler.post(() -> {
+                    try {
+                        Context ctx = ContextManager.getAppContext();
+                        if (ctx != null) Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show();
+                    } catch (Throwable ignored) {}
+                });
+                LogWriter.log(TAG, "restore " + (ok ? "ok" : "fail") + " from " + src.getName());
+            }).start();
         } catch (Throwable t) {
-            LogWriter.log(TAG, "restore trigger err: " + t.getMessage());
+            LogWriter.log(TAG, "triggerRestore err: " + t.getMessage());
         }
     }
 

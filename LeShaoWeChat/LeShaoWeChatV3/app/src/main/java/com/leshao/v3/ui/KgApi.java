@@ -413,7 +413,8 @@ public class KgApi {
 
             Arrays.sort(params);
             String joined = String.join("&", params);
-            String sig = md5(SIGN_KEY_URL + joined + SIGN_KEY_URL);
+            String noSep = String.join("", params);
+            String sig = md5(SIGN_KEY_URL + noSep + SIGN_KEY_URL);
             String fullUrl = "https://gateway.kugou.com/v5/url?" + joined + "&signature=" + sig;
 
             String resp = httpGet(fullUrl, "https://m.kugou.com",
@@ -692,7 +693,8 @@ public class KgApi {
                 String[] arr = params.toArray(new String[0]);
                 Arrays.sort(arr);
                 String joined = String.join("&", arr);
-                String sig = md5(SIGN_KEY_1058 + joined + SIGN_KEY_1058);
+                String noSep = String.join("", arr);
+                String sig = md5(SIGN_KEY_1058 + noSep + SIGN_KEY_1058);
                 String fullUrl = baseUrl + "?" + joined + "&signature=" + sig;
 
                 String resp = httpGet(fullUrl, "https://m.kugou.com",

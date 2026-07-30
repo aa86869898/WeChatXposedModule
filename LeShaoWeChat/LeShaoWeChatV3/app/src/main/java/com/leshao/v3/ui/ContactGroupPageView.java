@@ -12,6 +12,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 import com.leshao.v3.ContextManager;
+import com.leshao.v3.AutoJoinGroup;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.*;
 import com.leshao.v3.model.ModuleConfig;
@@ -29,8 +30,6 @@ public class ContactGroupPageView {
         root.setBackgroundColor(AppColors.bg());
         root.setPadding((int)(16 * d), (int)(16 * d), (int)(16 * d), (int)(16 * d));
 
-        root.addView(sectionLabel(ctx, "联系人管理"));
-
         LinearLayout cardContact = makeCard(ctx, d);
         cardContact.addView(switchRow(ctx, d, "通讯录导出", null, cfg.contactExportEnabled, (v, on) -> {
             cfg.contactExportEnabled = on; cfg.save(prefs); ContactExport.setEnabled(on);
@@ -41,7 +40,16 @@ public class ContactGroupPageView {
         root.addView(cardContact);
 
         root.addView(spacerV(ctx, d, 12));
-        root.addView(sectionLabel(ctx, "聊天功能"));
+
+        LinearLayout cardAuto = makeCard(ctx, d);
+        boolean autoJoinOn = prefs != null && prefs.getBoolean("ls_auto_join_group", false);
+        cardAuto.addView(switchRow(ctx, d, "自动扫码进群", "收到群二维码图片时自动识别并加群", autoJoinOn, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean("ls_auto_join_group", on).apply();
+            AutoJoinGroup.setEnabled(on);
+        }, null));
+        root.addView(cardAuto);
+
+        root.addView(spacerV(ctx, d, 12));
 
         LinearLayout cardChat = makeCard(ctx, d);
         boolean recallOn = prefs != null && prefs.getBoolean("ls_recall_enabled", false);
@@ -119,7 +127,7 @@ public class ContactGroupPageView {
         }
 
         Switch sw = new Switch(ctx); sw.setChecked(checked);
-        try { if (checked) sw.setThumbResource(android.R.drawable.btn_star_big_on); } catch (Throwable ignored) {}
+        try { sw.setThumbResource(android.R.drawable.btn_star_big_on); } catch (Throwable ignored) {}
         sw.setOnCheckedChangeListener(listener);
         row.addView(sw);
         return row;

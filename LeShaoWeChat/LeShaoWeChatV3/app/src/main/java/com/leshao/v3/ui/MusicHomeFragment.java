@@ -52,7 +52,7 @@ public class MusicHomeFragment extends Fragment {
 
         LinearLayout root = new LinearLayout(mActivity);
         root.setOrientation(LinearLayout.VERTICAL);
-        int p = MusicActivity.dp(16);
+        int p = MusicActivity.dp(11);
         root.setPadding(p, p, p, p);
 
         buildHeader(root);
@@ -75,23 +75,23 @@ public class MusicHomeFragment extends Fragment {
         LinearLayout row = new LinearLayout(mActivity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        int padV = MusicActivity.dp(12);
-        int padH = MusicActivity.dp(4);
+        int padV = MusicActivity.dp(8);
+        int padH = MusicActivity.dp(3);
         row.setPadding(padH, padV, padH, padV);
         row.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
 
         TextView title = new TextView(mActivity);
         title.setText("乐少音乐");
-        title.setTextSize(20);
+        title.setTextSize(14);
         title.setTextColor(MusicActivity.CLR_TEXT);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         row.addView(title);
 
         ImageView searchIcon = new ImageView(mActivity);
-        int iconSize = MusicActivity.dp(24);
+        int iconSize = MusicActivity.dp(17);
         searchIcon.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
-        searchIcon.setImageDrawable(MusicActivity.emoji("\uD83D\uDD0D", MusicActivity.dp(22)));
+        searchIcon.setImageDrawable(MusicActivity.emoji("\uD83D\uDD0D", MusicActivity.dp(15)));
         searchIcon.setOnClickListener(v -> {
             if (MusicActivity.sInstance != null) MusicActivity.sInstance.switchTab(3);
         });
@@ -102,13 +102,13 @@ public class MusicHomeFragment extends Fragment {
 
     private void buildBanner(LinearLayout parent) {
         FrameLayout banner = new FrameLayout(mActivity);
-        int bannerH = MusicActivity.dp(160);
+        int bannerH = MusicActivity.dp(130);
         LinearLayout.LayoutParams bannerLp = new LinearLayout.LayoutParams(-1, bannerH);
-        bannerLp.topMargin = MusicActivity.dp(12);
-        bannerLp.bottomMargin = MusicActivity.dp(12);
+        bannerLp.topMargin = MusicActivity.dp(8);
+        bannerLp.bottomMargin = MusicActivity.dp(8);
         banner.setLayoutParams(bannerLp);
         banner.setBackground(MusicActivity.gradientRounded(
-            new int[]{MusicActivity.CLR_ACCENT, 0xFF5B9EFF}, 16));
+            new int[]{MusicActivity.CLR_ACCENT, 0xFF5B9EFF}, 11));
         banner.setOnClickListener(v -> {
             if (MusicActivity.sInstance != null) MusicActivity.sInstance.switchTab(3);
         });
@@ -117,34 +117,34 @@ public class MusicHomeFragment extends Fragment {
         inner.setOrientation(LinearLayout.VERTICAL);
         inner.setGravity(Gravity.CENTER);
         FrameLayout.LayoutParams innerLp = new FrameLayout.LayoutParams(-1, -1);
-        int innerPad = MusicActivity.dp(16);
+        int innerPad = MusicActivity.dp(11);
         inner.setPadding(innerPad, innerPad, innerPad, innerPad);
         inner.setLayoutParams(innerLp);
 
         TextView emojiView = new TextView(mActivity);
         emojiView.setText("\uD83C\uDFB5");
-        emojiView.setTextSize(36);
+        emojiView.setTextSize(25);
         emojiView.setGravity(Gravity.CENTER);
         inner.addView(emojiView);
 
         TextView title = new TextView(mActivity);
         title.setText("海量音乐 随心畅听");
-        title.setTextSize(18);
+        title.setTextSize(13);
         title.setTextColor(0xFFFFFFFF);
         title.setGravity(Gravity.CENTER);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(-2, -2);
-        titleLp.topMargin = MusicActivity.dp(8);
+        titleLp.topMargin = MusicActivity.dp(6);
         title.setLayoutParams(titleLp);
         inner.addView(title);
 
         TextView sub = new TextView(mActivity);
         sub.setText("点击搜索发现更多好音乐");
-        sub.setTextSize(13);
+        sub.setTextSize(12);
         sub.setTextColor(0xFFFFFFFF);
         sub.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(-2, -2);
-        subLp.topMargin = MusicActivity.dp(6);
+        subLp.topMargin = MusicActivity.dp(4);
         sub.setLayoutParams(subLp);
         inner.addView(sub);
 
@@ -156,7 +156,7 @@ public class MusicHomeFragment extends Fragment {
         LinearLayout section = new LinearLayout(mActivity);
         section.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams sectionLp = new LinearLayout.LayoutParams(-1, -2);
-        sectionLp.bottomMargin = MusicActivity.dp(20);
+        sectionLp.bottomMargin = MusicActivity.dp(14);
         section.setLayoutParams(sectionLp);
 
         LinearLayout titleRow = buildSectionTitle("热门排行");
@@ -165,8 +165,8 @@ public class MusicHomeFragment extends Fragment {
         mRankLoading = new ProgressBar(mActivity);
         LinearLayout.LayoutParams loadLp = new LinearLayout.LayoutParams(-2, -2);
         loadLp.gravity = Gravity.CENTER_HORIZONTAL;
-        loadLp.topMargin = MusicActivity.dp(20);
-        loadLp.bottomMargin = MusicActivity.dp(20);
+        loadLp.topMargin = MusicActivity.dp(14);
+        loadLp.bottomMargin = MusicActivity.dp(14);
         mRankLoading.setLayoutParams(loadLp);
         section.addView(mRankLoading);
 
@@ -177,7 +177,7 @@ public class MusicHomeFragment extends Fragment {
 
         mRankCards = new LinearLayout(mActivity);
         mRankCards.setOrientation(LinearLayout.HORIZONTAL);
-        mRankCards.setPadding(0, MusicActivity.dp(8), 0, 0);
+        mRankCards.setPadding(0, MusicActivity.dp(6), 0, 0);
         mRankScroll.addView(mRankCards);
         section.addView(mRankScroll);
 
@@ -188,7 +188,7 @@ public class MusicHomeFragment extends Fragment {
         LinearLayout section = new LinearLayout(mActivity);
         section.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams sectionLp = new LinearLayout.LayoutParams(-1, -2);
-        sectionLp.bottomMargin = MusicActivity.dp(20);
+        sectionLp.bottomMargin = MusicActivity.dp(14);
         section.setLayoutParams(sectionLp);
 
         LinearLayout titleRow = buildSectionTitle("推荐歌单");
@@ -197,8 +197,8 @@ public class MusicHomeFragment extends Fragment {
         mPlaylistLoading = new ProgressBar(mActivity);
         LinearLayout.LayoutParams loadLp = new LinearLayout.LayoutParams(-2, -2);
         loadLp.gravity = Gravity.CENTER_HORIZONTAL;
-        loadLp.topMargin = MusicActivity.dp(20);
-        loadLp.bottomMargin = MusicActivity.dp(20);
+        loadLp.topMargin = MusicActivity.dp(14);
+        loadLp.bottomMargin = MusicActivity.dp(14);
         mPlaylistLoading.setLayoutParams(loadLp);
         section.addView(mPlaylistLoading);
 
@@ -215,7 +215,7 @@ public class MusicHomeFragment extends Fragment {
         LinearLayout section = new LinearLayout(mActivity);
         section.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams sectionLp = new LinearLayout.LayoutParams(-1, -2);
-        sectionLp.bottomMargin = MusicActivity.dp(20);
+        sectionLp.bottomMargin = MusicActivity.dp(14);
         section.setLayoutParams(sectionLp);
 
         LinearLayout titleRow = buildSectionTitle("热门歌手");
@@ -224,8 +224,8 @@ public class MusicHomeFragment extends Fragment {
         mArtistLoading = new ProgressBar(mActivity);
         LinearLayout.LayoutParams loadLp = new LinearLayout.LayoutParams(-2, -2);
         loadLp.gravity = Gravity.CENTER_HORIZONTAL;
-        loadLp.topMargin = MusicActivity.dp(20);
-        loadLp.bottomMargin = MusicActivity.dp(20);
+        loadLp.topMargin = MusicActivity.dp(14);
+        loadLp.bottomMargin = MusicActivity.dp(14);
         mArtistLoading.setLayoutParams(loadLp);
         section.addView(mArtistLoading);
 
@@ -236,7 +236,7 @@ public class MusicHomeFragment extends Fragment {
 
         mArtistCards = new LinearLayout(mActivity);
         mArtistCards.setOrientation(LinearLayout.HORIZONTAL);
-        mArtistCards.setPadding(0, MusicActivity.dp(8), 0, 0);
+        mArtistCards.setPadding(0, MusicActivity.dp(6), 0, 0);
         mArtistScroll.addView(mArtistCards);
         section.addView(mArtistScroll);
 
@@ -247,12 +247,12 @@ public class MusicHomeFragment extends Fragment {
         LinearLayout row = new LinearLayout(mActivity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, MusicActivity.dp(8), 0, MusicActivity.dp(4));
+        row.setPadding(0, MusicActivity.dp(6), 0, MusicActivity.dp(3));
         row.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
 
         TextView title = new TextView(mActivity);
         title.setText(titleText);
-        title.setTextSize(16);
+        title.setTextSize(15);
         title.setTextColor(MusicActivity.CLR_TEXT);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
@@ -260,9 +260,9 @@ public class MusicHomeFragment extends Fragment {
 
         TextView more = new TextView(mActivity);
         more.setText("更多 \u25B6");
-        more.setTextSize(13);
+        more.setTextSize(12);
         more.setTextColor(MusicActivity.CLR_TEXT2);
-        more.setPadding(MusicActivity.dp(8), MusicActivity.dp(4), 0, MusicActivity.dp(4));
+        more.setPadding(MusicActivity.dp(6), MusicActivity.dp(3), 0, MusicActivity.dp(3));
         more.setOnClickListener(v -> MusicActivity.toast("功能开发中"));
         row.addView(more);
 
@@ -304,9 +304,9 @@ public class MusicHomeFragment extends Fragment {
         mRankScroll.setVisibility(View.VISIBLE);
 
         int count = Math.min(list.size(), 5);
-        int cardW = MusicActivity.dp(130);
-        int cardH = MusicActivity.dp(150);
-        int gap = MusicActivity.dp(10);
+        int cardW = MusicActivity.dp(110);
+        int cardH = MusicActivity.dp(130);
+        int gap = MusicActivity.dp(7);
 
         for (int i = 0; i < count; i++) {
             KgApi.Ranking item = list.get(i);
@@ -315,32 +315,32 @@ public class MusicHomeFragment extends Fragment {
             LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(cardW, cardH);
             if (i > 0) cardLp.leftMargin = gap;
             card.setLayoutParams(cardLp);
-            card.setBackground(MusicActivity.rd(12, MusicActivity.CLR_CARD));
-            card.setElevation(MusicActivity.dp(2));
+            card.setBackground(MusicActivity.rd(8, MusicActivity.CLR_CARD));
+            card.setElevation(MusicActivity.dp(1));
             card.setOnClickListener(v -> MusicActivity.toast("功能开发中"));
 
             LinearLayout inner = new LinearLayout(mActivity);
             inner.setOrientation(LinearLayout.VERTICAL);
             inner.setGravity(Gravity.CENTER_HORIZONTAL);
             FrameLayout.LayoutParams innerLp = new FrameLayout.LayoutParams(-1, -1);
-            int innerPad = MusicActivity.dp(12);
+            int innerPad = MusicActivity.dp(8);
             inner.setPadding(innerPad, innerPad, innerPad, innerPad);
             inner.setLayoutParams(innerLp);
 
             FrameLayout colorBox = new FrameLayout(mActivity);
-            int boxSize = MusicActivity.dp(80);
+            int boxSize = MusicActivity.dp(60);
             LinearLayout.LayoutParams boxLp = new LinearLayout.LayoutParams(boxSize, boxSize);
             boxLp.gravity = Gravity.CENTER_HORIZONTAL;
-            boxLp.topMargin = MusicActivity.dp(10);
+            boxLp.topMargin = MusicActivity.dp(7);
             colorBox.setLayoutParams(boxLp);
             GradientDrawable boxBg = new GradientDrawable();
-            boxBg.setCornerRadius(MusicActivity.dp(8));
+            boxBg.setCornerRadius(MusicActivity.dp(6));
             boxBg.setColor(CARD_COLORS[i % CARD_COLORS.length]);
             colorBox.setBackground(boxBg);
 
             TextView rankNum = new TextView(mActivity);
             rankNum.setText(RANK_NUMBERS[i]);
-            rankNum.setTextSize(28);
+            rankNum.setTextSize(20);
             rankNum.setTextColor(0xFFFFFFFF);
             rankNum.setGravity(Gravity.CENTER);
             rankNum.setTypeface(null, android.graphics.Typeface.BOLD);
@@ -356,7 +356,7 @@ public class MusicHomeFragment extends Fragment {
             name.setSingleLine(true);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(-1, -2);
-            nameLp.topMargin = MusicActivity.dp(8);
+            nameLp.topMargin = MusicActivity.dp(6);
             name.setLayoutParams(nameLp);
             inner.addView(name);
 
@@ -371,8 +371,8 @@ public class MusicHomeFragment extends Fragment {
         mPlaylistGrid.setVisibility(View.VISIBLE);
 
         int count = Math.min(list.size(), 6);
-        int gap = MusicActivity.dp(10);
-        int cardH = MusicActivity.dp(75);
+        int gap = MusicActivity.dp(7);
+        int cardH = MusicActivity.dp(65);
 
         mPlaylistGrid.removeAllViews();
 
@@ -404,7 +404,7 @@ public class MusicHomeFragment extends Fragment {
 
     private FrameLayout buildPlaylistCard(KgApi.Playlist item, int cardH) {
         FrameLayout card = new FrameLayout(mActivity);
-        card.setBackground(MusicActivity.rd(10, MusicActivity.CLR_CARD));
+        card.setBackground(MusicActivity.rd(7, MusicActivity.CLR_CARD));
         card.setElevation(MusicActivity.dp(1));
         card.setOnClickListener(v -> MusicActivity.toast("功能开发中"));
 
@@ -412,16 +412,16 @@ public class MusicHomeFragment extends Fragment {
         inner.setOrientation(LinearLayout.HORIZONTAL);
         inner.setGravity(Gravity.CENTER_VERTICAL);
         FrameLayout.LayoutParams innerLp = new FrameLayout.LayoutParams(-1, -1);
-        int pad = MusicActivity.dp(10);
+        int pad = MusicActivity.dp(5);
         inner.setPadding(pad, pad, pad, pad);
         inner.setLayoutParams(innerLp);
 
-        int coverSize = cardH - MusicActivity.dp(20);
+        int coverSize = MusicActivity.dp(55);
         ImageView cover = new ImageView(mActivity);
         cover.setLayoutParams(new LinearLayout.LayoutParams(coverSize, coverSize));
         cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable coverBg = new GradientDrawable();
-        coverBg.setCornerRadius(MusicActivity.dp(6));
+        coverBg.setCornerRadius(MusicActivity.dp(4));
         coverBg.setColor(0xFFE0E0E0);
         cover.setBackground(coverBg);
         MusicActivity.loadCover(cover, item.cover);
@@ -429,12 +429,12 @@ public class MusicHomeFragment extends Fragment {
 
         TextView title = new TextView(mActivity);
         title.setText(item.title);
-        title.setTextSize(13);
+        title.setTextSize(12);
         title.setTextColor(MusicActivity.CLR_TEXT);
         title.setSingleLine(true);
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(0, -2, 1.0f);
-        titleLp.leftMargin = MusicActivity.dp(10);
+        titleLp.leftMargin = MusicActivity.dp(7);
         title.setLayoutParams(titleLp);
         inner.addView(title);
 
@@ -448,8 +448,8 @@ public class MusicHomeFragment extends Fragment {
         mArtistScroll.setVisibility(View.VISIBLE);
 
         int count = Math.min(list.size(), 8);
-        int avatarSize = MusicActivity.dp(70);
-        int gap = MusicActivity.dp(14);
+        int avatarSize = MusicActivity.dp(60);
+        int gap = MusicActivity.dp(10);
 
         for (int i = 0; i < count; i++) {
             KgApi.Playlist item = list.get(i);
@@ -481,7 +481,7 @@ public class MusicHomeFragment extends Fragment {
 
             GradientDrawable ring = new GradientDrawable();
             ring.setShape(GradientDrawable.OVAL);
-            ring.setStroke(MusicActivity.dp(2), MusicActivity.CLR_ACCENT_LIGHT);
+            ring.setStroke(MusicActivity.dp(1), MusicActivity.CLR_ACCENT_LIGHT);
             ring.setColor(Color.TRANSPARENT);
             FrameLayout ringView = new FrameLayout(mActivity);
             FrameLayout.LayoutParams ringLp = new FrameLayout.LayoutParams(frameSize, frameSize);
@@ -499,7 +499,7 @@ public class MusicHomeFragment extends Fragment {
             name.setSingleLine(true);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             LinearLayout.LayoutParams nameLp = new LinearLayout.LayoutParams(avatarSize, -2);
-            nameLp.topMargin = MusicActivity.dp(6);
+            nameLp.topMargin = MusicActivity.dp(4);
             name.setLayoutParams(nameLp);
             artistCard.addView(name);
 

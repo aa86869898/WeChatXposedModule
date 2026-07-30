@@ -41,12 +41,6 @@ public class ModuleConfig {
     public boolean quietEnabled = false;
     public String quietStart = "23:00", quietEnd = "07:00";
 
-    // 叮咚
-    public boolean dianGeEnabled = true;
-    public boolean ddMusicEnabled = true, ddVoiceSongEnabled = true, ddVideoAudioEnabled = true;
-    public boolean ddVideoMsgEnabled = true, ddLyricsEnabled = true, ddWeatherEnabled = true;
-    public boolean ddFunEnabled = true, ddSelfTrigger = true;
-
     // 群管
     public boolean autoAcceptFriend = false;
     public String autoAcceptFriendMsg = "你好呀，很高兴认识你!";
@@ -269,16 +263,6 @@ public class ModuleConfig {
         cfg.quietEnabled = prefs.getBoolean("ls_quiet_enabled", false);
         cfg.quietStart = prefs.getString("ls_quiet_start", "23:00");
         cfg.quietEnd = prefs.getString("ls_quiet_end", "07:00");
-
-        cfg.dianGeEnabled = prefs.getBoolean("ls_diange_enabled", true);
-        cfg.ddMusicEnabled = prefs.getBoolean("diange_music_enabled", true);
-        cfg.ddVoiceSongEnabled = prefs.getBoolean("dd_voice_song_enabled", true);
-        cfg.ddVideoAudioEnabled = prefs.getBoolean("dd_video_audio_enabled", true);
-        cfg.ddVideoMsgEnabled = prefs.getBoolean("dd_video_msg_enabled", true);
-        cfg.ddLyricsEnabled = prefs.getBoolean("diange_lyrics_enabled", true);
-        cfg.ddWeatherEnabled = prefs.getBoolean("diange_weather_enabled", true);
-        cfg.ddFunEnabled = prefs.getBoolean("diange_fun_enabled", true);
-        cfg.ddSelfTrigger = prefs.getBoolean("diange_self_trigger", true);
 
         cfg.autoAcceptFriend = prefs.getBoolean("ls_auto_accept_friend", false);
         cfg.autoAcceptFriendMsg = prefs.getString("ls_auto_accept_friend_msg", "你好呀，很高兴认识你!");
@@ -509,15 +493,6 @@ public class ModuleConfig {
         cfg.announceGroup = false;
         cfg.textTruncateEnabled = false;
         cfg.quietEnabled = false;
-        cfg.dianGeEnabled = false;
-        cfg.ddMusicEnabled = false;
-        cfg.ddVoiceSongEnabled = false;
-        cfg.ddVideoAudioEnabled = false;
-        cfg.ddVideoMsgEnabled = false;
-        cfg.ddLyricsEnabled = false;
-        cfg.ddWeatherEnabled = false;
-        cfg.ddFunEnabled = false;
-        cfg.ddSelfTrigger = false;
         cfg.autoAcceptFriend = false;
         cfg.groupInviteEnabled = false;
         cfg.leftGroupTipEnabled = false;
@@ -610,7 +585,6 @@ public class ModuleConfig {
         if (!isBit(mask, f)) cfg.chatBackupEnabled = false;  f++;
         if (!isBit(mask, f)) cfg.aiToolboxEnabled = false;  f++;
         if (!isBit(mask, f)) cfg.deepseekEnabled = false;  f++;
-        if (!isBit(mask, f)) cfg.dianGeEnabled = false;  f++;
     }
 
     private static boolean isBit(int mask, int bit) {
@@ -651,15 +625,6 @@ public class ModuleConfig {
         e.putBoolean("ls_quiet_enabled", quietEnabled);
         e.putString("ls_quiet_start", quietStart);
         e.putString("ls_quiet_end", quietEnd);
-        e.putBoolean("ls_diange_enabled", dianGeEnabled);
-        e.putBoolean("diange_music_enabled", ddMusicEnabled);
-        e.putBoolean("dd_voice_song_enabled", ddVoiceSongEnabled);
-        e.putBoolean("dd_video_audio_enabled", ddVideoAudioEnabled);
-        e.putBoolean("dd_video_msg_enabled", ddVideoMsgEnabled);
-        e.putBoolean("diange_lyrics_enabled", ddLyricsEnabled);
-        e.putBoolean("diange_weather_enabled", ddWeatherEnabled);
-        e.putBoolean("diange_fun_enabled", ddFunEnabled);
-        e.putBoolean("diange_self_trigger", ddSelfTrigger);
         e.putBoolean("ls_auto_accept_friend", autoAcceptFriend);
         e.putString("ls_auto_accept_friend_msg", autoAcceptFriendMsg);
         e.putBoolean("ls_group_invite_enabled", groupInviteEnabled);

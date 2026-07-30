@@ -102,8 +102,7 @@ public class AntiRecallHook {
                 Class<?> c = cl.loadClass(className);
                 for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
                     if (m.getParameterTypes().length >= 2) {
-                        XposedHelpers.findAndHookMethod(className, cl, m.getName(),
-                            new XC_MethodHook() {
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
                                 @Override
                                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                                     try {

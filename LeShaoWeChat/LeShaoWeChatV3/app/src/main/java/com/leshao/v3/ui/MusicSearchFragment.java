@@ -62,7 +62,7 @@ public class MusicSearchFragment extends Fragment {
 
         LinearLayout content = new LinearLayout(getContext());
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(MusicActivity.dp(16), MusicActivity.dp(14), MusicActivity.dp(16), MusicActivity.dp(80));
+        content.setPadding(MusicActivity.dp(11), MusicActivity.dp(10), MusicActivity.dp(11), MusicActivity.dp(56));
 
         buildSearchBar(content);
         buildTypeChips(content);
@@ -78,21 +78,21 @@ public class MusicSearchFragment extends Fragment {
         LinearLayout bar = new LinearLayout(getContext());
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setBackground(MusicActivity.rd(24, MusicActivity.CLR_CARD));
-        int padH = MusicActivity.dp(16);
-        int padV = MusicActivity.dp(10);
+        bar.setBackground(MusicActivity.rd(18, MusicActivity.CLR_CARD));
+        int padH = MusicActivity.dp(11);
+        int padV = MusicActivity.dp(7);
         bar.setPadding(padH, padV, padH, padV);
         parent.addView(bar);
 
         TextView icon = new TextView(getContext());
         icon.setText("\uD83D\uDD0D");
-        icon.setTextSize(18);
-        icon.setPadding(0, 0, MusicActivity.dp(8), 0);
+        icon.setTextSize(13);
+        icon.setPadding(0, 0, MusicActivity.dp(6), 0);
         bar.addView(icon);
 
         mSearchInput = new EditText(getContext());
         mSearchInput.setHint("搜索歌曲/歌手/专辑");
-        mSearchInput.setTextSize(15);
+        mSearchInput.setTextSize(14);
         mSearchInput.setTextColor(MusicActivity.CLR_TEXT);
         mSearchInput.setHintTextColor(MusicActivity.CLR_TEXT2);
         mSearchInput.setBackground(null);
@@ -129,14 +129,14 @@ public class MusicSearchFragment extends Fragment {
 
     private void buildTypeChips(LinearLayout parent) {
         LinearLayout chipWrapper = new LinearLayout(getContext());
-        chipWrapper.setPadding(0, MusicActivity.dp(12), 0, MusicActivity.dp(8));
+        chipWrapper.setPadding(0, MusicActivity.dp(8), 0, MusicActivity.dp(6));
         parent.addView(chipWrapper);
 
         HorizontalScrollView hsv = new HorizontalScrollView(getContext());
         hsv.setHorizontalScrollBarEnabled(false);
         mChipContainer = new LinearLayout(getContext());
         mChipContainer.setOrientation(LinearLayout.HORIZONTAL);
-        mChipContainer.setPadding(MusicActivity.dp(2), 0, MusicActivity.dp(2), 0);
+        mChipContainer.setPadding(MusicActivity.dp(1), 0, MusicActivity.dp(1), 0);
         hsv.addView(mChipContainer);
         chipWrapper.addView(hsv);
 
@@ -144,18 +144,18 @@ public class MusicSearchFragment extends Fragment {
             final int idx = i;
             TextView chip = new TextView(getContext());
             chip.setText(TYPE_LABELS[i]);
-            chip.setTextSize(13);
+            chip.setTextSize(12);
             chip.setTypeface(null, Typeface.BOLD);
             chip.setGravity(Gravity.CENTER);
-            int padH = MusicActivity.dp(16);
-            int padV = MusicActivity.dp(7);
+            int padH = MusicActivity.dp(12);
+            int padV = MusicActivity.dp(5);
             chip.setPadding(padH, padV, padH, padV);
 
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-            lp.setMargins(0, 0, MusicActivity.dp(8), 0);
+            lp.setMargins(0, 0, MusicActivity.dp(6), 0);
             chip.setLayoutParams(lp);
 
-            chip.setBackground(MusicActivity.rd(20, i == 0 ? MusicActivity.CLR_ACCENT : MusicActivity.CLR_INPUT));
+            chip.setBackground(MusicActivity.rd(14, i == 0 ? MusicActivity.CLR_ACCENT : MusicActivity.CLR_INPUT));
             chip.setTextColor(i == 0 ? 0xFFFFFFFF : MusicActivity.CLR_TEXT2);
 
             chip.setOnClickListener(v -> {
@@ -173,7 +173,7 @@ public class MusicSearchFragment extends Fragment {
         for (int i = 0; i < mChipViews.size(); i++) {
             TextView chip = (TextView) mChipViews.get(i);
             boolean sel = (i == mCurrentTypeIndex);
-            chip.setBackground(MusicActivity.rd(20, sel ? MusicActivity.CLR_ACCENT : MusicActivity.CLR_INPUT));
+            chip.setBackground(MusicActivity.rd(14, sel ? MusicActivity.CLR_ACCENT : MusicActivity.CLR_INPUT));
             chip.setTextColor(sel ? 0xFFFFFFFF : MusicActivity.CLR_TEXT2);
         }
     }
@@ -182,21 +182,21 @@ public class MusicSearchFragment extends Fragment {
         mEmptyState = new LinearLayout(getContext());
         mEmptyState.setOrientation(LinearLayout.VERTICAL);
         mEmptyState.setGravity(Gravity.CENTER);
-        mEmptyState.setPadding(0, MusicActivity.dp(80), 0, 0);
+        mEmptyState.setPadding(0, MusicActivity.dp(56), 0, 0);
         mEmptyState.setVisibility(View.VISIBLE);
 
         TextView emoji = new TextView(getContext());
         emoji.setText("\uD83C\uDFB5");
-        emoji.setTextSize(48);
+        emoji.setTextSize(34);
         emoji.setGravity(Gravity.CENTER);
         mEmptyState.addView(emoji);
 
         TextView hint = new TextView(getContext());
         hint.setText("搜索你喜欢的音乐");
-        hint.setTextSize(15);
+        hint.setTextSize(11);
         hint.setTextColor(MusicActivity.CLR_TEXT2);
         hint.setGravity(Gravity.CENTER);
-        hint.setPadding(0, MusicActivity.dp(12), 0, 0);
+        hint.setPadding(0, MusicActivity.dp(8), 0, 0);
         mEmptyState.addView(hint);
 
         parent.addView(mEmptyState);
@@ -209,7 +209,7 @@ public class MusicSearchFragment extends Fragment {
 
         mProgress = new ProgressBar(getContext());
         mProgress.setVisibility(View.GONE);
-        mProgress.setPadding(0, MusicActivity.dp(32), 0, 0);
+        mProgress.setPadding(0, MusicActivity.dp(22), 0, 0);
 
         parent.addView(mProgress);
         parent.addView(mResultsContainer);
@@ -218,11 +218,11 @@ public class MusicSearchFragment extends Fragment {
     private void buildLoadMore(LinearLayout parent) {
         mLoadMoreBtn = new TextView(getContext());
         mLoadMoreBtn.setText("加载更多");
-        mLoadMoreBtn.setTextSize(14);
+        mLoadMoreBtn.setTextSize(13);
         mLoadMoreBtn.setTextColor(MusicActivity.CLR_ACCENT);
         mLoadMoreBtn.setTypeface(null, Typeface.BOLD);
         mLoadMoreBtn.setGravity(Gravity.CENTER);
-        mLoadMoreBtn.setPadding(0, MusicActivity.dp(20), 0, MusicActivity.dp(20));
+        mLoadMoreBtn.setPadding(0, MusicActivity.dp(14), 0, MusicActivity.dp(14));
         mLoadMoreBtn.setVisibility(View.GONE);
         mLoadMoreBtn.setOnClickListener(v -> {
             if (!mIsLoading && mCurrentKeyword.length() > 0) {
@@ -311,39 +311,39 @@ public class MusicSearchFragment extends Fragment {
         LinearLayout item = new LinearLayout(getContext());
         item.setOrientation(LinearLayout.HORIZONTAL);
         item.setGravity(Gravity.CENTER_VERTICAL);
-        item.setBackground(MusicActivity.rd(12, MusicActivity.CLR_CARD));
-        item.setPadding(MusicActivity.dp(12), MusicActivity.dp(10), MusicActivity.dp(12), MusicActivity.dp(10));
+        item.setBackground(MusicActivity.rd(8, MusicActivity.CLR_CARD));
+        item.setPadding(MusicActivity.dp(8), MusicActivity.dp(7), MusicActivity.dp(8), MusicActivity.dp(7));
 
         LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(-1, -2);
-        itemLp.setMargins(0, 0, 0, MusicActivity.dp(8));
+        itemLp.setMargins(0, 0, 0, MusicActivity.dp(6));
         item.setLayoutParams(itemLp);
 
-        int coverSize = MusicActivity.dp(50);
+        int coverSize = MusicActivity.dp(40);
         ImageView cover = new ImageView(getContext());
         cover.setLayoutParams(new LinearLayout.LayoutParams(coverSize, coverSize));
         cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        cover.setBackground(MusicActivity.rd(8, 0xFFDDDDDD));
+        cover.setBackground(MusicActivity.rd(6, 0xFFDDDDDD));
         MusicActivity.loadCover(cover, song.cover);
         item.addView(cover);
 
         LinearLayout info = new LinearLayout(getContext());
         info.setOrientation(LinearLayout.VERTICAL);
-        info.setPadding(MusicActivity.dp(12), 0, MusicActivity.dp(8), 0);
+        info.setPadding(MusicActivity.dp(8), 0, MusicActivity.dp(6), 0);
         info.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
 
         TextView title = new TextView(getContext());
         title.setText(song.title);
-        title.setTextSize(15);
+        title.setTextSize(11);
         title.setTextColor(MusicActivity.CLR_TEXT);
         title.setSingleLine(true);
         info.addView(title);
 
         TextView artist = new TextView(getContext());
         artist.setText(song.artist);
-        artist.setTextSize(13);
+        artist.setTextSize(9);
         artist.setTextColor(MusicActivity.CLR_TEXT2);
         artist.setSingleLine(true);
-        artist.setPadding(0, MusicActivity.dp(3), 0, 0);
+        artist.setPadding(0, MusicActivity.dp(2), 0, 0);
         info.addView(artist);
 
         item.addView(info);
@@ -351,17 +351,17 @@ public class MusicSearchFragment extends Fragment {
         if (song.duration > 0) {
             TextView dur = new TextView(getContext());
             dur.setText(formatDuration(song.duration));
-            dur.setTextSize(12);
+            dur.setTextSize(9);
             dur.setTextColor(MusicActivity.CLR_TEXT2);
-            dur.setPadding(MusicActivity.dp(4), 0, MusicActivity.dp(8), 0);
+            dur.setPadding(MusicActivity.dp(3), 0, MusicActivity.dp(6), 0);
             item.addView(dur);
         }
 
         TextView playBtn = new TextView(getContext());
         playBtn.setText("\u25B6");
-        playBtn.setTextSize(18);
+        playBtn.setTextSize(13);
         playBtn.setTextColor(MusicActivity.CLR_ACCENT);
-        playBtn.setPadding(MusicActivity.dp(8), MusicActivity.dp(4), MusicActivity.dp(4), MusicActivity.dp(4));
+        playBtn.setPadding(MusicActivity.dp(6), MusicActivity.dp(3), MusicActivity.dp(3), MusicActivity.dp(3));
         item.addView(playBtn);
 
         item.setOnClickListener(v -> {
@@ -384,36 +384,36 @@ public class MusicSearchFragment extends Fragment {
         LinearLayout card = new LinearLayout(getContext());
         card.setOrientation(LinearLayout.VERTICAL);
         card.setGravity(Gravity.CENTER);
-        card.setBackground(MusicActivity.rd(12, MusicActivity.CLR_CARD));
-        int pad = MusicActivity.dp(12);
+        card.setBackground(MusicActivity.rd(8, MusicActivity.CLR_CARD));
+        int pad = MusicActivity.dp(8);
         card.setPadding(pad, pad, pad, pad);
 
-        int cardWidth = (int) ((getResources().getDisplayMetrics().widthPixels - MusicActivity.dp(16) * 2 - MusicActivity.dp(8) * 2) / 2f);
+        int cardWidth = (int) ((getResources().getDisplayMetrics().widthPixels - MusicActivity.dp(11) * 2 - MusicActivity.dp(6) * 2) / 2f);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(cardWidth, -2);
-        lp.setMargins(0, 0, MusicActivity.dp(8), MusicActivity.dp(8));
+        lp.setMargins(0, 0, MusicActivity.dp(6), MusicActivity.dp(6));
         card.setLayoutParams(lp);
 
         int imgSize = cardWidth - pad * 2;
         ImageView cover = new ImageView(getContext());
         cover.setLayoutParams(new LinearLayout.LayoutParams(imgSize, imgSize));
         cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        cover.setBackground(MusicActivity.rd(8, 0xFFDDDDDD));
+        cover.setBackground(MusicActivity.rd(6, 0xFFDDDDDD));
         MusicActivity.loadCover(cover, song.cover);
         card.addView(cover);
 
         TextView title = new TextView(getContext());
         title.setText(song.title);
-        title.setTextSize(14);
+        title.setTextSize(10);
         title.setTextColor(MusicActivity.CLR_TEXT);
         title.setSingleLine(true);
         title.setMaxLines(1);
-        title.setPadding(0, MusicActivity.dp(8), 0, MusicActivity.dp(2));
+        title.setPadding(0, MusicActivity.dp(6), 0, MusicActivity.dp(1));
         title.setLayoutParams(new LinearLayout.LayoutParams(cardWidth - pad * 2, -2));
         card.addView(title);
 
         TextView artist = new TextView(getContext());
         artist.setText(song.artist);
-        artist.setTextSize(12);
+        artist.setTextSize(9);
         artist.setTextColor(MusicActivity.CLR_TEXT2);
         artist.setSingleLine(true);
         artist.setLayoutParams(new LinearLayout.LayoutParams(cardWidth - pad * 2, -2));
@@ -427,29 +427,29 @@ public class MusicSearchFragment extends Fragment {
         LinearLayout card = new LinearLayout(getContext());
         card.setOrientation(LinearLayout.VERTICAL);
         card.setGravity(Gravity.CENTER);
-        card.setBackground(MusicActivity.rd(12, MusicActivity.CLR_CARD));
-        int pad = MusicActivity.dp(12);
+        card.setBackground(MusicActivity.rd(8, MusicActivity.CLR_CARD));
+        int pad = MusicActivity.dp(8);
         card.setPadding(pad, pad, pad, pad);
 
-        int cardWidth = (int) ((getResources().getDisplayMetrics().widthPixels - MusicActivity.dp(16) * 2 - MusicActivity.dp(8) * 2) / 2f);
+        int cardWidth = (int) ((getResources().getDisplayMetrics().widthPixels - MusicActivity.dp(11) * 2 - MusicActivity.dp(6) * 2) / 2f);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(cardWidth, -2);
-        lp.setMargins(0, 0, MusicActivity.dp(8), MusicActivity.dp(8));
+        lp.setMargins(0, 0, MusicActivity.dp(6), MusicActivity.dp(6));
         card.setLayoutParams(lp);
 
         int imgSize = cardWidth - pad * 2;
         ImageView cover = new ImageView(getContext());
         cover.setLayoutParams(new LinearLayout.LayoutParams(imgSize, imgSize));
         cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        cover.setBackground(MusicActivity.rd(8, 0xFFDDDDDD));
+        cover.setBackground(MusicActivity.rd(6, 0xFFDDDDDD));
         MusicActivity.loadCover(cover, song.cover);
         card.addView(cover);
 
         TextView title = new TextView(getContext());
         title.setText(song.title);
-        title.setTextSize(14);
+        title.setTextSize(10);
         title.setTextColor(MusicActivity.CLR_TEXT);
         title.setMaxLines(2);
-        title.setPadding(0, MusicActivity.dp(8), 0, 0);
+        title.setPadding(0, MusicActivity.dp(6), 0, 0);
         title.setLayoutParams(new LinearLayout.LayoutParams(cardWidth - pad * 2, -2));
         card.addView(title);
 
@@ -461,14 +461,14 @@ public class MusicSearchFragment extends Fragment {
         LinearLayout item = new LinearLayout(getContext());
         item.setOrientation(LinearLayout.HORIZONTAL);
         item.setGravity(Gravity.CENTER_VERTICAL);
-        item.setBackground(MusicActivity.rd(12, MusicActivity.CLR_CARD));
-        item.setPadding(MusicActivity.dp(12), MusicActivity.dp(10), MusicActivity.dp(12), MusicActivity.dp(10));
+        item.setBackground(MusicActivity.rd(8, MusicActivity.CLR_CARD));
+        item.setPadding(MusicActivity.dp(8), MusicActivity.dp(7), MusicActivity.dp(8), MusicActivity.dp(7));
 
         LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(-1, -2);
-        itemLp.setMargins(0, 0, 0, MusicActivity.dp(8));
+        itemLp.setMargins(0, 0, 0, MusicActivity.dp(6));
         item.setLayoutParams(itemLp);
 
-        int avatarSize = MusicActivity.dp(54);
+        int avatarSize = MusicActivity.dp(38);
         ImageView avatar = new ImageView(getContext());
         avatar.setLayoutParams(new LinearLayout.LayoutParams(avatarSize, avatarSize));
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -483,31 +483,31 @@ public class MusicSearchFragment extends Fragment {
 
         LinearLayout info = new LinearLayout(getContext());
         info.setOrientation(LinearLayout.VERTICAL);
-        info.setPadding(MusicActivity.dp(14), 0, 0, 0);
+        info.setPadding(MusicActivity.dp(10), 0, 0, 0);
         info.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
 
         TextView name = new TextView(getContext());
         name.setText(song.title);
-        name.setTextSize(16);
+        name.setTextSize(11);
         name.setTextColor(MusicActivity.CLR_TEXT);
         name.setSingleLine(true);
         info.addView(name);
 
         TextView songsCount = new TextView(getContext());
         songsCount.setText(song.artist);
-        songsCount.setTextSize(13);
+        songsCount.setTextSize(9);
         songsCount.setTextColor(MusicActivity.CLR_TEXT2);
         songsCount.setSingleLine(true);
-        songsCount.setPadding(0, MusicActivity.dp(3), 0, 0);
+        songsCount.setPadding(0, MusicActivity.dp(2), 0, 0);
         info.addView(songsCount);
 
         item.addView(info);
 
         TextView arrow = new TextView(getContext());
         arrow.setText("\u203A");
-        arrow.setTextSize(24);
+        arrow.setTextSize(17);
         arrow.setTextColor(MusicActivity.CLR_TEXT2);
-        arrow.setPadding(MusicActivity.dp(8), 0, 0, 0);
+        arrow.setPadding(MusicActivity.dp(6), 0, 0, 0);
         item.addView(arrow);
 
         item.setOnClickListener(v -> MusicActivity.toast("功能开发中"));
@@ -517,17 +517,17 @@ public class MusicSearchFragment extends Fragment {
     private View buildLyricItem(KgApi.Song song) {
         LinearLayout item = new LinearLayout(getContext());
         item.setOrientation(LinearLayout.VERTICAL);
-        item.setBackground(MusicActivity.rd(12, MusicActivity.CLR_CARD));
-        int pad = MusicActivity.dp(14);
+        item.setBackground(MusicActivity.rd(8, MusicActivity.CLR_CARD));
+        int pad = MusicActivity.dp(10);
         item.setPadding(pad, pad, pad, pad);
 
         LinearLayout.LayoutParams itemLp = new LinearLayout.LayoutParams(-1, -2);
-        itemLp.setMargins(0, 0, 0, MusicActivity.dp(8));
+        itemLp.setMargins(0, 0, 0, MusicActivity.dp(6));
         item.setLayoutParams(itemLp);
 
         TextView title = new TextView(getContext());
         title.setText(song.title);
-        title.setTextSize(15);
+        title.setTextSize(11);
         title.setTextColor(MusicActivity.CLR_TEXT);
         title.setTypeface(null, Typeface.BOLD);
         title.setSingleLine(true);
@@ -536,10 +536,10 @@ public class MusicSearchFragment extends Fragment {
         if (song.artist != null && !song.artist.isEmpty()) {
             TextView artist = new TextView(getContext());
             artist.setText(song.artist);
-            artist.setTextSize(13);
+            artist.setTextSize(9);
             artist.setTextColor(MusicActivity.CLR_TEXT2);
             artist.setSingleLine(true);
-            artist.setPadding(0, MusicActivity.dp(2), 0, MusicActivity.dp(6));
+            artist.setPadding(0, MusicActivity.dp(1), 0, MusicActivity.dp(4));
             item.addView(artist);
         }
 
@@ -550,10 +550,10 @@ public class MusicSearchFragment extends Fragment {
 
         TextView lyricHint = new TextView(getContext());
         lyricHint.setText("匹配歌词: " + song.title);
-        lyricHint.setTextSize(13);
+        lyricHint.setTextSize(9);
         lyricHint.setTextColor(MusicActivity.CLR_TEXT2);
         lyricHint.setMaxLines(2);
-        lyricHint.setPadding(0, MusicActivity.dp(8), 0, 0);
+        lyricHint.setPadding(0, MusicActivity.dp(6), 0, 0);
         item.addView(lyricHint);
 
         item.setOnClickListener(v -> MusicActivity.toast("功能开发中"));

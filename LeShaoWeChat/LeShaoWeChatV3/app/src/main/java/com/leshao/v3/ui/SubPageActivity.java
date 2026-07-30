@@ -10,6 +10,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -81,13 +82,12 @@ public class SubPageActivity {
         sv.addView(body);
         root.addView(sv);
 
-        AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+        AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Light_NoActionBar);
         b.setView(root);
         b.setCancelable(true);
         AlertDialog dlg = b.create();
         sSubDialog = dlg;
 
-        // 系统返回键或点击对话框外关闭时，回到主页面
         dlg.setOnCancelListener(dialog -> goBack(parentAct));
         dlg.setOnDismissListener(dialog -> {
             if (sSubDialog == dlg) sSubDialog = null;
@@ -95,10 +95,9 @@ public class SubPageActivity {
 
         Window w = dlg.getWindow();
         if (w != null) {
-            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
-                        (int)(ctx.getResources().getDisplayMetrics().heightPixels * 0.90));
-            w.setGravity(Gravity.CENTER);
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            w.setBackgroundDrawable(new ColorDrawable(AppColors.bg()));
+            w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         }
         dlg.show();
     }
@@ -142,6 +141,8 @@ public class SubPageActivity {
                 return ThemePageView.create(ctx, parentAct);
             case 3:  // 联系人和群聊
                 return ContactGroupPageView.create(ctx, parentAct);
+            case 5:  // 音乐娱乐
+                return MusicPageView.create(ctx, parentAct);
             case 8:  // TTS语音播报
                 return TTSPageView.create(ctx, parentAct);
             case 9:  // 红包转账

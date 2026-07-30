@@ -269,32 +269,6 @@ public class ConfigPanels {
         });
     }
 
-    // ==================== AutoReplyHook ====================
-
-    public static void showAutoReply(Activity act, SharedPreferences prefs) {
-        LinearLayout root = new LinearLayout(act);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
-
-        String saved = prefs.getString("auto_reply_rules", "");
-
-        EditText rulesEt = addTextRow(act, root,
-                "回复规则 (keyword=reply 每行一条)", keywordsToText(saved));
-        rulesEt.setMinLines(6);
-
-        TextView hint = new TextView(act);
-        hint.setText("格式: 关键词=回复内容\n示例: 你好=您好，请问有什么事？\n示例: 在吗=在的，请说");
-        hint.setTextSize(12);
-        hint.setTextColor(0xFF999999);
-        hint.setPadding(0, dp(act, 8), 0, 0);
-        root.addView(hint);
-
-        showDialog(act, "关键词回复配置", new ScrollView(act) {{ addView(root); }}, () -> {
-            String text = rulesEt.getText().toString().trim();
-            prefs.edit().putString("auto_reply_rules", text).apply();
-        });
-    }
-
     // ==================== SnsFeatures - time_edit ====================
 
     public static void showSnsTimeOffset(Activity act, SharedPreferences prefs) {
@@ -648,24 +622,6 @@ public class ConfigPanels {
 
     private static String colorToHex(int color) {
         return String.format("#%08X", color);
-    }
-
-    private static String keywordsToText(String saved) {
-        if (saved == null || saved.isEmpty()) return "";
-        StringBuilder sb = new StringBuilder();
-        try {
-            org.json.JSONObject obj = new org.json.JSONObject(saved);
-            java.util.Iterator<String> keys = obj.keys();
-            while (keys.hasNext()) {
-                String k = keys.next();
-                String v = obj.optString(k, "");
-                if (sb.length() > 0) sb.append("\n");
-                sb.append(k).append("=").append(v);
-            }
-        } catch (Exception e) {
-            return saved;
-        }
-        return sb.toString();
     }
 
     private static int dp(Activity act, int dp) {

@@ -42,6 +42,17 @@ public class MsgExport {
     private static void hookMenu(ClassLoader cl) {
         try {
             Class<?> chattingUI = VersionCompat.findChattingUIClass(cl);
+            if (chattingUI == null) {
+                for (String cn : new String[]{
+                    "com.tencent.mm.ui.chatting.ChattingUI",
+                    "com.tencent.mm.ui.chatting.BaseChattingUI",
+                    "com.tencent.mm.ui.chatting.v2.ChattingUI",
+                    "com.tencent.mm.ui.chatting.ChattingUIFragment",
+                    "com.tencent.mm.ui.chatting.v2.ChattingUIFragment"
+                }) {
+                    try { chattingUI = cl.loadClass(cn); break; } catch (Throwable ignored) {}
+                }
+            }
             if (chattingUI == null) return;
 
             XposedBridge.hookAllMethods(chattingUI, "onCreateOptionsMenu", new XC_MethodHook() {
@@ -123,8 +134,20 @@ public class MsgExport {
                 return;
             }
 
-            Method rawQuery = db.getClass().getDeclaredMethod("u", String.class, String[].class);
-            Method getCursor = db.getClass().getDeclaredMethod("d");
+            Method rawQuery = null;
+            for (String m : new String[]{"u", "rawQuery", "v", "w"}) {
+                try { rawQuery = db.getClass().getDeclaredMethod(m, String.class, String[].class); break; }
+                catch (Throwable ignored) {}
+            }
+            Method getCursor = null;
+            for (String m : new String[]{"d", "getCursor", "e", "f"}) {
+                try { getCursor = db.getClass().getDeclaredMethod(m); break; }
+                catch (Throwable ignored) {}
+            }
+            if (rawQuery == null || getCursor == null) {
+                showToast("数据库方法获取失败");
+                return;
+            }
 
             cursor = (Cursor) rawQuery.invoke(db,
                 "SELECT msgContent, createTime, isSend, type FROM message WHERE talker=? ORDER BY createTime ASC LIMIT 50000",
