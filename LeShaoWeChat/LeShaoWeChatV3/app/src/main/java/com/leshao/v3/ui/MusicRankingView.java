@@ -435,6 +435,8 @@ public class MusicRankingView {
         playBtn.setOnClickListener(v -> MusicActivity.playSong(msSong));
         item.addView(playBtn);
 
+        item.setOnClickListener(v -> MusicActivity.playSong(msSong));
+
         return item;
     }
 }

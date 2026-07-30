@@ -47,7 +47,6 @@ public class MineView {
         buildHistorySection(root);
         buildFavoritesSection(root);
         buildLocalSection(root);
-        buildLogSection(root);
 
         scroll.addView(root);
         return scroll;
@@ -366,93 +365,4 @@ public class MineView {
         return tv;
     }
 
-    private void buildLogSection(LinearLayout parent) {
-        LinearLayout card = new LinearLayout(mActivity);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(MusicActivity.rd(10, MusicActivity.CLR_CARD));
-        card.setPadding(MusicActivity.dp(14), MusicActivity.dp(12), MusicActivity.dp(14), MusicActivity.dp(10));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.bottomMargin = MusicActivity.dp(12);
-        card.setLayoutParams(lp);
-
-        TextView header = new TextView(mActivity);
-        header.setText("\uD83D\uDCDD  \u65E5\u5FD7\u67E5\u770B");
-        header.setTextSize(14);
-        header.setTextColor(MusicActivity.CLR_TEXT);
-        header.setTypeface(null, Typeface.BOLD);
-        header.setPadding(0, 0, 0, MusicActivity.dp(6));
-        card.addView(header);
-
-        TextView viewBtn = new TextView(mActivity);
-        viewBtn.setText("\u67E5\u770B\u64AD\u653E\u65E5\u5FD7");
-        viewBtn.setTextSize(12);
-        viewBtn.setTextColor(0xFFFFFFFF);
-        viewBtn.setGravity(Gravity.CENTER);
-        viewBtn.setPadding(MusicActivity.dp(10), MusicActivity.dp(7), MusicActivity.dp(10), MusicActivity.dp(7));
-        viewBtn.setBackground(MusicActivity.rd(8, MusicActivity.CLR_ACCENT));
-        viewBtn.setOnClickListener(v -> showLogDialog());
-        card.addView(viewBtn);
-
-        parent.addView(card);
-    }
-
-    private void showLogDialog() {
-        String[] paths = {
-            "/data/data/com.tencent.mm/files/leshao_v3/music_log.txt",
-            "/sdcard/leshao_v3_logs/music_log.txt",
-            "/sdcard/music_log.txt"
-        };
-
-        StringBuilder sb = new StringBuilder();
-        boolean found = false;
-        for (String p : paths) {
-            try {
-                File f = new File(p);
-                if (!f.exists()) continue;
-                sb.append("=== ").append(p).append(" ===\n");
-                BufferedReader br = new BufferedReader(new FileReader(f));
-                String line;
-                int lines = 0;
-                while ((line = br.readLine()) != null && lines < 200) {
-                    sb.append(line).append("\n");
-                    lines++;
-                }
-                br.close();
-                if (lines >= 200) sb.append("...(truncated)\n");
-                sb.append("\n");
-                found = true;
-            } catch (Throwable ignored) {}
-        }
-
-        if (!found) {
-            sb.append("未找到日志文件。\n\n尝试的路径:\n");
-            for (String p : paths) sb.append("  ").append(p).append("\n");
-            sb.append("\n日志文件只会在有问题时才会生成。\n请尝试搜索/播放歌曲后再查看。");
-        }
-
-        final String logText = sb.toString();
-
-        ScrollView sv = new ScrollView(mActivity);
-        sv.setPadding(MusicActivity.dp(12), MusicActivity.dp(12), MusicActivity.dp(12), MusicActivity.dp(12));
-
-        TextView content = new TextView(mActivity);
-        content.setText(logText);
-        content.setTextSize(10);
-        content.setTextColor(MusicActivity.CLR_TEXT);
-        content.setTypeface(Typeface.MONOSPACE);
-        content.setTextIsSelectable(true);
-
-        sv.addView(content);
-
-        new AlertDialog.Builder(mActivity)
-            .setTitle("播放日志")
-            .setView(sv)
-            .setPositiveButton("一键复制", (d, w) -> {
-                ClipboardManager cm = (ClipboardManager) mActivity.getSystemService(Context.CLIPBOARD_SERVICE);
-                cm.setPrimaryClip(ClipData.newPlainText("log", logText));
-                MusicActivity.toast("日志已复制到剪贴板");
-            })
-            .setNegativeButton("关闭", null)
-            .show();
-    }
 }

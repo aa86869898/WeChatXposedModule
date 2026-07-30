@@ -206,6 +206,14 @@ public class MusicActivity extends Activity {
     }
 
     void showTab(int idx) {
+        if (idx == 2) {
+            int savedTab = mCurrentTab;
+            mCurrentTab = 2;
+            updateNavHighlight();
+            openPlayer();
+            mCurrentTab = savedTab;
+            return;
+        }
         mCurrentTab = idx;
         mContent.removeAllViews();
 
@@ -222,10 +230,6 @@ public class MusicActivity extends Activity {
                 view = rv.createView(this);
                 rv.onViewReady();
                 break;
-            }
-            case 2: {
-                openPlayer();
-                return;
             }
             case 3: {
                 MineView mv = new MineView();
