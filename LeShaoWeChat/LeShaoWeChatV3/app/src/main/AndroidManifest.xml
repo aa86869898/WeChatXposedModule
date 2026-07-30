@@ -39,6 +39,11 @@
         </activity>
 
         <activity
+            android:name="com.leshao.v3.ui.MusicPlayerActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Holo.Light.NoActionBar" />
+
+        <activity
             android:name="com.leshao.v3.ui.MusicActivity"
             android:exported="true"
             android:label="乐少音乐"

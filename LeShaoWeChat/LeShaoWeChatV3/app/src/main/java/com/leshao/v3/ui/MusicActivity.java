@@ -58,7 +58,7 @@ public class MusicActivity extends Activity {
         super.onCreate(savedInstanceState);
         try {
             MusicLog.init();
-            MusicLog.i("MusicActivity", "onCreate start, v=1.4.8-music");
+            MusicLog.i("MusicActivity", "onCreate start, v=1.4.9-music");
             sDensity = getResources().getDisplayMetrics().density;
             int rid = getResources().getIdentifier("status_bar_height", "dimen", "android");
             sStatusBarH = rid > 0 ? getResources().getDimensionPixelSize(rid) : dp(24);
@@ -253,11 +253,13 @@ public class MusicActivity extends Activity {
     }
 
     public static void playSong(MusicSearchApi.Song song) {
-        if (sPlayer == null) return;
+        if (sPlayer == null) { toast("播放器未初始化"); return; }
+        MusicLog.i("MusicActivity", "playSong: " + song.title + " hash=" + song.hash);
         int idx = sPlayer.getPlaylist().indexOf(song);
         if (idx >= 0) sPlayer.playFromPlaylist(idx);
         else { sPlayer.getPlaylist().add(song); sPlayer.play(song); }
         if (sInstance != null) sInstance.refreshPlayerBar();
+        toast("正在播放: " + song.title + " - " + song.artist);
     }
 
     public static void playSongs(List<MusicSearchApi.Song> songs, int startIdx) {
@@ -272,7 +274,7 @@ public class MusicActivity extends Activity {
         if (url == null || url.isEmpty()) return;
         if (!url.startsWith("http")) {
             if (url.startsWith("//")) url = "https:" + url;
-            else if (!url.startsWith("http")) return;
+            else return;
         }
         url = url.replace("{size}", "400");
         final String finalUrl = url;
@@ -281,25 +283,19 @@ public class MusicActivity extends Activity {
                 java.net.URL u = new java.net.URL(finalUrl);
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
                 conn.setConnectTimeout(8000); conn.setReadTimeout(8000);
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12)");
+                conn.setRequestProperty("User-Agent", "Android800-AndroidPhone-12029-56-0-starlive-ctnet(13)");
                 conn.setRequestProperty("Referer", "https://m.kugou.com");
+                conn.setRequestProperty("KG-THash", "3e5ec6b");
+                conn.setRequestProperty("KG-RC", "1");
+                conn.setRequestProperty("KG-RF", "00869891");
+                conn.setRequestProperty("Accept", "image/*, */*");
                 int code = conn.getResponseCode();
-                if (code != 200) {
-                    MusicLog.e("cover", "HTTP " + code + " for " + finalUrl);
-                    conn.disconnect();
-                    return;
-                }
+                if (code != 200) { conn.disconnect(); return; }
                 java.io.InputStream is = conn.getInputStream();
                 android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
                 is.close(); conn.disconnect();
-                if (bmp != null) {
-                    MAIN.post(() -> iv.setImageBitmap(bmp));
-                } else {
-                    MusicLog.e("cover", "decode null for " + finalUrl);
-                }
-            } catch (Throwable t) {
-                MusicLog.e("cover", "load fail: " + finalUrl, t);
-            }
+                if (bmp != null) MAIN.post(() -> iv.setImageBitmap(bmp));
+            } catch (Throwable ignored) {}
         }).start();
     }
 

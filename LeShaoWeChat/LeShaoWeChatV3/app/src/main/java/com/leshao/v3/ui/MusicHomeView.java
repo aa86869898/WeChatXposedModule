@@ -8,6 +8,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
@@ -33,6 +34,9 @@ public class MusicHomeView {
 
     private ProgressBar mArtistLoading;
     private LinearLayout mArtistGrid;
+    private LinearLayout mSearchResults;
+    private Runnable mSearchDebounce;
+    private EditText mSearchInput;
 
     private static final int[] CARD_COLORS = {
         0xFF3B8EFF, 0xFFF59E0B, 0xFFEF4444, 0xFF10B981, 0xFF8B5CF6
@@ -94,25 +98,85 @@ public class MusicHomeView {
         icon.setPadding(0, 0, MusicActivity.dp(6), 0);
         bar.addView(icon);
 
-        EditText searchInput = new EditText(mActivity);
-        searchInput.setHint("\u641C\u7D22\u6B4C\u66F2/\u6B4C\u624B/\u4E13\u8F91");
-        searchInput.setTextSize(13);
-        searchInput.setTextColor(MusicActivity.CLR_TEXT);
-        searchInput.setHintTextColor(MusicActivity.CLR_TEXT2);
-        searchInput.setBackground(null);
-        searchInput.setSingleLine(true);
-        searchInput.setFocusable(false);
-        searchInput.setClickable(true);
-        searchInput.setCursorVisible(false);
-        searchInput.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-        searchInput.setOnClickListener(v -> {
-            if (MusicActivity.sInstance != null) {
-                MusicActivity.sInstance.showTab(0);
+        mSearchInput = new EditText(mActivity);
+        mSearchInput.setHint("\u641C\u7D22\u6B4C\u66F2/\u6B4C\u624B/\u4E13\u8F91");
+        mSearchInput.setTextSize(13);
+        mSearchInput.setTextColor(MusicActivity.CLR_TEXT);
+        mSearchInput.setHintTextColor(MusicActivity.CLR_TEXT2);
+        mSearchInput.setBackground(null);
+        mSearchInput.setSingleLine(true);
+        mSearchInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        mSearchInput.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        mSearchInput.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            public void afterTextChanged(android.text.Editable s) {
+                if (mSearchDebounce != null) mHandler.removeCallbacks(mSearchDebounce);
+                String kw = s.toString().trim();
+                if (kw.isEmpty()) {
+                    if (mSearchResults != null) mSearchResults.removeAllViews();
+                    return;
+                }
+                mSearchDebounce = () -> {
+                    KgApi.search(kw, 1, "music", new KgApi.SongListCallback() {
+                        public void onResult(List<KgApi.Song> songs, int total) {
+                            if (mSearchResults == null) return;
+                            mHandler.post(() -> {
+                                mSearchResults.removeAllViews();
+                                if (songs.isEmpty()) {
+                                    TextView empty = new TextView(mActivity);
+                                    empty.setText("\u672A\u627E\u5230\u7ED3\u679C");
+                                    empty.setTextSize(12);
+                                    empty.setTextColor(MusicActivity.CLR_TEXT2);
+                                    empty.setPadding(MusicActivity.dp(8), MusicActivity.dp(4), 0, 0);
+                                    mSearchResults.addView(empty);
+                                    return;
+                                }
+                                int max = Math.min(songs.size(), 10);
+                                for (int i = 0; i < max; i++) {
+                                    final KgApi.Song ks = songs.get(i);
+                                    final MusicSearchApi.Song ms = convertSingle(ks);
+                                    TextView tv = new TextView(mActivity);
+                                    tv.setText((i + 1) + ". " + ks.title + " - " + ks.artist);
+                                    tv.setTextSize(12);
+                                    tv.setTextColor(MusicActivity.CLR_TEXT);
+                                    tv.setSingleLine(true);
+                                    tv.setPadding(MusicActivity.dp(8), MusicActivity.dp(5), MusicActivity.dp(8), MusicActivity.dp(5));
+                                    tv.setOnClickListener(v -> {
+                                        MusicActivity.playSong(ms);
+                                        MusicActivity.toast("\u6B63\u5728\u64AD\u653E: " + ms.title);
+                                    });
+                                    mSearchResults.addView(tv);
+                                }
+                            });
+                        }
+                        public void onError(String msg) {}
+                    });
+                };
+                mHandler.postDelayed(mSearchDebounce, 400);
             }
         });
-        bar.addView(searchInput);
+        mSearchInput.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                String kw = mSearchInput.getText().toString().trim();
+                if (!kw.isEmpty() && mSearchDebounce != null) {
+                    mHandler.removeCallbacks(mSearchDebounce);
+                    mSearchDebounce.run();
+                }
+                return true;
+            }
+            return false;
+        });
+        bar.addView(mSearchInput);
 
         parent.addView(bar);
+
+        mSearchResults = new LinearLayout(mActivity);
+        mSearchResults.setOrientation(LinearLayout.VERTICAL);
+        mSearchResults.setBackgroundColor(MusicActivity.CLR_CARD);
+        mSearchResults.setPadding(0, 0, 0, MusicActivity.dp(4));
+        mSearchResults.setVisibility(View.VISIBLE);
+        parent.addView(mSearchResults);
     }
 
     private void buildRankingSection(LinearLayout parent) {
