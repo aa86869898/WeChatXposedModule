@@ -18,13 +18,11 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentActivity;
 import com.leshao.v3.LogWriter;
 import java.util.ArrayList;
 import java.util.List;
 
-public class MusicActivity extends FragmentActivity {
+public class MusicActivity extends Activity {
 
     static final int CLR_BG = 0xFFF5F7FA;
     static final int CLR_CARD = 0xFFFFFFFF;
@@ -51,7 +49,6 @@ public class MusicActivity extends FragmentActivity {
     ImageView mPlayerPlayBtn;
     ImageView mPlayerNextBtn;
     int mCurrentTab = 0;
-    Fragment mCurrentFrag;
 
     static final String[] TAB_LABELS = {"推荐", "排行", "歌单", "搜索"};
     static final String[] TAB_ICONS = {"🏠", "🏆", "🎵", "🔍"};
@@ -70,7 +67,6 @@ public class MusicActivity extends FragmentActivity {
             root.setBackgroundColor(CLR_BG);
 
             mContent = new FrameLayout(this);
-            mContent.setId(View.generateViewId());
             mContent.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1.0f));
             root.addView(mContent);
 
@@ -82,13 +78,9 @@ public class MusicActivity extends FragmentActivity {
 
             setContentView(root);
 
-            getSupportFragmentManager().beginTransaction()
-                .replace(mContent.getId(), new MusicHomeFragment()).commit();
-            mCurrentFrag = new MusicHomeFragment();
-            mCurrentTab = 0;
+            showTab(0);
 
             LogWriter.log("MusicActivity", "onCreate OK");
-            Toast.makeText(this, "乐少音乐已启动", Toast.LENGTH_SHORT).show();
         } catch (Throwable e) {
             LogWriter.log("MusicActivity", "onCreate CRASH: " + Log.getStackTraceString(e));
             Toast.makeText(this, "启动失败: " + e.toString(), Toast.LENGTH_LONG).show();
@@ -194,25 +186,44 @@ public class MusicActivity extends FragmentActivity {
 
             tab.setTag(new View[]{icon, label});
 
-            tab.setOnClickListener(v -> switchTab(idx));
+            tab.setOnClickListener(v -> showTab(idx));
             mBottomNav.addView(tab);
         }
         updateNavHighlight();
     }
 
-    void switchTab(int idx) {
-        if (mCurrentTab == idx) return;
+    void showTab(int idx) {
         mCurrentTab = idx;
-        Fragment frag;
+        mContent.removeAllViews();
+
+        View view = null;
         switch (idx) {
-            case 0: frag = new MusicHomeFragment(); break;
-            case 1: frag = new MusicRankingFragment(); break;
-            case 2: frag = new MusicPlaylistFragment(); break;
-            case 3: frag = new MusicSearchFragment(); break;
-            default: frag = new MusicHomeFragment(); break;
+            case 0: {
+                MusicHomeView hv = new MusicHomeView();
+                view = hv.createView(this);
+                hv.onViewReady();
+                break;
+            }
+            case 1: {
+                MusicRankingView rv = new MusicRankingView();
+                view = rv.createView(this);
+                rv.onViewReady();
+                break;
+            }
+            case 2: {
+                MusicPlaylistView pv = new MusicPlaylistView();
+                view = pv.createView(this);
+                pv.onViewReady();
+                break;
+            }
+            case 3: {
+                MusicSearchView sv = new MusicSearchView();
+                view = sv.createView(this);
+                sv.onViewReady();
+                break;
+            }
         }
-        mCurrentFrag = frag;
-        getSupportFragmentManager().beginTransaction().replace(mContent.getId(), frag).commit();
+        if (view != null) mContent.addView(view);
         updateNavHighlight();
     }
 

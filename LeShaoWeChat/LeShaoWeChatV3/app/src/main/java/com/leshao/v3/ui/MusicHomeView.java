@@ -3,13 +3,10 @@ package com.leshao.v3.ui;
 import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
-import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
@@ -17,10 +14,9 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import androidx.fragment.app.Fragment;
 import java.util.List;
 
-public class MusicHomeFragment extends Fragment {
+public class MusicHomeView {
 
     private Activity mActivity;
     private Handler mHandler = new Handler(Looper.getMainLooper());
@@ -42,9 +38,8 @@ public class MusicHomeFragment extends Fragment {
 
     private static final String[] RANK_NUMBERS = {"1", "2", "3", "4", "5"};
 
-    @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        mActivity = getActivity();
+    public View createView(Activity activity) {
+        mActivity = activity;
 
         ScrollView scroll = new ScrollView(mActivity);
         scroll.setFillViewport(true);
@@ -65,9 +60,7 @@ public class MusicHomeFragment extends Fragment {
         return scroll;
     }
 
-    @Override
-    public void onViewCreated(View view, Bundle savedInstanceState) {
-        super.onViewCreated(view, savedInstanceState);
+    public void onViewReady() {
         loadData();
     }
 
@@ -93,7 +86,7 @@ public class MusicHomeFragment extends Fragment {
         searchIcon.setLayoutParams(new LinearLayout.LayoutParams(iconSize, iconSize));
         searchIcon.setImageDrawable(MusicActivity.emoji("\uD83D\uDD0D", MusicActivity.dp(15)));
         searchIcon.setOnClickListener(v -> {
-            if (MusicActivity.sInstance != null) MusicActivity.sInstance.switchTab(3);
+            if (MusicActivity.sInstance != null) MusicActivity.sInstance.showTab(3);
         });
         row.addView(searchIcon);
 
@@ -110,7 +103,7 @@ public class MusicHomeFragment extends Fragment {
         banner.setBackground(MusicActivity.gradientRounded(
             new int[]{MusicActivity.CLR_ACCENT, 0xFF5B9EFF}, 11));
         banner.setOnClickListener(v -> {
-            if (MusicActivity.sInstance != null) MusicActivity.sInstance.switchTab(3);
+            if (MusicActivity.sInstance != null) MusicActivity.sInstance.showTab(3);
         });
 
         LinearLayout inner = new LinearLayout(mActivity);
