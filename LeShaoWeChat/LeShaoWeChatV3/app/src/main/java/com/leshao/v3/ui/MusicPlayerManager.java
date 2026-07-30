@@ -193,6 +193,20 @@ public class MusicPlayerManager {
         }
     }
 
+    public void refetchWithQuality(MusicSearchApi.Song song, int quality) {
+        if (mCurrent == null || !mCurrent.id.equals(song.id)) return;
+        boolean wasPlaying = isPlaying();
+        int pos = getPosition();
+        stopPlayer();
+        mCurrent = song;
+        loadAndPlay(song);
+        if (wasPlaying && pos > 0) {
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (mPlayer != null && mPlayer.isPlaying()) mPlayer.seekTo(pos);
+            }, 500);
+        }
+    }
+
     public void stopPlayer() {
         stopProgressRunner();
         mPaused = true;

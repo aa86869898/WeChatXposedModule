@@ -36,6 +36,9 @@ public class MusicRankingView {
 
     public View createView(Activity activity) {
         mActivity = activity;
+        mDidLoadData = false;
+        mAllRankings.clear();
+        mChipViews.clear();
 
         mContentScroll = new ScrollView(mActivity);
 

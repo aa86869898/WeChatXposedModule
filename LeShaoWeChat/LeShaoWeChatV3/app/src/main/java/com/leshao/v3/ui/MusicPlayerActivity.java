@@ -1,6 +1,8 @@
 package com.leshao.v3.ui;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -9,9 +11,13 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
+import android.view.animation.Animation;
+import android.view.animation.LinearInterpolator;
+import android.view.animation.RotateAnimation;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import java.util.List;
@@ -19,15 +25,23 @@ import java.util.Locale;
 
 public class MusicPlayerActivity extends Activity {
 
-    private ImageView mCover;
+    private ImageView mCover, mDiscBg;
+    private FrameLayout mDiscFrame;
+    private RotateAnimation mDiscAnim;
     private TextView mTitle, mArtist, mCurrentTime, mTotalTime;
     private SeekBar mSeekBar;
-    private TextView mPrevBtn, mPlayBtn, mNextBtn, mModeBtn;
+    private TextView mPrevBtn, mPlayBtn, mNextBtn, mModeBtn, mQualityBtn;
     private TextView mLyricText;
     private LinearLayout mRoot;
     private Handler mHandler = new Handler(Looper.getMainLooper());
     private Runnable mProgressRunner;
     private boolean mUserSeeking;
+    private boolean mDiscPaused;
+    private float mDiscDegrees;
+    private int mQuality = 0; // 0=标准 1=HQ 2=无损
+
+    private static final String[] QUALITY_LABELS = {"标准音质", "高品质 HQ", "无损 FLAC"};
+    private static final int[] QUALITY_COLORS = {0xFF6B7280, 0xFF3B8EFF, 0xFFF59E0B};
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -39,13 +53,15 @@ public class MusicPlayerActivity extends Activity {
             mRoot.setPadding(0, MusicActivity.sStatusBarH, 0, 0);
 
             buildHeader();
-            buildCoverArea();
+            buildDiscArea();
+            buildSongInfo();
             buildProgressArea();
             buildLyricArea();
             buildControls();
 
             setContentView(mRoot);
             updateUI();
+            startDiscAnim();
             startProgressRunner();
             Log.d("MusicPlayer", "onCreate OK");
         } catch (Throwable e) {
@@ -58,6 +74,7 @@ public class MusicPlayerActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         stopProgressRunner();
+        stopDiscAnim();
     }
 
     void buildHeader() {
@@ -68,7 +85,7 @@ public class MusicPlayerActivity extends Activity {
 
         TextView back = new TextView(this);
         back.setText("\u2190");
-        back.setTextSize(18);
+        back.setTextSize(20);
         back.setTextColor(MusicActivity.CLR_TEXT);
         back.setPadding(0, 0, MusicActivity.dp(12), 0);
         back.setOnClickListener(v -> finish());
@@ -77,64 +94,82 @@ public class MusicPlayerActivity extends Activity {
         LinearLayout titleCol = new LinearLayout(this);
         titleCol.setOrientation(LinearLayout.VERTICAL);
         titleCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-
         TextView topTitle = new TextView(this);
         topTitle.setText("正在播放");
         topTitle.setTextSize(15);
         topTitle.setTextColor(MusicActivity.CLR_TEXT);
         topTitle.setTypeface(null, Typeface.BOLD);
         titleCol.addView(topTitle);
-
         header.addView(titleCol);
+
+        mQualityBtn = new TextView(this);
+        mQualityBtn.setTextSize(10);
+        mQualityBtn.setGravity(Gravity.CENTER);
+        mQualityBtn.setPadding(MusicActivity.dp(8), MusicActivity.dp(4), MusicActivity.dp(8), MusicActivity.dp(4));
+        mQualityBtn.setBackground(MusicActivity.rd(12, QUALITY_COLORS[mQuality]));
+        mQualityBtn.setTextColor(0xFFFFFFFF);
+        mQualityBtn.setText(QUALITY_LABELS[mQuality]);
+        mQualityBtn.setTypeface(null, Typeface.BOLD);
+        mQualityBtn.setOnClickListener(v -> showQualityDialog());
+        header.addView(mQualityBtn);
 
         mRoot.addView(header);
     }
 
-    void buildCoverArea() {
+    void buildDiscArea() {
         LinearLayout area = new LinearLayout(this);
         area.setOrientation(LinearLayout.VERTICAL);
         area.setGravity(Gravity.CENTER);
         area.setPadding(0, MusicActivity.dp(8), 0, MusicActivity.dp(8));
-        area.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1.0f));
 
-        int coverSize = (int) (Math.min(
-            getResources().getDisplayMetrics().widthPixels * 0.6f,
-            MusicActivity.dp(220)));
-        FrameLayout coverFrame = new FrameLayout(this);
-        coverFrame.setLayoutParams(new LinearLayout.LayoutParams(coverSize, coverSize));
+        int discSize = (int) (Math.min(getResources().getDisplayMetrics().widthPixels * 0.65f, MusicActivity.dp(240)));
 
-        GradientDrawable shadow = new GradientDrawable();
-        shadow.setCornerRadius(MusicActivity.dp(16));
-        shadow.setColor(0x33000000);
-        shadow.setSize(MusicActivity.dp(4), MusicActivity.dp(4));
+        mDiscFrame = new FrameLayout(this);
+        mDiscFrame.setLayoutParams(new LinearLayout.LayoutParams(discSize, discSize));
 
+        mDiscBg = new ImageView(this);
+        FrameLayout.LayoutParams discLp = new FrameLayout.LayoutParams(discSize, discSize);
+        mDiscBg.setLayoutParams(discLp);
+        mDiscBg.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        mDiscBg.setImageDrawable(MusicActivity.emoji("\uD83D\uDCBF", discSize));
+        mDiscBg.setAlpha(0.15f);
+        mDiscFrame.addView(mDiscBg);
+
+        int coverSize = (int) (discSize * 0.55f);
         mCover = new ImageView(this);
         FrameLayout.LayoutParams covLp = new FrameLayout.LayoutParams(coverSize, coverSize);
-        covLp.setMargins(MusicActivity.dp(4), MusicActivity.dp(4), MusicActivity.dp(4), MusicActivity.dp(4));
+        covLp.gravity = Gravity.CENTER;
         mCover.setLayoutParams(covLp);
         mCover.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable coverBg = new GradientDrawable();
-        coverBg.setCornerRadius(MusicActivity.dp(14));
+        coverBg.setCornerRadius(coverSize / 2);
         coverBg.setColor(0xFFDDDDDD);
         mCover.setBackground(coverBg);
-        coverFrame.addView(mCover);
+        mDiscFrame.addView(mCover);
 
-        area.addView(coverFrame);
+        area.addView(mDiscFrame);
+        mRoot.addView(area);
+    }
+
+    void buildSongInfo() {
+        LinearLayout area = new LinearLayout(this);
+        area.setOrientation(LinearLayout.VERTICAL);
+        area.setGravity(Gravity.CENTER);
+        area.setPadding(MusicActivity.dp(24), 0, MusicActivity.dp(24), 0);
 
         mTitle = new TextView(this);
         mTitle.setTextSize(17);
         mTitle.setTextColor(MusicActivity.CLR_TEXT);
         mTitle.setTypeface(null, Typeface.BOLD);
         mTitle.setSingleLine(true);
-        mTitle.setPadding(MusicActivity.dp(32), MusicActivity.dp(14), MusicActivity.dp(32), MusicActivity.dp(4));
         mTitle.setGravity(Gravity.CENTER);
+        mTitle.setPadding(0, MusicActivity.dp(12), 0, MusicActivity.dp(4));
         area.addView(mTitle);
 
         mArtist = new TextView(this);
         mArtist.setTextSize(13);
         mArtist.setTextColor(MusicActivity.CLR_TEXT2);
         mArtist.setSingleLine(true);
-        mArtist.setPadding(MusicActivity.dp(32), 0, MusicActivity.dp(32), 0);
         mArtist.setGravity(Gravity.CENTER);
         area.addView(mArtist);
 
@@ -144,7 +179,7 @@ public class MusicPlayerActivity extends Activity {
     void buildProgressArea() {
         LinearLayout area = new LinearLayout(this);
         area.setOrientation(LinearLayout.VERTICAL);
-        area.setPadding(MusicActivity.dp(24), 0, MusicActivity.dp(24), MusicActivity.dp(8));
+        area.setPadding(MusicActivity.dp(20), MusicActivity.dp(8), MusicActivity.dp(20), MusicActivity.dp(4));
 
         mSeekBar = new SeekBar(this);
         mSeekBar.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
@@ -165,7 +200,7 @@ public class MusicPlayerActivity extends Activity {
         timeRow.setOrientation(LinearLayout.HORIZONTAL);
 
         mCurrentTime = new TextView(this);
-        mCurrentTime.setTextSize(11);
+        mCurrentTime.setTextSize(10);
         mCurrentTime.setTextColor(MusicActivity.CLR_TEXT2);
         mCurrentTime.setText("0:00");
         timeRow.addView(mCurrentTime);
@@ -175,7 +210,7 @@ public class MusicPlayerActivity extends Activity {
         timeRow.addView(spacer);
 
         mTotalTime = new TextView(this);
-        mTotalTime.setTextSize(11);
+        mTotalTime.setTextSize(10);
         mTotalTime.setTextColor(MusicActivity.CLR_TEXT2);
         mTotalTime.setText("0:00");
         timeRow.addView(mTotalTime);
@@ -188,7 +223,8 @@ public class MusicPlayerActivity extends Activity {
         LinearLayout area = new LinearLayout(this);
         area.setOrientation(LinearLayout.VERTICAL);
         area.setGravity(Gravity.CENTER);
-        area.setPadding(MusicActivity.dp(24), MusicActivity.dp(4), MusicActivity.dp(24), MusicActivity.dp(4));
+        area.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1.0f));
+        area.setPadding(MusicActivity.dp(20), MusicActivity.dp(4), MusicActivity.dp(20), MusicActivity.dp(4));
 
         mLyricText = new TextView(this);
         mLyricText.setTextSize(14);
@@ -205,9 +241,9 @@ public class MusicPlayerActivity extends Activity {
         LinearLayout controls = new LinearLayout(this);
         controls.setOrientation(LinearLayout.HORIZONTAL);
         controls.setGravity(Gravity.CENTER);
-        controls.setPadding(MusicActivity.dp(8), MusicActivity.dp(8), MusicActivity.dp(8), MusicActivity.dp(16));
+        controls.setPadding(MusicActivity.dp(6), MusicActivity.dp(4), MusicActivity.dp(6), MusicActivity.dp(12));
 
-        mModeBtn = ctrlBtn("\uD83D\uDD01", 12);
+        mModeBtn = ctrlBtn("\uD83D\uDD01", 11);
         mModeBtn.setOnClickListener(v -> {
             if (MusicActivity.sPlayer != null) {
                 int mode = MusicActivity.sPlayer.getPlayMode();
@@ -229,32 +265,37 @@ public class MusicPlayerActivity extends Activity {
         controls.addView(mPrevBtn);
 
         View sp2 = new View(this);
-        sp2.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(8), 1));
+        sp2.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(6), 1));
         controls.addView(sp2);
 
-        int playSize = MusicActivity.dp(52);
+        int playSize = MusicActivity.dp(56);
         GradientDrawable playBg = new GradientDrawable();
         playBg.setShape(GradientDrawable.OVAL);
         playBg.setColor(MusicActivity.CLR_ACCENT);
 
         mPlayBtn = new TextView(this);
         mPlayBtn.setText("\u25B6");
-        mPlayBtn.setTextSize(22);
+        mPlayBtn.setTextSize(24);
         mPlayBtn.setTextColor(0xFFFFFFFF);
         mPlayBtn.setGravity(Gravity.CENTER);
         mPlayBtn.setBackground(playBg);
         mPlayBtn.setLayoutParams(new LinearLayout.LayoutParams(playSize, playSize));
         mPlayBtn.setOnClickListener(v -> {
             if (MusicActivity.sPlayer == null || MusicActivity.sPlayer.getCurrent() == null) return;
-            if (MusicActivity.sPlayer.isPlaying()) MusicActivity.sPlayer.pause();
-            else MusicActivity.sPlayer.resume();
+            if (MusicActivity.sPlayer.isPlaying()) {
+                MusicActivity.sPlayer.pause();
+                pauseDisc();
+            } else {
+                MusicActivity.sPlayer.resume();
+                resumeDisc();
+            }
             updateUI();
             if (MusicActivity.sInstance != null) MusicActivity.sInstance.refreshPlayerBar();
         });
         controls.addView(mPlayBtn);
 
         View sp3 = new View(this);
-        sp3.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(8), 1));
+        sp3.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(6), 1));
         controls.addView(sp3);
 
         mNextBtn = ctrlBtn("\u23ED", 20);
@@ -267,9 +308,9 @@ public class MusicPlayerActivity extends Activity {
         sp4.setLayoutParams(new LinearLayout.LayoutParams(0, 1, 1.0f));
         controls.addView(sp4);
 
-        TextView playlistBtn = ctrlBtn("\uD83D\uDCCB", 12);
-        playlistBtn.setOnClickListener(v -> showPlaylist());
-        controls.addView(playlistBtn);
+        TextView listBtn = ctrlBtn("\uD83D\uDCCB", 11);
+        listBtn.setOnClickListener(v -> showPlaylist());
+        controls.addView(listBtn);
 
         mRoot.addView(controls);
     }
@@ -279,8 +320,54 @@ public class MusicPlayerActivity extends Activity {
         btn.setText(emoji);
         btn.setTextSize(size);
         btn.setGravity(Gravity.CENTER);
-        btn.setPadding(MusicActivity.dp(10), MusicActivity.dp(10), MusicActivity.dp(10), MusicActivity.dp(10));
+        btn.setPadding(MusicActivity.dp(8), MusicActivity.dp(8), MusicActivity.dp(8), MusicActivity.dp(8));
         return btn;
+    }
+
+    private void showQualityDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("选择音质");
+        builder.setSingleChoiceItems(QUALITY_LABELS, mQuality, (d, which) -> {
+            mQuality = which;
+            mQualityBtn.setText(QUALITY_LABELS[mQuality]);
+            mQualityBtn.setBackground(MusicActivity.rd(12, QUALITY_COLORS[mQuality]));
+            d.dismiss();
+
+            MusicSearchApi.Song song = MusicActivity.sPlayer != null ? MusicActivity.sPlayer.getCurrent() : null;
+            if (song != null) {
+                MusicActivity.toast("已切换到: " + QUALITY_LABELS[mQuality]);
+                MusicActivity.sPlayer.refetchWithQuality(song, mQuality);
+            }
+        });
+        builder.setNegativeButton("取消", null);
+        builder.show();
+    }
+
+    private void startDiscAnim() {
+        mDiscAnim = new RotateAnimation(0, 360,
+            Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
+        mDiscAnim.setDuration(8000);
+        mDiscAnim.setRepeatCount(Animation.INFINITE);
+        mDiscAnim.setInterpolator(new LinearInterpolator());
+        mDiscFrame.startAnimation(mDiscAnim);
+    }
+
+    private void pauseDisc() {
+        mDiscPaused = true;
+        if (mDiscFrame.getAnimation() != null) {
+            // save current rotation state
+            mDiscAnim.cancel();
+        }
+    }
+
+    private void resumeDisc() {
+        if (!mDiscPaused) return;
+        mDiscPaused = false;
+        startDiscAnim();
+    }
+
+    private void stopDiscAnim() {
+        if (mDiscFrame != null) mDiscFrame.clearAnimation();
     }
 
     private void updateUI() {
@@ -289,6 +376,7 @@ public class MusicPlayerActivity extends Activity {
             mTitle.setText("未在播放");
             mArtist.setText("");
             mCover.setImageBitmap(null);
+            pauseDisc();
             return;
         }
         mTitle.setText(song.title);
@@ -297,6 +385,8 @@ public class MusicPlayerActivity extends Activity {
 
         boolean playing = MusicActivity.sPlayer != null && MusicActivity.sPlayer.isPlaying();
         mPlayBtn.setText(playing ? "\u23F8" : "\u25B6");
+        if (playing) resumeDisc();
+        else pauseDisc();
 
         mSeekBar.setMax(1000);
         mCurrentTime.setText("0:00");
@@ -344,32 +434,46 @@ public class MusicPlayerActivity extends Activity {
 
         LinearLayout container = new LinearLayout(this);
         container.setOrientation(LinearLayout.VERTICAL);
-        container.setBackgroundColor(0xFFFFFFFF);
         container.setPadding(MusicActivity.dp(12), MusicActivity.dp(12), MusicActivity.dp(12), MusicActivity.dp(12));
+
+        TextView header = new TextView(this);
+        header.setText("播放列表 (" + list.size() + " 首)");
+        header.setTextSize(14);
+        header.setTextColor(MusicActivity.CLR_TEXT);
+        header.setTypeface(null, Typeface.BOLD);
+        header.setPadding(0, 0, 0, MusicActivity.dp(8));
+        container.addView(header);
 
         for (int i = 0; i < Math.min(list.size(), 50); i++) {
             MusicSearchApi.Song s = list.get(i);
             boolean isCurrent = current != null && s.id.equals(current.id);
 
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, MusicActivity.dp(4), 0, MusicActivity.dp(4));
+
             TextView tv = new TextView(this);
             tv.setText((i + 1) + ". " + s.title + " - " + s.artist);
-            tv.setTextSize(13);
+            tv.setTextSize(12);
             tv.setTextColor(isCurrent ? MusicActivity.CLR_ACCENT : MusicActivity.CLR_TEXT);
             tv.setTypeface(null, isCurrent ? Typeface.BOLD : Typeface.NORMAL);
             tv.setSingleLine(true);
-            tv.setPadding(0, MusicActivity.dp(5), 0, MusicActivity.dp(5));
+            row.addView(tv);
+
             final int idx = i;
-            tv.setOnClickListener(v -> {
+            row.setOnClickListener(v -> {
                 if (MusicActivity.sPlayer != null) { MusicActivity.sPlayer.playFromPlaylist(idx); updateUI(); }
             });
-            container.addView(tv);
+            container.addView(row);
         }
 
-        android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
-            .setTitle("播放列表 (" + list.size() + "首)")
-            .setView(container)
+        ScrollView sv = new ScrollView(this);
+        sv.addView(container);
+
+        new AlertDialog.Builder(this)
+            .setView(sv)
             .setPositiveButton("关闭", null)
-            .create();
-        dialog.show();
+            .show();
     }
 }

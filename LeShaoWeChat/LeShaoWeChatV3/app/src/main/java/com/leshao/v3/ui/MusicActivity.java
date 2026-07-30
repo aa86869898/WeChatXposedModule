@@ -49,13 +49,8 @@ public class MusicActivity extends Activity {
     ImageView mPlayerNextBtn;
     int mCurrentTab = 0;
 
-    static final String[] TAB_LABELS = {"推荐", "排行", "播放器", "搜索"};
-    static final String[] TAB_ICONS = {"\uD83C\uDFE0", "\uD83C\uDFC6", "\uD83C\uDFB5", "\uD83D\uDD0D"};
-
-    private MusicHomeView mHomeView;
-    private MusicRankingView mRankingView;
-    private MusicPlayerTabView mPlayerTabView;
-    private MusicSearchView mSearchView;
+    static final String[] TAB_LABELS = {"推荐", "排行", "播放器", "我的"};
+    static final String[] TAB_ICONS = {"\uD83C\uDFE0", "\uD83C\uDFC6", "\uD83C\uDFB5", "\uD83D\uDC64"};
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -106,19 +101,17 @@ public class MusicActivity extends Activity {
         mPlayerBar.setBackgroundColor(CLR_CARD);
         mPlayerBar.setPadding(dp(8), dp(4), dp(8), dp(4));
         mPlayerBar.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(40)));
-        mPlayerBar.setElevation(dp(3));
 
         GradientDrawable coverBg = new GradientDrawable();
-        coverBg.setCornerRadius(dp(4));
-        coverBg.setColor(0xFFDDDDDD);
+        coverBg.setCornerRadius(dp(4)); coverBg.setColor(0xFFDDDDDD);
 
         mPlayerCover = new ImageView(this);
         int cs = dp(30);
         mPlayerCover.setLayoutParams(new LinearLayout.LayoutParams(cs, cs));
         mPlayerCover.setScaleType(ImageView.ScaleType.CENTER_CROP);
         mPlayerCover.setBackground(coverBg);
-        mPlayerBar.addView(mPlayerCover);
         mPlayerCover.setOnClickListener(v -> openPlayer());
+        mPlayerBar.addView(mPlayerCover);
 
         LinearLayout infoCol = new LinearLayout(this);
         infoCol.setOrientation(LinearLayout.VERTICAL);
@@ -138,14 +131,13 @@ public class MusicActivity extends Activity {
         mPlayerPlayBtn.setLayoutParams(new LinearLayout.LayoutParams(bs, bs));
         mPlayerPlayBtn.setScaleType(ImageView.ScaleType.FIT_CENTER);
         mPlayerPlayBtn.setPadding(dp(4), dp(4), dp(4), dp(4));
+        mPlayerPlayBtn.setImageDrawable(emoji("\u25B6", dp(13)));
         mPlayerPlayBtn.setOnClickListener(v -> {
             if (sPlayer != null && sPlayer.getCurrent() != null) {
-                if (sPlayer.isPlaying()) sPlayer.pause();
-                else sPlayer.resume();
+                if (sPlayer.isPlaying()) sPlayer.pause(); else sPlayer.resume();
                 refreshPlayerBar();
             }
         });
-        mPlayerPlayBtn.setImageDrawable(emoji("\u25B6", dp(13)));
         mPlayerBar.addView(mPlayerPlayBtn);
 
         mPlayerNextBtn = new ImageView(this);
@@ -182,7 +174,6 @@ public class MusicActivity extends Activity {
         mBottomNav = new LinearLayout(this);
         mBottomNav.setOrientation(LinearLayout.HORIZONTAL);
         mBottomNav.setBackgroundColor(CLR_CARD);
-        mBottomNav.setElevation(dp(6));
         mBottomNav.setPadding(dp(3), dp(3), dp(3), dp(1));
 
         for (int i = 0; i < 4; i++) {
@@ -218,26 +209,29 @@ public class MusicActivity extends Activity {
 
         View view = null;
         switch (idx) {
-            case 0:
-                if (mHomeView == null) mHomeView = new MusicHomeView();
-                view = mHomeView.createView(this);
-                mHomeView.onViewReady();
+            case 0: {
+                MusicHomeView hv = new MusicHomeView();
+                view = hv.createView(this);
+                hv.onViewReady();
                 break;
-            case 1:
-                if (mRankingView == null) mRankingView = new MusicRankingView();
-                view = mRankingView.createView(this);
-                mRankingView.onViewReady();
+            }
+            case 1: {
+                MusicRankingView rv = new MusicRankingView();
+                view = rv.createView(this);
+                rv.onViewReady();
                 break;
-            case 2:
-                if (mPlayerTabView == null) mPlayerTabView = new MusicPlayerTabView();
-                view = mPlayerTabView.createView(this);
-                mPlayerTabView.onViewReady();
+            }
+            case 2: {
+                openPlayer();
+                if (idx - 1 >= 0) showTab(idx - 1);
+                return;
+            }
+            case 3: {
+                MineView mv = new MineView();
+                view = mv.createView(this);
+                mv.onViewReady();
                 break;
-            case 3:
-                if (mSearchView == null) mSearchView = new MusicSearchView();
-                view = mSearchView.createView(this);
-                mSearchView.onViewReady();
-                break;
+            }
         }
         if (view != null) {
             mContent.addView(view);
@@ -266,7 +260,7 @@ public class MusicActivity extends Activity {
     }
 
     public static void playSongs(List<MusicSearchApi.Song> songs, int startIdx) {
-        if (sPlayer == null) return;
+        if (sPlayer == null || songs.isEmpty()) return;
         sPlayer.getPlaylist().clear();
         sPlayer.getPlaylist().addAll(songs);
         if (startIdx >= 0 && startIdx < songs.size()) sPlayer.play(songs.get(startIdx));
@@ -276,24 +270,22 @@ public class MusicActivity extends Activity {
     public static void loadCover(ImageView iv, String url) {
         if (url == null || url.isEmpty()) return;
         if (!url.startsWith("http")) {
-            url = url.startsWith("//") ? "https:" + url : url;
-            if (!url.startsWith("http")) return;
+            if (url.startsWith("//")) url = "https:" + url;
+            else if (!url.startsWith("http")) return;
         }
         url = url.replace("{size}", "400");
-        String finalUrl = url;
+        final String finalUrl = url;
         new Thread(() -> {
             try {
                 java.net.URL u = new java.net.URL(finalUrl);
                 java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
-                conn.setConnectTimeout(5000); conn.setReadTimeout(5000);
+                conn.setConnectTimeout(8000); conn.setReadTimeout(8000);
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+                conn.setRequestProperty("Referer", "https://m.kugou.com");
                 java.io.InputStream is = conn.getInputStream();
                 android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
                 is.close(); conn.disconnect();
-                if (bmp != null) MAIN.post(() -> {
-                    iv.setImageBitmap(bmp);
-                    iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                });
+                if (bmp != null) MAIN.post(() -> iv.setImageBitmap(bmp));
             } catch (Throwable ignored) {}
         }).start();
     }
@@ -305,7 +297,6 @@ public class MusicActivity extends Activity {
         GradientDrawable g = new GradientDrawable();
         g.setCornerRadius(dp(radius)); g.setColor(color); return g;
     }
-
     public static GradientDrawable gradientRounded(int[] colors, int radius) {
         GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, colors);
         g.setCornerRadius(dp(radius)); return g;
