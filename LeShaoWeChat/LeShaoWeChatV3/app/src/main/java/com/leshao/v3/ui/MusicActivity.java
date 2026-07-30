@@ -16,6 +16,7 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.util.ArrayList;
@@ -36,7 +37,6 @@ public class MusicActivity extends Activity {
 
     static final Handler MAIN = new Handler(Looper.getMainLooper());
     static float sDensity;
-    static float sScale = 0.55f;
     static MusicPlayerManager sPlayer;
     static Activity sActivity;
     static MusicActivity sInstance;
@@ -96,14 +96,14 @@ public class MusicActivity extends Activity {
         mPlayerBar.setPadding(dp(8), dp(4), dp(8), dp(4));
         mPlayerBar.setVisibility(View.VISIBLE);
         mPlayerBar.setElevation(dp(3));
-        mPlayerBar.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(41)));
+        mPlayerBar.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(40)));
 
         GradientDrawable coverBg = new GradientDrawable();
         coverBg.setCornerRadius(dp(4));
         coverBg.setColor(0xFFDDDDDD);
 
         mPlayerCover = new ImageView(this);
-        int cs = dp(36);
+        int cs = dp(30);
         mPlayerCover.setLayoutParams(new LinearLayout.LayoutParams(cs, cs));
         mPlayerCover.setScaleType(ImageView.ScaleType.CENTER_CROP);
         mPlayerCover.setBackground(coverBg);
@@ -122,7 +122,7 @@ public class MusicActivity extends Activity {
         mPlayerBar.addView(infoCol);
 
         mPlayerPlayBtn = new ImageView(this);
-        int bs = dp(32);
+        int bs = dp(28);
         mPlayerPlayBtn.setLayoutParams(new LinearLayout.LayoutParams(bs, bs));
         mPlayerPlayBtn.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         mPlayerPlayBtn.setOnClickListener(v -> {
@@ -175,7 +175,7 @@ public class MusicActivity extends Activity {
             LinearLayout tab = new LinearLayout(this);
             tab.setOrientation(LinearLayout.VERTICAL);
             tab.setGravity(Gravity.CENTER);
-            tab.setLayoutParams(new LinearLayout.LayoutParams(0, dp(48), 1.0f));
+            tab.setLayoutParams(new LinearLayout.LayoutParams(0, dp(44), 1.0f));
 
             TextView icon = new TextView(this);
             icon.setText(TAB_ICONS[i]);
@@ -229,7 +229,12 @@ public class MusicActivity extends Activity {
                 break;
             }
         }
-        if (view != null) mContent.addView(view);
+        if (view != null) {
+            mContent.addView(view);
+            if (view instanceof ScrollView) {
+                ((ScrollView) view).scrollTo(0, 0);
+            }
+        }
         updateNavHighlight();
     }
 
@@ -294,9 +299,9 @@ public class MusicActivity extends Activity {
         }).start();
     }
 
-    public static int dp(int dp) { return (int) (dp * sDensity * sScale + 0.5f); }
+    public static int dp(int dp) { return (int) (dp * sDensity + 0.5f); }
 
-    public static int dp(float dp) { return (int) (dp * sDensity * sScale + 0.5f); }
+    public static int dp(float dp) { return (int) (dp * sDensity + 0.5f); }
 
     public static GradientDrawable rd(int radius, int color) {
         GradientDrawable g = new GradientDrawable();

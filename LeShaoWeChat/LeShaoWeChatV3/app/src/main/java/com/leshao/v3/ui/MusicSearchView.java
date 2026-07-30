@@ -60,7 +60,7 @@ public class MusicSearchView {
 
         LinearLayout content = new LinearLayout(mActivity);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(MusicActivity.dp(11), MusicActivity.dp(10), MusicActivity.dp(11), MusicActivity.dp(56));
+        content.setPadding(MusicActivity.dp(11), MusicActivity.dp(10), MusicActivity.dp(11), MusicActivity.dp(8));
 
         buildSearchBar(content);
         buildTypeChips(content);
