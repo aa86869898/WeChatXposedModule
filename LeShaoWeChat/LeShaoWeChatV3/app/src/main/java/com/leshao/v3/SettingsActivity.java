@@ -1,7 +1,13 @@
 package com.leshao.v3;
 
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.ViewGroup;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewpager2.adapter.FragmentStateAdapter;
@@ -11,11 +17,11 @@ import com.google.android.material.tabs.TabLayoutMediator;
 import com.leshao.v3.ui.TTSFragment;
 import com.leshao.v3.ui.GroupGuardFragment;
 import com.leshao.v3.ui.AIFragment;
-
 import com.leshao.v3.ui.StatsFragment;
 import com.leshao.v3.ui.ChatEnhanceFragment;
 import com.leshao.v3.ui.SnsFragment;
 import com.leshao.v3.ui.PrivacyFragment;
+import java.lang.reflect.Method;
 
 public class SettingsActivity extends FragmentActivity {
 
@@ -34,10 +40,13 @@ public class SettingsActivity extends FragmentActivity {
         tabLayout.setTabGravity(TabLayout.GRAVITY_FILL);
         tabLayout.setTabMode(TabLayout.MODE_SCROLLABLE);
 
-        android.widget.LinearLayout root = new android.widget.LinearLayout(this);
-        root.setOrientation(android.widget.LinearLayout.VERTICAL);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
         root.setLayoutParams(new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        root.addView(buildStatusHeader());
+
         root.addView(tabLayout);
         root.addView(viewPager);
 
@@ -74,5 +83,60 @@ public class SettingsActivity extends FragmentActivity {
             case 8: tab.setText("统计"); break;
             }
         }).attach();
+    }
+
+    private ViewGroup buildStatusHeader() {
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setPadding(40, 32, 40, 24);
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(0xFF07C160);
+        bg.setCornerRadius(0);
+        header.setBackground(bg);
+
+        // 标题
+        TextView titleTv = new TextView(this);
+        titleTv.setText("微信乐少助手 V3");
+        titleTv.setTextColor(Color.WHITE);
+        titleTv.setTextSize(22);
+        titleTv.setTypeface(Typeface.DEFAULT_BOLD);
+        titleTv.setGravity(Gravity.CENTER);
+        header.addView(titleTv);
+
+        // 模块状态
+        TextView statusTv = new TextView(this);
+        statusTv.setTextColor(Color.argb(220, 255, 255, 255));
+        statusTv.setTextSize(13);
+        statusTv.setGravity(Gravity.CENTER);
+        statusTv.setPadding(0, 8, 0, 0);
+        statusTv.setText(getModuleStatus());
+        header.addView(statusTv);
+
+        return header;
+    }
+
+    private String getModuleStatus() {
+        boolean xposedLoaded = false;
+        try {
+            Class<?> xb = Class.forName("de.robv.android.xposed.XposedBridge");
+            xposedLoaded = true;
+            Method logMethod = xb.getMethod("log", String.class);
+            logMethod.invoke(null, TAG + " XposedBridge detected");
+        } catch (Throwable ignored) {
+        }
+
+        if (!xposedLoaded) {
+            return "Xposed未加载 | 请在Xposed框架中激活此模块";
+        }
+
+        try {
+            Class<?> hm = Class.forName("com.leshao.v3.hook.HookManager");
+            Method getStats = hm.getMethod("getStats");
+            String stats = (String) getStats.invoke(null);
+            return stats.replace("Hook统计: ", "");
+        } catch (Throwable e) {
+            return "Xposed已加载 | 获取Hook状态失败";
+        }
     }
 }

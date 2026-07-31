@@ -219,41 +219,42 @@ public class VoiceForwardHook {
     }
 
     private static void hookAllClassesInPackages(ClassLoader cl, String[] pkgs) {
-        try {
-            String apkPath = ContextManager.getApkPath();
-            if (apkPath == null) { LogWriter.log(TAG, "APK path null"); return; }
+        new Thread(() -> {
+            try {
+                String apkPath = ContextManager.getApkPath();
+                if (apkPath == null) { LogWriter.log(TAG, "APK path null"); return; }
 
-            dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
-            java.util.Enumeration<String> entries = dex.entries();
-            int clsCount = 0, hookedCount = 0;
+                dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+                java.util.Enumeration<String> entries = dex.entries();
+                int clsCount = 0, hookedCount = 0;
 
-            while (entries.hasMoreElements()) {
-                String className = entries.nextElement();
-                boolean match = false;
-                for (String pkg : pkgs) {
-                    if (className.startsWith(pkg + ".") || className.equals(pkg + ".a") || className.equals(pkg)) {
-                        match = true; break;
+                while (entries.hasMoreElements()) {
+                    String className = entries.nextElement();
+                    boolean match = false;
+                    for (String pkg : pkgs) {
+                        if (className.startsWith(pkg + ".") || className.equals(pkg + ".a") || className.equals(pkg)) {
+                            match = true; break;
+                        }
                     }
+                    if (!match) continue;
+
+                    try {
+                        Class<?> cls = cl.loadClass(className);
+                        int n = hookAllMethodsOnClass(cls, cls.getSimpleName());
+                        clsCount++;
+                        hookedCount += n;
+                        for (Class<?> inner : cls.getDeclaredClasses()) {
+                            int ni = hookAllMethodsOnClass(inner, cls.getSimpleName() + "$" + inner.getSimpleName());
+                            hookedCount += ni;
+                        }
+                    } catch (Throwable ignored) {}
                 }
-                if (!match) continue;
-
-                try {
-                    Class<?> cls = cl.loadClass(className);
-                    // 含内部类: 枚举 declared classes
-                    int n = hookAllMethodsOnClass(cls, cls.getSimpleName());
-                    clsCount++;
-                    hookedCount += n;
-                    for (Class<?> inner : cls.getDeclaredClasses()) {
-                        int ni = hookAllMethodsOnClass(inner, cls.getSimpleName() + "$" + inner.getSimpleName());
-                        hookedCount += ni;
-                    }
-                } catch (Throwable ignored) {}
+                dex.close();
+                LogWriter.log(TAG, "scan " + java.util.Arrays.toString(pkgs) + ": " + clsCount + " classes, " + hookedCount + " methods");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "scan error: " + t.getMessage());
             }
-            dex.close();
-            LogWriter.log(TAG, "scan " + java.util.Arrays.toString(pkgs) + ": " + clsCount + " classes, " + hookedCount + " methods");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "scan error: " + t.getMessage());
-        }
+        }, "leshao-vf-dex-scan").start();
     }
 
     // 对指定 simpleName 的类做全方法 hook（找 click handler）

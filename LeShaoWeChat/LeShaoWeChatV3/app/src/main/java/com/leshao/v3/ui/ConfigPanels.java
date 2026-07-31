@@ -110,20 +110,6 @@ public class ConfigPanels {
         });
     }
 
-    // ==================== ScheduledSend ====================
-
-    public static void showScheduledSend(Activity act, SharedPreferences prefs) {
-        LinearLayout root = new LinearLayout(act);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
-
-        EditText delayEt = addIntRow(act, root, "默认延迟 (毫秒，0=立即)", "0");
-
-        showDialog(act, "定时发送配置", new ScrollView(act) {{ addView(root); }}, () -> {
-            try { ScheduledSend.delayMs = Long.parseLong(delayEt.getText().toString()); } catch (Throwable e) {}
-        });
-    }
-
     // ==================== ChatFooterEnhance ====================
 
     public static void showChatFooterEnhance(Activity act, SharedPreferences prefs) {

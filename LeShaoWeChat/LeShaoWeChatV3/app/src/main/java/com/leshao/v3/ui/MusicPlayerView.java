@@ -6,7 +6,9 @@ import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
 import android.graphics.Outline;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
@@ -14,6 +16,8 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextPaint;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -28,7 +32,10 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MusicPlayerView {
 
@@ -37,16 +44,28 @@ public class MusicPlayerView {
     private static Activity sAct;
 
     private static ImageView sCover;
-    private static TextView sTitle, sArtist, sTimeCur, sTimeTotal, sLyricText;
+    private static TextView sTitle, sArtist, sTimeCur, sTimeTotal;
     private static SeekBar sSeekBar;
-    private static ImageView sPlayBtn, sFavBtn;
+    private static ImageView sPlayBtn;
     private static Handler sH = new Handler(Looper.getMainLooper());
     private static ObjectAnimator sRotationAnim;
     private static boolean sSeeking = false;
     private static AlertDialog sFullDialog;
     private static MusicSearchApi.Song sSong;
-    private static int sQuality = 2; // 0=standard, 1=HQ, 2=lossless(exhigh)
+    private static int sQuality = 2;
     private static TextView sQualityLabel;
+
+    private static LinearLayout sLyricContainer;
+    private static ScrollView sLyricScroller;
+    private static List<LyricLine> sLyricLines = new ArrayList<>();
+    private static int sCurrentLyricLine = -1;
+    private static final Pattern LRC_PAT = Pattern.compile("\\[(\\d{2}):(\\d{2})(?:\\.(\\d{2,3}))?\\](.*)");
+    private static boolean sLyricAutoScroll = true;
+
+    private static class LyricLine {
+        long timeMs;
+        String text;
+    }
 
     public static View create(Context ctx, Activity parentAct, MusicSearchApi.Song song, AlertDialog dialog) {
         sCtx = ctx;
@@ -54,6 +73,8 @@ public class MusicPlayerView {
         sD = ctx.getResources().getDisplayMetrics().density;
         sSong = song;
         sFullDialog = dialog;
+        sLyricLines.clear();
+        sCurrentLyricLine = -1;
 
         MusicPlayerManager pm = MusicPlayerManager.get(ctx);
         pm.addCallback(new MusicPlayerManager.PlayerCallback() {
@@ -89,11 +110,14 @@ public class MusicPlayerView {
         body.addView(buildArtwork(ctx, song));
         body.addView(buildSongInfo(ctx, song));
         body.addView(buildSeekBar(ctx));
+        body.addView(buildLyricArea(ctx));
         body.addView(buildControls(ctx));
         body.addView(buildActions(ctx));
 
         sv.addView(body);
         root.addView(sv);
+
+        fetchLyric(song);
 
         return root;
     }
@@ -118,7 +142,7 @@ public class MusicPlayerView {
         bar.addView(back);
 
         TextView label = new TextView(ctx);
-        label.setText("正在播放");
+        label.setText("\u6B63\u5728\u64AD\u653E");
         label.setTextSize(16);
         label.setTextColor(AppColors.text1());
         label.setTypeface(null, Typeface.BOLD);
@@ -135,7 +159,6 @@ public class MusicPlayerView {
         wrapper.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
         wrapper.setPadding(0, dp(24), 0, dp(16));
 
-        // Vinyl disc background
         GradientDrawable discBg = new GradientDrawable();
         discBg.setShape(GradientDrawable.OVAL);
         discBg.setColor(0xFF2A2A2A);
@@ -148,7 +171,6 @@ public class MusicPlayerView {
         disc.setLayoutParams(discLp);
         disc.setBackground(discBg);
 
-        // Vinyl grooves (concentric circles)
         for (int ring = 0; ring < 3; ring++) {
             int grooveSize = outerSize - dp(20 + ring * 20);
             GradientDrawable groove = new GradientDrawable();
@@ -163,14 +185,12 @@ public class MusicPlayerView {
             disc.addView(grooveView);
         }
 
-        // Cover image (circular)
         sCover = new ImageView(ctx);
         FrameLayout.LayoutParams coverLp = new FrameLayout.LayoutParams(innerSize, innerSize);
         coverLp.gravity = Gravity.CENTER;
         sCover.setLayoutParams(coverLp);
         sCover.setScaleType(ImageView.ScaleType.CENTER_CROP);
 
-        // Clip to circle
         sCover.setOutlineProvider(new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, Outline outline) {
@@ -285,6 +305,30 @@ public class MusicPlayerView {
         return wrapper;
     }
 
+    private static View buildLyricArea(Context ctx) {
+        sLyricScroller = new ScrollView(ctx);
+        sLyricScroller.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(220)));
+        sLyricScroller.setVerticalScrollBarEnabled(false);
+        sLyricScroller.setOverScrollMode(View.OVER_SCROLL_NEVER);
+
+        sLyricContainer = new LinearLayout(ctx);
+        sLyricContainer.setOrientation(LinearLayout.VERTICAL);
+        sLyricContainer.setPadding(dp(8), dp(20), dp(8), dp(20));
+        sLyricContainer.setGravity(Gravity.CENTER_HORIZONTAL);
+        sLyricScroller.addView(sLyricContainer);
+
+        sLyricScroller.setOnTouchListener((v, event) -> {
+            if (event.getAction() == android.view.MotionEvent.ACTION_DOWN) {
+                sLyricAutoScroll = false;
+            } else if (event.getAction() == android.view.MotionEvent.ACTION_UP) {
+                sH.postDelayed(() -> { sLyricAutoScroll = true; }, 3000);
+            }
+            return false;
+        });
+
+        return sLyricScroller;
+    }
+
     private static View buildControls(Context ctx) {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -328,17 +372,17 @@ public class MusicPlayerView {
         row.setGravity(Gravity.CENTER);
         row.setPadding(0, dp(4), 0, 0);
 
-        row.addView(actionBtn(ctx, "播放列表", "\uD83C\uDFB6", () -> showPlaylistDialog()));
-        row.addView(actionBtn(ctx, "播放历史", "\uD83D\uDDD2", () -> showHistoryDialog()));
-        row.addView(actionBtn(ctx, "下载", "\u2B07", () -> showDownloadDialog()));
-        row.addView(actionBtn(ctx, "音质选择", "\uD83C\uDFB5", () -> cycleQuality()));
+        row.addView(actionBtn(ctx, "\u64AD\u653E\u5217\u8868", "\uD83C\uDFB6", () -> showPlaylistDialog()));
+        row.addView(actionBtn(ctx, "\u64AD\u653E\u5386\u53F2", "\uD83D\uDDD2", () -> showHistoryDialog()));
+        row.addView(actionBtn(ctx, "\u4E0B\u8F7D", "\u2B07", () -> showDownloadDialog()));
+        row.addView(actionBtn(ctx, "\u97F3\u8D28\u9009\u62E9", "\uD83C\uDFB5", () -> cycleQuality()));
 
         return row;
     }
 
     private static void cycleQuality() {
         sQuality = (sQuality + 1) % 3;
-        Toast.makeText(sCtx, "音质: " + qualityName(sQuality), Toast.LENGTH_SHORT).show();
+        Toast.makeText(sCtx, "\u97F3\u8D28: " + qualityName(sQuality), Toast.LENGTH_SHORT).show();
         MusicPlayerManager pm = MusicPlayerManager.get(sCtx);
         MusicSearchApi.Song current = pm.getCurrent();
         if (current != null) {
@@ -374,14 +418,12 @@ public class MusicPlayerView {
         return btn;
     }
 
-    // ===== Quality =====
-
     private static String qualityName(int q) {
         switch (q) {
-            case 0: return "标准 128K";
+            case 0: return "\u6807\u51C6 128K";
             case 1: return "HQ 320K";
             case 2:
-            default: return "无损 FLAC";
+            default: return "\u65E0\u635F FLAC";
         }
     }
 
@@ -423,64 +465,20 @@ public class MusicPlayerView {
         }
     }
 
-    // ===== Dialogs =====
-
     private static void showPlaylistDialog() {
         MusicPlayerManager pm = MusicPlayerManager.get(sCtx);
         List<MusicSearchApi.Song> list = pm.getPlaylist();
-        showSongListDialog("播放列表", list, index -> pm.playFromPlaylist(index));
+        showSongListDialog("\u64AD\u653E\u5217\u8868", list, index -> pm.playFromPlaylist(index));
     }
 
     private static void showHistoryDialog() {
         MusicPlayerManager pm = MusicPlayerManager.get(sCtx);
         List<MusicSearchApi.Song> list = pm.getHistory();
-        showSongListDialog("播放历史", list, index -> {
+        showSongListDialog("\u64AD\u653E\u5386\u53F2", list, index -> {
             MusicSearchApi.Song s = list.get(index);
             pm.play(s);
             updateSongInfo(s);
         });
-    }
-
-    private static void showLyricDialog() {
-        MusicPlayerManager pm = MusicPlayerManager.get(sCtx);
-        MusicSearchApi.Song current = pm.getCurrent();
-        if (current == null) return;
-
-        MusicSearchApi.LyricCallback cb = new MusicSearchApi.LyricCallback() {
-            @Override
-            public void onLyric(String lrc) {
-                sH.post(() -> {
-                    AlertDialog dlg = new AlertDialog.Builder(sCtx, android.R.style.Theme_DeviceDefault_Light_NoActionBar)
-                        .setCancelable(true)
-                        .create();
-                    ScrollView sv = new ScrollView(sCtx);
-                    sv.setPadding(dp(20), dp(40), dp(20), dp(40));
-
-                    TextView tv = new TextView(sCtx);
-                    tv.setText(lrc.isEmpty() ? "暂无歌词" : lrc);
-                    tv.setTextSize(14);
-                    tv.setTextColor(AppColors.text1());
-                    tv.setLineSpacing(dp(4), 1.0f);
-                    sv.addView(tv);
-
-                    dlg.setView(sv);
-                    Window w = dlg.getWindow();
-                    if (w != null) {
-                        w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-                        w.setBackgroundDrawable(new ColorDrawable(AppColors.bg()));
-                    }
-                    dlg.show();
-                });
-            }
-            @Override
-            public void onError(String msg) {}
-        };
-
-        if (current.platform == 0) {
-            MusicSearchApi.getKugouLyric(current.hash, cb);
-        } else {
-            MusicSearchApi.getKuwoLyric(current.hash, cb);
-        }
     }
 
     private static void showDownloadDialog() {
@@ -488,7 +486,7 @@ public class MusicPlayerView {
         MusicSearchApi.Song current = pm.getCurrent();
         if (current == null) return;
 
-        String[] labels = {"标准音质 128K", "HQ高音质 320K", "无损音质 FLAC"};
+        String[] labels = {"\u6807\u51C6\u97F3\u8D28 128K", "HQ\u9AD8\u97F3\u8D28 320K", "\u65E0\u635F\u97F3\u8D28 FLAC"};
         final int[] levels = {0, 1, 2};
 
         LinearLayout root = new LinearLayout(sCtx);
@@ -497,7 +495,7 @@ public class MusicPlayerView {
         root.setBackgroundColor(AppColors.bg());
 
         TextView hdr = new TextView(sCtx);
-        hdr.setText("选择下载音质");
+        hdr.setText("\u9009\u62E9\u4E0B\u8F7D\u97F3\u8D28");
         hdr.setTextSize(16);
         hdr.setTextColor(AppColors.text1());
         hdr.setTypeface(null, Typeface.BOLD);
@@ -528,7 +526,7 @@ public class MusicPlayerView {
             tv.setOnClickListener(v -> {
                 dlg.dismiss();
                 sH.post(() -> {
-                    Toast.makeText(sCtx, "开始下载: " + label, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(sCtx, "\u5F00\u59CB\u4E0B\u8F7D: " + label, Toast.LENGTH_SHORT).show();
                     downloadWithQuality(current, q);
                 });
             });
@@ -538,7 +536,7 @@ public class MusicPlayerView {
         dlg.setView(root);
         Window w = dlg.getWindow();
         if (w != null) {
-            w.setLayout((int)(280 * sD), ViewGroup.LayoutParams.WRAP_CONTENT);
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
             w.setBackgroundDrawable(new ColorDrawable(AppColors.bg()));
         }
         dlg.show();
@@ -551,12 +549,12 @@ public class MusicPlayerView {
                 sH.post(() -> {
                     MusicPlayerManager pm = MusicPlayerManager.get(sCtx);
                     pm.download(song, url);
-                    Toast.makeText(sCtx, "已加入下载队列", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(sCtx, "\u5DF2\u52A0\u5165\u4E0B\u8F7D\u961F\u5217", Toast.LENGTH_SHORT).show();
                 });
             }
             @Override
             public void onError(String msg) {
-                sH.post(() -> Toast.makeText(sCtx, "下载失败: " + msg, Toast.LENGTH_SHORT).show());
+                sH.post(() -> Toast.makeText(sCtx, "\u4E0B\u8F7D\u5931\u8D25: " + msg, Toast.LENGTH_SHORT).show());
             }
         };
         if (song.platform == 0) {
@@ -599,7 +597,7 @@ public class MusicPlayerView {
 
         if (list.isEmpty()) {
             TextView empty = new TextView(sCtx);
-            empty.setText("暂无内容");
+            empty.setText("\u6682\u65E0\u5185\u5BB9");
             empty.setTextSize(14);
             empty.setTextColor(AppColors.text2());
             empty.setGravity(Gravity.CENTER);
@@ -621,11 +619,7 @@ public class MusicPlayerView {
         dlg.show();
     }
 
-    interface SongClickListener {
-        void onClick(int index);
-    }
-
-    // ===== Update Helpers =====
+    interface SongClickListener { void onClick(int index); }
 
     static void updateSongInfo(MusicSearchApi.Song song) {
         if (song == null || sTitle == null) return;
@@ -640,17 +634,18 @@ public class MusicPlayerView {
         sTimeTotal.setText("0:00");
         if (sSeekBar != null) sSeekBar.setProgress(0);
         startRotation();
+
+        sLyricLines.clear();
+        sCurrentLyricLine = -1;
+        fetchLyric(song);
     }
 
     static void updatePlayIcon(boolean playing) {
         if (sPlayBtn != null) {
             sPlayBtn.setImageDrawable(emojiDrawable(sCtx, playing ? "\u23F8" : "\u25B6", dp(26)));
         }
-        if (playing) {
-            startRotation();
-        } else {
-            pauseRotation();
-        }
+        if (playing) startRotation();
+        else pauseRotation();
     }
 
     static void startRotation() {
@@ -674,9 +669,214 @@ public class MusicPlayerView {
         }
         sTimeCur.setText(MusicPageView.formatTime(position));
         sTimeTotal.setText(MusicPageView.formatTime(duration));
+
+        updateLyricHighlight(position);
     }
 
-    // ===== Cover Loading =====
+    private static void fetchLyric(MusicSearchApi.Song song) {
+        if (song == null) return;
+        MusicSearchApi.LyricCallback cb = new MusicSearchApi.LyricCallback() {
+            @Override
+            public void onLyric(String lrc) {
+                sH.post(() -> {
+                    parseLrc(lrc);
+                    renderLyricLines();
+                });
+            }
+            @Override
+            public void onError(String msg) { }
+        };
+        if (song.platform == 0) {
+            MusicSearchApi.getKugouLyric(song.hash, cb);
+        } else {
+            MusicSearchApi.getKuwoLyric(song.hash, cb);
+        }
+    }
+
+    private static void parseLrc(String lrc) {
+        sLyricLines.clear();
+        if (lrc == null || lrc.trim().isEmpty()) return;
+
+        String[] lines = lrc.split("\n");
+        for (String line : lines) {
+            Matcher m = LRC_PAT.matcher(line);
+            if (m.find()) {
+                LyricLine ll = new LyricLine();
+                int min = Integer.parseInt(m.group(1));
+                int sec = Integer.parseInt(m.group(2));
+                String msStr = m.group(3);
+                int ms = 0;
+                if (msStr != null) {
+                    ms = Integer.parseInt(msStr);
+                    if (msStr.length() == 2) ms *= 10;
+                }
+                ll.timeMs = (min * 60L + sec) * 1000L + ms;
+                ll.text = m.group(4).trim();
+                if (ll.text.isEmpty()) ll.text = "";
+                sLyricLines.add(ll);
+            }
+        }
+
+        java.util.Collections.sort(sLyricLines, (a, b) -> Long.compare(a.timeMs, b.timeMs));
+
+        if (!sLyricLines.isEmpty() && sLyricLines.get(sLyricLines.size() - 1).timeMs < 1) {
+            sLyricLines.get(sLyricLines.size() - 1).timeMs = Integer.MAX_VALUE;
+        }
+    }
+
+    private static void renderLyricLines() {
+        if (sLyricContainer == null) return;
+        sLyricContainer.removeAllViews();
+
+        if (sLyricLines.isEmpty()) {
+            TextView empty = new TextView(sCtx);
+            empty.setText("\u6682\u65E0\u6B4C\u8BCD");
+            empty.setTextSize(13);
+            empty.setTextColor(AppColors.text2());
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(0, dp(40), 0, 0);
+            sLyricContainer.addView(empty);
+            return;
+        }
+
+        for (int i = 0; i < sLyricLines.size(); i++) {
+            LyricLine ll = sLyricLines.get(i);
+            GradientLyricTextView tv = new GradientLyricTextView(sCtx);
+            tv.setText(ll.text);
+            tv.setTextSize(14);
+            tv.setGravity(Gravity.CENTER);
+            tv.setPadding(0, dp(8), 0, dp(8));
+            tv.setSingleLine(true);
+            tv.setEllipsize(TextUtils.TruncateAt.END);
+            tv.setId(i);
+            tv.setTag(false);
+            sLyricContainer.addView(tv);
+        }
+
+        sCurrentLyricLine = -1;
+    }
+
+    private static void updateLyricHighlight(int positionMs) {
+        if (sLyricContainer == null || sLyricLines.isEmpty()) return;
+
+        int activeIdx = -1;
+        for (int i = 0; i < sLyricLines.size(); i++) {
+            if (sLyricLines.get(i).timeMs <= positionMs) {
+                activeIdx = i;
+            } else {
+                break;
+            }
+        }
+
+        if (activeIdx != sCurrentLyricLine) {
+            sCurrentLyricLine = activeIdx;
+
+            for (int i = 0; i < sLyricContainer.getChildCount(); i++) {
+                View child = sLyricContainer.getChildAt(i);
+                if (child instanceof GradientLyricTextView) {
+                    GradientLyricTextView tv = (GradientLyricTextView) child;
+                    tv.setTag(i == activeIdx);
+                    tv.setTextColor(i == activeIdx ? AppColors.accent() : AppColors.text2());
+                    if (i == activeIdx) {
+                        long nextTime = (i + 1 < sLyricLines.size()) ? sLyricLines.get(i + 1).timeMs : Integer.MAX_VALUE;
+                        float progress = 0;
+                        long dur = nextTime - sLyricLines.get(i).timeMs;
+                        if (dur > 0 && positionMs >= sLyricLines.get(i).timeMs) {
+                            progress = (float)(positionMs - sLyricLines.get(i).timeMs) / dur;
+                            if (progress > 1f) progress = 1f;
+                        }
+                        tv.setGradientProgress(progress);
+                    } else {
+                        tv.setGradientProgress(0);
+                    }
+                    tv.invalidate();
+                }
+            }
+
+            if (sLyricAutoScroll && sCurrentLyricLine >= 0 && sLyricScroller != null) {
+                scrollToLyricLine(sCurrentLyricLine);
+            }
+        } else if (activeIdx >= 0 && activeIdx < sLyricContainer.getChildCount()) {
+            View child = sLyricContainer.getChildAt(activeIdx);
+            if (child instanceof GradientLyricTextView) {
+                GradientLyricTextView tv = (GradientLyricTextView) child;
+                long nextTime = (activeIdx + 1 < sLyricLines.size()) ? sLyricLines.get(activeIdx + 1).timeMs : Integer.MAX_VALUE;
+                float progress = 0;
+                long dur = nextTime - sLyricLines.get(activeIdx).timeMs;
+                if (dur > 0 && positionMs >= sLyricLines.get(activeIdx).timeMs) {
+                    progress = (float)(positionMs - sLyricLines.get(activeIdx).timeMs) / dur;
+                    if (progress > 1f) progress = 1f;
+                }
+                tv.setGradientProgress(progress);
+                tv.invalidate();
+            }
+        }
+    }
+
+    private static void scrollToLyricLine(int lineIdx) {
+        if (sLyricScroller == null || sLyricContainer == null) return;
+        if (lineIdx < 0 || lineIdx >= sLyricContainer.getChildCount()) return;
+
+        View target = sLyricContainer.getChildAt(lineIdx);
+        int containerH = sLyricContainer.getHeight();
+        int scrollViewH = sLyricScroller.getHeight();
+        int targetTop = target.getTop();
+        int targetH = target.getHeight();
+
+        int scrollTo = targetTop - scrollViewH / 2 + targetH / 2;
+        if (scrollTo < 0) scrollTo = 0;
+        int maxScroll = containerH - scrollViewH;
+        if (scrollTo > maxScroll) scrollTo = maxScroll;
+
+        sLyricScroller.smoothScrollTo(0, scrollTo);
+    }
+
+    private static class GradientLyricTextView extends TextView {
+        private float mProgress = 0f;
+        private boolean mActive = false;
+
+        public GradientLyricTextView(Context ctx) {
+            super(ctx);
+        }
+
+        public void setGradientProgress(float p) {
+            mProgress = p;
+            mActive = true;
+        }
+
+        @Override
+        protected void onDraw(android.graphics.Canvas canvas) {
+            if (!mActive || mProgress <= 0f) {
+                super.onDraw(canvas);
+                return;
+            }
+
+            TextPaint paint = getPaint();
+            String text = getText().toString();
+            if (text.isEmpty()) { super.onDraw(canvas); return; }
+
+            float totalWidth = paint.measureText(text);
+            float clipX = totalWidth * mProgress;
+
+            float baseline = getBaseline();
+            float x = (getWidth() - totalWidth) / 2f;
+
+            int activeColor = AppColors.accent();
+            int dimColor = AppColors.text2();
+
+            canvas.save();
+            canvas.clipRect(x, 0, x + clipX, getHeight());
+            paint.setColor(activeColor);
+            canvas.drawText(text, x, baseline, paint);
+            canvas.restore();
+
+            canvas.save();
+            canvas.clipRect(x + clipX, 0, getWidth(), getHeight());
+            paint.setColor(dimColor);
+            canvas.drawText(text, x, baseline, paint);
+            canvas.restore();
+        }
+    }
 
     private static void loadCoverImage(Context ctx, String url) {
         if (url == null || url.isEmpty() || !url.startsWith("http")) return;
@@ -699,11 +899,7 @@ public class MusicPlayerView {
         }).start();
     }
 
-    // ===== Utilities =====
-
-    private static int dp(int dp) {
-        return (int) (dp * sD + 0.5f);
-    }
+    private static int dp(int dp) { return (int) (dp * sD + 0.5f); }
 
     private static ImageView makeIconBtn(Context ctx, String emoji, int size) {
         ImageView iv = new ImageView(ctx);

@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.PathUtil;
 import com.leshao.v3.model.ContactChangeRecord;
 
 import java.io.File;
@@ -412,7 +413,13 @@ public class ContactChangeLog {
     private static File getLogFile() {
         if (sLogFile != null) return sLogFile;
         String uinSuffix = sCurrentUin > 0 ? "_" + sCurrentUin : "";
-        sLogFile = new File("/sdcard/leshao_v3_logs/contact_changes" + uinSuffix + ".json");
+        Context ctx = ContextManager.getAppContext();
+        if (ctx != null) {
+            File root = PathUtil.getLeshaoRootDir(ctx);
+            sLogFile = new File(root, "contact_changes" + uinSuffix + ".json");
+        } else {
+            sLogFile = new File("/sdcard/leshao_v3_logs/contact_changes" + uinSuffix + ".json");
+        }
         sLogFile.getParentFile().mkdirs();
         return sLogFile;
     }

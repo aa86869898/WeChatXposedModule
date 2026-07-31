@@ -3,46 +3,11 @@ package com.leshao.v3.hook;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
-import android.content.Intent;
-import android.content.SharedPreferences;
-import android.content.res.ColorStateList;
-import android.graphics.Color;
-import android.graphics.Typeface;
-import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.GradientDrawable;
-import android.os.Handler;
-import android.os.Looper;
-import android.view.Gravity;
-import android.view.View;
-import android.view.ViewGroup;
-import android.view.Window;
-import android.view.WindowManager;
-import android.widget.Button;
-import android.widget.CompoundButton;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.ScrollView;
-import android.widget.Switch;
-import android.widget.TextView;
-import android.widget.Toast;
 
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-
-import com.leshao.v3.ui.MainActivity;
-import com.leshao.v3.ui.SubPageActivity;
-import com.leshao.v3.service.ActivationManager;
-
-import com.leshao.v3.ContactPickerFragment;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
-import com.leshao.v3.db.ContactRepository;
-import com.leshao.v3.model.Contact;
-import com.leshao.v3.model.ModuleConfig;
 
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.Set;
+import java.util.List;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -51,33 +16,10 @@ import de.robv.android.xposed.XposedHelpers;
 public class SettingsEntryHook {
 
     private static final String TAG = "SettingsEntryHook";
-
-    // ===== V21 ThemeEngine exact colors (light mode) =====
-    private static final int CLR_BG       = 0xFFF4F0FF;
-    private static final int CLR_CARD     = 0xB8FFFFFF;
-    private static final int CLR_BORDER   = 0xFFE0D0F0;
-    private static final int CLR_ACCENT   = 0xFFFF4298;
-    private static final int CLR_ACCENT2  = 0xFFB848E0;
-    private static final int CLR_TEXT     = 0xFF281838;
-    private static final int CLR_TEXT2    = 0xFF786890;
-    private static final int CLR_RED      = 0xFFFF3860;
-    private static final int CLR_SW_TRK   = 0xFFE8D8F0;
-    private static final int CLR_SW_THM   = 0xFFC0A0D8;
-    private static final int CLR_BTN_BD   = 0xFFD0B8E8;
-    private static final int CLR_WHITE    = 0xFFFFFFFF;
-    private static final int CLR_DIV      = 0xFFE8DCF0;
-
-    private static final int[] CANDY_COLORS = {
-        0xFFFFE8F4, 0xFFFCD4EE, 0xFFF0D4FF, 0xFFD4E6FF, 0xFFD8F4EE, 0xFFFFE4F4
-    };
-
     private static boolean backPressHooked = false;
     private static Activity panelActivity;
     private static AlertDialog panelDialog;
-
     private static volatile boolean hooksRegistered = false;
-    private static final int SETTINGS_LAYOUT_ID = 2131497752;
-    private static Handler sHandler;
 
     public SettingsEntryHook() {}
 
@@ -85,1189 +27,113 @@ public class SettingsEntryHook {
         if (!hooksRegistered) {
             hooksRegistered = true;
             XposedBridge.log("LeShaoV3: EntryHook.hook() called");
-            sHandler = new Handler(Looper.getMainLooper());
+            hookD34lF7();
+            hookMvvmListData();
             hookBackPressed();
-            hookLauncherUIEntry(wechatCL);
             LogWriter.log(TAG, "INIT: hooks registered ok");
         }
     }
 
-    // ========== V21 ThemeEngine drawable factories ==========
-
-    private static GradientDrawable createGlassBg(Context ctx, int rad) {
-        float d = ctx.getResources().getDisplayMetrics().density;
-        GradientDrawable gd = new GradientDrawable();
-        gd.setOrientation(GradientDrawable.Orientation.TL_BR);
-        gd.setColors(CANDY_COLORS);
-        gd.setCornerRadius(dpf(d, rad));
-        gd.setStroke((int)(1*d), CLR_BORDER);
-        return gd;
-    }
-
-    private static GradientDrawable createPrimaryBtnBg(Context ctx) {
-        float d = ctx.getResources().getDisplayMetrics().density;
-        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{com.leshao.v3.ui.AppColors.accent2(), com.leshao.v3.ui.AppColors.accent()});
-        return gd;
-    }
-
-    private static GradientDrawable createOutlineBtnBg(Context ctx) {
-        float d = ctx.getResources().getDisplayMetrics().density;
-        GradientDrawable gd = new GradientDrawable();
-        gd.setColor(Color.TRANSPARENT);
-        gd.setStroke((int)(2*d), com.leshao.v3.ui.AppColors.divider());
-        return gd;
-    }
-
-    private static GradientDrawable createDangerBtnBg(Context ctx, int rad) {
-        float d = ctx.getResources().getDisplayMetrics().density;
-        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{CLR_RED, 0xCC000000 | (CLR_RED & 0x00FFFFFF)});
-        gd.setCornerRadius(dpf(d, rad));
-        return gd;
-    }
-
-    private static GradientDrawable createInputBg(Context ctx) {
-        float d = ctx.getResources().getDisplayMetrics().density;
-        GradientDrawable gd = new GradientDrawable();
-        gd.setColor(0x18000000 | (CLR_TEXT & 0x00FFFFFF));
-        gd.setCornerRadius(dpf(d, 12));
-        gd.setStroke((int)(1*d), CLR_BORDER);
-        return gd;
-    }
-
-    private static GradientDrawable createCardBg(Context ctx, int rad) {
-        float d = ctx.getResources().getDisplayMetrics().density;
-        GradientDrawable gd = new GradientDrawable();
-        gd.setColor(CLR_CARD);
-        gd.setCornerRadius(dpf(d, rad));
-        gd.setStroke((int)(1*d), CLR_BORDER);
-        return gd;
-    }
-
-    // ========== V21 ThemeEngine style methods ==========
-
-    private static void styleSwitch(android.widget.Switch sw, boolean checked, Context ctx) {
-        float d = ctx.getResources().getDisplayMetrics().density;
-        GradientDrawable track = new GradientDrawable();
-        track.setOrientation(GradientDrawable.Orientation.TL_BR);
-        if (checked) {
-            track.setColors(new int[]{CLR_ACCENT, CLR_ACCENT2, CLR_ACCENT, CLR_ACCENT2, CLR_ACCENT});
-            track.setStroke((int)(2*d), CLR_ACCENT);
-        } else {
-            track.setColor(CLR_SW_TRK);
-            track.setStroke((int)(2*d), CLR_BORDER);
+    private static void hookD34lF7() {
+        ClassLoader cl = ContextManager.getClassLoader();
+        if (cl == null) {
+            LogWriter.log(TAG, "classLoader null");
+            return;
         }
-        float rT = dpf(d, 10), rB = dpf(d, 18);
-        try { track.setCornerRadii(new float[]{rT, rT, rT, rT, rB, rB, rB, rB}); }
-        catch (Throwable e) { track.setCornerRadius(dpf(d, 14)); }
-        sw.setTrackDrawable(track);
-        sw.setThumbTintList(new ColorStateList(
-            new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}},
-            new int[]{CLR_ACCENT, CLR_SW_THM}));
-    }
 
-    private static void styleInput(EditText et) {
-        if (et == null) return;
-        Context ctx = et.getContext();
-        float d = ctx.getResources().getDisplayMetrics().density;
-        et.setHintTextColor(CLR_TEXT2);
-        et.setTextColor(CLR_TEXT);
-        et.setTextSize(13);
-        et.setSingleLine(true);
-        et.setBackgroundDrawable(createInputBg(ctx));
-        et.setPadding((int)(10*d), (int)(8*d), (int)(10*d), (int)(8*d));
-    }
-
-    private static Button createBtn(Context ctx, String text) {
-        Button b = new Button(ctx);
-        b.setText(text);
-        b.setTextSize(13);
-        b.setAllCaps(false);
-        b.setClickable(true);
-        b.setFocusable(true);
-        b.setGravity(Gravity.CENTER);
-        return b;
-    }
-
-    private static void styleButton(Button btn) {
-        if (btn == null) return;
-        float d = btn.getContext().getResources().getDisplayMetrics().density;
-        btn.setAllCaps(false);
-        btn.setTextColor(CLR_WHITE);
-        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{CLR_ACCENT2, CLR_ACCENT});
-        bg.setCornerRadius(dpf(d, 14));
-        btn.setBackground(bg);
-        btn.setPadding((int)(12*d), (int)(8*d), (int)(12*d), (int)(8*d));
-    }
-
-    // ========== Utility ==========
-
-    private static float dpf(float density, int dp) { return density * dp; }
-
-    private static int dpC(Context ctx, int dp) {
-        return (int)(dp * ctx.getResources().getDisplayMetrics().density + 0.5f);
-    }
-
-    // ========== LayoutInflater hook (V21-style entry card) ==========
-
-    private static void hookLayoutInflater() {
         try {
-            java.lang.reflect.Method m = android.view.LayoutInflater.class.getDeclaredMethod(
-                "inflate", int.class, ViewGroup.class, boolean.class);
-            XposedBridge.hookMethod(m,
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        try {
-                            if ((int) param.args[0] != SETTINGS_LAYOUT_ID) return;
-                            View original = (View) param.getResult();
-                            if (original == null) return;
-                            try {
-                                ViewGroup parent = (ViewGroup) param.args[1];
-                                Context ctx = parent != null ? parent.getContext() : original.getContext();
-                                View card = buildSettingsCard(ctx);
-                                LinearLayout wrapper = new LinearLayout(ctx);
-                                wrapper.setOrientation(LinearLayout.VERTICAL);
-                                wrapper.addView(card, new LinearLayout.LayoutParams(
-                                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                                original.setPadding(original.getPaddingLeft(), 0,
-                                        original.getPaddingRight(), original.getPaddingBottom());
-                                wrapper.addView(original, new LinearLayout.LayoutParams(
-                                        ViewGroup.LayoutParams.MATCH_PARENT, 0, 1.0f));
-                                param.setResult(wrapper);
-                            } catch (Throwable e) {
-                                LogWriter.log(TAG, "CARD: wrap failed: " + e.getMessage());
-                            }
-                        } catch (Throwable ignored) {}
-                    }
-                });
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "CARD: inflate hook FAILED: " + t.getMessage());
-        }
-    }
+            Class<?> d34lClass = XposedHelpers.findClass("d34.l", cl);
 
-    private static View buildSettingsCard(Context ctx) {
-        float d = ctx.getResources().getDisplayMetrics().density;
-        LinearLayout card = new LinearLayout(ctx);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setPadding((int)(16*d), (int)(12*d), (int)(16*d), (int)(12*d));
-        card.setBackgroundColor(com.leshao.v3.ui.AppColors.whiteCard());
-        card.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-        View.OnClickListener listener = v -> openSettingsFromContext(ctx);
-        card.setOnClickListener(listener);
-
-        TextView title = new TextView(ctx);
-        title.setText("乐少助手 " + getModuleVersion());
-        title.setTextSize(15);
-        title.setTextColor(com.leshao.v3.ui.AppColors.text1());
-        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, -2, 1.0f);
-        tlp.gravity = Gravity.CENTER_VERTICAL;
-        title.setLayoutParams(tlp);
-        card.addView(title);
-
-        Button btn = createBtn(ctx, "进入");
-        btn.setTextSize(12);
-        btn.setTextColor(com.leshao.v3.ui.AppColors.accent());
-        btn.setBackground(createOutlineBtnBg(ctx));
-        btn.setPadding((int)(10*d), (int)(5*d), (int)(10*d), (int)(5*d));
-        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-2, -2);
-        blp.setMargins((int)(6*d), 0, 0, 0);
-        btn.setLayoutParams(blp);
-        btn.setOnClickListener(listener);
-        card.addView(btn);
-
-        return card;
-    }
-
-    private static String getModuleVersion() {
-        try {
-            android.content.Context ctx = ContextManager.getAppContext();
-            if (ctx == null) return "V3";
-            String pkg = ctx.getPackageName();
-            if (pkg.equals("com.leshao.v3")) {
-                return ctx.getPackageManager().getPackageInfo(pkg, 0).versionName;
-            }
-            android.content.pm.PackageInfo pi = ctx.getPackageManager()
-                .getPackageInfo("com.leshao.v3", 0);
-            return pi.versionName;
-        } catch (Throwable t) {
-            return "V3";
-        }
-    }
-
-    private static void openSettingsFromContext(Context ctx) {
-        try {
-            Activity act = null;
-            while (ctx != null) {
-                if (ctx instanceof Activity) { act = (Activity) ctx; break; }
-                if (ctx instanceof android.content.ContextWrapper) {
-                    ctx = ((android.content.ContextWrapper) ctx).getBaseContext();
-                } else break;
-            }
-            if (act == null) return;
-            MainActivity.open(act);
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "CARD: open failed: " + t.getMessage());
-        }
-    }
-
-    // ========== MainSettingsUI entry injection (V21-style card prepended to settings list) ==========
-
-    private static final Set<Integer> sInjectedSettings = new HashSet<>();
-
-    private static void hookMainSettingsUI() {
-        try {
-            ClassLoader cl = ContextManager.getClassLoader();
-            if (cl == null) return;
-            Class<?> mainSettingsUI = XposedHelpers.findClass(
-                "com.tencent.mm.plugin.setting.ui.setting_new.MainSettingsUI", cl);
-
-            XposedBridge.hookAllMethods(mainSettingsUI, "onResume", new XC_MethodHook() {
+            XposedBridge.hookAllMethods(d34lClass, "f7", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     try {
-                        Activity act = (Activity) param.thisObject;
-                        int id = System.identityHashCode(act);
-                        if (sInjectedSettings.contains(id)) return;
-                        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                            try {
-                                injectSettingsEntry(act);
-                                sInjectedSettings.add(id);
-                            } catch (Throwable t) {
-                                LogWriter.log(TAG, "SETTINGS: inject fail: " + t.getMessage());
-                            }
-                        }, 180);
-                    } catch (Throwable ignored) {}
+                        Object thisObj = param.thisObject;
+                        Context ctx = (Context) XposedHelpers.callMethod(thisObj, "getActivity");
+                        Activity act = getActivity(ctx);
+                        if (act == null) return;
+                        if (!act.getClass().getName().equals("com.tencent.mm.plugin.setting.ui.setting_new.MainSettingsUI")) return;
+
+                        SettingsInjectProvider.tryInject(act);
+                    } catch (Throwable t) {
+                        XposedBridge.log("LeShaoV3: f7 hook FAILED: " + t.getClass().getName() + ": " + t.getMessage());
+                        LogWriter.log(TAG, "f7 hook FAILED: " + t.getClass().getName() + ": " + t.getMessage());
+                    }
                 }
             });
-            LogWriter.log(TAG, "SETTINGS: MainSettingsUI hook ok");
+
+            XposedBridge.log("LeShaoV3: d34.l.f7() hook installed");
+            LogWriter.log(TAG, "d34.l.f7() hook installed");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "SETTINGS: MainSettingsUI hook fail: " + t.getMessage());
+            XposedBridge.log("LeShaoV3: hookD34lF7 FAILED: " + t.getClass().getName() + ": " + t.getMessage());
+            LogWriter.log(TAG, "hookD34lF7 FAILED: " + t.getClass().getName() + ": " + t.getMessage());
         }
     }
 
-    private static void injectSettingsEntry(Activity act) {
-        View content = act.findViewById(android.R.id.content);
-        if (!(content instanceof ViewGroup)) return;
-        ViewGroup container = findListContainer((ViewGroup) content);
-        if (container == null) return;
+    private static void hookMvvmListData() {
+        ClassLoader cl = ContextManager.getClassLoader();
+        if (cl == null) return;
 
-        for (int i = 0; i < container.getChildCount(); i++) {
-            if ("leshao_v3_entry".equals(container.getChildAt(i).getTag())) return;
+        try {
+            Class<?> mvvmListClass = XposedHelpers.findClass("com.tencent.mm.plugin.mvvmlist.MvvmList", cl);
+
+            XposedBridge.hookAllMethods(mvvmListClass, "n", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        List<?> data = (List<?>) param.args[0];
+                        if (data == null || data.isEmpty()) return;
+
+                        Object lifecycleOwner = XposedHelpers.getObjectField(param.thisObject, "f");
+                        if (!(lifecycleOwner instanceof Context)) return;
+                        Activity act = getActivity((Context) lifecycleOwner);
+                        if (act == null) return;
+                        if (!act.getClass().getName().equals("com.tencent.mm.plugin.setting.ui.setting_new.MainSettingsUI")) return;
+
+                        SettingsInjectProvider.tryInject(act);
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "MvvmList.n hook err: " + t.getMessage());
+                    }
+                }
+            });
+
+            LogWriter.log(TAG, "MvvmList.n() hook installed");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookMvvmListData FAIL: " + t.getMessage());
         }
-
-        int pos = findInsertPosition(container);
-        float d = act.getResources().getDisplayMetrics().density;
-        int p16 = (int)(16 * d);
-        int p12 = (int)(12 * d);
-
-        LinearLayout entry = new LinearLayout(act);
-        entry.setTag("leshao_v3_entry");
-        entry.setOrientation(LinearLayout.HORIZONTAL);
-        entry.setGravity(Gravity.CENTER_VERTICAL);
-        entry.setPadding(p16, p12, p16, p12);
-        entry.setClickable(true);
-        LinearLayout.LayoutParams elp = new LinearLayout.LayoutParams(-1, -2);
-        elp.setMargins(p16, p12, p16, 0);
-        entry.setLayoutParams(elp);
-
-        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{com.leshao.v3.ui.AppColors.accent2(), com.leshao.v3.ui.AppColors.accent()});
-        entry.setBackground(bg);
-
-        entry.setOnClickListener(v -> {
-            try { MainActivity.open(act); }
-            catch (Throwable t) {
-                LogWriter.log(TAG, "SETTINGS: open fail: " + t.getMessage());
-            }
-        });
-
-        TextView tv = new TextView(act);
-        tv.setText("乐少助手");
-        tv.setTextSize(15);
-        tv.setTextColor(com.leshao.v3.ui.AppColors.whiteCard());
-        entry.addView(tv);
-
-        container.addView(entry, pos);
-        LogWriter.log(TAG, "SETTINGS: entry injected at pos " + pos);
     }
 
-    private static int findInsertPosition(ViewGroup container) {
-        for (int i = 0; i < container.getChildCount(); i++) {
-            View child = container.getChildAt(i);
-            if (hasText(child, "个人资料") || hasText(child, "个人信息")) {
-                return i;
-            }
-        }
-        return 1;
-    }
-
-    private static boolean hasText(View v, String search) {
-        if (v instanceof TextView && ((TextView) v).getText().toString().contains(search))
-            return true;
-        if (v instanceof ViewGroup) {
-            for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) {
-                if (hasText(((ViewGroup) v).getChildAt(i), search)) return true;
-            }
-        }
-        return false;
-    }
-
-    private static ViewGroup findListContainer(ViewGroup parent) {
-        if (parent instanceof LinearLayout && parent.getChildCount() >= 2)
-            return parent;
-        for (int i = 0; i < parent.getChildCount(); i++) {
-            View child = parent.getChildAt(i);
-            if (child instanceof ViewGroup) {
-                ViewGroup result = findListContainer((ViewGroup) child);
-                if (result != null) return result;
-            }
+    private static Activity getActivity(Context ctx) {
+        while (ctx != null) {
+            if (ctx instanceof Activity) return (Activity) ctx;
+            if (ctx instanceof android.content.ContextWrapper) {
+                ctx = ((android.content.ContextWrapper) ctx).getBaseContext();
+            } else break;
         }
         return null;
     }
-
-    // ========== Back press hook ==========
 
     private static void hookBackPressed() {
         if (backPressHooked) return;
         backPressHooked = true;
         try {
             java.lang.reflect.Method m = Activity.class.getDeclaredMethod("onBackPressed");
-            XposedBridge.hookMethod(m,
-                new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        try {
-                            Activity act = (Activity) param.thisObject;
-                            if (panelDialog != null && panelDialog.isShowing() && act == panelActivity) {
-                                panelDialog.dismiss();
-                                panelDialog = null;
-                                panelActivity = null;
-                                param.setResult(null);
-                            }
-                        } catch (Throwable ignored) {}
-                    }
-                });
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "hookBackPressed FAILED: " + t.getMessage());
-        }
-    }
-
-    // ========== LauncherUI entry hook (Route 1 from 设置注入方案) ==========
-
-    private static final Handler sLauncherHandler = new Handler(Looper.getMainLooper());
-    private static volatile boolean sEntryOpenPending = false;
-
-    private static void hookLauncherUIEntry(ClassLoader cl) {
-        try {
-            Class<?> launcherUI = XposedHelpers.findClass(
-                "com.tencent.mm.ui.LauncherUI", cl);
-
-            XposedBridge.hookAllMethods(launcherUI, "onCreate", new XC_MethodHook() {
+            XposedBridge.hookMethod(m, new XC_MethodHook() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
+                protected void beforeHookedMethod(MethodHookParam param) {
                     try {
                         Activity act = (Activity) param.thisObject;
-                        Intent intent = act.getIntent();
-                        if (intent != null && intent.hasExtra("leshao_open")) {
-                            intent.removeExtra("leshao_open");
-                            if (sEntryOpenPending) return;
-                            sEntryOpenPending = true;
-                            sLauncherHandler.postDelayed(() -> {
-                                try {
-                                    MainActivity.open(act);
-                                    LogWriter.log(TAG, "LauncherUI: entry via onCreate intent");
-                                } catch (Throwable t) {
-                                    LogWriter.log(TAG, "LauncherUI onCreate open err: " + t.getMessage());
-                                } finally {
-                                    sLauncherHandler.postDelayed(() -> sEntryOpenPending = false, 3000);
-                                }
-                            }, 500);
+                        if (panelDialog != null && panelDialog.isShowing() && act == panelActivity) {
+                            panelDialog.dismiss();
+                            panelDialog = null;
+                            panelActivity = null;
+                            param.setResult(null);
                         }
                     } catch (Throwable ignored) {}
                 }
             });
-
-            XposedBridge.hookAllMethods(launcherUI, "onNewIntent", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    try {
-                        Activity act = (Activity) param.thisObject;
-                        Intent intent = (Intent) param.args[0];
-                        if (intent != null && intent.hasExtra("leshao_open")) {
-                            intent.removeExtra("leshao_open");
-                            if (sEntryOpenPending) return;
-                            sEntryOpenPending = true;
-                            MainActivity.open(act);
-                            LogWriter.log(TAG, "LauncherUI: entry via onNewIntent");
-                            sLauncherHandler.postDelayed(() -> sEntryOpenPending = false, 3000);
-                        }
-                    } catch (Throwable t) {
-                        LogWriter.log(TAG, "LauncherUI onNewIntent err: " + t.getMessage());
-                    }
-                }
-            });
-            LogWriter.log(TAG, "LauncherUI entry hooks ok");
         } catch (Throwable t) {
-            LogWriter.log(TAG, "LauncherUI entry hook FAILED: " + t.getMessage());
+            LogWriter.log(TAG, "hookBackPressed FAILED: " + t.getMessage());
         }
-    }
-
-    // ===== Contact tab button helpers =====
-
-    private static TextView makeContactTabBtn(Activity act, String text, boolean selected) {
-        float d = act.getResources().getDisplayMetrics().density;
-        TextView tv = new TextView(act);
-        tv.setText(text);
-        tv.setTextSize(11);
-        tv.setAllCaps(false);
-        tv.setGravity(Gravity.CENTER);
-        tv.setPadding(dpC(act, 10), dpC(act, 5), dpC(act, 10), dpC(act, 5));
-        tv.setTextColor(selected ? CLR_WHITE : CLR_TEXT);
-        tv.setBackground(selected ? createPrimaryBtnBg(act) : createOutlineBtnBg(act));
-        tv.setClickable(true);
-        tv.setFocusable(true);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-        lp.setMargins(0, 0, dpC(act, 4), 0);
-        tv.setLayoutParams(lp);
-        return tv;
-    }
-
-    private static void highlightTab(TextView selected, TextView... others) {
-        float d = selected.getContext().getResources().getDisplayMetrics().density;
-        selected.setBackground(createPrimaryBtnBg(selected.getContext()));
-        selected.setTextColor(com.leshao.v3.ui.AppColors.whiteCard());
-        for (TextView other : others) {
-            other.setBackground(createOutlineBtnBg(other.getContext()));
-            other.setTextColor(com.leshao.v3.ui.AppColors.text1());
-        }
-    }
-
-    // ================================================================
-    // V21 ModuleUI.showMainPanel exact structure:
-    // ScrollView > LinearLayout (GlassBg) > title, subtitle, content, buttons
-    // ================================================================
-
-    private static void showMainPanel(Activity act) {
-        try {
-            if (panelDialog != null && panelDialog.isShowing()) {
-                panelDialog.dismiss();
-            }
-            panelDialog = null;
-            panelActivity = act;
-
-            Context ctx = act;
-            float d = act.getResources().getDisplayMetrics().density;
-            int p = dpC(ctx, 10);
-
-            ScrollView sv = new ScrollView(ctx);
-            sv.setFillViewport(true);
-
-            LinearLayout root = new LinearLayout(ctx);
-            root.setOrientation(LinearLayout.VERTICAL);
-            root.setPadding(p, p, p, p);
-            root.setBackgroundColor(com.leshao.v3.ui.AppColors.bg());
-
-            TextView title = new TextView(ctx);
-        title.setText("乐少多功能助手");
-            title.setTextSize(18);
-            title.setTextColor(CLR_ACCENT);
-            title.setTypeface(null, Typeface.BOLD);
-            title.setGravity(Gravity.CENTER);
-            title.setPadding(0, dpC(ctx, 4), 0, dpC(ctx, 2));
-            root.addView(title);
-
-            TextView ver = new TextView(ctx);
-            ver.setText("微信多功能增强模块");
-            ver.setTextSize(11);
-            ver.setTextColor(CLR_TEXT2);
-            ver.setGravity(Gravity.CENTER);
-            ver.setPadding(0, 0, 0, dpC(ctx, 6));
-            root.addView(ver);
-
-            Button btnProfile = createBtn(ctx, "个人中心");
-            styleButton(btnProfile);
-            btnProfile.setTextSize(13);
-            btnProfile.setPadding(dpC(ctx, 24), dpC(ctx, 6), dpC(ctx, 24), dpC(ctx, 6));
-            LinearLayout.LayoutParams pflp = new LinearLayout.LayoutParams(-2, -2);
-            pflp.gravity = Gravity.CENTER;
-            pflp.bottomMargin = dpC(ctx, 4);
-            btnProfile.setLayoutParams(pflp);
-            btnProfile.setOnClickListener(v -> {
-                try { com.leshao.v3.ui.MainActivity.open(act); }
-                catch (Throwable t) { LogWriter.log("SettingsEntry", "open: " + t.getMessage()); }
-            });
-            root.addView(btnProfile);
-
-            buildAllContent(ctx, root);
-
-            LinearLayout btns = new LinearLayout(ctx);
-            btns.setOrientation(LinearLayout.HORIZONTAL);
-            btns.setGravity(Gravity.CENTER);
-            btns.setPadding(0, dpC(ctx, 6), 0, dpC(ctx, 2));
-
-            SharedPreferences prefs = ContextManager.getPrefs();
-            final ModuleConfig cfg = ModuleConfig.load(prefs);
-
-            Button btnSave = createBtn(ctx, "保存配置");
-            styleButton(btnSave);
-            btnSave.setOnClickListener(v -> { cfg.save(prefs); Toast.makeText(ctx, "已保存", Toast.LENGTH_SHORT).show(); });
-            btns.addView(btnSave);
-            btns.addView(spacerH(ctx, 8));
-
-            Button btnStop = createBtn(ctx, "停止");
-            styleButton(btnStop);
-            btnStop.setBackground(createDangerBtnBg(ctx, 8));
-            btnStop.setOnClickListener(v -> { panelDialog.dismiss(); panelDialog = null; });
-            btns.addView(btnStop);
-            btns.addView(spacerH(ctx, 8));
-
-            Button btnSys = createBtn(ctx, "设置");
-            styleButton(btnSys);
-            btns.addView(btnSys);
-            btns.addView(spacerH(ctx, 8));
-
-            Button btnClose = createBtn(ctx, "关闭");
-            styleButton(btnClose);
-            btnClose.setOnClickListener(v -> { panelDialog.dismiss(); panelDialog = null; });
-            btns.addView(btnClose);
-
-            root.addView(btns);
-            sv.addView(root);
-
-            AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert);
-            b.setView(sv);
-            b.setCancelable(true);
-            final AlertDialog dlg = b.create();
-            panelDialog = dlg;
-            panelActivity = act;
-
-            Window w = dlg.getWindow();
-            if (w != null) {
-                w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-                w.setLayout((int)(ctx.getResources().getDisplayMetrics().widthPixels * 0.94),
-                            (int)(ctx.getResources().getDisplayMetrics().heightPixels * 0.88));
-                w.setGravity(Gravity.CENTER);
-            }
-            dlg.show();
-            LogWriter.log(TAG, "PANEL: dialog opened");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "PANEL: error: " + t.getMessage());
-        }
-    }
-
-    private static View spacerH(Context ctx, int wDp) {
-        View v = new View(ctx);
-        v.setLayoutParams(new LinearLayout.LayoutParams(dpC(ctx, wDp), 0));
-        return v;
-    }
-
-    // ================================================================
-    // V21-style all content in one vertical layout (no tabs)
-    // ================================================================
-
-    private static void buildAllContent(Context ctx, LinearLayout root) {
-        addSection(ctx, root, "常用功能");
-        buildSwitchesSection(ctx, root);
-
-        addSection(ctx, root, "联系人");
-        buildContactSection(ctx, root);
-
-        addSection(ctx, root, "播报设置");
-        buildTtsSection(ctx, root);
-
-        addSection(ctx, root, "群管理");
-        buildGroupGuardSection(ctx, root);
-
-        addSection(ctx, root, "AI 助手");
-        buildAISection(ctx, root);
-
-        addSection(ctx, root, "数据统计");
-        buildStatsSection(ctx, root);
-    }
-
-    // ================================================================
-    // V21 ModuleUI helpers: addSection, sw, ed, btn
-    // ================================================================
-
-    private static void addSection(Context ctx, LinearLayout r, String t) {
-        LinearLayout h = new LinearLayout(ctx);
-        h.setPadding(dpC(ctx, 10), dpC(ctx, 3), dpC(ctx, 10), dpC(ctx, 3));
-        GradientDrawable g = new GradientDrawable();
-        g.setCornerRadius(dpC(ctx, 6));
-        g.setColor(CLR_CARD);
-        h.setBackground(g);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.topMargin = dpC(ctx, 4);
-        h.setLayoutParams(lp);
-
-        TextView tv = new TextView(ctx);
-        tv.setText(t);
-        tv.setTextSize(15);
-        tv.setTextColor(CLR_ACCENT);
-        tv.setTypeface(null, Typeface.BOLD);
-        h.addView(tv);
-        r.addView(h);
-    }
-
-    private interface SwitchCB { void onChange(boolean v); }
-
-    private static void sw(Context ctx, LinearLayout p, String l, boolean c, final SwitchCB cb) {
-        sw(ctx, p, l, c, true, cb);
-    }
-
-    private static void sw(Context ctx, LinearLayout p, String l, boolean c, boolean enabled, final SwitchCB cb) {
-        LinearLayout r = new LinearLayout(ctx);
-        r.setOrientation(LinearLayout.HORIZONTAL);
-        r.setGravity(Gravity.CENTER_VERTICAL);
-        r.setPadding(dpC(ctx, 12), dpC(ctx, 6), dpC(ctx, 12), dpC(ctx, 6));
-        TextView tv = new TextView(ctx);
-        tv.setText(l);
-        tv.setTextSize(12);
-        tv.setTextColor(enabled ? CLR_TEXT : CLR_TEXT2);
-        tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
-        r.addView(tv);
-        Switch s = new Switch(ctx);
-        s.setChecked(c);
-        s.setEnabled(enabled);
-        styleSwitch(s, c && enabled, ctx);
-        s.setOnCheckedChangeListener((btn, v) -> {
-            if (!enabled) {
-                s.setChecked(!v);
-                Toast.makeText(ctx, "当前激活码未授权此功能", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            styleSwitch(s, v, ctx);
-            if (cb != null) cb.onChange(v);
-        });
-        r.addView(s);
-        p.addView(r);
-    }
-
-    private static void swStar(Context ctx, LinearLayout p, String l, boolean c, boolean enabled, final SwitchCB cb) {
-        LinearLayout r = new LinearLayout(ctx);
-        r.setOrientation(LinearLayout.HORIZONTAL);
-        r.setGravity(Gravity.CENTER_VERTICAL);
-        r.setPadding(dpC(ctx, 12), dpC(ctx, 6), dpC(ctx, 12), dpC(ctx, 6));
-        TextView tv = new TextView(ctx);
-        tv.setText(l);
-        tv.setTextSize(12);
-        tv.setTextColor(enabled ? CLR_TEXT : CLR_TEXT2);
-        tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
-        r.addView(tv);
-
-        Switch s = new Switch(ctx);
-        s.setChecked(c);
-        s.setEnabled(enabled);
-        styleSwitch(s, c && enabled, ctx);
-        try {
-            if (c && enabled) s.setThumbResource(android.R.drawable.btn_star_big_on);
-        } catch (Throwable ignored) {}
-        s.setOnCheckedChangeListener((btn, v) -> {
-            if (!enabled) {
-                s.setChecked(!v);
-                Toast.makeText(ctx, "当前激活码未授权此功能", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            styleSwitch(s, v, ctx);
-            try {
-                s.setThumbResource(v ? android.R.drawable.btn_star_big_on : 0);
-            } catch (Throwable ignored) {}
-            if (cb != null) cb.onChange(v);
-        });
-        r.addView(s);
-        p.addView(r);
-    }
-
-    private interface EditCB { void onChange(String s); }
-
-    private static void ed(Context ctx, LinearLayout p, String l, String v, final EditCB cb) {
-        LinearLayout r = new LinearLayout(ctx);
-        r.setOrientation(LinearLayout.HORIZONTAL);
-        r.setGravity(Gravity.CENTER_VERTICAL);
-        r.setPadding(0, dpC(ctx, 2), 0, dpC(ctx, 2));
-        TextView tv = new TextView(ctx);
-        tv.setText(l + ": ");
-        tv.setTextSize(10);
-        tv.setTextColor(CLR_TEXT2);
-        r.addView(tv);
-        final EditText e = new EditText(ctx);
-        e.setText(v != null ? v : "");
-        styleInput(e);
-        e.setTextSize(11);
-        e.setLayoutParams(new LinearLayout.LayoutParams(0, dpC(ctx, 28), 1));
-        e.setOnFocusChangeListener((vv, h) -> {
-            if (!h && cb != null) cb.onChange(e.getText().toString());
-        });
-        r.addView(e);
-        p.addView(r);
-    }
-
-    private static void btn(Context ctx, LinearLayout p, String l, String bt, final View.OnClickListener li) {
-        LinearLayout r = new LinearLayout(ctx);
-        r.setOrientation(LinearLayout.HORIZONTAL);
-        r.setGravity(Gravity.CENTER_VERTICAL);
-        r.setPadding(0, dpC(ctx, 4), 0, dpC(ctx, 4));
-        TextView tv = new TextView(ctx);
-        tv.setText(l);
-        tv.setTextSize(12);
-        tv.setTextColor(CLR_TEXT);
-        tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
-        r.addView(tv);
-        if (bt != null && !bt.isEmpty()) {
-            Button b = createBtn(ctx, bt);
-            b.setTextSize(10);
-            b.setTextColor(CLR_TEXT);
-            b.setBackground(createOutlineBtnBg(ctx));
-            b.setPadding(dpC(ctx, 12), dpC(ctx, 2), dpC(ctx, 12), dpC(ctx, 2));
-            if (li != null) b.setOnClickListener(li);
-            r.addView(b);
-        }
-        p.addView(r);
-    }
-
-    private static View makeDivider(Context ctx) {
-        View v = new View(ctx);
-        v.setLayoutParams(new LinearLayout.LayoutParams(-1, dpC(ctx, 1)));
-        v.setBackgroundColor(CLR_DIV);
-        return v;
-    }
-
-    // ================================================================
-    // Function sections (V3 logic, V21 UI patterns)
-    // ================================================================
-
-    private static void buildSwitchesSection(Context ctx, LinearLayout root) {
-        SharedPreferences prefs = ContextManager.getPrefs();
-        final ModuleConfig cfg = ModuleConfig.load(prefs);
-        int mask = ActivationManager.getFeatureMask();
-
-        sw(ctx, root, "总开关", cfg.masterSwitch, isBit(mask, 0),
-            v -> { cfg.masterSwitch = v; cfg.save(prefs); });
-        swStar(ctx, root, "防撤回", cfg.antiRecall, isBit(mask, 13),
-            v -> { cfg.antiRecall = v; cfg.save(prefs); });
-        sw(ctx, root, "红包助手", cfg.redPacketGrab, isBit(mask, 14),
-            v -> { cfg.redPacketGrab = v; cfg.save(prefs); });
-        sw(ctx, root, "自动通过好友", cfg.autoAcceptFriend, true,
-            v -> { cfg.autoAcceptFriend = v; cfg.save(prefs); });
-        ed(ctx, root, "欢迎语", cfg.welcomeMsg,
-            s -> { cfg.welcomeMsg = s; cfg.save(prefs); });
-    }
-
-    private static void buildTtsSection(Context ctx, LinearLayout root) {
-        SharedPreferences prefs = ContextManager.getPrefs();
-        final ModuleConfig cfg = ModuleConfig.load(prefs);
-        int mask = ActivationManager.getFeatureMask();
-
-        swStar(ctx, root, "免打扰", cfg.quietEnabled, true,
-            v -> { cfg.quietEnabled = v; cfg.save(prefs); });
-
-        final String[] engines = {"系统", "配音阁", "五声"};
-        btn(ctx, root, "引擎: " + engines[cfg.ttsEngine.equals("peiyin") ? 1 : cfg.ttsEngine.equals("wusound") ? 2 : 0],
-            "切换", v -> {
-                int cur = cfg.ttsEngine.equals("peiyin") ? 1 : cfg.ttsEngine.equals("wusound") ? 2 : 0;
-                int next = (cur + 1) % 3;
-                cfg.ttsEngine = next == 1 ? "peiyin" : next == 2 ? "wusound" : "system";
-                cfg.save(prefs);
-            });
-
-        swStar(ctx, root, "文字播报", cfg.announceText, isBit(mask, 2),
-            v -> { cfg.announceText = v; cfg.save(prefs); });
-        swStar(ctx, root, "图片播报", cfg.announceImage, isBit(mask, 4),
-            v -> { cfg.announceImage = v; cfg.save(prefs); });
-        swStar(ctx, root, "视频播报", cfg.announceVideo, isBit(mask, 5),
-            v -> { cfg.announceVideo = v; cfg.save(prefs); });
-        swStar(ctx, root, "红包播报", cfg.announceRedBag, isBit(mask, 7),
-            v -> { cfg.announceRedBag = v; cfg.save(prefs); });
-        swStar(ctx, root, "转账播报", cfg.announceTransfer, isBit(mask, 8),
-            v -> { cfg.announceTransfer = v; cfg.save(prefs); });
-        swStar(ctx, root, "名片播报", cfg.announceCard, isBit(mask, 9),
-            v -> { cfg.announceCard = v; cfg.save(prefs); });
-    }
-
-    private static void buildGroupGuardSection(Context ctx, LinearLayout root) {
-        SharedPreferences prefs = ContextManager.getPrefs();
-        final ModuleConfig cfg = ModuleConfig.load(prefs);
-
-        sw(ctx, root, "入群欢迎", cfg.welcomeEnabled,
-            v -> { cfg.welcomeEnabled = v; cfg.save(prefs); });
-        ed(ctx, root, "欢迎语", cfg.welcomeMsg,
-            s -> { cfg.welcomeMsg = s; cfg.save(prefs); });
-        sw(ctx, root, "自动踢人", cfg.autoKickEnabled,
-            v -> { cfg.autoKickEnabled = v; cfg.save(prefs); });
-        ed(ctx, root, "违规阈值", String.valueOf(cfg.kickThreshold),
-            s -> { try { cfg.kickThreshold = Integer.parseInt(s); cfg.save(prefs); } catch (Throwable ignored) {} });
-
-        btn(ctx, root, "广告关键词 (" + cfg.adKeywords.size() + "个)", "管理", v -> {
-            showKeywordsDialog(ctx);
-        });
-
-        btn(ctx, root, "黑名单 (" + cfg.blacklistWxids.size() + "个)", "管理", v -> {
-            showBlacklistDialog(ctx);
-        });
-    }
-
-    private static void buildAISection(Context ctx, LinearLayout root) {
-        SharedPreferences prefs = ContextManager.getPrefs();
-        final ModuleConfig cfg = ModuleConfig.load(prefs);
-
-        sw(ctx, root, "DeepSeek 对话", cfg.deepseekEnabled,
-            v -> { cfg.deepseekEnabled = v; cfg.save(prefs); });
-        ed(ctx, root, "API Key", cfg.deepseekApiKey,
-            s -> { cfg.deepseekApiKey = s; cfg.save(prefs); });
-        ed(ctx, root, "模型", cfg.deepseekModel,
-            s -> { cfg.deepseekModel = s; cfg.save(prefs); });
-        sw(ctx, root, "AI 图片生成", cfg.imageGenEnabled,
-            v -> { cfg.imageGenEnabled = v; cfg.save(prefs); });
-        ed(ctx, root, "火山API Key", cfg.arkApiKey,
-            s -> { cfg.arkApiKey = s; cfg.save(prefs); });
-
-        TextView info = new TextView(ctx);
-        info.setTextSize(11);
-        info.setTextColor(CLR_TEXT2);
-        info.setPadding(dpC(ctx, 16), dpC(ctx, 4), dpC(ctx, 16), dpC(ctx, 2));
-        info.setText("群聊 @机器人 提问 | 私聊发送 AI+内容");
-        root.addView(info);
-    }
-
-    private static void buildStatsSection(Context ctx, LinearLayout root) {
-        TextView fInfo = new TextView(ctx);
-        fInfo.setTextSize(12);
-        fInfo.setTextColor(CLR_TEXT);
-        fInfo.setPadding(dpC(ctx, 16), dpC(ctx, 6), dpC(ctx, 16), dpC(ctx, 2));
-        fInfo.setText("好友数: " + ContactRepository.getFriends().size() + "    群聊数: " + ContactRepository.getGroups().size());
-        root.addView(fInfo);
-
-        java.util.List<String> recalls = com.leshao.v3.service.StatsCollector.getRecallRecords();
-        if (!recalls.isEmpty()) {
-            int start = Math.max(0, recalls.size() - 5);
-            for (int i = start; i < recalls.size(); i++) {
-                TextView tv = new TextView(ctx);
-                tv.setText(recalls.get(i));
-                tv.setTextSize(11);
-                tv.setTextColor(CLR_TEXT2);
-                tv.setPadding(dpC(ctx, 16), dpC(ctx, 2), dpC(ctx, 16), dpC(ctx, 2));
-                root.addView(tv);
-            }
-        }
-    }
-
-    // ================================================================
-    // Contact section (V3 logic with V21 contact tab sub-tabs)
-    // ================================================================
-
-    private static void buildContactSection(final Context ctx, LinearLayout root) {
-        final Activity act = (Activity) ctx;
-        float d = ctx.getResources().getDisplayMetrics().density;
-        final int PAGE_SIZE = 50;
-
-        LinearLayout tabBar = new LinearLayout(ctx);
-        tabBar.setOrientation(LinearLayout.HORIZONTAL);
-        tabBar.setPadding(dpC(ctx, 16), dpC(ctx, 4), dpC(ctx, 16), dpC(ctx, 4));
-
-        TextView tabFriend = makeContactTabBtn(act, "好友", true);
-        TextView tabGroup = makeContactTabBtn(act, "群聊", false);
-        TextView tabMember = makeContactTabBtn(act, "群成员", false);
-        tabBar.addView(tabFriend);
-        tabBar.addView(tabGroup);
-        tabBar.addView(tabMember);
-        root.addView(tabBar);
-
-        final java.util.List<Contact> emptyList = new java.util.ArrayList<>();
-        final ContactPickerFragment.ContactAdapter adapter = new ContactPickerFragment.ContactAdapter(emptyList);
-
-        final java.util.Set<String> selectedWxids = new LinkedHashSet<>();
-        adapter.setOnItemClickListener((contact, position) -> {
-            if (selectedWxids.contains(contact.wxid)) {
-                selectedWxids.remove(contact.wxid);
-            } else {
-                selectedWxids.add(contact.wxid);
-            }
-            adapter.notifyItemChanged(position);
-        });
-
-        final Handler handler = sHandler != null ? sHandler : new Handler(Looper.getMainLooper());
-        final int[] currentTab = {0};
-        final int[] currentPage = {0, 0, 0};
-        final java.util.List<Contact>[] sourceData = new java.util.List[]{null, null, null};
-
-        final Runnable loadMore = new Runnable() {
-            @Override
-            public void run() {
-                int t = currentTab[0];
-                int p = currentPage[t];
-                java.util.List<Contact> src = sourceData[t];
-                if (src == null || src.isEmpty()) return;
-                int start = p * PAGE_SIZE;
-                int end = Math.min(start + PAGE_SIZE, src.size());
-                if (start >= src.size()) return;
-                java.util.List<Contact> page = new java.util.ArrayList<>(src.subList(start, end));
-                java.util.List<Contact> current = adapter.getData();
-                if (current != null) page.addAll(0, current);
-                adapter.updateData(page);
-                currentPage[t] = p + 1;
-            }
-        };
-
-        final Runnable switchTab = new Runnable() {
-            @Override
-            public void run() {
-                int t = currentTab[0];
-                currentPage[0] = currentPage[1] = currentPage[2] = 0;
-                java.util.List<Contact> src = sourceData[t];
-                if (src != null && !src.isEmpty()) {
-                    int end = Math.min(PAGE_SIZE, src.size());
-                    adapter.updateData(new java.util.ArrayList<>(src.subList(0, end)));
-                    currentPage[t] = 1;
-                } else {
-                    adapter.updateData(emptyList);
-                }
-            }
-        };
-
-        tabFriend.setOnClickListener(v -> {
-            highlightTab(tabFriend, tabGroup, tabMember);
-            currentTab[0] = 0; switchTab.run();
-        });
-        tabGroup.setOnClickListener(v -> {
-            highlightTab(tabGroup, tabFriend, tabMember);
-            currentTab[0] = 1; switchTab.run();
-        });
-        tabMember.setOnClickListener(v -> {
-            highlightTab(tabMember, tabFriend, tabGroup);
-            currentTab[0] = 2; switchTab.run();
-        });
-
-        RecyclerView rv = new RecyclerView(ctx);
-        rv.setLayoutParams(new LinearLayout.LayoutParams(-1, dpC(ctx, 220)));
-        rv.setLayoutManager(new LinearLayoutManager(ctx));
-        rv.setAdapter(adapter);
-        rv.setNestedScrollingEnabled(false);
-        root.addView(rv);
-
-        LinearLayout actionRow = new LinearLayout(ctx);
-        actionRow.setOrientation(LinearLayout.HORIZONTAL);
-        actionRow.setGravity(Gravity.CENTER);
-        actionRow.setPadding(dpC(ctx, 16), dpC(ctx, 6), dpC(ctx, 16), dpC(ctx, 6));
-
-        Button loadMoreBtn = createBtn(ctx, "加载更多");
-        loadMoreBtn.setTextSize(11);
-        loadMoreBtn.setTextColor(CLR_TEXT);
-        loadMoreBtn.setBackground(createOutlineBtnBg(ctx));
-        loadMoreBtn.setPadding(dpC(ctx, 12), dpC(ctx, 4), dpC(ctx, 12), dpC(ctx, 4));
-        loadMoreBtn.setOnClickListener(v -> loadMore.run());
-        actionRow.addView(loadMoreBtn);
-        actionRow.addView(spacerH(ctx, 8));
-
-        Button clearBtn = createBtn(ctx, "清空");
-        clearBtn.setTextSize(11);
-        clearBtn.setTextColor(CLR_TEXT);
-        clearBtn.setBackground(createOutlineBtnBg(ctx));
-        clearBtn.setPadding(dpC(ctx, 12), dpC(ctx, 4), dpC(ctx, 12), dpC(ctx, 4));
-        clearBtn.setOnClickListener(v -> { selectedWxids.clear(); adapter.notifyDataSetChanged(); });
-        actionRow.addView(clearBtn);
-        actionRow.addView(spacerH(ctx, 8));
-
-        Button batchBtn = createBtn(ctx, "批量操作");
-        batchBtn.setTextSize(11);
-        batchBtn.setTextColor(CLR_WHITE);
-        batchBtn.setBackground(createPrimaryBtnBg(ctx));
-        batchBtn.setPadding(dpC(ctx, 12), dpC(ctx, 4), dpC(ctx, 12), dpC(ctx, 4));
-        batchBtn.setOnClickListener(v -> {
-            if (selectedWxids.isEmpty()) {
-                Toast.makeText(ctx, "请先选择联系人", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            LogWriter.log(TAG, "BATCH: " + selectedWxids.size() + " contacts");
-        });
-        actionRow.addView(batchBtn);
-
-        root.addView(actionRow);
-
-        new Thread(() -> {
-            ContactRepository.loadContacts();
-            sourceData[0] = ContactRepository.getFriends();
-            sourceData[1] = ContactRepository.getGroups();
-            sourceData[2] = ContactRepository.getFriends();
-            handler.post(() -> {
-                LogWriter.log(TAG, "CONTACT: f=" + (sourceData[0] != null ? sourceData[0].size() : 0)
-                    + " g=" + (sourceData[1] != null ? sourceData[1].size() : 0));
-                switchTab.run();
-            });
-        }).start();
-    }
-
-    // ================================================================
-    // Sub-dialogs (keywords, blacklist, scheduler)
-    // ================================================================
-
-    private static void showKeywordsDialog(Context ctx) {
-        SharedPreferences prefs = ContextManager.getPrefs();
-        final ModuleConfig cfg = ModuleConfig.load(prefs);
-
-        LinearLayout root = new LinearLayout(ctx);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dpC(ctx, 14), dpC(ctx, 10), dpC(ctx, 14), dpC(ctx, 10));
-        root.setBackground(new ColorDrawable(CLR_BG));
-
-        TextView tv = new TextView(ctx);
-        tv.setText("广告关键词");
-        tv.setTextSize(16);
-        tv.setTextColor(CLR_ACCENT);
-        tv.setTypeface(null, Typeface.BOLD);
-        tv.setGravity(Gravity.CENTER);
-        tv.setPadding(0, 0, 0, dpC(ctx, 8));
-        root.addView(tv);
-
-        LinearLayout addRow = new LinearLayout(ctx);
-        addRow.setOrientation(LinearLayout.HORIZONTAL);
-        final EditText kwInput = new EditText(ctx);
-        kwInput.setHint("输入关键词");
-        styleInput(kwInput);
-        kwInput.setTextSize(12);
-        kwInput.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
-        addRow.addView(kwInput);
-
-        final LinearLayout kwList = new LinearLayout(ctx);
-        kwList.setOrientation(LinearLayout.VERTICAL);
-
-        Button addBtn = createBtn(ctx, "添加");
-        styleButton(addBtn);
-        addBtn.setTextSize(11);
-        addRow.addView(addBtn);
-        root.addView(addRow);
-        root.addView(spacerV(ctx, 6));
-        root.addView(kwList);
-
-        refreshKwViews(ctx, kwList, cfg);
-
-        addBtn.setOnClickListener(v -> {
-            String kw = kwInput.getText().toString().trim();
-            if (!kw.isEmpty()) {
-                cfg.adKeywords.add(kw);
-                cfg.save(prefs);
-                refreshKwViews(ctx, kwList, cfg);
-                kwInput.setText("");
-            }
-        });
-
-        root.addView(spacerV(ctx, 8));
-        Button closeBtn = createBtn(ctx, "关闭");
-        styleButton(closeBtn);
-
-        AlertDialog dlg = new AlertDialog.Builder(ctx).setView(root).setCancelable(true).create();
-        closeBtn.setOnClickListener(v2 -> {
-            if (dlg != null && dlg.isShowing()) dlg.dismiss();
-        });
-        root.addView(closeBtn);
-
-        Window w = dlg.getWindow();
-        if (w != null) {
-            w.setBackgroundDrawable(new ColorDrawable(CLR_BG));
-            w.setLayout((int)(ctx.getResources().getDisplayMetrics().widthPixels * 0.9), -2);
-        }
-        dlg.show();
-    }
-
-    private static void refreshKwViews(Context ctx, LinearLayout container, ModuleConfig cfg) {
-        container.removeAllViews();
-        for (String kw : new java.util.ArrayList<>(cfg.adKeywords)) {
-            final String kwf = kw;
-            LinearLayout row = new LinearLayout(ctx);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dpC(ctx, 3), 0, dpC(ctx, 3));
-
-            TextView tv = new TextView(ctx);
-            tv.setText(kwf);
-            tv.setTextSize(12);
-            tv.setTextColor(CLR_TEXT);
-            tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
-            row.addView(tv);
-
-            GradientDrawable delBg = new GradientDrawable();
-            delBg.setCornerRadius(dpC(ctx, 4));
-            delBg.setColor(CLR_RED);
-            TextView del = new TextView(ctx);
-            del.setText("X");
-            del.setTextSize(10);
-            del.setTextColor(CLR_WHITE);
-            del.setBackground(delBg);
-            del.setGravity(Gravity.CENTER);
-            del.setPadding(dpC(ctx, 6), dpC(ctx, 2), dpC(ctx, 6), dpC(ctx, 2));
-            del.setOnClickListener(v2 -> {
-                cfg.adKeywords.remove(kwf);
-                refreshKwViews(ctx, container, cfg);
-            });
-            row.addView(del);
-            container.addView(row);
-        }
-    }
-
-    private static void showBlacklistDialog(Context ctx) {
-        SharedPreferences prefs = ContextManager.getPrefs();
-        final ModuleConfig cfg = ModuleConfig.load(prefs);
-
-        LinearLayout root = new LinearLayout(ctx);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dpC(ctx, 14), dpC(ctx, 10), dpC(ctx, 14), dpC(ctx, 10));
-        root.setBackground(new ColorDrawable(CLR_BG));
-
-        TextView tv = new TextView(ctx);
-        tv.setText("黑名单 wxid (每行一个)");
-        tv.setTextSize(16);
-        tv.setTextColor(CLR_ACCENT);
-        tv.setTypeface(null, Typeface.BOLD);
-        tv.setGravity(Gravity.CENTER);
-        tv.setPadding(0, 0, 0, dpC(ctx, 8));
-        root.addView(tv);
-
-        StringBuilder blText = new StringBuilder();
-        for (String w : cfg.blacklistWxids) blText.append(w).append("\n");
-        final EditText blEdit = new EditText(ctx);
-        blEdit.setText(blText.toString());
-        blEdit.setTextSize(12);
-        blEdit.setTextColor(CLR_TEXT);
-        blEdit.setMinLines(4);
-        blEdit.setGravity(Gravity.TOP);
-        blEdit.setBackgroundDrawable(createInputBg(ctx));
-        blEdit.setPadding(dpC(ctx, 10), dpC(ctx, 8), dpC(ctx, 10), dpC(ctx, 8));
-        root.addView(blEdit);
-
-        root.addView(spacerV(ctx, 8));
-        Button saveBtn = createBtn(ctx, "保存");
-        styleButton(saveBtn);
-
-        AlertDialog dlg = new AlertDialog.Builder(ctx).setView(root).setCancelable(true).create();
-        saveBtn.setOnClickListener(v2 -> {
-            cfg.blacklistWxids.clear();
-            for (String line : blEdit.getText().toString().split("\n")) {
-                String t = line.trim();
-                if (!t.isEmpty()) cfg.blacklistWxids.add(t);
-            }
-            cfg.save(prefs);
-            if (dlg != null && dlg.isShowing()) dlg.dismiss();
-        });
-        root.addView(saveBtn);
-
-        Window w = dlg.getWindow();
-        if (w != null) {
-            w.setBackgroundDrawable(new ColorDrawable(CLR_BG));
-            w.setLayout((int)(ctx.getResources().getDisplayMetrics().widthPixels * 0.9), -2);
-        }
-        dlg.show();
-    }
-
-    private static boolean isBit(int mask, int bit) {
-        return (mask & (1 << bit)) != 0;
-    }
-
-    private static View spacerV(Context ctx, int hDp) {
-        View v = new View(ctx);
-        v.setLayoutParams(new LinearLayout.LayoutParams(-1, dpC(ctx, hDp)));
-        return v;
     }
 }

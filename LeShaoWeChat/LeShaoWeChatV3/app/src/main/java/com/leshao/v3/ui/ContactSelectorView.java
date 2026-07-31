@@ -152,8 +152,8 @@ public class ContactSelectorView {
         btnConfirm.setTextColor(Color.WHITE);
         btnConfirm.setTextSize(15);
         btnConfirm.setAllCaps(false);
-        GradientDrawable confirmBg = new GradientDrawable();
-        confirmBg.setColor(COLOR_ACCENT);
+        GradientDrawable confirmBg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{0xFFe0408a, COLOR_ACCENT});
         confirmBg.setCornerRadius(dp(6));
         btnConfirm.setBackground(confirmBg);
         btnConfirm.setPadding(dp(28), dp(10), dp(28), dp(10));
@@ -209,7 +209,7 @@ public class ContactSelectorView {
 
         Window window = dialog.getWindow();
         if (window != null) {
-            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, dp(600));
+            window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         }
     }
 

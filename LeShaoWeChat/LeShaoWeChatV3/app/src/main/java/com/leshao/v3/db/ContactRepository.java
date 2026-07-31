@@ -180,8 +180,8 @@ public class ContactRepository {
         return queryContacts(db, "SELECT username, nickname, conRemark, alias, type, verifyFlag"
             + " FROM rcontact"
             + " WHERE deleteFlag = 0"
-            + " AND ((type & 3) = 3 AND (type & 32) = 0"
-            + " AND username NOT LIKE 'gh_%'"
+            + " AND (((type & 3) = 3 AND (type & 32) = 0"
+            + " AND username NOT LIKE 'gh_%')"
             + " OR username LIKE '%@chatroom')"
             + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, nickname");
     }
@@ -463,15 +463,18 @@ public class ContactRepository {
     // ===== 好友过滤: type=0=好友, type=2=被删, type=4=拉黑 =====
 
     private static boolean queryViaKa5(Object db) {
+        Cursor c = null;
         try {
             Method u = db.getClass().getDeclaredMethod("u", String.class, String[].class);
 
             String sql = "SELECT username, alias, conRemark, nickname, type, createTime"
                 + " FROM rcontact"
                 + " WHERE deleteFlag = 0"
-                + " AND type = 0"
+                + " AND (type & 3) = 3"
+                + " AND (type & 32) = 0"
+                + " AND username NOT LIKE 'gh_%'"
                 + " ORDER BY CASE WHEN username LIKE '%@chatroom' THEN 1 ELSE 0 END, nickname";
-            Cursor c = (Cursor) u.invoke(db, sql, null);
+            c = (Cursor) u.invoke(db, sql, null);
             if (c == null) return false;
 
             List<Contact> all = new ArrayList<>();
@@ -504,7 +507,6 @@ public class ContactRepository {
                 if (cat == CAT_GROUP) groups.add(contact);
                 else friends.add(contact);
             }
-            c.close();
 
             LogWriter.log(TAG, "Strategy A: query OK, all=" + all.size()
                 + " f=" + friends.size() + " g=" + groups.size());
@@ -516,6 +518,10 @@ public class ContactRepository {
             LogWriter.log(TAG, "Strategy A: query ERROR: " + e.getClass().getSimpleName()
                 + ": " + e.getMessage());
             return false;
+        } finally {
+            if (c != null) {
+                try { c.close(); } catch (Throwable ignored) {}
+            }
         }
     }
 
@@ -635,14 +641,15 @@ public class ContactRepository {
             String wxid = resolveObjWxid(conv);
             if (skipWxid(wxid)) return false;
 
-            if (!wxid.endsWith("@chatroom")) return false;
-
             String name = resolveObjName(conv);
             if (name == null || name.isEmpty()) name = wxid;
 
-            Contact c = new Contact(wxid, name, name, wxid, 1);
+            boolean isGroup = wxid.endsWith("@chatroom");
+            int type = isGroup ? 1 : 0;
+            Contact c = new Contact(wxid, name, name, wxid, type);
             all.add(c);
-            groups.add(c);
+            if (isGroup) groups.add(c);
+            else friends.add(c);
             return true;
         } catch (Throwable e) { return false; }
     }

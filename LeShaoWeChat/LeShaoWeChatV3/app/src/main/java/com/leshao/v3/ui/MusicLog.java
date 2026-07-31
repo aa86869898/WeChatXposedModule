@@ -2,6 +2,9 @@ package com.leshao.v3.ui;
 
 import android.util.Log;
 
+import com.leshao.v3.ContextManager;
+import com.leshao.v3.PathUtil;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.io.PrintWriter;
@@ -15,10 +18,16 @@ public class MusicLog {
 
     public static void init() {
         try {
-            File d = new File("/data/data/com.tencent.mm/files/leshao_v3");
-            if (!d.exists()) d.mkdirs();
-            sPath = d.getAbsolutePath() + "/music_log.txt";
-            raw("MusicLog init OK");
+            android.content.Context ctx = ContextManager.getAppContext();
+            if (ctx != null) {
+                File root = PathUtil.getLeshaoRootDir(ctx);
+                sPath = new File(root, "music_log.txt").getAbsolutePath();
+            } else {
+                File d = new File("/data/data/com.tencent.mm/files/leshao_v3");
+                if (!d.exists()) d.mkdirs();
+                sPath = d.getAbsolutePath() + "/music_log.txt";
+            }
+            raw("MusicLog init OK, path=" + sPath);
         } catch (Throwable t) {
             Log.e("MusicLog", "init err", t);
         }

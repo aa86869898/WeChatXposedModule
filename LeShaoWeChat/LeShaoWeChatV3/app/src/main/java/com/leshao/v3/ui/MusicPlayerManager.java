@@ -2,6 +2,7 @@ package com.leshao.v3.ui;
 
 import android.app.DownloadManager;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Environment;
@@ -12,6 +13,8 @@ import android.util.Log;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 public class MusicPlayerManager {
 
@@ -26,6 +29,8 @@ public class MusicPlayerManager {
     private int mPlayMode = 0; // 0=列表循环, 1=单曲循环, 2=随机
     private Handler mHandler = new Handler(Looper.getMainLooper());
     private Runnable mProgressRunner;
+    private SharedPreferences mPrefs;
+    private int mLastPosition = 0;
 
     public interface PlayerCallback {
         void onPlayStateChanged(boolean playing);
@@ -44,6 +49,8 @@ public class MusicPlayerManager {
 
     private MusicPlayerManager(Context ctx) {
         mContext = ctx;
+        mPrefs = ctx.getSharedPreferences("music_player", Context.MODE_PRIVATE);
+        restoreState();
     }
 
     public void addCallback(PlayerCallback cb) { mCallbacks.add(cb); }
@@ -84,6 +91,7 @@ public class MusicPlayerManager {
 
         addToHistory(song);
         loadAndPlay(song);
+        saveState();
     }
 
     public void playUrl(String url) {
@@ -95,6 +103,10 @@ public class MusicPlayerManager {
             mPlayer.setLooping(false);
             mPlayer.setOnPreparedListener(mp -> {
                 mPaused = false;
+                if (mLastPosition > 0) {
+                    mp.seekTo(mLastPosition);
+                    mLastPosition = 0;
+                }
                 mp.start();
                 MusicLog.i("Player", "prepared OK, started playback");
                 notifyStateChanged(true);
@@ -209,9 +221,11 @@ public class MusicPlayerManager {
     public void pause() {
         if (mPlayer == null || !mPlayer.isPlaying()) return;
         mPaused = true;
+        mLastPosition = mPlayer.getCurrentPosition();
         mPlayer.pause();
         stopProgressRunner();
         notifyStateChanged(false);
+        saveState();
     }
 
     public void resume() {
@@ -220,6 +234,7 @@ public class MusicPlayerManager {
         mPlayer.start();
         startProgressRunner();
         notifyStateChanged(true);
+        saveState();
     }
 
     public int getPlayMode() { return mPlayMode; }
@@ -227,31 +242,48 @@ public class MusicPlayerManager {
     public void setPlayMode(int mode) {
         mPlayMode = mode % 3;
         if (mPlayer != null) mPlayer.setLooping(mPlayMode == 1);
+        saveState();
     }
 
     public void next() {
-        if (mPlaylist.isEmpty()) return;
-        mCurrentIndex = (mCurrentIndex + 1) % mPlaylist.size();
-        MusicSearchApi.Song song = mPlaylist.get(mCurrentIndex);
-        addToHistory(song);
-        stopPlayer();
-        mCurrent = song;
-        loadAndPlay(song);
+        try {
+            if (mPlaylist.isEmpty()) return;
+            mCurrentIndex = (mCurrentIndex + 1) % mPlaylist.size();
+            MusicSearchApi.Song song = mPlaylist.get(mCurrentIndex);
+            if (song == null) return;
+            addToHistory(song);
+            stopPlayer();
+            mCurrent = song;
+            mLastPosition = 0;
+            loadAndPlay(song);
+            saveState();
+        } catch (Throwable e) {
+            MusicLog.e("Player", "next crash: " + e.getMessage());
+        }
     }
 
     public void prev() {
-        if (mPlaylist.isEmpty()) return;
-        mCurrentIndex = mCurrentIndex <= 0 ? mPlaylist.size() - 1 : mCurrentIndex - 1;
-        MusicSearchApi.Song song = mPlaylist.get(mCurrentIndex);
-        addToHistory(song);
-        stopPlayer();
-        mCurrent = song;
-        loadAndPlay(song);
+        try {
+            if (mPlaylist.isEmpty()) return;
+            mCurrentIndex = mCurrentIndex <= 0 ? mPlaylist.size() - 1 : mCurrentIndex - 1;
+            MusicSearchApi.Song song = mPlaylist.get(mCurrentIndex);
+            if (song == null) return;
+            addToHistory(song);
+            stopPlayer();
+            mCurrent = song;
+            mLastPosition = 0;
+            loadAndPlay(song);
+            saveState();
+        } catch (Throwable e) {
+            MusicLog.e("Player", "prev crash: " + e.getMessage());
+        }
     }
 
     public void seekTo(int pos) {
         if (mPlayer != null) {
             mPlayer.seekTo(pos);
+            mLastPosition = pos;
+            saveState();
         }
     }
 
@@ -364,6 +396,110 @@ public class MusicPlayerManager {
     private void stopProgressRunner() {
         if (mProgressRunner != null) {
             mHandler.removeCallbacks(mProgressRunner);
+        }
+    }
+
+    private void saveState() {
+        try {
+            JSONObject root = new JSONObject();
+            root.put("mode", mPlayMode);
+            root.put("index", mCurrentIndex);
+            if (mPlayer != null && mPlayer.isPlaying()) {
+                root.put("position", mPlayer.getCurrentPosition());
+            } else {
+                root.put("position", mLastPosition);
+            }
+            root.put("paused", mPaused);
+
+            JSONArray arr = new JSONArray();
+            for (MusicSearchApi.Song s : mPlaylist) {
+                JSONObject so = new JSONObject();
+                so.put("id", s.id != null ? s.id : "");
+                so.put("hash", s.hash != null ? s.hash : "");
+                so.put("hash320", s.hash320 != null ? s.hash320 : "");
+                so.put("sqHash", s.sqHash != null ? s.sqHash : "");
+                so.put("originHash", s.originHash != null ? s.originHash : "");
+                so.put("albumId", s.albumId != null ? s.albumId : "");
+                so.put("albumAudioId", s.albumAudioId != null ? s.albumAudioId : "");
+                so.put("title", s.title != null ? s.title : "");
+                so.put("artist", s.artist != null ? s.artist : "");
+                so.put("cover", s.cover != null ? s.cover : "");
+                so.put("duration", s.duration);
+                so.put("platform", s.platform);
+                arr.put(so);
+            }
+            root.put("playlist", arr);
+
+            // save simplified history (last 20)
+            JSONArray histArr = new JSONArray();
+            int histCount = Math.min(mHistory.size(), 20);
+            for (int i = 0; i < histCount; i++) {
+                MusicSearchApi.Song s = mHistory.get(i);
+                JSONObject ho = new JSONObject();
+                ho.put("title", s.title != null ? s.title : "");
+                ho.put("artist", s.artist != null ? s.artist : "");
+                ho.put("cover", s.cover != null ? s.cover : "");
+                ho.put("hash", s.hash != null ? s.hash : "");
+                histArr.put(ho);
+            }
+            root.put("history", histArr);
+
+            mPrefs.edit().putString("state", root.toString()).apply();
+        } catch (Exception e) {
+            MusicLog.e("PlayerManager", "saveState error", e);
+        }
+    }
+
+    private void restoreState() {
+        try {
+            String json = mPrefs.getString("state", "");
+            if (json.isEmpty()) return;
+            JSONObject root = new JSONObject(json);
+            mPlayMode = root.optInt("mode", 0);
+            mCurrentIndex = root.optInt("index", -1);
+            mLastPosition = root.optInt("position", 0);
+            mPaused = root.optBoolean("paused", true);
+
+            JSONArray arr = root.optJSONArray("playlist");
+            if (arr != null && arr.length() > 0) {
+                mPlaylist.clear();
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject so = arr.getJSONObject(i);
+                    MusicSearchApi.Song s = new MusicSearchApi.Song();
+                    s.id = so.optString("id", "");
+                    s.hash = so.optString("hash", "");
+                    s.hash320 = so.optString("hash320", "");
+                    s.sqHash = so.optString("sqHash", "");
+                    s.originHash = so.optString("originHash", "");
+                    s.albumId = so.optString("albumId", "");
+                    s.albumAudioId = so.optString("albumAudioId", "");
+                    s.title = so.optString("title", "");
+                    s.artist = so.optString("artist", "");
+                    s.cover = so.optString("cover", "");
+                    s.duration = so.optInt("duration", 0);
+                    s.platform = so.optInt("platform", 0);
+                    mPlaylist.add(s);
+                }
+                if (mCurrentIndex >= 0 && mCurrentIndex < mPlaylist.size()) {
+                    mCurrent = mPlaylist.get(mCurrentIndex);
+                }
+            }
+
+            JSONArray histArr = root.optJSONArray("history");
+            if (histArr != null) {
+                mHistory.clear();
+                for (int i = 0; i < histArr.length(); i++) {
+                    JSONObject ho = histArr.getJSONObject(i);
+                    MusicSearchApi.Song s = new MusicSearchApi.Song();
+                    s.title = ho.optString("title", "");
+                    s.artist = ho.optString("artist", "");
+                    s.cover = ho.optString("cover", "");
+                    s.hash = ho.optString("hash", "");
+                    mHistory.add(s);
+                }
+            }
+        } catch (Exception e) {
+            MusicLog.e("PlayerManager", "restoreState error", e);
         }
     }
 }

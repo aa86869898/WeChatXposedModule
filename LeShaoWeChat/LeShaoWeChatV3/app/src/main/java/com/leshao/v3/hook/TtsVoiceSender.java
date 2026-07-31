@@ -108,6 +108,7 @@ public class TtsVoiceSender {
     private static final Set<String> sSceneSentIds = new HashSet<>();
     private static final Set<Integer> sSuppressedMessages = new HashSet<>();
     private static final Set<Integer> sBlockedOriginalMessages = new HashSet<>();
+    private static final Set<Long> sMarkedMsgIds = new HashSet<>();
     private static final Map<Integer, String> sSyncAmrMap = new HashMap<>();
     private static final StringBuilder sTraceBuf = new StringBuilder(2048);
     private static volatile long sTraceBufResetAt;
@@ -415,13 +416,9 @@ public class TtsVoiceSender {
                     Object msg = param.thisObject;
                     if (msg == null || !isMarkedMessage(msg)) return;
                     try {
-                        XposedHelpers.callMethod(msg, "A1", 34);
-                        LogWriter.log(TAG, "d1 after: forced A1(34) type=" + getMsgType(msg));
-                    } catch (Throwable t) {
-                        try {
-                            XposedHelpers.setIntField(msg, "field_type", 34);
-                        } catch (Throwable ignored) {}
-                    }
+                        int type = getMsgType(msg);
+                        LogWriter.log(TAG, "d1 after: type=" + type + " (no forced type change)");
+                    } catch (Throwable ignored) {}
                 }
             });
 
@@ -518,8 +515,8 @@ public class TtsVoiceSender {
                     protected void afterHookedMethod(MethodHookParam p) {
                         try {
                             if (!isMarkedMessage(p.thisObject)) return;
-                            XposedHelpers.callMethod(p.thisObject, "A1", 34);
-                            LogWriter.log(TAG, "convertTo after: A1(34) type=" + getMsgType(p.thisObject));
+                            int type = getMsgType(p.thisObject);
+                            LogWriter.log(TAG, "convertTo after: type=" + type + " (no forced type change)");
                             scheduleAmrFixup(p.thisObject);
                         } catch (Throwable ignored) {}
                     }
@@ -1112,12 +1109,36 @@ public class TtsVoiceSender {
                                 LogWriter.log(TAG, "adapter.k." + sig + " called item="
                                         + item.getClass().getName() + " window="
                                         + (now - sLastTtsCommandAt));
+                                StringBuilder dbg = new StringBuilder("adapter.k." + sig + " item fields:");
+                                for (java.lang.reflect.Field f : item.getClass().getDeclaredFields()) {
+                                    try {
+                                        f.setAccessible(true);
+                                        Object v = f.get(item);
+                                        dbg.append("\n  ").append(f.getName()).append(' ')
+                                           .append(f.getType().getSimpleName())
+                                           .append(" = ").append(v == null ? "null"
+                                                : (v.getClass().getName() + ":" + truncStr(v.toString(), 20)));
+                                    } catch (Throwable ignored) {}
+                                }
+                                LogWriter.log(TAG, dbg.toString());
                             }
                             Object marked = findMarkedMessageIn(item, e9Class);
-                            if (marked == null) return;
-                            LogWriter.log(TAG, "adapter.k." + sig + " BLOCK marked #tts item="
+                            if (marked == null) {
+                                if (System.currentTimeMillis() - sLastTtsCommandAt <= FAILURE_SUPPRESS_WINDOW_MS) {
+                                    int lr = removeMarkedFromLists(item, e9Class);
+                                    if (lr > 0) {
+                                        LogWriter.log(TAG, "adapter.k." + sig + " loose REMOVE removed=" + lr
+                                                + " window=" + (System.currentTimeMillis() - sLastTtsCommandAt));
+                                        return;
+                                    }
+                                }
+                                return;
+                            }
+                            LogWriter.log(TAG, "adapter.k." + sig + " REMOVE marked #tts item="
                                     + item.getClass().getName() + " msg=" + System.identityHashCode(marked));
-                            p.setResult(defaultReturnValue(rt));
+                            int removed = removeMarkedFromLists(item, e9Class);
+                            LogWriter.log(TAG, "adapter.k." + sig + " removed=" + removed
+                                    + " continue render");
                         } catch (Throwable ignored) {}
                     }
                 });
@@ -1128,6 +1149,34 @@ public class TtsVoiceSender {
         } catch (Throwable t) {
             LogWriter.log(TAG, "adapter.k.j FAIL: " + t.getMessage());
         }
+    }
+
+    private static int removeMarkedFromLists(Object item, Class<?> e9Class) {
+        int removed = 0;
+        if (item == null) return 0;
+        for (java.lang.reflect.Field f : item.getClass().getDeclaredFields()) {
+            try {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                f.setAccessible(true);
+                Object v = f.get(item);
+                if (v instanceof java.util.List) {
+                    java.util.List<?> list = (java.util.List<?>) v;
+                    for (java.util.Iterator<?> it = list.iterator(); it.hasNext(); ) {
+                        Object e = it.next();
+                        if (e9Class.isInstance(e) && (isMarkedMessage(e) || isMarkedByMsgId(e)
+                                || isLikelySuppressedTts(e))) {
+                            long mid = 0;
+                            try { mid = (Long) XposedHelpers.callMethod(e, "H0"); } catch (Throwable ignored) {}
+                            LogWriter.log(TAG, "adapter.k REMOVE e9 msgId=" + mid
+                                    + " idHash=" + System.identityHashCode(e));
+                            it.remove();
+                            removed++;
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        return removed;
     }
 
     private static void hookF9I9(ClassLoader cl) {
@@ -1156,6 +1205,24 @@ public class TtsVoiceSender {
                             }
                         } catch (Throwable ignored) {}
                     }
+
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        try {
+                            Object msg = p.args[0];
+                            if (msg == null || !e9Class.isInstance(msg)) return;
+                            if (!isMarkedMessage(msg)) return;
+                            long msgId = 0;
+                            try { msgId = (Long) XposedHelpers.callMethod(msg, "H0"); } catch (Throwable ignored) {}
+                            if (msgId > 0) {
+                                synchronized (sMarkedMsgIds) {
+                                    sMarkedMsgIds.add(msgId);
+                                    if (sMarkedMsgIds.size() > 64) sMarkedMsgIds.clear();
+                                }
+                                LogWriter.log(TAG, "f9.I9 after: captured marked msgId=" + msgId);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
                 });
                 hooked++;
                 LogWriter.log(TAG, "Hook f9.I9 OK " + m.getParameterCount() + " params");
@@ -1167,15 +1234,43 @@ public class TtsVoiceSender {
     }
 
     private static Object findMarkedMessageIn(Object item, Class<?> e9Class) {
+        return findMarkedMessageIn(item, e9Class, 0);
+    }
+
+    private static Object findMarkedMessageIn(Object item, Class<?> e9Class, int depth) {
         if (item == null) return null;
         if (e9Class.isInstance(item)) {
-            return isMarkedMessage(item) ? item : null;
+            return (isMarkedMessage(item) || isMarkedByMsgId(item)) ? item : null;
         }
+        if (depth > 4) return null;
         for (java.lang.reflect.Field f : item.getClass().getDeclaredFields()) {
             try {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
                 f.setAccessible(true);
                 Object v = f.get(item);
-                if (v != null && e9Class.isInstance(v) && isMarkedMessage(v)) return v;
+                if (v == null) continue;
+                if (e9Class.isInstance(v)) {
+                    if (isMarkedMessage(v) || isMarkedByMsgId(v)) return v;
+                    continue;
+                }
+                if (v instanceof Iterable) {
+                    for (Object e : (Iterable<?>) v) {
+                        Object r = findMarkedMessageIn(e, e9Class, depth + 1);
+                        if (r != null) return r;
+                    }
+                    continue;
+                }
+                if (v instanceof Object[]) {
+                    for (Object e : (Object[]) v) {
+                        Object r = findMarkedMessageIn(e, e9Class, depth + 1);
+                        if (r != null) return r;
+                    }
+                    continue;
+                }
+                if (v.getClass().getName().startsWith("com.tencent.mm")) {
+                    Object r = findMarkedMessageIn(v, e9Class, depth + 1);
+                    if (r != null) return r;
+                }
             } catch (Throwable ignored) {}
         }
         return null;
@@ -1415,6 +1510,32 @@ public class TtsVoiceSender {
         synchronized (sBlockedOriginalMessages) {
             return sBlockedOriginalMessages.contains(key);
         }
+    }
+
+    private static boolean isMarkedByMsgId(Object msg) {
+        if (msg == null) return false;
+        long msgId = 0;
+        try { msgId = (Long) XposedHelpers.callMethod(msg, "H0"); } catch (Throwable ignored) {}
+        if (msgId <= 0) return false;
+        synchronized (sMarkedMsgIds) {
+            return sMarkedMsgIds.contains(msgId);
+        }
+    }
+
+    private static boolean isLikelySuppressedTts(Object msg) {
+        if (msg == null) return false;
+        if (System.currentTimeMillis() - sLastTtsCommandAt > FAILURE_SUPPRESS_WINDOW_MS) return false;
+        String content = null;
+        try {
+            Object c = XposedHelpers.getObjectField(msg, "field_content");
+            if (c instanceof String) content = (String) c;
+        } catch (Throwable ignored) {}
+        if (content == null || content.trim().length() > 0) return false;
+        int type = getMsgType(msg);
+        if (type != 34 && type != 228 && type != 1) return false;
+        String talker = getTalker(msg);
+        if (talker == null || sLastTtsTalker == null || !sLastTtsTalker.equals(talker)) return false;
+        return true;
     }
 
     private static void resetTraceBuf() {

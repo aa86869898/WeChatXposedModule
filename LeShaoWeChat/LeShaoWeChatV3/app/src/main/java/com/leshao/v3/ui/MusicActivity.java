@@ -2,8 +2,17 @@ package com.leshao.v3.ui;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffXfermode;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -12,6 +21,10 @@ import android.os.Looper;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewOutlineProvider;
+import android.view.animation.Animation;
+import android.view.animation.LinearInterpolator;
+import android.view.animation.RotateAnimation;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -22,17 +35,18 @@ import java.util.List;
 
 public class MusicActivity extends Activity {
 
-    static final int CLR_BG = 0xFFF0F4FA;
-    static final int CLR_CARD = 0xFFFFFFFF;
-    static final int CLR_ACCENT = 0xFF3B8EFF;
-    static final int CLR_ACCENT_LIGHT = 0xFFE8F0FE;
-    static final int CLR_TEXT = 0xFF1A1A2E;
-    static final int CLR_TEXT2 = 0xFF6B7280;
-    static final int CLR_DIV = 0xFFE5E7EB;
-    static final int CLR_INPUT = 0xFFEEF2F7;
-    static final int CLR_GOLD = 0xFFF59E0B;
-    static final int CLR_RED = 0xFFEF4444;
-    static final int CLR_ACCENT_DARK = 0xFF2E6FD4;
+    static int CLR_BG = 0xFFF0F4FA;
+    static int CLR_CARD = 0xFFFFFFFF;
+    static int CLR_ACCENT = 0xFF3B8EFF;
+    static int CLR_ACCENT_LIGHT = 0xFFE8F0FE;
+    static int CLR_TEXT = 0xFF1A1A2E;
+    static int CLR_TEXT2 = 0xFF6B7280;
+    static int CLR_DIV = 0xFFE5E7EB;
+    static int CLR_INPUT = 0xFFEEF2F7;
+    static int CLR_GOLD = 0xFFF59E0B;
+    static int CLR_RED = 0xFFEF4444;
+    static int CLR_ACCENT_DARK = 0xFF2E6FD4;
+    static boolean sIsDark = false;
 
     static final Handler MAIN = new Handler(Looper.getMainLooper());
     static float sDensity;
@@ -48,7 +62,12 @@ public class MusicActivity extends Activity {
     TextView mPlayerTitle;
     ImageView mPlayerPlayBtn;
     ImageView mPlayerNextBtn;
+    MiniProgressView mPlayerProgress;
+    RotateAnimation mCoverRotate;
+    Runnable mMiniProgressRunner;
     int mCurrentTab = 0;
+    MusicRankingView mRankingView;
+    MusicHomeView mHomeView;
 
     static final String[] TAB_LABELS = {"推荐", "排行", "播放器", "我的"};
     static final String[] TAB_ICONS = {"\uD83C\uDFE0", "\uD83C\uDFC6", "\uD83C\uDFB5", "\uD83D\uDC64"};
@@ -65,6 +84,18 @@ public class MusicActivity extends Activity {
             sPlayer = MusicPlayerManager.get(this);
             sActivity = this;
             sInstance = this;
+
+            applyTheme();
+
+            sPlayer.addCallback(new MusicPlayerManager.PlayerCallback() {
+                @Override public void onPlayStateChanged(boolean playing) {
+                    MAIN.post(() -> refreshPlayerBar());
+                }
+                @Override public void onProgressChanged(int position, int duration) {}
+                @Override public void onSongChanged(MusicSearchApi.Song song, int index) {
+                    MAIN.post(() -> refreshPlayerBar());
+                }
+            });
 
             LinearLayout root = new LinearLayout(this);
             root.setOrientation(LinearLayout.VERTICAL);
@@ -83,6 +114,9 @@ public class MusicActivity extends Activity {
             setContentView(root);
             showTab(0);
             refreshPlayerBar();
+
+            autoPlayIfNeeded();
+
             Log.d("MusicActivity", "onCreate OK");
         } catch (Throwable e) {
             Log.e("MusicActivity", "onCreate CRASH: " + Log.getStackTraceString(e));
@@ -95,26 +129,132 @@ public class MusicActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refreshPlayerBar();
+        if (mMiniProgressRunner != null) {
+            MAIN.post(mMiniProgressRunner);
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (mMiniProgressRunner != null) {
+            MAIN.removeCallbacks(mMiniProgressRunner);
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (mHomeView != null && mHomeView.hideSearchIfShown()) return;
+        if (mRankingView != null && mRankingView.isDetailShown()) {
+            mRankingView.showRankingView();
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        boolean wasDark = sIsDark;
+        sIsDark = (newConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        if (wasDark != sIsDark) {
+            applyThemeColors();
+            if (mPlayerBar != null) mPlayerBar.setBackgroundColor(CLR_CARD);
+            if (mBottomNav != null) mBottomNav.setBackgroundColor(CLR_CARD);
+            if (mContent != null) {
+                mContent.getRootView().setBackgroundColor(CLR_BG);
+            }
+            showTab(mCurrentTab);
+        }
+    }
+
+    void applyTheme() {
+        sIsDark = (getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        applyThemeColors();
+    }
+
+    static void applyThemeColors() {
+        if (sIsDark) {
+            CLR_BG = 0xFF121212;
+            CLR_CARD = 0xFF1E1E2E;
+            CLR_ACCENT = 0xFF6B8EFF;
+            CLR_ACCENT_LIGHT = 0xFF1A2A4A;
+            CLR_TEXT = 0xFFE0E0E0;
+            CLR_TEXT2 = 0xFF9CA3AF;
+            CLR_DIV = 0xFF2A2A3C;
+            CLR_INPUT = 0xFF252535;
+            CLR_GOLD = 0xFFF59E0B;
+            CLR_RED = 0xFFEF4444;
+            CLR_ACCENT_DARK = 0xFF5580EE;
+        } else {
+            CLR_BG = 0xFFF0F4FA;
+            CLR_CARD = 0xFFFFFFFF;
+            CLR_ACCENT = 0xFF3B8EFF;
+            CLR_ACCENT_LIGHT = 0xFFE8F0FE;
+            CLR_TEXT = 0xFF1A1A2E;
+            CLR_TEXT2 = 0xFF6B7280;
+            CLR_DIV = 0xFFE5E7EB;
+            CLR_INPUT = 0xFFEEF2F7;
+            CLR_GOLD = 0xFFF59E0B;
+            CLR_RED = 0xFFEF4444;
+            CLR_ACCENT_DARK = 0xFF2E6FD4;
+        }
+    }
+
+    void autoPlayIfNeeded() {
+        if (sPlayer == null || sPlayer.getCurrent() != null) return;
+        try {
+            KgApi.getTopListDetail("8888", 1, new KgApi.PlaylistSongsCallback() {
+                public void onResult(List<KgApi.Song> songs, int total) {
+                    if (sPlayer != null && songs != null && !songs.isEmpty()) {
+                        MusicSearchApi.Song ms = new MusicSearchApi.Song();
+                        KgApi.Song ks = songs.get(0);
+                        ms.id = ks.hash.isEmpty() ? ks.id : ks.hash;
+                        ms.hash = ks.hash;
+                        ms.hash320 = ks.hash320;
+                        ms.sqHash = ks.sqHash;
+                        ms.title = ks.title;
+                        ms.artist = ks.artist;
+                        ms.cover = ks.cover;
+                        ms.duration = ks.duration;
+                        ms.platform = 0;
+                        sPlayer.play(ms);
+                        refreshPlayerBar();
+                    }
+                }
+                public void onError(String msg) {}
+            });
+        } catch (Throwable ignored) {}
     }
 
     void buildPlayerBar() {
         mPlayerBar = new LinearLayout(this);
-        mPlayerBar.setOrientation(LinearLayout.HORIZONTAL);
-        mPlayerBar.setGravity(Gravity.CENTER_VERTICAL);
+        mPlayerBar.setOrientation(LinearLayout.VERTICAL);
         mPlayerBar.setBackgroundColor(CLR_CARD);
-        mPlayerBar.setPadding(dp(8), dp(4), dp(8), dp(4));
-        mPlayerBar.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(40)));
+        mPlayerBar.setPadding(dp(8), dp(5), dp(8), dp(4));
 
-        GradientDrawable coverBg = new GradientDrawable();
-        coverBg.setCornerRadius(dp(4)); coverBg.setColor(0xFFDDDDDD);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        int cs = dp(30);
+        FrameLayout coverWrap = new FrameLayout(this);
+        coverWrap.setLayoutParams(new LinearLayout.LayoutParams(cs, cs));
+
+        GradientDrawable discBg = new GradientDrawable();
+        discBg.setCornerRadius(cs / 2);
+        discBg.setColor(0xFFDDDDDD);
 
         mPlayerCover = new ImageView(this);
-        int cs = dp(30);
-        mPlayerCover.setLayoutParams(new LinearLayout.LayoutParams(cs, cs));
+        FrameLayout.LayoutParams covLp = new FrameLayout.LayoutParams(cs, cs);
+        covLp.gravity = Gravity.CENTER;
+        mPlayerCover.setLayoutParams(covLp);
         mPlayerCover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        mPlayerCover.setBackground(coverBg);
+        mPlayerCover.setBackground(discBg);
         mPlayerCover.setOnClickListener(v -> openPlayer());
-        mPlayerBar.addView(mPlayerCover);
+        coverWrap.addView(mPlayerCover);
+        row.addView(coverWrap);
 
         LinearLayout infoCol = new LinearLayout(this);
         infoCol.setOrientation(LinearLayout.VERTICAL);
@@ -127,7 +267,7 @@ public class MusicActivity extends Activity {
         mPlayerTitle.setSingleLine(true);
         mPlayerTitle.setTypeface(null, Typeface.BOLD);
         infoCol.addView(mPlayerTitle);
-        mPlayerBar.addView(infoCol);
+        row.addView(infoCol);
 
         int bs = dp(28);
         mPlayerPlayBtn = new ImageView(this);
@@ -141,7 +281,7 @@ public class MusicActivity extends Activity {
                 refreshPlayerBar();
             }
         });
-        mPlayerBar.addView(mPlayerPlayBtn);
+        row.addView(mPlayerPlayBtn);
 
         mPlayerNextBtn = new ImageView(this);
         mPlayerNextBtn.setLayoutParams(new LinearLayout.LayoutParams(bs, bs));
@@ -149,7 +289,56 @@ public class MusicActivity extends Activity {
         mPlayerNextBtn.setPadding(dp(4), dp(4), dp(4), dp(4));
         mPlayerNextBtn.setImageDrawable(emoji("\u23ED", dp(13)));
         mPlayerNextBtn.setOnClickListener(v -> { if (sPlayer != null) { sPlayer.next(); refreshPlayerBar(); } });
-        mPlayerBar.addView(mPlayerNextBtn);
+        row.addView(mPlayerNextBtn);
+
+        mPlayerBar.addView(row);
+
+        View gap = new View(this);
+        gap.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(4)));
+        mPlayerBar.addView(gap);
+
+        mPlayerProgress = new MiniProgressView(this);
+        LinearLayout.LayoutParams ppLp = new LinearLayout.LayoutParams(-1, dp(14));
+        mPlayerProgress.setLayoutParams(ppLp);
+        mPlayerProgress.setProgress(0);
+        mPlayerProgress.setOnTouchListener((v, event) -> {
+            if (event.getAction() == android.view.MotionEvent.ACTION_DOWN
+                    || event.getAction() == android.view.MotionEvent.ACTION_MOVE) {
+                float x = event.getX();
+                float w = v.getWidth();
+                if (w > 0 && sPlayer != null) {
+                    float ratio = Math.max(0, Math.min(1, x / w));
+                    int dur = sPlayer.getDuration();
+                    if (dur > 0) {
+                        sPlayer.seekTo((int) (dur * ratio));
+                        mPlayerProgress.setProgress(ratio);
+                    }
+                }
+                return true;
+            }
+            return false;
+        });
+        mPlayerBar.addView(mPlayerProgress);
+
+        mCoverRotate = new RotateAnimation(0, 360,
+                Animation.RELATIVE_TO_SELF, 0.5f, Animation.RELATIVE_TO_SELF, 0.5f);
+        mCoverRotate.setDuration(8000);
+        mCoverRotate.setRepeatCount(Animation.INFINITE);
+        mCoverRotate.setInterpolator(new LinearInterpolator());
+
+        mMiniProgressRunner = new Runnable() {
+            @Override
+            public void run() {
+                if (sPlayer != null && sPlayer.isPlaying()) {
+                    int dur = sPlayer.getDuration();
+                    int pos = sPlayer.getPosition();
+                    if (dur > 0 && mPlayerProgress != null) {
+                        mPlayerProgress.setProgress((float) pos / dur);
+                    }
+                }
+                MAIN.postDelayed(this, 500);
+            }
+        };
     }
 
     void openPlayer() {
@@ -164,12 +353,26 @@ public class MusicActivity extends Activity {
             mPlayerTitle.setText("未在播放");
             mPlayerPlayBtn.setImageDrawable(emoji("\u25B6", dp(13)));
             mPlayerCover.setImageBitmap(null);
+            mPlayerCover.clearAnimation();
+            if (mPlayerProgress != null) mPlayerProgress.setProgress(0);
             return;
         }
         mPlayerTitle.setText(song.title + " - " + song.artist);
         boolean playing = sPlayer.isPlaying();
         mPlayerPlayBtn.setImageDrawable(emoji(playing ? "\u23F8" : "\u25B6", dp(13)));
-        loadCover(mPlayerCover, song.cover);
+        loadCircularCover(mPlayerCover, song.cover);
+
+        if (playing) {
+            if (mPlayerCover.getAnimation() == null) {
+                mPlayerCover.startAnimation(mCoverRotate);
+            }
+            if (mMiniProgressRunner != null) {
+                MAIN.removeCallbacks(mMiniProgressRunner);
+                MAIN.post(mMiniProgressRunner);
+            }
+        } else {
+            mPlayerCover.clearAnimation();
+        }
     }
 
     void buildBottomNav() {
@@ -223,12 +426,14 @@ public class MusicActivity extends Activity {
                 MusicHomeView hv = new MusicHomeView();
                 view = hv.createView(this);
                 hv.onViewReady();
+                mHomeView = hv;
                 break;
             }
             case 1: {
                 MusicRankingView rv = new MusicRankingView();
                 view = rv.createView(this);
                 rv.onViewReady();
+                mRankingView = rv;
                 break;
             }
             case 3: {
@@ -257,13 +462,18 @@ public class MusicActivity extends Activity {
     }
 
     public static void playSong(MusicSearchApi.Song song) {
-        if (sPlayer == null) { toast("播放器未初始化"); return; }
-        MusicLog.i("MusicActivity", "playSong: " + song.title + " hash=" + song.hash);
-        int idx = sPlayer.getPlaylist().indexOf(song);
-        if (idx >= 0) sPlayer.playFromPlaylist(idx);
-        else { sPlayer.getPlaylist().add(song); sPlayer.play(song); }
-        if (sInstance != null) sInstance.refreshPlayerBar();
-        toast("正在播放: " + song.title + " - " + song.artist);
+        try {
+            if (sPlayer == null || song == null) { toast("播放器未初始化"); return; }
+            MusicLog.i("MusicActivity", "playSong: " + song.title + " hash=" + song.hash);
+            int idx = sPlayer.getPlaylist().indexOf(song);
+            if (idx >= 0) sPlayer.playFromPlaylist(idx);
+            else { sPlayer.getPlaylist().add(song); sPlayer.play(song); }
+            if (sInstance != null) sInstance.refreshPlayerBar();
+            toast("正在播放: " + song.title + " - " + song.artist);
+        } catch (Throwable e) {
+            MusicLog.e("MusicActivity", "playSong crash: " + e.getMessage());
+            toast("播放失败");
+        }
     }
 
     public static void playSongs(List<MusicSearchApi.Song> songs, int startIdx) {
@@ -303,6 +513,56 @@ public class MusicActivity extends Activity {
         }).start();
     }
 
+    public static void loadCircularCover(ImageView iv, String url) {
+        if (url == null || url.isEmpty()) return;
+        if (!url.startsWith("http")) {
+            if (url.startsWith("//")) url = "https:" + url;
+            else return;
+        }
+        url = url.replace("{size}", "400");
+        final String finalUrl = url;
+        new Thread(() -> {
+            try {
+                java.net.URL u = new java.net.URL(finalUrl);
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
+                conn.setConnectTimeout(8000); conn.setReadTimeout(8000);
+                conn.setRequestProperty("User-Agent", "Android800-AndroidPhone-12029-56-0-starlive-ctnet(13)");
+                conn.setRequestProperty("Referer", "https://m.kugou.com");
+                conn.setRequestProperty("KG-THash", "3e5ec6b");
+                conn.setRequestProperty("KG-RC", "1");
+                conn.setRequestProperty("KG-RF", "00869891");
+                conn.setRequestProperty("Accept", "image/*, */*");
+                int code = conn.getResponseCode();
+                if (code != 200) { conn.disconnect(); return; }
+                java.io.InputStream is = conn.getInputStream();
+                android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
+                is.close(); conn.disconnect();
+                if (bmp != null) {
+                    android.graphics.Bitmap circular = makeCircularBitmap(bmp);
+                    MAIN.post(() -> iv.setImageBitmap(circular));
+                }
+            } catch (Throwable ignored) {}
+        }).start();
+    }
+
+    private static android.graphics.Bitmap makeCircularBitmap(android.graphics.Bitmap source) {
+        int srcW = source.getWidth(), srcH = source.getHeight();
+        int size = Math.min(srcW, srcH);
+        android.graphics.Bitmap output = android.graphics.Bitmap.createBitmap(size, size,
+                android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(output);
+        android.graphics.Paint paint = new android.graphics.Paint(
+                android.graphics.Paint.ANTI_ALIAS_FLAG | android.graphics.Paint.FILTER_BITMAP_FLAG);
+        float r = size / 2f;
+        canvas.drawCircle(r, r, r, paint);
+        paint.setXfermode(new android.graphics.PorterDuffXfermode(
+                android.graphics.PorterDuff.Mode.SRC_IN));
+        float dx = (size - srcW) / 2f;
+        float dy = (size - srcH) / 2f;
+        canvas.drawBitmap(source, dx, dy, paint);
+        return output;
+    }
+
     public static int dp(int dp) { return (int) (dp * sDensity + 0.5f); }
     public static int dp(float dp) { return (int) (dp * sDensity + 0.5f); }
 
@@ -332,5 +592,68 @@ public class MusicActivity extends Activity {
 
     public static void toast(String msg) {
         MAIN.post(() -> { if (sActivity != null) Toast.makeText(sActivity, msg, Toast.LENGTH_SHORT).show(); });
+    }
+
+    static class MiniProgressView extends View {
+        private float mProgress;
+        private Paint mLinePaint, mThumbPaint;
+        private static final int[] NEON_COLORS = {0xFFFF6B9D, 0xFFC44DFF, 0xFF6BC5FF, 0xFF39E6A5, 0xFFFFE259};
+
+        MiniProgressView(Context ctx) {
+            super(ctx);
+            mLinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            mLinePaint.setStyle(Paint.Style.STROKE);
+            mLinePaint.setStrokeCap(Paint.Cap.ROUND);
+
+            mThumbPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            mThumbPaint.setStyle(Paint.Style.FILL);
+        }
+
+        void setProgress(float p) { mProgress = p; postInvalidateOnAnimation(); }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            int w = getWidth(), h = getHeight();
+            int cy = h / 2;
+            int pad = dp(1);
+            int left = pad;
+            int right = w - pad;
+            int trackH = dp(2);
+
+            float startX = left;
+            float endX = right;
+
+            mLinePaint.setStrokeWidth(trackH);
+            mLinePaint.setColor(CLR_DIV);
+            canvas.drawLine(startX, cy, endX, cy, mLinePaint);
+
+            if (mProgress > 0) {
+                float progressX = left + (right - left) * mProgress;
+                mLinePaint.setShader(new LinearGradient(startX, 0, progressX, 0,
+                    NEON_COLORS, null, Shader.TileMode.MIRROR));
+                mLinePaint.setStrokeWidth(trackH);
+                canvas.drawLine(startX, cy, progressX, cy, mLinePaint);
+                mLinePaint.setShader(null);
+
+                drawMiniHeart(canvas, progressX, cy, dp(3));
+            }
+        }
+
+        private void drawMiniHeart(Canvas canvas, float cx, float cy, float size) {
+            int saved = canvas.save();
+            canvas.translate(cx, cy);
+            Path heart = new Path();
+            float s = size;
+            heart.moveTo(0, s * 0.4f);
+            heart.cubicTo(-s, -s * 0.4f, -s * 0.5f, -s, 0, -s * 0.3f);
+            heart.cubicTo(s * 0.5f, -s, s, -s * 0.4f, 0, s * 0.4f);
+            heart.close();
+
+            Paint sp = new Paint(Paint.ANTI_ALIAS_FLAG);
+            sp.setShader(new LinearGradient(-s, 0, s, 0, NEON_COLORS, null, Shader.TileMode.MIRROR));
+            sp.setStyle(Paint.Style.FILL);
+            canvas.drawPath(heart, sp);
+            canvas.restore();
+        }
     }
 }

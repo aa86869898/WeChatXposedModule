@@ -101,7 +101,6 @@ public class ModuleConfig {
     public boolean chatFooterEnhanceEnabled = true;
     public boolean chatUICustomEnabled = true;
     public boolean batchMessageEnabled = true;
-    public boolean scheduledSendEnabled = true;
     public boolean autoRemarkEnabled = true;
     public boolean searchEnhanceEnabled = true;
     public boolean notifyCustomEnabled = true;
@@ -300,7 +299,6 @@ public class ModuleConfig {
         cfg.chatFooterEnhanceEnabled = prefs.getBoolean("ls_wp_chatfooter", true);
         cfg.chatUICustomEnabled = prefs.getBoolean("ls_wp_chatui", true);
         cfg.batchMessageEnabled = prefs.getBoolean("ls_wp_batchmsg", true);
-        cfg.scheduledSendEnabled = prefs.getBoolean("ls_wp_schedsend", true);
         cfg.autoRemarkEnabled = prefs.getBoolean("ls_wp_autoremark", true);
         cfg.searchEnhanceEnabled = prefs.getBoolean("ls_wp_search", true);
         cfg.notifyCustomEnabled = prefs.getBoolean("ls_wp_notify", true);
@@ -510,7 +508,6 @@ public class ModuleConfig {
         cfg.typingIndicatorEnabled = false;
         cfg.chatUICustomEnabled = false;
         cfg.batchMessageEnabled = false;
-        cfg.scheduledSendEnabled = false;
         cfg.autoRemarkEnabled = false;
         cfg.autoReplyEnabled = false;
         cfg.snsFeaturesEnabled = false;
@@ -576,7 +573,7 @@ public class ModuleConfig {
         if (!isBit(mask, f)) cfg.chatFooterEnhanceEnabled = false;  f++;
         if (!isBit(mask, f)) cfg.chatUICustomEnabled = false;  f++;
         if (!isBit(mask, f)) cfg.batchMessageEnabled = false;  f++;
-        if (!isBit(mask, f)) cfg.scheduledSendEnabled = false;  f++;
+        f++;
         if (!isBit(mask, f)) cfg.autoRemarkEnabled = false;  f++;
         if (!isBit(mask, f)) cfg.deleteDetectEnabled = false;  f++;
         if (!isBit(mask, f)) cfg.contactExportEnabled = false;  f++;
@@ -660,7 +657,6 @@ public class ModuleConfig {
         e.putBoolean("ls_wp_chatfooter", chatFooterEnhanceEnabled);
         e.putBoolean("ls_wp_chatui", chatUICustomEnabled);
         e.putBoolean("ls_wp_batchmsg", batchMessageEnabled);
-        e.putBoolean("ls_wp_schedsend", scheduledSendEnabled);
         e.putBoolean("ls_wp_autoremark", autoRemarkEnabled);
         e.putBoolean("ls_wp_search", searchEnhanceEnabled);
         e.putBoolean("ls_wp_notify", notifyCustomEnabled);

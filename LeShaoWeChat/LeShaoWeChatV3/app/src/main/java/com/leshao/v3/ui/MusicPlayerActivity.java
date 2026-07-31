@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
+import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
@@ -17,9 +18,13 @@ import android.graphics.drawable.shapes.RectShape;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.SpannableString;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.AbsoluteSizeSpan;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewOutlineProvider;
 import android.view.animation.Animation;
 import android.view.animation.LinearInterpolator;
 import android.view.animation.RotateAnimation;
@@ -32,6 +37,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import java.util.List;
 import java.util.Locale;
+import java.util.ArrayList;
 
 public class MusicPlayerActivity extends Activity {
 
@@ -49,6 +55,9 @@ public class MusicPlayerActivity extends Activity {
     private boolean mDiscPaused;
     private int mQuality = 0;
     private MusicPlayerManager.PlayerCallback mPlayerCb;
+    private List<LyricLine> mLyricLines = new ArrayList<>();
+    private int mCurrentLyricIdx = -1;
+    private ScrollView mLyricScroll;
 
     private static final String[] QUALITY_LABELS = {"标准音质", "高品质 HQ", "无损 FLAC"};
     private static final String[] QUALITY_LABELS_SHORT = {"标准", "HQ", "无损"};
@@ -104,9 +113,10 @@ public class MusicPlayerActivity extends Activity {
         super.onDestroy();
         stopProgressRunner();
         stopDiscAnim();
-        if (MusicActivity.sPlayer != null && mPlayerCb != null) {
+        if (mPlayerCb != null && MusicActivity.sPlayer != null) {
             MusicActivity.sPlayer.removeCallback(mPlayerCb);
         }
+        mHandler.removeCallbacksAndMessages(null);
     }
 
     void buildHeader() {
@@ -207,14 +217,18 @@ public class MusicPlayerActivity extends Activity {
         area.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1.0f));
         area.setPadding(MusicActivity.dp(24), MusicActivity.dp(8), MusicActivity.dp(24), MusicActivity.dp(4));
 
+        mLyricScroll = new ScrollView(this);
+        mLyricScroll.setFillViewport(true);
+
         mLyricText = new TextView(this);
-        mLyricText.setTextSize(13);
+        mLyricText.setTextSize(14);
         mLyricText.setTextColor(MusicActivity.CLR_TEXT);
         mLyricText.setGravity(Gravity.CENTER);
-        mLyricText.setLineSpacing(MusicActivity.dp(6), 1.0f);
+        mLyricText.setLineSpacing(MusicActivity.dp(8), 1.0f);
         mLyricText.setText("加载歌词中...");
-        mLyricText.setSingleLine(true);
-        area.addView(mLyricText);
+        mLyricText.setPadding(0, MusicActivity.dp(60), 0, MusicActivity.dp(60));
+        mLyricScroll.addView(mLyricText);
+        area.addView(mLyricScroll, new LinearLayout.LayoutParams(-1, -1));
 
         mRoot.addView(area);
     }
@@ -271,7 +285,9 @@ public class MusicPlayerActivity extends Activity {
 
         mPrevBtn = playCtrlBtn("\u23EE", 22);
         mPrevBtn.setOnClickListener(v -> {
-            if (MusicActivity.sPlayer != null) { MusicActivity.sPlayer.prev(); updateUI(); }
+            try {
+                if (MusicActivity.sPlayer != null) { MusicActivity.sPlayer.prev(); updateUI(); }
+            } catch (Throwable e) { /* ignore */ }
         });
         controls.addView(mPrevBtn);
 
@@ -315,7 +331,9 @@ public class MusicPlayerActivity extends Activity {
 
         mNextBtn = playCtrlBtn("\u23ED", 22);
         mNextBtn.setOnClickListener(v -> {
-            if (MusicActivity.sPlayer != null) { MusicActivity.sPlayer.next(); updateUI(); }
+            try {
+                if (MusicActivity.sPlayer != null) { MusicActivity.sPlayer.next(); updateUI(); }
+            } catch (Throwable e) { /* ignore */ }
         });
         controls.addView(mNextBtn);
 
@@ -326,7 +344,7 @@ public class MusicPlayerActivity extends Activity {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER);
-        bar.setPadding(MusicActivity.dp(12), MusicActivity.dp(10), MusicActivity.dp(12), MusicActivity.dp(12));
+        bar.setPadding(MusicActivity.dp(8), MusicActivity.dp(10), MusicActivity.dp(8), MusicActivity.dp(14));
 
         mModeBtn = bottomBtn("\uD83D\uDD01", "循环");
         mModeBtn.setOnClickListener(v -> {
@@ -340,13 +358,25 @@ public class MusicPlayerActivity extends Activity {
         });
         bar.addView(mModeBtn);
 
+        View sep1 = new View(this);
+        sep1.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(8), 1));
+        bar.addView(sep1);
+
         mQualityBtn = bottomBtn("\uD83C\uDFA7", QUALITY_LABELS_SHORT[mQuality]);
         mQualityBtn.setOnClickListener(v -> showQualityDialog());
         bar.addView(mQualityBtn);
 
+        View sep2 = new View(this);
+        sep2.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(8), 1));
+        bar.addView(sep2);
+
         mDownloadBtn = bottomBtn("\u2B07", "下载");
         mDownloadBtn.setOnClickListener(v -> showDownloadDialog());
         bar.addView(mDownloadBtn);
+
+        View sep3 = new View(this);
+        sep3.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(8), 1));
+        bar.addView(sep3);
 
         TextView listBtn = bottomBtn("\uD83D\uDCCB", "列表");
         listBtn.setOnClickListener(v -> showPlaylist());
@@ -371,9 +401,9 @@ public class MusicPlayerActivity extends Activity {
         btn.setTextSize(11);
         btn.setTextColor(MusicActivity.CLR_TEXT2);
         btn.setGravity(Gravity.CENTER);
-        btn.setPadding(0, MusicActivity.dp(6), 0, MusicActivity.dp(6));
-        btn.setLineSpacing(MusicActivity.dp(2), 1.0f);
-        btn.setMinWidth(MusicActivity.dp(48));
+        btn.setPadding(MusicActivity.dp(6), MusicActivity.dp(6), MusicActivity.dp(6), MusicActivity.dp(6));
+        btn.setLineSpacing(MusicActivity.dp(3), 1.0f);
+        btn.setMinWidth(MusicActivity.dp(56));
         return btn;
     }
 
@@ -439,27 +469,34 @@ public class MusicPlayerActivity extends Activity {
     }
 
     private void updateUI() {
-        MusicSearchApi.Song song = MusicActivity.sPlayer != null ? MusicActivity.sPlayer.getCurrent() : null;
-        if (song == null) {
-            mTitle.setText("未在播放");
-            mArtist.setText("");
-            mCover.setImageBitmap(null);
-            mLyricText.setText("暂无歌词");
-            pauseDisc();
-            return;
-        }
-        mTitle.setText(song.title);
-        mArtist.setText(song.artist);
-        MusicActivity.loadCover(mCover, song.cover);
+        if (isFinishing() || isDestroyed()) return;
+        try {
+            MusicSearchApi.Song song = MusicActivity.sPlayer != null ? MusicActivity.sPlayer.getCurrent() : null;
+            if (song == null) {
+                if (mTitle != null) mTitle.setText("未在播放");
+                if (mArtist != null) mArtist.setText("");
+                if (mCover != null) mCover.setImageBitmap(null);
+                if (mLyricText != null) mLyricText.setText("暂无歌词");
+                pauseDisc();
+                return;
+            }
+            if (mTitle != null) mTitle.setText(song.title);
+            if (mArtist != null) mArtist.setText(song.artist);
+            MusicActivity.loadCircularCover(mCover, song.cover);
 
-        updatePlayBtn();
+            updatePlayBtn();
 
-        mSeekBar.setMax(1000);
-        mSeekBar.setProgress(0);
-        mCurrentTime.setText("0:00");
-        mTotalTime.setText(formatTime(song.duration * 1000));
+            if (mSeekBar != null) {
+                mSeekBar.setMax(1000);
+                mSeekBar.setProgress(0);
+            }
+            if (mCurrentTime != null) mCurrentTime.setText("0:00");
+            if (mTotalTime != null) mTotalTime.setText(formatTime(song.duration * 1000));
 
-        loadLyric(song.hash);
+            mLyricLines.clear();
+            mCurrentLyricIdx = -1;
+            loadLyric(song.hash);
+        } catch (Throwable e) { /* ignore */ }
     }
 
     private void updatePlayBtn() {
@@ -479,9 +516,13 @@ public class MusicPlayerActivity extends Activity {
             public void onResult(String data) {
                 if (isFinishing()) return;
                 mHandler.post(() -> {
-                    String display = parseLyricSimple(data);
-                    mLyricText.setText(display);
-                    mLyricText.setSingleLine(false);
+                    mLyricLines = parseLrc(data);
+                    if (mLyricLines.isEmpty()) {
+                        mLyricText.setText("暂无歌词");
+                    } else {
+                        mLyricText.setText("");
+                        mLyricText.setSingleLine(false);
+                    }
                 });
             }
             @Override
@@ -492,24 +533,41 @@ public class MusicPlayerActivity extends Activity {
         });
     }
 
-    private String parseLyricSimple(String raw) {
-        if (raw == null || raw.isEmpty() || raw.startsWith("<?xml") || raw.startsWith("<!DOCTYPE")) {
-            return "暂无歌词";
-        }
-        if (raw.contains("[00:") || raw.contains("[")) {
-            StringBuilder sb = new StringBuilder();
-            String[] lines = raw.split("\n");
-            int count = 0;
-            for (String line : lines) {
-                String cleaned = line.replaceAll("\\[\\d{2}:\\d{2}[.:]\\d{2,3}\\]", "").trim();
-                if (!cleaned.isEmpty() && !cleaned.startsWith("[") && count < 20) {
-                    sb.append(cleaned).append("\n");
-                    count++;
+    private List<LyricLine> parseLrc(String raw) {
+        List<LyricLine> lines = new ArrayList<>();
+        if (raw == null || raw.isEmpty() || raw.startsWith("<?xml") || raw.startsWith("<!DOCTYPE"))
+            return lines;
+        if (!raw.contains("[") || !raw.contains(":")) return lines;
+
+        String[] rawLines = raw.split("\n");
+        for (String line : rawLines) {
+            line = line.trim();
+            if (line.isEmpty()) continue;
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "\\[(\\d{2}):(\\d{2})(?:[.:](\\d{2,3}))?\\]").matcher(line);
+            String text = line.replaceAll("\\[\\d{2}:\\d{2}[.:]\\d{2,3}\\]", "").trim();
+            if (text.isEmpty()) continue;
+
+            while (m.find()) {
+                int min = Integer.parseInt(m.group(1));
+                int sec = Integer.parseInt(m.group(2));
+                int ms = 0;
+                String msStr = m.group(3);
+                if (msStr != null) {
+                    ms = Integer.parseInt(msStr);
+                    if (msStr.length() == 2) ms *= 10;
                 }
+                int timeMs = min * 60000 + sec * 1000 + ms;
+                lines.add(new LyricLine(timeMs, text));
             }
-            return sb.length() > 0 ? sb.toString().trim() : raw;
         }
-        return raw.length() > 500 ? raw.substring(0, 500) : raw;
+
+        if (lines.size() > 1) {
+            for (int i = 0; i < lines.size(); i++) {
+                lines.get(i).index = i;
+            }
+        }
+        return lines;
     }
 
     private void startProgressRunner() {
@@ -523,10 +581,11 @@ public class MusicPlayerActivity extends Activity {
                         mSeekBar.setProgress(pos * 1000 / dur);
                         mCurrentTime.setText(formatTime(pos));
                         mTotalTime.setText(formatTime(dur));
+                        updateLyric(pos);
                     }
                 }
                 if (MusicActivity.sInstance != null) MusicActivity.sInstance.refreshPlayerBar();
-                mHandler.postDelayed(this, 1000);
+                mHandler.postDelayed(this, 500);
             }
         };
         mHandler.post(mProgressRunner);
@@ -534,6 +593,42 @@ public class MusicPlayerActivity extends Activity {
 
     private void stopProgressRunner() {
         if (mProgressRunner != null) mHandler.removeCallbacks(mProgressRunner);
+    }
+
+    private void updateLyric(int positionMs) {
+        if (mLyricLines.isEmpty() || mLyricText == null) return;
+        int idx = -1;
+        for (int i = mLyricLines.size() - 1; i >= 0; i--) {
+            if (mLyricLines.get(i).timeMs <= positionMs) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx < 0) idx = 0;
+        if (idx == mCurrentLyricIdx) return;
+        mCurrentLyricIdx = idx;
+
+        int start = Math.max(0, idx - 3);
+        int end = Math.min(mLyricLines.size(), idx + 4);
+        android.text.SpannableStringBuilder ssb = new android.text.SpannableStringBuilder();
+        for (int i = start; i < end; i++) {
+            LyricLine ll = mLyricLines.get(i);
+            String line = ll.text + (i < end - 1 ? "\n" : "");
+            int oldLen = ssb.length();
+            ssb.append(line);
+            if (i == idx) {
+                ssb.setSpan(new ForegroundColorSpan(MusicActivity.CLR_ACCENT), oldLen, oldLen + line.length(),
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                ssb.setSpan(new AbsoluteSizeSpan(MusicActivity.dp(16)), oldLen, oldLen + line.length(),
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                ssb.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), oldLen, oldLen + line.length(),
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            } else {
+                ssb.setSpan(new ForegroundColorSpan(MusicActivity.CLR_TEXT2), oldLen, oldLen + line.length(),
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+        }
+        mLyricText.setText(ssb);
     }
 
     private String formatTime(int ms) {
@@ -662,5 +757,12 @@ public class MusicPlayerActivity extends Activity {
 
             canvas.restore();
         }
+    }
+
+    static class LyricLine {
+        int timeMs;
+        int index;
+        String text;
+        LyricLine(int timeMs, String text) { this.timeMs = timeMs; this.text = text; }
     }
 }

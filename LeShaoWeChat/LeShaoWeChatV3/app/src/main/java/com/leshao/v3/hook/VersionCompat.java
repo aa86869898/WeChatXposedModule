@@ -226,7 +226,13 @@ public class VersionCompat {
         return findClassMulti(cl,
             "com.tencent.mm.plugin.setting.ui.setting_new.MainSettingsUI",
             "com.tencent.mm.plugin.setting.ui.setting.MainSettingsUI",
-            "com.tencent.mm.plugin.setting.ui.MainSettingsUI");
+            "com.tencent.mm.plugin.setting.ui.MainSettingsUI",
+            "com.tencent.mm.plugin.setting.ui.setting.SettingsUI",
+            "com.tencent.mm.plugin.setting.ui.setting.SettingUI",
+            "com.tencent.mm.ui.setting.SettingsUI",
+            "com.tencent.mm.plugin.setting.ui.setting_new.SettingsUI",
+            "com.tencent.mm.ui.tools.preference.MMPreference",
+            "com.tencent.mm.plugin.setting.ui.setting.SelfQRcodeUI");
     }
 
     // ==================== Storage/DB (short names) ====================

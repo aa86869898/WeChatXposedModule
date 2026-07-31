@@ -277,14 +277,17 @@ public class ProfilePageView {
                 java.io.File destDir = new java.io.File("/sdcard/leshao_v3_logs");
                 if (!destDir.exists()) destDir.mkdirs();
 
+                android.content.Context appCtx = com.leshao.v3.ContextManager.getAppContext();
+                java.io.File leshaoRoot = appCtx != null
+                    ? com.leshao.v3.PathUtil.getLeshaoRootDir(appCtx)
+                    : new java.io.File("/data/data/com.tencent.mm/files/leshao_v3");
+
                 int count = 0;
-                String[] logDirs = {
-                    "/data/data/com.tencent.mm/files/leshao_v3",
-                    "/sdcard/leshao_v3_logs"
+                java.io.File[] logDirs = {
+                    leshaoRoot,
+                    destDir
                 };
-                for (String logDir : logDirs) {
-                    java.io.File dir = new java.io.File(logDir);
-                    if (!dir.exists() || !dir.isDirectory()) continue;
+                for (java.io.File dir : logDirs) {
                     java.io.File[] files = dir.listFiles();
                     if (files == null) continue;
                     for (java.io.File src : files) {

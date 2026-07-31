@@ -17,7 +17,6 @@ import com.leshao.v3.hook.TypingIndicator;
 import com.leshao.v3.hook.ChatFooterEnhance;
 import com.leshao.v3.hook.ChatUICustom;
 import com.leshao.v3.hook.BatchMessage;
-import com.leshao.v3.hook.ScheduledSend;
 import com.leshao.v3.hook.AutoRemark;
 import com.leshao.v3.hook.SearchEnhance;
 import com.leshao.v3.hook.NotifyCustom;
@@ -59,10 +58,6 @@ public class ChatEnhanceFragment extends Fragment {
                 "突破9条限制/全选反选", mCfg.batchMessageEnabled, (v, on) -> {
             mCfg.batchMessageEnabled = on; mCfg.save(mPrefs); BatchMessage.setEnabled(on);
         }, v -> ConfigPanels.showBatchMessage(act, mPrefs)));
-        card.addView(switchRow(d, "定时发送消息",
-                null, mCfg.scheduledSendEnabled, (v, on) -> {
-            mCfg.scheduledSendEnabled = on; mCfg.save(mPrefs); ScheduledSend.setEnabled(on);
-        }, v -> ConfigPanels.showScheduledSend(act, mPrefs)));
         card.addView(switchRow(d, "自动备注好友",
                 "从群昵称/名片自动填充", mCfg.autoRemarkEnabled, (v, on) -> {
             mCfg.autoRemarkEnabled = on; mCfg.save(mPrefs); AutoRemark.setEnabled(on);

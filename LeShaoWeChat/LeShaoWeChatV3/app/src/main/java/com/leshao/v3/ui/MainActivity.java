@@ -362,15 +362,15 @@ public class MainActivity {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(WC_BG);
-        root.setPadding(dp(d, 16), dp(d, 24), dp(d, 16), dp(d, 16));
+        root.setPadding(dp(d, 12), dp(d, 12), dp(d, 12), dp(d, 12));
 
         TextView titleTv = new TextView(ctx);
         titleTv.setText("免责声明");
-        titleTv.setTextSize(20);
+        titleTv.setTextSize(18);
         titleTv.setTextColor(AppColors.accent());
         titleTv.setTypeface(null, Typeface.BOLD);
         titleTv.setGravity(Gravity.CENTER);
-        titleTv.setPadding(0, 0, 0, dp(d, 14));
+        titleTv.setPadding(0, 0, 0, dp(d, 8));
         root.addView(titleTv);
 
         ScrollView sv = new ScrollView(ctx);
@@ -381,7 +381,7 @@ public class MainActivity {
         bodyBg.setCornerRadius(dp(d, 8));
         bodyBg.setColor(AppColors.card());
         bodyCol.setBackground(bodyBg);
-        bodyCol.setPadding(dp(d, 14), dp(d, 12), dp(d, 14), dp(d, 12));
+        bodyCol.setPadding(dp(d, 12), dp(d, 10), dp(d, 12), dp(d, 10));
 
         SpannableStringBuilder ssb = new SpannableStringBuilder();
         appendPara(ssb, "用户在使用本工具前，须完整阅读、充分理解并自愿同意本全部免责条款，开启及使用本软件即代表本人已完整阅读、完全知晓并自愿接受所有协议内容。");
@@ -399,14 +399,33 @@ public class MainActivity {
         sv.addView(bodyCol);
         root.addView(sv);
 
-        root.addView(spacerV(ctx, d, 10));
+        root.addView(spacerV(ctx, d, 8));
 
         CheckBox checkBox = new CheckBox(ctx);
         checkBox.setText("我已完整阅读并同意以上免责条款");
         checkBox.setTextSize(13);
         checkBox.setTextColor(AppColors.text1());
-        checkBox.setPadding(0, 0, 0, dp(d, 4));
+        checkBox.setPadding(0, 0, 0, dp(d, 2));
         root.addView(checkBox);
+
+        LinearLayout btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setGravity(Gravity.CENTER);
+
+        Button declineBtn = new Button(ctx);
+        declineBtn.setText("不同意");
+        declineBtn.setTextSize(14);
+        declineBtn.setTextColor(AppColors.text2());
+        declineBtn.setAllCaps(false);
+        GradientDrawable declineBg = new GradientDrawable();
+        declineBg.setCornerRadius(dp(d, 8));
+        declineBg.setColor(AppColors.card());
+        declineBtn.setBackground(declineBg);
+        declineBtn.setPadding(dp(d, 16), dp(d, 10), dp(d, 16), dp(d, 10));
+        declineBtn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        btnRow.addView(declineBtn);
+
+        btnRow.addView(spacerH(ctx, d, 10));
 
         Button agreeBtn = new Button(ctx);
         agreeBtn.setText("同意并继续 (30秒)");
@@ -419,6 +438,9 @@ public class MainActivity {
         agreeBtn.setBackground(btnBg);
         agreeBtn.setPadding(dp(d, 16), dp(d, 10), dp(d, 16), dp(d, 10));
         agreeBtn.setEnabled(false);
+        agreeBtn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        btnRow.addView(agreeBtn);
+        root.addView(btnRow);
 
         Handler handler = new Handler(Looper.getMainLooper());
         final int[] remaining = {30};
@@ -442,10 +464,12 @@ public class MainActivity {
         };
         handler.post(countdown);
 
-        AlertDialog dl = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Light_NoActionBar)
-            .setView(root)
-            .setCancelable(false)
-            .create();
+        final AlertDialog[] dlRef = new AlertDialog[1];
+        declineBtn.setOnClickListener(v -> {
+            handler.removeCallbacks(countdown);
+            if (dlRef[0] != null) dlRef[0].dismiss();
+            act.finish();
+        });
 
         agreeBtn.setOnClickListener(v -> {
             if (!checkBox.isChecked()) {
@@ -457,20 +481,25 @@ public class MainActivity {
             if (prefs != null) {
                 prefs.edit().putBoolean("ls_disclaimer_accepted", true).apply();
             }
-            dl.dismiss();
+            if (dlRef[0] != null) dlRef[0].dismiss();
             showMainPanel(act);
         });
 
-        Window w = dl.getWindow();
-        if (w != null) {
-            w.setLayout(-1, (int)(ctx.getResources().getDisplayMetrics().heightPixels * 0.90));
-            w.setBackgroundDrawable(new ColorDrawable(WC_BG));
-        }
+        AlertDialog dl = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Light_NoActionBar)
+            .setView(root)
+            .setCancelable(false)
+            .create();
+        dlRef[0] = dl;
         sActiveDialog = dl;
         dl.show();
+
+        Window w = dl.getWindow();
+        if (w != null) {
+            w.setLayout(-1, -1);
+            w.setBackgroundDrawable(new ColorDrawable(WC_BG));
+        }
     }
 
-    private static int sParaIdx;
 
     private static void appendPara(SpannableStringBuilder ssb, String text) {
         if (ssb.length() > 0) ssb.append("\n\n");
@@ -964,7 +993,11 @@ public class MainActivity {
         return v;
     }
 
-    private static void resetActivation(Context ctx) {
+    private static View spacerH(Context ctx, float d, int dp) {
+        View v = new View(ctx);
+        v.setLayoutParams(new LinearLayout.LayoutParams(dp(d, dp), 0));
+        return v;
+    }    private static void resetActivation(Context ctx) {
         SharedPreferences prefs = ContextManager.getPrefs();
         if (prefs == null) return;
         prefs.edit()

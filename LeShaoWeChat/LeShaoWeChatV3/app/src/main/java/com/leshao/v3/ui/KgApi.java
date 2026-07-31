@@ -67,11 +67,10 @@ public class KgApi {
     }
 
     public static class Ranking {
-        public String id;
-        public String title;
-        public String cover;
+        public String id, title, cover;
         public int classify;
         public int songCount;
+        public String updateFrequency;
     }
 
     public static class Album {
@@ -179,6 +178,7 @@ public class KgApi {
                     r.cover = item.optString("imgurl", "").replace("{size}", "480");
                     r.classify = item.optInt("classify", 0);
                     r.songCount = item.optInt("song_count", 0);
+                    r.updateFrequency = item.optString("update_frequency", "");
                     list.add(r);
                 }
                 MAIN.post(() -> cb.onResult(list));

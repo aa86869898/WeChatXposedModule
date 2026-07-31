@@ -269,7 +269,7 @@ public class ContactPickerDialog {
         Window w = dlg.getWindow();
         if (w != null) {
             w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
-                        (int)(ctx.getResources().getDisplayMetrics().heightPixels * 0.78));
+                        ViewGroup.LayoutParams.MATCH_PARENT);
             w.setGravity(Gravity.CENTER);
         }
 

@@ -65,7 +65,7 @@ public class ActivationManager {
     public static final int F_FOOTER_ENHANCE = 19;
     public static final int F_CHAT_UI        = 20;
     public static final int F_BATCH_MSG      = 21;
-    public static final int F_SCHEDULED_SEND = 22;
+    public static final int F_RESERVED_22     = 22;
     public static final int F_AUTO_REMARK    = 23;
     public static final int F_DELETE_DETECT  = 24;
     public static final int F_CONTACT_EXPORT = 25;
@@ -83,7 +83,7 @@ public class ActivationManager {
         "群聊播报", "防撤回", "红包秒抢",
         "自动回复", "关键词回复", "语音转发",
         "正在输入提示", "底部栏增强", "聊天UI定制",
-        "批量群发", "定时发送", "自动备注",
+        "批量群发", "预留功能", "自动备注",
         "删除检测", "通讯录导出", "朋友圈增强",
         "隐私安全", "数据备份", "AI助手",
         "DeepSeek"
@@ -388,17 +388,15 @@ public class ActivationManager {
         if (mask == 0xFFFFFFFF) return true;
 
         switch (pageId) {
-            case 1:  // 聊天功能: 防撤回/自动回复/关键词/语音转发/输入/底部栏/聊天UI/批量群发/定时发送/自动备注/删除检测
+            case 1:  // 聊天功能: 防撤回/自动回复/关键词/语音转发/输入/底部栏/聊天UI/批量群发/自动备注/删除检测
                 return isAnyBit(mask, F_ANTI_RECALL, F_AUTO_REPLY, F_KEYWORD_REPLY, F_VOICE_FORWARD,
-                        F_TYPING_HINT, F_FOOTER_ENHANCE, F_CHAT_UI, F_BATCH_MSG, F_SCHEDULED_SEND, F_AUTO_REMARK, F_DELETE_DETECT);
+                        F_TYPING_HINT, F_FOOTER_ENHANCE, F_CHAT_UI, F_BATCH_MSG, F_AUTO_REMARK, F_DELETE_DETECT);
             case 2:  // 主题美化: 基础功能，默认放行
             case 4:  // 群管理助手: 基础功能，默认放行
             case 3:  // 联系人和群聊: 通讯录导出
                 return isAnyBit(mask, F_CONTACT_EXPORT);
             case 5:  // 音乐娱乐
                 return true;
-            case 6:  // 定时消息助手: 定时发送
-                return isAnyBit(mask, F_SCHEDULED_SEND);
             case 7:  // AI智慧助手: AI助手/DeepSeek
                 return isAnyBit(mask, F_AI_ASST, F_DEEPSEEK);
             case 8:  // TTS播报: 总开关或任意播报类型
@@ -412,8 +410,6 @@ public class ActivationManager {
                 return isAnyBit(mask, F_PRIVACY);
             case 12: // 数据备份
                 return isAnyBit(mask, F_DATA_BACKUP);
-            case 13: // 定时消息群发: 定时发送
-                return isAnyBit(mask, F_SCHEDULED_SEND);
             default:
                 return true;
         }

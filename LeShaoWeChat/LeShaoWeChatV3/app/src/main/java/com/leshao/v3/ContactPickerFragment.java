@@ -33,13 +33,11 @@ public class ContactPickerFragment extends Fragment {
     private static final String TAG = "ContactPickerFragment";
 
     // 蜜桃苏打主题色（与 SettingsEntryHook 保持一致）
-    static final int CLR_DARK_BG  = 0xFF221B17;
     static final int CLR_HEADING  = 0xFFFFF0E5;
     static final int CLR_BODY_TXT = 0xFFD4C5B2;
     static final int CLR_SUB_TEXT = 0xFFAA9988;
     static final int CLR_CARD_BG  = 0xC828221D;
     static final int CLR_CARD_BORDER = 0xFF48403A;
-    static final int CLR_ACCENT   = 0xFFF0A080;
     private RecyclerView mRecyclerView;
     private ContactAdapter mAdapter;
     private List<Contact> mAllContacts;

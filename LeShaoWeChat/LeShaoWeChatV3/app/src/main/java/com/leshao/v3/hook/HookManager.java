@@ -36,19 +36,23 @@ public class HookManager {
 
     public static void activateAll() {
         activated = true;
-        XposedBridge.log("[HookManager] activateAll: " + pendingTasks.size() + " tasks");
-        int idx = 0;
-        for (Runnable t : pendingTasks) {
-            try {
-                t.run();
-            } catch (Throwable ex) {
-                XposedBridge.log("[HookManager] task[" + idx + "] failed: " + ex.getClass().getSimpleName()
-                    + " " + ex.getMessage());
-            }
-            idx++;
-        }
+        XposedBridge.log("[HookManager] activateAll: " + pendingTasks.size() + " tasks (async)");
+        List<Runnable> tasks = new ArrayList<>(pendingTasks);
         pendingTasks.clear();
-        XposedBridge.log("[HookManager] activateAll DONE, success=" + successCount + " fail=" + failCount);
+        // run hooks on background thread to avoid blocking main thread (attachBaseContext)
+        new Thread(() -> {
+            int idx = 0;
+            for (Runnable t : tasks) {
+                try {
+                    t.run();
+                } catch (Throwable ex) {
+                    XposedBridge.log("[HookManager] task[" + idx + "] failed: " + ex.getClass().getSimpleName()
+                        + " " + ex.getMessage());
+                }
+                idx++;
+            }
+            XposedBridge.log("[HookManager] activateAll DONE (async), success=" + successCount + " fail=" + failCount);
+        }, "leshao-hook-activate").start();
     }
 
     /** 注册Hook并追踪 */

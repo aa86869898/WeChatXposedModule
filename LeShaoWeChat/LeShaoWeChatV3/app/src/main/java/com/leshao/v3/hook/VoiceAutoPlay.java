@@ -134,7 +134,6 @@ public class VoiceAutoPlay {
                         Object so = param.thisObject;
                         sCurrentSo = so;
                         LogWriter.log(TAG, "so.y() fired, q=" + sPendingQueue.size());
-                        sCurrentPlayer = getPlayer(so);
                         if (!sPendingQueue.isEmpty()) {
                             sHandler.postDelayed(() -> playAllFromQueue(), 800);
                         }
@@ -198,33 +197,20 @@ public class VoiceAutoPlay {
             LogWriter.log(TAG, "recv: msgId=" + msgId + " talker=" + talker);
 
             final String tTalker = talker;
+            final Object e9Final = e9;
+            final long msgIdFinal = msgId;
 
-            // 等 TTS 播报完再播语音
-            android.util.Log.e(TAG, ">>> waitForTTS: isSpeaking=" + TTSBroadcaster.isSpeaking());
-            long waitStart = System.currentTimeMillis();
-            while (TTSBroadcaster.isSpeaking() && (System.currentTimeMillis() - waitStart) < 8000) {
-                try { Thread.sleep(150); } catch (InterruptedException ignored) { break; }
-            }
-            if (TTSBroadcaster.isSpeaking()) {
-                LogWriter.log(TAG, "tts timeout, play anyway msgId=" + msgId);
-                android.util.Log.e(TAG, ">>> tts timeout after " + (System.currentTimeMillis() - waitStart) + "ms");
-            } else {
-                LogWriter.log(TAG, "tts done, waited " + (System.currentTimeMillis() - waitStart) + "ms msgId=" + msgId);
-                android.util.Log.e(TAG, ">>> tts done, waited " + (System.currentTimeMillis() - waitStart) + "ms");
-            }
-
-            // 方案A: 微信CDN流式API — 下载+解码PCM → AudioTrack
-            android.util.Log.e(TAG, ">>> starting play plans for msgId=" + msgId);
             new Thread(() -> {
-                boolean streamOk = playViaWxStream(e9, tTalker, msgId);
-                android.util.Log.e(TAG, ">>> planA stream result=" + streamOk + " msgId=" + msgId);
+                long waitStart = System.currentTimeMillis();
+                while (TTSBroadcaster.isSpeaking() && (System.currentTimeMillis() - waitStart) < 8000) {
+                    try { Thread.sleep(150); } catch (InterruptedException ignored) { break; }
+                }
+                boolean streamOk = playViaWxStream(e9Final, tTalker, msgIdFinal);
                 if (!streamOk) {
-                    boolean bgOk = playBackground(e9, tTalker, msgId);
-                    android.util.Log.e(TAG, ">>> planB background result=" + bgOk + " msgId=" + msgId);
+                    boolean bgOk = playBackground(e9Final, tTalker, msgIdFinal);
                     if (!bgOk) {
-                        sPendingQueue.offer(new PendingVoiceMsg(e9, msgId, tTalker));
-                        android.util.Log.e(TAG, ">>> planC queue: msgId=" + msgId + " q=" + sPendingQueue.size() + " so=" + (sCurrentSo != null));
-                        LogWriter.log(TAG, "queue: msgId=" + msgId + " q=" + sPendingQueue.size());
+                        sPendingQueue.offer(new PendingVoiceMsg(e9Final, msgIdFinal, tTalker));
+                        LogWriter.log(TAG, "queue: msgId=" + msgIdFinal + " q=" + sPendingQueue.size());
                         if (sCurrentSo != null) {
                             sHandler.post(() -> playAllFromQueue());
                         }

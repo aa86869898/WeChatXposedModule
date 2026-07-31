@@ -202,9 +202,13 @@ public class MusicRankingView {
         showRankingView();
     }
 
-    private void showRankingView() {
+    public void showRankingView() {
         mRankingList.setVisibility(View.VISIBLE);
         mDetailScroll.setVisibility(View.GONE);
+    }
+
+    public boolean isDetailShown() {
+        return mDetailScroll != null && mDetailScroll.getVisibility() == View.VISIBLE;
     }
 
     private void showDetailView() {
@@ -263,7 +267,9 @@ public class MusicRankingView {
         textCol.addView(titleTv);
 
         TextView countTv = new TextView(mActivity);
-        countTv.setText(rank.songCount + " 首");
+        String desc = rank.updateFrequency != null && !rank.updateFrequency.isEmpty()
+                ? rank.updateFrequency : rank.songCount + " 首";
+        countTv.setText(desc);
         countTv.setTextSize(11);
         countTv.setTextColor(MusicActivity.CLR_TEXT2);
         textCol.addView(countTv);

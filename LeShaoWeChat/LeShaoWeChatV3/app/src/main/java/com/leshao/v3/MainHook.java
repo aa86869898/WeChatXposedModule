@@ -3,8 +3,6 @@ package com.leshao.v3;
 import android.app.Application;
 import android.content.Context;
 import android.content.pm.PackageInfo;
-import android.os.Handler;
-import android.os.Looper;
 
 import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.db.DatabaseProvider;
@@ -32,10 +30,10 @@ import com.leshao.v3.hook.NotifyCustom;
 import com.leshao.v3.hook.PrivacyFeatures;
 import com.leshao.v3.hook.RedPacketAlert;
 import com.leshao.v3.hook.RedPacketHook;
-import com.leshao.v3.hook.ScheduledSend;
 import com.leshao.v3.hook.SearchEnhance;
 import com.leshao.v3.hook.SettingsEntryHook;
 import com.leshao.v3.hook.SettingsInjectProvider;
+import com.leshao.v3.hook.TtsVoiceSender;
 import com.leshao.v3.hook.ShakeCustom;
 import com.leshao.v3.hook.SnsFeatures;
 import com.leshao.v3.hook.StickyEnhance;
@@ -65,11 +63,12 @@ public class MainHook implements IXposedHookLoadPackage {
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
         if (!WX_PKG.equals(lpparam.packageName)) return;
 
+        LogWriter.init();
+
         boolean isMain = WX_PKG.equals(lpparam.processName);
 
-        try { LogWriter.init(); } catch (Throwable t) {
-            LogWriter.log(TAG, "LeShaoV3: LogWriter init FAILED: " + t.getMessage());
-        }
+        LogWriter.log(TAG, "Module loaded, process=" + lpparam.processName + ", isMain=" + isMain
+            + ", userId=" + PathUtil.getMyUserId());
 
         int wxVersion = 0;
         try { wxVersion = XposedHelpers.getIntField(lpparam.appInfo, "versionCode"); }
@@ -94,15 +93,14 @@ public class MainHook implements IXposedHookLoadPackage {
 
             SettingsEntryHook.hook(cl);
             MessageHook.hook(cl);
-            AutoJoinGroup.hook(lpparam);
+            TtsVoiceSender.hook(cl);
 
             ContextManager.setOnReadyCallback(new Runnable() {
                 @Override
                 public void run() {
                     try {
-                        DatabaseProvider.init();
-
                         Context ctx = ContextManager.getAppContext();
+                        DatabaseProvider.init();
                         if (ctx instanceof Application) {
                             SettingsInjectProvider.injectIntoWeChat((Application) ctx);
                         }
@@ -124,7 +122,6 @@ public class MainHook implements IXposedHookLoadPackage {
                         HookManager.register(() -> ChatFooterEnhance.hook(cl));
                         HookManager.register(() -> ChatUICustom.hook(cl));
                         HookManager.register(() -> BatchMessage.hook(cl));
-                        HookManager.register(() -> ScheduledSend.hook(cl));
                         HookManager.register(() -> AutoRemark.hook(cl));
                         HookManager.register(() -> SearchEnhance.hook(cl));
                         HookManager.register(() -> NotifyCustom.hook(cl));
@@ -150,26 +147,7 @@ public class MainHook implements IXposedHookLoadPackage {
                         HookManager.register(() -> GroupFeatures.hook(cl));
                         HookManager.register(() -> AutoJoinGroup.hook(lpparam));
 
-                        // === 数据工具 ==============================================================
-                        HookManager.register(() -> MsgExport.hook(cl));
-                        HookManager.register(() -> ChatBackup.hook(cl));
-
-                        // === 红包提醒 ==============================================================
-                        HookManager.register(() -> RedPacketAlert.hook(cl));
-
-                        // === 主题引擎 ==============================================================
-                        HookManager.register(ThemeHook::hook);
-                        HookManager.register(VoiceForwardHook::hook);
-                        HookManager.register(() -> com.leshao.v3.hook.TtsVoiceSender.hook(cl));
-
-                        LogWriter.log(TAG, "[MainHook] activateAll() START, pendingTasks=" + HookManager.pendingCount());
-
-                        LogWriter.log("LeShaoV3", "!!! DEBUG: AutoJoinGroup about to hook, class=" + AutoJoinGroup.class.getName());
-                        AutoJoinGroup.hook(lpparam);
-
                         HookManager.activateAll();
-
-                        LogWriter.log(TAG, "[MainHook] activateAll() DONE");
                     } catch (Throwable t) {
                         LogWriter.log(TAG, "[MainHook] FATAL in onReadyCallback: " + t.getClass().getSimpleName()
                             + " " + t.getMessage());

@@ -8,8 +8,6 @@ import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -29,8 +27,8 @@ public class SettingsInjectProvider extends ContentProvider {
     private static final String ENTRY_TAG = "leshao_v3_section";
 
     private static volatile Application sWxApp;
-    private static final Handler sHandler = new Handler(Looper.getMainLooper());
     private static final Set<Integer> sInjected = new HashSet<>();
+    private static final Set<Integer> sPending = new HashSet<>();
 
     @Override
     public boolean onCreate() {
@@ -60,7 +58,9 @@ public class SettingsInjectProvider extends ContentProvider {
                 @Override public void onActivityStopped(Activity a) {}
                 @Override public void onActivitySaveInstanceState(Activity a, Bundle b) {}
                 @Override public void onActivityDestroyed(Activity a) {
-                    try { sInjected.remove(System.identityHashCode(a)); } catch (Throwable ignored) {}
+                    int id = System.identityHashCode(a);
+                    try { sInjected.remove(id); } catch (Throwable ignored) {}
+                    try { sPending.remove(id); } catch (Throwable ignored) {}
                 }
             });
             LogWriter.log(TAG, "INIT: registered");
@@ -70,13 +70,18 @@ public class SettingsInjectProvider extends ContentProvider {
     }
 
     private static void scheduleInject(Activity activity) {
-        try {
-            sHandler.postDelayed(() -> tryInject(activity), 300);
-        } catch (Throwable ignored) {}
+        if (!isSettingsActivity(activity)) return;
+        tryInject(activity);
     }
 
-    private static void tryInject(Activity activity) {
-        int id = System.identityHashCode(activity);
+    private static boolean isSettingsActivity(Activity activity) {
+        if (activity == null) return false;
+        String name = activity.getClass().getName();
+        return name.equals("com.tencent.mm.plugin.setting.ui.setting_new.MainSettingsUI");
+    }
+
+    public static void tryInject(Activity activity) {
+        final int id = System.identityHashCode(activity);
         if (sInjected.contains(id)) return;
         try {
             if (activity.getWindow() == null) return;
@@ -86,29 +91,66 @@ public class SettingsInjectProvider extends ContentProvider {
             View target = findTextView((ViewGroup) decor, "账号", "Accounts", "Account");
             if (target == null) target = findTextView((ViewGroup) decor, "个人资料", "Profile", "Personal Info");
             if (target == null) target = findTextView((ViewGroup) decor, "通用", "General", "Common");
-            if (target == null) return;
-
-            ViewGroup listParent = walkUpToLinearLayout(target);
-            if (listParent == null) return;
-
-            int insertPos = findInsertPosition(listParent, target);
-
-            for (int i = 0; i < listParent.getChildCount(); i++) {
-                Object tag = listParent.getChildAt(i).getTag();
-                if (ENTRY_TAG.equals(tag)) return;
+            if (target == null) {
+                scheduleRetry(activity, decor, id);
+                return;
             }
 
-            float d = activity.getResources().getDisplayMetrics().density;
-            View section = buildPluginSection(activity, d);
-            section.setTag(ENTRY_TAG);
-
-            listParent.addView(section, insertPos);
-            sInjected.add(id);
-            LogWriter.log(TAG, "Plugin section injected at pos " + insertPos
-                + " in " + listParent.getClass().getSimpleName());
+            doInject(activity, decor, target, id);
         } catch (Throwable t) {
             LogWriter.log(TAG, "err: " + t.getClass().getSimpleName() + " " + t.getMessage());
         }
+    }
+
+    private static void scheduleRetry(Activity activity, View decor, int id) {
+        if (sPending.contains(id)) return;
+        sPending.add(id);
+        LogWriter.log(TAG, "pending retry: layout not ready for " + activity.getClass().getSimpleName());
+        decor.postDelayed(new Runnable() {
+            private int attempt;
+            @Override
+            public void run() {
+                attempt++;
+                if (!sPending.contains(id)) return;
+                if (activity.isDestroyed() || activity.isFinishing()) {
+                    sPending.remove(id);
+                    return;
+                }
+                View t = findTextView((ViewGroup) decor, "账号", "Accounts", "Account");
+                if (t == null) t = findTextView((ViewGroup) decor, "个人资料", "Profile", "Personal Info");
+                if (t == null) t = findTextView((ViewGroup) decor, "通用", "General", "Common");
+                if (t != null) {
+                    sPending.remove(id);
+                    doInject(activity, decor, t, id);
+                } else if (attempt < 5) {
+                    decor.postDelayed(this, 150);
+                } else {
+                    sPending.remove(id);
+                    LogWriter.log(TAG, "retry exhausted for " + activity.getClass().getSimpleName());
+                }
+            }
+        }, 200);
+    }
+
+    private static void doInject(Activity activity, View decor, View target, int id) {
+        ViewGroup listParent = walkUpToLinearLayout(target);
+        if (listParent == null) return;
+
+        int insertPos = findInsertPosition(listParent, target);
+
+        for (int i = 0; i < listParent.getChildCount(); i++) {
+            Object tag = listParent.getChildAt(i).getTag();
+            if (ENTRY_TAG.equals(tag)) return;
+        }
+
+        float d = activity.getResources().getDisplayMetrics().density;
+        View section = buildPluginSection(activity, d);
+        section.setTag(ENTRY_TAG);
+
+        listParent.addView(section, insertPos);
+        sInjected.add(id);
+        LogWriter.log(TAG, "Plugin section injected at pos " + insertPos
+            + " in " + listParent.getClass().getSimpleName());
     }
 
     private static ViewGroup walkUpToLinearLayout(View v) {

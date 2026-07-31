@@ -1,6 +1,5 @@
 package com.leshao.v3.hook;
 
-import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -23,6 +22,7 @@ public class MessageHook {
     private static Handler sMainHandler;
     private static ClassLoader sClassLoader;
     private static final Set<Long> sSeenMsgIds = new HashSet<>();
+    private static final ThreadLocal<Boolean> sConsumedTtsOriginal = new ThreadLocal<>();
 
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
@@ -58,9 +58,32 @@ public class MessageHook {
                 Class<?>[] pts = m.getParameterTypes();
                 if (pts.length >= 1 && pts[0] == e9Cls) {
                     final int paramCount = pts.length;
+                    final Class<?> returnType = m.getReturnType();
                     XposedBridge.hookMethod(m,
                         new XC_MethodHook() {
+                            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                                sConsumedTtsOriginal.set(Boolean.FALSE);
+                                if (TtsVoiceSender.consumeBlockedOriginal(p.args[0])) {
+                                    LogWriter.log(TAG, "consume blocked #tts original x9." + m.getName()
+                                            + " return=" + returnType.getName());
+                                    sConsumedTtsOriginal.set(Boolean.TRUE);
+                                    p.setResult(defaultReturnValue(returnType));
+                                    return;
+                                }
+                                if (TtsVoiceSender.shouldConsumeTtsFailureMessage(p.args[0])) {
+                                    LogWriter.log(TAG, "consume #tts failure residue x9." + m.getName()
+                                            + " return=" + returnType.getName());
+                                    sConsumedTtsOriginal.set(Boolean.TRUE);
+                                    p.setResult(defaultReturnValue(returnType));
+                                }
+                            }
+
                             @Override protected void afterHookedMethod(MethodHookParam p) {
+                                if (Boolean.TRUE.equals(sConsumedTtsOriginal.get())) {
+                                    sConsumedTtsOriginal.remove();
+                                    return;
+                                }
+                                sConsumedTtsOriginal.remove();
                                 onX9Message(p.args[0], paramCount >= 2 ? p.args[1] : null);
                             }
                         });
@@ -129,10 +152,10 @@ public class MessageHook {
                     }
                 });
 
-                if (rawType == 34) {
+                if (rawType == 34 || rawType == 228) {
                     final long voiceMsgId = msgId;
                     android.util.Log.e(TAG, ">>> VOICE msgId=" + voiceMsgId + " talker=" + talker + " isSend=" + isSend);
-                    LogWriter.log("VoiceAutoPlay", "rawType=34 msgId=" + voiceMsgId + " talker=" + talker);
+                    LogWriter.log("VoiceAutoPlay", "rawType=" + rawType + " msgId=" + voiceMsgId + " talker=" + talker);
                     sMainHandler.post(() -> {
                         try {
                             VoiceAutoPlay.onVoiceMsg(e9, voiceMsgId, p0);
@@ -178,24 +201,6 @@ public class MessageHook {
                             + " talker=" + talker + " msgId=" + msgId
                             + " content=[" + (content == null ? "null" : content.substring(0, Math.min(content.length(), 60))) + "]");
 
-                        if (type != 1 || content == null || !content.startsWith("#tts ")) return;
-
-                        SharedPreferences prefs = ContextManager.getPrefs();
-                        if (prefs == null || !prefs.getBoolean("ls_tts_command", false)) {
-                            android.util.Log.e(TAG, ">>> #tts ignored: switch OFF");
-                            return;
-                        }
-
-                        String text = content.substring(5).trim();
-                        if (text.isEmpty()) return;
-
-                        android.util.Log.e(TAG, ">>> #tts DETECTED: " + text + " talker=" + talker);
-                        LogWriter.log(TAG, "#tts via IEvent: " + text + " talker=" + talker);
-
-                        final String fText = text;
-                        final String fTalker = talker;
-                        sMainHandler.post(() -> TtsVoiceSender.synthesizeAndSend(fText, fTalker));
-
                     } catch (Throwable t) {
                         android.util.Log.e(TAG, ">>> IEvent.e hook err: " + t.getMessage());
                     }
@@ -221,5 +226,18 @@ public class MessageHook {
             || t == 95 || t == 102 || t == 103 || t == 131 || t == 132
             || t == 1048625 || t == 16777265) return 49;
         return t;
+    }
+
+    private static Object defaultReturnValue(Class<?> returnType) {
+        if (returnType == Void.TYPE) return null;
+        if (returnType == Boolean.TYPE) return false;
+        if (returnType == Byte.TYPE) return (byte) 0;
+        if (returnType == Short.TYPE) return (short) 0;
+        if (returnType == Integer.TYPE) return 0;
+        if (returnType == Long.TYPE) return 0L;
+        if (returnType == Float.TYPE) return 0f;
+        if (returnType == Double.TYPE) return 0d;
+        if (returnType == Character.TYPE) return (char) 0;
+        return null;
     }
 }
