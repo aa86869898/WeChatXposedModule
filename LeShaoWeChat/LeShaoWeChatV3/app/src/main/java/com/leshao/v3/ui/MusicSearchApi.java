@@ -337,7 +337,6 @@ public class MusicSearchApi {
         conn.setRequestProperty("User-Agent", FULL_UA);
         conn.setRequestProperty("Referer", referer);
         conn.setRequestProperty("Accept", "application/json, text/plain, */*");
-        conn.setRequestProperty("Accept-Encoding", "gzip, deflate");
         conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
         conn.setInstanceFollowRedirects(true);
         if (extraHeaders != null) {
@@ -374,7 +373,6 @@ public class MusicSearchApi {
         conn.setRequestProperty("User-Agent", FULL_UA);
         conn.setRequestProperty("Referer", referer);
         conn.setRequestProperty("Accept", "application/json, text/plain, */*");
-        conn.setRequestProperty("Accept-Encoding", "gzip, deflate");
         conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
         conn.setInstanceFollowRedirects(true);
 
