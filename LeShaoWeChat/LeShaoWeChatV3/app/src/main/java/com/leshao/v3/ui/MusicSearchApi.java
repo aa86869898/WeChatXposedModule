@@ -75,7 +75,20 @@ public class MusicSearchApi {
                     + "&page=" + page + "&pagesize=20&userid=0&clientver=&platform=WebFilter"
                     + "&filter=2&iscorrection=1&privilege_filter=0&area_code=1";
                 String resp = httpGet(urlStr, "https://songsearch.kugou.com");
-                JSONObject json = new JSONObject(resp);
+
+                if (resp == null || resp.isEmpty()) {
+                    MusicLog.e(TAG, "searchKugou: empty resp");
+                    postError(cb, "音源接口请求失败");
+                    return;
+                }
+                String trimmed = resp.trim();
+                if (!trimmed.startsWith("{")) {
+                    MusicLog.e(TAG, "searchKugou: non-JSON resp=[" + truncated(trimmed, 200) + "]");
+                    postError(cb, "音源接口请求失败");
+                    return;
+                }
+
+                JSONObject json = new JSONObject(trimmed);
                 JSONObject data = json.optJSONObject("data");
                 if (data == null) { MusicLog.e(TAG, "searchKugou: no data"); postError(cb, "无搜索结果"); return; }
 
@@ -115,10 +128,15 @@ public class MusicSearchApi {
                 final boolean fHasPrev = hasPrev;
                 sHandler.post(() -> cb.onResult(finalSongs, finalTotal, fHasPrev, fHasNext));
             } catch (Exception e) {
-                Log.e(TAG, "KG search error", e);
-                postError(cb, "酷狗搜索失败: " + e.getMessage());
+                Log.e(TAG, "KG search exception", e);
+                postError(cb, "音源接口请求失败");
             }
         });
+    }
+
+    private static String truncated(String s, int maxLen) {
+        if (s == null) return "null";
+        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
     }
 
     public static void getKugouPlayUrl(String hash, PlayUrlCallback cb) {

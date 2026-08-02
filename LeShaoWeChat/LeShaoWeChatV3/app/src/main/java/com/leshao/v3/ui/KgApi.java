@@ -174,7 +174,20 @@ public class KgApi {
                     + "&userid=0&clientver=&platform=WebFilter"
                     + "&filter=2&iscorrection=1&privilege_filter=0&area_code=1";
                 String resp = httpGet(url, "https://songsearch.kugou.com");
-                JSONObject json = new JSONObject(resp);
+
+                if (resp == null || resp.isEmpty()) {
+                    Log.e(TAG, "searchSimple: empty resp, url=" + url);
+                    songListError(cb, "音源接口请求失败");
+                    return;
+                }
+                String trimmed = resp.trim();
+                if (!trimmed.startsWith("{")) {
+                    Log.e(TAG, "searchSimple: non-JSON resp=[" + truncated(trimmed, 200) + "] url=" + url);
+                    songListError(cb, "音源接口请求失败");
+                    return;
+                }
+
+                JSONObject json = new JSONObject(trimmed);
                 JSONObject data = json.optJSONObject("data");
                 if (data == null) { songListError(cb, "无搜索结果"); return; }
 
@@ -205,9 +218,15 @@ public class KgApi {
                 final int ft = total;
                 MAIN.post(() -> cb.onResult(f, ft));
             } catch (Exception e) {
-                songListError(cb, e.getMessage());
+                Log.e(TAG, "searchSimple exception", e);
+                songListError(cb, "音源接口请求失败");
             }
         });
+    }
+
+    private static String truncated(String s, int maxLen) {
+        if (s == null) return "null";
+        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
     }
 
     // ===== 排行榜 =====
