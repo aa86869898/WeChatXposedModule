@@ -3,6 +3,7 @@ package com.leshao.v3.ui;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -144,7 +145,11 @@ public class SubPageActivity {
             case 4:  // 群管理助手
                 return WxMasterPageView.create(ctx, parentAct);
             case 5:  // 音乐娱乐
-                return MusicPageView.create(ctx, parentAct);
+                sSubDialog.dismiss();
+                sSubDialog = null;
+                Intent musicIntent = new Intent(parentAct, MusicActivity.class);
+                parentAct.startActivity(musicIntent);
+                return new LinearLayout(ctx);
             case 8:  // TTS语音播报
                 return TTSPageView.create(ctx, parentAct);
             case 9:  // 红包转账

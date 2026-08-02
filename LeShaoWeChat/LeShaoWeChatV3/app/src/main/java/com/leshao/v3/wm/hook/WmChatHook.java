@@ -185,8 +185,8 @@ public class WmChatHook {
     private static void applyPanelWindow(Dialog dialog) {
         Window w = dialog.getWindow();
         if (w == null) return;
-        int pw = dp(400);
-        int ph = dp(1000);
+        int pw = dp(220);
+        int ph = dp(600);
         w.setLayout(pw, ph);
         WindowManager.LayoutParams lp = w.getAttributes();
         lp.dimAmount = 0.05f;

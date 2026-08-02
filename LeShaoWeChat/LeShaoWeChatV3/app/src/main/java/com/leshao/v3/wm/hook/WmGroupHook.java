@@ -129,8 +129,8 @@ public class WmGroupHook {
     private static void applyPanelWindow(Dialog dialog) {
         android.view.Window w = dialog.getWindow();
         if (w == null) return;
-        int pw = dp(400);
-        int ph = dp(1000);
+        int pw = dp(220);
+        int ph = dp(600);
         w.setLayout(pw, ph);
         android.view.WindowManager.LayoutParams lp = w.getAttributes();
         lp.dimAmount = 0.05f;
