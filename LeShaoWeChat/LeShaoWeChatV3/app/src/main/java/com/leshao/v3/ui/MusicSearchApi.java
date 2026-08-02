@@ -26,27 +26,6 @@ public class MusicSearchApi {
 
     // ===== Cookie =====
 
-    private static String sKgMid = null;
-
-    private static String getKgMid() {
-        if (sKgMid == null) {
-            android.content.SharedPreferences p = com.leshao.v3.ContextManager.getPrefs();
-            if (p != null) {
-                sKgMid = p.getString("kg_mid", "");
-            }
-            if (sKgMid == null || sKgMid.isEmpty()) {
-                String uuid = java.util.UUID.randomUUID().toString().replace("-", "");
-                sKgMid = uuid.substring(0, 32);
-                if (p != null) p.edit().putString("kg_mid", sKgMid).apply();
-            }
-        }
-        return sKgMid;
-    }
-
-    private static String kgCookie() {
-        return "kg_mid=" + getKgMid() + "; kg_mid_temp=" + getKgMid() + "; ACK_SERVER_10015=; ACK_SERVER_10016=; ACK_SERVER_10017=; kg_dfid=-; Hm_lvt_aedee6983d4cfc62f509129453d6bb3d=" + (System.currentTimeMillis() / 1000);
-    }
-
     public static class Song {
         public String id;
         public String title;
@@ -365,9 +344,9 @@ public class MusicSearchApi {
         conn.setReadTimeout(8000);
         conn.setRequestProperty("User-Agent", FULL_UA);
         conn.setRequestProperty("Referer", referer);
-        conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+        conn.setRequestProperty("Accept", "*/*");
+        conn.setRequestProperty("Accept-Encoding", "gzip, deflate");
         conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
-        conn.setRequestProperty("Cookie", kgCookie());
         conn.setInstanceFollowRedirects(true);
         if (extraHeaders != null) {
             for (String[] h : extraHeaders) {
@@ -397,9 +376,9 @@ public class MusicSearchApi {
         conn.setReadTimeout(8000);
         conn.setRequestProperty("User-Agent", FULL_UA);
         conn.setRequestProperty("Referer", referer);
-        conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+        conn.setRequestProperty("Accept", "*/*");
+        conn.setRequestProperty("Accept-Encoding", "gzip, deflate");
         conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
-        conn.setRequestProperty("Cookie", kgCookie());
         conn.setInstanceFollowRedirects(true);
 
         String raw;

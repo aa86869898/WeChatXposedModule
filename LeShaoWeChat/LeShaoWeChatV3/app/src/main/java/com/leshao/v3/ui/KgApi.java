@@ -39,29 +39,6 @@ public class KgApi {
     private static final String TOKEN = "f7524337c1ae877929a1497cf3d5d37e5c4cb8073fc298e492a67babc376a9d4";
     private static final String APP_ID = "1005";
 
-    // ===== Cookie =====
-
-    private static String sKgMid = null;
-
-    private static String getKgMid() {
-        if (sKgMid == null) {
-            android.content.SharedPreferences p = com.leshao.v3.ContextManager.getPrefs();
-            if (p != null) {
-                sKgMid = p.getString("kg_mid", "");
-            }
-            if (sKgMid == null || sKgMid.isEmpty()) {
-                String uuid = java.util.UUID.randomUUID().toString().replace("-", "");
-                sKgMid = uuid.substring(0, 32);
-                if (p != null) p.edit().putString("kg_mid", sKgMid).apply();
-            }
-        }
-        return sKgMid;
-    }
-
-    private static String kgCookie() {
-        return "kg_mid=" + getKgMid() + "; kg_mid_temp=" + getKgMid() + "; ACK_SERVER_10015=; ACK_SERVER_10016=; ACK_SERVER_10017=; kg_dfid=-; Hm_lvt_aedee6983d4cfc62f509129453d6bb3d=" + (System.currentTimeMillis() / 1000);
-    }
-
     // ===== 数据模型 =====
 
     public static class Song {
@@ -448,8 +425,7 @@ public class KgApi {
 
                 String resp = httpPost("https://gateway.kugou.com/v2/get_res_privilege/lite",
                     body.toString(), "https://m.kugou.com",
-                    "Android712-AndroidPhone-11451-376-0-FeeCacheUpdate-wifi",
-                    "media.store.kugou.com");
+                    "Android712-AndroidPhone-11451-376-0-FeeCacheUpdate-wifi");
 
                     JSONArray data = new JSONObject(resp).optJSONArray("data");
                 if (data != null) {
@@ -602,7 +578,7 @@ public class KgApi {
                 String url;
                 if (level == 0) {
                     url = "https://api.ikunshare.com/url?source=kg&songId=" + hash + "&quality=" + lxq;
-                    String r = httpGet(url, "https://api.ikunshare.com", "lx-music-mobile/2.0.0", null);
+                    String r = httpGet(url, "https://api.ikunshare.com", "lx-music-mobile/2.0.0");
                     JSONObject j = new JSONObject(r);
                     String pu = j.optString("url", "");
                     if (!pu.isEmpty()) { MAIN.post(() -> cb.onUrl(pu)); return; }
@@ -710,7 +686,7 @@ public class KgApi {
                 String url = "https://m3ws.kugou.com/api/v1/album/info?" + joined + "&signature=" + sig;
 
                 String resp = httpGet(url, "https://m.kugou.com",
-                    "Android712-AndroidPhone-10518-18-0-NetMusic-wifi", null);
+                    "Android712-AndroidPhone-10518-18-0-NetMusic-wifi");
                 JSONObject json = new JSONObject(resp);
                 JSONObject data = json.optJSONObject("data");
                 if (data == null) { MAIN.post(() -> cb.onError("专辑数据异常")); return; }
@@ -867,7 +843,7 @@ public class KgApi {
                 String fullUrl = baseUrl + "?" + joined + "&signature=" + sig;
 
                 String resp = httpGet(fullUrl, "https://m.kugou.com",
-                    "Android712-AndroidPhone-10518-18-0-NetMusic-wifi", null);
+                    "Android712-AndroidPhone-10518-18-0-NetMusic-wifi");
                 JSONObject root = new JSONObject(resp);
                 JSONObject data = root.optJSONObject(path);
                 if (data != null) {
@@ -883,11 +859,13 @@ public class KgApi {
 
     // ===== HTTP =====
 
+    private static final String FULL_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/106.0.0.0 Safari/537.36";
+
     private static String httpGet(String urlStr, String referer) throws Exception {
-        return httpGet(urlStr, referer, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", null);
+        return httpGet(urlStr, referer, FULL_UA);
     }
 
-    private static String httpGet(String urlStr, String referer, String ua, String router) throws Exception {
+    private static String httpGet(String urlStr, String referer, String ua) throws Exception {
         URL url = new URL(urlStr);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
@@ -895,20 +873,16 @@ public class KgApi {
         conn.setReadTimeout(10000);
         conn.setRequestProperty("User-Agent", ua);
         conn.setRequestProperty("Referer", referer);
-        conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+        conn.setRequestProperty("Accept", "*/*");
+        conn.setRequestProperty("Accept-Encoding", "gzip, deflate");
         conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
-        conn.setRequestProperty("Cookie", kgCookie());
-        conn.setRequestProperty("KG-THash", "3e5ec6b");
-        conn.setRequestProperty("KG-RC", "1");
-        conn.setRequestProperty("KG-RF", "00869891");
-        if (router != null) conn.setRequestProperty("x-router", router);
         conn.setInstanceFollowRedirects(true);
 
         Log.e(TAG, "GET " + urlStr);
         return readResponse(conn);
     }
 
-    private static String httpPost(String urlStr, String body, String referer, String ua, String router) throws Exception {
+    private static String httpPost(String urlStr, String body, String referer, String ua) throws Exception {
         URL url = new URL(urlStr);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
@@ -918,13 +892,9 @@ public class KgApi {
         conn.setRequestProperty("Content-Type", "application/json");
         conn.setRequestProperty("User-Agent", ua);
         conn.setRequestProperty("Referer", referer);
-        conn.setRequestProperty("Accept", "application/json, text/plain, */*");
-        conn.setRequestProperty("Cookie", kgCookie());
-        conn.setRequestProperty("KG-THash", "13a3164");
-        conn.setRequestProperty("KG-RC", "1");
-        conn.setRequestProperty("KG-Fake", "0");
-        conn.setRequestProperty("KG-RF", "00869891");
-        if (router != null) conn.setRequestProperty("x-router", router);
+        conn.setRequestProperty("Accept", "*/*");
+        conn.setRequestProperty("Accept-Encoding", "gzip, deflate");
+        conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
 
         Log.e(TAG, "POST " + urlStr);
         try (OutputStream os = conn.getOutputStream()) {
@@ -973,12 +943,9 @@ public class KgApi {
         conn.setReadTimeout(10000);
         conn.setRequestProperty("User-Agent", "Android800-AndroidPhone-12029-56-0-starlive-ctnet(13)");
         conn.setRequestProperty("Referer", "https://m.kugou.com");
-        conn.setRequestProperty("Accept", "application/json, text/plain, */*");
-        conn.setRequestProperty("Cookie", kgCookie());
-        conn.setRequestProperty("KG-THash", "595ff94");
-        conn.setRequestProperty("KG-FAKE", USER_ID);
-        conn.setRequestProperty("KG-Rec", "1");
-        conn.setRequestProperty("KG-RC", "1");
+        conn.setRequestProperty("Accept", "*/*");
+        conn.setRequestProperty("Accept-Encoding", "gzip, deflate");
+        conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
         conn.setRequestProperty("x-router", "tracker.kugou.com");
         conn.setInstanceFollowRedirects(true);
         return readResponse(conn);
