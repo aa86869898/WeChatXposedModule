@@ -188,7 +188,7 @@ public class KgApi {
                     return;
                 }
 
-                JSONObject json = new JSONObject(trimmed);
+                JSONObject json = parseJsonSafe(trimmed);
                 JSONObject data = json.optJSONObject("data");
                 if (data == null) { songListError(cb, "无搜索结果"); return; }
 
@@ -933,6 +933,20 @@ public class KgApi {
             throw new Exception("音源访问受限，请稍后重试");
         }
         return trimmed;
+    }
+
+    private static JSONObject parseJsonSafe(String raw) throws Exception {
+        String trimmed = raw != null ? raw.trim() : "";
+        Log.e(TAG, "parseJsonSafe len=" + trimmed.length() + " head=[" + truncated(trimmed, 300) + "]");
+        if (trimmed.isEmpty() || (trimmed.charAt(0) != '{' && trimmed.charAt(0) != '[')) {
+            throw new Exception("音源访问受限，请稍后重试");
+        }
+        try {
+            return new JSONObject(trimmed);
+        } catch (Exception e) {
+            Log.e(TAG, "parseJsonSafe FAILED raw=[" + truncated(trimmed, 500) + "]", e);
+            throw new Exception("音源访问受限，请稍后重试");
+        }
     }
 
     private static String getPlayUrlRaw(String urlStr) throws Exception {
