@@ -192,12 +192,12 @@ public class KgApi {
                 if (data == null) { songListError(cb, "无搜索结果"); return; }
 
                 JSONArray lists = data.optJSONArray("lists");
-                int total = data.optJSONObject("info") != null
-                    ? data.optJSONObject("info").optInt("total", 0) : 0;
+                int total = data.optInt("total", 0);
                 List<Song> songs = new ArrayList<>();
                 if (lists != null) {
                     for (int i = 0; i < lists.length(); i++) {
-                        JSONObject item = lists.getJSONObject(i);
+                        JSONObject item = lists.optJSONObject(i);
+                        if (item == null) continue;
                         Song s = new Song();
                         s.hash = item.optString("FileHash", "");
                         s.id = s.hash;

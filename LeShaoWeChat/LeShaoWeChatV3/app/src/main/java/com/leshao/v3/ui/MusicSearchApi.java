@@ -93,13 +93,13 @@ public class MusicSearchApi {
                 if (data == null) { MusicLog.e(TAG, "searchKugou: no data"); postError(cb, "无搜索结果"); return; }
 
                 JSONArray lists = data.optJSONArray("lists");
-                JSONObject info = data.optJSONObject("info");
-                int total = info != null ? info.optInt("total", 0) : 0;
+                int total = data.optInt("total", 0);
 
                 List<Song> songs = new ArrayList<>();
                 if (lists != null) {
                     for (int i = 0; i < lists.length(); i++) {
-                        JSONObject item = lists.getJSONObject(i);
+                        JSONObject item = lists.optJSONObject(i);
+                        if (item == null) continue;
                         Song s = new Song();
                         s.id = item.optString("FileHash", "");
                         s.hash = item.optString("FileHash", "");
