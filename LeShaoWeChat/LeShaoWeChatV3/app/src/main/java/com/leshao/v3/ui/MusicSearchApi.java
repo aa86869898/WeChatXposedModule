@@ -59,9 +59,13 @@ public class MusicSearchApi {
 
     // ===== KuGou =====
     private static final String KG_SEARCH = "https://songsearch.kugou.com/song_search_v2";
-    private static final String KG_PLAY = "https://wwwapi.kugou.com/yy/index.php?r=play/getdata&hash=";
     private static final String KG_PLAY_FALLBACK = "https://music.haitangw.cc/kgqq1/kg.php";
-    private static final String KG_LYRIC = "https://wwwapi.kugou.com/yy/index.php?r=play/getdata&hash=";
+    private static final String KG_SEARCH_ALBUM = "http://msearch.kugou.com/api/v3/search/album";
+    private static final String KG_SEARCH_SHEET = "http://mobilecdn.kugou.com/api/v3/search/special";
+    private static final String LYRICS_SEARCH = "http://lyrics.kugou.com/search";
+    private static final String LYRICS_DOWNLOAD = "http://lyrics.kugou.com/download";
+    private static final String FULL_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/106.0.0.0 Safari/537.36";
+    private static final String LYRICS_UA = "KuGou2012-9020-ExpandSearchManager";
 
     public static void searchKugou(String query, int page, SearchCallback cb) {
         MusicLog.i(TAG, "searchKugou q=" + query + " page=" + page);
@@ -91,6 +95,11 @@ public class MusicSearchApi {
                         s.album = item.optString("AlbumName", "");
                         s.duration = item.optInt("Duration", 0);
                         s.cover = item.optString("Image", "");
+                        s.sqHash = item.optString("SQFileHash", "");
+                        s.hash320 = item.optString("HQFileHash", "");
+                        s.originHash = item.optString("ResFileHash", "");
+                        s.albumId = item.optString("AlbumID", "");
+                        s.albumAudioId = "0";
                         s.platform = 0;
                         songs.add(s);
                     }
@@ -124,43 +133,16 @@ public class MusicSearchApi {
                 return;
             }
             String safeLevel = level == null || level.trim().isEmpty() ? "exhigh" : level;
-            // Primary: official Kugou API
-            String playUrl = fetchKugouOfficial(hash);
+            String playUrl = fetchKugouFallback(hash, safeLevel);
             if (playUrl != null && !playUrl.isEmpty()) {
-                MusicLog.i(TAG, "Kugou official OK: " + playUrl.substring(0, Math.min(80, playUrl.length())));
+                MusicLog.i(TAG, "getKugouPlayUrl OK: " + playUrl.substring(0, Math.min(80, playUrl.length())));
                 final String url = playUrl;
                 sHandler.post(() -> cb.onUrl(url));
                 return;
             }
-            // Fallback: third-party proxy
-            MusicLog.i(TAG, "Kugou official failed, trying fallback...");
-            playUrl = fetchKugouFallback(hash, safeLevel);
-            if (playUrl != null && !playUrl.isEmpty()) {
-                MusicLog.i(TAG, "Kugou fallback OK: " + playUrl.substring(0, Math.min(80, playUrl.length())));
-                final String url = playUrl;
-                sHandler.post(() -> cb.onUrl(url));
-                return;
-            }
-            MusicLog.e(TAG, "All Kugou play sources failed for hash=" + hash);
+            MusicLog.e(TAG, "Kugou play failed for hash=" + hash);
             postError(cb, "获取音源失败");
         });
-    }
-
-    private static String fetchKugouOfficial(String hash) {
-        try {
-            if (hash == null || hash.trim().isEmpty()) return "";
-            String url = KG_PLAY + hash;
-            String resp = httpGet(url, "https://wwwapi.kugou.com");
-            JSONObject json = new JSONObject(resp);
-            JSONObject data = json.optJSONObject("data");
-            if (data == null) return "";
-            String playUrl = data.optString("play_url", data.optString("play_backup_url", ""));
-            if (playUrl.isEmpty() || "null".equals(playUrl)) return "";
-            return normalizePlayUrl(playUrl);
-        } catch (Exception e) {
-            MusicLog.e(TAG, "fetchKugouOfficial error", e);
-            return "";
-        }
     }
 
     private static String fetchKugouFallback(String hash, String level) {
@@ -181,6 +163,10 @@ public class MusicSearchApi {
     }
 
     public static void getKugouLyric(String hash, LyricCallback cb) {
+        getKugouLyric(hash, "", 0, cb);
+    }
+
+    public static void getKugouLyric(String hash, String title, int duration, LyricCallback cb) {
         if (cb == null) return;
         if (hash == null || hash.isEmpty()) {
             sHandler.post(() -> cb.onLyric(""));
@@ -188,12 +174,40 @@ public class MusicSearchApi {
         }
         sExecutor.execute(() -> {
             try {
-                String url = KG_LYRIC + hash;
-                String resp = httpGet(url, "https://wwwapi.kugou.com");
-                JSONObject json = new JSONObject(resp);
-                JSONObject data = json.optJSONObject("data");
-                if (data != null) {
-                    String lrc = data.optString("lyrics", data.optString("lyric", ""));
+                String safeTitle = title != null ? URLEncoder.encode(title, "UTF-8") : "";
+                String searchUrl = LYRICS_SEARCH + "?ver=1&man=yes&client=pc&keyword="
+                    + safeTitle + "&hash=" + hash + "&timelength=" + duration;
+                String searchResp = httpGetWithHeaders(searchUrl, "http://lyrics.kugou.com",
+                    new String[][]{
+                        {"User-Agent", LYRICS_UA},
+                        {"KG-RC", "1"},
+                        {"KG-THash", "expand_search_manager.cpp:852736169:451"}
+                    });
+                JSONObject searchJson = new JSONObject(searchResp);
+                JSONArray candidates = searchJson.optJSONArray("candidates");
+                if (candidates == null || candidates.length() == 0) {
+                    sHandler.post(() -> cb.onLyric(""));
+                    return;
+                }
+                JSONObject first = candidates.getJSONObject(0);
+                String lyricId = first.optString("id", "");
+                String accessKey = first.optString("accesskey", first.optString("accessKey", ""));
+                if (lyricId.isEmpty() || accessKey.isEmpty()) {
+                    sHandler.post(() -> cb.onLyric(""));
+                    return;
+                }
+                String dlUrl = LYRICS_DOWNLOAD + "?ver=1&client=pc&id=" + lyricId
+                    + "&accesskey=" + accessKey + "&fmt=lrc&charset=utf8";
+                String dlResp = httpGetWithHeaders(dlUrl, "http://lyrics.kugou.com",
+                    new String[][]{
+                        {"User-Agent", LYRICS_UA},
+                        {"KG-RC", "1"},
+                        {"KG-THash", "expand_search_manager.cpp:852736169:451"}
+                    });
+                JSONObject dlJson = new JSONObject(dlResp);
+                String content = dlJson.optString("content", "");
+                if (!content.isEmpty()) {
+                    String lrc = new String(android.util.Base64.decode(content, android.util.Base64.DEFAULT), "UTF-8");
                     sHandler.post(() -> cb.onLyric(lrc));
                 } else {
                     sHandler.post(() -> cb.onLyric(""));
@@ -205,7 +219,125 @@ public class MusicSearchApi {
         });
     }
 
+    // ===== Album/Search extensions =====
+
+    public static void searchKugouAlbum(String query, int page, SearchCallback cb) {
+        MusicLog.i(TAG, "searchKugouAlbum q=" + query + " page=" + page);
+        sExecutor.execute(() -> {
+            try {
+                String urlStr = KG_SEARCH_ALBUM + "?version=9024&iscorrection=1&highlight=em&plat=0"
+                    + "&keyword=" + URLEncoder.encode(query, "UTF-8")
+                    + "&pagesize=20&page=" + page + "&sver=2&with_res_tag=0";
+                String resp = httpGet(urlStr, "http://msearch.kugou.com");
+                JSONObject json = new JSONObject(resp);
+                JSONObject data = json.optJSONObject("data");
+                if (data == null) { postError(cb, "无搜索结果"); return; }
+
+                JSONArray info = data.optJSONArray("info");
+                int total = data.optInt("total", 0);
+                List<Song> songs = new ArrayList<>();
+                if (info != null) {
+                    for (int i = 0; i < info.length(); i++) {
+                        JSONObject item = info.getJSONObject(i);
+                        Song s = new Song();
+                        s.id = item.optString("albumid", "");
+                        s.title = item.optString("albumname", "");
+                        s.artist = item.optString("singername", "");
+                        s.cover = item.optString("imgurl", "").replace("{size}", "400");
+                        s.platform = 0;
+                        s.albumId = item.optString("albumid", "");
+                        s.album = item.optString("albumname", "");
+                        songs.add(s);
+                    }
+                }
+                int pageSize = 20;
+                boolean hasNext = page * pageSize < total;
+                boolean hasPrev = page > 1;
+                final List<Song> finalSongs = songs;
+                final int finalTotal = total;
+                final boolean fHasNext = hasNext;
+                final boolean fHasPrev = hasPrev;
+                sHandler.post(() -> cb.onResult(finalSongs, finalTotal, fHasPrev, fHasNext));
+            } catch (Exception e) {
+                Log.e(TAG, "KG album search error", e);
+                postError(cb, "专辑搜索失败: " + e.getMessage());
+            }
+        });
+    }
+
+    public static void searchKugouSheet(String query, int page, SearchCallback cb) {
+        MusicLog.i(TAG, "searchKugouSheet q=" + query + " page=" + page);
+        sExecutor.execute(() -> {
+            try {
+                String urlStr = KG_SEARCH_SHEET + "?format=json"
+                    + "&keyword=" + URLEncoder.encode(query, "UTF-8")
+                    + "&page=" + page + "&pagesize=20&showtype=1";
+                String resp = httpGet(urlStr, "http://mobilecdn.kugou.com");
+                JSONObject json = new JSONObject(resp);
+                JSONObject data = json.optJSONObject("data");
+                if (data == null) { postError(cb, "无搜索结果"); return; }
+
+                JSONArray info = data.optJSONArray("info");
+                int total = data.optInt("total", 0);
+                List<Song> songs = new ArrayList<>();
+                if (info != null) {
+                    for (int i = 0; i < info.length(); i++) {
+                        JSONObject item = info.getJSONObject(i);
+                        Song s = new Song();
+                        s.id = item.optString("specialid", "");
+                        s.title = item.optString("specialname", "");
+                        s.artist = item.optString("nickname", "");
+                        s.cover = item.optString("imgurl", "");
+                        s.platform = 0;
+                        s.sqHash = item.optString("specialid", "");
+                        songs.add(s);
+                    }
+                }
+                int pageSize = 20;
+                boolean hasNext = page * pageSize < total;
+                boolean hasPrev = page > 1;
+                final List<Song> finalSongs = songs;
+                final int finalTotal = total;
+                final boolean fHasNext = hasNext;
+                final boolean fHasPrev = hasPrev;
+                sHandler.post(() -> cb.onResult(finalSongs, finalTotal, fHasPrev, fHasNext));
+            } catch (Exception e) {
+                Log.e(TAG, "KG sheet search error", e);
+                postError(cb, "歌单搜索失败: " + e.getMessage());
+            }
+        });
+    }
+
     // ===== HTTP helpers =====
+
+    private static String httpGetWithHeaders(String urlStr, String referer, String[][] extraHeaders) throws Exception {
+        URL url = new URL(urlStr);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setConnectTimeout(8000);
+        conn.setReadTimeout(8000);
+        conn.setRequestProperty("User-Agent", FULL_UA);
+        conn.setRequestProperty("Referer", referer);
+        conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+        conn.setRequestProperty("Accept-Encoding", "gzip, deflate");
+        conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
+        conn.setInstanceFollowRedirects(true);
+        if (extraHeaders != null) {
+            for (String[] h : extraHeaders) {
+                conn.setRequestProperty(h[0], h[1]);
+            }
+        }
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"))) {
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
+            }
+            return sb.toString();
+        } finally {
+            conn.disconnect();
+        }
+    }
 
     private static String normalizePlayUrl(String url) {
         if (url == null || url.isEmpty() || "null".equals(url)) return "";
@@ -221,9 +353,11 @@ public class MusicSearchApi {
         conn.setRequestMethod("GET");
         conn.setConnectTimeout(8000);
         conn.setReadTimeout(8000);
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        conn.setRequestProperty("User-Agent", FULL_UA);
         conn.setRequestProperty("Referer", referer);
         conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+        conn.setRequestProperty("Accept-Encoding", "gzip, deflate");
+        conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
         conn.setInstanceFollowRedirects(true);
 
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"))) {

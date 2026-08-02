@@ -682,7 +682,7 @@ public class MusicPlayerView {
             @Override
             public void onError(String msg) { }
         };
-        MusicSearchApi.getKugouLyric(song.hash, cb);
+        MusicSearchApi.getKugouLyric(song.hash, song.title, song.duration, cb);
     }
 
     private static void parseLrc(String lrc) {
