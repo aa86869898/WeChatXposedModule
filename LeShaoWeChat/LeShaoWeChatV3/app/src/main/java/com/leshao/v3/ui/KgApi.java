@@ -135,7 +135,8 @@ public class KgApi {
                     List<Song> songs = new ArrayList<>();
                     if (lists != null) {
                         for (int i = 0; i < lists.length(); i++) {
-                            JSONObject item = lists.getJSONObject(i);
+                            JSONObject item = lists.optJSONObject(i);
+                            if (item == null) continue;
                             Song s = new Song();
                             s.id = item.optString("audio_id", item.optString("id", ""));
                             s.hash = item.optString("hash", item.optString("FileHash", ""));
@@ -236,18 +237,24 @@ public class KgApi {
             try {
                 String url = "http://mobilecdnbj.kugou.com/api/v3/rank/list?version=9108&plat=0&showtype=2&parentid=0&apiver=6&area_code=1&withsong=0&with_res_tag=0";
                 String resp = httpGet(url, "https://m.kugou.com");
-                JSONArray info = new JSONObject(resp).getJSONObject("data").getJSONArray("info");
+                JSONObject json = new JSONObject(resp);
+                JSONObject data = json.optJSONObject("data");
+                if (data == null) { MAIN.post(() -> cb.onError("排行榜数据异常")); return; }
+                JSONArray info = data.optJSONArray("info");
                 List<Ranking> list = new ArrayList<>();
-                for (int i = 0; i < info.length(); i++) {
-                    JSONObject item = info.getJSONObject(i);
-                    Ranking r = new Ranking();
-                    r.id = item.optString("rankid", "");
-                    r.title = item.optString("rankname", "");
-                    r.cover = item.optString("imgurl", "").replace("{size}", "480");
-                    r.classify = item.optInt("classify", 0);
-                    r.songCount = item.optInt("song_count", 0);
-                    r.updateFrequency = item.optString("update_frequency", "");
-                    list.add(r);
+                if (info != null) {
+                    for (int i = 0; i < info.length(); i++) {
+                        JSONObject item = info.optJSONObject(i);
+                        if (item == null) continue;
+                        Ranking r = new Ranking();
+                        r.id = item.optString("rankid", "");
+                        r.title = item.optString("rankname", "");
+                        r.cover = item.optString("imgurl", "").replace("{size}", "480");
+                        r.classify = item.optInt("classify", 0);
+                        r.songCount = item.optInt("song_count", 0);
+                        r.updateFrequency = item.optString("update_frequency", "");
+                        list.add(r);
+                    }
                 }
                 MAIN.post(() -> cb.onResult(list));
             } catch (Exception e) {
@@ -261,21 +268,26 @@ public class KgApi {
             try {
                 String url = "http://mobilecdnbj.kugou.com/api/v3/rank/song?version=9108&ranktype=0&plat=0&pagesize=" + PAGE_SIZE + "&area_code=1&page=" + page + "&volid=35050&rankid=" + rankId + "&with_res_tag=0";
                 String resp = httpGet(url, "https://m.kugou.com");
-                JSONObject data = new JSONObject(resp).getJSONObject("data");
-                JSONArray info = data.getJSONArray("info");
+                JSONObject json = new JSONObject(resp);
+                JSONObject data = json.optJSONObject("data");
+                if (data == null) { MAIN.post(() -> cb.onError("榜单数据异常")); return; }
+                JSONArray info = data.optJSONArray("info");
                 int total = data.optInt("total", 0);
 
                 List<Song> songs = new ArrayList<>();
                 List<String> hashes = new ArrayList<>();
-                for (int i = 0; i < info.length(); i++) {
-                    JSONObject item = info.getJSONObject(i);
-                    Song s = new Song();
-                    s.hash = item.optString("hash", "");
-                    s.title = item.optString("filename", "").replace(".mp3", "");
-                    s.artist = "";
-                    s.duration = item.optInt("duration", 0);
-                    songs.add(s);
-                    hashes.add(s.hash);
+                if (info != null) {
+                    for (int i = 0; i < info.length(); i++) {
+                        JSONObject item = info.optJSONObject(i);
+                        if (item == null) continue;
+                        Song s = new Song();
+                        s.hash = item.optString("hash", "");
+                        s.title = item.optString("filename", "").replace(".mp3", "");
+                        s.artist = "";
+                        s.duration = item.optInt("duration", 0);
+                        songs.add(s);
+                        hashes.add(s.hash);
+                    }
                 }
                 enrichSongs(songs, enriched ->
                     MAIN.post(() -> cb.onResult(enriched, total)));
@@ -292,15 +304,21 @@ public class KgApi {
             try {
                 String url = "http://www2.kugou.kugou.com/yueku/v9/special/getSpecial?is_smarty=1";
                 String resp = httpGet(url, "https://www.kugou.com");
-                JSONObject data = new JSONObject(resp).getJSONObject("data");
+                JSONObject json = new JSONObject(resp);
+                JSONObject data = json.optJSONObject("data");
+                if (data == null) { MAIN.post(() -> cb.onError("分类数据异常")); return; }
                 List<Playlist> hot = new ArrayList<>();
-                JSONArray hotTags = data.getJSONObject("hotTag").getJSONArray("data");
-                for (int i = 0; i < hotTags.length(); i++) {
-                    JSONObject t = hotTags.getJSONObject(i);
-                    Playlist p = new Playlist();
-                    p.id = t.optString("special_id", "");
-                    p.title = t.optString("special_name", "");
-                    hot.add(p);
+                JSONObject hotTag = data.optJSONObject("hotTag");
+                JSONArray hotTags = hotTag != null ? hotTag.optJSONArray("data") : null;
+                if (hotTags != null) {
+                    for (int i = 0; i < hotTags.length(); i++) {
+                        JSONObject t = hotTags.optJSONObject(i);
+                        if (t == null) continue;
+                        Playlist p = new Playlist();
+                        p.id = t.optString("special_id", "");
+                        p.title = t.optString("special_name", "");
+                        hot.add(p);
+                    }
                 }
                 MAIN.post(() -> cb.onResult(hot));
             } catch (Exception e) {
@@ -321,13 +339,16 @@ public class KgApi {
                     url = "http://www2.kugou.kugou.com/yueku/v9/special/getSpecial?is_ajax=1&cdn=cdn&t=5&pagesize=30&c=" + tagId.trim() + "&p=" + page;
                 }
                 String resp = httpGet(url, "https://www.kugou.com");
-                JSONObject data = new JSONObject(resp).getJSONObject("data");
+                JSONObject json = new JSONObject(resp);
+                JSONObject data = json.optJSONObject("data");
+                if (data == null) { MAIN.post(() -> callbackError(cb, "歌单数据异常")); return; }
                 JSONArray list = data.optJSONArray("special_db");
 
                 List<Playlist> playlists = new ArrayList<>();
                 if (list != null) {
                     for (int i = 0; i < list.length(); i++) {
-                        JSONObject item = list.getJSONObject(i);
+                        JSONObject item = list.optJSONObject(i);
+                        if (item == null) continue;
                         Playlist p = new Playlist();
                         p.id = item.optString("specialid", "");
                         p.title = item.optString("specialname", "");
@@ -349,19 +370,22 @@ public class KgApi {
             "global_specialid=" + specialId, "specialid=" + specialId, page, "data", new RawCallback() {
             public void onResult(JSONObject data) {
                 try {
-                    JSONArray list = data.getJSONArray("info");
+                    JSONArray list = data.optJSONArray("info");
                     JSONObject info = data.optJSONObject("info");
-                    int total = info != null ? info.optInt("songcount", list.length()) : list.length();
+                    int total = info != null ? info.optInt("songcount", list != null ? list.length() : 0) : (list != null ? list.length() : 0);
 
                     List<Song> songs = new ArrayList<>();
-                    for (int i = 0; i < list.length(); i++) {
-                        JSONObject item = list.getJSONObject(i);
-                        Song s = new Song();
-                        s.hash = item.optString("hash", "");
-                        s.title = item.optString("filename", "").replace(".mp3", "");
-                        s.artist = "";
-                        s.duration = item.optInt("duration", 0);
-                        songs.add(s);
+                    if (list != null) {
+                        for (int i = 0; i < list.length(); i++) {
+                            JSONObject item = list.optJSONObject(i);
+                            if (item == null) continue;
+                            Song s = new Song();
+                            s.hash = item.optString("hash", "");
+                            s.title = item.optString("filename", "").replace(".mp3", "");
+                            s.artist = "";
+                            s.duration = item.optInt("duration", 0);
+                            songs.add(s);
+                        }
                     }
                     enrichSongs(songs, enriched ->
                         MAIN.post(() -> cb.onResult(enriched, total)));
@@ -407,7 +431,8 @@ public class KgApi {
                     JSONArray data = new JSONObject(resp).optJSONArray("data");
                 if (data != null) {
                     for (int i = 0; i < data.length() && i < songs.size(); i++) {
-                        JSONObject d = data.getJSONObject(i);
+                        JSONObject d = data.optJSONObject(i);
+                        if (d == null) continue;
                         Song s = songs.get(i);
 
                         String fname = d.optString("filename", d.optString("name", ""));
@@ -623,7 +648,8 @@ public class KgApi {
                         }
                         List<Comment> comments = new ArrayList<>();
                         for (int i = 0; i < list.length(); i++) {
-                            JSONObject item = list.getJSONObject(i);
+                            JSONObject item = list.optJSONObject(i);
+                            if (item == null) continue;
                             Comment c = new Comment();
                             c.id = item.optString("id", "");
                             c.nickName = item.optString("user_name", "");
@@ -662,19 +688,24 @@ public class KgApi {
 
                 String resp = httpGet(url, "https://m.kugou.com",
                     "Android712-AndroidPhone-10518-18-0-NetMusic-wifi", null);
-                JSONObject data = new JSONObject(resp).getJSONObject("data");
-                JSONArray list = data.getJSONArray("list");
-                int total = data.optInt("songcount", list.length());
+                JSONObject json = new JSONObject(resp);
+                JSONObject data = json.optJSONObject("data");
+                if (data == null) { MAIN.post(() -> cb.onError("专辑数据异常")); return; }
+                JSONArray list = data.optJSONArray("list");
+                int total = data.optInt("songcount", list != null ? list.length() : 0);
 
                 List<Song> songs = new ArrayList<>();
-                for (int i = 0; i < list.length(); i++) {
-                    JSONObject item = list.getJSONObject(i);
-                    Song s = new Song();
-                    s.hash = item.optString("hash", "");
-                    s.title = item.optString("filename", "").replace(".mp3", "");
-                    s.artist = "";
-                    s.duration = item.optInt("duration", 0);
-                    songs.add(s);
+                if (list != null) {
+                    for (int i = 0; i < list.length(); i++) {
+                        JSONObject item = list.optJSONObject(i);
+                        if (item == null) continue;
+                        Song s = new Song();
+                        s.hash = item.optString("hash", "");
+                        s.title = item.optString("filename", "").replace(".mp3", "");
+                        s.artist = "";
+                        s.duration = item.optInt("duration", 0);
+                        songs.add(s);
+                    }
                 }
                 enrichSongs(songs, enriched ->
                     MAIN.post(() -> cb.onResult(enriched, total)));
@@ -697,11 +728,15 @@ public class KgApi {
             try {
                 String url = "http://mobilecdnbj.kugou.com/api/v3/singer/list?version=9108&plat=0&pagesize=20&sextype=1&area=0&type=1&page=1";
                 String resp = httpGet(url, "https://m.kugou.com");
-                JSONObject data = new JSONObject(resp).getJSONObject("data");
-                JSONArray info = data.getJSONArray("info");
+                JSONObject json = new JSONObject(resp);
+                JSONObject data = json.optJSONObject("data");
+                if (data == null) { MAIN.post(() -> callbackError(cb, "歌手数据异常")); return; }
+                JSONArray info = data.optJSONArray("info");
+                if (info == null) { MAIN.post(() -> cb.onResult(new ArrayList<>())); return; }
                 List<Playlist> artists = new ArrayList<>();
                 for (int i = 0; i < Math.min(10, info.length()); i++) {
-                    JSONObject item = info.getJSONObject(i);
+                    JSONObject item = info.optJSONObject(i);
+                    if (item == null) continue;
                     Playlist p = new Playlist();
                     p.id = item.optString("singerid", "");
                     p.title = item.optString("singername", "");
@@ -727,7 +762,8 @@ public class KgApi {
                         List<Song> songs = new ArrayList<>();
                         if (songsArr != null) {
                             for (int i = 0; i < songsArr.length(); i++) {
-                                JSONObject info = songsArr.getJSONObject(i).optJSONObject("audio_info");
+                                JSONObject songObj = songsArr.optJSONObject(i);
+                                JSONObject info = songObj != null ? songObj.optJSONObject("audio_info") : null;
                                 if (info != null) {
                                     Song s = new Song();
                                     s.hash = info.optString("hash", "");
@@ -753,20 +789,25 @@ public class KgApi {
             try {
                 String url = "http://mobilecdnbj.kugou.com/api/v3/singer/album?version=9108&plat=0&pagesize=" + PAGE_SIZE + "&page=" + page + "&singerid=" + artistId;
                 String resp = httpGet(url, "https://m.kugou.com");
-                JSONObject data = new JSONObject(resp).getJSONObject("data");
-                JSONArray info = data.getJSONArray("info");
+                JSONObject json = new JSONObject(resp);
+                JSONObject data = json.optJSONObject("data");
+                if (data == null) { MAIN.post(() -> cb.onError("歌手专辑数据异常")); return; }
+                JSONArray info = data.optJSONArray("info");
                 int total = data.optInt("total", 0);
 
                 List<Album> albums = new ArrayList<>();
-                for (int i = 0; i < info.length(); i++) {
-                    JSONObject item = info.getJSONObject(i);
-                    Album a = new Album();
-                    a.id = item.optString("albumid", "");
-                    a.title = item.optString("albumname", "");
-                    a.cover = item.optString("img", "").replace("{size}", "480");
-                    a.artist = item.optString("singername", "");
-                    a.songCount = item.optInt("songcount", 0);
-                    albums.add(a);
+                if (info != null) {
+                    for (int i = 0; i < info.length(); i++) {
+                        JSONObject item = info.optJSONObject(i);
+                        if (item == null) continue;
+                        Album a = new Album();
+                        a.id = item.optString("albumid", "");
+                        a.title = item.optString("albumname", "");
+                        a.cover = item.optString("img", "").replace("{size}", "480");
+                        a.artist = item.optString("singername", "");
+                        a.songCount = item.optInt("songcount", 0);
+                        albums.add(a);
+                    }
                 }
                 MAIN.post(() -> cb.onResult(albums, total));
             } catch (Exception e) {

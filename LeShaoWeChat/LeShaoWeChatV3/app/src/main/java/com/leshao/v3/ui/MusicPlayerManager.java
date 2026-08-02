@@ -428,7 +428,8 @@ public class MusicPlayerManager {
             if (arr != null && arr.length() > 0) {
                 mPlaylist.clear();
                 for (int i = 0; i < arr.length(); i++) {
-                    JSONObject so = arr.getJSONObject(i);
+                    JSONObject so = arr.optJSONObject(i);
+                    if (so == null) continue;
                     MusicSearchApi.Song s = new MusicSearchApi.Song();
                     s.id = so.optString("id", "");
                     s.hash = so.optString("hash", "");
@@ -453,7 +454,8 @@ public class MusicPlayerManager {
             if (histArr != null) {
                 mHistory.clear();
                 for (int i = 0; i < histArr.length(); i++) {
-                    JSONObject ho = histArr.getJSONObject(i);
+                    JSONObject ho = histArr.optJSONObject(i);
+                    if (ho == null) continue;
                     MusicSearchApi.Song s = new MusicSearchApi.Song();
                     s.title = ho.optString("title", "");
                     s.artist = ho.optString("artist", "");

@@ -207,7 +207,11 @@ public class MusicSearchApi {
                     sHandler.post(() -> cb.onLyric(""));
                     return;
                 }
-                JSONObject first = candidates.getJSONObject(0);
+                JSONObject first = candidates.optJSONObject(0);
+                if (first == null) {
+                    sHandler.post(() -> cb.onLyric(""));
+                    return;
+                }
                 String lyricId = first.optString("id", "");
                 String accessKey = first.optString("accesskey", first.optString("accessKey", ""));
                 if (lyricId.isEmpty() || accessKey.isEmpty()) {
@@ -256,7 +260,8 @@ public class MusicSearchApi {
                 List<Song> songs = new ArrayList<>();
                 if (info != null) {
                     for (int i = 0; i < info.length(); i++) {
-                        JSONObject item = info.getJSONObject(i);
+                        JSONObject item = info.optJSONObject(i);
+                        if (item == null) continue;
                         Song s = new Song();
                         s.id = item.optString("albumid", "");
                         s.title = item.optString("albumname", "");
@@ -300,7 +305,8 @@ public class MusicSearchApi {
                 List<Song> songs = new ArrayList<>();
                 if (info != null) {
                     for (int i = 0; i < info.length(); i++) {
-                        JSONObject item = info.getJSONObject(i);
+                        JSONObject item = info.optJSONObject(i);
+                        if (item == null) continue;
                         Song s = new Song();
                         s.id = item.optString("specialid", "");
                         s.title = item.optString("specialname", "");
