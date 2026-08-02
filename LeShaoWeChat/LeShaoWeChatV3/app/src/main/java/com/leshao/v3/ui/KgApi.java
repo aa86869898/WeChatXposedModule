@@ -935,15 +935,21 @@ public class KgApi {
     }
 
     private static String readResponse(HttpURLConnection conn) throws Exception {
+        int code = conn.getResponseCode();
+        Log.e(TAG, "HTTP " + code + " " + conn.getURL());
         String raw;
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"))) {
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) sb.append(line);
-            raw = sb.toString();
-        } finally {
-            conn.disconnect();
+        java.io.InputStream is = code >= 200 && code < 300 ? conn.getInputStream() : conn.getErrorStream();
+        if (is == null) {
+            raw = "";
+        } else {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(is, "UTF-8"))) {
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) sb.append(line);
+                raw = sb.toString();
+            }
         }
+        conn.disconnect();
         return ensureJsonResponse(raw);
     }
 

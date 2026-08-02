@@ -59,3 +59,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 每次代码修改编译成功后，自动执行 git add + commit + push
   - APK 已解除 gitignore (!**/build/outputs/apk/debug/*.apk)，会随源码一起推送
   - 推送命令: `git push` (推送到 master 分支)
+
+### APK 下载服务部署机制
+- Date: 2026-07-31
+- Context: Agent 在部署 v115 APK 时发现 8000 下载服务不自动同步 /workspace，需主动推送
+- Category: 运维部署
+- Instructions:
+  - 下载基址 `https://8000-796f33fc01a6a82b.monkeycode-ai.online/` 对应本地 8000 端口 python3 静态服务 (`python3 -m http.server 8000 --bind 0.0.0.0`)，serve 目录 = `/workspace/LeShaoWeChat/LeShaoWeChatV3/`
+  - 部署新 APK 时，将 `app/build/outputs/apk/release/app-release.apk` 重命名后复制到 `/workspace/LeShaoWeChat/LeShaoWeChatV3/leshao_v3_vXXX_*.apk`，服务实时生效，立即 curl 验证 `https://8000-796f33fc01a6a82b.monkeycode-ai.online/leshao_v3_vXXX_*.apk` 返回 200
+  - 不要把 APK 放在 /workspace 根目录，那里不会同步到下载服务

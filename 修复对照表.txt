@@ -1,0 +1,150 @@
+================================================================================
+  TTS文字转语音 — 日志诊断 + 修复对照
+================================================================================
+
+诊断时间: 2025-07-31
+日志来源: /data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt
+
+================================================================================
+一、日志中发现的问题
+================================================================================
+
+  BUG-1: AccPath 缺少 32 位 hash
+  ─────────────────────────────────────────────────────────
+  实际输出: AccPath: /data/data/com.tencent.mm/MicroMsg/
+  正确应为: AccPath: /data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/
+  证据:     VAP 模块已正确获取:
+            VAP: voice2: /data/data/com.tencent.mm/MicroMsg/7b998556beeef3a1552aa84157df99e8/voice2
+
+  根因:     com.tencent.mm.kernel.h 中没有 getAccPath 方法,
+            兜底路径缺少 hash 后缀。
+
+  ═════════════════════════════════════════════════════════
+
+  BUG-2: AMR 文件路径错误
+  ─────────────────────────────────────────────────────────
+  实际输出: j1(/data/data/com.tencent.mm/MicroMsg/tts_temp/tts_1785481845915.amr)
+  正确应为: j1(/data/.../MicroMsg/7b998556.../voice2/[talker]/msg_[msgId].amr)
+
+  后果:     微信在 voice2 目录下找语音文件, 找不到则发送空语音。
+
+  ═════════════════════════════════════════════════════════
+
+  BUG-3: setType(34) 被覆盖, 消息 type 仍为 1
+  ─────────────────────────────────────────────────────────
+  证据:     MessageHook: IEvent.e: type=1 talker=wxid_9ohhf82mrlgc22
+            msgId=94140 content=<msg><voicemsg voiceformat="4"...
+
+  分析:     content 已变成语音 XML ✅
+            type 仍是 1 (文本)     ❌
+
+  根因:     消息构造流程是:
+              new e9() → setType(1) → d1(content) → [某处再调 setType(1)]
+            ▲                     ▲
+            │                     └── 旧版在此调用 setType(34), 然后被覆盖
+            └──────────────────────── 新版: 在 d1 AFTER 中再强制 setType(34)
+
+================================================================================
+二、修复对照
+================================================================================
+
+  ┌────────────────┬───────────────────────────────────────┐
+  │ 问题           │ 修复                                  │
+  ├────────────────┼───────────────────────────────────────┤
+  │ BUG-1 AccPath  │ getAccPath() 改用目录扫描:             │
+  │                │ 遍历 /data/data/.../MicroMsg/ 下所有   │
+  │                │ 32位hex子目录, 找包含 EnMicroMsg.db    │
+  │                │ 的那个, 返回完整路径                   │
+  ├────────────────┼───────────────────────────────────────┤
+  │ BUG-2 AMR路径  │ getVoicePath(msgObj) 生成标准路径:     │
+  │                │ voice2/[e9.N0()]/msg_[e9.getMsgId()]  │
+  │                │ .amr                                  │
+  ├────────────────┼───────────────────────────────────────┤
+  │ BUG-3 type覆盖 │ d1 Hook 拆成 before + after:          │
+  │                │   before: TTS合成, 改content, 设j1    │
+  │                │   after:  强制 setType(34)            │
+  │                │ after 在 d1 原方法执行完毕后触发,      │
+  │                │ 此时任何覆盖 type 的代码都已执行完毕   │
+  └────────────────┴───────────────────────────────────────┘
+
+================================================================================
+三、关键代码变更
+================================================================================
+
+  变更1: getAccPath() — 增加目录扫描策略
+  ─────────────────────────────────────
+  // 旧代码
+  getAccPath() {
+      return callStatic("com.tencent.mm.kernel.h", "getAccPath");
+      // fallback: "/data/data/com.tencent.mm/MicroMsg/"
+  }
+
+  // 新代码
+  getAccPath() {
+      // 策略1: kernel 反射 (尝试多个方法名)
+      // 策略2: 扫描 MicroMsg 目录找 EnMicroMsg.db 所在的32位hex子目录
+  }
+
+
+  变更2: AMR路径 — 使用 voice2 标准目录
+  ──────────────────────────────────────
+  // 旧代码
+  amrPath = accPath + "tts_temp/tts_" + ts + ".amr"
+
+  // 新代码
+  getVoicePath(msgObj) {
+      talker = msgObj.N0()        // e9.N0() → 会话ID
+      msgId  = msgObj.getMsgId()
+      return accPath + "voice2/" + talker + "/msg_" + msgId + ".amr"
+  }
+
+
+  变更3: Hook — before + after 双阶段
+  ─────────────────────────────────────
+  // 旧代码: 只在 before 中操作
+  hookMethodBefore(e9class, "d1", param -> {
+      ...
+      callMethod(msg, "setType", 34);  // ← 会被覆盖!
+      ...
+  })
+
+  // 新代码: before + after
+  hook(e9class, "d1", new MethodHook() {
+      before: {
+          // TTS合成 + 改 content + j1(amrPath)
+          param.setObjectExtra("__tts_voice_xml__", true);  // 标记
+      }
+      after: {
+          // ★ 在 d1() 完全执行完毕后强制 setType(34)
+          if ("__tts_voice_xml__" == true) {
+              callMethod(msg, "setType", 34);
+          }
+      }
+  })
+
+================================================================================
+四、替换步骤
+================================================================================
+
+  1. 用 TtsVoiceSender_fixed.java 替换项目中的 TtsVoiceSender.java
+  2. 检查 import 路径是否匹配你的包名
+  3. 在 ModuleMain.handleLoadPackage() 中调用:
+       new TtsVoiceSender(lpparam).install();
+  4. Build → 安装 → 重启微信 → 测试
+
+================================================================================
+五、预期日志
+================================================================================
+
+  修复后日志应显示:
+    TtsVoiceSender: Acc via scan        ← AccPath 通过扫描获取
+    TtsVoiceSender: AccPath: /data/.../MicroMsg/7b998556beeef3a1552aa84157df99e8/
+    TtsVoiceSender: AMR: /data/.../voice2/wxid_xxx/msg_123456.amr
+    TtsVoiceSender: ✅ before OK, after 将强制 setType(34)
+    TtsVoiceSender: ✅ afterHook: setType(34) 已强制修正
+
+  IEvent.e 应显示:
+    MessageHook: IEvent.e: type=34 ... content=<msg><voicemsg voiceformat="4"...
+                          ↑ 从这里变成 34
+
+================================================================================

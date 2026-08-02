@@ -1,0 +1,49 @@
+开发手册 / API 文档
+
+1. 接口概述
+
+平台对外提供 RESTful JSON API，您可以在「API Key 管理」中创建 Key，通过 Authorization 或 X-API-Key 请求头携带 Key 进行调用。
+
+方法路径说明POST/api/open/v1/tts/simple-generate同步语音合成（核心接口，支持内置音色和用户自定义音色）GET/api/open/v1/voices获取内置角色（音色）列表（按影视剧分组，含 voice_id）GET/api/open/v1/user-voices获取当前用户的自定义音色列表（含 voice_id）GET/api/open/v1/me校验 Key 有效性并查看信息
+
+2. 请求头鉴权
+
+Authorization: Bearer <YOUR_API_KEY> # 或 X-API-Key: <YOUR_API_KEY>
+
+3. 语音合成请求参数
+
+字段类型必填说明voiceIdstring是角色 ID，支持两种格式：
+- 内置音色：「影视剧-角色名」，例如「琅琊榜-梅长苏」
+- 用户自定义音色：「user-{audio_id}」，例如「user-123」（需先调用 /api/open/v1/user-voices 获取）textstring是要合成的文本内容，最多 1000 字emoVecnumber[8]否情感强度向量，每项 0~1，总和建议 ≤ 1.5
+
+示例请求体（内置音色）
+
+{ "voiceId": "琅琊榜-梅长苏", "text": "你好，欢迎使用语音合成服务。", "emoVec": [0.5, 0, 0, 0, 0, 0, 0, 0] }
+
+示例请求体（用户自定义音色）
+
+{ "voiceId": "user-123", "text": "你好，这是我的自定义音色。" }
+
+4. 响应格式（tts/simple-generate）
+
+{ "status": 200, "message": "OK", "data": { "id": "OA_xxxxx.wav", "voice_id": "琅琊榜-梅长苏", "audio": "https://peiyinmofang.com/cdn/result/audios/OA_xxxxx.wav", "format": "wav", "text": "你好，欢迎使用语音合成服务。", "credit_used": 1 } }
+
+5. 响应格式（voices - 内置音色）
+
+{ "status": 200, "message": "OK", "data": [ { "title": "琅琊榜", "characters": [ {"name": "梅长苏", "actor": "胡歌", "voice_id": "琅琊榜-梅长苏"}, {"name": "靖王", "actor": "王凯", "voice_id": "琅琊榜-靖王"} ] }, { "title": "甄嬛传", "characters": [ {"name": "甄嬛", "actor": "孙俪", "voice_id": "甄嬛传-甄嬛"} ] } ] }
+
+6. 响应格式（user-voices - 用户自定义音色）
+
+{ "status": 200, "message": "OK", "data": [ { "id": 123, "voice_id": "user-123", "name": "我的音色", "audio_type": 1, "created_at": "2024-01-15 10:30:00" }, { "id": 124, "voice_id": "user-124", "name": "录制的声音", "audio_type": 2, "created_at": "2024-01-16 14:20:00" } ] }
+
+audio_type 说明： 1 表示上传的音色，2 表示录制的音色。 voice_id 字段用于语音合成接口的 voiceId 参数。
+
+ cURL Python Node.js Java Go C# Ruby PHP
+
+7. cURL 示例
+
+复制代码# 替换为你自己的 API Key API_KEY="vbox-xxxxxxxxxxxxxxxx-xxxx" BASE_URL="https://peiyinmofang.com" # 1. 同步语音合成（内置音色） curl -X POST "$BASE_URL/api/open/v1/tts/simple-generate" \ -H "Content-Type: application/json" \ -H "Authorization: Bearer $API_KEY" \ -d '{ "voiceId": "琅琊榜-梅长苏", "text": "你好，欢迎使用语音合成服务。" }' # 2. 同步语音合成（用户自定义音色） # 先获取用户音色列表，得到 voice_id（格式：user-{audio_id}） curl -X POST "$BASE_URL/api/open/v1/tts/simple-generate" \ -H "Content-Type: application/json" \ -H "Authorization: Bearer $API_KEY" \ -d '{ "voiceId": "user-123", "text": "你好，这是我的自定义音色。" }' # 3. 获取内置角色列表 curl -H "Authorization: Bearer $API_KEY" \ "$BASE_URL/api/open/v1/voices" # 4. 获取用户自定义音色列表 curl -H "Authorization: Bearer $API_KEY" \ "$BASE_URL/api/open/v1/user-voices" # 5. 检查 Key 状态 curl -H "Authorization: Bearer $API_KEY" \ "$BASE_URL/api/open/v1/me"
+
+8. 错误码
+
+HTTP 状态说明200成功400参数错误 / voiceId 或 text 缺失401API Key 无效或未提供403Key 已被禁用或余额不足404指定的角色或用户音色不存在500服务器内部错误

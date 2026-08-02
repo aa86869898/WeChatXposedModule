@@ -1,0 +1,466 @@
+================================================================================
+   微信设置页 RecyclerView Adapter — 地毯式精准分析报告（第二版·核查补全）
+================================================================================
+
+分析时间: 2025-01-20
+目标 App: com.tencent.mm (微信)
+分析工具: DexKit / jadx / baksmali / class_hierarchy / find_class_usage
+验证方法: Java 反编译 + Smali 二进制交叉验证，逐条核对无矛盾
+
+================================================================================
+一章、核心结论
+================================================================================
+
+设置页 RecyclerView Adapter 类名:  f34.g
+
+完整继承链:
+    f34.g
+  └─ zn3.t0                    ← MvvmList 感知层
+       └─ com.tencent.mm.view.recyclerview.WxRecyclerAdapter   ← 微信通用 Adapter
+            └─ po5.n0           ← 观察者/Header/Footer 管理
+                 └─ com.tencent.mm.ui.recyclerview.SynchronizedAdapter
+                      └─ androidx.recyclerview.widget.RecyclerView.Adapter
+
+特征:
+  - 叶子节点，无任何子类
+  - 自身 0 个字段，所有逻辑在父类 zn3.t0 和 WxRecyclerAdapter
+  - f34.g.x0() 硬编码返回 false（禁止某种默认行为）
+  - 同时服务于:「主设置页」和「搜索设置页」
+
+================================================================================
+二章、Adapter 构造参数（已核查，逐寄存器验证）
+================================================================================
+
+2.1 f34.g 构造函数
+
+  Smali 签名:
+    f34.g.<init>(Lcom/tencent/mm/plugin/mvvmlist/MvvmList; Lpo5/s; Z)V
+
+  ┌────────┬──────────────────────┬────────────────────────────────────┐
+  │ 寄存器 │ 类型                 │ 含义                               │
+  ├────────┼──────────────────────┼────────────────────────────────────┤
+  │ p1     │ MvvmList             │ MVVM 数据模型（持有 ArrayList）    │
+  │ p2     │ po5.s                │ ItemConvert 视图工厂               │
+  │ p3     │ boolean              │ 传给 WxRecyclerAdapter.<init>     │
+  └────────┴──────────────────────┴────────────────────────────────────┘
+
+  Smali (仅15行):
+    .method public constructor <init>(Lcom/tencent/mm/plugin/mvvmlist/MvvmList;Lpo5/s;Z)V
+        invoke-static {p1, v0}, ...     # p1 空检查
+        invoke-static {p2, v0}, ...     # p2 空检查
+        invoke-direct {p0, p1, p2, p3}, Lzn3/t0;-><init>(...)   # ★ 全透传父类
+        return-void
+    .end method
+
+  f34.g 本身无任何字段！纯粹透传。
+
+
+2.2 zn3.t0 构造函数（真正的构造逻辑在此）
+
+  zn3.t0 有两个构造函数:
+    (A) zn3.t0.<init>(ao3.f, LifecycleOwner, po5.s, Z)   — 内部创建 MvvmList
+    (B) zn3.t0.<init>(MvvmList, po5.s, Z)                 — 外部传入 MvvmList
+
+  ★ d34.l.f7() 使用 (B) 路径：先自己创建 MvvmList，再传给 f34.g → zn3.t0(B)
+
+
+2.3 zn3.t0.<init>(MvvmList, po5.s, Z) — 逐寄存器分析
+
+  ┌────────┬──────────────────────┬────────────────────────────────────┐
+  │ 寄存器 │ 类型                 │ 用途                               │
+  ├────────┼──────────────────────┼────────────────────────────────────┤
+  │ p0     │ zn3.t0 (this)        │ 自身                              │
+  │ p1     │ MvvmList             │ mvvmList                          │
+  │ p2     │ po5.s                │ itemConvertFactory (后复用为 0x1) │
+  │ p3     │ boolean              │ 传给 WxRecyclerAdapter             │
+  │ v1     │ ArrayList            │ 从 p1.o 取出，传给 WxRecyclerAdapter│
+  └────────┴──────────────────────┴────────────────────────────────────┘
+
+  关键 Smali (line 89-107):
+    iget-object v1, p1, MvvmList;->o:Ljava/util/ArrayList;     # ★ 取数据
+    invoke-direct {p0, p2, v1, p3}, WxRecyclerAdapter.<init>(po5.s, ArrayList, Z)
+    const/4 p2, 0x1                                             # p2 复用存 1
+    iput-boolean p2, p0, Lzn3/t0;->J:Z                         # J = true（硬编码!）
+    iput-object p1, p0, Lzn3/t0;->I:L...MvvmList;              # I = mvvmList
+    iput-object p0, p1, MvvmList;->q:Lzn3/m0;                  # ★ 双向绑定！
+
+  注意: J 字段始终 = true，不依赖 p3 参数！
+
+2.4 WxRecyclerAdapter.<init>(po5.s, ArrayList, boolean)
+
+  Smali 签名:
+    WxRecyclerAdapter.<init>(Lpo5/s; Ljava/util/ArrayList; Z)V
+
+  字段赋值:
+    this.t  = p1 (itemConvertFactory)    ← po5.s
+    this.data = p2 (ArrayList)           ← 与 MvvmList.o 同一对象!
+    this.u  = p3 (boolean)
+    this.F  = po5.y0 (Footer 回调，由 d34.l.f7 后续设置)
+
+
+================================================================================
+三章、完整数据流（从头到尾，逐方法核查）
+================================================================================
+
+3.1 概览
+
+  StateCenter 状态变化
+    → uic.c.invoke(state)
+      → new f34.e(list)          // 包装成 DataSource
+        → d34.l.f7(f34.e)
+          → new MvvmList(f34.e, ...)
+          → new f34.g(mvvmList, factory, true)
+            → zn3.t0.<init>(mvvmList, factory, true)
+              → MvvmList.o (ArrayList) → WxRecyclerAdapter.data
+          → recyclerView.setAdapter(f34.g)
+
+
+3.2 第〇步: Activity 注册 UIC 组件
+
+  文件: BaseSettingPrefUI.superImportUIComponents()
+
+  public void superImportUIComponents(HashSet hashSet) {
+      super.superImportUIComponents(hashSet);
+      hashSet.add(com.tencent.mm.plugin.setting.ui.setting_new.uic.e.class); // 搜索头 UIC
+      hashSet.add(d.class);  // ★ uic.d — 核心列表 UIC (extends d34.l)
+      g gVar = g.a;          // x34.g 单例
+      l c = gVar.c("SettingGroup_Main", this);
+      // ... 遍历 c.e 添加设置项 UIC
+      this.e = (i) c.d;
+  }
+
+
+3.3 第一步: onCreate 触发状态绑定
+
+  文件: uic.d.onCreate()  (继承 d34.l)
+
+  public void onCreate(Bundle bundle) {
+      super.onCreate(bundle);
+      BaseMvvmActivity a7 = a7();
+      f stateCenter = a7.getStateCenter();
+      stateCenter.h0(getActivity(), new c(this));  // ★ 注册状态观察者
+  }
+
+
+3.4 第二步: 状态回调 → 构建 DataSource → 调用 f7
+
+  文件: uic.c.invoke()
+
+  Smali:
+    check-cast p1, Lu34/f;            // state: u34.f
+    iget-object p1, p1, q85/a;->d:Lq85/d;  // state.d
+    check-cast p1, Lu34/e;            // u34.e
+    iget-object p1, p1, Lu34/e;->b:Lq06/l;  // u34.e.b = q06.l (Pair)
+    iget-object p1, p1, Lq06/l;->e:Ljava/lang/Object; // Pair.second = List
+    check-cast p1, Ljava/util/List;    // List<d34.i>
+
+    new-instance v0, Lf34/e;           // DataSource
+    invoke-direct {v0, p1}, Lf34/e;-><init>(Ljava/util/List;)V
+
+    iget-object p1, p0, .../uic/c;->d:L.../uic/d;  // 持有 uic.d
+    invoke-virtual {p1, v0}, Ld34/l;->f7(Lao3/a;)V  // ★ 调用 f7
+
+  类型链:
+    u34.f → u34.e → q06.l.e → List<d34.i> → f34.e (DataSource)
+
+
+3.5 第三步: d34.l.f7() — 创建 MvvmList + f34.g + 绑定 RecyclerView
+
+  完整 Smali (101行)，逐段分析:
+
+  ┌──────────────────────────────────────────────────────────────────┐
+  │ 阶段 1: 找到 RecyclerView                                        │
+  │   const v0, 0x7f0956c7       ← layout id                        │
+  │   invoke-virtual {p0, v0}, findViewById(I) → WxRecyclerView     │
+  └──────────────────────────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────────────┐
+  │ 阶段 2: 清空旧状态                                               │
+  │   recyclerView.setAdapter(null)                                  │
+  │   recyclerView.setLayoutManager(null)                            │
+  └──────────────────────────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────────────┐
+  │ 阶段 3: 设置 LayoutManager                                       │
+  │   new WxLinearLayoutManager(getActivity())                       │
+  │   recyclerView.setLayoutManager(layoutManager)                   │
+  └──────────────────────────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────────────┐
+  │ 阶段 4: 创建 MvvmList                                           │
+  │   new MvvmList(                                                  │
+  │       dataSource    = p1 (f34.e),                               │
+  │       initConfig    = new zn3.n0(),   // 默认配置                │
+  │       lifecycleOwner = getActivity(),                            │
+  │       workerScope   = null,           // 使用默认                │
+  │       initDataList  = null            // 使用默认(空列表)         │
+  │   )                                                              │
+  │   → MvvmList.o = new ArrayList()     // 初始为空                 │
+  │   → 数据通过 f34.e DataSource 异步加载                           │
+  └──────────────────────────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────────────┐
+  │ 阶段 5: 创建 f34.g 并绑定                                        │
+  │   new f34.g(v1= MvvmList,                                        │
+  │             v2= e7()→PrefSettingListUIC$buildItemCoverts$1,     │
+  │             v3= true)                                            │
+  │                                                                  │
+  │   new d34.j(this) → WxRecyclerAdapter.F (Footer 曝光上报回调)    │
+  │   recyclerView.setAdapter(f34.g)                                 │
+  └──────────────────────────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────────────┐
+  │ 阶段 6: 保存引用                                                 │
+  │   this.d = mvvmList    // d34.l.d 字段缓存 MvvmList              │
+  └──────────────────────────────────────────────────────────────────┘
+
+
+3.6  第四步: zn3.t0 构造内部 — Adapter 如何获取数据
+
+  zn3.t0.<init>(MvvmList, po5.s, Z):
+
+    ArrayList v1 = mvvmList.o              // ★ 取 MvvmList 的 ArrayList
+    WxRecyclerAdapter.<init>(factory, v1, true)  // ★ 传入 ArrayList
+    this.J = true                           // 硬编码
+    this.I = mvvmList                       // 持有 MvvmList 引用
+    mvvmList.q = this                       // ★ 反向绑定 Adapter → MvvmList
+
+  ★ 关键: WxRecyclerAdapter.data 和 MvvmList.o 是同一个 ArrayList 对象！
+    数据源更新 MvvmList.o → Adapter 自动感知 → notifyDataSetChanged
+
+
+3.7 数据加载机制
+
+  DataSource: f34.e
+    字段: d: List      — 构造时传入的原始设置项列表
+          e: LinkedList — onCreate() 中筛选后待展示的队列
+
+  f34.e.onCreate():
+    foreach (obj in this.d) {
+        if (obj.A7())              // 过滤: 仅展示可见项
+            this.e.add(new f(index, obj))
+    }
+
+  当 RecyclerView 请求数据时，f34.e.a(scope, request) 将 e 中数据通过 Flow 发送。
+
+
+================================================================================
+四章、关键类字段速查（已逐字段核对）
+================================================================================
+
+4.1 f34.g (Adapter)
+  字段: 0 个（无自有字段）
+  方法:
+    <init>(MvvmList, po5.s, boolean)
+    x0() → return false
+
+4.2 zn3.t0 (父 Adapter)
+  字段:
+    I: MvvmList                    ← MvvmList 引用
+    J: boolean                     ← 始终 true (硬编码)
+  方法:
+    <init>(ao3.f, LifecycleOwner, po5.s, Z)   — 内部创建 MvvmList
+    <init>(MvvmList, po5.s, Z)                 — 外部传入 MvvmList (d34.l.f7 用此)
+    x0() → boolean
+    e(zn3.o0)
+
+4.3 WxRecyclerAdapter
+  字段 (16个):
+    t:   po5.s                     ← ItemConvert 工厂
+    data: ArrayList                ← 数据 (与 MvvmList.o 同一引用!)
+    u:   boolean                   ← 构造参数 p3
+    v:   ConcurrentHashMap         ← ViewHolder 缓存
+    w:   ConcurrentHashMap         ← ViewHolder 缓存
+    x:   boolean
+    y:   po5.d1                    ← AdapterDataObserver
+    z:   LongSparseArray
+    A:   boolean                   ← 初始 true
+    B:   po5.u
+    C, D, E: LongSparseArray
+    F:   po5.y0                    ← Footer 回调 (d34.j 设置)
+    G:   po5.b1
+    H:   RecyclerView.AdapterDataObserver
+
+4.4 MvvmList (数据模型)
+  字段 (20个):
+    d: ao3.f             ← 数据源 (f34.e)
+    e: zn3.n0            ← 初始化配置
+    f: LifecycleOwner    ← Activity
+    g: d85.i             ← 协程作用域
+    h: List              ← 初始数据列表 (null → 空列表)
+    i: boolean           ← 标志 (初始 true)
+    m: boolean
+    n: int
+    o: ArrayList         ← ★ 运行时数据 ★ (RecyclerView 读这个!)
+    p: ArrayList         ← 额外列表
+    q: zn3.m0            ← ★ 反向指向 Adapter (zn3.t0)!
+    r: MutableLiveData
+    s: MutableSharedFlow
+    t: long              ← 节流 (100ms)
+    u: LiveData
+    v: Flow
+    w: AtomicInteger     ← 版本号
+    x,y,z: Channel       ← 协程通道
+
+4.5 f34.e (DataSource)
+  继承: ao3.a (implements ao3.f)
+  字段:
+    d: List              ← 原始设置项列表 (List<d34.i>)
+    e: LinkedList        ← 筛选后队列
+
+4.6 d34.l (UIC 基类)
+  继承: yn3.a → UIComponent
+  字段:
+    d: MvvmList          ← f7() 中保存的引用
+  方法:
+    abstract e7() → po5.s       ← ItemConvert 工厂
+    f7(ao3.a)                   ← ★ 创建 Adapter + 绑定
+
+4.7 uic.d (设置列表 UIC)
+  继承: d34.l
+  e7() → new PrefSettingListUIC$buildItemCoverts$1()   ← ItemConvert 工厂
+
+4.8 uic.r (搜索列表 UIC)
+  继承: d34.l
+  e7() → new SearchListUIC$buildItemCoverts$1(this)    ← 搜索用工厂
+
+
+================================================================================
+五章、ItemConvert 工厂 (viewType 映射)
+================================================================================
+
+5.1 PrefSettingListUIC$buildItemCoverts$1 (主设置页)
+
+  public r getItemConvert(int i) {
+      switch(i):
+          1 → w34.r     (设置项)
+          2 → y         (设置项)
+          5 → d         (设置组)
+          6 → a         (设置项)
+          7 → w34.c     (设置项)
+          else → new r()
+  }
+
+
+================================================================================
+六章、Footer 回调机制 (d34.j)
+
+  在 d34.l.f7() 中设置:
+    WxRecyclerAdapter.F = new d34.j(this)
+
+  d34.j.a(RecyclerView, w0):
+    遍历 w0Var.j (footer 数据列表)
+    对每个 footer 项:
+      - 找到对应的 ViewHolder
+      - 调用曝光上报 (aVar.Ek, aVar.xk, aVar.vk)
+      - 特殊处理 "SettingGroup_Main_HeaderSearch"
+
+
+================================================================================
+七章、两个 zn3.t0 构造函数的区别
+
+  ┌──────────────────────────────────────────────────────────────┐
+  │ 重载 A: zn3.t0(ao3.f, LifecycleOwner, po5.s, Z)            │
+  │   内部自己 new MvvmList(dataSource, initConfig, lifecycle)  │
+  │   然后 delegate 到重载 B                                     │
+  │   常用于: 外部不关心 MvvmList 创建细节的场景                 │
+  ├──────────────────────────────────────────────────────────────┤
+  │ 重载 B: zn3.t0(MvvmList, po5.s, Z)                         │
+  │   直接接收外部创建的 MvvmList                                │
+  │   d34.l.f7() 使用这个 —— 因为它需要在创建 Adapter 前         │
+  │   先持有 MvvmList 引用                                       │
+  └──────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+八章、Hook 方案（已核查字段路径正确性）
+================================================================================
+
+8.1 方案 A: Hook Adapter 构造
+
+  hookMethodAfter("f34.g", "<init>", param -> {
+      Object mvvmList = param.args[0];      // MvvmList
+      Object factory  = param.args[1];      // po5.s
+      boolean flag    = param.args[2];      // true
+      log("[f34.g] 构造: mvvmList=" + mvvmList);
+  });
+
+8.2 方案 B: Hook d34.l.f7 — 获取完整上下文
+
+  hookMethodAfter("d34.l", "f7", param -> {
+      Object dataSource = param.args[0];          // f34.e
+      Object mvvmList = getObjectField(param.thisObject, "d"); // d34.l.d
+      // 注意: f7 末尾才设置 this.d = mvvmList
+      // 因此 Hook After 才能拿到
+      log("[d34.l.f7] adapter 已绑定到 RecyclerView");
+      log("  MvvmList: " + mvvmList);
+  });
+
+  如果要拿 Adapter 本身（在 After 中）:
+    WxRecyclerView rv = findViewById(0x7f0956c7);
+    RecyclerView.Adapter adapter = rv.getAdapter(); // f34.g 实例
+
+8.3 方案 C: 获取当前数据列表
+
+  路径1: f34.g → zn3.t0.I → MvvmList.o
+  路径2: f34.g → WxRecyclerAdapter.data  (同一对象)
+
+  Object adapter = ...;
+  Object mvvmList = getObjectField(adapter, "I");  // zn3.t0.I
+  List dataList = (List) getObjectField(mvvmList, "o"); // MvvmList.o
+
+  或者捷径:
+  List dataList = (List) getObjectField(adapter, "data"); // WxRecyclerAdapter.data
+
+8.4 方案 D: Hook 数据更新
+
+  MvvmList 通过 o (ArrayList) 字段与 Adapter 共享数据。
+  监听 MvvmList 的关键方法:
+    - MvvmList.n(List, boolean)  → 设置数据
+    - MvvmList.p(List, boolean)  → 更新数据
+    - MvvmList.v(List, boolean)  → 替换数据
+
+  hookMethodAfter("com.tencent.mm.plugin.mvvmlist.MvvmList", "n", param -> {
+      log("数据更新: size=" + ((List)param.args[0]).size());
+  });
+
+
+================================================================================
+九章、验证清单
+================================================================================
+
+  ✅ f34.g 构造函数签名: Smali 交叉验证通过
+  ✅ zn3.t0 构造函数: Smali 第76-109行逐行分析
+  ✅ d34.l.f7: Smali 第1-101行逐段分析
+  ✅ uic.c.invoke: Smali 第1-38行逐行分析
+  ✅ f34.e DataSource: Java 反编译第17-55行
+  ✅ MvvmList 字段: 20个字段逐一核对
+  ✅ WxRecyclerAdapter 字段: 16个字段逐一核对
+  ✅ 继承链: class_hierarchy 验证，f34.g 无子类
+  ✅ 双向绑定: MvvmList.q = zn3.t0; zn3.t0.I = MvvmList
+  ✅ 数据共享: WxRecyclerAdapter.data === MvvmList.o (同一对象引用)
+  ✅ Footer: d34.j 设置到 WxRecyclerAdapter.F
+  ✅ ItemConvert: PrefSettingListUIC$buildItemCoverts$1 和 SearchListUIC 两种
+  ✅ LayoutManager: WxLinearLayoutManager
+  ✅ RecyclerView: WxRecyclerView (id=0x7f0956c7)
+
+================================================================================
+十章、本次核查修正项
+================================================================================
+
+  原版错误: 未明确 zn3.t0.J 始终为 true（硬编码 const/4 p2, 0x1）
+  本版修正: 指明 J 字段不受构造参数 p3 影响，始终为 true
+
+  原版遗漏: 未说明两个 zn3.t0 构造函数重载的区别
+  本版补全: 第七章详述重载 A（内部创建 MvvmList）和重载 B（外部传入）
+
+  原版遗漏: d34.j Footer 回调的具体逻辑
+  本版补全: 第六章分析曝光上报机制
+
+  原版遗漏: f34.e DataSource 的数据加载机制
+  本版补全: 第三章详述 f34.e.onCreate() 过滤逻辑和 Flow 发送
+
+  原版遗漏: MvvmList.o 初始为空（initDataList=null），数据异步加载
+  本版补全: 第三章阶段4明确说明
+
+  原版遗漏: WxRecyclerAdapter.data 和 MvvmList.o 是同一引用
+  本版补全: 多处强调此关键事实
+
+================================================================================
+报告完毕。经 Smali 逐行核查，所有字段路径和参数类型均精准无误。
+================================================================================
