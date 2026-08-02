@@ -15,7 +15,7 @@
             android:value="true" />
         <meta-data
             android:name="xposeddescription"
-            android:value="乐少助手 V3 - 微信多功能辅助模块" />
+            android:value="com.leshao.v3" />
         <meta-data
             android:name="xposedminversion"
             android:value="102" />

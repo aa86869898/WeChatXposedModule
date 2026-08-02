@@ -60,10 +60,10 @@ public class MusicSearchApi {
     // ===== KuGou =====
     private static final String KG_SEARCH = "https://songsearch.kugou.com/song_search_v2";
     private static final String KG_PLAY_FALLBACK = "https://music.haitangw.cc/kgqq1/kg.php";
-    private static final String KG_SEARCH_ALBUM = "http://msearch.kugou.com/api/v3/search/album";
+    private static final String KG_SEARCH_ALBUM = "https://msearch.kugou.com/api/v3/search/album";
     private static final String KG_SEARCH_SHEET = "http://mobilecdn.kugou.com/api/v3/search/special";
-    private static final String LYRICS_SEARCH = "http://lyrics.kugou.com/search";
-    private static final String LYRICS_DOWNLOAD = "http://lyrics.kugou.com/download";
+    private static final String LYRICS_SEARCH = "https://lyrics.kugou.com/search";
+    private static final String LYRICS_DOWNLOAD = "https://lyrics.kugou.com/download";
     private static final String FULL_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/106.0.0.0 Safari/537.36";
     private static final String LYRICS_UA = "KuGou2012-9020-ExpandSearchManager";
 
@@ -195,7 +195,7 @@ public class MusicSearchApi {
                 String safeTitle = title != null ? URLEncoder.encode(title, "UTF-8") : "";
                 String searchUrl = LYRICS_SEARCH + "?ver=1&man=yes&client=pc&keyword="
                     + safeTitle + "&hash=" + hash + "&timelength=" + duration;
-                String searchResp = httpGetWithHeaders(searchUrl, "http://lyrics.kugou.com",
+                String searchResp = httpGetWithHeaders(searchUrl, "https://lyrics.kugou.com",
                     new String[][]{
                         {"User-Agent", LYRICS_UA},
                         {"KG-RC", "1"},
@@ -216,7 +216,7 @@ public class MusicSearchApi {
                 }
                 String dlUrl = LYRICS_DOWNLOAD + "?ver=1&client=pc&id=" + lyricId
                     + "&accesskey=" + accessKey + "&fmt=lrc&charset=utf8";
-                String dlResp = httpGetWithHeaders(dlUrl, "http://lyrics.kugou.com",
+                String dlResp = httpGetWithHeaders(dlUrl, "https://lyrics.kugou.com",
                     new String[][]{
                         {"User-Agent", LYRICS_UA},
                         {"KG-RC", "1"},
@@ -246,7 +246,7 @@ public class MusicSearchApi {
                 String urlStr = KG_SEARCH_ALBUM + "?version=9024&iscorrection=1&highlight=em&plat=0"
                     + "&keyword=" + URLEncoder.encode(query, "UTF-8")
                     + "&pagesize=20&page=" + page + "&sver=2&with_res_tag=0";
-                String resp = httpGet(urlStr, "http://msearch.kugou.com");
+                String resp = httpGet(urlStr, "https://msearch.kugou.com");
                 JSONObject json = new JSONObject(resp);
                 JSONObject data = json.optJSONObject("data");
                 if (data == null) { postError(cb, "无搜索结果"); return; }

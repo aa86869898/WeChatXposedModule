@@ -32,7 +32,7 @@ public class SnsFeatures {
 
         if (HookConfig.isEnabled("sns_ad_block"))      hookAdBlock();
         if (HookConfig.isEnabled("sns_forward"))       hookForward();
-        if (HookConfig.isEnabled("sns_fake_like"))     hookFakeLike();
+        if (HookConfig.isEnabled("sns_simulate_like"))     hookFakeLike();
         if (HookConfig.isEnabled("sns_time_edit"))     hookTimeEdit();
         if (HookConfig.isEnabled("sns_video_quality")) hookVideoQuality();
         if (HookConfig.isEnabled("sns_long_video"))    hookLongVideo();

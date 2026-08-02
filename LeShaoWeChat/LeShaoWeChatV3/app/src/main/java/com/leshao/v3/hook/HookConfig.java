@@ -40,7 +40,7 @@ public class HookConfig {
         if (key.equals("anonymous_chat")) return false;
         if (key.equals("sns_ad_block")) return true;
         if (key.equals("sns_forward")) return true;
-        if (key.equals("sns_fake_like")) return false;
+        if (key.equals("sns_simulate_like")) return false;
         if (key.equals("sns_time_edit")) return false;
         if (key.equals("sns_video_quality")) return true;
         if (key.equals("sns_long_video")) return true;

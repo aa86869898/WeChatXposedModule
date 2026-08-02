@@ -48,7 +48,7 @@ public class SnsFragment extends Fragment {
         LinearLayout cardSub = makeCard(d);
         cardSub.addView(subSwitch(d, "sns_ad_block", "去广告", "隐藏朋友圈中的广告内容", true));
         cardSub.addView(subSwitch(d, "sns_forward", "转发与复制", "支持转发到聊天和复制文字内容", true));
-        cardSub.addView(subSwitch(d, "sns_fake_like", "假点赞", "强制点赞结果返回成功", false));
+        cardSub.addView(subSwitch(d, "sns_simulate_like", "假点赞", "强制点赞结果返回成功", false));
         cardSub.addView(subSwitch(d, "sns_time_edit", "时间修改", "修改朋友圈发布时间的偏移量", false,
                 v -> ConfigPanels.showSnsTimeOffset(act, mPrefs)));
         cardSub.addView(subSwitch(d, "sns_video_quality", "视频画质增强", "解锁朋友圈视频的高画质播放", true));

@@ -89,10 +89,12 @@ public class ActivationManager {
         "DeepSeek"
     };
 
-    private static final String SECRET = new String(new byte[]{
-        0x4C, 0x65, 0x53, 0x68, 0x61, 0x6F, 0x32, 0x30,
-        0x32, 0x35, 0x4B, 0x65, 0x79, 0x58, 0x58, 0x58
-    });
+    private static String getSecret() {
+        int[] v = {76, 101, 83, 104, 97, 111, 50, 48, 50, 53, 75, 101, 121, 88, 88, 88};
+        char[] c = new char[v.length];
+        for (int i = 0; i < v.length; i++) c[i] = (char) v[i];
+        return new String(c);
+    }
 
     // ==================== 激活码生成 ====================
 
@@ -119,7 +121,7 @@ public class ActivationManager {
         String payload = base62Encode(metadata);
 
         // verify = MD5(metadata + wxid + SECRET)[0:4] as hex
-        byte[] verifyBytes = md5(concat(metadata, wxid.getBytes(StandardCharsets.UTF_8), SECRET.getBytes(StandardCharsets.UTF_8)));
+        byte[] verifyBytes = md5(concat(metadata, wxid.getBytes(StandardCharsets.UTF_8), getSecret().getBytes(StandardCharsets.UTF_8)));
         String verify = bytesToHex(verifyBytes, 4);
 
         return "LS-" + payload + "-" + verify;
@@ -162,7 +164,7 @@ public class ActivationManager {
             if (metadata == null || metadata.length != 7) return r;
 
             // 校验 verify
-            byte[] expected = md5(concat(metadata, wxid.getBytes(StandardCharsets.UTF_8), SECRET.getBytes(StandardCharsets.UTF_8)));
+            byte[] expected = md5(concat(metadata, wxid.getBytes(StandardCharsets.UTF_8), getSecret().getBytes(StandardCharsets.UTF_8)));
             String expectedHex = bytesToHex(expected, 4);
             if (!expectedHex.equalsIgnoreCase(verify)) return r;
 

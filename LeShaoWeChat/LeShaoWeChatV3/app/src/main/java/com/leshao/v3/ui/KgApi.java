@@ -599,7 +599,7 @@ public class KgApi {
     public static void getLyric(String hash, StringCallback cb) {
         EXEC.execute(() -> {
             try {
-                String url = "http://m.kugou.com/app/i/krc.php?cmd=100&timelength=999999&hash=" + hash;
+                String url = "https://m.kugou.com/app/i/krc.php?cmd=100&timelength=999999&hash=" + hash;
                 String r = httpGet(url, "https://m.kugou.com");
                 MAIN.post(() -> cb.onResult(r));
             } catch (Exception e) {
