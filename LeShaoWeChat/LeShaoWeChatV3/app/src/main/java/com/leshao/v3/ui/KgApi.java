@@ -112,6 +112,10 @@ public class KgApi {
     // ===== 搜索 =====
 
     public static void search(String keyword, int page, String type, SongListCallback cb) {
+        if ("music".equals(type) || "song".equals(type)) {
+            searchSimple(keyword, page, cb);
+            return;
+        }
         String st;
         String sv;
         switch (type) {
@@ -158,6 +162,51 @@ public class KgApi {
                 }
             }
             public void onError(String msg) { MAIN.post(() -> songListError(cb, msg)); }
+        });
+    }
+
+    private static void searchSimple(String keyword, int page, SongListCallback cb) {
+        EXEC.execute(() -> {
+            try {
+                String url = "https://songsearch.kugou.com/song_search_v2?keyword="
+                    + URLEncoder.encode(keyword, "UTF-8")
+                    + "&page=" + page + "&pagesize=" + PAGE_SIZE
+                    + "&userid=0&clientver=&platform=WebFilter"
+                    + "&filter=2&iscorrection=1&privilege_filter=0&area_code=1";
+                String resp = httpGet(url, "https://songsearch.kugou.com");
+                JSONObject json = new JSONObject(resp);
+                JSONObject data = json.optJSONObject("data");
+                if (data == null) { songListError(cb, "无搜索结果"); return; }
+
+                JSONArray lists = data.optJSONArray("lists");
+                int total = data.optJSONObject("info") != null
+                    ? data.optJSONObject("info").optInt("total", 0) : 0;
+                List<Song> songs = new ArrayList<>();
+                if (lists != null) {
+                    for (int i = 0; i < lists.length(); i++) {
+                        JSONObject item = lists.getJSONObject(i);
+                        Song s = new Song();
+                        s.hash = item.optString("FileHash", "");
+                        s.id = s.hash;
+                        s.title = item.optString("SongName", item.optString("FileName", ""));
+                        s.artist = item.optString("SingerName", "");
+                        s.album = item.optString("AlbumName", "");
+                        s.duration = item.optInt("Duration", 0);
+                        s.cover = item.optString("Image", "");
+                        s.albumId = item.optString("AlbumID", "");
+                        s.albumAudioId = "0";
+                        s.sqHash = item.optString("SQFileHash", "");
+                        s.hash320 = item.optString("HQFileHash", "");
+                        s.originHash = item.optString("ResFileHash", "");
+                        songs.add(s);
+                    }
+                }
+                final List<Song> f = songs;
+                final int ft = total;
+                MAIN.post(() -> cb.onResult(f, ft));
+            } catch (Exception e) {
+                songListError(cb, e.getMessage());
+            }
         });
     }
 
