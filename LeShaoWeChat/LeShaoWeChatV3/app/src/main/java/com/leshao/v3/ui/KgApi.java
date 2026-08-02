@@ -39,6 +39,29 @@ public class KgApi {
     private static final String TOKEN = "f7524337c1ae877929a1497cf3d5d37e5c4cb8073fc298e492a67babc376a9d4";
     private static final String APP_ID = "1005";
 
+    // ===== Cookie =====
+
+    private static String sKgMid = null;
+
+    private static String getKgMid() {
+        if (sKgMid == null) {
+            android.content.SharedPreferences p = com.leshao.v3.ContextManager.getPrefs();
+            if (p != null) {
+                sKgMid = p.getString("kg_mid", "");
+            }
+            if (sKgMid == null || sKgMid.isEmpty()) {
+                String uuid = java.util.UUID.randomUUID().toString().replace("-", "");
+                sKgMid = uuid.substring(0, 32);
+                if (p != null) p.edit().putString("kg_mid", sKgMid).apply();
+            }
+        }
+        return sKgMid;
+    }
+
+    private static String kgCookie() {
+        return "kg_mid=" + getKgMid() + "; kg_mid_temp=" + getKgMid() + "; ACK_SERVER_10015=; ACK_SERVER_10016=; ACK_SERVER_10017=; kg_dfid=-; Hm_lvt_aedee6983d4cfc62f509129453d6bb3d=" + (System.currentTimeMillis() / 1000);
+    }
+
     // ===== 数据模型 =====
 
     public static class Song {
@@ -184,7 +207,7 @@ public class KgApi {
                 String trimmed = resp.trim();
                 if (!trimmed.startsWith("{")) {
                     Log.e(TAG, "searchSimple: non-JSON resp=[" + truncated(trimmed, 200) + "] url=" + url);
-                    songListError(cb, "音源接口请求失败");
+                    songListError(cb, "音源访问受限，请稍后重试");
                     return;
                 }
 
@@ -220,7 +243,7 @@ public class KgApi {
                 MAIN.post(() -> cb.onResult(f, ft));
             } catch (Exception e) {
                 Log.e(TAG, "searchSimple exception", e);
-                songListError(cb, "音源接口请求失败");
+                songListError(cb, e.getMessage() != null && e.getMessage().contains("受") ? e.getMessage() : "音源访问受限，请稍后重试");
             }
         });
     }
@@ -873,12 +896,15 @@ public class KgApi {
         conn.setRequestProperty("User-Agent", ua);
         conn.setRequestProperty("Referer", referer);
         conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+        conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
+        conn.setRequestProperty("Cookie", kgCookie());
         conn.setRequestProperty("KG-THash", "3e5ec6b");
         conn.setRequestProperty("KG-RC", "1");
         conn.setRequestProperty("KG-RF", "00869891");
         if (router != null) conn.setRequestProperty("x-router", router);
         conn.setInstanceFollowRedirects(true);
 
+        Log.e(TAG, "GET " + urlStr);
         return readResponse(conn);
     }
 
@@ -892,12 +918,15 @@ public class KgApi {
         conn.setRequestProperty("Content-Type", "application/json");
         conn.setRequestProperty("User-Agent", ua);
         conn.setRequestProperty("Referer", referer);
+        conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+        conn.setRequestProperty("Cookie", kgCookie());
         conn.setRequestProperty("KG-THash", "13a3164");
         conn.setRequestProperty("KG-RC", "1");
         conn.setRequestProperty("KG-Fake", "0");
         conn.setRequestProperty("KG-RF", "00869891");
         if (router != null) conn.setRequestProperty("x-router", router);
 
+        Log.e(TAG, "POST " + urlStr);
         try (OutputStream os = conn.getOutputStream()) {
             os.write(body.getBytes("UTF-8"));
             os.flush();
@@ -906,14 +935,28 @@ public class KgApi {
     }
 
     private static String readResponse(HttpURLConnection conn) throws Exception {
+        String raw;
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"))) {
             StringBuilder sb = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) sb.append(line);
-            return sb.toString();
+            raw = sb.toString();
         } finally {
             conn.disconnect();
         }
+        return ensureJsonResponse(raw);
+    }
+
+    private static String ensureJsonResponse(String raw) throws Exception {
+        String trimmed = raw != null ? raw.trim() : "";
+        Log.e(TAG, "API resp len=" + trimmed.length() + " head=[" + truncated(trimmed, 300) + "]");
+        if (trimmed.isEmpty()) return trimmed;
+        char first = trimmed.charAt(0);
+        if (first != '{' && first != '[') {
+            Log.e(TAG, "API returned non-JSON: [" + truncated(trimmed, 500) + "]");
+            throw new Exception("音源访问受限，请稍后重试");
+        }
+        return trimmed;
     }
 
     private static String getPlayUrlRaw(String urlStr) throws Exception {
@@ -925,6 +968,7 @@ public class KgApi {
         conn.setRequestProperty("User-Agent", "Android800-AndroidPhone-12029-56-0-starlive-ctnet(13)");
         conn.setRequestProperty("Referer", "https://m.kugou.com");
         conn.setRequestProperty("Accept", "application/json, text/plain, */*");
+        conn.setRequestProperty("Cookie", kgCookie());
         conn.setRequestProperty("KG-THash", "595ff94");
         conn.setRequestProperty("KG-FAKE", USER_ID);
         conn.setRequestProperty("KG-Rec", "1");

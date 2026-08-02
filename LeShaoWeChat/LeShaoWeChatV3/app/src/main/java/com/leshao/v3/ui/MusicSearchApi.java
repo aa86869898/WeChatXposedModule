@@ -24,6 +24,29 @@ public class MusicSearchApi {
     private static final ExecutorService sExecutor = Executors.newFixedThreadPool(4);
     private static final Handler sHandler = new Handler(Looper.getMainLooper());
 
+    // ===== Cookie =====
+
+    private static String sKgMid = null;
+
+    private static String getKgMid() {
+        if (sKgMid == null) {
+            android.content.SharedPreferences p = com.leshao.v3.ContextManager.getPrefs();
+            if (p != null) {
+                sKgMid = p.getString("kg_mid", "");
+            }
+            if (sKgMid == null || sKgMid.isEmpty()) {
+                String uuid = java.util.UUID.randomUUID().toString().replace("-", "");
+                sKgMid = uuid.substring(0, 32);
+                if (p != null) p.edit().putString("kg_mid", sKgMid).apply();
+            }
+        }
+        return sKgMid;
+    }
+
+    private static String kgCookie() {
+        return "kg_mid=" + getKgMid() + "; kg_mid_temp=" + getKgMid() + "; ACK_SERVER_10015=; ACK_SERVER_10016=; ACK_SERVER_10017=; kg_dfid=-; Hm_lvt_aedee6983d4cfc62f509129453d6bb3d=" + (System.currentTimeMillis() / 1000);
+    }
+
     public static class Song {
         public String id;
         public String title;
@@ -129,7 +152,7 @@ public class MusicSearchApi {
                 sHandler.post(() -> cb.onResult(finalSongs, finalTotal, fHasPrev, fHasNext));
             } catch (Exception e) {
                 Log.e(TAG, "KG search exception", e);
-                postError(cb, "音源接口请求失败");
+                postError(cb, e.getMessage() != null && e.getMessage().contains("受") ? e.getMessage() : "音源访问受限，请稍后重试");
             }
         });
     }
@@ -344,30 +367,26 @@ public class MusicSearchApi {
         conn.setRequestProperty("Referer", referer);
         conn.setRequestProperty("Accept", "application/json, text/plain, */*");
         conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
+        conn.setRequestProperty("Cookie", kgCookie());
         conn.setInstanceFollowRedirects(true);
         if (extraHeaders != null) {
             for (String[] h : extraHeaders) {
                 conn.setRequestProperty(h[0], h[1]);
             }
         }
+        String raw;
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"))) {
             StringBuilder sb = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) {
                 sb.append(line);
             }
-            return sb.toString();
+            raw = sb.toString();
         } finally {
             conn.disconnect();
         }
-    }
-
-    private static String normalizePlayUrl(String url) {
-        if (url == null || url.isEmpty() || "null".equals(url)) return "";
-        String u = url.trim();
-        if (u.startsWith("//")) u = "https:" + u;
-        else if (u.startsWith("http://")) u = "https://" + u.substring(7);
-        return u;
+        Log.e(TAG, "GET(2) url=" + urlStr);
+        return ensureJson(raw, urlStr);
     }
 
     private static String httpGet(String urlStr, String referer) throws Exception {
@@ -380,18 +399,42 @@ public class MusicSearchApi {
         conn.setRequestProperty("Referer", referer);
         conn.setRequestProperty("Accept", "application/json, text/plain, */*");
         conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9");
+        conn.setRequestProperty("Cookie", kgCookie());
         conn.setInstanceFollowRedirects(true);
 
+        String raw;
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"))) {
             StringBuilder sb = new StringBuilder();
             String line;
             while ((line = reader.readLine()) != null) {
                 sb.append(line);
             }
-            return sb.toString();
+            raw = sb.toString();
         } finally {
             conn.disconnect();
         }
+        Log.e(TAG, "GET url=" + urlStr);
+        return ensureJson(raw, urlStr);
+    }
+
+    private static String ensureJson(String raw, String urlForLog) throws Exception {
+        String trimmed = raw != null ? raw.trim() : "";
+        Log.e(TAG, "API resp len=" + trimmed.length() + " url=" + urlForLog + " head=[" + truncated(trimmed, 300) + "]");
+        if (trimmed.isEmpty()) return trimmed;
+        char first = trimmed.charAt(0);
+        if (first != '{' && first != '[') {
+            Log.e(TAG, "API non-JSON url=" + urlForLog + " raw=[" + truncated(trimmed, 500) + "]");
+            throw new Exception("\u97F3\u6E90\u8BBF\u95EE\u53D7\u9650\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
+        }
+        return trimmed;
+    }
+
+    private static String normalizePlayUrl(String url) {
+        if (url == null || url.isEmpty() || "null".equals(url)) return "";
+        String u = url.trim();
+        if (u.startsWith("//")) u = "https:" + u;
+        else if (u.startsWith("http://")) u = "https://" + u.substring(7);
+        return u;
     }
 
     private static void postError(SearchCallback cb, String msg) {
