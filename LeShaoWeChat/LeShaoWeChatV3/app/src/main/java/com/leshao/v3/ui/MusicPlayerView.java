@@ -226,7 +226,7 @@ public class MusicPlayerView {
         col.setPadding(0, 0, 0, dp(16));
 
         sTitle = new TextView(ctx);
-        sTitle.setText(song.title);
+        sTitle.setText(song.title != null ? song.title : "");
         sTitle.setTextSize(18);
         sTitle.setTextColor(AppColors.text1());
         sTitle.setTypeface(null, Typeface.BOLD);
@@ -235,7 +235,7 @@ public class MusicPlayerView {
         col.addView(sTitle);
 
         sArtist = new TextView(ctx);
-        sArtist.setText(song.artist);
+        sArtist.setText(song.artist != null ? song.artist : "");
         sArtist.setTextSize(14);
         sArtist.setTextColor(AppColors.text2());
         sArtist.setGravity(Gravity.CENTER);
@@ -436,33 +436,24 @@ public class MusicPlayerView {
         }
     }
 
-    private static String kwFormat(int q) {
-        switch (q) {
-            case 0: return "mp3";
-            case 1: return "aac";
-            case 2:
-            default: return "flac";
-        }
-    }
-
     private static void refetchAndPlay(MusicSearchApi.Song song, int quality) {
         MusicSearchApi.PlayUrlCallback cb = new MusicSearchApi.PlayUrlCallback() {
             @Override
             public void onUrl(String url) {
+                if (url == null || url.isEmpty()) {
+                    sH.post(() -> Toast.makeText(sCtx, "获取音源失败", Toast.LENGTH_SHORT).show());
+                    return;
+                }
                 MusicPlayerManager pm = MusicPlayerManager.get(sCtx);
                 pm.playUrl(url);
                 sH.post(() -> updatePlayIcon(true));
             }
             @Override
             public void onError(String msg) {
-                sH.post(() -> Toast.makeText(sCtx, msg, Toast.LENGTH_SHORT).show());
+                sH.post(() -> Toast.makeText(sCtx, msg != null && !msg.isEmpty() ? msg : "获取音源失败", Toast.LENGTH_SHORT).show());
             }
         };
-        if (song.platform == 0) {
-            MusicSearchApi.getKugouPlayUrl(song.hash, kgLevel(quality), cb);
-        } else {
-            MusicSearchApi.getKuwoPlayUrl(song.hash, kwFormat(quality), cb);
-        }
+        MusicSearchApi.getKugouPlayUrl(song.hash, kgLevel(quality), cb);
     }
 
     private static void showPlaylistDialog() {
@@ -547,6 +538,10 @@ public class MusicPlayerView {
             @Override
             public void onUrl(String url) {
                 sH.post(() -> {
+                    if (url == null || url.isEmpty()) {
+                        Toast.makeText(sCtx, "获取音源失败", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
                     MusicPlayerManager pm = MusicPlayerManager.get(sCtx);
                     pm.download(song, url);
                     Toast.makeText(sCtx, "\u5DF2\u52A0\u5165\u4E0B\u8F7D\u961F\u5217", Toast.LENGTH_SHORT).show();
@@ -554,14 +549,10 @@ public class MusicPlayerView {
             }
             @Override
             public void onError(String msg) {
-                sH.post(() -> Toast.makeText(sCtx, "\u4E0B\u8F7D\u5931\u8D25: " + msg, Toast.LENGTH_SHORT).show());
+                sH.post(() -> Toast.makeText(sCtx, "\u4E0B\u8F7D\u5931\u8D25: " + (msg != null ? msg : "获取音源失败"), Toast.LENGTH_SHORT).show());
             }
         };
-        if (song.platform == 0) {
-            MusicSearchApi.getKugouPlayUrl(song.hash, kgLevel(quality), cb);
-        } else {
-            MusicSearchApi.getKuwoPlayUrl(song.hash, kwFormat(quality), cb);
-        }
+        MusicSearchApi.getKugouPlayUrl(song.hash, kgLevel(quality), cb);
     }
 
     private static void showSongListDialog(String title, List<MusicSearchApi.Song> list, SongClickListener clickListener) {
@@ -581,7 +572,9 @@ public class MusicPlayerView {
         for (int i = 0; i < list.size(); i++) {
             MusicSearchApi.Song s = list.get(i);
             TextView tv = new TextView(sCtx);
-            tv.setText((i + 1) + ". " + s.title + " - " + s.artist);
+            String sTitleText = (s.title != null && !s.title.isEmpty()) ? s.title : "\u672A\u77E5\u6B4C\u66F2";
+            String sArtistText = (s.artist != null && !s.artist.isEmpty()) ? s.artist : "\u672A\u77E5\u6B4C\u624B";
+            tv.setText((i + 1) + ". " + sTitleText + " - " + sArtistText);
             tv.setTextSize(14);
             tv.setTextColor(s.id != null && s.id.equals(curId) ? AppColors.accent() : AppColors.text1());
             tv.setPadding(dp(12), dp(10), dp(12), dp(10));
@@ -623,8 +616,8 @@ public class MusicPlayerView {
 
     static void updateSongInfo(MusicSearchApi.Song song) {
         if (song == null || sTitle == null) return;
-        sTitle.setText(song.title);
-        sArtist.setText(song.artist);
+        sTitle.setText(song.title != null ? song.title : "");
+        if (sArtist != null) sArtist.setText(song.artist != null ? song.artist : "");
         sSong = song;
 
         if (song.cover != null && !song.cover.isEmpty() && sCover != null) {
@@ -674,7 +667,10 @@ public class MusicPlayerView {
     }
 
     private static void fetchLyric(MusicSearchApi.Song song) {
-        if (song == null) return;
+        if (song == null || song.hash == null || song.hash.isEmpty()) {
+            sH.post(() -> renderLyricLines());
+            return;
+        }
         MusicSearchApi.LyricCallback cb = new MusicSearchApi.LyricCallback() {
             @Override
             public void onLyric(String lrc) {
@@ -686,11 +682,7 @@ public class MusicPlayerView {
             @Override
             public void onError(String msg) { }
         };
-        if (song.platform == 0) {
-            MusicSearchApi.getKugouLyric(song.hash, cb);
-        } else {
-            MusicSearchApi.getKuwoLyric(song.hash, cb);
-        }
+        MusicSearchApi.getKugouLyric(song.hash, cb);
     }
 
     private static void parseLrc(String lrc) {
@@ -711,7 +703,7 @@ public class MusicPlayerView {
                     if (msStr.length() == 2) ms *= 10;
                 }
                 ll.timeMs = (min * 60L + sec) * 1000L + ms;
-                ll.text = m.group(4).trim();
+                ll.text = m.group(4) != null ? m.group(4).trim() : "";
                 if (ll.text.isEmpty()) ll.text = "";
                 sLyricLines.add(ll);
             }

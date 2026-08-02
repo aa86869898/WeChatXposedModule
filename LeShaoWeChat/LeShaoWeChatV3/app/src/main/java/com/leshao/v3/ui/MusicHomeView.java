@@ -477,7 +477,8 @@ public class MusicHomeView {
             inner.addView(colorBox);
 
             TextView name = new TextView(mActivity);
-            name.setText(item.title.length() > 4 ? item.title.substring(0, 4) : item.title);
+            String rTitle = item.title != null ? item.title : "";
+            name.setText(rTitle.length() > 4 ? rTitle.substring(0, 4) : rTitle);
             name.setTextSize(10);
             name.setTextColor(MusicActivity.CLR_TEXT);
             name.setGravity(Gravity.CENTER);
@@ -567,7 +568,7 @@ public class MusicHomeView {
             info.setPadding(MusicActivity.dp(6), 0, MusicActivity.dp(4), 0);
 
             TextView nameTv = new TextView(mActivity);
-            nameTv.setText(ks.title);
+            nameTv.setText(ks.title != null ? ks.title : "");
             nameTv.setTextSize(11);
             nameTv.setTextColor(MusicActivity.CLR_TEXT);
             nameTv.setSingleLine(true);
@@ -575,7 +576,7 @@ public class MusicHomeView {
             info.addView(nameTv);
 
             TextView artistTv = new TextView(mActivity);
-            artistTv.setText(ks.artist);
+            artistTv.setText(ks.artist != null ? ks.artist : "");
             artistTv.setTextSize(9);
             artistTv.setTextColor(MusicActivity.CLR_TEXT2);
             artistTv.setSingleLine(true);
@@ -734,7 +735,7 @@ public class MusicHomeView {
         inner.addView(cover);
 
         TextView title = new TextView(mActivity);
-        title.setText(item.title);
+        title.setText(item.title != null ? item.title : "");
         title.setTextSize(11);
         title.setTextColor(MusicActivity.CLR_TEXT);
         title.setSingleLine(true);
@@ -810,7 +811,8 @@ public class MusicHomeView {
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable avatarBg = new GradientDrawable();
         avatarBg.setShape(GradientDrawable.OVAL);
-        avatarBg.setColor(CARD_COLORS[Math.abs(item.title.hashCode()) % CARD_COLORS.length]);
+        String artistTitle = item.title != null ? item.title : "";
+        avatarBg.setColor(CARD_COLORS[Math.abs(artistTitle.hashCode()) % CARD_COLORS.length]);
         avatar.setBackground(avatarBg);
         MusicActivity.loadCover(avatar, item.cover);
         avatarFrame.addView(avatar);
@@ -999,7 +1001,7 @@ public class MusicHomeView {
                         info.setPadding(MusicActivity.dp(8), 0, MusicActivity.dp(4), 0);
 
                         TextView nameTv = new TextView(mActivity);
-                        nameTv.setText(ks.title);
+                        nameTv.setText(ks.title != null ? ks.title : "");
                         nameTv.setTextSize(13);
                         nameTv.setTextColor(MusicActivity.CLR_TEXT);
                         nameTv.setSingleLine(true);
@@ -1007,7 +1009,7 @@ public class MusicHomeView {
                         info.addView(nameTv);
 
                         TextView artistTv = new TextView(mActivity);
-                        artistTv.setText(ks.artist);
+                        artistTv.setText(ks.artist != null ? ks.artist : "");
                         artistTv.setTextSize(11);
                         artistTv.setTextColor(MusicActivity.CLR_TEXT2);
                         artistTv.setSingleLine(true);
@@ -1045,7 +1047,8 @@ public class MusicHomeView {
     }
 
     private void loadCoverFallback(ImageView iv, String title) {
-        int color = CARD_COLORS[Math.abs(title.hashCode()) % CARD_COLORS.length];
+        String safeTitle = title != null && !title.isEmpty() ? title : "music";
+        int color = CARD_COLORS[Math.abs(safeTitle.hashCode()) % CARD_COLORS.length];
         int size = MusicActivity.dp(36);
         Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
@@ -1057,16 +1060,19 @@ public class MusicHomeView {
 
     private MusicSearchApi.Song convertSingle(KgApi.Song ks) {
         MusicSearchApi.Song ms = new MusicSearchApi.Song();
-        ms.id = ks.hash.isEmpty() ? ks.id : ks.hash;
-        ms.hash = ks.hash;
+        if (ks == null) return ms;
+        String hash = ks.hash != null ? ks.hash : "";
+        String id = ks.id != null ? ks.id : hash;
+        ms.id = hash.isEmpty() ? id : hash;
+        ms.hash = hash;
         ms.hash320 = ks.hash320;
         ms.sqHash = ks.sqHash;
         ms.originHash = ks.originHash;
         ms.albumId = ks.albumId;
         ms.albumAudioId = ks.albumAudioId;
-        ms.title = ks.title;
-        ms.artist = ks.artist;
-        ms.cover = ks.cover;
+        ms.title = ks.title != null ? ks.title : "未知歌曲";
+        ms.artist = ks.artist != null ? ks.artist : "未知歌手";
+        ms.cover = ks.cover != null ? ks.cover : "";
         ms.duration = ks.duration;
         ms.platform = 0;
         return ms;

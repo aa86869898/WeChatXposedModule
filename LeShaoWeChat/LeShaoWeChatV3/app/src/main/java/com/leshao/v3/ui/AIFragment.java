@@ -91,7 +91,7 @@ public class AIFragment extends Fragment {
         TextView t1 = new TextView(getContext()); t1.setText(cmd); t1.setTextSize(13);
         t1.getPaint().setFakeBoldText(true); row.addView(t1);
         TextView t2 = new TextView(getContext()); t2.setText(" - " + desc); t2.setTextSize(13);
-        t2.setTextColor(0xFF666666); row.addView(t2); return row;
+        t2.setTextColor(AppColors.text2()); row.addView(t2); return row;
     }
 
     private int dp(int dp) { return (int) (dp * getResources().getDisplayMetrics().density + 0.5f); }

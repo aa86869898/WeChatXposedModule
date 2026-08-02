@@ -386,6 +386,11 @@ public class KgApi {
     // ===== 播放链接 =====
 
     public static void getPlayUrl(Song song, String quality, PlayUrlCallback cb) {
+        if (song == null) {
+            MAIN.post(() -> cb.onError("歌曲数据为空"));
+            return;
+        }
+        if (quality == null || quality.isEmpty()) quality = "standard";
         String hash = getQualityHash(song, quality);
         if (hash == null || hash.isEmpty()) {
             MAIN.post(() -> cb.onError("无此音质"));
@@ -459,11 +464,20 @@ public class KgApi {
     }
 
     private static void fallbackPlayUrl(Song song, String quality, PlayUrlCallback cb, int level) {
+        final String fq = (quality == null || quality.isEmpty()) ? "standard" : quality;
         EXEC.execute(() -> {
             try {
+                if (song == null) {
+                    MAIN.post(() -> cb.onError("歌曲数据为空"));
+                    return;
+                }
                 String hash = song.hash != null ? song.hash : song.id;
+                if (hash == null || hash.isEmpty()) {
+                    MAIN.post(() -> cb.onError("歌曲 hash 为空"));
+                    return;
+                }
                 String lxq;
-                switch (quality) {
+                switch (fq) {
                     case "low": lxq = "128k"; break;
                     case "standard": lxq = "320k"; break;
                     case "super": lxq = "flac"; break;
@@ -479,7 +493,7 @@ public class KgApi {
                 }
                 if (level <= 1) {
                     String lv;
-                    switch (quality) {
+                    switch (fq) {
                         case "low": lv = "standard"; break;
                         case "standard": lv = "exhigh"; break;
                         case "super": lv = "lossless"; break;
@@ -502,6 +516,8 @@ public class KgApi {
     }
 
     private static String getQualityHash(Song song, String quality) {
+        if (song == null) return "";
+        if (quality == null || quality.isEmpty()) quality = "standard";
         switch (quality) {
             case "low": return song.hash;
             case "standard": return song.hash320 != null ? song.hash320 : song.hash;

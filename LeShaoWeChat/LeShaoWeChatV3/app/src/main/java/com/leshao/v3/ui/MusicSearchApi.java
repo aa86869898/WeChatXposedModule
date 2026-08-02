@@ -119,9 +119,14 @@ public class MusicSearchApi {
     public static void getKugouPlayUrl(String hash, String level, PlayUrlCallback cb) {
         sExecutor.execute(() -> {
             MusicLog.i(TAG, "getKugouPlayUrl hash=" + hash + " level=" + level);
+            if (hash == null || hash.trim().isEmpty()) {
+                postError(cb, "歌曲 hash 为空");
+                return;
+            }
+            String safeLevel = level == null || level.trim().isEmpty() ? "exhigh" : level;
             // Primary: official Kugou API
             String playUrl = fetchKugouOfficial(hash);
-            if (!playUrl.isEmpty()) {
+            if (playUrl != null && !playUrl.isEmpty()) {
                 MusicLog.i(TAG, "Kugou official OK: " + playUrl.substring(0, Math.min(80, playUrl.length())));
                 final String url = playUrl;
                 sHandler.post(() -> cb.onUrl(url));
@@ -129,20 +134,21 @@ public class MusicSearchApi {
             }
             // Fallback: third-party proxy
             MusicLog.i(TAG, "Kugou official failed, trying fallback...");
-            playUrl = fetchKugouFallback(hash, level);
-            if (!playUrl.isEmpty()) {
+            playUrl = fetchKugouFallback(hash, safeLevel);
+            if (playUrl != null && !playUrl.isEmpty()) {
                 MusicLog.i(TAG, "Kugou fallback OK: " + playUrl.substring(0, Math.min(80, playUrl.length())));
                 final String url = playUrl;
                 sHandler.post(() -> cb.onUrl(url));
                 return;
             }
             MusicLog.e(TAG, "All Kugou play sources failed for hash=" + hash);
-            postError(cb, "无法获取酷狗播放链接");
+            postError(cb, "获取音源失败");
         });
     }
 
     private static String fetchKugouOfficial(String hash) {
         try {
+            if (hash == null || hash.trim().isEmpty()) return "";
             String url = KG_PLAY + hash;
             String resp = httpGet(url, "https://wwwapi.kugou.com");
             JSONObject json = new JSONObject(resp);
@@ -150,7 +156,7 @@ public class MusicSearchApi {
             if (data == null) return "";
             String playUrl = data.optString("play_url", data.optString("play_backup_url", ""));
             if (playUrl.isEmpty() || "null".equals(playUrl)) return "";
-            return playUrl;
+            return normalizePlayUrl(playUrl);
         } catch (Exception e) {
             MusicLog.e(TAG, "fetchKugouOfficial error", e);
             return "";
@@ -159,12 +165,15 @@ public class MusicSearchApi {
 
     private static String fetchKugouFallback(String hash, String level) {
         try {
+            if (hash == null || hash.trim().isEmpty()) return "";
+            if (level == null || level.trim().isEmpty()) level = "exhigh";
             String url = KG_PLAY_FALLBACK + "?id=" + hash + "&type=json&level=" + level;
             String resp = httpGet(url, "https://music.haitangw.cc");
             JSONObject json = new JSONObject(resp);
             JSONObject data = json.optJSONObject("data");
             String playUrl = data != null ? data.optString("url", "") : "";
-            return playUrl;
+            if (playUrl.isEmpty() || "null".equals(playUrl)) return "";
+            return normalizePlayUrl(playUrl);
         } catch (Exception e) {
             MusicLog.e(TAG, "fetchKugouFallback error", e);
             return "";
@@ -172,6 +181,11 @@ public class MusicSearchApi {
     }
 
     public static void getKugouLyric(String hash, LyricCallback cb) {
+        if (cb == null) return;
+        if (hash == null || hash.isEmpty()) {
+            sHandler.post(() -> cb.onLyric(""));
+            return;
+        }
         sExecutor.execute(() -> {
             try {
                 String url = KG_LYRIC + hash;
@@ -191,137 +205,15 @@ public class MusicSearchApi {
         });
     }
 
-    // ===== KuWo =====
-    private static final String KW_SEARCH = "https://search.kuwo.cn/r.s";
-    private static final String KW_PLAY = "http://antiserver.kuwo.cn/anti.s";
-    private static final String KW_LYRIC = "http://m.kuwo.cn/newh5/singles/songinfoandlrc";
-
-    public static void searchKuwo(String query, int page, SearchCallback cb) {
-        sExecutor.execute(() -> {
-            try {
-                int limit = 30;
-                int pn = (page - 1) * limit;
-                String urlStr = KW_SEARCH + "?all=" + URLEncoder.encode(query, "UTF-8")
-                    + "&ft=music&pn=" + pn + "&rn=" + limit + "&rformat=json&encoding=utf8";
-                String resp = httpGet(urlStr, "https://www.kuwo.cn");
-
-                String parsed = resp.replace('\'', '"').replace("True", "true").replace("False", "false");
-                JSONObject json = new JSONObject(parsed);
-                JSONArray abslist = json.optJSONArray("abslist");
-                int total = json.optInt("TOTAL", 0);
-
-                List<Song> songs = new ArrayList<>();
-                if (abslist != null) {
-                    for (int i = 0; i < abslist.length(); i++) {
-                        JSONObject item = abslist.getJSONObject(i);
-                        Song s = new Song();
-                        s.id = item.optString("MUSICRID", "");
-                        s.hash = item.optString("MUSICRID", "");
-                        s.title = item.optString("NAME", item.optString("SONGNAME", ""));
-                        s.artist = item.optString("ARTIST", "");
-                        s.album = item.optString("ALBUM", "");
-                        s.duration = item.optInt("DURATION", 0);
-                        s.cover = item.optString("PICPATH", "");
-                        s.platform = 1;
-
-                        String songId = s.id.replace("MUSIC_", "");
-                        if (s.cover.isEmpty() || s.cover.equals("")) {
-                            String artistPic = item.optString("web_artistpic_short", "");
-                            if (artistPic != null && !artistPic.isEmpty() && !artistPic.equals("")) {
-                                s.cover = "https://img4.kuwo.cn/star/starhead/" + artistPic;
-                            }
-                        }
-                        if (s.cover.isEmpty() || s.cover.equals("")) {
-                            String albumPic = item.optString("web_albumpic_short", "");
-                            if (albumPic != null && !albumPic.isEmpty() && !albumPic.equals("")) {
-                                s.cover = "https://img4.kuwo.cn/star/albumcover/" + albumPic;
-                            }
-                        }
-                        if (s.cover.isEmpty() || s.cover.equals("")) {
-                            int idLen = songId.length();
-                            if (idLen >= 2) {
-                                s.cover = "https://img4.kuwo.cn/star/albumcover/120/" + songId.substring(idLen - 2) + "/" + songId + "/" + songId + ".jpg";
-                            }
-                        }
-                        if (!s.cover.startsWith("http") && !s.cover.isEmpty()) {
-                            s.cover = "https:" + s.cover;
-                        }
-                        songs.add(s);
-                    }
-                }
-
-                boolean hasNext = (pn + (abslist != null ? abslist.length() : 0)) < total;
-                boolean hasPrev = page > 1;
-
-                final List<Song> finalSongs = songs;
-                final int finalTotal = total;
-                final boolean fHasNext = hasNext;
-                final boolean fHasPrev = hasPrev;
-                sHandler.post(() -> cb.onResult(finalSongs, finalTotal, fHasPrev, fHasNext));
-            } catch (Exception e) {
-                Log.e(TAG, "KW search error", e);
-                postError(cb, "酷我搜索失败: " + e.getMessage());
-            }
-        });
-    }
-
-    public static void getKuwoPlayUrl(String musicrid, PlayUrlCallback cb) {
-        getKuwoPlayUrl(musicrid, "mp3", cb);
-    }
-
-    public static void getKuwoPlayUrl(String musicrid, String format, PlayUrlCallback cb) {
-        sExecutor.execute(() -> {
-            try {
-                String urlStr = KW_PLAY + "?type=convert_url&rid=" + musicrid + "&format=" + format + "&response=url";
-                String resp = httpGet(urlStr, "https://www.kuwo.cn");
-                final String playUrl = resp.trim();
-                if (playUrl.startsWith("http")) {
-                    sHandler.post(() -> cb.onUrl(playUrl));
-                } else {
-                    postError(cb, "无法获取酷我播放链接");
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "KW play error", e);
-                postError(cb, "获取播放链接失败");
-            }
-        });
-    }
-
-    public static void getKuwoLyric(String musicrid, LyricCallback cb) {
-        sExecutor.execute(() -> {
-            try {
-                String songId = musicrid.replace("MUSIC_", "");
-                String url = KW_LYRIC + "?musicId=" + songId;
-                String resp = httpGet(url, "http://m.kuwo.cn");
-                JSONObject json = new JSONObject(resp);
-                if (json.optInt("status") == 200) {
-                    JSONObject data = json.optJSONObject("data");
-                    if (data != null) {
-                        JSONArray lrclist = data.optJSONArray("lrclist");
-                        if (lrclist != null && lrclist.length() > 0) {
-                            StringBuilder lrc = new StringBuilder();
-                            for (int i = 0; i < lrclist.length(); i++) {
-                                JSONObject item = lrclist.getJSONObject(i);
-                                double time = item.optDouble("time", 0);
-                                String text = item.optString("lineLyric", "");
-                                int min = (int) (time / 60);
-                                double sec = time % 60;
-                                lrc.append(String.format("[%02d:%05.2f]%s\n", min, sec, text));
-                            }
-                            sHandler.post(() -> cb.onLyric(lrc.toString()));
-                            return;
-                        }
-                    }
-                }
-                sHandler.post(() -> cb.onLyric(""));
-            } catch (Exception e) {
-                Log.e(TAG, "KW lyric error", e);
-                sHandler.post(() -> cb.onLyric(""));
-            }
-        });
-    }
-
     // ===== HTTP helpers =====
+
+    private static String normalizePlayUrl(String url) {
+        if (url == null || url.isEmpty() || "null".equals(url)) return "";
+        String u = url.trim();
+        if (u.startsWith("//")) u = "https:" + u;
+        else if (u.startsWith("http://")) u = "https://" + u.substring(7);
+        return u;
+    }
 
     private static String httpGet(String urlStr, String referer) throws Exception {
         URL url = new URL(urlStr);

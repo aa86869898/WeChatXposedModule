@@ -1,102 +1,82 @@
 package com.leshao.v3.ui;
 
-import android.content.SharedPreferences;
-import android.content.res.Configuration;
-import android.content.res.Resources;
-import android.os.Build;
-
-import com.leshao.v3.ContextManager;
-
 public class AppColors {
 
-    private static final int DEF_BG      = 0xFFF2F2F7;
-    private static final int DEF_WHITE   = 0xFFFFFFFF;
-    private static final int DEF_TEXT    = 0xFF000000;
-    private static final int DEF_TEXT2   = 0xFF8E8E93;
-    private static final int DEF_ACCENT  = 0xFF007AFF;
-    private static final int DEF_DIV     = 0xFFE5E5EA;
-    private static final int DEF_ARROW   = 0xFFC7C7CC;
-    private static final int DEF_BORDER  = 0xFFE5E5EA;
-    private static final int DEF_ACCENT2 = 0xFF5856D6;
-    private static final int DEF_ON      = 0xFF007AFF;
-    private static final int DEF_OFF     = 0xFFE5E5EA;
+    // 淡霓虹糖果风 - 统一色彩系统
+    // 页面背景渐变起止色
+    public static final int BG_GRADIENT_START = 0xFFF7F9FF;
+    public static final int BG_GRADIENT_END   = 0xFFFFF5F8;
 
-    private static final int DARK_BG      = 0xFF1C1C1E;
-    private static final int DARK_CARD    = 0xFF2C2C2E;
-    private static final int DARK_TEXT    = 0xFFFFFFFF;
-    private static final int DARK_TEXT2   = 0xFF8E8E93;
-    private static final int DARK_ACCENT  = 0xFF0A84FF;
-    private static final int DARK_DIV     = 0xFF38383A;
-    private static final int DARK_ARROW   = 0xFF545458;
-    private static final int DARK_BORDER  = 0xFF38383A;
-    private static final int DARK_ACCENT2 = 0xFF5E5CE6;
-    private static final int DARK_ON      = 0xFF0A84FF;
-    private static final int DARK_OFF     = 0xFF48484A;
-    private static final int DARK_WHITE   = 0xFFFFFFFF;
+    // 卡片底色 (极淡柔和高光, rgba(255,255,255,0.72))
+    public static final int CARD_BG    = 0xB8FFFFFF;
 
-    public static boolean isDarkMode() {
-        try {
-            android.content.Context ctx = ContextManager.getAppContext();
-            if (ctx == null) return false;
-            Resources res = ctx.getResources();
-            if (res == null) return false;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                return res.getConfiguration().isNightModeActive();
-            }
-            int uiMode = res.getConfiguration().uiMode
-                & Configuration.UI_MODE_NIGHT_MASK;
-            return (uiMode == Configuration.UI_MODE_NIGHT_YES);
-        } catch (Throwable ignored) {}
-        return false;
-    }
+    // 搜索/输入框底色 (rgba(255,255,255,0.65))
+    public static final int INPUT_BG   = 0xA6FFFFFF;
 
-    private static SharedPreferences p() {
-        return ContextManager.getPrefs();
-    }
+    // 标题文字
+    public static final int TEXT_TITLE = 0xFF1D1D1F;
+    // 正文文字
+    public static final int TEXT_BODY  = 0xFF565659;
+    // 备注小字
+    public static final int TEXT_NOTE  = 0xFF949499;
 
-    private static int themed(String key, int def) {
-        SharedPreferences p = p();
-        return p != null ? p.getInt(key, def) : def;
-    }
+    // 主题淡霓虹青
+    public static final int ACCENT     = 0xFF36D1E8;
 
-    private static int themedDual(String key, int lightDef, int darkDef) {
-        if (isDarkMode()) return themed(key + "_dark", darkDef);
-        return themed(key, lightDef);
-    }
+    // 开关轨道
+    public static final int SWITCH_ON  = 0xFFCCF2F9;
+    public static final int SWITCH_OFF = 0xFFE6E6EA;
 
-    public static int bg()          { return themedDual("ls_tc_page_bg",          DEF_BG,      DARK_BG); }
-    public static int card()        { return themedDual("ls_tc_actionbar_bg",    DEF_WHITE,   DARK_CARD); }
-    public static int whiteCard()   { return isDarkMode() ? DARK_CARD : DEF_WHITE; }
-    public static int text1()       { return themedDual("ls_tc_text_primary",    DEF_TEXT,    DARK_TEXT); }
-    public static int text2()       { return themedDual("ls_tc_text_secondary",  DEF_TEXT2,   DARK_TEXT2); }
-    public static int accent()      { return themedDual("ls_tc_accent",          DEF_ACCENT,  DARK_ACCENT); }
-    public static int divider()     {
-        boolean dm = isDarkMode();
-        int b = bg();
-        return (0xFF << 24) | adjust(b, dm ? 0.12f : 0.08f);
-    }
-    public static int arrow()       { return isDarkMode() ? DARK_ARROW : DEF_ARROW; }
-    public static int border()      { return isDarkMode() ? DARK_BORDER : DEF_BORDER; }
-    public static int accent2()     { return themedDual("ls_tc_accent2",         DEF_ACCENT2, DARK_ACCENT2); }
-    public static int onColor()     { return isDarkMode() ? DARK_ON : DEF_ON; }
-    public static int offColor()    { return isDarkMode() ? DARK_OFF : DEF_OFF; }
-    public static int bubbleSelfBg()  { return themedDual("ls_tc_bubble_self_bg", 0xFFFFFFFF, 0xFF2D2D44); }
-    public static int bubbleOtherBg() { return themedDual("ls_tc_bubble_other_bg", 0xFFFFFFFF, 0xFF2D2D44); }
+    // 点缀色 - 仅用于标签/次要按钮
+    public static final int CANDY_PINK   = 0xFFFF94C2;
+    public static final int CANDY_YELLOW = 0xFFFFE470;
 
-    public static int whiteTextOnAccent() { return 0xFFFFFFFF; }
-    public static int inputBg()    { return isDarkMode() ? DARK_CARD : 0xFFF0F0F0; }
+    // 箭头/分割线
+    public static final int ARROW    = 0xFF949499;
+    public static final int DIVIDER  = 0xFFE6E6EA;
 
-    private static int adjust(int c, float ratio) {
-        int r = (c >> 16) & 0xFF;
-        int g = (c >> 8) & 0xFF;
-        int b = c & 0xFF;
-        r = clamp((int)(r + 255 * ratio));
-        g = clamp((int)(g + 255 * ratio));
-        b = clamp((int)(b + 255 * ratio));
-        return (r << 16) | (g << 8) | b;
-    }
+    // 白色文字(用于强调色之上的文字)
+    public static final int WHITE_TEXT = 0xFFFFFFFF;
 
-    private static int clamp(int v) {
-        return Math.max(0, Math.min(255, v));
-    }
+    // Switch 尺寸 (dp值)
+    public static final int SWITCH_WIDTH_DP  = 48;
+    public static final int SWITCH_HEIGHT_DP = 26;
+    public static final int SWITCH_RADIUS_DP = 13;
+
+    // 列表条目高度 (dp)
+    public static final int ITEM_HEIGHT_DP = 58;
+    // 弹窗圆角 (dp)
+    public static final int DIALOG_RADIUS_DP = 16;
+
+    // ---------- 便捷取值 (向后兼容) ----------
+
+    // 别名 (供 static import 或直接引用使用)
+    public static final int candyPink   = CANDY_PINK;
+    public static final int candyYellow = CANDY_YELLOW;
+
+    public static int bg()          { return BG_GRADIENT_START; }
+    public static int card()        { return CARD_BG; }
+    public static int whiteCard()   { return CARD_BG; }
+    public static int text1()       { return TEXT_TITLE; }
+    public static int text2()       { return TEXT_BODY; }
+    public static int text3()       { return TEXT_NOTE; }
+    public static int accent()      { return ACCENT; }
+    public static int accent2()     { return ACCENT; }
+    public static int onColor()     { return SWITCH_ON; }
+    public static int offColor()    { return SWITCH_OFF; }
+    public static int arrow()       { return ARROW; }
+    public static int divider()     { return DIVIDER; }
+    public static int border()      { return DIVIDER; }
+    public static int inputBg()     { return INPUT_BG; }
+
+    public static int candyPink()  { return CANDY_PINK; }
+    public static int candyYellow(){ return CANDY_YELLOW; }
+
+    public static int whiteTextOnAccent() { return WHITE_TEXT; }
+    public static int bubbleSelfBg()  { return CARD_BG; }
+    public static int bubbleOtherBg() { return CARD_BG; }
+
+    public static boolean isDarkMode() { return false; }
+
+    private AppColors() {}
 }

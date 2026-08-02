@@ -185,7 +185,7 @@ public class RedPacketConfigView {
         etStart.setInputType(InputType.TYPE_CLASS_DATETIME);
         etStart.setWidth((int)(60 * d));
         etStart.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
-        etStart.setBackgroundColor(isDark() ? 0xFF3A3A50 : 0xFFF0F0F0);
+        etStart.setBackgroundColor(AppColors.bg());
         row.addView(etStart);
 
         TextView sep = new TextView(ctx);
@@ -202,7 +202,7 @@ public class RedPacketConfigView {
         etEnd.setInputType(InputType.TYPE_CLASS_DATETIME);
         etEnd.setWidth((int)(60 * d));
         etEnd.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
-        etEnd.setBackgroundColor(isDark() ? 0xFF3A3A50 : 0xFFF0F0F0);
+        etEnd.setBackgroundColor(AppColors.bg());
         row.addView(etEnd);
 
         TextView save = new TextView(ctx);
@@ -236,7 +236,7 @@ public class RedPacketConfigView {
         et.setMinLines(1);
         et.setMaxLines(3);
         et.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
-        et.setBackgroundColor(isDark() ? 0xFF3A3A50 : 0xFFF0F0F0);
+        et.setBackgroundColor(AppColors.bg());
         row.addView(et);
 
         TextView save = new TextView(ctx);

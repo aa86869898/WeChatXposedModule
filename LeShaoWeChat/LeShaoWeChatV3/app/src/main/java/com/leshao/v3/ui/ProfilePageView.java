@@ -55,7 +55,7 @@ public class ProfilePageView {
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable avatarBg = new GradientDrawable();
         avatarBg.setCornerRadius(avatarSize / 2f);
-        avatarBg.setColor(0xFFE8D8F0);
+        avatarBg.setColor(AppColors.bg());
         avatar.setBackground(avatarBg);
         String avatarPath = MainActivity.getAvatarPath();
         if (avatarPath != null) {
@@ -93,11 +93,11 @@ public class ProfilePageView {
         TextView copyBtn = new TextView(ctx);
         copyBtn.setText("复制");
         copyBtn.setTextSize(10);
-        copyBtn.setTextColor(0xFF4A90D9);
+        copyBtn.setTextColor(AppColors.accent());
         copyBtn.setPadding((int)(8 * d), (int)(3 * d), (int)(8 * d), (int)(3 * d));
         GradientDrawable cpBg = new GradientDrawable();
         cpBg.setCornerRadius((int)(3 * d));
-        cpBg.setStroke((int)(1 * d), 0xFF4A90D9);
+        cpBg.setStroke((int)(1 * d), AppColors.accent());
         cpBg.setColor(android.graphics.Color.TRANSPARENT);
         copyBtn.setBackground(cpBg);
         copyBtn.setOnClickListener(v -> {
@@ -314,7 +314,7 @@ public class ProfilePageView {
         btnSpacer.setLayoutParams(new LinearLayout.LayoutParams((int)(12*d), 0));
         logBtnRow.addView(btnSpacer);
 
-        TextView btnOpenDir = makeSmallBtn(ctx, d, "打开日志目录", 0xFF607D8B);
+        TextView btnOpenDir = makeSmallBtn(ctx, d, "打开日志目录", AppColors.text1());
         btnOpenDir.setOnClickListener(v -> {
             try {
                 java.io.File logDir = new java.io.File("/sdcard/leshao_v3_logs");
@@ -367,7 +367,7 @@ public class ProfilePageView {
         TextView btn = new TextView(ctx);
         btn.setText(text);
         btn.setTextSize(13);
-        btn.setTextColor(0xFFFFFFFF);
+        btn.setTextColor(AppColors.WHITE_TEXT);
         btn.setTypeface(null, Typeface.BOLD);
         btn.setPadding((int)(16 * d), (int)(8 * d), (int)(16 * d), (int)(8 * d));
         btn.setGravity(Gravity.CENTER);
@@ -384,7 +384,7 @@ public class ProfilePageView {
         TextView btn = new TextView(ctx);
         btn.setText(text);
         btn.setTextSize(12);
-        btn.setTextColor(0xFFFFFFFF);
+        btn.setTextColor(AppColors.WHITE_TEXT);
         btn.setTypeface(null, Typeface.BOLD);
         btn.setPadding((int)(14 * d), (int)(6 * d), (int)(14 * d), (int)(6 * d));
         btn.setGravity(Gravity.CENTER);

@@ -120,13 +120,13 @@ public class ContactGroupPageView {
         if (configListener != null) {
             LogWriter.log("ContactGroupPageView", "switchRow [" + title + "] 显示[设置]按钮");
             TextView btn = new TextView(ctx);
-            btn.setText("[设置]"); btn.setTextSize(12); btn.setTextColor(0xFF4A90D9);
+            btn.setText("[设置]"); btn.setTextSize(12); btn.setTextColor(AppColors.accent());
             btn.setPadding((int)(6 * d), 0, (int)(6 * d), 0);
             btn.setOnClickListener(configListener);
             row.addView(btn);
         }
 
-        Switch sw = new Switch(ctx); sw.setChecked(checked);
+            Switch sw = CandyUi.newSwitch(ctx); sw.setChecked(checked);
         try { sw.setThumbResource(android.R.drawable.btn_star_big_on); } catch (Throwable ignored) {}
         sw.setOnCheckedChangeListener(listener);
         row.addView(sw);

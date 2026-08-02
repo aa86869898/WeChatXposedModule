@@ -22,10 +22,10 @@ import com.leshao.v3.theme.MonetColorEngine;
 public class ThemePageView {
 
     private static final int[] PRESET_COLORS = {
-        0xFF2D2D2D, 0xFFF5F5F5, 0xFFFFFFFF, 0xFFEDEDED, 0xFFE8E8E8,
-        0xFFFF4298, 0xFF576B95, 0xFF576B95, 0xFF191919, 0xFF888888,
-        0xFF000000, 0xFFE04040, 0xFFFF8C00, 0xFFFFBE00, 0xFF10AEFF,
-        0xFF7B2FBE, 0xFFFF8C00, 0xFFC73E3A, 0xFFF2F2F2, 0xFFD43C33
+        AppColors.text1(), AppColors.bg(), AppColors.card(), AppColors.bg(), AppColors.bg(),
+        AppColors.accent(), 0xFF576B95, 0xFF576B95, AppColors.text1(), AppColors.text2(),
+        AppColors.text1(), AppColors.accent(), AppColors.accent(), AppColors.accent(), AppColors.accent(),
+        AppColors.accent(), AppColors.accent(), AppColors.accent(), AppColors.bg(), AppColors.accent()
     };
 
     private static final String[] COLOR_NAMES = {
@@ -81,7 +81,7 @@ public class ThemePageView {
         TextView star = new TextView(ctx);
         star.setText(on ? "\u2605" : "\u2606");
         star.setTextSize(26);
-        star.setTextColor(on ? 0xFFFFD700 : 0xFFCCCCCC);
+        star.setTextColor(on ? AppColors.accent() : AppColors.offColor());
         star.setPadding((int)(8*d), 0, 0, 0);
         star.setTag(new Object[]{prefs, on});
         star.setOnClickListener(v -> {
@@ -90,7 +90,7 @@ public class ThemePageView {
             boolean cur = !(boolean) tag[1];
             tag[1] = cur;
             ((TextView) v).setText(cur ? "\u2605" : "\u2606");
-            ((TextView) v).setTextColor(cur ? 0xFFFFD700 : 0xFFCCCCCC);
+            ((TextView) v).setTextColor(cur ? AppColors.accent() : AppColors.offColor());
             p.edit().putBoolean("ls_theme_enabled", cur).apply();
             ThemeHook.setMasterEnabled(cur);
         });
@@ -143,7 +143,7 @@ public class ThemePageView {
                     "标题栏美化", "ls_theme_actionbar",
                     new String[]{"标题栏背景色","标题栏文字色"},
                     new String[]{"ls_tc_actionbar_bg","ls_tc_actionbar_title"},
-                    new int[]{0xFF2D2D2D,0xFFFFFFFF},
+                    new int[]{AppColors.text1(),AppColors.card()},
                     v -> ThemeHook.setActionBarOn(v));
                 break;
             case 22:
@@ -151,7 +151,7 @@ public class ThemePageView {
                     "页面背景色", "ls_theme_pagebg",
                     new String[]{"页面背景色"},
                     new String[]{"ls_tc_page_bg"},
-                    new int[]{0xFFF5F5F5},
+                    new int[]{AppColors.bg()},
                     v -> ThemeHook.setPageBgOn(v));
                 break;
             case 23:
@@ -159,7 +159,7 @@ public class ThemePageView {
                     "聊天背景色", "ls_theme_chatbg",
                     new String[]{"聊天背景色"},
                     new String[]{"ls_tc_chat_bg"},
-                    new int[]{0xFFEDEDED},
+                    new int[]{AppColors.bg()},
                     v -> ThemeHook.setChatBgOn(v));
                 break;
             case 24:
@@ -167,7 +167,7 @@ public class ThemePageView {
                     "底部Tab美化", "ls_theme_convlist",
                     new String[]{"Tab背景色","选中色","未选中色"},
                     new String[]{"ls_tc_tab_bg","ls_tc_tab_selected","ls_tc_tab_unselected"},
-                    new int[]{0xFFF7F7F7,0xFFFF4298,0xFF999999},
+                    new int[]{AppColors.card(),AppColors.accent(),AppColors.text2()},
                     v -> ThemeHook.setConvListOn(v));
                 break;
             case 25:
@@ -175,21 +175,21 @@ public class ThemePageView {
                     "自己聊天气泡",
                     new String[]{"自己气泡背景","自己文字色"},
                     new String[]{"ls_tc_bubble_self_bg","ls_tc_bubble_self_text"},
-                    new int[]{0xFFFFFFFF,0xFF000000});
+                    new int[]{AppColors.card(),AppColors.text1()});
                 break;
             case 26:
                 buildColorConfigBubble(ctx, parentAct, prefs, d, root,
                     "对方聊天气泡",
                     new String[]{"对方气泡背景","对方文字色"},
                     new String[]{"ls_tc_bubble_other_bg","ls_tc_bubble_other_text"},
-                    new int[]{0xFFFFFFFF,0xFF000000});
+                    new int[]{AppColors.card(),AppColors.text1()});
                 break;
             case 27:
                 buildColorConfig(ctx, parentAct, prefs, d, root,
                     "文字颜色", "ls_theme_textcolor",
                     new String[]{"主文字色","次要文字色"},
                     new String[]{"ls_tc_text_primary","ls_tc_text_secondary"},
-                    new int[]{0xFF191919,0xFF888888},
+                    new int[]{AppColors.text1(),AppColors.text2()},
                     v -> ThemeHook.setTextColorOn(v));
                 break;
             case 28:
@@ -256,14 +256,14 @@ public class ThemePageView {
         TextView sw = new TextView(ctx);
         sw.setText(on ? "\u2605" : "\u2606");
         sw.setTextSize(26);
-        sw.setTextColor(on ? 0xFFFFD700 : 0xFFCCCCCC);
+        sw.setTextColor(on ? AppColors.accent() : AppColors.offColor());
         sw.setTag(new Object[]{on, ts});
         sw.setOnClickListener(v -> {
             Object[] tag = (Object[]) v.getTag();
             boolean cur = !(boolean) tag[0];
             tag[0] = cur;
             ((TextView) v).setText(cur ? "\u2605" : "\u2606");
-            ((TextView) v).setTextColor(cur ? 0xFFFFD700 : 0xFFCCCCCC);
+            ((TextView) v).setTextColor(cur ? AppColors.accent() : AppColors.offColor());
             ((ToggleSetter) tag[1]).set(cur);
         });
         row.addView(sw);
@@ -292,7 +292,7 @@ public class ThemePageView {
         GradientDrawable gd = new GradientDrawable();
         gd.setShape(GradientDrawable.OVAL);
         gd.setColor(current);
-        gd.setStroke((int)(1.5f*d), 0xFFD0D0D0);
+        gd.setStroke((int)(1.5f*d), AppColors.offColor());
         dot.setBackground(gd);
 
         final int[] cur = {current};
@@ -338,7 +338,7 @@ public class ThemePageView {
                 GradientDrawable dg = new GradientDrawable();
                 dg.setShape(GradientDrawable.OVAL);
                 dg.setColor(pc);
-                dg.setStroke(pc == current ? (int)(3*d) : (int)(1*d), pc == current ? AppColors.accent() : 0xFFD0D0D0);
+                dg.setStroke(pc == current ? (int)(3*d) : (int)(1*d), pc == current ? AppColors.accent() : AppColors.offColor());
                 dot.setBackground(dg);
                 dot.setLayoutParams(new LinearLayout.LayoutParams(cellSz - (int)(8*d), cellSz - (int)(8*d)));
 
@@ -369,7 +369,7 @@ public class ThemePageView {
         hex.setTextSize(13);
         hex.setSingleLine(true);
         hex.setPadding((int)(8*d), (int)(6*d), (int)(8*d), (int)(6*d));
-        hex.setBackgroundColor(0xFFF0F0F0);
+        hex.setBackgroundColor(AppColors.bg());
         hex.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
         ((LinearLayout.LayoutParams) hex.getLayoutParams()).setMargins(0, (int)(12*d), 0, 0);
         grid.addView(hex);
@@ -410,7 +410,7 @@ public class ThemePageView {
 
     private static void buildMonetConfig(Context ctx, Activity parentAct, SharedPreferences prefs,
                                           float d, LinearLayout root) {
-        int seedColor = prefs.getInt("ls_monet_seed", 0xFFFF4298);
+        int seedColor = prefs.getInt("ls_monet_seed", AppColors.accent());
         int currIdx = prefs.getInt("ls_monet_style", 0);
 
         TextView info = new TextView(ctx);
@@ -444,7 +444,7 @@ public class ThemePageView {
                     btn.setBackgroundColor(AppColors.accent());
                     btn.setTextColor(AppColors.whiteCard());
                 } else {
-                    btn.setBackgroundColor(0xFFE8E0F0);
+                    btn.setBackgroundColor(AppColors.bg());
                     btn.setTextColor(AppColors.text1());
                 }
                 btn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
@@ -456,7 +456,7 @@ public class ThemePageView {
                         prefs.edit().putBoolean("ls_theme_enabled", true).apply();
                         ThemeHook.setMasterEnabled(true);
                     }
-                    int s = prefs.getInt("ls_monet_seed", 0xFFFF4298);
+                    int s = prefs.getInt("ls_monet_seed", AppColors.accent());
                     MonetColorEngine.Style st = MonetColorEngine.Style.fromIndex(fi);
                     int[] lightPalette = MonetColorEngine.generate(s, st);
                     int[] darkPalette = MonetColorEngine.generateDark(s, st);
@@ -526,7 +526,7 @@ public class ThemePageView {
             TextView clearBtn = new TextView(ctx);
             clearBtn.setText("清除");
             clearBtn.setTextSize(14);
-            clearBtn.setTextColor(0xFFE04040);
+            clearBtn.setTextColor(AppColors.accent());
             clearBtn.setPadding((int)(20*d), (int)(10*d), (int)(20*d), (int)(10*d));
             clearBtn.setLayoutParams(new LinearLayout.LayoutParams(-2, -2));
             ((LinearLayout.LayoutParams) clearBtn.getLayoutParams()).setMargins((int)(12*d), 0, 0, 0);

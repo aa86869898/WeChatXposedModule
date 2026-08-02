@@ -64,7 +64,7 @@ public class SnsFragment extends Fragment {
         LinearLayout card = new LinearLayout(getContext());
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding((int)(2 * d), (int)(2 * d), (int)(2 * d), (int)(2 * d));
-        card.setBackgroundColor(0xFFF5F5F5);
+        card.setBackgroundColor(AppColors.bg());
         return card;
     }
 
@@ -75,7 +75,7 @@ public class SnsFragment extends Fragment {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        row.setBackgroundColor(0xFFFFFFFF);
+        row.setBackgroundColor(AppColors.card());
 
         LinearLayout textCol = new LinearLayout(getContext());
         textCol.setOrientation(LinearLayout.VERTICAL);
@@ -83,12 +83,12 @@ public class SnsFragment extends Fragment {
 
         TextView tv = new TextView(getContext());
         tv.setText(title); tv.setTextSize(15);
-        tv.setTextColor(0xFF1A1A1A); tv.setTypeface(null, Typeface.BOLD);
+        tv.setTextColor(AppColors.text1()); tv.setTypeface(null, Typeface.BOLD);
         textCol.addView(tv);
 
         if (desc != null && !desc.isEmpty()) {
             TextView dv = new TextView(getContext());
-            dv.setText(desc); dv.setTextSize(12); dv.setTextColor(0xFF999999);
+            dv.setText(desc); dv.setTextSize(12); dv.setTextColor(AppColors.text2());
             dv.setPadding(0, (int)(3 * d), 0, 0);
             textCol.addView(dv);
         }
@@ -97,7 +97,7 @@ public class SnsFragment extends Fragment {
 
         if (config != null) {
             TextView btn = new TextView(getContext());
-            btn.setText("[设置]"); btn.setTextSize(12); btn.setTextColor(0xFF4A90D9);
+            btn.setText("[设置]"); btn.setTextSize(12); btn.setTextColor(AppColors.accent());
             btn.setPadding((int)(6 * d), 0, (int)(6 * d), 0);
             btn.setOnClickListener(config);
             row.addView(btn);
@@ -124,7 +124,7 @@ public class SnsFragment extends Fragment {
     private TextView sLabel(String t) {
         float d = getResources() != null ? getResources().getDisplayMetrics().density : 2.0f;
         TextView tv = new TextView(getContext());
-        tv.setText(t); tv.setTextSize(13); tv.setTextColor(0xFF999999);
+        tv.setText(t); tv.setTextSize(13); tv.setTextColor(AppColors.text2());
         tv.setPadding(0, 0, 0, (int)(8 * d));
         return tv;
     }

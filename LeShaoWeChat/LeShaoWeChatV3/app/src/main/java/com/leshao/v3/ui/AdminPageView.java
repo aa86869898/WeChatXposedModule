@@ -85,7 +85,7 @@ public class AdminPageView {
         deselectBtn.setPadding((int)(10*d), (int)(3*d), (int)(10*d), (int)(3*d));
         GradientDrawable dsBg = new GradientDrawable();
         dsBg.setCornerRadius((int)(4*d));
-        dsBg.setColor(0xFFE74C3C);
+        dsBg.setColor(AppColors.accent());
         deselectBtn.setBackground(dsBg);
         deselectBtn.setOnClickListener(v -> { for (Switch sw : sFeatureBoxes) sw.setChecked(false); });
         selectRow.addView(deselectBtn);
@@ -127,7 +127,7 @@ public class AdminPageView {
         btnCopy.setPadding((int)(20*d), (int)(8*d), (int)(20*d), (int)(8*d));
         GradientDrawable cpBg = new GradientDrawable();
         cpBg.setCornerRadius((int)(6*d));
-        cpBg.setColor(0xFF607D8B);
+        cpBg.setColor(AppColors.text1());
         btnCopy.setBackground(cpBg);
         btnCopy.setOnClickListener(v -> onCopy(ctx));
         btnRow.addView(btnCopy);
@@ -359,7 +359,7 @@ public class AdminPageView {
         spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 0, 0.1f));
         row.addView(spacer);
 
-        Switch sw = new Switch(ctx);
+        Switch sw = CandyUi.newSwitch(ctx);
         sw.setChecked(checked);
         row.addView(sw);
 

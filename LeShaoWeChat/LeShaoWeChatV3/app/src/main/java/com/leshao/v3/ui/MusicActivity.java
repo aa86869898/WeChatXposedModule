@@ -210,13 +210,15 @@ public class MusicActivity extends Activity {
                     if (sPlayer != null && songs != null && !songs.isEmpty()) {
                         MusicSearchApi.Song ms = new MusicSearchApi.Song();
                         KgApi.Song ks = songs.get(0);
-                        ms.id = ks.hash.isEmpty() ? ks.id : ks.hash;
-                        ms.hash = ks.hash;
+                        String hash = ks.hash != null ? ks.hash : "";
+                        String id = ks.id != null ? ks.id : hash;
+                        ms.id = hash.isEmpty() ? id : hash;
+                        ms.hash = hash;
                         ms.hash320 = ks.hash320;
                         ms.sqHash = ks.sqHash;
-                        ms.title = ks.title;
-                        ms.artist = ks.artist;
-                        ms.cover = ks.cover;
+                        ms.title = ks.title != null ? ks.title : "未知歌曲";
+                        ms.artist = ks.artist != null ? ks.artist : "未知歌手";
+                        ms.cover = ks.cover != null ? ks.cover : "";
                         ms.duration = ks.duration;
                         ms.platform = 0;
                         sPlayer.play(ms);
@@ -357,7 +359,7 @@ public class MusicActivity extends Activity {
             if (mPlayerProgress != null) mPlayerProgress.setProgress(0);
             return;
         }
-        mPlayerTitle.setText(song.title + " - " + song.artist);
+        mPlayerTitle.setText((song.title != null ? song.title : "") + " - " + (song.artist != null ? song.artist : ""));
         boolean playing = sPlayer.isPlaying();
         mPlayerPlayBtn.setImageDrawable(emoji(playing ? "\u23F8" : "\u25B6", dp(13)));
         loadCircularCover(mPlayerCover, song.cover);
@@ -464,12 +466,12 @@ public class MusicActivity extends Activity {
     public static void playSong(MusicSearchApi.Song song) {
         try {
             if (sPlayer == null || song == null) { toast("播放器未初始化"); return; }
-            MusicLog.i("MusicActivity", "playSong: " + song.title + " hash=" + song.hash);
+            MusicLog.i("MusicActivity", "playSong: " + (song.title != null ? song.title : "") + " hash=" + song.hash);
             int idx = sPlayer.getPlaylist().indexOf(song);
             if (idx >= 0) sPlayer.playFromPlaylist(idx);
             else { sPlayer.getPlaylist().add(song); sPlayer.play(song); }
             if (sInstance != null) sInstance.refreshPlayerBar();
-            toast("正在播放: " + song.title + " - " + song.artist);
+            toast("正在播放: " + (song.title != null ? song.title : "") + " - " + (song.artist != null ? song.artist : ""));
         } catch (Throwable e) {
             MusicLog.e("MusicActivity", "playSong crash: " + e.getMessage());
             toast("播放失败");

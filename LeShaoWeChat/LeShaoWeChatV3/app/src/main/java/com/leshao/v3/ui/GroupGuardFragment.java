@@ -133,7 +133,7 @@ public class GroupGuardFragment extends Fragment {
         row.setPadding(0, dp(8), 0, dp(8));
         TextView tv = new TextView(getContext()); tv.setText(label); tv.setTextSize(14);
         row.addView(tv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        Switch sw = new Switch(getContext()); sw.setChecked(checked); sw.setOnCheckedChangeListener(l);
+        Switch sw = CandyUi.newSwitch(getContext()); sw.setChecked(checked); sw.setOnCheckedChangeListener(l);
         row.addView(sw); return row;
     }
 

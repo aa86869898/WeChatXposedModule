@@ -271,6 +271,10 @@ public class ContactPickerDialog {
             w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT);
             w.setGravity(Gravity.CENTER);
+            GradientDrawable wbg = new GradientDrawable();
+            wbg.setCornerRadius(16 * d);
+            wbg.setColor(AppColors.card());
+            w.setBackgroundDrawable(wbg);
         }
 
         dlg.show();
@@ -496,7 +500,7 @@ public class ContactPickerDialog {
             mBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             mTextPaint.setTextAlign(Paint.Align.CENTER);
-            mTextPaint.setColor(0xFFFFFFFF);
+            mTextPaint.setColor(AppColors.WHITE_TEXT);
             mTextPaint.setFakeBoldText(true);
             updatePaints();
         }

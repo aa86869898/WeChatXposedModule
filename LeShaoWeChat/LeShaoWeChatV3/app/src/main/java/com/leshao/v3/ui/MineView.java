@@ -209,7 +209,7 @@ public class MineView {
         TextView scanBtn = new TextView(mActivity);
         scanBtn.setText("\u626B\u63CF\u672C\u5730\u97F3\u4E50");
         scanBtn.setTextSize(12);
-        scanBtn.setTextColor(0xFFFFFFFF);
+        scanBtn.setTextColor(AppColors.WHITE_TEXT);
         scanBtn.setGravity(Gravity.CENTER);
         scanBtn.setPadding(MusicActivity.dp(10), MusicActivity.dp(7), MusicActivity.dp(10), MusicActivity.dp(7));
         scanBtn.setBackground(MusicActivity.rd(8, MusicActivity.CLR_ACCENT));
@@ -297,7 +297,7 @@ public class MineView {
         coverIv.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable covBg = new GradientDrawable();
         covBg.setCornerRadius(MusicActivity.dp(4));
-        covBg.setColor(0xFFE8ECF0);
+        covBg.setColor(AppColors.bg());
         coverIv.setBackground(covBg);
         coverIv.setPadding(MusicActivity.dp(6), MusicActivity.dp(6), MusicActivity.dp(6), MusicActivity.dp(6));
         item.addView(coverIv);

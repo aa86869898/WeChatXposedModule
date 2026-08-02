@@ -25,27 +25,35 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.model.Contact;
+import com.leshao.v3.wm.utils.WmReflect;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ContactSelectorView {
 
-    private static final int COLOR_BG       = 0xFFF4F0FF;
-    private static final int COLOR_CARD     = 0xFFFFFFFF;
-    private static final int COLOR_TEXT     = 0xFF281838;
-    private static final int COLOR_TEXT2    = 0xFF786890;
-    private static final int COLOR_ACCENT   = 0xFFFF4298;
-    private static final int COLOR_DIVIDER  = 0xFFE8DCF0;
-    private static final int COLOR_TAB_INACTIVE = 0xFFE8E0F0;
+    private static final int COLOR_BG       = AppColors.bg();
+    private static final int COLOR_CARD     = AppColors.card();
+    private static final int COLOR_TEXT     = AppColors.text1();
+    private static final int COLOR_TEXT2    = AppColors.text2();
+    private static final int COLOR_ACCENT   = AppColors.accent();
+    private static final int COLOR_DIVIDER  = AppColors.divider();
+    private static final int COLOR_TAB_INACTIVE = AppColors.divider();
 
     private static final int COLOR_AVATAR_FRIEND = 0xFF42A5F5;
     private static final int COLOR_AVATAR_GROUP  = 0xFF26A69A;
 
+    public static final int MODE_ALL    = 0;
+    public static final int MODE_FRIEND = 1;
+    public static final int MODE_GROUP  = 2;
+
     private Activity mActivity;
     private boolean mVoiceOnlyMode;
+    private int mMode = MODE_ALL;
     private Callback mCallback;
     private boolean mFriendTab = true;
     private final Set<String> mCheckedWxids = new HashSet<>();
@@ -55,20 +63,26 @@ public class ContactSelectorView {
     }
 
     public static void show(Activity parentAct, boolean voiceOnlyMode, Callback callback) {
-        new ContactSelectorView().buildAndShow(parentAct, voiceOnlyMode, callback);
+        new ContactSelectorView().buildAndShow(parentAct, voiceOnlyMode, MODE_ALL, callback);
     }
 
-    private void buildAndShow(Activity parentAct, boolean voiceOnlyMode, Callback callback) {
+    public static void show(Activity parentAct, boolean voiceOnlyMode, int mode, Callback callback) {
+        new ContactSelectorView().buildAndShow(parentAct, voiceOnlyMode, mode, callback);
+    }
+
+    private void buildAndShow(Activity parentAct, boolean voiceOnlyMode, int mode, Callback callback) {
         mActivity = parentAct;
         mVoiceOnlyMode = voiceOnlyMode;
+        mMode = mode;
         mCallback = callback;
+        if (mode == MODE_GROUP) mFriendTab = false;
 
         LinearLayout root = new LinearLayout(mActivity);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(COLOR_BG);
         root.setPadding(dp(12), dp(12), dp(12), dp(12));
 
-        // ── Tab bar ──
+        // ── Tab bar (hidden when single-mode) ──
         LinearLayout tabBar = new LinearLayout(mActivity);
         tabBar.setOrientation(LinearLayout.HORIZONTAL);
 
@@ -87,12 +101,14 @@ public class ContactSelectorView {
         btnGroup.setTextSize(14);
         btnGroup.setGravity(Gravity.CENTER);
 
-        applyTabStyle(btnFriend, true);
-        applyTabStyle(btnGroup, false);
+        applyTabStyle(btnFriend, mFriendTab);
+        applyTabStyle(btnGroup, !mFriendTab);
 
-        tabBar.addView(btnFriend, tabLp);
-        tabBar.addView(btnGroup, tabLp);
-        root.addView(tabBar);
+        if (mode == MODE_ALL) {
+            tabBar.addView(btnFriend, tabLp);
+            tabBar.addView(btnGroup, tabLp);
+            root.addView(tabBar);
+        }
 
         // ── Search ──
         EditText searchEdit = new EditText(mActivity);
@@ -153,25 +169,44 @@ public class ContactSelectorView {
         btnConfirm.setTextSize(15);
         btnConfirm.setAllCaps(false);
         GradientDrawable confirmBg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{0xFFe0408a, COLOR_ACCENT});
+            new int[]{AppColors.accent(), COLOR_ACCENT});
         confirmBg.setCornerRadius(dp(6));
         btnConfirm.setBackground(confirmBg);
         btnConfirm.setPadding(dp(28), dp(10), dp(28), dp(10));
         btnConfirm.setGravity(Gravity.CENTER);
+
+        TextView countTv = new TextView(mActivity);
+        countTv.setText("0");
+        countTv.setTextColor(COLOR_ACCENT);
+        countTv.setTextSize(15);
+        countTv.setVisibility(View.GONE);
+        countTv.setPadding(dp(8), dp(10), dp(4), dp(10));
 
         final boolean[] selectAllOn = {false};
 
         LinearLayout.LayoutParams selectAllLp = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
         bottomBar.addView(btnSelectAll, selectAllLp);
+        bottomBar.addView(countTv);
         bottomBar.addView(btnConfirm);
         root.addView(bottomBar);
 
+        adapter.setCountCallback(newCount -> {
+            if (newCount > 0) {
+                countTv.setVisibility(View.VISIBLE);
+                countTv.setText("已选" + newCount);
+            } else {
+                countTv.setVisibility(View.GONE);
+            }
+        });
+
         // ── Tab switchers ──
-        btnFriend.setOnClickListener(v -> switchTab(adapter, searchEdit, btnSelectAll,
-                selectAllOn, btnFriend, btnGroup, true));
-        btnGroup.setOnClickListener(v -> switchTab(adapter, searchEdit, btnSelectAll,
-                selectAllOn, btnFriend, btnGroup, false));
+        if (mode == MODE_ALL) {
+            btnFriend.setOnClickListener(v -> switchTab(adapter, searchEdit, btnSelectAll,
+                    selectAllOn, btnFriend, btnGroup, true));
+            btnGroup.setOnClickListener(v -> switchTab(adapter, searchEdit, btnSelectAll,
+                    selectAllOn, btnFriend, btnGroup, false));
+        }
 
         // ── Select all / deselect all ──
         btnSelectAll.setOnClickListener(v -> {
@@ -188,7 +223,7 @@ public class ContactSelectorView {
 
         // ── Dialog ──
         AlertDialog dialog = new AlertDialog.Builder(mActivity)
-                .setTitle("选择联系人")
+                .setTitle(mode == MODE_FRIEND ? "选择好友" : mode == MODE_GROUP ? "选择群聊" : "选择联系人")
                 .setView(root)
                 .setCancelable(true)
                 .create();
@@ -263,11 +298,16 @@ public class ContactSelectorView {
 
         private List<Contact> mData;
         private final Set<String> mCheckedWxids;
+        private CountCallback mCountCallback;
+
+        interface CountCallback { void onCountChanged(int count); }
 
         ContactAdapter(List<Contact> data, Set<String> checkedWxids) {
             mData = new ArrayList<>(data);
             mCheckedWxids = checkedWxids;
         }
+
+        void setCountCallback(CountCallback cb) { mCountCallback = cb; }
 
         void updateData(List<Contact> newData) {
             mData = new ArrayList<>(newData);
@@ -324,16 +364,36 @@ public class ContactSelectorView {
             Contact contact = mData.get(position);
             holder.nameTv.setText(contact.displayName());
             holder.subTv.setText(contact.detailInfo());
-            holder.avatar.setInitials(getInitials(contact.displayName()));
-            holder.avatar.setIsGroup(contact.isGroup());
+
+            String cachedUrl = sAvatarCache.get(contact.wxid);
+            if (cachedUrl == null) {
+                try {
+                    ClassLoader cl = com.leshao.v3.ContextManager.getClassLoader();
+                    if (cl != null) {
+                        String url = WmReflect.getAvatarUrl(cl, contact.wxid);
+                        if (url != null && !url.isEmpty()) {
+                            sAvatarCache.put(contact.wxid, url);
+                            cachedUrl = url;
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+            if (cachedUrl != null && !cachedUrl.isEmpty()) {
+                holder.avatar.loadImage(cachedUrl);
+            } else {
+                holder.avatar.setInitials(getInitials(contact.displayName()), contact.isGroup());
+            }
 
             holder.cb.setOnCheckedChangeListener(null);
             holder.cb.setChecked(mCheckedWxids.contains(contact.wxid));
             holder.cb.setOnCheckedChangeListener((buttonView, isChecked) -> {
                 if (isChecked) mCheckedWxids.add(contact.wxid);
                 else mCheckedWxids.remove(contact.wxid);
+                if (mCountCallback != null) mCountCallback.onCountChanged(mCheckedWxids.size());
             });
         }
+
+        private static final Map<String, String> sAvatarCache = new ConcurrentHashMap<>();
 
         @Override
         public int getItemCount() {
@@ -366,16 +426,19 @@ public class ContactSelectorView {
     }
 
     // ========================================================================
-    // AvatarView — 32dp circle with initials
+    // AvatarView — 32dp circle with initials or loaded image
     // ========================================================================
 
     static class AvatarView extends View {
 
         private String mInitials = "";
         private boolean mIsGroup = false;
+        private android.graphics.Bitmap mBitmap;
         private final Paint mBgPaint;
         private final Paint mTextPaint;
+        private final android.graphics.Paint mBitmapPaint;
         private final Rect mTextBounds = new Rect();
+        private String mPendingUrl;
 
         AvatarView(android.content.Context ctx) {
             super(ctx);
@@ -383,16 +446,36 @@ public class ContactSelectorView {
             mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             mTextPaint.setColor(Color.WHITE);
             mTextPaint.setTextAlign(Paint.Align.CENTER);
+            mBitmapPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            mBitmapPaint.setFilterBitmap(true);
         }
 
-        void setInitials(String initials) {
+        void setInitials(String initials, boolean isGroup) {
             mInitials = initials;
+            mIsGroup = isGroup;
+            mBitmap = null;
+            mPendingUrl = null;
             invalidate();
         }
 
-        void setIsGroup(boolean isGroup) {
-            mIsGroup = isGroup;
-            invalidate();
+        void loadImage(String url) {
+            if (url == null || url.isEmpty()) return;
+            if (url.equals(mPendingUrl)) return;
+            mPendingUrl = url;
+            final String fUrl = url;
+            new Thread(() -> {
+                try {
+                    java.net.URL u = new java.net.URL(fUrl);
+                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
+                    conn.setConnectTimeout(5000);
+                    conn.setReadTimeout(5000);
+                    android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(conn.getInputStream());
+                    conn.disconnect();
+                    if (bmp != null && fUrl.equals(mPendingUrl)) {
+                        post(() -> { mBitmap = bmp; invalidate(); });
+                    }
+                } catch (Throwable ignored) {}
+            }).start();
         }
 
         @Override
@@ -405,9 +488,41 @@ public class ContactSelectorView {
         protected void onDraw(Canvas canvas) {
             int w = getWidth(), h = getHeight();
             if (w <= 0 || h <= 0) return;
-
             int cx = w / 2, cy = h / 2;
             int r = Math.min(w, h) / 2;
+
+            if (mBitmap != null) {
+                // Try built-in circle helper first
+                try {
+                    Class<?> avatarHelper = getClass().getClassLoader().loadClass(
+                        "com.tencent.mm.pluginsdk.ui.a");
+                    android.graphics.Bitmap circle = android.graphics.Bitmap.createBitmap(w, h,
+                            android.graphics.Bitmap.Config.ARGB_8888);
+                    Canvas c2 = new Canvas(circle);
+                    Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+                    p.setFilterBitmap(true);
+                    android.graphics.Bitmap scaledBmp = android.graphics.Bitmap.createScaledBitmap(mBitmap, w, h, true);
+                    canvas.save();
+                    android.graphics.Path path = new android.graphics.Path();
+                    path.addCircle(cx, cy, r, android.graphics.Path.Direction.CW);
+                    canvas.clipPath(path);
+                    canvas.drawBitmap(scaledBmp, 0, 0, mBitmapPaint);
+                    canvas.restore();
+                    if (scaledBmp != mBitmap) scaledBmp.recycle();
+                    return;
+                } catch (Throwable e) {
+                    // simple circle fallback below
+                }
+                android.graphics.Bitmap scaled = android.graphics.Bitmap.createScaledBitmap(mBitmap, w, h, true);
+                canvas.save();
+                android.graphics.Path path = new android.graphics.Path();
+                path.addCircle(cx, cy, r, android.graphics.Path.Direction.CW);
+                canvas.clipPath(path);
+                canvas.drawBitmap(scaled, 0, 0, mBitmapPaint);
+                canvas.restore();
+                if (scaled != mBitmap) scaled.recycle();
+                return;
+            }
 
             mBgPaint.setColor(mIsGroup ? COLOR_AVATAR_GROUP : COLOR_AVATAR_FRIEND);
             canvas.drawCircle(cx, cy, r, mBgPaint);

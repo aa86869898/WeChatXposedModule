@@ -38,6 +38,7 @@ import android.widget.Toast;
 import java.util.List;
 import java.util.Locale;
 import java.util.ArrayList;
+import java.io.File;
 
 public class MusicPlayerActivity extends Activity {
 
@@ -46,7 +47,7 @@ public class MusicPlayerActivity extends Activity {
     private RotateAnimation mDiscAnim;
     private TextView mTitle, mArtist, mCurrentTime, mTotalTime;
     private LinearGradientSeekBar mSeekBar;
-    private TextView mPrevBtn, mPlayBtn, mNextBtn, mModeBtn, mQualityBtn, mDownloadBtn;
+    private TextView mPrevBtn, mPlayBtn, mNextBtn, mModeBtn, mQualityBtn, mDownloadBtn, mSendVoiceBtn;
     private TextView mLyricText;
     private LinearLayout mRoot;
     private Handler mHandler = new Handler(Looper.getMainLooper());
@@ -378,6 +379,14 @@ public class MusicPlayerActivity extends Activity {
         sep3.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(8), 1));
         bar.addView(sep3);
 
+        mSendVoiceBtn = bottomBtn("\uD83C\uDFB6", "发语音");
+        mSendVoiceBtn.setOnClickListener(v -> showSendVoiceDialog());
+        bar.addView(mSendVoiceBtn);
+
+        View sep4 = new View(this);
+        sep4.setLayoutParams(new LinearLayout.LayoutParams(MusicActivity.dp(8), 1));
+        bar.addView(sep4);
+
         TextView listBtn = bottomBtn("\uD83D\uDCCB", "列表");
         listBtn.setOnClickListener(v -> showPlaylist());
         bar.addView(listBtn);
@@ -440,6 +449,87 @@ public class MusicPlayerActivity extends Activity {
         });
         builder.setNegativeButton("取消", null);
         builder.show();
+    }
+
+    // ===== 发送语音 =====
+
+    private void showSendVoiceDialog() {
+        MusicSearchApi.Song song = MusicActivity.sPlayer != null ? MusicActivity.sPlayer.getCurrent() : null;
+        if (song == null) {
+            MusicActivity.toast("无歌曲可发送");
+            return;
+        }
+        ContactSelectorView.show(this, true, selected -> {
+            if (selected == null || selected.isEmpty()) {
+                MusicActivity.toast("未选择联系人");
+                return;
+            }
+            sendSongAsVoice(song, selected);
+        });
+    }
+
+    private void sendSongAsVoice(final MusicSearchApi.Song song, final List<com.leshao.v3.model.Contact> contacts) {
+        MusicActivity.toast("获取播放地址...");
+        MusicSearchApi.PlayUrlCallback cb = new MusicSearchApi.PlayUrlCallback() {
+            @Override
+            public void onUrl(String url) {
+                if (url == null || url.isEmpty()) {
+                    MusicActivity.toast("获取音源失败");
+                    return;
+                }
+                convertAndSend(url, contacts);
+            }
+            @Override
+            public void onError(String msg) {
+                MusicActivity.toast("获取音源失败");
+            }
+        };
+        MusicSearchApi.getKugouPlayUrl(song.hash, cb);
+    }
+
+    private void convertAndSend(final String audioUrl, final List<com.leshao.v3.model.Contact> contacts) {
+        new Thread(() -> {
+            try {
+                File tmp = new File(getCacheDir(), "voice_send_" + System.currentTimeMillis());
+                MusicLog.i("Player", "download audio: " + audioUrl.substring(0, Math.min(60, audioUrl.length())));
+                downloadToFile(audioUrl, tmp);
+                if (!tmp.exists() || tmp.length() < 1024) {
+                    MusicActivity.toast("音频下载失败");
+                    return;
+                }
+                MusicLog.i("Player", "audio downloaded: " + tmp.length() + " bytes");
+                byte[] pcm = com.leshao.v3.hook.TtsVoiceSender.decodeAudioToPcm16kMono(tmp.getAbsolutePath());
+                tmp.delete();
+                if (pcm == null || pcm.length == 0) {
+                    MusicActivity.toast("音频解码失败");
+                    return;
+                }
+                for (com.leshao.v3.model.Contact c : contacts) {
+                    String cid = "mv" + System.currentTimeMillis() + "_" + Math.abs(c.wxid.hashCode());
+                    com.leshao.v3.hook.TtsVoiceSender.sendPcm16kMonoAsVoice(c.wxid, pcm, cid);
+                }
+                MusicActivity.toast("已发送 " + contacts.size() + " 人");
+            } catch (Throwable e) {
+                MusicLog.e("Player", "send voice crash: " + e.getMessage());
+                MusicActivity.toast("发送失败: " + e.getMessage());
+            }
+        }, "leshao-music-voice-send").start();
+    }
+
+    private void downloadToFile(String urlStr, File out) throws Exception {
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new java.net.URL(urlStr).openConnection();
+        conn.setConnectTimeout(15000);
+        conn.setReadTimeout(60000);
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+        conn.setInstanceFollowRedirects(true);
+        try (java.io.InputStream in = conn.getInputStream();
+             java.io.FileOutputStream fos = new java.io.FileOutputStream(out)) {
+            byte[] buf = new byte[8192];
+            int r;
+            while ((r = in.read(buf)) != -1) fos.write(buf, 0, r);
+        } finally {
+            conn.disconnect();
+        }
     }
 
     private void startDiscAnim() {

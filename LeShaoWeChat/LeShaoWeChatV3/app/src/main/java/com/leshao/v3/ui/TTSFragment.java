@@ -126,7 +126,7 @@ public class TTSFragment extends Fragment {
     private LinearLayout makeCard(float d) {
         LinearLayout card = new LinearLayout(getContext());
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackgroundColor(0xFFF5F5F5);
+        card.setBackgroundColor(AppColors.bg());
         card.setPadding((int)(2*d), (int)(2*d), (int)(2*d), (int)(2*d));
         return card;
     }
@@ -135,7 +135,7 @@ public class TTSFragment extends Fragment {
         TextView tv = new TextView(getContext());
         tv.setText(text);
         tv.setTextSize(13);
-        tv.setTextColor(0xFF999999);
+        tv.setTextColor(AppColors.text2());
         tv.setPadding(0, 0, 0, (int)(8*d));
         return tv;
     }
@@ -146,7 +146,7 @@ public class TTSFragment extends Fragment {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14*d), (int)(12*d), (int)(14*d), (int)(12*d));
-        row.setBackgroundColor(0xFFFFFFFF);
+        row.setBackgroundColor(AppColors.card());
 
         LinearLayout textCol = new LinearLayout(getContext());
         textCol.setOrientation(LinearLayout.VERTICAL);
@@ -155,7 +155,7 @@ public class TTSFragment extends Fragment {
         TextView tv = new TextView(getContext());
         tv.setText(title);
         tv.setTextSize(15);
-        tv.setTextColor(0xFF1A1A1A);
+        tv.setTextColor(AppColors.text1());
         tv.setTypeface(null, Typeface.BOLD);
         textCol.addView(tv);
 
@@ -163,7 +163,7 @@ public class TTSFragment extends Fragment {
             TextView dv = new TextView(getContext());
             dv.setText(desc);
             dv.setTextSize(12);
-            dv.setTextColor(0xFF999999);
+            dv.setTextColor(AppColors.text2());
             dv.setPadding(0, (int)(3*d), 0, 0);
             textCol.addView(dv);
         }
@@ -174,13 +174,13 @@ public class TTSFragment extends Fragment {
             TextView btn = new TextView(getContext());
             btn.setText("[设置]");
             btn.setTextSize(12);
-            btn.setTextColor(0xFF4A90D9);
+            btn.setTextColor(AppColors.accent());
             btn.setPadding((int)(6*d), 0, (int)(6*d), 0);
             btn.setOnClickListener(config);
             row.addView(btn);
         }
 
-        Switch sw = new Switch(getContext());
+        Switch sw = CandyUi.newSwitch(getContext());
         sw.setChecked(checked);
         sw.setOnCheckedChangeListener(l);
         row.addView(sw);
@@ -192,16 +192,16 @@ public class TTSFragment extends Fragment {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14*d), (int)(10*d), (int)(14*d), (int)(10*d));
-        row.setBackgroundColor(0xFFFFFFFF);
+        row.setBackgroundColor(AppColors.card());
 
         TextView tv = new TextView(getContext());
         tv.setText(label);
         tv.setTextSize(14);
-        tv.setTextColor(0xFF333333);
+        tv.setTextColor(AppColors.text1());
         tv.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         row.addView(tv);
 
-        Switch sw = new Switch(getContext());
+        Switch sw = CandyUi.newSwitch(getContext());
         sw.setChecked(checked);
         sw.setOnCheckedChangeListener(l);
         row.addView(sw);
@@ -213,20 +213,20 @@ public class TTSFragment extends Fragment {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14*d), (int)(10*d), (int)(14*d), (int)(10*d));
-        row.setBackgroundColor(0xFFFFFFFF);
+        row.setBackgroundColor(AppColors.card());
 
         TextView tv = new TextView(getContext());
         tv.setText(label);
         tv.setTextSize(14);
-        tv.setTextColor(0xFF333333);
+        tv.setTextColor(AppColors.text1());
         tv.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.35f));
         row.addView(tv);
 
         EditText et = new EditText(getContext());
         et.setText(value);
         et.setTextSize(14);
-        et.setTextColor(0xFF1A1A1A);
-        et.setBackgroundColor(0xFFF5F5F5);
+        et.setTextColor(AppColors.text1());
+        et.setBackgroundColor(AppColors.inputBg());
         et.setPadding((int)(10*d), (int)(8*d), (int)(10*d), (int)(8*d));
         et.setSingleLine(true);
         et.addTextChangedListener(new android.text.TextWatcher() {
@@ -245,12 +245,12 @@ public class TTSFragment extends Fragment {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14*d), (int)(12*d), (int)(14*d), (int)(12*d));
-        row.setBackgroundColor(0xFFFFFFFF);
+        row.setBackgroundColor(AppColors.card());
 
         TextView tv = new TextView(getContext());
         tv.setText(label);
         tv.setTextSize(15);
-        tv.setTextColor(0xFF1A1A1A);
+        tv.setTextColor(AppColors.text1());
         tv.setTypeface(null, Typeface.BOLD);
         tv.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.4f));
         row.addView(tv);

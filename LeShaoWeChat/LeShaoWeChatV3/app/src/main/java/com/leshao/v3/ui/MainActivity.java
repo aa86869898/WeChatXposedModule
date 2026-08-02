@@ -63,10 +63,11 @@ public class MainActivity {
     public static String getAvatarPath() { return sAvatarPath; }
     public static String getVipLevel() { return sVipLevel; }
 
-    private static final int WC_BG   = 0xFFF0F0F2;
-    private static final int WC_CARD = 0xFFFFFFFF;
-    private static final int WC_ARROW = 0xFFC7C7CC;
-    private static final int WC_DIV  = 0xFFE5E5EA;
+    private static int dialogTheme() {
+        return AppColors.isDarkMode()
+                ? android.R.style.Theme_DeviceDefault_NoActionBar
+                : android.R.style.Theme_DeviceDefault_Light_NoActionBar;
+    }
 
     private static final String[] ITEM_NAMES = {
         "主题美化", "联系人和群聊", "群管理助手", "音乐娱乐",
@@ -87,7 +88,7 @@ public class MainActivity {
     static {
         PAGE_FEATURES.put(2, "全局主题|标题栏美化|页面背景|聊天背景|底部Tab美化|自己气泡|对方气泡|文字颜色|Monet引擎|自定义气泡|背景色|文字色|气泡样式|颜色|美化");
         PAGE_FEATURES.put(3, "通讯录导出|联系人变更日志|通讯录|联系人|防撤回|消息防撤回|语音转发|语音消息转发");
-        PAGE_FEATURES.put(5, "音乐娱乐|语音点歌|卡片点歌|酷狗|酷我|点歌|K歌|听歌");
+        PAGE_FEATURES.put(5, "音乐娱乐|语音点歌|卡片点歌|酷狗|点歌|K歌|听歌");
         PAGE_FEATURES.put(8, "语音播报|TTS播报|排版引擎|配音|API|Voice|间隔|熔断|消息类型|免打扰|安静时段|播报参数|音量|语速|音调|TTS|文字消息播报|语音消息播报|图片消息播报|播报发送人昵称|播报群聊消息|截断长文字");
         PAGE_FEATURES.put(9, "自动抢红包|秒抢|红包震动|响铃|红包提醒|转账收款|私聊红包|群聊红包|时间段过滤|延时抢红包|排除群列|目标群聊|播报金额|关键词过滤");
         PAGE_FEATURES.put(12, "消息导出|聊天备份|导出聊天|备份数据|查看记录|清除记录|数据备份|导出|自动每日备份|导入外部记录|通讯录变更|变更日志");
@@ -361,7 +362,7 @@ public class MainActivity {
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(WC_BG);
+        root.setBackground(CandyUi.pageGradient());
         root.setPadding(dp(d, 12), dp(d, 12), dp(d, 12), dp(d, 12));
 
         TextView titleTv = new TextView(ctx);
@@ -434,7 +435,7 @@ public class MainActivity {
         agreeBtn.setAllCaps(false);
         GradientDrawable btnBg = new GradientDrawable();
         btnBg.setCornerRadius(dp(d, 8));
-        btnBg.setColor(0xFFCCCCCC);
+        btnBg.setColor(AppColors.offColor());
         agreeBtn.setBackground(btnBg);
         agreeBtn.setPadding(dp(d, 16), dp(d, 10), dp(d, 16), dp(d, 10));
         agreeBtn.setEnabled(false);
@@ -485,7 +486,7 @@ public class MainActivity {
             showMainPanel(act);
         });
 
-        AlertDialog dl = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Light_NoActionBar)
+        AlertDialog dl = new AlertDialog.Builder(ctx, dialogTheme())
             .setView(root)
             .setCancelable(false)
             .create();
@@ -496,7 +497,7 @@ public class MainActivity {
         Window w = dl.getWindow();
         if (w != null) {
             w.setLayout(-1, -1);
-            w.setBackgroundDrawable(new ColorDrawable(WC_BG));
+            w.setBackgroundDrawable(new ColorDrawable(AppColors.bg()));
         }
     }
 
@@ -526,11 +527,12 @@ public class MainActivity {
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(WC_BG);
+        root.setBackground(CandyUi.pageGradient());
 
         root.addView(buildTopBar(ctx, d, act));
         root.addView(spacerV(ctx, d, 10));
-        root.addView(buildSearchCard(ctx, d));
+        View searchCard = buildSearchCard(ctx, d);
+        root.addView(searchCard);
         root.addView(spacerV(ctx, d, 10));
 
         LinearLayout card1 = buildCard(ctx, d);
@@ -548,7 +550,7 @@ public class MainActivity {
         final HashMap<View, String> searchMap = new HashMap<>();
         boolean first = true;
         for (int i = 0; i < ITEM_NAMES.length; i++) {
-            if (i == 0 || i == 2 || i == 4 || i == 5 || i == 9) continue;
+            if (i == 0 || i == 4 || i == 5 || i == 9) continue;
             if (!first) card2.addView(makeInnerDivider(ctx, d));
             first = false;
             final int idx = i;
@@ -570,7 +572,7 @@ public class MainActivity {
 
         sv.addView(root);
 
-        AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Light_NoActionBar);
+        AlertDialog.Builder b = new AlertDialog.Builder(ctx, dialogTheme());
         b.setView(sv);
         b.setCancelable(true);
         AlertDialog dlg = b.create();
@@ -578,13 +580,14 @@ public class MainActivity {
         Window w = dlg.getWindow();
         if (w != null) {
             w.setLayout(-1, -1);
-            w.setBackgroundDrawable(new ColorDrawable(WC_BG));
+            w.setBackgroundDrawable(new ColorDrawable(AppColors.bg()));
             w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         }
 
         sActiveDialog = dlg;
 
-        setupSearch(root, searchMap, card2);
+        EditText searchBox = (EditText) searchCard.findViewWithTag("search_box");
+        setupSearch(searchBox, searchMap, card2);
 
         dlg.show();
     }
@@ -604,7 +607,7 @@ public class MainActivity {
         TextView titleTv = new TextView(ctx);
         titleTv.setText("乐少助手");
         titleTv.setTextSize(17);
-        titleTv.setTextColor(AppColors.whiteCard());
+        titleTv.setTextColor(AppColors.WHITE_TEXT);
         titleTv.setTypeface(null, Typeface.BOLD);
         titleTv.setGravity(Gravity.CENTER);
         titleTv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
@@ -635,7 +638,7 @@ public class MainActivity {
         card.setPadding(dp(d, 12), 0, dp(d, 12), 0);
         GradientDrawable cardBg = new GradientDrawable();
         cardBg.setCornerRadius(dp(d, 8));
-        cardBg.setColor(WC_CARD);
+        cardBg.setColor(AppColors.card());
         card.setBackground(cardBg);
 
         EditText searchBox = new EditText(ctx);
@@ -644,19 +647,19 @@ public class MainActivity {
         searchBox.setTextColor(AppColors.text1());
         searchBox.setHintTextColor(AppColors.text2());
         searchBox.setSingleLine(true);
-        searchBox.setBackgroundColor(Color.TRANSPARENT);
+        searchBox.setBackground(CandyUi.inputBg(ctx));
         searchBox.setPadding(0, dp(d, 10), 0, dp(d, 10));
         searchBox.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
         searchBox.setTag("search_box");
         card.addView(searchBox);
+        card.setTag("search_card");
 
         return card;
     }
 
-    private static void setupSearch(final LinearLayout root,
+    private static void setupSearch(final EditText searchBox,
                                       final HashMap<View, String> searchMap,
                                       final LinearLayout itemsContainer) {
-        EditText searchBox = (EditText) root.findViewWithTag("search_box");
         if (searchBox == null) return;
 
         searchBox.addTextChangedListener(new TextWatcher() {
@@ -695,7 +698,7 @@ public class MainActivity {
         card.setPadding(dp(d, 12), 0, dp(d, 12), 0);
         GradientDrawable cardBg = new GradientDrawable();
         cardBg.setCornerRadius(dp(d, 8));
-        cardBg.setColor(WC_CARD);
+        cardBg.setColor(AppColors.card());
         card.setBackground(cardBg);
         return card;
     }
@@ -730,7 +733,7 @@ public class MainActivity {
         TextView arrow = new TextView(ctx);
         arrow.setText(">");
         arrow.setTextSize(16);
-        arrow.setTextColor(WC_ARROW);
+        arrow.setTextColor(AppColors.arrow());
         row.addView(arrow);
 
         return row;
@@ -741,7 +744,7 @@ public class MainActivity {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 1);
         lp.setMargins(dp(d, 52), 0, 0, 0);
         v.setLayoutParams(lp);
-        v.setBackgroundColor(WC_DIV);
+        v.setBackgroundColor(AppColors.divider());
         return v;
     }
 
@@ -753,7 +756,7 @@ public class MainActivity {
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(AppColors.bg());
+        root.setBackground(CandyUi.pageGradient());
         root.setPadding(dp(d, 20), dp(d, 20), dp(d, 20), dp(d, 16));
 
         TextView titleTv = new TextView(ctx);
@@ -878,7 +881,7 @@ public class MainActivity {
     private static void showDonateImage(Context ctx, float d, Activity act, String resName, String title) {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(AppColors.bg());
+        root.setBackground(CandyUi.pageGradient());
         root.setPadding(dp(d, 20), dp(d, 20), dp(d, 20), dp(d, 16));
         root.setGravity(Gravity.CENTER);
 

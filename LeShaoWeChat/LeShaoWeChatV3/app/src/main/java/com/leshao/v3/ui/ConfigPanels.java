@@ -184,7 +184,7 @@ public class ConfigPanels {
 
         int style = prefs.getInt("badge_style", 0);
         int max = prefs.getInt("badge_max", 99);
-        int bc = prefs.getInt("badge_color", 0xFFFA5151);
+        int bc = prefs.getInt("badge_color", AppColors.accent());
 
         Spinner styleSp = addSpinnerRow(act, root, "角标样式", style,
                 new String[]{"默认", "仅红点", "精确数字", "99+模式", "自定义颜色"});
@@ -416,7 +416,7 @@ public class ConfigPanels {
         TextView tv = new TextView(act);
         tv.setText(label);
         tv.setTextSize(13);
-        tv.setTextColor(0xFF666666);
+        tv.setTextColor(AppColors.text2());
         tv.setPadding(0, dp(act, 8), 0, dp(act, 2));
         root.addView(tv);
 
@@ -431,7 +431,7 @@ public class ConfigPanels {
     private static TextView addSelectedLabel(Activity act, LinearLayout root, Set<String> selected) {
         TextView tv = new TextView(act);
         tv.setTextSize(12);
-        tv.setTextColor(0xFF999999);
+        tv.setTextColor(AppColors.text3());
         tv.setPadding(0, dp(act, 2), 0, dp(act, 6));
         updateContactLabel(tv, selected);
         root.addView(tv);
@@ -544,7 +544,7 @@ public class ConfigPanels {
         TextView tv = new TextView(act);
         tv.setText(label);
         tv.setTextSize(13);
-        tv.setTextColor(0xFF666666);
+        tv.setTextColor(AppColors.text2());
         tv.setPadding(0, dp(act, 8), 0, dp(act, 2));
         root.addView(tv);
 
@@ -553,7 +553,7 @@ public class ConfigPanels {
         et.setTextSize(14);
         et.setInputType(inputType);
         et.setPadding(dp(act, 10), dp(act, 8), dp(act, 10), dp(act, 8));
-        et.setBackgroundColor(0xFFF5F5F5);
+        et.setBackgroundColor(AppColors.bg());
         root.addView(et);
         return et;
     }
@@ -562,7 +562,7 @@ public class ConfigPanels {
         TextView tv = new TextView(act);
         tv.setText(label);
         tv.setTextSize(13);
-        tv.setTextColor(0xFF666666);
+        tv.setTextColor(AppColors.text2());
         tv.setPadding(0, dp(act, 8), 0, dp(act, 2));
         root.addView(tv);
 
@@ -587,7 +587,7 @@ public class ConfigPanels {
         tv.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         row.addView(tv);
 
-        Switch sw = new Switch(act);
+        Switch sw = CandyUi.newSwitch(act);
         sw.setChecked(checked);
         row.addView(sw);
 

@@ -69,7 +69,7 @@ public class SubPageActivity {
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(AppColors.bg());
+        root.setBackground(CandyUi.pageGradient());
 
         root.addView(MainActivity.makeTitleBar(ctx, title, true, () -> goBack(parentAct)));
 
@@ -141,6 +141,8 @@ public class SubPageActivity {
                 return ThemePageView.create(ctx, parentAct);
             case 3:  // 联系人和群聊
                 return ContactGroupPageView.create(ctx, parentAct);
+            case 4:  // 群管理助手
+                return WxMasterPageView.create(ctx, parentAct);
             case 5:  // 音乐娱乐
                 return MusicPageView.create(ctx, parentAct);
             case 8:  // TTS语音播报

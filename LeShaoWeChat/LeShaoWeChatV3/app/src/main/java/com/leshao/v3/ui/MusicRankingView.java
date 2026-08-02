@@ -345,7 +345,7 @@ public class MusicRankingView {
                 List<MusicSearchApi.Song> msSongs = new ArrayList<>();
                 for (KgApi.Song ks : songs) {
                     MusicSearchApi.Song ms = new MusicSearchApi.Song();
-                    ms.id = ks.hash.isEmpty() ? ks.id : ks.hash;
+                    ms.id = (ks.hash != null && !ks.hash.isEmpty()) ? ks.hash : ks.id;
                     ms.hash = ks.hash;
                     ms.hash320 = ks.hash320;
                     ms.sqHash = ks.sqHash;
@@ -417,14 +417,14 @@ public class MusicRankingView {
         textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
 
         TextView titleTv = new TextView(mActivity);
-        titleTv.setText(kgSong.title);
+        titleTv.setText(kgSong.title != null ? kgSong.title : "");
         titleTv.setTextSize(13);
         titleTv.setTextColor(MusicActivity.CLR_TEXT);
         titleTv.setSingleLine(true);
         textCol.addView(titleTv);
 
         TextView artistTv = new TextView(mActivity);
-        artistTv.setText(kgSong.artist);
+        artistTv.setText(kgSong.artist != null ? kgSong.artist : "");
         artistTv.setTextSize(11);
         artistTv.setTextColor(MusicActivity.CLR_TEXT2);
         artistTv.setSingleLine(true);

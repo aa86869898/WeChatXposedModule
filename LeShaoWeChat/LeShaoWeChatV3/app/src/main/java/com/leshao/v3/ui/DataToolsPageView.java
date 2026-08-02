@@ -169,12 +169,12 @@ public class DataToolsPageView {
         android.widget.TextView customBtn = new android.widget.TextView(ctx);
         customBtn.setText("从自定义路径导入");
         customBtn.setTextSize(12);
-        customBtn.setTextColor(0xFF4A90D9);
+        customBtn.setTextColor(AppColors.accent());
         customBtn.setGravity(Gravity.CENTER);
         customBtn.setPadding((int)(14*d), (int)(8*d), (int)(14*d), (int)(8*d));
         android.graphics.drawable.GradientDrawable cbg = new android.graphics.drawable.GradientDrawable();
         cbg.setCornerRadius((int)(4*d));
-        cbg.setStroke((int)(1*d), 0xFF4A90D9);
+        cbg.setStroke((int)(1*d), AppColors.accent());
         cbg.setColor(android.graphics.Color.TRANSPARENT);
         customBtn.setBackground(cbg);
         LinearLayout.LayoutParams cblp = new LinearLayout.LayoutParams(-1, -2);
@@ -520,7 +520,7 @@ public class DataToolsPageView {
         }
         row.addView(textCol);
 
-        Switch sw = new Switch(ctx); sw.setChecked(checked);
+        Switch sw = CandyUi.newSwitch(ctx); sw.setChecked(checked);
         try { sw.setThumbResource(android.R.drawable.btn_star_big_on); } catch (Throwable ignored) {}
         sw.setOnCheckedChangeListener(listener);
         row.addView(sw);

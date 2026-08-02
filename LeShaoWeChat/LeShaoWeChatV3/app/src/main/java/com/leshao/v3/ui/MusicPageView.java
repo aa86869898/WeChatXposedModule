@@ -18,29 +18,30 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import com.leshao.v3.wm.utils.WmPrefs;
+
 public class MusicPageView {
 
-    private static int sPlatform = 0; // 0=KuGou, 1=KuWo
-    private static int sKgPage = 1, sKwPage = 1;
-    private static String sKgQuery = "", sKwQuery = "";
-    private static boolean sKgHasPrev, sKgHasNext, sKwHasPrev, sKwHasNext;
-    private static List<MusicSearchApi.Song> sKgResults = new ArrayList<>();
-    private static List<MusicSearchApi.Song> sKwResults = new ArrayList<>();
+    private static int sPage = 1;
+    private static String sQuery = "";
+    private static boolean sHasPrev, sHasNext;
+    private static List<MusicSearchApi.Song> sResults = new ArrayList<>();
     private static LinearLayout sResultsContainer;
     private static TextView sLoadMoreBtn;
-    private static LinearLayout sTabBar;
     private static EditText sSearchBox;
     private static float sDensity;
     private static Context sCtx;
@@ -54,8 +55,8 @@ public class MusicPageView {
     private static TextView sMiniTime;
     private static Handler sH = new Handler(Looper.getMainLooper());
     private static String sLastCoverUrl;
-    private static View sTabKuGou, sTabKuWo;
     private static ScrollView sScrollView;
+    private static boolean sVoiceSongEnabled, sMusicCardEnabled;
 
     public static View create(Context ctx, Activity parentAct) {
         sCtx = ctx;
@@ -87,7 +88,7 @@ public class MusicPageView {
         root.setBackgroundColor(AppColors.bg());
         root.setLayoutParams(new LinearLayout.LayoutParams(-1, -1));
 
-        root.addView(buildTabBar(ctx));
+        root.addView(buildToggles(ctx));
 
         root.addView(buildSearchBar(ctx));
 
@@ -141,80 +142,52 @@ public class MusicPageView {
         return root;
     }
 
-    // ===== Tab Bar =====
+    // ===== Toggle Bar =====
 
-    private static View buildTabBar(Context ctx) {
-        sTabBar = new LinearLayout(ctx);
-        sTabBar.setOrientation(LinearLayout.HORIZONTAL);
-        sTabBar.setGravity(Gravity.CENTER);
-        sTabBar.setBackgroundColor(AppColors.card());
-        sTabBar.setPadding(dp(4), dp(8), dp(4), dp(8));
+    private static View buildToggles(Context ctx) {
+        LinearLayout bar = new LinearLayout(ctx);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER);
+        bar.setBackgroundColor(AppColors.card());
+        bar.setPadding(dp(8), dp(8), dp(8), dp(8));
 
-        sTabKuGou = tabPill(ctx, "酷狗音乐", 0xFF00B4FF, 0);
-        sTabKuWo = tabPill(ctx, "酷我音乐", 0xFFFF6B00, 1);
-        sTabBar.addView(sTabKuGou);
-        sTabBar.addView(sTabKuWo);
-        return sTabBar;
+        sVoiceSongEnabled = WmPrefs.isVoiceSong();
+        sMusicCardEnabled = WmPrefs.isMusicCard();
+
+        bar.addView(buildToggle(ctx, "语音点歌", sVoiceSongEnabled, v -> {
+            sVoiceSongEnabled = v;
+            WmPrefs.set("voice_song_enabled", v);
+        }));
+        bar.addView(buildToggle(ctx, "音乐卡片", sMusicCardEnabled, v -> {
+            sMusicCardEnabled = v;
+            WmPrefs.set("music_card_enabled", v);
+        }));
+        return bar;
     }
 
-    private static View tabPill(Context ctx, String label, int accent, final int platform) {
-        boolean selected = (sPlatform == platform);
-        int w = dp(120);
+    private static View buildToggle(Context ctx, String label, boolean checked, ToggleCallback cb) {
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(6), dp(2), dp(6), dp(2));
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(0, dp(38), 1f);
+        row.setLayoutParams(rlp);
 
-        FrameLayout wrapper = new FrameLayout(ctx);
-        LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(w, dp(38));
-        wlp.setMargins(dp(6), 0, dp(6), 0);
-        wrapper.setLayoutParams(wlp);
-
-        GradientDrawable pillBg = new GradientDrawable();
-        pillBg.setCornerRadius(dp(20));
-        pillBg.setColor(selected ? accent : AppColors.inputBg());
-
-        FrameLayout pill = new FrameLayout(ctx);
-        pill.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
-        pill.setBackground(pillBg);
-        pill.setTag("pill");
+        Switch sw = CandyUi.newSwitch(ctx);
+        sw.setChecked(checked);
+        sw.setOnCheckedChangeListener((v, isChecked) -> cb.onToggle(isChecked));
+        row.addView(sw);
 
         TextView tv = new TextView(ctx);
         tv.setText(label);
-        tv.setTextSize(14);
-        tv.setTextColor(selected ? 0xFFFFFFFF : AppColors.text1());
-        tv.setTypeface(null, Typeface.BOLD);
-        tv.setGravity(Gravity.CENTER);
-        tv.setTag(platform);
-        tv.setTag("label");
-        tv.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
-
-        pill.addView(tv);
-        wrapper.addView(pill);
-
-        wrapper.setOnClickListener(v -> {
-            sPlatform = platform;
-            refreshTabPills(ctx);
-            loadCurrentTab();
-        });
-        return wrapper;
+        tv.setTextSize(11);
+        tv.setTextColor(AppColors.text2());
+        tv.setPadding(dp(4), 0, 0, 0);
+        row.addView(tv);
+        return row;
     }
 
-    private static void refreshTabPills(Context ctx) {
-        if (sTabKuGou == null || sTabKuWo == null) return;
-        updatePillColor(sTabKuGou, sPlatform == 0, 0xFF00B4FF);
-        updatePillColor(sTabKuWo, sPlatform == 1, 0xFFFF6B00);
-        updateSearchHint();
-    }
-
-    private static void updatePillColor(View wrapper, boolean selected, int accent) {
-        if (!(wrapper instanceof FrameLayout)) return;
-        View pill = ((FrameLayout) wrapper).getChildAt(0);
-        if (!(pill instanceof FrameLayout)) return;
-        View label = ((FrameLayout) pill).getChildAt(0);
-        if (!(label instanceof TextView)) return;
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(20));
-        bg.setColor(selected ? accent : AppColors.inputBg());
-        pill.setBackground(bg);
-        ((TextView) label).setTextColor(selected ? 0xFFFFFFFF : AppColors.text1());
-    }
+    interface ToggleCallback { void onToggle(boolean on); }
 
     // ===== Search Bar =====
 
@@ -294,7 +267,7 @@ public class MusicPageView {
 
     private static void updateSearchHint() {
         if (sSearchBox != null) {
-            sSearchBox.setHint(sPlatform == 0 ? "搜索酷狗音乐" : "搜索酷我音乐");
+            sSearchBox.setHint("搜索酷狗音乐");
         }
     }
 
@@ -338,7 +311,7 @@ public class MusicPageView {
         }
 
         int page = getCurrentPage();
-        int pageSize = sPlatform == 0 ? 20 : 30;
+        int pageSize = 20;
         boolean hasMore = page * pageSize < total;
         sLoadMoreBtn.setVisibility(hasMore ? View.VISIBLE : View.GONE);
     }
@@ -370,7 +343,7 @@ public class MusicPageView {
         textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
 
         TextView title = new TextView(sCtx);
-        title.setText(song.title);
+        title.setText(song.title != null ? song.title : "");
         title.setTextSize(15);
         title.setTextColor(isCurrent ? AppColors.accent() : AppColors.text1());
         title.setTypeface(null, Typeface.BOLD);
@@ -378,7 +351,7 @@ public class MusicPageView {
         textCol.addView(title);
 
         TextView artist = new TextView(sCtx);
-        artist.setText(song.artist);
+        artist.setText(song.artist != null ? song.artist : "");
         artist.setTextSize(12);
         artist.setTextColor(AppColors.text2());
         artist.setSingleLine(true);
@@ -412,8 +385,13 @@ public class MusicPageView {
         row.addView(addBtn);
 
         row.setOnClickListener(v -> {
-            sPlayer.play(song);
-            showFullPlayer(song);
+            if (sPlayer == null || song == null) return;
+            try {
+                sPlayer.play(song);
+                showFullPlayer(song);
+            } catch (Exception e) {
+                Toast.makeText(sCtx, "播放失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+            }
         });
         return row;
     }
@@ -506,7 +484,9 @@ public class MusicPageView {
             return;
         }
         sMiniPlayerBar.setVisibility(View.VISIBLE);
-        sMiniTitle.setText(song.title + " - " + song.artist);
+        String title = song.title != null && !song.title.isEmpty() ? song.title : "未知歌曲";
+        String artist = song.artist != null && !song.artist.isEmpty() ? song.artist : "未知歌手";
+        sMiniTitle.setText(title + " - " + artist);
         updatePlayBtnIcon();
 
         int pos = sPlayer.getPosition();
@@ -517,9 +497,10 @@ public class MusicPageView {
             sMiniTime.setText("");
         }
 
-        if (!song.cover.equals(sLastCoverUrl)) {
-            sLastCoverUrl = song.cover;
-            loadCover(sMiniCover, song.cover);
+        String cover = song.cover != null ? song.cover : "";
+        if (!cover.equals(sLastCoverUrl)) {
+            sLastCoverUrl = cover;
+            loadCover(sMiniCover, cover);
         }
     }
 
@@ -594,11 +575,7 @@ public class MusicPageView {
             }
         };
 
-        if (sPlatform == 0) {
-            MusicSearchApi.searchKugou(query, page, cb);
-        } else {
-            MusicSearchApi.searchKuwo(query, page, cb);
-        }
+        MusicSearchApi.searchKugou(query, page, cb);
     }
 
     private static void showLoading() {
@@ -618,43 +595,16 @@ public class MusicPageView {
         sLoadMoreBtn.setVisibility(View.GONE);
     }
 
-    private static void loadCurrentTab() {
-        String q = getCurrentQuery();
-        if (q.isEmpty()) {
-            List<MusicSearchApi.Song> cached = getCurrentResults();
-            if (!cached.isEmpty()) {
-                showResults(cached, cached.size(), false);
-            } else {
-                clearResults();
-            }
-            sH.postDelayed(() -> updateMiniPlayer(), 100);
-        } else {
-            doSearch();
-        }
-    }
-
     // ===== State accessors =====
 
-    private static String getCurrentQuery() { return sPlatform == 0 ? sKgQuery : sKwQuery; }
-    private static void setCurrentQuery(String q) {
-        if (sPlatform == 0) sKgQuery = q; else sKwQuery = q;
-    }
-    private static int getCurrentPage() { return sPlatform == 0 ? sKgPage : sKwPage; }
-    private static void setCurrentPage(int p) {
-        if (sPlatform == 0) sKgPage = p; else sKwPage = p;
-    }
-    private static void setHasPrev(boolean v) {
-        if (sPlatform == 0) sKgHasPrev = v; else sKwHasPrev = v;
-    }
-    private static void setHasNext(boolean v) {
-        if (sPlatform == 0) sKgHasNext = v; else sKwHasNext = v;
-    }
-    private static List<MusicSearchApi.Song> getCurrentResults() {
-        return sPlatform == 0 ? sKgResults : sKwResults;
-    }
-    private static void saveCurrentResults(List<MusicSearchApi.Song> list) {
-        if (sPlatform == 0) sKgResults = list; else sKwResults = list;
-    }
+    private static String getCurrentQuery() { return sQuery; }
+    private static void setCurrentQuery(String q) { sQuery = q; }
+    private static int getCurrentPage() { return sPage; }
+    private static void setCurrentPage(int p) { sPage = p; }
+    private static void setHasPrev(boolean v) { sHasPrev = v; }
+    private static void setHasNext(boolean v) { sHasNext = v; }
+    private static List<MusicSearchApi.Song> getCurrentResults() { return sResults; }
+    private static void saveCurrentResults(List<MusicSearchApi.Song> list) { sResults = list; }
 
     // ===== Cover loading =====
 

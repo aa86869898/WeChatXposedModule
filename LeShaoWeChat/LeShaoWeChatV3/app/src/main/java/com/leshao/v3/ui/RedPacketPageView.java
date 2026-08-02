@@ -122,7 +122,7 @@ public class RedPacketPageView {
         }
         row.addView(textCol);
 
-        Switch sw = new Switch(ctx); sw.setChecked(checked);
+        Switch sw = CandyUi.newSwitch(ctx); sw.setChecked(checked);
         try { sw.setThumbResource(android.R.drawable.btn_star_big_on); } catch (Throwable ignored) {}
         sw.setOnCheckedChangeListener(listener);
         row.addView(sw);

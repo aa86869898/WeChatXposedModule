@@ -1,21 +1,39 @@
 package com.leshao.v3.ui;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
+import android.media.MediaPlayer;
+import android.os.Environment;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.service.TTSBroadcaster;
+import com.leshao.v3.wm.utils.WmPrefs;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.Arrays;
+import java.util.List;
 
 public class TTSPageView {
 
@@ -48,10 +66,16 @@ public class TTSPageView {
         float d = ctx.getResources().getDisplayMetrics().density;
         SharedPreferences prefs = ContextManager.getPrefs();
 
+        // 外层 ScrollView 包裹
+        ScrollView scrollView = new ScrollView(ctx);
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(AppColors.bg());
+        root.setBackground(CandyUi.pageGradient());
         root.setPadding((int)(8 * d), (int)(16 * d), (int)(8 * d), (int)(16 * d));
+
+        // ★ TTS 引擎选择 + 配音魔方入口 (置顶)
+        root.addView(buildTtsEngineCard(ctx, parentAct, d, prefs));
+        root.addView(spacerV(ctx, d, 12));
 
         boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true);
         boolean announceImage = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_IMAGE, true);
@@ -200,7 +224,8 @@ public class TTSPageView {
         }));
         root.addView(cardTts);
 
-        return root;
+        scrollView.addView(root);
+        return scrollView;
     }
 
     private static View timeRangeRow(Context ctx, float d, String start, String end, TimeCallback cb) {
@@ -400,7 +425,7 @@ public class TTSPageView {
             textCol.addView(dv);
         }
         row.addView(textCol);
-        Switch sw = new Switch(ctx);
+        Switch sw = CandyUi.newSwitch(ctx);
         sw.setChecked(checked);
         try {
             sw.setThumbResource(android.R.drawable.btn_star_big_on);
@@ -484,4 +509,684 @@ public class TTSPageView {
     public interface IntCallback { void onChange(int value); }
     public interface StringCallback { void onChange(String value); }
     public interface FloatCallback { void onChange(float value); }
+
+    // ===== TTS 引擎选择 (置顶卡片) =====
+
+    private static View buildTtsEngineCard(Context ctx, Activity parentAct, float d, SharedPreferences prefs) {
+        LinearLayout card = makeCard(ctx, d);
+
+        TextView title = new TextView(ctx);
+        title.setText("TTS 引擎选择");
+        title.setTextSize(15);
+        title.setTextColor(AppColors.text1());
+        title.setTypeface(null, Typeface.BOLD);
+        title.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(8 * d));
+        card.addView(title);
+
+        // 单选按钮行
+        LinearLayout radioRow = new LinearLayout(ctx);
+        radioRow.setOrientation(LinearLayout.HORIZONTAL);
+        radioRow.setPadding((int)(14 * d), (int)(4 * d), (int)(14 * d), (int)(8 * d));
+        radioRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        String engine = WmPrefs.isTTSCube() ? "cube" : "system";
+        boolean isCube = "cube".equals(engine);
+
+        Button btnCube = new Button(ctx);
+        btnCube.setText("配音魔方TTS");
+        btnCube.setTextSize(13);
+        btnCube.setAllCaps(false);
+        btnCube.setGravity(Gravity.CENTER);
+        android.graphics.drawable.GradientDrawable cubeBg = new android.graphics.drawable.GradientDrawable();
+        cubeBg.setColor(isCube ? AppColors.accent() : AppColors.card());
+        cubeBg.setCornerRadius((int)(6 * d));
+        cubeBg.setStroke(isCube ? 0 : 1, AppColors.divider());
+        btnCube.setBackground(cubeBg);
+        btnCube.setTextColor(isCube ? AppColors.WHITE_TEXT : AppColors.text1());
+        btnCube.setPadding((int)(18 * d), (int)(10 * d), (int)(18 * d), (int)(10 * d));
+        LinearLayout.LayoutParams btnCubeLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        btnCubeLp.setMargins(0, 0, (int)(6 * d), 0);
+        radioRow.addView(btnCube, btnCubeLp);
+
+        Button btnSys = new Button(ctx);
+        btnSys.setText("手机系统TTS");
+        btnSys.setTextSize(13);
+        btnSys.setAllCaps(false);
+        btnSys.setGravity(Gravity.CENTER);
+        android.graphics.drawable.GradientDrawable sysBg = new android.graphics.drawable.GradientDrawable();
+        sysBg.setColor(!isCube ? AppColors.accent() : AppColors.card());
+        sysBg.setCornerRadius((int)(6 * d));
+        sysBg.setStroke(!isCube ? 0 : 1, AppColors.divider());
+        btnSys.setBackground(sysBg);
+        btnSys.setTextColor(!isCube ? AppColors.WHITE_TEXT : AppColors.text1());
+        btnSys.setPadding((int)(18 * d), (int)(10 * d), (int)(18 * d), (int)(10 * d));
+        LinearLayout.LayoutParams btnSysLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        btnSysLp.setMargins((int)(6 * d), 0, 0, 0);
+        radioRow.addView(btnSys, btnSysLp);
+        card.addView(radioRow);
+
+        btnCube.setOnClickListener(v -> {
+            WmPrefs.set("tts_cube", true);
+            android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
+            gd.setColor(AppColors.accent());
+            gd.setCornerRadius((int)(6 * d));
+            btnCube.setBackground(gd);
+            btnCube.setTextColor(AppColors.WHITE_TEXT);
+            android.graphics.drawable.GradientDrawable gd2 = new android.graphics.drawable.GradientDrawable();
+            gd2.setColor(AppColors.card());
+            gd2.setCornerRadius((int)(6 * d));
+            gd2.setStroke(1, AppColors.divider());
+            btnSys.setBackground(gd2);
+            btnSys.setTextColor(AppColors.text1());
+            Toast.makeText(parentAct, "已切换为配音魔方TTS", Toast.LENGTH_SHORT).show();
+        });
+        btnSys.setOnClickListener(v -> {
+            WmPrefs.set("tts_cube", false);
+            android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
+            gd.setColor(AppColors.accent());
+            gd.setCornerRadius((int)(6 * d));
+            btnSys.setBackground(gd);
+            btnSys.setTextColor(AppColors.WHITE_TEXT);
+            android.graphics.drawable.GradientDrawable gd2 = new android.graphics.drawable.GradientDrawable();
+            gd2.setColor(AppColors.card());
+            gd2.setCornerRadius((int)(6 * d));
+            gd2.setStroke(1, AppColors.divider());
+            btnCube.setBackground(gd2);
+            btnCube.setTextColor(AppColors.text1());
+            Toast.makeText(parentAct, "已切换为手机系统TTS", Toast.LENGTH_SHORT).show();
+        });
+
+        // 配音魔方接口配置入口按钮
+        Button cfgBtn = new Button(ctx);
+        cfgBtn.setText("配音魔方接口配置");
+        cfgBtn.setTextSize(14);
+        cfgBtn.setAllCaps(false);
+        cfgBtn.setTextColor(AppColors.WHITE_TEXT);
+        cfgBtn.setGravity(Gravity.CENTER);
+        android.graphics.drawable.GradientDrawable cfgBg = new android.graphics.drawable.GradientDrawable();
+        cfgBg.setColor(AppColors.accent());
+        cfgBg.setCornerRadius((int)(8 * d));
+        cfgBtn.setBackground(cfgBg);
+        cfgBtn.setPadding(0, (int)(12 * d), 0, (int)(12 * d));
+        LinearLayout.LayoutParams cfgLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        cfgLp.setMargins((int)(14 * d), (int)(8 * d), (int)(14 * d), (int)(12 * d));
+        card.addView(cfgBtn, cfgLp);
+
+        cfgBtn.setOnClickListener(v -> showTtsCubeDialog(ctx, parentAct, d));
+
+        return card;
+    }
+
+    // ===== 配音魔方接口配置对话框 (peiyinmofang.com) =====
+
+    private static final String PMF_BASE = "https://peiyinmofang.com";
+
+    private static void showTtsCubeDialog(Context ctx, Activity parentAct, float d) {
+        String savedKey = WmPrefs.getStr("tts_cube_key", "");
+
+        TextView statusTv = new TextView(ctx);
+        statusTv.setText("加载中...");
+        statusTv.setTextSize(13);
+        statusTv.setTextColor(AppColors.text2());
+        statusTv.setPadding((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+
+        LinearLayout body = new LinearLayout(ctx);
+        body.setOrientation(LinearLayout.VERTICAL);
+
+        // 音色列表容器 (动态填充)
+        LinearLayout voiceList = new LinearLayout(ctx);
+        voiceList.setOrientation(LinearLayout.VERTICAL);
+        body.addView(voiceList);
+
+        // 根布局: 自定义标题栏 + 内容区
+        LinearLayout rootLayout = new LinearLayout(ctx);
+        rootLayout.setOrientation(LinearLayout.VERTICAL);
+
+        // 自定义标题栏 + Key 入口 (作为 body 第一行，不用 setCustomTitle)
+        LinearLayout titleBar = new LinearLayout(ctx);
+        titleBar.setOrientation(LinearLayout.HORIZONTAL);
+        titleBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        titleBar.setPadding((int)(16 * d), (int)(12 * d), (int)(12 * d), (int)(12 * d));
+
+        TextView titleTv = new TextView(ctx);
+        titleTv.setText("配音魔方接口配置");
+        titleTv.setTextSize(16);
+        titleTv.setTextColor(AppColors.TEXT_TITLE);
+        titleTv.setTypeface(null, android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams ttlp = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        titleBar.addView(titleTv, ttlp);
+
+        Button keyBtn = new Button(ctx);
+        keyBtn.setText("\u2699\uFE0F");
+        keyBtn.setTextSize(18);
+        keyBtn.setAllCaps(false);
+        keyBtn.setTextColor(AppColors.text2());
+        keyBtn.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        keyBtn.setPadding((int)(4 * d), (int)(2 * d), (int)(4 * d), (int)(2 * d));
+        titleBar.addView(keyBtn);
+
+        rootLayout.addView(titleBar);
+
+        // 分隔线
+        View divider = new View(ctx);
+        divider.setBackgroundColor(AppColors.DIVIDER);
+        divider.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 1));
+        rootLayout.addView(divider);
+
+        // 内容区
+        body.setPadding((int)(12 * d), (int)(8 * d), (int)(12 * d), (int)(12 * d));
+        rootLayout.addView(body);
+
+        ScrollView sv = new ScrollView(ctx);
+        sv.addView(rootLayout);
+
+        AlertDialog dialog = new AlertDialog.Builder(parentAct)
+                .setView(sv)
+                .setPositiveButton("关闭", null)
+                .create();
+        dialog.show();
+
+        keyBtn.setOnClickListener(v -> {
+            showKeyInputPopup(ctx, parentAct, d, keyBtn);
+            String newKey = WmPrefs.getStr("tts_cube_key", "");
+            if (newKey.isEmpty()) return;
+            voiceList.removeAllViews();
+            voiceList.addView(statusTv);
+            statusTv.setText("校验Key中...");
+            new Thread(() -> {
+                String checkResult = checkTtsKey(newKey);
+                parentAct.runOnUiThread(() -> {
+                    statusTv.setText(checkResult);
+                    if (!checkResult.startsWith("有效")) return;
+                    statusTv.setText("拉取内置音色列表...");
+                });
+                java.util.List<VoiceItem> builtin = fetchBuiltinVoices(newKey);
+                parentAct.runOnUiThread(() -> statusTv.setText("拉取自义音色列表..."));
+                java.util.List<VoiceItem> custom = fetchUserVoices(newKey);
+                parentAct.runOnUiThread(() -> {
+                    voiceList.removeView(statusTv);
+                    buildVoiceListUI(ctx, parentAct, d, voiceList, newKey, builtin, custom);
+                });
+            }).start();
+        });
+
+        // 自动加载 (如果已有 Key)
+        if (!savedKey.isEmpty()) {
+            voiceList.addView(statusTv);
+            statusTv.setText("校验Key中...");
+            new Thread(() -> {
+                String checkResult = checkTtsKey(savedKey);
+                parentAct.runOnUiThread(() -> {
+                    statusTv.setText(checkResult);
+                    if (!checkResult.startsWith("有效")) return;
+                    parentAct.runOnUiThread(() -> statusTv.setText("拉取内置音色列表..."));
+                    java.util.List<VoiceItem> builtin = fetchBuiltinVoices(savedKey);
+                    parentAct.runOnUiThread(() -> statusTv.setText("拉取自义音色列表..."));
+                    java.util.List<VoiceItem> custom = fetchUserVoices(savedKey);
+                    parentAct.runOnUiThread(() -> {
+                        voiceList.removeView(statusTv);
+                        buildVoiceListUI(ctx, parentAct, d, voiceList, savedKey, builtin, custom);
+                    });
+                });
+            }).start();
+        }
+    }
+
+    private static void showKeyInputPopup(Context ctx, Activity parentAct, float d, Button keyBtn) {
+        LinearLayout popup = new LinearLayout(ctx);
+        popup.setOrientation(LinearLayout.VERTICAL);
+        popup.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(12 * d));
+
+        TextView popTitle = new TextView(ctx);
+        popTitle.setText("设置 API Key");
+        popTitle.setTextSize(14);
+        popTitle.setTextColor(AppColors.TEXT_TITLE);
+        popTitle.setTypeface(null, android.graphics.Typeface.BOLD);
+        popTitle.setPadding(0, 0, 0, (int)(8 * d));
+        popup.addView(popTitle);
+
+        EditText keyEt = new EditText(ctx);
+        String currentKey = WmPrefs.getStr("tts_cube_key", "");
+        keyEt.setText(currentKey);
+        keyEt.setHint("输入 API Key");
+        keyEt.setSingleLine(true);
+        keyEt.setTextSize(13);
+        keyEt.setPadding((int)(8 * d), (int)(8 * d), (int)(8 * d), (int)(8 * d));
+        android.graphics.drawable.GradientDrawable etBg = new android.graphics.drawable.GradientDrawable();
+        etBg.setColor(AppColors.inputBg());
+        etBg.setCornerRadius((int)(6 * d));
+        etBg.setStroke((int)(1 * d), AppColors.DIVIDER);
+        keyEt.setBackground(etBg);
+        popup.addView(keyEt);
+
+        new AlertDialog.Builder(parentAct)
+                .setView(popup)
+                .setPositiveButton("保存", (d2, w2) -> {
+                    String key = keyEt.getText().toString().trim();
+                    if (key.isEmpty()) {
+                        Toast.makeText(parentAct, "请输入Key", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    WmPrefs.setStr("tts_cube_key", key);
+                    Toast.makeText(parentAct, "Key已保存", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    // ===== 音色列表UI构建 =====
+
+    private static void buildVoiceListUI(Context ctx, Activity parentAct, float d,
+                                          LinearLayout voiceList, String key,
+                                          java.util.List<VoiceItem> builtin, java.util.List<VoiceItem> custom) {
+        String savedVoice = WmPrefs.getStr("tts_cube_voice", "");
+
+        // 搜索框
+        EditText searchEt = new EditText(ctx);
+        searchEt.setHint("搜索音色名称/影视剧...");
+        searchEt.setTextSize(13);
+        searchEt.setSingleLine(true);
+        searchEt.setPadding((int)(8 * d), (int)(8 * d), (int)(8 * d), (int)(8 * d));
+        searchEt.setHintTextColor(AppColors.text3());
+        android.graphics.drawable.GradientDrawable sBg = new android.graphics.drawable.GradientDrawable();
+        sBg.setColor(AppColors.inputBg());
+        sBg.setCornerRadius((int)(6 * d));
+        searchEt.setBackground(sBg);
+        voiceList.addView(searchEt);
+        voiceList.addView(spacerV(ctx, d, 6));
+
+        // 收集所有voice rows用于搜索
+        final java.util.List<View> allVoiceRows = new java.util.ArrayList<>();
+        final java.util.List<String> allVoiceSearchText = new java.util.ArrayList<>();
+        final java.util.List<View> groupHeaders = new java.util.ArrayList<>();
+
+        // 内置音色 (按影视剧分组)
+        if (builtin != null && !builtin.isEmpty()) {
+            TextView secTitle = new TextView(ctx);
+            secTitle.setText("内置音色 (按影视剧分组):");
+            secTitle.setTextSize(13);
+            secTitle.setTextColor(AppColors.text1());
+            secTitle.setTypeface(null, Typeface.BOLD);
+            secTitle.setPadding(0, (int)(12 * d), 0, (int)(6 * d));
+            voiceList.addView(secTitle);
+
+            // 按 group 分组
+            String currentGroup = null;
+            for (VoiceItem vi : builtin) {
+                if (!vi.group.equals(currentGroup)) {
+                    currentGroup = vi.group;
+                    TextView gTitle = new TextView(ctx);
+                    gTitle.setText("  " + vi.group);
+                    gTitle.setTextSize(13);
+                    gTitle.setTextColor(AppColors.accent());
+                    gTitle.setTypeface(null, Typeface.BOLD);
+                    gTitle.setPadding(0, (int)(8 * d), 0, (int)(4 * d));
+                    voiceList.addView(gTitle);
+                    groupHeaders.add(gTitle);
+                }
+                View row = buildVoiceRow(ctx, parentAct, d, key, vi, savedVoice);
+                voiceList.addView(row);
+                allVoiceRows.add(row);
+                allVoiceSearchText.add((vi.displayName != null ? vi.displayName : vi.voiceId) + "|" + vi.group + "|" + (vi.actor != null ? vi.actor : ""));
+            }
+        }
+
+        // 用户自定义音色
+        if (custom != null && !custom.isEmpty()) {
+            TextView secTitle = new TextView(ctx);
+            secTitle.setText("我的自定义音色:");
+            secTitle.setTextSize(13);
+            secTitle.setTextColor(AppColors.text1());
+            secTitle.setTypeface(null, Typeface.BOLD);
+            secTitle.setPadding(0, (int)(12 * d), 0, (int)(6 * d));
+            voiceList.addView(secTitle);
+            for (VoiceItem vi : custom) {
+                View row = buildVoiceRow(ctx, parentAct, d, key, vi, savedVoice);
+                voiceList.addView(row);
+                allVoiceRows.add(row);
+                allVoiceSearchText.add((vi.displayName != null ? vi.displayName : vi.voiceId));
+            }
+        }
+
+        if (allVoiceRows.isEmpty()) {
+            TextView emptyTv = new TextView(ctx);
+            emptyTv.setText("未找到可用音色");
+            emptyTv.setTextSize(13);
+            emptyTv.setTextColor(AppColors.text2());
+            emptyTv.setPadding(0, (int)(12 * d), 0, 0);
+            voiceList.addView(emptyTv);
+        }
+
+        // 搜索过滤
+        searchEt.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int cnt, int aft) {}
+            @Override public void onTextChanged(CharSequence s, int st, int bef, int cnt) {}
+            @Override
+            public void afterTextChanged(android.text.Editable s) {
+                String q = s.toString().trim().toLowerCase();
+                int visibleCount = 0;
+                for (int i = 0; i < allVoiceRows.size(); i++) {
+                    boolean match = q.isEmpty() || allVoiceSearchText.get(i).toLowerCase().contains(q);
+                    allVoiceRows.get(i).setVisibility(match ? View.VISIBLE : View.GONE);
+                    if (match) visibleCount++;
+                }
+                // 隐藏/显示分组标题
+                for (View gh : groupHeaders) {
+                    int idx = voiceList.indexOfChild(gh);
+                    boolean hasVisible = false;
+                    for (int j = idx + 1; j < voiceList.getChildCount(); j++) {
+                        View child = voiceList.getChildAt(j);
+                        if (groupHeaders.contains(child)) break;
+                        if (child.getVisibility() == View.VISIBLE) { hasVisible = true; break; }
+                    }
+                    gh.setVisibility(hasVisible ? View.VISIBLE : View.GONE);
+                }
+            }
+        });
+    }
+
+    private static View buildVoiceRow(Context ctx, Activity parentAct, float d,
+                                       String key, VoiceItem vi, String savedVoice) {
+        LinearLayout vRow = new LinearLayout(ctx);
+        vRow.setOrientation(LinearLayout.HORIZONTAL);
+        vRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        vRow.setPadding(0, (int)(3 * d), 0, (int)(3 * d));
+
+        // 名称 + 演员
+        String displayName = vi.displayName != null ? vi.displayName : vi.voiceId;
+        String subtitle = (vi.actor != null && !vi.actor.isEmpty()) ? " (" + vi.actor + ")" : "";
+        TextView vName = new TextView(ctx);
+        vName.setText(displayName + subtitle);
+        vName.setTextSize(12);
+        vName.setTextColor(AppColors.text1());
+        LinearLayout.LayoutParams vnlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        vRow.addView(vName, vnlp);
+
+        // 试听按钮 - 耳机图标
+        Button listenBtn = new Button(ctx);
+        listenBtn.setText("\uD83C\uDFA7");
+        listenBtn.setTextSize(14);
+        listenBtn.setAllCaps(false);
+        listenBtn.setTextColor(AppColors.WHITE_TEXT);
+        android.graphics.drawable.GradientDrawable lbBg = new android.graphics.drawable.GradientDrawable();
+        lbBg.setColor(AppColors.accent());
+        lbBg.setCornerRadius((int)(4 * d));
+        listenBtn.setBackground(lbBg);
+        listenBtn.setPadding((int)(8 * d), (int)(4 * d), (int)(8 * d), (int)(4 * d));
+        vRow.addView(listenBtn);
+
+        // 选择按钮
+        boolean isSelected = vi.voiceId.equals(savedVoice);
+        Button selBtn = new Button(ctx);
+        selBtn.setText(isSelected ? "✓" : "○");
+        selBtn.setTextSize(14);
+        selBtn.setAllCaps(false);
+        selBtn.setTextColor(AppColors.WHITE_TEXT);
+        android.graphics.drawable.GradientDrawable sbBg = new android.graphics.drawable.GradientDrawable();
+        sbBg.setColor(isSelected ? AppColors.accent() : AppColors.offColor());
+        sbBg.setCornerRadius((int)(4 * d));
+        selBtn.setBackground(sbBg);
+        selBtn.setPadding((int)(10 * d), (int)(4 * d), (int)(10 * d), (int)(4 * d));
+        vRow.addView(selBtn);
+
+        listenBtn.setOnClickListener(v3 -> {
+            new Thread(() -> {
+                String result = ttsPreviewVoice(key, vi.voiceId, "欢迎使用配音魔方");
+                parentAct.runOnUiThread(() -> {
+                    if (result.startsWith("OK:")) {
+                        try {
+                            MediaPlayer mp = new MediaPlayer();
+                            mp.setDataSource(result.substring(3));
+                            mp.prepare();
+                            mp.start();
+                            mp.setOnCompletionListener(MediaPlayer::release);
+                            Toast.makeText(parentAct, "试听: " + displayName, Toast.LENGTH_SHORT).show();
+                        } catch (Exception e) {
+                            Toast.makeText(parentAct, "播放失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                        }
+                    } else {
+                        Toast.makeText(parentAct, result, Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }).start();
+        });
+
+        selBtn.setOnClickListener(v3 -> {
+            WmPrefs.setStr("tts_cube_voice", vi.voiceId);
+            Toast.makeText(parentAct, "已选择默认音色: " + displayName, Toast.LENGTH_SHORT).show();
+            // 刷新当前dialog内所有按钮状态 (简单方式: 重建)
+        });
+
+        return vRow;
+    }
+
+    // ===== 音色数据模型 =====
+
+    static class VoiceItem {
+        String voiceId;
+        String group;       // 影视剧名
+        String displayName;  // 角色名
+        String actor;        // 演员
+        VoiceItem(String voiceId, String group, String displayName, String actor) {
+            this.voiceId = voiceId;
+            this.group = group;
+            this.displayName = displayName;
+            this.actor = actor;
+        }
+    }
+
+    // ===== API 调用 =====
+
+    private static String checkTtsKey(String key) {
+        try {
+            java.net.URL url = new java.net.URL(PMF_BASE + "/api/open/v1/me");
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Authorization", "Bearer " + key);
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                java.io.InputStream is = conn.getInputStream();
+                String body = readAllAsString(is);
+                is.close();
+                conn.disconnect();
+                try {
+                    JSONObject jo = new JSONObject(body);
+                    int status = jo.optInt("status", -1);
+                    if (status == 200) return "有效: " + jo.optString("message", "OK");
+                } catch (Exception ignored) {}
+                return "Key 有效";
+            }
+            String err = readErrorStream(conn);
+            conn.disconnect();
+            if (code == 401) return "无效: 认证失败(401)" + (err.isEmpty() ? "" : " - " + err);
+            if (code == 403) return "无效: Key被禁用或余额不足(403)" + (err.isEmpty() ? "" : " - " + err);
+            return "检测失败: HTTP " + code + (err.isEmpty() ? "" : " - " + err);
+        } catch (Exception e) {
+            return "检测失败: " + e.getMessage();
+        }
+    }
+
+    private static java.util.List<VoiceItem> fetchBuiltinVoices(String key) {
+        java.util.List<VoiceItem> list = new java.util.ArrayList<>();
+        try {
+            java.net.URL url = new java.net.URL(PMF_BASE + "/api/open/v1/voices");
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Authorization", "Bearer " + key);
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(10000);
+            int code = conn.getResponseCode();
+            if (code != 200) { conn.disconnect(); return list; }
+            java.io.InputStream is = conn.getInputStream();
+            String body = readAllAsString(is);
+            is.close();
+            conn.disconnect();
+            JSONObject jo = new JSONObject(body);
+            if (jo.optInt("status") != 200) return list;
+            JSONArray data = jo.optJSONArray("data");
+            if (data == null) return list;
+            for (int i = 0; i < data.length(); i++) {
+                JSONObject drama = data.getJSONObject(i);
+                String title = drama.optString("title", "未知剧集");
+                JSONArray chars = drama.optJSONArray("characters");
+                if (chars == null) continue;
+                for (int j = 0; j < chars.length(); j++) {
+                    JSONObject chr = chars.getJSONObject(j);
+                    String voiceId = chr.optString("voice_id", "");
+                    if (voiceId.isEmpty()) continue; // 跳过无 voice_id 的条目
+                    String name = chr.optString("name", voiceId);
+                    String actor = chr.optString("actor", "");
+                    list.add(new VoiceItem(voiceId, title, name, actor));
+                }
+            }
+        } catch (Exception e) {
+            // 静默失败
+        }
+        return list;
+    }
+
+    private static java.util.List<VoiceItem> fetchUserVoices(String key) {
+        java.util.List<VoiceItem> list = new java.util.ArrayList<>();
+        try {
+            java.net.URL url = new java.net.URL(PMF_BASE + "/api/open/v1/user-voices");
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Authorization", "Bearer " + key);
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(10000);
+            int code = conn.getResponseCode();
+            if (code != 200) { conn.disconnect(); return list; }
+            java.io.InputStream is = conn.getInputStream();
+            String body = readAllAsString(is);
+            is.close();
+            conn.disconnect();
+            JSONObject jo = new JSONObject(body);
+            if (jo.optInt("status") != 200) return list;
+            JSONArray data = jo.optJSONArray("data");
+            if (data == null) return list;
+            for (int i = 0; i < data.length(); i++) {
+                JSONObject uv = data.getJSONObject(i);
+                String voiceId = uv.optString("voice_id", "");
+                if (voiceId.isEmpty()) continue; // 跳过无 voice_id 的条目
+                String name = uv.optString("name", voiceId);
+                list.add(new VoiceItem(voiceId, "我的音色", name, ""));
+            }
+        } catch (Exception e) {
+            // 静默失败
+        }
+        return list;
+    }
+
+    private static String ttsPreviewVoice(String key, String voiceId, String text) {
+        try {
+            JSONObject req = new JSONObject();
+            req.put("voiceId", voiceId);
+            req.put("text", text);
+            String body = req.toString();
+
+            java.net.URL url = new java.net.URL(PMF_BASE + "/api/open/v1/tts/simple-generate");
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("X-API-Key", key);
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(15000);
+            java.io.OutputStream os = conn.getOutputStream();
+            os.write(body.getBytes("UTF-8"));
+            os.flush();
+            os.close();
+
+            int code = conn.getResponseCode();
+            if (code != 200) {
+                String err = readErrorStream(conn);
+                conn.disconnect();
+                return "合成失败: HTTP " + code + (err.isEmpty() ? "" : " - " + err);
+            }
+
+            java.io.InputStream is = conn.getInputStream();
+            String respStr = readAllAsString(is);
+            is.close();
+            conn.disconnect();
+
+            JSONObject jo = new JSONObject(respStr);
+            if (jo.optInt("status") != 200) {
+                return "合成失败: " + jo.optString("message", "状态非200");
+            }
+            JSONObject data = jo.optJSONObject("data");
+            if (data == null) return "合成失败: 响应无data字段";
+            String audioUrl = data.optString("audio");
+            if (audioUrl == null || audioUrl.isEmpty()) return "合成失败: 响应无音频URL";
+
+            // 下载音频文件
+            java.net.URL audioURL = new java.net.URL(audioUrl);
+            java.net.HttpURLConnection audioConn = (java.net.HttpURLConnection) audioURL.openConnection();
+            audioConn.setConnectTimeout(15000);
+            audioConn.setReadTimeout(15000);
+            int audioCode = audioConn.getResponseCode();
+            if (audioCode != 200) {
+                audioConn.disconnect();
+                return "下载音频失败: HTTP " + audioCode;
+            }
+
+            String safeName = voiceId.replaceAll("[^a-zA-Z0-9_\\-\\u4e00-\\u9fa5]", "_");
+            Context appCtx = com.leshao.v3.ContextManager.getAppContext();
+            File cacheDir = appCtx != null ? appCtx.getCacheDir() : null;
+            if (cacheDir == null) cacheDir = new File(Environment.getExternalStorageDirectory(), "leshao_v3_cache");
+            File ttsDir = new File(cacheDir, "tts_preview");
+            ttsDir.mkdirs();
+            File outFile = new File(ttsDir, safeName + ".wav");
+
+            java.io.InputStream audioIs = audioConn.getInputStream();
+            FileOutputStream fos = new FileOutputStream(outFile);
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = audioIs.read(buf)) > 0) fos.write(buf, 0, n);
+            fos.flush();
+            fos.close();
+            audioIs.close();
+            audioConn.disconnect();
+
+            // 验证文件大小
+            if (outFile.length() < 100) {
+                return "下载失败: 音频文件过小(" + outFile.length() + "字节)";
+            }
+            return "OK:" + outFile.getAbsolutePath();
+        } catch (Exception e) {
+            return "合成失败: " + e.getMessage();
+        }
+    }
+
+    /** 读 InputStream 为 String (UTF-8) */
+    private static String readAllAsString(java.io.InputStream is) throws Exception {
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[4096];
+        int n;
+        while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
+        return new String(bos.toByteArray(), "UTF-8");
+    }
+
+    /** 读 HTTP 错误响应体 */
+    private static String readErrorStream(java.net.HttpURLConnection conn) {
+        try {
+            java.io.InputStream es = conn.getErrorStream();
+            if (es == null) return "";
+            String body = readAllAsString(es);
+            es.close();
+            if (body.length() > 200) body = body.substring(0, 200) + "...";
+            return body;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static String escapeJson(String s) {
+        return s.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+    }
 }

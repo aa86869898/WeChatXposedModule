@@ -9,6 +9,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.widget.Toast;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -95,11 +96,21 @@ public class MusicPlayerManager {
     }
 
     public void playUrl(String url) {
+        if (url == null || url.isEmpty()) {
+            MusicLog.e("Player", "playUrl: url is null or empty");
+            stopProgressRunner();
+            notifyStateChanged(false);
+            mHandler.post(() -> Toast.makeText(mContext, "获取音源失败", Toast.LENGTH_SHORT).show());
+            return;
+        }
         MusicLog.i("Player", "playUrl: " + url.substring(0, Math.min(60, url.length())));
         stopPlayer();
         mPlayer = new MediaPlayer();
         try {
-            mPlayer.setDataSource(url);
+            java.util.Map<String, String> headers = new java.util.HashMap<>();
+            headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            headers.put("Referer", "https://www.kugou.com/");
+            mPlayer.setDataSource(mContext, Uri.parse(url), headers);
             mPlayer.setLooping(false);
             mPlayer.setOnPreparedListener(mp -> {
                 mPaused = false;
@@ -133,81 +144,32 @@ public class MusicPlayerManager {
     }
 
     private void loadAndPlay(final MusicSearchApi.Song song) {
-        MusicLog.i("Player", "loadAndPlay: " + song.title + " - " + song.artist + " hash=" + song.hash + " platform=" + song.platform);
-        if (song.platform == 0) {
-            MusicSearchApi.getKugouPlayUrl(song.hash, "exhigh", new MusicSearchApi.PlayUrlCallback() {
-                @Override
-                public void onUrl(String url) {
-                    MusicLog.i("Player", "Kugou playUrl OK: " + url.substring(0, Math.min(60, url.length())));
-                    if (mCurrent == song && url != null && !url.isEmpty()) {
-                        playUrl(url);
-                    }
-                }
-                @Override
-                public void onError(String msg) {
-                    MusicLog.e("Player", "Kugou playUrl failed, trying kuwo...");
-                    tryKuwoFallback(song);
-                }
-            });
-        } else {
-            MusicSearchApi.getKuwoPlayUrl(song.hash, new MusicSearchApi.PlayUrlCallback() {
-                @Override
-                public void onUrl(String url) {
-                    MusicLog.i("Player", "Kuwo playUrl OK: " + url.substring(0, Math.min(60, url.length())));
-                    if (mCurrent == song && url != null && !url.isEmpty()) {
-                        playUrl(url);
-                    }
-                }
-                @Override
-                public void onError(String msg) {
-                    MusicLog.e("Player", "Kuwo playUrl failed: " + msg);
-                    MusicActivity.toast("播放失败: " + msg);
-                    stopProgressRunner();
-                    notifyStateChanged(false);
-                }
-            });
-        }
-    }
-
-    private void tryKuwoFallback(final MusicSearchApi.Song song) {
-        String q = song.title + " " + song.artist;
-        MusicSearchApi.searchKuwo(q, 1, new MusicSearchApi.SearchCallback() {
+        MusicLog.i("Player", "loadAndPlay: " + (song.title != null ? song.title : "?") + " - " + (song.artist != null ? song.artist : "?") + " hash=" + (song.hash != null ? song.hash : "?"));
+        MusicSearchApi.getKugouPlayUrl(song.hash != null ? song.hash : "", "exhigh", new MusicSearchApi.PlayUrlCallback() {
             @Override
-            public void onResult(List<MusicSearchApi.Song> songs, int total, boolean hasPrev, boolean hasNext) {
-                if (songs.isEmpty()) {
-                    MusicLog.e("Player", "Kuwo fallback: no results");
-                    MusicActivity.toast("播放失败");
+            public void onUrl(String url) {
+                if (url == null || url.isEmpty()) {
+                    MusicLog.e("Player", "Kugou onUrl: url is null/empty");
+                    MusicActivity.toast("获取音源失败");
                     stopProgressRunner();
                     notifyStateChanged(false);
                     return;
                 }
-                MusicSearchApi.Song kw = songs.get(0);
-                MusicSearchApi.getKuwoPlayUrl(kw.hash, "mp3", new MusicSearchApi.PlayUrlCallback() {
-                    @Override
-                    public void onUrl(String url) {
-                        MusicLog.i("Player", "Kuwo fallback OK: " + url.substring(0, Math.min(60, url.length())));
-                        if (mCurrent == song && url != null && !url.isEmpty()) {
-                            playUrl(url);
-                        }
-                    }
-                    @Override
-                    public void onError(String msg) {
-                        MusicLog.e("Player", "Kuwo fallback failed: " + msg);
-                        MusicActivity.toast("播放失败");
-                        stopProgressRunner();
-                        notifyStateChanged(false);
-                    }
-                });
+                MusicLog.i("Player", "Kugou playUrl OK: " + url.substring(0, Math.min(60, url.length())));
+                if (mCurrent == song) {
+                    playUrl(url);
+                }
             }
             @Override
             public void onError(String msg) {
-                MusicLog.e("Player", "Kuwo search failed: " + msg);
-                MusicActivity.toast("播放失败");
+                MusicLog.e("Player", "Kugou playUrl failed: " + msg);
+                MusicActivity.toast("获取音源失败");
                 stopProgressRunner();
                 notifyStateChanged(false);
             }
         });
     }
+
 
     public void togglePause() {
         if (mPlayer == null || mCurrent == null) return;
@@ -288,7 +250,7 @@ public class MusicPlayerManager {
     }
 
     public void refetchWithQuality(MusicSearchApi.Song song, int quality) {
-        if (mCurrent == null || !mCurrent.id.equals(song.id)) return;
+        if (mCurrent == null || song == null || mCurrent.id == null || song.id == null || !mCurrent.id.equals(song.id)) return;
         boolean wasPlaying = isPlaying();
         int pos = getPosition();
         stopPlayer();
@@ -328,6 +290,7 @@ public class MusicPlayerManager {
     }
 
     public void download(MusicSearchApi.Song song, String directUrl) {
+        if (song == null) return;
         if (directUrl != null && !directUrl.isEmpty()) {
             enqueueDownload(song, directUrl);
             return;
@@ -340,32 +303,31 @@ public class MusicPlayerManager {
             @Override
             public void onError(String msg) {}
         };
-        if (song.platform == 0) {
-            MusicSearchApi.getKugouPlayUrl(song.hash, cb);
-        } else {
-            MusicSearchApi.getKuwoPlayUrl(song.hash, cb);
-        }
+        MusicSearchApi.getKugouPlayUrl(song.hash, cb);
     }
 
     private void enqueueDownload(MusicSearchApi.Song song, String url) {
-        if (url == null || url.isEmpty()) return;
+        if (song == null || url == null || url.isEmpty()) return;
         try {
             DownloadManager dm = (DownloadManager) mContext.getSystemService(Context.DOWNLOAD_SERVICE);
             DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url));
             String ext = url.contains("flac") || url.contains("FLAC") ? ".flac" :
                          url.contains("aac") || url.contains("AAC") ? ".aac" : ".mp3";
-            String filename = song.title + " - " + song.artist + ext;
+            String title = song.title != null && !song.title.isEmpty() ? song.title : "未知歌曲";
+            String artist = song.artist != null && !song.artist.isEmpty() ? song.artist : "未知歌手";
+            String filename = title + " - " + artist + ext;
             filename = filename.replaceAll("[\\\\/:*?\"<>|]", "_");
             req.setTitle("下载: " + filename);
-            req.setDescription(song.title + " - " + song.artist);
+            req.setDescription(title + " - " + artist);
             req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-            req.setDestinationInExternalPublicDir(Environment.DIRECTORY_MUSIC, filename);
+            req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "乐少助手/" + filename);
             if (dm != null) dm.enqueue(req);
         } catch (Exception e) {}
     }
 
     private void addToHistory(MusicSearchApi.Song song) {
-        mHistory.removeIf(s -> s.id.equals(song.id));
+        if (song == null) return;
+        mHistory.removeIf(s -> s != null && s.id != null && song.id != null && s.id.equals(song.id));
         mHistory.add(0, song);
         if (mHistory.size() > 50) {
             mHistory.remove(mHistory.size() - 1);
@@ -373,8 +335,10 @@ public class MusicPlayerManager {
     }
 
     private int findInPlaylist(String id) {
+        if (id == null) return -1;
         for (int i = 0; i < mPlaylist.size(); i++) {
-            if (mPlaylist.get(i).id.equals(id)) return i;
+            MusicSearchApi.Song s = mPlaylist.get(i);
+            if (s != null && id.equals(s.id)) return i;
         }
         return -1;
     }
