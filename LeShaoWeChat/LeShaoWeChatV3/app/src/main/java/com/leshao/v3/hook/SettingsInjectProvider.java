@@ -14,6 +14,7 @@ import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.MainActivity;
@@ -212,8 +213,8 @@ public class SettingsInjectProvider extends ContentProvider {
                 if (w > 0) {
                     getPaint().setShader(new android.graphics.LinearGradient(
                         0, 0, w, 0,
-                        new int[]{0xFFFF6BD6, 0xFFC44DFF, 0xFF6B9DFF,
-                                  0xFF4DFFC4, 0xFFFFC44D, 0xFFFF4D6B, 0xFFFF6B9D},
+                        new int[]{AppColors.candyPink, AppColors.accent(), AppColors.accent(),
+                                   AppColors.accent(), AppColors.accent(), AppColors.accent(), AppColors.accent()},
                         null, android.graphics.Shader.TileMode.CLAMP));
                 }
             }
@@ -228,7 +229,7 @@ public class SettingsInjectProvider extends ContentProvider {
 
         // 版本号右侧对齐
         TextView verView = new TextView(ctx);
-        verView.setText("1.2.106");
+        verView.setText(ContextManager.getVersionName());
         verView.setTextSize(12);
         verView.setTextColor(AppColors.text2());
         verView.setGravity(Gravity.CENTER_VERTICAL);

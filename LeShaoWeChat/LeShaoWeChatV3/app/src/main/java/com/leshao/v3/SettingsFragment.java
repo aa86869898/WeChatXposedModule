@@ -10,7 +10,6 @@ import android.widget.*;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
-import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.hook.AntiRecallHook;
 import com.leshao.v3.hook.AntiDetectionHook;
 import com.leshao.v3.hook.FriendRequestHook;
@@ -24,11 +23,12 @@ import com.leshao.v3.hook.MsgExport;
 import com.leshao.v3.hook.ChatBackup;
 import com.leshao.v3.hook.ShakeCustom;
 import com.leshao.v3.ui.ConfigPanels;
+import com.leshao.v3.ui.CandyUi;
+import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.model.KeywordRule;
 import com.leshao.v3.model.ModuleConfig;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 public class SettingsFragment extends Fragment {
 
@@ -46,6 +46,7 @@ public class SettingsFragment extends Fragment {
         LinearLayout root = new LinearLayout(getContext());
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(16), dp(16), dp(16));
+        root.setBackground(CandyUi.pageGradient());
 
         root.addView(sLabel("通用设置"));
 
@@ -146,10 +147,9 @@ public class SettingsFragment extends Fragment {
         root.addView(swEdit);
 
         root.addView(sLabel("系统状态"));
-        root.addView(infoRow("数据库", com.leshao.v3.db.DatabaseProvider.isReady() ? "已连接" : "未连接"));
-        root.addView(infoRow("联系人", String.format(Locale.getDefault(),
-            "好友 %d, 群聊 %d",
-            ContactRepository.getFriends().size(), ContactRepository.getGroups().size())));
+        // 数据库数据源已清空，待重写
+        root.addView(infoRow("数据库", "未连接（已清空）"));
+        root.addView(infoRow("联系人", "数据源已清空"));
 
         ScrollView sv = new ScrollView(getContext());
         sv.addView(root);
@@ -196,7 +196,7 @@ public class SettingsFragment extends Fragment {
         row.addView(tv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         if (config != null) {
             TextView btn = new TextView(getContext());
-            btn.setText("[设置]"); btn.setTextSize(12); btn.setTextColor(0xFF4A90D9);
+            btn.setText("[设置]"); btn.setTextSize(12); btn.setTextColor(AppColors.accent());
             btn.setPadding(dp(6), 0, dp(6), 0);
             btn.setOnClickListener(config);
             row.addView(btn);

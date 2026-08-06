@@ -3,7 +3,7 @@ package com.leshao.v3.hook;
 import android.os.Handler;
 import android.os.Looper;
 
-import com.leshao.v3.AutoJoinGroup;
+
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.service.TTSBroadcaster;
@@ -40,11 +40,17 @@ public class MessageHook {
     private static void hookX9Dispatch(ClassLoader cl) {
         try {
             Class<?> x9Cls = null;
-            for (String name : new String[]{"e01.x9", "e02.x9", "e00.x9", "e01.x8", "e01.y9"}) {
+            String[] candidates = {"e01.x9", "e02.x9", "e00.x9", "e01.x8", "e01.y9",
+                    "e01.w9", "e02.x8", "e01.z9", "e00.y9", "e03.x9", "e01.x10"};
+            for (String name : candidates) {
                 try { x9Cls = cl.loadClass(name); break; } catch (Throwable ignored) {}
             }
             if (x9Cls == null) {
-                LogWriter.log(TAG, "x9 class not found");
+                LogWriter.log(TAG, "x9 class not found, trying DexFile enumeration");
+                x9Cls = VersionCompat.findMsgDispatchClass(cl);
+            }
+            if (x9Cls == null) {
+                LogWriter.log(TAG, "x9 class ALL strategies failed");
                 return;
             }
             Class<?> e9Cls = VersionCompat.findMsgInfoStorageClass(cl);
@@ -117,14 +123,15 @@ public class MessageHook {
             try { msgId = (Long) XposedHelpers.callMethod(e9, "H0"); } catch (Throwable ignored) {}
 
             sCount++;
-            LogWriter.log(TAG, "#" + sCount
-                + " type=" + rawType + "->" + type
-                + " isSend=" + isSend + " msgId=" + msgId
-                + " talker=" + trunc(talker, 20)
-                + " content=" + trunc(content, 40));
-            android.util.Log.e(TAG, "!!! RAW #" + sCount + ": isSend=" + isSend + " rawType=" + rawType
-                    + " msgId=" + msgId + " talker=" + talker
-                    + " content=[" + (content == null ? "null" : content.substring(0, Math.min(content.length(), 60))) + "]");
+            boolean isVoice = (rawType == 34 || rawType == 228);
+            boolean isTts = content != null && content.startsWith("#tts");
+            if (isVoice || isTts) {
+                LogWriter.log(TAG, "#" + sCount
+                    + " type=" + rawType + "->" + type
+                    + " isSend=" + isSend + " msgId=" + msgId
+                    + " talker=" + trunc(talker, 20)
+                    + " content=" + trunc(content, 40));
+            }
 
             // 去重: 同一个 msgId 只处理一次
             synchronized (sSeenMsgIds) {
@@ -132,13 +139,14 @@ public class MessageHook {
                     android.util.Log.e(TAG, "!!! SKIP duplicate msgId=" + msgId);
                     return;
                 }
-                // 防止内存膨胀: 超过 200 条就清理
-                if (sSeenMsgIds.size() > 200) sSeenMsgIds.clear();
+                // 防止内存膨胀: 超过 400 条时移除最旧条目，而非整体清空
+                // （整体清空会导致同一消息的多重 hook 回调再次触发重复播报）
+                if (sSeenMsgIds.size() > 400) {
+                    Long oldest = sSeenMsgIds.iterator().next();
+                    sSeenMsgIds.remove(oldest);
+                }
             }
 
-            if (type == 3) {
-                AutoJoinGroup.onImageMsg(e9);
-            }
 
             if (isSend != 1) {
                 final int fType = type;
@@ -154,8 +162,14 @@ public class MessageHook {
 
                 if (rawType == 34 || rawType == 228) {
                     final long voiceMsgId = msgId;
-                    android.util.Log.e(TAG, ">>> VOICE msgId=" + voiceMsgId + " talker=" + talker + " isSend=" + isSend);
-                    LogWriter.log("VoiceAutoPlay", "rawType=" + rawType + " msgId=" + voiceMsgId + " talker=" + talker);
+                    final String vTalker = talker;
+                    if (!VoiceAutoPlay.shouldAutoPlay(vTalker)) {
+                        android.util.Log.e(TAG, ">>> VOICE skipped (whitelist) talker=" + vTalker + " msgId=" + voiceMsgId);
+                        LogWriter.log("VoiceAutoPlay", "skip whitelist talker=" + vTalker + " msgId=" + voiceMsgId);
+                        return;
+                    }
+                    android.util.Log.e(TAG, ">>> VOICE msgId=" + voiceMsgId + " talker=" + vTalker + " isSend=" + isSend);
+                    LogWriter.log("VoiceAutoPlay", "rawType=" + rawType + " msgId=" + voiceMsgId + " talker=" + vTalker);
                     sMainHandler.post(() -> {
                         try {
                             VoiceAutoPlay.onVoiceMsg(e9, voiceMsgId, p0);

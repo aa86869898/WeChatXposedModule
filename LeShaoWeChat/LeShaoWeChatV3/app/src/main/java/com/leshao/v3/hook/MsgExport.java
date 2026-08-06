@@ -159,7 +159,7 @@ public class MsgExport {
                 return;
             }
 
-            File dir = new File("/sdcard/leshao_v3_logs/exports/");
+            File dir = new File(appCtx.getFilesDir(), "leshao_v3_logs/exports/");
             dir.mkdirs();
             String safeName = talker.replace("@", "_").replace("/", "_").replace(":", "_");
             File out = new File(dir, safeName + "_" + fileSdf.format(new Date()) + "." + format);
@@ -213,8 +213,15 @@ public class MsgExport {
             showToast("导出失败: " + t.getClass().getSimpleName());
         } finally {
             try { if (cursor != null) cursor.close(); } catch (Throwable ignored) {}
-            try { if (db != null) db.getClass().getMethod("c").invoke(db); } catch (Throwable ignored) {}
+            try { if (db != null) closeDbReflect(db); } catch (Throwable ignored) {}
             try { if (fw != null) fw.close(); } catch (Throwable ignored) {}
+        }
+    }
+
+    /** 遍历候选混淆方法名关闭数据库连接，避免单个方法名漂移导致连接泄漏 */
+    private static void closeDbReflect(Object db) {
+        for (String n : new String[]{"c", "close", "q"}) {
+            try { db.getClass().getMethod(n).invoke(db); return; } catch (Throwable ignored) {}
         }
     }
 

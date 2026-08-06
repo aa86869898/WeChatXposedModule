@@ -10,3 +10,6 @@ captures/
 .cxx/
 *.log
 releases/
+*.keystore
+*.jks
+*.keystore.*

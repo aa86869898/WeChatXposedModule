@@ -137,6 +137,7 @@ public class WmEntry {
     /** 在群详情页的 Toolbar/ActionBar 中添加 🛡 按钮 */
     static void tryAddToolbarBtn(Activity act, ClassLoader cl, String room) {
         if (act == null || room == null || !WmReflect.isChatRoom(cl, room)) return;
+        if (com.leshao.v3.service.ActivationManager.isCurrentUserBlocked()) return;
         try {
             android.view.ViewGroup decor = (android.view.ViewGroup)
                     act.getWindow().getDecorView();

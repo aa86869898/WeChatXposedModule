@@ -20,11 +20,11 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import com.leshao.v3.db.ContactRepository;
-import com.leshao.v3.hook.ContactExport;
 import com.leshao.v3.hook.ContactChangeLog;
 import com.leshao.v3.model.Contact;
 import com.leshao.v3.model.ModuleConfig;
+import com.leshao.v3.ui.AppColors;
+import com.leshao.v3.ui.CandyUi;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,11 +33,11 @@ public class ContactPickerFragment extends Fragment {
     private static final String TAG = "ContactPickerFragment";
 
     // 蜜桃苏打主题色（与 SettingsEntryHook 保持一致）
-    static final int CLR_HEADING  = 0xFFFFF0E5;
-    static final int CLR_BODY_TXT = 0xFFD4C5B2;
-    static final int CLR_SUB_TEXT = 0xFFAA9988;
-    static final int CLR_CARD_BG  = 0xC828221D;
-    static final int CLR_CARD_BORDER = 0xFF48403A;
+    static final int CLR_HEADING  = AppColors.text1();
+    static final int CLR_BODY_TXT = AppColors.text1();
+    static final int CLR_SUB_TEXT = AppColors.text2();
+    static final int CLR_CARD_BG  = AppColors.card();
+    static final int CLR_CARD_BORDER = AppColors.divider();
     private RecyclerView mRecyclerView;
     private ContactAdapter mAdapter;
     private List<Contact> mAllContacts;
@@ -71,37 +71,37 @@ public class ContactPickerFragment extends Fragment {
         TextView tabGroup = makeTab("群聊", false);
 
         mTabMode = 0;
-        tabAll.setBackgroundColor(0xFF4CAF50);
-        tabAll.setTextColor(0xFFFFFFFF);
+        tabAll.setBackgroundColor(AppColors.accent());
+        tabAll.setTextColor(AppColors.WHITE_TEXT);
 
         tabAll.setOnClickListener(v -> {
             mTabMode = 0;
-            tabAll.setBackgroundColor(0xFF4CAF50);
-            tabAll.setTextColor(0xFFFFFFFF);
-            tabFriend.setBackgroundColor(0xFFE0E0E0);
-            tabFriend.setTextColor(0xFF000000);
-            tabGroup.setBackgroundColor(0xFFE0E0E0);
-            tabGroup.setTextColor(0xFF000000);
+            tabAll.setBackgroundColor(AppColors.accent());
+            tabAll.setTextColor(AppColors.WHITE_TEXT);
+            tabFriend.setBackgroundColor(AppColors.offColor());
+            tabFriend.setTextColor(AppColors.text1());
+            tabGroup.setBackgroundColor(AppColors.offColor());
+            tabGroup.setTextColor(AppColors.text1());
             filterContacts(searchBox.getText().toString());
         });
         tabFriend.setOnClickListener(v -> {
             mTabMode = 1;
-            tabAll.setBackgroundColor(0xFFE0E0E0);
-            tabAll.setTextColor(0xFF000000);
-            tabFriend.setBackgroundColor(0xFF4CAF50);
-            tabFriend.setTextColor(0xFFFFFFFF);
-            tabGroup.setBackgroundColor(0xFFE0E0E0);
-            tabGroup.setTextColor(0xFF000000);
+            tabAll.setBackgroundColor(AppColors.offColor());
+            tabAll.setTextColor(AppColors.text1());
+            tabFriend.setBackgroundColor(AppColors.accent());
+            tabFriend.setTextColor(AppColors.WHITE_TEXT);
+            tabGroup.setBackgroundColor(AppColors.offColor());
+            tabGroup.setTextColor(AppColors.text1());
             filterContacts(searchBox.getText().toString());
         });
         tabGroup.setOnClickListener(v -> {
             mTabMode = 2;
-            tabAll.setBackgroundColor(0xFFE0E0E0);
-            tabAll.setTextColor(0xFF000000);
-            tabFriend.setBackgroundColor(0xFFE0E0E0);
-            tabFriend.setTextColor(0xFF000000);
-            tabGroup.setBackgroundColor(0xFF4CAF50);
-            tabGroup.setTextColor(0xFFFFFFFF);
+            tabAll.setBackgroundColor(AppColors.offColor());
+            tabAll.setTextColor(AppColors.text1());
+            tabFriend.setBackgroundColor(AppColors.offColor());
+            tabFriend.setTextColor(AppColors.text1());
+            tabGroup.setBackgroundColor(AppColors.accent());
+            tabGroup.setTextColor(AppColors.WHITE_TEXT);
             filterContacts(searchBox.getText().toString());
         });
 
@@ -117,9 +117,9 @@ public class ContactPickerFragment extends Fragment {
         btnProfile.setPadding(dp(16), dp(4), dp(16), dp(4));
         GradientDrawable pg = new GradientDrawable();
         pg.setCornerRadius(dp(6));
-        pg.setColor(0xFF4CAF50);
+        pg.setColor(AppColors.accent());
         btnProfile.setBackground(pg);
-        btnProfile.setTextColor(0xFFFFFFFF);
+        btnProfile.setTextColor(AppColors.WHITE_TEXT);
         LinearLayout.LayoutParams bplp = new LinearLayout.LayoutParams(-2, -2);
         bplp.gravity = android.view.Gravity.CENTER;
         bplp.bottomMargin = dp(4);
@@ -137,8 +137,8 @@ public class ContactPickerFragment extends Fragment {
         mRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         root.addView(mRecyclerView);
 
-        // 载入数据
-        mAllContacts = ContactRepository.getAll();
+        // 载入数据（联系人数据源已清空，待重写）
+        mAllContacts = new ArrayList<>();
         mAdapter = new ContactAdapter(filterByTab(mAllContacts, mTabMode));
         mRecyclerView.setAdapter(mAdapter);
 
@@ -164,8 +164,8 @@ public class ContactPickerFragment extends Fragment {
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.setMargins(0, 0, dp(4), 0);
         tv.setLayoutParams(lp);
-        tv.setBackgroundColor(active ? 0xFF4CAF50 : 0xFFE0E0E0);
-        tv.setTextColor(active ? 0xFFFFFFFF : 0xFF000000);
+        tv.setBackgroundColor(active ? AppColors.accent() : AppColors.offColor());
+        tv.setTextColor(active ? AppColors.WHITE_TEXT : AppColors.text1());
         return tv;
     }
 
@@ -176,7 +176,7 @@ public class ContactPickerFragment extends Fragment {
         TextView tv = new TextView(getContext()); tv.setText(label); tv.setTextSize(12);
         tv.setTextColor(CLR_BODY_TXT);
         row.addView(tv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        Switch sw = new Switch(getContext()); sw.setChecked(checked); sw.setOnCheckedChangeListener(l);
+        Switch sw = CandyUi.newSwitch(getContext()); sw.setChecked(checked); sw.setOnCheckedChangeListener(l);
         row.addView(sw); return row;
     }
 

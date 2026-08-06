@@ -5,6 +5,7 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import com.leshao.v3.Logger;
 import com.leshao.v3.ContextManager;
+import com.leshao.v3.CrashTrace;
 import com.leshao.v3.model.ModuleConfig;
 
 /**
@@ -69,7 +70,9 @@ public class DeleteDetect {
             XposedBridge.hookAllMethods(contactInfoUI, "D2", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
+                    CrashTrace.t("DEL_D2_IN");
                     checkContactStatus(param.thisObject);
+                    CrashTrace.t("DEL_D2_OUT");
                 }
             });
 
@@ -78,7 +81,9 @@ public class DeleteDetect {
                     new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
+                    CrashTrace.t("DEL_RS_IN");
                     checkContactStatus(param.thisObject);
+                    CrashTrace.t("DEL_RS_OUT");
                 }
             });
 

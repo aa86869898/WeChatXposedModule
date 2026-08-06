@@ -14,7 +14,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -23,7 +22,6 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.leshao.v3.ContextManager;
-import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.model.Contact;
 import com.leshao.v3.wm.utils.WmReflect;
 
@@ -130,9 +128,8 @@ public class ContactSelectorView {
         recyclerView.setBackgroundColor(COLOR_CARD);
         recyclerView.setMinimumHeight(dp(480));
 
-        List<Contact> sourceContacts = mFriendTab
-                ? ContactRepository.getFriends()
-                : ContactRepository.getGroups();
+        // 联系人数据源已清空，待重写
+        List<Contact> sourceContacts = new ArrayList<>();
         ContactAdapter adapter = new ContactAdapter(sourceContacts, mCheckedWxids);
         recyclerView.setAdapter(adapter);
 
@@ -229,15 +226,17 @@ public class ContactSelectorView {
                 .create();
 
         btnConfirm.setOnClickListener(v -> {
-            List<Contact> selected = new ArrayList<>();
-            List<Contact> source = mFriendTab
-                    ? ContactRepository.getFriends()
-                    : ContactRepository.getGroups();
-            for (Contact c : source) {
-                if (mCheckedWxids.contains(c.wxid)) selected.add(c);
+            try {
+                List<Contact> selected = new ArrayList<>();
+                List<Contact> source = adapter.getCurrentData();
+                for (Contact c : source) {
+                    if (mCheckedWxids.contains(c.wxid)) selected.add(c);
+                }
+                mCallback.onSelected(selected);
+                dialog.dismiss();
+            } catch (Throwable t) {
+                try { dialog.dismiss(); } catch (Throwable ignored) {}
             }
-            mCallback.onSelected(selected);
-            dialog.dismiss();
         });
 
         dialog.show();
@@ -257,16 +256,12 @@ public class ContactSelectorView {
         searchEdit.setText("");
         selectAllOn[0] = false;
         btnSelectAll.setText("全部勾选");
-        List<Contact> contacts = friendTab
-                ? ContactRepository.getFriends()
-                : ContactRepository.getGroups();
+        List<Contact> contacts = new ArrayList<>();
         adapter.updateData(contacts);
     }
 
     private void filterContacts(ContactAdapter adapter, String keyword) {
-        List<Contact> all = mFriendTab
-                ? ContactRepository.getFriends()
-                : ContactRepository.getGroups();
+        List<Contact> all = new ArrayList<>();
         List<Contact> filtered = new ArrayList<>();
         for (Contact c : all) {
             if (keyword.isEmpty()
@@ -328,11 +323,12 @@ public class ContactSelectorView {
             row.setPadding(pad, dp(ctx, 6), pad, dp(ctx, 6));
             row.setGravity(Gravity.CENTER_VERTICAL);
 
-            CheckBox cb = new CheckBox(ctx);
-            cb.setPadding(0, 0, dp(ctx, 10), 0);
-            row.addView(cb, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            TextView cb = new TextView(ctx);
+            cb.setGravity(Gravity.CENTER);
+            cb.setTextSize(13);
+            cb.setTypeface(null, android.graphics.Typeface.BOLD);
+            int selSize = dp(ctx, 22);
+            row.addView(cb, new LinearLayout.LayoutParams(selSize, selSize));
 
             AvatarView avatar = new AvatarView(ctx);
             int size = dp(ctx, 32);
@@ -384,13 +380,31 @@ public class ContactSelectorView {
                 holder.avatar.setInitials(getInitials(contact.displayName()), contact.isGroup());
             }
 
-            holder.cb.setOnCheckedChangeListener(null);
-            holder.cb.setChecked(mCheckedWxids.contains(contact.wxid));
-            holder.cb.setOnCheckedChangeListener((buttonView, isChecked) -> {
-                if (isChecked) mCheckedWxids.add(contact.wxid);
+            boolean checked = mCheckedWxids.contains(contact.wxid);
+            android.content.Context ctx = holder.itemView.getContext();
+            holder.cb.setText(checked ? "\u2714" : "");
+            holder.cb.setTextColor(checked ? COLOR_ACCENT : AppColors.text3());
+            GradientDrawable selBg = new GradientDrawable();
+            selBg.setShape(GradientDrawable.OVAL);
+            selBg.setColor(checked ? 0x332196F3 : 0x00FFFFFF);
+            selBg.setStroke((int)(1.5f * dp(ctx, 1)), checked ? COLOR_ACCENT : AppColors.text3());
+            holder.cb.setBackground(selBg);
+
+            View.OnClickListener toggle = v -> {
+                boolean nowChecked = !mCheckedWxids.contains(contact.wxid);
+                if (nowChecked) mCheckedWxids.add(contact.wxid);
                 else mCheckedWxids.remove(contact.wxid);
+                holder.cb.setText(nowChecked ? "\u2714" : "");
+                holder.cb.setTextColor(nowChecked ? COLOR_ACCENT : AppColors.text3());
+                GradientDrawable nBg = new GradientDrawable();
+                nBg.setShape(GradientDrawable.OVAL);
+                nBg.setColor(nowChecked ? 0x332196F3 : 0x00FFFFFF);
+                nBg.setStroke((int)(1.5f * dp(ctx, 1)), nowChecked ? COLOR_ACCENT : AppColors.text3());
+                holder.cb.setBackground(nBg);
                 if (mCountCallback != null) mCountCallback.onCountChanged(mCheckedWxids.size());
-            });
+            };
+            holder.cb.setOnClickListener(toggle);
+            holder.itemView.setOnClickListener(v -> toggle.onClick(v));
         }
 
         private static final Map<String, String> sAvatarCache = new ConcurrentHashMap<>();
@@ -406,12 +420,12 @@ public class ContactSelectorView {
         }
 
         static class VH extends RecyclerView.ViewHolder {
-            final CheckBox cb;
+            final TextView cb;
             final AvatarView avatar;
             final TextView nameTv;
             final TextView subTv;
 
-            VH(View itemView, CheckBox cb, AvatarView avatar, TextView nameTv, TextView subTv) {
+            VH(View itemView, TextView cb, AvatarView avatar, TextView nameTv, TextView subTv) {
                 super(itemView);
                 this.cb = cb;
                 this.avatar = avatar;
@@ -464,17 +478,23 @@ public class ContactSelectorView {
             mPendingUrl = url;
             final String fUrl = url;
             new Thread(() -> {
+                java.net.HttpURLConnection conn = null;
+                java.io.InputStream is = null;
                 try {
                     java.net.URL u = new java.net.URL(fUrl);
-                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection) u.openConnection();
+                    conn = (java.net.HttpURLConnection) u.openConnection();
                     conn.setConnectTimeout(5000);
                     conn.setReadTimeout(5000);
-                    android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(conn.getInputStream());
-                    conn.disconnect();
+                    is = conn.getInputStream();
+                    android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeStream(is);
                     if (bmp != null && fUrl.equals(mPendingUrl)) {
                         post(() -> { mBitmap = bmp; invalidate(); });
                     }
-                } catch (Throwable ignored) {}
+                } catch (Throwable ignored) {
+                } finally {
+                    if (is != null) try { is.close(); } catch (Exception ignored) {}
+                    if (conn != null) conn.disconnect();
+                }
             }).start();
         }
 

@@ -15,8 +15,6 @@
 -keep class com.leshao.v3.service.**$* { *; }
 
 # ========== 5. 实体、API 相关类防止反射异常 ==========
--keep class com.leshao.v3.db.** { *; }
--keep class com.leshao.v3.db.**$* { *; }
 -keep class com.leshao.v3.model.** { *; }
 -keep class com.leshao.v3.model.**$* { *; }
 -keep class com.leshao.v3.dispatch.** { *; }

@@ -39,12 +39,22 @@ public class ConvPrivacy {
     }
 
     private static void loadPrivacyList() {
-        String saved = "";
-        if (saved != null && !saved.isEmpty()) {
-            for (String s : saved.split(",")) {
-                if (!s.trim().isEmpty()) privacyList.add(s.trim());
+        // 从 SharedPreferences 读取设置面板保存的配置
+        // （原实现写死空串，导致 privacyList 恒空、隐私级别等设置完全不生效）
+        try {
+            android.content.SharedPreferences prefs = ContextManager.getPrefs();
+            if (prefs == null) return;
+            privacyLevel = prefs.getInt("conv_privacy_level", 1);
+            hideNotificationContent = prefs.getBoolean("conv_hide_notification", true);
+            hideConvListContent = prefs.getBoolean("conv_hide_convlist", true);
+            privacyList.clear();
+            String saved = prefs.getString("conv_privacy_list", "");
+            if (saved != null && !saved.isEmpty()) {
+                for (String s : saved.split(",")) {
+                    if (!s.trim().isEmpty()) privacyList.add(s.trim());
+                }
             }
-        }
+        } catch (Throwable ignored) {}
     }
 
     /**

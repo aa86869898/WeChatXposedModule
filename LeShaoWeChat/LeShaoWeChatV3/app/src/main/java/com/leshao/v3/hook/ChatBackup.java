@@ -34,14 +34,35 @@ public class ChatBackup {
     private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd_HHmmss");
     private static final SimpleDateFormat dateSdf = new SimpleDateFormat("yyyyMMdd");
     private static final int RETENTION_DAYS = 7;
-    private static final String TRIGGER_FILE = "/sdcard/leshao_v3_logs/trigger_backup";
-    private static final String RESTORE_TRIGGER = "/sdcard/leshao_v3_logs/trigger_restore";
-    private static final String STATUS_FILE = "/sdcard/leshao_v3_logs/last_backup_status.json";
+
+    private static String logRoot() {
+        Context ctx = ContextManager.getAppContext();
+        String base = ctx != null ? ctx.getFilesDir().getAbsolutePath()
+            : "/data/data/com.tencent.mm/files";
+        return base + "/leshao_v3_logs";
+    }
+    private static String triggerFile() { return logRoot() + "/trigger_backup"; }
+    private static String restoreTrigger() { return logRoot() + "/trigger_restore"; }
+    private static String statusFile() { return logRoot() + "/last_backup_status.json"; }
+    private static String backupDir() { return logRoot() + "/backup/"; }
 
     private static String lastBackupDate = "";
     private static ClassLoader sCL;
     private static long sUin = -1;
     private static Handler sMainHandler;
+
+    /** 备份进度回调。onProgress/onDone 均在后台线程触发,UI 侧需自行切主线程。 */
+    public interface ProgressListener {
+        void onProgress(int percent);
+        void onDone(boolean ok, String backupDir, long totalSize);
+    }
+
+    private static volatile ProgressListener sProgressListener;
+
+    /** 设置手动备份进度监听,备份完成后自动清除。 */
+    public static void setProgressListener(ProgressListener l) {
+        sProgressListener = l;
+    }
 
     public static void hook(ClassLoader cl) {
         sCL = cl;
@@ -70,7 +91,10 @@ public class ChatBackup {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     sMainHandler.postDelayed(() -> {
-                        checkAndPerformBackup();
+                        // 备份涉及大文件复制，放子线程避免阻塞主线程
+                        new Thread(() -> {
+                            try { checkAndPerformBackup(); } catch (Throwable ignored) {}
+                        }, "leshao-backup").start();
                     }, 8000);
                 }
             });
@@ -78,7 +102,9 @@ public class ChatBackup {
             XposedBridge.hookAllMethods(launcherUI, "onDestroy", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    checkAndPerformBackup();
+                    new Thread(() -> {
+                        try { checkAndPerformBackup(); } catch (Throwable ignored) {}
+                    }, "leshao-backup-exit").start();
                 }
             });
         } catch (Throwable t) {
@@ -112,13 +138,14 @@ public class ChatBackup {
 
     private static void checkRestoreTrigger() {
         try {
-            File trigger = new File(RESTORE_TRIGGER);
+            File trigger = new File(restoreTrigger());
             if (!trigger.exists()) return;
             StringBuilder content = new StringBuilder();
             java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(trigger));
+            try {
             String line;
             while ((line = br.readLine()) != null) content.append(line);
-            br.close();
+            } finally { br.close(); }
             trigger.delete();
 
             String path = content.toString().trim();
@@ -152,7 +179,7 @@ public class ChatBackup {
 
     private static boolean checkManualTrigger() {
         try {
-            File trigger = new File(TRIGGER_FILE);
+            File trigger = new File(triggerFile());
             if (trigger.exists()) {
                 boolean deleted = trigger.delete();
                 LogWriter.log(TAG, "manual trigger detected, deleted=" + deleted);
@@ -202,6 +229,10 @@ public class ChatBackup {
     }
 
     private static boolean performBackup() {
+        return performBackup(null);
+    }
+
+    private static boolean performBackup(final ProgressListener listener) {
         try {
             File dbDir = findDbDirectory();
             if (dbDir == null || !dbDir.exists()) {
@@ -209,7 +240,7 @@ public class ChatBackup {
                 return false;
             }
 
-            File backupDir = new File("/sdcard/leshao_v3_logs/backup/");
+            File backupDir = new File(backupDir());
             if (!backupDir.exists() && !backupDir.mkdirs()) {
                 LogWriter.log(TAG, "backup err: cannot create dir " + backupDir.getAbsolutePath());
                 return false;
@@ -217,9 +248,14 @@ public class ChatBackup {
             String timeStr = sdf.format(new Date());
 
             String[] dbs = {"EnMicroMsg.db", "EnMicroMsg.db-wal", "EnMicroMsg.db-shm"};
-            int count = 0;
-            long totalSize = 0;
+            long total = 0;
+            for (String dbName : dbs) {
+                File src = new File(dbDir, dbName);
+                if (src.exists()) total += src.length();
+            }
 
+            int count = 0;
+            long copied = 0;
             for (String dbName : dbs) {
                 File src = new File(dbDir, dbName);
                 if (!src.exists()) continue;
@@ -228,33 +264,55 @@ public class ChatBackup {
                     + dbName.substring(dbName.lastIndexOf('.')));
                 FileInputStream fis = new FileInputStream(src);
                 FileOutputStream fos = new FileOutputStream(dest);
+                try {
                 byte[] buf = new byte[16384];
                 int read;
-                while ((read = fis.read(buf)) > 0) { fos.write(buf, 0, read); totalSize += read; }
-                fos.flush(); fos.close(); fis.close();
+                while ((read = fis.read(buf)) > 0) {
+                    fos.write(buf, 0, read);
+                    copied += read;
+                    if (listener != null && total > 0) {
+                        listener.onProgress((int) (copied * 100 / total));
+                    }
+                }
+                fos.flush();
+                } finally {
+                try { fos.close(); } catch (Exception ignored) {}
+                try { fis.close(); } catch (Exception ignored) {}
+                }
                 count++;
             }
 
-            LogWriter.log(TAG, "backup done " + count + " files " + formatSize(totalSize));
+            LogWriter.log(TAG, "backup done " + count + " files " + formatSize(copied));
             cleanupOldBackups(backupDir);
+            if (listener != null) listener.onDone(count > 0, backupDir.getAbsolutePath(), copied);
             return count > 0;
         } catch (Throwable t) {
             LogWriter.log(TAG, "backup err: " + t.getMessage());
+            if (listener != null) listener.onDone(false, null, 0);
             return false;
         }
     }
 
     public static void triggerManualBackup() {
+        triggerManualBackup(null);
+    }
+
+    public static void triggerManualBackup(final ProgressListener listener) {
         try {
+            if (listener != null) sProgressListener = listener;
             new Thread(() -> {
-                boolean ok = performBackup();
+                boolean ok = performBackup(sProgressListener);
+                ProgressListener doneListener = sProgressListener;
+                sProgressListener = null;
                 final String msg = ok ? "聊天记录备份完成" : "备份失败,请检查存储权限";
-                sMainHandler.post(() -> {
-                    try {
-                        Context ctx = ContextManager.getAppContext();
-                        if (ctx != null) Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show();
-                    } catch (Throwable ignored) {}
-                });
+                if (sMainHandler != null && doneListener == null) {
+                    sMainHandler.post(() -> {
+                        try {
+                            Context ctx = ContextManager.getAppContext();
+                            if (ctx != null) Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show();
+                        } catch (Throwable ignored) {}
+                    });
+                }
                 if (ok) {
                     lastBackupDate = dateSdf.format(new Date());
                     writeStatus("ok", formatSize(getBackupTotalSize()));
@@ -312,10 +370,15 @@ public class ChatBackup {
             File dest = new File(dbDir, destName);
             FileInputStream fis = new FileInputStream(srcFile);
             FileOutputStream fos = new FileOutputStream(dest);
+            try {
             byte[] buf = new byte[16384];
             int read;
             while ((read = fis.read(buf)) > 0) fos.write(buf, 0, read);
-            fos.flush(); fos.close(); fis.close();
+            fos.flush();
+            } finally {
+            try { fos.close(); } catch (Exception ignored) {}
+            try { fis.close(); } catch (Exception ignored) {}
+            }
             LogWriter.log(TAG, "restored " + srcName + " -> " + dest.getAbsolutePath());
             return true;
         } catch (Throwable t) {
@@ -325,7 +388,7 @@ public class ChatBackup {
     }
 
     private static long getBackupTotalSize() {
-        File dir = new File("/sdcard/leshao_v3_logs/backup/");
+        File dir = new File(backupDir());
         if (!dir.exists()) return 0;
         File[] files = dir.listFiles();
         if (files == null) return 0;
@@ -340,12 +403,13 @@ public class ChatBackup {
 
     private static void writeStatus(String status, String detail) {
         try {
-            File dir = new File(STATUS_FILE).getParentFile();
+            File dir = new File(statusFile()).getParentFile();
             if (dir != null) dir.mkdirs();
-            FileWriter fw = new FileWriter(new File(STATUS_FILE));
+            FileWriter fw = new FileWriter(new File(statusFile()));
+            try {
             fw.write("{\"status\":\"" + status + "\",\"detail\":\"" + detail
                 + "\",\"time\":" + System.currentTimeMillis() + "}");
-            fw.close();
+            } finally { fw.close(); }
         } catch (Throwable ignored) {}
     }
 

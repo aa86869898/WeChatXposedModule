@@ -32,8 +32,13 @@ import java.util.Locale;
 public class DataToolsPageView {
 
     private static final SimpleDateFormat fileSdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
-    private static final String BACKUP_DIR = "/sdcard/leshao_v3_logs/backup/";
-    private static final String EXPORT_DIR = "/sdcard/leshao_v3_logs/exports/";
+
+    private static String backupDir(Context ctx) {
+        return ctx.getFilesDir().getAbsolutePath() + "/leshao_v3_logs/backup/";
+    }
+    private static String exportDir(Context ctx) {
+        return ctx.getFilesDir().getAbsolutePath() + "/leshao_v3_logs/exports/";
+    }
 
     public static View create(Context ctx, Activity parentAct) {
         float d = ctx.getResources().getDisplayMetrics().density;
@@ -67,8 +72,7 @@ public class DataToolsPageView {
         btnRow.setOrientation(LinearLayout.HORIZONTAL);
         btnRow.setPadding((int)(2*d), 0, (int)(2*d), 0);
         btnRow.addView(actionButton(ctx, d, "立即备份", 1f, () -> {
-            ChatBackup.triggerManualBackup();
-            Toast.makeText(ctx, "正在备份,请稍候...", Toast.LENGTH_LONG).show();
+            showBackupProgressDialog(ctx, parentAct, d);
         }));
         View gap = new View(ctx);
         gap.setLayoutParams(new LinearLayout.LayoutParams((int)(8*d), -2));
@@ -85,7 +89,7 @@ public class DataToolsPageView {
                 .setTitle("确认清除")
                 .setMessage("确定要清除所有导出记录文件吗?")
                 .setPositiveButton("清除", (dialog, which) -> {
-                    int deleted = deleteAllFiles(new File(EXPORT_DIR));
+                    int deleted = deleteAllFiles(new File(exportDir(ctx)));
                     Toast.makeText(ctx, "已删除 " + deleted + " 个文件", Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("取消", null)
@@ -108,16 +112,85 @@ public class DataToolsPageView {
         return sv;
     }
 
+    private static void showBackupProgressDialog(Context ctx, Activity parentAct, float d) {
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding((int)(20*d), (int)(16*d), (int)(20*d), (int)(16*d));
+        root.setBackgroundColor(AppColors.bg());
+
+        TextView titleTv = new TextView(ctx);
+        titleTv.setText("正在备份聊天记录...");
+        titleTv.setTextSize(15);
+        titleTv.setTextColor(AppColors.text1());
+        titleTv.setTypeface(null, Typeface.BOLD);
+        titleTv.setGravity(Gravity.CENTER);
+        titleTv.setPadding(0, 0, 0, (int)(12*d));
+        root.addView(titleTv);
+
+        android.widget.ProgressBar pb = new android.widget.ProgressBar(ctx,
+                null, android.R.attr.progressBarStyleHorizontal);
+        pb.setMax(100);
+        pb.setProgress(0);
+        LinearLayout.LayoutParams pblp = new LinearLayout.LayoutParams(-1, (int)(10*d));
+        root.addView(pb, pblp);
+
+        TextView statusTv = new TextView(ctx);
+        statusTv.setText("准备中... 0%");
+        statusTv.setTextSize(12);
+        statusTv.setTextColor(AppColors.text2());
+        statusTv.setGravity(Gravity.CENTER);
+        statusTv.setPadding(0, (int)(10*d), 0, 0);
+        root.addView(statusTv);
+
+        AlertDialog dlg = new AlertDialog.Builder(ctx)
+                .setView(root)
+                .setCancelable(false)
+                .create();
+
+        ChatBackup.ProgressListener listener = new ChatBackup.ProgressListener() {
+            @Override
+            public void onProgress(final int percent) {
+                if (parentAct == null) return;
+                parentAct.runOnUiThread(() -> {
+                    pb.setProgress(percent);
+                    statusTv.setText("正在备份... " + percent + "%");
+                });
+            }
+
+            @Override
+            public void onDone(final boolean ok, final String backupDir, final long totalSize) {
+                if (parentAct == null) return;
+                parentAct.runOnUiThread(() -> {
+                    try { dlg.dismiss(); } catch (Throwable ignored) {}
+                    if (ok && backupDir != null) {
+                        String msg = "备份完成\n文件大小: " + formatSize(totalSize)
+                                + "\n备份路径: " + backupDir;
+                        new AlertDialog.Builder(ctx)
+                                .setTitle("备份成功")
+                                .setMessage(msg)
+                                .setPositiveButton("好的", null)
+                                .show();
+                    } else {
+                        Toast.makeText(ctx, "备份失败,请检查存储权限", Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+        };
+
+        dlg.show();
+        ChatBackup.triggerManualBackup(listener);
+    }
+
     private static void showBackupList(Context ctx) {
-        showFileListDialog(ctx, "备份文件列表", new File(BACKUP_DIR), "EnMicroMsg_");
+        showFileListDialog(ctx, "备份文件列表", new File(backupDir(ctx)), "EnMicroMsg_");
     }
 
     private static void showExportList(Context ctx) {
-        showFileListDialog(ctx, "导出记录列表", new File(EXPORT_DIR), null);
+        showFileListDialog(ctx, "导出记录列表", new File(exportDir(ctx)), null);
     }
 
     private static void showRestoreDialog(Context ctx) {
-        showFilePickDialog(ctx, "选择备份文件恢复", new File(BACKUP_DIR), "EnMicroMsg_", (file) -> {
+        showFilePickDialog(ctx, "选择备份文件恢复", new File(backupDir(ctx)), "EnMicroMsg_", (file) -> {
             new AlertDialog.Builder(ctx)
                 .setTitle("确认恢复")
                 .setMessage("将用 " + file.getName() + " 恢复聊天记录数据库?\n恢复后需重新打开微信生效。")
@@ -132,7 +205,8 @@ public class DataToolsPageView {
 
     private static void showImportDialog(Context ctx) {
         java.util.List<File> dbFiles = new java.util.ArrayList<>();
-        findDbFilesRecursive(new java.io.File("/sdcard/"), dbFiles, 3);
+        File importRoot = new File(ctx.getFilesDir(), "leshao_v3_logs");
+        findDbFilesRecursive(importRoot, dbFiles, 3);
 
         float d = ctx.getResources().getDisplayMetrics().density;
         LinearLayout root = new LinearLayout(ctx);
@@ -258,7 +332,7 @@ public class DataToolsPageView {
 
         if (dbFiles.isEmpty()) {
             TextView empty = new TextView(ctx);
-            empty.setText("未在 /sdcard/ 中找到数据库文件");
+            empty.setText("内部备份目录中未找到数据库文件");
             empty.setTextSize(14);
             empty.setTextColor(AppColors.text2());
             empty.setPadding((int)(14*d), (int)(12*d), 0, 0);

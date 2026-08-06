@@ -20,8 +20,8 @@ public class AppColors {
     // 备注小字
     public static final int TEXT_NOTE  = 0xFF949499;
 
-    // 主题淡霓虹青
-    public static final int ACCENT     = 0xFF36D1E8;
+    // 主题蓝
+    public static final int ACCENT     = 0xFF2196F3;
 
     // 开关轨道
     public static final int SWITCH_ON  = 0xFFCCF2F9;

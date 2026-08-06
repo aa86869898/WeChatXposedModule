@@ -1,8 +1,8 @@
 package com.leshao.v3.ui;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -11,20 +11,15 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
-import com.leshao.v3.LogWriter;
 import com.leshao.v3.service.ActivationManager;
 
 import java.io.File;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
 
 public class ProfilePageView {
 
@@ -61,8 +56,13 @@ public class ProfilePageView {
         if (avatarPath != null) {
             File f = new File(avatarPath);
             if (f.exists()) {
-                Bitmap bm = BitmapFactory.decodeFile(avatarPath);
-                if (bm != null) avatar.setImageBitmap(bm);
+                // 后台线程解码大图，避免阻塞主线程
+                final ImageView avatarIv = avatar;
+                final String fPath = avatarPath;
+                new Thread(() -> {
+                    Bitmap bm = BitmapFactory.decodeFile(fPath);
+                    if (bm != null) avatarIv.post(() -> avatarIv.setImageBitmap(bm));
+                }, "leshao-avatar").start();
             }
         }
         userRow.addView(avatar);
@@ -127,126 +127,39 @@ public class ProfilePageView {
 
         root.addView(infoCard);
 
-        // ===== 激活码 =====
-        root.addView(spacerV(ctx, d, 16));
-        root.addView(sectionLabel(ctx, d, "激活码"));
-        LinearLayout actCard = makeCard(ctx, d);
-
-        // 会员状态
-        boolean isActive = ActivationManager.isActivated();
-        String currentLevel = ActivationManager.getLevelName();
-        String boundWxid = ActivationManager.getBoundWxid();
+        // 管理员配置入口 (仅管理员可见)
         String currentWxid = MainActivity.getUserWxid();
+        if (currentWxid != null && ActivationManager.isAdmin(currentWxid)) {
+            root.addView(spacerV(ctx, d, 16));
+            root.addView(sectionLabel(ctx, d, "管理员工具"));
+            LinearLayout adminCard = makeCard(ctx, d);
 
-        TextView statusLabel = new TextView(ctx);
-        statusLabel.setText("会员状态: " + currentLevel + (isActive && boundWxid.equals(currentWxid) ? " (已激活)" : ""));
-        statusLabel.setTextSize(13);
-        statusLabel.setTextColor(isActive ? AppColors.accent() : AppColors.arrow());
-        statusLabel.setTypeface(null, Typeface.BOLD);
-        statusLabel.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(4 * d));
-        actCard.addView(statusLabel);
+            LinearLayout adminRow = new LinearLayout(ctx);
+            adminRow.setOrientation(LinearLayout.HORIZONTAL);
+            adminRow.setGravity(Gravity.CENTER_VERTICAL);
+            adminRow.setPadding((int)(16 * d), (int)(8 * d), (int)(16 * d), (int)(8 * d));
+            adminRow.setBackgroundColor(AppColors.whiteCard());
 
-        if (isActive) {
-            TextView wxidLabel = new TextView(ctx);
-            wxidLabel.setText("绑定ID: " + boundWxid);
-            wxidLabel.setTextSize(11);
-            wxidLabel.setTextColor(AppColors.text2());
-            wxidLabel.setPadding((int)(16 * d), (int)(2 * d), (int)(16 * d), (int)(8 * d));
-            actCard.addView(wxidLabel);
+            TextView adminLabel = new TextView(ctx);
+            adminLabel.setText("模块黑名单管理");
+            adminLabel.setTextSize(13);
+            adminLabel.setTextColor(AppColors.accent());
+            adminLabel.setTypeface(null, Typeface.BOLD);
+            adminLabel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+            adminRow.addView(adminLabel);
 
-            // 管理员配置入口 (仅管理员可见)
-            if (currentWxid != null && ActivationManager.isAdmin(currentWxid)) {
-                actCard.addView(itemDivider(ctx, d));
-                LinearLayout adminRow = new LinearLayout(ctx);
-                adminRow.setOrientation(LinearLayout.HORIZONTAL);
-                adminRow.setGravity(Gravity.CENTER_VERTICAL);
-                adminRow.setPadding((int)(16 * d), (int)(8 * d), (int)(16 * d), (int)(8 * d));
-                adminRow.setBackgroundColor(AppColors.whiteCard());
+            TextView adminArrow = new TextView(ctx);
+            adminArrow.setText(">");
+            adminArrow.setTextSize(16);
+            adminArrow.setTextColor(AppColors.text2());
+            adminRow.addView(adminArrow);
 
-                TextView adminLabel = new TextView(ctx);
-                adminLabel.setText("管理员配置");
-                adminLabel.setTextSize(13);
-                adminLabel.setTextColor(AppColors.accent());
-                adminLabel.setTypeface(null, Typeface.BOLD);
-                adminLabel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-                adminRow.addView(adminLabel);
-
-                TextView adminArrow = new TextView(ctx);
-                adminArrow.setText(">");
-                adminArrow.setTextSize(16);
-                adminArrow.setTextColor(AppColors.text2());
-                adminRow.addView(adminArrow);
-
-                adminRow.setOnClickListener(v -> {
-                    SubPageActivity.open(parentAct, "管理员工具", 98);
-                });
-                actCard.addView(adminRow);
-            }
-        }
-
-        // 输入框 (未激活或wxid不匹配时显示)
-        final boolean showInput = !isActive || !boundWxid.equals(currentWxid);
-        if (showInput) {
-            LinearLayout inputRow = new LinearLayout(ctx);
-            inputRow.setOrientation(LinearLayout.HORIZONTAL);
-            inputRow.setGravity(Gravity.CENTER_VERTICAL);
-            inputRow.setPadding((int)(16 * d), (int)(8 * d), (int)(16 * d), (int)(12 * d));
-
-            EditText codeInput = new EditText(ctx);
-            codeInput.setHint("请输入激活码 (LS-开头)");
-            codeInput.setTextSize(13);
-            codeInput.setTextColor(AppColors.text1());
-            codeInput.setHintTextColor(AppColors.text2());
-            codeInput.setSingleLine(true);
-            codeInput.setPadding((int)(12 * d), (int)(8 * d), (int)(12 * d), (int)(8 * d));
-            codeInput.setBackgroundColor(AppColors.inputBg());
-
-            GradientDrawable inputBorder = new GradientDrawable();
-            inputBorder.setCornerRadius((int)(6 * d));
-            inputBorder.setStroke(1, AppColors.border());
-            codeInput.setBackground(inputBorder);
-
-            LinearLayout.LayoutParams inputLp = new LinearLayout.LayoutParams(0, -2, 1.0f);
-            inputLp.setMargins(0, 0, (int)(8 * d), 0);
-            codeInput.setLayoutParams(inputLp);
-            inputRow.addView(codeInput);
-
-            TextView btnActivate = makeBtn(ctx, d, "验证激活");
-            inputRow.addView(btnActivate);
-
-            btnActivate.setOnClickListener(v -> {
-                String code = codeInput.getText().toString().trim();
-                if (code.isEmpty()) {
-                    Toast.makeText(ctx, "请输入激活码", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                String wxid = MainActivity.getUserWxid();
-                if (wxid == null || wxid.isEmpty()) {
-                    Toast.makeText(ctx, "无法获取微信ID", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                ActivationManager.ValidationResult result = ActivationManager.validate(code, wxid);
-                if (result.valid) {
-                    // 记录激活时间
-                ContextManager.getPrefs().edit()
-                    .putString("ls_act_time", String.valueOf(System.currentTimeMillis()))
-                    .commit();
-                    ActivationManager.saveActivation(ctx, code, wxid,
-                        result.levelIndex, result.expireHours, result.featureMask);
-                    statusLabel.setText("当前状态: " + result.levelName + " (已激活)");
-                    statusLabel.setTextColor(AppColors.accent());
-                    Toast.makeText(ctx, "激活成功: " + result.levelName, Toast.LENGTH_SHORT).show();
-                    // 刷新页面
-                    SubPageActivity.open(parentAct, "个人中心", 99);
-                } else {
-                    Toast.makeText(ctx, "激活码无效或不匹配当前微信", Toast.LENGTH_SHORT).show();
-                }
+            adminRow.setOnClickListener(v -> {
+                SubPageActivity.open(parentAct, "管理员工具", 98);
             });
-
-            actCard.addView(inputRow);
+            adminCard.addView(adminRow);
+            root.addView(adminCard);
         }
-
-        root.addView(actCard);
 
         final SharedPreferences prefs = ContextManager.getPrefs();
 
@@ -259,7 +172,7 @@ public class ProfilePageView {
         LinearLayout logCard = makeCard(ctx, d);
 
         TextView logDesc = new TextView(ctx);
-        logDesc.setText("将乐少助手运行日志导出到 /sdcard/leshao_v3_logs/");
+        logDesc.setText("将乐少助手运行日志导出到应用内部目录");
         logDesc.setTextSize(12);
         logDesc.setTextColor(AppColors.text2());
         logDesc.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(4 * d));
@@ -274,18 +187,16 @@ public class ProfilePageView {
         btnExport.setOnClickListener(v -> {
             try {
                 String ts = String.valueOf(System.currentTimeMillis());
-                java.io.File destDir = new java.io.File("/sdcard/leshao_v3_logs");
-                if (!destDir.exists()) destDir.mkdirs();
-
                 android.content.Context appCtx = com.leshao.v3.ContextManager.getAppContext();
                 java.io.File leshaoRoot = appCtx != null
                     ? com.leshao.v3.PathUtil.getLeshaoRootDir(appCtx)
                     : new java.io.File("/data/data/com.tencent.mm/files/leshao_v3");
+                java.io.File destDir = new java.io.File(leshaoRoot, "log_export");
+                if (!destDir.exists()) destDir.mkdirs();
 
                 int count = 0;
                 java.io.File[] logDirs = {
-                    leshaoRoot,
-                    destDir
+                    leshaoRoot
                 };
                 for (java.io.File dir : logDirs) {
                     java.io.File[] files = dir.listFiles();
@@ -303,7 +214,7 @@ public class ProfilePageView {
                         count++;
                     }
                 }
-                Toast.makeText(ctx, "已导出 " + count + " 个日志到 /sdcard/leshao_v3_logs/", Toast.LENGTH_LONG).show();
+                Toast.makeText(ctx, "已导出 " + count + " 个日志到 " + destDir.getAbsolutePath(), Toast.LENGTH_LONG).show();
             } catch (Throwable t) {
                 Toast.makeText(ctx, "导出失败: " + t.getMessage(), Toast.LENGTH_LONG).show();
             }
@@ -314,18 +225,16 @@ public class ProfilePageView {
         btnSpacer.setLayoutParams(new LinearLayout.LayoutParams((int)(12*d), 0));
         logBtnRow.addView(btnSpacer);
 
-        TextView btnOpenDir = makeSmallBtn(ctx, d, "打开日志目录", AppColors.text1());
+        TextView btnOpenDir = makeSmallBtn(ctx, d, "查看日志路径", AppColors.text1());
         btnOpenDir.setOnClickListener(v -> {
             try {
-                java.io.File logDir = new java.io.File("/sdcard/leshao_v3_logs");
-                if (!logDir.exists()) logDir.mkdirs();
-                android.net.Uri uri = android.net.Uri.parse("content://com.android.externalstorage.documents/tree/primary%3Aleshao_v3_logs");
-                Intent intent = new Intent(Intent.ACTION_VIEW);
-                intent.setDataAndType(uri, "resource/folder");
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                ctx.startActivity(intent);
+                android.content.Context appCtx = com.leshao.v3.ContextManager.getAppContext();
+                java.io.File leshaoRoot = appCtx != null
+                    ? com.leshao.v3.PathUtil.getLeshaoRootDir(appCtx)
+                    : new java.io.File("/data/data/com.tencent.mm/files/leshao_v3");
+                Toast.makeText(ctx, "日志目录: " + leshaoRoot.getAbsolutePath(), Toast.LENGTH_LONG).show();
             } catch (Throwable t) {
-                Toast.makeText(ctx, "日志目录: /sdcard/leshao_v3_logs", Toast.LENGTH_LONG).show();
+                Toast.makeText(ctx, "日志目录获取失败", Toast.LENGTH_LONG).show();
             }
         });
         logBtnRow.addView(btnOpenDir);
@@ -428,22 +337,6 @@ public class ProfilePageView {
     }
 
     private static String getExpireTime() {
-        try {
-            SharedPreferences prefs = ContextManager.getPrefs();
-            if (prefs == null) return "未激活";
-            String actTimeStr = prefs.getString("ls_act_time", "");
-            String expireStr = prefs.getString("ls_act_expire", "0");
-            if (actTimeStr.isEmpty()) return "未激活";
-            long actTime = Long.parseLong(actTimeStr);
-            int expireHours = Integer.parseInt(expireStr);
-            if (ActivationManager.isPermanentMember()) return "2099年12月31日 23:59:59";
-            if (expireHours <= 0) return "永久有效";
-            long expireTime = actTime + expireHours * 3600000L;
-            if (System.currentTimeMillis() > expireTime) return "已过期";
-            SimpleDateFormat sdf = new SimpleDateFormat("yyyy年MM月dd日 HH:mm:ss", Locale.getDefault());
-            return sdf.format(new Date(expireTime));
-        } catch (Throwable t) {
-            return "未激活";
-        }
+        return "永久有效";
     }
 }

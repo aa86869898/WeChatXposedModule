@@ -33,8 +33,8 @@ import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
-import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.model.Contact;
+import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.ActivationManager;
 
 import java.io.File;
@@ -51,10 +51,10 @@ public class MainActivity {
     private static Dialog sActiveDialog;
     private static volatile long sLastOpenTime = 0;
 
-    private static String sUserNickname;
-    private static String sUserAlias;
-    private static String sUserWxid;
-    private static String sAvatarPath;
+    private static volatile String sUserNickname;
+    private static volatile String sUserAlias;
+    private static volatile String sUserWxid;
+    private static volatile String sAvatarPath;
     private static String sVipLevel = "王者VIP";
 
     public static String getUserNickname() { return sUserNickname; }
@@ -70,25 +70,21 @@ public class MainActivity {
     }
 
     private static final String[] ITEM_NAMES = {
-        "主题美化", "联系人和群聊", "群管理助手", "音乐娱乐",
-        "定时消息助手", "AI智慧助手", "TTS语音播报",
-        "红包转账", "数据备份", "娱乐助手"
+        "联系人和群聊", "群管理助手", "TTS语音播报",
+        "红包转账", "数据备份", "通讯录日志"
     };
     private static final int[] ITEM_ICONS = {
-        0x1F3A8, 0x1F465, 0x1F6E1, 0x1F3B5,
-        0x23F0, 0x1F916, 0x1F50A,
-        0x1F4B0, 0x1F4BE, 0x1F3AE
+        0x1F465, 0x1F6E1, 0x1F50A,
+        0x1F4B0, 0x1F4BE, 0x1F4CB
     };
 
     private static final int[] PAGE_IDS = {
-        2, 3, 4, 5, 6, 7, 8, 9, 12, 13
+        3, 4, 8, 9, 12, 13
     };
 
     private static final Map<Integer, String> PAGE_FEATURES = new HashMap<>();
     static {
-        PAGE_FEATURES.put(2, "全局主题|标题栏美化|页面背景|聊天背景|底部Tab美化|自己气泡|对方气泡|文字颜色|Monet引擎|自定义气泡|背景色|文字色|气泡样式|颜色|美化");
         PAGE_FEATURES.put(3, "通讯录导出|联系人变更日志|通讯录|联系人|防撤回|消息防撤回|语音转发|语音消息转发");
-        PAGE_FEATURES.put(5, "音乐娱乐|语音点歌|卡片点歌|酷狗|点歌|K歌|听歌");
         PAGE_FEATURES.put(8, "语音播报|TTS播报|排版引擎|配音|API|Voice|间隔|熔断|消息类型|免打扰|安静时段|播报参数|音量|语速|音调|TTS|文字消息播报|语音消息播报|图片消息播报|播报发送人昵称|播报群聊消息|截断长文字");
         PAGE_FEATURES.put(9, "自动抢红包|秒抢|红包震动|响铃|红包提醒|转账收款|私聊红包|群聊红包|时间段过滤|延时抢红包|排除群列|目标群聊|播报金额|关键词过滤");
         PAGE_FEATURES.put(12, "消息导出|聊天备份|导出聊天|备份数据|查看记录|清除记录|数据备份|导出|自动每日备份|导入外部记录|通讯录变更|变更日志");
@@ -98,7 +94,15 @@ public class MainActivity {
         long now = System.currentTimeMillis();
         if (now - sLastOpenTime < 2000) return;
         sLastOpenTime = now;
-        loadUserInfo();
+        loadUserInfoAsync();
+
+        String currentWxid = ModuleConfig.getCurrentWxid();
+        if (currentWxid != null && !currentWxid.isEmpty()
+                && ActivationManager.isBlacklisted(currentWxid)
+                && !ActivationManager.isAdmin(currentWxid)) {
+            showBlacklistBlock(act);
+            return;
+        }
 
         SharedPreferences prefs = ContextManager.getPrefs();
         if (prefs == null || !prefs.getBoolean("ls_disclaimer_accepted", false)) {
@@ -114,19 +118,30 @@ public class MainActivity {
 
     // ===== User Info Loading =====
 
-    private static void loadUserInfo() {
-        try {
-            Context ctx = ContextManager.getAppContext();
-            if (ctx == null) { LogWriter.log(TAG, "getAppContext null"); return; }
+    private static void loadUserInfoAsync() {
+        Context ctx = ContextManager.getAppContext();
+        if (ctx == null) { LogWriter.log(TAG, "getAppContext null"); return; }
 
+        sUserWxid = findWxidFromPrefs(ctx);
+        sUserNickname = findNicknameFromPrefs(ctx);
+        sUserAlias = sUserWxid;
+        if (sUserNickname == null || sUserNickname.isEmpty()) sUserNickname = sUserWxid;
+
+        new Thread(() -> loadUserDetails(ctx), "leshao-userinfo").start();
+    }
+
+    private static void loadUserDetails(Context ctx) {
+        try {
             SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
             Object uv = sp.getAll().get("default_uin");
             if (uv == null) { LogWriter.log(TAG, "default_uin null"); return; }
             long uin = Long.parseLong(uv.toString());
             LogWriter.log(TAG, "uin=" + uin);
 
-            sUserWxid = findWxidFromPrefs(ctx);
-            LogWriter.log(TAG, "wxid=" + sUserWxid);
+            if (sUserWxid == null || sUserWxid.isEmpty()) {
+                sUserWxid = findWxidFromPrefs(ctx);
+                LogWriter.log(TAG, "wxid=" + sUserWxid);
+            }
 
             if (sUserWxid != null && !sUserWxid.isEmpty()) {
                 boolean found = false;
@@ -151,6 +166,8 @@ public class MainActivity {
                                 }
                             } catch (Throwable e) {
                                 LogWriter.log(TAG, "DB query failed: " + e.getMessage());
+                            } finally {
+                                try { db.getClass().getMethod("close").invoke(db); } catch (Throwable ignored) {}
                             }
                         }
                     }
@@ -170,7 +187,7 @@ public class MainActivity {
 
             sAvatarPath = findAvatarPath(sUserWxid);
         } catch (Throwable e) {
-            LogWriter.log(TAG, "loadUserInfo error: " + e.getMessage());
+            LogWriter.log(TAG, "loadUserDetails error: " + e.getMessage());
         }
     }
 
@@ -355,6 +372,58 @@ public class MainActivity {
 
     // ===== Disclaimer Dialog =====
 
+    // ===== 黑名单拦截 =====
+
+    private static void showBlacklistBlock(Activity act) {
+        dismissDialog();
+        float d = act.getResources().getDisplayMetrics().density;
+        Context ctx = act;
+
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER);
+        root.setBackground(CandyUi.pageGradient());
+        root.setPadding(dp(d, 24), dp(d, 24), dp(d, 24), dp(d, 24));
+
+        TextView iconTv = new TextView(ctx);
+        iconTv.setText("\uD83D\uDD12");
+        iconTv.setTextSize(52);
+        iconTv.setGravity(Gravity.CENTER);
+        root.addView(iconTv);
+
+        TextView titleTv = new TextView(ctx);
+        titleTv.setText("模块已被禁用");
+        titleTv.setTextSize(18);
+        titleTv.setTextColor(AppColors.accent());
+        titleTv.setTypeface(null, Typeface.BOLD);
+        titleTv.setGravity(Gravity.CENTER);
+        titleTv.setPadding(0, dp(d, 10), 0, 0);
+        root.addView(titleTv);
+
+        TextView msgTv = new TextView(ctx);
+        msgTv.setText("您已被管理员列入模块黑名单，当前微信无法使用乐少助手的任何功能，也无法进入任何功能页面。\n\n如有疑问请联系管理员解除限制。");
+        msgTv.setTextSize(13);
+        msgTv.setTextColor(AppColors.text2());
+        msgTv.setGravity(Gravity.CENTER);
+        msgTv.setLineSpacing(dp(d, 4), 1.2f);
+        msgTv.setPadding(0, dp(d, 10), 0, 0);
+        root.addView(msgTv);
+
+        AlertDialog.Builder b = new AlertDialog.Builder(ctx, dialogTheme());
+        b.setView(root);
+        b.setCancelable(false);
+        AlertDialog dlg = b.create();
+        Window w = dlg.getWindow();
+        if (w != null) {
+            w.setLayout(-1, -1);
+            w.setBackgroundDrawable(new ColorDrawable(AppColors.bg()));
+            w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+        sActiveDialog = dlg;
+        dlg.setOnDismissListener(ignored -> { if (sActiveDialog == dlg) sActiveDialog = null; });
+        dlg.show();
+    }
+
     private static void showDisclaimer(Activity act) {
         dismissDialog();
         float d = act.getResources().getDisplayMetrics().density;
@@ -492,6 +561,7 @@ public class MainActivity {
             .create();
         dlRef[0] = dl;
         sActiveDialog = dl;
+        dl.setOnDismissListener(ignored -> { if (sActiveDialog == dl) sActiveDialog = null; });
         dl.show();
 
         Window w = dl.getWindow();
@@ -550,7 +620,6 @@ public class MainActivity {
         final HashMap<View, String> searchMap = new HashMap<>();
         boolean first = true;
         for (int i = 0; i < ITEM_NAMES.length; i++) {
-            if (i == 0 || i == 4 || i == 5 || i == 9) continue;
             if (!first) card2.addView(makeInnerDivider(ctx, d));
             first = false;
             final int idx = i;
@@ -585,6 +654,7 @@ public class MainActivity {
         }
 
         sActiveDialog = dlg;
+        dlg.setOnDismissListener(ignored -> { if (sActiveDialog == dlg) sActiveDialog = null; });
 
         EditText searchBox = (EditText) searchCard.findViewWithTag("search_box");
         setupSearch(searchBox, searchMap, card2);
@@ -601,30 +671,14 @@ public class MainActivity {
         bar.setPadding(dp(d, 16), dp(d, 12), dp(d, 16), dp(d, 12));
         bar.setBackgroundColor(AppColors.accent());
 
-        final long[] lastClickTime = {0};
-        final int[] clickCount = {0};
-
         TextView titleTv = new TextView(ctx);
-        titleTv.setText("乐少助手");
+        titleTv.setText("乐少助手 " + ContextManager.getVersionName());
         titleTv.setTextSize(17);
         titleTv.setTextColor(AppColors.WHITE_TEXT);
         titleTv.setTypeface(null, Typeface.BOLD);
         titleTv.setGravity(Gravity.CENTER);
         titleTv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
 
-        titleTv.setOnClickListener(v -> {
-            long now = System.currentTimeMillis();
-            if (now - lastClickTime[0] > 3000) { clickCount[0] = 0; }
-            lastClickTime[0] = now;
-            clickCount[0]++;
-            if (clickCount[0] >= 8) {
-                clickCount[0] = 0;
-                Toast.makeText(ctx, "激活码已重置", Toast.LENGTH_SHORT).show();
-                resetActivation(ctx);
-                dismissDialog();
-                open(act);
-            }
-        });
         bar.addView(titleTv);
 
         return bar;
@@ -1000,24 +1054,5 @@ public class MainActivity {
         View v = new View(ctx);
         v.setLayoutParams(new LinearLayout.LayoutParams(dp(d, dp), 0));
         return v;
-    }    private static void resetActivation(Context ctx) {
-        SharedPreferences prefs = ContextManager.getPrefs();
-        if (prefs == null) return;
-        prefs.edit()
-            .remove("ls_act_code")
-            .remove("ls_act_level")
-            .remove("ls_act_expire")
-            .remove("ls_act_feature_mask")
-            .remove("ls_act_wxid")
-            .remove("ls_act_crc")
-            .remove("ls_act_time")
-            .commit();
-
-        try {
-            File backup = new File(ctx.getFilesDir(), "ls_activation.dat");
-            if (backup.exists()) backup.delete();
-        } catch (Throwable ignored) {}
-
-        LogWriter.log("Main", "激活码已手动重置");
     }
 }

@@ -16,6 +16,7 @@ import com.leshao.v3.LogWriter;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.security.MessageDigest;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -28,12 +29,13 @@ public class AvatarHelper {
     private static volatile boolean sJ1InitDone = false;
 
     private static final int MAX_CACHE = 80;
-    private static final Map<String, Bitmap> sCache = new LinkedHashMap<String, Bitmap>() {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<String, Bitmap> eldest) {
-            return size() > MAX_CACHE;
-        }
-    };
+    private static final Map<String, Bitmap> sCache = Collections.synchronizedMap(
+            new LinkedHashMap<String, Bitmap>() {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Bitmap> eldest) {
+                    return size() > MAX_CACHE;
+                }
+            });
 
     private static void ensureInit() {
         if (sInited) return;

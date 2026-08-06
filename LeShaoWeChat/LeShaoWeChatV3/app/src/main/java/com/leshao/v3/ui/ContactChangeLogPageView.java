@@ -39,6 +39,7 @@ public class ContactChangeLogPageView {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackgroundColor(AppColors.card());
         card.setPadding((int)(2*d), (int)(2*d), (int)(2*d), (int)(2*d));
+        final LinearLayout cardRef = card;
 
         if (records.isEmpty()) {
             TextView empty = new TextView(ctx);
@@ -81,8 +82,20 @@ public class ContactChangeLogPageView {
                 .setTitle("确认清除")
                 .setMessage("确定要清除所有通讯录变更记录吗？")
                 .setPositiveButton("清除", (dialog, which) -> {
-                    ContactChangeLog.clearRecords();
-                    if (parentAct != null) parentAct.recreate();
+                    try {
+                        ContactChangeLog.clearRecords();
+                        // 原地刷新列表，避免 recreate() 重启整个微信设置 Activity
+                        cardRef.removeAllViews();
+                        TextView empty = new TextView(ctx);
+                        empty.setText("暂无变更记录");
+                        empty.setTextSize(14);
+                        empty.setTextColor(AppColors.text2());
+                        empty.setGravity(Gravity.CENTER);
+                        empty.setPadding((int)(16*d), (int)(30*d), (int)(16*d), (int)(30*d));
+                        cardRef.addView(empty);
+                    } catch (Throwable t) {
+                        android.widget.Toast.makeText(ctx, "清除失败", android.widget.Toast.LENGTH_SHORT).show();
+                    }
                 })
                 .setNegativeButton("取消", null)
                 .show();

@@ -14,9 +14,10 @@ import androidx.viewpager2.adapter.FragmentStateAdapter;
 import androidx.viewpager2.widget.ViewPager2;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
+import com.leshao.v3.ui.AppColors;
+import com.leshao.v3.ui.CandyUi;
 import com.leshao.v3.ui.TTSFragment;
 import com.leshao.v3.ui.GroupGuardFragment;
-import com.leshao.v3.ui.AIFragment;
 import com.leshao.v3.ui.StatsFragment;
 import com.leshao.v3.ui.ChatEnhanceFragment;
 import com.leshao.v3.ui.SnsFragment;
@@ -42,6 +43,7 @@ public class SettingsActivity extends FragmentActivity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackground(CandyUi.pageGradient());
         root.setLayoutParams(new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -62,12 +64,11 @@ public class SettingsActivity extends FragmentActivity {
                     case 4: return new PrivacyFragment();
                 case 5: return new TTSFragment();
                 case 6: return new GroupGuardFragment();
-                case 7: return new AIFragment();
-                case 8: return new StatsFragment();
+                case 7: return new StatsFragment();
                 default: return new SettingsFragment();
             }
         }
-        @Override public int getItemCount() { return 9; }
+        @Override public int getItemCount() { return 8; }
         });
 
         new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
@@ -79,8 +80,7 @@ public class SettingsActivity extends FragmentActivity {
                 case 4: tab.setText("隐私安全"); break;
             case 5: tab.setText("播报"); break;
             case 6: tab.setText("群管"); break;
-            case 7: tab.setText("AI"); break;
-            case 8: tab.setText("统计"); break;
+            case 7: tab.setText("统计"); break;
             }
         }).attach();
     }
@@ -91,7 +91,7 @@ public class SettingsActivity extends FragmentActivity {
         header.setPadding(40, 32, 40, 24);
 
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0xFF07C160);
+        bg.setColor(AppColors.accent2());
         bg.setCornerRadius(0);
         header.setBackground(bg);
 

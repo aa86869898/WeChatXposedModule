@@ -2,6 +2,7 @@ package com.leshao.v3.ui;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
@@ -36,6 +37,8 @@ import java.util.Arrays;
 import java.util.List;
 
 public class TTSPageView {
+
+    private static Dialog sTtsCubeDialog = null;
 
     private static final String KEY_ANNOUNCE_TEXT = "ls_announce_text";
     private static final String KEY_ANNOUNCE_IMAGE = "ls_announce_image";
@@ -459,6 +462,12 @@ public class TTSPageView {
         return v;
     }
 
+    private static View spacerH(Context ctx, float d, int dpVal) {
+        View v = new View(ctx);
+        v.setLayoutParams(new LinearLayout.LayoutParams((int)(dpVal * d), 1));
+        return v;
+    }
+
     private static View speedRateRow(Context ctx, float d, float currentRate, FloatCallback cb) {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.VERTICAL);
@@ -622,7 +631,10 @@ public class TTSPageView {
 
     private static final String PMF_BASE = "https://peiyinmofang.com";
 
-    private static void showTtsCubeDialog(Context ctx, Activity parentAct, float d) {
+    public static void showTtsCubeDialog(Context ctx, Activity parentAct, float d) {
+        if (sTtsCubeDialog != null && sTtsCubeDialog.isShowing()) {
+            sTtsCubeDialog.dismiss();
+        }
         String savedKey = WmPrefs.getStr("tts_cube_key", "");
 
         TextView statusTv = new TextView(ctx);
@@ -631,23 +643,21 @@ public class TTSPageView {
         statusTv.setTextColor(AppColors.text2());
         statusTv.setPadding((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
 
-        LinearLayout body = new LinearLayout(ctx);
-        body.setOrientation(LinearLayout.VERTICAL);
+        // 外层根布局：与主页一致的渐变背景（标题栏 + 可滚动内容 + 固定底部）
+        LinearLayout outerLayout = new LinearLayout(ctx);
+        outerLayout.setOrientation(LinearLayout.VERTICAL);
+        outerLayout.setBackground(CandyUi.pageGradient());
+        outerLayout.setPadding((int)(12 * d), (int)(12 * d), (int)(12 * d), (int)(12 * d));
 
-        // 音色列表容器 (动态填充)
-        LinearLayout voiceList = new LinearLayout(ctx);
-        voiceList.setOrientation(LinearLayout.VERTICAL);
-        body.addView(voiceList);
-
-        // 根布局: 自定义标题栏 + 内容区
-        LinearLayout rootLayout = new LinearLayout(ctx);
-        rootLayout.setOrientation(LinearLayout.VERTICAL);
-
-        // 自定义标题栏 + Key 入口 (作为 body 第一行，不用 setCustomTitle)
+        // 标题栏卡片
         LinearLayout titleBar = new LinearLayout(ctx);
         titleBar.setOrientation(LinearLayout.HORIZONTAL);
         titleBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
         titleBar.setPadding((int)(16 * d), (int)(12 * d), (int)(12 * d), (int)(12 * d));
+        titleBar.setBackground(CandyUi.cardBg(ctx));
+        LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        titleBar.setLayoutParams(titleLp);
 
         TextView titleTv = new TextView(ctx);
         titleTv.setText("配音魔方接口配置");
@@ -662,80 +672,140 @@ public class TTSPageView {
         keyBtn.setText("\u2699\uFE0F");
         keyBtn.setTextSize(18);
         keyBtn.setAllCaps(false);
-        keyBtn.setTextColor(AppColors.text2());
+        keyBtn.setTextColor(AppColors.accent());
         keyBtn.setBackgroundColor(android.graphics.Color.TRANSPARENT);
         keyBtn.setPadding((int)(4 * d), (int)(2 * d), (int)(4 * d), (int)(2 * d));
         titleBar.addView(keyBtn);
 
-        rootLayout.addView(titleBar);
+        outerLayout.addView(titleBar);
+        outerLayout.addView(spacerV(ctx, d, 10));
 
-        // 分隔线
-        View divider = new View(ctx);
-        divider.setBackgroundColor(AppColors.DIVIDER);
-        divider.setLayoutParams(new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 1));
-        rootLayout.addView(divider);
+        // 内容区卡片（可滚动，weight=1）
+        LinearLayout contentCard = new LinearLayout(ctx);
+        contentCard.setOrientation(LinearLayout.VERTICAL);
+        contentCard.setBackground(CandyUi.cardBg(ctx));
+        contentCard.setPadding((int)(12 * d), (int)(12 * d), (int)(12 * d), (int)(12 * d));
+        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
+        contentCard.setLayoutParams(cardLp);
 
-        // 内容区
-        body.setPadding((int)(12 * d), (int)(8 * d), (int)(12 * d), (int)(12 * d));
-        rootLayout.addView(body);
+        // 音色列表容器 (动态填充)
+        LinearLayout voiceList = new LinearLayout(ctx);
+        voiceList.setOrientation(LinearLayout.VERTICAL);
+        contentCard.addView(voiceList);
 
         ScrollView sv = new ScrollView(ctx);
-        sv.addView(rootLayout);
+        sv.addView(contentCard);
+        LinearLayout.LayoutParams svLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
+        sv.setLayoutParams(svLp);
+        outerLayout.addView(sv);
+
+        // 底部固定操作栏（不跟随滑动）
+        LinearLayout bottomBar = new LinearLayout(ctx);
+        bottomBar.setOrientation(LinearLayout.HORIZONTAL);
+        bottomBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        bottomBar.setPadding((int)(12 * d), (int)(10 * d), (int)(12 * d), 0);
+
+        Button saveBtn = new Button(ctx);
+        saveBtn.setText("保存");
+        saveBtn.setTextSize(14);
+        saveBtn.setAllCaps(false);
+        saveBtn.setTextColor(AppColors.WHITE_TEXT);
+        android.graphics.drawable.GradientDrawable saveBg = new android.graphics.drawable.GradientDrawable();
+        saveBg.setColor(AppColors.accent());
+        saveBg.setCornerRadius((int)(8 * d));
+        saveBtn.setBackground(saveBg);
+        saveBtn.setPadding(0, (int)(10 * d), 0, (int)(10 * d));
+        LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        saveLp.setMargins(0, 0, (int)(8 * d), 0);
+        bottomBar.addView(saveBtn, saveLp);
+
+        Button closeBtn = new Button(ctx);
+        closeBtn.setText("关闭");
+        closeBtn.setTextSize(14);
+        closeBtn.setAllCaps(false);
+        closeBtn.setTextColor(AppColors.text1());
+        android.graphics.drawable.GradientDrawable closeBg = new android.graphics.drawable.GradientDrawable();
+        closeBg.setColor(AppColors.card());
+        closeBg.setCornerRadius((int)(8 * d));
+        closeBg.setStroke(1, AppColors.divider());
+        closeBtn.setBackground(closeBg);
+        closeBtn.setPadding(0, (int)(10 * d), 0, (int)(10 * d));
+        LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        bottomBar.addView(closeBtn, closeLp);
+
+        outerLayout.addView(spacerV(ctx, d, 10));
+        outerLayout.addView(bottomBar);
 
         AlertDialog dialog = new AlertDialog.Builder(parentAct)
-                .setView(sv)
-                .setPositiveButton("关闭", null)
+                .setView(outerLayout)
                 .create();
+        sTtsCubeDialog = dialog;
         dialog.show();
 
+        // 调整窗口大小：宽度 85%（+5），高度 75%（+5）
+        try {
+            android.view.Window window = dialog.getWindow();
+            if (window != null) {
+                android.util.DisplayMetrics dm = parentAct.getResources().getDisplayMetrics();
+                window.setLayout((int) (dm.widthPixels * 0.85f), (int) (dm.heightPixels * 0.75f));
+                window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+            }
+        } catch (Throwable ignored) {}
+
         keyBtn.setOnClickListener(v -> {
-            showKeyInputPopup(ctx, parentAct, d, keyBtn);
             String newKey = WmPrefs.getStr("tts_cube_key", "");
-            if (newKey.isEmpty()) return;
-            voiceList.removeAllViews();
-            voiceList.addView(statusTv);
-            statusTv.setText("校验Key中...");
-            new Thread(() -> {
-                String checkResult = checkTtsKey(newKey);
-                parentAct.runOnUiThread(() -> {
-                    statusTv.setText(checkResult);
-                    if (!checkResult.startsWith("有效")) return;
-                    statusTv.setText("拉取内置音色列表...");
-                });
-                java.util.List<VoiceItem> builtin = fetchBuiltinVoices(newKey);
-                parentAct.runOnUiThread(() -> statusTv.setText("拉取自义音色列表..."));
-                java.util.List<VoiceItem> custom = fetchUserVoices(newKey);
-                parentAct.runOnUiThread(() -> {
-                    voiceList.removeView(statusTv);
-                    buildVoiceListUI(ctx, parentAct, d, voiceList, newKey, builtin, custom);
-                });
-            }).start();
+            if (newKey.isEmpty()) {
+                showKeyInputPopup(ctx, parentAct, d, keyBtn, voiceList, statusTv);
+                return;
+            }
+            // 已有 Key：直接加载音色
+            loadVoices(ctx, parentAct, d, voiceList, statusTv, newKey);
         });
 
-        // 自动加载 (如果已有 Key)
-        if (!savedKey.isEmpty()) {
-            voiceList.addView(statusTv);
-            statusTv.setText("校验Key中...");
-            new Thread(() -> {
-                String checkResult = checkTtsKey(savedKey);
-                parentAct.runOnUiThread(() -> {
-                    statusTv.setText(checkResult);
-                    if (!checkResult.startsWith("有效")) return;
-                    parentAct.runOnUiThread(() -> statusTv.setText("拉取内置音色列表..."));
-                    java.util.List<VoiceItem> builtin = fetchBuiltinVoices(savedKey);
-                    parentAct.runOnUiThread(() -> statusTv.setText("拉取自义音色列表..."));
-                    java.util.List<VoiceItem> custom = fetchUserVoices(savedKey);
-                    parentAct.runOnUiThread(() -> {
-                        voiceList.removeView(statusTv);
-                        buildVoiceListUI(ctx, parentAct, d, voiceList, savedKey, builtin, custom);
-                    });
-                });
-            }).start();
+        closeBtn.setOnClickListener(v -> dialog.dismiss());
+        saveBtn.setOnClickListener(v -> dialog.dismiss());
+
+        // 自动加载：已有 Key 时直接加载音色，无需点击齿轮
+        if (savedKey.isEmpty()) {
+            TextView hintTv = new TextView(ctx);
+            hintTv.setText("点击右上角齿轮设置 Key 后加载音色");
+            hintTv.setTextSize(13);
+            hintTv.setTextColor(AppColors.text2());
+            hintTv.setPadding((int)(12 * d), (int)(12 * d), (int)(12 * d), 0);
+            voiceList.addView(hintTv);
+        } else {
+            loadVoices(ctx, parentAct, d, voiceList, statusTv, savedKey);
         }
     }
 
-    private static void showKeyInputPopup(Context ctx, Activity parentAct, float d, Button keyBtn) {
+    private static void loadVoices(Context ctx, Activity parentAct, float d,
+                                   LinearLayout voiceList, TextView statusTv, String key) {
+        voiceList.removeAllViews();
+        voiceList.addView(statusTv);
+        statusTv.setText("校验Key中...");
+        new Thread(() -> {
+            String checkResult = checkTtsKey(key);
+            parentAct.runOnUiThread(() -> {
+                statusTv.setText(checkResult);
+                if (!checkResult.startsWith("有效")) return;
+                statusTv.setText("拉取内置音色列表...");
+            });
+            java.util.List<VoiceItem> builtin = fetchBuiltinVoices(key);
+            parentAct.runOnUiThread(() -> statusTv.setText("拉取自定义音色列表..."));
+            java.util.List<VoiceItem> custom = fetchUserVoices(key);
+            parentAct.runOnUiThread(() -> {
+                voiceList.removeView(statusTv);
+                buildVoiceListUI(ctx, parentAct, d, voiceList, key, builtin, custom);
+            });
+        }).start();
+    }
+
+    private static void showKeyInputPopup(Context ctx, Activity parentAct, float d, Button keyBtn,
+                                          LinearLayout voiceList, TextView statusTv) {
         LinearLayout popup = new LinearLayout(ctx);
         popup.setOrientation(LinearLayout.VERTICAL);
         popup.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(12 * d));
@@ -772,9 +842,12 @@ public class TTSPageView {
                     }
                     WmPrefs.setStr("tts_cube_key", key);
                     Toast.makeText(parentAct, "Key已保存", Toast.LENGTH_SHORT).show();
+                    loadVoices(ctx, parentAct, d, voiceList, statusTv, key);
                 })
                 .setNegativeButton("取消", null)
                 .show();
+
+
     }
 
     // ===== 音色列表UI构建 =====
@@ -782,7 +855,23 @@ public class TTSPageView {
     private static void buildVoiceListUI(Context ctx, Activity parentAct, float d,
                                           LinearLayout voiceList, String key,
                                           java.util.List<VoiceItem> builtin, java.util.List<VoiceItem> custom) {
+        buildVoiceListUI(ctx, parentAct, d, voiceList, key, builtin, custom, "");
+    }
+
+    private static void buildVoiceListUI(Context ctx, Activity parentAct, float d,
+                                          LinearLayout voiceList, String key,
+                                          java.util.List<VoiceItem> builtin, java.util.List<VoiceItem> custom,
+                                          String searchHint) {
         String savedVoice = WmPrefs.getStr("tts_cube_voice", "");
+
+        // 标题栏
+        TextView listTitle = new TextView(ctx);
+        listTitle.setText("选择默认音色");
+        listTitle.setTextSize(14);
+        listTitle.setTextColor(AppColors.TEXT_TITLE);
+        listTitle.setTypeface(null, Typeface.BOLD);
+        listTitle.setPadding(0, (int)(8 * d), 0, (int)(8 * d));
+        voiceList.addView(listTitle);
 
         // 搜索框
         EditText searchEt = new EditText(ctx);
@@ -791,12 +880,23 @@ public class TTSPageView {
         searchEt.setSingleLine(true);
         searchEt.setPadding((int)(8 * d), (int)(8 * d), (int)(8 * d), (int)(8 * d));
         searchEt.setHintTextColor(AppColors.text3());
+        if (searchHint != null && !searchHint.isEmpty()) {
+            searchEt.setText(searchHint);
+        }
         android.graphics.drawable.GradientDrawable sBg = new android.graphics.drawable.GradientDrawable();
         sBg.setColor(AppColors.inputBg());
         sBg.setCornerRadius((int)(6 * d));
         searchEt.setBackground(sBg);
         voiceList.addView(searchEt);
         voiceList.addView(spacerV(ctx, d, 6));
+
+        // 刷新回调：重新构建列表并保留搜索关键词
+        final Runnable[] refreshUi = new Runnable[1];
+        refreshUi[0] = () -> {
+            String q = searchEt.getText().toString();
+            voiceList.removeAllViews();
+            buildVoiceListUI(ctx, parentAct, d, voiceList, key, builtin, custom, q);
+        };
 
         // 收集所有voice rows用于搜索
         final java.util.List<View> allVoiceRows = new java.util.ArrayList<>();
@@ -827,7 +927,7 @@ public class TTSPageView {
                     voiceList.addView(gTitle);
                     groupHeaders.add(gTitle);
                 }
-                View row = buildVoiceRow(ctx, parentAct, d, key, vi, savedVoice);
+                View row = buildVoiceRow(ctx, parentAct, d, key, vi, savedVoice, refreshUi[0]);
                 voiceList.addView(row);
                 allVoiceRows.add(row);
                 allVoiceSearchText.add((vi.displayName != null ? vi.displayName : vi.voiceId) + "|" + vi.group + "|" + (vi.actor != null ? vi.actor : ""));
@@ -844,7 +944,7 @@ public class TTSPageView {
             secTitle.setPadding(0, (int)(12 * d), 0, (int)(6 * d));
             voiceList.addView(secTitle);
             for (VoiceItem vi : custom) {
-                View row = buildVoiceRow(ctx, parentAct, d, key, vi, savedVoice);
+                View row = buildVoiceRow(ctx, parentAct, d, key, vi, savedVoice, refreshUi[0]);
                 voiceList.addView(row);
                 allVoiceRows.add(row);
                 allVoiceSearchText.add((vi.displayName != null ? vi.displayName : vi.voiceId));
@@ -867,11 +967,9 @@ public class TTSPageView {
             @Override
             public void afterTextChanged(android.text.Editable s) {
                 String q = s.toString().trim().toLowerCase();
-                int visibleCount = 0;
                 for (int i = 0; i < allVoiceRows.size(); i++) {
                     boolean match = q.isEmpty() || allVoiceSearchText.get(i).toLowerCase().contains(q);
                     allVoiceRows.get(i).setVisibility(match ? View.VISIBLE : View.GONE);
-                    if (match) visibleCount++;
                 }
                 // 隐藏/显示分组标题
                 for (View gh : groupHeaders) {
@@ -889,19 +987,40 @@ public class TTSPageView {
     }
 
     private static View buildVoiceRow(Context ctx, Activity parentAct, float d,
-                                       String key, VoiceItem vi, String savedVoice) {
+                                        String key, VoiceItem vi, String savedVoice, Runnable onSelected) {
         LinearLayout vRow = new LinearLayout(ctx);
         vRow.setOrientation(LinearLayout.HORIZONTAL);
         vRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        vRow.setPadding(0, (int)(3 * d), 0, (int)(3 * d));
+        vRow.setPadding(0, (int)(4 * d), 0, (int)(4 * d));
 
-        // 名称 + 演员
+        boolean isSelected = vi.voiceId.equals(savedVoice);
+
+        // 选择按钮（左侧）
+        TextView selBtn = new TextView(ctx);
+        selBtn.setText(isSelected ? "\u2714" : "");
+        selBtn.setTextSize(13);
+        selBtn.setGravity(android.view.Gravity.CENTER);
+        selBtn.setTextColor(isSelected ? AppColors.accent() : AppColors.text3());
+        selBtn.setTypeface(null, Typeface.BOLD);
+        android.graphics.drawable.GradientDrawable selBg = new android.graphics.drawable.GradientDrawable();
+        selBg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        selBg.setColor(isSelected ? 0x332196F3 : 0x00FFFFFF);
+        selBg.setStroke((int)(1.5f * d), isSelected ? AppColors.accent() : AppColors.text3());
+        selBtn.setBackground(selBg);
+        int selSize = (int)(22 * d);
+        selBtn.setLayoutParams(new LinearLayout.LayoutParams(selSize, selSize));
+        vRow.addView(selBtn);
+
+        vRow.addView(spacerH(ctx, d, 8));
+
+        // 名称 + 演员（流体渐变霓虹糖果色 + 加粗）
         String displayName = vi.displayName != null ? vi.displayName : vi.voiceId;
         String subtitle = (vi.actor != null && !vi.actor.isEmpty()) ? " (" + vi.actor + ")" : "";
-        TextView vName = new TextView(ctx);
+        TextView vName = new NeonTextView(ctx);
         vName.setText(displayName + subtitle);
-        vName.setTextSize(12);
+        vName.setTextSize(13);
         vName.setTextColor(AppColors.text1());
+        vName.setTypeface(null, Typeface.BOLD);
         LinearLayout.LayoutParams vnlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         vRow.addView(vName, vnlp);
 
@@ -917,20 +1036,6 @@ public class TTSPageView {
         listenBtn.setBackground(lbBg);
         listenBtn.setPadding((int)(8 * d), (int)(4 * d), (int)(8 * d), (int)(4 * d));
         vRow.addView(listenBtn);
-
-        // 选择按钮
-        boolean isSelected = vi.voiceId.equals(savedVoice);
-        Button selBtn = new Button(ctx);
-        selBtn.setText(isSelected ? "✓" : "○");
-        selBtn.setTextSize(14);
-        selBtn.setAllCaps(false);
-        selBtn.setTextColor(AppColors.WHITE_TEXT);
-        android.graphics.drawable.GradientDrawable sbBg = new android.graphics.drawable.GradientDrawable();
-        sbBg.setColor(isSelected ? AppColors.accent() : AppColors.offColor());
-        sbBg.setCornerRadius((int)(4 * d));
-        selBtn.setBackground(sbBg);
-        selBtn.setPadding((int)(10 * d), (int)(4 * d), (int)(10 * d), (int)(4 * d));
-        vRow.addView(selBtn);
 
         listenBtn.setOnClickListener(v3 -> {
             new Thread(() -> {
@@ -957,13 +1062,37 @@ public class TTSPageView {
         selBtn.setOnClickListener(v3 -> {
             WmPrefs.setStr("tts_cube_voice", vi.voiceId);
             Toast.makeText(parentAct, "已选择默认音色: " + displayName, Toast.LENGTH_SHORT).show();
-            // 刷新当前dialog内所有按钮状态 (简单方式: 重建)
+            if (onSelected != null) onSelected.run();
         });
 
         return vRow;
     }
 
     // ===== 音色数据模型 =====
+
+    /** 流体渐变霓虹糖果色文字 */
+    static class NeonTextView extends TextView {
+        private static final int[] NEON = {0xFFFF10F0, 0xFF7B2FF7, 0xFF36D1E8};
+        private final android.graphics.Paint mPaint;
+
+        NeonTextView(Context ctx) {
+            super(ctx);
+            mPaint = getPaint();
+        }
+
+        @Override
+        protected void onDraw(android.graphics.Canvas canvas) {
+            float w = getWidth();
+            float h = getHeight();
+            if (w > 1 && h > 1) {
+                android.graphics.LinearGradient g = new android.graphics.LinearGradient(
+                        0, 0, w, h, NEON, null, android.graphics.Shader.TileMode.CLAMP);
+                mPaint.setShader(g);
+            }
+            super.onDraw(canvas);
+            mPaint.setShader(null);
+        }
+    }
 
     static class VoiceItem {
         String voiceId;
@@ -982,30 +1111,31 @@ public class TTSPageView {
 
     private static String checkTtsKey(String key) {
         try {
-            java.net.URL url = new java.net.URL(PMF_BASE + "/api/open/v1/me");
-            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Authorization", "Bearer " + key);
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(8000);
-            int code = conn.getResponseCode();
-            if (code == 200) {
-                java.io.InputStream is = conn.getInputStream();
-                String body = readAllAsString(is);
-                is.close();
-                conn.disconnect();
-                try {
-                    JSONObject jo = new JSONObject(body);
-                    int status = jo.optInt("status", -1);
-                    if (status == 200) return "有效: " + jo.optString("message", "OK");
-                } catch (Exception ignored) {}
-                return "Key 有效";
-            }
-            String err = readErrorStream(conn);
-            conn.disconnect();
-            if (code == 401) return "无效: 认证失败(401)" + (err.isEmpty() ? "" : " - " + err);
-            if (code == 403) return "无效: Key被禁用或余额不足(403)" + (err.isEmpty() ? "" : " - " + err);
-            return "检测失败: HTTP " + code + (err.isEmpty() ? "" : " - " + err);
+             java.net.URL url = new java.net.URL(PMF_BASE + "/api/open/v1/me");
+             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+             try {
+             conn.setRequestMethod("GET");
+             conn.setRequestProperty("Authorization", "Bearer " + key);
+             conn.setConnectTimeout(8000);
+             conn.setReadTimeout(8000);
+             int code = conn.getResponseCode();
+             if (code == 200) {
+                 java.io.InputStream is = conn.getInputStream();
+                 try {
+                 String body = readAllAsString(is);
+                 try {
+                     JSONObject jo = safeJsonObject(body);
+                     int status = jo.optInt("status", -1);
+                     if (status == 200) return "有效: " + jo.optString("message", "OK");
+                 } catch (Exception ignored) {}
+                 return "Key 有效";
+                 } finally { is.close(); }
+             }
+             String err = readErrorStream(conn);
+             if (code == 401) return "无效: 认证失败(401)" + (err.isEmpty() ? "" : " - " + err);
+             if (code == 403) return "无效: Key被禁用或余额不足(403)" + (err.isEmpty() ? "" : " - " + err);
+             return "检测失败: HTTP " + code + (err.isEmpty() ? "" : " - " + err);
+             } finally { conn.disconnect(); }
         } catch (Exception e) {
             return "检测失败: " + e.getMessage();
         }
@@ -1014,24 +1144,24 @@ public class TTSPageView {
     private static java.util.List<VoiceItem> fetchBuiltinVoices(String key) {
         java.util.List<VoiceItem> list = new java.util.ArrayList<>();
         try {
-            java.net.URL url = new java.net.URL(PMF_BASE + "/api/open/v1/voices");
-            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Authorization", "Bearer " + key);
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(10000);
-            int code = conn.getResponseCode();
-            if (code != 200) { conn.disconnect(); return list; }
-            java.io.InputStream is = conn.getInputStream();
-            String body = readAllAsString(is);
-            is.close();
-            conn.disconnect();
-            JSONObject jo = new JSONObject(body);
-            if (jo.optInt("status") != 200) return list;
-            JSONArray data = jo.optJSONArray("data");
-            if (data == null) return list;
-            for (int i = 0; i < data.length(); i++) {
-                JSONObject drama = data.getJSONObject(i);
+             java.net.URL url = new java.net.URL(PMF_BASE + "/api/open/v1/voices");
+             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+             try {
+             conn.setRequestMethod("GET");
+             conn.setRequestProperty("Authorization", "Bearer " + key);
+             conn.setConnectTimeout(10000);
+             conn.setReadTimeout(10000);
+             int code = conn.getResponseCode();
+             if (code != 200) return list;
+             java.io.InputStream is = conn.getInputStream();
+             try {
+             String body = readAllAsString(is);
+             JSONObject jo = safeJsonObject(body);
+             if (jo.optInt("status") != 200) return list;
+             JSONArray data = jo.optJSONArray("data");
+             if (data == null) return list;
+             for (int i = 0; i < data.length(); i++) {
+                 JSONObject drama = data.getJSONObject(i);
                 String title = drama.optString("title", "未知剧集");
                 JSONArray chars = drama.optJSONArray("characters");
                 if (chars == null) continue;
@@ -1043,39 +1173,43 @@ public class TTSPageView {
                     String actor = chr.optString("actor", "");
                     list.add(new VoiceItem(voiceId, title, name, actor));
                 }
-            }
-        } catch (Exception e) {
-            // 静默失败
-        }
-        return list;
-    }
+             }
+                    } finally { is.close(); }
+             } finally { conn.disconnect(); }
+         } catch (Exception e) {
+             // 静默失败
+         }
+         return list;
+     }
 
-    private static java.util.List<VoiceItem> fetchUserVoices(String key) {
+     private static java.util.List<VoiceItem> fetchUserVoices(String key) {
         java.util.List<VoiceItem> list = new java.util.ArrayList<>();
         try {
-            java.net.URL url = new java.net.URL(PMF_BASE + "/api/open/v1/user-voices");
-            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Authorization", "Bearer " + key);
-            conn.setConnectTimeout(10000);
-            conn.setReadTimeout(10000);
-            int code = conn.getResponseCode();
-            if (code != 200) { conn.disconnect(); return list; }
-            java.io.InputStream is = conn.getInputStream();
-            String body = readAllAsString(is);
-            is.close();
-            conn.disconnect();
-            JSONObject jo = new JSONObject(body);
-            if (jo.optInt("status") != 200) return list;
-            JSONArray data = jo.optJSONArray("data");
-            if (data == null) return list;
-            for (int i = 0; i < data.length(); i++) {
-                JSONObject uv = data.getJSONObject(i);
-                String voiceId = uv.optString("voice_id", "");
-                if (voiceId.isEmpty()) continue; // 跳过无 voice_id 的条目
-                String name = uv.optString("name", voiceId);
-                list.add(new VoiceItem(voiceId, "我的音色", name, ""));
-            }
+             java.net.URL url = new java.net.URL(PMF_BASE + "/api/open/v1/user-voices");
+             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+             try {
+             conn.setRequestMethod("GET");
+             conn.setRequestProperty("Authorization", "Bearer " + key);
+             conn.setConnectTimeout(10000);
+             conn.setReadTimeout(10000);
+             int code = conn.getResponseCode();
+             if (code != 200) return list;
+             java.io.InputStream is = conn.getInputStream();
+             try {
+             String body = readAllAsString(is);
+             JSONObject jo = safeJsonObject(body);
+             if (jo.optInt("status") != 200) return list;
+             JSONArray data = jo.optJSONArray("data");
+             if (data == null) return list;
+             for (int i = 0; i < data.length(); i++) {
+                 JSONObject uv = data.getJSONObject(i);
+                 String voiceId = uv.optString("voice_id", "");
+                 if (voiceId.isEmpty()) continue;
+                 String name = uv.optString("name", voiceId);
+                 list.add(new VoiceItem(voiceId, "我的音色", name, ""));
+             }
+                    } finally { is.close(); }
+             } finally { conn.disconnect(); }
         } catch (Exception e) {
             // 静默失败
         }
@@ -1089,74 +1223,79 @@ public class TTSPageView {
             req.put("text", text);
             String body = req.toString();
 
-            java.net.URL url = new java.net.URL(PMF_BASE + "/api/open/v1/tts/simple-generate");
-            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("X-API-Key", key);
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(15000);
-            conn.setReadTimeout(15000);
-            java.io.OutputStream os = conn.getOutputStream();
-            os.write(body.getBytes("UTF-8"));
-            os.flush();
-            os.close();
+             java.net.URL url = new java.net.URL(PMF_BASE + "/api/open/v1/tts/simple-generate");
+             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+             try {
+             conn.setRequestMethod("POST");
+             conn.setRequestProperty("X-API-Key", key);
+             conn.setRequestProperty("Content-Type", "application/json");
+             conn.setDoOutput(true);
+             conn.setConnectTimeout(15000);
+             conn.setReadTimeout(15000);
+             java.io.OutputStream os = conn.getOutputStream();
+             try {
+             os.write(body.getBytes("UTF-8"));
+             os.flush();
+             } finally { os.close(); }
 
-            int code = conn.getResponseCode();
-            if (code != 200) {
-                String err = readErrorStream(conn);
-                conn.disconnect();
-                return "合成失败: HTTP " + code + (err.isEmpty() ? "" : " - " + err);
-            }
+             int code = conn.getResponseCode();
+             if (code != 200) {
+                 String err = readErrorStream(conn);
+                 return "合成失败: HTTP " + code + (err.isEmpty() ? "" : " - " + err);
+             }
 
-            java.io.InputStream is = conn.getInputStream();
-            String respStr = readAllAsString(is);
-            is.close();
-            conn.disconnect();
+             java.io.InputStream is = conn.getInputStream();
+             try {
+             String respStr = readAllAsString(is);
 
-            JSONObject jo = new JSONObject(respStr);
-            if (jo.optInt("status") != 200) {
-                return "合成失败: " + jo.optString("message", "状态非200");
-            }
-            JSONObject data = jo.optJSONObject("data");
-            if (data == null) return "合成失败: 响应无data字段";
-            String audioUrl = data.optString("audio");
-            if (audioUrl == null || audioUrl.isEmpty()) return "合成失败: 响应无音频URL";
+             JSONObject jo = safeJsonObject(respStr);
+             if (jo.optInt("status") != 200) {
+                 return "合成失败: " + jo.optString("message", "状态非200");
+             }
+             JSONObject data = jo.optJSONObject("data");
+             if (data == null) return "合成失败: 响应无data字段";
+             String audioUrl = data.optString("audio");
+             if (audioUrl == null || audioUrl.isEmpty()) return "合成失败: 响应无音频URL";
 
-            // 下载音频文件
-            java.net.URL audioURL = new java.net.URL(audioUrl);
-            java.net.HttpURLConnection audioConn = (java.net.HttpURLConnection) audioURL.openConnection();
-            audioConn.setConnectTimeout(15000);
-            audioConn.setReadTimeout(15000);
-            int audioCode = audioConn.getResponseCode();
-            if (audioCode != 200) {
-                audioConn.disconnect();
-                return "下载音频失败: HTTP " + audioCode;
-            }
+             // 下载音频文件
+             java.net.URL audioURL = new java.net.URL(audioUrl);
+             java.net.HttpURLConnection audioConn = (java.net.HttpURLConnection) audioURL.openConnection();
+             try {
+             audioConn.setConnectTimeout(15000);
+             audioConn.setReadTimeout(15000);
+             int audioCode = audioConn.getResponseCode();
+             if (audioCode != 200) {
+                 return "下载音频失败: HTTP " + audioCode;
+             }
 
-            String safeName = voiceId.replaceAll("[^a-zA-Z0-9_\\-\\u4e00-\\u9fa5]", "_");
-            Context appCtx = com.leshao.v3.ContextManager.getAppContext();
-            File cacheDir = appCtx != null ? appCtx.getCacheDir() : null;
-            if (cacheDir == null) cacheDir = new File(Environment.getExternalStorageDirectory(), "leshao_v3_cache");
-            File ttsDir = new File(cacheDir, "tts_preview");
-            ttsDir.mkdirs();
-            File outFile = new File(ttsDir, safeName + ".wav");
+             String safeName = voiceId.replaceAll("[^a-zA-Z0-9_\\-\\u4e00-\\u9fa5]", "_");
+             Context appCtx = com.leshao.v3.ContextManager.getAppContext();
+             File cacheDir = appCtx != null ? appCtx.getCacheDir() : null;
+             if (cacheDir == null) cacheDir = new File(Environment.getExternalStorageDirectory(), "leshao_v3_cache");
+             File ttsDir = new File(cacheDir, "tts_preview");
+             ttsDir.mkdirs();
+             File outFile = new File(ttsDir, safeName + ".wav");
 
-            java.io.InputStream audioIs = audioConn.getInputStream();
-            FileOutputStream fos = new FileOutputStream(outFile);
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = audioIs.read(buf)) > 0) fos.write(buf, 0, n);
-            fos.flush();
-            fos.close();
-            audioIs.close();
-            audioConn.disconnect();
+             java.io.InputStream audioIs = audioConn.getInputStream();
+             java.io.FileOutputStream fos = new java.io.FileOutputStream(outFile);
+             try {
+             byte[] buf = new byte[8192];
+             int n;
+             while ((n = audioIs.read(buf)) > 0) fos.write(buf, 0, n);
+             fos.flush();
+             } finally {
+             try { fos.close(); } catch (Exception ignored) {}
+             try { audioIs.close(); } catch (Exception ignored) {}
+             }
 
-            // 验证文件大小
-            if (outFile.length() < 100) {
-                return "下载失败: 音频文件过小(" + outFile.length() + "字节)";
-            }
-            return "OK:" + outFile.getAbsolutePath();
+             // 验证文件大小
+             if (outFile.length() < 100) {
+                 return "下载失败: 音频文件过小(" + outFile.length() + "字节)";
+             }
+             return "OK:" + outFile.getAbsolutePath();
+             } finally { audioConn.disconnect(); }
+             } finally { is.close(); }
+             } finally { conn.disconnect(); }
         } catch (Exception e) {
             return "合成失败: " + e.getMessage();
         }
@@ -1185,8 +1324,10 @@ public class TTSPageView {
         }
     }
 
-    private static String escapeJson(String s) {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"")
-                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+    private static JSONObject safeJsonObject(String raw) throws Exception {
+        if (raw == null || raw.isEmpty()) throw new Exception("响应为空");
+        char first = raw.trim().charAt(0);
+        if (first != '{' && first != '[') throw new Exception("接口返回非JSON数据");
+        return new JSONObject(raw);
     }
 }

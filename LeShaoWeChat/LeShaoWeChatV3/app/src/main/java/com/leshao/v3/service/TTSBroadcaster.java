@@ -60,6 +60,10 @@ public class TTSBroadcaster {
         return sEngine != null && sEngine.isSpeaking();
     }
 
+    public static boolean hasPendingSpeak() {
+        return sEngine != null && sEngine.hasPendingSpeak();
+    }
+
     public static void setSpeechRate(float rate) {
         if (sEngine != null) sEngine.setSpeechRate(rate);
     }

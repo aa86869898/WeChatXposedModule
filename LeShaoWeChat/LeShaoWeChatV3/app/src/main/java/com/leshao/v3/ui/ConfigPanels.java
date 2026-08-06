@@ -10,7 +10,6 @@ import android.view.ViewGroup;
 import android.widget.*;
 
 import com.leshao.v3.hook.*;
-import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.model.Contact;
 
 import java.util.ArrayList;
@@ -454,7 +453,8 @@ public class ConfigPanels {
     }
 
     private static void showContactPicker(Activity act, Set<String> selected) {
-        List<Contact> friends = ContactRepository.getFriends();
+        // 联系人数据源已清空，待重写
+        List<Contact> friends = new ArrayList<>();
         if (friends.isEmpty()) {
             Toast.makeText(act, "通讯录未加载，请先打开微信加载联系人", Toast.LENGTH_LONG).show();
             return;
@@ -523,7 +523,14 @@ public class ConfigPanels {
         new android.app.AlertDialog.Builder(act)
                 .setTitle(title)
                 .setView(content)
-                .setPositiveButton("保存", (d, w) -> { onSave.run(); Toast.makeText(act, "已保存(重启后生效)", Toast.LENGTH_SHORT).show(); })
+                .setPositiveButton("保存", (d, w) -> {
+                    try {
+                        onSave.run();
+                        Toast.makeText(act, "已保存(重启后生效)", Toast.LENGTH_SHORT).show();
+                    } catch (Throwable t) {
+                        Toast.makeText(act, "保存失败: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                })
                 .setNegativeButton("取消", null)
                 .show();
     }

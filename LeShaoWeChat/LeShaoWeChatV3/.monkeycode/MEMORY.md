@@ -30,3 +30,12 @@
   - 方案C(聊天内 v0.I(msg)) 是实际成功路径，但依赖 `so.y()` 设置 sCurrentSo
   - TTS 重叠判断：不能用瞬时 `TtsEngine.isSpeaking()`（onStart 触发前为 false），改用 `hasPendingSpeak()`（mSpeaking || speakSeq>doneSeq || queue 非空）
   - 路径构建优先用 `VersionCompat.findPlayThreadClass().d()` 权威方法，再回退 md5 目录
+
+### 联系人加载 APK 版本识别
+- Date: 2026-08-05
+- Context: Agent 分析 leshao_v3_log.txt 时发现日志格式可区分设备上运行的 APK 版本
+- Category: 排错调试
+- Instructions:
+  - 旧版日志（v171 及更早）格式：`openDatabase FIRED`、`rawQuery FIRED`、`Strategy A: DB opened, rcontact table confirmed`、`ensureDirDb OK`，且 loadContacts 里 Strategy A 仍会执行
+  - 新版日志（v172+）格式：带 `[DIAG]` 前缀（`[DIAG] openDatabase hook`、`[DIAG] loadContacts START`），Strategy A 已禁用
+  - `ensureDirDb` 会在首次调用线程（可能是 main）同步打开 WCDB EnMicroMsg.db 第二连接，早于微信正式初始化 DB 约 5 秒，导致 queryNick 全部 not found；v173 起 queryNickFromDB/queryGroupInfoFromDB 优先用 DatabaseProvider 连接，主线程禁止 ensureDirDb

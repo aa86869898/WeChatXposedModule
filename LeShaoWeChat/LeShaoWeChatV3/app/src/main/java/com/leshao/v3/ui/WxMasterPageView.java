@@ -34,7 +34,7 @@ public class WxMasterPageView {
         LinearLayout card1 = makeCard(ctx, d);
         card1.addView(buttonRow(ctx, d, "广播到所有群", "一条消息发送到全部群聊", () -> WxMasterFeatures.broadcastAll(parentAct, cl)));
         card1.addView(divider(ctx, d));
-        card1.addView(buttonRow(ctx, d, "群发助手", "勾选多个群后发送", () -> WxMasterFeatures.batchSend(parentAct, cl)));
+        card1.addView(buttonRow(ctx, d, "乐少万群定时群发", "勾选多个群+定时发送", () -> WxMasterFeatures.batchSend(parentAct, cl)));
         root.addView(card1);
 
         root.addView(spacer(ctx, d, 10));

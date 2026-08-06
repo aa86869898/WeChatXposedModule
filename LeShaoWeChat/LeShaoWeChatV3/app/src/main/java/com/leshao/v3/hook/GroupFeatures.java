@@ -276,6 +276,8 @@ public class GroupFeatures {
                     if (menu != null) {
                         menu.add(0, 99990, 0, "导出成员列表");
                         menu.add(0, 99991, 0, "批量踢出");
+                        menu.add(0, 99992, 0, "群信息报告");
+                        menu.add(0, 99993, 0, "查看群公告");
                     }
                 }
             });
@@ -288,6 +290,12 @@ public class GroupFeatures {
                         param.setResult(true);
                     } else if (item.getItemId() == 99991) {
                         performBatchKick(param.thisObject);
+                        param.setResult(true);
+                    } else if (item.getItemId() == 99992) {
+                        WxMasterFeatures.exportRoomReport(param.thisObject);
+                        param.setResult(true);
+                    } else if (item.getItemId() == 99993) {
+                        WxMasterFeatures.showRoomNotice(param.thisObject);
                         param.setResult(true);
                     }
                 }
@@ -451,8 +459,7 @@ public class GroupFeatures {
             if (chatroom == null) chatroom = "group";
             File f = new File(dir, chatroom.replace("@", "_") + "_members.txt");
             FileWriter fw = new FileWriter(f);
-            fw.write(sb.toString());
-            fw.close();
+            try { fw.write(sb.toString()); } finally { fw.close(); }
             
             Toast.makeText((android.app.Activity) activity,
                     "成员列表已导出: " + f.getName(), Toast.LENGTH_LONG).show();
@@ -773,7 +780,7 @@ public class GroupFeatures {
         } catch (Throwable t) {}
     }
 
-    private static void sendTextMessage(ClassLoader cl, String talker, String text) {
+    public static void sendTextMessage(ClassLoader cl, String talker, String text) {
         try {
             Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
             if (e9Class == null) return;
@@ -826,8 +833,7 @@ public class GroupFeatures {
             try {
                 logFile.getParentFile().mkdirs();
                 FileWriter fw = new FileWriter(logFile, true);
-                fw.write(msg + "\n");
-                fw.close();
+                try { fw.write(msg + "\n"); } finally { fw.close(); }
             } catch (Throwable ignored) {}
         }
     }

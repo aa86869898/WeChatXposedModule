@@ -35,11 +35,9 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.hook.TtsVoiceSender;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
-import com.leshao.v3.ui.MusicSearchApi;
-import com.leshao.v3.ui.MusicLog;
-import com.leshao.v3.wm.utils.VoiceSongHelper;
 import com.leshao.v3.wm.utils.WmPrefs;
 import com.leshao.v3.wm.utils.WmReflect;
 import com.leshao.v3.wm.utils.WmUi;
@@ -90,6 +88,11 @@ public class WmChatHook {
         sWM = (WindowManager) act.getSystemService(Context.WINDOW_SERVICE);
         if (user == null) return;
 
+        if (com.leshao.v3.service.ActivationManager.isCurrentUserBlocked()) {
+            LogWriter.log(TAG, "⚡ float icon suppressed: user blacklisted");
+            return;
+        }
+
         com.leshao.v3.wm.utils.WmUi.DragFloat f = new com.leshao.v3.wm.utils.WmUi.DragFloat(
                 act, sWM, "⚡", AppColors.accent(), "float_chat",
                 () -> { if (sPanelShow) hidePanel(); else showPanel(); });
@@ -135,7 +138,7 @@ public class WmChatHook {
         ScrollView sv = new ScrollView(sAct);
         LinearLayout btns = new LinearLayout(sAct);
         btns.setOrientation(LinearLayout.VERTICAL);
-        btns.setPadding(0, 0, 0, dp(8));
+        btns.setPadding(0, 0, 0, dp(0));
 
         btns.addView(com.leshao.v3.wm.utils.WmUi.makeHeader(sAct,
                 "⚡ 乐少大师", displayName));
@@ -154,8 +157,6 @@ public class WmChatHook {
         if (WmPrefs.isChatStats()) btns.addView(WmUi.makeBtn(sAct, "📊 聊天统计", WmChatHook::showChatStats));
         if (WmPrefs.isClearScreen()) btns.addView(WmUi.makeBtn(sAct, "🧹 一键清屏", () -> toast("消息已隐藏")));
         if (WmPrefs.isMsgSearch()) btns.addView(WmUi.makeBtn(sAct, "🔍 消息搜索", WmChatHook::showMsgSearch));
-        btns.addView(makeToggleRow("语音点歌", "voice_song_enabled"));
-        btns.addView(makeToggleRow("音乐卡片", "music_card_enabled"));
 
         if (isGroup) {
             com.leshao.v3.wm.hook.WmGroupHook.bind(sAct, sCL, sUser);
@@ -185,8 +186,8 @@ public class WmChatHook {
     private static void applyPanelWindow(Dialog dialog) {
         Window w = dialog.getWindow();
         if (w == null) return;
-        int pw = dp(150);
-        int ph = dp(400);
+        int pw = dp(250);
+        int ph = dp(560);
         w.setLayout(pw, ph);
         WindowManager.LayoutParams lp = w.getAttributes();
         lp.dimAmount = 0.05f;
@@ -219,384 +220,6 @@ public class WmChatHook {
         sPanelShow = false;
     }
 
-    // ===== 语音点歌 & 音乐卡片 =====
-
-    public static void onVoiceSongRequest(String query, String talker, boolean isSelf) {
-        if (sAct == null || sAct.isFinishing()) return;
-        LogWriter.log(TAG, "voiceSong q=" + query + " talker=" + talker + " self=" + isSelf);
-        MusicSearchApi.searchKugou(query, 1, new MusicSearchApi.SearchCallback() {
-            @Override
-            public void onResult(java.util.List<MusicSearchApi.Song> songs, int total, boolean hasPrev, boolean hasNext) {
-                sH.post(() -> {
-                    if (songs == null || songs.isEmpty()) {
-                        toast("未找到歌曲: " + query);
-                        return;
-                    }
-                    if (isSelf) {
-                        showVoiceSongDialog(talker, songs);
-                    } else {
-                        onVoiceSongAutoSend(talker, songs.get(0));
-                    }
-                });
-            }
-            @Override
-            public void onError(String msg) {
-                sH.post(() -> toast("搜索失败: " + msg));
-            }
-        });
-    }
-
-    private static void onVoiceSongAutoSend(String talker, MusicSearchApi.Song song) {
-        MusicSearchApi.getKugouPlayUrl(song.hash, new MusicSearchApi.PlayUrlCallback() {
-            @Override
-            public void onUrl(String url) {
-                if (url == null || url.isEmpty()) {
-                    sH.post(() -> toast("获取音源失败"));
-                    return;
-                }
-                final String fUrl = url;
-                new Thread(() -> {
-                    VoiceSongHelper.sendMp3AsVoiceFromUrl(sAct, fUrl,
-                        (song.title != null ? song.title : "") + "-" + (song.artist != null ? song.artist : ""), talker);
-                }).start();
-            }
-            @Override
-            public void onError(String msg) {
-                sH.post(() -> toast("获取音源失败"));
-            }
-        });
-    }
-
-    private static void showVoiceSongDialog(String talker, java.util.List<MusicSearchApi.Song> songs) {
-        LinearLayout root = new LinearLayout(sAct);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(8), dp(8), dp(8), dp(8));
-        root.setBackground(CandyUi.cardBg(sAct));
-
-        TextView title = new TextView(sAct);
-        title.setText("语音点歌 - 选择歌曲发送");
-        title.setTextSize(14);
-        title.setTextColor(AppColors.TEXT_TITLE);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setPadding(0, 0, 0, dp(8));
-        root.addView(title);
-
-        ScrollView sv = new ScrollView(sAct);
-        LinearLayout list = new LinearLayout(sAct);
-        list.setOrientation(LinearLayout.VERTICAL);
-
-        for (final MusicSearchApi.Song song : songs) {
-            list.addView(buildVoiceSongRow(song, talker));
-            View div = new View(sAct);
-            div.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(1)));
-            div.setBackgroundColor(AppColors.divider());
-            list.addView(div);
-        }
-        sv.addView(list);
-        root.addView(sv, new LinearLayout.LayoutParams(-1, dp(320)));
-
-        Button closeBtn = new Button(sAct);
-        closeBtn.setText("关闭");
-        closeBtn.setTextSize(13);
-        closeBtn.setAllCaps(false);
-        closeBtn.setTextColor(AppColors.WHITE_TEXT);
-        GradientDrawable cbBg = new GradientDrawable();
-        cbBg.setColor(AppColors.accent());
-        cbBg.setCornerRadius(dp(8));
-        closeBtn.setBackground(cbBg);
-        root.addView(closeBtn);
-
-        Dialog dlg = new Dialog(sAct);
-        dlg.setContentView(root);
-        dlg.setCanceledOnTouchOutside(true);
-        closeBtn.setOnClickListener(v -> dlg.dismiss());
-
-        Window w = dlg.getWindow();
-        if (w != null) {
-            w.setLayout(dp(330), dp(480));
-            w.setGravity(Gravity.CENTER);
-            WindowManager.LayoutParams lp = w.getAttributes();
-            lp.dimAmount = 0.4f;
-            w.setAttributes(lp);
-        }
-        dlg.show();
-    }
-
-    private static View buildVoiceSongRow(final MusicSearchApi.Song song, final String talker) {
-        LinearLayout row = new LinearLayout(sAct);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(8), dp(6), dp(8), dp(6));
-        row.setBackgroundColor(AppColors.card());
-
-        ImageView cover = new ImageView(sAct);
-        int cs = dp(44);
-        cover.setLayoutParams(new LinearLayout.LayoutParams(cs, cs));
-        cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        GradientDrawable cr = new GradientDrawable();
-        cr.setCornerRadius(dp(4));
-        cover.setBackground(cr);
-        cover.setBackgroundColor(0xFFFFFFFF);
-        loadSongCover(cover, song.cover);
-        row.addView(cover);
-
-        LinearLayout col = new LinearLayout(sAct);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(dp(10), 0, dp(8), 0);
-        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, -2, 1f);
-        col.setLayoutParams(clp);
-
-        TextView tvTitle = new TextView(sAct);
-        tvTitle.setText(song.title != null ? song.title : "");
-        tvTitle.setTextSize(13);
-        tvTitle.setTextColor(AppColors.text1());
-        tvTitle.setSingleLine(true);
-        col.addView(tvTitle);
-
-        TextView tvArtist = new TextView(sAct);
-        tvArtist.setText(song.artist != null ? song.artist : "");
-        tvArtist.setTextSize(11);
-        tvArtist.setTextColor(AppColors.text2());
-        tvArtist.setSingleLine(true);
-        col.addView(tvArtist);
-
-        row.addView(col);
-
-        Button sendBtn = new Button(sAct);
-        sendBtn.setText("发送");
-        sendBtn.setTextSize(11);
-        sendBtn.setAllCaps(false);
-        sendBtn.setTextColor(AppColors.WHITE_TEXT);
-        GradientDrawable sbBg = new GradientDrawable();
-        sbBg.setColor(AppColors.accent());
-        sbBg.setCornerRadius(dp(6));
-        sendBtn.setBackground(sbBg);
-        sendBtn.setPadding(dp(10), dp(4), dp(10), dp(4));
-        sendBtn.setOnClickListener(v -> {
-            toast("正在获取播放链接...");
-            MusicSearchApi.getKugouPlayUrl(song.hash, new MusicSearchApi.PlayUrlCallback() {
-                @Override
-                public void onUrl(String url) {
-                    if (url == null || url.isEmpty()) {
-                        sH.post(() -> toast("获取音源失败"));
-                        return;
-                    }
-                    final String fUrl = url;
-                    new Thread(() -> {
-                        VoiceSongHelper.sendMp3AsVoiceFromUrl(sAct, fUrl,
-                            (song.title != null ? song.title : "") + "-" + (song.artist != null ? song.artist : ""), talker);
-                        sH.post(() -> toast("\uD83C\uDFB5 " + (song.title != null ? song.title : "") + " 已发送"));
-                    }).start();
-                }
-                @Override
-                public void onError(String msg) {
-                    sH.post(() -> toast("获取音源失败"));
-                }
-            });
-        });
-        row.addView(sendBtn);
-
-        return row;
-    }
-
-    public static void onMusicCardRequest(String query, String talker, boolean isSelf) {
-        if (sAct == null || sAct.isFinishing()) return;
-        LogWriter.log(TAG, "musicCard q=" + query + " talker=" + talker + " self=" + isSelf);
-        MusicSearchApi.searchKugou(query, 1, new MusicSearchApi.SearchCallback() {
-            @Override
-            public void onResult(java.util.List<MusicSearchApi.Song> songs, int total, boolean hasPrev, boolean hasNext) {
-                sH.post(() -> {
-                    if (songs == null || songs.isEmpty()) {
-                        toast("未找到歌曲: " + query);
-                        return;
-                    }
-                    if (isSelf) {
-                        showMusicCardDialog(talker, songs);
-                    } else {
-                        onMusicCardAutoSend(talker, songs.get(0));
-                    }
-                });
-            }
-            @Override
-            public void onError(String msg) {
-                sH.post(() -> toast("搜索失败: " + msg));
-            }
-        });
-    }
-
-    private static void onMusicCardAutoSend(String talker, MusicSearchApi.Song song) {
-        sendMusicCard(talker, song);
-    }
-
-    private static void showMusicCardDialog(String talker, java.util.List<MusicSearchApi.Song> songs) {
-        LinearLayout root = new LinearLayout(sAct);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(8), dp(8), dp(8), dp(8));
-        root.setBackground(CandyUi.cardBg(sAct));
-
-        TextView title = new TextView(sAct);
-        title.setText("音乐卡片 - 选择歌曲发送");
-        title.setTextSize(14);
-        title.setTextColor(AppColors.TEXT_TITLE);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setPadding(0, 0, 0, dp(8));
-        root.addView(title);
-
-        ScrollView sv = new ScrollView(sAct);
-        LinearLayout list = new LinearLayout(sAct);
-        list.setOrientation(LinearLayout.VERTICAL);
-
-        for (final MusicSearchApi.Song song : songs) {
-            list.addView(buildMusicCardRow(song, talker));
-            View div = new View(sAct);
-            div.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(1)));
-            div.setBackgroundColor(AppColors.divider());
-            list.addView(div);
-        }
-        sv.addView(list);
-        root.addView(sv, new LinearLayout.LayoutParams(-1, dp(320)));
-
-        Button closeBtn = new Button(sAct);
-        closeBtn.setText("关闭");
-        closeBtn.setTextSize(13);
-        closeBtn.setAllCaps(false);
-        closeBtn.setTextColor(AppColors.WHITE_TEXT);
-        GradientDrawable cbBg = new GradientDrawable();
-        cbBg.setColor(AppColors.accent());
-        cbBg.setCornerRadius(dp(8));
-        closeBtn.setBackground(cbBg);
-        root.addView(closeBtn);
-
-        Dialog dlg = new Dialog(sAct);
-        dlg.setContentView(root);
-        dlg.setCanceledOnTouchOutside(true);
-        closeBtn.setOnClickListener(v -> dlg.dismiss());
-
-        Window w = dlg.getWindow();
-        if (w != null) {
-            w.setLayout(dp(330), dp(480));
-            w.setGravity(Gravity.CENTER);
-            WindowManager.LayoutParams lp = w.getAttributes();
-            lp.dimAmount = 0.4f;
-            w.setAttributes(lp);
-        }
-        dlg.show();
-    }
-
-    private static View buildMusicCardRow(final MusicSearchApi.Song song, final String talker) {
-        LinearLayout row = new LinearLayout(sAct);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(8), dp(6), dp(8), dp(6));
-        row.setBackgroundColor(AppColors.card());
-
-        ImageView cover = new ImageView(sAct);
-        int cs = dp(44);
-        cover.setLayoutParams(new LinearLayout.LayoutParams(cs, cs));
-        cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        GradientDrawable cr = new GradientDrawable();
-        cr.setCornerRadius(dp(4));
-        cover.setBackground(cr);
-        cover.setBackgroundColor(0xFFFFFFFF);
-        loadSongCover(cover, song.cover);
-        row.addView(cover);
-
-        LinearLayout col = new LinearLayout(sAct);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(dp(10), 0, dp(8), 0);
-        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, -2, 1f);
-        col.setLayoutParams(clp);
-
-        TextView tvTitle = new TextView(sAct);
-        tvTitle.setText(song.title != null ? song.title : "");
-        tvTitle.setTextSize(13);
-        tvTitle.setTextColor(AppColors.text1());
-        tvTitle.setSingleLine(true);
-        col.addView(tvTitle);
-
-        TextView tvArtist = new TextView(sAct);
-        tvArtist.setText(song.artist != null ? song.artist : "");
-        tvArtist.setTextSize(11);
-        tvArtist.setTextColor(AppColors.text2());
-        tvArtist.setSingleLine(true);
-        col.addView(tvArtist);
-
-        row.addView(col);
-
-        Button sendBtn = new Button(sAct);
-        sendBtn.setText("发送卡片");
-        sendBtn.setTextSize(11);
-        sendBtn.setAllCaps(false);
-        sendBtn.setTextColor(AppColors.WHITE_TEXT);
-        GradientDrawable sbBg = new GradientDrawable();
-        sbBg.setColor(AppColors.accent());
-        sbBg.setCornerRadius(dp(6));
-        sendBtn.setBackground(sbBg);
-        sendBtn.setPadding(dp(10), dp(4), dp(10), dp(4));
-        sendBtn.setOnClickListener(v -> {
-            sendMusicCard(talker, song);
-            toast("\uD83C\uDFB6 " + song.title + " 卡片已发送");
-        });
-        row.addView(sendBtn);
-
-        return row;
-    }
-
-    private static void sendMusicCard(String talker, MusicSearchApi.Song song) {
-        try {
-            if (sCL == null) { toast("发送失败: ClassLoader null"); return; }
-            String xml = "<msg><appmsg appid=\"wx79f2c4418704b4f8\" sdkver=\"0\"><title>"
-                    + escapeXml(song.title) + "</title><des>"
-                    + escapeXml(song.artist) + "</des><type>3</type><url>"
-                    + escapeXml("https://www.kugou.com/song/#hash=" + song.hash) + "</url>"
-                    + "<appattach><cdnthumbaeskey></cdnthumbaeskey><aeskey></aeskey></appattach>"
-                    + "</appmsg></msg>";
-            WmReflect.sendAppMsg(sCL, xml, talker);
-            LogWriter.log(TAG, "musicCard sent: " + song.title);
-        } catch (Exception e) {
-            LogWriter.log(TAG, "sendMusicCard err: " + e.getMessage());
-            toast("发送音乐卡片失败: " + e.getMessage());
-        }
-    }
-
-    private static String escapeXml(String s) {
-        if (s == null) return "";
-        return s.replace("&", "&amp;").replace("<", "&lt;")
-                .replace(">", "&gt;").replace("\"", "&quot;");
-    }
-
-    private static void loadSongCover(ImageView iv, String urlStr) {
-        if (urlStr == null || urlStr.isEmpty()) {
-            iv.setImageDrawable(emojiDrawable(sAct, "\uD83C\uDFB5", dp(18)));
-            return;
-        }
-        new Thread(() -> {
-            try {
-                java.net.URL url = new java.net.URL(urlStr);
-                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-                conn.setConnectTimeout(5000);
-                conn.setReadTimeout(5000);
-                android.graphics.Bitmap bm = android.graphics.BitmapFactory.decodeStream(conn.getInputStream());
-                conn.disconnect();
-                if (bm != null) sH.post(() -> iv.setImageBitmap(bm));
-            } catch (Exception ignored) {}
-        }).start();
-    }
-
-    private static android.graphics.drawable.Drawable emojiDrawable(Context ctx, String emoji, int size) {
-        TextView tv = new TextView(ctx);
-        tv.setText(emoji);
-        tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, size);
-        tv.setGravity(Gravity.CENTER);
-        tv.measure(View.MeasureSpec.makeMeasureSpec(size * 2, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(size * 2, View.MeasureSpec.EXACTLY));
-        tv.layout(0, 0, tv.getMeasuredWidth(), tv.getMeasuredHeight());
-        android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(
-                tv.getMeasuredWidth(), tv.getMeasuredHeight(), android.graphics.Bitmap.Config.ARGB_8888);
-        android.graphics.Canvas c = new android.graphics.Canvas(bm);
-        tv.draw(c);
-        return new android.graphics.drawable.BitmapDrawable(ctx.getResources(), bm);
-    }
 
     // ===== 工具方法 =====
 
@@ -737,7 +360,7 @@ public class WmChatHook {
         }
     }
 
-    /** 将 content:// URI 复制到 /sdcard/WeChatMaster/tmp/ 返回本地路径 */
+    /** 将 content:// URI 复制到应用私有目录 /data/data/<pkg>/files/wm_picker/ 返回本地路径 */
     private static String copyUriToTemp(Activity act, Uri uri) {
         try {
             String fileName = "picked_" + System.currentTimeMillis();
@@ -750,17 +373,24 @@ public class WmChatHook {
                     }
                 } finally { cursor.close(); }
             }
-            File wcMaster = new File(Environment.getExternalStorageDirectory(), "WeChatMaster");
-            File tmpDir = new File(wcMaster, "tmp");
-            tmpDir.mkdirs();
+            File tmpDir = new File(act.getFilesDir(), "wm_picker");
+            if (!tmpDir.exists()) tmpDir.mkdirs();
             File out = new File(tmpDir, fileName);
             InputStream is = act.getContentResolver().openInputStream(uri);
+            if (is == null) {
+                LogWriter.log(TAG, "copyUriToTemp: openInputStream null");
+                return null;
+            }
             FileOutputStream fos = new FileOutputStream(out);
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
-            fos.close();
-            is.close();
+            try {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
+            } finally {
+                try { fos.close(); } catch (Exception ignored) {}
+                try { is.close(); } catch (Exception ignored) {}
+            }
+            LogWriter.log(TAG, "copyUriToTemp ok: " + out.getAbsolutePath());
             return out.getAbsolutePath();
         } catch (Exception e) {
             LogWriter.log(TAG, "copyUriToTemp err: " + e.getMessage());
@@ -986,11 +616,14 @@ public class WmChatHook {
             // Fallback: 直接复制文件尝试 (如果微信支持直接播放MP3)
             java.io.FileInputStream fis = new java.io.FileInputStream(mp3File);
             java.io.FileOutputStream fos = new java.io.FileOutputStream(outputPath);
+            try {
             byte[] buf = new byte[8192];
             int n;
             while ((n = fis.read(buf)) > 0) fos.write(buf, 0, n);
-            fis.close();
-            fos.close();
+            } finally {
+            try { fis.close(); } catch (Exception ignored) {}
+            try { fos.close(); } catch (Exception ignored) {}
+            }
             return true;
         } catch (Exception e) {
             LogWriter.log(TAG, "convertMp3ToWeChat err: " + e.getMessage());
@@ -1011,28 +644,11 @@ public class WmChatHook {
             catch (Throwable ignored) { sCachedDb = null; sCachedRawQueryMethod = null; }
         }
 
-        // 2. 使用 DatabaseProvider 捕获的 WCDB 实例
-        Object db = com.leshao.v3.db.DatabaseProvider.getDatabase();
-        if (db != null) {
-            Cursor c = tryRawQuery(db, sql, args);
-            if (c != null) { sCachedDb = db; return c; }
-        }
-
-        // 3. 回退: VersionCompat 打开
+        // 2. 回退: VersionCompat 打开
         Object db2 = openWxDb();
         if (db2 != null) {
             Cursor c = tryRawQuery(db2, sql, args);
             if (c != null) { sCachedDb = db2; return c; }
-        }
-
-        // 4. 最后回退: 用捕获的密码直接打开
-        byte[] pwd = com.leshao.v3.db.DatabaseProvider.getPassword();
-        if (pwd != null) {
-            Object db3 = openWxDbWithPassword(pwd);
-            if (db3 != null) {
-                Cursor c = tryRawQuery(db3, sql, args);
-                if (c != null) { sCachedDb = db3; return c; }
-            }
         }
 
         LogWriter.log(TAG, "rawQueryMsg: all attempts failed");
@@ -1089,72 +705,6 @@ public class WmChatHook {
             return com.leshao.v3.hook.VersionCompat.openDatabase(dbOpener, dbPath, password);
         } catch (Throwable t) {
             LogWriter.log(TAG, "openWxDb err: " + t.getClass().getSimpleName());
-            return null;
-        }
-    }
-
-    /** 使用 DatabaseProvider 捕获的密码直接打开 EnMicroMsg.db */
-    static Object openWxDbWithPassword(byte[] password) {
-        try {
-            Context appCtx = com.leshao.v3.ContextManager.getAppContext();
-            if (appCtx == null) return null;
-            long uin = getWxUin(appCtx);
-            if (uin <= 0) return null;
-            String base = com.leshao.v3.hook.VersionCompat.getBaseDir(sCL, appCtx);
-            String hash = com.leshao.v3.hook.VersionCompat.getDbHash(sCL, (int) uin);
-            String dbPath = base + "MicroMsg/" + hash + "/EnMicroMsg.db";
-            if (!new File(dbPath).exists()) return null;
-
-            // 尝试通过 WCDB SQLiteDatabase 打开
-            Class<?> dbOpener = com.leshao.v3.hook.VersionCompat.findDbOpenerClass(sCL);
-            if (dbOpener != null) {
-                // 尝试带 byte[] 密码的 openDatabase
-                for (Method m : dbOpener.getDeclaredMethods()) {
-                    if (m.getName().equals("s") || m.getName().equals("r")
-                            || m.getName().equals("t") || m.getName().equals("openDatabase")) {
-                        if (m.getParameterCount() >= 2) {
-                            try {
-                                m.setAccessible(true);
-                                Object result = m.invoke(null, dbPath, password);
-                                if (result != null) return result;
-                            } catch (Throwable ignored) {}
-                            try {
-                                m.setAccessible(true);
-                                Object result = m.invoke(null, dbPath, password, 0);
-                                if (result != null) return result;
-                            } catch (Throwable ignored) {}
-                        }
-                    }
-                }
-            }
-
-            // 尝试 SQLCipher 直接打开
-            try {
-                Class<?> sqlcipherDb = Class.forName("net.sqlcipher.database.SQLiteDatabase");
-                Method openDb = sqlcipherDb.getMethod("openOrCreateDatabase",
-                        String.class, String.class, Object.class);
-                Object db = openDb.invoke(null, dbPath, "", null);
-                if (db != null) {
-                    Method rawQuery = db.getClass().getMethod("rawQuery", String.class, String[].class);
-                    // 用 SQLCipher 的 key 设置
-                    sqlcipherDb.getMethod("changePassword", String.class).invoke(db,
-                            new String(password, "UTF-8"));
-                    return db;
-                }
-            } catch (Throwable ignored) {}
-
-            // 尝试 net.sqlcipher.database.SQLiteDatabase openDatabase
-            try {
-                Class<?> sqlcipherDb = Class.forName("net.sqlcipher.database.SQLiteDatabase");
-                Method openDb = sqlcipherDb.getMethod("openDatabase",
-                        String.class, String.class, Object.class, int.class);
-                Object db = openDb.invoke(null, dbPath, new String(password, "UTF-8"), null, 0);
-                if (db != null) return db;
-            } catch (Throwable ignored) {}
-
-            return null;
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "openWxDbWithPassword err: " + t.getClass().getSimpleName());
             return null;
         }
     }
@@ -1452,7 +1002,7 @@ public class WmChatHook {
     static LinearLayout makeToggleRow(String label, String prefKey) {
         LinearLayout row = new LinearLayout(sAct);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(dp(14), dp(6), dp(14), dp(6));
+        row.setPadding(dp(12), dp(4), dp(12), dp(4));
         GradientDrawable rowBg = new GradientDrawable();
         rowBg.setColor(AppColors.bg());
         rowBg.setCornerRadius(dp(12));
@@ -1462,7 +1012,7 @@ public class WmChatHook {
         tv.setText(label);
         tv.setTextSize(13);
         tv.setTextColor(AppColors.text1());
-        LinearLayout.LayoutParams tvlp = new LinearLayout.LayoutParams(0, dp(36), 1f);
+        LinearLayout.LayoutParams tvlp = new LinearLayout.LayoutParams(0, dp(32), 1f);
         tv.setGravity(Gravity.CENTER_VERTICAL);
         row.addView(tv, tvlp);
 
@@ -1482,8 +1032,8 @@ public class WmChatHook {
         row.addView(sw);
 
         LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(44));
-        rlp.setMargins(dp(10), 0, dp(10), dp(8));
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(38));
+        rlp.setMargins(dp(8), 0, dp(8), dp(4));
         row.setLayoutParams(rlp);
         return row;
     }
@@ -1664,15 +1214,16 @@ public class WmChatHook {
         try {
             java.net.URL url = new java.net.URL("https://api.openai.com/v1/models");
             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            try {
             conn.setRequestMethod("GET");
             conn.setRequestProperty("Authorization", "Bearer " + key);
             conn.setConnectTimeout(8000);
             conn.setReadTimeout(8000);
             int code = conn.getResponseCode();
-            conn.disconnect();
             if (code == 200) return "Key 有效";
             if (code == 401) return "Key 无效: 认证失败(code=" + code + ")";
             return "检测失败: HTTP " + code;
+            } finally { conn.disconnect(); }
         } catch (Exception e) {
             return "检测失败: " + e.getMessage();
         }
@@ -1686,6 +1237,7 @@ public class WmChatHook {
 
             java.net.URL url = new java.net.URL("https://api.openai.com/v1/audio/speech");
             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            try {
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Authorization", "Bearer " + key);
             conn.setRequestProperty("Content-Type", "application/json");
@@ -1694,13 +1246,13 @@ public class WmChatHook {
             conn.setReadTimeout(15000);
 
             java.io.OutputStream os = conn.getOutputStream();
+            try {
             os.write(body.getBytes("UTF-8"));
             os.flush();
-            os.close();
+            } finally { os.close(); }
 
             int code = conn.getResponseCode();
             if (code != 200) {
-                conn.disconnect();
                 return "试听失败: HTTP " + code;
             }
 
@@ -1712,13 +1264,16 @@ public class WmChatHook {
 
             java.io.InputStream is = conn.getInputStream();
             java.io.FileOutputStream fos = new java.io.FileOutputStream(outFile);
+            try {
             byte[] buf = new byte[8192];
             int n;
             while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
-            fos.close();
-            is.close();
-            conn.disconnect();
+            } finally {
+            try { fos.close(); } catch (Exception ignored) {}
+            try { is.close(); } catch (Exception ignored) {}
+            }
             return "OK:" + outFile.getAbsolutePath();
+            } finally { conn.disconnect(); }
         } catch (Exception e) {
             return "试听失败: " + e.getMessage();
         }
@@ -1779,6 +1334,11 @@ public class WmChatHook {
         titleTv.setPadding(0, 0, 0, dp(14));
         root.addView(titleTv);
 
+        // 先创建 Dialog 以便按钮引用
+        final Dialog dlg = new Dialog(sAct);
+        dlg.setContentView(root);
+        dlg.setCanceledOnTouchOutside(true);
+
         // 2行×3列等宽网格
         final int[] selectedIdx = {-1};
         final LinearLayout[] gridRows = new LinearLayout[2];
@@ -1804,22 +1364,8 @@ public class WmChatHook {
                 blp.setMargins(dp(3), dp(4), dp(3), dp(4));
                 btn.setLayoutParams(blp);
                 btn.setOnClickListener(v -> {
-                    if (selectedIdx[0] == idx) { selectedIdx[0] = -1; }
-                    else selectedIdx[0] = idx;
-                    for (int rr = 0; rr < 2; rr++) {
-                        if (gridRows[rr] == null) continue;
-                        for (int cc = 0; cc < gridRows[rr].getChildCount(); cc++) {
-                            View child = gridRows[rr].getChildAt(cc);
-                            if (child instanceof Button) {
-                                boolean isSel = (rr * 3 + cc == selectedIdx[0]);
-                                GradientDrawable sd = new GradientDrawable();
-                                sd.setColor(AppColors.accent());
-                                sd.setCornerRadius(dp(10));
-                                sd.setAlpha(isSel ? 255 : 80);
-                                ((Button) child).setBackground(sd);
-                            }
-                        }
-                    }
+                    dlg.dismiss();
+                    showMassSendStep2(idx);
                 });
                 row.addView(btn);
             }
@@ -1831,11 +1377,6 @@ public class WmChatHook {
         bottomBar.setOrientation(LinearLayout.HORIZONTAL);
         bottomBar.setGravity(Gravity.CENTER);
         bottomBar.setPadding(0, dp(20), 0, dp(8));
-
-        // 先创建 Dialog 以便按钮引用
-        final Dialog dlg = new Dialog(sAct);
-        dlg.setContentView(root);
-        dlg.setCanceledOnTouchOutside(true);
 
         Button recordsBtn = new Button(sAct);
         recordsBtn.setText("群发记录");
@@ -2530,18 +2071,37 @@ public class WmChatHook {
     private static boolean sendAudioFile(String talker, String filePath) {
         try {
             if (sCL == null) return false;
-            Object storage = getMsgStorage();
-            if (storage == null) return false;
-            Object msg = XposedHelpers.newInstance(
-                XposedHelpers.findClass("com.tencent.mm.storage.bs", sCL), talker);
-            XposedHelpers.callMethod(msg, "A1", 34);
-            XposedHelpers.callMethod(msg, "P0", filePath);
-            XposedHelpers.callMethod(msg, "L1", System.currentTimeMillis());
-            XposedHelpers.callMethod(storage, "Ra", System.currentTimeMillis(), msg);
-            return true;
+
+            String lower = filePath.toLowerCase();
+            if (lower.endsWith(".mp3")) {
+                LogWriter.log(TAG, "sendAudioFile: mp3 -> sendMp3Voice");
+                return TtsVoiceSender.sendMp3Voice(talker, filePath);
+            }
+
+            // AMR/SILK 文件直接走 SceneVoice 发送
+            if (lower.endsWith(".amr") || lower.endsWith(".silk")) {
+                int durationMs = estimateAmrDuration(filePath);
+                LogWriter.log(TAG, "sendAudioFile: direct amr/silk duration=" + durationMs);
+                return TtsVoiceSender.sendViaSceneVoice(talker, filePath, durationMs);
+            }
+
+            // 兜底：尝试 MP3 转码
+            LogWriter.log(TAG, "sendAudioFile: unknown ext, try mp3 fallback");
+            return TtsVoiceSender.sendMp3Voice(talker, filePath);
         } catch (Throwable t) {
             LogWriter.log(TAG, "sendAudioFile err: " + t.getMessage());
             return false;
+        }
+    }
+
+    private static int estimateAmrDuration(String path) {
+        try {
+            File f = new File(path);
+            if (!f.exists()) return 0;
+            // AMR-NB 帧大小约 32 字节/20ms；SILK 按 AMR 估算
+            return (int) (f.length() / 32.0 * 20.0);
+        } catch (Throwable t) {
+            return 0;
         }
     }
 

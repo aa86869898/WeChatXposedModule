@@ -40,7 +40,9 @@ public class WmReflect {
     }
 
     public static Class<?> getChatroomLogic(ClassLoader cl) {
-        return XposedHelpers.findClass("e01.v1", cl);
+        try {
+            return XposedHelpers.findClass("e01.v1", cl);
+        } catch (Throwable t) { return null; }
     }
 
     public static Object getContactStorage(ClassLoader cl) {
@@ -158,10 +160,7 @@ public class WmReflect {
                 if (v != null && !v.isEmpty()) return v;
             } catch (Exception ignored) {}
         }
-        try {
-            String[] info = com.leshao.v3.db.ContactRepository.queryGroupInfoFromDB(room);
-            if (info != null && info[0] != null && !info[0].isEmpty()) return info[0];
-        } catch (Throwable ignored) {}
+        // 兜底数据源已清空（原 ContactRepository 群信息），待重写
         return "";
     }
 
@@ -229,14 +228,16 @@ public class WmReflect {
     private static Bitmap downloadAvatarUrl(String url) {
         try {
             HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+            try {
             conn.setConnectTimeout(5000);
             conn.setReadTimeout(5000);
             conn.setInstanceFollowRedirects(true);
             InputStream is = conn.getInputStream();
+            try {
             Bitmap bm = BitmapFactory.decodeStream(is);
-            is.close();
-            conn.disconnect();
             if (bm != null) return toRoundBitmap(bm);
+            } finally { is.close(); }
+            } finally { conn.disconnect(); }
         } catch (Exception ignored) {}
         return null;
     }
@@ -387,14 +388,7 @@ public class WmReflect {
                 if (v != null && !v.isEmpty()) return v;
             } catch (Exception ignored) {}
         }
-        try {
-            String[] info = com.leshao.v3.db.ContactRepository.queryGroupInfoFromDB(room);
-            if (info != null && info[2] != null && !info[2].isEmpty()) return info[2];
-        } catch (Throwable ignored) {}
-        try {
-            String nick = com.leshao.v3.db.ContactRepository.queryNickFromDB(room);
-            if (nick != null && !nick.isEmpty()) return nick;
-        } catch (Throwable ignored) {}
+        // 兜底数据源已清空（原 ContactRepository 群信息/昵称），待重写
         return "";
     }
 

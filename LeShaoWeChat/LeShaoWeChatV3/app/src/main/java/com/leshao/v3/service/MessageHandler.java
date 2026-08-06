@@ -19,6 +19,8 @@ public class MessageHandler {
     // 当前消息的 sender/group 名称, 由 handle() 设置
     private String mSenderName;
     private String mGroupName;
+    private String mSenderWxid;
+    private boolean mIsSelf;
 
     public MessageHandler(TtsEngine tts, FilterManager filter, NicknameResolver nick) {
         this.mTts = tts;
@@ -27,16 +29,13 @@ public class MessageHandler {
     }
 
     public void handle(Object msgInfo, int msgType, String talker, String content, ModuleConfig cfg) {
-        if (!mFilter.shouldProcess(talker, msgType, content, cfg)) {
-            LogWriter.log("MessageHandler", "DROPPED by filter: type=" + msgType + " from=" + talker + " masterSwitch=" + cfg.masterSwitch + " announceText=" + cfg.announceText);
-            return;
-        }
-
         boolean isGroup = talker != null && talker.endsWith("@chatroom");
         String effectiveContent = content;
 
         mGroupName = null;
         mSenderName = null;
+        mSenderWxid = null;
+        mIsSelf = false;
 
         if (isGroup) {
             mGroupName = mNick.resolveDisplayName(talker);
@@ -44,13 +43,25 @@ public class MessageHandler {
             if (senderWxid != null) {
                 effectiveContent = removeSenderPrefix(content);
                 mSenderName = mNick.resolveDisplayName(senderWxid);
+                mSenderWxid = senderWxid;
             }
         } else {
             mSenderName = mNick.resolveDisplayName(talker);
+            mSenderWxid = talker;
+        }
+
+        String myWxid = ModuleConfig.getCurrentWxid();
+        if (myWxid != null && mSenderWxid != null && myWxid.equals(mSenderWxid)) {
+            mIsSelf = true;
         }
 
         LogWriter.log("MessageHandler", "handle type=" + msgType + " talker=" + talker
-                + " sender=" + mSenderName + " group=" + mGroupName);
+                + " sender=" + mSenderName + " group=" + mGroupName + " self=" + mIsSelf);
+
+        if (!mFilter.shouldProcess(talker, msgType, content, cfg)) {
+            LogWriter.log("MessageHandler", "DROPPED by filter: type=" + msgType + " from=" + talker + " masterSwitch=" + cfg.masterSwitch + " announceText=" + cfg.announceText);
+            return;
+        }
 
         switch (msgType) {
             case 1:  handleText(effectiveContent, talker, isGroup, cfg); break;

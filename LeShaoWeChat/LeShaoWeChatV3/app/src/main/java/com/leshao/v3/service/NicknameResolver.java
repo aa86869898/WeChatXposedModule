@@ -1,30 +1,15 @@
 package com.leshao.v3.service;
 
-import com.leshao.v3.db.ContactRepository;
-import com.leshao.v3.model.Contact;
-
-import java.util.HashMap;
-import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
 public class NicknameResolver {
 
-    private static final Map<String, String> sCache = new HashMap<>();
+    private static final Map<String, String> sCache = new ConcurrentHashMap<>();
 
     public static void init() {
-        List<Contact> all = ContactRepository.getAll();
-        for (Contact c : all) {
-            if (c.wxid == null || c.wxid.isEmpty()) continue;
-            String name = null;
-            if (c.remarkName != null && !c.remarkName.isEmpty()) {
-                name = c.remarkName;
-            } else if (c.nickname != null && !c.nickname.isEmpty()) {
-                name = c.nickname;
-            }
-            if (name != null && !name.isEmpty()) {
-                sCache.put(c.wxid, name);
-            }
-        }
+        // 联系人数据源已清空，待重写
+        sCache.clear();
     }
 
     public String resolveDisplayName(String wxid) {
@@ -33,26 +18,7 @@ public class NicknameResolver {
         String cached = sCache.get(wxid);
         if (cached != null) return cached;
 
-        String name = null;
-
-        try {
-            name = ContactRepository.queryNickFromDB(wxid);
-        } catch (Throwable ignored) {}
-
-        if (name == null) {
-            try {
-                Contact c = ContactRepository.findByWxid(wxid);
-                if (c != null) {
-                    if (c.remarkName != null && !c.remarkName.isEmpty()) {
-                        name = c.remarkName;
-                    } else if (c.nickname != null && !c.nickname.isEmpty()) {
-                        name = c.nickname;
-                    }
-                }
-            } catch (Throwable ignored) {}
-        }
-
-        if (name == null) name = fallbackName(wxid);
+        String name = fallbackName(wxid);
         sCache.put(wxid, name);
         return name;
     }

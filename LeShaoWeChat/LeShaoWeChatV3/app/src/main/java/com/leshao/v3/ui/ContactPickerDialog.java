@@ -25,7 +25,6 @@ import android.widget.TextView;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.model.Contact;
 
 import java.util.ArrayList;
@@ -46,7 +45,6 @@ public class ContactPickerDialog {
     public static void show(Activity parentAct, String currentIds, final int initialMode,
                             final OnContactsSelected callback) {
         try {
-            ContactRepository.forceReload();
             showInner(parentAct, currentIds, initialMode, callback);
         } catch (Throwable t) {
             com.leshao.v3.LogWriter.log("ContactPicker", "show CRASH: "
@@ -70,18 +68,11 @@ public class ContactPickerDialog {
 
         final List<Contact>[] holder = new List[]{null, null};
         int fCount, gCount;
-        try {
-            List<Contact> friends = ContactRepository.getFriends();
-            List<Contact> groups = ContactRepository.getGroups();
-            holder[0] = friends != null ? friends : Collections.<Contact>emptyList();
-            holder[1] = groups != null ? groups : Collections.<Contact>emptyList();
-            fCount = holder[0].size();
-            gCount = holder[1].size();
-        } catch (Throwable t) {
-            holder[0] = Collections.emptyList();
-            holder[1] = Collections.emptyList();
-            fCount = gCount = 0;
-        }
+        // 联系人数据源已清空，待重写
+        holder[0] = Collections.<Contact>emptyList();
+        holder[1] = Collections.<Contact>emptyList();
+        fCount = 0;
+        gCount = 0;
         final List<Contact> allFriends = holder[0];
         final List<Contact> allGroups = holder[1];
 
@@ -193,7 +184,8 @@ public class ContactPickerDialog {
         selectAllBtn.setPadding((int)(10 * d), (int)(6 * d), (int)(10 * d), (int)(6 * d));
         selectAllBtn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         selectAllBtn.setOnClickListener(v -> {
-            boolean allSelected = filteredList.size() > 0;
+            if (filteredList.isEmpty()) return; // 空列表不切换勾选状态
+            boolean allSelected = true;
             for (Contact c : filteredList) {
                 if (!selected.contains(c.wxid)) { allSelected = false; break; }
             }
@@ -256,9 +248,13 @@ public class ContactPickerDialog {
         });
 
         doneBtn.setOnClickListener(v -> {
-            String display = selected.size() + " 个选中";
-            if (callback != null) callback.onSelected(selected, display);
-            dlgRef[0].dismiss();
+            try {
+                String display = selected.size() + " 个选中";
+                if (callback != null) callback.onSelected(selected, display);
+                dlgRef[0].dismiss();
+            } catch (Throwable t) {
+                try { dlgRef[0].dismiss(); } catch (Throwable ignored) {}
+            }
         });
 
         AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert);
@@ -355,7 +351,8 @@ public class ContactPickerDialog {
         if (name == null || name.isEmpty()) return colors[0];
         int hash = 0;
         for (int i = 0; i < name.length(); i++) hash = hash * 31 + name.charAt(i);
-        return colors[Math.abs(hash) % colors.length];
+        // 用 & 0x7FFFFFFF 避免 Integer.MIN_VALUE 时 Math.abs 返回负数导致负索引
+        return colors[(hash & 0x7FFFFFFF) % colors.length];
     }
 
     static class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.VH> {
@@ -515,6 +512,8 @@ public class ContactPickerDialog {
             }
             mColor = getColorFromName(name != null ? name : "?");
             mBgPaint.setColor(mColor);
+            // 清除可能残留的 BitmapShader，避免复用后头像显示错乱
+            mBgPaint.setShader(null);
             invalidate();
         }
 

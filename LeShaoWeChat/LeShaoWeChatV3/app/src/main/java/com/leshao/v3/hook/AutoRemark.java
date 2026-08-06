@@ -5,6 +5,7 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import com.leshao.v3.Logger;
 import com.leshao.v3.ContextManager;
+import com.leshao.v3.CrashTrace;
 import com.leshao.v3.model.ModuleConfig;
 
 public class AutoRemark {
@@ -34,14 +35,18 @@ public class AutoRemark {
             XposedBridge.hookAllMethods(contactInfoUI, "D2", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
+                    CrashTrace.t("AUR_D2_IN");
                     checkAndAutoRemark(param.thisObject);
+                    CrashTrace.t("AUR_D2_OUT");
                 }
             });
 
             XposedBridge.hookAllMethods(contactInfoUI, "onResume", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
+                    CrashTrace.t("AUR_RS_IN");
                     checkAndAutoRemark(param.thisObject);
+                    CrashTrace.t("AUR_RS_OUT");
                 }
             });
         } catch (Throwable t) {}

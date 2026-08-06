@@ -12,6 +12,7 @@ import com.leshao.v3.LogWriter;
 import java.util.LinkedList;
 import java.util.Locale;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class TtsEngine {
 
@@ -21,10 +22,13 @@ public class TtsEngine {
     private TextToSpeech mTts;
     private volatile boolean mReady = false;
     private volatile boolean mSpeaking = false;
-    private final Queue<String> mQueue = new LinkedList<>();
+    private final Queue<String> mQueue = new ConcurrentLinkedQueue<>();
     private PowerManager.WakeLock mWakeLock;
     private volatile int mErrorCount = 0;
     private float mSpeechRate = 1.1f;
+    private volatile int mSpeakSeq = 0;
+    private volatile int mDoneSeq = 0;
+    private volatile boolean mPaused = false;
 
     public TtsEngine(Context ctx) {
         try {
@@ -54,15 +58,24 @@ public class TtsEngine {
             @Override public void onStart(String utteranceId) { mSpeaking = true; }
             @Override public void onDone(String utteranceId) {
                 mSpeaking = false;
+                mDoneSeq++;
                 mErrorCount = 0;
                 releaseWakeLock();
                 flushQueue();
             }
             @Override public void onError(String utteranceId) {
                 mSpeaking = false;
+                mDoneSeq++;
                 mErrorCount++;
                 LogWriter.log(TAG, "TTS onError count=" + mErrorCount);
                 releaseWakeLock();
+                // pause() 调用 mTts.stop() 会触发 onError/onStop：
+                // 此时不应继续播放下一条，否则暂停退化为"跳过当前条"
+                if (mPaused) {
+                    mPaused = false;
+                    mErrorCount = 0;
+                    return;
+                }
                 if (mErrorCount < 3) flushQueue();
                 else { mQueue.clear(); mErrorCount = 0; }
             }
@@ -70,6 +83,10 @@ public class TtsEngine {
     }
 
     public boolean isSpeaking() { return mSpeaking; }
+
+    public boolean hasPendingSpeak() {
+        return mSpeaking || mSpeakSeq > mDoneSeq || !mQueue.isEmpty();
+    }
 
     public void setSpeechRate(float rate) {
         if (rate < 0.5f || rate > 2.5f) return;
@@ -86,6 +103,7 @@ public class TtsEngine {
     public void speak(String text) {
         if (text == null || text.isEmpty()) return;
         if (!mReady || mTts == null) { mQueue.offer(text); return; }
+        mSpeakSeq++;
         acquireWakeLock();
         mTts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "tts_" + System.currentTimeMillis());
     }
@@ -93,12 +111,14 @@ public class TtsEngine {
     public void speakQueued(String text) {
         if (text == null || text.isEmpty()) return;
         if (!mReady || mTts == null) { mQueue.offer(text); return; }
+        mSpeakSeq++;
         acquireWakeLock();
         mTts.speak(text, TextToSpeech.QUEUE_ADD, null, "tts_" + System.currentTimeMillis());
     }
 
     public void pause() {
         if (mTts != null && mSpeaking) {
+            mPaused = true;
             mTts.stop();
             mSpeaking = false;
         }

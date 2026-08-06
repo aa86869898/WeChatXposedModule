@@ -8,7 +8,6 @@ import android.widget.*;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
-import com.leshao.v3.db.ContactRepository;
 import com.leshao.v3.service.StatsCollector;
 import java.util.List;
 import java.util.Map;
@@ -25,9 +24,9 @@ public class StatsFragment extends Fragment {
 
         root.addView(sLabel("数据统计"));
 
-        // 联系人统计
-        root.addView(infoRow("好友数", String.valueOf(ContactRepository.getFriends().size())));
-        root.addView(infoRow("群聊数", String.valueOf(ContactRepository.getGroups().size())));
+        // 联系人统计（数据源已清空，待重写）
+        root.addView(infoRow("好友数", "0"));
+        root.addView(infoRow("群聊数", "0"));
 
         // 撤回记录
         root.addView(sLabel("最近撤回记录"));

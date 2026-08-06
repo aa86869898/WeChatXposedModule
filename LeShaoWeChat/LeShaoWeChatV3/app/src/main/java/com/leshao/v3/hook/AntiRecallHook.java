@@ -2,6 +2,7 @@ package com.leshao.v3.hook;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.StatsCollector;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -20,6 +21,14 @@ public class AntiRecallHook {
             LogWriter.log(TAG, "hook ABORTED: ContextManager not ready");
             return;
         }
+
+        // 从配置初始化开关：默认关闭时仅安装 hook 外壳，回调内按 sEnabled 判断，
+        // 设置页切换后立即生效，避免关闭后重启仍强制生效
+        try {
+            ModuleConfig cfg = ModuleConfig.load(ContextManager.getPrefs());
+            sEnabled = cfg != null && cfg.antiRecall;
+            LogWriter.log(TAG, "antiRecall enabled=" + sEnabled);
+        } catch (Throwable ignored) {}
 
         ClassLoader cl = ContextManager.getClassLoader();
 
@@ -138,20 +147,8 @@ public class AntiRecallHook {
             String convTalker = getField(recallMsg, "field_talker", "talker", "getTalker");
             if (convTalker == null) return;
 
-            // 取撤回者显示名
+            // 取撤回者显示名（联系人数据源已清空，暂用 wxid；待重写）
             String displayName = talkerWxid;
-            try {
-                java.util.List<com.leshao.v3.model.Contact> contacts =
-                    com.leshao.v3.db.ContactRepository.getAll();
-                if (contacts != null) {
-                    for (com.leshao.v3.model.Contact ct : contacts) {
-                        if (talkerWxid != null && talkerWxid.equals(ct.wxid)) {
-                            displayName = ct.displayName();
-                            break;
-                        }
-                    }
-                }
-            } catch (Throwable ignored) {}
 
             String tipText = displayName + " 撤回了一条消息";
 

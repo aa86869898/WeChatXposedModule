@@ -1,17 +1,28 @@
 package com.leshao.v3.hook;
 
 import android.content.Context;
+import android.media.MediaCodec;
+import android.media.MediaExtractor;
+import android.media.MediaFormat;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.wm.utils.WmPrefs;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.util.HashSet;
 import java.util.HashMap;
@@ -109,6 +120,8 @@ public class TtsVoiceSender {
     private static final Set<Integer> sSuppressedMessages = new HashSet<>();
     private static final Set<Integer> sBlockedOriginalMessages = new HashSet<>();
     private static final Set<Long> sMarkedMsgIds = new HashSet<>();
+    private static final java.util.Map<Long, String> sIncomingVoiceIds = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Map<Long, String> sIncomingVoiceCids = new java.util.concurrent.ConcurrentHashMap<>();
     private static final Map<Integer, String> sSyncAmrMap = new HashMap<>();
     private static final StringBuilder sTraceBuf = new StringBuilder(2048);
     private static volatile long sTraceBufResetAt;
@@ -161,23 +174,7 @@ public class TtsVoiceSender {
         hookB31W(cl);
         hookAdapterKJ(cl);
         hookF9I9(cl);
-        dumpClassAll("zn3.t0", cl);
-        dumpFields("zn3.t0", cl);
-        dumpFields("n85.z", cl);
-        dumpFields("a21.e", cl);
-        dumpFields("q85.b", cl);
-        dumpClassAll("com.tencent.mm.ui.chatting.ChattingUI", cl);
-        dumpClassAll("com.tencent.mm.ui.chatting.ChattingUIFragment", cl);
-        dumpFields("com.tencent.mm.ui.chatting.ChattingUI", cl);
-        dumpFields("com.tencent.mm.ui.chatting.ChattingUIFragment", cl);
-        dumpClassAll("com.tencent.mm.ui.chatting.view.MMChattingListView", cl);
-        dumpFields("com.tencent.mm.ui.chatting.view.MMChattingListView", cl);
-        dumpFields("n85.c0", cl);
-        dumpFields("a21.o", cl);
-        dumpClassAll("q06.n", cl);
-        dumpFields("q06.n", cl);
-        dumpFields(VersionCompat.findMsgInfoStorageClass(cl) != null
-                ? VersionCompat.findMsgInfoStorageClass(cl).getName() : "e9", cl);
+        // 自动发现微信内部类（功能所需）
         autoDiscoverClasses(cl, "com.tencent.mm.ui.chatting.ChattingUIFragment");
         autoDiscoverClasses(cl, "com.tencent.mm.ui.chatting.view.MMChattingListView");
         autoDiscoverClasses(cl, "com.tencent.mm.ui.chatting.ChattingUI");
@@ -243,10 +240,7 @@ public class TtsVoiceSender {
             long uin = getDefaultUin(ctx);
             if (uin > 0) {
                 String hash = VersionCompat.getDbHash(sClassLoader, (int) uin);
-                String[] roots = {
-                    "/data/data/com.tencent.mm/MicroMsg",
-                    "/data/user/0/com.tencent.mm/MicroMsg",
-                };
+                String[] roots = buildAccRoots();
                 for (String root : roots) {
                     File dir = new File(root, hash);
                     if (new File(dir, "EnMicroMsg.db").exists()) {
@@ -259,10 +253,7 @@ public class TtsVoiceSender {
             LogWriter.log(TAG, "Acc default_uin err: " + t.getMessage());
         }
 
-        String[] roots = {
-            "/data/data/com.tencent.mm/MicroMsg",
-            "/data/user/0/com.tencent.mm/MicroMsg",
-        };
+        String[] roots = buildAccRoots();
         for (String root : roots) {
             File md = new File(root);
             if (!md.exists() || !md.isDirectory()) continue;
@@ -383,9 +374,16 @@ public class TtsVoiceSender {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     String content = (String) param.args[0];
-                    LogWriter.log(TAG, "e9.d1 before: thread=" + Thread.currentThread().getName()
-                            + " content='" + truncStr(content, 40) + "' this="
-                            + (param.thisObject == null ? "null" : param.thisObject.getClass().getName()));
+                    if (content == null) return;
+                    captureIncomingVoice(param.thisObject, content);
+                    if (content.startsWith(TTS_PREFIX)) {
+                        LogWriter.log(TAG, "e9.d1 before: thread=" + Thread.currentThread().getName()
+                                + " content='" + truncStr(content, 40) + "' this="
+                                + (param.thisObject == null ? "null" : param.thisObject.getClass().getName()));
+                    } else if (isMarkedMessage(param.thisObject)) {
+                        LogWriter.log(TAG, "e9.d1 before(marked): thread=" + Thread.currentThread().getName()
+                                + " content='" + truncStr(content, 40) + "'");
+                    }
                     if (content == null || !content.startsWith(TTS_PREFIX)) return;
 
                     String text = content.substring(TTS_PREFIX.length()).trim();
@@ -425,6 +423,49 @@ public class TtsVoiceSender {
             LogWriter.log(TAG, "Hook e9.d1(String) OK");
         } catch (Throwable t) {
             LogWriter.log(TAG, "Hook e9.d1 FAIL: " + t.getMessage());
+        }
+    }
+
+    public static String getCapturedVoiceId(long msgId) {
+        return sIncomingVoiceIds.get(msgId);
+    }
+
+    public static String getCapturedVoiceCid(long msgId) {
+        return sIncomingVoiceCids.get(msgId);
+    }
+
+    private static void captureIncomingVoice(Object msg, String content) {
+        try {
+            if (content == null || !content.contains("<voicemsg")) return;
+            long msgId;
+            try { msgId = (Long) XposedHelpers.callMethod(msg, "getMsgId"); }
+            catch (Throwable t) { msgId = 0; }
+            if (msgId == 0) {
+                try { msgId = (Long) XposedHelpers.callMethod(msg, "H0"); }
+                catch (Throwable ignored) {}
+            }
+            if (msgId == 0) return;
+
+            String voiceId = extractXmlAttr(content, "voiceid");
+            String cid = extractXmlAttr(content, "clientmsgid");
+            if (voiceId == null && cid == null) return;
+            if (voiceId != null) sIncomingVoiceIds.put(msgId, voiceId);
+            if (cid != null) sIncomingVoiceCids.put(msgId, cid);
+            String voicemd5 = extractXmlAttr(content, "voicemd5");
+            String filename = extractXmlAttr(content, "filename");
+            String voiceformat = extractXmlAttr(content, "voiceformat");
+            String length = extractXmlAttr(content, "length");
+            String fromusername = extractXmlAttr(content, "fromusername");
+            LogWriter.log(TAG, "captureIncomingVoice msgId=" + msgId
+                + " voiceId=" + (voiceId != null ? truncStr(voiceId, 30) : "null")
+                + " voicemd5=" + (voicemd5 != null ? truncStr(voicemd5, 30) : "null")
+                + " filename=" + (filename != null ? truncStr(filename, 40) : "null")
+                + " fmt=" + (voiceformat != null ? voiceformat : "null")
+                + " len=" + (length != null ? length : "null")
+                + " from=" + (fromusername != null ? truncStr(fromusername, 20) : "null")
+                + " cid=" + (cid != null ? truncStr(cid, 30) : "null"));
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "captureIncomingVoice err: " + t.getMessage());
         }
     }
 
@@ -471,24 +512,49 @@ public class TtsVoiceSender {
             try {
                 LogWriter.log(TAG, "async start: source=" + source + " talker=" + talker
                         + " cid=" + clientMsgId + " text='" + truncStr(text, 40) + "'");
-                if (!ensureTtsReady()) {
-                    LogWriter.log(TAG, "async TTS not ready: " + source);
-                    return;
+
+                boolean useCube = WmPrefs.isTTSCube();
+                LogWriter.log(TAG, "async useCube=" + useCube + " source=" + source);
+
+                if (useCube) {
+                    if (sAccPath == null || sClassLoader == null) {
+                        ensureTtsReady();
+                    }
+                    if (sAccPath == null || sClassLoader == null) {
+                        LogWriter.log(TAG, "async cube accPath/classLoader null: " + source);
+                        return;
+                    }
+                    String amrPath = buildVoicePath(clientMsgId);
+                    Object[] ttsResult = doCubeTTS(text, amrPath);
+                    if (ttsResult == null) {
+                        LogWriter.log(TAG, "async cube TTS synth fail: " + source);
+                        return;
+                    }
+                    int amrSize = (Integer) ttsResult[0];
+                    int durationMs = (Integer) ttsResult[1];
+                    LogWriter.log(TAG, "async cube scene send start: dur=" + durationMs);
+                    boolean sceneSent = sendViaSceneVoice(talker, amrPath, durationMs);
+                    LogWriter.log(TAG, "async cube scene sent=" + sceneSent + " cid=" + clientMsgId);
+                } else {
+                    if (!ensureTtsReady()) {
+                        LogWriter.log(TAG, "async TTS not ready: " + source);
+                        return;
+                    }
+                    LogWriter.log(TAG, "async ensureTtsReady OK: " + source);
+                    String amrPath = buildVoicePath(clientMsgId);
+                    LogWriter.log(TAG, "async amrPath=" + amrPath + " source=" + source);
+                    Object[] ttsResult = doTTS(text, amrPath);
+                    if (ttsResult == null) {
+                        LogWriter.log(TAG, "async TTS synth fail: " + source);
+                        return;
+                    }
+                    int amrSize = (Integer) ttsResult[0];
+                    int durationMs = (Integer) ttsResult[1];
+                    LogWriter.log(TAG, "async scene send start: dur=" + durationMs + " source=" + source);
+                    boolean sceneSent = sendViaSceneVoice(talker, amrPath, durationMs);
+                    LogWriter.log(TAG, "async scene sent=" + sceneSent + " cid=" + clientMsgId
+                            + " bytes=" + amrSize + " dur=" + durationMs);
                 }
-                LogWriter.log(TAG, "async ensureTtsReady OK: " + source);
-                String amrPath = buildVoicePath(clientMsgId);
-                LogWriter.log(TAG, "async amrPath=" + amrPath + " source=" + source);
-                Object[] ttsResult = doTTS(text, amrPath);
-                if (ttsResult == null) {
-                    LogWriter.log(TAG, "async TTS synth fail: " + source);
-                    return;
-                }
-                int amrSize = (Integer) ttsResult[0];
-                int durationMs = (Integer) ttsResult[1];
-                LogWriter.log(TAG, "async scene send start: dur=" + durationMs + " source=" + source);
-                boolean sceneSent = sendViaSceneVoice(talker, amrPath, durationMs);
-                LogWriter.log(TAG, "async scene sent=" + sceneSent + " cid=" + clientMsgId
-                        + " bytes=" + amrSize + " dur=" + durationMs);
             } catch (Throwable t) {
                 LogWriter.log(TAG, "async TTS crash: " + t.getClass().getSimpleName() + " " + t.getMessage());
             }
@@ -947,38 +1013,6 @@ public class TtsVoiceSender {
         }
     }
 
-    private static void dumpClassAll(String name, ClassLoader cl) {
-        try {
-            Class<?> cls = XposedHelpers.findClass(name, cl);
-            StringBuilder sb = new StringBuilder("dumpAll " + name + " methods:");
-            for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
-                sb.append("\n  ").append(m.getName()).append('(');
-                Class<?>[] pts = m.getParameterTypes();
-                for (int i = 0; i < pts.length; i++) {
-                    if (i > 0) sb.append(',');
-                    sb.append(pts[i].getSimpleName());
-                }
-                sb.append(')').append(m.getReturnType().getSimpleName());
-            }
-            LogWriter.log(TAG, sb.toString());
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "dumpClassAll " + name + " FAIL: " + t.getClass().getSimpleName());
-        }
-    }
-
-    private static void dumpFields(String name, ClassLoader cl) {
-        try {
-            Class<?> cls = XposedHelpers.findClass(name, cl);
-            StringBuilder sb = new StringBuilder("dumpFields " + name + ":");
-            for (java.lang.reflect.Field f : cls.getDeclaredFields()) {
-                sb.append("\n  ").append(f.getType().getSimpleName()).append(' ').append(f.getName());
-            }
-            LogWriter.log(TAG, sb.toString());
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "dumpFields " + name + " FAIL: " + t.getClass().getSimpleName());
-        }
-    }
-
     private static final Set<String> sDiscoveredClasses = new HashSet<>();
 
     private static void autoDiscoverClasses(ClassLoader cl, String hostClass) {
@@ -995,8 +1029,6 @@ public class TtsVoiceSender {
                 if (sDiscoveredClasses.add(fn)) {
                     LogWriter.log(TAG, "autoDiscover from " + host.getSimpleName() + " field "
                             + f.getName() + " -> " + fn);
-                    dumpClassAll(fn, cl);
-                    dumpFields(fn, cl);
                     hookNamedClassAll(fn, cl, sn);
                 }
             }
@@ -1197,9 +1229,11 @@ public class TtsVoiceSender {
                             Object msg = p.args[0];
                             if (msg == null || !e9Class.isInstance(msg)) return;
                             boolean marked = isMarkedMessage(msg);
+                            String content = getMsgContent(msg);
                             LogWriter.log(TAG, "f9.I9 called marked=" + marked + " content="
-                                    + truncStr(getMsgContent(msg), 30) + " talker=" + getTalker(msg)
+                                    + truncStr(content, 800) + " talker=" + getTalker(msg)
                                     + " msg=" + System.identityHashCode(msg));
+                            captureIncomingVoice(msg, content);
                             if (marked) {
                                 LogWriter.log(TAG, "f9.I9 PASS marked #tts insert (no block)");
                             }
@@ -1211,6 +1245,10 @@ public class TtsVoiceSender {
                         try {
                             Object msg = p.args[0];
                             if (msg == null || !e9Class.isInstance(msg)) return;
+                            String afterContent = getMsgContent(msg);
+                            if (afterContent != null && afterContent.contains("<voicemsg")) {
+                                captureIncomingVoice(msg, afterContent);
+                            }
                             if (!isMarkedMessage(msg)) return;
                             long msgId = 0;
                             try { msgId = (Long) XposedHelpers.callMethod(msg, "H0"); } catch (Throwable ignored) {}
@@ -1318,7 +1356,6 @@ public class TtsVoiceSender {
                             if (t != null) {
                                 String tn = t.getClass().getName();
                                 if (sDiscoveredClasses.add("rt:" + tn)) {
-                                    dumpClassAll(tn, cl);
                                     hookNamedClassAll(tn, cl, t.getClass().getSimpleName());
                                 }
                             }
@@ -1842,7 +1879,7 @@ public class TtsVoiceSender {
         }
     }
 
-    private static boolean sendViaSceneVoice(String talker, String voiceFile, int durationMs) {
+    public static boolean sendViaSceneVoice(String talker, String voiceFile, int durationMs) {
         try {
             if (talker == null || talker.isEmpty()) {
                 LogWriter.log(TAG, "SceneVoice: talker null");
@@ -1896,6 +1933,284 @@ public class TtsVoiceSender {
         int idx = voiceFile.indexOf("/voice2/");
         if (idx >= 0) return voiceFile.substring(0, idx + 8);
         return voiceFile.substring(0, voiceFile.lastIndexOf('/') + 1);
+    }
+
+    // ========== MP3 转语音消息 ==========
+
+    /**
+     * 将本地 MP3 文件转为微信语音消息并发送
+     */
+    public static boolean sendMp3Voice(String talker, String mp3Path) {
+        if (sClassLoader == null) {
+            LogWriter.log(TAG, "sendMp3Voice: sClassLoader null");
+            return false;
+        }
+        try {
+            LogWriter.log(TAG, "sendMp3Voice start: " + mp3Path);
+
+            // 1. 将 MP3 解码为 16kHz 16bit mono PCM
+            byte[] pcm = mp3ToPcm(new File(mp3Path));
+            if (pcm == null || pcm.length == 0) {
+                LogWriter.log(TAG, "sendMp3Voice: MP3 解码失败");
+                return false;
+            }
+            LogWriter.log(TAG, "sendMp3Voice: pcm " + pcm.length + " bytes");
+
+            // 2. 编码为 silk 文件
+            File outDir = new File(sAccPath, "voice2/" + talker);
+            outDir.mkdirs();
+            String silkPath = new File(outDir, "leshao_" + System.currentTimeMillis() + ".silk").getAbsolutePath();
+
+            byte[] encodePcm = padPcmToFrame(pcm);
+            int amrSize = encodePcmToSilk(encodePcm, silkPath, pcm.length);
+            if (amrSize <= 0) {
+                LogWriter.log(TAG, "sendMp3Voice: silk 编码失败");
+                return false;
+            }
+            int durationMs = pcmBytesToDurationMs(pcm.length);
+            LogWriter.log(TAG, "sendMp3Voice: silk " + amrSize + "b duration=" + durationMs + "ms");
+
+            // 3. 通过 SceneVoice 发送
+            return sendViaSceneVoice(talker, silkPath, durationMs);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "sendMp3Voice err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 使用 Android MediaExtractor/MediaCodec 将 MP3 解码为 16kHz 16bit mono PCM
+     */
+    private static byte[] mp3ToPcm(File mp3File) {
+        MediaExtractor extractor = new MediaExtractor();
+        FileInputStream fis = null;
+        MediaCodec codec = null;
+        try {
+            extractor.setDataSource(mp3File.getAbsolutePath());
+            int trackIndex = -1;
+            for (int i = 0; i < extractor.getTrackCount(); i++) {
+                MediaFormat format = extractor.getTrackFormat(i);
+                String mime = format.getString(MediaFormat.KEY_MIME);
+                if (mime != null && mime.startsWith("audio/")) {
+                    trackIndex = i;
+                    break;
+                }
+            }
+            if (trackIndex < 0) {
+                LogWriter.log(TAG, "mp3ToPcm: 无音频轨道");
+                return null;
+            }
+
+            extractor.selectTrack(trackIndex);
+            MediaFormat format = extractor.getTrackFormat(trackIndex);
+            codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME));
+            codec.configure(format, null, null, 0);
+            codec.start();
+
+            ByteArrayOutputStream pcmOut = new ByteArrayOutputStream();
+            ByteBuffer[] inputBuffers = codec.getInputBuffers();
+            ByteBuffer[] outputBuffers = codec.getOutputBuffers();
+            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+
+            boolean inputDone = false;
+            boolean outputDone = false;
+            while (!outputDone) {
+                if (!inputDone) {
+                    int inIndex = codec.dequeueInputBuffer(10000);
+                    if (inIndex >= 0) {
+                        ByteBuffer buffer = inputBuffers[inIndex];
+                        buffer.clear();
+                        int sampleSize = extractor.readSampleData(buffer, 0);
+                        if (sampleSize < 0) {
+                            codec.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                            inputDone = true;
+                        } else {
+                            codec.queueInputBuffer(inIndex, 0, sampleSize, extractor.getSampleTime(), 0);
+                            extractor.advance();
+                        }
+                    }
+                }
+
+                int outIndex = codec.dequeueOutputBuffer(info, 10000);
+                if (outIndex >= 0) {
+                    ByteBuffer buffer = outputBuffers[outIndex];
+                    buffer.position(info.offset);
+                    byte[] chunk = new byte[info.size];
+                    buffer.get(chunk);
+                    pcmOut.write(chunk);
+                    codec.releaseOutputBuffer(outIndex, false);
+                    if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                        outputDone = true;
+                    }
+                } else if (outIndex == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
+                    outputBuffers = codec.getOutputBuffers();
+                }
+            }
+
+            byte[] rawPcm = pcmOut.toByteArray();
+            LogWriter.log(TAG, "mp3ToPcm: raw " + rawPcm.length + " bytes, format=" + format);
+
+            // 重采样为 16kHz 16bit mono
+            int srcRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE);
+            int channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT, 1);
+            return resamplePcm16Mono(rawPcm, srcRate, channels, TARGET_SAMPLE_RATE);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "mp3ToPcm err: " + t.getMessage());
+            return null;
+        } finally {
+            try { extractor.release(); } catch (Throwable ignored) {}
+            try { if (fis != null) fis.close(); } catch (Throwable ignored) {}
+            try { if (codec != null) codec.release(); } catch (Throwable ignored) {}
+        }
+    }
+
+    private static byte[] resamplePcm16Mono(byte[] rawPcm, int srcRate, int channels, int dstRate) {
+        // 假设输入为 16bit 小端 PCM
+        int srcSamples = rawPcm.length / 2 / channels;
+        int dstSamples = (int) ((long) srcSamples * dstRate / srcRate);
+        byte[] out = new byte[dstSamples * 2];
+        for (int i = 0; i < dstSamples; i++) {
+            double srcPos = (double) i * srcRate / dstRate;
+            int srcIdx = (int) srcPos;
+            double frac = srcPos - srcIdx;
+            int sample = 0;
+            for (int ch = 0; ch < channels; ch++) {
+                int s1 = readLe16(rawPcm, (srcIdx * channels + ch) * 2);
+                int s2 = readLe16(rawPcm, ((srcIdx + 1) * channels + ch) * 2);
+                int s = (int) (s1 * (1 - frac) + s2 * frac);
+                sample += s;
+            }
+            sample = sample / channels;
+            if (sample > Short.MAX_VALUE) sample = Short.MAX_VALUE;
+            if (sample < Short.MIN_VALUE) sample = Short.MIN_VALUE;
+            out[i * 2] = (byte) (sample & 0xff);
+            out[i * 2 + 1] = (byte) ((sample >> 8) & 0xff);
+        }
+        LogWriter.log(TAG, "resample: " + srcRate + "Hz/" + channels + "ch -> " + dstRate + "Hz/mono, " + rawPcm.length + " -> " + out.length + " bytes");
+        return out;
+    }
+
+    // ========== 配音魔方 TTS (Cube) ==========
+
+    private static Object[] doCubeTTS(String text, String outAmrPath) {
+        try {
+            String apiKey = WmPrefs.getStr("tts_cube_key", "");
+            String voiceId = WmPrefs.getStr("tts_cube_voice", "");
+            if (apiKey.isEmpty() || voiceId.isEmpty()) {
+                LogWriter.log(TAG, "CubeTTS: key or voice empty");
+                return null;
+            }
+
+            String apiUrl = "https://peiyinmofang.com/api/open/v1/tts/simple-generate";
+            URL url = new URL(apiUrl);
+             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+             try {
+             conn.setRequestMethod("POST");
+             conn.setConnectTimeout(20000);
+             conn.setReadTimeout(20000);
+             conn.setDoOutput(true);
+             conn.setRequestProperty("Content-Type", "application/json");
+             conn.setRequestProperty("X-API-Key", apiKey);
+
+             String jsonBody = "{\"voiceId\":\"" + voiceId + "\",\"text\":\"" + escapeJson(text) + "\"}";
+             OutputStream os = conn.getOutputStream();
+             try {
+             os.write(jsonBody.getBytes("UTF-8"));
+             os.flush();
+             } finally { os.close(); }
+
+             int code = conn.getResponseCode();
+             if (code != 200) {
+                 LogWriter.log(TAG, "CubeTTS: API HTTP " + code);
+                 return null;
+             }
+
+             InputStream is = conn.getInputStream();
+             try {
+             StringBuilder sb = new StringBuilder();
+             byte[] buf = new byte[4096];
+             int n;
+             while ((n = is.read(buf)) > 0) sb.append(new String(buf, 0, n, "UTF-8"));
+
+             String resp = sb.toString();
+             int audioIdx = resp.indexOf("\"audio\":\"");
+             if (audioIdx < 0) {
+                 LogWriter.log(TAG, "CubeTTS: no audio field in resp");
+                 return null;
+             }
+             int audioStart = audioIdx + 9;
+             int audioEnd = resp.indexOf("\"", audioStart);
+             if (audioEnd < 0) {
+                 LogWriter.log(TAG, "CubeTTS: audio URL parse fail");
+                 return null;
+             }
+             String audioUrl = resp.substring(audioStart, audioEnd)
+                     .replace("\\/", "/");
+
+             URL audioURL = new URL(audioUrl);
+             HttpURLConnection audioConn = (HttpURLConnection) audioURL.openConnection();
+             try {
+             audioConn.setConnectTimeout(15000);
+             audioConn.setReadTimeout(15000);
+             int audioCode = audioConn.getResponseCode();
+             if (audioCode != 200) {
+                 LogWriter.log(TAG, "CubeTTS: audio download HTTP " + audioCode);
+                 return null;
+             }
+
+             File tmpDir = new File(sAccPath, "cube_temp");
+             tmpDir.mkdirs();
+             File wavFile = new File(tmpDir, "cube_" + System.currentTimeMillis() + ".wav");
+             InputStream audioIs = audioConn.getInputStream();
+             FileOutputStream fos = new FileOutputStream(wavFile);
+             try {
+             byte[] wBuf = new byte[8192];
+             int rn;
+             while ((rn = audioIs.read(wBuf)) > 0) fos.write(wBuf, 0, rn);
+             fos.flush();
+             } finally {
+             try { fos.close(); } catch (Exception ignored) {}
+             try { audioIs.close(); } catch (Exception ignored) {}
+             }
+
+             LogWriter.log(TAG, "CubeTTS: wav saved " + wavFile.length() + "b");
+
+             byte[] pcm = wavToPcm(wavFile);
+             wavFile.delete();
+             if (pcm == null || pcm.length == 0) {
+                 LogWriter.log(TAG, "CubeTTS: wavToPcm empty");
+                 return null;
+             }
+
+             byte[] encodePcm = padPcmToFrame(pcm);
+             int amrSize = encodePcmToSilk(encodePcm, outAmrPath, pcm.length);
+             int durationMs = pcmBytesToDurationMs(pcm.length);
+             LogWriter.log(TAG, "CubeTTS: silk " + amrSize + "b " + durationMs + "ms");
+             return new Object[]{amrSize, durationMs};
+             } finally { audioConn.disconnect(); }
+             } finally { is.close(); }
+             } finally { conn.disconnect(); }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "CubeTTS error: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return null;
+        }
+    }
+
+    private static String escapeJson(String s) {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"': sb.append("\\\""); break;
+                case '\\': sb.append("\\\\"); break;
+                case '\n': sb.append("\\n"); break;
+                case '\r': sb.append("\\r"); break;
+                case '\t': sb.append("\\t"); break;
+                default: sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     // ========== TTS 合成 + Silk 编码 ==========
@@ -1972,7 +2287,7 @@ public class TtsVoiceSender {
         }
     }
 
-    private static byte[] wavToPcm(File wavFile) {
+    public static byte[] wavToPcm(File wavFile) {
         try (FileInputStream fis = new FileInputStream(wavFile)) {
             ByteArrayOutputStream raw = new ByteArrayOutputStream();
             byte[] buf = new byte[4096];
@@ -2044,7 +2359,7 @@ public class TtsVoiceSender {
                 | ((data[off + 2] & 0xff) << 16) | ((data[off + 3] & 0xff) << 24);
     }
 
-    private static byte[] resamplePcm16Mono(byte[] data, int dataOffset, int dataSize,
+    public static byte[] resamplePcm16Mono(byte[] data, int dataOffset, int dataSize,
             int srcRate, int channels, int dstRate) {
         int frameSize = channels * 2;
         int srcSamples = dataSize / frameSize;
@@ -2080,7 +2395,7 @@ public class TtsVoiceSender {
         return out;
     }
 
-    private static byte[] padPcmToFrame(byte[] pcm) {
+    public static byte[] padPcmToFrame(byte[] pcm) {
         int remainder = pcm.length % FRAME_PCM_BYTES;
         if (remainder == 0) return pcm;
         int paddedLength = pcm.length + (FRAME_PCM_BYTES - remainder);
@@ -2091,12 +2406,12 @@ public class TtsVoiceSender {
         return padded;
     }
 
-    private static int pcmBytesToDurationMs(int pcmBytes) {
+    public static int pcmBytesToDurationMs(int pcmBytes) {
         return (pcmBytes / (TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8))
                 * 1000 / TARGET_SAMPLE_RATE;
     }
 
-    private static int encodePcmToSilk(byte[] pcm, String outPath, int originalPcmBytes) {
+    public static int encodePcmToSilk(byte[] pcm, String outPath, int originalPcmBytes) {
         try {
             Class<?> silkCls = XposedHelpers.findClass("yl.g", sClassLoader);
             Object silk = XposedHelpers.newInstance(silkCls, TARGET_SAMPLE_RATE, SILK_BITRATE);
@@ -2188,5 +2503,84 @@ public class TtsVoiceSender {
                 }
             }
         }
+    }
+
+    // ========== WAV → SILK 转码器 (配音魔方) ==========
+
+    public static String wavToSilk(String wavFilePath, String clientMsgId) {
+        if (!sReady || sAccPath == null || sClassLoader == null) {
+            ensureTtsReady();
+        }
+        if (sAccPath == null || sClassLoader == null) {
+            LogWriter.log(TAG, "wavToSilk: accPath/classloader null");
+            return null;
+        }
+
+        File wavFile = new File(wavFilePath);
+        if (!wavFile.exists()) {
+            LogWriter.log(TAG, "wavToSilk: wav not found " + wavFilePath);
+            return null;
+        }
+
+        try {
+            byte[] pcm = wavToPcm(wavFile);
+            if (pcm == null || pcm.length == 0) {
+                LogWriter.log(TAG, "wavToSilk: wavToPcm empty");
+                return null;
+            }
+
+            byte[] encodePcm = padPcmToFrame(pcm);
+            String silkPath = buildVoicePath(clientMsgId);
+            int silkSize = encodePcmToSilk(encodePcm, silkPath, pcm.length);
+            if (silkSize <= 0) {
+                LogWriter.log(TAG, "wavToSilk: silk encode fail");
+                return null;
+            }
+            LogWriter.log(TAG, "wavToSilk: ok " + silkSize + "b -> " + silkPath);
+            return silkPath;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "wavToSilk error: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return null;
+        }
+    }
+
+    public static void sendWavAsVoice(final String talker, final String wavFilePath, final String clientMsgId) {
+        if (talker == null || talker.isEmpty() || wavFilePath == null || wavFilePath.isEmpty()) {
+            LogWriter.log(TAG, "sendWavAsVoice: invalid args");
+            return;
+        }
+        Thread t = new Thread(() -> {
+            try {
+                String silkPath = wavToSilk(wavFilePath, clientMsgId);
+                if (silkPath == null) {
+                    LogWriter.log(TAG, "sendWavAsVoice: wavToSilk failed");
+                    return;
+                }
+                File wavFile = new File(wavFilePath);
+                byte[] pcm = wavToPcm(wavFile);
+                int durationMs = pcmBytesToDurationMs(pcm != null ? pcm.length : 0);
+                boolean ok = sendViaSceneVoice(talker, silkPath, durationMs);
+                LogWriter.log(TAG, "sendWavAsVoice sent=" + ok + " talker=" + talker);
+            } catch (Throwable t2) {
+                LogWriter.log(TAG, "sendWavAsVoice error: " + t2.getClass().getSimpleName() + " " + t2.getMessage());
+            }
+        }, "leshao-wav-voice");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private static String[] buildAccRoots() {
+        java.util.List<String> roots = new java.util.ArrayList<>();
+        roots.add("/data/data/com.tencent.mm/MicroMsg");
+        java.io.File userBase = new java.io.File("/data/user");
+        java.io.File[] userDirs = userBase.listFiles();
+        if (userDirs != null) {
+            for (java.io.File ud : userDirs) {
+                if (ud.isDirectory()) {
+                    roots.add(ud.getAbsolutePath() + "/com.tencent.mm/MicroMsg");
+                }
+            }
+        }
+        return roots.toArray(new String[0]);
     }
 }

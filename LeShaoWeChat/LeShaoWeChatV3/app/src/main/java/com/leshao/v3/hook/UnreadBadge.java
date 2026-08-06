@@ -37,6 +37,16 @@ public class UnreadBadge {
         ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
         if (config == null || !config.unreadBadgeEnabled) return;
 
+        // 从配置读取角标样式（设置页写入 badge_style/max_badge/badge_color）
+        try {
+            android.content.SharedPreferences prefs = ContextManager.getPrefs();
+            if (prefs != null) {
+                badgeStyle = prefs.getInt("badge_style", 0);
+                maxDisplay = prefs.getInt("badge_max", 99);
+                badgeColor = prefs.getInt("badge_color", 0xFFFA5151);
+            }
+        } catch (Throwable ignored) {}
+
         hookSetBadge(cl);
         hookClearBadge(cl);
     }

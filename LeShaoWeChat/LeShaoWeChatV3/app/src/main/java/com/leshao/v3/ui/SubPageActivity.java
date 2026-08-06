@@ -3,7 +3,6 @@ package com.leshao.v3.ui;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -27,14 +26,7 @@ public class SubPageActivity {
     private static Activity sParentAct;
     private static String sTitle;
     private static int sPageId;
-    private static int sThemeFeaturePageId = 0;
     private static final java.util.Stack<Integer> sNavStack = new java.util.Stack<>();
-
-    private static boolean sIsThemeSubPage;
-
-    public static void setThemeFeaturePageId(int id) {
-        sThemeFeaturePageId = id;
-    }
 
     public static void open(Activity parentAct, String title, int pageId) {
         openInternal(parentAct, title, pageId, true);
@@ -46,19 +38,34 @@ public class SubPageActivity {
     }
 
     private static void openInternal(Activity parentAct, String title, int pageId, boolean pushCurrent) {
+        if (ActivationManager.isCurrentUserBlocked()) {
+            showBlacklistBlock(parentAct);
+            return;
+        }
         if (pushCurrent && sPageId != 0) sNavStack.push(sPageId);
         sParentAct = parentAct;
         sTitle = title;
         sPageId = pageId;
-        sIsThemeSubPage = false;
         show(parentAct, title, pageId);
     }
 
-    public static void reloadThemePage() {
-        if (sParentAct != null) {
-            dismissSub();
-            show(sParentAct, sTitle, sPageId);
-        }
+    // ===== 黑名单拦截 =====
+
+    private static void showBlacklistBlock(Activity parentAct) {
+        dismissSub();
+        MainActivity.dismissDialog();
+        if (sParentAct == null) sParentAct = parentAct;
+        final Activity act = parentAct;
+        act.runOnUiThread(() -> {
+            try {
+                new AlertDialog.Builder(act)
+                        .setTitle("\uD83D\uDD12 模块已被禁用")
+                        .setMessage("您已被管理员列入模块黑名单，当前微信无法使用乐少助手的任何功能，也无法进入任何功能页面。\n\n如有疑问请联系管理员解除限制。")
+                        .setPositiveButton("知道了", null)
+                        .setCancelable(false)
+                        .show();
+            } catch (Throwable ignored) {}
+        });
     }
 
     private static void show(Activity parentAct, String title, int pageId) {
@@ -118,38 +125,15 @@ public class SubPageActivity {
             try { sSubDialog.dismiss(); } catch (Throwable ignored) {}
         }
         sSubDialog = null;
+        sParentAct = null;
     }
 
     private static View createPageBody(Context ctx, Activity parentAct, int pageId) {
-        // 激活门控: 功能页面必须先激活
-        // 排除: 个人中心(99)、管理员工具(98)、主题子页(20)
-        if (pageId != 98 && pageId != 99 && pageId != 20) {
-            String wxid = ModuleConfig.getCurrentWxid();
-            if (wxid == null) wxid = MainActivity.getUserWxid();
-            boolean isAdmin = !ActivationManager.isTestMode() && wxid != null && ActivationManager.isAdmin(wxid);
-            if (!isAdmin && !ActivationManager.isActivated()) {
-                return createActivationGate(ctx, parentAct);
-            }
-
-            // 已激活但无对应功能权限：弹窗提示
-            if (!isAdmin && !ActivationManager.isFeaturePageAllowed(pageId)) {
-                return createPermissionDenied(ctx, parentAct);
-            }
-        }
-
         switch (pageId) {
-            case 2:  // 主题美化
-                return ThemePageView.create(ctx, parentAct);
             case 3:  // 联系人和群聊
                 return ContactGroupPageView.create(ctx, parentAct);
             case 4:  // 群管理助手
                 return WxMasterPageView.create(ctx, parentAct);
-            case 5:  // 音乐娱乐
-                sSubDialog.dismiss();
-                sSubDialog = null;
-                Intent musicIntent = new Intent(parentAct, MusicActivity.class);
-                parentAct.startActivity(musicIntent);
-                return new LinearLayout(ctx);
             case 8:  // TTS语音播报
                 return TTSPageView.create(ctx, parentAct);
             case 9:  // 红包转账
@@ -164,138 +148,9 @@ public class SubPageActivity {
                 return ProfilePageView.create(ctx, parentAct);
             case 98: // 管理员工具
                 return AdminPageView.create(ctx, parentAct);
-            case 20: // 主题美化 > 具体功能配置
-                return ThemePageView.createFeatureConfigPage(ctx, parentAct, sThemeFeaturePageId);
             default:
                 return makePlaceholder(ctx, parentAct);
         }
-    }
-
-    private static View createActivationGate(Context ctx, Activity parentAct) {
-        float d = ctx.getResources().getDisplayMetrics().density;
-
-        LinearLayout body = new LinearLayout(ctx);
-        body.setOrientation(LinearLayout.VERTICAL);
-        body.setGravity(Gravity.CENTER);
-        body.setPadding((int)(20 * d), (int)(60 * d), (int)(20 * d), (int)(20 * d));
-
-        TextView lock = new TextView(ctx);
-        lock.setText(new String(Character.toChars(0x1F512)));
-        lock.setTextSize(52);
-        lock.setGravity(Gravity.CENTER);
-        body.addView(lock);
-
-        TextView title = new TextView(ctx);
-        title.setText("请先激活模块");
-        title.setTextSize(17);
-        title.setTextColor(AppColors.text1());
-        title.setTypeface(null, Typeface.BOLD);
-        title.setGravity(Gravity.CENTER);
-        title.setPadding(0, (int)(16 * d), 0, (int)(6 * d));
-        body.addView(title);
-
-        TextView hint = new TextView(ctx);
-        hint.setText("输入激活码以解锁全部功能");
-        hint.setTextSize(13);
-        hint.setTextColor(AppColors.text2());
-        hint.setGravity(Gravity.CENTER);
-        hint.setPadding(0, 0, 0, (int)(24 * d));
-        body.addView(hint);
-
-        LinearLayout inputRow = new LinearLayout(ctx);
-        inputRow.setOrientation(LinearLayout.HORIZONTAL);
-        inputRow.setGravity(Gravity.CENTER_VERTICAL);
-        inputRow.setBackgroundColor(AppColors.whiteCard());
-        inputRow.setPadding((int)(14 * d), (int)(10 * d), (int)(14 * d), (int)(10 * d));
-
-        EditText codeInput = new EditText(ctx);
-        codeInput.setHint("请输入激活码 (LS-开头)");
-        codeInput.setTextSize(14);
-        codeInput.setTextColor(AppColors.text1());
-        codeInput.setHintTextColor(AppColors.text2());
-        codeInput.setSingleLine(true);
-        codeInput.setPadding((int)(12 * d), (int)(10 * d), (int)(12 * d), (int)(10 * d));
-        codeInput.setBackgroundColor(AppColors.card());
-        LinearLayout.LayoutParams inputLp = new LinearLayout.LayoutParams(0, -2, 1.0f);
-        inputLp.setMargins(0, 0, (int)(10 * d), 0);
-        codeInput.setLayoutParams(inputLp);
-        inputRow.addView(codeInput);
-
-        TextView btn = new TextView(ctx);
-        btn.setText("验证激活");
-        btn.setTextSize(13);
-        btn.setTextColor(AppColors.whiteCard());
-        btn.setTypeface(null, Typeface.BOLD);
-        btn.setPadding((int)(16 * d), (int)(10 * d), (int)(16 * d), (int)(10 * d));
-
-        android.graphics.drawable.GradientDrawable btnBg = new android.graphics.drawable.GradientDrawable();
-        btnBg.setCornerRadius((int)(6 * d));
-        btnBg.setColor(AppColors.accent());
-        btn.setBackground(btnBg);
-
-        btn.setOnClickListener(v -> {
-            String code = codeInput.getText().toString().trim();
-            if (code.isEmpty()) {
-                Toast.makeText(ctx, "请输入激活码", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            String wxid = MainActivity.getUserWxid();
-            if (wxid == null || wxid.isEmpty()) {
-                Toast.makeText(ctx, "无法获取微信ID", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            ActivationManager.ValidationResult result = ActivationManager.validate(code, wxid);
-            if (result.valid) {
-                ContextManager.getPrefs().edit()
-                    .putString("ls_act_time", String.valueOf(System.currentTimeMillis()))
-                    .commit();
-                ActivationManager.saveActivation(ctx, code, wxid,
-                    result.levelIndex, result.expireHours, result.featureMask);
-                Toast.makeText(ctx, "激活成功: " + result.levelName, Toast.LENGTH_SHORT).show();
-                SubPageActivity.open(parentAct, sTitle, sPageId);
-            } else {
-                Toast.makeText(ctx, "激活码无效或不匹配当前微信", Toast.LENGTH_SHORT).show();
-            }
-        });
-        inputRow.addView(btn);
-
-        body.addView(inputRow);
-
-        return body;
-    }
-
-    private static View createPermissionDenied(Context ctx, Activity parentAct) {
-        float d = parentAct.getResources().getDisplayMetrics().density;
-
-        LinearLayout body = new LinearLayout(ctx);
-        body.setOrientation(LinearLayout.VERTICAL);
-        body.setGravity(Gravity.CENTER);
-        body.setPadding((int)(20 * d), (int)(60 * d), (int)(20 * d), (int)(60 * d));
-
-        TextView icon = new TextView(ctx);
-        icon.setText("\uD83D\uDD12");
-        icon.setTextSize(48);
-        icon.setGravity(Gravity.CENTER);
-        body.addView(icon);
-
-        TextView title = new TextView(ctx);
-        title.setText("无使用权限");
-        title.setTextSize(18);
-        title.setTextColor(AppColors.text1());
-        title.setTypeface(null, Typeface.BOLD);
-        title.setGravity(Gravity.CENTER);
-        title.setPadding(0, (int)(16 * d), 0, (int)(8 * d));
-        body.addView(title);
-
-        TextView hint = new TextView(ctx);
-        hint.setText("当前激活码未授权此功能\n请联系管理员升级授权范围");
-        hint.setTextSize(13);
-        hint.setTextColor(AppColors.text2());
-        hint.setGravity(Gravity.CENTER);
-        hint.setPadding(0, 0, 0, (int)(16 * d));
-        body.addView(hint);
-
-        return body;
     }
 
     private static View makePlaceholder(Context ctx, Activity parentAct) {

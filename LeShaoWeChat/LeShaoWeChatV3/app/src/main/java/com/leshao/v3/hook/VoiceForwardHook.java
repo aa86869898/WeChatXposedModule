@@ -12,7 +12,6 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
-import com.leshao.v3.service.ActivationManager;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -51,12 +50,8 @@ public class VoiceForwardHook {
     private static final int MAX_LOG = 30;
 
     public static void setEnabled(boolean v) {
-        sEnabled = v && ActivationManager.isFeatureEnabled(ActivationManager.F_VOICE_FORWARD);
-        LogWriter.log(TAG, "setEnabled=" + v + " actual=" + sEnabled + " permitted=" + ActivationManager.isFeatureEnabled(ActivationManager.F_VOICE_FORWARD));
-    }
-
-    public static boolean isFeaturePermitted() {
-        return ActivationManager.isFeatureEnabled(ActivationManager.F_VOICE_FORWARD);
+        sEnabled = v;
+        LogWriter.log(TAG, "setEnabled=" + v + " actual=" + sEnabled);
     }
 
     private static volatile boolean sForwarding = false;
@@ -211,11 +206,26 @@ public class VoiceForwardHook {
     private static void injectIntoMenuBuilder(Object menu) {
         try {
             Method add = menu.getClass().getMethod("add", int.class, int.class, int.class, CharSequence.class);
-            add.invoke(menu, 0, MENU_ID, 0, "语音转发");
+            Object item = add.invoke(menu, 0, MENU_ID, 0, "语音转发");
+            setMenuIcon(item);
             LogWriter.log(TAG, "injected 语音转发 into MenuBuilder");
         } catch (Throwable t) {
             LogWriter.log(TAG, "MenuBuilder inject fail: " + t.getMessage());
         }
+    }
+
+    /** 给菜单项设置"语音转发"图标 */
+    private static void setMenuIcon(Object menuItem) {
+        try {
+            android.graphics.drawable.Drawable d = com.leshao.v3.IconLoader.load(
+                    com.leshao.v3.ContextManager.getAppContext(),
+                    com.leshao.v3.IconLoader.IC_VOICE_FORWARD, 20);
+            if (d == null) return;
+            try {
+                menuItem.getClass().getMethod("setIcon", android.graphics.drawable.Drawable.class)
+                        .invoke(menuItem, d);
+            } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {}
     }
 
     private static void hookAllClassesInPackages(ClassLoader cl, String[] pkgs) {
@@ -468,7 +478,6 @@ public class VoiceForwardHook {
     }
 
     private static void injectForwardMenuItem(Object menuObj, View itemView) {
-        if (!ActivationManager.isFeatureEnabled(ActivationManager.F_VOICE_FORWARD)) return;
         try {
             // WeKit 文档: addMenuItem(int, CharSequence, Drawable)
             Object tag = itemView.getTag();
@@ -480,7 +489,8 @@ public class VoiceForwardHook {
             // 方式1: addMenuItem(int, CharSequence) 
             try {
                 Method addItem = menuObj.getClass().getMethod("addMenuItem", int.class, CharSequence.class);
-                addItem.invoke(menuObj, MENU_ID, "语音转发");
+                Object item = addItem.invoke(menuObj, MENU_ID, "语音转发");
+                if (item instanceof MenuItem) setMenuIcon(item);
                 LogWriter.log(TAG, "added via addMenuItem(int,CharSequence)");
                 ok = true;
             } catch (Throwable ignored) {}
@@ -489,7 +499,9 @@ public class VoiceForwardHook {
             if (!ok) {
                 try {
                     Method addItem = menuObj.getClass().getMethod("addMenuItem", int.class, CharSequence.class, Drawable.class);
-                    addItem.invoke(menuObj, MENU_ID, "语音转发", null);
+                    Object item = addItem.invoke(menuObj, MENU_ID, "语音转发",
+                            com.leshao.v3.IconLoader.load(itemView.getContext(),
+                                    com.leshao.v3.IconLoader.IC_VOICE_FORWARD, 20));
                     LogWriter.log(TAG, "added via addMenuItem(int,CharSequence,Drawable)");
                     ok = true;
                 } catch (Throwable ignored) {}
@@ -499,7 +511,8 @@ public class VoiceForwardHook {
             if (!ok) {
                 try {
                     Method add = menuObj.getClass().getMethod("add", int.class, int.class, int.class, CharSequence.class);
-                    add.invoke(menuObj, 0, MENU_ID, 0, "语音转发");
+                    Object item = add.invoke(menuObj, 0, MENU_ID, 0, "语音转发");
+                    if (item instanceof MenuItem) setMenuIcon(item);
                     LogWriter.log(TAG, "added via add(int,int,int,CharSequence)");
                     ok = true;
                 } catch (Throwable ignored) {}
@@ -544,7 +557,7 @@ public class VoiceForwardHook {
 
     // ===== 转发执行 — 使用自己的联系人选择器 ====
     private static void executeForward() {
-        if (!sEnabled || sForwarding || !ActivationManager.isFeatureEnabled(ActivationManager.F_VOICE_FORWARD)) return;
+        if (!sEnabled || sForwarding) return;
         sForwarding = true;
         try {
             final Object msg = sPendingMsg;
@@ -718,10 +731,7 @@ public class VoiceForwardHook {
         // 优先用 MD5 路径直接定位
         String uinHash = getUinHash(cl);
         if (uinHash != null) {
-            String[] roots = {
-                "/data/data/com.tencent.mm/MicroMsg/" + uinHash + "/voice2",
-                "/data/user/0/com.tencent.mm/MicroMsg/" + uinHash + "/voice2",
-            };
+            String[] roots = buildVoice2Roots(uinHash);
             String md5 = md5(cid);
             String path = md5.substring(0, 2) + "/" + md5.substring(2, 4) + "/msg_" + cid + ".amr";
             for (String v2 : roots) {
@@ -811,10 +821,7 @@ public class VoiceForwardHook {
 
     private static String searchVoice2Dir(String cid) {
         String targetName = "msg_" + cid + ".amr";
-        String[] roots = {
-            "/data/data/com.tencent.mm/MicroMsg",
-            "/data/user/0/com.tencent.mm/MicroMsg",
-        };
+        String[] roots = buildMicroMsgRoots();
         for (String root : roots) {
             java.io.File md = new java.io.File(root);
             if (!md.exists()) continue;
@@ -958,11 +965,14 @@ public class VoiceForwardHook {
             LogWriter.log(TAG, "SceneVoice: dstPath=" + dstPath);
 
             // Step 3: copy 原始文件 → Mj() 返回的路径
+            // 用流复制，避免 java.nio.file.Files（API 26+）在低版本崩溃
             new java.io.File(dstPath).getParentFile().mkdirs();
-            java.nio.file.Files.copy(
-                java.nio.file.Paths.get(voiceFile),
-                java.nio.file.Paths.get(dstPath),
-                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            try (java.io.FileInputStream fis = new java.io.FileInputStream(voiceFile);
+                 java.io.FileOutputStream fos = new java.io.FileOutputStream(dstPath)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = fis.read(buf)) != -1) fos.write(buf, 0, n);
+            }
             LogWriter.log(TAG, "SceneVoice: copy to dstPath ok");
 
             // Step 4: t(newName, duration, 0, null) → v0.d()→Lj()→同一个Mj()→文件存在→true (动态发现)
@@ -1266,5 +1276,36 @@ public class VoiceForwardHook {
         }
         sb.append(")→").append(m.getReturnType().getSimpleName());
         return sb.toString();
+    }
+
+    private static String[] buildVoice2Roots(String uinHash) {
+        String dataPath = "/data/data/com.tencent.mm/MicroMsg/" + uinHash + "/voice2";
+        java.util.List<String> roots = new java.util.ArrayList<>();
+        roots.add(dataPath);
+        java.io.File userBase = new java.io.File("/data/user");
+        java.io.File[] userDirs = userBase.listFiles();
+        if (userDirs != null) {
+            for (java.io.File ud : userDirs) {
+                if (ud.isDirectory()) {
+                    roots.add(ud.getAbsolutePath() + "/com.tencent.mm/MicroMsg/" + uinHash + "/voice2");
+                }
+            }
+        }
+        return roots.toArray(new String[0]);
+    }
+
+    private static String[] buildMicroMsgRoots() {
+        java.util.List<String> roots = new java.util.ArrayList<>();
+        roots.add("/data/data/com.tencent.mm/MicroMsg");
+        java.io.File userBase = new java.io.File("/data/user");
+        java.io.File[] userDirs = userBase.listFiles();
+        if (userDirs != null) {
+            for (java.io.File ud : userDirs) {
+                if (ud.isDirectory()) {
+                    roots.add(ud.getAbsolutePath() + "/com.tencent.mm/MicroMsg");
+                }
+            }
+        }
+        return roots.toArray(new String[0]);
     }
 }

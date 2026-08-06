@@ -1,5 +1,6 @@
 package com.leshao.v3.hook;
 
+import com.leshao.v3.CrashTrace;
 import com.leshao.v3.LogWriter;
 import java.lang.reflect.Method;
 import de.robv.android.xposed.XposedHelpers;
@@ -28,9 +29,14 @@ public class VersionCompat {
     }
 
     public static String getContactUsername(Object contact) {
+        CrashTrace.t("VC_GETUN_IN");
+        String result;
         for (String m : new String[]{"d1", "d0", "getUsername", "c1", "getWxid"}) {
-            try { return (String) XposedHelpers.callMethod(contact, m); } catch (Throwable ignored) {}
+            try { result = (String) XposedHelpers.callMethod(contact, m);
+                  CrashTrace.t("VC_GETUN_OUT=" + result);
+                  return result; } catch (Throwable ignored) {}
         }
+        CrashTrace.t("VC_GETUN_OUT=\"\"");
         return "";
     }
 
@@ -245,6 +251,18 @@ public class VersionCompat {
         return findClassMulti(cl, "com.tencent.mm.storage.e9",
             "com.tencent.mm.storage.d9", "com.tencent.mm.storage.f9",
             "com.tencent.mm.storage.e8");
+    }
+
+    /** 查找消息分发类 (x9) */
+    public static Class<?> findMsgDispatchClass(ClassLoader cl) {
+        for (String pkg : new String[]{"e01", "e02", "e00", "e03"}) {
+            for (String suffix : new String[]{
+                    "x9", "x8", "y9", "w9", "z9", "x10", "x11",
+                    "a9", "b9", "c9", "v9", "u9", "t9"}) {
+                try { return findClassMulti(cl, pkg + "." + suffix); } catch (Throwable ignored) {}
+            }
+        }
+        return null;
     }
 
     public static Class<?> findAdapterClass(ClassLoader cl) {

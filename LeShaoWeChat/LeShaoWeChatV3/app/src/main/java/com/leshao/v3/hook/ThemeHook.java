@@ -46,19 +46,19 @@ public class ThemeHook {
     private static volatile String  sBubbleImagePath;
     private static volatile Bitmap  sBubbleBitmap;
 
-    private static int sActionBarBg     = 0xFF2D2D2D;
-    private static int sActionBarTitle  = 0xFFFFFFFF;
-    private static int sPageBg          = 0xFFF5F5F5;
-    private static int sChatBg          = 0xFFEDEDED;
-    private static int sBubbleSelfBg    = 0xFFFFFFFF;
-    private static int sBubbleOtherBg   = 0xFFFFFFFF;
-    private static int sBubbleSelfText  = 0xFF000000;
-    private static int sBubbleOtherText = 0xFF000000;
-    private static int sTabBg           = 0xFFF7F7F7;
-    private static int sTabSelected     = 0xFFFF4298;
-    private static int sTabUnselected   = 0xFF999999;
-    private static int sTextPrimary     = 0xFF191919;
-    private static int sTextSecondary   = 0xFF888888;
+    private static int sActionBarBg     = AppColors.text1();
+    private static int sActionBarTitle  = AppColors.card();
+    private static int sPageBg          = AppColors.bg();
+    private static int sChatBg          = AppColors.bg();
+    private static int sBubbleSelfBg    = AppColors.card();
+    private static int sBubbleOtherBg   = AppColors.card();
+    private static int sBubbleSelfText  = AppColors.text1();
+    private static int sBubbleOtherText = AppColors.text1();
+    private static int sTabBg           = AppColors.card();
+    private static int sTabSelected     = AppColors.accent();
+    private static int sTabUnselected   = AppColors.text2();
+    private static int sTextPrimary     = AppColors.text1();
+    private static int sTextSecondary   = AppColors.text2();
 
     public static void setMasterEnabled(boolean v) { sMasterEnabled = v; }
     public static void setActionBarOn(boolean v)  { sActionBarOn  = v; }
@@ -224,7 +224,7 @@ public class ThemeHook {
                         try {
                             if (!sMasterEnabled || !sConvListOn) return;
                             int orig = (int) param.getResult();
-                            if (orig == 0xFF07C160) param.setResult(sTabSelected);
+                            if (orig == AppColors.accent()) param.setResult(sTabSelected);
                         } catch (Throwable ignored) {}
                     }
                 });
@@ -470,7 +470,7 @@ public class ThemeHook {
                             if (!isInThemableContext()) return;
                             if (param.args.length == 0) return;
                             int color = (int) param.args[0];
-                            if (color == 0xFF000000 || color == Color.BLACK || isNearBlack(color))
+                            if (color == AppColors.text1() || color == Color.BLACK || isNearBlack(color))
                                 param.args[0] = sTextPrimary;
                         } catch (Throwable ignored) {}
                     }
@@ -627,10 +627,14 @@ public class ThemeHook {
                                 InputStream is = act.getContentResolver().openInputStream(uri);
                                 if (is != null) {
                                     FileOutputStream fos = new FileOutputStream(dest);
+                                    try {
                                     byte[] buf = new byte[8192];
                                     int n;
                                     while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
-                                    fos.close(); is.close();
+                                    } finally {
+                                    try { fos.close(); } catch (Exception ignored) {}
+                                    try { is.close(); } catch (Exception ignored) {}
+                                    }
                                     setBubbleImage(dest.getAbsolutePath());
                                     LogWriter.log(TAG, "gallery ok: " + dest.getAbsolutePath());
                                 }

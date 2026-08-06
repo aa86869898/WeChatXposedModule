@@ -73,6 +73,11 @@ public class WmGroupHook {
         sWM = (WindowManager) act.getSystemService(Context.WINDOW_SERVICE);
         if (room == null || !WmReflect.isChatRoom(cl, room)) return;
 
+        if (com.leshao.v3.service.ActivationManager.isCurrentUserBlocked()) {
+            LogWriter.log(TAG, "🛡 group btn suppressed: user blacklisted");
+            return;
+        }
+
         com.leshao.v3.wm.utils.WmUi.DragFloat f = new com.leshao.v3.wm.utils.WmUi.DragFloat(
                 act, sWM, "🛡", AppColors.accent(), "float_group",
                 () -> { if (sPanelOn) hidePanel(); else showPanel(); });
@@ -101,7 +106,7 @@ public class WmGroupHook {
         ScrollView sv = new ScrollView(sAct);
         LinearLayout btns = new LinearLayout(sAct);
         btns.setOrientation(LinearLayout.VERTICAL);
-        btns.setPadding(0, 0, 0, dp(8));
+        btns.setPadding(0, 0, 0, dp(0));
 
         btns.addView(com.leshao.v3.wm.utils.WmUi.makeHeader(sAct, "🛡 乐少群管理",
                 makeRoomSubtitle()));
@@ -129,8 +134,8 @@ public class WmGroupHook {
     private static void applyPanelWindow(Dialog dialog) {
         android.view.Window w = dialog.getWindow();
         if (w == null) return;
-        int pw = dp(150);
-        int ph = dp(400);
+        int pw = dp(250);
+        int ph = dp(560);
         w.setLayout(pw, ph);
         android.view.WindowManager.LayoutParams lp = w.getAttributes();
         lp.dimAmount = 0.05f;
@@ -189,15 +194,7 @@ public class WmGroupHook {
     static void exportMembers() {
         try {
             List<String> ms = WmReflect.getMemberList(sCL, sRoom);
-            if (ms == null || ms.isEmpty()) {
-                // 兜底: 从 ContactRepository 群信息获取
-                String[] info = com.leshao.v3.db.ContactRepository.queryGroupInfoFromDB(sRoom);
-                if (info != null && info[6] != null && !info[6].isEmpty()) {
-                    String[] members = info[6].split(",");
-                    ms = new ArrayList<>();
-                    for (String m : members) { if (!m.trim().isEmpty()) ms.add(m.trim()); }
-                }
-            }
+            // 兜底数据源已清空（原 ContactRepository 群信息），待重写
             if (ms == null || ms.isEmpty()) { toast("未获取到成员列表"); return; }
 
             StringBuilder sb = new StringBuilder();
@@ -213,8 +210,7 @@ public class WmGroupHook {
             dir.mkdirs();
             File f = new File(dir, "members_" + System.currentTimeMillis() + ".csv");
             FileOutputStream fos = new FileOutputStream(f);
-            fos.write(sb.toString().getBytes("UTF-8"));
-            fos.close();
+            try { fos.write(sb.toString().getBytes("UTF-8")); } finally { fos.close(); }
             toast("已导出:" + f.getName() + " (" + ms.size() + "人)");
         } catch (Exception e) {
             LogWriter.log(TAG, "exportMembers err: " + e.getMessage());
@@ -306,8 +302,7 @@ public class WmGroupHook {
             dir.mkdirs();
             File f = new File(dir, "report_" + System.currentTimeMillis() + ".txt");
             FileOutputStream fos = new FileOutputStream(f);
-            fos.write(sb.toString().getBytes("UTF-8"));
-            fos.close();
+            try { fos.write(sb.toString().getBytes("UTF-8")); } finally { fos.close(); }
             toast("已导出:" + f.getName());
         } catch (Exception e) {
             LogWriter.log(TAG, "exportReport err: " + e.getMessage());
@@ -487,13 +482,8 @@ public class WmGroupHook {
     static void exportAllRooms() {
         try {
             List<String> rooms = WmReflect.getAllChatRooms(sCL);
-            if (rooms == null || rooms.isEmpty()) {
-                // 兜底: 从 ContactRepository 获取群列表
-                List<com.leshao.v3.model.Contact> groups = com.leshao.v3.db.ContactRepository.getGroups();
-                if (groups == null || groups.isEmpty()) { toast("未获取到群列表"); return; }
-                rooms = new ArrayList<>();
-                for (com.leshao.v3.model.Contact g : groups) rooms.add(g.wxid);
-            }
+            // 兜底数据源已清空（原 ContactRepository 群列表），待重写
+            if (rooms == null || rooms.isEmpty()) { toast("未获取到群列表"); return; }
             StringBuilder sb = new StringBuilder();
             sb.append("群ID,群名,成员数,群主\n");
             for (String r : rooms) {
@@ -509,8 +499,7 @@ public class WmGroupHook {
             dir.mkdirs();
             File f = new File(dir, "allrooms_" + System.currentTimeMillis() + ".csv");
             FileOutputStream fos = new FileOutputStream(f);
-            fos.write(sb.toString().getBytes("UTF-8"));
-            fos.close();
+            try { fos.write(sb.toString().getBytes("UTF-8")); } finally { fos.close(); }
             toast("已导出全部群:" + f.getName() + " (" + rooms.size() + "个)");
         } catch (Exception e) {
             LogWriter.log(TAG, "exportAllRooms err: " + e.getMessage());

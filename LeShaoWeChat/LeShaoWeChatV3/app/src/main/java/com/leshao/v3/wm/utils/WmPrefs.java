@@ -65,12 +65,8 @@ public class WmPrefs {
     public static boolean isGrpKick() { return get("grp_kick", true); }
     public static boolean isGrpQuit() { return get("grp_quit", true); }
     public static boolean isGrpAll() { return get("grp_all", true); }
-    public static boolean isVoiceSong() { return get("voice_song_enabled", true); }
-    public static boolean isMusicCard() { return get("music_card_enabled", true); }
 
     public static boolean defaultFor(String key) {
-        if ("voice_song_enabled".equals(key)) return true;
-        if ("music_card_enabled".equals(key)) return true;
         return "auto_voice".equals(key);
     }
 

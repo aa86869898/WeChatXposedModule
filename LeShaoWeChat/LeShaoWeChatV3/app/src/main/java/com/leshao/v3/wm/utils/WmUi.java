@@ -87,8 +87,7 @@ public final class WmUi {
         btn.setAllCaps(false);
         btn.setTextColor(C_TEXT);
         btn.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        btn.setPadding(dp(act, 14), 0, dp(act, 14), 0);
-        btn.setMinimumHeight(0);
+        btn.setPadding(dp(act, 12), 0, dp(act, 12), 0);
 
         GradientDrawable gd = new GradientDrawable();
         gd.setColor(C_BG);
@@ -96,8 +95,8 @@ public final class WmUi {
         btn.setBackground(gd);
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(act, 44));
-        lp.setMargins(dp(act, 10), 0, dp(act, 10), dp(act, 8));
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(act, 38));
+        lp.setMargins(dp(act, 8), 0, dp(act, 8), dp(act, 4));
         btn.setLayoutParams(lp);
 
         btn.setOnClickListener(v -> {

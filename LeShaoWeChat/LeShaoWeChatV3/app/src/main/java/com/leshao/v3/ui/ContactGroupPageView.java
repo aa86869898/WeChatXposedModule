@@ -12,7 +12,6 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 import com.leshao.v3.ContextManager;
-import com.leshao.v3.AutoJoinGroup;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.*;
 import com.leshao.v3.model.ModuleConfig;
@@ -31,23 +30,10 @@ public class ContactGroupPageView {
         root.setPadding((int)(16 * d), (int)(16 * d), (int)(16 * d), (int)(16 * d));
 
         LinearLayout cardContact = makeCard(ctx, d);
-        cardContact.addView(switchRow(ctx, d, "通讯录导出", null, cfg.contactExportEnabled, (v, on) -> {
-            cfg.contactExportEnabled = on; cfg.save(prefs); ContactExport.setEnabled(on);
-        }, v -> ContactExport.startCustomExport(act)));
         cardContact.addView(switchRow(ctx, d, "联系人变更日志", null, cfg.contactChangeLogEnabled, (v, on) -> {
             cfg.contactChangeLogEnabled = on; cfg.save(prefs); ContactChangeLog.setEnabled(on);
         }, v -> SubPageActivity.open(act, "通讯录更新日志", 13)));
         root.addView(cardContact);
-
-        root.addView(spacerV(ctx, d, 12));
-
-        LinearLayout cardAuto = makeCard(ctx, d);
-        boolean autoJoinOn = prefs != null && prefs.getBoolean("ls_auto_join_group", false);
-        cardAuto.addView(switchRow(ctx, d, "自动扫码进群", "收到群二维码图片时自动识别并加群", autoJoinOn, (v, on) -> {
-            if (prefs != null) prefs.edit().putBoolean("ls_auto_join_group", on).apply();
-            AutoJoinGroup.setEnabled(on);
-        }, null));
-        root.addView(cardAuto);
 
         root.addView(spacerV(ctx, d, 12));
 

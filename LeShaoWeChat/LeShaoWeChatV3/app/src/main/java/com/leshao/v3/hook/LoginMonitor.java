@@ -124,8 +124,10 @@ public class LoginMonitor {
             File fpFile = new File("/sdcard/LeShaoV3Logs/device_fingerprint.txt");
             if (!fpFile.exists()) return null;
             BufferedReader br = new BufferedReader(new FileReader(fpFile));
-            String line = br.readLine();
-            br.close();
+            String line;
+            try {
+            line = br.readLine();
+            } finally { br.close(); }
             return line;
         } catch (Throwable t) { return null; }
     }
@@ -135,8 +137,9 @@ public class LoginMonitor {
             File fpFile = new File("/sdcard/LeShaoV3Logs/device_fingerprint.txt");
             fpFile.getParentFile().mkdirs();
             FileWriter fw = new FileWriter(fpFile);
+            try {
             fw.write(fingerprint);
-            fw.close();
+            } finally { fw.close(); }
         } catch (Throwable ignored) {}
     }
 
@@ -144,8 +147,9 @@ public class LoginMonitor {
         try {
             logFile.getParentFile().mkdirs();
             FileWriter fw = new FileWriter(logFile, true);
+            try {
             fw.write(sdf.format(new Date()) + " | " + event + " | " + detail + "\n");
-            fw.close();
+            } finally { fw.close(); }
         } catch (Throwable ignored) {}
     }
 

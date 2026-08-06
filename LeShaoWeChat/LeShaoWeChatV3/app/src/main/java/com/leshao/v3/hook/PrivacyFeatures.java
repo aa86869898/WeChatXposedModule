@@ -34,10 +34,12 @@ public class PrivacyFeatures {
     public static void hook(ClassLoader cl) {
         XposedBridge.log("[PrivacyFeatures] hook() ENTER sEnabled=" + sEnabled);
         loadLockedChats();
-        if (sEnabled && ModuleConfig.load(ContextManager.getPrefs()).privacyFeaturesEnabled)  hookScreenshot(cl);
-        if (sEnabled && ModuleConfig.load(ContextManager.getPrefs()).privacyFeaturesEnabled)  hookClipboard(cl);
-        if (sEnabled && ModuleConfig.load(ContextManager.getPrefs()).privacyFeaturesEnabled)    hookWebView(cl);
-        if (sEnabled && ModuleConfig.load(ContextManager.getPrefs()).privacyFeaturesEnabled)   hookFingerprint(cl);
+        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        if (config == null || !config.privacyFeaturesEnabled) return;
+        if (sEnabled) hookScreenshot(cl);
+        if (sEnabled) hookClipboard(cl);
+        if (sEnabled) hookWebView(cl);
+        if (sEnabled) hookFingerprint(cl);
     }
 
     private static void loadLockedChats() {
@@ -58,10 +60,10 @@ public class PrivacyFeatures {
                     if (path != null && path.toLowerCase().contains("screenshot")) {
                         XposedBridge.log("[Privacy] ⚠️ 检测到截图: " + path);
                         try {
-                            Activity act = (Activity) ContextManager.getAppContext();
-                            if (act != null)
-                                android.widget.Toast.makeText(act,
-                                        "⚠️ 截图操作已记录", android.widget.Toast.LENGTH_SHORT).show();
+                            Context ctx = ContextManager.getAppContext();
+                            if (ctx != null)
+                                android.widget.Toast.makeText(ctx,
+                                        "截图操作已记录", android.widget.Toast.LENGTH_SHORT).show();
                         } catch (Throwable ignored) {}
                     }
                 }
@@ -174,10 +176,10 @@ public class PrivacyFeatures {
         new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
             public void run() {
                 try {
-                    Activity act = (Activity) ContextManager.getAppContext();
-                    if (act == null) return;
+                    Context ctx = ContextManager.getAppContext();
+                    if (ctx == null) return;
                     FingerprintManager fpm = (FingerprintManager)
-                            act.getSystemService(android.content.Context.FINGERPRINT_SERVICE);
+                            ctx.getSystemService(android.content.Context.FINGERPRINT_SERVICE);
                     if (fpm != null && fpm.isHardwareDetected() && fpm.hasEnrolledFingerprints()) {
                         fpm.authenticate(null, new CancellationSignal(), 0,
                                 new FingerprintManager.AuthenticationCallback() {

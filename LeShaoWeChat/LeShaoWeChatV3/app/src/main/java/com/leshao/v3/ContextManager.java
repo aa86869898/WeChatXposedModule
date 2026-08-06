@@ -3,6 +3,7 @@ package com.leshao.v3;
 import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import java.lang.reflect.Method;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -35,6 +36,9 @@ public class ContextManager {
             XposedBridge.hookMethod(attachMethod, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
+                    // 仅接受 Application 级别的 attach，避免 Activity/Service 覆盖
+                    // sAppContext 并被静态引用导致 Activity 泄漏
+                    if (!(param.thisObject instanceof Application)) return;
                     sAppContext = (Context) param.thisObject;
                     if (!sReady) {
                         sReady = true;
@@ -74,5 +78,9 @@ public class ContextManager {
             try { Thread.sleep(100); } catch (InterruptedException ignored) {}
         }
         return sReady;
+    }
+
+    public static String getVersionName() {
+        return "3.6.6-v166";
     }
 }
