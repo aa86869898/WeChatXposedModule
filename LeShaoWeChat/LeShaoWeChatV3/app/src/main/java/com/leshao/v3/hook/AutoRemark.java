@@ -10,7 +10,7 @@ import com.leshao.v3.model.ModuleConfig;
 
 public class AutoRemark {
 
-    private static final boolean DEBUG_NOOP = true;  // v182d3: NOOP
+    private static final boolean DEBUG_NOOP = false;  // v182e: restore, but W6 write disabled
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
@@ -77,23 +77,35 @@ public class AutoRemark {
             } catch (Throwable ignored) {}
 
             if (autoFillFromGroupNick && nickname != null && nickname.length() > 0) {
+                CrashTrace.t("AUR_GNRM_IN");
                 try {
                     String roomNickname = (String) XposedHelpers.getObjectField(
                             activity, "roomNickname");
                     if (roomNickname != null && !roomNickname.isEmpty()) {
-                        autoSetRemark(activity, roomNickname);
-                        return;
+                        CrashTrace.t("AUR_GNRM_SET=" + roomNickname);
+                        // autoSetRemark(activity, roomNickname);  // DISABLED: crashes WeChat
+                        CrashTrace.t("AUR_GNRM_SET_OK");
                     }
-                } catch (Throwable ignored) {}
+                } catch (Throwable ignored) {
+                    CrashTrace.t("AUR_GNRM_ERR:" + ignored.getClass().getSimpleName());
+                }
+                CrashTrace.t("AUR_GNRM_OUT");
+                return;
             }
 
             if (autoFillFromCard) {
+                CrashTrace.t("AUR_CARD_IN");
                 try {
                     String alias = (String) XposedHelpers.getObjectField(contact, "field_alias");
                     if (alias != null && !alias.isEmpty() && !alias.startsWith("wxid_")) {
-                        autoSetRemark(activity, alias);
+                        CrashTrace.t("AUR_CARD_SET=" + alias);
+                        // autoSetRemark(activity, alias);  // DISABLED: crashes WeChat
+                        CrashTrace.t("AUR_CARD_SET_OK");
                     }
-                } catch (Throwable ignored) {}
+                } catch (Throwable ignored) {
+                    CrashTrace.t("AUR_CARD_ERR:" + ignored.getClass().getSimpleName());
+                }
+                CrashTrace.t("AUR_CARD_OUT");
             }
         } catch (Throwable t) {}
     }
