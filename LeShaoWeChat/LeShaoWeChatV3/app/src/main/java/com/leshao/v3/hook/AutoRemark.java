@@ -10,7 +10,6 @@ import com.leshao.v3.model.ModuleConfig;
 
 public class AutoRemark {
 
-    private static final boolean DEBUG_NOOP = false;  // v182e: restore, but W6 write disabled
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
@@ -37,7 +36,7 @@ public class AutoRemark {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     CrashTrace.t("AUR_D2_IN");
-                    if (!DEBUG_NOOP) checkAndAutoRemark(param.thisObject);
+                    checkAndAutoRemark(param.thisObject);
                     CrashTrace.t("AUR_D2_OUT");
                 }
             });
@@ -46,7 +45,7 @@ public class AutoRemark {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     CrashTrace.t("AUR_RS_IN");
-                    if (!DEBUG_NOOP) checkAndAutoRemark(param.thisObject);
+                    checkAndAutoRemark(param.thisObject);
                     CrashTrace.t("AUR_RS_OUT");
                 }
             });

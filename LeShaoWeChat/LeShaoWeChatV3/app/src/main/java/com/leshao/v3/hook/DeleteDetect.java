@@ -37,7 +37,6 @@ import com.leshao.v3.model.ModuleConfig;
  */
 public class DeleteDetect {
 
-    private static final boolean DEBUG_NOOP = false; // v182f: restore
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
@@ -72,8 +71,18 @@ public class DeleteDetect {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     CrashTrace.t("DEL_D2_IN");
-                    if (!DEBUG_NOOP) checkContactStatus(param.thisObject);
+                    checkContactStatus(param.thisObject);
                     CrashTrace.t("DEL_D2_OUT");
+                }
+            });
+
+            XposedBridge.hookAllMethods(contactInfoUI, "onResume",
+                    new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    CrashTrace.t("DEL_RS_IN");
+                    checkContactStatus(param.thisObject);
+                    CrashTrace.t("DEL_RS_OUT");
                 }
             });
 
