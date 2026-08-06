@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 import com.leshao.v3.ContextManager;
+import com.leshao.v3.CrashTrace;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.PathUtil;
 import com.leshao.v3.model.ContactChangeRecord;
@@ -154,21 +155,34 @@ public class ContactChangeLog {
                 XposedBridge.hookAllMethods(contactInfoUI, "D2", new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
+                        CrashTrace.t("CLC_D2_IN");
+                        try {
                         Object contact = getContactField(param.thisObject);
                         if (contact != null) detectChangesFromContact(contact);
+                        } catch (Throwable t) {
+                            CrashTrace.t("CLC_D2_ERR:" + t);
+                        }
+                        CrashTrace.t("CLC_D2_OUT");
                     }
                 });
 
                 XposedBridge.hookAllMethods(contactInfoUI, "onNotifyChange", new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
+                        CrashTrace.t("CLC_ONC_IN");
+                        try {
                         Object contact = getContactField(param.thisObject);
                         if (contact != null) detectChangesFromContact(contact);
+                        } catch (Throwable t) {
+                            CrashTrace.t("CLC_ONC_ERR:" + t);
+                        }
+                        CrashTrace.t("CLC_ONC_OUT");
                     }
                 });
             }
 
             LogWriter.log(TAG, "hook installed OK");
+            CrashTrace.t("CLC_HOOK_INSTALLED");
 
             sCurrentUin = getCurrentUin();
             loadSnapshots();
@@ -273,6 +287,7 @@ public class ContactChangeLog {
 
     private static void detectChangesFromContact(Object contact) {
         if (!sEnabled) return;
+        CrashTrace.t("CLC_DEC_IN");
 
         try {
             long now = System.currentTimeMillis();
@@ -289,12 +304,17 @@ public class ContactChangeLog {
             debounce.put(username, now);
 
             String nickname  = VersionCompat.getContactNickname(contact);
+            CrashTrace.t("CLC_NICK_OK");
             String remark    = VersionCompat.getContactRemark(contact);
+            CrashTrace.t("CLC_REMARK_OK");
             int avatarHash   = VersionCompat.getContactAvatar(contact);
+            CrashTrace.t("CLC_AVATAR_OK");
 
             String signature = VersionCompat.getContactSignature(contact);
+            CrashTrace.t("CLC_SIG_OK");
 
             ContactSnapshot current = new ContactSnapshot(username, nickname, remark, avatarHash, signature);
+            CrashTrace.t("CLC_SNAP_OK");
             ContactSnapshot previous = lastSnapshot.get(username);
 
             if (previous != null) {
@@ -304,8 +324,10 @@ public class ContactChangeLog {
             lastSnapshot.put(username, current);
             saveSnapshots();
         } catch (Throwable t) {
+            CrashTrace.t("CLC_DEC_ERR:" + t);
             LogWriter.log(TAG, "detect err: " + t.getClass().getSimpleName() + " " + t.getMessage());
         }
+        CrashTrace.t("CLC_DEC_OUT");
     }
 
     private static void buildAndSaveRecord(long now, String wxid, String nickname, String remark,
@@ -460,25 +482,39 @@ public class ContactChangeLog {
         }
     }
 
+    private static volatile boolean sSavePending;
+    private static final Object sSaveLock = new Object();
+
     private static void saveSnapshots() {
-        try {
-            org.json.JSONObject root = new org.json.JSONObject();
-            for (java.util.Map.Entry<String, ContactSnapshot> e : lastSnapshot.entrySet()) {
-                org.json.JSONObject o = new org.json.JSONObject();
-                o.put("n", e.getValue().nickname != null ? e.getValue().nickname : "");
-                o.put("r", e.getValue().remark != null ? e.getValue().remark : "");
-                o.put("a", e.getValue().avatarHash);
-                o.put("s", e.getValue().signature != null ? e.getValue().signature : "");
-                root.put(e.getKey(), o);
-            }
-            File f = getSnapshotFile();
-            f.getParentFile().mkdirs();
-            FileWriter fw = new FileWriter(f);
-            fw.write(root.toString());
-            fw.close();
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "save snapshot err: " + t.getClass().getSimpleName());
+        synchronized (sSaveLock) {
+            if (sSavePending) return;
+            sSavePending = true;
         }
+        new Thread("LeShaoSnapSaver") {
+            @Override
+            public void run() {
+                try {
+                    org.json.JSONObject root = new org.json.JSONObject();
+                    for (java.util.Map.Entry<String, ContactSnapshot> e : lastSnapshot.entrySet()) {
+                        org.json.JSONObject o = new org.json.JSONObject();
+                        o.put("n", e.getValue().nickname != null ? e.getValue().nickname : "");
+                        o.put("r", e.getValue().remark != null ? e.getValue().remark : "");
+                        o.put("a", e.getValue().avatarHash);
+                        o.put("s", e.getValue().signature != null ? e.getValue().signature : "");
+                        root.put(e.getKey(), o);
+                    }
+                    File f = getSnapshotFile();
+                    f.getParentFile().mkdirs();
+                    FileWriter fw = new FileWriter(f);
+                    fw.write(root.toString());
+                    fw.close();
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "save snapshot err: " + t.getClass().getSimpleName());
+                } finally {
+                    sSavePending = false;
+                }
+            }
+        }.start();
     }
 
     private static class ContactSnapshot {
