@@ -37,7 +37,7 @@ import com.leshao.v3.model.ModuleConfig;
  */
 public class DeleteDetect {
 
-    private static final boolean DEBUG_NOOP = true;  // v182e: NOOP
+    private static final boolean DEBUG_NOOP = false; // v182f: restore
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 

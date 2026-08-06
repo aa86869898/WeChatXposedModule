@@ -34,7 +34,6 @@ public class HideContactFields {
 
     private static Set<String> hiddenFields = new HashSet<>();
     private static volatile boolean sEnabled = true;
-    private static final boolean DEBUG_NOOP = true; // v182c
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
@@ -71,7 +70,7 @@ public class HideContactFields {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     try {
-                        if (!DEBUG_NOOP) applyHiddenFields(param.thisObject);
+                        applyHiddenFields(param.thisObject);
                     } catch (Throwable t) {
                         LogWriter.log(TAG, "applyHiddenFields err: " + t.getClass().getSimpleName());
                     }
@@ -83,7 +82,7 @@ public class HideContactFields {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     try {
-                        if (!DEBUG_NOOP) applyHiddenFields(param.thisObject);
+                        applyHiddenFields(param.thisObject);
                     } catch (Throwable t) {}
                 }
             });

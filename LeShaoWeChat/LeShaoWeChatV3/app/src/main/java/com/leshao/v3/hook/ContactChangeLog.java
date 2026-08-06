@@ -285,16 +285,9 @@ public class ContactChangeLog {
         }
     }
 
-    private static final boolean DEBUG_NOOP = true; // v182c: skip all logic, just trace
-
     private static void detectChangesFromContact(Object contact) {
         if (!sEnabled) return;
         CrashTrace.t("CLC_DEC_IN");
-        if (DEBUG_NOOP) {
-            CrashTrace.t("CLC_NOOP");
-            CrashTrace.t("CLC_DEC_OUT");
-            return;
-        }
 
         try {
             long now = System.currentTimeMillis();
@@ -310,15 +303,15 @@ public class ContactChangeLog {
             if (last != null && (now - last) < 800) return;
             debounce.put(username, now);
 
-            // v182b: SKIP ALL reflection to see if crash stops
-            String nickname  = "";      // was: VersionCompat.getContactNickname(contact);
+            // v182f: restored - W6 write was the real culprit, reflection reads are safe
+            String nickname  = VersionCompat.getContactNickname(contact);
             CrashTrace.t("CLC_NICK_OK");
-            String remark    = "";      // was: VersionCompat.getContactRemark(contact);
+            String remark    = VersionCompat.getContactRemark(contact);
             CrashTrace.t("CLC_REMARK_OK");
-            int avatarHash   = 0;       // was: VersionCompat.getContactAvatar(contact);
+            int avatarHash   = VersionCompat.getContactAvatar(contact);
             CrashTrace.t("CLC_AVATAR_OK");
 
-            String signature = "";      // was: VersionCompat.getContactSignature(contact);
+            String signature = VersionCompat.getContactSignature(contact);
             CrashTrace.t("CLC_SIG_OK");
 
             ContactSnapshot current = new ContactSnapshot(username, nickname, remark, avatarHash, signature);
