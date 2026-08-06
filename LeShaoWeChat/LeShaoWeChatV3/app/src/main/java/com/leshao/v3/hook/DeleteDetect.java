@@ -37,7 +37,7 @@ import com.leshao.v3.model.ModuleConfig;
  */
 public class DeleteDetect {
 
-    private static final boolean DEBUG_NOOP = true;  // v182d2: NOOP, test AutoRemark alone
+    private static final boolean DEBUG_NOOP = false; // v182d3: DeleteDetect only
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 

@@ -10,7 +10,7 @@ import com.leshao.v3.model.ModuleConfig;
 
 public class AutoRemark {
 
-    private static final boolean DEBUG_NOOP = false; // v182d: restore both
+    private static final boolean DEBUG_NOOP = true;  // v182d3: NOOP
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
