@@ -285,9 +285,16 @@ public class ContactChangeLog {
         }
     }
 
+    private static final boolean DEBUG_NOOP = true; // v182c: skip all logic, just trace
+
     private static void detectChangesFromContact(Object contact) {
         if (!sEnabled) return;
         CrashTrace.t("CLC_DEC_IN");
+        if (DEBUG_NOOP) {
+            CrashTrace.t("CLC_NOOP");
+            CrashTrace.t("CLC_DEC_OUT");
+            return;
+        }
 
         try {
             long now = System.currentTimeMillis();

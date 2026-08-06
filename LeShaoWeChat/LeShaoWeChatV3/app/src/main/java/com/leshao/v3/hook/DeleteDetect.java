@@ -37,6 +37,7 @@ import com.leshao.v3.model.ModuleConfig;
  */
 public class DeleteDetect {
 
+    private static final boolean DEBUG_NOOP = true; // v182c
     private static volatile boolean sEnabled = true;
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
@@ -71,7 +72,7 @@ public class DeleteDetect {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     CrashTrace.t("DEL_D2_IN");
-                    checkContactStatus(param.thisObject);
+                    if (!DEBUG_NOOP) checkContactStatus(param.thisObject);
                     CrashTrace.t("DEL_D2_OUT");
                 }
             });
@@ -82,7 +83,7 @@ public class DeleteDetect {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     CrashTrace.t("DEL_RS_IN");
-                    checkContactStatus(param.thisObject);
+                    if (!DEBUG_NOOP) checkContactStatus(param.thisObject);
                     CrashTrace.t("DEL_RS_OUT");
                 }
             });
