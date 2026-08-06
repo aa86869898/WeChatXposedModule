@@ -92,7 +92,7 @@ public class DeleteDetect {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     CrashTrace.t("DEL_RS_IN");
-                    if (!DEBUG_NOOP) checkContactStatus(param.thisObject);
+                    checkContactStatus(param.thisObject);
                     CrashTrace.t("DEL_RS_OUT");
                 }
             });
