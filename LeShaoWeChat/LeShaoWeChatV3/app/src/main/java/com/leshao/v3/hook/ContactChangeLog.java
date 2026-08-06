@@ -303,14 +303,15 @@ public class ContactChangeLog {
             if (last != null && (now - last) < 800) return;
             debounce.put(username, now);
 
-            String nickname  = VersionCompat.getContactNickname(contact);
+            // v182b: SKIP ALL reflection to see if crash stops
+            String nickname  = "";      // was: VersionCompat.getContactNickname(contact);
             CrashTrace.t("CLC_NICK_OK");
-            String remark    = VersionCompat.getContactRemark(contact);
+            String remark    = "";      // was: VersionCompat.getContactRemark(contact);
             CrashTrace.t("CLC_REMARK_OK");
-            int avatarHash   = VersionCompat.getContactAvatar(contact);
+            int avatarHash   = 0;       // was: VersionCompat.getContactAvatar(contact);
             CrashTrace.t("CLC_AVATAR_OK");
 
-            String signature = VersionCompat.getContactSignature(contact);
+            String signature = "";      // was: VersionCompat.getContactSignature(contact);
             CrashTrace.t("CLC_SIG_OK");
 
             ContactSnapshot current = new ContactSnapshot(username, nickname, remark, avatarHash, signature);
