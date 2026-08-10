@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.drawable.Drawable;
+import android.os.Process;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Toast;
@@ -1279,31 +1280,44 @@ public class VoiceForwardHook {
     }
 
     private static String[] buildVoice2Roots(String uinHash) {
-        String dataPath = "/data/data/com.tencent.mm/MicroMsg/" + uinHash + "/voice2";
+        int currentUser = Process.myUid() / 100000;
         java.util.List<String> roots = new java.util.ArrayList<>();
-        roots.add(dataPath);
+        roots.add("/data/user/" + currentUser + "/com.tencent.mm/MicroMsg/" + uinHash + "/voice2");
+        if (currentUser != 0) {
+            roots.add("/data/user/0/com.tencent.mm/MicroMsg/" + uinHash + "/voice2");
+        }
         java.io.File userBase = new java.io.File("/data/user");
         java.io.File[] userDirs = userBase.listFiles();
         if (userDirs != null) {
             for (java.io.File ud : userDirs) {
-                if (ud.isDirectory()) {
-                    roots.add(ud.getAbsolutePath() + "/com.tencent.mm/MicroMsg/" + uinHash + "/voice2");
-                }
+                if (!ud.isDirectory()) continue;
+                try {
+                    int id = Integer.parseInt(ud.getName());
+                    if (id == currentUser || (currentUser != 0 && id == 0)) continue;
+                } catch (Throwable ignored) { continue; }
+                roots.add(ud.getAbsolutePath() + "/com.tencent.mm/MicroMsg/" + uinHash + "/voice2");
             }
         }
         return roots.toArray(new String[0]);
     }
 
     private static String[] buildMicroMsgRoots() {
+        int currentUser = Process.myUid() / 100000;
         java.util.List<String> roots = new java.util.ArrayList<>();
-        roots.add("/data/data/com.tencent.mm/MicroMsg");
+        roots.add("/data/user/" + currentUser + "/com.tencent.mm/MicroMsg");
+        if (currentUser != 0) {
+            roots.add("/data/user/0/com.tencent.mm/MicroMsg");
+        }
         java.io.File userBase = new java.io.File("/data/user");
         java.io.File[] userDirs = userBase.listFiles();
         if (userDirs != null) {
             for (java.io.File ud : userDirs) {
-                if (ud.isDirectory()) {
-                    roots.add(ud.getAbsolutePath() + "/com.tencent.mm/MicroMsg");
-                }
+                if (!ud.isDirectory()) continue;
+                try {
+                    int id = Integer.parseInt(ud.getName());
+                    if (id == currentUser || (currentUser != 0 && id == 0)) continue;
+                } catch (Throwable ignored) { continue; }
+                roots.add(ud.getAbsolutePath() + "/com.tencent.mm/MicroMsg");
             }
         }
         return roots.toArray(new String[0]);

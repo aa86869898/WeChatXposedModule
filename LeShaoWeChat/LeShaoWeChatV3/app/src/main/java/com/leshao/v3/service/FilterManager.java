@@ -17,6 +17,9 @@ public class FilterManager {
         if (!cfg.announceWhitelist.isEmpty()) {
             boolean inWl = cfg.announceWhitelist.contains(talker);
             if (!inWl) return false;
+        } else {
+            // 白名单为空时不播报任何消息
+            return false;
         }
 
         switch (msgType) {

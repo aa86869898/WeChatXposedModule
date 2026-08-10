@@ -25,25 +25,34 @@ public class WmHomeHook {
     }
 
     static void showPanel(Activity act, ClassLoader cl) {
-        String[] items = {
-                "🎮 乐少助手 - 进入模块设置",
-                "🚀 乐少万群定时群发 - 勾选群+定时发送",
-                "📋 所有群列表 - 查看群+人数",
-                "📷 快捷扫码 - 一键启动扫一扫",
-                "🕐 朋友圈定时 - 定时发布",
-                "📁 文件助手 - 查看微信文件"
-        };
-        new AlertDialog.Builder(act).setTitle("微信大师")
-                .setItems(items, (d, w) -> {
-                    switch (w) {
-                        case 0: openLeShao(act); break;
-                        case 1: batchSend(act, cl); break;
-                        case 2: allGroups(act, cl); break;
-                        case 3: quickScan(act); break;
-                        case 4: scheduledMoment(act); break;
-                        case 5: fileHelper(act); break;
-                    }
-                }).show();
+        java.util.List<String> items = new java.util.ArrayList<>();
+        java.util.List<Runnable> actions = new java.util.ArrayList<>();
+
+        if (com.leshao.v3.wm.utils.WmPrefs.isBatchSend()) {
+            items.add("\u4e50\u5c11\u4e07\u7fa4\u5b9a\u65f6\u7fa4\u53d1 - \u52fe\u9009\u7fa4+\u5b9a\u65f6\u53d1\u9001");
+            actions.add(() -> batchSend(act, cl));
+        }
+        if (com.leshao.v3.wm.utils.WmPrefs.isGroupList()) {
+            items.add("\u6240\u6709\u7fa4\u5217\u8868 - \u67e5\u770b\u7fa4+\u4eba\u6570");
+            actions.add(() -> allGroups(act, cl));
+        }
+        if (com.leshao.v3.wm.utils.WmPrefs.isQuickScan()) {
+            items.add("\u5feb\u6377\u626b\u7801 - \u4e00\u952e\u542f\u52a8\u626b\u4e00\u626b");
+            actions.add(() -> quickScan(act));
+        }
+        if (com.leshao.v3.wm.utils.WmPrefs.isScheduledMoment()) {
+            items.add("\u670b\u53cb\u5708\u5b9a\u65f6 - \u5b9a\u65f6\u53d1\u5e03");
+            actions.add(() -> scheduledMoment(act));
+        }
+        if (com.leshao.v3.wm.utils.WmPrefs.isFileHelper()) {
+            items.add("\u6587\u4ef6\u52a9\u624b - \u67e5\u770b\u5fae\u4fe1\u6587\u4ef6");
+            actions.add(() -> fileHelper(act));
+        }
+        if (items.isEmpty()) return;
+
+        new AlertDialog.Builder(act).setTitle("\u5fae\u4fe1\u5927\u5e08")
+                .setItems(items.toArray(new String[0]), (d, w) -> actions.get(w).run())
+                .show();
     }
 
     static void openLeShao(Activity act) {
@@ -55,13 +64,13 @@ public class WmHomeHook {
         }
     }
 
-    static void batchSend(Activity act, ClassLoader cl) {
+    public static void batchSend(Activity act, ClassLoader cl) {
         try {
             com.leshao.v3.ui.ContactSelectorView.show(act, false,
                     com.leshao.v3.ui.ContactSelectorView.MODE_GROUP, selected -> {
                         if (selected == null || selected.isEmpty()) { toast(act, "未选择群"); return; }
                         List<String> rooms = new ArrayList<>();
-                        for (com.leshao.v3.model.Contact c : selected) rooms.add(c.wxid);
+                        for (com.leshao.v3.model.ContactCard c : selected) rooms.add(c.username);
                         showScheduleDialog(act, cl, rooms);
                     });
         } catch (Throwable t) {
@@ -136,7 +145,7 @@ public class WmHomeHook {
         return (int) (v * act.getResources().getDisplayMetrics().density + 0.5f);
     }
 
-    static void allGroups(Activity act, ClassLoader cl) {
+    public static void allGroups(Activity act, ClassLoader cl) {
         List<String> rooms = WmReflect.getAllChatRooms(cl);
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < Math.min(rooms.size(), 50); i++) {
@@ -148,14 +157,14 @@ public class WmHomeHook {
                 .setMessage(sb.toString()).setPositiveButton("确定", null).show();
     }
 
-    static void quickScan(Activity act) {
+    public static void quickScan(Activity act) {
         try {
             act.startActivity(new android.content.Intent().setClassName(
                     "com.tencent.mm", "com.tencent.mm.plugin.scanner.ui.BaseScanUI"));
         } catch (Exception e) { toast(act, "启动失败"); }
     }
 
-    static void scheduledMoment(Activity act) {
+    public static void scheduledMoment(Activity act) {
         final EditText et = new EditText(act);
         et.setHint("朋友圈内容");
         et.setMinLines(2);
@@ -171,12 +180,12 @@ public class WmHomeHook {
                     int sec;
                     try { sec = Integer.parseInt(dl.getText().toString().trim()); }
                     catch (Exception e) { sec = 300; }
-                    new android.os.Handler().postDelayed(() -> toast(act, "定时朋友圈已触发"), sec * 1000L);
+                    new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> toast(act, "定时朋友圈已触发"), sec * 1000L);
                     toast(act, "已设置" + sec + "秒后");
                 }).setNegativeButton("取消", null).show();
     }
 
-    static void fileHelper(Activity act) {
+    public static void fileHelper(Activity act) {
         new AlertDialog.Builder(act).setTitle("文件助手").setMessage(
                 "微信文件存储位置:\n\n" +
                         "图片: Pictures/WeChat/\n" +

@@ -1,331 +1,340 @@
 package com.leshao.v3;
 
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.drawable.GradientDrawable;
-import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.CheckBox;
-import android.widget.Button;
-import android.widget.CompoundButton;
 import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.Switch;
 import android.widget.TextView;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-import com.leshao.v3.hook.ContactChangeLog;
-import com.leshao.v3.model.Contact;
-import com.leshao.v3.model.ModuleConfig;
+
+import com.leshao.v3.model.ContactCard;
+import com.leshao.v3.model.ContactCard.Category;
 import com.leshao.v3.ui.AppColors;
-import com.leshao.v3.ui.CandyUi;
+import com.leshao.v3.ui.AvatarHelper;
+
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 public class ContactPickerFragment extends Fragment {
 
-    private static final String TAG = "ContactPickerFragment";
+    private static final int TAB_ALL = 0;
+    private static final int TAB_FRIEND = 1;
+    private static final int TAB_GROUP = 2;
 
-    // 蜜桃苏打主题色（与 SettingsEntryHook 保持一致）
-    static final int CLR_HEADING  = AppColors.text1();
-    static final int CLR_BODY_TXT = AppColors.text1();
-    static final int CLR_SUB_TEXT = AppColors.text2();
-    static final int CLR_CARD_BG  = AppColors.card();
-    static final int CLR_CARD_BORDER = AppColors.divider();
-    private RecyclerView mRecyclerView;
-    private ContactAdapter mAdapter;
-    private List<Contact> mAllContacts;
-    private int mTabMode = 0;
+    private int currentTab = TAB_ALL;
+    private String searchQuery = "";
+    private List<ContactCard> allContacts = new ArrayList<>();
+    private List<ContactCard> displayList = new ArrayList<>();
+    private ContactAdapter adapter;
+    private TextView tabAll, tabFriend, tabGroup;
+    private TextView countText;
+    private EditText searchInput;
+    private Handler handler = new Handler(Looper.getMainLooper());
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
+        ContextManager.waitForReady(5000);
+        return buildUi(container);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        loadData();
+    }
+
+    private void loadData() {
+        ContactRepository.loadAsync(() -> {
+            if (getActivity() == null) return;
+            handler.post(() -> {
+                allContacts = new ArrayList<>(ContactRepository.getAll());
+                if (allContacts.isEmpty()) {
+                    allContacts = new ArrayList<>(ContactRepository.getFriends());
+                }
+                applyFilter();
+            });
+        });
+    }
+
+    private View buildUi(ViewGroup parent) {
+        int p16 = dp(16);
+        int p12 = dp(12);
+        int p8 = dp(8);
 
         LinearLayout root = new LinearLayout(getContext());
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setLayoutParams(new ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.setBackgroundColor(AppColors.BG_GRADIENT_START);
 
-        // 搜索框
-        EditText searchBox = new EditText(getContext());
-        searchBox.setHint("搜索联系人...");
-        searchBox.setPadding(dp(8), dp(8), dp(8), dp(8));
-        searchBox.setLayoutParams(new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(searchBox);
+        // Search bar
+        LinearLayout searchBar = new LinearLayout(getContext());
+        searchBar.setOrientation(LinearLayout.HORIZONTAL);
+        searchBar.setPadding(p16, p12, p16, p12);
+        searchBar.setBackgroundColor(AppColors.BG_GRADIENT_START);
 
-        // 群聊/好友切换
-        LinearLayout tabBar = new LinearLayout(getContext());
-        tabBar.setOrientation(LinearLayout.HORIZONTAL);
-        tabBar.setPadding(dp(8), dp(4), dp(8), dp(4));
-
-        TextView tabAll = makeTab("全部", true);
-        TextView tabFriend = makeTab("好友", false);
-        TextView tabGroup = makeTab("群聊", false);
-
-        mTabMode = 0;
-        tabAll.setBackgroundColor(AppColors.accent());
-        tabAll.setTextColor(AppColors.WHITE_TEXT);
-
-        tabAll.setOnClickListener(v -> {
-            mTabMode = 0;
-            tabAll.setBackgroundColor(AppColors.accent());
-            tabAll.setTextColor(AppColors.WHITE_TEXT);
-            tabFriend.setBackgroundColor(AppColors.offColor());
-            tabFriend.setTextColor(AppColors.text1());
-            tabGroup.setBackgroundColor(AppColors.offColor());
-            tabGroup.setTextColor(AppColors.text1());
-            filterContacts(searchBox.getText().toString());
-        });
-        tabFriend.setOnClickListener(v -> {
-            mTabMode = 1;
-            tabAll.setBackgroundColor(AppColors.offColor());
-            tabAll.setTextColor(AppColors.text1());
-            tabFriend.setBackgroundColor(AppColors.accent());
-            tabFriend.setTextColor(AppColors.WHITE_TEXT);
-            tabGroup.setBackgroundColor(AppColors.offColor());
-            tabGroup.setTextColor(AppColors.text1());
-            filterContacts(searchBox.getText().toString());
-        });
-        tabGroup.setOnClickListener(v -> {
-            mTabMode = 2;
-            tabAll.setBackgroundColor(AppColors.offColor());
-            tabAll.setTextColor(AppColors.text1());
-            tabFriend.setBackgroundColor(AppColors.offColor());
-            tabFriend.setTextColor(AppColors.text1());
-            tabGroup.setBackgroundColor(AppColors.accent());
-            tabGroup.setTextColor(AppColors.WHITE_TEXT);
-            filterContacts(searchBox.getText().toString());
-        });
-
-        tabBar.addView(tabAll);
-        tabBar.addView(tabFriend);
-        tabBar.addView(tabGroup);
-        root.addView(tabBar);
-
-        // 个人中心按钮
-        Button btnProfile = new Button(getContext());
-        btnProfile.setText("个人中心");
-        btnProfile.setTextSize(12);
-        btnProfile.setPadding(dp(16), dp(4), dp(16), dp(4));
-        GradientDrawable pg = new GradientDrawable();
-        pg.setCornerRadius(dp(6));
-        pg.setColor(AppColors.accent());
-        btnProfile.setBackground(pg);
-        btnProfile.setTextColor(AppColors.WHITE_TEXT);
-        LinearLayout.LayoutParams bplp = new LinearLayout.LayoutParams(-2, -2);
-        bplp.gravity = android.view.Gravity.CENTER;
-        bplp.bottomMargin = dp(4);
-        btnProfile.setLayoutParams(bplp);
-        btnProfile.setOnClickListener(v -> {
-            try { com.leshao.v3.ui.MainActivity.open(getActivity()); }
-            catch (Throwable ignored) {}
-        });
-        root.addView(btnProfile);
-
-        // RecyclerView
-        mRecyclerView = new RecyclerView(getContext());
-        mRecyclerView.setLayoutParams(new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        mRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-        root.addView(mRecyclerView);
-
-        // 载入数据（联系人数据源已清空，待重写）
-        mAllContacts = new ArrayList<>();
-        mAdapter = new ContactAdapter(filterByTab(mAllContacts, mTabMode));
-        mRecyclerView.setAdapter(mAdapter);
-
-        searchBox.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+        searchInput = new EditText(getContext());
+        searchInput.setHint("\u641c\u7d22\u8054\u7cfb\u4eba");
+        searchInput.setHintTextColor(AppColors.TEXT_NOTE);
+        searchInput.setTextColor(AppColors.TEXT_TITLE);
+        searchInput.setTextSize(14);
+        searchInput.setBackground(roundBg(AppColors.INPUT_BG, dp(22)));
+        searchInput.setPadding(dp(40), dp(10), dp(16), dp(10));
+        searchInput.setSingleLine(true);
+        searchInput.setCompoundDrawablesWithIntrinsicBounds(
+                0, 0, android.R.drawable.ic_menu_search, 0);
+        searchInput.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
             @Override public void afterTextChanged(Editable s) {
-                filterContacts(s.toString());
+                searchQuery = s.toString().trim();
+                applyFilter();
             }
         });
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, dp(42), 1);
+        slp.rightMargin = p8;
+        searchBar.addView(searchInput, slp);
 
-        LogWriter.log(TAG, "loaded " + mAllContacts.size() + " items");
+        // Count
+        countText = new TextView(getContext());
+        countText.setTextSize(11);
+        countText.setTextColor(AppColors.TEXT_NOTE);
+        countText.setPadding(0, 0, 0, dp(4));
+        root.addView(searchBar);
+        root.addView(countText);
+
+        // Tab buttons
+        LinearLayout tabs = new LinearLayout(getContext());
+        tabs.setOrientation(LinearLayout.HORIZONTAL);
+        tabs.setPadding(p16, 0, p16, p12);
+        tabs.setBackgroundColor(AppColors.BG_GRADIENT_START);
+
+        tabAll = makeTab(tabs, "\u5168\u90e8", TAB_ALL);
+        tabFriend = makeTab(tabs, "\u597d\u53cb", TAB_FRIEND);
+        tabGroup = makeTab(tabs, "\u7fa4\u804a", TAB_GROUP);
+        root.addView(tabs);
+
+        // List
+        RecyclerView recycler = new RecyclerView(getContext());
+        recycler.setLayoutManager(new LinearLayoutManager(getContext()));
+        recycler.setBackgroundColor(Color.WHITE);
+        adapter = new ContactAdapter();
+        recycler.setAdapter(adapter);
+        root.addView(recycler, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
 
         return root;
     }
 
-    private TextView makeTab(String text, boolean active) {
+    private TextView makeTab(LinearLayout parent, String label, int tab) {
+        int p6 = dp(6);
+        int p14 = dp(14);
         TextView tv = new TextView(getContext());
-        tv.setText(text);
-        tv.setTextSize(14);
-        tv.setPadding(dp(12), dp(6), dp(12), dp(6));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(0, 0, dp(4), 0);
-        tv.setLayoutParams(lp);
-        tv.setBackgroundColor(active ? AppColors.accent() : AppColors.offColor());
-        tv.setTextColor(active ? AppColors.WHITE_TEXT : AppColors.text1());
+        tv.setText(label);
+        tv.setTextSize(13);
+        tv.setGravity(Gravity.CENTER);
+        tv.setPadding(p14, p6, p14, p6);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(32), 1);
+        lp.setMargins(0, 0, p6, 0);
+        tv.setOnClickListener(v -> {
+            currentTab = tab;
+            updateTabStyles();
+            applyFilter();
+        });
+        parent.addView(tv, lp);
         return tv;
     }
 
-    private LinearLayout makeToggle(String label, boolean checked, CompoundButton.OnCheckedChangeListener l) {
-        LinearLayout row = new LinearLayout(getContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(dp(4), 0, dp(12), 0);
-        TextView tv = new TextView(getContext()); tv.setText(label); tv.setTextSize(12);
-        tv.setTextColor(CLR_BODY_TXT);
-        row.addView(tv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        Switch sw = CandyUi.newSwitch(getContext()); sw.setChecked(checked); sw.setOnCheckedChangeListener(l);
-        row.addView(sw); return row;
+    private void updateTabStyles() {
+        tabAll.setBackground(roundBg(currentTab == TAB_ALL ? AppColors.ACCENT : AppColors.DIVIDER, dp(16)));
+        tabAll.setTextColor(currentTab == TAB_ALL ? AppColors.WHITE_TEXT : AppColors.TEXT_BODY);
+        tabFriend.setBackground(roundBg(currentTab == TAB_FRIEND ? AppColors.ACCENT : AppColors.DIVIDER, dp(16)));
+        tabFriend.setTextColor(currentTab == TAB_FRIEND ? AppColors.WHITE_TEXT : AppColors.TEXT_BODY);
+        tabGroup.setBackground(roundBg(currentTab == TAB_GROUP ? AppColors.ACCENT : AppColors.DIVIDER, dp(16)));
+        tabGroup.setTextColor(currentTab == TAB_GROUP ? AppColors.WHITE_TEXT : AppColors.TEXT_BODY);
     }
 
-    private void filterContacts(String query) {
-        List<Contact> filtered = filterByTab(mAllContacts, mTabMode);
-        if (!query.isEmpty()) {
-            String q = query.toLowerCase();
-            List<Contact> result = new ArrayList<>();
-            for (Contact c : filtered) {
-                if (c.displayName().toLowerCase().contains(q) || c.wxid.toLowerCase().contains(q)) {
-                    result.add(c);
-                }
-            }
-            filtered = result;
+    private void applyFilter() {
+        List<ContactCard> source;
+        switch (currentTab) {
+            case TAB_FRIEND: source = filterByCategory(allContacts, Category.FRIEND); break;
+            case TAB_GROUP:  source = filterByCategory(allContacts, Category.GROUP); break;
+            default:         source = new ArrayList<>(allContacts); break;
         }
-        mAdapter.updateData(filtered);
-    }
 
-    private List<Contact> filterByTab(List<Contact> all, int mode) {
-        List<Contact> result = new ArrayList<>();
-        for (Contact c : all) {
-            switch (mode) {
-                case 0: result.add(c); break;
-                case 1: if (!c.isGroup() && !isSkippableContact(c)) result.add(c); break;
-                case 2: if (c.isGroup()) result.add(c); break;
+        if (searchQuery.isEmpty()) {
+            Collections.sort(source, Comparator.comparing(c -> c.sortKey()));
+            displayList = source;
+        } else {
+            displayList = new ArrayList<>();
+            String q = searchQuery.toLowerCase();
+            for (ContactCard c : source) {
+                if (matchesSearch(c, q)) displayList.add(c);
             }
         }
-        return result;
+
+        countText.setText("\u5171 " + displayList.size() + " \u4eba");
+        adapter.notifyDataSetChanged();
+        updateTabStyles();
     }
 
-    private static boolean isSkippableContact(Contact c) {
-        if (c == null || c.wxid == null) return true;
-        if (c.wxid.startsWith("gh_")) return true;
-        if (c.wxid.startsWith("qqmail_")) return true;
-        if (c.wxid.contains("@lbsroom")) return true;
-        if (c.wxid.contains("@openim")) return true;
-        if (c.wxid.contains("@im.chatroom")) return true;
+    private List<ContactCard> filterByCategory(List<ContactCard> list, Category cat) {
+        List<ContactCard> r = new ArrayList<>();
+        for (ContactCard c : list) {
+            if (c.category == cat) r.add(c);
+        }
+        return r;
+    }
+
+    private boolean matchesSearch(ContactCard c, String q) {
+        if (c.displayName().toLowerCase().contains(q)) return true;
+        if (c.username != null && c.username.toLowerCase().contains(q)) return true;
+        if (c.alias != null && c.alias.toLowerCase().contains(q)) return true;
+        if (c.pyInitial != null && c.pyInitial.toLowerCase().contains(q)) return true;
+        if (c.quanPin != null && c.quanPin.toLowerCase().contains(q)) return true;
         return false;
     }
 
-    private int dp(int dp) {
-        float d = getResources() != null ? getResources().getDisplayMetrics().density : 2.0f;
-        return (int) (dp * d + 0.5f);
-    }
+    private class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.VH> {
 
-    public static class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.VH> {
+        @Override
+        public int getItemCount() { return displayList.size(); }
 
-        private List<Contact> mData;
-        private OnItemClickListener mListener;
-
-        public interface OnItemClickListener {
-            void onItemClick(Contact contact, int position);
-        }
-
-        public ContactAdapter(List<Contact> data) { this.mData = data; }
-
-        public void setOnItemClickListener(OnItemClickListener listener) { mListener = listener; }
-
-        public void updateData(List<Contact> data) {
-            this.mData = data;
-            notifyDataSetChanged();
-        }
-
-        public List<Contact> getData() { return mData; }
-
-        @NonNull @Override
+        @NonNull
+        @Override
         public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            // 毛玻璃卡片包裹
-            LinearLayout wrapper = new LinearLayout(parent.getContext());
-            wrapper.setOrientation(LinearLayout.VERTICAL);
-            wrapper.setPadding(dp(parent, 4), dp(parent, 3), dp(parent, 4), dp(parent, 3));
+            int p12 = dp(12);
+            int p8 = dp(8);
 
-            LinearLayout item = new LinearLayout(parent.getContext());
+            LinearLayout item = new LinearLayout(getContext());
             item.setOrientation(LinearLayout.HORIZONTAL);
-            item.setPadding(dp(parent, 12), dp(parent, 8), dp(parent, 12), dp(parent, 8));
+            item.setPadding(p12, p8, p12, p8);
+            item.setGravity(Gravity.CENTER_VERTICAL);
+            item.setBackgroundColor(Color.WHITE);
 
-            GradientDrawable cardBg = new GradientDrawable();
-            cardBg.setColor(CLR_CARD_BG);
-            cardBg.setCornerRadius(dp(parent, 14));
-            cardBg.setStroke(dp(parent, 1), CLR_CARD_BORDER);
-            item.setBackground(cardBg);
+            ImageView avatar = new ImageView(getContext());
+            avatar.setId(View.generateViewId());
+            LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(dp(44), dp(44));
+            alp.rightMargin = p12;
+            item.addView(avatar, alp);
 
-            CheckBox cb = new CheckBox(parent.getContext());
-            cb.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            item.addView(cb);
+            LinearLayout textCol = new LinearLayout(getContext());
+            textCol.setOrientation(LinearLayout.VERTICAL);
 
-            LinearLayout texts = new LinearLayout(parent.getContext());
-            texts.setOrientation(LinearLayout.VERTICAL);
-            texts.setPadding(dp(parent, 12), 0, 0, 0);
+            TextView name = new TextView(getContext());
+            name.setId(View.generateViewId());
+            name.setTextSize(15);
+            name.setTextColor(AppColors.TEXT_TITLE);
+            textCol.addView(name);
 
-            TextView nameView = new TextView(parent.getContext());
-            nameView.setTextSize(15);
-            nameView.setTextColor(CLR_HEADING);
-            TextView wxidView = new TextView(parent.getContext());
-            wxidView.setTextSize(11);
-            wxidView.setTextColor(CLR_SUB_TEXT);
+            TextView sub = new TextView(getContext());
+            sub.setId(View.generateViewId());
+            sub.setTextSize(12);
+            sub.setTextColor(AppColors.TEXT_NOTE);
+            sub.setPadding(0, dp(2), 0, 0);
+            textCol.addView(sub);
 
-            texts.addView(nameView);
-            texts.addView(wxidView);
-            item.addView(texts);
+            item.addView(textCol, new LinearLayout.LayoutParams(0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
-            item.setLayoutParams(new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            wrapper.setTag(new Object[]{cb, nameView, wxidView});
-
-            wrapper.addView(item);
-
-            // 分割线
-            View divider = new View(parent.getContext());
-            divider.setBackgroundColor(CLR_CARD_BORDER);
+            View divider = new View(getContext());
+            divider.setBackgroundColor(AppColors.DIVIDER);
             divider.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(parent, 1)));
+                    LinearLayout.LayoutParams.MATCH_PARENT, 1));
+
+            FrameLayout wrapper = new FrameLayout(getContext());
+            wrapper.addView(item);
+            FrameLayout.LayoutParams flp = new FrameLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT);
+            divider.setLayoutParams(new FrameLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, 1, Gravity.BOTTOM));
             wrapper.addView(divider);
 
-            return new VH(wrapper);
+            return new VH(wrapper, avatar, name, sub);
         }
 
         @Override
         public void onBindViewHolder(@NonNull VH holder, int position) {
-            Contact c = mData.get(position);
-            Object[] tags = (Object[]) holder.itemView.getTag();
-            CheckBox cb = (CheckBox) tags[0];
-            TextView nameView = (TextView) tags[1];
-            TextView wxidView = (TextView) tags[2];
+            ContactCard c = displayList.get(position);
+            holder.name.setText(c.displayName());
 
-            nameView.setText(c.displayName());
-            wxidView.setText(c.detailInfo() + (c.isGroup() ? " [群聊]" : ""));
-            cb.setOnCheckedChangeListener(null);
-            cb.setChecked(false);
-            cb.setOnCheckedChangeListener((btn, checked) -> { /* 后续扩展多选 */ });
+            String subInfo;
+            if (c.conRemark != null && !c.conRemark.isEmpty()
+                    && c.conRemark.equals(c.displayName())) {
+                subInfo = "\u6635\u79f0: " + (c.nickname != null ? c.nickname : "");
+            } else {
+                subInfo = (c.alias != null && !c.alias.isEmpty()) ? "\u5fae\u4fe1\u53f7: " + c.alias : c.username;
+            }
+            holder.sub.setText(subInfo);
 
-            holder.itemView.setOnClickListener(v -> {
-                if (mListener != null) {
-                    mListener.onItemClick(c, position);
-                }
-            });
+            int size = dp(44);
+            Bitmap bm = AvatarHelper.loadAvatar(c.username, size);
+            if (bm != null) {
+                holder.avatar.setImageBitmap(bm);
+            } else {
+                String letter = c.sortKey().substring(0, 1).toUpperCase();
+                holder.avatar.setImageBitmap(createLetterAvatar(letter, size));
+            }
         }
 
-        @Override
-        public int getItemCount() { return mData.size(); }
-
-        static class VH extends RecyclerView.ViewHolder {
-            VH(View v) { super(v); }
-        }
-
-        private static int dp(ViewGroup parent, int dp) {
-            float d = parent.getResources().getDisplayMetrics().density;
-            return (int) (dp * d + 0.5f);
+        class VH extends RecyclerView.ViewHolder {
+            ImageView avatar;
+            TextView name, sub;
+            VH(View itemView, ImageView avatar, TextView name, TextView sub) {
+                super(itemView);
+                this.avatar = avatar;
+                this.name = name;
+                this.sub = sub;
+            }
         }
     }
+
+    private Bitmap createLetterAvatar(String letter, int size) {
+        Paint paint = new Paint();
+        paint.setColor(AppColors.WHITE_TEXT);
+        paint.setTextSize(size * 0.45f);
+        paint.setAntiAlias(true);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setFakeBoldText(true);
+
+        Bitmap bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bm);
+        Paint bgPaint = new Paint();
+        bgPaint.setColor(AppColors.TEXT_NOTE);
+        canvas.drawRoundRect(0, 0, size, size, size / 2f, size / 2f, bgPaint);
+        float y = size / 2f - (paint.descent() + paint.ascent()) / 2f;
+        canvas.drawText(letter, size / 2f, y, paint);
+        return bm;
+    }
+
+    private GradientDrawable roundBg(int color, int radius) {
+        GradientDrawable gd = new GradientDrawable();
+        gd.setColor(color);
+        gd.setCornerRadius(radius);
+        return gd;
+    }
+
+    private int dp(int px) { return (int) (px * getResources().getDisplayMetrics().density + 0.5f); }
 }

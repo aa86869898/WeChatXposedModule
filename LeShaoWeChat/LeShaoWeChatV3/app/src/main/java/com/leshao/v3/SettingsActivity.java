@@ -31,6 +31,7 @@ public class SettingsActivity extends FragmentActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        AppColors.init(this);
         LogWriter.log(TAG, "onCreate");
 
         ViewPager2 viewPager = new ViewPager2(this);

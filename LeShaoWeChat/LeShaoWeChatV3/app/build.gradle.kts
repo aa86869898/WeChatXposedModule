@@ -11,16 +11,16 @@ android {
         applicationId = "com.leshao.v3"
         minSdk = 24
         targetSdk = 35
-        versionCode = 372
-        versionName = "3.6.6-v172"
+        versionCode = 416
+        versionName = "3.6.6-v416"
     }
 
     signingConfigs {
         create("release") {
             storeFile = file("release.keystore")
-            storePassword = System.getenv("LESHAO_STORE_PASSWORD") ?: "leshao2024"
-            keyAlias = System.getenv("LESHAO_KEY_ALIAS") ?: "leshao"
-            keyPassword = System.getenv("LESHAO_KEY_PASSWORD") ?: "leshao2024"
+            storePassword = "leshao2024"
+            keyAlias = "leshao"
+            keyPassword = "leshao2024"
         }
     }
 
@@ -30,7 +30,7 @@ android {
         }
         release {
             isMinifyEnabled = true
-            isShrinkResources = false
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
         }

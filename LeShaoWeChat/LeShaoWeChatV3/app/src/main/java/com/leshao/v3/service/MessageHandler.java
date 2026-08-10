@@ -3,6 +3,7 @@ package com.leshao.v3.service;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.ui.MainActivity;
+import com.leshao.v3.wm.utils.WmPrefs;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -13,6 +14,7 @@ public class MessageHandler {
     private static final Pattern SENDER_PREFIX_ANY = Pattern.compile("^([a-zA-Z0-9_]+):\\s*");
 
     private final TtsEngine mTts;
+    private final CubeTtsPlayer mCubeTts;
     private final FilterManager mFilter;
     private final NicknameResolver mNick;
 
@@ -22,10 +24,20 @@ public class MessageHandler {
     private String mSenderWxid;
     private boolean mIsSelf;
 
-    public MessageHandler(TtsEngine tts, FilterManager filter, NicknameResolver nick) {
+    public MessageHandler(TtsEngine tts, CubeTtsPlayer cubeTts, FilterManager filter, NicknameResolver nick) {
         this.mTts = tts;
+        this.mCubeTts = cubeTts;
         this.mFilter = filter;
         this.mNick = nick;
+    }
+
+    void speak(String text) {
+        if (text == null || text.isEmpty()) return;
+        if (mCubeTts != null && WmPrefs.isTTSCube()) {
+            mCubeTts.speak(text);
+        } else if (mTts != null) {
+            speak(text);
+        }
     }
 
     public void handle(Object msgInfo, int msgType, String talker, String content, ModuleConfig cfg) {
@@ -85,7 +97,7 @@ public class MessageHandler {
                 if (!cleaned.isEmpty()) {
                     if (cfg.textTruncateEnabled && cfg.textCutoffLen > 0 && cleaned.length() > cfg.textCutoffLen)
                         cleaned = cleaned.substring(0, cfg.textCutoffLen) + "等长内容";
-                    mTts.speak(str(mSenderName) + "在" + str(mGroupName) + "群艾特了我说:" + cleaned);
+                    speak(str(mSenderName) + "在" + str(mGroupName) + "群艾特了我说:" + cleaned);
                     return;
                 }
             }
@@ -98,66 +110,66 @@ public class MessageHandler {
             cleaned = cleaned.substring(0, cfg.textCutoffLen) + "等长内容";
 
         if (isGroup)
-            mTts.speak(str(mSenderName) + "在" + str(mGroupName) + "群说:" + cleaned);
+            speak(str(mSenderName) + "在" + str(mGroupName) + "群说:" + cleaned);
         else
-            mTts.speak(str(mSenderName) + "说:" + cleaned);
+            speak(str(mSenderName) + "说:" + cleaned);
     }
 
     private void handleVoice() {
         if (mGroupName != null)
-            mTts.speak(str(mSenderName) + "在" + mGroupName + "群说:");
+            speak(str(mSenderName) + "在" + mGroupName + "群说:");
         else
-            mTts.speak(str(mSenderName) + "说:");
+            speak(str(mSenderName) + "说:");
     }
 
     private void handleImage() {
         if (mGroupName != null)
-            mTts.speak(str(mSenderName) + "在" + mGroupName + "群分享一张照片");
+            speak(str(mSenderName) + "在" + mGroupName + "群分享一张照片");
         else
-            mTts.speak(str(mSenderName) + "给你分享一张照片");
+            speak(str(mSenderName) + "给你分享一张照片");
     }
 
     private void handleVideo() {
         if (mGroupName != null)
-            mTts.speak(str(mSenderName) + "在" + mGroupName + "群分享一段视频");
+            speak(str(mSenderName) + "在" + mGroupName + "群分享一段视频");
         else
-            mTts.speak(str(mSenderName) + "给你分享一段视频");
+            speak(str(mSenderName) + "给你分享一段视频");
     }
 
     private void handleCard() {
         if (mGroupName != null)
-            mTts.speak(str(mSenderName) + "在" + mGroupName + "群分享一张名片");
+            speak(str(mSenderName) + "在" + mGroupName + "群分享一张名片");
         else
-            mTts.speak(str(mSenderName) + "发来一张名片");
+            speak(str(mSenderName) + "发来一张名片");
     }
 
     private void handleFile() {
         if (mGroupName != null)
-            mTts.speak(str(mSenderName) + "在" + mGroupName + "群分享一个文件");
+            speak(str(mSenderName) + "在" + mGroupName + "群分享一个文件");
         else
-            mTts.speak(str(mSenderName) + "给你发来一个文件");
+            speak(str(mSenderName) + "给你发来一个文件");
     }
 
     private void handleLocation(String content) {
         String loc = parseLocation(content);
         if (mGroupName != null)
-            mTts.speak(str(mSenderName) + "在" + mGroupName + "群分享定位:" + loc);
+            speak(str(mSenderName) + "在" + mGroupName + "群分享定位:" + loc);
         else
-            mTts.speak(str(mSenderName) + "给你分享定位:" + loc);
+            speak(str(mSenderName) + "给你分享定位:" + loc);
     }
 
     private void handleSticker() {
         if (mGroupName != null)
-            mTts.speak(str(mSenderName) + "在" + mGroupName + "群发了一个表情");
+            speak(str(mSenderName) + "在" + mGroupName + "群发了一个表情");
         else
-            mTts.speak(str(mSenderName) + "发来一个表情");
+            speak(str(mSenderName) + "发来一个表情");
     }
 
     private void handleVoip() {
         if (mGroupName != null)
-            mTts.speak(str(mSenderName) + "在" + mGroupName + "群发起语音通话");
+            speak(str(mSenderName) + "在" + mGroupName + "群发起语音通话");
         else
-            mTts.speak(str(mSenderName) + "给你发起语音通话");
+            speak(str(mSenderName) + "给你发起语音通话");
     }
 
     private void handleAppMsg(String content, boolean isGroup, ModuleConfig cfg) {
@@ -168,9 +180,9 @@ public class MessageHandler {
         }
         if (content.contains("luckymoney") || content.contains("lucky money")) {
             if (isGroup)
-                mTts.speak(str(mGroupName) + "群正在发红包");
+                speak(str(mGroupName) + "群正在发红包");
             else
-                mTts.speak(str(mSenderName) + "给你发来一个红包");
+                speak(str(mSenderName) + "给你发来一个红包");
             return;
         }
         if (content.contains("<type>57</type>")) {
@@ -179,23 +191,23 @@ public class MessageHandler {
         }
         if (cfg.announceMiniProgram && (content.contains("<weappinfo>") || content.contains("<type>33</type>"))) {
             if (isGroup)
-                mTts.speak(str(mSenderName) + "在" + str(mGroupName) + "群分享一个小程序");
+                speak(str(mSenderName) + "在" + str(mGroupName) + "群分享一个小程序");
             else
-                mTts.speak(str(mSenderName) + "给你分享一个小程序");
+                speak(str(mSenderName) + "给你分享一个小程序");
             return;
         }
         if (cfg.announceVideoChannel && (content.contains("<finderFeed>") || content.contains("<type>2001</type>"))) {
             if (isGroup)
-                mTts.speak(str(mSenderName) + "在" + str(mGroupName) + "群分享一个视频号");
+                speak(str(mSenderName) + "在" + str(mGroupName) + "群分享一个视频号");
             else
-                mTts.speak(str(mSenderName) + "给你分享一个视频号");
+                speak(str(mSenderName) + "给你分享一个视频号");
             return;
         }
         if (cfg.announceChatHistory && (content.contains("<recorditem>") || content.contains("<type>19</type>"))) {
             if (isGroup)
-                mTts.speak(str(mSenderName) + "在" + str(mGroupName) + "群分享了聊天记录");
+                speak(str(mSenderName) + "在" + str(mGroupName) + "群分享了聊天记录");
             else
-                mTts.speak(str(mSenderName) + "给你发来聊天记录");
+                speak(str(mSenderName) + "给你发来聊天记录");
             return;
         }
         LogWriter.log("MessageHandler", "handleAppMsg unknown: " + (content.length() > 200 ? content.substring(0, 200) + "..." : content));
@@ -208,7 +220,7 @@ public class MessageHandler {
         String referBlock = extractXmlBlock(content, "refermsg");
         if (referBlock.isEmpty()) {
             LogWriter.log("MessageHandler", "handleQuote: referBlock empty, fallback speech");
-            mTts.speak(str(mSenderName) + "发来一条引用消息");
+            speak(str(mSenderName) + "发来一条引用消息");
             return;
         }
 
@@ -246,7 +258,7 @@ public class MessageHandler {
         if (!replyText.isEmpty()) sb.append("说:").append(replyText);
 
         LogWriter.log("MessageHandler", "handleQuote: speech=[" + sb.toString() + "]");
-        mTts.speak(sb.toString());
+        speak(sb.toString());
     }
 
     private String resolveMediaDesc(String refType, String quoteContent) {
@@ -273,15 +285,15 @@ public class MessageHandler {
 
         if (isGroup) {
             String groupName = mNick.resolveDisplayName(chatroom);
-            mTts.speak("成功抢到" + groupName + "群" + senderName + "发的红包，金额" + amount + "元");
+            speak("成功抢到" + groupName + "群" + senderName + "发的红包，金额" + amount + "元");
         } else {
-            mTts.speak("成功领取" + senderName + "给你的红包，金额" + amount + "元");
+            speak("成功领取" + senderName + "给你的红包，金额" + amount + "元");
         }
     }
 
     public void announceTransfer(String sender, String chatroom, String amount, String desc) {
         String senderName = sender != null ? mNick.resolveDisplayName(sender) : "好友";
-        mTts.speak("成功领取" + senderName + "给你的转账，金额" + amount + "元");
+        speak("成功领取" + senderName + "给你的转账，金额" + amount + "元");
     }
 
     // ========== 工具方法 ==========

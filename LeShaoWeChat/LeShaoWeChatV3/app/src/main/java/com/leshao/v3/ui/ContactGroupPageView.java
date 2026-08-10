@@ -51,6 +51,24 @@ public class ContactGroupPageView {
         }, null));
         root.addView(cardChat);
 
+        root.addView(spacerV(ctx, d, 12));
+
+        LinearLayout cardEntry = makeCard(ctx, d);
+        boolean cornerMenuOn = com.leshao.v3.wm.utils.WmPrefs.isCornerMenu();
+        boolean longPressMenuOn = com.leshao.v3.wm.utils.WmPrefs.isLongPressMenu();
+        boolean inputButtonsOn = com.leshao.v3.wm.utils.WmPrefs.isInputButtons();
+
+        cardEntry.addView(switchRow(ctx, d, "微信左上角菜单", null, cornerMenuOn, (v, on) -> {
+            com.leshao.v3.wm.utils.WmPrefs.set("corner_menu", on);
+        }, null));
+        cardEntry.addView(switchRow(ctx, d, "聊天窗口长按菜单", null, longPressMenuOn, (v, on) -> {
+            com.leshao.v3.wm.utils.WmPrefs.set("long_press_menu", on);
+        }, null));
+        cardEntry.addView(switchRow(ctx, d, "输入框功能按钮", null, inputButtonsOn, (v, on) -> {
+            com.leshao.v3.wm.utils.WmPrefs.set("input_buttons", on);
+        }, null));
+        root.addView(cardEntry);
+
         return root;
     }
 

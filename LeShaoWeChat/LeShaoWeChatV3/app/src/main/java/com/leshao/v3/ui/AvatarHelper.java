@@ -9,6 +9,9 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
+import android.os.Process;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
@@ -138,7 +141,7 @@ public class AvatarHelper {
 
     private static String tryFallback(Context ctx) {
         try {
-            String base = "/data/data/com.tencent.mm/MicroMsg/";
+            String base = "/data/user/" + (Process.myUid() / 100000) + "/com.tencent.mm/MicroMsg/";
             File microMsgDir = new File(base);
             if (!microMsgDir.exists() || !microMsgDir.isDirectory()) return null;
 
@@ -209,35 +212,126 @@ public class AvatarHelper {
         Bitmap cached = sCache.get(wxid);
         if (cached != null && !cached.isRecycled()) return cached;
 
-        String path = getAvatarPath(wxid);
-        if (path == null) return null;
-        File f = new File(path);
-        if (!f.exists()) return null;
+        int target = sizePx > 0 ? sizePx : 80;
+        return loadFromLocalFile(wxid, target);
+    }
 
-        try {
-            BitmapFactory.Options opts = new BitmapFactory.Options();
-            opts.inJustDecodeBounds = true;
-            BitmapFactory.decodeFile(path, opts);
+    private static Bitmap loadFromLocalFile(String wxid, int target) {
+        String m = md5(wxid);
+        if (m.isEmpty()) return null;
 
-            int sample = 1;
-            int target = sizePx > 0 ? sizePx : 80;
-            while (opts.outWidth / sample > target * 2 || opts.outHeight / sample > target * 2) {
-                sample *= 2;
+        ensureInit();
+        if (sAccountDir == null) return null;
+
+        String base = sAccountDir + "avatar/" + m.substring(0, 2) + "/" + m.substring(2, 4) + "/";
+        String[] paths = {
+            base + "user_" + m + ".png",
+            base + "user_" + m + ".jpg",
+            base + m + ".png",
+            base + m + ".jpg",
+            base + "user_" + m + ".hd",
+        };
+
+        for (String path : paths) {
+            File f = new File(path);
+            if (!f.exists()) continue;
+            try {
+                Bitmap bm = decodeFile(path, target);
+                if (bm != null) {
+                    Bitmap round = makeRoundCorner(bm, target);
+                    sCache.put(wxid, round);
+                    if (bm != round) bm.recycle();
+                    return round;
+                }
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "load err for " + wxid + " path=" + path + ": " + e.getMessage());
             }
-            opts.inSampleSize = sample;
-            opts.inJustDecodeBounds = false;
-
-            Bitmap bm = BitmapFactory.decodeFile(path, opts);
-            if (bm != null) {
-                Bitmap round = makeRoundCorner(bm, target);
-                sCache.put(wxid, round);
-                if (bm != round) bm.recycle();
-                return round;
-            }
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "load err for " + wxid + ": " + e.getMessage());
         }
         return null;
+    }
+
+    private static Bitmap loadFromWeChatApi(String wxid, int target) {
+        try {
+            ClassLoader cl = ContextManager.getClassLoader();
+            if (cl == null) return null;
+
+            // com.tencent.mm.pluginsdk.ui.a$b is WeChat's avatar display helper
+            Class<?> avatarClass = cl.loadClass("com.tencent.mm.pluginsdk.ui.a$b");
+            Context ctx = ContextManager.getAppContext();
+            if (ctx == null) return null;
+
+            // Try a.b.a(Context, username, ...) -> Drawable
+            for (String methodName : new String[]{"a", "b", "c"}) {
+                try {
+                    for (java.lang.reflect.Method method : avatarClass.getDeclaredMethods()) {
+                        if (!method.getName().equals(methodName)) continue;
+                        Class<?>[] params = method.getParameterTypes();
+                        if (params.length < 2) continue;
+                        if (params[0] != Context.class) continue;
+                        if (params[1] != String.class) continue;
+
+                        Object[] args = new Object[params.length];
+                        args[0] = ctx;
+                        args[1] = wxid;
+                        for (int i = 2; i < params.length; i++) {
+                            if (params[i] == int.class) args[i] = 0;
+                            else if (params[i] == boolean.class) args[i] = false;
+                            else if (params[i] == float.class) args[i] = 0f;
+                            else args[i] = null;
+                        }
+                        method.setAccessible(true);
+                        Object result = method.invoke(null, args);
+                        if (result instanceof Bitmap) {
+                            Bitmap round = makeRoundCorner((Bitmap) result, target);
+                            sCache.put(wxid, round);
+                            return round;
+                        }
+                        if (result instanceof Drawable) {
+                            Bitmap bm = drawableToBitmap((Drawable) result, target);
+                            if (bm != null) {
+                                Bitmap round = makeRoundCorner(bm, target);
+                                sCache.put(wxid, round);
+                                if (bm != round) bm.recycle();
+                                return round;
+                            }
+                        }
+                        break;
+                    }
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "WeChat API load fail: " + e.getMessage());
+        }
+        return null;
+    }
+
+    private static Bitmap drawableToBitmap(Drawable drawable, int size) {
+        if (drawable == null) return null;
+        if (drawable instanceof BitmapDrawable) {
+            return ((BitmapDrawable) drawable).getBitmap();
+        }
+        try {
+            Bitmap bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bm);
+            drawable.setBounds(0, 0, size, size);
+            drawable.draw(canvas);
+            return bm;
+        } catch (Throwable e) { return null; }
+    }
+
+    private static Bitmap decodeFile(String path, int target) {
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(path, opts);
+
+        int sample = 1;
+        while (opts.outWidth / sample > target * 2 || opts.outHeight / sample > target * 2) {
+            sample *= 2;
+        }
+        opts.inSampleSize = sample;
+        opts.inJustDecodeBounds = false;
+
+        return BitmapFactory.decodeFile(path, opts);
     }
 
     public static Bitmap makeRoundCorner(Bitmap source, int size) {

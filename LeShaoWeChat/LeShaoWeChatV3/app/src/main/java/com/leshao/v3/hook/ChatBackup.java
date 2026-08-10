@@ -262,9 +262,11 @@ public class ChatBackup {
 
                 File dest = new File(backupDir, dbName.replace(".db", "_") + timeStr
                     + dbName.substring(dbName.lastIndexOf('.')));
-                FileInputStream fis = new FileInputStream(src);
-                FileOutputStream fos = new FileOutputStream(dest);
+                FileInputStream fis = null;
+                FileOutputStream fos = null;
                 try {
+                fis = new FileInputStream(src);
+                fos = new FileOutputStream(dest);
                 byte[] buf = new byte[16384];
                 int read;
                 while ((read = fis.read(buf)) > 0) {
@@ -276,8 +278,8 @@ public class ChatBackup {
                 }
                 fos.flush();
                 } finally {
-                try { fos.close(); } catch (Exception ignored) {}
-                try { fis.close(); } catch (Exception ignored) {}
+                try { if (fos != null) fos.close(); } catch (Exception ignored) {}
+                try { if (fis != null) fis.close(); } catch (Exception ignored) {}
                 }
                 count++;
             }
@@ -368,16 +370,18 @@ public class ChatBackup {
             else if (srcName.endsWith(".db-shm")) destName = "EnMicroMsg.db-shm";
 
             File dest = new File(dbDir, destName);
-            FileInputStream fis = new FileInputStream(srcFile);
-            FileOutputStream fos = new FileOutputStream(dest);
+            FileInputStream fis = null;
+            FileOutputStream fos = null;
             try {
+            fis = new FileInputStream(srcFile);
+            fos = new FileOutputStream(dest);
             byte[] buf = new byte[16384];
             int read;
             while ((read = fis.read(buf)) > 0) fos.write(buf, 0, read);
             fos.flush();
             } finally {
-            try { fos.close(); } catch (Exception ignored) {}
-            try { fis.close(); } catch (Exception ignored) {}
+            try { if (fos != null) fos.close(); } catch (Exception ignored) {}
+            try { if (fis != null) fis.close(); } catch (Exception ignored) {}
             }
             LogWriter.log(TAG, "restored " + srcName + " -> " + dest.getAbsolutePath());
             return true;

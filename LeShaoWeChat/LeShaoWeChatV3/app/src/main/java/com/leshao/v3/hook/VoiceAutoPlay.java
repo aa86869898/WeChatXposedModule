@@ -6,6 +6,7 @@ import android.media.AudioTrack;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Process;
 import android.view.KeyEvent;
 
 import com.leshao.v3.LogWriter;
@@ -174,7 +175,7 @@ public class VoiceAutoPlay {
         } catch (Throwable t) {
             LogWriter.log(TAG, "shouldAutoPlay cfg err: " + t.getMessage());
         }
-        return true;
+        return false;
     }
 
     public static void onVoiceMsg(Object e9, long msgId, Object p0) {
@@ -711,8 +712,23 @@ public class VoiceAutoPlay {
 
     private static void findVoice2Dir() {
         try {
-            // 1. /data/data (primary user)
-            String[] roots = {"/data/data/com.tencent.mm/MicroMsg"};
+            int currentUser = Process.myUid() / 100000;
+            java.util.List<String> roots = new java.util.ArrayList<>();
+            roots.add("/data/user/" + currentUser + "/com.tencent.mm/MicroMsg");
+            if (currentUser != 0) {
+                roots.add("/data/user/0/com.tencent.mm/MicroMsg");
+            }
+            File[] userDirs = new File("/data/user").listFiles();
+            if (userDirs != null) {
+                for (File u : userDirs) {
+                    if (!u.isDirectory()) continue;
+                    try {
+                        int id = Integer.parseInt(u.getName());
+                        if (id == currentUser || (currentUser != 0 && id == 0)) continue;
+                    } catch (Throwable ignored) { continue; }
+                    roots.add(u.getAbsolutePath() + "/com.tencent.mm/MicroMsg");
+                }
+            }
             for (String root : roots) {
                 File md = new File(root);
                 if (!md.exists()) continue;
@@ -725,26 +741,6 @@ public class VoiceAutoPlay {
                             sVoice2Dir = v2.getAbsolutePath();
                             LogWriter.log(TAG, "voice2: " + sVoice2Dir);
                             return;
-                        }
-                    }
-                }
-            }
-            // 2. 扫描 /data/user (多用户/双开)
-            File[] userDirs = new File("/data/user").listFiles();
-            if (userDirs != null) {
-                for (File u : userDirs) {
-                    File md = new File(u, "com.tencent.mm/MicroMsg");
-                    if (!md.exists() || !md.isDirectory()) continue;
-                    File[] dirs = md.listFiles();
-                    if (dirs == null) continue;
-                    for (File dir : dirs) {
-                        if (dir.isDirectory() && dir.getName().length() >= 32) {
-                            File v2 = new File(dir, "voice2");
-                            if (v2.exists() && v2.isDirectory()) {
-                                sVoice2Dir = v2.getAbsolutePath();
-                                LogWriter.log(TAG, "voice2(scan /data/user): " + sVoice2Dir);
-                                return;
-                            }
                         }
                     }
                 }

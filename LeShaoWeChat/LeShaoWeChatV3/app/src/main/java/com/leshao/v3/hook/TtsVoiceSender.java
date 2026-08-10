@@ -4,11 +4,13 @@ import android.content.Context;
 import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
+import android.os.Process;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.db.VoiceHistoryDbHelper;
 import com.leshao.v3.wm.utils.WmPrefs;
 
 import java.io.ByteArrayOutputStream;
@@ -55,7 +57,7 @@ public class TtsVoiceSender {
     private static final int FRAME_DURATION_MS = 20;
     private static final int FRAME_SAMPLES = TARGET_SAMPLE_RATE * FRAME_DURATION_MS / 1000;
     private static final int FRAME_PCM_BYTES = FRAME_SAMPLES * TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8;
-    private static final int SILK_BITRATE = 16000;
+    private static final int SILK_BITRATE = 30000;
     private static final int SILK_COMPLEXITY = 5;
     private static final long FAILURE_SUPPRESS_WINDOW_MS = 8000;
     private static volatile boolean sCrashHandlerInstalled;
@@ -106,7 +108,7 @@ public class TtsVoiceSender {
 
     private static TextToSpeech sTts;
     private static ClassLoader sClassLoader;
-    private static boolean sReady;
+    private static volatile boolean sReady;
     private static String sAccPath;
     private static String sMyWxId;
     private static String sVoiceGClass;
@@ -230,6 +232,7 @@ public class TtsVoiceSender {
             String path = (String) XposedHelpers.callStaticMethod(
                     XposedHelpers.findClass("com.tencent.mm.kernel.h", sClassLoader), "getAccPath");
             if (path != null && !path.isEmpty()) {
+                path = normalizeDataPath(path);
                 LogWriter.log(TAG, "Acc via kernel.h.getAccPath");
                 return ensureTrailingSlash(path);
             }
@@ -272,7 +275,7 @@ public class TtsVoiceSender {
         }
 
         LogWriter.log(TAG, "Acc fallback: no hash dir found");
-        return "/data/data/com.tencent.mm/MicroMsg/";
+        return "/data/user/" + getCurrentUserId() + "/com.tencent.mm/MicroMsg/";
     }
 
     private static long getDefaultUin(Context ctx) {
@@ -285,8 +288,63 @@ public class TtsVoiceSender {
     }
 
     private static String ensureTrailingSlash(String path) {
-        if (path == null) return "/data/data/com.tencent.mm/MicroMsg/";
+        if (path == null) return "/data/user/" + getCurrentUserId() + "/com.tencent.mm/MicroMsg/";
         return path.endsWith("/") ? path : path + "/";
+    }
+
+    private static String getVoice2Dir() {
+        int expectedUser = getCurrentUserId();
+        String expectedPrefix = "/data/user/" + expectedUser + "/";
+        if (sAccPath != null) {
+            String normalized = normalizeDataPath(sAccPath);
+            if (!normalized.startsWith(expectedPrefix)) {
+                LogWriter.log(TAG, "AccPath mismatch: " + sAccPath + " vs user " + expectedUser + ", re-find");
+                sAccPath = null;
+            } else {
+                sAccPath = normalized;
+            }
+        }
+        if (sAccPath == null) {
+            sAccPath = findAccPath();
+        }
+        return sAccPath + "voice2";
+    }
+
+    private static String normalizeDataPath(String path) {
+        if (path == null) return null;
+        if (path.startsWith("/data/data/")) {
+            return path.replaceFirst("^/data/data/", "/data/user/0/");
+        }
+        return path;
+    }
+
+    private static void fileCopy(String src, String dst) {
+        java.io.FileInputStream fis = null;
+        java.io.FileOutputStream fos = null;
+        try {
+            fis = new java.io.FileInputStream(src);
+            fos = new java.io.FileOutputStream(dst);
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = fis.read(buf)) > 0) fos.write(buf, 0, n);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "fileCopy err: " + t.getMessage());
+        } finally {
+            try { if (fis != null) fis.close(); } catch (Throwable ignored) {}
+            try { if (fos != null) fos.close(); } catch (Throwable ignored) {}
+        }
+    }
+
+    private static void fileWrite(File file, byte[] data) {
+        java.io.FileOutputStream fos = null;
+        try {
+            fos = new java.io.FileOutputStream(file);
+            fos.write(data);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "fileWrite err: " + t.getMessage());
+        } finally {
+            try { if (fos != null) fos.close(); } catch (Throwable ignored) {}
+        }
     }
 
     private static String getMyWxId() {
@@ -612,13 +670,11 @@ public class TtsVoiceSender {
                 try { msgId = (Long) XposedHelpers.callMethod(msg, "H0"); } catch (Throwable ignored) {}
                 if (msgId > 0) {
                     try {
+                        if (sAccPath == null) { findAccPath(); if (sAccPath == null) return; }
                         String dst = sAccPath + "voice2/" + talker + "/msg_" + msgId + ".amr";
                         File parent = new File(dst).getParentFile();
                         if (parent != null) parent.mkdirs();
-                        java.nio.file.Files.copy(
-                                java.nio.file.Paths.get(amrPath),
-                                java.nio.file.Paths.get(dst),
-                                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        fileCopy(amrPath, dst);
                         try { XposedHelpers.callMethod(msg, "j1", dst); } catch (Throwable ignored) {}
                         LogWriter.log(TAG, "amr fixup: msgId=" + msgId + " copied " + amrPath + " -> " + dst);
                     } catch (Throwable e) {
@@ -633,7 +689,9 @@ public class TtsVoiceSender {
         t.start();
     }
 
-    private static String buildVoicePath(String clientMsgId) {        String voice2Dir = sAccPath + "voice2/";
+    private static String buildVoicePath(String clientMsgId) {
+        if (sAccPath == null) { findAccPath(); if (sAccPath == null) return null; }
+        String voice2Dir = sAccPath + "voice2/";
         String path = buildVoice2Path(voice2Dir, clientMsgId);
         File parent = new File(path).getParentFile();
         if (parent != null) parent.mkdirs();
@@ -1881,6 +1939,7 @@ public class TtsVoiceSender {
 
     public static boolean sendViaSceneVoice(String talker, String voiceFile, int durationMs) {
         try {
+            LogWriter.log(TAG, "SceneVoice: start voiceFile=" + voiceFile + " talker=" + talker + " durationMs=" + durationMs);
             if (talker == null || talker.isEmpty()) {
                 LogWriter.log(TAG, "SceneVoice: talker null");
                 return false;
@@ -1899,13 +1958,12 @@ public class TtsVoiceSender {
             if (newName == null || newName.isEmpty()) return false;
 
             String voice2Dir = getVoice2Dir(voiceFile);
+            LogWriter.log(TAG, "SceneVoice: voice2Dir=" + voice2Dir + " newName=" + newName);
             String dstPath = buildVoice2Path(voice2Dir, newName);
+            LogWriter.log(TAG, "SceneVoice: dstPath=" + dstPath);
             File dstParent = new File(dstPath).getParentFile();
             if (dstParent != null) dstParent.mkdirs();
-            java.nio.file.Files.copy(
-                    java.nio.file.Paths.get(voiceFile),
-                    java.nio.file.Paths.get(dstPath),
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            fileCopy(voiceFile, dstPath);
             LogWriter.log(TAG, "SceneVoice: copied to " + dstPath);
 
             boolean ok = (Boolean) XposedHelpers.callStaticMethod(
@@ -1938,40 +1996,132 @@ public class TtsVoiceSender {
     // ========== MP3 转语音消息 ==========
 
     /**
-     * 将本地 MP3 文件转为微信语音消息并发送
+     * 将本地 MP3 文件转为微信语音消息并发送 (默认参数)
      */
+    public interface VoiceSendCallback {
+        void onProgress(int current, int total);
+    }
+
     public static boolean sendMp3Voice(String talker, String mp3Path) {
+        return sendMp3Voice(talker, mp3Path, 0, 1000, 0, 0, null);
+    }
+
+    public static boolean sendMp3Voice(String talker, String mp3Path, int splitSeconds, int fakeDurationMs) {
+        return sendMp3Voice(talker, mp3Path, splitSeconds, fakeDurationMs, 0, 0, null);
+    }
+
+    /**
+     * 将本地 MP3 文件转为微信语音消息并发送 (支持音频裁剪)
+     * @param cutBeginSec 裁剪起始秒数, 0=不裁剪
+     * @param cutEndSec 裁剪结束秒数, 0=到末尾
+     */
+    public static boolean sendMp3Voice(String talker, String mp3Path, int splitSeconds, int fakeDurationMs,
+            float cutBeginSec, float cutEndSec, VoiceSendCallback callback) {
         if (sClassLoader == null) {
             LogWriter.log(TAG, "sendMp3Voice: sClassLoader null");
             return false;
         }
         try {
-            LogWriter.log(TAG, "sendMp3Voice start: " + mp3Path);
+            LogWriter.log(TAG, "sendMp3Voice start: " + mp3Path
+                    + " split=" + splitSeconds + "s fakeMs=" + fakeDurationMs
+                    + " cut=" + cutBeginSec + "-" + cutEndSec);
 
-            // 1. 将 MP3 解码为 16kHz 16bit mono PCM
-            byte[] pcm = mp3ToPcm(new File(mp3Path));
+            final VoiceSendCallback decodePhaseCb = (callback != null) ? new VoiceSendCallback() {
+                @Override public void onProgress(int current, int total) {
+                    try { callback.onProgress(current, total); } catch (Throwable ignored) {}
+                }
+            } : null;
+            byte[] pcm = mp3ToPcm(new File(mp3Path), decodePhaseCb);
             if (pcm == null || pcm.length == 0) {
                 LogWriter.log(TAG, "sendMp3Voice: MP3 解码失败");
                 return false;
             }
+
+            int bytesPerSec = TARGET_SAMPLE_RATE * TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8;
+
+            if (cutBeginSec > 0 || cutEndSec > 0) {
+                int cutStart = (int)(cutBeginSec * bytesPerSec);
+                if (cutStart % 2 != 0) cutStart++; // align to 16-bit
+                int cutEnd = (int)(cutEndSec * bytesPerSec);
+                if (cutEnd % 2 != 0) cutEnd++;
+                if (cutEnd <= 0 || cutEnd > pcm.length) cutEnd = pcm.length;
+                if (cutEnd % 2 != 0) cutEnd--;
+                if (cutStart >= cutEnd) {
+                    LogWriter.log(TAG, "sendMp3Voice: invalid cut range");
+                    return false;
+                }
+                int newLen = cutEnd - cutStart;
+                byte[] cutPcm = new byte[newLen];
+                System.arraycopy(pcm, cutStart, cutPcm, 0, newLen);
+                pcm = cutPcm;
+                LogWriter.log(TAG, "sendMp3Voice: cut pcm " + cutStart + "-" + cutEnd + " -> " + pcm.length + " bytes");
+            }
+
             LogWriter.log(TAG, "sendMp3Voice: pcm " + pcm.length + " bytes");
 
-            // 2. 编码为 silk 文件
-            File outDir = new File(sAccPath, "voice2/" + talker);
-            outDir.mkdirs();
-            String silkPath = new File(outDir, "leshao_" + System.currentTimeMillis() + ".silk").getAbsolutePath();
+            String voice2 = getVoice2Dir();
+            boolean anySent = false;
 
-            byte[] encodePcm = padPcmToFrame(pcm);
-            int amrSize = encodePcmToSilk(encodePcm, silkPath, pcm.length);
-            if (amrSize <= 0) {
-                LogWriter.log(TAG, "sendMp3Voice: silk 编码失败");
-                return false;
+            if (splitSeconds <= 0) {
+                if (callback != null) callback.onProgress(0, 1);
+                byte[] padPcm = padPcmToFrame(pcm);
+                byte[] silkData = encodeSilkRaw(padPcm);
+                if (silkData == null || silkData.length == 0) return false;
+                String tmpPath = voice2 + "/mp3_" + System.currentTimeMillis();
+                fileWrite(new File(tmpPath), silkData);
+                anySent = sendViaSceneVoice(talker, tmpPath, fakeDurationMs);
+                if (callback != null) callback.onProgress(1, 1);
+            } else {
+                int segmentBytes = splitSeconds * bytesPerSec;
+                int totalSegments = (pcm.length + segmentBytes - 1) / segmentBytes;
+
+                LogWriter.log(TAG, "sendMp3Voice: splitting into " + totalSegments
+                        + " segments, " + segmentBytes + " bytes/segment");
+
+                if (callback != null) callback.onProgress(0, totalSegments);
+
+                for (int seg = 0; seg < totalSegments; seg++) {
+                    int off = seg * segmentBytes;
+                    int len = Math.min(segmentBytes, pcm.length - off);
+                    byte[] segPcm = new byte[len];
+                    System.arraycopy(pcm, off, segPcm, 0, len);
+
+                    byte[] padPcm = padPcmToFrame(segPcm);
+                    byte[] silkData = encodeSilkRaw(padPcm);
+                    if (silkData == null || silkData.length == 0) {
+                        LogWriter.log(TAG, "sendMp3Voice: segment " + (seg+1) + "/" + totalSegments + " encode fail");
+                        if (callback != null) callback.onProgress(seg + 1, totalSegments);
+                        continue;
+                    }
+
+                    String tmpPath = voice2 + "/mp3_" + System.currentTimeMillis() + "_" + (seg + 1);
+                    fileWrite(new File(tmpPath), silkData);
+
+                    boolean sent = sendViaSceneVoice(talker, tmpPath, fakeDurationMs);
+                    LogWriter.log(TAG, "sendMp3Voice: segment " + (seg+1) + "/"
+                            + totalSegments + " sent=" + sent);
+                    if (sent) anySent = true;
+                    if (callback != null) callback.onProgress(seg + 1, totalSegments);
+
+                    if (sent && seg < totalSegments - 1) {
+                        try { Thread.sleep(500); } catch (InterruptedException ignored) {}
+                    }
+                }
             }
-            int durationMs = pcmBytesToDurationMs(pcm.length);
-            LogWriter.log(TAG, "sendMp3Voice: silk " + amrSize + "b duration=" + durationMs + "ms");
 
-            // 3. 通过 SceneVoice 发送
-            return sendViaSceneVoice(talker, silkPath, durationMs);
+            if (anySent) {
+                try {
+                    File mp3File = new File(mp3Path);
+                    String fileName = mp3File.getName();
+                    int durationMs = (int)((pcm.length * 1000L) / (TARGET_SAMPLE_RATE * TARGET_CHANNELS * 2));
+                    android.content.Context ctx = ContextManager.getAppContext();
+                    if (ctx != null) {
+                        VoiceHistoryDbHelper.getInstance(ctx).insert(mp3Path, fileName, talker, durationMs);
+                    }
+                } catch (Throwable ignored) {}
+            }
+
+            return anySent;
         } catch (Throwable t) {
             LogWriter.log(TAG, "sendMp3Voice err: " + t.getClass().getSimpleName() + " " + t.getMessage());
             return false;
@@ -1980,16 +2130,20 @@ public class TtsVoiceSender {
 
     /**
      * 使用 Android MediaExtractor/MediaCodec 将 MP3 解码为 16kHz 16bit mono PCM
+     * @param decodeCb 解码进度回调(percent 0-100), 可为 null
      */
-    private static byte[] mp3ToPcm(File mp3File) {
+    private static byte[] mp3ToPcm(File mp3File, VoiceSendCallback decodeCb) {
         MediaExtractor extractor = new MediaExtractor();
-        FileInputStream fis = null;
         MediaCodec codec = null;
+        File tempPcmFile = null;
+        FileOutputStream fos = null;
+        long startMs = System.currentTimeMillis();
         try {
             extractor.setDataSource(mp3File.getAbsolutePath());
             int trackIndex = -1;
+            MediaFormat format = null;
             for (int i = 0; i < extractor.getTrackCount(); i++) {
-                MediaFormat format = extractor.getTrackFormat(i);
+                format = extractor.getTrackFormat(i);
                 String mime = format.getString(MediaFormat.KEY_MIME);
                 if (mime != null && mime.startsWith("audio/")) {
                     trackIndex = i;
@@ -2002,91 +2156,187 @@ public class TtsVoiceSender {
             }
 
             extractor.selectTrack(trackIndex);
-            MediaFormat format = extractor.getTrackFormat(trackIndex);
+            format = extractor.getTrackFormat(trackIndex);
+
+            long fileSize = mp3File.length();
+            long totalDurationUs = format.containsKey(MediaFormat.KEY_DURATION)
+                ? format.getLong(MediaFormat.KEY_DURATION) : fileSize * 60; // rough estimate
+
+            int srcRate = format.containsKey(MediaFormat.KEY_SAMPLE_RATE)
+                ? format.getInteger(MediaFormat.KEY_SAMPLE_RATE) : 44100;
+            int channels = format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)
+                ? format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) : 2;
+
+            LogWriter.log(TAG, "mp3ToPcm: file=" + fileSize + "B dur="
+                + (totalDurationUs / 1000000) + "s srcRate=" + srcRate + " ch=" + channels);
+
             codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME));
             codec.configure(format, null, null, 0);
             codec.start();
 
-            ByteArrayOutputStream pcmOut = new ByteArrayOutputStream();
-            ByteBuffer[] inputBuffers = codec.getInputBuffers();
-            ByteBuffer[] outputBuffers = codec.getOutputBuffers();
-            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+            tempPcmFile = File.createTempFile("pcm_dec_", ".raw",
+                ContextManager.getAppContext().getCacheDir());
+            fos = new FileOutputStream(tempPcmFile);
 
+            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
             boolean inputDone = false;
             boolean outputDone = false;
-            while (!outputDone) {
+
+            long maxWaitMs = Math.min(3600000, Math.max(60000,
+                Math.max(totalDurationUs / 1000 * 3, fileSize / 1024 * 10)));
+            long lastProgressMs = startMs;
+            int drainPct = -1;
+
+            while (!outputDone && (System.currentTimeMillis() - startMs) < maxWaitMs) {
                 if (!inputDone) {
                     int inIndex = codec.dequeueInputBuffer(10000);
                     if (inIndex >= 0) {
-                        ByteBuffer buffer = inputBuffers[inIndex];
-                        buffer.clear();
-                        int sampleSize = extractor.readSampleData(buffer, 0);
-                        if (sampleSize < 0) {
-                            codec.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-                            inputDone = true;
-                        } else {
-                            codec.queueInputBuffer(inIndex, 0, sampleSize, extractor.getSampleTime(), 0);
-                            extractor.advance();
+                        ByteBuffer buffer = codec.getInputBuffer(inIndex);
+                        if (buffer != null) {
+                            buffer.clear();
+                            int sampleSize = extractor.readSampleData(buffer, 0);
+                            if (sampleSize < 0) {
+                                codec.queueInputBuffer(inIndex, 0, 0, 0,
+                                    MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                                inputDone = true;
+                            } else {
+                                codec.queueInputBuffer(inIndex, 0, sampleSize,
+                                    extractor.getSampleTime(), 0);
+                                extractor.advance();
+                            }
                         }
                     }
                 }
 
                 int outIndex = codec.dequeueOutputBuffer(info, 10000);
                 if (outIndex >= 0) {
-                    ByteBuffer buffer = outputBuffers[outIndex];
-                    buffer.position(info.offset);
-                    byte[] chunk = new byte[info.size];
-                    buffer.get(chunk);
-                    pcmOut.write(chunk);
+                    ByteBuffer buffer = codec.getOutputBuffer(outIndex);
+                    if (buffer != null && info.size > 0) {
+                        byte[] chunk = new byte[info.size];
+                        buffer.position(info.offset);
+                        buffer.get(chunk);
+                        fos.write(chunk);
+                    }
                     codec.releaseOutputBuffer(outIndex, false);
                     if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
                         outputDone = true;
                     }
-                } else if (outIndex == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
-                    outputBuffers = codec.getOutputBuffers();
+                }
+
+                long now = System.currentTimeMillis();
+                if (now - lastProgressMs > 500) {
+                    lastProgressMs = now;
+                    if (decodeCb != null) {
+                        int pct;
+                        if (inputDone) {
+                            // 输入已耗尽，输出排空中：从上次百分比向上递增
+                            if (drainPct < 0) drainPct = 90;
+                            drainPct = Math.min(99, drainPct + 1);
+                            pct = drainPct;
+                        } else {
+                            long sampleTimeUs = extractor.getSampleTime();
+                            pct = (sampleTimeUs > 0 && totalDurationUs > 0)
+                                ? (int) (sampleTimeUs * 100 / totalDurationUs) : -1;
+                            if (pct < 1) pct = 1;
+                            if (pct > 98) pct = 98;
+                            drainPct = pct + 1; // 为排空阶段预留起始值
+                        }
+                        try { decodeCb.onProgress(pct, 100); } catch (Throwable ignored) {}
+                    }
                 }
             }
 
-            byte[] rawPcm = pcmOut.toByteArray();
-            LogWriter.log(TAG, "mp3ToPcm: raw " + rawPcm.length + " bytes, format=" + format);
+            if (!outputDone) {
+                LogWriter.log(TAG, "mp3ToPcm: decode timeout after " + (System.currentTimeMillis() - startMs) + "ms");
+                return null;
+            }
 
-            // 重采样为 16kHz 16bit mono
-            int srcRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE);
-            int channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT, 1);
-            return resamplePcm16Mono(rawPcm, srcRate, channels, TARGET_SAMPLE_RATE);
+            fos.flush();
+            fos.close();
+            fos = null;
+
+            long elapsedDecode = System.currentTimeMillis() - startMs;
+            LogWriter.log(TAG, "mp3ToPcm: decode done " + tempPcmFile.length() + "B raw, "
+                + elapsedDecode + "ms, srcRate=" + srcRate + " ch=" + channels);
+
+            byte[] rawPcm = fileReadAll(tempPcmFile);
+            byte[] result;
+            if (srcRate == TARGET_SAMPLE_RATE && channels == 1) {
+                result = rawPcm;
+                LogWriter.log(TAG, "mp3ToPcm: already 16kHz mono, skip resample");
+            } else {
+                result = resampleLanczos3(rawPcm, srcRate, channels, TARGET_SAMPLE_RATE);
+            }
+
+            long elapsedTotal = System.currentTimeMillis() - startMs;
+            LogWriter.log(TAG, "mp3ToPcm: total " + elapsedTotal + "ms, output " + result.length + "B");
+            return result;
+
         } catch (Throwable t) {
             LogWriter.log(TAG, "mp3ToPcm err: " + t.getMessage());
             return null;
         } finally {
             try { extractor.release(); } catch (Throwable ignored) {}
-            try { if (fis != null) fis.close(); } catch (Throwable ignored) {}
-            try { if (codec != null) codec.release(); } catch (Throwable ignored) {}
+            try { if (fos != null) fos.close(); } catch (Throwable ignored) {}
+            try { if (codec != null) { codec.stop(); codec.release(); } } catch (Throwable ignored) {}
+            try { if (tempPcmFile != null) tempPcmFile.delete(); } catch (Throwable ignored) {}
         }
     }
 
-    private static byte[] resamplePcm16Mono(byte[] rawPcm, int srcRate, int channels, int dstRate) {
-        // 假设输入为 16bit 小端 PCM
+    private static byte[] fileReadAll(File f) throws Exception {
+        byte[] data = new byte[(int) f.length()];
+        FileInputStream fis = null;
+        try {
+            fis = new FileInputStream(f);
+            int off = 0;
+            while (off < data.length) {
+                int r = fis.read(data, off, data.length - off);
+                if (r < 0) break;
+                off += r;
+            }
+            return data;
+        } finally {
+            try { if (fis != null) fis.close(); } catch (Throwable ignored) {}
+        }
+    }
+
+    private static byte[] resampleLanczos3(byte[] rawPcm, int srcRate, int channels, int dstRate) {
         int srcSamples = rawPcm.length / 2 / channels;
         int dstSamples = (int) ((long) srcSamples * dstRate / srcRate);
         byte[] out = new byte[dstSamples * 2];
+        int lanczosWindow = 3;
         for (int i = 0; i < dstSamples; i++) {
             double srcPos = (double) i * srcRate / dstRate;
-            int srcIdx = (int) srcPos;
-            double frac = srcPos - srcIdx;
-            int sample = 0;
-            for (int ch = 0; ch < channels; ch++) {
-                int s1 = readLe16(rawPcm, (srcIdx * channels + ch) * 2);
-                int s2 = readLe16(rawPcm, ((srcIdx + 1) * channels + ch) * 2);
-                int s = (int) (s1 * (1 - frac) + s2 * frac);
-                sample += s;
+            int srcBase = (int) srcPos - lanczosWindow + 1;
+            double sum = 0, weightSum = 0;
+            for (int tap = -lanczosWindow + 1; tap <= lanczosWindow; tap++) {
+                int si = srcBase + tap;
+                if (si < 0) si = 0;
+                if (si >= srcSamples) si = srcSamples - 1;
+                double x = srcPos - si;
+                double w;
+                if (x == 0) {
+                    w = 1.0;
+                } else {
+                    double piX = Math.PI * x;
+                    w = lanczosWindow * Math.sin(piX) * Math.sin(piX / lanczosWindow) / (piX * x);
+                }
+                weightSum += w;
+                double sample = 0;
+                for (int ch = 0; ch < channels; ch++) {
+                    int idx = (si * channels + ch) * 2;
+                    short s = (short) ((rawPcm[idx + 1] << 8) | (rawPcm[idx] & 0xFF));
+                    sample += s;
+                }
+                sample /= channels;
+                sum += w * sample;
             }
-            sample = sample / channels;
-            if (sample > Short.MAX_VALUE) sample = Short.MAX_VALUE;
-            if (sample < Short.MIN_VALUE) sample = Short.MIN_VALUE;
-            out[i * 2] = (byte) (sample & 0xff);
-            out[i * 2 + 1] = (byte) ((sample >> 8) & 0xff);
+            short outSample = (short) Math.max(-32768, Math.min(32767, sum / weightSum));
+            out[i * 2] = (byte) (outSample & 0xFF);
+            out[i * 2 + 1] = (byte) ((outSample >> 8) & 0xFF);
         }
-        LogWriter.log(TAG, "resample: " + srcRate + "Hz/" + channels + "ch -> " + dstRate + "Hz/mono, " + rawPcm.length + " -> " + out.length + " bytes");
+        LogWriter.log(TAG, "resample Lanczos-3: " + srcRate + "Hz/" + channels + "ch -> "
+                + dstRate + "Hz/mono, " + rawPcm.length + " -> " + out.length + " bytes");
         return out;
     }
 
@@ -2376,39 +2626,188 @@ public class TtsVoiceSender {
             mono[i] = (short) (sum / channels);
         }
 
-        int dstSamples = Math.max(1, (int) ((long) srcSamples * dstRate / srcRate));
+        int dstSamples = (int) ((long) srcSamples * dstRate / srcRate);
         byte[] out = new byte[dstSamples * 2];
+        int lanczosWindow = 3;
         for (int i = 0; i < dstSamples; i++) {
             double srcPos = (double) i * srcRate / dstRate;
-            int idx = (int) srcPos;
-            double frac = srcPos - idx;
-            short s0 = mono[Math.min(idx, srcSamples - 1)];
-            short s1 = mono[Math.min(idx + 1, srcSamples - 1)];
-            int sample = (int) Math.round(s0 + (s1 - s0) * frac);
-            out[i * 2] = (byte) (sample & 0xff);
-            out[i * 2 + 1] = (byte) ((sample >> 8) & 0xff);
+            int srcBase = (int) srcPos - lanczosWindow + 1;
+            double sum = 0, weightSum = 0;
+            for (int tap = -lanczosWindow + 1; tap <= lanczosWindow; tap++) {
+                int si = srcBase + tap;
+                if (si < 0) si = 0;
+                if (si >= srcSamples) si = srcSamples - 1;
+                double x = srcPos - si;
+                double w;
+                if (x == 0) {
+                    w = 1.0;
+                } else {
+                    double piX = Math.PI * x;
+                    w = lanczosWindow * Math.sin(piX) * Math.sin(piX / lanczosWindow) / (piX * piX);
+                }
+                weightSum += w;
+                sum += w * mono[si];
+            }
+            short outSample = (short) Math.max(-32768, Math.min(32767, sum / weightSum));
+            out[i * 2] = (byte) (outSample & 0xff);
+            out[i * 2 + 1] = (byte) ((outSample >> 8) & 0xff);
         }
 
-        LogWriter.log(TAG, "PCM resample: " + srcRate + "Hz/" + channels + "ch -> "
+        LogWriter.log(TAG, "PCM resample (Lanczos-3): " + srcRate + "Hz/" + channels + "ch -> "
                 + dstRate + "Hz/" + TARGET_CHANNELS + "ch " + TARGET_BITS_PER_SAMPLE
                 + "bit " + out.length + " bytes");
         return out;
     }
 
     public static byte[] padPcmToFrame(byte[] pcm) {
+        byte[] clamped = clampAmplitude(pcm, 32000);
+
         int remainder = pcm.length % FRAME_PCM_BYTES;
-        if (remainder == 0) return pcm;
-        int paddedLength = pcm.length + (FRAME_PCM_BYTES - remainder);
-        byte[] padded = new byte[paddedLength];
-        System.arraycopy(pcm, 0, padded, 0, pcm.length);
-        LogWriter.log(TAG, "PCM frame pad: " + pcm.length + " -> " + paddedLength
-                + " bytes, frame=" + FRAME_PCM_BYTES);
-        return padded;
+        int padEnd = (remainder == 0) ? 0 : (FRAME_PCM_BYTES - remainder);
+        byte[] result = new byte[pcm.length + padEnd];
+        System.arraycopy(clamped, 0, result, 0, clamped.length);
+
+        if (result.length % FRAME_PCM_BYTES != 0) {
+            throw new RuntimeException("padPcmToFrame: not aligned " + result.length);
+        }
+
+        LogWriter.log(TAG, "PCM pad: " + pcm.length + " -> " + result.length
+                + " (clamp+align), frame=" + FRAME_PCM_BYTES);
+        return result;
+    }
+
+    private static byte[] clampAmplitude(byte[] pcm, int maxVal) {
+        byte[] result = new byte[pcm.length];
+        System.arraycopy(pcm, 0, result, 0, pcm.length);
+        for (int i = 0; i < pcm.length - 1; i += 2) {
+            int sample = (short) ((pcm[i] & 0xff) | (pcm[i + 1] << 8));
+            if (sample > maxVal) sample = maxVal;
+            else if (sample < -maxVal) sample = -maxVal;
+            result[i] = (byte) (sample & 0xff);
+            result[i + 1] = (byte) ((sample >> 8) & 0xff);
+        }
+        return result;
     }
 
     public static int pcmBytesToDurationMs(int pcmBytes) {
-        return (pcmBytes / (TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8))
-                * 1000 / TARGET_SAMPLE_RATE;
+        return (int) ((long) pcmBytes * 1000
+                / (TARGET_SAMPLE_RATE * TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8));
+    }
+
+    private static final String AMR_WB_MIME = "audio/amr-wb";
+
+    private static byte[] encodeSilkRaw(byte[] padPcm) {
+        try {
+            ClassLoader cl = sClassLoader;
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+
+            long handle = (Long) XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
+                    "SilkEncInit", 16000, 30000, 5, 0L);
+            LogWriter.log(TAG, "silk handle=" + handle);
+            if (handle == 0) return null;
+
+            XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
+                    "SetVoiceSilkControl", 200, 0, handle);
+            XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
+                    "SetVoiceSilkControl", 203, 3, handle);
+            XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
+                    "SetVoiceSilkControl", 204, 1, handle);
+            XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
+                    "SetVoiceSilkControl", 205, 2, handle);
+            XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
+                    "SetVoiceSilkControl", 206, 1, handle);
+            XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
+                    "SetVoiceSilkControl", 207, 1, handle);
+
+            byte[] ob = new byte[640 * 6];
+            short[] ol = new short[1];
+            int fb = 640;
+            int tf = padPcm.length / fb;
+
+            for (int i = 0; i < tf; i++) {
+                byte[] f = new byte[fb];
+                System.arraycopy(padPcm, i * fb, f, 0, fb);
+                boolean last = (i == tf - 1);
+                java.util.Arrays.fill(ob, (byte) 0);
+                ol[0] = 0;
+                XposedHelpers.callStaticMethod(
+                        XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
+                        "SilkDoEnc", f, (short) fb, ob, ol, last, handle);
+                int len = ol[0];
+                if (len <= 0) continue;
+                baos.write(ob, 0, len);
+            }
+
+            XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
+                    "SetVoiceSilkControl", 201, 1, handle);
+
+            XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
+                    "SilkEncUnInit", handle);
+
+            byte[] silkBody = baos.toByteArray();
+
+            LogWriter.log(TAG, "SILK encode: " + padPcm.length + "b PCM -> " + silkBody.length + "b");
+            return silkBody;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "encodeSilkRaw err: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private static byte[] encodePcmToAmrWb(byte[] pcm, int sampleRate) {
+        try {
+            MediaCodec codec = MediaCodec.createEncoderByType(AMR_WB_MIME);
+            MediaFormat fmt = MediaFormat.createAudioFormat(AMR_WB_MIME, sampleRate, 1);
+            fmt.setInteger(MediaFormat.KEY_BIT_RATE, 15850);
+            codec.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            codec.start();
+
+            int idx = codec.dequeueInputBuffer(10000);
+            ByteBuffer inBuf = codec.getInputBuffer(idx);
+            inBuf.clear();
+            inBuf.put(pcm);
+            codec.queueInputBuffer(idx, 0, pcm.length, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+            while (true) {
+                int outIdx = codec.dequeueOutputBuffer(info, 10000);
+                if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) continue;
+                if (outIdx < 0) break;
+                ByteBuffer outBuf = codec.getOutputBuffer(outIdx);
+                byte[] chunk = new byte[info.size];
+                outBuf.get(chunk);
+                baos.write(chunk);
+                codec.releaseOutputBuffer(outIdx, false);
+            }
+            codec.stop();
+            codec.release();
+
+            byte[] body = baos.toByteArray();
+            byte[] result = new byte[6 + body.length];
+            result[0] = '#';
+            result[1] = '!';
+            result[2] = 'A';
+            result[3] = 'M';
+            result[4] = 'R';
+            result[5] = '\n';
+            System.arraycopy(body, 0, result, 6, body.length);
+
+            LogWriter.log(TAG, "AMR-WB encode: " + pcm.length + "b PCM -> " + result.length + "b sr=" + sampleRate);
+            return result;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "encodePcmToAmrWb err: " + e.getMessage());
+            return null;
+        }
     }
 
     public static int encodePcmToSilk(byte[] pcm, String outPath, int originalPcmBytes) {
@@ -2425,9 +2824,7 @@ public class TtsVoiceSender {
 
             Class<?> h0Cls = XposedHelpers.findClass("tl.h0", sClassLoader);
             int frameSize = FRAME_PCM_BYTES;
-            int totalFrames = (pcm.length + frameSize - 1) / frameSize;
-            int finalFrameBytes = pcm.length % frameSize;
-            if (finalFrameBytes == 0) finalFrameBytes = frameSize;
+            int totalFrames = pcm.length / frameSize;
 
             LogWriter.log(TAG, "Silk V3 encoding: " + TARGET_SAMPLE_RATE + "Hz "
                     + TARGET_CHANNELS + "ch " + TARGET_BITS_PER_SAMPLE + "bit, "
@@ -2435,23 +2832,21 @@ public class TtsVoiceSender {
                     + FRAME_PCM_BYTES + " bytes/frame, bitrate=" + SILK_BITRATE
                     + "bps, complexity=" + SILK_COMPLEXITY + ", total="
                     + originalPcmBytes + " bytes, encodedTotal=" + pcm.length
-                    + " bytes -> " + totalFrames + " frames, finalFrame="
-                    + finalFrameBytes + " bytes, tailPad=enabled");
+                    + " bytes -> " + totalFrames + " frames");
 
             int frameIndex = 0;
             for (int off = 0; off < pcm.length; off += frameSize, frameIndex++) {
-                int size = Math.min(frameSize, pcm.length - off);
                 byte[] frame = new byte[frameSize];
-                System.arraycopy(pcm, off, frame, 0, size);
-                boolean isLast = off + size >= pcm.length;
+                System.arraycopy(pcm, off, frame, 0, frameSize);
+                boolean isLast = frameIndex == totalFrames - 1;
 
-                Object h0 = newH0(h0Cls, frame, size, isLast);
+                Object h0 = newH0(h0Cls, frame, frameSize, isLast);
                 if (h0 == null) return 0;
 
                 XposedHelpers.callMethod(silk, "a", h0, 0);
                 if (frameIndex == 0 || isLast) {
                     LogWriter.log(TAG, "Silk frame push: idx=" + frameIndex
-                            + " ts=0 size=" + size
+                            + " ts=0 size=" + frameSize
                             + " last=" + isLast);
                 }
             }
@@ -2570,17 +2965,30 @@ public class TtsVoiceSender {
     }
 
     private static String[] buildAccRoots() {
+        int currentUser = getCurrentUserId();
         java.util.List<String> roots = new java.util.ArrayList<>();
-        roots.add("/data/data/com.tencent.mm/MicroMsg");
+        roots.add("/data/user/" + currentUser + "/com.tencent.mm/MicroMsg");
+        if (currentUser != 0) {
+            roots.add("/data/user/0/com.tencent.mm/MicroMsg");
+        }
         java.io.File userBase = new java.io.File("/data/user");
         java.io.File[] userDirs = userBase.listFiles();
         if (userDirs != null) {
             for (java.io.File ud : userDirs) {
-                if (ud.isDirectory()) {
-                    roots.add(ud.getAbsolutePath() + "/com.tencent.mm/MicroMsg");
-                }
+                if (!ud.isDirectory()) continue;
+                int id = parseIntSafe(ud.getName(), -1);
+                if (id < 0 || id == currentUser || (currentUser != 0 && id == 0)) continue;
+                roots.add(ud.getAbsolutePath() + "/com.tencent.mm/MicroMsg");
             }
         }
         return roots.toArray(new String[0]);
+    }
+
+    private static int getCurrentUserId() {
+        return Process.myUid() / 100000;
+    }
+
+    private static int parseIntSafe(String s, int def) {
+        try { return Integer.parseInt(s); } catch (Throwable ignored) { return def; }
     }
 }

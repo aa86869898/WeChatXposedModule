@@ -8,6 +8,7 @@ import com.leshao.v3.CrashTrace;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.PathUtil;
 import com.leshao.v3.model.ContactChangeRecord;
+import com.leshao.v3.ui.AvatarHelper;
 
 import java.io.File;
 import java.io.FileReader;
@@ -234,6 +235,7 @@ public class ContactChangeLog {
             LogWriter.log(TAG, "[v.b] uid=" + username + " nick=" + nickname + " remark=" + remark + " avatar=" + avatarHash);
 
             ContactSnapshot cur = new ContactSnapshot(username, nickname, remark, avatarHash, "");
+            cur.avatarPath = AvatarHelper.getAvatarPath(username);
             ContactSnapshot prev = lastSnapshot.get(username);
 
             if (prev != null) {
@@ -358,6 +360,8 @@ public class ContactChangeLog {
             r.avatarChanged = true;
             r.oldAvatarHash = prev.avatarHash;
             r.newAvatarHash = cur.avatarHash;
+            r.oldAvatarPath = prev.avatarPath;
+            r.newAvatarPath = cur.avatarPath;
         }
 
         if (r.hasAnyChange()) {
@@ -474,6 +478,7 @@ public class ContactChangeLog {
                         o.optInt("a"),
                         o.optString("s")
                     );
+                    s.avatarPath = o.optString("ap", null);
                     lastSnapshot.put(key, s);
                 }
             }
@@ -502,6 +507,7 @@ public class ContactChangeLog {
                         o.put("r", e.getValue().remark != null ? e.getValue().remark : "");
                         o.put("a", e.getValue().avatarHash);
                         o.put("s", e.getValue().signature != null ? e.getValue().signature : "");
+                        o.put("ap", e.getValue().avatarPath != null ? e.getValue().avatarPath : "");
                         root.put(e.getKey(), o);
                     }
                     File f = getSnapshotFile();
@@ -521,6 +527,7 @@ public class ContactChangeLog {
     private static class ContactSnapshot {
         String username, nickname, remark, signature;
         int avatarHash;
+        String avatarPath;
         ContactSnapshot(String u, String n, String r, int a, String s) {
             username = u; nickname = n; remark = r; avatarHash = a; signature = s;
         }

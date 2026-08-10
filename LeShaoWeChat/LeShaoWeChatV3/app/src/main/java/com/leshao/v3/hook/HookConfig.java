@@ -21,6 +21,11 @@ public class HookConfig {
         return sp.getInt(key, def);
     }
 
+    public static void setInt(String key, int val) {
+        SharedPreferences sp = getPrefs();
+        if (sp != null) sp.edit().putInt(key, val).apply();
+    }
+
     public static long getLong(String key, long def) {
         SharedPreferences sp = getPrefs();
         if (sp == null) return def;

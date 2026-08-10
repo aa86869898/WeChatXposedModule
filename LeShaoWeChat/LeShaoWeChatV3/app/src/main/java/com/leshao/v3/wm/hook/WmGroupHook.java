@@ -347,7 +347,7 @@ public class WmGroupHook {
     }
 
     // 已选好目标群 → 输入消息 → 广播
-    static void showBroadcastInput(Activity act, List<com.leshao.v3.model.Contact> groups) {
+    static void showBroadcastInput(Activity act, List<com.leshao.v3.model.ContactCard> groups) {
         final EditText et = new EditText(act);
         et.setHint("消息内容");
         et.setMinLines(2);
@@ -356,7 +356,7 @@ public class WmGroupHook {
                     String msg = et.getText().toString().trim();
                     if (msg.isEmpty()) { toast("消息不能为空"); return; }
                     List<String> rooms = new ArrayList<>();
-                    for (com.leshao.v3.model.Contact c : groups) rooms.add(c.wxid);
+                    for (com.leshao.v3.model.ContactCard c : groups) rooms.add(c.username);
                     WmReflect.broadcastRooms(sCL, rooms, msg);
                     toast("已广播" + rooms.size() + "个群");
                 }).setNegativeButton("取消", null).show();
@@ -368,7 +368,7 @@ public class WmGroupHook {
                     com.leshao.v3.ui.ContactSelectorView.MODE_FRIEND, selected -> {
                         if (selected == null || selected.isEmpty()) { toast("未选择好友"); return; }
                         List<String> l = new ArrayList<>();
-                        for (com.leshao.v3.model.Contact c : selected) l.add(c.wxid);
+                        for (com.leshao.v3.model.ContactCard c : selected) l.add(c.username);
                         boolean ok = WmReflect.inviteMembers(sCL, sRoom, l);
                         toast(ok ? "邀请已发送 " + l.size() + " 人" : "邀请失败");
                     });

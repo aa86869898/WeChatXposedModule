@@ -1,6 +1,7 @@
 package com.leshao.v3.ui;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.text.InputType;
@@ -11,6 +12,9 @@ import android.widget.*;
 
 import com.leshao.v3.hook.*;
 import com.leshao.v3.model.Contact;
+import com.leshao.v3.ContextManager;
+
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.HashSet;

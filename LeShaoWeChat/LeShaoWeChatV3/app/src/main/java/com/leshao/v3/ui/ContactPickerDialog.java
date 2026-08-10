@@ -2,33 +2,30 @@ package com.leshao.v3.ui;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.BitmapShader;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Shader;
-import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.os.Handler;
-import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.Window;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-
-import com.leshao.v3.model.Contact;
+import com.leshao.v3.ContactRepository;
+import com.leshao.v3.model.ContactCard;
+import com.leshao.v3.model.ContactCard.Category;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -42,510 +39,429 @@ public class ContactPickerDialog {
         void onSelected(Set<String> wxids, String display);
     }
 
-    public static void show(Activity parentAct, String currentIds, final int initialMode,
-                            final OnContactsSelected callback) {
-        try {
-            showInner(parentAct, currentIds, initialMode, callback);
-        } catch (Throwable t) {
-            com.leshao.v3.LogWriter.log("ContactPicker", "show CRASH: "
-                + t.getClass().getSimpleName() + ": " + t.getMessage());
-        }
+    public static void show(Activity parentAct, String currentIds, int initialMode, OnContactsSelected callback) {
+        if (parentAct == null || parentAct.isFinishing()) return;
+
+        ContactRepository.loadAsync(() -> {
+            List<ContactCard> all;
+            switch (initialMode) {
+                case MODE_FRIEND: all = ContactRepository.getFriends(); break;
+                case MODE_GROUP:
+                default:          all = ContactRepository.getGroups(); break;
+            }
+            if (all == null || all.isEmpty()) {
+                parentAct.runOnUiThread(() -> {
+                    android.widget.Toast.makeText(parentAct, "\u901a\u8baf\u5f55\u672a\u52a0\u8f7d",
+                            android.widget.Toast.LENGTH_LONG).show();
+                });
+                return;
+            }
+
+            final List<ContactCard> contacts = new ArrayList<>(all);
+            Collections.sort(contacts, Comparator.comparing(c -> c.sortKey()));
+
+            final Set<String> selected = new LinkedHashSet<>();
+            if (currentIds != null && !currentIds.isEmpty()) {
+                for (String id : currentIds.split(",")) {
+                    String trimmed = id.trim();
+                    if (!trimmed.isEmpty()) selected.add(trimmed);
+                }
+            }
+
+            parentAct.runOnUiThread(() -> showDialog(parentAct, contacts, selected, initialMode, callback));
+        });
     }
 
-    private static void showInner(Activity parentAct, String currentIds, final int initialMode,
-                                   final OnContactsSelected callback) {
-        final Context ctx = parentAct;
-        final float d = ctx.getResources().getDisplayMetrics().density;
-        final Handler handler = new Handler(Looper.getMainLooper());
+    private static void showDialog(Activity act, List<ContactCard> items,
+                                   Set<String> selected, int initialMode,
+                                   OnContactsSelected callback) {
+        int p20 = dp(act, 20);
+        int p16 = dp(act, 16);
+        int p12 = dp(act, 12);
+        int p8 = dp(act, 8);
+        int p4 = dp(act, 4);
 
-        final Set<String> selected = new LinkedHashSet<>();
-        if (currentIds != null && !currentIds.isEmpty()) {
-            for (String id : currentIds.split(",")) {
-                String t = id.trim();
-                if (!t.isEmpty()) selected.add(t);
-            }
-        }
-
-        final List<Contact>[] holder = new List[]{null, null};
-        int fCount, gCount;
-        // 联系人数据源已清空，待重写
-        holder[0] = Collections.<Contact>emptyList();
-        holder[1] = Collections.<Contact>emptyList();
-        fCount = 0;
-        gCount = 0;
-        final List<Contact> allFriends = holder[0];
-        final List<Contact> allGroups = holder[1];
-
-        final List<Contact> filteredList = new ArrayList<>();
-        final int[] currentTab = { initialMode };
-        final String[] currentQuery = { "" };
-
-        LinearLayout root = new LinearLayout(ctx);
+        LinearLayout root = new LinearLayout(act);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(AppColors.bg());
+        root.setMinimumHeight(dp(act, 520));
 
-        TextView titleBar = new TextView(ctx);
-        titleBar.setText("选择对象");
-        titleBar.setTextSize(15);
-        titleBar.setTextColor(AppColors.accent());
-        titleBar.setTypeface(null, Typeface.BOLD);
-        titleBar.setGravity(Gravity.CENTER);
-        titleBar.setPadding((int)(14 * d), (int)(6 * d), (int)(14 * d), (int)(4 * d));
-        root.addView(titleBar);
+        // Title
+        TextView title = new TextView(act);
+        title.setText("\u9009\u62e9\u8054\u7cfb\u4eba");
+        title.setTextSize(16);
+        title.setTextColor(AppColors.TEXT_TITLE);
+        title.setPadding(p16, p16, p16, p12);
+        title.setGravity(Gravity.CENTER);
+        root.addView(title);
 
-        View titleSep = new View(ctx);
-        titleSep.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
-        titleSep.setBackgroundColor(AppColors.divider());
-        root.addView(titleSep);
-
-        EditText searchBox = new EditText(ctx);
-        searchBox.setHint("搜索" + (currentTab[0] == MODE_FRIEND ? "好友" : "群聊"));
-        searchBox.setHintTextColor(AppColors.text2());
-        searchBox.setTextSize(14);
-        searchBox.setTextColor(AppColors.text1());
-        searchBox.setSingleLine(true);
-        searchBox.setPadding((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
-        searchBox.setBackgroundColor(AppColors.whiteCard());
-        LinearLayout.LayoutParams sblp = new LinearLayout.LayoutParams(-1, -2);
-        sblp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), 0);
-        searchBox.setLayoutParams(sblp);
-        root.addView(searchBox);
-
-        LinearLayout tabBar = new LinearLayout(ctx);
-        tabBar.setOrientation(LinearLayout.HORIZONTAL);
-        tabBar.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams tblp = new LinearLayout.LayoutParams(-1, -2);
-        tblp.setMargins((int)(12 * d), (int)(4 * d), (int)(12 * d), 0);
-        tabBar.setLayoutParams(tblp);
-
-        final TextView[] tabViews = new TextView[2];
-        final View[] tabIndicators = new View[2];
-        final LinearLayout[] tabItems = new LinearLayout[2];
-        for (int t = 0; t < 2; t++) {
-            boolean active = (t == currentTab[0]);
-            LinearLayout tabItem = new LinearLayout(ctx);
-            tabItem.setOrientation(LinearLayout.VERTICAL);
-            tabItem.setGravity(Gravity.CENTER);
-            tabItem.setClickable(true);
-            tabItem.setPadding((int)(16 * d), (int)(4 * d), (int)(16 * d), (int)(1 * d));
-            tabItem.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-
-            TextView tabTv = new TextView(ctx);
-            tabTv.setText(t == 0 ? "好友 (" + fCount + ")" : "群聊 (" + gCount + ")");
-            tabTv.setTextSize(14);
-            tabTv.setTextColor(active ? AppColors.accent() : AppColors.text2());
-            tabTv.setTypeface(null, active ? Typeface.BOLD : Typeface.NORMAL);
-            tabItem.addView(tabTv);
-            tabViews[t] = tabTv;
-
-            View indicator = new View(ctx);
-            indicator.setLayoutParams(new LinearLayout.LayoutParams((int)(24 * d), (int)(2.5f * d)));
-            indicator.setBackgroundColor(active ? AppColors.accent() : android.graphics.Color.TRANSPARENT);
-            ((LinearLayout.LayoutParams) indicator.getLayoutParams()).setMargins(0, (int)(4 * d), 0, 0);
-            tabItem.addView(indicator);
-            tabIndicators[t] = indicator;
-
-            tabItems[t] = tabItem;
-            tabBar.addView(tabItem);
+        // Tab bar: 好友 | 群聊 with counts
+        int friendCount = 0, groupCount = 0;
+        for (ContactCard c : items) {
+            if (c.category == Category.FRIEND) friendCount++;
+            else if (c.category == Category.GROUP) groupCount++;
         }
-        root.addView(tabBar);
+        final int fFriendCount = friendCount, fGroupCount = groupCount;
 
-        // 移除性别栏，保留分隔线
-        View sep = new View(ctx);
-        sep.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
-        sep.setBackgroundColor(AppColors.divider());
-        root.addView(sep);
+        final int[] currentTab = {initialMode};
+        LinearLayout tabs = new LinearLayout(act);
+        tabs.setOrientation(LinearLayout.HORIZONTAL);
+        tabs.setGravity(Gravity.CENTER);
+        tabs.setPadding(p12, 0, p12, p12);
 
-        int screenH = ctx.getResources().getDisplayMetrics().heightPixels;
-        int dialogH = (int)(screenH * 0.78);
-        int fixedH = (int)((42 + 1 + 44 + 30 + 50) * d);
-        int scrollH = Math.max(dialogH - fixedH, (int)(200 * d));
+        TextView tabFriend = buildTab(act, "\u597d\u53cb(" + fFriendCount + ")", currentTab[0] == MODE_FRIEND);
+        TextView tabGroup = buildTab(act, "\u7fa4\u804a(" + fGroupCount + ")", currentTab[0] == MODE_GROUP);
+        tabs.addView(tabFriend);
+        tabs.addView(space(act, p20));
+        tabs.addView(tabGroup);
+        root.addView(tabs);
 
-        RecyclerView recyclerView = new RecyclerView(ctx);
-        recyclerView.setLayoutManager(new LinearLayoutManager(ctx));
-        recyclerView.setLayoutParams(new LinearLayout.LayoutParams(-1, scrollH));
+        // Search
+        EditText search = new EditText(act);
+        search.setHint("\u641c\u7d22...");
+        search.setHintTextColor(AppColors.TEXT_NOTE);
+        search.setTextSize(14);
+        search.setTextColor(AppColors.TEXT_BODY);
+        search.setPadding(p16, p10(act), p16, p10(act));
+        search.setBackground(roundBg(act, AppColors.INPUT_BG, dp(act, 20)));
+        search.setSingleLine(true);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        slp.setMargins(p16, 0, p16, p8);
+        root.addView(search, slp);
 
-        final ContactAdapter adapter = new ContactAdapter(ctx, d, filteredList, selected);
-        recyclerView.setAdapter(adapter);
+        // List container
+        LinearLayout listRoot = new LinearLayout(act);
+        listRoot.setOrientation(LinearLayout.VERTICAL);
+        listRoot.setPadding(p12, 0, p12, 0);
 
-        root.addView(recyclerView);
+        ScrollView sv = new ScrollView(act);
+        sv.addView(listRoot);
+        root.addView(sv, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
 
-        final LinearLayout bottomBar = new LinearLayout(ctx);
-        bottomBar.setOrientation(LinearLayout.HORIZONTAL);
-        bottomBar.setGravity(Gravity.CENTER_VERTICAL);
-        bottomBar.setPadding((int)(12 * d), (int)(4 * d), (int)(12 * d), (int)(4 * d));
-        bottomBar.setBackgroundColor(AppColors.card());
-        bottomBar.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+        List<ContactCard>[] filteredHolder = new List[]{items};
 
-        final TextView selectAllBtn = new TextView(ctx);
-        selectAllBtn.setText("全部勾选");
-        selectAllBtn.setTextSize(13);
-        selectAllBtn.setTextColor(AppColors.accent());
-        selectAllBtn.setPadding((int)(10 * d), (int)(6 * d), (int)(10 * d), (int)(6 * d));
-        selectAllBtn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-        selectAllBtn.setOnClickListener(v -> {
-            if (filteredList.isEmpty()) return; // 空列表不切换勾选状态
-            boolean allSelected = true;
-            for (Contact c : filteredList) {
-                if (!selected.contains(c.wxid)) { allSelected = false; break; }
+        Runnable[] refreshHolder = new Runnable[1];
+        refreshHolder[0] = () -> {
+            listRoot.removeAllViews();
+            String f = search.getText().toString().toLowerCase().trim();
+
+            // Filter by tab
+            if (currentTab[0] == MODE_FRIEND) {
+                filteredHolder[0] = ContactRepository.getFriends();
+            } else {
+                filteredHolder[0] = ContactRepository.getGroups();
             }
-            if (allSelected) { selected.clear(); selectAllBtn.setText("全部勾选"); }
-            else { for (Contact c : filteredList) selected.add(c.wxid); selectAllBtn.setText("取消勾选"); }
-            updateDoneBtn(bottomBar, selected);
-            rebuildList(ctx, d, filteredList, allFriends, allGroups, currentTab, currentQuery,
-                selected, adapter, selectAllBtn, bottomBar, handler);
+            if (filteredHolder[0] == null) filteredHolder[0] = Collections.emptyList();
+
+            int count = 0;
+            for (ContactCard c : filteredHolder[0]) {
+                if (!f.isEmpty() && !matchesFilter(c, f)) continue;
+                String wxid = c.username;
+                listRoot.addView(buildRow(act, c, selected.contains(wxid), () -> {
+                    if (selected.contains(wxid)) selected.remove(wxid);
+                    else selected.add(wxid);
+                    refreshHolder[0].run();
+                }));
+                count++;
+            }
+            if (count == 0) {
+                TextView empty = new TextView(act);
+                empty.setText("\u65e0\u5339\u914d\u8054\u7cfb\u4eba");
+                empty.setTextSize(14);
+                empty.setTextColor(AppColors.TEXT_NOTE);
+                empty.setGravity(Gravity.CENTER);
+                empty.setPadding(0, dp(act, 40), 0, 0);
+                listRoot.addView(empty);
+            }
+            title.setText("\u5df2\u9009 " + selected.size() + " \u4eba");
+        };
+
+        tabFriend.setOnClickListener(v -> {
+            currentTab[0] = MODE_FRIEND;
+            updateTabs(act, tabFriend, tabGroup, MODE_FRIEND);
+            refreshHolder[0].run();
         });
-        bottomBar.addView(selectAllBtn);
+        tabGroup.setOnClickListener(v -> {
+            currentTab[0] = MODE_GROUP;
+            updateTabs(act, tabFriend, tabGroup, MODE_GROUP);
+            refreshHolder[0].run();
+        });
 
-        final TextView doneBtn = new TextView(ctx);
-        doneBtn.setText("确定(" + selected.size() + ")");
-        doneBtn.setTextSize(14);
-        doneBtn.setTextColor(AppColors.whiteCard());
-        doneBtn.setGravity(Gravity.CENTER);
-        doneBtn.setPadding((int)(20 * d), (int)(8 * d), (int)(20 * d), (int)(8 * d));
-        GradientDrawable dg = new GradientDrawable();
-        dg.setCornerRadius(6 * d);
-        dg.setColor(AppColors.accent());
-        doneBtn.setBackground(dg);
-        bottomBar.addView(doneBtn);
+        search.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void afterTextChanged(Editable s) { refreshHolder[0].run(); }
+        });
 
+        refreshHolder[0].run();
+
+        // Bottom bar: toggle + buttons
+        LinearLayout bottomBar = new LinearLayout(act);
+        bottomBar.setOrientation(LinearLayout.VERTICAL);
+        bottomBar.setPadding(p16, p8, p16, p16);
+
+        LinearLayout btns = new LinearLayout(act);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(Gravity.CENTER);
+
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        btnLp.leftMargin = p4;
+        btnLp.rightMargin = p4;
+
+        int btnRadius = dp(act, 20);
+        TextView cancel = dialogBtn(act, "\u53d6\u6d88", AppColors.TEXT_NOTE, AppColors.DIVIDER, btnRadius);
+        TextView toggleAll = new TextView(act);
+        toggleAll.setTextSize(13);
+        toggleAll.setTextColor(AppColors.WHITE_TEXT);
+        toggleAll.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
+        toggleAll.setBackground(roundBg(act, AppColors.ACCENT, btnRadius));
+        toggleAll.setGravity(Gravity.CENTER);
+        TextView confirm = dialogBtn(act, "\u786e\u5b9a", AppColors.WHITE_TEXT, AppColors.ACCENT, btnRadius);
+
+        btns.addView(cancel, btnLp);
+        btns.addView(space(act, p16));
+        btns.addView(toggleAll, btnLp);
+        btns.addView(space(act, p16));
+        btns.addView(confirm, btnLp);
+        bottomBar.addView(btns);
         root.addView(bottomBar);
 
-        adapter.setBottomBar(bottomBar);
-        adapter.setSelectAllBtn(selectAllBtn);
+        AlertDialog dialog = new AlertDialog.Builder(act)
+                .setView(root)
+                .setCancelable(true)
+                .create();
 
-        for (int t = 0; t < 2; t++) {
-            final int ti = t;
-            tabItems[t].setOnClickListener(v -> {
-                if (ti == currentTab[0]) return;
-                currentTab[0] = ti;
-                currentQuery[0] = "";
-                searchBox.setText("");
-                searchBox.setHint("搜索" + (ti == MODE_FRIEND ? "好友" : "群聊"));
-                for (int i = 0; i < 2; i++) {
-                    tabViews[i].setTextColor(i == ti ? AppColors.accent() : AppColors.text2());
-                    tabViews[i].setTypeface(null, i == ti ? Typeface.BOLD : Typeface.NORMAL);
-                    tabIndicators[i].setBackgroundColor(i == ti ? AppColors.accent() : android.graphics.Color.TRANSPARENT);
-                }
-                rebuildList(ctx, d, filteredList, allFriends, allGroups, currentTab, currentQuery,
-                    selected, adapter, selectAllBtn, bottomBar, handler);
-            });
-        }
-
-        final AlertDialog[] dlgRef = new AlertDialog[1];
-
-        searchBox.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
-            @Override public void afterTextChanged(Editable s) {
-                String q = s.toString().trim();
-                if (!q.equals(currentQuery[0])) {
-                    currentQuery[0] = q;
-                    rebuildList(ctx, d, filteredList, allFriends, allGroups, currentTab, currentQuery,
-                        selected, adapter, selectAllBtn, bottomBar, handler);
-                }
-            }
+        cancel.setOnClickListener(v -> {
+            dialog.dismiss();
+            if (callback != null) callback.onSelected(Collections.<String>emptySet(), "");
         });
 
-        doneBtn.setOnClickListener(v -> {
-            try {
-                String display = selected.size() + " 个选中";
-                if (callback != null) callback.onSelected(selected, display);
-                dlgRef[0].dismiss();
-            } catch (Throwable t) {
-                try { dlgRef[0].dismiss(); } catch (Throwable ignored) {}
+        confirm.setOnClickListener(v -> {
+            if (callback != null) {
+                StringBuilder sb = new StringBuilder();
+                int i = 0;
+                for (String wid : selected) {
+                    if (i++ > 0) sb.append(", ");
+                    ContactCard found = findCard(items, wid);
+                    sb.append(found != null ? found.displayName() : wid);
+                    if (i >= 4 && i < selected.size()) {
+                        sb.append("...\u7b49" + selected.size() + "");
+                        break;
+                    }
+                }
+                callback.onSelected(new LinkedHashSet<>(selected), sb.toString());
             }
+            dialog.dismiss();
         });
 
-        AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert);
-        b.setView(root);
-        b.setCancelable(true);
-        AlertDialog dlg = b.create();
-        dlgRef[0] = dlg;
-        Window w = dlg.getWindow();
-        if (w != null) {
-            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT);
-            w.setGravity(Gravity.CENTER);
-            GradientDrawable wbg = new GradientDrawable();
-            wbg.setCornerRadius(16 * d);
-            wbg.setColor(AppColors.card());
-            w.setBackgroundDrawable(wbg);
-        }
-
-        dlg.show();
-
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                rebuildList(ctx, d, filteredList, allFriends, allGroups, currentTab, currentQuery,
-                    selected, adapter, selectAllBtn, bottomBar, handler);
+        toggleAll.setOnClickListener(v -> {
+            List<ContactCard> source = filteredHolder[0];
+            if (source == null) return;
+            String f = search.getText().toString().toLowerCase().trim();
+            List<String> visibleIds = new ArrayList<>();
+            for (ContactCard c : source) {
+                if (!f.isEmpty() && !matchesFilter(c, f)) continue;
+                visibleIds.add(c.username);
             }
-        }, 150);
+            boolean allSelected = !visibleIds.isEmpty() && selected.containsAll(visibleIds);
+            if (allSelected) {
+                selected.removeAll(visibleIds);
+            } else {
+                selected.addAll(visibleIds);
+            }
+            refreshHolder[0].run();
+        });
+
+        dialog.setOnCancelListener(d -> {
+            if (callback != null) callback.onSelected(Collections.<String>emptySet(), "");
+        });
+
+        // Update toggle text + confirm button in refresh
+        Runnable origRefresh = refreshHolder[0];
+        refreshHolder[0] = () -> {
+            origRefresh.run();
+            List<ContactCard> source = filteredHolder[0];
+            if (source == null) return;
+            String f = search.getText().toString().toLowerCase().trim();
+            List<String> visibleIds = new ArrayList<>();
+            for (ContactCard c : source) {
+                if (!f.isEmpty() && !matchesFilter(c, f)) continue;
+                visibleIds.add(c.username);
+            }
+            boolean allSelected = !visibleIds.isEmpty() && selected.containsAll(visibleIds);
+            toggleAll.setText(allSelected ? "\u53d6\u6d88\u5168\u9009" : "\u5168\u9009");
+            confirm.setText("\u786e\u5b9a (" + selected.size() + ")");
+        };
+
+        dialog.show();
     }
 
-    private static void rebuildList(Context ctx, float d, List<Contact> filteredList,
-                                     List<Contact> allFriends, List<Contact> allGroups,
-                                     int[] currentTab, String[] currentQuery,
-                                     Set<String> selected, ContactAdapter adapter,
-                                     TextView selectAllBtn, View bottomBar, Handler handler) {
-        filteredList.clear();
-        List<Contact> source = currentTab[0] == MODE_FRIEND ? allFriends : allGroups;
-        String q = currentQuery[0].toLowerCase().trim();
+    private static void updateTabs(Activity act, TextView tFriend, TextView tGroup, int mode) {
+        int radius = dp(act, 20);
+        boolean friendActive = mode == MODE_FRIEND;
+        tFriend.setTextColor(friendActive ? AppColors.WHITE_TEXT : AppColors.TEXT_BODY);
+        tFriend.setBackground(roundBg(act, friendActive ? AppColors.ACCENT : AppColors.DIVIDER, radius));
+        tGroup.setTextColor(friendActive ? AppColors.TEXT_BODY : AppColors.WHITE_TEXT);
+        tGroup.setBackground(roundBg(act, friendActive ? AppColors.DIVIDER : AppColors.ACCENT, radius));
+    }
 
-        for (Contact c : source) {
-            if (currentTab[0] == MODE_FRIEND && !isValidFriend(c)) continue;
-            if (currentTab[0] == MODE_GROUP && !isValidGroup(c)) continue;
-            if (!q.isEmpty() && !matchesSearch(c, q)) continue;
-            filteredList.add(c);
+    private static TextView buildTab(Activity act, String text, boolean selected) {
+        int radius = dp(act, 20);
+        TextView tv = new TextView(act);
+        tv.setText(text);
+        tv.setTextSize(13);
+        tv.setTextColor(selected ? AppColors.WHITE_TEXT : AppColors.TEXT_BODY);
+        tv.setGravity(Gravity.CENTER);
+        tv.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
+        tv.setBackground(roundBg(act, selected ? AppColors.ACCENT : AppColors.DIVIDER, radius));
+        return tv;
+    }
+
+    private static ContactCard findCard(List<ContactCard> items, String wxid) {
+        for (ContactCard c : items) {
+            if (wxid.equals(c.username)) return c;
+        }
+        return null;
+    }
+
+    private static LinearLayout buildRow(Activity act, ContactCard c, boolean checked, Runnable onToggle) {
+        int p8 = dp(act, 8);
+        int p12 = dp(act, 12);
+
+        LinearLayout row = new LinearLayout(act);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(p12, p6(act), p12, p6(act));
+
+        // Styled checkbox
+        ImageView cb = new ImageView(act);
+        cb.setImageDrawable(makeCheckbox(act, checked));
+        cb.setScaleType(ImageView.ScaleType.CENTER);
+        LinearLayout.LayoutParams cblp = new LinearLayout.LayoutParams(
+                dp(act, 28), dp(act, 28));
+        cblp.setMargins(0, 0, p8, 0);
+        row.addView(cb, cblp);
+
+        // Avatar
+        int avatarSize = dp(act, 40);
+        ImageView avatar = new ImageView(act);
+        Bitmap bm = AvatarHelper.loadAvatar(c.username, avatarSize);
+        if (bm != null) {
+            avatar.setImageBitmap(bm);
+        } else {
+            avatar.setImageBitmap(letterAvatar(act, c.sortKey().substring(0, 1), avatarSize));
+        }
+        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(avatarSize, avatarSize);
+        alp.setMargins(0, 0, p12, 0);
+        row.addView(avatar, alp);
+
+        // Name only
+        LinearLayout textCol = new LinearLayout(act);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        textCol.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView name = new TextView(act);
+        name.setText(c.displayName());
+        name.setTextSize(14);
+        name.setTextColor(AppColors.TEXT_TITLE);
+        textCol.addView(name);
+
+        row.addView(textCol, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        row.setOnClickListener(v -> onToggle.run());
+        return row;
+    }
+
+    private static Drawable makeCheckbox(Activity act, boolean checked) {
+        int size = dp(act, 22);
+        Bitmap bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bm);
+
+        if (checked) {
+            android.graphics.LinearGradient lg = new android.graphics.LinearGradient(
+                    0, 0, size, size,
+                    new int[]{AppColors.ACCENT, 0xFF1976D2, 0xFF0D47A1},
+                    new float[]{0f, 0.5f, 1f},
+                    android.graphics.Shader.TileMode.CLAMP);
+            Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
+            fill.setShader(lg);
+            canvas.drawCircle(size / 2f, size / 2f, size / 2f - 1, fill);
+
+            Paint check = new Paint(Paint.ANTI_ALIAS_FLAG);
+            check.setColor(Color.WHITE);
+            check.setStrokeWidth(dp(act, 2.2f));
+            check.setStyle(Paint.Style.STROKE);
+            check.setStrokeCap(Paint.Cap.ROUND);
+            check.setStrokeJoin(Paint.Join.ROUND);
+            float cx = size * 0.32f, cy = size * 0.52f;
+            float mx = size * 0.46f, my = size * 0.66f;
+            float ex = size * 0.72f, ey = size * 0.35f;
+            canvas.drawLine(cx, cy, mx, my, check);
+            canvas.drawLine(mx, my, ex, ey, check);
+        } else {
+            Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+            stroke.setStyle(Paint.Style.STROKE);
+            stroke.setColor(AppColors.DIVIDER);
+            stroke.setStrokeWidth(dp(act, 2));
+            canvas.drawCircle(size / 2f, size / 2f, size / 2f - 1, stroke);
         }
 
-        adapter.updateData(filteredList);
-        updateDoneBtn(bottomBar, selected);
-        updateSelectAllState(selectAllBtn, filteredList, selected);
+        return new android.graphics.drawable.BitmapDrawable(act.getResources(), bm);
     }
 
-    private static boolean isValidFriend(Contact c) {
-        if (c == null || c.wxid == null) return false;
-        if (c.wxid.endsWith("@chatroom")) return false;
-        if (c.wxid.startsWith("gh_")) return false;
-        if (c.wxid.startsWith("qqmail_")) return false;
-        if (c.wxid.contains("@lbsroom")) return false;
-        if (c.wxid.contains("@openim")) return false;
-        return true;
-    }
-
-    private static boolean isValidGroup(Contact c) {
-        if (c == null || c.wxid == null) return false;
-        return c.wxid.endsWith("@chatroom");
-    }
-
-    private static boolean matchesSearch(Contact c, String q) {
-        if (q.isEmpty()) return true;
-        if (c.displayName() != null && c.displayName().toLowerCase().contains(q)) return true;
-        if (c.remarkName != null && c.remarkName.toLowerCase().contains(q)) return true;
-        if (c.nickname != null && c.nickname.toLowerCase().contains(q)) return true;
-        if (c.wxid != null && c.wxid.toLowerCase().contains(q)) return true;
+    private static boolean matchesFilter(ContactCard c, String q) {
+        if (c.displayName().toLowerCase().contains(q)) return true;
+        if (c.username != null && c.username.toLowerCase().contains(q)) return true;
         if (c.alias != null && c.alias.toLowerCase().contains(q)) return true;
         return false;
     }
 
-    private static void updateSelectAllState(TextView btn, List<Contact> list, Set<String> selected) {
-        boolean allSelected = list.size() > 0;
-        for (Contact c : list) {
-            if (!selected.contains(c.wxid)) { allSelected = false; break; }
-        }
-        btn.setText(allSelected ? "取消勾选" : "全部勾选");
+    private static Bitmap letterAvatar(Activity act, String letter, int size) {
+        Paint paint = new Paint();
+        paint.setColor(AppColors.WHITE_TEXT);
+        paint.setTextSize(size * 0.45f);
+        paint.setAntiAlias(true);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setFakeBoldText(true);
+
+        Bitmap bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bm);
+        Paint bgPaint = new Paint();
+        bgPaint.setColor(AppColors.TEXT_NOTE);
+        canvas.drawRoundRect(0, 0, size, size, size / 2f, size / 2f, bgPaint);
+        float y = size / 2f - (paint.descent() + paint.ascent()) / 2f;
+        canvas.drawText(letter, size / 2f, y, paint);
+        return bm;
     }
 
-    private static void updateDoneBtn(View bottomBar, Set<String> selected) {
-        View doneBtn = ((ViewGroup) bottomBar).getChildAt(1);
-        if (doneBtn instanceof TextView) {
-            ((TextView) doneBtn).setText("确定(" + selected.size() + ")");
-        }
+    private static TextView dialogBtn(Activity act, String text, int textColor, int bgColor, int radius) {
+        TextView btn = new TextView(act);
+        btn.setText(text);
+        btn.setTextSize(14);
+        btn.setTextColor(textColor);
+        btn.setGravity(Gravity.CENTER);
+        btn.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
+        btn.setBackground(roundBg(act, bgColor, radius));
+        return btn;
     }
 
-    private static int getColorFromName(String name) {
-        int[] colors = {0xFFE04040, 0xFF576B95, 0xFF576B95, 0xFFFFBE00, 0xFF10AEFF,
-                         0xFF7B2FBE, 0xFFFF4298, 0xFFFF8C00, 0xFF5856D6, 0xFF576B95};
-        if (name == null || name.isEmpty()) return colors[0];
-        int hash = 0;
-        for (int i = 0; i < name.length(); i++) hash = hash * 31 + name.charAt(i);
-        // 用 & 0x7FFFFFFF 避免 Integer.MIN_VALUE 时 Math.abs 返回负数导致负索引
-        return colors[(hash & 0x7FFFFFFF) % colors.length];
+    private static View space(Activity act, int w) {
+        View v = new View(act);
+        v.setLayoutParams(new ViewGroup.LayoutParams(w, 1));
+        return v;
     }
 
-    static class ContactAdapter extends RecyclerView.Adapter<ContactAdapter.VH> {
-
-        private final Context ctx;
-        private final float d;
-        private List<Contact> data = new ArrayList<>();
-        private final Set<String> selected;
-        private final int avatarSize;
-        private View bottomBar;
-        private TextView selectAllBtn;
-
-        ContactAdapter(Context ctx, float d, List<Contact> filteredList, Set<String> selected) {
-            this.ctx = ctx;
-            this.d = d;
-            this.data = new ArrayList<>(filteredList);
-            this.selected = selected;
-            this.avatarSize = (int)(36 * d);
-        }
-
-        void setBottomBar(View bar) { this.bottomBar = bar; }
-        void setSelectAllBtn(TextView btn) { this.selectAllBtn = btn; }
-
-        void updateData(List<Contact> newData) {
-            this.data = new ArrayList<>(newData);
-            notifyDataSetChanged();
-        }
-
-        @Override
-        public VH onCreateViewHolder(ViewGroup parent, int viewType) {
-            LinearLayout row = new LinearLayout(ctx);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding((int)(12 * d), (int)(4 * d), (int)(12 * d), (int)(4 * d));
-            row.setBackgroundColor(AppColors.whiteCard());
-            row.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
-
-            TextView checkTv = new TextView(ctx);
-            checkTv.setTextSize(16);
-            checkTv.setPadding(0, 0, (int)(10 * d), 0);
-            checkTv.setGravity(Gravity.CENTER);
-            row.addView(checkTv);
-
-            TextAvatarView avatar = new TextAvatarView(ctx, avatarSize);
-            avatar.setLayoutParams(new LinearLayout.LayoutParams(avatarSize, avatarSize));
-            row.addView(avatar);
-
-            LinearLayout textCol = new LinearLayout(ctx);
-            textCol.setOrientation(LinearLayout.VERTICAL);
-            textCol.setPadding((int)(10 * d), 0, 0, 0);
-            textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-
-            TextView nameTv = new TextView(ctx);
-            nameTv.setTextSize(14);
-            nameTv.setTextColor(AppColors.text1());
-            textCol.addView(nameTv);
-
-            TextView wxidTv = new TextView(ctx);
-            wxidTv.setTextSize(11);
-            wxidTv.setTextColor(AppColors.text2());
-            wxidTv.setPadding(0, (int)(2 * d), 0, 0);
-            textCol.addView(wxidTv);
-
-            TextView aliasTv = new TextView(ctx);
-            aliasTv.setTextSize(11);
-            aliasTv.setTextColor(android.graphics.Color.argb(255, 170, 153, 136));
-            aliasTv.setPadding(0, (int)(2 * d), 0, 0);
-            textCol.addView(aliasTv);
-
-            row.addView(textCol);
-
-            return new VH(row, checkTv, avatar, nameTv, wxidTv, aliasTv);
-        }
-
-        @Override
-        public void onBindViewHolder(VH holder, int position) {
-            Contact c = data.get(position);
-            boolean sel = selected.contains(c.wxid);
-            holder.checkTv.setText(sel ? "\u2713" : "");
-            holder.checkTv.setTextColor(sel ? AppColors.accent() : AppColors.arrow());
-            holder.nameTv.setText(c.displayName());
-            holder.wxidTv.setText(c.wxid);
-            holder.aliasTv.setText(c.alias != null && !c.alias.isEmpty() && !c.alias.startsWith("wxid_") ? c.alias : "");
-            holder.aliasTv.setVisibility(c.alias != null && !c.alias.isEmpty() && !c.alias.startsWith("wxid_") ? View.VISIBLE : View.GONE);
-
-            holder.avatar.setLetter(c.displayName(), c.wxid);
-
-            final String wxid = c.wxid;
-            new Thread(() -> {
-                Bitmap bm = AvatarHelper.loadAvatar(wxid, avatarSize);
-                if (bm != null) {
-                    holder.avatar.post(() -> {
-                        if (wxid.equals(holder.avatar.getTag()))
-                            holder.avatar.setImageBitmap(bm);
-                    });
-                }
-            }).start();
-
-            holder.itemView.setOnClickListener(v -> {
-                if (selected.contains(wxid)) selected.remove(wxid);
-                else selected.add(wxid);
-                notifyItemChanged(position);
-                if (bottomBar != null) updateDoneBtn(bottomBar, selected);
-                if (selectAllBtn != null) updateSelectAllState(selectAllBtn, data, selected);
-            });
-        }
-
-        @Override
-        public int getItemCount() {
-            return data.size();
-        }
-
-        static class VH extends RecyclerView.ViewHolder {
-            TextView checkTv;
-            TextAvatarView avatar;
-            TextView nameTv;
-            TextView wxidTv;
-            TextView aliasTv;
-
-            VH(View itemView, TextView checkTv, TextAvatarView avatar, TextView nameTv, TextView wxidTv, TextView aliasTv) {
-                super(itemView);
-                this.checkTv = checkTv;
-                this.avatar = avatar;
-                this.nameTv = nameTv;
-                this.wxidTv = wxidTv;
-                this.aliasTv = aliasTv;
-            }
-        }
+    private static GradientDrawable roundBg(Activity act, int color, int radius) {
+        GradientDrawable gd = new GradientDrawable();
+        gd.setColor(color);
+        gd.setCornerRadius(radius);
+        return gd;
     }
 
-    static class TextAvatarView extends View {
-        private String mLetter;
-        private String mTag;
-        private int mColor;
-        private final Paint mBgPaint;
-        private final Paint mTextPaint;
-        private final int mSize;
-
-        TextAvatarView(Context ctx, int size) {
-            super(ctx);
-            mSize = size;
-            mBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            mTextPaint.setTextAlign(Paint.Align.CENTER);
-            mTextPaint.setColor(AppColors.WHITE_TEXT);
-            mTextPaint.setFakeBoldText(true);
-            updatePaints();
-        }
-
-        void setLetter(String name, String tag) {
-            mTag = tag;
-            mLetter = "?";
-            if (name != null && !name.isEmpty()) {
-                char first = name.charAt(0);
-                if (Character.isLetter(first)) mLetter = String.valueOf(first).toUpperCase();
-                else if (first >= 0x4E00 && first <= 0x9FFF) mLetter = String.valueOf(first);
-            }
-            mColor = getColorFromName(name != null ? name : "?");
-            mBgPaint.setColor(mColor);
-            // 清除可能残留的 BitmapShader，避免复用后头像显示错乱
-            mBgPaint.setShader(null);
-            invalidate();
-        }
-
-        void setImageBitmap(Bitmap bm) {
-            if (bm != null) {
-                mLetter = null;
-                mBgPaint.setShader(new BitmapShader(bm, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP));
-                invalidate();
-            }
-        }
-
-        @Override
-        public Object getTag() { return mTag; }
-
-        private void updatePaints() {
-            float textSize = mSize * 0.38f;
-            mTextPaint.setTextSize(textSize);
-        }
-
-        @Override
-        protected void onDraw(Canvas canvas) {
-            float cx = mSize / 2f;
-            float cy = mSize / 2f;
-            float r = mSize / 2f;
-            if (mLetter != null) {
-                Paint.FontMetrics fm = mTextPaint.getFontMetrics();
-                float textY = (mSize / 2f) - (fm.ascent + fm.descent) / 2f;
-                canvas.drawCircle(cx, cy, r, mBgPaint);
-                canvas.drawText(mLetter, cx, textY, mTextPaint);
-            } else {
-                canvas.drawCircle(cx, cy, r, mBgPaint);
-            }
-        }
-    }
+    private static int dp(Activity act, float px) { return (int) (px * act.getResources().getDisplayMetrics().density + 0.5f); }
+    private static int p6(Activity act) { return dp(act, 6); }
+    private static int p10(Activity act) { return dp(act, 10); }
 }

@@ -270,6 +270,18 @@ public class VersionCompat {
             "nv1.t2", "nx1.t2");
     }
 
+    public static Class<?> findClassSafe(ClassLoader cl, String name) {
+        try {
+            return Class.forName(name, false, cl);
+        } catch (Throwable t) {
+            try {
+                return XposedHelpers.findClass(name, cl);
+            } catch (Throwable t2) {
+                return null;
+            }
+        }
+    }
+
     // ==================== Voice/Media ====================
 
     public static Class<?> findVoiceMsgClass(ClassLoader cl) {

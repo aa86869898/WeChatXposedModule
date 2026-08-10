@@ -6,6 +6,7 @@ import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -32,6 +33,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
+import com.leshao.v3.IconLoader;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.model.Contact;
 import com.leshao.v3.model.ModuleConfig;
@@ -978,12 +980,11 @@ public class MainActivity {
 
     public static android.graphics.drawable.Drawable loadModuleDrawable(Context ctx, String name) {
         try {
-            Context modCtx = ctx.createPackageContext("com.leshao.v3",
-                Context.CONTEXT_IGNORE_SECURITY);
-            int resId = modCtx.getResources().getIdentifier(
-                name, "drawable", "com.leshao.v3");
+            Resources res = IconLoader.moduleResources(ctx);
+            if (res == null) return null;
+            int resId = res.getIdentifier(name, "drawable", "com.leshao.v3");
             if (resId != 0) {
-                return modCtx.getResources().getDrawable(resId);
+                return res.getDrawable(resId);
             }
         } catch (Throwable t) {
             LogWriter.log("MainActivity", "loadModuleDrawable(" + name + ") err: " + t.getMessage());

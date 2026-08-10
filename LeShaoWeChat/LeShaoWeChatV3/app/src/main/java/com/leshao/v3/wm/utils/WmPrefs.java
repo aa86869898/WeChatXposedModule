@@ -66,6 +66,9 @@ public class WmPrefs {
     public static boolean isGrpQuit() { return get("grp_quit", true); }
     public static boolean isGrpAll() { return get("grp_all", true); }
 
+    public static boolean isCornerMenu() { return get("corner_menu", true); }
+    public static boolean isInputButtons() { return get("input_buttons", true); }
+
     public static boolean defaultFor(String key) {
         return "auto_voice".equals(key);
     }

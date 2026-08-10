@@ -29,9 +29,6 @@ public class WmEntry {
         try {
             injectChatWindow(cl);
             injectGroupInfo(cl);
-            injectHomePlusMenu(cl);
-            WmMsgHook.setupAntiRevoke(cl);
-            WmMsgHook.setupLongPressMenu(cl);
             LogWriter.log(TAG, "inject all OK (⚡🛡🏠💬)");
         } catch (Throwable t) {
             LogWriter.log(TAG, "inject err: " + t.getMessage());
@@ -98,40 +95,7 @@ public class WmEntry {
 
     // ===== 群详情页入口 =====
     static void injectGroupInfo(ClassLoader cl) {
-        try {
-            Class<?> gui = XposedHelpers.findClass(
-                    "com.tencent.mm.chatroom.ui.ChatroomInfoUI", cl);
-            XposedBridge.hookAllMethods(gui, "onResume", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam p) {
-                    try {
-                        Activity act = (Activity) p.thisObject;
-                        String room = null;
-                        try {
-                            room = act.getIntent().getStringExtra("Chatroom_Name");
-                        } catch (Exception ignored) {}
-                        if (room == null || room.isEmpty()) {
-                            room = WmReflect.getCurrentChatUser(act.getIntent());
-                        }
-                        final String fRoom = room;
-                        final ClassLoader fCl = cl;
-                        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                            WmGroupHook.showGroupBtn(act, cl, fRoom);
-                        }, 400);
-
-                        // 尝试在 ChatroomInfoUI 标题栏添加内置按钮
-                        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
-                            tryAddToolbarBtn(act, fCl, fRoom);
-                        }, 600);
-                    } catch (Exception e) {
-                        LogWriter.log(TAG, "group info err: " + e.getMessage());
-                    }
-                }
-            });
-            LogWriter.log(TAG, "✓ 群详情入口");
-        } catch (Exception e) {
-            LogWriter.log(TAG, "✗ 群详情:" + e.getMessage());
-        }
+        // 浮动按钮和标题栏注入已移除——与 ChatroomInfoUI 原生 "+" 按钮冲突导致闪退
     }
 
     /** 在群详情页的 Toolbar/ActionBar 中添加 🛡 按钮 */

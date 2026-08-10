@@ -1,58 +1,87 @@
 package com.leshao.v3.ui;
 
+import android.app.Activity;
+import android.content.Context;
+import android.content.res.Configuration;
+
 public class AppColors {
 
-    // 淡霓虹糖果风 - 统一色彩系统
-    // 页面背景渐变起止色
-    public static final int BG_GRADIENT_START = 0xFFF7F9FF;
-    public static final int BG_GRADIENT_END   = 0xFFFFF5F8;
+    private static final boolean sDarkMode;
+    static {
+        boolean dark = false;
+        try {
+            Context ctx = com.leshao.v3.ContextManager.getAppContext();
+            if (ctx != null) {
+                int nightMode = ctx.getResources().getConfiguration().uiMode
+                        & Configuration.UI_MODE_NIGHT_MASK;
+                dark = nightMode == Configuration.UI_MODE_NIGHT_YES;
+            }
+        } catch (Throwable ignored) {}
+        sDarkMode = dark;
+    }
 
-    // 卡片底色 (极淡柔和高光, rgba(255,255,255,0.72))
-    public static final int CARD_BG    = 0xB8FFFFFF;
+    public static void init(Activity act) { /* compat, detection in static block */ }
+    public static boolean isDarkMode() { return sDarkMode; }
 
-    // 搜索/输入框底色 (rgba(255,255,255,0.65))
-    public static final int INPUT_BG   = 0xA6FFFFFF;
+    // 浅色模式
+    private static final int L_BG_GRADIENT_START = 0xFFF7F9FF;
+    private static final int L_BG_GRADIENT_END   = 0xFFFFF5F8;
+    private static final int L_CARD_BG    = 0xB8FFFFFF;
+    private static final int L_INPUT_BG   = 0xA6FFFFFF;
+    private static final int L_TEXT_TITLE = 0xFF1D1D1F;
+    private static final int L_TEXT_BODY  = 0xFF565659;
+    private static final int L_TEXT_NOTE  = 0xFF949499;
+    private static final int L_ACCENT     = 0xFF2196F3;
+    private static final int L_SWITCH_ON  = 0xFFCCF2F9;
+    private static final int L_SWITCH_OFF = 0xFFE6E6EA;
+    private static final int L_CANDY_PINK   = 0xFFFF94C2;
+    private static final int L_CANDY_YELLOW = 0xFFFFE470;
+    private static final int L_ARROW    = 0xFF949499;
+    private static final int L_DIVIDER  = 0xFFE6E6EA;
+    private static final int L_WHITE_TEXT = 0xFFFFFFFF;
 
-    // 标题文字
-    public static final int TEXT_TITLE = 0xFF1D1D1F;
-    // 正文文字
-    public static final int TEXT_BODY  = 0xFF565659;
-    // 备注小字
-    public static final int TEXT_NOTE  = 0xFF949499;
+    // 暗色模式
+    private static final int D_BG_GRADIENT_START = 0xFF1A1A2E;
+    private static final int D_BG_GRADIENT_END   = 0xFF16213E;
+    private static final int D_CARD_BG    = 0xB81A1A2E;
+    private static final int D_INPUT_BG   = 0xA60F3460;
+    private static final int D_TEXT_TITLE = 0xFFE4E4E8;
+    private static final int D_TEXT_BODY  = 0xFFB0B0B8;
+    private static final int D_TEXT_NOTE  = 0xFF707079;
+    private static final int D_ACCENT     = 0xFF64B5F6;
+    private static final int D_SWITCH_ON  = 0xFF0F3460;
+    private static final int D_SWITCH_OFF = 0xFF333344;
+    private static final int D_CANDY_PINK   = 0xFFCC5A8A;
+    private static final int D_CANDY_YELLOW = 0xFFCCB860;
+    private static final int D_ARROW    = 0xFF707079;
+    private static final int D_DIVIDER  = 0xFF333344;
+    private static final int D_WHITE_TEXT = 0xFFFFFFFF;
 
-    // 主题蓝
-    public static final int ACCENT     = 0xFF2196F3;
+    // 动态取色 (static final, computed after sDarkMode)
+    public static final int BG_GRADIENT_START = sDarkMode ? D_BG_GRADIENT_START : L_BG_GRADIENT_START;
+    public static final int BG_GRADIENT_END   = sDarkMode ? D_BG_GRADIENT_END   : L_BG_GRADIENT_END;
+    public static final int CARD_BG    = sDarkMode ? D_CARD_BG    : L_CARD_BG;
+    public static final int INPUT_BG   = sDarkMode ? D_INPUT_BG   : L_INPUT_BG;
+    public static final int TEXT_TITLE = sDarkMode ? D_TEXT_TITLE : L_TEXT_TITLE;
+    public static final int TEXT_BODY  = sDarkMode ? D_TEXT_BODY  : L_TEXT_BODY;
+    public static final int TEXT_NOTE  = sDarkMode ? D_TEXT_NOTE  : L_TEXT_NOTE;
+    public static final int ACCENT     = sDarkMode ? D_ACCENT     : L_ACCENT;
+    public static final int SWITCH_ON  = sDarkMode ? D_SWITCH_ON  : L_SWITCH_ON;
+    public static final int SWITCH_OFF = sDarkMode ? D_SWITCH_OFF : L_SWITCH_OFF;
+    public static final int CANDY_PINK   = sDarkMode ? D_CANDY_PINK   : L_CANDY_PINK;
+    public static final int CANDY_YELLOW = sDarkMode ? D_CANDY_YELLOW : L_CANDY_YELLOW;
+    public static final int ARROW    = sDarkMode ? D_ARROW    : L_ARROW;
+    public static final int DIVIDER  = sDarkMode ? D_DIVIDER  : L_DIVIDER;
+    public static final int WHITE_TEXT = sDarkMode ? D_WHITE_TEXT : L_WHITE_TEXT;
 
-    // 开关轨道
-    public static final int SWITCH_ON  = 0xFFCCF2F9;
-    public static final int SWITCH_OFF = 0xFFE6E6EA;
+    public static final int candyPink   = sDarkMode ? D_CANDY_PINK   : L_CANDY_PINK;
+    public static final int candyYellow = sDarkMode ? D_CANDY_YELLOW : L_CANDY_YELLOW;
 
-    // 点缀色 - 仅用于标签/次要按钮
-    public static final int CANDY_PINK   = 0xFFFF94C2;
-    public static final int CANDY_YELLOW = 0xFFFFE470;
-
-    // 箭头/分割线
-    public static final int ARROW    = 0xFF949499;
-    public static final int DIVIDER  = 0xFFE6E6EA;
-
-    // 白色文字(用于强调色之上的文字)
-    public static final int WHITE_TEXT = 0xFFFFFFFF;
-
-    // Switch 尺寸 (dp值)
     public static final int SWITCH_WIDTH_DP  = 48;
     public static final int SWITCH_HEIGHT_DP = 26;
     public static final int SWITCH_RADIUS_DP = 13;
-
-    // 列表条目高度 (dp)
     public static final int ITEM_HEIGHT_DP = 58;
-    // 弹窗圆角 (dp)
     public static final int DIALOG_RADIUS_DP = 16;
-
-    // ---------- 便捷取值 (向后兼容) ----------
-
-    // 别名 (供 static import 或直接引用使用)
-    public static final int candyPink   = CANDY_PINK;
-    public static final int candyYellow = CANDY_YELLOW;
 
     public static int bg()          { return BG_GRADIENT_START; }
     public static int card()        { return CARD_BG; }
@@ -68,15 +97,11 @@ public class AppColors {
     public static int divider()     { return DIVIDER; }
     public static int border()      { return DIVIDER; }
     public static int inputBg()     { return INPUT_BG; }
-
     public static int candyPink()  { return CANDY_PINK; }
     public static int candyYellow(){ return CANDY_YELLOW; }
-
     public static int whiteTextOnAccent() { return WHITE_TEXT; }
     public static int bubbleSelfBg()  { return CARD_BG; }
     public static int bubbleOtherBg() { return CARD_BG; }
-
-    public static boolean isDarkMode() { return false; }
 
     private AppColors() {}
 }

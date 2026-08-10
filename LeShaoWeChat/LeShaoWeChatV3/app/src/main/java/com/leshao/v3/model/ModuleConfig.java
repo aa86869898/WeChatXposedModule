@@ -316,6 +316,7 @@ public class ModuleConfig {
         cfg.msgExportEnabled = prefs.getBoolean("ls_wp_msgexport", true);
         cfg.chatBackupEnabled = prefs.getBoolean("ls_wp_chatbackup", true);
         cfg.shakeCustomEnabled = prefs.getBoolean("ls_wp_shake", true);
+
         cfg.sensitiveFilterEnabled = prefs.getBoolean("ls_sensitive_enabled", false);
         cfg.sensitiveWords.clear();
         try {
@@ -484,6 +485,7 @@ public class ModuleConfig {
         e.putBoolean("ls_wp_msgexport", msgExportEnabled);
         e.putBoolean("ls_wp_chatbackup", chatBackupEnabled);
         e.putBoolean("ls_wp_shake", shakeCustomEnabled);
+
         e.putBoolean("ls_sensitive_enabled", sensitiveFilterEnabled);
         JSONArray swArr = new JSONArray();
         for (String w : sensitiveWords) swArr.put(w);

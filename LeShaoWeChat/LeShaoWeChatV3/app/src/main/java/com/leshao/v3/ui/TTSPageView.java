@@ -63,6 +63,9 @@ public class TTSPageView {
     private static final String KEY_ANNOUNCE_INTERVAL = "ls_announce_interval_ms";
     private static final String KEY_TEXT_CUTOFF = "ls_text_truncate_len";
     private static final String KEY_TEXT_TRUNCATE = "ls_text_truncate";
+    private static final String KEY_ANNOUNCE_PAT = "ls_announce_pat";
+    private static final String KEY_ANNOUNCE_AT = "ls_announce_at";
+    private static final String KEY_ANNOUNCE_BL = "ls_tts_blacklist";
     private static final String KEY_TTS_COMMAND = "ls_tts_command";
 
     public static View create(Context ctx, Activity parentAct) {
@@ -80,7 +83,7 @@ public class TTSPageView {
         root.addView(buildTtsEngineCard(ctx, parentAct, d, prefs));
         root.addView(spacerV(ctx, d, 12));
 
-        boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true);
+boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true);
         boolean announceImage = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_IMAGE, true);
         boolean announceVideo = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_VIDEO, true);
         boolean announceLocation = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_LOCATION, true);
@@ -96,99 +99,124 @@ public class TTSPageView {
         boolean announceChatHistory = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_CHATHISTORY, true);
         boolean announceNickname = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_NICKNAME, true);
         boolean announceGroup = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_GROUP, false);
+        boolean announcePat = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_PAT, false);
+        boolean announceAt = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_AT, false);
         boolean quietOn = prefs != null && prefs.getBoolean(KEY_QUIET_ON, false);
         String quietStart = prefs != null ? prefs.getString(KEY_QUIET_START, "23:00") : "23:00";
         String quietEnd = prefs != null ? prefs.getString(KEY_QUIET_END, "07:00") : "07:00";
         String whitelist = prefs != null ? prefs.getString(KEY_ANNOUNCE_WL, "") : "";
+        String blacklist = prefs != null ? prefs.getString(KEY_ANNOUNCE_BL, "") : "";
         int interval = prefs != null ? Integer.parseInt(prefs.getString(KEY_ANNOUNCE_INTERVAL, "0")) : 0;
         boolean truncate = prefs != null && prefs.getBoolean(KEY_TEXT_TRUNCATE, true);
         int cutoff = prefs != null ? Integer.parseInt(prefs.getString(KEY_TEXT_CUTOFF, "150")) : 150;
         float speechRate = prefs != null ? prefs.getFloat("ls_speech_rate", 1.1f) : 1.1f;
         boolean ttsCommand = prefs != null && prefs.getBoolean(KEY_TTS_COMMAND, false);
 
+        // 启用 #tts 文字转语音指令
+        LinearLayout cardTts = makeCard(ctx, d);
+        cardTts.addView(switchRow(ctx, d, "\u542f\u7528 #tts \u6587\u5b57\u8f6c\u8bed\u97f3\u6307\u4ee4", "\u5728\u804a\u5929\u7a97\u53e3\u53d1\u9001 #tts XXX\u5185\u5bb9, \u81ea\u52a8\u5c06\u6587\u5b57\u5408\u6210\u8bed\u97f3\u6d88\u606f\u53d1\u51fa", ttsCommand, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean(KEY_TTS_COMMAND, on).apply();
+        }));
+        root.addView(cardTts);
+
+        root.addView(spacerV(ctx, d, 12));
+        root.addView(sectionLabel(ctx, d, "\u81ea\u52a8\u64ad\u62a5\u7c7b\u578b"));
+
         LinearLayout card1 = makeCard(ctx, d);
-        card1.addView(switchRow(ctx, d, "文字消息播报", "格式: XXX说:文字内容 / XXX在群说:文字内容", announceText, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "\u6587\u5b57\u6d88\u606f\u64ad\u62a5", null, announceText, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_TEXT, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "语音消息播报", "格式: XXX说:播放语音 / XXX在群说:播放语音", announceCall, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "\u8bed\u97f3\u6d88\u606f\u64ad\u62a5", null, announceCall, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_CALL, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "图片消息播报", "格式: XXX给你分享一张照片", announceImage, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "\u56fe\u7247\u6d88\u606f\u64ad\u62a5", null, announceImage, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_IMAGE, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "视频消息播报", "格式: XXX给你分享一段视频", announceVideo, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "\u89c6\u9891\u6d88\u606f\u64ad\u62a5", null, announceVideo, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_VIDEO, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "位置消息播报", "格式: XXX给你分享定位:位置", announceLocation, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "\u4f4d\u7f6e\u6d88\u606f\u64ad\u62a5", null, announceLocation, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_LOCATION, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "红包消息播报", "格式: XXX给你发来一个红包 / 群正在发红包", announceRedBag, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "\u7ea2\u5305\u6d88\u606f\u64ad\u62a5", null, announceRedBag, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_REDBAG, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "转账消息播报", "格式: XXX给你发来一笔转账", announceTransfer, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "\u8f6c\u8d26\u6d88\u606f\u64ad\u62a5", null, announceTransfer, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_TRANSFER, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "名片消息播报", "格式: XXX发来一张名片", announceCard, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "\u540d\u7247\u6d88\u606f\u64ad\u62a5", null, announceCard, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_CARD, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "文件消息播报", "格式: XXX给你发来一个文件", announceFile, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "\u6587\u4ef6\u6d88\u606f\u64ad\u62a5", null, announceFile, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_FILE, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "表情消息播报", "格式: XXX发来一个表情", announceSticker, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "\u8868\u60c5\u6d88\u606f\u64ad\u62a5", null, announceSticker, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_STICKER, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "引用消息播报", "格式: XXX引用你发的消息说:XXX", announceQuote, (v, on) -> {
+        card1.addView(switchRow(ctx, d, "\u5f15\u7528\u6d88\u606f\u64ad\u62a5", null, announceQuote, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_QUOTE, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "播报发送人昵称", "播报消息发送人昵称", announceNickname, (v, on) -> {
-            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_NICKNAME, on).apply();
+        card1.addView(switchRow(ctx, d, "\u804a\u5929\u8bb0\u5f55\u64ad\u62a5", null, announceChatHistory, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_CHATHISTORY, on).apply();
+        }));
+        card1.addView(itemDivider(ctx, d));
+        card1.addView(switchRow(ctx, d, "\u88ab\u62cd\u81ea\u52a8\u64ad\u62a5", null, announcePat, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_PAT, on).apply();
+        }));
+        card1.addView(itemDivider(ctx, d));
+        card1.addView(switchRow(ctx, d, "\u7fa4\u5185\u88ab@\u65f6\u64ad\u62a5", null, announceAt, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_AT, on).apply();
+        }));
+        card1.addView(itemDivider(ctx, d));
+        card1.addView(switchRow(ctx, d, "\u5c0f\u7a0b\u5e8f\u6d88\u606f\u64ad\u62a5", null, announceMiniProgram, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_MINIPROGRAM, on).apply();
+        }));
+        card1.addView(itemDivider(ctx, d));
+        card1.addView(switchRow(ctx, d, "\u89c6\u9891\u53f7\u6d88\u606f\u64ad\u62a5", null, announceVideoChannel, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_VIDEOCHANNEL, on).apply();
         }));
         root.addView(card1);
 
         root.addView(spacerV(ctx, d, 12));
+        root.addView(sectionLabel(ctx, d, "\u81ea\u52a8\u64ad\u62a5\u89c4\u5219"));
+
         LinearLayout card2 = makeCard(ctx, d);
-        card2.addView(switchRow(ctx, d, "播报群聊消息", "打开后群内消息格式: XXX在XX群说:XXX内容", announceGroup, (v, on) -> {
+        card2.addView(switchRow(ctx, d, "\u662f\u5426\u64ad\u62a5\u5168\u7fa4\u6d88\u606f", null, announceGroup, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_GROUP, on).apply();
+        }));
+        card2.addView(itemDivider(ctx, d));
+        card2.addView(switchRow(ctx, d, "\u662f\u5426\u64ad\u62a5\u53d1\u9001\u4eba\u6635\u79f0/\u5907\u6ce8", null, announceNickname, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_NICKNAME, on).apply();
         }));
         root.addView(card2);
 
         root.addView(spacerV(ctx, d, 12));
-        LinearLayout cardSpecial = makeCard(ctx, d);
-        cardSpecial.addView(switchRow(ctx, d, "小程序消息播报", "播报小程序分享消息", announceMiniProgram, (v, on) -> {
-            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_MINIPROGRAM, on).apply();
-        }));
-        cardSpecial.addView(itemDivider(ctx, d));
-        cardSpecial.addView(switchRow(ctx, d, "视频号消息播报", "播报视频号分享消息", announceVideoChannel, (v, on) -> {
-            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_VIDEOCHANNEL, on).apply();
-        }));
-        cardSpecial.addView(itemDivider(ctx, d));
-        cardSpecial.addView(switchRow(ctx, d, "聊天记录播报", "播报合并转发的聊天记录消息", announceChatHistory, (v, on) -> {
-            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_CHATHISTORY, on).apply();
-        }));
-        root.addView(cardSpecial);
-
-        root.addView(spacerV(ctx, d, 12));
         LinearLayout card3 = makeCard(ctx, d);
-        card3.addView(pickerRow(ctx, d, parentAct, "播报白名单", "只播报指定好友或群聊的消息", whitelist,
+        card3.addView(pickerRow(ctx, d, parentAct, "\u81ea\u52a8\u64ad\u62a5\u767d\u540d\u5355\u5217\u8868", "\u53ea\u64ad\u62a5\u6307\u5b9a\u597d\u53cb\u6216\u7fa4\u804a\u7684\u6d88\u606f", whitelist,
             ContactPickerDialog.MODE_FRIEND, val -> {
                 if (prefs != null) prefs.edit().putString(KEY_ANNOUNCE_WL, val).apply();
+            }));
+        card3.addView(itemDivider(ctx, d));
+        card3.addView(pickerRow(ctx, d, parentAct, "\u81ea\u52a8\u64ad\u62a5\u9ed1\u540d\u5355\u5217\u8868", "\u4e0d\u64ad\u62a5\u6307\u5b9a\u597d\u53cb\u6216\u7fa4\u804a\u7684\u6d88\u606f", blacklist,
+            ContactPickerDialog.MODE_FRIEND, val -> {
+                if (prefs != null) prefs.edit().putString(KEY_ANNOUNCE_BL, val).apply();
             }));
         root.addView(card3);
 
         root.addView(spacerV(ctx, d, 12));
         LinearLayout card4 = makeCard(ctx, d);
-        card4.addView(switchRow(ctx, d, "开启免打扰", "在指定时段内不播报消息", quietOn, (v, on) -> {
+        card4.addView(switchRow(ctx, d, "\u4ec5\u5728\u65f6\u95f4\u6bb5\u5185\u81ea\u52a8\u64ad\u62a5", "\u5728\u6307\u5b9a\u65f6\u6bb5\u5185\u4e0d\u64ad\u62a5\u6d88\u606f", quietOn, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_QUIET_ON, on).apply();
         }));
         card4.addView(itemDivider(ctx, d));
@@ -201,15 +229,15 @@ public class TTSPageView {
 
         root.addView(spacerV(ctx, d, 12));
         LinearLayout card5 = makeCard(ctx, d);
-        card5.addView(switchRow(ctx, d, "截断长文字", "超长文字自动截断后播报", truncate, (v, on) -> {
+        card5.addView(switchRow(ctx, d, "\u5355\u6761\u6d88\u606f\u64ad\u62a5\u5b57\u7b26\u4e0a\u9650\u8bbe\u7f6e", "\u8d85\u8fc7\u6b64\u957f\u5ea6\u7684\u6587\u5b57\u5c06\u88ab\u622a\u65ad", truncate, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_TEXT_TRUNCATE, on).apply();
         }));
         card5.addView(itemDivider(ctx, d));
-        card5.addView(intervalRow(ctx, d, cutoff, "截断长度", "超过此长度的文字将被截断", 1, 500, val -> {
+        card5.addView(intervalRow(ctx, d, cutoff, "\u622a\u65ad\u957f\u5ea6", "\u8d85\u8fc7\u6b64\u957f\u5ea6\u7684\u6587\u5b57\u5c06\u88ab\u622a\u65ad", 1, 500, val -> {
             if (prefs != null) prefs.edit().putString(KEY_TEXT_CUTOFF, String.valueOf(val)).apply();
         }));
         card5.addView(itemDivider(ctx, d));
-        card5.addView(intervalRow(ctx, d, interval, "播报间隔", "两次播报之间最小间隔(毫秒)", 0, 5000, val -> {
+        card5.addView(intervalRow(ctx, d, interval, "\u64ad\u62a5\u95f4\u9694", "\u4e24\u6b21\u64ad\u62a5\u4e4b\u95f4\u6700\u5c0f\u95f4\u9694(\u6beb\u79d2)", 0, 5000, val -> {
             if (prefs != null) prefs.edit().putString(KEY_ANNOUNCE_INTERVAL, String.valueOf(val)).apply();
         }));
         card5.addView(itemDivider(ctx, d));
@@ -218,14 +246,6 @@ public class TTSPageView {
             if (prefs != null) prefs.edit().putFloat("ls_speech_rate", rate).apply();
         }));
         root.addView(card5);
-
-        // 文字转语音开关
-        root.addView(spacerV(ctx, d, 12));
-        LinearLayout cardTts = makeCard(ctx, d);
-        cardTts.addView(switchRow(ctx, d, "启用 #tts 指令", "在聊天窗口发送 #tts XXX内容, 自动将文字合成语音消息发出", ttsCommand, (v, on) -> {
-            if (prefs != null) prefs.edit().putBoolean(KEY_TTS_COMMAND, on).apply();
-        }));
-        root.addView(cardTts);
 
         scrollView.addView(root);
         return scrollView;
@@ -752,7 +772,7 @@ public class TTSPageView {
             if (window != null) {
                 android.util.DisplayMetrics dm = parentAct.getResources().getDisplayMetrics();
                 window.setLayout((int) (dm.widthPixels * 0.85f), (int) (dm.heightPixels * 0.75f));
-                window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+                window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(AppColors.CARD_BG));
             }
         } catch (Throwable ignored) {}
 
@@ -808,6 +828,7 @@ public class TTSPageView {
                                           LinearLayout voiceList, TextView statusTv) {
         LinearLayout popup = new LinearLayout(ctx);
         popup.setOrientation(LinearLayout.VERTICAL);
+        popup.setBackground(CandyUi.cardBg(ctx));
         popup.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(12 * d));
 
         TextView popTitle = new TextView(ctx);

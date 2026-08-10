@@ -22,6 +22,8 @@ public class ContactChangeRecord {
     public boolean avatarChanged;
     public int oldAvatarHash;
     public int newAvatarHash;
+    public String oldAvatarPath;
+    public String newAvatarPath;
 
     public ContactChangeRecord() {}
 
@@ -61,6 +63,8 @@ public class ContactChangeRecord {
             if (avatarChanged) {
                 o.put("ah", oldAvatarHash);
                 o.put("na", newAvatarHash);
+                o.put("op", oldAvatarPath != null ? oldAvatarPath : "");
+                o.put("np", newAvatarPath != null ? newAvatarPath : "");
             }
         } catch (Throwable ignored) {}
         return o;
@@ -91,6 +95,8 @@ public class ContactChangeRecord {
         if (r.avatarChanged) {
             r.oldAvatarHash = o.optInt("ah");
             r.newAvatarHash = o.optInt("na");
+            r.oldAvatarPath = o.optString("op", null);
+            r.newAvatarPath = o.optString("np", null);
         }
         return r;
     }

@@ -99,6 +99,7 @@ public class SnsFeatures {
                         if (menu != null) {
                             menu.add(0, 99995, 0, "转发到聊天");
                             menu.add(0, 99996, 0, "复制文字内容");
+                            menu.add(0, 99997, 0, "快速收藏");
                         }
                     } catch (Throwable ignored) {}
                 }
@@ -216,6 +217,16 @@ public class SnsFeatures {
                     Toast.LENGTH_SHORT).show();
             XposedBridge.log("[SNS] 复制: " + content.length() + "字");
         } catch (Throwable ignored) {}
+    }
+
+    private static long getSnsIdFromFlip(Object flipObj) {
+        try {
+            Object snsInfo = XposedHelpers.getObjectField(flipObj, "mSnsInfo");
+            if (snsInfo != null) {
+                return XposedHelpers.getLongField(snsInfo, "field_snsId");
+            }
+        } catch (Throwable ignored) {}
+        return 0;
     }
 
     private static String extractTextFromView(View v) {

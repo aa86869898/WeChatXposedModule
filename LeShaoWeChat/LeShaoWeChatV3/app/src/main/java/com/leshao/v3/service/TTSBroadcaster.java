@@ -12,15 +12,17 @@ public class TTSBroadcaster {
     private static final String TAG = "TTSBroadcaster";
 
     private static volatile TtsEngine sEngine;
+    private static volatile CubeTtsPlayer sCubePlayer;
     private static volatile FilterManager sFilter;
     private static volatile MessageHandler sHandler;
 
     public static synchronized void init(Context ctx) {
         if (sEngine != null) return;
         sEngine = new TtsEngine(ctx);
+        sCubePlayer = new CubeTtsPlayer(ctx);
         sFilter = new FilterManager();
         NicknameResolver.init();
-        sHandler = new MessageHandler(sEngine, sFilter, new NicknameResolver());
+        sHandler = new MessageHandler(sEngine, sCubePlayer, sFilter, new NicknameResolver());
         LogWriter.log(TAG, "TTS init done");
     }
 
@@ -57,11 +59,15 @@ public class TTSBroadcaster {
     }
 
     public static boolean isSpeaking() {
-        return sEngine != null && sEngine.isSpeaking();
+        if (sEngine != null && sEngine.isSpeaking()) return true;
+        if (sCubePlayer != null && sCubePlayer.isSpeaking()) return true;
+        return false;
     }
 
     public static boolean hasPendingSpeak() {
-        return sEngine != null && sEngine.hasPendingSpeak();
+        if (sEngine != null && sEngine.hasPendingSpeak()) return true;
+        if (sCubePlayer != null && sCubePlayer.hasPendingSpeak()) return true;
+        return false;
     }
 
     public static void setSpeechRate(float rate) {
@@ -69,18 +75,22 @@ public class TTSBroadcaster {
     }
 
     public static void speakText(String text) {
-        if (sEngine != null) sEngine.speak(text);
+        if (sHandler != null) sHandler.speak(text);
     }
 
     public static void pause() {
+        if (sCubePlayer != null) sCubePlayer.pause();
         if (sEngine != null) sEngine.pause();
     }
 
     public static void stopAll() {
+        if (sCubePlayer != null) sCubePlayer.stop();
         if (sEngine != null) sEngine.stop();
     }
 
     public static void shutdown() {
+        if (sCubePlayer != null) sCubePlayer.shutdown();
+        sCubePlayer = null;
         if (sEngine != null) sEngine.shutdown();
         sEngine = null;
         sHandler = null;

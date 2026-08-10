@@ -20,6 +20,7 @@ import com.leshao.v3.ContextManager;
 import com.leshao.v3.service.ActivationManager;
 
 import java.io.File;
+import java.lang.reflect.Method;
 
 public class ProfilePageView {
 
@@ -52,17 +53,25 @@ public class ProfilePageView {
         avatarBg.setCornerRadius(avatarSize / 2f);
         avatarBg.setColor(AppColors.bg());
         avatar.setBackground(avatarBg);
-        String avatarPath = MainActivity.getAvatarPath();
-        if (avatarPath != null) {
-            File f = new File(avatarPath);
-            if (f.exists()) {
-                // 后台线程解码大图，避免阻塞主线程
-                final ImageView avatarIv = avatar;
-                final String fPath = avatarPath;
-                new Thread(() -> {
-                    Bitmap bm = BitmapFactory.decodeFile(fPath);
-                    if (bm != null) avatarIv.post(() -> avatarIv.setImageBitmap(bm));
-                }, "leshao-avatar").start();
+        avatar.setClipToOutline(true);
+
+        // 优先使用 AvatarHelper 多路径加载，回退到 getAvatarPath
+        int avatarSizePx = (int)(56 * d);
+        android.graphics.Bitmap bm = AvatarHelper.loadAvatar(MainActivity.getUserWxid(), avatarSizePx);
+        if (bm != null) {
+            avatar.setImageBitmap(bm);
+        } else {
+            String avatarPath = MainActivity.getAvatarPath();
+            if (avatarPath != null) {
+                java.io.File f = new java.io.File(avatarPath);
+                if (f.exists()) {
+                    final ImageView avatarIv = avatar;
+                    final String fPath = avatarPath;
+                    new Thread(() -> {
+                        android.graphics.Bitmap bm2 = android.graphics.BitmapFactory.decodeFile(fPath);
+                        if (bm2 != null) avatarIv.post(() -> avatarIv.setImageBitmap(bm2));
+                    }, "leshao-avatar").start();
+                }
             }
         }
         userRow.addView(avatar);
@@ -73,12 +82,33 @@ public class ProfilePageView {
         textCol.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView nickTv = new TextView(ctx);
-        nickTv.setText(MainActivity.getUserNickname());
+        nickTv.setText("加载中...");
         nickTv.setTextSize(16);
         nickTv.setTextColor(AppColors.text1());
         nickTv.setTypeface(null, Typeface.BOLD);
         nickTv.setPadding(0, 0, 0, (int)(6 * d));
         textCol.addView(nickTv);
+
+        // 始终从 DB 加载真实昵称
+        final String wxid = MainActivity.getUserWxid();
+        final Context appCtx = ContextManager.getAppContext();
+        new Thread(() -> {
+            String realNick = null;
+            if (appCtx != null) {
+                try {
+                    realNick = findNicknameFromDb(wxid, appCtx);
+                } catch (Throwable ignored) {}
+            }
+            if (realNick == null || realNick.isEmpty()) {
+                // 回退到 prefs/MainActivity 缓存
+                realNick = MainActivity.getUserNickname();
+            }
+            if (realNick == null || realNick.isEmpty() || realNick.startsWith("wxid_")) {
+                realNick = wxid;
+            }
+            final String finalNick = realNick;
+            nickTv.post(() -> nickTv.setText(finalNick));
+        }, "leshao-nickname").start();
 
         LinearLayout wxidRow = new LinearLayout(ctx);
         wxidRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -121,10 +151,6 @@ public class ProfilePageView {
             infoCard.addView(itemDivider(ctx, d));
         }
 
-        // 会员到期
-        String expireText = getExpireTime();
-        infoCard.addView(profileRow(ctx, d, "会员到期", expireText));
-
         root.addView(infoCard);
 
         // 管理员配置入口 (仅管理员可见)
@@ -162,85 +188,6 @@ public class ProfilePageView {
         }
 
         final SharedPreferences prefs = ContextManager.getPrefs();
-
-        // ===== Monet 主题 =====
-        root.addView(spacerV(ctx, d, 16));
-
-        // ===== 日志导出 =====
-        root.addView(spacerV(ctx, d, 16));
-        root.addView(sectionLabel(ctx, d, "日志导出"));
-        LinearLayout logCard = makeCard(ctx, d);
-
-        TextView logDesc = new TextView(ctx);
-        logDesc.setText("将乐少助手运行日志导出到应用内部目录");
-        logDesc.setTextSize(12);
-        logDesc.setTextColor(AppColors.text2());
-        logDesc.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(4 * d));
-        logCard.addView(logDesc);
-
-        LinearLayout logBtnRow = new LinearLayout(ctx);
-        logBtnRow.setOrientation(LinearLayout.HORIZONTAL);
-        logBtnRow.setGravity(Gravity.CENTER);
-        logBtnRow.setPadding((int)(16 * d), (int)(4 * d), (int)(16 * d), (int)(12 * d));
-
-        TextView btnExport = makeSmallBtn(ctx, d, "导出日志", AppColors.accent());
-        btnExport.setOnClickListener(v -> {
-            try {
-                String ts = String.valueOf(System.currentTimeMillis());
-                android.content.Context appCtx = com.leshao.v3.ContextManager.getAppContext();
-                java.io.File leshaoRoot = appCtx != null
-                    ? com.leshao.v3.PathUtil.getLeshaoRootDir(appCtx)
-                    : new java.io.File("/data/data/com.tencent.mm/files/leshao_v3");
-                java.io.File destDir = new java.io.File(leshaoRoot, "log_export");
-                if (!destDir.exists()) destDir.mkdirs();
-
-                int count = 0;
-                java.io.File[] logDirs = {
-                    leshaoRoot
-                };
-                for (java.io.File dir : logDirs) {
-                    java.io.File[] files = dir.listFiles();
-                    if (files == null) continue;
-                    for (java.io.File src : files) {
-                        if (!src.isFile() || src.length() == 0) continue;
-                        String destName = src.getName().replace(".", "_" + ts + ".");
-                        java.io.File dest = new java.io.File(destDir, destName);
-                        try (java.io.FileInputStream fis = new java.io.FileInputStream(src);
-                             java.io.FileOutputStream fos = new java.io.FileOutputStream(dest)) {
-                            byte[] buf = new byte[8192];
-                            int n;
-                            while ((n = fis.read(buf)) > 0) fos.write(buf, 0, n);
-                        }
-                        count++;
-                    }
-                }
-                Toast.makeText(ctx, "已导出 " + count + " 个日志到 " + destDir.getAbsolutePath(), Toast.LENGTH_LONG).show();
-            } catch (Throwable t) {
-                Toast.makeText(ctx, "导出失败: " + t.getMessage(), Toast.LENGTH_LONG).show();
-            }
-        });
-        logBtnRow.addView(btnExport);
-
-        View btnSpacer = new View(ctx);
-        btnSpacer.setLayoutParams(new LinearLayout.LayoutParams((int)(12*d), 0));
-        logBtnRow.addView(btnSpacer);
-
-        TextView btnOpenDir = makeSmallBtn(ctx, d, "查看日志路径", AppColors.text1());
-        btnOpenDir.setOnClickListener(v -> {
-            try {
-                android.content.Context appCtx = com.leshao.v3.ContextManager.getAppContext();
-                java.io.File leshaoRoot = appCtx != null
-                    ? com.leshao.v3.PathUtil.getLeshaoRootDir(appCtx)
-                    : new java.io.File("/data/data/com.tencent.mm/files/leshao_v3");
-                Toast.makeText(ctx, "日志目录: " + leshaoRoot.getAbsolutePath(), Toast.LENGTH_LONG).show();
-            } catch (Throwable t) {
-                Toast.makeText(ctx, "日志目录获取失败", Toast.LENGTH_LONG).show();
-            }
-        });
-        logBtnRow.addView(btnOpenDir);
-
-        logCard.addView(logBtnRow);
-        root.addView(logCard);
 
         return root;
     }
@@ -338,5 +285,64 @@ public class ProfilePageView {
 
     private static String getExpireTime() {
         return "永久有效";
+    }
+
+    private static String findNicknameFromDb(String wxid, Context ctx) {
+        if (wxid == null || ctx == null) return null;
+        try {
+            android.content.SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
+            Object uv = sp.getAll().get("default_uin");
+            if (uv == null) return null;
+            long uin = Long.parseLong(uv.toString());
+
+            String dbDir = ctx.getFilesDir().getParent();
+            java.io.File[] dirs = new java.io.File(dbDir).listFiles();
+            if (dirs == null) return null;
+            for (java.io.File dir : dirs) {
+                if (!dir.isDirectory()) continue;
+                if (dir.getName().length() < 10) continue;
+                java.io.File dbFile = new java.io.File(dir, "EnMicroMsg.db");
+                if (!dbFile.exists()) continue;
+
+                try {
+                    Class<?> wo = com.leshao.v3.ContextManager.getClassLoader()
+                            .loadClass("wo.w0");
+                    Method g = wo.getDeclaredMethod("g", boolean.class);
+                    String dbName = (String) g.invoke(null, true);
+                    Method bMtd = wo.getDeclaredMethod("b", String.class, String.class, int.class);
+                    byte[] pwd = (byte[]) bMtd.invoke(null, String.valueOf(uin), "ABCDEF", 0);
+                    if (pwd == null) continue;
+
+                    java.io.File dbPath = new java.io.File(dbFile.getAbsolutePath());
+                    Class<?> sqliteClass = Class.forName("com.tencent.wcdb.database.SQLiteCipherSpec");
+                    Object cipher = sqliteClass.getConstructor(byte[].class, int.class, int.class, int.class)
+                            .newInstance(pwd, 2048, pwd.length, 0);
+                    Class<?> wcdbClass = Class.forName("com.tencent.wcdb.database.SQLiteDatabase");
+                    Method openDb = wcdbClass.getMethod("openDatabase", String.class, byte[].class, sqliteClass, Class.forName("com.tencent.wcdb.database.SQLiteCipherSpec"));
+                    Object db = openDb.invoke(null, dbPath.getAbsolutePath(), null, cipher, null);
+
+                    if (db != null) {
+                        try {
+                            Method rawQuery = db.getClass().getMethod("rawQuery", String.class, String[].class);
+                            Object cursor = rawQuery.invoke(db, "SELECT nickname FROM rcontact WHERE username=?", new String[]{wxid});
+                            if (cursor != null) {
+                                Method moveToFirst = cursor.getClass().getMethod("moveToFirst");
+                                if ((Boolean) moveToFirst.invoke(cursor)) {
+                                    Method getStr = cursor.getClass().getMethod("getString", int.class);
+                                    String nick = (String) getStr.invoke(cursor, 0);
+                                    cursor.getClass().getMethod("close").invoke(cursor);
+                                    db.getClass().getMethod("close").invoke(db);
+                                    if (nick != null && !nick.isEmpty()) return nick;
+                                }
+                                cursor.getClass().getMethod("close").invoke(cursor);
+                            }
+                        } catch (Throwable ignored) {}
+                        db.getClass().getMethod("close").invoke(db);
+                    }
+                } catch (Throwable ignored) {}
+                break;
+            }
+        } catch (Throwable ignored) {}
+        return null;
     }
 }

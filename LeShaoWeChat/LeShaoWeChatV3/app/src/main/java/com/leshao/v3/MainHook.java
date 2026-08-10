@@ -3,6 +3,8 @@ package com.leshao.v3;
 import android.app.Application;
 import android.content.Context;
 import android.content.pm.PackageInfo;
+import android.os.Process;
+
 
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.AntiRecallHook;
@@ -28,8 +30,6 @@ import com.leshao.v3.hook.PlusMenuInject;
 import com.leshao.v3.hook.PrivacyFeatures;
 import com.leshao.v3.hook.RedPacketHook;
 import com.leshao.v3.hook.SearchEnhance;
-import com.leshao.v3.hook.SettingsEntryHook;
-import com.leshao.v3.hook.SettingsInjectProvider;
 import com.leshao.v3.hook.TtsVoiceSender;
 import com.leshao.v3.hook.ShakeCustom;
 import com.leshao.v3.hook.SnsFeatures;
@@ -39,11 +39,11 @@ import com.leshao.v3.hook.TypingIndicator;
 import com.leshao.v3.hook.UnreadBadge;
 import com.leshao.v3.hook.VoiceForwardHook;
 import com.leshao.v3.hook.VoiceAutoPlay;
+import com.leshao.v3.db.VoiceHistoryDbHelper;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.TTSBroadcaster;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
-import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
@@ -62,22 +62,22 @@ public class MainHook implements IXposedHookLoadPackage {
         LogWriter.init();
 
         boolean isMain = WX_PKG.equals(lpparam.processName);
-
-        LogWriter.log(TAG, "Module loaded, process=" + lpparam.processName + ", isMain=" + isMain
-            + ", userId=" + PathUtil.getMyUserId());
-
-        int wxVersion = 0;
-        try { wxVersion = XposedHelpers.getIntField(lpparam.appInfo, "versionCode"); }
-        catch (Throwable t) {}
-
-        LogWriter.log(TAG, "WeChat versionCode=" + wxVersion + " pkg=" + WX_PKG);
-
         if (!isMain) {
+            LogWriter.log(TAG, "skip sub-process: " + lpparam.processName);
             return;
         }
 
         if (sMainInitialized) return;
         sMainInitialized = true;
+
+        int wxVersion = 0;
+        try { wxVersion = XposedHelpers.getIntField(lpparam.appInfo, "versionCode"); }
+        catch (Throwable t) {}
+
+        int userId = Process.myUid() / 100000;
+        String instanceLabel = userId == 0 ? "主微信" : ("分身微信(user" + userId + ")");
+        LogWriter.log(TAG, "WeChat versionCode=" + wxVersion + " uid=" + Process.myUid() + " userId=" + userId);
+        LogWriter.log(TAG, "当前实例: " + instanceLabel + ", process=" + lpparam.processName);
 
         final int wxVerCode = wxVersion;
         final ClassLoader cl = lpparam.classLoader;
@@ -86,36 +86,36 @@ public class MainHook implements IXposedHookLoadPackage {
             ContextManager.init(cl, lpparam.appInfo.sourceDir);
             ContextManager.hookAttachBaseContext(lpparam);
 
-            SettingsEntryHook.hook(cl);
             MessageHook.hook(cl);
             TtsVoiceSender.hook(cl);
             PlusMenuInject.init(cl);
-
+            CornerMenu.hook(cl);
+            ChatRoomMuteHelper.hook(cl);
+            ChatFooterLongPressMenu.hook(cl);
             ContextManager.setOnReadyCallback(new Runnable() {
                 @Override
                 public void run() {
                     try {
                         Context ctx = ContextManager.getAppContext();
-                        if (ctx instanceof Application) {
-                            SettingsInjectProvider.injectIntoWeChat((Application) ctx);
-                        }
 
                         TTSBroadcaster.init(ctx);
                         VoiceAutoPlay.hook(cl);
 
                         ModuleConfig.initWxid(ctx);
 
-                        // === 安全 ===================================================================
+                        try {
+                            VoiceHistoryDbHelper.getInstance(ctx).deleteExpired(
+                                System.currentTimeMillis() - 30L * 86400000L);
+                        } catch (Throwable ignored) {}
+
                         AntiDetectionHook.hook(cl);
                         HookManager.register(AntiRecallHook::hook);
                         HookManager.register(RedPacketHook::hook);
                         FriendRequestHook.hook(cl);
 
-                        // === WeChatPlus 聊天增强层 ============================================
                         HookManager.register(VoiceForwardHook::hook);
                         HookManager.register(() -> TypingIndicator.hook(cl));
                         HookManager.register(() -> ChatFooterEnhance.hook(cl));
-                        // 音色切换按钮直接同步初始化，避免后台线程 hook 系统类时机问题
                         ChatVoiceSwitchHook.init(cl);
                         HookManager.register(() -> ChatUICustom.hook(cl));
                         HookManager.register(() -> BatchMessage.hook(cl));
@@ -129,16 +129,13 @@ public class MainHook implements IXposedHookLoadPackage {
                         HookManager.register(() -> DeleteDetect.hook(cl));
                         HookManager.register(() -> CallFeatures.hook(cl));
 
-                        // === 朋友圈 ================================================================
                         HookManager.register(() -> SnsFeatures.hook(cl));
 
-                        // === 隐私安全 ==============================================================
                         HookManager.register(() -> PrivacyFeatures.hook(cl));
                         HookManager.register(() -> LoginMonitor.hook(cl));
                         HookManager.register(() -> HideContactFields.hook(cl));
                         HookManager.register(() -> ConvPrivacy.hook(cl));
 
-                        // === 联系人与群管 ==========================================================
                         HookManager.register(() -> ContactChangeLog.hook(cl));
                         HookManager.register(() -> GroupFeatures.hook(cl));
                         HookManager.register(() -> WmEntry.injectAll(cl));

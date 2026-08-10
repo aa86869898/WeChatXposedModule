@@ -3,9 +3,12 @@ package com.leshao.v3.ui;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -136,7 +139,7 @@ public class ContactChangeLogPageView {
         row.addView(header);
 
         if (r.avatarChanged) {
-            row.addView(changeLine(ctx, d, "头像", null, null));
+            row.addView(avatarLine(ctx, d, r));
         }
         if (r.nicknameChanged) {
             row.addView(changeLine(ctx, d, "昵称", r.oldNickname, r.newNickname));
@@ -190,6 +193,73 @@ public class ContactChangeLogPageView {
         }
 
         return line;
+    }
+
+    private static View avatarLine(Context ctx, float d, ContactChangeRecord r) {
+        LinearLayout line = new LinearLayout(ctx);
+        line.setOrientation(LinearLayout.HORIZONTAL);
+        line.setPadding(0, (int)(6 * d), 0, 0);
+        line.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView label = new TextView(ctx);
+        label.setText("头像");
+        label.setTextSize(12);
+        label.setTextColor(AppColors.accent());
+        label.setPadding(0, 0, (int)(6 * d), 0);
+        line.addView(label);
+
+        int avSize = (int)(32 * d);
+        ImageView oldAv = makeAvatarView(ctx, avSize, d);
+        ImageView newAv = makeAvatarView(ctx, avSize, d);
+
+        loadAvatarAsync(oldAv, r.oldAvatarPath, avSize);
+        loadAvatarAsync(newAv, r.newAvatarPath, avSize);
+
+        line.addView(oldAv);
+
+        View spacer = new View(ctx);
+        spacer.setLayoutParams(new LinearLayout.LayoutParams((int)(8 * d), 0));
+        line.addView(spacer);
+
+        TextView arrow = new TextView(ctx);
+        arrow.setText("→");
+        arrow.setTextSize(12);
+        arrow.setTextColor(AppColors.text2());
+        arrow.setPadding(0, 0, (int)(8 * d), 0);
+        line.addView(arrow);
+
+        line.addView(newAv);
+
+        return line;
+    }
+
+    private static ImageView makeAvatarView(Context ctx, int size, float d) {
+        ImageView iv = new ImageView(ctx);
+        iv.setLayoutParams(new LinearLayout.LayoutParams(size, size));
+        iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setCornerRadius(size / 2f);
+        bg.setColor(AppColors.divider());
+        iv.setBackground(bg);
+        iv.setClipToOutline(true);
+        return iv;
+    }
+
+    private static void loadAvatarAsync(ImageView iv, String path, int size) {
+        if (path == null || path.isEmpty()) {
+            return;
+        }
+        new Thread(() -> {
+            try {
+                java.io.File f = new java.io.File(path);
+                if (!f.exists()) return;
+                Bitmap bm = BitmapFactory.decodeFile(path);
+                if (bm != null) {
+                    Bitmap scaled = Bitmap.createScaledBitmap(bm, size, size, true);
+                    iv.post(() -> iv.setImageBitmap(scaled));
+                }
+            } catch (Throwable ignored) {}
+        }, "leshao-av-log").start();
     }
 
     private static View divider(Context ctx, float d) {
