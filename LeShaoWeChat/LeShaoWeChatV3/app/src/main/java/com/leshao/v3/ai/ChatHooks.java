@@ -162,7 +162,7 @@ public class ChatHooks {
                     MAIN.removeCallbacks(closeWindowTask);
                     MAIN.postDelayed(showBallTask, 300);
                     final String openedTalker = currentTalker;
-                    MAIN.postDelayed(() -> ReplyFeature.onSessionOpened(openedTalker, lp.classLoader), 800);
+                    MAIN.postDelayed(() -> ReplyFeature.onSessionOpened(openedTalker, lp.classLoader), 2000);
                 }
             });
             LogWriter.log(TAG, "悬浮球: M0 挂载完成");

@@ -31,6 +31,11 @@ public class ReplyFeature {
     public static void onSessionOpened(String talker, ClassLoader cl) {
         if (!AiConfig.masterEnabled() || !AiConfig.replyEnabled()) return;
         if (talker == null || talker.isEmpty()) return;
+        String curNow = ChatHooks.currentTalker();
+        if (!talker.equals(curNow)) {
+            LogWriter.log(TAG, "onSessionOpened: 已切走 talker=" + talker + " cur=" + curNow + "，取消");
+            return;
+        }
         List<MessageReader.ChatMsg> mem = ChatMemory.get(talker);
         MessageReader.ChatMsg lastOther = null;
         for (int i = mem.size() - 1; i >= 0; i--) {
