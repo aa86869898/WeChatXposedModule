@@ -26,6 +26,14 @@ public class AiMsgDb {
     public AiMsgDb(ClassLoader cl) { this.cl = cl; }
 
     public List<MessageReader.ChatMsg> readRecent(String talker, int limit) {
+        return readRecentInternal(talker, limit, true);
+    }
+
+    public List<MessageReader.ChatMsg> readRecentFull(String talker, int limit) {
+        return readRecentInternal(talker, limit, false);
+    }
+
+    private List<MessageReader.ChatMsg> readRecentInternal(String talker, int limit, boolean textOnly) {
         List<MessageReader.ChatMsg> out = new ArrayList<>();
         Cursor c = null;
         try {
@@ -49,13 +57,18 @@ public class AiMsgDb {
                 long time = c.getLong(1);
                 int isSend = c.getInt(2);
                 int type = c.getInt(3);
-                if (type != AiConst.TYPE_TEXT) { skipType++; continue; }
-                if (content == null || content.trim().isEmpty()) { skipEmpty++; continue; }
+                if (textOnly) {
+                    if (type != AiConst.TYPE_TEXT) { skipType++; continue; }
+                    if (content == null || content.trim().isEmpty()) { skipEmpty++; continue; }
+                } else if (content == null) {
+                    content = "";
+                }
                 String role = isSend == 1 ? "me" : "other";
-                out.add(new MessageReader.ChatMsg(role, "", content, time));
+                out.add(new MessageReader.ChatMsg(role, "", content, time, type));
             }
             Collections.reverse(out);
-            LogWriter.log(TAG, "readRecent: 文本=" + out.size() + " 非文本跳过=" + skipType + " 空跳过=" + skipEmpty);
+            LogWriter.log(TAG, "readRecent: 文本=" + (textOnly ? out.size() : "-")
+                    + " 全部=" + out.size() + " 非文本跳过=" + skipType + " 空跳过=" + skipEmpty);
         } catch (Throwable t) {
             LogWriter.log(TAG, "readRecent 异常: " + t.getClass().getSimpleName() + ": " + t.getMessage());
         } finally {
