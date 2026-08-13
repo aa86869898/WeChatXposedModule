@@ -641,6 +641,19 @@ public class MainActivity {
             searchMap.put(item, searchText);
             card2.addView(item);
         }
+
+        // AI 聊天助手入口
+        card2.addView(candyDivider(ctx, d));
+        LogWriter.log(TAG, "showMainPanel: adding AI 入口 v624");
+        View aiItem = makeListRow(ctx, d, 0x1F916, "AI助手", 0, false, v -> {
+            dismissDialog();
+            LogWriter.log(TAG, "AI 入口: 点击，打开微信内面板");
+            com.leshao.v3.ai.AiPanelDialog.show(act);
+        });
+        aiItem.setTag("menu_item");
+        searchMap.put(aiItem, "AI助手|AI聊天|聊天总结|推荐回复|润色|情绪分析|关键词|DeepSeek|OpenAI|人工智能");
+        card2.addView(aiItem);
+
         root.addView(card2);
 
         root.addView(candyDivider(ctx, d));

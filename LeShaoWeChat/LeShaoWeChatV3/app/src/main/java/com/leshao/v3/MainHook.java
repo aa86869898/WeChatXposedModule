@@ -44,6 +44,8 @@ import com.leshao.v3.hook.VoiceAutoPlay;
 import com.leshao.v3.db.VoiceHistoryDbHelper;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.TTSBroadcaster;
+import com.leshao.v3.ai.AiConfig;
+import com.leshao.v3.ai.ChatHooks;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XposedHelpers;
@@ -146,6 +148,14 @@ public class MainHook implements IXposedHookLoadPackage {
                         LogWriter.log(TAG, "[MainHook] 开始初始化 FakeAddSource");
                         FakeAddSource.hook(cl);
                         LogWriter.log(TAG, "[MainHook] FakeAddSource 初始化完成");
+
+                        try {
+                            AiConfig.init(ctx);
+                            ChatHooks.install(lpparam);
+                            LogWriter.log(TAG, "[MainHook] AI 聊天助手已加载 v624");
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "[MainHook] AI install FAIL: " + t.getMessage());
+                        }
 
                         HookManager.activateAll();
                     } catch (Throwable t) {

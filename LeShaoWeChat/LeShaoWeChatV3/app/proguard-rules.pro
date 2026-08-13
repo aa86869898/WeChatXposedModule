@@ -21,6 +21,8 @@
 -keep class com.leshao.v3.dispatch.**$* { *; }
 -keep class com.leshao.v3.ui.** { *; }
 -keep class com.leshao.v3.ui.**$* { *; }
+-keep class com.leshao.v3.ai.** { *; }
+-keep class com.leshao.v3.ai.**$* { *; }
 -keep class com.leshao.v3.ContextManager { *; }
 
 # ========== 6. 关闭 R8 危险优化（关键！避免匿名回调被销毁）==========

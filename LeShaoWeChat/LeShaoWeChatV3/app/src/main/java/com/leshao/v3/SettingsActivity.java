@@ -22,6 +22,7 @@ import com.leshao.v3.ui.StatsFragment;
 import com.leshao.v3.ui.ChatEnhanceFragment;
 import com.leshao.v3.ui.SnsFragment;
 import com.leshao.v3.ui.PrivacyFragment;
+import com.leshao.v3.ai.AIControlFragment;
 import java.lang.reflect.Method;
 
 public class SettingsActivity extends FragmentActivity {
@@ -66,10 +67,11 @@ public class SettingsActivity extends FragmentActivity {
                 case 5: return new TTSFragment();
                 case 6: return new GroupGuardFragment();
                 case 7: return new StatsFragment();
+                case 8: return new AIControlFragment();
                 default: return new SettingsFragment();
             }
         }
-        @Override public int getItemCount() { return 8; }
+        @Override public int getItemCount() { return 9; }
         });
 
         new TabLayoutMediator(tabLayout, viewPager, (tab, position) -> {
@@ -82,6 +84,7 @@ public class SettingsActivity extends FragmentActivity {
             case 5: tab.setText("播报"); break;
             case 6: tab.setText("群管"); break;
             case 7: tab.setText("统计"); break;
+            case 8: tab.setText("AI助手"); break;
             }
         }).attach();
     }
