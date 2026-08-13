@@ -27,6 +27,8 @@ public class ChatHooks {
     private static volatile boolean chatWindowOpen = false;
     private static Activity chatActivity;
     private static ClassLoader sClassLoader;
+    private static int lastDiagType = -99;
+    private static int lastDiagSend = -99;
 
     public static String currentTalker() { return currentTalker; }
     public static boolean isChatWindowOpen() { return chatWindowOpen; }
@@ -53,7 +55,16 @@ public class ChatHooks {
                         Object msg = param.args[0];
                         if (!AiConfig.masterEnabled() || !AiConfig.replyEnabled()) return;
                         WxReflect.dumpMsgInfoFields(msg);
-                        if (!WxReflect.isIncomingText(msg)) return;
+                        if (!WxReflect.isIncomingText(msg)) {
+                            int ty = WxReflect.type(msg);
+                            int sd = WxReflect.isSend(msg);
+                            if (ty != lastDiagType || sd != lastDiagSend) {
+                                lastDiagType = ty;
+                                lastDiagSend = sd;
+                                LogWriter.log(TAG, "消息入库Hook: 非纯文本不触发 type=" + ty + " isSend=" + sd);
+                            }
+                            return;
+                        }
                         String talker = WxReflect.talker(msg);
                         String content = WxReflect.content(msg);
                         long time = WxReflect.createTime(msg);
@@ -301,34 +312,57 @@ public class ChatHooks {
             Object footer = findFooter(act);
             if (footer != null) {
                 LogWriter.log(TAG, "findInputView: 找到 ChatFooter=" + footer.getClass().getName());
-                // m 字段：MMFlexEditText（真实输入框，非 EditText 子类，需反射读写）
+                // 1) m 字段 MMFlexEditText：仅当文本非空才采用，否则回退其内部输入框
                 Object m = getFieldOrNull(footer, "m");
                 if (m != null) {
-                    LogWriter.log(TAG, "findInputView: m 字段命中=" + m.getClass().getName());
-                    return m;
+                    String t = reflectGetText(m);
+                    if (t != null && !t.isEmpty()) {
+                        LogWriter.log(TAG, "findInputView: m 字段非空(长度=" + t.length() + ")，采用 " + m.getClass().getName());
+                        return m;
+                    }
+                    LogWriter.log(TAG, "findInputView: m 字段文本为空，查找其内部输入框");
+                    Object inner = findInnerEditText(m);
+                    if (inner != null) {
+                        LogWriter.log(TAG, "findInputView: m 内部命中 " + inner.getClass().getName());
+                        return inner;
+                    }
                 }
+                // 2) l4 字段
                 Object l4 = getFieldOrNull(footer, "l4");
                 if (l4 != null) {
-                    LogWriter.log(TAG, "findInputView: l4 字段命中=" + l4.getClass().getName());
-                    return l4;
+                    String t = reflectGetText(l4);
+                    if (t != null && !t.isEmpty()) {
+                        LogWriter.log(TAG, "findInputView: l4 字段非空，采用 " + l4.getClass().getName());
+                        return l4;
+                    }
                 }
+                // 3) ChatFooter 内遍历，选可见且非空 EditText
                 if (footer instanceof android.view.View) {
-                    EditText et = findEditTextRecursive((android.view.View) footer);
-                    if (et != null) {
-                        LogWriter.log(TAG, "findInputView: ChatFooter 内递归命中 " + et.getClass().getName());
-                        return et;
+                    Object best = findBestVisibleEditText((android.view.View) footer);
+                    if (best != null) {
+                        LogWriter.log(TAG, "findInputView: ChatFooter 内最佳 " + best.getClass().getName());
+                        return best;
                     }
                 }
             } else {
                 LogWriter.log(TAG, "findInputView: 未找到 ChatFooter（" + AiConst.CLS_CHAT_FOOTER + "）");
             }
-            EditText mm = findBestMMEditText(decor);
-            if (mm != null) return mm;
+            // 4) 全局兜底
+            Object best = findBestVisibleEditText(decor);
+            if (best != null) return best;
             return findEditTextRecursive(decor);
         } catch (Throwable t) {
             LogWriter.log(TAG, "findInputView 异常: " + t.getClass().getSimpleName() + ": " + t.getMessage());
             return null;
         }
+    }
+
+    private static Object findInnerEditText(Object m) {
+        if (m instanceof android.view.View) {
+            Object best = findBestVisibleEditText((android.view.View) m);
+            if (best != null) return best;
+        }
+        return null;
     }
 
     private static Object getFieldOrNull(Object obj, String field) {
@@ -351,9 +385,21 @@ public class ChatHooks {
         }
         try {
             Object t = XposedHelpers.callMethod(view, "getText");
-            return t != null ? t.toString() : "";
+            if (t != null) {
+                String s = t.toString();
+                if (!s.isEmpty()) return s;
+            }
         } catch (Throwable e) {
-            LogWriter.log(TAG, "reflectGetText 失败: " + e.getClass().getSimpleName() + ":" + e.getMessage());
+            LogWriter.log(TAG, "reflectGetText getText 失败: " + e.getClass().getSimpleName() + ":" + e.getMessage());
+        }
+        // getText 为空：MMFlexEditText 真实文本可能在内部 EditText
+        if (view instanceof android.view.View) {
+            Object inner = findBestVisibleEditText((android.view.View) view);
+            if (inner instanceof EditText) {
+                String s = ((EditText) inner).getText().toString();
+                LogWriter.log(TAG, "reflectGetText: 内部 EditText 长度=" + s.length());
+                return s;
+            }
         }
         return null;
     }
@@ -382,31 +428,35 @@ public class ChatHooks {
         }
     }
 
-    private static EditText findBestMMEditText(android.view.View v) {
+    private static Object findBestVisibleEditText(android.view.View v) {
         List<EditText> list = new ArrayList<>();
-        collectMMEditText(v, list);
-        LogWriter.log(TAG, "findBestMMEditText: 共找到 " + list.size() + " 个 MMEditText");
+        collectAllEditText(v, list);
+        LogWriter.log(TAG, "findBestVisibleEditText: 共 " + list.size() + " 个 EditText");
         for (EditText et : list) {
             if (et.getVisibility() == android.view.View.VISIBLE && et.getText().length() > 0) {
-                LogWriter.log(TAG, "findBestMMEditText: 选中可见非空, 长度=" + et.getText().length());
+                LogWriter.log(TAG, "findBestVisibleEditText: 可见非空 长度=" + et.getText().length()
+                        + " " + et.getClass().getName());
                 return et;
             }
         }
         for (EditText et : list) {
-            if (et.getVisibility() == android.view.View.VISIBLE) return et;
+            if (et.getVisibility() == android.view.View.VISIBLE) {
+                LogWriter.log(TAG, "findBestVisibleEditText: 可见(空) " + et.getClass().getName());
+                return et;
+            }
         }
         if (!list.isEmpty()) return list.get(0);
         return null;
     }
 
-    private static void collectMMEditText(android.view.View v, List<EditText> out) {
-        if (v instanceof EditText && "com.tencent.mm.ui.widget.MMEditText".equals(v.getClass().getName())) {
+    private static void collectAllEditText(android.view.View v, List<EditText> out) {
+        if (v instanceof EditText) {
             out.add((EditText) v);
         }
         if (v instanceof android.view.ViewGroup) {
             android.view.ViewGroup g = (android.view.ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) {
-                collectMMEditText(g.getChildAt(i), out);
+                collectAllEditText(g.getChildAt(i), out);
             }
         }
     }
