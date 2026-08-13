@@ -5,7 +5,6 @@ import android.database.Cursor;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
-import com.leshao.v3.hook.VersionCompat;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -70,38 +69,162 @@ public class AiMsgDb {
             if (ctx == null) { LogWriter.log(TAG, "openDb: 无 app context"); return null; }
             long uin = getUin(ctx);
             if (uin <= 0) { LogWriter.log(TAG, "openDb: uin=0"); return null; }
-            String imei = VersionCompat.getImei(cl);
+
+            String imei = getImei();
             String password = md5(imei + uin).substring(0, 7);
-            String base = VersionCompat.getBaseDir(cl, ctx);
-            String hash = VersionCompat.getDbHash(cl, (int) uin);
+            byte[] pwdBytes = password.getBytes("UTF-8");
+
+            String base = getBaseDir(ctx);
+            String hash = getDbHash((int) uin);
             String dbPath = base + "MicroMsg/" + hash + "/EnMicroMsg.db";
-            Class<?> dbOpener = VersionCompat.findDbOpenerClass(cl);
-            if (dbOpener == null) { LogWriter.log(TAG, "openDb: dbOpener 类未找到"); return null; }
-            Object db = VersionCompat.openDatabase(dbOpener, dbPath, password);
-            if (db == null) LogWriter.log(TAG, "openDb: openDatabase 返回 null path=" + dbPath);
-            return db;
+            LogWriter.log(TAG, "openDb: path=" + dbPath);
+
+            try {
+                Class<?> sqliteDB = cl.loadClass("com.tencent.wcdb.database.SQLiteDatabase");
+                Class<?> cursorFactory = cl.loadClass("com.tencent.wcdb.database.SQLiteDatabase$CursorFactory");
+
+                // 尝试 String 密码 + CipherSpec（5参）
+                try {
+                    Class<?> cipher = cl.loadClass("com.tencent.wcdb.database.SQLiteCipherSpec");
+                    Method m = sqliteDB.getMethod("openDatabase", String.class, String.class, cipher,
+                            cursorFactory, int.class);
+                    Object db = m.invoke(null, dbPath, password, null, null, 0);
+                    LogWriter.log(TAG, "openDb: 成功(CipherSpec) db类=" + db.getClass().getName());
+                    return db;
+                } catch (Throwable ignored) {}
+
+                // 尝试 byte[] 密码（4参）
+                try {
+                    Method m = sqliteDB.getMethod("openDatabase", String.class, byte[].class,
+                            cursorFactory, int.class);
+                    Object db = m.invoke(null, dbPath, pwdBytes, null, 0);
+                    LogWriter.log(TAG, "openDb: 成功(byte[]) db类=" + db.getClass().getName());
+                    return db;
+                } catch (Throwable ignored) {}
+
+                // 尝试 byte[] 密码 + ErrorHandler（5参）
+                try {
+                    Class<?> errHandler = cl.loadClass("com.tencent.wcdb.database.SQLiteDatabase$DatabaseErrorHandler");
+                    Method m = sqliteDB.getMethod("openDatabase", String.class, byte[].class,
+                            cursorFactory, int.class, errHandler);
+                    Object db = m.invoke(null, dbPath, pwdBytes, null, 0, null);
+                    LogWriter.log(TAG, "openDb: 成功(byte[]+err) db类=" + db.getClass().getName());
+                    return db;
+                } catch (Throwable ignored) {}
+
+                LogWriter.log(TAG, "openDb: WCDB openDatabase 所有签名均失败");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "openDb: WCDB 加载失败 " + t.getClass().getSimpleName() + ": " + t.getMessage());
+            }
         } catch (Throwable t) {
             LogWriter.log(TAG, "openDb 异常: " + t.getClass().getSimpleName() + ": " + t.getMessage());
-            return null;
         }
+        return null;
+    }
+
+    private String getImei() {
+        try {
+            Class<?> wo = cl.loadClass("wo.w0");
+            Method g = wo.getDeclaredMethod("g", boolean.class);
+            String s = (String) g.invoke(null, true);
+            if (s != null && !s.isEmpty() && !s.equals("1234567890ABCDEF")) return s;
+        } catch (Throwable ignored) {}
+        try {
+            Class<?> wo = cl.loadClass("wn.w0");
+            Method g = wo.getDeclaredMethod("g", boolean.class);
+            String s = (String) g.invoke(null, true);
+            if (s != null && !s.isEmpty() && !s.equals("1234567890ABCDEF")) return s;
+        } catch (Throwable ignored) {}
+        return "1234567890ABCDEF";
+    }
+
+    private String getBaseDir(Context ctx) {
+        try {
+            Class<?> bc = cl.loadClass("mp0.b");
+            String r = (String) bc.getDeclaredMethod("X").invoke(null);
+            if (r != null && !r.isEmpty()) return r;
+        } catch (Throwable ignored) {}
+        try {
+            Class<?> bc = cl.loadClass("mo0.b");
+            String r = (String) bc.getDeclaredMethod("X").invoke(null);
+            if (r != null && !r.isEmpty()) return r;
+        } catch (Throwable ignored) {}
+        return ctx.getFilesDir().getParentFile().getAbsolutePath() + "/";
+    }
+
+    private String getDbHash(int uin) {
+        try {
+            Class<?> hc = cl.loadClass("hm0.b0");
+            String r = (String) hc.getDeclaredMethod("e", int.class).invoke(null, uin);
+            if (r != null && !r.isEmpty()) return r;
+        } catch (Throwable ignored) {}
+        try {
+            Class<?> hc = cl.loadClass("hm0.a0");
+            String r = (String) hc.getDeclaredMethod("e", int.class).invoke(null, uin);
+            if (r != null && !r.isEmpty()) return r;
+        } catch (Throwable ignored) {}
+        return md5("mm" + uin);
     }
 
     private static Cursor rawQuery(Object db, String sql, String[] args) {
-        for (Method m : db.getClass().getMethods()) {
-            if (m.getName().equals("rawQuery") && m.getParameterCount() >= 1
-                    && m.getParameterTypes()[0] == String.class) {
-                try { m.setAccessible(true); return (Cursor) m.invoke(db, sql, args); }
-                catch (Throwable ignored) {}
+        Class<?> cls = db.getClass();
+        dumpDbMethods(cls);
+        String[] names = {"rawQuery", "u", "v", "w", "x", "y", "z", "rowQuery"};
+        for (String nm : names) {
+            Cursor c = tryRawByName(cls, db, nm, sql, args);
+            if (c != null) { LogWriter.log(TAG, "rawQuery: 命中方法 " + nm); return c; }
+        }
+        LogWriter.log(TAG, "rawQuery: 未找到可用 rawQuery 方法");
+        return null;
+    }
+
+    private static void dumpDbMethods(Class<?> cls) {
+        java.util.TreeSet<String> names = new java.util.TreeSet<>();
+        for (Method m : cls.getMethods()) names.add(m.getName());
+        for (Method m : cls.getDeclaredMethods()) names.add(m.getName());
+        LogWriter.log(TAG, "dumpDb: 类=" + cls.getName()
+                + " 父类=" + (cls.getSuperclass() == null ? "-" : cls.getSuperclass().getName())
+                + " 方法数=" + names.size() + " 方法=" + String.join(",", names));
+    }
+
+    private static Cursor tryRawByName(Class<?> cls, Object db, String nm, String sql, String[] args) {
+        for (Method m : cls.getMethods()) {
+            if (m.getName().equals(nm)) {
+                Cursor c = invokeRaw(m, db, sql, args);
+                if (c != null) return c;
             }
         }
-        for (Method m : db.getClass().getDeclaredMethods()) {
-            if (m.getName().equals("rawQuery") && m.getParameterCount() >= 1
-                    && m.getParameterTypes()[0] == String.class) {
-                try { m.setAccessible(true); return (Cursor) m.invoke(db, sql, args); }
-                catch (Throwable ignored) {}
+        for (Method m : cls.getDeclaredMethods()) {
+            if (m.getName().equals(nm)) {
+                Cursor c = invokeRaw(m, db, sql, args);
+                if (c != null) return c;
             }
         }
-        LogWriter.log(TAG, "rawQuery: 未找到 rawQuery 方法");
+        return null;
+    }
+
+    private static Cursor invokeRaw(Method m, Object db, String sql, String[] args) {
+        try {
+            m.setAccessible(true);
+            Class<?>[] pts = m.getParameterTypes();
+            Object r = null;
+            if (pts.length >= 2 && pts[0] == String.class && pts[1] == String[].class) {
+                if (pts.length == 2) {
+                    r = m.invoke(db, sql, args);
+                } else {
+                    r = m.invoke(db, sql, args, null);
+                }
+            } else if (pts.length == 1 && pts[0] == String.class) {
+                r = m.invoke(db, sql);
+            } else {
+                return null;
+            }
+            if (r instanceof Cursor) return (Cursor) r;
+            if (r != null) LogWriter.log(TAG, "invokeRaw: 方法 " + m.getName()
+                    + " 返回非 Cursor 类型=" + r.getClass().getName());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "invokeRaw: 方法 " + m.getName() + " 失败 " + t.getClass().getSimpleName() + ":" + t.getMessage());
+        }
         return null;
     }
 
