@@ -10,6 +10,7 @@ import com.leshao.v3.LogWriter;
 public class ReplyFeature {
     private static final String TAG = "ReplyFeature";
     private static String lastKey = "";
+    private static final long RECENT_WINDOW_MS = 120_000L;
 
     public static void onIncoming(String talker, String content, ClassLoader cl) {
         if (content == null || content.isEmpty()) return;
@@ -24,10 +25,36 @@ public class ReplyFeature {
             LogWriter.log(TAG, "onIncoming: 非当前会话，跳过 talker=" + talker + " cur=" + cur);
             return;
         }
+        doGenerate(talker, content, cl);
+    }
+
+    public static void onSessionOpened(String talker, ClassLoader cl) {
+        if (!AiConfig.masterEnabled() || !AiConfig.replyEnabled()) return;
+        if (talker == null || talker.isEmpty()) return;
+        List<MessageReader.ChatMsg> mem = ChatMemory.get(talker);
+        MessageReader.ChatMsg lastOther = null;
+        for (int i = mem.size() - 1; i >= 0; i--) {
+            MessageReader.ChatMsg m = mem.get(i);
+            if ("other".equals(m.role)) { lastOther = m; break; }
+        }
+        if (lastOther == null || lastOther.content == null || lastOther.content.isEmpty()) {
+            LogWriter.log(TAG, "onSessionOpened: 无最近对方消息 talker=" + talker);
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastOther.time > RECENT_WINDOW_MS) {
+            LogWriter.log(TAG, "onSessionOpened: 最近消息超时 " + (now - lastOther.time) + "ms，跳过 talker=" + talker);
+            return;
+        }
+        LogWriter.log(TAG, "onSessionOpened: 基于最近消息生成推荐回复 talker=" + talker);
+        doGenerate(talker, lastOther.content, cl);
+    }
+
+    private static void doGenerate(String talker, String content, ClassLoader cl) {
         String key = talker + "|" + content.hashCode();
         if (key.equals(lastKey)) return;
         lastKey = key;
-        LogWriter.log(TAG, "onIncoming: 处理 talker=" + talker + " content=" + content);
+        LogWriter.log(TAG, "doGenerate: 处理 talker=" + talker + " content=" + content);
 
         List<MessageReader.ChatMsg> mem = ChatMemory.get(talker);
         StringBuilder ctx = new StringBuilder();
