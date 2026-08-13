@@ -72,33 +72,85 @@ public class ReplyFeature {
         List<AiClient.ChatMessage> req = new ArrayList<>();
         req.add(new AiClient.ChatMessage("user", ctx.toString()));
 
-        AiClient.chatAsync(prompt, req, new AiClient.Callback() {
-            @Override public void onResult(String text) {
-                List<String> replies = parseReplies(text, AiConfig.replyCount());
-                LogWriter.log(TAG, "onResult: 收到 " + replies.size() + " 条回复");
-                ChatHooks.MAIN.post(() -> {
-                    String curNow = ChatHooks.currentTalker();
-                    if (!talker.equals(curNow)) {
-                        LogWriter.log(TAG, "onResult: 会话已切换 talker=" + talker + " cur=" + curNow + "，丢弃");
-                        return;
+        final StringBuilder buf = new StringBuilder();
+        final List<String> replies = new ArrayList<>();
+        final int max = AiConfig.replyCount();
+
+        AiClient.chatStream(prompt, req, new AiClient.StreamCallback() {
+            @Override public void onDelta(String delta) {
+                buf.append(delta);
+                for (String line : extractCompleteLines(buf)) {
+                    String cleaned = cleanLine(line);
+                    if (!cleaned.isEmpty() && replies.size() < max) replies.add(cleaned);
+                }
+                if (!replies.isEmpty()) {
+                    List<String> snap = new ArrayList<>(replies);
+                    ChatHooks.MAIN.post(() -> showOrUpdate(talker, snap));
+                }
+            }
+            @Override public void onDone(String fullText) {
+                String remain = buf.toString().trim();
+                if (!remain.isEmpty() && replies.size() < max) {
+                    String cleaned = cleanLine(remain);
+                    if (!cleaned.isEmpty()) replies.add(cleaned);
+                }
+                if (replies.isEmpty()) {
+                    for (String l : parseReplies(fullText, max)) {
+                        if (replies.size() >= max) break;
+                        replies.add(l);
                     }
-                    if (!ChatHooks.isChatWindowOpen()) { LogWriter.log(TAG, "onResult: 窗口已关闭，丢弃"); return; }
-                    Activity act = ChatHooks.currentActivity();
-                    if (act == null) { LogWriter.log(TAG, "onResult: 无 Activity，丢弃"); return; }
-                    ReplyBanner.show(act, replies, chosen -> {
-                        if (AiConfig.replyMode() == 1) {
-                            ChatHooks.fillAndSend(act, chosen);
-                        } else {
-                            ChatHooks.fillInput(act, chosen);
-                        }
-                        ChatMemory.append(talker, new MessageReader.ChatMsg("me", "", chosen, System.currentTimeMillis()));
-                    });
-                });
+                }
+                LogWriter.log(TAG, "onDone: 共 " + replies.size() + " 条回复");
+                if (!replies.isEmpty()) {
+                    List<String> snap = new ArrayList<>(replies);
+                    ChatHooks.MAIN.post(() -> showOrUpdate(talker, snap));
+                }
             }
             @Override public void onError(String msg) {
                 LogWriter.log(TAG, "推荐回复失败: " + msg);
             }
         });
+    }
+
+    private static void showOrUpdate(String talker, List<String> replies) {
+        String curNow = ChatHooks.currentTalker();
+        if (!talker.equals(curNow)) {
+            LogWriter.log(TAG, "showOrUpdate: 会话已切换 talker=" + talker + " cur=" + curNow + "，丢弃");
+            return;
+        }
+        if (!ChatHooks.isChatWindowOpen()) { LogWriter.log(TAG, "showOrUpdate: 窗口已关闭，丢弃"); return; }
+        Activity act = ChatHooks.currentActivity();
+        if (act == null) { LogWriter.log(TAG, "showOrUpdate: 无 Activity，丢弃"); return; }
+
+        ReplyBanner.OnPick pick = chosen -> {
+            if (AiConfig.replyMode() == 1) {
+                ChatHooks.fillAndSend(act, chosen);
+            } else {
+                ChatHooks.fillInput(act, chosen);
+            }
+            ChatMemory.append(talker, new MessageReader.ChatMsg("me", "", chosen, System.currentTimeMillis()));
+        };
+        if (ReplyBanner.isShowing()) ReplyBanner.update(replies);
+        else ReplyBanner.show(act, replies, pick);
+    }
+
+    private static List<String> extractCompleteLines(StringBuilder buf) {
+        List<String> out = new ArrayList<>();
+        String s = buf.toString();
+        int idx;
+        while ((idx = s.indexOf('\n')) >= 0) {
+            out.add(s.substring(0, idx));
+            s = s.substring(idx + 1);
+        }
+        buf.setLength(0);
+        buf.append(s);
+        return out;
+    }
+
+    private static String cleanLine(String line) {
+        line = line.trim();
+        line = line.replaceFirst("^[0-9]+[.、)）]\\s*", "");
+        return line.trim();
     }
 
     private static List<String> parseReplies(String text, int max) {

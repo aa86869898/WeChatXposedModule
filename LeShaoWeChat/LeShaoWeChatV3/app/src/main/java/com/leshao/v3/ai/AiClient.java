@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 
 public class AiClient {
     public interface Callback { void onResult(String text); void onError(String msg); }
+    public interface StreamCallback { void onDelta(String delta); void onDone(String fullText); void onError(String msg); }
     public interface ModelsCallback { void onModels(List<String> models); void onError(String msg); }
 
     private static final ExecutorService POOL = Executors.newFixedThreadPool(3);
@@ -41,18 +42,7 @@ public class AiClient {
 
     public static String chatSync(String system, List<ChatMessage> msgs) throws Exception {
         String url = apiUrl(AiConfig.activeBaseUrl(), "/chat/completions");
-        JSONArray arr = new JSONArray();
-        if (system != null && !system.isEmpty()) {
-            arr.put(new JSONObject().put("role", "system").put("content", system));
-        }
-        for (ChatMessage m : msgs) {
-            arr.put(new JSONObject().put("role", m.role).put("content", m.content));
-        }
-
-        JSONObject body = new JSONObject();
-        body.put("model", AiConfig.activeModel());
-        body.put("messages", arr);
-        body.put("temperature", AiConfig.temperature());
+        JSONObject body = buildBody(system, msgs, false);
 
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("POST");
@@ -79,6 +69,90 @@ public class AiClient {
 
         JSONObject resp = new JSONObject(sb.toString());
         return resp.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim();
+    }
+
+    public static void chatStream(String system, List<ChatMessage> msgs, StreamCallback cb) {
+        Thread t = new Thread(() -> {
+            HttpURLConnection conn = null;
+            try {
+                String url = apiUrl(AiConfig.activeBaseUrl(), "/chat/completions");
+                JSONObject body = buildBody(system, msgs, true);
+
+                conn = (HttpURLConnection) new URL(url).openConnection();
+                conn.setRequestMethod("POST");
+                conn.setConnectTimeout(15_000);
+                conn.setReadTimeout(90_000);
+                conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("Authorization", "Bearer " + AiConfig.activeKey());
+                conn.setRequestProperty("Accept", "text/event-stream");
+
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(body.toString().getBytes(StandardCharsets.UTF_8));
+                }
+
+                int code = conn.getResponseCode();
+                if (code >= 400) {
+                    StringBuilder sb = new StringBuilder();
+                    try (BufferedReader br = new BufferedReader(new InputStreamReader(
+                            conn.getErrorStream(), StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = br.readLine()) != null) sb.append(line);
+                    }
+                    throw new RuntimeException("HTTP " + code + ": " + sb);
+                }
+
+                StringBuilder full = new StringBuilder();
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(
+                        conn.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        if (line.startsWith("data:")) {
+                            String data = line.substring(5).trim();
+                            if (data.isEmpty()) continue;
+                            if (data.equals("[DONE]")) break;
+                            try {
+                                JSONObject obj = new JSONObject(data);
+                                JSONArray choices = obj.optJSONArray("choices");
+                                if (choices != null && choices.length() > 0) {
+                                    JSONObject delta = choices.getJSONObject(0).optJSONObject("delta");
+                                    if (delta != null) {
+                                        String content = delta.optString("content");
+                                        if (content != null && !content.isEmpty()) {
+                                            full.append(content);
+                                            cb.onDelta(content);
+                                        }
+                                    }
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    }
+                }
+                cb.onDone(full.toString().trim());
+            } catch (Exception e) {
+                cb.onError(diagError(e));
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
+        });
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private static JSONObject buildBody(String system, List<ChatMessage> msgs, boolean stream) throws Exception {
+        JSONArray arr = new JSONArray();
+        if (system != null && !system.isEmpty()) {
+            arr.put(new JSONObject().put("role", "system").put("content", system));
+        }
+        for (ChatMessage m : msgs) {
+            arr.put(new JSONObject().put("role", m.role).put("content", m.content));
+        }
+        JSONObject body = new JSONObject();
+        body.put("model", AiConfig.activeModel());
+        body.put("messages", arr);
+        body.put("temperature", AiConfig.temperature());
+        body.put("stream", stream);
+        return body;
     }
 
     public static void listModelsAsync(String base, String key, ModelsCallback cb) {

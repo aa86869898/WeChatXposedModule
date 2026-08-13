@@ -46,12 +46,24 @@ public class AiFeature {
         Toast.makeText(act, "AI 处理中…", Toast.LENGTH_SHORT).show();
         List<AiClient.ChatMessage> req = new ArrayList<>();
         req.add(new AiClient.ChatMessage("user", prompt));
-        AiClient.chatAsync(null, req, new AiClient.Callback() {
-            @Override public void onResult(String text) {
-                com.leshao.v3.LogWriter.log("AiFeature", "run: onResult len=" + (text == null ? 0 : text.length()));
+
+        final StringBuilder buf = new StringBuilder();
+        final long[] lastPost = {0};
+        AiClient.chatStream(null, req, new AiClient.StreamCallback() {
+            @Override public void onDelta(String delta) {
+                buf.append(delta);
+                if (!replaceInput) return;
+                long now = android.os.SystemClock.uptimeMillis();
+                if (now - lastPost[0] < 120) return;
+                lastPost[0] = now;
+                String snap = buf.toString();
+                ChatHooks.MAIN.post(() -> ChatHooks.fillInput(act, snap));
+            }
+            @Override public void onDone(String fullText) {
+                com.leshao.v3.LogWriter.log("AiFeature", "run: onDone len=" + (fullText == null ? 0 : fullText.length()));
                 ChatHooks.MAIN.post(() -> {
-                    if (replaceInput) ChatHooks.fillInput(act, text);
-                    else showResultDialog(act, text);
+                    if (replaceInput) ChatHooks.fillInput(act, fullText);
+                    else showResultDialog(act, fullText);
                 });
             }
             @Override public void onError(String msg) {

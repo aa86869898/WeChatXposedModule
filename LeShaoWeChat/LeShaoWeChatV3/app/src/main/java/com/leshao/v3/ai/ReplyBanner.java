@@ -22,10 +22,17 @@ public class ReplyBanner {
 
     private static WindowManager sWM;
     private static View sBanner;
+    private static LinearLayout sChips;
+    private static Activity sAct;
+    private static OnPick sPick;
+
+    public static boolean isShowing() { return sBanner != null; }
 
     public static void show(Activity act, List<String> replies, OnPick pick) {
         if (act == null || replies == null || replies.isEmpty()) return;
         hide();
+        sAct = act;
+        sPick = pick;
         sWM = (WindowManager) act.getSystemService(Context.WINDOW_SERVICE);
 
         LinearLayout banner = new LinearLayout(act);
@@ -36,39 +43,16 @@ public class ReplyBanner {
         banner.setBackground(bg);
 
         TextView title = new TextView(act);
-        title.setText("💡 推荐回复（点击使用）");
+        title.setText("推荐回复（点击使用）");
         title.setTextColor(Color.WHITE);
         title.setTextSize(13);
         banner.addView(title);
 
         HorizontalScrollView hsv = new HorizontalScrollView(act);
         hsv.setHorizontalScrollBarEnabled(false);
-        LinearLayout chips = new LinearLayout(act);
-        chips.setOrientation(LinearLayout.HORIZONTAL);
-
-        for (String r : replies) {
-            TextView chip = new TextView(act);
-            chip.setText(r);
-            chip.setTextColor(Color.WHITE);
-            chip.setTextSize(14);
-            chip.setPadding(24, 14, 24, 14);
-            GradientDrawable cb = new GradientDrawable();
-            cb.setColor(Color.parseColor("#FFFFFF"));
-            cb.setAlpha(40);
-            cb.setCornerRadius(60);
-            chip.setBackground(cb);
-            chip.setClickable(true);
-            chip.setOnClickListener(v -> {
-                LogWriter.log(TAG, "点击推荐回复: " + r);
-                hide();
-                if (pick != null) pick.onPick(r);
-            });
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            lp.rightMargin = 16;
-            chips.addView(chip, lp);
-        }
-        hsv.addView(chips);
+        sChips = new LinearLayout(act);
+        sChips.setOrientation(LinearLayout.HORIZONTAL);
+        hsv.addView(sChips);
         banner.addView(hsv);
 
         float d = act.getResources().getDisplayMetrics().density;
@@ -86,10 +70,45 @@ public class ReplyBanner {
             sWM.addView(banner, lp);
         } catch (Throwable t) {
             sBanner = null;
+            sChips = null;
             return;
         }
 
+        renderChips(replies);
         banner.postDelayed(ReplyBanner::hide, 15_000);
+    }
+
+    public static void update(List<String> replies) {
+        if (sBanner == null || sChips == null || replies == null || replies.isEmpty()) return;
+        renderChips(replies);
+        sBanner.postDelayed(ReplyBanner::hide, 15_000);
+    }
+
+    private static void renderChips(List<String> replies) {
+        sChips.removeAllViews();
+        Activity act = sAct;
+        for (String r : replies) {
+            TextView chip = new TextView(act);
+            chip.setText(r);
+            chip.setTextColor(Color.WHITE);
+            chip.setTextSize(14);
+            chip.setPadding(24, 14, 24, 14);
+            GradientDrawable cb = new GradientDrawable();
+            cb.setColor(Color.parseColor("#FFFFFF"));
+            cb.setAlpha(40);
+            cb.setCornerRadius(60);
+            chip.setBackground(cb);
+            chip.setClickable(true);
+            chip.setOnClickListener(v -> {
+                LogWriter.log(TAG, "点击推荐回复: " + r);
+                hide();
+                if (sPick != null) sPick.onPick(r);
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.rightMargin = 16;
+            sChips.addView(chip, lp);
+        }
     }
 
     public static void hide() {
@@ -97,6 +116,9 @@ public class ReplyBanner {
             try { sWM.removeView(sBanner); } catch (Throwable ignored) {}
         }
         sBanner = null;
+        sChips = null;
         sWM = null;
+        sAct = null;
+        sPick = null;
     }
 }
