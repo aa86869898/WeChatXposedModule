@@ -13,13 +13,14 @@ public class ReplyFeature {
 
     public static void onIncoming(String talker, String content, ClassLoader cl) {
         if (content == null || content.isEmpty()) return;
-        // 只处理当前打开会话，避免后台同步其他群消息也触发推荐回复
-        if (!ChatHooks.isChatWindowOpen()) {
-            LogWriter.log(TAG, "onIncoming: 聊天窗口未打开，跳过 talker=" + talker);
+        String cur = ChatHooks.currentTalker();
+        boolean curMatches = (cur != null && !cur.isEmpty() && cur.equals(talker));
+        boolean windowOpen = ChatHooks.isChatWindowOpen();
+        if (!windowOpen && !curMatches) {
+            LogWriter.log(TAG, "onIncoming: 窗口未打开且非当前会话，跳过 talker=" + talker + " cur=" + cur);
             return;
         }
-        String cur = ChatHooks.currentTalker();
-        if (cur != null && !cur.isEmpty() && !talker.equals(cur)) {
+        if (cur != null && !cur.isEmpty() && !curMatches) {
             LogWriter.log(TAG, "onIncoming: 非当前会话，跳过 talker=" + talker + " cur=" + cur);
             return;
         }
@@ -44,6 +45,11 @@ public class ReplyFeature {
                 List<String> replies = parseReplies(text, AiConfig.replyCount());
                 LogWriter.log(TAG, "onResult: 收到 " + replies.size() + " 条回复");
                 ChatHooks.MAIN.post(() -> {
+                    String curNow = ChatHooks.currentTalker();
+                    if (!talker.equals(curNow)) {
+                        LogWriter.log(TAG, "onResult: 会话已切换 talker=" + talker + " cur=" + curNow + "，丢弃");
+                        return;
+                    }
                     if (!ChatHooks.isChatWindowOpen()) { LogWriter.log(TAG, "onResult: 窗口已关闭，丢弃"); return; }
                     Activity act = ChatHooks.currentActivity();
                     if (act == null) { LogWriter.log(TAG, "onResult: 无 Activity，丢弃"); return; }

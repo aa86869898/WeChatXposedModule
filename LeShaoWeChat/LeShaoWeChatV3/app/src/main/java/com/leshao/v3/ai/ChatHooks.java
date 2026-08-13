@@ -123,6 +123,12 @@ public class ChatHooks {
             ReplyBanner.hide();
         }
     };
+    private static final Runnable closeWindowTask = new Runnable() {
+        @Override public void run() {
+            chatWindowOpen = false;
+            LogWriter.log(TAG, "悬浮球: 窗口关闭确认(延迟)");
+        }
+    };
     private static ClassLoader reflectClassLoader;
 
     private static void hookChatWindowBall(XC_LoadPackage.LoadPackageParam lp) {
@@ -142,6 +148,7 @@ public class ChatHooks {
                             + " talker=" + currentTalker);
                     MAIN.removeCallbacks(hideBallTask);
                     MAIN.removeCallbacks(showBallTask);
+                    MAIN.removeCallbacks(closeWindowTask);
                     MAIN.postDelayed(showBallTask, 300);
                 }
             });
@@ -151,9 +158,10 @@ public class ChatHooks {
             XposedBridge.hookMethod(o0, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    chatWindowOpen = false;
-                    LogWriter.log(TAG, "悬浮球: O0 聊天窗口关闭, 延迟移除悬浮球");
+                    LogWriter.log(TAG, "悬浮球: O0 聊天窗口关闭, 延迟确认");
                     MAIN.removeCallbacks(showBallTask);
+                    MAIN.removeCallbacks(closeWindowTask);
+                    MAIN.postDelayed(closeWindowTask, 300);
                     MAIN.removeCallbacks(hideBallTask);
                     MAIN.postDelayed(hideBallTask, 800);
                 }
