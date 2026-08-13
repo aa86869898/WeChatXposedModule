@@ -32,11 +32,13 @@ public class LoginMonitor {
             "yyyy-MM-dd HH:mm:ss", Locale.getDefault());
     private static File logFile;
     private static long loginTimestamp = 0;
+    private static ClassLoader sClassLoader;
 
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;
         ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
         if (config == null || !config.loginMonitorEnabled) return;
+        sClassLoader = cl;
 
         logFile = new File("/sdcard/LeShaoV3Logs/login_history.log");
         logFile.getParentFile().mkdirs();
@@ -104,7 +106,7 @@ public class LoginMonitor {
             try {
                 Object instance = XposedHelpers.callStaticMethod(
                         XposedHelpers.findClass("com.tencent.mm.ui.LauncherUI",
-                                ContextManager.getClassLoader()), "getInstance");
+                                sClassLoader), "getInstance");
                 if (instance != null) {
                     android.content.Context ctx = (android.content.Context) instance;
                     String pkg = ctx.getPackageName();

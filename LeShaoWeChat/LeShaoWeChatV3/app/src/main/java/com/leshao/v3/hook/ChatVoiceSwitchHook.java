@@ -302,43 +302,27 @@ public final class ChatVoiceSwitchHook {
         }, INJECT_DELAY_MS);
     }
 
-    /** 多级兜底注入：返回是否成功 */
+    /** 多级兜底注入：返回是否成功（参照 ChatQuickBar 逆向结论） */
     private static boolean injectAt(View edit, View row) {
-        // 尝试1：MaxHeightScrollView 祖先 → 其父 RelativeLayout → 祖父 LinearLayout
-        View mhs = findAncestor(edit, MAX_HEIGHT_SCROLL, 8);
-        if (mhs != null) {
-            ViewParent rel = mhs.getParent();
-            if (rel != null && rel.getParent() instanceof LinearLayout) {
-                LinearLayout grand = (LinearLayout) rel.getParent();
-                row.setLayoutParams(new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                grand.addView(row, grand.indexOfChild((View) rel));
-                return true;
-            }
-            if (rel instanceof ViewGroup) {
-                ViewGroup relVg = (ViewGroup) rel;
-                row.setLayoutParams(new RelativeLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                relVg.addView(row, relVg.indexOfChild(mhs));
-                return true;
-            }
-        }
-        // 尝试2：输入框行的父级 LinearLayout
-        ViewParent rowContainer = edit.getParent();
-        if (rowContainer != null && rowContainer.getParent() instanceof LinearLayout) {
-            LinearLayout grand = (LinearLayout) rowContainer.getParent();
+        // 找到输入框行（MaxHeightScrollView，输入框第3层祖先）
+        View mhs = findAncestor(edit, MAX_HEIGHT_SCROLL, 6);
+        if (mhs == null) return false;
+
+        // 优先：插入到输入框行父级的父级 LinearLayout（聊天根布局，输入框正上方）
+        ViewParent rel = mhs.getParent();
+        if (rel != null && rel.getParent() instanceof LinearLayout) {
+            LinearLayout grand = (LinearLayout) rel.getParent();
             row.setLayoutParams(new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            grand.addView(row, grand.indexOfChild((View) rowContainer));
+            grand.addView(row, grand.indexOfChild((View) rel));
             return true;
         }
-        // 尝试3：输入框祖父容器，插到最前面
-        ViewParent pp = edit.getParent() == null ? null : edit.getParent().getParent();
-        if (pp instanceof ViewGroup) {
-            ViewGroup ppVg = (ViewGroup) pp;
-            row.setLayoutParams(new FrameLayout.LayoutParams(
+        // 兜底：插入到输入框行的父 RelativeLayout 中，MaxHeightScrollView 之前
+        if (rel instanceof ViewGroup) {
+            ViewGroup relVg = (ViewGroup) rel;
+            row.setLayoutParams(new android.widget.RelativeLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            ppVg.addView(row, 0);
+            relVg.addView(row, relVg.indexOfChild(mhs));
             return true;
         }
         return false;

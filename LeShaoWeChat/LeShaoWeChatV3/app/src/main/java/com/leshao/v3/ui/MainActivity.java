@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -72,20 +73,21 @@ public class MainActivity {
     }
 
     private static final String[] ITEM_NAMES = {
-        "联系人和群聊", "群管理助手", "TTS语音播报",
-        "红包转账", "数据备份", "通讯录日志"
+        "联系人和群聊", "群管理助手", "聊天分组",
+        "TTS语音播报", "红包转账", "数据备份", "通讯录日志"
     };
     private static final int[] ITEM_ICONS = {
-        0x1F465, 0x1F6E1, 0x1F50A,
-        0x1F4B0, 0x1F4BE, 0x1F4CB
+        0x1F465, 0x1F6E1, 0x1F4CB,
+        0x1F50A, 0x1F4B0, 0x1F4BE, 0x1F4CB
     };
 
     private static final int[] PAGE_IDS = {
-        3, 4, 8, 9, 12, 13
+        3, 4, 14, 8, 9, 12, 13
     };
 
     private static final Map<Integer, String> PAGE_FEATURES = new HashMap<>();
     static {
+        PAGE_FEATURES.put(14, "聊天分组|标签分组|分组管理|标签管理|ChatGroup");
         PAGE_FEATURES.put(3, "通讯录导出|联系人变更日志|通讯录|联系人|防撤回|消息防撤回|语音转发|语音消息转发");
         PAGE_FEATURES.put(8, "语音播报|TTS播报|排版引擎|配音|API|Voice|间隔|熔断|消息类型|免打扰|安静时段|播报参数|音量|语速|音调|TTS|文字消息播报|语音消息播报|图片消息播报|播报发送人昵称|播报群聊消息|截断长文字");
         PAGE_FEATURES.put(9, "自动抢红包|秒抢|红包震动|响铃|红包提醒|转账收款|私聊红包|群聊红包|时间段过滤|延时抢红包|排除群列|目标群聊|播报金额|关键词过滤");
@@ -471,7 +473,7 @@ public class MainActivity {
         sv.addView(bodyCol);
         root.addView(sv);
 
-        root.addView(spacerV(ctx, d, 8));
+        root.addView(candyDivider(ctx, d));
 
         CheckBox checkBox = new CheckBox(ctx);
         checkBox.setText("我已完整阅读并同意以上免责条款");
@@ -494,6 +496,7 @@ public class MainActivity {
         declineBg.setColor(AppColors.card());
         declineBtn.setBackground(declineBg);
         declineBtn.setPadding(dp(d, 16), dp(d, 10), dp(d, 16), dp(d, 10));
+        declineBtn.setPaintFlags(declineBtn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         declineBtn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         btnRow.addView(declineBtn);
 
@@ -510,6 +513,7 @@ public class MainActivity {
         agreeBtn.setBackground(btnBg);
         agreeBtn.setPadding(dp(d, 16), dp(d, 10), dp(d, 16), dp(d, 10));
         agreeBtn.setEnabled(false);
+        agreeBtn.setPaintFlags(agreeBtn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         agreeBtn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         btnRow.addView(agreeBtn);
         root.addView(btnRow);
@@ -602,27 +606,27 @@ public class MainActivity {
         root.setBackground(CandyUi.pageGradient());
 
         root.addView(buildTopBar(ctx, d, act));
-        root.addView(spacerV(ctx, d, 10));
+        root.addView(candyDivider(ctx, d));
         View searchCard = buildSearchCard(ctx, d);
         root.addView(searchCard);
-        root.addView(spacerV(ctx, d, 10));
+        root.addView(candyDivider(ctx, d));
 
         LinearLayout card1 = buildCard(ctx, d);
         card1.addView(makeListRow(ctx, d, 0x2764, "爱心捐赠", AppColors.accent(), true, v -> showDonateDialog(act)));
-        card1.addView(makeInnerDivider(ctx, d));
+        card1.addView(candyDivider(ctx, d));
         card1.addView(makeListRow(ctx, d, 0x1F464, "个人中心", 0, false, v -> {
             dismissDialog();
             SubPageActivity.openFromMain(act, "个人中心", 99);
         }));
         root.addView(card1);
 
-        root.addView(spacerV(ctx, d, 10));
+        root.addView(candyDivider(ctx, d));
 
         LinearLayout card2 = buildCard(ctx, d);
         final HashMap<View, String> searchMap = new HashMap<>();
         boolean first = true;
         for (int i = 0; i < ITEM_NAMES.length; i++) {
-            if (!first) card2.addView(makeInnerDivider(ctx, d));
+            if (!first) card2.addView(candyDivider(ctx, d));
             first = false;
             final int idx = i;
             final int pageId = PAGE_IDS[i];
@@ -639,7 +643,7 @@ public class MainActivity {
         }
         root.addView(card2);
 
-        root.addView(spacerV(ctx, d, 20));
+        root.addView(candyDivider(ctx, d));
 
         sv.addView(root);
 
@@ -834,7 +838,7 @@ public class MainActivity {
 
         card1.addView(buildDonateButtons(ctx, d, act));
         root.addView(card1);
-        root.addView(spacerV(ctx, d, 16));
+        root.addView(candyDivider(ctx, d));
 
         LinearLayout card2 = new LinearLayout(ctx);
         card2.setOrientation(LinearLayout.VERTICAL);
@@ -871,6 +875,7 @@ public class MainActivity {
                 } catch (Throwable ignored) {}
             }
         });
+        contactBtn.setPaintFlags(contactBtn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         card2.addView(contactBtn);
         root.addView(card2);
 
@@ -1009,6 +1014,7 @@ public class MainActivity {
             back.setTextSize(13);
             back.setTextColor(AppColors.whiteCard());
             back.setPadding(0, 0, dp(d, 8), 0);
+            back.setPaintFlags(back.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
             back.setOnClickListener(v -> { if (onBack != null) onBack.run(); });
             bar.addView(back);
         }
@@ -1054,6 +1060,18 @@ public class MainActivity {
     private static View spacerH(Context ctx, float d, int dp) {
         View v = new View(ctx);
         v.setLayoutParams(new LinearLayout.LayoutParams(dp(d, dp), 0));
+        return v;
+    }
+
+    private static View candyDivider(Context ctx, float d) {
+        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
+        View v = new View(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
+        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+        v.setLayoutParams(lp);
+        v.setBackground(gd);
         return v;
     }
 }

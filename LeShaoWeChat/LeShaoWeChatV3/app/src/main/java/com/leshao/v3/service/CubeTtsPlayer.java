@@ -111,10 +111,14 @@ public class CubeTtsPlayer {
                 conn.setRequestProperty("X-API-Key", apiKey);
 
                 String jsonBody = "{\"voiceId\":\"" + voiceId + "\",\"text\":\"" + escapeJson(text) + "\"}";
-                OutputStream os = conn.getOutputStream();
+                OutputStream os = null;
+                try {
+                os = conn.getOutputStream();
                 os.write(jsonBody.getBytes("UTF-8"));
                 os.flush();
-                os.close();
+                } finally {
+                    if (os != null) { try { os.close(); } catch (Throwable ignored) {} }
+                }
 
                 int code = conn.getResponseCode();
                 if (code != 200) {
@@ -122,12 +126,16 @@ public class CubeTtsPlayer {
                     return null;
                 }
 
-                InputStream is = conn.getInputStream();
+                InputStream is = null;
                 StringBuilder sb = new StringBuilder();
+                try {
+                is = conn.getInputStream();
                 byte[] buf = new byte[4096];
                 int n;
                 while ((n = is.read(buf)) > 0) sb.append(new String(buf, 0, n, "UTF-8"));
-                is.close();
+                } finally {
+                    if (is != null) { try { is.close(); } catch (Throwable ignored) {} }
+                }
 
                 String resp = sb.toString();
                 int audioIdx = resp.indexOf("\"audio\":\"");
@@ -149,14 +157,19 @@ public class CubeTtsPlayer {
                     if (aConn.getResponseCode() != 200) return null;
 
                     File wav = new File(mCacheDir, "tts_" + System.currentTimeMillis() + ".wav");
-                    InputStream ais = aConn.getInputStream();
-                    FileOutputStream fos = new FileOutputStream(wav);
+                    InputStream ais = null;
+                    FileOutputStream fos = null;
+                    try {
+                    ais = aConn.getInputStream();
+                    fos = new FileOutputStream(wav);
                     byte[] wBuf = new byte[8192];
                     int rn;
                     while ((rn = ais.read(wBuf)) > 0) fos.write(wBuf, 0, rn);
                     fos.flush();
-                    fos.close();
-                    ais.close();
+                    } finally {
+                        if (ais != null) { try { ais.close(); } catch (Throwable ignored) {} }
+                        if (fos != null) { try { fos.close(); } catch (Throwable ignored) {} }
+                    }
 
                     LogWriter.log(TAG, "synthesize OK: " + wav.length() + "b");
                     return wav;

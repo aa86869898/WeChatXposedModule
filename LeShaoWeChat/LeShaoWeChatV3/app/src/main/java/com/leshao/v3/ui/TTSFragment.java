@@ -1,6 +1,9 @@
 package com.leshao.v3.ui;
 
+import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Paint;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -37,39 +40,39 @@ public class TTSFragment extends Fragment {
         card1.addView(switchRow(d, "播报总开关", "启用后将在锁屏/通知栏播报新消息内容", mCfg.masterSwitch, (v, on) -> {
             mCfg.masterSwitch = on; mCfg.save(mPrefs);
         }, null));
-        card1.addView(itemDivider(d));
+        card1.addView(candyDivider(getContext(), d));
         card1.addView(selectorRow("TTS 引擎", new String[]{"系统TTS", "配音引擎", "五音"}, mCfg.ttsEngine.equals("peiyin") ? 1 : mCfg.ttsEngine.equals("wusound") ? 2 : 0, d, idx -> {
             mCfg.ttsEngine = idx == 1 ? "peiyin" : idx == 2 ? "wusound" : "system";
             mCfg.save(mPrefs);
         }));
         root.addView(card1);
 
-        root.addView(spacerV(d, 12));
+        root.addView(candyDivider(getContext(), d));
         root.addView(sectionLabel("配音配置", d));
         LinearLayout card2 = makeCard(d);
         card2.addView(editRow(d, "配音API Key", mCfg.peiyinApiKey, s -> { mCfg.peiyinApiKey = s; mCfg.save(mPrefs); }));
-        card2.addView(itemDivider(d));
+        card2.addView(candyDivider(getContext(), d));
         card2.addView(editRow(d, "配音Voice ID", mCfg.peiyinVoiceId, s -> { mCfg.peiyinVoiceId = s; mCfg.save(mPrefs); }));
         root.addView(card2);
 
-        root.addView(spacerV(d, 12));
+        root.addView(candyDivider(getContext(), d));
         root.addView(sectionLabel("播报参数", d));
         LinearLayout card3 = makeCard(d);
         card3.addView(editRow(d, "播报间隔(ms)", String.valueOf(mCfg.announceIntervalMs), s -> {
             try { mCfg.announceIntervalMs = Integer.parseInt(s); mCfg.save(mPrefs); } catch (Throwable ignored) {}
         }));
-        card3.addView(itemDivider(d));
+        card3.addView(candyDivider(getContext(), d));
         card3.addView(editRow(d, "文本熔断字数", String.valueOf(mCfg.textCutoffLen), s -> {
             try { mCfg.textCutoffLen = Integer.parseInt(s); mCfg.save(mPrefs); } catch (Throwable ignored) {}
         }));
         root.addView(card3);
 
-        root.addView(spacerV(d, 12));
+        root.addView(candyDivider(getContext(), d));
         root.addView(sectionLabel("播报消息类型", d));
         LinearLayout card4 = makeCard(d);
         String[] types = {"文字", "图片", "语音", "视频", "红包", "转账", "名片", "文件", "位置", "表情"};
         for (int i = 0; i < types.length; i++) {
-            if (i > 0) card4.addView(itemDivider(d));
+            if (i > 0) card4.addView(candyDivider(getContext(), d));
             final int bit = 1 << (i + 1);
             final String typeName = types[i];
             card4.addView(subSwitchRow(d, typeName, (mCfg.announceTypeMask & bit) != 0, (v, checked) -> {
@@ -80,37 +83,37 @@ public class TTSFragment extends Fragment {
         }
         root.addView(card4);
 
-        root.addView(spacerV(d, 12));
+        root.addView(candyDivider(getContext(), d));
         root.addView(sectionLabel("特殊消息播报", d));
         LinearLayout card5 = makeCard(d);
         card5.addView(subSwitchRow(d, "被@时播报", mCfg.announceAt, (v, checked) -> {
             mCfg.announceAt = checked; mCfg.save(mPrefs);
         }));
-        card5.addView(itemDivider(d));
+        card5.addView(candyDivider(getContext(), d));
         card5.addView(subSwitchRow(d, "小程序消息播报", mCfg.announceMiniProgram, (v, checked) -> {
             mCfg.announceMiniProgram = checked; mCfg.save(mPrefs);
         }));
-        card5.addView(itemDivider(d));
+        card5.addView(candyDivider(getContext(), d));
         card5.addView(subSwitchRow(d, "视频号消息播报", mCfg.announceVideoChannel, (v, checked) -> {
             mCfg.announceVideoChannel = checked; mCfg.save(mPrefs);
         }));
-        card5.addView(itemDivider(d));
+        card5.addView(candyDivider(getContext(), d));
         card5.addView(subSwitchRow(d, "聊天记录播报", mCfg.announceChatHistory, (v, checked) -> {
             mCfg.announceChatHistory = checked; mCfg.save(mPrefs);
         }));
         root.addView(card5);
 
-        root.addView(spacerV(d, 12));
+        root.addView(candyDivider(getContext(), d));
         root.addView(sectionLabel("免打扰设置", d));
         LinearLayout card6 = makeCard(d);
         card6.addView(switchRow(d, "开启免打扰", "启用后在指定时间段内暂停语音播报", mCfg.quietEnabled, (v, on) -> {
             mCfg.quietEnabled = on; mCfg.save(mPrefs);
         }, null));
-        card6.addView(itemDivider(d));
+        card6.addView(candyDivider(getContext(), d));
         card6.addView(editRow(d, "开始时间(HH:MM)", mCfg.quietStart, s -> {
             mCfg.quietStart = s; mCfg.save(mPrefs);
         }));
-        card6.addView(itemDivider(d));
+        card6.addView(candyDivider(getContext(), d));
         card6.addView(editRow(d, "结束时间(HH:MM)", mCfg.quietEnd, s -> {
             mCfg.quietEnd = s; mCfg.save(mPrefs);
         }));
@@ -176,6 +179,7 @@ public class TTSFragment extends Fragment {
             btn.setTextSize(12);
             btn.setTextColor(AppColors.accent());
             btn.setPadding((int)(6*d), 0, (int)(6*d), 0);
+            btn.setPaintFlags(btn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
             btn.setOnClickListener(config);
             row.addView(btn);
         }
@@ -226,7 +230,11 @@ public class TTSFragment extends Fragment {
         et.setText(value);
         et.setTextSize(14);
         et.setTextColor(AppColors.text1());
-        et.setBackgroundColor(AppColors.inputBg());
+        GradientDrawable etBg = new GradientDrawable();
+        etBg.setColor(AppColors.inputBg());
+        etBg.setCornerRadius((int)(6 * d));
+        etBg.setStroke((int)(1.5f * d), AppColors.candyPink());
+        et.setBackground(etBg);
         et.setPadding((int)(10*d), (int)(8*d), (int)(10*d), (int)(8*d));
         et.setSingleLine(true);
         et.addTextChangedListener(new android.text.TextWatcher() {
@@ -267,18 +275,15 @@ public class TTSFragment extends Fragment {
         return row;
     }
 
-    private View itemDivider(float d) {
-        View v = new View(getContext());
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, (int)(1*d));
-        lp.setMargins((int)(14*d), 0, (int)(14*d), 0);
+    private static View candyDivider(Context ctx, float d) {
+        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
+        View v = new View(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
+        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
         v.setLayoutParams(lp);
-        v.setBackgroundColor(AppColors.divider());
-        return v;
-    }
-
-    private View spacerV(float d, int dpVal) {
-        View v = new View(getContext());
-        v.setLayoutParams(new LinearLayout.LayoutParams(-1, (int)(dpVal * d)));
+        v.setBackground(gd);
         return v;
     }
 

@@ -13,11 +13,14 @@ import com.leshao.v3.hook.AutoRemark;
 import com.leshao.v3.hook.BatchMessage;
 import com.leshao.v3.hook.CallFeatures;
 import com.leshao.v3.hook.ChatFooterEnhance;
+import com.leshao.v3.hook.ChatGroupHook;
+import com.leshao.v3.hook.ChatGroupUiInjector;
 import com.leshao.v3.hook.ChatVoiceSwitchHook;
 import com.leshao.v3.hook.ChatUICustom;
 import com.leshao.v3.hook.ContactChangeLog;
 import com.leshao.v3.hook.ConvPrivacy;
 import com.leshao.v3.hook.DeleteDetect;
+import com.leshao.v3.hook.FakeAddSource;
 import com.leshao.v3.hook.FriendRequestHook;
 import com.leshao.v3.hook.GroupFeatures;
 import com.leshao.v3.wm.WmEntry;
@@ -26,7 +29,6 @@ import com.leshao.v3.hook.HookManager;
 import com.leshao.v3.hook.LoginMonitor;
 import com.leshao.v3.hook.MessageHook;
 import com.leshao.v3.hook.NotifyCustom;
-import com.leshao.v3.hook.PlusMenuInject;
 import com.leshao.v3.hook.PrivacyFeatures;
 import com.leshao.v3.hook.RedPacketHook;
 import com.leshao.v3.hook.SearchEnhance;
@@ -88,10 +90,10 @@ public class MainHook implements IXposedHookLoadPackage {
 
             MessageHook.hook(cl);
             TtsVoiceSender.hook(cl);
-            PlusMenuInject.init(cl);
             CornerMenu.hook(cl);
             ChatRoomMuteHelper.hook(cl);
             ChatFooterLongPressMenu.hook(cl);
+            ChatGroupUiInjector.hook(cl);
             ContextManager.setOnReadyCallback(new Runnable() {
                 @Override
                 public void run() {
@@ -111,6 +113,7 @@ public class MainHook implements IXposedHookLoadPackage {
                         AntiDetectionHook.hook(cl);
                         HookManager.register(AntiRecallHook::hook);
                         HookManager.register(RedPacketHook::hook);
+                        HookManager.register(() -> ChatGroupHook.hook(cl));
                         FriendRequestHook.hook(cl);
 
                         HookManager.register(VoiceForwardHook::hook);
@@ -139,6 +142,10 @@ public class MainHook implements IXposedHookLoadPackage {
                         HookManager.register(() -> ContactChangeLog.hook(cl));
                         HookManager.register(() -> GroupFeatures.hook(cl));
                         HookManager.register(() -> WmEntry.injectAll(cl));
+
+                        LogWriter.log(TAG, "[MainHook] 开始初始化 FakeAddSource");
+                        FakeAddSource.hook(cl);
+                        LogWriter.log(TAG, "[MainHook] FakeAddSource 初始化完成");
 
                         HookManager.activateAll();
                     } catch (Throwable t) {

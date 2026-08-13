@@ -5,7 +5,9 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.ImageView;
@@ -54,7 +56,7 @@ public class ContactChangeLogPageView {
             card.addView(empty);
         } else {
             for (int i = 0; i < Math.min(records.size(), 200); i++) {
-                if (i > 0) card.addView(divider(ctx, d));
+                if (i > 0) card.addView(candyDivider(ctx, d));
                 card.addView(recordRow(ctx, d, records.get(i)));
             }
             if (records.size() > 200) {
@@ -80,6 +82,7 @@ public class ContactChangeLogPageView {
         clearBtn.setTextSize(14);
         clearBtn.setTextColor(AppColors.accent());
         clearBtn.setPadding((int)(20*d), (int)(10*d), (int)(20*d), (int)(10*d));
+        clearBtn.setPaintFlags(clearBtn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         clearBtn.setOnClickListener(v -> {
             new AlertDialog.Builder(parentAct)
                 .setTitle("确认清除")
@@ -266,6 +269,18 @@ public class ContactChangeLogPageView {
         View v = new View(ctx);
         v.setLayoutParams(new LinearLayout.LayoutParams(-1, (int)(1*d)));
         v.setBackgroundColor(AppColors.divider());
+        return v;
+    }
+
+    private static View candyDivider(Context ctx, float d) {
+        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
+        View v = new View(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
+        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+        v.setLayoutParams(lp);
+        v.setBackground(gd);
         return v;
     }
 }

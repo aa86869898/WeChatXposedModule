@@ -69,7 +69,7 @@ public class CandyUi {
             gd.setColor(AppColors.ACCENT);
         } else {
             gd.setColor(0x00000000);
-            gd.setStroke((int)(1 * d), AppColors.DIVIDER);
+        gd.setStroke((int)(1.5f * d), AppColors.candyPink());
         }
         return gd;
     }

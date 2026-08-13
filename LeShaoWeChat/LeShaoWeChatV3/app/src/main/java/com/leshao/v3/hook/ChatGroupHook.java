@@ -1,0 +1,711 @@
+package com.leshao.v3.hook;
+
+import android.content.Context;
+
+import com.leshao.v3.ContextManager;
+import com.leshao.v3.ContactRepository;
+import com.leshao.v3.LogWriter;
+import com.leshao.v3.ShadowLabelStore;
+import com.leshao.v3.hook.model.LabelInfo;
+
+import java.util.*;
+
+import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
+import de.robv.android.xposed.XposedHelpers;
+
+public class ChatGroupHook {
+
+    private static final String TAG = "ChatGroupHook";
+
+    private static volatile Object sLabelStorage;
+    private static volatile Object sContactStorage;
+    private static volatile ClassLoader sClassLoader;
+    private static volatile Context sWeChatContext;
+    private static volatile boolean sHooksInstalled = false;
+    private static volatile boolean sInitDone = false;
+
+    private static final List<LabelInfo> sCachedLabels = Collections.synchronizedList(new ArrayList<LabelInfo>());
+    private static final Map<Integer, Set<String>> sShadowContactMap = Collections.synchronizedMap(new HashMap<>());
+    private static volatile boolean sShadowMapBuilt = false;
+    private static int sNextFakeId = 10000;
+
+    public static void hook(ClassLoader cl) {
+        sClassLoader = cl;
+        ensureInit();
+        ShadowLabelStore.init(getWeChatContext());
+        installRealTimeHooks();
+        startSubSystems();
+        if (isReady()) {
+            restoreShadowLabels();
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> ChatGroupUiInjector.refreshTagData());
+            ContactRepository.loadAsync(null);
+        } else {
+            scheduleRetry(500);
+        }
+        LogWriter.log(TAG, "ChatGroupHook 初始化完成");
+    }
+
+    private static int sRetryCount = 0;
+
+    private static void scheduleRetry(int delayMs) {
+        sRetryCount++;
+        new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            new Thread(() -> {
+                try { Thread.sleep(100); } catch (Throwable ignored) {}
+                ensureInit();
+                if (isReady()) {
+                    sRetryCount = 0;
+                    restoreShadowLabels();
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> ChatGroupUiInjector.refreshTagData());
+                    ContactRepository.loadAsync(null);
+                } else if (sRetryCount < 6) {
+                    scheduleRetry(delayMs + 300);
+                }
+            }, "leshao-retry").start();
+        }, delayMs);
+    }
+
+    private static boolean initCoreServices() {
+        try {
+            String[] cand = {"x93.r","x93.s","x93.q","x93.t","y93.r","w93.r"};
+            for (String cn : cand) {
+                try {
+                    Class<?> cls = XposedHelpers.findClass(cn, sClassLoader);
+                    Object r = XposedHelpers.callStaticMethod(cls, "hj");
+                    if (r != null && "com.tencent.mm.storage.g4".equals(r.getClass().getName())) {
+                        sLabelStorage = r;
+                        break;
+                    }
+                } catch (Throwable ignored) {}
+            }
+            Class<?> j1 = XposedHelpers.findClass("hm0.j1", sClassLoader);
+            Class<?> sc4 = XposedHelpers.findClass("sh3.c4", sClassLoader);
+            sContactStorage = XposedHelpers.callMethod(XposedHelpers.callStaticMethod(j1, "s", sc4), "ij");
+            if (sLabelStorage == null) {
+                try {
+                    Class<?> fallback = XposedHelpers.findClass("x93.r", sClassLoader);
+                    sLabelStorage = XposedHelpers.callStaticMethod(fallback, "hj");
+                } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "核心服务初始化完成");
+            return sLabelStorage != null && sContactStorage != null;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "initCoreServices: " + e.toString());
+            return false;
+        }
+    }
+
+    private static void installRealTimeHooks() {
+        if (sHooksInstalled) return;
+        sHooksInstalled = true;
+        try {
+            Class<?> g4 = XposedHelpers.findClass("com.tencent.mm.storage.g4", sClassLoader);
+
+            XposedBridge.hookAllMethods(g4, "insert", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam p) {
+                    try {
+                        Object label = p.args[0];
+                        int id = XposedHelpers.getIntField(label, "field_labelID");
+                        String name = (String) XposedHelpers.getObjectField(label, "field_labelName");
+                        if ((boolean) p.getResult()) {
+                            EventBus.post(EventBus.Event.LABEL_CREATED, new int[]{id, name.hashCode()});
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            XposedBridge.hookAllMethods(g4, "d", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "标签删除: ID=" + p.args[0]);
+                }
+                @Override
+                protected void afterHookedMethod(MethodHookParam p) {
+                    if ((boolean) p.getResult()) EventBus.post(EventBus.Event.LABEL_DELETED, p.args[0]);
+                }
+            });
+            XposedBridge.hookAllMethods(g4, "update", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam p) {
+                    try {
+                        Object label = p.args[0];
+                        int id = XposedHelpers.getIntField(label, "field_labelID");
+                        String name = (String) XposedHelpers.getObjectField(label, "field_labelName");
+                        if ((boolean) p.getResult()) EventBus.post(EventBus.Event.LABEL_RENAMED, new Object[]{id, name});
+                    } catch (Throwable ignored) {}
+                }
+            });
+            Class<?> j4 = XposedHelpers.findClass("com.tencent.mm.storage.j4", sClassLoader);
+            XposedBridge.hookAllMethods(j4, "p0", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam p) {
+                    try {
+                        EventBus.post(EventBus.Event.CONTACT_LABEL_CHANGED, p.args[0]);
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LabelSyncHook.install(sClassLoader);
+
+            EventBus.subscribe(EventBus.Event.LABEL_CREATED, (event, data) -> {
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> ChatGroupUiInjector.refreshTagData());
+            });
+            EventBus.subscribe(EventBus.Event.LABEL_DELETED, (event, data) -> {
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> ChatGroupUiInjector.refreshTagData());
+            });
+            EventBus.subscribe(EventBus.Event.LABEL_RENAMED, (event, data) -> {
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> ChatGroupUiInjector.refreshTagData());
+            });
+            EventBus.subscribe(EventBus.Event.LABELS_SYNCED, (event, data) -> {
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> ChatGroupUiInjector.refreshTagData());
+            });
+
+            LogWriter.log(TAG, "7个实时Hook已安装 (含4个UI刷新订阅)");
+        } catch (Throwable e) { LogWriter.log(TAG, "installHooks error: " + e.getMessage()); }
+    }
+
+    private static void startSubSystems() {
+        if (GroupConfigManager.isAutoGroupEnabled()) {
+            AutoGroupEngine.start();
+            AutoGroupEngine.subscribeToEvents();
+        }
+        if (GroupConfigManager.isAutoBackupEnabled()) {
+            LabelBackup.scheduleAutoBackup(sWeChatContext);
+        }
+    }
+
+    // ==================== 公开访问器 ====================
+    public static Object getLabelStorage() {
+        ensureInit();
+        return sLabelStorage;
+    }
+    public static Object getContactStorage() {
+        ensureInit();
+        return sContactStorage;
+    }
+    public static ClassLoader getClassLoader() { return sClassLoader; }
+    public static Context getWeChatContext() {
+        if (sWeChatContext == null) sWeChatContext = ContextManager.getAppContext();
+        return sWeChatContext;
+    }
+    public static boolean isReady() { return sLabelStorage != null && sContactStorage != null; }
+
+    private static synchronized void ensureInit() {
+        if (sInitDone) return;
+        if (initCoreServices()) {
+            sInitDone = true;
+        } else if (sLabelStorage != null) {
+            sInitDone = true;
+        }
+    }
+
+    private static void restoreShadowLabels() {
+        try {
+            List<ShadowLabelStore.ShadowLabel> shadows = ShadowLabelStore.getAll();
+            if (shadows.isEmpty()) return;
+            int maxId = 0;
+            synchronized (sCachedLabels) {
+                for (ShadowLabelStore.ShadowLabel sl : shadows) {
+                    boolean exists = false;
+                    for (LabelInfo l : sCachedLabels) { if (l.labelName.equals(sl.labelName)) { exists = true; break; } }
+                    if (exists) continue;
+                    try {
+                        LabelInfo exist = findLabelByNameFromStorage(sLabelStorage, sl.labelName);
+                        if (exist != null) {
+                            if (exist.labelId > 0) {
+                                if (sl.labelId <= 0) ShadowLabelStore.updateId(sl.labelId, exist.labelId, sl.labelName);
+                                continue;
+                            }
+                            // exist.labelId <= 0: broken WeChat label, do not skip shadow restore
+                        }
+                    } catch (Throwable ignored) {}
+                    int id = sl.labelId > 0 ? sl.labelId : sNextFakeId++;
+                    LabelInfo li = new LabelInfo(id, sl.labelName);
+                    li.createTime = sl.createTime;
+                    sCachedLabels.add(li);
+                    if (id > maxId) maxId = id;
+                    LogWriter.log(TAG, "restoreShadow: restored '" + sl.labelName + "' id=" + id);
+                }
+            }
+            if (maxId >= sNextFakeId) sNextFakeId = maxId + 1;
+        } catch (Throwable e) { LogWriter.log(TAG, "restoreShadow: " + e.getMessage()); }
+    }
+
+    // ==================== 标签查询 ====================
+    public static List<LabelInfo> getAllLabels() {
+        List<LabelInfo> r = new ArrayList<>();
+        try {
+            Object st = getLabelStorage();
+            if (st != null) {
+                ArrayList<?> list = (ArrayList<?>) XposedHelpers.callMethod(st, "k1");
+                if (list != null && !list.isEmpty()) {
+                    Map<Integer, List<String>> contactMap = loadContactLabelMap(st);
+                    for (Object o : list) {
+                        LabelInfo li = toLabelInfo(o, contactMap);
+                        if (li.labelId > 0) {
+                            r.add(li);
+                        } else if (li.labelName != null && !li.labelName.isEmpty()) {
+                            rescueBrokenLabel(li);
+                        }
+                    }
+                }
+            }
+        } catch (Throwable e) { LogWriter.log(TAG, "getAll: " + e.getMessage()); }
+        synchronized (sCachedLabels) { r.addAll(sCachedLabels); }
+        return r;
+    }
+
+    public static List<LabelInfo> getAllLabelsWithTemp() {
+        List<LabelInfo> r = new ArrayList<>();
+        try {
+            Object st = getLabelStorage();
+            if (st != null) {
+                ArrayList<?> list = (ArrayList<?>) XposedHelpers.callMethod(st, "l1");
+                if (list != null && !list.isEmpty()) {
+                    Map<Integer, List<String>> contactMap = loadContactLabelMap(st);
+                    for (Object o : list) {
+                        LabelInfo li = toLabelInfo(o, contactMap);
+                        if (li.labelId > 0) {
+                            r.add(li);
+                        } else if (li.labelName != null && !li.labelName.isEmpty()) {
+                            rescueBrokenLabel(li);
+                        }
+                    }
+                }
+            }
+        } catch (Throwable e) { LogWriter.log(TAG, "getAllTemp: " + e.getMessage()); }
+        synchronized (sCachedLabels) { r.addAll(sCachedLabels); }
+        return r;
+    }
+
+    public static LabelInfo getLabelById(String labelId) {
+        int id = Integer.parseInt(labelId);
+        try {
+            Object st = getLabelStorage();
+            if (st != null) {
+                Object o = XposedHelpers.callMethod(st, "r1", id);
+                if (o != null) return toLabelInfo(o);
+            }
+        } catch (Throwable ignored) {}
+        synchronized (sCachedLabels) { for (LabelInfo l : sCachedLabels) { if (l.labelId == id) return l; } }
+        return null;
+    }
+
+    public static LabelInfo getLabelByName(String name) {
+        try {
+            Object st = getLabelStorage();
+            if (st == null) return null;
+            Object o = XposedHelpers.callMethod(st, "t1", name);
+            return o != null ? toLabelInfo(o) : null;
+        } catch (Throwable e) { return null; }
+    }
+
+    public static List<LabelInfo> searchLabels(String query) {
+        List<LabelInfo> r = new ArrayList<>();
+        try {
+            Object st = getLabelStorage();
+            if (st == null) return r;
+            ArrayList<?> list = (ArrayList<?>) XposedHelpers.callMethod(st, "V1", query);
+            if (list == null || list.isEmpty()) return r;
+            Map<Integer, List<String>> contactMap = loadContactLabelMap(st);
+            for (Object o : list) {
+                LabelInfo li = toLabelInfo(o, contactMap);
+                if (li.labelId > 0) {
+                    r.add(li);
+                } else if (li.labelName != null && !li.labelName.isEmpty()) {
+                    rescueBrokenLabel(li);
+                }
+            }
+        } catch (Throwable e) { LogWriter.log(TAG, "search: " + e.getMessage()); }
+        synchronized (sCachedLabels) { for (LabelInfo l : sCachedLabels) { if (l.labelName != null && l.labelName.toLowerCase().contains(query.toLowerCase())) r.add(l); } }
+        return r;
+    }
+
+    public static int labelCount() {
+        int n = 0;
+        try {
+            Object st = getLabelStorage();
+            if (st != null) {
+                ArrayList<?> list = (ArrayList<?>) XposedHelpers.callMethod(st, "k1");
+                if (list != null) n = list.size();
+            }
+        } catch (Throwable ignored) {}
+        synchronized (sCachedLabels) { n += sCachedLabels.size(); }
+        return n;
+    }
+
+    /** Migrate a WeChat 8.0.56 label with broken field_labelID (-1) into cache */
+    private static void rescueBrokenLabel(LabelInfo li) {
+        synchronized (sCachedLabels) {
+            for (LabelInfo cl : sCachedLabels) {
+                if (li.labelName.equals(cl.labelName)) return;
+            }
+            li.labelId = sNextFakeId++;
+            li.createTime = System.currentTimeMillis();
+            sCachedLabels.add(li);
+            ShadowLabelStore.add(li.labelId, li.labelName);
+            LogWriter.log(TAG, "rescue: " + li.labelName + " -> id=" + li.labelId);
+        }
+    }
+
+    public static List<LabelInfo> getAllLabelsLightweight() {
+        List<LabelInfo> r = new ArrayList<>();
+        try {
+            Object st = getLabelStorage();
+            if (st != null) {
+                ArrayList<?> list = (ArrayList<?>) XposedHelpers.callMethod(st, "k1");
+                if (list != null) for (Object o : list) {
+                    LabelInfo li = toLabelInfo(o, null);
+                    if (li.labelId > 0) {
+                        r.add(li);
+                    } else if (li.labelName != null && !li.labelName.isEmpty()) {
+                        rescueBrokenLabel(li);
+                    }
+                }
+            }
+        } catch (Throwable e) { LogWriter.log(TAG, "getAllLight: " + e.getMessage()); }
+        synchronized (sCachedLabels) { r.addAll(sCachedLabels); }
+        return r;
+    }
+
+    // ==================== 标签增删改 ====================
+    public static LabelInfo createLabel(String name) {
+        if (name == null || name.trim().isEmpty()) return null;
+        name = name.trim();
+        try {
+            // check duplicates in both WeChat and cache
+            LabelInfo exist = findLabelByNameFromStorage(getLabelStorage(), name);
+            if (exist != null) return exist;
+            synchronized (sCachedLabels) {
+                for (LabelInfo l : sCachedLabels) { if (name.equals(l.labelName)) return l; }
+            }
+
+            int fakeId = sNextFakeId++;
+            LabelInfo li = new LabelInfo(fakeId, name);
+            li.createTime = System.currentTimeMillis();
+
+            synchronized (sCachedLabels) { sCachedLabels.add(li); }
+            ShadowLabelStore.add(fakeId, name);
+            LogWriter.log(TAG, "create: cached id=" + fakeId + " name=" + name + " totalCache=" + sCachedLabels.size());
+
+            // best-effort: also try WeChat insert
+            try {
+                Object st = getLabelStorage();
+                ClassLoader cl = getClassLoader();
+                if (st != null && cl != null) {
+                    Class<?> c4 = XposedHelpers.findClass("com.tencent.mm.storage.c4", cl);
+                    Object label = XposedHelpers.newInstance(c4);
+                    try { XposedHelpers.setIntField(label, "field_labelID", -1); } catch (Throwable ignored) {}
+                    try { XposedHelpers.setObjectField(label, "field_labelName", name); } catch (Throwable ignored) {}
+                    try {
+                        Class<?> kc = XposedHelpers.findClass("z51.k", cl);
+                        XposedHelpers.setObjectField(label, "field_labelPYFull", XposedHelpers.callStaticMethod(kc, "a", name));
+                        XposedHelpers.setObjectField(label, "field_labelPYShort", XposedHelpers.callStaticMethod(kc, "b", name));
+                    } catch (Throwable ignored) {}
+                    try { XposedHelpers.setBooleanField(label, "field_isTemporary", false); } catch (Throwable ignored) {}
+                    boolean ok = (boolean) XposedHelpers.callMethod(st, "insert", label);
+                    if (ok) {
+                        int rid = XposedHelpers.getIntField(label, "field_labelID");
+                        if (rid > 0) { li.labelId = rid; ShadowLabelStore.updateId(fakeId, rid, name); }
+                    }
+                    LogWriter.log(TAG, "create: wechat insert=" + ok);
+                }
+            } catch (Throwable e) { LogWriter.log(TAG, "create: wechat insert failed: " + e.getMessage()); }
+
+            return li;
+        } catch (Throwable e) { LogWriter.log(TAG, "create error: " + e.getMessage()); }
+        return null;
+    }
+
+    private static LabelInfo findLabelByNameFromStorage(Object st, String name) {
+        try {
+            ArrayList<?> list = (ArrayList<?>) XposedHelpers.callMethod(st, "k1");
+            if (list != null) {
+                for (Object o : list) {
+                    String n = (String) XposedHelpers.getObjectField(o, "field_labelName");
+                    if (name.equals(n)) return toLabelInfo(o);
+                }
+            }
+        } catch (Throwable e) { LogWriter.log(TAG, "findLabelByName: " + e.getMessage()); }
+        return null;
+    }
+
+    public static boolean deleteLabel(String labelId) {
+        int id = Integer.parseInt(labelId);
+        try {
+            Object st = getLabelStorage();
+            if (st != null) { boolean ignored = (boolean) XposedHelpers.callMethod(st, "d", id); refreshCache(); }
+        } catch (Throwable ignored) {}
+        synchronized (sCachedLabels) {
+            for (Iterator<LabelInfo> it = sCachedLabels.iterator(); it.hasNext(); ) {
+                if (it.next().labelId == id) it.remove();
+            }
+        }
+        ShadowLabelStore.remove(id);
+        LogWriter.log(TAG, "delete: id=" + labelId);
+        return true;
+    }
+
+    public static boolean renameLabel(String labelId, String newName) {
+        if (newName == null || newName.trim().isEmpty()) return false;
+        newName = newName.trim();
+        int id = Integer.parseInt(labelId);
+        // try WeChat rename
+        try {
+            Object st = getLabelStorage();
+            ClassLoader cl = getClassLoader();
+            if (st != null && cl != null) {
+                Object label = XposedHelpers.callMethod(st, "r1", id);
+                if (label != null) {
+                    XposedHelpers.setObjectField(label, "field_labelName", newName);
+                    try {
+                        Class<?> kc = XposedHelpers.findClass("z51.k", cl);
+                        XposedHelpers.setObjectField(label, "field_labelPYFull", XposedHelpers.callStaticMethod(kc, "a", newName));
+                        XposedHelpers.setObjectField(label, "field_labelPYShort", XposedHelpers.callStaticMethod(kc, "b", newName));
+                    } catch (Throwable ignored) {}
+                    boolean ignored = (boolean) XposedHelpers.callMethod(st, "update", label);
+                    refreshCache();
+                }
+            }
+        } catch (Throwable e) { LogWriter.log(TAG, "rename wechat: " + e.getMessage()); }
+        // update cache
+        synchronized (sCachedLabels) {
+            for (LabelInfo l : sCachedLabels) { if (l.labelId == id) { l.labelName = newName; break; } }
+        }
+        ShadowLabelStore.rename(id, newName);
+        LogWriter.log(TAG, "rename: id=" + labelId + " -> " + newName);
+        return true;
+    }
+
+    // ==================== 标签-联系人查询 ====================
+    @SuppressWarnings("unchecked")
+    public static List<String> getContactsByLabelId(int labelId) {
+        List<String> r = new ArrayList<>();
+        try {
+            Object st = getLabelStorage();
+            if (st != null) {
+                try {
+                    HashMap<Integer, ArrayList<String>> m = (HashMap<Integer, ArrayList<String>>) XposedHelpers.getObjectField(st, "f");
+                    if (m != null) { ArrayList<String> u = m.get(labelId); if (u != null) r.addAll(u); }
+                } catch (Throwable e1) {
+                    LogWriter.log(TAG, "getContacts via field f failed: " + e1.getMessage() + ", using fallback");
+                }
+                // fallback: scan all labels
+                if (r.isEmpty()) {
+                    for (LabelInfo l : getAllLabels()) if (l.labelId == labelId) { r.addAll(l.contacts); break; }
+                }
+            }
+        } catch (Throwable e) { LogWriter.log(TAG, "getContacts: " + e.getMessage()); }
+        // virtual built-in labels: scan conversation list
+        if (r.isEmpty() && (labelId == 10000 || labelId == 10001 || labelId == 10002)) {
+            try {
+                List<String> builtIn = ConversationFilter.getUsernamesForBuiltInLabel(labelId);
+                if (builtIn != null) r.addAll(builtIn);
+            } catch (Throwable ignored) {}
+        }
+        // shadow labels: use maintained map
+        if (r.isEmpty()) {
+            if (!sShadowMapBuilt) { buildShadowContactMap(); sShadowMapBuilt = true; }
+            Set<String> sm = sShadowContactMap.get(labelId);
+            if (sm != null) r.addAll(sm);
+        }
+        return r;
+    }
+
+    static void buildShadowContactMap() {
+        synchronized (sCachedLabels) {
+            if (sCachedLabels.isEmpty()) return;
+            Set<Integer> shadowIds = new HashSet<>();
+            for (LabelInfo l : sCachedLabels) shadowIds.add(l.labelId);
+            ConversationFilter.scanContactsForShadowLabels(shadowIds, sShadowContactMap);
+        }
+        LogWriter.log(TAG, "buildShadowContactMap: " + sShadowContactMap.size() + " labels mapped");
+    }
+
+    @SuppressWarnings("unchecked")
+    public static int[] getLabelIdsByContact(String username) {
+        try {
+            Object st = getLabelStorage();
+            if (st == null) return new int[0];
+            try {
+                HashMap<String, int[]> m = (HashMap<String, int[]>) XposedHelpers.getObjectField(st, "e");
+                if (m != null) { int[] ids = m.get(username); return ids != null ? ids : new int[0]; }
+            } catch (Throwable e1) {
+                LogWriter.log(TAG, "getLabelIds via field e failed: " + e1.getMessage() + ", using fallback");
+                List<Integer> ids = new ArrayList<>();
+                for (LabelInfo l : getAllLabels()) if (l.contacts != null && l.contacts.contains(username)) ids.add(l.labelId);
+                int[] arr = new int[ids.size()];
+                for (int j = 0; j < ids.size(); j++) arr[j] = ids.get(j);
+                return arr;
+            }
+        } catch (Throwable e) { LogWriter.log(TAG, "getLabelIds: " + e.getMessage()); }
+        return new int[0];
+    }
+
+    // ==================== 联系人标签详情 ====================
+    public static List<Map<String, Object>> getLabels(String username) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        try {
+            int[] ids = getContactLabelIds(username);
+            for (int id : ids) {
+                if (id <= 0) continue;
+                LabelInfo info = getLabelById(String.valueOf(id));
+                if (info != null) {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("labelId", id);
+                    m.put("labelName", info.labelName);
+                    m.put("labelPYFull", info.labelPYFull != null ? info.labelPYFull : "");
+                    m.put("createTime", info.createTime);
+                    result.add(m);
+                }
+            }
+        } catch (Throwable e) { LogWriter.log(TAG, "getLabels: " + e.getMessage()); }
+        return result;
+    }
+
+    // ==================== 联系人标签操作 ====================
+    public static String getContactLabelIdsRaw(String username) {
+        try {
+            Object st = getContactStorage();
+            if (st == null) return "";
+            Object c = XposedHelpers.callMethod(st, "m", username);
+            if (c == null) return "";
+            String ids = (String) XposedHelpers.callMethod(c, "A0");
+            return ids != null ? ids : "";
+        } catch (Throwable e) { return ""; }
+    }
+
+    public static int[] getContactLabelIds(String username) {
+        String raw = getContactLabelIdsRaw(username);
+        if (raw.isEmpty()) return new int[0];
+        String[] parts = raw.split(",");
+        int[] ids = new int[parts.length];
+        for (int i = 0; i < parts.length; i++) { try { ids[i] = Integer.parseInt(parts[i].trim()); } catch (Exception e) { ids[i] = -1; } }
+        return ids;
+    }
+
+    public static boolean addLabelToContact(String username, int labelId) {
+        return modifyLabels(username, labelId, true);
+    }
+
+    public static boolean removeLabelFromContact(String username, int labelId) {
+        return modifyLabels(username, labelId, false);
+    }
+
+    public static boolean setContactLabels(String username, int[] labelIds) {
+        try {
+            Object st = getContactStorage();
+            if (st == null) return false;
+            Object c = XposedHelpers.callMethod(st, "m", username);
+            if (c == null) return false;
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < labelIds.length; i++) { if (i > 0) sb.append(","); sb.append(labelIds[i]); }
+            XposedHelpers.setObjectField(c, "field_contactLabelIds", sb.toString());
+            int ret = (int) XposedHelpers.callMethod(st, "p0", username, c);
+            refreshCache();
+            return ret >= 0;
+        } catch (Throwable e) { return false; }
+    }
+
+    public static boolean clearContactLabels(String username) {
+        return setContactLabels(username, new int[0]);
+    }
+
+    public static int batchAddLabel(List<String> users, int labelId) {
+        int n = 0; for (String u : users) if (addLabelToContact(u, labelId)) n++; return n;
+    }
+
+    public static int batchRemoveLabel(List<String> users, int labelId) {
+        int n = 0; for (String u : users) if (removeLabelFromContact(u, labelId)) n++; return n;
+    }
+
+    public static int batchSetLabels(List<String> users, int[] labelIds) {
+        int n = 0; for (String u : users) if (setContactLabels(u, labelIds)) n++; return n;
+    }
+
+    public static void refreshCache() {
+        try {
+            if (sLabelStorage != null) XposedHelpers.callMethod(sLabelStorage, "F0");
+            LogWriter.log(TAG, "refreshCache: F0 called OK");
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "refreshCache: F0 failed: " + e.getMessage());
+        }
+    }
+
+    // ==================== 内部 ====================
+    @SuppressWarnings("unchecked")
+    private static Map<Integer, List<String>> loadContactLabelMap(Object st) {
+        Map<Integer, List<String>> map = new HashMap<>();
+        try {
+            XposedHelpers.callMethod(st, "F0");
+            try {
+                HashMap<Integer, ArrayList<String>> f = (HashMap<Integer, ArrayList<String>>) XposedHelpers.getObjectField(st, "f");
+                if (f != null) for (Map.Entry<Integer, ArrayList<String>> e : f.entrySet()) map.put(e.getKey(), new ArrayList<>(e.getValue()));
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "loadContactMap field f fail: " + e.getMessage());
+            }
+        } catch (Throwable e) { LogWriter.log(TAG, "loadContactMap F0 fail: " + e.getMessage()); }
+        return map;
+    }
+
+    private static LabelInfo toLabelInfo(Object label) {
+        return toLabelInfo(label, null);
+    }
+
+    private static LabelInfo toLabelInfo(Object label, Map<Integer, List<String>> contactMap) {
+        LabelInfo info = new LabelInfo();
+        try {
+            info.labelId = XposedHelpers.getIntField(label, "field_labelID");
+            info.labelName = (String) XposedHelpers.getObjectField(label, "field_labelName");
+            info.labelPYFull = (String) XposedHelpers.getObjectField(label, "field_labelPYFull");
+            info.labelPYShort = (String) XposedHelpers.getObjectField(label, "field_labelPYShort");
+            try {
+                java.lang.reflect.Field f = label.getClass().getDeclaredField("field_createTime");
+                f.setAccessible(true); info.createTime = f.getLong(label);
+            } catch (Throwable ignored) {}
+            info.isTemporary = XposedHelpers.getBooleanField(label, "field_isTemporary");
+            try {
+                java.lang.reflect.Field f = label.getClass().getDeclaredField("field_lastUseTime");
+                f.setAccessible(true); info.lastUseTime = f.getLong(label);
+            } catch (Throwable ignored) {}
+            info.contacts = contactMap != null ? contactMap.getOrDefault(info.labelId, Collections.<String>emptyList()) : Collections.<String>emptyList();
+        } catch (Throwable e) { LogWriter.log(TAG, "toInfo: " + e.getMessage()); }
+        return info;
+    }
+
+    private static boolean modifyLabels(String username, int labelId, boolean add) {
+        try {
+            Object st = getContactStorage();
+            if (st == null) return false;
+            Object c = XposedHelpers.callMethod(st, "m", username);
+            if (c == null) return false;
+            String cur = (String) XposedHelpers.callMethod(c, "A0");
+            Set<String> set = new LinkedHashSet<>();
+            if (cur != null && !cur.isEmpty()) {
+                for (String s : cur.split(",")) { String ts = s.trim(); if (!ts.isEmpty()) set.add(ts); }
+            }
+            String sid = String.valueOf(labelId);
+            if (add) { if (!set.add(sid)) return true; }
+            else { if (!set.remove(sid)) return true; }
+            XposedHelpers.setObjectField(c, "field_contactLabelIds", set.isEmpty() ? "" : String.join(",", set));
+            int ret = (int) XposedHelpers.callMethod(st, "p0", username, c);
+            refreshCache();
+            LogWriter.log(TAG, "modifyLabels: " + (add ? "add" : "rem") + " label=" + labelId + " user=" + username + " ret=" + ret);
+            // maintain shadow contact map for cache-only labels
+            synchronized (sCachedLabels) {
+                for (LabelInfo l : sCachedLabels) {
+                    if (l.labelId == labelId) {
+                        if (add) {
+                            sShadowContactMap.computeIfAbsent(labelId, k -> new HashSet<>()).add(username);
+                        } else {
+                            Set<String> us = sShadowContactMap.get(labelId);
+                            if (us != null) us.remove(username);
+                        }
+                        break;
+                    }
+                }
+            }
+            return ret >= 0;
+        } catch (Throwable e) { LogWriter.log(TAG, "modifyLabels err: " + e.getMessage()); return false; }
+    }
+}

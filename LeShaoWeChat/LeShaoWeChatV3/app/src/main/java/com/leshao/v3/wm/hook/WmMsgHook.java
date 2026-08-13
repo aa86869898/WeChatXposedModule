@@ -24,6 +24,7 @@ public class WmMsgHook {
                 XposedBridge.hookMethod(m, new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam p) {
+                        XposedBridge.log("[WM] 长按菜单触发 Q");
                     }
                 });
             }
@@ -32,14 +33,10 @@ public class WmMsgHook {
     }
 
     public static void setupQuoteEnhance(ClassLoader cl) {
-        try {
-            XposedBridge.log("[WM] 引用增强已挂载");
-        } catch (Exception ignored) {}
+        XposedBridge.log("[WM] 引用增强已挂载 (stub)");
     }
 
     public static void setupWatermark(ClassLoader cl) {
-        try {
-            XposedBridge.log("[WM] 消息水印已挂载");
-        } catch (Exception ignored) {}
+        XposedBridge.log("[WM] 消息水印已挂载 (stub)");
     }
 }

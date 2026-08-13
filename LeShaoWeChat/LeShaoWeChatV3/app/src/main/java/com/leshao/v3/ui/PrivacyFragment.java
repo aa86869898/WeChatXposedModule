@@ -1,7 +1,10 @@
 package com.leshao.v3.ui;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Paint;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -101,6 +104,7 @@ public class PrivacyFragment extends Fragment {
             TextView btn = new TextView(getContext());
             btn.setText("[设置]"); btn.setTextSize(12); btn.setTextColor(AppColors.accent());
             btn.setPadding((int)(6 * d), 0, (int)(6 * d), 0);
+            btn.setPaintFlags(btn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
             btn.setOnClickListener(config);
             row.addView(btn);
         }
@@ -111,9 +115,23 @@ public class PrivacyFragment extends Fragment {
         return row;
     }
 
-    private TextView sLabel(float d, String t) {
-        TextView tv = new TextView(getContext());
-        tv.setText(t); tv.setTextSize(13); tv.setTextColor(AppColors.text2());
+    private static View candyDivider(Context ctx, float d) {
+        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
+        View v = new View(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
+        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+        v.setLayoutParams(lp);
+        v.setBackground(gd);
+        return v;
+    }
+
+    private static TextView sLabel(float d, String text) {
+        TextView tv = new TextView(ContextManager.getAppContext());
+        tv.setText(text);
+        tv.setTextSize(13);
+        tv.setTextColor(AppColors.text2());
         tv.setPadding(0, 0, 0, (int)(8 * d));
         return tv;
     }

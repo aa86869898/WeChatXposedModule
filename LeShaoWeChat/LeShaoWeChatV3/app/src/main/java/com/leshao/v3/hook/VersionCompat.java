@@ -244,7 +244,8 @@ public class VersionCompat {
     // ==================== Storage/DB (short names) ====================
 
     public static Class<?> findMsgStorageShortClass(ClassLoader cl) {
-        return findClassMulti(cl, "d9", "e9", "c9", "d8", "e8");
+        return findClassMulti(cl, "e01.d9", "e01.e9", "e01.d8", "e02.d9", "e02.e9",
+            "d9", "e9", "c9", "d8", "e8");
     }
 
     public static Class<?> findMsgInfoStorageClass(ClassLoader cl) {

@@ -59,6 +59,7 @@ public class VoiceHistoryDbHelper extends SQLiteOpenHelper {
         SQLiteDatabase db = getReadableDatabase();
         Cursor c = db.query(TABLE, null, null, null, null, null, "created_at DESC");
         if (c != null) {
+            try {
             while (c.moveToNext()) {
                 VoiceHistoryItem item = new VoiceHistoryItem();
                 item.id = c.getLong(c.getColumnIndexOrThrow("id"));
@@ -69,7 +70,9 @@ public class VoiceHistoryDbHelper extends SQLiteOpenHelper {
                 item.createdAt = c.getLong(c.getColumnIndexOrThrow("created_at"));
                 list.add(item);
             }
-            c.close();
+            } finally {
+                c.close();
+            }
         }
         return list;
     }

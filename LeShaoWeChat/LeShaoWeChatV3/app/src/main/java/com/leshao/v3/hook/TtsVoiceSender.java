@@ -65,6 +65,7 @@ public class TtsVoiceSender {
     private static void installCrashReporter() {
         if (sCrashHandlerInstalled) return;
         sCrashHandlerInstalled = true;
+        final Thread.UncaughtExceptionHandler prev = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
             @Override
             public void uncaughtException(Thread t, Throwable e) {
@@ -95,6 +96,9 @@ public class TtsVoiceSender {
                     }
                     LogWriter.log(TAG, sb.toString());
                 } catch (Throwable ignored) {}
+                if (prev != null && prev != this) {
+                    prev.uncaughtException(t, e);
+                }
             }
         });
     }
@@ -1292,6 +1296,27 @@ public class TtsVoiceSender {
                                     + truncStr(content, 800) + " talker=" + getTalker(msg)
                                     + " msg=" + System.identityHashCode(msg));
                             captureIncomingVoice(msg, content);
+                            int msgKey = System.identityHashCode(msg);
+                            boolean blocked = false;
+                            synchronized (sSuppressedMessages) { blocked = sSuppressedMessages.remove(msgKey); }
+                            if (!blocked) {
+                                synchronized (sBlockedOriginalMessages) { blocked = sBlockedOriginalMessages.remove(msgKey); }
+                            }
+                            if (!blocked && System.currentTimeMillis() - sLastTtsCommandAt <= FAILURE_SUPPRESS_WINDOW_MS) {
+                                if (content == null || content.trim().isEmpty()) {
+                                    String t = getTalker(msg);
+                                    if (sLastTtsTalker == null || t == null || sLastTtsTalker.equals(t)) {
+                                        blocked = true;
+                                    }
+                                }
+                            }
+                            if (blocked) {
+                                Class<?> rt = p.method instanceof java.lang.reflect.Method
+                                        ? ((java.lang.reflect.Method) p.method).getReturnType() : null;
+                                p.setResult(defaultReturnValue(rt));
+                                LogWriter.log(TAG, "f9.I9 BLOCK #tts suppressed msg=" + msgKey + " rt=" + (rt != null ? rt.getSimpleName() : "null"));
+                                return;
+                            }
                             if (marked) {
                                 LogWriter.log(TAG, "f9.I9 PASS marked #tts insert (no block)");
                             }
@@ -2764,8 +2789,9 @@ public class TtsVoiceSender {
     }
 
     private static byte[] encodePcmToAmrWb(byte[] pcm, int sampleRate) {
+        MediaCodec codec = null;
         try {
-            MediaCodec codec = MediaCodec.createEncoderByType(AMR_WB_MIME);
+            codec = MediaCodec.createEncoderByType(AMR_WB_MIME);
             MediaFormat fmt = MediaFormat.createAudioFormat(AMR_WB_MIME, sampleRate, 1);
             fmt.setInteger(MediaFormat.KEY_BIT_RATE, 15850);
             codec.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
@@ -2789,8 +2815,6 @@ public class TtsVoiceSender {
                 baos.write(chunk);
                 codec.releaseOutputBuffer(outIdx, false);
             }
-            codec.stop();
-            codec.release();
 
             byte[] body = baos.toByteArray();
             byte[] result = new byte[6 + body.length];
@@ -2807,6 +2831,11 @@ public class TtsVoiceSender {
         } catch (Throwable e) {
             LogWriter.log(TAG, "encodePcmToAmrWb err: " + e.getMessage());
             return null;
+        } finally {
+            if (codec != null) {
+                try { codec.stop(); } catch (Throwable ignored) {}
+                try { codec.release(); } catch (Throwable ignored) {}
+            }
         }
     }
 

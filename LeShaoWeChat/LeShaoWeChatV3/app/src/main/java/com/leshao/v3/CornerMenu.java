@@ -33,7 +33,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.app.AlertDialog;
 import android.content.Context;
-import android.content.DialogInterface;
 
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.wm.hook.WmHomeHook;
@@ -245,6 +244,19 @@ public class CornerMenu {
                     int userId = Process.myUid() / 100000;
                     String title = userId == 0 ? "快捷菜单" : ("快捷菜单【分身user" + userId + "】");
 
+                    if (items.isEmpty()) return;
+
+                    // 乐少助手（菜单第一项）
+                    items.add(0, "乐少助手");
+                    Runnable settingsAction = () -> {
+                        try {
+                            com.leshao.v3.ui.MainActivity.open(act);
+                        } catch (Throwable e2) {
+                            com.leshao.v3.LogWriter.log(TAG, "打开设置失败: " + e2.getMessage());
+                        }
+                    };
+                    actions.add(0, settingsAction);
+
                     String[] menuArr = items.toArray(new String[0]);
                     AlertDialog dialog = new AlertDialog.Builder(ctx)
                         .setTitle(title)
@@ -267,18 +279,28 @@ public class CornerMenu {
                         window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(cardBg));
                         window.setDimAmount(0.3f);
 
-                        // 自定义列表项适配器 (暗色模式文字颜色)
+                        // 自定义列表项适配器 (暗色模式文字颜色 + 首项图标)
                         ListView listView = dialog.getListView();
                         if (listView != null) {
                             listView.setBackgroundColor(cardBg);
                             listView.setDivider(new android.graphics.drawable.ColorDrawable(AppColors.divider()));
                             listView.setDividerHeight(1);
+                            final android.graphics.drawable.Drawable settingsIcon =
+                                com.leshao.v3.IconLoader.load(ctx, com.leshao.v3.IconLoader.IC_LESHAO_ICON, 14);
                             listView.setAdapter(new ArrayAdapter<String>(ctx,
                                     android.R.layout.simple_list_item_1, menuArr) {
                                 @Override
                                 public View getView(int pos, View convertView, ViewGroup parent) {
                                     TextView tv = (TextView) super.getView(pos, convertView, parent);
                                     tv.setTextColor(textColor);
+                                    if (pos == 0 && settingsIcon != null) {
+                                        settingsIcon.setBounds(0, 0,
+                                            (int) (18 * ctx.getResources().getDisplayMetrics().density),
+                                            (int) (18 * ctx.getResources().getDisplayMetrics().density));
+                                        tv.setCompoundDrawables(settingsIcon, null, null, null);
+                                        tv.setCompoundDrawablePadding(
+                                            (int) (8 * ctx.getResources().getDisplayMetrics().density));
+                                    }
                                     return tv;
                                 }
                             });

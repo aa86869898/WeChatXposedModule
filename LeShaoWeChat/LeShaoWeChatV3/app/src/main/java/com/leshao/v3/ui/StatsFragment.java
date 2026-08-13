@@ -1,5 +1,7 @@
 package com.leshao.v3.ui;
 
+import android.content.Context;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -18,6 +20,7 @@ public class StatsFragment extends Fragment {
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
 
+        float d = getResources().getDisplayMetrics().density;
         LinearLayout root = new LinearLayout(getContext());
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(16), dp(16), dp(16));
@@ -27,6 +30,8 @@ public class StatsFragment extends Fragment {
         // 联系人统计（数据源已清空，待重写）
         root.addView(infoRow("好友数", "0"));
         root.addView(infoRow("群聊数", "0"));
+
+        root.addView(candyDivider(getContext(), d));
 
         // 撤回记录
         root.addView(sLabel("最近撤回记录"));
@@ -62,6 +67,18 @@ public class StatsFragment extends Fragment {
     private TextView tv(String text) {
         TextView t = new TextView(getContext()); t.setText(text); t.setTextSize(13);
         t.setPadding(0, dp(2), 0, dp(2)); return t;
+    }
+
+    private static View candyDivider(Context ctx, float d) {
+        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
+        View v = new View(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
+        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+        v.setLayoutParams(lp);
+        v.setBackground(gd);
+        return v;
     }
 
     private int dp(int dp) { return (int) (dp * getResources().getDisplayMetrics().density + 0.5f); }

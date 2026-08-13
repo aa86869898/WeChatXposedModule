@@ -33,35 +33,35 @@ public class WxMasterPageView {
         root.addView(sectionLabel(ctx, "📨 群发 / 广播"));
         LinearLayout card1 = makeCard(ctx, d);
         card1.addView(buttonRow(ctx, d, "广播到所有群", "一条消息发送到全部群聊", () -> WxMasterFeatures.broadcastAll(parentAct, cl)));
-        card1.addView(divider(ctx, d));
+        card1.addView(candyDivider(ctx, d));
         card1.addView(buttonRow(ctx, d, "乐少万群定时群发", "勾选多个群+定时发送", () -> WxMasterFeatures.batchSend(parentAct, cl)));
         root.addView(card1);
 
-        root.addView(spacer(ctx, d, 10));
+        root.addView(candyDivider(ctx, d));
 
         root.addView(sectionLabel(ctx, "🛡 群工具"));
         LinearLayout card2 = makeCard(ctx, d);
         card2.addView(buttonRow(ctx, d, "所有群列表", "查看全部群名+人数", () -> WxMasterFeatures.listAllRooms(parentAct, cl)));
-        card2.addView(divider(ctx, d));
+        card2.addView(candyDivider(ctx, d));
         card2.addView(buttonRow(ctx, d, "群信息报告", "导出群资料到 TXT", () -> WxMasterFeatures.exportRoomReportPicker(parentAct, cl)));
-        card2.addView(divider(ctx, d));
+        card2.addView(candyDivider(ctx, d));
         card2.addView(buttonRow(ctx, d, "查看群公告", "公告内容 + 编辑者 + 时间", () -> WxMasterFeatures.showRoomNoticePicker(parentAct, cl)));
-        card2.addView(divider(ctx, d));
+        card2.addView(candyDivider(ctx, d));
         card2.addView(buttonRow(ctx, d, "导出全部群", "所有群信息 CSV 导出", () -> WxMasterFeatures.exportAllRooms(parentAct, cl)));
         root.addView(card2);
 
-        root.addView(spacer(ctx, d, 10));
+        root.addView(candyDivider(ctx, d));
 
         root.addView(sectionLabel(ctx, "🔧 聊天工具"));
         LinearLayout card3 = makeCard(ctx, d);
         card3.addView(buttonRow(ctx, d, "定时发送", "设置延迟后自动发送", () -> WxMasterFeatures.scheduledSend(parentAct, cl)));
-        card3.addView(divider(ctx, d));
+        card3.addView(candyDivider(ctx, d));
         card3.addView(buttonRow(ctx, d, "快捷扫码", "一键启动扫一扫", () -> WxMasterFeatures.quickScan(parentAct)));
-        card3.addView(divider(ctx, d));
+        card3.addView(candyDivider(ctx, d));
         card3.addView(buttonRow(ctx, d, "私密备注", "本地保存备注,不写入微信", () -> WxMasterFeatures.privateNote(parentAct, cl)));
         root.addView(card3);
 
-        root.addView(spacer(ctx, d, 10));
+        root.addView(candyDivider(ctx, d));
 
         TextView tip = new TextView(ctx);
         tip.setText("提示：\n· 导出文件保存在 微信文档目录 WeChatMaster/\n"
@@ -167,6 +167,18 @@ public class WxMasterPageView {
     private static View spacer(Context ctx, float d, int dpVal) {
         View v = new View(ctx);
         v.setLayoutParams(new LinearLayout.LayoutParams(-1, (int)(dpVal * d)));
+        return v;
+    }
+
+    private static View candyDivider(Context ctx, float d) {
+        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
+        View v = new View(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
+        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+        v.setLayoutParams(lp);
+        v.setBackground(gd);
         return v;
     }
 }

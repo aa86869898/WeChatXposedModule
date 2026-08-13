@@ -11,8 +11,8 @@ android {
         applicationId = "com.leshao.v3"
         minSdk = 24
         targetSdk = 35
-        versionCode = 416
-        versionName = "3.6.6-v416"
+        versionCode = 604
+        versionName = "3.9.0-v604"
     }
 
     signingConfigs {
@@ -39,6 +39,12 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    applicationVariants.all {
+        outputs.all {
+            (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName = "LeShaoWeChat-v$versionCode.apk"
+        }
     }
 }
 

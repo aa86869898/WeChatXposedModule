@@ -17,6 +17,7 @@ public class ContactRepository {
     private static final String TAG = "ContactRepo";
     private static List<ContactCard> sFriends;
     private static List<ContactCard> sGroups;
+    private static List<ContactCard> sServiceAccounts;
     private static volatile boolean sLoading;
 
     public static List<ContactCard> getFriends() {
@@ -27,16 +28,22 @@ public class ContactRepository {
         return sGroups != null ? sGroups : Collections.<ContactCard>emptyList();
     }
 
+    public static List<ContactCard> getServiceAccounts() {
+        return sServiceAccounts != null ? sServiceAccounts : Collections.<ContactCard>emptyList();
+    }
+
     public static List<ContactCard> getAll() {
         List<ContactCard> all = new ArrayList<>();
         if (sFriends != null) all.addAll(sFriends);
         if (sGroups != null) all.addAll(sGroups);
+        if (sServiceAccounts != null) all.addAll(sServiceAccounts);
         return all;
     }
 
     public static void refresh() {
         sFriends = null;
         sGroups = null;
+        sServiceAccounts = null;
     }
 
     public static void loadAsync(Runnable onDone) {
@@ -121,7 +128,6 @@ public class ContactRepository {
                     + "AND (verifyFlag & 8) = 0 "
                     + "AND username NOT LIKE '%@chatroom' "
                     + "AND username NOT LIKE '%@im.chatroom' "
-                    + "AND username NOT LIKE '%@openim' "
                     + "AND username NOT LIKE '%@micromsg.qq.com' "
                     + "AND username NOT LIKE 'gh_%' "
                     + "ORDER BY CASE WHEN length(conRemarkPYFull) > 0 "
@@ -144,10 +150,22 @@ public class ContactRepository {
             sGroups = query(db, sqlGroups, Category.GROUP);
             LogWriter.log(TAG, "groups: " + sGroups.size() + " rows in " + (System.currentTimeMillis() - t2) + "ms");
 
+            // 服务号: 公众号 + 订阅号 + 服务号 (gh_ 前缀)
+            String sqlService = "SELECT username, nickname, alias, conRemark, pyInitial, quanPin, "
+                    + "conRemarkPYFull, type, showHead, contactLabelIds, createTime "
+                    + "FROM rcontact WHERE deleteFlag = 0 "
+                    + "AND username LIKE 'gh_%' "
+                    + "ORDER BY CASE WHEN length(conRemarkPYFull) > 0 "
+                    + "THEN upper(conRemarkPYFull) ELSE upper(quanPin) END ASC";
+
+            long t3 = System.currentTimeMillis();
+            sServiceAccounts = query(db, sqlService, Category.OFFICIAL);
+            LogWriter.log(TAG, "service: " + sServiceAccounts.size() + " rows in " + (System.currentTimeMillis() - t3) + "ms");
+
             // 诊断: 找出混入好友列表的非正常联系人
             diagnoseContacts(db);
 
-            LogWriter.log(TAG, "total: " + (sFriends.size() + sGroups.size())
+            LogWriter.log(TAG, "total: " + (sFriends.size() + sGroups.size() + sServiceAccounts.size())
                     + " rows in " + (System.currentTimeMillis() - t0) + "ms");
 
         } catch (Throwable t) {
@@ -211,6 +229,7 @@ public class ContactRepository {
                 + "  OR (type&64)!=0) "
                 + "ORDER BY username";
         Cursor c = null;
+        Cursor c2 = null;
         try {
             java.lang.reflect.Method m = db.getClass().getDeclaredMethod("u", String.class, String[].class);
             c = (Cursor) m.invoke(db, sql, null);
@@ -235,7 +254,7 @@ public class ContactRepository {
                     + "(type&1)!=0 AS b0, (type&8)!=0 AS b3, (type&32)!=0 AS b5, (type&64)!=0 AS b6 "
                     + "FROM rcontact WHERE deleteFlag=0 AND username NOT LIKE '%@chatroom' "
                     + "GROUP BY type ORDER BY n DESC";
-            Cursor c2 = (Cursor) m.invoke(db, sqlDist, null);
+            c2 = (Cursor) m.invoke(db, sqlDist, null);
             if (c2 != null && c2.getCount() > 0) {
                 LogWriter.log(TAG, "DIAG_TYPE: type distribution:");
                 while (c2.moveToNext()) {
@@ -253,6 +272,9 @@ public class ContactRepository {
         } finally {
             if (c != null) {
                 try { c.close(); } catch (Throwable ignored) {}
+            }
+            if (c2 != null) {
+                try { c2.close(); } catch (Throwable ignored) {}
             }
         }
     }

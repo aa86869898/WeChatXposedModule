@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.CompoundButton;
@@ -24,18 +25,18 @@ public class RedPacketPageView {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(AppColors.bg());
 
-        root.addView(MainActivity.makeDivider(ctx));
+        root.addView(candyDivider(ctx, d));
 
         root.addView(makeMenuEntry(ctx, d, 0x1F4B0, "自动秒抢红包",
             "配置红包自动领取功能，支持私聊/群聊、时间段过滤、关键词过滤、秒抢名单",
             v -> SubPageActivity.open(parentAct, "自动秒抢红包", 91)));
 
-        root.addView(spacerV(ctx, d, 24));
+        root.addView(candyDivider(ctx, d));
 
         // 红包提醒开关
         SharedPreferences prefs = ContextManager.getPrefs();
         ModuleConfig cfg = ModuleConfig.load(prefs);
-        root.addView(MainActivity.makeDivider(ctx));
+        root.addView(candyDivider(ctx, d));
         root.addView(switchRow(ctx, d, "红包震动+响铃提醒", "收到红包时强制震动和响铃",
                 cfg.redPacketAlertEnabled, (v, on) -> {
             cfg.redPacketAlertEnabled = on; cfg.save(prefs); RedPacketAlert.setEnabled(on);
@@ -127,5 +128,17 @@ public class RedPacketPageView {
         sw.setOnCheckedChangeListener(listener);
         row.addView(sw);
         return row;
+    }
+
+    private static View candyDivider(Context ctx, float d) {
+        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
+        View v = new View(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
+        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+        v.setLayoutParams(lp);
+        v.setBackground(gd);
+        return v;
     }
 }

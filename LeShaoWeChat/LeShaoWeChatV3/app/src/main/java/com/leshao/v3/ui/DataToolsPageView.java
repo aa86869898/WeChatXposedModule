@@ -5,7 +5,9 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
@@ -232,8 +234,9 @@ public class DataToolsPageView {
         pathInput.setPadding((int)(12*d), (int)(10*d), (int)(12*d), (int)(10*d));
         pathInput.setBackgroundColor(AppColors.inputBg());
         android.graphics.drawable.GradientDrawable ib = new android.graphics.drawable.GradientDrawable();
-        ib.setCornerRadius((int)(4*d));
-        ib.setStroke(1, AppColors.border());
+        ib.setColor(AppColors.inputBg());
+        ib.setCornerRadius((int)(6*d));
+        ib.setStroke((int)(1.5f * d), AppColors.candyPink());
         pathInput.setBackground(ib);
         LinearLayout.LayoutParams pilp = new LinearLayout.LayoutParams(-1, -2);
         pilp.setMargins(0, 0, 0, (int)(10*d));
@@ -275,6 +278,7 @@ public class DataToolsPageView {
                 .setNegativeButton("取消", null)
                 .show();
         });
+        customBtn.setPaintFlags(customBtn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         root.addView(customBtn);
 
         TextView sep = new TextView(ctx);
@@ -626,6 +630,7 @@ public class DataToolsPageView {
         tv.setText(label); tv.setTextSize(14);
         tv.setTextColor(AppColors.whiteTextOnAccent());
         tv.setGravity(Gravity.CENTER);
+        tv.setPaintFlags(tv.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         btn.addView(tv);
 
         return btn;
@@ -666,5 +671,17 @@ public class DataToolsPageView {
         if (bytes < 1024) return bytes + "B";
         if (bytes < 1024 * 1024) return String.format("%.1fKB", bytes / 1024.0);
         return String.format("%.1fMB", bytes / (1024.0 * 1024.0));
+    }
+
+    private static View candyDivider(Context ctx, float d) {
+        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
+        View v = new View(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
+        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+        v.setLayoutParams(lp);
+        v.setBackground(gd);
+        return v;
     }
 }

@@ -89,7 +89,10 @@ public class WmChatHook {
         sAct = act;
         sCL = cl;
         sUser = user;
+        sCtx = act.getApplicationContext();
         sWM = (WindowManager) act.getSystemService(Context.WINDOW_SERVICE);
+        ensureReceiverRegistered();
+        recoverMassSendTask();
         if (user == null) return;
 
         if (com.leshao.v3.service.ActivationManager.isCurrentUserBlocked()) {
@@ -140,7 +143,7 @@ public class WmChatHook {
                     if (n != null && !n.isEmpty()) displayName = n;
                 }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
 
         ScrollView sv = new ScrollView(sAct);
         LinearLayout btns = new LinearLayout(sAct);
@@ -201,7 +204,7 @@ public class WmChatHook {
 
         if (sFloatIcon != null) {
             int[] loc = new int[2];
-            try { sFloatIcon.btn.getLocationOnScreen(loc); } catch (Exception ignored) {}
+            try { sFloatIcon.btn.getLocationOnScreen(loc); } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
             int fx = loc[0] + sFloatIcon.btn.getWidth() / 2 - pw / 2;
             int fy = loc[1] - ph - dp(8);
             int screenW = sAct.getResources().getDisplayMetrics().widthPixels;
@@ -221,7 +224,7 @@ public class WmChatHook {
 
     static void hidePanel() {
         if (sPanelDialog != null) {
-            try { sPanelDialog.dismiss(); } catch (Exception ignored) {}
+            try { sPanelDialog.dismiss(); } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
             sPanelDialog = null;
         }
         sPanelShow = false;
@@ -246,7 +249,7 @@ public class WmChatHook {
         try {
             Class<?> launcher = XposedHelpers.findClass("com.tencent.mm.ui.LauncherUI", sCL);
             Object inst = XposedHelpers.callStaticMethod(launcher, "getInstance");
-            Object frag = XposedHelpers.callMethod(inst, "getCurrentFragmet");
+            Object frag = XposedHelpers.callMethod(inst, "getCurrentFragment");
             if (frag == null) return null;
             return (View) XposedHelpers.getObjectField(frag, "mFooter");
         } catch (Exception ignored) { return null; }
@@ -394,8 +397,8 @@ public class WmChatHook {
                 int n;
                 while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
             } finally {
-                try { fos.close(); } catch (Exception ignored) {}
-                try { is.close(); } catch (Exception ignored) {}
+                try { fos.close(); } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
+                try { is.close(); } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
             }
             LogWriter.log(TAG, "copyUriToTemp ok: " + out.getAbsolutePath());
             return out.getAbsolutePath();
@@ -595,7 +598,7 @@ public class WmChatHook {
                     "com.tencent.mm.audio.b", "com.tencent.mm.audio.c",
                     "com.tencent.mm.audio.d", "com.tencent.mm.audio.e"
             }) {
-                try { audioTool = sCL.loadClass(cls); break; } catch (Throwable ignored) {}
+                try { audioTool = sCL.loadClass(cls); break; } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
             }
             if (audioTool != null) {
                 // MMPcmAudioRecorder: pcm→silk
@@ -615,9 +618,9 @@ public class WmChatHook {
                             Class<?> util = sCL.loadClass("com.tencent.mm.audio.recorder.MMRecorderUtil");
                             Object rec = XposedHelpers.newInstance(util, outputPath, durSec);
                             // 尝试 native encode: rec.encodePcmToSilk(pcmData, pcmLen)
-                        } catch (Throwable ignored) {}
+                        } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
                     }
-                } catch (Throwable ignored) {}
+                } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
             }
 
             // Fallback: 直接复制文件尝试 (如果微信支持直接播放MP3)
@@ -628,8 +631,8 @@ public class WmChatHook {
             int n;
             while ((n = fis.read(buf)) > 0) fos.write(buf, 0, n);
             } finally {
-            try { fis.close(); } catch (Exception ignored) {}
-            try { fos.close(); } catch (Exception ignored) {}
+            try { fis.close(); } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
+            try { fos.close(); } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
             }
             return true;
         } catch (Exception e) {
@@ -648,7 +651,7 @@ public class WmChatHook {
         // 1. 优先使用缓存的 WCDB 实例
         if (sCachedDb != null && sCachedRawQueryMethod != null) {
             try { return (Cursor) sCachedRawQueryMethod.invoke(sCachedDb, sql, args); }
-            catch (Throwable ignored) { sCachedDb = null; sCachedRawQueryMethod = null; }
+            catch (Throwable t) { sCachedDb = null; sCachedRawQueryMethod = null; LogWriter.log(TAG, "rawQueryMsg cached failed: " + t.getMessage()); }
         }
 
         // 2. 回退: VersionCompat 打开
@@ -692,7 +695,7 @@ public class WmChatHook {
                     }
                 }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
         return null;
     }
 
@@ -721,7 +724,7 @@ public class WmChatHook {
             android.content.SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
             Object uv = sp.getAll().get("default_uin");
             if (uv != null) return Long.parseLong(uv.toString());
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
         return 0;
     }
 
@@ -780,18 +783,16 @@ public class WmChatHook {
                             + " [" + typeMap(type) + "] " + content + "\n";
                     fos.write(line.getBytes("UTF-8"));
                     cnt++;
-                } catch (Exception ignored) {}
+                } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
             }
             fos.write(("\n================================\n共 " + cnt + " 条消息\n================================\n").getBytes("UTF-8"));
-            fos.close();
-            c.close();
             return cnt;
         } catch (Exception e) {
             LogWriter.log(TAG, "exportChat err: " + e.getMessage());
             return -1;
         } finally {
-            try { if (fos != null) fos.close(); } catch (Throwable ignored) {}
-            try { if (c != null) c.close(); } catch (Throwable ignored) {}
+            try { if (fos != null) fos.close(); } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
+            try { if (c != null) c.close(); } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
         }
     }
 
@@ -939,7 +940,7 @@ public class WmChatHook {
             LogWriter.log(TAG, "chatStats err: " + e.getMessage());
             return null;
         } finally {
-            try { if (c != null) c.close(); } catch (Throwable ignored) {}
+            try { if (c != null) c.close(); } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
         }
     }
 
@@ -1001,7 +1002,7 @@ public class WmChatHook {
             LogWriter.log(TAG, "searchMsg err: " + e.getMessage());
             return null;
         } finally {
-            try { if (c != null) c.close(); } catch (Throwable ignored) {}
+            try { if (c != null) c.close(); } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
         }
     }
 
@@ -1032,7 +1033,7 @@ public class WmChatHook {
             if ("auto_voice".equals(fKey)) {
                 try {
                     com.leshao.v3.hook.VoiceAutoPlay.setEnabled(on);
-                } catch (Throwable ignored) {}
+                } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
             }
             toast(label.replaceAll("[^\\u4e00-\\u9fa5]", "") + (on ? ":开" : ":关"));
         });
@@ -1076,7 +1077,7 @@ public class WmChatHook {
                     sb.append(key.substring(10)).append("\n");
                 }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
         if (sb.length() == 0) sb.append("暂无提醒对象");
         new AlertDialog.Builder(sAct).setTitle("强提醒列表")
                 .setMessage(sb.toString())
@@ -1276,8 +1277,8 @@ public class WmChatHook {
             int n;
             while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
             } finally {
-            try { fos.close(); } catch (Exception ignored) {}
-            try { is.close(); } catch (Exception ignored) {}
+            try { fos.close(); } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
+            try { is.close(); } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
             }
             return "OK:" + outFile.getAbsolutePath();
             } finally { conn.disconnect(); }
@@ -1558,6 +1559,8 @@ public class WmChatHook {
     public static void showMassSendFromCorner(Activity act, ClassLoader cl) {
         sAct = act;
         sCL = cl;
+        sCtx = act.getApplicationContext();
+        ensureReceiverRegistered();
         showMassSend();
     }
 
@@ -1892,7 +1895,7 @@ public class WmChatHook {
                                     if (bmp != null) {
                                         iv.setImageBitmap(bmp);
                                     }
-                                } catch (Exception ignored) {}
+                                } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
 
                                 cell.addView(iv, new FrameLayout.LayoutParams(thSize, thSize));
 
@@ -2148,7 +2151,7 @@ public class WmChatHook {
                     EditText et = (EditText) found;
                     sWizardText = et.getText().toString().trim();
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
 
             boolean hasText = !sWizardText.isEmpty();
             boolean hasAttachment = false;
@@ -2291,7 +2294,7 @@ public class WmChatHook {
                     opts.inSampleSize = 4;
                     Bitmap bmp = BitmapFactory.decodeFile(sWizardImagePaths.get(i), opts);
                     if (bmp != null) iv.setImageBitmap(bmp);
-                } catch (Exception ignored) {}
+                } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
                 thCell.addView(iv, new FrameLayout.LayoutParams(thSize, thSize));
 
                 LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(thSize, thSize);
@@ -2450,7 +2453,7 @@ public class WmChatHook {
         bottomBar.addView(confirmBtn, new LinearLayout.LayoutParams(0, dp(48), 1f));
         root.addView(bottomBar);
 
-        backBtn.setOnClickListener(v2 -> { sWizardType = -1; showMassSendContent(); });
+        backBtn.setOnClickListener(v2 -> { showMassSendContent(); });
         confirmBtn.setOnClickListener(v2 -> {
             if (sWizardTargets.isEmpty()) { toast("请选择目标群聊"); return; }
 
@@ -2470,7 +2473,7 @@ public class WmChatHook {
                 else WmPrefs.setStr("mass_send_audio", "");
                 WmPrefs.setStr("mass_send_task_id", "task_" + System.currentTimeMillis());
                 WmPrefs.set("mass_send_delay", sWizardDelay);
-            } catch (Exception ignored) {}
+            } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
 
             saveMassSendRecord(MASS_TYPES[sWizardType], sWizardTargets.size(), 0, 0);
             scheduleMassSend(sWizardTimeMs);
@@ -2656,7 +2659,7 @@ public class WmChatHook {
                     et.setTextSize(16);
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
     }
 
     // ==================== 群发记录 ====================
@@ -2683,7 +2686,7 @@ public class WmChatHook {
             obj.put("textPreview", sWizardText.length() > 30 ? sWizardText.substring(0, 30) + "..." : sWizardText);
             arr.put(obj);
             WmPrefs.setStr("mass_send_records", arr.toString());
-        } catch (Exception ignored) {}
+        } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
     }
 
     static void saveMassSendFailRecord(String target, String type, String reason) {
@@ -2699,7 +2702,7 @@ public class WmChatHook {
             obj.put("reason", reason);
             arr.put(obj);
             WmPrefs.setStr("mass_send_fail_records", arr.toString());
-        } catch (Exception ignored) {}
+        } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
     }
 
     static void showMassSendRecords() {
@@ -2842,7 +2845,7 @@ public class WmChatHook {
 
                     root.addView(card);
                 }
-            } catch (Exception ignored) {}
+            } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
         }
 
         // 底部按钮
@@ -2913,11 +2916,14 @@ public class WmChatHook {
     private static void scheduleMassSend(long triggerMs) {
         try {
             ensureReceiverRegistered();
+            WmPrefs.setStr("mass_send_trigger_ms", String.valueOf(triggerMs));
             Intent intent = new Intent("com.leshao.v3.MASS_SEND_TRIGGER");
             intent.setPackage("com.tencent.mm");
-            PendingIntent pi = PendingIntent.getBroadcast(sAct, 1002, intent,
+            Context ctx = (sCtx != null) ? sCtx : sAct;
+            if (ctx == null) { LogWriter.log(TAG, "scheduleMassSend err: no context"); return; }
+            PendingIntent pi = PendingIntent.getBroadcast(ctx, 1002, intent,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-            AlarmManager am = (AlarmManager) sAct.getSystemService(Context.ALARM_SERVICE);
+            AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
             if (am != null) {
                 am.setExact(AlarmManager.RTC_WAKEUP, triggerMs, pi);
                 LogWriter.log(TAG, "massSend scheduled: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(triggerMs)));
@@ -2929,14 +2935,16 @@ public class WmChatHook {
 
     private static void ensureReceiverRegistered() {
         if (sMassSendReceiver != null) return;
+        Context ctx = (sCtx != null) ? sCtx : sAct;
+        if (ctx == null) { LogWriter.log(TAG, "register receiver err: no context"); return; }
         try {
             sMassSendReceiver = new MassSendReceiver();
             IntentFilter filter = new IntentFilter("com.leshao.v3.MASS_SEND_TRIGGER");
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                sAct.registerReceiver(sMassSendReceiver, filter,
+                ctx.registerReceiver(sMassSendReceiver, filter,
                         Context.RECEIVER_NOT_EXPORTED);
             } else {
-                sAct.registerReceiver(sMassSendReceiver, filter);
+                ctx.registerReceiver(sMassSendReceiver, filter);
             }
             LogWriter.log(TAG, "massSend receiver registered dynamically");
         } catch (Exception e) {
@@ -2944,40 +2952,118 @@ public class WmChatHook {
         }
     }
 
+    private static void recoverMassSendTask() {
+        try {
+            String type = WmPrefs.getStr("mass_send_type", "");
+            if (type.isEmpty()) return;
+            String triggerStr = WmPrefs.getStr("mass_send_trigger_ms", "");
+            if (triggerStr.isEmpty()) return;
+            long triggerMs = Long.parseLong(triggerStr);
+            long now = System.currentTimeMillis();
+
+            String taskId = WmPrefs.getStr("mass_send_task_id", "");
+            String records = WmPrefs.getStr("mass_send_records", "");
+            boolean isPending = false;
+            if (!records.isEmpty() && !taskId.isEmpty()) {
+                JSONArray arr = new JSONArray(records);
+                for (int i = arr.length() - 1; i >= 0; i--) {
+                    JSONObject obj = arr.getJSONObject(i);
+                    if (taskId.equals(obj.optString("taskId", ""))
+                            && "pending".equals(obj.optString("status", ""))) {
+                        isPending = true;
+                        break;
+                    }
+                }
+            } else if (!type.isEmpty() && !taskId.isEmpty()) {
+                isPending = true;
+            }
+            if (!isPending) return;
+
+            if (triggerMs <= now) {
+                if (sCL != null) {
+                    LogWriter.log(TAG, "massSend recovery: executing expired task " + taskId);
+                    executeMassSendFromPrefs();
+                } else {
+                    LogWriter.log(TAG, "massSend recovery: task expired but sCL null, retry on next init");
+                }
+            } else {
+                scheduleMassSend(triggerMs);
+                LogWriter.log(TAG, "massSend recovery: re-scheduled task " + taskId);
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "massSend recovery err: " + t.getMessage());
+        }
+    }
+
+    public static void initOnAppStart(ClassLoader cl) {
+        try {
+            if (sCtx == null) {
+                sCtx = com.leshao.v3.ContextManager.getAppContext();
+            }
+            if (sCL == null && cl != null) {
+                sCL = cl;
+            }
+            ensureReceiverRegistered();
+            recoverMassSendTask();
+            LogWriter.log(TAG, "initOnAppStart OK build=v421 2026-08-10");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
+        }
+    }
+
     public static class MassSendReceiver extends BroadcastReceiver {
         @Override public void onReceive(Context ctx, Intent intent) {
             try {
                 LogWriter.log(TAG, "massSend receiver triggered");
-                String type = WmPrefs.getStr("mass_send_type", "");
-                String text = WmPrefs.getStr("mass_send_text", "");
-                String targetJson = WmPrefs.getStr("mass_send_targets", "");
-                String imgJson = WmPrefs.getStr("mass_send_images", "");
-                String videoPath = WmPrefs.getStr("mass_send_video", "");
-                String audioPath = WmPrefs.getStr("mass_send_audio", "");
-                String taskId = WmPrefs.getStr("mass_send_task_id", "");
-                boolean delay = WmPrefs.get("mass_send_delay", true);
-
-                if (sCL == null) {
-                    LogWriter.log(TAG, "massSend receiver: sCL is null, skip");
-                    return;
-                }
-
-                java.util.List<String> targets = new ArrayList<>();
-                if (!targetJson.isEmpty()) {
-                    JSONArray arr = new JSONArray(targetJson);
-                    for (int i = 0; i < arr.length(); i++) targets.add(arr.getString(i));
-                }
-
-                java.util.List<String> imgList = new ArrayList<>();
-                if (!imgJson.isEmpty()) {
-                    JSONArray arr = new JSONArray(imgJson);
-                    for (int i = 0; i < arr.length(); i++) imgList.add(arr.getString(i));
-                }
-
-                executeMassSend(type, text, targets, imgList, videoPath, audioPath, taskId, delay);
+                executeMassSendFromPrefs();
             } catch (Throwable t) {
                 LogWriter.log(TAG, "massSend receiver err: " + t.getMessage());
             }
+        }
+    }
+
+    private static void executeMassSendFromPrefs() {
+        try {
+            String type = WmPrefs.getStr("mass_send_type", "");
+            if (type.isEmpty()) return;
+            String text = WmPrefs.getStr("mass_send_text", "");
+            String targetJson = WmPrefs.getStr("mass_send_targets", "");
+            String imgJson = WmPrefs.getStr("mass_send_images", "");
+            String videoPath = WmPrefs.getStr("mass_send_video", "");
+            String audioPath = WmPrefs.getStr("mass_send_audio", "");
+            String taskId = WmPrefs.getStr("mass_send_task_id", "");
+            boolean delay = WmPrefs.get("mass_send_delay", true);
+
+            LogWriter.log(TAG, "massSend from prefs: type=" + type + " textLen=" + text.length()
+                + " targets=" + targetJson + " videoPath=" + videoPath + " imgCount=" + imgJson);
+
+            if (sCL == null) {
+                LogWriter.log(TAG, "massSend from prefs: sCL is null, will retry on next window open");
+                return;
+            }
+
+            java.util.List<String> targets = new ArrayList<>();
+            if (!targetJson.isEmpty()) {
+                JSONArray arr = new JSONArray(targetJson);
+                for (int i = 0; i < arr.length(); i++) targets.add(arr.getString(i));
+            }
+
+            java.util.List<String> imgList = new ArrayList<>();
+            if (!imgJson.isEmpty()) {
+                JSONArray arr = new JSONArray(imgJson);
+                for (int i = 0; i < arr.length(); i++) imgList.add(arr.getString(i));
+            }
+
+            if (targets.isEmpty()) {
+                LogWriter.log(TAG, "massSend from prefs: no targets, skip");
+                WmPrefs.setStr("mass_send_type", "");
+                WmPrefs.setStr("mass_send_trigger_ms", "");
+                return;
+            }
+
+            executeMassSend(type, text, targets, imgList, videoPath, audioPath, taskId, delay);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "executeMassSendFromPrefs err: " + t.getMessage());
         }
     }
 
@@ -2991,34 +3077,39 @@ public class WmChatHook {
             int success = 0, fail = 0;
             java.util.Random rand = new java.util.Random();
 
-            for (String target : targets) {
-                try {
-                    if (!text.isEmpty()) {
-                        com.leshao.v3.hook.GroupFeatures.sendTextMessage(sCL, target, text);
-                    }
+                for (String target : targets) {
+                    try {
+                        if (!text.isEmpty()) {
+                            WmReflect.sendTextMsg(sCL, text, target);
+                        }
 
-                    switch (type) {
-                        case "image":
-                            for (String imgPath : imgList) {
-                                if (!imgPath.isEmpty()) sendMediaFile(target, imgPath, "image");
-                            }
-                            break;
-                        case "video":
-                            if (videoPath != null && !videoPath.isEmpty())
-                                sendMediaFile(target, videoPath, "video");
+                        switch (type) {
+                            case "image":
+                                LogWriter.log(TAG, "massSend img: target=" + target + " listSize=" + imgList.size());
+                                for (String imgPath : imgList) {
+                                    if (!imgPath.isEmpty()) sendImageToUser(target, imgPath);
+                                    else LogWriter.log(TAG, "massSend img empty path");
+                                }
+                                break;
+                            case "video":
+                                LogWriter.log(TAG, "massSend vid: target=" + target + " videoPath=" + videoPath);
+                                if (videoPath != null && !videoPath.isEmpty())
+                                    sendVideoToUser(target, videoPath);
+                                else
+                                    LogWriter.log(TAG, "massSend vid EMPTY path, skip");
                             break;
                         case "image_text":
                             for (String imgPath : imgList) {
-                                if (!imgPath.isEmpty()) sendMediaFile(target, imgPath, "image");
+                                if (!imgPath.isEmpty()) sendImageToUser(target, imgPath);
                             }
                             break;
                         case "video_text":
                             if (videoPath != null && !videoPath.isEmpty())
-                                sendMediaFile(target, videoPath, "video");
+                                sendVideoToUser(target, videoPath);
                             break;
                         case "image_mixed":
                             for (String imgPath : imgList) {
-                                if (!imgPath.isEmpty()) sendMediaFile(target, imgPath, "image");
+                                if (!imgPath.isEmpty()) sendImageToUser(target, imgPath);
                             }
                             break;
                         case "voice":
@@ -3026,7 +3117,7 @@ public class WmChatHook {
                                 sendAudioFile(target, audioPath);
                             break;
                         default:
-                            com.leshao.v3.hook.GroupFeatures.sendTextMessage(sCL, target, text);
+                            WmReflect.sendTextMsg(sCL, text, target);
                     }
                     success++;
                 } catch (Throwable t) {
@@ -3050,6 +3141,7 @@ public class WmChatHook {
             WmPrefs.setStr("mass_send_video", "");
             WmPrefs.setStr("mass_send_audio", "");
             WmPrefs.setStr("mass_send_task_id", "");
+            WmPrefs.setStr("mass_send_trigger_ms", "");
         } catch (Throwable t) {
             LogWriter.log(TAG, "massSend err: " + t.getMessage());
         }
@@ -3078,7 +3170,7 @@ public class WmChatHook {
                     break;
                 }
             }
-         } catch (Exception ignored) {}
+         } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
     }
     private static boolean sendMediaFile(String talker, String filePath, String mediaType) {
         try {
@@ -3089,12 +3181,98 @@ public class WmChatHook {
                 XposedHelpers.findClass("com.tencent.mm.storage.bs", sCL), talker);
             XposedHelpers.callMethod(msg, "A1", "image".equals(mediaType) ? 3 : 43);
             XposedHelpers.callMethod(msg, "P0", filePath);
-            XposedHelpers.callMethod(msg, "L1", System.currentTimeMillis());
-            XposedHelpers.callMethod(storage, "Ra", System.currentTimeMillis(), msg);
+            XposedHelpers.callMethod(msg, "e1", System.currentTimeMillis());
+            XposedHelpers.callMethod(msg, "k1", 1);
+            XposedHelpers.callMethod(storage, "H9", msg);
             return true;
         } catch (Throwable t) {
             LogWriter.log(TAG, "sendMediaFile err: " + t.getMessage());
             return false;
+        }
+    }
+
+    private static boolean sendImageToUser(String toUser, String imgPath) {
+        try {
+            if (sCL == null) return false;
+            Object ms = getMsgInfoStorage();
+            if (ms == null) return false;
+            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", sCL);
+            Object msg = XposedHelpers.newInstance(e9Class, toUser);
+            XposedHelpers.callMethod(msg, "A1", 3);
+            XposedHelpers.callMethod(msg, "j1", imgPath);
+            XposedHelpers.callMethod(msg, "L1", System.currentTimeMillis());
+            copyMediaToWxDir(imgPath, msg);
+            long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
+            LogWriter.log(TAG, "sendImageToUser ok: msgId=" + msgId + " to=" + toUser);
+            return msgId > 0;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "sendImageToUser err: " + t.getMessage());
+            return false;
+        }
+    }
+
+    private static boolean sendVideoToUser(String toUser, String videoPath) {
+        try {
+            if (sCL == null) return false;
+            Object ms = getMsgInfoStorage();
+            if (ms == null) return false;
+            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", sCL);
+            Object msg = XposedHelpers.newInstance(e9Class, toUser);
+            XposedHelpers.callMethod(msg, "A1", 43);
+            XposedHelpers.callMethod(msg, "j1", videoPath);
+            XposedHelpers.callMethod(msg, "L1", System.currentTimeMillis());
+            copyMediaToWxDir(videoPath, msg);
+            long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
+            LogWriter.log(TAG, "sendVideoToUser ok: msgId=" + msgId + " to=" + toUser);
+            return msgId > 0;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "sendVideoToUser err: " + t.getMessage());
+            return false;
+        }
+    }
+
+    private static void copyMediaToWxDir(String srcPath, Object msg) {
+        try {
+            if (srcPath == null || !new java.io.File(srcPath).exists()) return;
+            Object u0Service = XposedHelpers.callStaticMethod(
+                XposedHelpers.findClass("pa5.n0", sCL), "c",
+                XposedHelpers.findClass("qh3.u0", sCL));
+            Object y_j = XposedHelpers.getStaticObjectField(
+                XposedHelpers.findClass("lin5.y", sCL), "j");
+            String ext = srcPath.substring(srcPath.lastIndexOf('.'));
+            String dstPath = (String) XposedHelpers.callMethod(
+                u0Service, "Nj", y_j, System.currentTimeMillis() + ext, false, true);
+            if (dstPath == null) return;
+            new java.io.File(dstPath).getParentFile().mkdirs();
+            java.io.FileInputStream fis = null;
+            java.io.FileOutputStream fos = null;
+            try {
+                fis = new java.io.FileInputStream(new java.io.File(srcPath));
+                fos = new java.io.FileOutputStream(new java.io.File(dstPath));
+                byte[] buf = new byte[16384];
+                int n;
+                while ((n = fis.read(buf)) > 0) fos.write(buf, 0, n);
+            } finally {
+                if (fis != null) { try { fis.close(); } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); } }
+                if (fos != null) { try { fos.close(); } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); } }
+            }
+            XposedHelpers.callMethod(msg, "j1", dstPath);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "copyMediaToWxDir error: " + t.getMessage());
+        }
+    }
+
+    private static Object getMsgInfoStorage() {
+        try {
+            if (sCL == null) { LogWriter.log(TAG, "getMsgInfoStorage: sCL null"); return null; }
+            Class<?> shortCls = com.leshao.v3.hook.VersionCompat.findMsgStorageShortClass(sCL);
+            if (shortCls == null) { LogWriter.log(TAG, "getMsgInfoStorage: shortCls null"); return null; }
+            Object service = XposedHelpers.callStaticMethod(shortCls, "b");
+            if (service == null) { LogWriter.log(TAG, "getMsgInfoStorage: service null"); return null; }
+            return XposedHelpers.callMethod(service, "u");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getMsgInfoStorage err: " + t.getMessage());
+            return null;
         }
     }
 

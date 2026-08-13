@@ -80,34 +80,20 @@ public class WeChatClasses {
     // ============== 核心类 ==============
 
     /** MsgInfo — 消息数据对象 */
-    public static Class<?> MsgInfo() { return clz("com.tencent.mm.storage.e9"); }
+    public static Class<?> MsgInfo() { return findAny("com.tencent.mm.storage.e9", "com.tencent.mm.storage.d9", "com.tencent.mm.storage.f9"); }
 
     /** 消息存储服务 */
     public static Class<?> MsgStorage() { return findAny("com.tencent.mm.storage.f9"); }
 
     /** ChatFooter — 聊天输入框 */
-    public static Class<?> ChatFooter() { return clz("com.tencent.mm.pluginsdk.ui.chat.ChatFooter"); }
-
-    /** ChatFooterCustom — 自定义聊天底部 */
-    public static Class<?> ChatFooterCustom() { return clz("com.tencent.mm.ui.chatting.ChatFooterCustom"); }
-
-    /** ChattingUIFragment — 聊天界面Fragment */
-    public static Class<?> ChattingUIFragment() { return clz("com.tencent.mm.ui.chatting.ChattingUIFragment"); }
-
-    /** LauncherUI — 主界面Activity */
-    public static Class<?> LauncherUI() { return clz("com.tencent.mm.ui.LauncherUI"); }
-
-    /** MainTabUI — 底部Tab */
-    public static Class<?> MainTabUI() { return clz("com.tencent.mm.ui.MainTabUI"); }
-
-    /** ContactInfoUI — 联系人详情页 */
-    public static Class<?> ContactInfoUI() { return clz("com.tencent.mm.plugin.profile.ui.ContactInfoUI"); }
-
-    /** SnsTimeLineUI — 朋友圈首页 */
-    public static Class<?> SnsTimeLineUI() { return clz("com.tencent.mm.plugin.sns.ui.SnsTimeLineUI"); }
-
-    /** RevokeMsgListener — 撤回消息监听器 */
-    public static Class<?> RevokeMsgListener() { return clz("com.tencent.mm.ui.chatting.RevokeMsgListener"); }
+    public static Class<?> ChatFooter() { return findAny("com.tencent.mm.pluginsdk.ui.chat.ChatFooter"); }
+    public static Class<?> ChatFooterCustom() { return findAny("com.tencent.mm.ui.chatting.ChatFooterCustom"); }
+    public static Class<?> ChattingUIFragment() { return findAny("com.tencent.mm.ui.chatting.ChattingUIFragment"); }
+    public static Class<?> LauncherUI() { return findAny("com.tencent.mm.ui.LauncherUI"); }
+    public static Class<?> MainTabUI() { return findAny("com.tencent.mm.ui.MainTabUI"); }
+    public static Class<?> ContactInfoUI() { return findAny("com.tencent.mm.plugin.profile.ui.ContactInfoUI"); }
+    public static Class<?> SnsTimeLineUI() { return findAny("com.tencent.mm.plugin.sns.ui.SnsTimeLineUI"); }
+    public static Class<?> RevokeMsgListener() { return findAny("com.tencent.mm.ui.chatting.RevokeMsgListener"); }
 
     // ============== 撤回相关 ==============
 

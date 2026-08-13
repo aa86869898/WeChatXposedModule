@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
@@ -136,6 +137,7 @@ public class ProfilePageView {
             cm.setPrimaryClip(cd);
             Toast.makeText(ctx, "微信ID已复制", Toast.LENGTH_SHORT).show();
         });
+        copyBtn.setPaintFlags(copyBtn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         wxidRow.addView(copyBtn);
 
         textCol.addView(wxidRow);
@@ -156,7 +158,7 @@ public class ProfilePageView {
         // 管理员配置入口 (仅管理员可见)
         String currentWxid = MainActivity.getUserWxid();
         if (currentWxid != null && ActivationManager.isAdmin(currentWxid)) {
-            root.addView(spacerV(ctx, d, 16));
+            root.addView(candyDivider(ctx, d));
             root.addView(sectionLabel(ctx, d, "管理员工具"));
             LinearLayout adminCard = makeCard(ctx, d);
 
@@ -344,5 +346,17 @@ public class ProfilePageView {
             }
         } catch (Throwable ignored) {}
         return null;
+    }
+
+    private static View candyDivider(Context ctx, float d) {
+        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
+        View v = new View(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
+        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+        v.setLayoutParams(lp);
+        v.setBackground(gd);
+        return v;
     }
 }

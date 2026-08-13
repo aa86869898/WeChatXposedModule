@@ -2,8 +2,11 @@ package com.leshao.v3.ui;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.drawable.GradientDrawable;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -427,6 +430,7 @@ public class ConfigPanels {
         btn.setText("从通讯录选择...");
         btn.setTextSize(13);
         btn.setPadding(dp(act, 10), dp(act, 6), dp(act, 10), dp(act, 6));
+        btn.setPaintFlags(btn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         btn.setOnClickListener(v -> showContactPicker(act, selected));
         root.addView(btn);
     }
@@ -472,6 +476,11 @@ public class ConfigPanels {
         filterEt.setHint("搜索联系人...");
         filterEt.setTextSize(13);
         filterEt.setPadding(dp(act, 10), dp(act, 6), dp(act, 10), dp(act, 6));
+        android.graphics.drawable.GradientDrawable filtBg = new android.graphics.drawable.GradientDrawable();
+        filtBg.setColor(AppColors.bg());
+        filtBg.setCornerRadius((int)(6 * dp(act, 1)));
+        filtBg.setStroke((int)(1.5f * dp(act, 1)), AppColors.candyPink());
+        filterEt.setBackground(filtBg);
         listRoot.addView(filterEt);
 
         LinearLayout checkList = new LinearLayout(act);
@@ -564,7 +573,11 @@ public class ConfigPanels {
         et.setTextSize(14);
         et.setInputType(inputType);
         et.setPadding(dp(act, 10), dp(act, 8), dp(act, 10), dp(act, 8));
-        et.setBackgroundColor(AppColors.bg());
+        android.graphics.drawable.GradientDrawable etBg = new android.graphics.drawable.GradientDrawable();
+        etBg.setColor(AppColors.bg());
+        etBg.setCornerRadius((int)(6 * dp(act, 1)));
+        etBg.setStroke((int)(1.5f * dp(act, 1)), AppColors.candyPink());
+        et.setBackground(etBg);
         root.addView(et);
         return et;
     }
@@ -623,5 +636,17 @@ public class ConfigPanels {
 
     private static int dp(Activity act, int dp) {
         return (int) (dp * act.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private static View candyDivider(Context ctx, float d) {
+        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
+        View v = new View(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
+        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+        v.setLayoutParams(lp);
+        v.setBackground(gd);
+        return v;
     }
 }

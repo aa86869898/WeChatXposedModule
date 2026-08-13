@@ -26,6 +26,7 @@ public class WmEntry {
 
     public static void injectAll(ClassLoader cl) {
         WmPrefs.init();
+        WmChatHook.initOnAppStart(cl);
         try {
             injectChatWindow(cl);
             injectGroupInfo(cl);

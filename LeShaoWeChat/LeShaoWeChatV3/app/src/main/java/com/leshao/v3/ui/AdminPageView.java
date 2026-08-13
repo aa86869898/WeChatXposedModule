@@ -5,6 +5,7 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
@@ -66,7 +67,11 @@ public class AdminPageView {
         wxidInput.setHintTextColor(AppColors.text2());
         wxidInput.setSingleLine(true);
         wxidInput.setPadding((int)(8*d), (int)(6*d), (int)(8*d), (int)(6*d));
-        wxidInput.setBackgroundColor(AppColors.card());
+        GradientDrawable wBg = new GradientDrawable();
+        wBg.setColor(AppColors.card());
+        wBg.setCornerRadius((int)(6 * d));
+        wBg.setStroke((int)(1.5f * d), AppColors.candyPink());
+        wxidInput.setBackground(wBg);
         wxidInput.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         inputRow.addView(wxidInput);
 
@@ -91,6 +96,7 @@ public class AdminPageView {
             toast(ctx, "已拉黑 " + wxid + ",即时生效");
             refreshBlacklistList(ctx, d, listContainer);
         });
+        addBtn.setPaintFlags(addBtn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         inputRow.addView(addBtn);
         card.addView(inputRow);
 
@@ -120,7 +126,7 @@ public class AdminPageView {
         }
         int i = 0;
         for (final String wxid : blacklist) {
-            if (i > 0) container.addView(itemDivider(ctx, d));
+            if (i > 0) container.addView(candyDivider(ctx, d));
             LinearLayout row = new LinearLayout(ctx);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
@@ -148,6 +154,7 @@ public class AdminPageView {
                 toast(ctx, "已解除 " + wxid + ",即时恢复");
                 refreshBlacklistList(ctx, d, container);
             });
+            removeBtn.setPaintFlags(removeBtn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
             row.addView(removeBtn);
             container.addView(row);
             i++;
@@ -185,6 +192,18 @@ public class AdminPageView {
     private static View spacerV(Context ctx, float d, int dpVal) {
         View v = new View(ctx);
         v.setLayoutParams(new LinearLayout.LayoutParams(-1, (int)(dpVal*d)));
+        return v;
+    }
+
+    private static View candyDivider(Context ctx, float d) {
+        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
+        View v = new View(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
+        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+        v.setLayoutParams(lp);
+        v.setBackground(gd);
         return v;
     }
 }

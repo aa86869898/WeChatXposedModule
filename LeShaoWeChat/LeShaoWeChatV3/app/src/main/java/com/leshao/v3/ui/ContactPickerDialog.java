@@ -218,6 +218,7 @@ public class ContactPickerDialog {
         toggleAll.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
         toggleAll.setBackground(roundBg(act, AppColors.ACCENT, btnRadius));
         toggleAll.setGravity(Gravity.CENTER);
+        toggleAll.setPaintFlags(toggleAll.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         TextView confirm = dialogBtn(act, "\u786e\u5b9a", AppColors.WHITE_TEXT, AppColors.ACCENT, btnRadius);
 
         btns.addView(cancel, btnLp);
@@ -316,6 +317,7 @@ public class ContactPickerDialog {
         tv.setGravity(Gravity.CENTER);
         tv.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
         tv.setBackground(roundBg(act, selected ? AppColors.ACCENT : AppColors.DIVIDER, radius));
+        tv.setPaintFlags(tv.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         return tv;
     }
 
@@ -445,6 +447,7 @@ public class ContactPickerDialog {
         btn.setGravity(Gravity.CENTER);
         btn.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
         btn.setBackground(roundBg(act, bgColor, radius));
+        btn.setPaintFlags(btn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         return btn;
     }
 

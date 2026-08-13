@@ -236,6 +236,7 @@ public class VoiceForwardHook {
                 if (apkPath == null) { LogWriter.log(TAG, "APK path null"); return; }
 
                 dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+                try {
                 java.util.Enumeration<String> entries = dex.entries();
                 int clsCount = 0, hookedCount = 0;
 
@@ -260,8 +261,10 @@ public class VoiceForwardHook {
                         }
                     } catch (Throwable ignored) {}
                 }
-                dex.close();
                 LogWriter.log(TAG, "scan " + java.util.Arrays.toString(pkgs) + ": " + clsCount + " classes, " + hookedCount + " methods");
+                } finally {
+                    dex.close();
+                }
             } catch (Throwable t) {
                 LogWriter.log(TAG, "scan error: " + t.getMessage());
             }
@@ -276,11 +279,11 @@ public class VoiceForwardHook {
             String apkPath = ContextManager.getApkPath();
             if (apkPath == null) return;
             dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+            try {
             java.util.Enumeration<String> entries = dex.entries();
             while (entries.hasMoreElements()) {
                 String cn = entries.nextElement();
                 if (!cn.endsWith("." + simpleName)) continue;
-                // 只匹配 viewitems 或 component 包
                 if (!cn.startsWith("com.tencent.mm.ui.chatting.viewitems.")
                     && !cn.startsWith("com.tencent.mm.ui.chatting.component.")) continue;
                 try {
@@ -293,7 +296,9 @@ public class VoiceForwardHook {
                 } catch (Throwable ignored) {}
                 break;
             }
-            dex.close();
+            } finally {
+                dex.close();
+            }
         } catch (Throwable t) {
             LogWriter.log(TAG, "FULL-hook error: " + t.getMessage());
         }
@@ -1200,6 +1205,7 @@ public class VoiceForwardHook {
             String apkPath = ContextManager.getApkPath();
             if (apkPath == null) return;
             dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+            try {
             Enumeration<String> entries = dex.entries();
 
             while (entries.hasMoreElements()) {
@@ -1229,16 +1235,16 @@ public class VoiceForwardHook {
                                             if (test != null && test.matches("[0-9a-f]{20,}")) {
                                                 sGClass = cn;
                                                 sGMethod = "g";
-                                                LogWriter.log(TAG, "◆discovered g(): " + cn + ".g(String,String)→String test=" + test);
+                                                LogWriter.log(TAG, "discovered g(): " + cn + ".g(String,String)String test=" + test);
                                             } else {
-                                                LogWriter.log(TAG, "◆g() test miss: " + cn + ".g → " + test);
+                                                LogWriter.log(TAG, "g() test miss: " + cn + ".g " + test);
                                             }
                                         } catch (java.lang.reflect.InvocationTargetException e) {
                                             sGClass = cn;
                                             sGMethod = "g";
-                                            LogWriter.log(TAG, "◆discovered g(): " + cn + ".g(String,String)→String (trusted, ITE on init)");
+                                            LogWriter.log(TAG, "discovered g(): " + cn + ".g(String,String)String (trusted, ITE on init)");
                                         } catch (Throwable e) {
-                                            LogWriter.log(TAG, "◆g() test fail: " + cn + ".g → " + e.getClass().getSimpleName() + " " + e.getMessage());
+                                            LogWriter.log(TAG, "g() test fail: " + cn + ".g " + e.getClass().getSimpleName() + " " + e.getMessage());
                                         }
                                     }
                                 }
@@ -1253,7 +1259,7 @@ public class VoiceForwardHook {
                                         && m.getParameterTypes()[2] == int.class) {
                                         sTClass = cn;
                                         sTMethod = "t";
-                                        LogWriter.log(TAG, "◆discovered t(): " + cn + ".t(" + sig(m) + ")");
+                                        LogWriter.log(TAG, "discovered t(): " + cn + ".t(" + sig(m) + ")");
                                     }
                                 }
                             }
@@ -1262,7 +1268,9 @@ public class VoiceForwardHook {
                 } catch (Throwable ignored) {}
             }
             LogWriter.log(TAG, "discoverVoiceApi: g=" + sGClass + "." + sGMethod + " t=" + sTClass + "." + sTMethod + " path=" + sPathServiceClass + "." + sPathMethod);
-            dex.close();
+            } finally {
+                dex.close();
+            }
         } catch (Throwable t) {
             LogWriter.log(TAG, "◆find error: " + t.getMessage());
         }

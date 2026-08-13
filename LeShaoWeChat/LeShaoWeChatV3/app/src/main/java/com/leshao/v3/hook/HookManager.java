@@ -4,6 +4,8 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -21,10 +23,10 @@ import java.util.ArrayList;
 public class HookManager {
 
     private static final Map<String, XC_MethodHook.Unhook> trackedHooks = new ConcurrentHashMap<>();
-    private static final List<Runnable> pendingTasks = new ArrayList<>();
-    private static final List<String> hookLog = new ArrayList<>();
-    private static int successCount = 0;
-    private static int failCount = 0;
+    private static final List<Runnable> pendingTasks = new CopyOnWriteArrayList<>();
+    private static final List<String> hookLog = new CopyOnWriteArrayList<>();
+    private static final AtomicInteger successCount = new AtomicInteger(0);
+    private static final AtomicInteger failCount = new AtomicInteger(0);
     private static boolean activated = false;
 
     public static void register(Runnable task) {
@@ -51,7 +53,7 @@ public class HookManager {
                 }
                 idx++;
             }
-            XposedBridge.log("[HookManager] activateAll DONE (async), success=" + successCount + " fail=" + failCount);
+            XposedBridge.log("[HookManager] activateAll DONE (async), success=" + successCount.get() + " fail=" + failCount.get());
         }, "leshao-hook-activate").start();
     }
 
@@ -69,11 +71,11 @@ public class HookManager {
                 var unhook = XposedBridge.hookMethod(method, callback);
                 trackedHooks.put(key, unhook);
             }
-            successCount++;
+            successCount.incrementAndGet();
             log("✅ " + key + " → " + clazz.getSimpleName() + "." + methodName);
             return true;
         } catch (Throwable t) {
-            failCount++;
+            failCount.incrementAndGet();
             log("❌ " + key + " → " + t.getMessage());
             return false;
         }

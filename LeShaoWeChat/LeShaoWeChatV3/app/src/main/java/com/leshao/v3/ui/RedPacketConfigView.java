@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
@@ -70,28 +71,28 @@ public class RedPacketConfigView {
         }));
         root.addView(card1);
 
-        root.addView(spacerV(ctx, d, 12));
+        root.addView(candyDivider(ctx, d));
         root.addView(sectionLabel(ctx, d, "领取范围"));
         LinearLayout card2 = makeCard(ctx, d);
         card2.addView(switchRow(ctx, d, "私聊红包", "自动领取私聊中的红包", priv, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_PRIVATE, on).apply();
             RedPacketHook.setPrivateEnabled(on);
         }));
-        card2.addView(itemDivider(ctx, d));
+        card2.addView(candyDivider(ctx, d));
         card2.addView(switchRow(ctx, d, "群聊红包", "自动领取群聊中的红包", group, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_GROUP, on).apply();
             RedPacketHook.setGroupEnabled(on);
         }));
         root.addView(card2);
 
-        root.addView(spacerV(ctx, d, 12));
+        root.addView(candyDivider(ctx, d));
         root.addView(sectionLabel(ctx, d, "时间段过滤"));
         LinearLayout card3 = makeCard(ctx, d);
         card3.addView(switchRow(ctx, d, "开启时间段过滤", "在指定时间段内不领取红包", timeOn, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_TIME_ON, on).apply();
             RedPacketHook.setTimeFilter(on, timeStart, timeEnd);
         }));
-        card3.addView(itemDivider(ctx, d));
+        card3.addView(candyDivider(ctx, d));
         card3.addView(timeRangeRow(ctx, d, timeStart, timeEnd, (s, e) -> {
             if (prefs != null) {
                 prefs.edit().putString(KEY_TIME_START, s).putString(KEY_TIME_END, e).apply();
@@ -100,7 +101,7 @@ public class RedPacketConfigView {
         }));
         root.addView(card3);
 
-        root.addView(spacerV(ctx, d, 12));
+        root.addView(candyDivider(ctx, d));
         root.addView(sectionLabel(ctx, d, "关键词过滤"));
         LinearLayout card4 = makeCard(ctx, d);
         card4.addView(switchRow(ctx, d, "排除关键词", "包含这些关键词的红包不领取", kwExOn, (v, on) -> {
@@ -108,19 +109,19 @@ public class RedPacketConfigView {
             Set<String> set = parseKeywords(prefs != null ? prefs.getString(KEY_KW_EXCLUDE, "") : "");
             RedPacketHook.setKeywordExclude(on, set);
         }));
-        card4.addView(itemDivider(ctx, d));
+        card4.addView(candyDivider(ctx, d));
         card4.addView(keywordRow(ctx, d, "排除关键词(空格分隔)", kwEx, val -> {
             if (prefs != null) prefs.edit().putString(KEY_KW_EXCLUDE, val).apply();
             Set<String> set = parseKeywords(val);
             RedPacketHook.setKeywordExclude(prefs != null && prefs.getBoolean(KEY_KW_EXCLUDE_ON, false), set);
         }));
-        card4.addView(itemDivider(ctx, d));
+        card4.addView(candyDivider(ctx, d));
         card4.addView(switchRow(ctx, d, "包含关键词", "只领取包含这些关键词的红包", kwInOn, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_KW_INCLUDE_ON, on).apply();
             Set<String> set = parseKeywords(prefs != null ? prefs.getString(KEY_KW_INCLUDE, "") : "");
             RedPacketHook.setKeywordInclude(on, set);
         }));
-        card4.addView(itemDivider(ctx, d));
+        card4.addView(candyDivider(ctx, d));
         card4.addView(keywordRow(ctx, d, "包含关键词(空格分隔)", kwIn, val -> {
             if (prefs != null) prefs.edit().putString(KEY_KW_INCLUDE, val).apply();
             Set<String> set = parseKeywords(val);
@@ -128,7 +129,7 @@ public class RedPacketConfigView {
         }));
         root.addView(card4);
 
-        root.addView(spacerV(ctx, d, 12));
+        root.addView(candyDivider(ctx, d));
         root.addView(sectionLabel(ctx, d, "秒抢名单"));
         LinearLayout card5 = makeCard(ctx, d);
         card5.addView(pickerRow(ctx, d, parentAct, "好友秒抢白名单", "指定的好友红包立即秒抢，无延迟", fastPriv,
@@ -136,7 +137,7 @@ public class RedPacketConfigView {
                 if (prefs != null) prefs.edit().putString(KEY_FAST_PRIVATE, val).apply();
                 RedPacketHook.setFastPrivateWxids(parseIds(val));
             }));
-        card5.addView(itemDivider(ctx, d));
+        card5.addView(candyDivider(ctx, d));
         card5.addView(pickerRow(ctx, d, parentAct, "群聊秒抢白名单", "指定的群聊红包立即秒抢，无延迟", fastGrp,
             ContactPickerDialog.MODE_GROUP, val -> {
                 if (prefs != null) prefs.edit().putString(KEY_FAST_GROUP, val).apply();
@@ -144,7 +145,7 @@ public class RedPacketConfigView {
             }));
         root.addView(card5);
 
-        root.addView(spacerV(ctx, d, 12));
+        root.addView(candyDivider(ctx, d));
         root.addView(sectionLabel(ctx, d, "播报设置"));
         LinearLayout card6 = makeCard(ctx, d);
         card6.addView(switchRow(ctx, d, "抢到红包播报金额", "通过TTS语音播报抢到的金额", ttsOn, (v, on) -> {
@@ -153,7 +154,7 @@ public class RedPacketConfigView {
         }));
         root.addView(card6);
 
-        root.addView(spacerV(ctx, d, 12));
+        root.addView(candyDivider(ctx, d));
         root.addView(sectionLabel(ctx, d, "延迟设置"));
         LinearLayout card7 = makeCard(ctx, d);
         card7.addView(delayRow(ctx, d, delayMs, ms -> {
@@ -467,4 +468,16 @@ public class RedPacketConfigView {
     public interface DelayCallback { void onChange(int ms); }
     public interface TimeCallback { void onChange(String start, String end); }
     public interface StringCallback { void onChange(String value); }
+
+    private static View candyDivider(Context ctx, float d) {
+        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
+        View v = new View(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
+        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+        v.setLayoutParams(lp);
+        v.setBackground(gd);
+        return v;
+    }
 }

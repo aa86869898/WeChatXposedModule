@@ -146,6 +146,8 @@ public class SubPageActivity {
                 return RedPacketConfigView.create(ctx, parentAct);
             case 99: // 个人中心
                 return ProfilePageView.create(ctx, parentAct);
+            case 14: // 聊天分组
+                return ChatGroupPageView.create(ctx, parentAct);
             case 98: // 管理员工具
                 return AdminPageView.create(ctx, parentAct);
             default:

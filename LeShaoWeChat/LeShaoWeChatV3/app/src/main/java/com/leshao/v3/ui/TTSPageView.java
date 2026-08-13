@@ -5,7 +5,9 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.media.MediaPlayer;
 import android.os.Environment;
 import android.text.InputType;
@@ -81,7 +83,7 @@ public class TTSPageView {
 
         // ★ TTS 引擎选择 + 配音魔方入口 (置顶)
         root.addView(buildTtsEngineCard(ctx, parentAct, d, prefs));
-        root.addView(spacerV(ctx, d, 12));
+        root.addView(candyDivider(ctx, d));
 
 boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true);
         boolean announceImage = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_IMAGE, true);
@@ -119,7 +121,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         }));
         root.addView(cardTts);
 
-        root.addView(spacerV(ctx, d, 12));
+        root.addView(candyDivider(ctx, d));
         root.addView(sectionLabel(ctx, d, "\u81ea\u52a8\u64ad\u62a5\u7c7b\u578b"));
 
         LinearLayout card1 = makeCard(ctx, d);
@@ -188,7 +190,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         }));
         root.addView(card1);
 
-        root.addView(spacerV(ctx, d, 12));
+        root.addView(candyDivider(ctx, d));
         root.addView(sectionLabel(ctx, d, "\u81ea\u52a8\u64ad\u62a5\u89c4\u5219"));
 
         LinearLayout card2 = makeCard(ctx, d);
@@ -201,7 +203,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         }));
         root.addView(card2);
 
-        root.addView(spacerV(ctx, d, 12));
+        root.addView(candyDivider(ctx, d));
         LinearLayout card3 = makeCard(ctx, d);
         card3.addView(pickerRow(ctx, d, parentAct, "\u81ea\u52a8\u64ad\u62a5\u767d\u540d\u5355\u5217\u8868", "\u53ea\u64ad\u62a5\u6307\u5b9a\u597d\u53cb\u6216\u7fa4\u804a\u7684\u6d88\u606f", whitelist,
             ContactPickerDialog.MODE_FRIEND, val -> {
@@ -214,7 +216,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
             }));
         root.addView(card3);
 
-        root.addView(spacerV(ctx, d, 12));
+        root.addView(candyDivider(ctx, d));
         LinearLayout card4 = makeCard(ctx, d);
         card4.addView(switchRow(ctx, d, "\u4ec5\u5728\u65f6\u95f4\u6bb5\u5185\u81ea\u52a8\u64ad\u62a5", "\u5728\u6307\u5b9a\u65f6\u6bb5\u5185\u4e0d\u64ad\u62a5\u6d88\u606f", quietOn, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_QUIET_ON, on).apply();
@@ -227,7 +229,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         }));
         root.addView(card4);
 
-        root.addView(spacerV(ctx, d, 12));
+        root.addView(candyDivider(ctx, d));
         LinearLayout card5 = makeCard(ctx, d);
         card5.addView(switchRow(ctx, d, "\u5355\u6761\u6d88\u606f\u64ad\u62a5\u5b57\u7b26\u4e0a\u9650\u8bbe\u7f6e", "\u8d85\u8fc7\u6b64\u957f\u5ea6\u7684\u6587\u5b57\u5c06\u88ab\u622a\u65ad", truncate, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_TEXT_TRUNCATE, on).apply();
@@ -698,7 +700,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         titleBar.addView(keyBtn);
 
         outerLayout.addView(titleBar);
-        outerLayout.addView(spacerV(ctx, d, 10));
+        outerLayout.addView(candyDivider(ctx, d));
 
         // 内容区卡片（可滚动，weight=1）
         LinearLayout contentCard = new LinearLayout(ctx);
@@ -757,7 +759,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         bottomBar.addView(closeBtn, closeLp);
 
-        outerLayout.addView(spacerV(ctx, d, 10));
+        outerLayout.addView(candyDivider(ctx, d));
         outerLayout.addView(bottomBar);
 
         AlertDialog dialog = new AlertDialog.Builder(parentAct)
@@ -907,9 +909,10 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         android.graphics.drawable.GradientDrawable sBg = new android.graphics.drawable.GradientDrawable();
         sBg.setColor(AppColors.inputBg());
         sBg.setCornerRadius((int)(6 * d));
+        sBg.setStroke((int)(1.5f * d), AppColors.candyPink());
         searchEt.setBackground(sBg);
         voiceList.addView(searchEt);
-        voiceList.addView(spacerV(ctx, d, 6));
+
 
         // 刷新回调：重新构建列表并保留搜索关键词
         final Runnable[] refreshUi = new Runnable[1];
@@ -1037,7 +1040,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         // 名称 + 演员（流体渐变霓虹糖果色 + 加粗）
         String displayName = vi.displayName != null ? vi.displayName : vi.voiceId;
         String subtitle = (vi.actor != null && !vi.actor.isEmpty()) ? " (" + vi.actor + ")" : "";
-        TextView vName = new NeonTextView(ctx);
+        TextView vName = new TextView(ctx);
         vName.setText(displayName + subtitle);
         vName.setTextSize(13);
         vName.setTextColor(AppColors.text1());
@@ -1045,17 +1048,14 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         LinearLayout.LayoutParams vnlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         vRow.addView(vName, vnlp);
 
-        // 试听按钮 - 耳机图标
-        Button listenBtn = new Button(ctx);
-        listenBtn.setText("\uD83C\uDFA7");
-        listenBtn.setTextSize(14);
-        listenBtn.setAllCaps(false);
-        listenBtn.setTextColor(AppColors.WHITE_TEXT);
-        android.graphics.drawable.GradientDrawable lbBg = new android.graphics.drawable.GradientDrawable();
-        lbBg.setColor(AppColors.accent());
-        lbBg.setCornerRadius((int)(4 * d));
-        listenBtn.setBackground(lbBg);
+        // 试听按钮
+        TextView listenBtn = new TextView(ctx);
+        listenBtn.setText("试听");
+        listenBtn.setTextSize(12);
+        listenBtn.setTextColor(AppColors.accent());
+        listenBtn.setGravity(Gravity.CENTER);
         listenBtn.setPadding((int)(8 * d), (int)(4 * d), (int)(8 * d), (int)(4 * d));
+        listenBtn.getPaint().setFlags(Paint.UNDERLINE_TEXT_FLAG);
         vRow.addView(listenBtn);
 
         listenBtn.setOnClickListener(v3 -> {
@@ -1090,30 +1090,6 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
     }
 
     // ===== 音色数据模型 =====
-
-    /** 流体渐变霓虹糖果色文字 */
-    static class NeonTextView extends TextView {
-        private static final int[] NEON = {0xFFFF10F0, 0xFF7B2FF7, 0xFF36D1E8};
-        private final android.graphics.Paint mPaint;
-
-        NeonTextView(Context ctx) {
-            super(ctx);
-            mPaint = getPaint();
-        }
-
-        @Override
-        protected void onDraw(android.graphics.Canvas canvas) {
-            float w = getWidth();
-            float h = getHeight();
-            if (w > 1 && h > 1) {
-                android.graphics.LinearGradient g = new android.graphics.LinearGradient(
-                        0, 0, w, h, NEON, null, android.graphics.Shader.TileMode.CLAMP);
-                mPaint.setShader(g);
-            }
-            super.onDraw(canvas);
-            mPaint.setShader(null);
-        }
-    }
 
     static class VoiceItem {
         String voiceId;
@@ -1350,5 +1326,17 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         char first = raw.trim().charAt(0);
         if (first != '{' && first != '[') throw new Exception("接口返回非JSON数据");
         return new JSONObject(raw);
+    }
+
+    private static View candyDivider(Context ctx, float d) {
+        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
+        View v = new View(ctx);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
+        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+        v.setLayoutParams(lp);
+        v.setBackground(gd);
+        return v;
     }
 }
