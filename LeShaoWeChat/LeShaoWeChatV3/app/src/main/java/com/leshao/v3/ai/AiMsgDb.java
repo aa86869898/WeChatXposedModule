@@ -35,11 +35,10 @@ public class AiMsgDb {
                 return out;
             }
             int n = limit > 0 ? limit : 200;
-            c = rawQuery(db,
-                    "SELECT msgContent, createTime, isSend, type FROM message WHERE talker=? ORDER BY createTime DESC LIMIT " + n,
-                    new String[]{talker});
+            c = queryMessage(db, talker, n);
             if (c == null) {
                 LogWriter.log(TAG, "readRecent: 查询返回 null talker=" + talker);
+                diagnoseMessageTable(db);
                 return out;
             }
             int rows = c.getCount();
@@ -63,6 +62,32 @@ public class AiMsgDb {
             try { if (c != null) c.close(); } catch (Throwable ignored) {}
         }
         return out;
+    }
+
+    private Cursor queryMessage(Object db, String talker, int n) {
+        String[] colVariants = {"msgContent", "content"};
+        for (String col : colVariants) {
+            String sql = "SELECT " + col + ", createTime, isSend, type FROM message"
+                    + " WHERE talker=? ORDER BY createTime DESC LIMIT " + n;
+            Cursor c = rawQuery(db, sql, new String[]{talker});
+            if (c != null) return c;
+        }
+        return null;
+    }
+
+    private void diagnoseMessageTable(Object db) {
+        try {
+            Cursor c = rawQuery(db, "SELECT * FROM message LIMIT 1", null);
+            if (c != null) {
+                String[] cols = c.getColumnNames();
+                LogWriter.log(TAG, "message 表列名: " + String.join(",", cols));
+                c.close();
+            } else {
+                LogWriter.log(TAG, "message 表 SELECT * 也返回 null");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "diagnose message 异常: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+        }
     }
 
     private Object openDb() {
@@ -149,8 +174,11 @@ public class AiMsgDb {
             if (r != null) LogWriter.log(TAG, "invokeRaw: " + m.getName()
                     + " 返回非 Cursor 类型=" + r.getClass().getName());
         } catch (Throwable t) {
-            LogWriter.log(TAG, "invokeRaw: " + m.getName() + " 失败 "
-                    + t.getClass().getSimpleName() + ":" + t.getMessage());
+            Throwable root = t;
+            while (root.getCause() != null && root.getCause() != root) root = root.getCause();
+            String sig = java.util.Arrays.toString(m.getParameterTypes());
+            LogWriter.log(TAG, "invokeRaw: " + m.getName() + sig + " 失败 "
+                    + root.getClass().getName() + ": " + root.getMessage());
         }
         return null;
     }
