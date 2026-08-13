@@ -41,17 +41,21 @@ public class AiFeature {
     }
 
     private static void run(Activity act, String prompt, boolean replaceInput) {
+        com.leshao.v3.LogWriter.log("AiFeature", "run: 发起请求 model=" + AiConfig.activeModel()
+                + " replace=" + replaceInput + " promptLen=" + prompt.length());
         Toast.makeText(act, "AI 处理中…", Toast.LENGTH_SHORT).show();
         List<AiClient.ChatMessage> req = new ArrayList<>();
         req.add(new AiClient.ChatMessage("user", prompt));
         AiClient.chatAsync(null, req, new AiClient.Callback() {
             @Override public void onResult(String text) {
+                com.leshao.v3.LogWriter.log("AiFeature", "run: onResult len=" + (text == null ? 0 : text.length()));
                 ChatHooks.MAIN.post(() -> {
                     if (replaceInput) ChatHooks.fillInput(act, text);
                     else showResultDialog(act, text);
                 });
             }
             @Override public void onError(String msg) {
+                com.leshao.v3.LogWriter.log("AiFeature", "run: onError " + msg);
                 ChatHooks.MAIN.post(() -> Toast.makeText(act, "失败: " + msg, Toast.LENGTH_LONG).show());
             }
         });

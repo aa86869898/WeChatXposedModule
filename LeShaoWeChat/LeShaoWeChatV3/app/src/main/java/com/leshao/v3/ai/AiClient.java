@@ -29,8 +29,14 @@ public class AiClient {
     public static void chatAsync(String system, List<ChatMessage> msgs, Callback cb) {
         POOL.execute(() -> {
             try { cb.onResult(chatSync(system, msgs)); }
-            catch (Exception e) { cb.onError(e.getMessage()); }
+            catch (Exception e) { cb.onError(diagError(e)); }
         });
+    }
+
+    private static String diagError(Exception e) {
+        String host = "";
+        try { host = new URL(AiConfig.activeBaseUrl()).getHost(); } catch (Throwable ignored) {}
+        return "[" + AiConfig.activeModel() + "@" + host + "] " + e.getMessage();
     }
 
     public static String chatSync(String system, List<ChatMessage> msgs) throws Exception {
