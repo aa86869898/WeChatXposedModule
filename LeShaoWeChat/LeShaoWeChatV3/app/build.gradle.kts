@@ -11,7 +11,7 @@ android {
         applicationId = "com.leshao.v3"
         minSdk = 24
         targetSdk = 35
-        versionCode = 624
+        versionCode = 626
         versionName = "3.9.0-v609"
     }
 
