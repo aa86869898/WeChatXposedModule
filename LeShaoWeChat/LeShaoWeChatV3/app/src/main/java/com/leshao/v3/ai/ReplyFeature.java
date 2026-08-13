@@ -9,8 +9,8 @@ import com.leshao.v3.LogWriter;
 
 public class ReplyFeature {
     private static final String TAG = "ReplyFeature";
-    private static String lastKey = "";
-    private static final long RECENT_WINDOW_MS = 120_000L;
+    private static final java.util.Map<String, String> lastKeyMap = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final long RECENT_WINDOW_MS = 1_800_000L;
 
     public static void onIncoming(String talker, String content, ClassLoader cl) {
         if (content == null || content.isEmpty()) return;
@@ -52,8 +52,8 @@ public class ReplyFeature {
 
     private static void doGenerate(String talker, String content, ClassLoader cl) {
         String key = talker + "|" + content.hashCode();
-        if (key.equals(lastKey)) return;
-        lastKey = key;
+        if (key.equals(lastKeyMap.get(talker))) return;
+        lastKeyMap.put(talker, key);
         LogWriter.log(TAG, "doGenerate: 处理 talker=" + talker + " content=" + content);
 
         List<MessageReader.ChatMsg> mem = ChatMemory.get(talker);
