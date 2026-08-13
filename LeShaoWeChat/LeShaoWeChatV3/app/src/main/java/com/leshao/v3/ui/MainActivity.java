@@ -644,7 +644,7 @@ public class MainActivity {
 
         // AI 聊天助手入口
         card2.addView(candyDivider(ctx, d));
-        LogWriter.log(TAG, "showMainPanel: adding AI 入口 v628");
+        LogWriter.log(TAG, "showMainPanel: adding AI 入口 v629");
         View aiItem = makeListRow(ctx, d, 0x1F916, "AI助手", 0, false, v -> {
             dismissDialog();
             LogWriter.log(TAG, "AI 入口: 点击，打开微信内面板");

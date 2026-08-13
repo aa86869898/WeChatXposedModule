@@ -152,7 +152,7 @@ public class MainHook implements IXposedHookLoadPackage {
                         try {
                             AiConfig.init(ctx);
                             ChatHooks.install(lpparam);
-                            LogWriter.log(TAG, "[MainHook] AI 聊天助手已加载 v628");
+                            LogWriter.log(TAG, "[MainHook] AI 聊天助手已加载 v629");
                         } catch (Throwable t) {
                             LogWriter.log(TAG, "[MainHook] AI install FAIL: " + t.getMessage());
                         }

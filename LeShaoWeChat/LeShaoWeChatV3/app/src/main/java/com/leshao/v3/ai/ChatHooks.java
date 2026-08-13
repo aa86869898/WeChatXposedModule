@@ -11,6 +11,8 @@ import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.wm.utils.WmReflect;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -274,44 +276,81 @@ public class ChatHooks {
         if (act == null) return null;
         try {
             android.view.View decor = act.getWindow().getDecorView();
-            // 1) 精确类名 MMEditText（聊天输入框），避免误中搜索框等其它 EditText
-            EditText mm = findByExactName(decor, "com.tencent.mm.ui.widget.MMEditText");
-            if (mm != null) return mm;
-            // 2) ChatFooter 内找 EditText
+            // 1) ChatFooter.l4/m 字段（8.0.76 反编译确认的精确坐标，优先）
             Object footer = findFooter(act);
-            if (footer instanceof android.view.View) {
-                EditText et = findEditTextRecursive((android.view.View) footer);
-                if (et != null) return et;
+            if (footer != null) {
+                LogWriter.log(TAG, "findChatInput: 找到 ChatFooter=" + footer.getClass().getName());
+                EditText byField = findInputByFooterField(footer);
+                if (byField != null) {
+                    LogWriter.log(TAG, "findChatInput: 通过字段命中 " + byField.getClass().getName()
+                            + " 文本长度=" + byField.getText().length());
+                    return byField;
+                }
+                if (footer instanceof android.view.View) {
+                    EditText et = findEditTextRecursive((android.view.View) footer);
+                    if (et != null) {
+                        LogWriter.log(TAG, "findChatInput: ChatFooter 内递归命中 " + et.getClass().getName());
+                        return et;
+                    }
+                }
+            } else {
+                LogWriter.log(TAG, "findChatInput: 未找到 ChatFooter（" + AiConst.CLS_CHAT_FOOTER + "）");
             }
-            // 2.5) ChatFooter.l4 字段（8.0.76 反编译确认的 MMEditText 字段）
-            EditText byField = findInputByFooterField(footer);
-            if (byField != null) return byField;
+            // 2) 遍历所有 MMEditText，选可见且非空的
+            EditText mm = findBestMMEditText(decor);
+            if (mm != null) return mm;
             // 3) 任意 EditText 兜底
             return findEditTextRecursive(decor);
         } catch (Throwable t) {
+            LogWriter.log(TAG, "findChatInput 异常: " + t.getClass().getSimpleName() + ": " + t.getMessage());
             return null;
         }
     }
 
-    private static EditText findByExactName(android.view.View v, String name) {
-        if (name.equals(v.getClass().getName()) && v instanceof EditText) return (EditText) v;
+    private static EditText findBestMMEditText(android.view.View v) {
+        List<EditText> list = new ArrayList<>();
+        collectMMEditText(v, list);
+        LogWriter.log(TAG, "findBestMMEditText: 共找到 " + list.size() + " 个 MMEditText");
+        for (EditText et : list) {
+            if (et.getVisibility() == android.view.View.VISIBLE && et.getText().length() > 0) {
+                LogWriter.log(TAG, "findBestMMEditText: 选中可见非空, 长度=" + et.getText().length());
+                return et;
+            }
+        }
+        for (EditText et : list) {
+            if (et.getVisibility() == android.view.View.VISIBLE) return et;
+        }
+        if (!list.isEmpty()) return list.get(0);
+        return null;
+    }
+
+    private static void collectMMEditText(android.view.View v, List<EditText> out) {
+        if (v instanceof EditText && "com.tencent.mm.ui.widget.MMEditText".equals(v.getClass().getName())) {
+            out.add((EditText) v);
+        }
         if (v instanceof android.view.ViewGroup) {
             android.view.ViewGroup g = (android.view.ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) {
-                EditText r = findByExactName(g.getChildAt(i), name);
-                if (r != null) return r;
+                collectMMEditText(g.getChildAt(i), out);
             }
         }
-        return null;
     }
 
     private static EditText findInputByFooterField(Object footer) {
         if (footer == null) return null;
-        for (String f : new String[]{"l4", "m"}) {
-            try {
-                Object v = XposedHelpers.getObjectField(footer, f);
-                if (v instanceof EditText) return (EditText) v;
-            } catch (Throwable ignored) {}
+        try {
+            Object v = XposedHelpers.getObjectField(footer, "l4");
+            if (v instanceof EditText) return (EditText) v;
+            if (v != null) LogWriter.log(TAG, "findInputByFooterField: l4 类型=" + v.getClass().getName());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "findInputByFooterField: l4 读取失败 " + t.getClass().getSimpleName());
+        }
+        try {
+            Object v = XposedHelpers.getObjectField(footer, "m");
+            if (v instanceof EditText) return (EditText) v;
+            if (v != null) LogWriter.log(TAG, "findInputByFooterField: m 类型=" + v.getClass().getName());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "findInputByFooterField: m 读取失败 " + t.getClass().getSimpleName());
         }
         return null;
     }
