@@ -73,14 +73,12 @@ public class AiFeature {
 
     private static String getInputText(Activity act) {
         try {
-            android.widget.EditText et = ChatHooks.findChatInput(act);
-            if (et == null) {
+            String txt = ChatHooks.readInputText(act);
+            if (txt == null) {
                 com.leshao.v3.LogWriter.log("AiFeature", "getInputText: 未找到输入框");
                 return null;
             }
-            String txt = et.getText().toString();
-            com.leshao.v3.LogWriter.log("AiFeature", "getInputText: 输入框类=" + et.getClass().getName()
-                    + " 长度=" + txt.length());
+            com.leshao.v3.LogWriter.log("AiFeature", "getInputText: 长度=" + txt.length());
             return txt;
         } catch (Throwable t) { return null; }
     }

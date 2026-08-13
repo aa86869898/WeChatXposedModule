@@ -258,12 +258,13 @@ public class ChatHooks {
 
     public static void fillInput(Activity act, String text) {
         try {
-            EditText et = findChatInput(act);
-            if (et != null) {
-                MAIN.post(() -> { et.setText(text); et.setSelection(text.length()); });
-            } else {
+            Object input = findInputView(act);
+            if (input == null) {
                 LogWriter.log(TAG, "fillInput: 未找到输入框");
+                return;
             }
+            LogWriter.log(TAG, "fillInput: 目标=" + input.getClass().getName());
+            MAIN.post(() -> reflectSetText(input, text));
         } catch (Throwable t) { android.util.Log.e("WxAi", "填入输入框失败", t); }
     }
 
@@ -272,38 +273,104 @@ public class ChatHooks {
         MAIN.postDelayed(() -> clickSend(act), 400);
     }
 
-    public static EditText findChatInput(Activity act) {
+    public static String readInputText(Activity act) {
+        if (act == null) return null;
+        Object input = findInputView(act);
+        if (input == null) {
+            LogWriter.log(TAG, "readInputText: 未找到输入框");
+            return null;
+        }
+        String txt = reflectGetText(input);
+        LogWriter.log(TAG, "readInputText: 类=" + input.getClass().getName()
+                + " 长度=" + (txt == null ? -1 : txt.length()));
+        return txt;
+    }
+
+    public static Object findInputView(Activity act) {
         if (act == null) return null;
         try {
             android.view.View decor = act.getWindow().getDecorView();
-            // 1) ChatFooter.l4/m 字段（8.0.76 反编译确认的精确坐标，优先）
             Object footer = findFooter(act);
             if (footer != null) {
-                LogWriter.log(TAG, "findChatInput: 找到 ChatFooter=" + footer.getClass().getName());
-                EditText byField = findInputByFooterField(footer);
-                if (byField != null) {
-                    LogWriter.log(TAG, "findChatInput: 通过字段命中 " + byField.getClass().getName()
-                            + " 文本长度=" + byField.getText().length());
-                    return byField;
+                LogWriter.log(TAG, "findInputView: 找到 ChatFooter=" + footer.getClass().getName());
+                // m 字段：MMFlexEditText（真实输入框，非 EditText 子类，需反射读写）
+                Object m = getFieldOrNull(footer, "m");
+                if (m != null) {
+                    LogWriter.log(TAG, "findInputView: m 字段命中=" + m.getClass().getName());
+                    return m;
+                }
+                Object l4 = getFieldOrNull(footer, "l4");
+                if (l4 != null) {
+                    LogWriter.log(TAG, "findInputView: l4 字段命中=" + l4.getClass().getName());
+                    return l4;
                 }
                 if (footer instanceof android.view.View) {
                     EditText et = findEditTextRecursive((android.view.View) footer);
                     if (et != null) {
-                        LogWriter.log(TAG, "findChatInput: ChatFooter 内递归命中 " + et.getClass().getName());
+                        LogWriter.log(TAG, "findInputView: ChatFooter 内递归命中 " + et.getClass().getName());
                         return et;
                     }
                 }
             } else {
-                LogWriter.log(TAG, "findChatInput: 未找到 ChatFooter（" + AiConst.CLS_CHAT_FOOTER + "）");
+                LogWriter.log(TAG, "findInputView: 未找到 ChatFooter（" + AiConst.CLS_CHAT_FOOTER + "）");
             }
-            // 2) 遍历所有 MMEditText，选可见且非空的
             EditText mm = findBestMMEditText(decor);
             if (mm != null) return mm;
-            // 3) 任意 EditText 兜底
             return findEditTextRecursive(decor);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "findChatInput 异常: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+            LogWriter.log(TAG, "findInputView 异常: " + t.getClass().getSimpleName() + ": " + t.getMessage());
             return null;
+        }
+    }
+
+    private static Object getFieldOrNull(Object obj, String field) {
+        try {
+            return XposedHelpers.getObjectField(obj, field);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getFieldOrNull: " + field + " 失败 " + t.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    private static String reflectGetText(Object view) {
+        if (view == null) return null;
+        if (view instanceof android.widget.EditText) {
+            return ((android.widget.EditText) view).getText().toString();
+        }
+        if (view instanceof android.widget.TextView) {
+            CharSequence cs = ((android.widget.TextView) view).getText();
+            return cs != null ? cs.toString() : "";
+        }
+        try {
+            Object t = XposedHelpers.callMethod(view, "getText");
+            return t != null ? t.toString() : "";
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "reflectGetText 失败: " + e.getClass().getSimpleName() + ":" + e.getMessage());
+        }
+        return null;
+    }
+
+    private static void reflectSetText(Object view, String text) {
+        if (view == null) return;
+        if (view instanceof android.widget.EditText) {
+            ((android.widget.EditText) view).setText(text);
+            try { ((android.widget.EditText) view).setSelection(text.length()); } catch (Throwable ignored) {}
+            return;
+        }
+        if (view instanceof android.widget.TextView) {
+            ((android.widget.TextView) view).setText(text);
+            return;
+        }
+        try {
+            XposedHelpers.callMethod(view, "setText", text);
+            LogWriter.log(TAG, "reflectSetText: 成功(String)");
+        } catch (Throwable e1) {
+            try {
+                XposedHelpers.callMethod(view, "setText", (CharSequence) text);
+                LogWriter.log(TAG, "reflectSetText: 成功(CharSequence)");
+            } catch (Throwable e2) {
+                LogWriter.log(TAG, "reflectSetText 失败: " + e2.getClass().getSimpleName() + ":" + e2.getMessage());
+            }
         }
     }
 
@@ -334,25 +401,6 @@ public class ChatHooks {
                 collectMMEditText(g.getChildAt(i), out);
             }
         }
-    }
-
-    private static EditText findInputByFooterField(Object footer) {
-        if (footer == null) return null;
-        try {
-            Object v = XposedHelpers.getObjectField(footer, "l4");
-            if (v instanceof EditText) return (EditText) v;
-            if (v != null) LogWriter.log(TAG, "findInputByFooterField: l4 类型=" + v.getClass().getName());
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "findInputByFooterField: l4 读取失败 " + t.getClass().getSimpleName());
-        }
-        try {
-            Object v = XposedHelpers.getObjectField(footer, "m");
-            if (v instanceof EditText) return (EditText) v;
-            if (v != null) LogWriter.log(TAG, "findInputByFooterField: m 类型=" + v.getClass().getName());
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "findInputByFooterField: m 读取失败 " + t.getClass().getSimpleName());
-        }
-        return null;
     }
 
     private static EditText findEditText(Activity act) {
