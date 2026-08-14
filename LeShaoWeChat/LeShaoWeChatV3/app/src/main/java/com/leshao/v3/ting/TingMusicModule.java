@@ -58,6 +58,7 @@ public class TingMusicModule {
         hookAudioEngine(cl);
         hookNetwork(cl);
         hookFileWrite();
+        hookTingEntry(cl);
         LogWriter.log(TAG, "hook 完成");
     }
 
@@ -756,6 +757,75 @@ public class TingMusicModule {
             if (parts.length >= 3) return parts[2];
         } catch (Throwable ignored) {}
         return null;
+    }
+
+    // ==================== 听一听入口反查 ====================
+    private static void hookTingEntry(ClassLoader cl) {
+        try {
+            Class<?> ting = XposedHelpers.findClass("com.tencent.mm.plugin.ting.TingFlutterActivity", cl);
+            XposedBridge.hookAllMethods(ting, "onCreate", new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    try {
+                        if (!(p.thisObject instanceof Activity)) return;
+                        Intent it = ((Activity) p.thisObject).getIntent();
+                        LogWriter.log(TAG, "[Ting入口] onCreate 触发 " + dumpIntent(it));
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "[Ting入口] onCreate 日志失败: " + t.getMessage());
+                    }
+                }
+            });
+            LogWriter.log(TAG, "[Ting入口] TingFlutterActivity.onCreate hook 已注册");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[Ting入口] TingFlutterActivity 未找到: " + t.getMessage());
+        }
+
+        try {
+            XposedBridge.hookAllMethods(android.app.Activity.class, "startActivity", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    try {
+                        if (p.args.length < 1 || !(p.args[0] instanceof Intent)) return;
+                        Intent i = (Intent) p.args[0];
+                        android.content.ComponentName cn = i.getComponent();
+                        if (cn == null) return;
+                        String cls = cn.getClassName();
+                        if (cls == null) return;
+                        String low = cls.toLowerCase();
+                        if (low.contains("ting") || low.contains("music")) {
+                            LogWriter.log(TAG, "[Ting入口] startActivity from="
+                                    + p.thisObject.getClass().getSimpleName()
+                                    + " -> " + cls + " " + dumpIntent(i));
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "[Ting入口] Activity.startActivity hook 已注册");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[Ting入口] startActivity hook 失败: " + t.getMessage());
+        }
+    }
+
+    private static String dumpIntent(Intent it) {
+        if (it == null) return "intent=null";
+        try {
+            StringBuilder sb = new StringBuilder();
+            android.content.ComponentName cn = it.getComponent();
+            sb.append("component=").append(cn == null ? "null" : cn.flattenToShortString());
+            sb.append(" flags=").append(it.getFlags());
+            android.os.Bundle b = it.getExtras();
+            if (b != null && !b.isEmpty()) {
+                sb.append(" extras={");
+                for (String k : b.keySet()) {
+                    Object v = b.get(k);
+                    String vs = v == null ? "null" : String.valueOf(v);
+                    if (vs.length() > 150) vs = vs.substring(0, 150) + "...";
+                    sb.append(k).append("=").append(vs).append("; ");
+                }
+                sb.append("}");
+            }
+            return sb.toString();
+        } catch (Throwable t) {
+            return "dump失败: " + t.getMessage();
+        }
     }
 
     // ==================== 下载 ====================
