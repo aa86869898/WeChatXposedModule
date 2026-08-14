@@ -48,6 +48,7 @@ public class TingMusicModule {
     private static WindowManager sWM;
     private static TextView ball;
     private static Context appContext;
+    private static String lastAudioFile;
 
     public static void hook(ClassLoader cl) {
         hookChatWindow(cl);
@@ -736,6 +737,10 @@ public class TingMusicModule {
                 || low.contains("music") || low.contains("audio");
         if (!hit) return;
         if (dumpedFiles.add(path)) LogWriter.log(TAG, "[文件] " + path);
+        if (low.contains("resourceloader") && low.endsWith(".mp4")) {
+            lastAudioFile = path;
+            LogWriter.log(TAG, "[音频] 记录最新音频文件: " + path);
+        }
     }
 
     // ==================== 下载 ====================
@@ -788,7 +793,12 @@ public class TingMusicModule {
             String result = null;
             String error = "缓存中未找到对应音频，请先完整播放该歌曲";
             try {
-                File src = findCachedAudio(info.listenId);
+                File src = null;
+                if (lastAudioFile != null) {
+                    File f = new File(lastAudioFile);
+                    if (f.exists() && f.length() > 0) src = f;
+                }
+                if (src == null) src = findCachedAudio(info.listenId);
                 if (src != null && src.length() > 0) {
                     Context ctx = appContext != null ? appContext : currentChatting;
                     if (ctx == null) {
