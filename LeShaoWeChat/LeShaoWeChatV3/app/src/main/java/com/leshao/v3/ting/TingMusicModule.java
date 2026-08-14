@@ -225,64 +225,50 @@ public class TingMusicModule {
     private static final Set<String> dumpedMethods = Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
 
     private static void hookTingPlayer(ClassLoader cl) {
-        boolean hit = false;
-        String[] candidateClasses = { "ul4.a9" };
-        for (String cn : candidateClasses) {
-            try {
-                Class<?> svc = XposedHelpers.findClass(cn, cl);
-                LogWriter.log(TAG, "播放服务类命中: " + cn + " -> " + svc.getName());
-                hit |= hookServiceMethods(svc);
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "播放服务类未找到: " + cn);
+        try {
+            Class<?> svc = XposedHelpers.findClass("ul4.a9", cl);
+            LogWriter.log(TAG, "播放服务类命中: ul4.a9 -> " + svc.getName());
+            int hooked = 0;
+            for (Method m : svc.getDeclaredMethods()) {
+                if (hookOne(svc, m)) hooked++;
             }
+            LogWriter.log(TAG, "已 hook ul4.a9 全部方法共 " + hooked + " 个，用于反查");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "播放服务类未找到: " + t.getMessage());
         }
-        LogWriter.log(TAG, "播放捕获 hook 命中=" + hit);
     }
 
-    private static boolean hookServiceMethods(Class<?> svc) {
-        boolean hit = false;
-        String[] names = { "Ej", "Fj", "qj" };
-        for (Method m : svc.getDeclaredMethods()) {
-            boolean matched = false;
-            for (String n : names) {
-                if (n.equals(m.getName())) { matched = true; break; }
-            }
-            if (!matched) continue;
-            final Method target = m;
-            try {
-                XposedBridge.hookMethod(target, new XC_MethodHook() {
-                    @Override protected void afterHookedMethod(MethodHookParam p) {
-                        try {
-                            String key = target.getName();
-                            boolean first = dumpedMethods.add(key);
-                            LogWriter.log(TAG, "播放方法触发: " + key + " 参数数=" + p.args.length + (first ? " (首次)" : ""));
-                            for (int i = 0; i < p.args.length; i++) {
-                                Object arg = p.args[i];
-                                if (arg == null) continue;
-                                if (first) dumpObject(arg, "  arg[" + i + "]");
-                                TingMusicInfo info = extract(arg);
-                                if (info != null) {
-                                    LogWriter.log(TAG, "捕获音乐: " + info.toString());
-                                    if (info.title != null || info.listenId != null) {
-                                        pendingMusic = info;
-                                        MAIN.post(() -> updateBallState());
-                                    }
-                                    break;
-                                }
+    private static boolean hookOne(Class<?> svc, final Method target) {
+        try {
+            XposedBridge.hookMethod(target, new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    try {
+                        String key = target.getName();
+                        boolean first = dumpedMethods.add(key);
+                        if (!first) return;
+                        LogWriter.log(TAG, "[反查] 方法触发: " + key + "(" + target.getParameterCount() + " 参数)");
+                        for (int i = 0; i < p.args.length; i++) {
+                            Object arg = p.args[i];
+                            if (arg == null) continue;
+                            TingMusicInfo info = extract(arg);
+                            if (info != null && (info.title != null || info.listenId != null)) {
+                                pendingMusic = info;
+                                LogWriter.log(TAG, "[反查] 捕获音乐: " + info.toString());
+                                MAIN.post(() -> updateBallState());
+                                continue;
                             }
-                        } catch (Throwable t) {
-                            LogWriter.log(TAG, "捕获处理失败: " + t.getMessage());
+                            dumpObject(arg, "    arg[" + i + "]");
                         }
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "捕获处理失败: " + t.getMessage());
                     }
-                });
-                hit = true;
-                LogWriter.log(TAG, "已 hook 播放方法: " + svc.getSimpleName() + "." + target.getName()
-                        + "(" + target.getParameterCount() + " 参数)");
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "hook " + target.getName() + " 失败: " + t.getMessage());
-            }
+                }
+            });
+            return true;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hook " + target.getName() + " 失败: " + t.getMessage());
+            return false;
         }
-        return hit;
     }
 
     // ==================== 信息提取 ====================
