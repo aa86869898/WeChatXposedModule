@@ -51,6 +51,7 @@ public class TingMusicModule {
         hookChatWindow(cl);
         hookTingPlayer(cl);
         hookMediaPlayer();
+        hookAudioAnchors();
         LogWriter.log(TAG, "hook 完成");
     }
 
@@ -440,6 +441,48 @@ public class TingMusicModule {
     }
 
     private static int mediaPlayerStackDumps = 0;
+
+    // ==================== 底层播放锚点反查 ====================
+    private static int anchorStackDumps = 0;
+
+    private static void hookAudioAnchors() {
+        try {
+            Class<?> am = Class.forName("android.media.AudioManager");
+            for (Method m : am.getDeclaredMethods()) {
+                if (m.getName().equals("requestAudioFocus")) {
+                    try {
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
+                            @Override protected void afterHookedMethod(MethodHookParam p) {
+                                LogWriter.log(TAG, "[AudioFocus] requestAudioFocus 触发, result=" + p.getResult());
+                                dumpAnchorStack("AudioFocus");
+                            }
+                        });
+                    } catch (Throwable ignored) {}
+                }
+            }
+        } catch (Throwable t) { LogWriter.log(TAG, "[AudioFocus] hook 失败: " + t.getMessage()); }
+
+        try {
+            Class<?> at = Class.forName("android.media.AudioTrack");
+            Method play = at.getDeclaredMethod("play");
+            XposedBridge.hookMethod(play, new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "[AudioTrack] play 触发");
+                    dumpAnchorStack("AudioTrack");
+                }
+            });
+            LogWriter.log(TAG, "[AudioTrack] play 已 hook");
+        } catch (Throwable t) { LogWriter.log(TAG, "[AudioTrack] hook 失败: " + t.getMessage()); }
+    }
+
+    private static void dumpAnchorStack(String label) {
+        if (anchorStackDumps >= 8) return;
+        anchorStackDumps++;
+        StackTraceElement[] st = Thread.currentThread().getStackTrace();
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < Math.min(25, st.length); i++) sb.append("    ").append(st[i].toString()).append("\n");
+        LogWriter.log(TAG, "[" + label + "] 调用栈:\n" + sb);
+    }
 
     // ==================== 下载 ====================
     public interface DownloadCallback {
