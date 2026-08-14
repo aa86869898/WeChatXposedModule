@@ -216,11 +216,9 @@ public class TingMusicModule {
             if (info.dataUrl != null && !info.dataUrl.isEmpty()) {
                 LogWriter.log(TAG, "开始下载: " + info.title + " url=" + info.dataUrl);
                 downloadAudio(info.dataUrl, currentChatting, cb);
-            } else if (info.listenId != null && !info.listenId.isEmpty()) {
+            } else {
                 LogWriter.log(TAG, "从缓存查找音频: " + info.title + " listenId=" + info.listenId);
                 findAndCopyCached(info, cb);
-            } else {
-                cb.onFail("无音频链接且无歌曲ID");
             }
         } else {
             try {
@@ -262,8 +260,9 @@ public class TingMusicModule {
                     try {
                         String key = target.getName();
                         boolean first = dumpedMethods.add(key);
-                        if (!first) return;
-                        LogWriter.log(TAG, "[反查] 方法触发: " + key + "(" + target.getParameterCount() + " 参数)");
+                        if (first) {
+                            LogWriter.log(TAG, "[反查] 方法触发: " + key + "(" + target.getParameterCount() + " 参数)");
+                        }
                         for (int i = 0; i < p.args.length; i++) {
                             Object arg = p.args[i];
                             if (arg == null) continue;
@@ -272,8 +271,8 @@ public class TingMusicModule {
                                 pendingMusic = info;
                                 LogWriter.log(TAG, "[反查] 捕获音乐: " + info.toString());
                                 MAIN.post(() -> updateBallState());
-                                dumpTree(arg, "    arg[" + i + "]", 4);
-                            } else {
+                                if (first) dumpTree(arg, "    arg[" + i + "]", 4);
+                            } else if (first) {
                                 dumpObject(arg, "    arg[" + i + "]");
                             }
                         }
@@ -626,21 +625,20 @@ public class TingMusicModule {
                             Object arg = p.args[i];
                             if (arg == null) continue;
                             if (arg instanceof String) {
-                                LogWriter.log(TAG, "    arg[" + i + "] String=" + arg);
+                                if (first) LogWriter.log(TAG, "    arg[" + i + "] String=" + arg);
                                 continue;
                             }
                             if (arg instanceof android.net.Uri) {
-                                LogWriter.log(TAG, "    arg[" + i + "] Uri=" + arg);
+                                if (first) LogWriter.log(TAG, "    arg[" + i + "] Uri=" + arg);
                                 continue;
                             }
-                            if (!first) continue;
                             TingMusicInfo info = extract(arg);
                             if (info != null && (info.title != null || info.listenId != null)) {
                                 pendingMusic = info;
                                 LogWriter.log(TAG, "    arg[" + i + "] 捕获音乐: " + info);
                                 MAIN.post(() -> updateBallState());
-                                dumpTree(arg, "    arg[" + i + "]", 4);
-                            } else {
+                                if (first) dumpTree(arg, "    arg[" + i + "]", 4);
+                            } else if (first) {
                                 dumpObject(arg, "    arg[" + i + "]");
                             }
                         }
