@@ -258,7 +258,7 @@ public class TingMusicModule {
                                 pendingMusic = info;
                                 LogWriter.log(TAG, "[反查] 捕获音乐: " + info.toString());
                                 MAIN.post(() -> updateBallState());
-                                dumpTree(arg, "    arg[" + i + "]", 2);
+                                dumpTree(arg, "    arg[" + i + "]", 3);
                             } else {
                                 dumpObject(arg, "    arg[" + i + "]");
                             }
@@ -286,15 +286,26 @@ public class TingMusicModule {
 
     private static TingMusicInfo extractFromDoc(Object root) {
         try {
-            Object w90 = callNoArg(root, "d");
+            Object zr0 = unwrapZr0(root);
+            if (zr0 == null) zr0 = root;
+            Object w90 = callNoArg(zr0, "d");
             if (w90 == null) return null;
             TingMusicInfo info = buildInfo(w90);
             if (info == null) return null;
-            info.srcId = getter(root, "b", "getSrcId", "getSourceId");
+            info.srcId = getter(zr0, "b", "getSrcId", "getSourceId");
             return info;
         } catch (Throwable t) {
             return null;
         }
+    }
+
+    private static Object unwrapZr0(Object root) {
+        Object a = callNoArg(root, "a");
+        if (a != null) {
+            Object i = callNoArg(a, "i");
+            if (i != null) return i;
+        }
+        return root;
     }
 
     private static TingMusicInfo buildInfo(Object o) {
@@ -306,10 +317,41 @@ public class TingMusicModule {
         info.listenId = listenId;
         info.author = getter(o, "getAuthor", "getSinger", "getArtist", "getSingerName", "c");
         info.cover = getter(o, "getCover", "getCoverUrl", "getThumbUrl", "getAlbumUrl", "f");
-        info.dataUrl = getter(o, "getDataUrl", "getPlayUrl", "getAudioUrl", "getSongUrl", "getMediaUrl", "getStreamUrl");
-        info.webUrl = getter(o, "getWebUrl", "getPageUrl", "getUrl");
-        info.bizUsername = getter(o, "getBizUsername", "getBizUserName");
+        info.type = getInt(o, "e");
+        Object h60 = callNoArg(o, "b");
+        if (h60 != null) {
+            info.dataUrl = getter(h60, "d", "getDataUrl", "getPlayUrl", "getAudioUrl", "getSongUrl");
+            info.webUrl = getter(h60, "getUrl", "getWebUrl", "getPageUrl");
+            info.bizUsername = getter(h60, "getBizUsername", "getBizUserName");
+        }
+        if (info.dataUrl == null) {
+            Object f90 = callNoArg(o, "g");
+            if (f90 != null) info.dataUrl = getter(f90, "getTid");
+        }
+        if (info.dataUrl == null) {
+            info.dataUrl = getter(o, "getDataUrl", "getPlayUrl", "getAudioUrl", "getSongUrl", "getMediaUrl", "getStreamUrl");
+        }
+        if (info.webUrl == null) info.webUrl = getter(o, "getWebUrl", "getPageUrl", "getUrl");
+        if (info.bizUsername == null) info.bizUsername = getter(o, "getBizUsername", "getBizUserName");
         return info;
+    }
+
+    private static int getInt(Object o, String... names) {
+        if (o == null) return 0;
+        for (Method m : o.getClass().getMethods()) {
+            if (m.getParameterCount() != 0) continue;
+            Class<?> rt = m.getReturnType();
+            if (rt != int.class && rt != Integer.class) continue;
+            for (String n : names) {
+                if (m.getName().equals(n)) {
+                    try {
+                        Object r = m.invoke(o);
+                        return r == null ? 0 : ((Number) r).intValue();
+                    } catch (Throwable ignored) {}
+                }
+            }
+        }
+        return 0;
     }
 
     private static TingMusicInfo extractByScan(Object root) {
@@ -570,7 +612,7 @@ public class TingMusicModule {
                                 pendingMusic = info;
                                 LogWriter.log(TAG, "    arg[" + i + "] 捕获音乐: " + info);
                                 MAIN.post(() -> updateBallState());
-                                dumpTree(arg, "    arg[" + i + "]", 2);
+                                dumpTree(arg, "    arg[" + i + "]", 3);
                             } else {
                                 dumpObject(arg, "    arg[" + i + "]");
                             }
