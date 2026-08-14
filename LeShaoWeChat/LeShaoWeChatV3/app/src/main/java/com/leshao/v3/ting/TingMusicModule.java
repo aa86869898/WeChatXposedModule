@@ -53,6 +53,7 @@ public class TingMusicModule {
         hookMediaPlayer();
         hookAudioAnchors();
         hookAudioEngine(cl);
+        hookNetwork(cl);
         LogWriter.log(TAG, "hook 完成");
     }
 
@@ -638,6 +639,58 @@ public class TingMusicModule {
             return true;
         } catch (Throwable t) {
             return false;
+        }
+    }
+
+    // ==================== 网络层反查 ====================
+    private static final Set<String> dumpedUrls = Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+
+    private static void hookNetwork(ClassLoader cl) {
+        try {
+            Class<?> u = Class.forName("java.net.URL");
+            for (java.lang.reflect.Constructor<?> c : u.getDeclaredConstructors()) {
+                try {
+                    XposedBridge.hookMethod(c, new XC_MethodHook() {
+                        @Override protected void afterHookedMethod(MethodHookParam p) {
+                            for (Object a : p.args) if (a instanceof String) logUrl((String) a);
+                        }
+                    });
+                } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "[网络] java.net.URL 构造已 hook");
+        } catch (Throwable t) { LogWriter.log(TAG, "[网络] URL hook 失败: " + t.getMessage()); }
+
+        String[] candidates = { "okhttp3.Request$Builder", "okhttp3.HttpUrl", "okhttp3.Request" };
+        for (String name : candidates) {
+            try {
+                Class<?> c = XposedHelpers.findClass(name, cl);
+                int hooked = 0;
+                for (Method m : c.getDeclaredMethods()) {
+                    try {
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
+                            @Override protected void afterHookedMethod(MethodHookParam p) {
+                                for (Object a : p.args) if (a instanceof String) logUrl((String) a);
+                            }
+                        });
+                        hooked++;
+                    } catch (Throwable ignored) {}
+                }
+                LogWriter.log(TAG, "[网络] 命中 " + name + " 共 hook " + hooked + " 方法");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "[网络] 未找到 " + name);
+            }
+        }
+    }
+
+    private static void logUrl(String u) {
+        if (u == null || !u.startsWith("http")) return;
+        String low = u.toLowerCase();
+        boolean audio = low.contains("music") || low.contains("m4a") || low.contains("mp3")
+                || low.contains("stream") || low.contains("audio") || low.contains("songmid")
+                || low.contains("qy.qq.com") || low.contains("qqmusic") || low.contains(".flac");
+        if (!audio) return;
+        if (dumpedUrls.add(u)) {
+            LogWriter.log(TAG, "[URL] " + u);
         }
     }
 
