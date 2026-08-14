@@ -50,6 +50,7 @@ public class TingMusicModule {
     public static void hook(ClassLoader cl) {
         hookChatWindow(cl);
         hookTingPlayer(cl);
+        hookMediaPlayer();
         LogWriter.log(TAG, "hook 完成");
     }
 
@@ -381,6 +382,64 @@ public class TingMusicModule {
             LogWriter.log(TAG, prefix + " dump 失败: " + t.getMessage());
         }
     }
+
+    // ==================== MediaPlayer 反查 ====================
+    private static void hookMediaPlayer() {
+        try {
+            Class<?> mp = Class.forName("android.media.MediaPlayer");
+            int hooked = 0;
+            for (Method m : mp.getDeclaredMethods()) {
+                if (!m.getName().equals("setDataSource")) continue;
+                final Method target = m;
+                try {
+                    XposedBridge.hookMethod(target, new XC_MethodHook() {
+                        @Override protected void afterHookedMethod(MethodHookParam p) {
+                            try {
+                                StringBuilder sb = new StringBuilder("[MediaPlayer] setDataSource(");
+                                for (int i = 0; i < p.args.length; i++) {
+                                    Object a = p.args[i];
+                                    if (i > 0) sb.append(", ");
+                                    if (a instanceof String) sb.append("String=").append(a);
+                                    else if (a instanceof android.net.Uri) sb.append("Uri=").append(a);
+                                    else sb.append(a == null ? "null" : a.getClass().getName());
+                                }
+                                sb.append(")");
+                                LogWriter.log(TAG, sb.toString());
+                                if (mediaPlayerStackDumps < 5) {
+                                    mediaPlayerStackDumps++;
+                                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
+                                    StringBuilder stb = new StringBuilder();
+                                    for (int i = 0; i < Math.min(15, st.length); i++) stb.append("    ").append(st[i].toString()).append("\n");
+                                    LogWriter.log(TAG, "[MediaPlayer] 调用栈:\n" + stb);
+                                }
+                                for (Object a : p.args) {
+                                    if (a instanceof String) {
+                                        String url = (String) a;
+                                        if (url.startsWith("http")) {
+                                            TingMusicInfo info = new TingMusicInfo();
+                                            info.title = url;
+                                            info.dataUrl = url;
+                                            pendingMusic = info;
+                                            LogWriter.log(TAG, "[MediaPlayer] 捕获直链: " + url);
+                                            MAIN.post(() -> updateBallState());
+                                        }
+                                    }
+                                }
+                            } catch (Throwable t) {
+                                LogWriter.log(TAG, "[MediaPlayer] 处理失败: " + t.getMessage());
+                            }
+                        }
+                    });
+                    hooked++;
+                } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "[MediaPlayer] 已 hook setDataSource 共 " + hooked + " 个重载");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[MediaPlayer] hook 失败: " + t.getMessage());
+        }
+    }
+
+    private static int mediaPlayerStackDumps = 0;
 
     // ==================== 下载 ====================
     public interface DownloadCallback {
