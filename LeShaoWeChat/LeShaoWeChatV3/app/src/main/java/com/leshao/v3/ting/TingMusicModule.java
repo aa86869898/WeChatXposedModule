@@ -275,6 +275,14 @@ public class TingMusicModule {
                         for (int i = 0; i < p.args.length; i++) {
                             Object arg = p.args[i];
                             if (arg == null) continue;
+                            if (arg instanceof String) {
+                                LogWriter.log(TAG, "[反查] " + target.getName() + " arg[" + i + "] String=" + arg);
+                                continue;
+                            }
+                            if (arg instanceof Integer || arg instanceof Long || arg instanceof Float) {
+                                LogWriter.log(TAG, "[反查] " + target.getName() + " arg[" + i + "] = " + arg);
+                                continue;
+                            }
                             TingMusicInfo info = extract(arg);
                             if (info != null && (info.title != null || info.listenId != null)) {
                                 pendingMusic = info;
@@ -708,7 +716,9 @@ public class TingMusicModule {
         String low = u.toLowerCase();
         boolean audio = low.contains("music") || low.contains("m4a") || low.contains("mp3")
                 || low.contains("stream") || low.contains("audio") || low.contains("songmid")
-                || low.contains("qy.qq.com") || low.contains("qqmusic") || low.contains(".flac");
+                || low.contains("qy.qq.com") || low.contains("qqmusic") || low.contains(".flac")
+                || low.contains("ting") || low.contains("search") || low.contains("song")
+                || low.contains("cgi") || low.contains("listen");
         if (!audio) return;
         if (dumpedUrls.add(u)) {
             LogWriter.log(TAG, "[URL] " + u);
