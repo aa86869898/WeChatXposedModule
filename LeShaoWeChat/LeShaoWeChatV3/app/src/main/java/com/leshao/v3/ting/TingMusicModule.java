@@ -738,7 +738,24 @@ public class TingMusicModule {
         if (low.contains("resourceloader") && low.endsWith(".mp4")) {
             lastAudioFile = path;
             LogWriter.log(TAG, "[音频] 记录最新音频文件: " + path);
+            if (pendingMusic == null) {
+                TingMusicInfo info = new TingMusicInfo();
+                info.title = "听一听歌曲";
+                info.listenId = extractIdFromPath(path);
+                pendingMusic = info;
+                LogWriter.log(TAG, "[音频] 元数据未捕获, 设置占位歌曲 listenId=" + info.listenId);
+                MAIN.post(() -> updateBallState());
+            }
         }
+    }
+
+    private static String extractIdFromPath(String path) {
+        try {
+            String name = path.substring(path.lastIndexOf('/') + 1);
+            String[] parts = name.split("_");
+            if (parts.length >= 3) return parts[2];
+        } catch (Throwable ignored) {}
+        return null;
     }
 
     // ==================== 下载 ====================
