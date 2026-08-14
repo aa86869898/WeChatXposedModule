@@ -52,6 +52,7 @@ public class TingMusicModule {
         hookTingPlayer(cl);
         hookMediaPlayer();
         hookAudioAnchors();
+        hookAudioEngine(cl);
         LogWriter.log(TAG, "hook 完成");
     }
 
@@ -482,6 +483,79 @@ public class TingMusicModule {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < Math.min(25, st.length); i++) sb.append("    ").append(st[i].toString()).append("\n");
         LogWriter.log(TAG, "[" + label + "] 调用栈:\n" + sb);
+    }
+
+    // ==================== 播放引擎类反查 ====================
+    private static void hookAudioEngine(ClassLoader cl) {
+        String[] targets = {
+                "android.content.BierkontDaedeelt",
+                "p35.d",
+                "q35.e",
+                "c4.g",
+                "c4.h"
+        };
+        for (String name : targets) {
+            Class<?> c;
+            try {
+                c = XposedHelpers.findClass(name, cl);
+            } catch (Throwable t) {
+                try { c = Class.forName(name); }
+                catch (Throwable t2) {
+                    LogWriter.log(TAG, "[反查类] 未找到 " + name);
+                    continue;
+                }
+            }
+            LogWriter.log(TAG, "[反查类] 命中 " + name + " -> " + c.getName());
+            int hooked = 0;
+            for (Method m : c.getDeclaredMethods()) {
+                if (hookOneReverse(c, m)) hooked++;
+            }
+            LogWriter.log(TAG, "[反查类] 已 hook " + name + " 共 " + hooked + " 个方法");
+        }
+    }
+
+    private static boolean hookOneReverse(Class<?> c, final Method target) {
+        try {
+            XposedBridge.hookMethod(target, new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    try {
+                        String key = target.getDeclaringClass().getName() + "." + target.getName();
+                        boolean first = dumpedMethods.add(key);
+                        if (first) {
+                            StringBuilder sig = new StringBuilder();
+                            for (Class<?> pt : target.getParameterTypes()) sig.append(pt.getSimpleName()).append(",");
+                            LogWriter.log(TAG, "[反查类] 触发: " + key + "(" + sig + ")");
+                        }
+                        for (int i = 0; i < p.args.length; i++) {
+                            Object arg = p.args[i];
+                            if (arg == null) continue;
+                            if (arg instanceof String) {
+                                LogWriter.log(TAG, "    arg[" + i + "] String=" + arg);
+                                continue;
+                            }
+                            if (arg instanceof android.net.Uri) {
+                                LogWriter.log(TAG, "    arg[" + i + "] Uri=" + arg);
+                                continue;
+                            }
+                            if (!first) continue;
+                            TingMusicInfo info = extract(arg);
+                            if (info != null && (info.title != null || info.listenId != null)) {
+                                pendingMusic = info;
+                                LogWriter.log(TAG, "    arg[" + i + "] 捕获音乐: " + info);
+                                MAIN.post(() -> updateBallState());
+                                continue;
+                            }
+                            dumpObject(arg, "    arg[" + i + "]");
+                        }
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "[反查类] 处理失败: " + t.getMessage());
+                    }
+                }
+            });
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     // ==================== 下载 ====================
