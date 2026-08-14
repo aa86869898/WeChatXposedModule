@@ -246,12 +246,20 @@ public class TingMusicModule {
             LogWriter.log(TAG, "播放服务类命中: ul4.a9 -> " + svc.getName());
             int hooked = 0;
             for (Method m : svc.getDeclaredMethods()) {
+                LogWriter.log(TAG, "[播放服务] 方法签名 " + sig(m));
                 if (hookOne(svc, m)) hooked++;
             }
             LogWriter.log(TAG, "已 hook ul4.a9 全部方法共 " + hooked + " 个，用于反查");
         } catch (Throwable t) {
             LogWriter.log(TAG, "播放服务类未找到: " + t.getMessage());
         }
+    }
+
+    private static String sig(Method m) {
+        StringBuilder sb = new StringBuilder(m.getName()).append("(");
+        for (Class<?> pt : m.getParameterTypes()) sb.append(pt.getSimpleName()).append(",");
+        sb.append(")");
+        return sb.toString();
     }
 
     private static boolean hookOne(Class<?> svc, final Method target) {
@@ -270,7 +278,7 @@ public class TingMusicModule {
                             TingMusicInfo info = extract(arg);
                             if (info != null && (info.title != null || info.listenId != null)) {
                                 pendingMusic = info;
-                                LogWriter.log(TAG, "[反查] 捕获音乐: " + info.toString());
+                                LogWriter.log(TAG, "[反查] 捕获音乐[" + target.getName() + " arg" + i + "]: " + info.toString());
                                 MAIN.post(() -> updateBallState());
                                 if (first) dumpTree(arg, "    arg[" + i + "]", 4);
                             } else if (first) {
@@ -604,6 +612,7 @@ public class TingMusicModule {
             LogWriter.log(TAG, "[反查类] 命中 " + name + " -> " + c.getName());
             int hooked = 0;
             for (Method m : c.getDeclaredMethods()) {
+                LogWriter.log(TAG, "[反查类] 方法签名 " + sig(m));
                 if (hookOneReverse(c, m)) hooked++;
             }
             LogWriter.log(TAG, "[反查类] 已 hook " + name + " 共 " + hooked + " 个方法");
@@ -636,7 +645,7 @@ public class TingMusicModule {
                             TingMusicInfo info = extract(arg);
                             if (info != null && (info.title != null || info.listenId != null)) {
                                 pendingMusic = info;
-                                LogWriter.log(TAG, "    arg[" + i + "] 捕获音乐: " + info);
+                                LogWriter.log(TAG, "    arg[" + i + "] 捕获音乐[" + target.getDeclaringClass().getSimpleName() + "." + target.getName() + "]: " + info);
                                 MAIN.post(() -> updateBallState());
                                 if (first) dumpTree(arg, "    arg[" + i + "]", 4);
                             } else if (first) {
