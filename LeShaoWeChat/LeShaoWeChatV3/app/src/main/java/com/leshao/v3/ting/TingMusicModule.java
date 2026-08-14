@@ -258,8 +258,10 @@ public class TingMusicModule {
                                 pendingMusic = info;
                                 LogWriter.log(TAG, "[反查] 捕获音乐: " + info.toString());
                                 MAIN.post(() -> updateBallState());
+                                dumpTree(arg, "    arg[" + i + "]", 2);
+                            } else {
+                                dumpObject(arg, "    arg[" + i + "]");
                             }
-                            dumpObject(arg, "    arg[" + i + "]");
                         }
                     } catch (Throwable t) {
                         LogWriter.log(TAG, "捕获处理失败: " + t.getMessage());
@@ -387,6 +389,26 @@ public class TingMusicModule {
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, prefix + " dump 失败: " + t.getMessage());
+        }
+    }
+
+    private static void dumpTree(Object root, String prefix, int depth) {
+        dumpObject(root, prefix);
+        if (depth <= 1) return;
+        int children = 0;
+        for (Method m : root.getClass().getMethods()) {
+            if (m.getParameterCount() != 0) continue;
+            Class<?> rt = m.getReturnType();
+            if (rt == void.class || rt.isPrimitive() || rt == String.class) continue;
+            String decl = m.getDeclaringClass().getName();
+            if (decl.startsWith("java.") || decl.startsWith("android.") || decl.startsWith("com.google.protobuf")) continue;
+            try {
+                Object r = m.invoke(root);
+                if (r == null) continue;
+                LogWriter.log(TAG, prefix + "  --" + m.getName() + "()--> " + r.getClass().getName());
+                dumpTree(r, prefix + "    ", depth - 1);
+                if (++children >= 5) break;
+            } catch (Throwable ignored) {}
         }
     }
 
@@ -548,8 +570,10 @@ public class TingMusicModule {
                                 pendingMusic = info;
                                 LogWriter.log(TAG, "    arg[" + i + "] 捕获音乐: " + info);
                                 MAIN.post(() -> updateBallState());
+                                dumpTree(arg, "    arg[" + i + "]", 2);
+                            } else {
+                                dumpObject(arg, "    arg[" + i + "]");
                             }
-                            dumpObject(arg, "    arg[" + i + "]");
                         }
                     } catch (Throwable t) {
                         LogWriter.log(TAG, "[反查类] 处理失败: " + t.getMessage());
