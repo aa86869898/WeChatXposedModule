@@ -258,7 +258,6 @@ public class TingMusicModule {
                                 pendingMusic = info;
                                 LogWriter.log(TAG, "[反查] 捕获音乐: " + info.toString());
                                 MAIN.post(() -> updateBallState());
-                                continue;
                             }
                             dumpObject(arg, "    arg[" + i + "]");
                         }
@@ -371,14 +370,20 @@ public class TingMusicModule {
             int printed = 0;
             for (Method m : o.getClass().getMethods()) {
                 if (m.getParameterCount() != 0) continue;
-                if (m.getDeclaringClass() == Object.class) continue;
+                String decl = m.getDeclaringClass().getName();
+                if (decl.startsWith("java.") || decl.startsWith("android.")
+                        || decl.startsWith("com.google.protobuf") || decl.startsWith("javax.")) continue;
                 Class<?> rt = m.getReturnType();
-                if (rt != String.class && !rt.isPrimitive() && !Number.class.isAssignableFrom(rt)) continue;
+                if (rt == void.class) continue;
                 try {
                     Object r = m.invoke(o);
-                    LogWriter.log(TAG, prefix + "  " + m.getName() + "() -> " + (r == null ? "null" : r));
+                    if (rt == String.class || rt.isPrimitive() || Number.class.isAssignableFrom(rt)) {
+                        LogWriter.log(TAG, prefix + "  " + m.getName() + "() -> " + (r == null ? "null" : r));
+                    } else {
+                        LogWriter.log(TAG, prefix + "  " + m.getName() + "() : " + rt.getName() + (r == null ? " =null" : ""));
+                    }
                 } catch (Throwable ignored) {}
-                if (++printed >= 40) break;
+                if (++printed >= 80) break;
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, prefix + " dump 失败: " + t.getMessage());
@@ -543,7 +548,6 @@ public class TingMusicModule {
                                 pendingMusic = info;
                                 LogWriter.log(TAG, "    arg[" + i + "] 捕获音乐: " + info);
                                 MAIN.post(() -> updateBallState());
-                                continue;
                             }
                             dumpObject(arg, "    arg[" + i + "]");
                         }
