@@ -46,6 +46,7 @@ import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.TTSBroadcaster;
 import com.leshao.v3.ai.AiConfig;
 import com.leshao.v3.ai.ChatHooks;
+import com.leshao.v3.ting.TingMusicModule;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XposedHelpers;
@@ -155,6 +156,13 @@ public class MainHook implements IXposedHookLoadPackage {
                             LogWriter.log(TAG, "[MainHook] AI 聊天助手已加载 v629");
                         } catch (Throwable t) {
                             LogWriter.log(TAG, "[MainHook] AI install FAIL: " + t.getMessage());
+                        }
+
+                        try {
+                            TingMusicModule.hook(cl);
+                            LogWriter.log(TAG, "[MainHook] 听一听音乐模块已加载");
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "[MainHook] TingMusic install FAIL: " + t.getMessage());
                         }
 
                         HookManager.activateAll();

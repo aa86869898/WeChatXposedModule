@@ -1,0 +1,394 @@
+package com.leshao.v3.ting;
+
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.PixelFormat;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.WindowManager;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import com.leshao.v3.LogWriter;
+import com.leshao.v3.wm.utils.WmReflect;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.lang.reflect.Method;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
+
+import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
+import de.robv.android.xposed.XposedHelpers;
+
+public class TingMusicModule {
+    private static final String TAG = "TingMusic";
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+
+    public interface OnMusicReady { void onReady(String chatUser, TingMusicInfo info); }
+    private static OnMusicReady listener;
+    public static void setOnMusicReady(OnMusicReady l) { listener = l; }
+
+    private static Activity currentChatting;
+    private static String currentUser;
+    private static TingMusicInfo pendingMusic;
+    private static WindowManager sWM;
+    private static TextView ball;
+
+    public static void hook(ClassLoader cl) {
+        hookChatWindow(cl);
+        hookTingPlayer(cl);
+        LogWriter.log(TAG, "hook 完成");
+    }
+
+    // ==================== 聊天窗口生命周期 ====================
+    private static void hookChatWindow(ClassLoader cl) {
+        try {
+            Class<?> frag = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUIFragment", cl);
+            Method m0 = frag.getDeclaredMethod("M0");
+            XposedBridge.hookMethod(m0, new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    Activity act = fragmentActivity(p.thisObject);
+                    if (act == null) { LogWriter.log(TAG, "M0 未获取到 Activity"); return; }
+                    currentChatting = act;
+                    currentUser = WmReflect.getCurrentChatUser(act.getIntent());
+                    LogWriter.log(TAG, "聊天窗口打开 user=" + currentUser);
+                    MAIN.postDelayed(() -> showBall(act), 300);
+                }
+            });
+            Method o0 = frag.getDeclaredMethod("O0");
+            XposedBridge.hookMethod(o0, new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "聊天窗口关闭，移除悬浮球");
+                    removeBall();
+                }
+            });
+            LogWriter.log(TAG, "聊天窗口 M0/O0 hook 完成");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "聊天窗口 hook 失败: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+        }
+    }
+
+    private static Activity fragmentActivity(Object fragment) {
+        try {
+            Object act = XposedHelpers.callMethod(fragment, "getActivity");
+            if (act instanceof Activity) return (Activity) act;
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    // ==================== 悬浮球 ====================
+    private static void showBall(final Activity act) {
+        try {
+            if (ball != null) { updateBallState(); return; }
+            if (act == null) return;
+            sWM = (WindowManager) act.getSystemService(Context.WINDOW_SERVICE);
+            float d = act.getResources().getDisplayMetrics().density;
+            int sz = (int) (52 * d);
+
+            ball = new TextView(act);
+            ball.setTextColor(Color.WHITE);
+            ball.setTextSize(22);
+            ball.setGravity(Gravity.CENTER);
+            ball.setBackground(makeCircle(0xE607C160));
+
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                    sz, sz,
+                    WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    PixelFormat.TRANSLUCENT);
+            lp.gravity = Gravity.TOP | Gravity.RIGHT;
+            lp.x = (int) (12 * d);
+            lp.y = (int) (120 * d);
+            sWM.addView(ball, lp);
+            ball.setOnTouchListener(makeTouch());
+            updateBallState();
+            LogWriter.log(TAG, "悬浮球已显示");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "悬浮球显示失败: " + t.getMessage());
+        }
+    }
+
+    private static void updateBallState() {
+        if (ball == null) return;
+        if (pendingMusic != null) {
+            ball.setText("\u2713");
+            ball.setBackground(makeCircle(0xE6FA5151));
+        } else {
+            ball.setText("\u266A");
+            ball.setBackground(makeCircle(0xE607C160));
+        }
+    }
+
+    private static void removeBall() {
+        try {
+            if (ball != null && sWM != null) { sWM.removeView(ball); }
+        } catch (Throwable ignored) {}
+        ball = null;
+        sWM = null;
+    }
+
+    private static GradientDrawable makeCircle(int color) {
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(color);
+        return g;
+    }
+
+    private static View.OnTouchListener makeTouch() {
+        return new View.OnTouchListener() {
+            float dx, dy, downX, downY;
+            long downTime;
+            @Override public boolean onTouch(View v, MotionEvent e) {
+                WindowManager.LayoutParams wp = (WindowManager.LayoutParams) v.getLayoutParams();
+                switch (e.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        dx = wp.x - e.getRawX();
+                        dy = wp.y - e.getRawY();
+                        downX = e.getRawX();
+                        downY = e.getRawY();
+                        downTime = System.currentTimeMillis();
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        wp.x = (int) (e.getRawX() + dx);
+                        wp.y = (int) (e.getRawY() + dy);
+                        try { sWM.updateViewLayout(v, wp); } catch (Throwable ignored) {}
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                        if (System.currentTimeMillis() - downTime < 300
+                                && Math.abs(e.getRawX() - downX) < 15
+                                && Math.abs(e.getRawY() - downY) < 15) {
+                            onClickBall();
+                        }
+                        return true;
+                }
+                return false;
+            }
+        };
+    }
+
+    private static void onClickBall() {
+        if (pendingMusic != null) {
+            final TingMusicInfo info = pendingMusic;
+            LogWriter.log(TAG, "开始下载: " + info.title + " url=" + info.dataUrl);
+            downloadAudio(info.dataUrl, currentChatting, new DownloadCallback() {
+                @Override public void onSuccess(String localPath) {
+                    info.localPath = localPath;
+                    LogWriter.log(TAG, "下载完成: " + localPath);
+                    pendingMusic = null;
+                    updateBallState();
+                    if (currentChatting != null) {
+                        Toast.makeText(currentChatting, "已下载: " + info.title + "\n" + localPath,
+                                Toast.LENGTH_LONG).show();
+                    }
+                    if (listener != null) listener.onReady(currentUser, info);
+                }
+                @Override public void onFail(String err) {
+                    LogWriter.log(TAG, "下载失败: " + err);
+                    if (currentChatting != null) {
+                        Toast.makeText(currentChatting, "下载失败: " + err, Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        } else {
+            try {
+                Class<?> ting = XposedHelpers.findClass("com.tencent.mm.plugin.ting.TingFlutterActivity", currentChatting.getClassLoader());
+                Intent i = new Intent(currentChatting, ting);
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                currentChatting.startActivity(i);
+                LogWriter.log(TAG, "已启动听一听");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "启动听一听失败: " + t.getMessage());
+                if (currentChatting != null) {
+                    Toast.makeText(currentChatting, "启动听一听失败", Toast.LENGTH_SHORT).show();
+                }
+            }
+        }
+    }
+
+    // ==================== 播放捕获 ====================
+    private static void hookTingPlayer(ClassLoader cl) {
+        boolean hit = false;
+        String[] candidateClasses = { "ul4.a9" };
+        for (String cn : candidateClasses) {
+            try {
+                Class<?> svc = XposedHelpers.findClass(cn, cl);
+                LogWriter.log(TAG, "播放服务类命中: " + cn + " -> " + svc.getName());
+                hit |= hookServiceMethods(svc);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "播放服务类未找到: " + cn);
+            }
+        }
+        LogWriter.log(TAG, "播放捕获 hook 命中=" + hit);
+    }
+
+    private static boolean hookServiceMethods(Class<?> svc) {
+        boolean hit = false;
+        String[] names = { "Ej", "Fj", "qj" };
+        for (Method m : svc.getDeclaredMethods()) {
+            boolean matched = false;
+            for (String n : names) {
+                if (n.equals(m.getName())) { matched = true; break; }
+            }
+            if (!matched) continue;
+            final Method target = m;
+            try {
+                XposedBridge.hookMethod(target, new XC_MethodHook() {
+                    @Override protected void afterHookedMethod(MethodHookParam p) {
+                        try {
+                            for (Object arg : p.args) {
+                                if (arg == null) continue;
+                                TingMusicInfo info = extract(arg);
+                                if (info == null) continue;
+                                LogWriter.log(TAG, "捕获音乐: " + info.toString());
+                                if (info.title != null || info.listenId != null) {
+                                    pendingMusic = info;
+                                    MAIN.post(() -> updateBallState());
+                                }
+                                break;
+                            }
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "捕获处理失败: " + t.getMessage());
+                        }
+                    }
+                });
+                hit = true;
+                LogWriter.log(TAG, "已 hook 播放方法: " + svc.getSimpleName() + "." + target.getName()
+                        + "(" + target.getParameterCount() + " 参数)");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "hook " + target.getName() + " 失败: " + t.getMessage());
+            }
+        }
+        return hit;
+    }
+
+    // ==================== 信息提取（递归扫描 + getter 兜底） ====================
+    private static TingMusicInfo extract(Object root) {
+        Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+        ArrayDeque<Object> q = new ArrayDeque<>();
+        q.add(root);
+        int scanned = 0;
+        while (!q.isEmpty() && scanned < 300) {
+            Object cur = q.poll();
+            if (cur == null) continue;
+            if (!visited.add(cur)) continue;
+            scanned++;
+            TingMusicInfo info = tryExtract(cur);
+            if (info != null) return info;
+            try {
+                for (Method m : cur.getClass().getMethods()) {
+                    if (m.getParameterCount() != 0) continue;
+                    Class<?> rt = m.getReturnType();
+                    if (rt == void.class || rt.isPrimitive() || rt == String.class) continue;
+                    if (m.getDeclaringClass() == Object.class) continue;
+                    try {
+                        Object r = m.invoke(cur);
+                        if (r != null && !visited.contains(r)) q.add(r);
+                    } catch (Throwable ignored) {}
+                }
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    private static TingMusicInfo tryExtract(Object o) {
+        String title = getter(o, "getTitle");
+        String listenId = getter(o, "getListenId");
+        if (title == null && listenId == null) return null;
+        TingMusicInfo info = new TingMusicInfo();
+        info.title = title;
+        info.listenId = listenId;
+        info.author = getter(o, "getAuthor", "getSinger", "getArtist", "getSingerName");
+        info.cover = getter(o, "getCover", "getCoverUrl", "getThumbUrl", "getAlbumUrl");
+        info.dataUrl = getter(o, "getDataUrl", "getPlayUrl", "getAudioUrl", "getSongUrl", "getMediaUrl", "getStreamUrl");
+        info.webUrl = getter(o, "getWebUrl", "getPageUrl", "getUrl");
+        info.bizUsername = getter(o, "getBizUsername", "getBizUserName");
+        return info;
+    }
+
+    private static String getter(Object o, String... names) {
+        if (o == null) return null;
+        for (Method m : o.getClass().getMethods()) {
+            if (m.getParameterCount() != 0) continue;
+            for (String n : names) {
+                if (m.getName().equals(n)) {
+                    try {
+                        Object r = m.invoke(o);
+                        return r == null ? null : r.toString();
+                    } catch (Throwable ignored) {}
+                }
+            }
+        }
+        return null;
+    }
+
+    // ==================== 下载 ====================
+    public interface DownloadCallback {
+        void onSuccess(String localPath);
+        void onFail(String error);
+    }
+
+    private static void downloadAudio(final String url, final Context ctx, final DownloadCallback cb) {
+        if (url == null || url.isEmpty()) { cb.onFail("音频链接为空"); return; }
+        new Thread(() -> {
+            String result = null;
+            String error = null;
+            try {
+                HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+                conn.setConnectTimeout(10000);
+                conn.setReadTimeout(60000);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android)");
+                conn.setInstanceFollowRedirects(true);
+                conn.connect();
+                int code = conn.getResponseCode();
+                if (code != 200) {
+                    error = "HTTP " + code;
+                } else {
+                    File dir = new File(ctx.getCacheDir(), "ting_music");
+                    if (!dir.exists()) dir.mkdirs();
+                    File file = new File(dir, "ting_" + System.currentTimeMillis() + guessExt(url));
+                    InputStream in = conn.getInputStream();
+                    FileOutputStream out = new FileOutputStream(file);
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+                    out.close();
+                    in.close();
+                    result = file.getAbsolutePath();
+                }
+                conn.disconnect();
+            } catch (Throwable t) {
+                error = t.getMessage();
+            }
+            final String r = result, e = error;
+            MAIN.post(() -> {
+                if (r != null) cb.onSuccess(r); else cb.onFail(e);
+            });
+        }).start();
+    }
+
+    private static String guessExt(String url) {
+        String path = url;
+        int q = path.indexOf('?');
+        if (q > 0) path = path.substring(0, q);
+        int dot = path.lastIndexOf('.');
+        if (dot > 0) {
+            String ext = path.substring(dot);
+            if (ext.length() <= 5) return ext;
+        }
+        return ".mp3";
+    }
+}
