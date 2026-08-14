@@ -59,7 +59,7 @@ public class TingMusicModule {
         hookNetwork(cl);
         hookFileWrite();
         hookTingEntry(cl);
-        hookFlutterChannel();
+        hookFlutterChannel(cl);
         LogWriter.log(TAG, "hook 完成");
     }
 
@@ -780,9 +780,9 @@ public class TingMusicModule {
     }
 
     // ==================== 听一听入口反查 ====================
-    private static void hookFlutterChannel() {
+    private static void hookFlutterChannel(ClassLoader cl) {
         try {
-            Class<?> mc = Class.forName("io.flutter.plugin.common.MethodChannel");
+            Class<?> mc = XposedHelpers.findClass("io.flutter.plugin.common.MethodChannel", cl);
             for (Method m : mc.getDeclaredMethods()) {
                 if (!m.getName().equals("invokeMethod")) continue;
                 XposedBridge.hookMethod(m, new XC_MethodHook() {
@@ -804,7 +804,7 @@ public class TingMusicModule {
                     }
                 });
             }
-            LogWriter.log(TAG, "[Flutter] MethodChannel.invokeMethod hook 已注册");
+            LogWriter.log(TAG, "[Flutter] MethodChannel.invokeMethod hook 已注册, 方法数=" + mc.getDeclaredMethods().length);
         } catch (Throwable t) {
             LogWriter.log(TAG, "[Flutter] hook 失败: " + t.getMessage());
         }
