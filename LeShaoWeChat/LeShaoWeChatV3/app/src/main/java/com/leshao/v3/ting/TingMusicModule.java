@@ -59,6 +59,7 @@ public class TingMusicModule {
         hookNetwork(cl);
         hookFileWrite();
         hookTingEntry(cl);
+        hookFlutterChannel();
         LogWriter.log(TAG, "hook 完成");
     }
 
@@ -779,6 +780,36 @@ public class TingMusicModule {
     }
 
     // ==================== 听一听入口反查 ====================
+    private static void hookFlutterChannel() {
+        try {
+            Class<?> mc = Class.forName("io.flutter.plugin.common.MethodChannel");
+            for (Method m : mc.getDeclaredMethods()) {
+                if (!m.getName().equals("invokeMethod")) continue;
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        try {
+                            if (p.args.length < 1 || !(p.args[0] instanceof String)) return;
+                            String method = (String) p.args[0];
+                            String low = method.toLowerCase();
+                            if (low.contains("music") || low.contains("ting") || low.contains("send")
+                                    || low.contains("share") || low.contains("song")
+                                    || low.contains("forward") || low.contains("chat")
+                                    || low.contains("play") || low.contains("listen")) {
+                                Object args = p.args.length >= 2 ? p.args[1] : null;
+                                String as = args == null ? "null" : String.valueOf(args);
+                                if (as.length() > 300) as = as.substring(0, 300);
+                                LogWriter.log(TAG, "[Flutter] invokeMethod=" + method + " args=" + as);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            }
+            LogWriter.log(TAG, "[Flutter] MethodChannel.invokeMethod hook 已注册");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[Flutter] hook 失败: " + t.getMessage());
+        }
+    }
+
     private static void hookTingEntry(ClassLoader cl) {
         try {
             Class<?> ting = XposedHelpers.findClass("com.tencent.mm.plugin.ting.TingFlutterActivity", cl);
