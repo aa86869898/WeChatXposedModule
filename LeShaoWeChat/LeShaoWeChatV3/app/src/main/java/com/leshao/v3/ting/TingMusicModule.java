@@ -769,6 +769,17 @@ public class TingMusicModule {
                         if (!(p.thisObject instanceof Activity)) return;
                         Intent it = ((Activity) p.thisObject).getIntent();
                         LogWriter.log(TAG, "[Ting入口] onCreate 触发 " + dumpIntent(it));
+                        android.os.Bundle b = it.getExtras();
+                        if (b != null) {
+                            for (String k : b.keySet()) {
+                                Object v = b.get(k);
+                                if (v == null) continue;
+                                String cn = v.getClass().getName();
+                                if (cn.contains("FlutterPageInfo") || cn.contains("FlutterPageStyle")) {
+                                    dumpFields(v, "    [" + k + "]");
+                                }
+                            }
+                        }
                     } catch (Throwable t) {
                         LogWriter.log(TAG, "[Ting入口] onCreate 日志失败: " + t.getMessage());
                     }
@@ -825,6 +836,36 @@ public class TingMusicModule {
             return sb.toString();
         } catch (Throwable t) {
             return "dump失败: " + t.getMessage();
+        }
+    }
+
+    private static void dumpFields(Object o, String prefix) {
+        try {
+            Class<?> c = o.getClass();
+            LogWriter.log(TAG, prefix + " 类=" + c.getName());
+            int level = 0;
+            while (c != null && c != Object.class && level < 4) {
+                for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                    try {
+                        f.setAccessible(true);
+                        Object v = f.get(o);
+                        String vs = v == null ? "null" : String.valueOf(v);
+                        if (vs.length() > 200) vs = vs.substring(0, 200) + "...";
+                        LogWriter.log(TAG, prefix + " 字段 " + f.getName() + " = " + vs
+                                + " (" + (v == null ? "null" : v.getClass().getSimpleName()) + ")");
+                    } catch (Throwable ignored) {}
+                }
+                c = c.getSuperclass();
+                level++;
+            }
+            for (java.lang.reflect.Constructor<?> ctor : o.getClass().getDeclaredConstructors()) {
+                StringBuilder sb = new StringBuilder(prefix + " 构造 " + o.getClass().getSimpleName() + "(");
+                for (Class<?> pt : ctor.getParameterTypes()) sb.append(pt.getSimpleName()).append(",");
+                sb.append(")");
+                LogWriter.log(TAG, sb.toString());
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, prefix + " dumpFields 失败: " + t.getMessage());
         }
     }
 
