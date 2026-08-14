@@ -63,7 +63,9 @@ public class TingMusicModule {
                     Activity act = fragmentActivity(p.thisObject);
                     if (act == null) { LogWriter.log(TAG, "M0 未获取到 Activity"); return; }
                     currentChatting = act;
-                    currentUser = WmReflect.getCurrentChatUser(act.getIntent());
+                    String user = WmReflect.getChatUserFromFragment(p.thisObject);
+                    if (user == null || user.isEmpty()) user = WmReflect.getCurrentChatUser(act.getIntent());
+                    currentUser = user;
                     LogWriter.log(TAG, "聊天窗口打开 user=" + currentUser);
                     MAIN.postDelayed(() -> showBall(act), 300);
                 }
@@ -220,6 +222,8 @@ public class TingMusicModule {
     }
 
     // ==================== 播放捕获 ====================
+    private static final Set<String> dumpedMethods = Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+
     private static void hookTingPlayer(ClassLoader cl) {
         boolean hit = false;
         String[] candidateClasses = { "ul4.a9" };
@@ -249,16 +253,22 @@ public class TingMusicModule {
                 XposedBridge.hookMethod(target, new XC_MethodHook() {
                     @Override protected void afterHookedMethod(MethodHookParam p) {
                         try {
-                            for (Object arg : p.args) {
+                            String key = target.getName();
+                            boolean first = dumpedMethods.add(key);
+                            LogWriter.log(TAG, "播放方法触发: " + key + " 参数数=" + p.args.length + (first ? " (首次)" : ""));
+                            for (int i = 0; i < p.args.length; i++) {
+                                Object arg = p.args[i];
                                 if (arg == null) continue;
+                                if (first) dumpObject(arg, "  arg[" + i + "]");
                                 TingMusicInfo info = extract(arg);
-                                if (info == null) continue;
-                                LogWriter.log(TAG, "捕获音乐: " + info.toString());
-                                if (info.title != null || info.listenId != null) {
-                                    pendingMusic = info;
-                                    MAIN.post(() -> updateBallState());
+                                if (info != null) {
+                                    LogWriter.log(TAG, "捕获音乐: " + info.toString());
+                                    if (info.title != null || info.listenId != null) {
+                                        pendingMusic = info;
+                                        MAIN.post(() -> updateBallState());
+                                    }
+                                    break;
                                 }
-                                break;
                             }
                         } catch (Throwable t) {
                             LogWriter.log(TAG, "捕获处理失败: " + t.getMessage());
@@ -275,18 +285,54 @@ public class TingMusicModule {
         return hit;
     }
 
-    // ==================== 信息提取（递归扫描 + getter 兜底） ====================
+    // ==================== 信息提取 ====================
     private static TingMusicInfo extract(Object root) {
+        // 1) 文档逻辑：root.d() -> 歌曲信息对象
+        TingMusicInfo info = extractFromDoc(root);
+        if (info != null) return info;
+        // 2) 递归扫描兜底
+        return extractByScan(root);
+    }
+
+    private static TingMusicInfo extractFromDoc(Object root) {
+        try {
+            Object w90 = callNoArg(root, "d");
+            if (w90 == null) return null;
+            TingMusicInfo info = buildInfo(w90);
+            if (info == null) return null;
+            info.srcId = getter(root, "b", "getSrcId", "getSourceId");
+            return info;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static TingMusicInfo buildInfo(Object o) {
+        String title = getter(o, "getTitle");
+        String listenId = getter(o, "getListenId");
+        if (title == null && listenId == null) return null;
+        TingMusicInfo info = new TingMusicInfo();
+        info.title = title;
+        info.listenId = listenId;
+        info.author = getter(o, "getAuthor", "getSinger", "getArtist", "getSingerName", "c");
+        info.cover = getter(o, "getCover", "getCoverUrl", "getThumbUrl", "getAlbumUrl", "f");
+        info.dataUrl = getter(o, "getDataUrl", "getPlayUrl", "getAudioUrl", "getSongUrl", "getMediaUrl", "getStreamUrl");
+        info.webUrl = getter(o, "getWebUrl", "getPageUrl", "getUrl");
+        info.bizUsername = getter(o, "getBizUsername", "getBizUserName");
+        return info;
+    }
+
+    private static TingMusicInfo extractByScan(Object root) {
         Set<Object> visited = Collections.newSetFromMap(new IdentityHashMap<>());
         ArrayDeque<Object> q = new ArrayDeque<>();
         q.add(root);
         int scanned = 0;
-        while (!q.isEmpty() && scanned < 300) {
+        while (!q.isEmpty() && scanned < 200) {
             Object cur = q.poll();
             if (cur == null) continue;
             if (!visited.add(cur)) continue;
             scanned++;
-            TingMusicInfo info = tryExtract(cur);
+            TingMusicInfo info = buildInfo(cur);
             if (info != null) return info;
             try {
                 for (Method m : cur.getClass().getMethods()) {
@@ -304,21 +350,6 @@ public class TingMusicModule {
         return null;
     }
 
-    private static TingMusicInfo tryExtract(Object o) {
-        String title = getter(o, "getTitle");
-        String listenId = getter(o, "getListenId");
-        if (title == null && listenId == null) return null;
-        TingMusicInfo info = new TingMusicInfo();
-        info.title = title;
-        info.listenId = listenId;
-        info.author = getter(o, "getAuthor", "getSinger", "getArtist", "getSingerName");
-        info.cover = getter(o, "getCover", "getCoverUrl", "getThumbUrl", "getAlbumUrl");
-        info.dataUrl = getter(o, "getDataUrl", "getPlayUrl", "getAudioUrl", "getSongUrl", "getMediaUrl", "getStreamUrl");
-        info.webUrl = getter(o, "getWebUrl", "getPageUrl", "getUrl");
-        info.bizUsername = getter(o, "getBizUsername", "getBizUserName");
-        return info;
-    }
-
     private static String getter(Object o, String... names) {
         if (o == null) return null;
         for (Method m : o.getClass().getMethods()) {
@@ -333,6 +364,36 @@ public class TingMusicModule {
             }
         }
         return null;
+    }
+
+    private static Object callNoArg(Object o, String name) {
+        if (o == null) return null;
+        for (Method m : o.getClass().getMethods()) {
+            if (m.getName().equals(name) && m.getParameterCount() == 0) {
+                try { return m.invoke(o); } catch (Throwable ignored) {}
+            }
+        }
+        return null;
+    }
+
+    private static void dumpObject(Object o, String prefix) {
+        try {
+            LogWriter.log(TAG, prefix + " 类=" + o.getClass().getName());
+            int printed = 0;
+            for (Method m : o.getClass().getMethods()) {
+                if (m.getParameterCount() != 0) continue;
+                if (m.getDeclaringClass() == Object.class) continue;
+                Class<?> rt = m.getReturnType();
+                if (rt != String.class && !rt.isPrimitive() && !Number.class.isAssignableFrom(rt)) continue;
+                try {
+                    Object r = m.invoke(o);
+                    LogWriter.log(TAG, prefix + "  " + m.getName() + "() -> " + (r == null ? "null" : r));
+                } catch (Throwable ignored) {}
+                if (++printed >= 40) break;
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, prefix + " dump 失败: " + t.getMessage());
+        }
     }
 
     // ==================== 下载 ====================
