@@ -258,7 +258,7 @@ public class TingMusicModule {
                                 pendingMusic = info;
                                 LogWriter.log(TAG, "[反查] 捕获音乐: " + info.toString());
                                 MAIN.post(() -> updateBallState());
-                                dumpTree(arg, "    arg[" + i + "]", 3);
+                                dumpTree(arg, "    arg[" + i + "]", 4);
                             } else {
                                 dumpObject(arg, "    arg[" + i + "]");
                             }
@@ -429,6 +429,15 @@ public class TingMusicModule {
                 } catch (Throwable ignored) {}
                 if (++printed >= 80) break;
             }
+            try {
+                Method tj = o.getClass().getMethod("toJSON");
+                Object json = tj.invoke(o);
+                if (json != null) {
+                    String js = json.toString();
+                    if (js.length() > 3000) js = js.substring(0, 3000);
+                    LogWriter.log(TAG, prefix + "  toJSON() -> " + js);
+                }
+            } catch (Throwable ignored) {}
         } catch (Throwable t) {
             LogWriter.log(TAG, prefix + " dump 失败: " + t.getMessage());
         }
@@ -612,7 +621,7 @@ public class TingMusicModule {
                                 pendingMusic = info;
                                 LogWriter.log(TAG, "    arg[" + i + "] 捕获音乐: " + info);
                                 MAIN.post(() -> updateBallState());
-                                dumpTree(arg, "    arg[" + i + "]", 3);
+                                dumpTree(arg, "    arg[" + i + "]", 4);
                             } else {
                                 dumpObject(arg, "    arg[" + i + "]");
                             }
