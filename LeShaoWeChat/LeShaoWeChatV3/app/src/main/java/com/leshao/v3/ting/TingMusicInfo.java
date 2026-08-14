@@ -15,7 +15,8 @@ public class TingMusicInfo {
     @Override
     public String toString() {
         return "TingMusicInfo{title=" + title + ", author=" + author
-                + ", type=" + type + ", dataUrl=" + (dataUrl == null ? "null" : dataUrl.substring(0, Math.min(60, dataUrl.length())))
+                + ", listenId=" + listenId + ", type=" + type
+                + ", dataUrl=" + (dataUrl == null ? "null" : dataUrl.substring(0, Math.min(60, dataUrl.length())))
                 + "}";
     }
 }

@@ -19,6 +19,7 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.wm.utils.WmReflect;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.lang.reflect.Method;
@@ -46,6 +47,7 @@ public class TingMusicModule {
     private static TingMusicInfo pendingMusic;
     private static WindowManager sWM;
     private static TextView ball;
+    private static Context appContext;
 
     public static void hook(ClassLoader cl) {
         hookChatWindow(cl);
@@ -101,6 +103,7 @@ public class TingMusicModule {
         try {
             if (ball != null) { updateBallState(); return; }
             if (act == null) return;
+            appContext = act.getApplicationContext();
             sWM = (WindowManager) act.getSystemService(Context.WINDOW_SERVICE);
             float d = act.getResources().getDisplayMetrics().density;
             int sz = (int) (52 * d);
@@ -190,8 +193,7 @@ public class TingMusicModule {
     private static void onClickBall() {
         if (pendingMusic != null) {
             final TingMusicInfo info = pendingMusic;
-            LogWriter.log(TAG, "开始下载: " + info.title + " url=" + info.dataUrl);
-            downloadAudio(info.dataUrl, currentChatting, new DownloadCallback() {
+            DownloadCallback cb = new DownloadCallback() {
                 @Override public void onSuccess(String localPath) {
                     info.localPath = localPath;
                     LogWriter.log(TAG, "下载完成: " + localPath);
@@ -209,7 +211,16 @@ public class TingMusicModule {
                         Toast.makeText(currentChatting, "下载失败: " + err, Toast.LENGTH_SHORT).show();
                     }
                 }
-            });
+            };
+            if (info.dataUrl != null && !info.dataUrl.isEmpty()) {
+                LogWriter.log(TAG, "开始下载: " + info.title + " url=" + info.dataUrl);
+                downloadAudio(info.dataUrl, currentChatting, cb);
+            } else if (info.listenId != null && !info.listenId.isEmpty()) {
+                LogWriter.log(TAG, "从缓存查找音频: " + info.title + " listenId=" + info.listenId);
+                findAndCopyCached(info, cb);
+            } else {
+                cb.onFail("无音频链接且无歌曲ID");
+            }
         } else {
             try {
                 Class<?> ting = XposedHelpers.findClass("com.tencent.mm.plugin.ting.TingFlutterActivity", currentChatting.getClassLoader());
@@ -770,6 +781,72 @@ public class TingMusicModule {
                 if (r != null) cb.onSuccess(r); else cb.onFail(e);
             });
         }).start();
+    }
+
+    private static void findAndCopyCached(final TingMusicInfo info, final DownloadCallback cb) {
+        new Thread(() -> {
+            String result = null;
+            String error = "缓存中未找到对应音频，请先完整播放该歌曲";
+            try {
+                File src = findCachedAudio(info.listenId);
+                if (src != null && src.length() > 0) {
+                    Context ctx = appContext != null ? appContext : currentChatting;
+                    if (ctx == null) {
+                        error = "无可用上下文";
+                    } else {
+                        File dir = new File(ctx.getCacheDir(), "ting_music");
+                        if (!dir.exists()) dir.mkdirs();
+                        File dst = new File(dir, "ting_" + System.currentTimeMillis() + guessExt(src.getName()));
+                        copyFile(src, dst);
+                        LogWriter.log(TAG, "[缓存] 源文件 " + src.getAbsolutePath() + " 大小 " + src.length());
+                        result = dst.getAbsolutePath();
+                    }
+                }
+            } catch (Throwable t) {
+                error = t.getMessage();
+            }
+            final String r = result, e = error;
+            MAIN.post(() -> {
+                if (r != null) cb.onSuccess(r); else cb.onFail(e);
+            });
+        }).start();
+    }
+
+    private static File findCachedAudio(String listenId) {
+        if (listenId == null || listenId.isEmpty()) return null;
+        String[] dirs = {
+                "/data/data/com.tencent.mm/cache/resourceLoader",
+                "/data/data/com.tencent.mm/cache/TingAudioCache",
+                "/data/data/com.tencent.mm/cache/tingCache"
+        };
+        File best = null;
+        for (String d : dirs) {
+            File dir = new File(d);
+            File[] files = dir.listFiles();
+            if (files == null) continue;
+            for (File f : files) {
+                if (!f.isFile()) continue;
+                if (!f.getName().contains(listenId)) continue;
+                String low = f.getName().toLowerCase();
+                boolean audio = low.endsWith(".mp4") || low.endsWith(".mp3")
+                        || low.endsWith(".m4a") || low.endsWith(".aac")
+                        || low.endsWith(".flac") || low.endsWith(".ogg")
+                        || low.endsWith(".player");
+                if (!audio) continue;
+                if (best == null || f.length() > best.length()) best = f;
+            }
+        }
+        return best;
+    }
+
+    private static void copyFile(File src, File dst) throws Exception {
+        FileInputStream in = new FileInputStream(src);
+        FileOutputStream out = new FileOutputStream(dst);
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+        out.close();
+        in.close();
     }
 
     private static String guessExt(String url) {
