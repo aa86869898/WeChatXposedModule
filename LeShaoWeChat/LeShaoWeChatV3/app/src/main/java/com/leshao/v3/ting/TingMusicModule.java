@@ -54,6 +54,7 @@ public class TingMusicModule {
         hookAudioAnchors();
         hookAudioEngine(cl);
         hookNetwork(cl);
+        hookFileWrite();
         LogWriter.log(TAG, "hook 完成");
     }
 
@@ -692,6 +693,38 @@ public class TingMusicModule {
         if (dumpedUrls.add(u)) {
             LogWriter.log(TAG, "[URL] " + u);
         }
+    }
+
+    // ==================== 文件写入反查 ====================
+    private static final Set<String> dumpedFiles = Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+
+    private static void hookFileWrite() {
+        try {
+            Class<?> file = Class.forName("java.io.File");
+            for (java.lang.reflect.Constructor<?> c : file.getDeclaredConstructors()) {
+                try {
+                    XposedBridge.hookMethod(c, new XC_MethodHook() {
+                        @Override protected void afterHookedMethod(MethodHookParam p) {
+                            for (Object a : p.args) {
+                                if (a instanceof String) logFile((String) a);
+                                else if (a instanceof File) logFile(((File) a).getAbsolutePath());
+                            }
+                        }
+                    });
+                } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "[文件] File 构造已 hook");
+        } catch (Throwable t) { LogWriter.log(TAG, "[文件] File hook 失败: " + t.getMessage()); }
+    }
+
+    private static void logFile(String path) {
+        if (path == null) return;
+        String low = path.toLowerCase();
+        boolean hit = low.contains("ting") || low.endsWith(".m4a") || low.endsWith(".mp3")
+                || low.endsWith(".aac") || low.endsWith(".flac") || low.endsWith(".ogg")
+                || low.contains("music") || low.contains("audio");
+        if (!hit) return;
+        if (dumpedFiles.add(path)) LogWriter.log(TAG, "[文件] " + path);
     }
 
     // ==================== 下载 ====================
