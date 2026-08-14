@@ -323,10 +323,6 @@ public class TingMusicModule {
             info.dataUrl = getter(h60, "d", "getDataUrl", "getPlayUrl", "getAudioUrl", "getSongUrl");
             info.webUrl = getter(h60, "getUrl", "getWebUrl", "getPageUrl");
             info.bizUsername = getter(h60, "getBizUsername", "getBizUserName");
-            if (info.dataUrl == null || info.dataUrl.isEmpty()) {
-                LogWriter.log(TAG, "[h60] 字段 dump 类=" + h60.getClass().getName());
-                dumpObject(h60, "      [h60]");
-            }
         }
         if (info.dataUrl == null) {
             Object f90 = callNoArg(o, "g");
@@ -337,6 +333,10 @@ public class TingMusicModule {
         }
         if (info.webUrl == null) info.webUrl = getter(o, "getWebUrl", "getPageUrl", "getUrl");
         if (info.bizUsername == null) info.bizUsername = getter(o, "getBizUsername", "getBizUserName");
+        if (info.dataUrl == null || info.dataUrl.isEmpty()) {
+            LogWriter.log(TAG, "[w90] 展开子对象 类=" + o.getClass().getName());
+            dumpTree(o, "      [w90]", 2);
+        }
         return info;
     }
 
