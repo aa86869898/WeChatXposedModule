@@ -2893,7 +2893,7 @@ public class WmChatHook {
             recoverMassSendTask();
             hookP06Bypass(sCL);
             hookF9Debug();
-            LogWriter.log(TAG, "initOnAppStart OK v774 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v775 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3190,46 +3190,42 @@ public class WmChatHook {
     }
 
 private static boolean sendImageToUser(String toUser, String imgPath) {
-        LogWriter.log(TAG, "v774 sendImage ENTER: to=" + toUser + " path=" + imgPath);
+        LogWriter.log(TAG, "v775 sendImage ENTER: to=" + toUser + " path=" + imgPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(imgPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + imgPath);
-        Object ms = getMsgInfoStorage();
-        if (ms == null) throw new RuntimeException("MsgInfoStorage null");
-        Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", sCL);
-        Object msg = XposedHelpers.newInstance(e9Class, toUser);
-        XposedHelpers.callMethod(msg, "A1", 3);
-        XposedHelpers.callMethod(msg, "j1", imgPath);
         try {
-            long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
-            LogWriter.log(TAG, "v774 sendImage I9 msgId=" + msgId);
-            XposedHelpers.callMethod(ms, "Ra", msgId, msg);
-            LogWriter.log(TAG, "v774 sendImage Ra ok to=" + toUser + " msgId=" + msgId);
+            Object sendMgr = WmReflect.getSendMsgMgr(sCL);
+            if (sendMgr == null) throw new RuntimeException("SendMsgMgr null");
+            XposedHelpers.callMethod(sendMgr, "wj",
+                    sCtx, toUser, imgPath, 0, "", "", "", null);
+            LogWriter.log(TAG, "v775 sendImage wj ok to=" + toUser);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "v774 sendImage fail: " + t.getClass().getName() + ": " + t.getMessage());
+            LogWriter.log(TAG, "v775 sendImage fail: " + t.getClass().getName() + ": " + t.getMessage());
+            java.io.StringWriter sw = new java.io.StringWriter();
+            t.printStackTrace(new java.io.PrintWriter(sw));
+            LogWriter.log(TAG, "v775 sendImage stack: " + sw.toString());
             throw new RuntimeException(t);
         }
         return true;
     }
 
     private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v774 sendVideoToUser ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v775 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
-        Object ms = getMsgInfoStorage();
-        if (ms == null) throw new RuntimeException("MsgInfoStorage null");
-        Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", sCL);
-        Object msg = XposedHelpers.newInstance(e9Class, toUser);
-        XposedHelpers.callMethod(msg, "A1", 43);
-        XposedHelpers.callMethod(msg, "j1", videoPath);
         try {
-            long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
-            LogWriter.log(TAG, "v774 sendVideo I9 msgId=" + msgId);
-            XposedHelpers.callMethod(ms, "Ra", msgId, msg);
-            LogWriter.log(TAG, "v774 sendVideo Ra ok to=" + toUser + " msgId=" + msgId);
+            Object sendMgr = WmReflect.getSendMsgMgr(sCL);
+            if (sendMgr == null) throw new RuntimeException("SendMsgMgr null");
+            XposedHelpers.callMethod(sendMgr, "Cj",
+                    sCtx, toUser, videoPath, "", 43, 0, null, false, false, "", "", null);
+            LogWriter.log(TAG, "v775 sendVideo Cj ok to=" + toUser);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "v774 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
+            LogWriter.log(TAG, "v775 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
+            java.io.StringWriter sw = new java.io.StringWriter();
+            t.printStackTrace(new java.io.PrintWriter(sw));
+            LogWriter.log(TAG, "v775 sendVideo stack: " + sw.toString());
             throw new RuntimeException(t);
         }
         return true;
