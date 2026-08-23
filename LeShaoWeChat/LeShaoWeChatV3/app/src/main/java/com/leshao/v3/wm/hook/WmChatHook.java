@@ -2895,7 +2895,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v786 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v787 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3000,6 +3000,27 @@ private static void hookVideoSendDebug() {
                     });
                 }
                 LogWriter.log(TAG, "hookVideoSendDebug3 OK");
+            try {
+                java.lang.reflect.Method mh = d3.getDeclaredMethod("h", String.class);
+                XposedBridge.hookMethod(mh, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        java.lang.reflect.Method pm = (java.lang.reflect.Method) p.method;
+                        LogWriter.log(TAG, "v21.d3.h returnType=" + pm.getReturnType().getName() + " result=" + p.getResult());
+                        if (p.getResult() == null) {
+                            try {
+                                p.setResult(pm.getReturnType().newInstance());
+                                LogWriter.log(TAG, "v21.d3.h forced non-null: " + p.getResult());
+                            } catch (Throwable t2) {
+                                LogWriter.log(TAG, "v21.d3.h force fail: " + t2.getMessage());
+                            }
+                        }
+                    }
+                });
+                LogWriter.log(TAG, "hookVideoSendDebug4 OK");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "hookVideoSendDebug4 err: " + t.getMessage());
+            }
             } catch (Throwable t) {
                 LogWriter.log(TAG, "hookVideoSendDebug3 err: " + t.getMessage());
             }
