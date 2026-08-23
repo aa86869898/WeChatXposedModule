@@ -2893,7 +2893,7 @@ public class WmChatHook {
             recoverMassSendTask();
             hookP06Bypass(sCL);
             hookF9Debug();
-            LogWriter.log(TAG, "initOnAppStart OK v773 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v774 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3190,7 +3190,7 @@ public class WmChatHook {
     }
 
 private static boolean sendImageToUser(String toUser, String imgPath) {
-        LogWriter.log(TAG, "v773 sendImage ENTER: to=" + toUser + " path=" + imgPath);
+        LogWriter.log(TAG, "v774 sendImage ENTER: to=" + toUser + " path=" + imgPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(imgPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + imgPath);
@@ -3201,21 +3201,19 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
         XposedHelpers.callMethod(msg, "A1", 3);
         XposedHelpers.callMethod(msg, "j1", imgPath);
         try {
-            Object i9Ret = XposedHelpers.callMethod(ms, "I9", msg, true);
-            LogWriter.log(TAG, "v773 sendImage I9 ret=" + i9Ret + " cls=" + (i9Ret != null ? i9Ret.getClass().getSimpleName() : "null"));
-            long msgId = (Long) XposedHelpers.callMethod(msg, "H0");
-            LogWriter.log(TAG, "v773 sendImage H0 msgId=" + msgId);
+            long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
+            LogWriter.log(TAG, "v774 sendImage I9 msgId=" + msgId);
             XposedHelpers.callMethod(ms, "Ra", msgId, msg);
-            LogWriter.log(TAG, "v773 sendImage Ra ok to=" + toUser + " msgId=" + msgId);
+            LogWriter.log(TAG, "v774 sendImage Ra ok to=" + toUser + " msgId=" + msgId);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "v773 sendImage fail: " + t.getClass().getName() + ": " + t.getMessage());
+            LogWriter.log(TAG, "v774 sendImage fail: " + t.getClass().getName() + ": " + t.getMessage());
             throw new RuntimeException(t);
         }
         return true;
     }
 
     private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v773 sendVideoToUser ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v774 sendVideoToUser ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
@@ -3226,14 +3224,12 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
         XposedHelpers.callMethod(msg, "A1", 43);
         XposedHelpers.callMethod(msg, "j1", videoPath);
         try {
-            Object i9Ret = XposedHelpers.callMethod(ms, "I9", msg, true);
-            LogWriter.log(TAG, "v773 sendVideo I9 ret=" + i9Ret + " cls=" + (i9Ret != null ? i9Ret.getClass().getSimpleName() : "null"));
-            long msgId = (Long) XposedHelpers.callMethod(msg, "H0");
-            LogWriter.log(TAG, "v773 sendVideo H0 msgId=" + msgId);
+            long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
+            LogWriter.log(TAG, "v774 sendVideo I9 msgId=" + msgId);
             XposedHelpers.callMethod(ms, "Ra", msgId, msg);
-            LogWriter.log(TAG, "v773 sendVideo Ra ok to=" + toUser + " msgId=" + msgId);
+            LogWriter.log(TAG, "v774 sendVideo Ra ok to=" + toUser + " msgId=" + msgId);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "v773 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
+            LogWriter.log(TAG, "v774 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
             throw new RuntimeException(t);
         }
         return true;
