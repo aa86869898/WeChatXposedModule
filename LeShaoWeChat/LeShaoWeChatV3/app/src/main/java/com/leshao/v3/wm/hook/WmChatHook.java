@@ -2896,7 +2896,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v792 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v793 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3034,6 +3034,44 @@ private static void hookVideoSendDebug() {
                     }
                 });
                 LogWriter.log(TAG, "hookVideoSendDebug4 OK");
+            try {
+                XposedBridge.hookAllMethods(XposedHelpers.findClass("kl5.c2", sCL), "onPostExecute", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "kl5.c2.onPostExecute ENTER");
+                    }
+                });
+                XposedBridge.hookAllMethods(XposedHelpers.findClass("kl5.c2", sCL), "doInBackground", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "kl5.c2.doInBackground ENTER args=" + p.args.length);
+                    }
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "kl5.c2.doInBackground result=" + p.getResult());
+                    }
+                });
+                LogWriter.log(TAG, "hookVideoSendDebug5 OK");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "hookVideoSendDebug5 err: " + t.getMessage());
+            }
+            try {
+                XposedBridge.hookAllMethods(XposedHelpers.findClass("s85.v0", sCL), "d", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "s85.v0.d ENTER args=" + p.args.length);
+                    }
+                });
+                XposedBridge.hookAllMethods(XposedHelpers.findClass("s85.v0", sCL), "c", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "s85.v0.c ENTER args=" + p.args.length);
+                    }
+                });
+                LogWriter.log(TAG, "hookVideoSendDebug6 OK");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "hookVideoSendDebug6 err: " + t.getMessage());
+            }
             } catch (Throwable t) {
                 LogWriter.log(TAG, "hookVideoSendDebug4 err: " + t.getMessage());
             }
@@ -3363,12 +3401,12 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
     }
 
 private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v792 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v793 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
         int duration = getVideoDuration(videoPath);
-        LogWriter.log(TAG, "v792 sendVideo duration=" + duration + "s size=" + f.length());
+        LogWriter.log(TAG, "v793 sendVideo duration=" + duration + "s size=" + f.length());
         sPendingVideoToUser = toUser;
         String finalToUser = toUser;
         sH.post(() -> {
@@ -3400,16 +3438,16 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 Class<?> x9Class = XposedHelpers.findClass("e01.x9", sCL);
                 long msgId = (Long) XposedHelpers.callStaticMethod(x9Class, "x", e9);
                 XposedHelpers.setObjectField(v2, "n", msgId);
-                LogWriter.log(TAG, "v792 sendVideo built v2 msgId=" + msgId);
+                LogWriter.log(TAG, "v793 sendVideo built v2 msgId=" + msgId);
                 Class<?> o2Class = XposedHelpers.findClass("v21.o2", sCL);
                 Object w2 = XposedHelpers.callStaticMethod(o2Class, "qj");
                 boolean result = (Boolean) XposedHelpers.callMethod(w2, "x", v2, true);
-                LogWriter.log(TAG, "v792 sendVideo w2.x ret=" + result);
+                LogWriter.log(TAG, "v793 sendVideo w2.x ret=" + result);
             } catch (Throwable t) {
-                LogWriter.log(TAG, "v792 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
+                LogWriter.log(TAG, "v793 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
                 java.io.StringWriter sw = new java.io.StringWriter();
                 t.printStackTrace(new java.io.PrintWriter(sw));
-                LogWriter.log(TAG, "v792 sendVideo stack: " + sw.toString());
+                LogWriter.log(TAG, "v793 sendVideo stack: " + sw.toString());
             }
         });
         return true;
