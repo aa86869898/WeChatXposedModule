@@ -2895,7 +2895,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v783 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v784 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -2969,6 +2969,21 @@ private static void hookVideoSendDebug() {
                 }
             });
             LogWriter.log(TAG, "hookVideoSendDebug OK");
+            try {
+                XposedBridge.hookAllMethods(XposedHelpers.findClass("e01.x9", sCL), "x", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "e01.x9.x ENTER args=" + p.args.length);
+                    }
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "e01.x9.x result=" + p.getResult());
+                    }
+                });
+                LogWriter.log(TAG, "hookVideoSendDebug2 OK");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "hookVideoSendDebug2 err: " + t.getMessage());
+            }
         } catch (Throwable t) {
             LogWriter.log(TAG, "hookVideoSendDebug err: " + t.getClass().getName() + ": " + t.getMessage());
             java.io.StringWriter sw = new java.io.StringWriter();
@@ -3289,12 +3304,12 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
     }
 
     private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v783 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v784 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
         int duration = getVideoDuration(videoPath);
-        LogWriter.log(TAG, "v783 sendVideo duration=" + duration + "s size=" + f.length());
+        LogWriter.log(TAG, "v784 sendVideo duration=" + duration + "s size=" + f.length());
         String finalToUser = toUser;
         sH.post(() -> {
             try {
@@ -3304,9 +3319,9 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
                 boolean result = (Boolean) XposedHelpers.callStaticMethod(d3, "q",
                         videoPath, "", duration, finalToUser, "", 0, "", 43, null,
                         null, msgIdTalker, "", "", false, -1L, null, "", "");
-                LogWriter.log(TAG, "v783 sendVideo d3.q main-thread ret=" + result);
+                LogWriter.log(TAG, "v784 sendVideo d3.q main-thread ret=" + result);
             } catch (Throwable t) {
-                LogWriter.log(TAG, "v783 sendVideo d3.q main-thread fail: " + t.getClass().getName() + ": " + t.getMessage());
+                LogWriter.log(TAG, "v784 sendVideo d3.q main-thread fail: " + t.getClass().getName() + ": " + t.getMessage());
                 java.io.StringWriter sw = new java.io.StringWriter();
                 t.printStackTrace(new java.io.PrintWriter(sw));
                 LogWriter.log(TAG, "v783 sendVideo d3.q stack: " + sw.toString());
