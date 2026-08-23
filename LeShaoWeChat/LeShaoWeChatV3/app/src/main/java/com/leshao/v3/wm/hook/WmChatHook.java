@@ -2806,18 +2806,15 @@ public class WmChatHook {
 
     private static void scheduleMassSend(long triggerMs) {
         try {
-            ensureReceiverRegistered();
             WmPrefs.setStr("mass_send_trigger_ms", String.valueOf(triggerMs));
-            Intent intent = new Intent("com.leshao.v3.MASS_SEND_TRIGGER");
-            intent.setPackage("com.tencent.mm");
-            Context ctx = (sCtx != null) ? sCtx : sAct;
-            if (ctx == null) { LogWriter.log(TAG, "scheduleMassSend err: no context"); return; }
-            PendingIntent pi = PendingIntent.getBroadcast(ctx, 1002, intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-            AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
-            if (am != null) {
-                am.setExact(AlarmManager.RTC_WAKEUP, triggerMs, pi);
-                LogWriter.log(TAG, "massSend scheduled: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(triggerMs)));
+            long delay = triggerMs - System.currentTimeMillis();
+            if (delay < 0) delay = 0;
+            LogWriter.log(TAG, "massSend scheduled: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(triggerMs)) + " delay=" + delay + "ms");
+            if (sH != null) {
+                sH.postDelayed(() -> {
+                    LogWriter.log(TAG, "massSend handler triggered");
+                    executeMassSendFromPrefs();
+                }, delay);
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, "scheduleMassSend err: " + t.getMessage());
@@ -2871,11 +2868,9 @@ public class WmChatHook {
             if (!isPending) return;
 
             if (triggerMs <= now) {
-                if (sCL != null) {
-                    LogWriter.log(TAG, "massSend recovery: executing expired task " + taskId);
-                    executeMassSendFromPrefs();
-                } else {
-                    LogWriter.log(TAG, "massSend recovery: task expired but sCL null, retry on next init");
+                LogWriter.log(TAG, "massSend recovery: executing expired task " + taskId);
+                if (sH != null) {
+                    sH.post(() -> executeMassSendFromPrefs());
                 }
             } else {
                 scheduleMassSend(triggerMs);
@@ -2900,7 +2895,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v802 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v803 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
