@@ -2893,9 +2893,34 @@ public class WmChatHook {
             recoverMassSendTask();
             hookP06Bypass(sCL);
             hookF9Debug();
-            LogWriter.log(TAG, "initOnAppStart OK v775 build=v421 2026-08-10");
+            hookSendMsgMgrDebug();
+            LogWriter.log(TAG, "initOnAppStart OK v776 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
+        }
+    }
+
+    private static void hookSendMsgMgrDebug() {
+        try {
+            if (sCL == null) return;
+            Class<?> s5 = XposedHelpers.findClass("kl5.s5", sCL);
+            LogWriter.log(TAG, "kl5.s5 methods:");
+            for (java.lang.reflect.Method m : s5.getDeclaredMethods()) {
+                String name = m.getName();
+                if (name.equals("Cj") || name.equals("Dj") || name.equals("Ej") || name.equals("Fj")
+                        || name.equals("vj") || name.equals("wj") || name.equals("rj") || name.equals("tj")) {
+                    StringBuilder sb = new StringBuilder(name + "(");
+                    Class<?>[] params = m.getParameterTypes();
+                    for (int i = 0; i < params.length; i++) {
+                        if (i > 0) sb.append(", ");
+                        sb.append(params[i].getSimpleName());
+                    }
+                    sb.append(")");
+                    LogWriter.log(TAG, "kl5.s5 " + sb.toString());
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookSendMsgMgrDebug err: " + t.getMessage());
         }
     }
 
