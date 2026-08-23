@@ -81,6 +81,9 @@ public class WmChatHook {
     private static BroadcastReceiver sMassSendReceiver;
     private static Context sCtx;
     private static String sPendingVideoToUser;
+    private static String sPendingVideoPath;
+    private static int sPendingVideoDuration;
+    private static long sPendingVideoSize;
 
     public static void showTitleBtn(Activity act, ClassLoader cl, String user) {
         dismissTitleBtn();
@@ -2896,7 +2899,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v794 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v795 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3021,10 +3024,18 @@ private static void hookVideoSendDebug() {
                                     if (sPendingVideoToUser != null) {
                                         XposedHelpers.setObjectField(v2, "q", sPendingVideoToUser);
                                         XposedHelpers.setObjectField(v2, "r", sPendingVideoToUser);
-                                        LogWriter.log(TAG, "v21.d3.h forced v2: a=" + f.getName() + " f=" + f.length() + " m=" + getVideoDuration(path) + " q=" + sPendingVideoToUser);
-                                    } else {
-                                        LogWriter.log(TAG, "v21.d3.h forced v2: a=" + f.getName() + " f=" + f.length() + " m=" + getVideoDuration(path));
                                     }
+                                    LogWriter.log(TAG, "v21.d3.h forced v2 from file: a=" + f.getName() + " f=" + f.length());
+                                } else if (sPendingVideoPath != null) {
+                                    XposedHelpers.setObjectField(v2, "a", path);
+                                    XposedHelpers.setIntField(v2, "f", (int) sPendingVideoSize);
+                                    XposedHelpers.setIntField(v2, "m", sPendingVideoDuration);
+                                    XposedHelpers.setIntField(v2, "i", 111);
+                                    if (sPendingVideoToUser != null) {
+                                        XposedHelpers.setObjectField(v2, "q", sPendingVideoToUser);
+                                        XposedHelpers.setObjectField(v2, "r", sPendingVideoToUser);
+                                    }
+                                    LogWriter.log(TAG, "v21.d3.h forced v2 from pending: a=" + path + " f=" + sPendingVideoSize + " m=" + sPendingVideoDuration);
                                 }
                                 p.setResult(v2);
                             } catch (Throwable t2) {
@@ -3401,13 +3412,16 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
     }
 
 private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v794 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v795 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
         int duration = getVideoDuration(videoPath);
-        LogWriter.log(TAG, "v794 sendVideo duration=" + duration + "s size=" + f.length());
+        LogWriter.log(TAG, "v795 sendVideo duration=" + duration + "s size=" + f.length());
         sPendingVideoToUser = toUser;
+        sPendingVideoPath = videoPath;
+        sPendingVideoDuration = duration;
+        sPendingVideoSize = f.length();
         String finalToUser = toUser;
         sH.post(() -> {
             try {
@@ -3416,9 +3430,9 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                         XposedHelpers.findClass("com.tencent.mm.plugin.msg.MsgIdTalker", sCL), "g");
                 XposedHelpers.callMethod(sendMgr, "Cj",
                         sCtx, finalToUser, videoPath, "", duration, 0, null, false, false, "", "", msgIdTalker);
-                LogWriter.log(TAG, "v794 sendVideo Cj main-thread ok to=" + finalToUser);
+                LogWriter.log(TAG, "v795 sendVideo Cj main-thread ok to=" + finalToUser);
             } catch (Throwable t) {
-                LogWriter.log(TAG, "v794 sendVideo Cj fail: " + t.getClass().getName() + ": " + t.getMessage());
+                LogWriter.log(TAG, "v795 sendVideo Cj fail: " + t.getClass().getName() + ": " + t.getMessage());
                 java.io.StringWriter sw = new java.io.StringWriter();
                 t.printStackTrace(new java.io.PrintWriter(sw));
                 LogWriter.log(TAG, "v794 sendVideo Cj stack: " + sw.toString());
