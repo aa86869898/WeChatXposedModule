@@ -80,6 +80,7 @@ public class WmChatHook {
     private static final String TAG = "WmChat";
     private static BroadcastReceiver sMassSendReceiver;
     private static Context sCtx;
+    private static String sPendingVideoToUser;
 
     public static void showTitleBtn(Activity act, ClassLoader cl, String user) {
         dismissTitleBtn();
@@ -2895,7 +2896,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v789 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v790 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3017,7 +3018,13 @@ private static void hookVideoSendDebug() {
                                     XposedHelpers.setIntField(v2, "f", (int) f.length());
                                     XposedHelpers.setIntField(v2, "m", getVideoDuration(path));
                                     XposedHelpers.setIntField(v2, "i", 0);
-                                    LogWriter.log(TAG, "v21.d3.h forced v2: a=" + f.getName() + " f=" + f.length() + " m=" + getVideoDuration(path));
+                                    if (sPendingVideoToUser != null) {
+                                        XposedHelpers.setObjectField(v2, "q", sPendingVideoToUser);
+                                        XposedHelpers.setObjectField(v2, "r", sPendingVideoToUser);
+                                        LogWriter.log(TAG, "v21.d3.h forced v2: a=" + f.getName() + " f=" + f.length() + " m=" + getVideoDuration(path) + " q=" + sPendingVideoToUser);
+                                    } else {
+                                        LogWriter.log(TAG, "v21.d3.h forced v2: a=" + f.getName() + " f=" + f.length() + " m=" + getVideoDuration(path));
+                                    }
                                 }
                                 p.setResult(v2);
                             } catch (Throwable t2) {
@@ -3356,12 +3363,13 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
     }
 
 private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v785 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v790 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
         int duration = getVideoDuration(videoPath);
-        LogWriter.log(TAG, "v785 sendVideo duration=" + duration + "s size=" + f.length());
+        LogWriter.log(TAG, "v790 sendVideo duration=" + duration + "s size=" + f.length());
+        sPendingVideoToUser = toUser;
         String finalToUser = toUser;
         sH.post(() -> {
             try {
@@ -3371,12 +3379,12 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 boolean result = (Boolean) XposedHelpers.callStaticMethod(d3, "q",
                         videoPath, "", duration, finalToUser, "", 0, "", 43, null,
                         videoPath, msgIdTalker, "", "", false, -1L, null, "", "");
-                LogWriter.log(TAG, "v785 sendVideo d3.q main-thread ret=" + result);
+                LogWriter.log(TAG, "v790 sendVideo d3.q main-thread ret=" + result);
             } catch (Throwable t) {
-                LogWriter.log(TAG, "v785 sendVideo d3.q main-thread fail: " + t.getClass().getName() + ": " + t.getMessage());
+                LogWriter.log(TAG, "v790 sendVideo d3.q main-thread fail: " + t.getClass().getName() + ": " + t.getMessage());
                 java.io.StringWriter sw = new java.io.StringWriter();
                 t.printStackTrace(new java.io.PrintWriter(sw));
-                LogWriter.log(TAG, "v785 sendVideo d3.q stack: " + sw.toString());
+                LogWriter.log(TAG, "v790 sendVideo d3.q stack: " + sw.toString());
             }
         });
         return true;
