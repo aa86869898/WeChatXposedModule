@@ -2894,7 +2894,7 @@ public class WmChatHook {
             hookP06Bypass(sCL);
             hookF9Debug();
             hookSendMsgMgrDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v779 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v780 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3236,42 +3236,26 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
     }
 
     private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v779 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v780 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
         int duration = getVideoDuration(videoPath);
-        LogWriter.log(TAG, "v779 sendVideo duration=" + duration + "s");
-        try {
-            Class<?> d3 = XposedHelpers.findClass("v21.d3", sCL);
-            Object msgIdTalker = XposedHelpers.getStaticObjectField(
-                    XposedHelpers.findClass("com.tencent.mm.plugin.msg.MsgIdTalker", sCL), "g");
-            Object result = XposedHelpers.callStaticMethod(d3, "q",
-                    videoPath, "", duration, toUser, "", 0, "", 43, null,
-                    "", msgIdTalker, "", "", false, -1L, null, "", "");
-            LogWriter.log(TAG, "v779 sendVideo d3.q ret=" + result);
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "v779 sendVideo d3.q fail: " + t.getClass().getName() + ": " + t.getMessage());
-            java.io.StringWriter sw = new java.io.StringWriter();
-            t.printStackTrace(new java.io.PrintWriter(sw));
-            LogWriter.log(TAG, "v779 sendVideo d3.q stack: " + sw.toString());
-        }
-        try {
-            final Object sendMgr = WmReflect.getSendMsgMgr(sCL);
-            if (sendMgr != null) {
-                sH.post(() -> {
-                    try {
-                        XposedHelpers.callMethod(sendMgr, "Ej",
-                                sCtx, toUser, videoPath, "", duration, 0, false, false, "", "");
-                        LogWriter.log(TAG, "v779 sendVideo Ej main-thread ok to=" + toUser);
-                    } catch (Throwable t2) {
-                        LogWriter.log(TAG, "v779 sendVideo Ej main-thread fail: " + t2.getMessage());
-                    }
-                });
+        LogWriter.log(TAG, "v780 sendVideo duration=" + duration + "s");
+        final Object sendMgr = WmReflect.getSendMsgMgr(sCL);
+        if (sendMgr == null) throw new RuntimeException("SendMsgMgr null");
+        sH.post(() -> {
+            try {
+                XposedHelpers.callMethod(sendMgr, "Dj",
+                        sCtx, toUser, videoPath, "", duration, 0, null, false, false, "", "", null, null, "", null);
+                LogWriter.log(TAG, "v780 sendVideo Dj main-thread ok to=" + toUser);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "v780 sendVideo Dj fail: " + t.getClass().getName() + ": " + t.getMessage());
+                java.io.StringWriter sw = new java.io.StringWriter();
+                t.printStackTrace(new java.io.PrintWriter(sw));
+                LogWriter.log(TAG, "v780 sendVideo Dj stack: " + sw.toString());
             }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "v779 sendVideo Ej err: " + t.getMessage());
-        }
+        });
         return true;
     }
 
