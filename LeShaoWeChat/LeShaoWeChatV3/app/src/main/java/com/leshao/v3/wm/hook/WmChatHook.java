@@ -2895,7 +2895,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v803 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v804 trace build=v422 2026-08-23");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -2920,6 +2920,95 @@ public class WmChatHook {
                     LogWriter.log(TAG, "kl5.s5 " + sb.toString());
                 }
             }
+            XposedBridge.hookAllMethods(s5, "Cj", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.Cj ENTER this=" + (p.thisObject != null ? p.thisObject.getClass().getSimpleName() : "null"));
+                    for (int i = 0; i < p.args.length; i++) {
+                        LogWriter.log(TAG, "kl5.s5.Cj arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                    }
+                }
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.Cj result=" + p.getResult());
+                }
+            });
+            XposedBridge.hookAllMethods(s5, "Dj", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.Dj ENTER this=" + (p.thisObject != null ? p.thisObject.getClass().getSimpleName() : "null"));
+                    for (int i = 0; i < p.args.length; i++) {
+                        LogWriter.log(TAG, "kl5.s5.Dj arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                    }
+                }
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.Dj result=" + p.getResult());
+                }
+            });
+            XposedBridge.hookAllMethods(s5, "Ej", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.Ej ENTER this=" + (p.thisObject != null ? p.thisObject.getClass().getSimpleName() : "null"));
+                    for (int i = 0; i < p.args.length; i++) {
+                        LogWriter.log(TAG, "kl5.s5.Ej arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                    }
+                }
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.Ej result=" + p.getResult());
+                }
+            });
+            XposedBridge.hookAllMethods(s5, "Fj", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.Fj ENTER this=" + (p.thisObject != null ? p.thisObject.getClass().getSimpleName() : "null"));
+                    for (int i = 0; i < p.args.length; i++) {
+                        LogWriter.log(TAG, "kl5.s5.Fj arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                    }
+                }
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.Fj result=" + p.getResult());
+                }
+            });
+            XposedBridge.hookAllMethods(s5, "vj", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.vj ENTER this=" + (p.thisObject != null ? p.thisObject.getClass().getSimpleName() : "null"));
+                    for (int i = 0; i < p.args.length; i++) {
+                        LogWriter.log(TAG, "kl5.s5.vj arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                    }
+                }
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.vj result=" + p.getResult());
+                }
+            });
+            XposedBridge.hookAllMethods(s5, "wj", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.wj ENTER this=" + (p.thisObject != null ? p.thisObject.getClass().getSimpleName() : "null"));
+                    for (int i = 0; i < p.args.length; i++) {
+                        LogWriter.log(TAG, "kl5.s5.wj arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                    }
+                }
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.wj result=" + p.getResult());
+                }
+            });
+            XposedBridge.hookAllMethods(s5, "rj", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.rj ENTER this=" + (p.thisObject != null ? p.thisObject.getClass().getSimpleName() : "null"));
+                    for (int i = 0; i < p.args.length; i++) {
+                        LogWriter.log(TAG, "kl5.s5.rj arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                    }
+                }
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.rj result=" + p.getResult());
+                }
+            });
+            XposedBridge.hookAllMethods(s5, "tj", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.tj ENTER this=" + (p.thisObject != null ? p.thisObject.getClass().getSimpleName() : "null"));
+                    for (int i = 0; i < p.args.length; i++) {
+                        LogWriter.log(TAG, "kl5.s5.tj arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                    }
+                }
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    LogWriter.log(TAG, "kl5.s5.tj result=" + p.getResult());
+                }
+            });
+            LogWriter.log(TAG, "hookSendMsgMgrDebug hooks OK");
         } catch (Throwable t) {
             LogWriter.log(TAG, "hookSendMsgMgrDebug err: " + t.getMessage());
         }
@@ -3046,7 +3135,30 @@ private static void hookVideoSendDebug() {
                 });
                 LogWriter.log(TAG, "hookVideoSendDebug4 OK");
             try {
-                XposedBridge.hookAllMethods(XposedHelpers.findClass("kl5.c2", sCL), "onPostExecute", new XC_MethodHook() {
+                Class<?> c2 = XposedHelpers.findClass("kl5.c2", sCL);
+                XposedBridge.hookAllConstructors(c2, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "kl5.c2.<init> ENTER args=" + p.args.length);
+                        for (int i = 0; i < p.args.length; i++) {
+                            LogWriter.log(TAG, "kl5.c2.<init> arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                        }
+                    }
+                });
+                XposedBridge.hookAllMethods(c2, "onPreExecute", new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "kl5.c2.onPreExecute ENTER");
+                    }
+                });
+                XposedBridge.hookAllMethods(c2, "onProgressUpdate", new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "kl5.c2.onProgressUpdate ENTER args=" + p.args.length);
+                        for (int i = 0; i < p.args.length; i++) {
+                            LogWriter.log(TAG, "kl5.c2.onProgressUpdate arg" + i + "=" + p.args[i]);
+                        }
+                    }
+                });
+                LogWriter.log(TAG, "hookVideoSendDebug4a OK");
+                XposedBridge.hookAllMethods(c2, "onPostExecute", new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam p) {
                         LogWriter.log(TAG, "kl5.c2.onPostExecute ENTER");
@@ -3086,7 +3198,14 @@ private static void hookVideoSendDebug() {
                         }
                     }
                 });
-                XposedBridge.hookAllMethods(XposedHelpers.findClass("kl5.c2", sCL), "doInBackground", new XC_MethodHook() {
+                XposedBridge.hookAllMethods(c2, "doInBackground", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "kl5.c2.doInBackground ENTER args=" + p.args.length);
+                        for (int i = 0; i < p.args.length; i++) {
+                            LogWriter.log(TAG, "kl5.c2.doInBackground arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                        }
+                    }
                     @Override
                     protected void afterHookedMethod(MethodHookParam p) {
                         Object result = p.getResult();
@@ -3097,6 +3216,11 @@ private static void hookVideoSendDebug() {
                         if (!root.exists()) return;
                         sPendingVideoDstPath = findFile(root, fileName);
                         LogWriter.log(TAG, "kl5.c2.doInBackground found path=" + sPendingVideoDstPath);
+                    }
+                });
+                XposedBridge.hookAllMethods(c2, "onCancelled", new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "kl5.c2.onCancelled ENTER");
                     }
                 });
                 LogWriter.log(TAG, "hookVideoSendDebug5 OK");
@@ -3119,6 +3243,80 @@ private static void hookVideoSendDebug() {
                 LogWriter.log(TAG, "hookVideoSendDebug6 OK");
             } catch (Throwable t) {
                 LogWriter.log(TAG, "hookVideoSendDebug6 err: " + t.getMessage());
+            }
+            try {
+                XposedBridge.hookAllConstructors(XposedHelpers.findClass("a65.xh6", sCL), new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "a65.xh6.<init> ENTER args=" + p.args.length);
+                        for (int i = 0; i < p.args.length; i++) {
+                            LogWriter.log(TAG, "a65.xh6.<init> arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                        }
+                    }
+                });
+                LogWriter.log(TAG, "hookVideoSendDebug7 OK");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "hookVideoSendDebug7 err: " + t.getMessage());
+            }
+            try {
+                Class<?> g27 = XposedHelpers.findClass("a65.g27", sCL);
+                XposedBridge.hookAllConstructors(g27, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "a65.g27.<init> ENTER args=" + p.args.length);
+                        for (int i = 0; i < p.args.length; i++) {
+                            LogWriter.log(TAG, "a65.g27.<init> arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                        }
+                    }
+                });
+                LogWriter.log(TAG, "hookVideoSendDebug8 OK");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "hookVideoSendDebug8 err: " + t.getMessage());
+            }
+            try {
+                Class<?> talkerCls = XposedHelpers.findClass("com.tencent.mm.plugin.msg.MsgIdTalker", sCL);
+                XposedBridge.hookAllConstructors(talkerCls, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "MsgIdTalker.<init> ENTER args=" + p.args.length);
+                        for (int i = 0; i < p.args.length; i++) {
+                            LogWriter.log(TAG, "MsgIdTalker.<init> arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                        }
+                    }
+                });
+                LogWriter.log(TAG, "hookVideoSendDebug9 OK");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "hookVideoSendDebug9 err: " + t.getMessage());
+            }
+            try {
+                Class<?> v2Cls = XposedHelpers.findClass("v21.v2", sCL);
+                XposedBridge.hookAllConstructors(v2Cls, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        LogWriter.log(TAG, "v21.v2.<init> ENTER args=" + p.args.length);
+                        for (int i = 0; i < p.args.length; i++) {
+                            LogWriter.log(TAG, "v21.v2.<init> arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                        }
+                    }
+                });
+                LogWriter.log(TAG, "hookVideoSendDebug10 OK");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "hookVideoSendDebug10 err: " + t.getMessage());
+            }
+            try {
+                Class<?> o2 = XposedHelpers.findClass("v21.o2", sCL);
+for (java.lang.reflect.Method o2m : o2.getDeclaredMethods()) {
+                        XposedBridge.hookMethod(o2m, new XC_MethodHook() {
+                            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                                LogWriter.log(TAG, "v21.o2." + p.method.getName() + " ENTER args=" + p.args.length);
+                                for (int i = 0; i < p.args.length && i < 3; i++) {
+                                    LogWriter.log(TAG, "v21.o2." + p.method.getName() + " arg" + i + "=" + p.args[i] + " (" + (p.args[i] != null ? p.args[i].getClass().getSimpleName() : "null") + ")");
+                                }
+                            }
+                            @Override protected void afterHookedMethod(MethodHookParam p) {
+                                LogWriter.log(TAG, "v21.o2." + p.method.getName() + " result=" + p.getResult());
+                            }
+                        });
+                    }
+                LogWriter.log(TAG, "hookVideoSendDebug11 OK");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "hookVideoSendDebug11 err: " + t.getMessage());
             }
             } catch (Throwable t) {
                 LogWriter.log(TAG, "hookVideoSendDebug4 err: " + t.getMessage());
@@ -3509,6 +3707,41 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                         XposedHelpers.findClass("e01.x9", sCL), "x", e9);
                 XposedHelpers.setObjectField(v2, "n", msgId);
                 LogWriter.log(TAG, "v803 built v2 msgId=" + msgId + " path=" + dstPath);
+                boolean sent = false;
+                try {
+                    Object mgr = XposedHelpers.callStaticMethod(
+                            XposedHelpers.findClass("pa5.n0", sCL), "c",
+                            XposedHelpers.findClass("kl5.s5", sCL));
+                    if (mgr != null) {
+                        LogWriter.log(TAG, "v803 kl5.s5 mgr OK");
+                        try {
+                            XposedHelpers.callMethod(mgr, "Dj",
+                                    sCtx, dstPath, dstPath, finalToUser, duration, 43,
+                                    null, true, true, "", "", talker, null, "", null);
+                            LogWriter.log(TAG, "v803 kl5.s5.Dj OK");
+                            sent = true;
+                        } catch (Throwable tdj) {
+                            LogWriter.log(TAG, "v803 kl5.s5.Dj fail: " + tdj.getMessage());
+                            try {
+                                XposedHelpers.callMethod(mgr, "Cj",
+                                        sCtx, dstPath, dstPath, finalToUser, duration, 43,
+                                        null, true, true, "", "", talker);
+                                LogWriter.log(TAG, "v803 kl5.s5.Cj OK");
+                                sent = true;
+                            } catch (Throwable tcj) {
+                                LogWriter.log(TAG, "v803 kl5.s5.Cj fail: " + tcj.getMessage());
+                            }
+                        }
+                    } else {
+                        LogWriter.log(TAG, "v803 kl5.s5 mgr null");
+                    }
+                } catch (Throwable tbl) {
+                    LogWriter.log(TAG, "v803 kl5.s5 err: " + tbl.getMessage());
+                }
+                if (sent) {
+                    LogWriter.log(TAG, "v803 sent via kl5.s5");
+                    return;
+                }
                 Class<?> d3Class = XposedHelpers.findClass("v21.d3", sCL);
                 boolean d3Called = false;
                 try {
