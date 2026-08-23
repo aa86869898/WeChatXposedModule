@@ -2895,7 +2895,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v784 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v785 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3303,13 +3303,13 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
         return true;
     }
 
-    private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v784 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
+private static boolean sendVideoToUser(String toUser, String videoPath) {
+        LogWriter.log(TAG, "v785 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
         int duration = getVideoDuration(videoPath);
-        LogWriter.log(TAG, "v784 sendVideo duration=" + duration + "s size=" + f.length());
+        LogWriter.log(TAG, "v785 sendVideo duration=" + duration + "s size=" + f.length());
         String finalToUser = toUser;
         sH.post(() -> {
             try {
@@ -3318,13 +3318,13 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
                         XposedHelpers.findClass("com.tencent.mm.plugin.msg.MsgIdTalker", sCL), "g");
                 boolean result = (Boolean) XposedHelpers.callStaticMethod(d3, "q",
                         videoPath, "", duration, finalToUser, "", 0, "", 43, null,
-                        null, msgIdTalker, "", "", false, -1L, null, "", "");
-                LogWriter.log(TAG, "v784 sendVideo d3.q main-thread ret=" + result);
+                        videoPath, msgIdTalker, "", "", false, -1L, null, "", "");
+                LogWriter.log(TAG, "v785 sendVideo d3.q main-thread ret=" + result);
             } catch (Throwable t) {
-                LogWriter.log(TAG, "v784 sendVideo d3.q main-thread fail: " + t.getClass().getName() + ": " + t.getMessage());
+                LogWriter.log(TAG, "v785 sendVideo d3.q main-thread fail: " + t.getClass().getName() + ": " + t.getMessage());
                 java.io.StringWriter sw = new java.io.StringWriter();
                 t.printStackTrace(new java.io.PrintWriter(sw));
-                LogWriter.log(TAG, "v783 sendVideo d3.q stack: " + sw.toString());
+                LogWriter.log(TAG, "v785 sendVideo d3.q stack: " + sw.toString());
             }
         });
         return true;
