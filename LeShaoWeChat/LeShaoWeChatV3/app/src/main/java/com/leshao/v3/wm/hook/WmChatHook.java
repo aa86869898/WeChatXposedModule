@@ -2896,7 +2896,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v790 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v791 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3017,7 +3017,7 @@ private static void hookVideoSendDebug() {
                                     XposedHelpers.setObjectField(v2, "a", f.getName());
                                     XposedHelpers.setIntField(v2, "f", (int) f.length());
                                     XposedHelpers.setIntField(v2, "m", getVideoDuration(path));
-                                    XposedHelpers.setIntField(v2, "i", 0);
+                                    XposedHelpers.setIntField(v2, "i", 111);
                                     if (sPendingVideoToUser != null) {
                                         XposedHelpers.setObjectField(v2, "q", sPendingVideoToUser);
                                         XposedHelpers.setObjectField(v2, "r", sPendingVideoToUser);
