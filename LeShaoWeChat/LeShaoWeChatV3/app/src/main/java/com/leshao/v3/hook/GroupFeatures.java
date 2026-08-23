@@ -17,10 +17,13 @@ import java.io.File;
 import java.io.FileWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.json.JSONArray;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.model.ModuleConfig;
@@ -44,12 +47,16 @@ public class GroupFeatures {
     private static String anonymousName = "匿名群友";
     private static volatile boolean sEnabled = true;
     private static Object sMsgStorage;
-    private static final Set<String> processedMsgIds = new HashSet<>();
+    private static final Set<String> processedMsgIds = ConcurrentHashMap.newKeySet();
+    private static final Map<String, Integer> violationCount = new ConcurrentHashMap<>();
+    // #44 入群欢迎去重: room|排序成员 -> 最近发送时间戳(ms)
+    private static final Map<String, Long> sWelcomeDedupe = new ConcurrentHashMap<>();
 
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     public static void hook(ClassLoader cl) {
-        if (!sEnabled) return;
+        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        if (config == null || !config.groupFeaturesEnabled) return;
         anonymousName = HookConfig.getString("anonymous_name", "匿名群友");
 
         initMsgStorage(cl);
@@ -591,32 +598,74 @@ public class GroupFeatures {
                             processedMsgIds.remove(processedMsgIds.iterator().next());
                         }
 
-                        Set<String> keywords = new HashSet<>();
+                        Set<String> adKeywords = new HashSet<>();
+                        Set<String> kickKeywords = new HashSet<>();
                         try {
                             JSONArray adArr = new JSONArray(prefs.getString("ls_ad_keywords", "[]"));
-                            for (int i = 0; i < adArr.length(); i++) keywords.add(adArr.getString(i));
+                            for (int i = 0; i < adArr.length(); i++) adKeywords.add(adArr.getString(i));
                         } catch (Throwable ignored) {}
                         try {
                             JSONArray kkArr = new JSONArray(prefs.getString("ls_kick_keywords", "[]"));
-                            for (int i = 0; i < kkArr.length(); i++) keywords.add(kkArr.getString(i));
+                            for (int i = 0; i < kkArr.length(); i++) kickKeywords.add(kkArr.getString(i));
                         } catch (Throwable ignored) {}
 
-                        if (keywords.isEmpty()) return;
-
-                        boolean matched = false;
-                        for (String kw : keywords) {
-                            if (!kw.isEmpty() && content.contains(kw)) {
-                                matched = true;
-                                break;
-                            }
-                        }
-                        if (!matched) return;
+                        if (adKeywords.isEmpty() && kickKeywords.isEmpty()) return;
 
                         XposedBridge.log("[Group] 检测到违规消息: " + sender
                                 + " -> " + content.substring(0, Math.min(30, content.length())));
-                        writeLog(sdf.format(new Date()) + " | " + talker + " | " + sender
-                                + " | AD_DETECTED | " + content.substring(0, Math.min(50, content.length())));
 
+                        // 黑名单: 命中直接踢
+                        if (prefs.getBoolean("ls_blacklist_enabled", true)) {
+                            Set<String> blacklist = loadBlacklist(prefs);
+                            if (blacklist.contains(sender)) {
+                                writeLog(sdf.format(new Date()) + " | " + talker + " | " + sender
+                                        + " | BLACKLIST_KICK | " + content.substring(0, Math.min(50, content.length())));
+                                XposedBridge.log("[Group] 命中黑名单，直接踢出: " + sender);
+                                kickMember(cl, talker, sender);
+                                return;
+                            }
+                        }
+
+                        // 踢人关键词: 命中即踢
+                        for (String kw : kickKeywords) {
+                            if (!kw.isEmpty() && content.contains(kw)) {
+                                writeLog(sdf.format(new Date()) + " | " + talker + " | " + sender
+                                        + " | KICK_KEYWORD | " + content.substring(0, Math.min(50, content.length())));
+                                XposedBridge.log("[Group] 命中踢人关键词[" + kw + "]，直接踢出: " + sender);
+                                kickMember(cl, talker, sender);
+                                return;
+                            }
+                        }
+
+                        // 广告关键词: 计数达阈值踢
+                        boolean matchedAd = false;
+                        for (String kw : adKeywords) {
+                            if (!kw.isEmpty() && content.contains(kw)) {
+                                matchedAd = true;
+                                break;
+                            }
+                        }
+                        if (!matchedAd) return;
+
+                        String violationKey = talker + ":" + sender;
+
+                        int threshold = 3;
+                        try { threshold = Integer.parseInt(prefs.getString("ls_kick_threshold", "3")); }
+                        catch (Throwable ignored) {}
+                        if (threshold <= 0) threshold = 1;
+
+                        int current = violationCount.getOrDefault(violationKey, 0) + 1;
+                        violationCount.put(violationKey, current);
+                        writeLog(sdf.format(new Date()) + " | " + talker + " | " + sender
+                                + " | AD_DETECTED(" + current + "/" + threshold + ") | "
+                                + content.substring(0, Math.min(50, content.length())));
+
+                        if (current < threshold) {
+                            XposedBridge.log("[Group] 违规 " + current + "/" + threshold + "，暂不踢出: " + sender);
+                            return;
+                        }
+
+                        violationCount.remove(violationKey);
                         kickMember(cl, talker, sender);
                     } catch (Throwable ignored) {}
                 }
@@ -638,6 +687,24 @@ public class GroupFeatures {
                 return false;
             }
         }
+    }
+
+    private static Set<String> loadBlacklist(SharedPreferences prefs) {
+        Set<String> blacklist = new HashSet<>();
+        try {
+            JSONArray blArr = new JSONArray(prefs.getString("ls_blacklist", "[]"));
+            for (int i = 0; i < blArr.length(); i++) {
+                org.json.JSONObject o = blArr.optJSONObject(i);
+                if (o != null) {
+                    String w = o.optString("wxid", "");
+                    if (!w.isEmpty()) blacklist.add(w);
+                } else {
+                    String w = blArr.optString(i, "");
+                    if (!w.isEmpty()) blacklist.add(w);
+                }
+            }
+        } catch (Throwable ignored) {}
+        return blacklist;
     }
 
     private static void kickMember(ClassLoader cl, String chatroom, String wxid) {
@@ -687,6 +754,7 @@ public class GroupFeatures {
             Class<?> delUI = XposedHelpers.findClass(
                     "com.tencent.mm.chatroom.ui.DelChatroomMemberUI", cl);
             for (java.lang.reflect.Method m : delUI.getDeclaredMethods()) {
+                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
                 if (m.getParameterTypes().length >= 4
                         && m.getParameterTypes()[0] == String.class
                         && m.getParameterTypes()[m.getParameterTypes().length - 1] == String.class) {
@@ -708,6 +776,9 @@ public class GroupFeatures {
     // #44 入群欢迎 — 新成员入群自动发送欢迎消息
     // ══════════════════════════════════════════════════════
     private static void hookGroupWelcome(ClassLoader cl) {
+        // 首选: 反编译确认的原子入口 e01.v1.t(room, members, roomOwner) = syncAddChatroomMember
+        if (hookWelcomeViaSyncAdd(cl)) return;
+        // 备选1: 事件类
         try {
             String[] eventCandidates = {
                 "com.tencent.mm.autogen.events.NetSceneAddChatRoomMemberEvent",
@@ -737,18 +808,69 @@ public class GroupFeatures {
                             String welcomeMsg = prefs.getString("ls_welcome_msg", "欢迎加入群聊!");
                             if (welcomeMsg.isEmpty()) welcomeMsg = "欢迎加入群聊!";
 
-                            sendTextMessage(cl, chatroom, welcomeMsg);
+                            sendWelcome(cl, prefs, chatroom, welcomeMsg);
                             XposedBridge.log("[Group] 欢迎消息已发送: " + chatroom);
                         } catch (Throwable ignored) {}
                     }
                 });
                 XposedBridge.log("[Group] #44 入群欢迎(Event)完成");
-            } else {
-                hookWelcomeViaChatroomInfo(cl);
+                return;
             }
+        } catch (Throwable ignored) {}
+        // 备选2: ChatroomInfoUI.onResume
+        hookWelcomeViaChatroomInfo(cl);
+    }
+
+    /**
+     * 首选欢迎触发点: hook e01.v1.t(String room, ArrayList<String> members, String roomOwner)。
+     * 该方法是 NetSceneAddChatRoomMember 成功后更新本地成员的原子入口(syncAddChatroomMember)，
+     * 每次真实成员入群都会调用, 按 room + 排序后的 members 去重(60s 窗口)。
+     */
+    private static boolean hookWelcomeViaSyncAdd(ClassLoader cl) {
+        try {
+            Class<?> v1 = VersionCompat.findChatroomMembersLogicClass(cl);
+            if (v1 == null) return false;
+            XposedBridge.hookAllMethods(v1, "t", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!(param.args[0] instanceof String)) return;
+                        String room = (String) param.args[0];
+                        if (room.isEmpty()) return;
+                        Object membersObj = param.args[1];
+                        List<String> members = new ArrayList<>();
+                        if (membersObj instanceof List) {
+                            for (Object o : (List<?>) membersObj) {
+                                if (o instanceof String) members.add((String) o);
+                            }
+                        }
+                        if (members.isEmpty()) return;
+
+                        // 去重: room + 排序成员
+                        List<String> sorted = new ArrayList<>(members);
+                        Collections.sort(sorted);
+                        String key = room + "|" + sorted.toString();
+                        long now = System.currentTimeMillis();
+                        Long last = sWelcomeDedupe.get(key);
+                        if (last != null && now - last < 60000L) return;
+                        sWelcomeDedupe.put(key, now);
+                        if (sWelcomeDedupe.size() > 500) sWelcomeDedupe.clear();
+
+                        SharedPreferences prefs = ContextManager.getPrefs();
+                        if (!prefs.getBoolean("ls_welcome_enabled", false)) return;
+                        String welcomeMsg = prefs.getString("ls_welcome_msg", "欢迎加入群聊!");
+                        if (welcomeMsg.isEmpty()) welcomeMsg = "欢迎加入群聊!";
+
+                        sendWelcome(cl, prefs, room, welcomeMsg);
+                        XposedBridge.log("[Group] 欢迎消息(syncAdd)已发送: " + room + " members=" + members.size());
+                    } catch (Throwable ignored) {}
+                }
+            });
+            XposedBridge.log("[Group] #44 入群欢迎(syncAddChatroomMember e01.v1.t)完成");
+            return true;
         } catch (Throwable t) {
-            XposedBridge.log("[Group] #44 入群欢迎失败: " + t.getMessage());
-            hookWelcomeViaChatroomInfo(cl);
+            XposedBridge.log("[Group] #44 syncAdd hook 失败: " + t.getMessage());
+            return false;
         }
     }
 
@@ -772,12 +894,26 @@ public class GroupFeatures {
                         if (chatroom.isEmpty()) return;
 
                         String welcomeMsg = prefs.getString("ls_welcome_msg", "欢迎加入群聊!");
-                        sendTextMessage(cl, chatroom, welcomeMsg);
+                        sendWelcome(cl, prefs, chatroom, welcomeMsg);
                         XposedBridge.log("[Group] 欢迎消息(ChatroomInfoUI)已发送: " + chatroom);
                     } catch (Throwable ignored) {}
                 }
             });
         } catch (Throwable t) {}
+    }
+
+    /**
+     * 发送欢迎语, 按 ls_welcome_type 区分类型:
+     *  0=文本消息 (已实现)  1=图片消息 (依赖微信签名, 暂回退文本并记日志)
+     */
+    private static void sendWelcome(ClassLoader cl, SharedPreferences prefs, String talker, String welcomeMsg) {
+        int welcomeType = 0;
+        try { welcomeType = Integer.parseInt(prefs.getString("ls_welcome_type", "0")); }
+        catch (Throwable ignored) {}
+        if (welcomeType == 1) {
+            XposedBridge.log("[Group] 欢迎语图片类型暂缺签名实现, 回退发送文本: " + talker);
+        }
+        sendTextMessage(cl, talker, welcomeMsg);
     }
 
     public static void sendTextMessage(ClassLoader cl, String talker, String text) {

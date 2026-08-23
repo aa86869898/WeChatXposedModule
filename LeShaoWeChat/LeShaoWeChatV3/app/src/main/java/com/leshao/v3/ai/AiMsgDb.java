@@ -8,6 +8,8 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.VersionCompat;
 
 import java.lang.reflect.Method;
+
+import de.robv.android.xposed.XposedHelpers;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -35,9 +37,10 @@ public class AiMsgDb {
 
     private List<MessageReader.ChatMsg> readRecentInternal(String talker, int limit, boolean textOnly) {
         List<MessageReader.ChatMsg> out = new ArrayList<>();
+        Object db = null;
         Cursor c = null;
         try {
-            Object db = openDb();
+            db = openDb();
             if (db == null) {
                 LogWriter.log(TAG, "readRecent: 打开数据库失败 talker=" + talker);
                 return out;
@@ -73,12 +76,22 @@ public class AiMsgDb {
             LogWriter.log(TAG, "readRecent 异常: " + t.getClass().getSimpleName() + ": " + t.getMessage());
         } finally {
             try { if (c != null) c.close(); } catch (Throwable ignored) {}
+            closeDb(db);
         }
         return out;
     }
 
+    private static void closeDb(Object db) {
+        if (db == null) return;
+        try {
+            db.getClass().getMethod("close").invoke(db);
+        } catch (Throwable t) {
+            try { XposedHelpers.callMethod(db, "close"); } catch (Throwable ignored) {}
+        }
+    }
+
     private Cursor queryMessage(Object db, String talker, int n) {
-        String[] colVariants = {"msgContent", "content"};
+        String[] colVariants = {"content", "msgContent"};
         for (String col : colVariants) {
             String sql = "SELECT " + col + ", createTime, isSend, type FROM message"
                     + " WHERE talker=? ORDER BY createTime DESC LIMIT " + n;

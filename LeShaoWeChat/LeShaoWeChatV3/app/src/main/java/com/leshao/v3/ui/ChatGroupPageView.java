@@ -194,7 +194,8 @@ public class ChatGroupPageView {
         textCol.addView(tvName);
 
         TextView tvCount = new TextView(ctx);
-        tvCount.setText(label.contacts.size() + " 位联系人" + (label.isTemporary ? " | 临时" : ""));
+        boolean builtIn = label.labelId == ChatGroupHook.LABEL_ID_GROUP || label.labelId == ChatGroupHook.LABEL_ID_FRIEND || label.labelId == ChatGroupHook.LABEL_ID_SERVICE;
+        tvCount.setText(builtIn ? "内置分组" : (label.contacts.size() + " 位联系人" + (label.isTemporary ? " | 临时" : "")));
         tvCount.setTextSize(11); tvCount.setTextColor(AppColors.text2());
         tvCount.setPadding(0, (int)(2*d), 0, 0);
         textCol.addView(tvCount);
@@ -212,7 +213,7 @@ public class ChatGroupPageView {
         delBtn.setTextColor(0xFFE53935);
         delBtn.setPadding((int)(6*d), (int)(6*d), (int)(6*d), (int)(6*d));
         delBtn.setOnClickListener(v -> showDeleteLabelDialog(ctx, parentAct, d, String.valueOf(label.labelId), label.labelName, refresh));
-        if (label.labelId != 10000 && label.labelId != 10001 && label.labelId != 10002) {
+        if (label.labelId != ChatGroupHook.LABEL_ID_GROUP && label.labelId != ChatGroupHook.LABEL_ID_FRIEND && label.labelId != ChatGroupHook.LABEL_ID_SERVICE) {
             row.addView(delBtn);
         }
 

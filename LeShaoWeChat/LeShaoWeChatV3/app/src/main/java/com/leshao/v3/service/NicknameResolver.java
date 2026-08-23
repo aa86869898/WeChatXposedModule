@@ -28,6 +28,13 @@ public class NicknameResolver {
             return name;
         }
 
+        // 群成员/非好友: 从 rcontact 全表按需查询(备注优先, 其次昵称)
+        String anyName = ContactRepository.queryAnyContactName(wxid);
+        if (anyName != null && !anyName.isEmpty()) {
+            sCache.put(wxid, anyName);
+            return anyName;
+        }
+
         // 触发异步加载供后续使用
         ContactRepository.loadAsync(() -> {
             ContactCard c2 = ContactRepository.findByUsername(wxid);
@@ -44,6 +51,8 @@ public class NicknameResolver {
     private static String fallbackName(String wxid) {
         if (wxid == null || wxid.isEmpty()) return "未知";
         if (wxid.startsWith("gh_")) return "公众号";
-        return wxid.length() > 20 ? wxid.substring(0, 20) : wxid;
+        if (wxid.endsWith("@chatroom")) return "群聊";
+        if (wxid.startsWith("wxid_")) return "好友";
+        return "好友";
     }
 }

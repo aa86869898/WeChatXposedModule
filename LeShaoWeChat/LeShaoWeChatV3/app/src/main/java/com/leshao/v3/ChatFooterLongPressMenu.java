@@ -7,6 +7,8 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.net.Uri;
@@ -20,11 +22,14 @@ import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.app.AlertDialog;
@@ -32,7 +37,9 @@ import android.app.AlertDialog;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.db.VoiceHistoryDbHelper;
 import com.leshao.v3.hook.TtsVoiceSender;
+import com.leshao.v3.ting.TingMusicModule;
 import com.leshao.v3.ui.AppColors;
+import com.leshao.v3.ui.CandyUi;
 import com.leshao.v3.wm.utils.WmPrefs;
 
 import java.io.File;
@@ -40,8 +47,15 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.HashSet;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -50,7 +64,7 @@ public class ChatFooterLongPressMenu {
 
     private static final String TAG = "CFLPMenu";
     private static final int REQ_PICK_MP3 = 9998;
-    private static final Set<View> injectedViews = new HashSet<>();
+    private static final Set<View> injectedViews = Collections.newSetFromMap(new WeakHashMap<View, Boolean>());
     private static PopupWindow popupWindow;
     private static ClassLoader sClassLoader;
     private static volatile String sCurrentTalker;
@@ -58,6 +72,7 @@ public class ChatFooterLongPressMenu {
     private static TextView sTargetPathText;
     private static String sLastPickedPath;
     private static ViewTreeObserver.OnGlobalLayoutListener sLayoutListener;
+    private static View sLayoutAnchor;
     private static AlertDialog sHistoryDialog;
     private static float sCutBeginSec;
     private static float sCutEndSec;
@@ -320,14 +335,133 @@ public class ChatFooterLongPressMenu {
         if (!WmPrefs.isLongPressMenu()) return;
         if (popupWindow != null) {
             if (popupWindow.isShowing()) popupWindow.dismiss();
-            if (sLayoutListener != null) {
-                try { anchor.getViewTreeObserver().removeOnGlobalLayoutListener(sLayoutListener); } catch (Throwable ignored) {}
-            }
+            removeLayoutListener();
         }
 
         Context ctx = anchor.getContext();
 
         int cardBg = AppColors.card();
+        int p6 = dp(ctx, 6);
+        int p8 = dp(ctx, 8);
+        int p10 = dp(ctx, 10);
+        int p12 = dp(ctx, 12);
+
+        // 主容器（垂直）
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(cardBg);
+        root.setPadding(p8, dp(ctx, 4), p8, p8);
+
+        // 标题栏（横跨，居中）
+        TextView titleBar = new TextView(ctx);
+        titleBar.setText("乐少音频转语音助手支持在线点歌");
+        titleBar.setTextSize(13);
+        titleBar.setTextColor(AppColors.text1());
+        titleBar.setGravity(Gravity.CENTER);
+        titleBar.setPadding(0, dp(ctx, 3), 0, p6);
+        GradientDrawable titleBg = new GradientDrawable();
+        titleBg.setColor(AppColors.inputBg());
+        titleBg.setCornerRadius(p6);
+        titleBar.setBackground(titleBg);
+        root.addView(titleBar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // 主体（水平）
+        LinearLayout body = new LinearLayout(ctx);
+        body.setOrientation(LinearLayout.HORIZONTAL);
+        root.addView(body);
+
+        // 左侧功能列表
+        LinearLayout leftList = new LinearLayout(ctx);
+        leftList.setOrientation(LinearLayout.VERTICAL);
+        body.addView(leftList, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // 右侧容器
+        FrameLayout rightContainer = new FrameLayout(ctx);
+        LinearLayout.LayoutParams rcLp = new LinearLayout.LayoutParams(dp(ctx, 300),
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        rcLp.leftMargin = p8;
+        body.addView(rightContainer, rcLp);
+
+        // 子面板
+        View audioPanel = createAudioToVoicePanel(ctx);
+        View searchPanel = createSearchToVoicePanel(ctx);
+        rightContainer.addView(audioPanel);
+        rightContainer.addView(searchPanel);
+        searchPanel.setVisibility(View.GONE);
+
+        // 左侧按钮
+        final TextView audioBtn = makeSideButton(ctx, "高音质转换", "", true);
+        final TextView searchBtn = makeSideButton(ctx, "自动点歌", "", false);
+        leftList.addView(audioBtn);
+        leftList.addView(searchBtn);
+
+        audioBtn.setOnClickListener(v -> switchPanel(audioBtn, searchBtn, audioPanel, searchPanel));
+        searchBtn.setOnClickListener(v -> switchPanel(searchBtn, audioBtn, searchPanel, audioPanel));
+
+        // PopupWindow
+        popupWindow = new PopupWindow(root, ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        popupWindow.setBackgroundDrawable(new ColorDrawable(0));
+        popupWindow.setElevation(dp(ctx, 8));
+        popupWindow.setOutsideTouchable(true);
+        popupWindow.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+
+        int[] loc = new int[2];
+        anchor.getLocationOnScreen(loc);
+        int x = Math.max(0, loc[0] - p8);
+        int y = Math.max(0, loc[1] - dp(ctx, 340));
+        popupWindow.showAtLocation(anchor, Gravity.TOP | Gravity.START, x, y);
+        popupWindow.setOnDismissListener(() -> removeLayoutListener());
+
+        sLayoutAnchor = anchor;
+        sLayoutListener = () -> {
+            if (popupWindow == null || !popupWindow.isShowing()) return;
+            int[] newLoc = new int[2];
+            anchor.getLocationOnScreen(newLoc);
+            int ny = Math.max(0, newLoc[1] - dp(ctx, 340));
+            popupWindow.update(newLoc[0] - p8, ny, -1, -1, true);
+        };
+        anchor.getViewTreeObserver().addOnGlobalLayoutListener(sLayoutListener);
+    }
+
+    private static void removeLayoutListener() {
+        if (sLayoutListener != null && sLayoutAnchor != null) {
+            try { sLayoutAnchor.getViewTreeObserver().removeOnGlobalLayoutListener(sLayoutListener); } catch (Throwable ignored) {}
+        }
+        sLayoutListener = null;
+        sLayoutAnchor = null;
+    }
+
+    private static TextView makeSideButton(Context ctx, String title, String sub, boolean selected) {
+        TextView btn = new TextView(ctx);
+        btn.setText((sub == null || sub.isEmpty()) ? title : title + "\n" + sub);
+        btn.setTextSize(12);
+        btn.setGravity(Gravity.CENTER);
+        btn.setPadding(dp(ctx, 4), dp(ctx, 14), dp(ctx, 4), dp(ctx, 14));
+        btn.setTextColor(selected ? AppColors.WHITE_TEXT : AppColors.text1());
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(selected ? AppColors.accent() : AppColors.inputBg());
+        bg.setCornerRadius(dp(ctx, 8));
+        btn.setBackground(bg);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.bottomMargin = dp(ctx, 6);
+        btn.setLayoutParams(lp);
+        return btn;
+    }
+
+    private static void switchPanel(TextView selectedBtn, TextView otherBtn, View showPanel, View hidePanel) {
+        selectedBtn.setTextColor(AppColors.WHITE_TEXT);
+        ((GradientDrawable) selectedBtn.getBackground()).setColor(AppColors.accent());
+        otherBtn.setTextColor(AppColors.text1());
+        ((GradientDrawable) otherBtn.getBackground()).setColor(AppColors.inputBg());
+        showPanel.setVisibility(View.VISIBLE);
+        hidePanel.setVisibility(View.GONE);
+    }
+
+    private static View createAudioToVoicePanel(Context ctx) {
         int text1 = AppColors.text1();
         int text2 = AppColors.text2();
         int accent = AppColors.accent();
@@ -341,19 +475,8 @@ public class ChatFooterLongPressMenu {
 
         LinearLayout panel = new LinearLayout(ctx);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setBackgroundColor(cardBg);
-        panel.setPadding(p12, p10, p12, p10);
-        panel.setMinimumWidth(dp(ctx, 280));
 
-        // --- 标题 ---
-        TextView title = new TextView(ctx);
-        title.setText("MP3转语音");
-        title.setTextSize(14);
-        title.setTextColor(text1);
-        title.setPadding(0, 0, 0, p8);
-        panel.addView(title);
-
-        // --- 文件选择行: [路径文本] [选择] ---
+        // 文件选择行: [路径文本] [选择]
         LinearLayout fileRow = new LinearLayout(ctx);
         fileRow.setOrientation(LinearLayout.HORIZONTAL);
         fileRow.setPadding(0, 0, 0, p8);
@@ -375,7 +498,7 @@ public class ChatFooterLongPressMenu {
         browseBtn.setTextSize(12);
         browseBtn.setTextColor(whiteOnAccent);
         browseBtn.setGravity(Gravity.CENTER);
-        browseBtn.setPadding(p10, p8, p10, p8);
+        browseBtn.        setPadding(dp(ctx, 4), p8, dp(ctx, 4), p8);
         GradientDrawable browseBg = new GradientDrawable();
         browseBg.setColor(accent);
         browseBg.setCornerRadius(p6);
@@ -386,7 +509,7 @@ public class ChatFooterLongPressMenu {
         fileRow.addView(browseBtn, btnLp);
         panel.addView(fileRow);
 
-        // --- 已选文件名显示 ---
+        // 已选文件名显示
         final TextView fileNameTv = new TextView(ctx);
         fileNameTv.setTextSize(11);
         fileNameTv.setTextColor(text2);
@@ -394,7 +517,7 @@ public class ChatFooterLongPressMenu {
         fileNameTv.setVisibility(View.GONE);
         panel.addView(fileNameTv);
 
-        // --- 音频切割 / 历史记录 按钮行 ---
+        // 音频切割 / 历史记录 按钮行
         LinearLayout btnRow = new LinearLayout(ctx);
         btnRow.setOrientation(LinearLayout.HORIZONTAL);
         btnRow.setPadding(0, 0, 0, p8);
@@ -404,7 +527,7 @@ public class ChatFooterLongPressMenu {
         cutBtn.setTextSize(12);
         cutBtn.setTextColor(accent);
         cutBtn.setGravity(Gravity.CENTER);
-        cutBtn.setPadding(p10, p6, p10, p6);
+        cutBtn.setPadding(dp(ctx, 4), p6, dp(ctx, 4), p6);
         GradientDrawable cutBg = new GradientDrawable();
         cutBg.setStroke(dp(ctx, 1), accent);
         cutBg.setCornerRadius(p6);
@@ -420,8 +543,9 @@ public class ChatFooterLongPressMenu {
         historyBtn.setTextSize(12);
         historyBtn.setTextColor(text2);
         historyBtn.setGravity(Gravity.CENTER);
-        historyBtn.setPadding(p10, p6, p10, p6);
+        historyBtn.setPadding(dp(ctx, 4), p6, dp(ctx, 4), p6);
         GradientDrawable hBg = new GradientDrawable();
+        hBg.setColor(AppColors.inputBg());
         hBg.setStroke(dp(ctx, 1), divider);
         hBg.setCornerRadius(p6);
         historyBtn.setBackground(hBg);
@@ -431,7 +555,7 @@ public class ChatFooterLongPressMenu {
         btnRow.addView(historyBtn, histLp);
         panel.addView(btnRow);
 
-        // --- 进度条 ---
+        // 进度条
         final ProgressBar progressBar = new ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal);
         progressBar.setMax(100);
         progressBar.setProgress(0);
@@ -440,7 +564,7 @@ public class ChatFooterLongPressMenu {
         pbLp.bottomMargin = p8;
         panel.addView(progressBar, pbLp);
 
-        // --- 进度文字 ---
+        // 进度文字
         final TextView progressText = new TextView(ctx);
         progressText.setTextSize(11);
         progressText.setTextColor(text2);
@@ -449,21 +573,20 @@ public class ChatFooterLongPressMenu {
         progressText.setPadding(0, 0, 0, p6);
         panel.addView(progressText);
 
-        // --- 转码按钮 ---
+        // 转码按钮
         final TextView convertBtn = new TextView(ctx);
         convertBtn.setText("转码");
         convertBtn.setTextSize(13);
         convertBtn.setTextColor(whiteOnAccent);
         convertBtn.setGravity(Gravity.CENTER);
-        convertBtn.setPadding(p12, p8, p12, p8);
+        convertBtn.setPadding(dp(ctx, 4), p8, dp(ctx, 4), p8);
         GradientDrawable cvtBg = new GradientDrawable();
         cvtBg.setColor(accent);
         cvtBg.setCornerRadius(p6);
         convertBtn.setBackground(cvtBg);
         panel.addView(convertBtn);
 
-        // --- 事件绑定 ---
-
+        // 事件绑定
         browseBtn.setOnClickListener(v -> {
             Activity act = getActivityFromContext(ctx);
             if (act == null) {
@@ -549,8 +672,7 @@ public class ChatFooterLongPressMenu {
             themeAlertDialog(cfgDlg);
         });
 
-        // --- 文件选择回调: 更新显示 ---
-        // (原 sTargetPathText 回调保留在 hookActivityResult 中)
+        // 文件选择回调更新显示
         final ViewTreeObserver.OnGlobalLayoutListener updateFileName = () -> {
             String name = new java.io.File(pathText.getText().toString().trim()).getName();
             if (!name.isEmpty() && !name.equals("未选择文件")) {
@@ -572,28 +694,264 @@ public class ChatFooterLongPressMenu {
         });
         updateFileName.onGlobalLayout();
 
-        // --- PopupWindow ---
-        popupWindow = new PopupWindow(panel, ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT, true);
-        popupWindow.setBackgroundDrawable(new ColorDrawable(0));
-        popupWindow.setElevation(dp(ctx, 8));
-        popupWindow.setOutsideTouchable(true);
-        popupWindow.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        return panel;
+    }
 
-        int[] loc = new int[2];
-        anchor.getLocationOnScreen(loc);
-        int x = Math.max(0, loc[0] - p8);
-        int y = Math.max(0, loc[1] - dp(ctx, 260));
-        popupWindow.showAtLocation(anchor, Gravity.TOP | Gravity.START, x, y);
+    private static View createSearchToVoicePanel(Context ctx) {
+        int text1 = AppColors.text1();
+        int text2 = AppColors.text2();
+        int accent = AppColors.accent();
+        int whiteOnAccent = AppColors.WHITE_TEXT;
 
-        sLayoutListener = () -> {
-            if (popupWindow == null || !popupWindow.isShowing()) return;
-            int[] newLoc = new int[2];
-            anchor.getLocationOnScreen(newLoc);
-            int ny = Math.max(0, newLoc[1] - dp(ctx, 260));
-            popupWindow.update(newLoc[0] - p8, ny, -1, -1, true);
-        };
-        anchor.getViewTreeObserver().addOnGlobalLayoutListener(sLayoutListener);
+        int p6 = dp(ctx, 6);
+        int p8 = dp(ctx, 8);
+        int p10 = dp(ctx, 10);
+
+        LinearLayout panel = new LinearLayout(ctx);
+        panel.setOrientation(LinearLayout.VERTICAL);
+
+        // 点歌功能（搜索框上方）
+        LinearLayout orderSection = new LinearLayout(ctx);
+        orderSection.setOrientation(LinearLayout.VERTICAL);
+        orderSection.setPadding(0, 0, 0, p8);
+
+        LinearLayout swRow = new LinearLayout(ctx);
+        swRow.setOrientation(LinearLayout.HORIZONTAL);
+        swRow.setGravity(Gravity.CENTER_VERTICAL);
+
+        TextView cardLbl = new TextView(ctx);
+        cardLbl.setText("卡片点歌");
+        cardLbl.setTextSize(12);
+        cardLbl.setTextColor(text1);
+        swRow.addView(cardLbl);
+
+        Switch cardSw = CandyUi.newSwitch(ctx);
+        cardSw.setChecked(WmPrefs.isCardOrder());
+        cardSw.setOnCheckedChangeListener((b, checked) -> WmPrefs.set("card_order", checked));
+        LinearLayout.LayoutParams cardSwLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        cardSwLp.leftMargin = dp(ctx, 4);
+        cardSwLp.rightMargin = dp(ctx, 12);
+        swRow.addView(cardSw, cardSwLp);
+
+        TextView voiceLbl = new TextView(ctx);
+        voiceLbl.setText("语音点歌");
+        voiceLbl.setTextSize(12);
+        voiceLbl.setTextColor(text1);
+        swRow.addView(voiceLbl);
+
+        Switch voiceSw = CandyUi.newSwitch(ctx);
+        voiceSw.setChecked(WmPrefs.isVoiceOrder());
+        voiceSw.setOnCheckedChangeListener((b, checked) -> WmPrefs.set("voice_order", checked));
+        LinearLayout.LayoutParams voiceSwLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        voiceSwLp.leftMargin = dp(ctx, 4);
+        swRow.addView(voiceSw, voiceSwLp);
+
+        orderSection.addView(swRow);
+
+        // 点歌记录按钮
+        TextView recordBtn = new TextView(ctx);
+        recordBtn.setText("点歌记录");
+        recordBtn.setTextSize(12);
+        recordBtn.setTextColor(AppColors.accent());
+        recordBtn.setGravity(Gravity.CENTER);
+        recordBtn.setPadding(dp(ctx, 4), p6, dp(ctx, 4), p6);
+        GradientDrawable recBg = new GradientDrawable();
+        recBg.setStroke(dp(ctx, 1), AppColors.accent());
+        recBg.setCornerRadius(p6);
+        recordBtn.setBackground(recBg);
+        recordBtn.setOnClickListener(v -> Toast.makeText(ctx, "点歌记录功能开发中", Toast.LENGTH_SHORT).show());
+        LinearLayout.LayoutParams recLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        recLp.topMargin = p6;
+        orderSection.addView(recordBtn, recLp);
+
+        panel.addView(orderSection);
+
+        // 搜索行
+        LinearLayout searchRow = new LinearLayout(ctx);
+        searchRow.setOrientation(LinearLayout.HORIZONTAL);
+        searchRow.setPadding(0, 0, 0, p8);
+
+        final EditText input = new EditText(ctx);
+        input.setHint("搜索歌曲");
+        input.setTextColor(text1);
+        input.setHintTextColor(text2);
+        input.setSingleLine(true);
+        input.setBackgroundColor(AppColors.inputBg());
+        input.setPadding(p8, p8, p8, p8);
+        LinearLayout.LayoutParams inputLp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        searchRow.addView(input, inputLp);
+
+        TextView searchBtn = new TextView(ctx);
+        searchBtn.setText("搜索");
+        searchBtn.setTextSize(12);
+        searchBtn.setTextColor(whiteOnAccent);
+        searchBtn.setGravity(Gravity.CENTER);
+        searchBtn.        setPadding(dp(ctx, 4), p8, dp(ctx, 4), p8);
+        GradientDrawable sbg = new GradientDrawable();
+        sbg.setColor(accent);
+        sbg.setCornerRadius(p6);
+        searchBtn.setBackground(sbg);
+        LinearLayout.LayoutParams searchBtnLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        searchBtnLp.leftMargin = p8;
+        searchRow.addView(searchBtn, searchBtnLp);
+        panel.addView(searchRow);
+
+        // 结果列表（高度自适应：空时收起，有内容时向上扩展）
+        ScrollView scroll = new ScrollView(ctx);
+        final LinearLayout resultList = new LinearLayout(ctx);
+        resultList.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(resultList);
+        final LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(-1, 0);
+        panel.addView(scroll, scrollLp);
+
+        searchBtn.setOnClickListener(v -> {
+            String kw = input.getText().toString().trim();
+            if (kw.isEmpty()) {
+                Toast.makeText(ctx, "请输入关键词", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            resultList.removeAllViews();
+            TextView tip = new TextView(ctx);
+            tip.setText("搜索中...");
+            tip.setTextSize(12);
+            tip.setTextColor(text2);
+            resultList.addView(tip);
+            resizeResultScroll(scrollLp, scroll, 1);
+            TingMusicModule.searchForPanel(kw, new TingMusicModule.PanelSearchCallback() {
+                @Override public void onResult(List<Map<String, String>> songs) {
+                    resultList.removeAllViews();
+                    if (songs == null || songs.isEmpty()) {
+                        TextView t = new TextView(ctx);
+                        t.setText("无结果");
+                        t.setTextSize(12);
+                        t.setTextColor(text2);
+                        resultList.addView(t);
+                        resizeResultScroll(scrollLp, scroll, 1);
+                        return;
+                    }
+                    for (final Map<String, String> s : songs) {
+                        resultList.addView(makeSongRow(ctx, s));
+                    }
+                    resizeResultScroll(scrollLp, scroll, songs.size());
+                }
+                @Override public void onFail(String err) {
+                    resultList.removeAllViews();
+                    TextView t = new TextView(ctx);
+                    t.setText("搜索失败: " + err);
+                    t.setTextSize(12);
+                    t.setTextColor(0xFFFF8888);
+                    resultList.addView(t);
+                    resizeResultScroll(scrollLp, scroll, 1);
+                }
+            });
+        });
+
+        return panel;
+    }
+
+    private static void resizeResultScroll(LinearLayout.LayoutParams lp, ScrollView scroll, int rows) {
+        float d = scroll.getContext().getResources().getDisplayMetrics().density;
+        int rowH = (int) (56 * d);
+        int maxH = (int) (330 * d);
+        int h = rows <= 0 ? 0 : Math.min(rows * rowH, maxH);
+        lp.height = h;
+        scroll.setLayoutParams(lp);
+    }
+
+    private static View makeSongRow(Context ctx, final Map<String, String> s) {
+        float d = ctx.getResources().getDisplayMetrics().density;
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding((int)(4*d), (int)(8*d), (int)(4*d), (int)(8*d));
+
+        ImageView cover = new ImageView(ctx);
+        cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        GradientDrawable cbg = new GradientDrawable();
+        cbg.setColor(0x22000000);
+        cbg.setCornerRadius(8);
+        cover.setBackground(cbg);
+        int coverSize = (int)(38*d);
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(coverSize, coverSize);
+        row.addView(cover, cp);
+
+        LinearLayout mid = new LinearLayout(ctx);
+        mid.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        mp.leftMargin = (int)(10*d);
+        row.addView(mid, mp);
+
+        TextView name = new TextView(ctx);
+        name.setText(s.get("songName") == null ? "" : s.get("songName"));
+        name.setTextSize(14);
+        name.setTextColor(AppColors.text1());
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        mid.addView(name);
+
+        TextView singerTv = new TextView(ctx);
+        singerTv.setText(s.get("singer") == null ? "" : s.get("singer"));
+        singerTv.setTextSize(12);
+        singerTv.setTextColor(AppColors.text3());
+        singerTv.setSingleLine(true);
+        singerTv.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        mid.addView(singerTv);
+
+        TextView dur = new TextView(ctx);
+        int durSec = parseIntSafe(s.get("duration"), 0);
+        dur.setText(durSec > 0 ? formatSec(durSec) : "");
+        dur.setTextSize(12);
+        dur.setTextColor(AppColors.text3());
+        row.addView(dur);
+
+        row.setOnClickListener(v -> {
+            TingMusicModule.sendSongForPanel(
+                    s.get("songName"), s.get("singer"), s.get("dataUrl"),
+                    s.get("appid"), s.get("webUrl"), s.get("coverUrl"),
+                    s.get("mid"), s.get("lyric"));
+            Toast.makeText(ctx, "已发送: " + s.get("songName"), Toast.LENGTH_SHORT).show();
+            if (popupWindow != null) popupWindow.dismiss();
+        });
+
+        String coverUrl = s.get("coverUrl");
+        if (coverUrl != null && !coverUrl.isEmpty()) {
+            loadCover(ctx, coverUrl, cover, coverSize);
+        }
+        return row;
+    }
+
+    private static void loadCover(final Context ctx, final String url, final ImageView view, final int size) {
+        new Thread(() -> {
+            HttpURLConnection conn = null;
+            InputStream is = null;
+            try {
+                conn = (HttpURLConnection) new URL(url).openConnection();
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                conn.setInstanceFollowRedirects(true);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36");
+                conn.connect();
+                is = conn.getInputStream();
+                Bitmap bmp = BitmapFactory.decodeStream(is);
+                if (bmp == null) return;
+                Bitmap scaled = Bitmap.createScaledBitmap(bmp, size, size, true);
+                if (scaled != bmp) bmp.recycle();
+                final Bitmap fBmp = scaled;
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    try { view.setImageBitmap(fBmp); } catch (Throwable ignored) {}
+                });
+            } catch (Throwable ignored) {
+            } finally {
+                if (is != null) { try { is.close(); } catch (Throwable ignored) {} }
+                if (conn != null) conn.disconnect();
+            }
+        }, "cflp-cover").start();
     }
 
     private static String formatSec(float secs) {
@@ -815,15 +1173,16 @@ public class ChatFooterLongPressMenu {
 
     private static void showCutDialog(Context ctx, String mp3Path, final TextView fileNameTv) {
         long durationMs = 0;
+        MediaMetadataRetriever mmr = new MediaMetadataRetriever();
         try {
-            MediaMetadataRetriever mmr = new MediaMetadataRetriever();
             mmr.setDataSource(mp3Path);
             String dur = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
             if (dur != null) durationMs = Long.parseLong(dur);
-            mmr.release();
         } catch (Throwable t) {
             Toast.makeText(ctx, "无法读取音频时长", Toast.LENGTH_SHORT).show();
             return;
+        } finally {
+            try { mmr.release(); } catch (Throwable ignored) {}
         }
 
         if (durationMs <= 0) {

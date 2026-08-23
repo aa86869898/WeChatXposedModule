@@ -161,21 +161,28 @@ public class VoiceAutoPlay {
             // 从 WmPrefs 读取实时开关状态
             android.content.Context ctx = com.leshao.v3.ContextManager.getAppContext();
             if (ctx != null) {
-                boolean prefsOn = ctx.getSharedPreferences("wm_prefs", 0)
+                boolean prefsOn = com.leshao.v3.UnifiedPrefs.get(ctx, "wm_prefs")
                         .getBoolean("auto_voice", true);
                 if (!prefsOn) return false;
             }
         } catch (Throwable ignored) {}
         if (!sEnabled) return false;
+        // 与文本播报(ls_tts_whitelist/ls_tts_blacklist)保持一致:
+        // 黑名单内一律不自动播放; 白名单非空时仅白名单内自动播放;
+        // 白名单为空且严格模式开启时不自动播放
         try {
             com.leshao.v3.model.ModuleConfig cfg = com.leshao.v3.model.ModuleConfig.load(com.leshao.v3.ContextManager.getPrefs());
+            if (!cfg.announceBlacklist.isEmpty() && cfg.announceBlacklist.contains(talker)) {
+                return false;
+            }
             if (cfg.announceWhitelist != null && !cfg.announceWhitelist.isEmpty()) {
                 return cfg.announceWhitelist.contains(talker);
             }
+            if (cfg.whitelistStrict) return false;
         } catch (Throwable t) {
             LogWriter.log(TAG, "shouldAutoPlay cfg err: " + t.getMessage());
         }
-        return false;
+        return true;
     }
 
     public static void onVoiceMsg(Object e9, long msgId, Object p0) {

@@ -331,12 +331,8 @@ public class ContactSelectorView {
         // Avatar
         int avatarSize = dp(act, 40);
         ImageView avatar = new ImageView(act);
-        Bitmap bm = AvatarHelper.loadAvatar(c.username, avatarSize);
-        if (bm != null) {
-            avatar.setImageBitmap(bm);
-        } else {
-            avatar.setImageBitmap(letterAvatar(act, c.sortKey().substring(0, 1), avatarSize));
-        }
+        Bitmap fallback = letterAvatar(act, c.sortKey().substring(0, 1), avatarSize);
+        AvatarHelper.loadAvatarAsync(avatar, c.username, avatarSize, fallback);
         LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(avatarSize, avatarSize);
         alp.setMargins(0, 0, p12, 0);
         row.addView(avatar, alp);

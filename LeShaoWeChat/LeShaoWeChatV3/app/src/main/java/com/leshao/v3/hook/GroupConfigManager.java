@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 
 import com.leshao.v3.ContextManager;
+import com.leshao.v3.UnifiedPrefs;
 
 public class GroupConfigManager {
 
@@ -12,7 +13,7 @@ public class GroupConfigManager {
 
     public static void init(Context ctx) {
         if (ctx != null) {
-            sPrefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            sPrefs = UnifiedPrefs.get(ctx, PREFS_NAME);
         }
     }
 

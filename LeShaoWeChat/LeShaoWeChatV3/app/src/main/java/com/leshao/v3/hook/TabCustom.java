@@ -47,12 +47,12 @@ public class TabCustom {
             }
         }
 
+        customLabels = HookConfig.getInt("tab_custom_labels", 0) == 1;
         String labels = HookConfig.getString("tab_labels", "");
         if (labels != null && !labels.isEmpty()) {
             String[] parts = labels.split(",");
             if (parts.length >= 4) {
                 tabLabels = parts;
-                customLabels = true;
             }
         }
 

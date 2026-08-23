@@ -36,7 +36,7 @@ public class MessageHandler {
         if (mCubeTts != null && WmPrefs.isTTSCube()) {
             mCubeTts.speak(text);
         } else if (mTts != null) {
-            speak(text);
+            mTts.speak(text);
         }
     }
 
@@ -71,7 +71,11 @@ public class MessageHandler {
                 + " sender=" + mSenderName + " group=" + mGroupName + " self=" + mIsSelf);
 
         if (!mFilter.shouldProcess(talker, msgType, content, cfg)) {
-            LogWriter.log("MessageHandler", "DROPPED by filter: type=" + msgType + " from=" + talker + " masterSwitch=" + cfg.masterSwitch + " announceText=" + cfg.announceText);
+            LogWriter.log("MessageHandler", "DROPPED by filter: type=" + msgType + " from=" + talker
+                    + " masterSwitch=" + cfg.masterSwitch + " announceText=" + cfg.announceText
+                    + " wl=" + cfg.announceWhitelist.size() + " bl=" + cfg.announceBlacklist.size()
+                    + " strict=" + cfg.whitelistStrict
+                    + " wlHit=" + (cfg.announceWhitelist.isEmpty() ? "-" : cfg.announceWhitelist.contains(talker)));
             return;
         }
 
@@ -178,11 +182,20 @@ public class MessageHandler {
             handleLocation(content);
             return;
         }
-        if (content.contains("luckymoney") || content.contains("lucky money")) {
+        if (content.contains("luckymoney") || content.contains("lucky money")
+                || content.contains("红包")) {
             if (isGroup)
                 speak(str(mGroupName) + "群正在发红包");
             else
                 speak(str(mSenderName) + "给你发来一个红包");
+            return;
+        }
+        if (cfg.announceTransfer && (content.contains("transferid") || content.contains("remittance")
+                || content.contains("transfer"))) {
+            if (isGroup)
+                speak(str(mSenderName) + "在" + str(mGroupName) + "群发来转账");
+            else
+                speak(str(mSenderName) + "给你发来转账");
             return;
         }
         if (content.contains("<type>57</type>")) {
@@ -342,7 +355,7 @@ public class MessageHandler {
         return null;
     }
 
-    static String removeSenderPrefix(String content) {
+    public static String removeSenderPrefix(String content) {
         if (content == null) return "";
         Matcher m = SENDER_PREFIX_WXID.matcher(content);
         if (m.find()) return content.substring(m.end());

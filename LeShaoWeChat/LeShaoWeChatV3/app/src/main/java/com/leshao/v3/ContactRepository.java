@@ -15,9 +15,9 @@ import java.util.List;
 public class ContactRepository {
 
     private static final String TAG = "ContactRepo";
-    private static List<ContactCard> sFriends;
-    private static List<ContactCard> sGroups;
-    private static List<ContactCard> sServiceAccounts;
+    private static volatile List<ContactCard> sFriends;
+    private static volatile List<ContactCard> sGroups;
+    private static volatile List<ContactCard> sServiceAccounts;
     private static volatile boolean sLoading;
 
     public static List<ContactCard> getFriends() {
@@ -118,6 +118,7 @@ public class ContactRepository {
             LogWriter.log(TAG, "db opened in " + (System.currentTimeMillis() - t0) + "ms");
 
             // 微信 j4.t()/j4.O()/j4.K() + j4.m() 精确: 正常联系人唯一定义
+            // verifyFlag 为验证状态(非联系人类型), 不过滤, 避免漏掉"被对方删除的单向好友"
             String sqlFriends = "SELECT username, nickname, alias, conRemark, pyInitial, quanPin, "
                     + "conRemarkPYFull, type, showHead, contactLabelIds, createTime "
                     + "FROM rcontact WHERE deleteFlag = 0 "
@@ -125,9 +126,9 @@ public class ContactRepository {
                     + "AND (type & 32) = 0 "
                     + "AND (type & 8) = 0 "
                     + "AND (type & 64) = 0 "
-                    + "AND (verifyFlag & 8) = 0 "
                     + "AND username NOT LIKE '%@chatroom' "
                     + "AND username NOT LIKE '%@im.chatroom' "
+                    + "AND username NOT LIKE '%@openim' "
                     + "AND username NOT LIKE '%@micromsg.qq.com' "
                     + "AND username NOT LIKE 'gh_%' "
                     + "ORDER BY CASE WHEN length(conRemarkPYFull) > 0 "
@@ -164,6 +165,7 @@ public class ContactRepository {
 
             // 诊断: 找出混入好友列表的非正常联系人
             diagnoseContacts(db);
+            diagnoseStarContacts(db);
 
             LogWriter.log(TAG, "total: " + (sFriends.size() + sGroups.size() + sServiceAccounts.size())
                     + " rows in " + (System.currentTimeMillis() - t0) + "ms");
@@ -279,6 +281,73 @@ public class ContactRepository {
         }
     }
 
+    /**
+     * 诊断: 统计星标联系人(type bit14=16384 或 specialFlag=1)数量,
+     * 并检查它们是否都被好友 SQL 包含——用于排查"星标好友不在联系人选择器"。
+     */
+    private static void diagnoseStarContacts(Object db) {
+        try {
+            java.lang.reflect.Method m = db.getClass().getDeclaredMethod("u", String.class, String[].class);
+            String sql = "SELECT username, nickname, type FROM rcontact WHERE deleteFlag=0 AND (type & 16384) != 0";
+            Cursor c = (Cursor) m.invoke(db, sql, null);
+            if (c == null) return;
+            try {
+                int total = c.getCount();
+                int inFriends = 0;
+                StringBuilder missing = new StringBuilder();
+                while (c.moveToNext()) {
+                    String usr = c.getString(0);
+                    // 实际用线性查找
+                    boolean found = false;
+                    if (sFriends != null) {
+                        for (ContactCard cc : sFriends) {
+                            if (usr.equals(cc.username)) { found = true; break; }
+                        }
+                    }
+                    if (found) inFriends++;
+                    else {
+                        if (missing.length() < 200) {
+                            if (missing.length() > 0) missing.append(",");
+                            missing.append(usr);
+                        }
+                    }
+                }
+                LogWriter.log(TAG, "STAR_DIAG: type16384 total=" + total + " inFriends=" + inFriends + " missing=[" + missing + "]");
+            } finally {
+                try { c.close(); } catch (Throwable ignored) {}
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "STAR_DIAG err: " + t.getMessage());
+        }
+        // specialFlag 列可能不存在(版本差异), 单独尝试
+        try {
+            java.lang.reflect.Method m = db.getClass().getDeclaredMethod("u", String.class, String[].class);
+            Cursor c = (Cursor) m.invoke(db,
+                    "SELECT username FROM rcontact WHERE specialFlag = 1", null);
+            if (c != null) {
+                try {
+                    int total = c.getCount();
+                    int inFriends = 0;
+                    while (c.moveToNext()) {
+                        String usr = c.getString(0);
+                        boolean found = false;
+                        if (sFriends != null) {
+                            for (ContactCard cc : sFriends) {
+                                if (usr.equals(cc.username)) { found = true; break; }
+                            }
+                        }
+                        if (found) inFriends++;
+                    }
+                    LogWriter.log(TAG, "STAR_DIAG: specialFlag=1 total=" + total + " inFriends=" + inFriends);
+                } finally {
+                    try { c.close(); } catch (Throwable ignored) {}
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "STAR_DIAG: specialFlag column not present: " + t.getMessage());
+        }
+    }
+
     private static long getUin(Context ctx) {
         try {
             SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
@@ -303,6 +372,57 @@ public class ContactRepository {
             for (ContactCard c : sGroups) {
                 if (wxid.equals(c.username)) return c;
             }
+        }
+        return null;
+    }
+
+    /**
+     * 按需查询任意联系人(含群成员/已删除好友): 从 rcontact 全表查单条, 不限 deleteFlag/type。
+     * 用于群消息发送者昵称解析——群成员通常不在好友列表中, 但 rcontact 仍有其记录。
+     */
+    public static String queryAnyContactName(String wxid) {
+        if (wxid == null || wxid.isEmpty()) return null;
+        try {
+            Context ctx = ContextManager.getAppContext();
+            ClassLoader cl = ContextManager.getClassLoader();
+            if (ctx == null || cl == null) return null;
+
+            long uin = getUin(ctx);
+            if (uin <= 0) return null;
+
+            String imei = VersionCompat.getImei(cl);
+            String baseDir = VersionCompat.getBaseDir(cl, ctx);
+            String dbHash = VersionCompat.getDbHash(cl, (int) uin);
+            String dbPath = baseDir + "MicroMsg/" + dbHash + "/EnMicroMsg.db";
+            String password = md5(imei + uin).substring(0, 7);
+
+            Class<?> dbCls = VersionCompat.findDbOpenerClass(cl);
+            if (dbCls == null) return null;
+
+            Object db = VersionCompat.openDatabase(dbCls, dbPath, password);
+            if (db == null) return null;
+            Cursor cursor = null;
+            try {
+                String sql = "SELECT nickname, conRemark FROM rcontact WHERE username = ?";
+                java.lang.reflect.Method m = db.getClass().getDeclaredMethod("u", String.class, String[].class);
+                cursor = (Cursor) m.invoke(db, sql, new String[]{wxid});
+                if (cursor != null && cursor.moveToFirst()) {
+                    String nickname = cursor.getString(0);
+                    String remark = cursor.getString(1);
+                    if (remark != null && !remark.isEmpty()) return remark;
+                    if (nickname != null && !nickname.isEmpty()) return nickname;
+                }
+            } finally {
+                if (cursor != null) {
+                    try { cursor.close(); } catch (Throwable ignored) {}
+                }
+                try {
+                    java.lang.reflect.Method close = db.getClass().getDeclaredMethod("c");
+                    close.invoke(db);
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "queryAnyContactName err: " + t.getClass().getSimpleName() + " " + t.getMessage());
         }
         return null;
     }

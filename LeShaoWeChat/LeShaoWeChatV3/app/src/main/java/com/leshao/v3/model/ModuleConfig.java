@@ -35,6 +35,9 @@ public class ModuleConfig {
     public boolean textTruncateEnabled = true;
 
     public Set<String> announceWhitelist = new HashSet<>();
+    public Set<String> announceBlacklist = new HashSet<>();
+    // 白名单严格模式: 白名单为空时不播报任何消息(默认开启)
+    public boolean whitelistStrict = true;
     public int announceTypeMask = 0;
 
     // 免打扰
@@ -90,7 +93,7 @@ public class ModuleConfig {
 
     // 安全
     public boolean antiRecall = false;
-    public boolean redPacketGrab = false;
+    public boolean redPacketGrab = true;
     public boolean redPacketAlertEnabled = true;  // 红包震动/响铃提醒
     public boolean recallLogEnabled = false;
     public boolean antiDetection = true;          // 反Xposed/LSPosed检测
@@ -288,7 +291,7 @@ public class ModuleConfig {
         cfg.deepseekPersona = prefs.getString("ls_ds_persona", "");
 
         cfg.recallLogEnabled = prefs.getBoolean("ls_recall_log", false);
-        cfg.redPacketGrab = prefs.getBoolean("ls_redpacket_enabled", false);
+        cfg.redPacketGrab = prefs.getBoolean("ls_redpacket_enabled", true);
         cfg.redPacketAlertEnabled = prefs.getBoolean("ls_wp_redalert", true);
 
         // WeChatPlus 增强功能
@@ -339,6 +342,8 @@ public class ModuleConfig {
                 cfg.keywordReplyMap.put(kw, m);
             }
         } catch (Exception e) {}
+        cfg.keywordRules.clear();
+        cfg.keywordRules.addAll(KeywordRule.fromJson(prefs.getString("ls_kwreply_rules", "[]")));
         cfg.antiAdEnabled = prefs.getBoolean("ls_antiad_enabled", false);
         cfg.adKeywords.clear();
         try {
@@ -392,6 +397,16 @@ public class ModuleConfig {
                 if (!t.isEmpty()) cfg.announceWhitelist.add(t);
             }
         }
+
+        cfg.announceBlacklist.clear();
+        String blStr = prefs.getString("ls_tts_blacklist", "");
+        if (!blStr.isEmpty()) {
+            for (String id : blStr.split(",")) {
+                String t = id.trim();
+                if (!t.isEmpty()) cfg.announceBlacklist.add(t);
+            }
+        }
+        cfg.whitelistStrict = prefs.getBoolean("ls_tts_whitelist_strict", true);
 
         return cfg;
     }
@@ -501,6 +516,7 @@ public class ModuleConfig {
             try { kwObj.put(kw, reply == null ? "" : reply); } catch (Exception ex) {}
         }
         e.putString("ls_kwreply_map", kwObj.toString());
+        e.putString("ls_kwreply_rules", KeywordRule.toJson(keywordRules));
         e.putBoolean("ls_antiad_enabled", antiAdEnabled);
         JSONArray adArr = new JSONArray();
         for (String a : adKeywords) adArr.put(a);
@@ -536,6 +552,14 @@ public class ModuleConfig {
             wlSb.append(id);
         }
         e.putString("ls_tts_whitelist", wlSb.toString());
+        e.putBoolean("ls_tts_whitelist_strict", whitelistStrict);
+
+        StringBuilder blSb = new StringBuilder();
+        for (String id : announceBlacklist) {
+            if (blSb.length() > 0) blSb.append(",");
+            blSb.append(id);
+        }
+        e.putString("ls_tts_blacklist", blSb.toString());
 
         e.apply();
     }

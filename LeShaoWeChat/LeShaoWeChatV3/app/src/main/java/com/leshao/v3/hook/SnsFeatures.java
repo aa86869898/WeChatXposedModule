@@ -13,6 +13,8 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 import android.widget.Toast;
+import com.leshao.v3.ContextManager;
+import com.leshao.v3.model.ModuleConfig;
 
 /**
  * [功能19/22/23/24/27/29] 朋友圈增强 — 生产级完整实现
@@ -26,7 +28,8 @@ public class SnsFeatures {
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     public static void hook(ClassLoader loader) {
-        if (!sEnabled) return;
+        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        if (config == null || !config.snsFeaturesEnabled) return;
         cl = loader;
         timeOffsetMs = HookConfig.getLong("sns_time_offset_ms", -3600000);
 
@@ -41,6 +44,10 @@ public class SnsFeatures {
     // ═══════════════════════════════════════════════════════════
     // #19 去广告
     // ═══════════════════════════════════════════════════════════
+    // 反编译确认(用户数据): contentStyle(e)==15 是"视频新样式", 不是广告!
+    // 完整 adType 集合 = {1,2,3,4,5,9,10,12,13}; viewType 15 = 球形卡片广告(isSphereCardAd)。
+    private static final int[] AD_TYPES = {1, 2, 3, 4, 5, 9, 10, 12, 13};
+
     private static void hookAdBlock() {
         try {
             Class<?> snsInfo = XposedHelpers.findClass(
@@ -48,8 +55,8 @@ public class SnsFeatures {
             XposedBridge.hookAllMethods(snsInfo, "getType", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    int type = (Integer) param.getResult();
-                    if (type == 15) {
+                    int adType = getAdType(param.thisObject);
+                    if (isAdType(adType)) {
                         try { XposedHelpers.setAdditionalInstanceField(
                                 param.thisObject, "wxp_is_ad", true); }
                         catch (Throwable ignored) {}
@@ -81,6 +88,32 @@ public class SnsFeatures {
             }
         } catch (Throwable t) {}
         XposedBridge.log("[SNS] #19 去广告完成");
+    }
+
+    private static boolean isAdType(int t) {
+        for (int v : AD_TYPES) if (v == t) return true;
+        return false;
+    }
+
+    // 尽力读取广告类型: 方法名/字段名多候选, 命中广告集合才算广告
+    private static int getAdType(Object item) {
+        String[] methods = {"getAdType", "getADType", "getAdInfo"};
+        for (String m : methods) {
+            try {
+                Object v = XposedHelpers.callMethod(item, m);
+                if (v instanceof Integer) return (Integer) v;
+                if (v instanceof Long) return (int) (long) (Long) v;
+            } catch (Throwable ignored) {}
+        }
+        String[] fields = {"adType", "field_adType", "adInfo"};
+        for (String f : fields) {
+            try {
+                Object v = XposedHelpers.getObjectField(item, f);
+                if (v instanceof Integer) return (Integer) v;
+                if (v instanceof Long) return (int) (long) (Long) v;
+            } catch (Throwable ignored) {}
+        }
+        return -1;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -132,9 +165,10 @@ public class SnsFeatures {
         try {
             String snsContent = null;
             long snsId = 0;
-            
+            Object snsInfo = null;
+
             try {
-                Object snsInfo = XposedHelpers.getObjectField(flipObj, "mSnsInfo");
+                snsInfo = XposedHelpers.getObjectField(flipObj, "mSnsInfo");
                 if (snsInfo != null) {
                     try {
                         snsContent = (String) XposedHelpers.getObjectField(snsInfo, "field_content");
@@ -145,20 +179,33 @@ public class SnsFeatures {
                 }
             } catch (Throwable ignored) {}
 
-            if (snsContent == null) {
+            // 反编译确认: {n,o,p,q,r,s,t} 是 ContentObj(snsInfo) 的字段, 不是 flipObj 的!
+            // 其中 n = a65.aj4(标量protobuf), 其内部字段为 {d,e,f,g,h,i,m,n,o,p,q,r}
+            if (snsContent == null && snsInfo != null) {
                 for (String f : new String[]{"n", "o", "p", "q", "r", "s", "t"}) {
                     try {
-                        Object obj = XposedHelpers.getObjectField(flipObj, f);
-                        if (obj != null) {
+                        Object obj = XposedHelpers.getObjectField(snsInfo, f);
+                        if (obj == null) continue;
+                        if (obj instanceof String) { snsContent = (String) obj; break; }
+                        try {
+                            snsContent = (String) XposedHelpers.getObjectField(obj, "field_content");
+                            if (snsContent != null) break;
+                        } catch (Throwable ignored) {}
+                        // a65.aj4 标量对象: 尝试取内容相关 String 字段
+                        for (String inner : new String[]{"f", "p", "n"}) {
                             try {
-                                snsContent = (String) XposedHelpers.getObjectField(obj, "field_content");
-                                if (snsContent != null) break;
+                                Object v = XposedHelpers.getObjectField(obj, inner);
+                                if (v instanceof String && !((String) v).isEmpty()) {
+                                    snsContent = (String) v;
+                                    break;
+                                }
                             } catch (Throwable ignored) {}
                         }
+                        if (snsContent != null) break;
                     } catch (Throwable ignored) {}
                 }
             }
-            
+
             if (snsContent == null) {
                 try {
                     View v = (View) XposedHelpers.getObjectField(flipObj, "mView");

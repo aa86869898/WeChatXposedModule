@@ -56,25 +56,9 @@ public class ProfilePageView {
         avatar.setBackground(avatarBg);
         avatar.setClipToOutline(true);
 
-        // 优先使用 AvatarHelper 多路径加载，回退到 getAvatarPath
+        // 优先使用 AvatarHelper 多路径加载（内部含微信缓存/本地文件/CDN 兜底）
         int avatarSizePx = (int)(56 * d);
-        android.graphics.Bitmap bm = AvatarHelper.loadAvatar(MainActivity.getUserWxid(), avatarSizePx);
-        if (bm != null) {
-            avatar.setImageBitmap(bm);
-        } else {
-            String avatarPath = MainActivity.getAvatarPath();
-            if (avatarPath != null) {
-                java.io.File f = new java.io.File(avatarPath);
-                if (f.exists()) {
-                    final ImageView avatarIv = avatar;
-                    final String fPath = avatarPath;
-                    new Thread(() -> {
-                        android.graphics.Bitmap bm2 = android.graphics.BitmapFactory.decodeFile(fPath);
-                        if (bm2 != null) avatarIv.post(() -> avatarIv.setImageBitmap(bm2));
-                    }, "leshao-avatar").start();
-                }
-            }
-        }
+        AvatarHelper.loadAvatarAsync(avatar, MainActivity.getUserWxid(), avatarSizePx, null);
         userRow.addView(avatar);
 
         // 昵称+wxid 右侧

@@ -95,10 +95,13 @@ public class ContactPickerDialog {
         root.addView(title);
 
         // Tab bar: 好友 | 群聊 with counts
+        // 计数必须基于全部联系人, 而非 initialMode 单列表(否则好友模式时群计数恒为 0)
         int friendCount = 0, groupCount = 0;
-        for (ContactCard c : items) {
+        for (ContactCard c : ContactRepository.getFriends()) {
             if (c.category == Category.FRIEND) friendCount++;
-            else if (c.category == Category.GROUP) groupCount++;
+        }
+        for (ContactCard c : ContactRepository.getGroups()) {
+            if (c.category == Category.GROUP) groupCount++;
         }
         final int fFriendCount = friendCount, fGroupCount = groupCount;
 
@@ -235,8 +238,8 @@ public class ContactPickerDialog {
                 .create();
 
         cancel.setOnClickListener(v -> {
+            // 取消: 不回调, 保留原有配置(避免把已保存的白/黑名单清空)
             dialog.dismiss();
-            if (callback != null) callback.onSelected(Collections.<String>emptySet(), "");
         });
 
         confirm.setOnClickListener(v -> {
@@ -246,6 +249,7 @@ public class ContactPickerDialog {
                 for (String wid : selected) {
                     if (i++ > 0) sb.append(", ");
                     ContactCard found = findCard(items, wid);
+                    if (found == null) found = findCard(ContactRepository.getAll(), wid);
                     sb.append(found != null ? found.displayName() : wid);
                     if (i >= 4 && i < selected.size()) {
                         sb.append("...\u7b49" + selected.size() + "");
@@ -276,7 +280,7 @@ public class ContactPickerDialog {
         });
 
         dialog.setOnCancelListener(d -> {
-            if (callback != null) callback.onSelected(Collections.<String>emptySet(), "");
+            // 返回键取消: 不回调, 保留原有配置
         });
 
         // Update toggle text + confirm button in refresh
@@ -349,12 +353,8 @@ public class ContactPickerDialog {
         // Avatar
         int avatarSize = dp(act, 40);
         ImageView avatar = new ImageView(act);
-        Bitmap bm = AvatarHelper.loadAvatar(c.username, avatarSize);
-        if (bm != null) {
-            avatar.setImageBitmap(bm);
-        } else {
-            avatar.setImageBitmap(letterAvatar(act, c.sortKey().substring(0, 1), avatarSize));
-        }
+        Bitmap fallback = letterAvatar(act, c.sortKey().substring(0, 1), avatarSize);
+        AvatarHelper.loadAvatarAsync(avatar, c.username, avatarSize, fallback);
         LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(avatarSize, avatarSize);
         alp.setMargins(0, 0, p12, 0);
         row.addView(avatar, alp);

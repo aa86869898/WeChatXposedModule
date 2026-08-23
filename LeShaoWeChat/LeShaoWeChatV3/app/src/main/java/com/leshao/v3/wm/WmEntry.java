@@ -5,8 +5,6 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.wm.hook.WmChatHook;
 import com.leshao.v3.wm.hook.WmGroupHook;
-import com.leshao.v3.wm.hook.WmHomeHook;
-import com.leshao.v3.wm.hook.WmMsgHook;
 import com.leshao.v3.wm.utils.WmPrefs;
 import com.leshao.v3.wm.utils.WmReflect;
 import java.lang.reflect.Method;
@@ -157,25 +155,5 @@ public class WmEntry {
 
     static int dp(Activity act, int d) {
         return (int) (d * act.getResources().getDisplayMetrics().density);
-    }
-
-    // ===== 主页+菜单 =====
-    static void injectHomePlusMenu(ClassLoader cl) {
-        try {
-            Class<?> home = XposedHelpers.findClass("com.tencent.mm.ui.HomeUI", cl);
-            Method o = home.getDeclaredMethod("o");
-            XposedBridge.hookMethod(o, new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam p) {
-                    try {
-                        Activity act = (Activity) XposedHelpers.getObjectField(p.thisObject, "q");
-                        if (act != null) WmHomeHook.injectMenu(act, cl);
-                    } catch (Exception ignored) {}
-                }
-            });
-            LogWriter.log(TAG, "✓ 主页+菜单");
-        } catch (Exception e) {
-            LogWriter.log(TAG, "✗ 主页+:" + e.getMessage());
-        }
     }
 }

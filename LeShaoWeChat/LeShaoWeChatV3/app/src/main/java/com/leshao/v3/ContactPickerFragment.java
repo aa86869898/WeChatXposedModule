@@ -56,7 +56,6 @@ public class ContactPickerFragment extends Fragment {
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
-        ContextManager.waitForReady(5000);
         return buildUi(container);
     }
 
@@ -290,13 +289,9 @@ public class ContactPickerFragment extends Fragment {
             holder.sub.setText(subInfo);
 
             int size = dp(44);
-            Bitmap bm = AvatarHelper.loadAvatar(c.username, size);
-            if (bm != null) {
-                holder.avatar.setImageBitmap(bm);
-            } else {
-                String letter = c.sortKey().substring(0, 1).toUpperCase();
-                holder.avatar.setImageBitmap(createLetterAvatar(letter, size));
-            }
+            String letter = c.sortKey().substring(0, 1).toUpperCase();
+            Bitmap fallback = createLetterAvatar(letter, size);
+            AvatarHelper.loadAvatarAsync(holder.avatar, c.username, size, fallback);
         }
 
         class VH extends RecyclerView.ViewHolder {

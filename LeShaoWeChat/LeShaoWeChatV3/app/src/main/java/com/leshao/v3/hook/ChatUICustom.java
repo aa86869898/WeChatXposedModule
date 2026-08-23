@@ -58,7 +58,7 @@ public class ChatUICustom {
     }
 
     private static void reloadConfig() {
-        bgColor = (int) HookConfig.getLong("chat_bg_color", 0);
+        bgColor = HookConfig.getInt("chat_bg_color", 0);
         sendBubbleColor = HookConfig.getInt("chat_bubble_send", 0);
         recvBubbleColor = HookConfig.getInt("chat_bubble_recv", 0);
         bubbleRadius = HookConfig.getInt("chat_bubble_radius", 0);

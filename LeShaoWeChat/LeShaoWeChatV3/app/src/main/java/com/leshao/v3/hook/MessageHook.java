@@ -6,6 +6,8 @@ import android.os.Looper;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.model.KeywordRule;
+import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.TTSBroadcaster;
 
 import java.util.HashSet;
@@ -33,6 +35,77 @@ public class MessageHook {
 
         hookX9Dispatch(cl);
         hookIEventBus(cl);
+        hookSensitiveBlock(cl);
+    }
+
+    /**
+     * 敏感词过滤: 在消息入库层 (f9.Ra) 拦截含敏感词的接收消息, 使其不显示在聊天列表。
+     * 与 processKeywordAndSensitive 的「不播报」形成双保险: 这里直接阻断消息入库。
+     */
+    private static void hookSensitiveBlock(ClassLoader cl) {
+        try {
+            Class<?> f9 = VersionCompat.findMsgStorageClass(cl);
+            if (f9 == null) {
+                LogWriter.log(TAG, "sensitive block: f9 storage class not found");
+                return;
+            }
+            XposedBridge.hookAllMethods(f9, "Ra", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (param.args.length < 2 || param.args[1] == null) return;
+                        ModuleConfig cfg = ModuleConfig.load(ContextManager.getPrefs());
+                        if (cfg == null || !cfg.sensitiveFilterEnabled
+                                || cfg.sensitiveWords == null || cfg.sensitiveWords.isEmpty()) return;
+
+                        Object msg = param.args[1];
+                        // 只过滤接收消息
+                        int isSend = -1;
+                        try { isSend = (Integer) XposedHelpers.callMethod(msg, "z0"); }
+                        catch (Throwable ignored) {}
+                        try {
+                            java.lang.reflect.Field f = msg.getClass().getDeclaredField("field_isSend");
+                            f.setAccessible(true);
+                            Object v = f.get(msg);
+                            if (v instanceof Integer) isSend = (Integer) v;
+                        } catch (Throwable ignored) {}
+                        if (isSend == 1) return;
+
+                        String content = readMsgContent(msg);
+                        if (content == null || content.isEmpty()) return;
+                        for (String w : cfg.sensitiveWords) {
+                            if (w != null && !w.isEmpty() && content.contains(w)) {
+                                LogWriter.log(TAG, "[Sensitive] 拦截敏感词消息入库: " + w
+                                        + " msg=" + trunc(content, 40));
+                                param.setResult(null);
+                                return;
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "sensitive block hooks installed (f9.Ra)");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookSensitiveBlock FAIL: " + t.getMessage());
+        }
+    }
+
+    private static String readMsgContent(Object msg) {
+        try {
+            java.lang.reflect.Field f = msg.getClass().getDeclaredField("field_content");
+            f.setAccessible(true);
+            Object v = f.get(msg);
+            if (v != null) return v.toString();
+        } catch (Throwable ignored) {}
+        try {
+            Object v = XposedHelpers.callMethod(msg, "getContent");
+            if (v != null) return v.toString();
+        } catch (Throwable ignored) {}
+        try {
+            Object v = XposedHelpers.callMethod(msg, "I0");
+            if (v != null) return v.toString();
+        } catch (Throwable ignored) {}
+        return null;
     }
 
     // ====== x9 分发 (接收消息: TTS + 语音播放) ======
@@ -148,13 +221,40 @@ public class MessageHook {
             }
 
 
+            // 诊断: 对红包/转账特征消息打印 rawType（用于校准当前微信版本的真实类型码）
+            if (RedPacketHook.looksLikeMoneyMessage(content)) {
+                LogWriter.log(TAG, "[RP-DIAG] rawType=" + rawType + " isSend=" + isSend
+                    + " msgId=" + msgId + " talker=" + trunc(talker, 20)
+                    + " content=" + trunc(content, 200));
+            }
+
+            // 红包/转账消息: 不依赖 isSend 判断（收到的红包/转账在入库时 field_isSend 可能为 1 导致误判）
+            if (RedPacketHook.isRedPacketType(rawType) || RedPacketHook.isTransferType(rawType)) {
+                LogWriter.log(TAG, "RP/TRANSFER x9: rawType=" + rawType + " isSend=" + isSend
+                    + " msgId=" + msgId + " talker=" + trunc(talker, 20));
+                final int rpRawType = rawType;
+                final String rpTalker = talker;
+                final String rpContent = content;
+                final long rpMsgId = msgId;
+                sMainHandler.post(() -> {
+                    try {
+                        RedPacketHook.onIncomingMessage(rpRawType, rpTalker, rpContent, rpMsgId);
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "RP notify err: " + e.getMessage());
+                    }
+                });
+            }
+
             if (isSend != 1) {
                 final int fType = type;
                 final String fTalker = talker;
                 final String fContent = content;
                 sMainHandler.post(() -> {
                     try {
-                        TTSBroadcaster.handleMessageRaw(fType, fTalker, fContent);
+                        boolean blocked = processKeywordAndSensitive(fType, fTalker, fContent);
+                        if (!blocked) {
+                            TTSBroadcaster.handleMessageRaw(fType, fTalker, fContent);
+                        }
                     } catch (Throwable e) {
                         LogWriter.log("TTS", "err: " + e.getMessage());
                     }
@@ -183,6 +283,42 @@ public class MessageHook {
         } catch (Throwable t) {
             LogWriter.log(TAG, "err: " + t);
         }
+    }
+
+    // ====== 关键词回复 + 敏感词过滤 (接收消息) ======
+
+    private static boolean processKeywordAndSensitive(int type, String talker, String content) {
+        if (content == null || content.isEmpty()) return false;
+        if (content.startsWith("#tts")) return false;
+        ModuleConfig cfg = ModuleConfig.load(ContextManager.getPrefs());
+        if (cfg == null) return false;
+
+        boolean blocked = false;
+        if (cfg.sensitiveFilterEnabled && !cfg.sensitiveWords.isEmpty()) {
+            for (String w : cfg.sensitiveWords) {
+                if (w != null && !w.isEmpty() && content.contains(w)) {
+                    LogWriter.log(TAG, "[Sensitive] 命中敏感词=" + w + " talker=" + trunc(talker, 20));
+                    blocked = true;
+                    break;
+                }
+            }
+        }
+
+        if (cfg.keywordReplyEnabled && !cfg.keywordRules.isEmpty()) {
+            for (KeywordRule r : cfg.keywordRules) {
+                if (r == null || r.keyword == null || r.reply == null) continue;
+                boolean match = r.fuzzyMatch
+                        ? content.contains(r.keyword)
+                        : content.equals(r.keyword);
+                if (match) {
+                    LogWriter.log(TAG, "[KwReply] 命中=" + r.keyword + " -> " + r.reply);
+                    GroupFeatures.sendTextMessage(sClassLoader, talker, r.reply);
+                    break;
+                }
+            }
+        }
+
+        return blocked;
     }
 
     // ====== IEvent.e() 事件总线 (拦截自己发出的 #tts) ======

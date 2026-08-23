@@ -194,10 +194,66 @@ public class CallFeatures {
             public void run() {
                 try {
                     Logger.i("[AutoAnswer] 执行自动接听...");
+                    tryAccept();
                 } catch (Throwable t) {
                     Logger.e("[AutoAnswer] 执行失败: " + t.getMessage());
                 }
             }
         }, 2000);
+    }
+
+    /**
+     * 真实接听(反编译确认):
+     *   底层方法 h2.a(boolean onlyAudio, boolean isVideo) — "accept onlyAudio:"
+     *   入口 d0.h()(视频) / d0.j()->d0.g0()(语音) / d0.D(int callType)(模拟, callType==1 语音)
+     * 多路尝试: 任一成功即返回; 全部失败则等 signature_dump.txt 确认 static/实例。
+     */
+    private static void tryAccept() {
+        ClassLoader cl = ContextManager.getClassLoader();
+        boolean answered = false;
+
+        // 方案1: 底层接听 h2.a(onlyAudio=true, isVideo=false) = 语音接听
+        Class<?> h2 = VersionCompat.findVoipAcceptClass(cl);
+        if (h2 != null) {
+            try {
+                XposedHelpers.callStaticMethod(h2, "a", true, false);
+                Logger.i("[AutoAnswer] 成功: h2.a(true,false) 语音接听");
+                answered = true;
+            } catch (Throwable t) {
+                Logger.w("[AutoAnswer] h2.a 静态调用失败(可能为实例方法): " + t.getMessage());
+            }
+        } else {
+            Logger.w("[AutoAnswer] 未找到 h2 类");
+        }
+
+        // 方案2: 入口 d0.g0() 语音
+        if (!answered) {
+            Class<?> d0 = VersionCompat.findVoipEntryClass(cl);
+            if (d0 != null) {
+                try {
+                    XposedHelpers.callStaticMethod(d0, "g0");
+                    Logger.i("[AutoAnswer] 成功: d0.g0() 语音接听");
+                    answered = true;
+                } catch (Throwable t) {
+                    Logger.w("[AutoAnswer] d0.g0() 失败: " + t.getMessage());
+                }
+                // 方案3: d0.D(1) 模拟语音接听
+                if (!answered) {
+                    try {
+                        XposedHelpers.callStaticMethod(d0, "D", 1);
+                        Logger.i("[AutoAnswer] 成功: d0.D(1) 语音接听");
+                        answered = true;
+                    } catch (Throwable t) {
+                        Logger.w("[AutoAnswer] d0.D(1) 失败: " + t.getMessage());
+                    }
+                }
+            } else {
+                Logger.w("[AutoAnswer] 未找到 d0 入口类");
+            }
+        }
+
+        if (!answered) {
+            Logger.w("[AutoAnswer] 全部接听方案失败, 待 signature_dump 确认 h2/d0 静态或实例方法");
+        }
     }
 }

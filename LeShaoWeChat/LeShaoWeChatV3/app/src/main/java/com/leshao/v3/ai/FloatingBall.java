@@ -14,6 +14,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.UnifiedPrefs;
 
 public class FloatingBall {
     private static final String TAG = "FloatingBall";
@@ -59,7 +60,7 @@ public class FloatingBall {
         int h = act.getResources().getDisplayMetrics().heightPixels;
         int defX = w - sz - (int) (14 * d);
         int defY = h - sz - (int) (150 * d);
-        SharedPreferences sp = act.getSharedPreferences(SP, Context.MODE_PRIVATE);
+        SharedPreferences sp = UnifiedPrefs.get(act, SP);
         int x = sp.getInt("x", defX);
         int y = sp.getInt("y", defY);
         if (x < -w || x > w) x = defX;
@@ -71,9 +72,8 @@ public class FloatingBall {
         if (sAct == null || sBall == null) return;
         try {
             WindowManager.LayoutParams wp = (WindowManager.LayoutParams) sBall.getLayoutParams();
-            sAct.getSharedPreferences(SP, Context.MODE_PRIVATE).edit()
-                    .putInt("x", wp.x).putInt("y", wp.y).apply();
-        } catch (Throwable ignored) {}
+            UnifiedPrefs.get(sAct, SP).edit()
+                    .putInt("x", wp.x).putInt("y", wp.y).apply();        } catch (Throwable ignored) {}
     }
 
     private static View.OnTouchListener makeTouch() {

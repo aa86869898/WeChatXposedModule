@@ -59,7 +59,6 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -79,8 +78,6 @@ public class WmChatHook {
     private static boolean sTranslateOn;
 
     private static final String TAG = "WmChat";
-    private static final AtomicBoolean sScheduledTaskRunning = new AtomicBoolean(false);
-    private static final List<Runnable> sPendingScheduledTasks = new ArrayList<>();
     private static BroadcastReceiver sMassSendReceiver;
     private static Context sCtx;
 
@@ -100,6 +97,12 @@ public class WmChatHook {
             return;
         }
         LogWriter.log(TAG, "chat window opened user=" + user);
+
+        com.leshao.v3.wm.utils.WmUi.DragFloat f = new com.leshao.v3.wm.utils.WmUi.DragFloat(
+                act, sWM, "⚡", AppColors.accent(), "float_chat",
+                () -> { if (sPanelShow) hidePanel(); else showPanel(); });
+        f.addToWindow();
+        sFloatIcon = f;
     }
 
     public static void dismissTitleBtn() {
@@ -612,29 +615,14 @@ public class WmChatHook {
                     if (durStr != null) {
                         int durMs = Integer.parseInt(durStr);
                         int durSec = Math.max(1, durMs / 1000);
-
-                        // 尝试 WeChat silk encoder: new MMRecorderUtil(silkPath, durationSec)
-                        try {
-                            Class<?> util = sCL.loadClass("com.tencent.mm.audio.recorder.MMRecorderUtil");
-                            Object rec = XposedHelpers.newInstance(util, outputPath, durSec);
-                            // 尝试 native encode: rec.encodePcmToSilk(pcmData, pcmLen)
-                        } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
+                        LogWriter.log(TAG, "convertMp3ToWeChat: mp3 duration=" + durSec + "s");
                     }
                 } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
             }
 
-            // Fallback: 直接复制文件尝试 (如果微信支持直接播放MP3)
-            java.io.FileInputStream fis = new java.io.FileInputStream(mp3File);
-            java.io.FileOutputStream fos = new java.io.FileOutputStream(outputPath);
-            try {
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = fis.read(buf)) > 0) fos.write(buf, 0, n);
-            } finally {
-            try { fis.close(); } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
-            try { fos.close(); } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
-            }
-            return true;
+            // 未实现真实 MP3→SILK 编码：直接复制 MP3 字节会产生损坏语音，明确返回失败
+            LogWriter.log(TAG, "convertMp3ToWeChat: 无真实 SILK 编码实现，返回失败");
+            return false;
         } catch (Exception e) {
             LogWriter.log(TAG, "convertMp3ToWeChat err: " + e.getMessage());
             return false;
@@ -665,38 +653,50 @@ public class WmChatHook {
         return null;
     }
 
-    /** 尝试在 db 上调用 rawQuery */
+    /** 尝试在 db 上调用 rawQuery(String, String[]) */
     private static Cursor tryRawQuery(Object db, String sql, String[] args) {
-        try {
+        for (Method m : db.getClass().getMethods()) {
+            if (isRawQuery2(m)) {
+                sCachedRawQueryMethod = m;
+                Cursor c = invokeRawQuery(db, m, sql, args);
+                if (c != null) return c;
+            }
+        }
+        for (Method m : db.getClass().getDeclaredMethods()) {
+            if (isRawQuery2(m)) {
+                sCachedRawQueryMethod = m;
+                Cursor c = invokeRawQuery(db, m, sql, args);
+                if (c != null) return c;
+            }
+        }
+        // 也尝试混淆后的方法名
+        for (String mn : new String[]{"u", "rowQuery", "v", "w", "x", "y", "z"}) {
             for (Method m : db.getClass().getMethods()) {
-                if (m.getName().equals("rawQuery") && m.getParameterCount() >= 1
+                if (m.getName().equals(mn) && m.getParameterCount() == 2
                         && m.getParameterTypes()[0] == String.class) {
-                    m.setAccessible(true);
                     sCachedRawQueryMethod = m;
-                    return (Cursor) m.invoke(db, sql, args);
+                    Cursor c = invokeRawQuery(db, m, sql, args);
+                    if (c != null) return c;
                 }
             }
-            for (Method m : db.getClass().getDeclaredMethods()) {
-                if (m.getName().equals("rawQuery") && m.getParameterCount() >= 1
-                        && m.getParameterTypes()[0] == String.class) {
-                    m.setAccessible(true);
-                    sCachedRawQueryMethod = m;
-                    return (Cursor) m.invoke(db, sql, args);
-                }
-            }
-            // 也尝试混淆后的方法名
-            for (String mn : new String[]{"u", "rowQuery", "v", "w", "x", "y", "z"}) {
-                for (Method m : db.getClass().getMethods()) {
-                    if (m.getName().equals(mn) && m.getParameterCount() >= 1
-                            && m.getParameterTypes()[0] == String.class) {
-                        m.setAccessible(true);
-                        sCachedRawQueryMethod = m;
-                        return (Cursor) m.invoke(db, sql, args);
-                    }
-                }
-            }
-        } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
+        }
         return null;
+    }
+
+    private static boolean isRawQuery2(Method m) {
+        return m.getName().equals("rawQuery")
+                && m.getParameterCount() == 2
+                && m.getParameterTypes()[0] == String.class;
+    }
+
+    private static Cursor invokeRawQuery(Object db, Method m, String sql, String[] args) {
+        try {
+            m.setAccessible(true);
+            return (Cursor) m.invoke(db, sql, args);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "invokeRawQuery err: " + t.getMessage());
+            return null;
+        }
     }
 
     static Object openWxDb() {
@@ -759,7 +759,7 @@ public class WmChatHook {
         FileOutputStream fos = null;
         try {
             c = rawQueryMsg(
-                "SELECT msgContent, createTime, isSend, type FROM message WHERE talker=? ORDER BY createTime ASC LIMIT 50000",
+                "SELECT content, createTime, isSend, type FROM message WHERE talker=? ORDER BY createTime ASC LIMIT 50000",
                 new String[]{sUser});
             if (c == null) return -1;
             if (c.getCount() == 0) return 0;
@@ -894,7 +894,7 @@ public class WmChatHook {
         Cursor c = null;
         try {
             c = rawQueryMsg(
-                "SELECT msgContent, createTime, isSend, type FROM message WHERE talker=? ORDER BY createTime ASC",
+                "SELECT content, createTime, isSend, type FROM message WHERE talker=? ORDER BY createTime ASC",
                 new String[]{sUser});
             if (c == null) return null;
             if (c.getCount() == 0) return "";
@@ -974,7 +974,7 @@ public class WmChatHook {
         Cursor c = null;
         try {
             c = rawQueryMsg(
-                "SELECT msgContent, createTime, isSend, type FROM message WHERE talker=? AND msgContent LIKE ? ORDER BY createTime DESC LIMIT 100",
+                "SELECT content, createTime, isSend, type FROM message WHERE talker=? AND content LIKE ? ORDER BY createTime DESC LIMIT 100",
                 new String[]{sUser, "%" + kw + "%"});
             if (c == null) return null;
             if (c.getCount() == 0) return "";
@@ -1051,7 +1051,11 @@ public class WmChatHook {
     }
 
     static void toast(String m) {
-        Toast.makeText(sAct, m, Toast.LENGTH_SHORT).show();
+        sH.post(() -> {
+            if (sAct != null && !sAct.isFinishing()) {
+                Toast.makeText(sAct, m, Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     // ===== @强提醒 =====
@@ -1071,7 +1075,7 @@ public class WmChatHook {
     static void showRemindList() {
         StringBuilder sb = new StringBuilder();
         try {
-            java.util.Map<String, ?> all = sAct.getSharedPreferences("leshao_prefs", 0).getAll();
+            java.util.Map<String, ?> all = com.leshao.v3.UnifiedPrefs.get(sAct, "wm_prefs").getAll();
             for (String key : all.keySet()) {
                 if (key.startsWith("at_remind_") && "1".equals(String.valueOf(all.get(key)))) {
                     sb.append(key.substring(10)).append("\n");
@@ -2479,9 +2483,8 @@ public class WmChatHook {
             scheduleMassSend(sWizardTimeMs);
 
             // 关闭弹窗并提示
-            if (root.getParent() != null && root.getParent().getParent() instanceof View) {
-                View p = (View) root.getParent().getParent();
-                if (p.getTag() instanceof Dialog) ((Dialog) p.getTag()).dismiss();
+            if (root.getTag() instanceof Dialog) {
+                ((Dialog) root.getTag()).dismiss();
             }
             toast("任务已创建，" + new SimpleDateFormat("MM月dd日 HH:mm").format(new Date(sWizardTimeMs)) + " 准时发送");
         });
@@ -3061,10 +3064,17 @@ public class WmChatHook {
                 return;
             }
 
-            executeMassSend(type, text, targets, imgList, videoPath, audioPath, taskId, delay);
+            executeMassSendOnWorker(type, text, targets, imgList, videoPath, audioPath, taskId, delay);
         } catch (Throwable t) {
             LogWriter.log(TAG, "executeMassSendFromPrefs err: " + t.getMessage());
         }
+    }
+
+    private static void executeMassSendOnWorker(String type, String text, java.util.List<String> targets,
+                                                 java.util.List<String> imgList, String videoPath,
+                                                 String audioPath, String taskId, boolean delay) {
+        new Thread(() -> executeMassSend(type, text, targets, imgList, videoPath, audioPath, taskId, delay),
+                "mass-send-worker").start();
     }
 
     // ==================== 发送执行 ====================
@@ -3117,7 +3127,8 @@ public class WmChatHook {
                                 sendAudioFile(target, audioPath);
                             break;
                         default:
-                            WmReflect.sendTextMsg(sCL, text, target);
+                            // 纯文本已在上面 if (!text.isEmpty()) 统一发送，避免重复
+                            break;
                     }
                     success++;
                 } catch (Throwable t) {
@@ -3172,25 +3183,6 @@ public class WmChatHook {
             }
          } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
     }
-    private static boolean sendMediaFile(String talker, String filePath, String mediaType) {
-        try {
-            if (sCL == null) return false;
-            Object storage = getMsgStorage();
-            if (storage == null) return false;
-            Object msg = XposedHelpers.newInstance(
-                XposedHelpers.findClass("com.tencent.mm.storage.bs", sCL), talker);
-            XposedHelpers.callMethod(msg, "A1", "image".equals(mediaType) ? 3 : 43);
-            XposedHelpers.callMethod(msg, "P0", filePath);
-            XposedHelpers.callMethod(msg, "e1", System.currentTimeMillis());
-            XposedHelpers.callMethod(msg, "k1", 1);
-            XposedHelpers.callMethod(storage, "H9", msg);
-            return true;
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "sendMediaFile err: " + t.getMessage());
-            return false;
-        }
-    }
-
     private static boolean sendImageToUser(String toUser, String imgPath) {
         try {
             if (sCL == null) return false;
@@ -3310,16 +3302,6 @@ public class WmChatHook {
             return (int) (f.length() / 32.0 * 20.0);
         } catch (Throwable t) {
             return 0;
-        }
-    }
-
-    private static Object getMsgStorage() {
-        try {
-            if (sCL == null) return null;
-            Class<?> mma = XposedHelpers.findClass("com.tencent.mm.modelmulti.aa", sCL);
-            return XposedHelpers.callStaticMethod(mma, "getService");
-        } catch (Throwable t) {
-            return null;
         }
     }
 }

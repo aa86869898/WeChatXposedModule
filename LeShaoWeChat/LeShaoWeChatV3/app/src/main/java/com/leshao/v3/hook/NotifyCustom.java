@@ -6,6 +6,8 @@ import de.robv.android.xposed.XposedHelpers;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.Arrays;
+import com.leshao.v3.ContextManager;
+import com.leshao.v3.model.ModuleConfig;
 
 /**
  * [功能65/66/67] 通知增强 — 生产级完整实现
@@ -33,7 +35,8 @@ public class NotifyCustom {
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     public static void hook(ClassLoader cl) {
-        if (!sEnabled) return;
+        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        if (config == null || !config.notifyCustomEnabled) return;
         loadConfig();
         hookNotifyPriority(cl);
         hookNotifyAvatar(cl);

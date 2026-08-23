@@ -1,6 +1,5 @@
 package com.leshao.v3.hook;
 
-import com.leshao.v3.CrashTrace;
 import com.leshao.v3.LogWriter;
 import java.lang.reflect.Method;
 import de.robv.android.xposed.XposedHelpers;
@@ -29,14 +28,10 @@ public class VersionCompat {
     }
 
     public static String getContactUsername(Object contact) {
-        CrashTrace.t("VC_GETUN_IN");
         String result;
         for (String m : new String[]{"d1", "d0", "getUsername", "c1", "getWxid"}) {
-            try { result = (String) XposedHelpers.callMethod(contact, m);
-                  CrashTrace.t("VC_GETUN_OUT=" + result);
-                  return result; } catch (Throwable ignored) {}
+            try { result = (String) XposedHelpers.callMethod(contact, m); return result; } catch (Throwable ignored) {}
         }
-        CrashTrace.t("VC_GETUN_OUT=\"\"");
         return "";
     }
 
@@ -210,6 +205,30 @@ public class VersionCompat {
     public static Class<?> findAntiRecallProtoClass(ClassLoader cl) {
         return findClassMulti(cl, "e01.u", "e02.u", "e00.u", "e03.u",
             "e01.t", "e02.t", "e01.v", "e00.t");
+    }
+
+    // 群成员同步逻辑类: e01.v1.t(String room, ArrayList<String> members, String roomOwner)
+    // = syncAddChatroomMember, 入群欢迎的首选触发点(反编译确认)
+    public static Class<?> findChatroomMembersLogicClass(ClassLoader cl) {
+        return findClassMulti(cl, "e01.v1", "e02.v1", "e01.v2", "e00.v1",
+            "e01.w1", "e02.w1");
+    }
+
+    // ==================== VOIP 自动接听(反编译确认) ====================
+
+    // 底层接听方法: h2.a(boolean onlyAudio, boolean isVideo)
+    public static Class<?> findVoipAcceptClass(ClassLoader cl) {
+        return findClassMulti(cl, "com.tencent.mm.plugin.voip.model.h2",
+            "com.tencent.mm.plugin.voip.ui.h2",
+            "com.tencent.mm.plugin.voip.v2.model.h2");
+    }
+
+    // 接听入口: d0.h()(视频) / d0.j()->d0.g0()(语音) / d0.D(int callType)(模拟)
+    public static Class<?> findVoipEntryClass(ClassLoader cl) {
+        return findClassMulti(cl, "com.tencent.mm.plugin.voip.model.d0",
+            "com.tencent.mm.plugin.voip.ui.d0",
+            "com.tencent.mm.plugin.voip.v2.model.d0",
+            "com.tencent.mm.plugin.voip.model.f0");
     }
 
     // ==================== Message/Notification ====================

@@ -26,14 +26,27 @@ public class SubPageActivity {
     private static Activity sParentAct;
     private static String sTitle;
     private static int sPageId;
+    private static boolean sStandalone = false;
     private static final java.util.Stack<Integer> sNavStack = new java.util.Stack<>();
 
     public static void open(Activity parentAct, String title, int pageId) {
+        sStandalone = false;
         openInternal(parentAct, title, pageId, true);
     }
 
     public static void openFromMain(Activity parentAct, String title, int pageId) {
         sNavStack.clear();
+        sStandalone = false;
+        openInternal(parentAct, title, pageId, false);
+    }
+
+    /**
+     * 从微信原生页面（如群聊详情页）独立打开子页面。
+     * 返回时清空导航栈并直接关闭弹窗回到原页面，不跳转模块主页。
+     */
+    public static void openStandalone(Activity parentAct, String title, int pageId) {
+        sNavStack.clear();
+        sStandalone = true;
         openInternal(parentAct, title, pageId, false);
     }
 
@@ -90,7 +103,9 @@ public class SubPageActivity {
         sv.addView(body);
         root.addView(sv);
 
-        AlertDialog.Builder b = new AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Light_NoActionBar);
+        AlertDialog.Builder b = new AlertDialog.Builder(ctx, AppColors.isDarkMode()
+                ? android.R.style.Theme_DeviceDefault_NoActionBar
+                : android.R.style.Theme_DeviceDefault_Light_NoActionBar);
         b.setView(root);
         b.setCancelable(true);
         AlertDialog dlg = b.create();
@@ -115,9 +130,10 @@ public class SubPageActivity {
         if (!sNavStack.isEmpty()) {
             int prevPageId = sNavStack.pop();
             openInternal(parentAct, "返回", prevPageId, false);
-        } else {
+        } else if (!sStandalone) {
             MainActivity.open(parentAct);
         }
+        sStandalone = false;
     }
 
     private static void dismissSub() {
@@ -148,8 +164,22 @@ public class SubPageActivity {
                 return ProfilePageView.create(ctx, parentAct);
             case 14: // 聊天分组
                 return ChatGroupPageView.create(ctx, parentAct);
+            case 15: // 批量加好友记录
+                return BatchAddRecordPageView.create(ctx, parentAct);
             case 98: // 管理员工具
                 return AdminPageView.create(ctx, parentAct);
+            case 6:  // 通用设置
+                return SettingsPageView.create(ctx, parentAct);
+            case 7:  // 聊天增强
+                return ChatEnhancePageView.create(ctx, parentAct);
+            case 10: // 朋友圈
+                return SnsPageView.create(ctx, parentAct);
+            case 11: // 隐私安全
+                return PrivacyPageView.create(ctx, parentAct);
+            case 5:  // 群管审核（自动踢人/广告关键词/黑名单）
+                return GroupGuardPageView.create(ctx, parentAct);
+            case 16: // 数据统计
+                return StatsPageView.create(ctx, parentAct);
             default:
                 return makePlaceholder(ctx, parentAct);
         }

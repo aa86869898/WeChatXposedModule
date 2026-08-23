@@ -80,23 +80,12 @@ public class WmReflect {
     }
 
     private static Class<?> findChatroomSvcIface(ClassLoader cl) {
-        String[] candidates = {"f", "e", "g", "h", "d", "c", "i", "j"};
-        for (String name : candidates) {
-            try {
-                Class<?> iface = XposedHelpers.findClass(name, cl);
-                Object svc = XposedHelpers.callStaticMethod(
-                        XposedHelpers.findClass("hm0.j1", cl), "s", iface);
-                if (svc != null) {
-                    Object inst = XposedHelpers.callMethod(svc, "a");
-                    if (inst != null) {
-                        LogWriter.log(TAG, "getChatroomInfo: found iface=" + name);
-                        return iface;
-                    }
-                }
-            } catch (Exception ignored) {}
+        try {
+            return XposedHelpers.findClass("cw1.f", cl);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getChatroomInfo: chatroom iface cw1.f not found: " + t.getMessage());
+            return null;
         }
-        LogWriter.log(TAG, "getChatroomInfo: all iface candidates failed");
-        return null;
     }
 
     // ===== 消息 =====
@@ -106,24 +95,12 @@ public class WmReflect {
         try { XposedHelpers.callMethod(m, "qj", content, toUser); } catch (Exception ignored) {}
     }
 
-    public static void sendAppMsg(ClassLoader cl, String xmlContent, String toUser) {
-        try {
-            Class<?> nm = XposedHelpers.findClass("com.tencent.mm.modelmulti.n", cl);
-            Object msg = XposedHelpers.newInstance(nm, toUser, xmlContent, 49, (Object) null);
-            XposedHelpers.callStaticMethod(nm, "b", msg);
-        } catch (Exception e) {
-            LogWriter.log(TAG, "sendAppMsg err: " + e.getMessage());
-        }
-    }
-
     public static void broadcastRooms(ClassLoader cl, List<String> rooms, String content) {
         if (rooms == null || rooms.isEmpty()) return;
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < rooms.size(); i++) {
-            if (i > 0) sb.append(",");
-            sb.append(rooms.get(i));
+        for (String room : rooms) {
+            if (room == null || room.isEmpty()) continue;
+            sendTextMsg(cl, content, room);
         }
-        sendTextMsg(cl, content, sb.toString());
     }
 
     // ===== 成员 =====
@@ -290,10 +267,6 @@ public class WmReflect {
         } catch (Exception e) { return false; }
     }
 
-    // ===== 退群 =====
-    // 退群操作需要 ChatroomInfoUI 实例上下文，静态调用不可靠，改为弹窗指引
-    public static boolean quitRoom(ClassLoader cl, String room) { return false; }
-
     // ===== 上下文 =====
     /** 从聊天 intent 提取当前对象，尝试多个 key（兼容不同微信版本） */
     public static String getCurrentChatUser(Intent intent) {
@@ -334,8 +307,9 @@ public class WmReflect {
         List<String> rooms = new ArrayList<>();
         Object s = getContactStorage(cl);
         if (s == null) return rooms;
+        Cursor c = null;
         try {
-            Cursor c = (Cursor) XposedHelpers.callMethod(s, "D");
+            c = (Cursor) XposedHelpers.callMethod(s, "D");
             if (c != null) {
                 while (c.moveToNext()) {
                     String u = c.getString(c.getColumnIndex("username"));
@@ -343,9 +317,14 @@ public class WmReflect {
                         rooms.add(u);
                     }
                 }
-                c.close();
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            LogWriter.log(TAG, "getAllChatRooms err: " + e.getMessage());
+        } finally {
+            if (c != null) {
+                try { c.close(); } catch (Exception ignored) {}
+            }
+        }
         return rooms;
     }
 

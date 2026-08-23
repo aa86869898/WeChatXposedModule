@@ -41,8 +41,6 @@ public class WxMasterPageView {
 
         root.addView(sectionLabel(ctx, "🛡 群工具"));
         LinearLayout card2 = makeCard(ctx, d);
-        card2.addView(buttonRow(ctx, d, "所有群列表", "查看全部群名+人数", () -> WxMasterFeatures.listAllRooms(parentAct, cl)));
-        card2.addView(candyDivider(ctx, d));
         card2.addView(buttonRow(ctx, d, "群信息报告", "导出群资料到 TXT", () -> WxMasterFeatures.exportRoomReportPicker(parentAct, cl)));
         card2.addView(candyDivider(ctx, d));
         card2.addView(buttonRow(ctx, d, "查看群公告", "公告内容 + 编辑者 + 时间", () -> WxMasterFeatures.showRoomNoticePicker(parentAct, cl)));
@@ -55,8 +53,6 @@ public class WxMasterPageView {
         root.addView(sectionLabel(ctx, "🔧 聊天工具"));
         LinearLayout card3 = makeCard(ctx, d);
         card3.addView(buttonRow(ctx, d, "定时发送", "设置延迟后自动发送", () -> WxMasterFeatures.scheduledSend(parentAct, cl)));
-        card3.addView(candyDivider(ctx, d));
-        card3.addView(buttonRow(ctx, d, "快捷扫码", "一键启动扫一扫", () -> WxMasterFeatures.quickScan(parentAct)));
         card3.addView(candyDivider(ctx, d));
         card3.addView(buttonRow(ctx, d, "私密备注", "本地保存备注,不写入微信", () -> WxMasterFeatures.privateNote(parentAct, cl)));
         root.addView(card3);

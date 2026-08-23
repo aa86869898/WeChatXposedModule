@@ -3,13 +3,15 @@ package com.leshao.v3.ai;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import com.leshao.v3.UnifiedPrefs;
+
 public class AiConfig {
     private static final String SP = "leshao_v3_prefs";
     private static SharedPreferences sp;
 
     public static void init(Context ctx) {
         if (sp == null && ctx != null) {
-            sp = ctx.getSharedPreferences(SP, Context.MODE_PRIVATE);
+            sp = UnifiedPrefs.get(ctx, SP);
         }
     }
 

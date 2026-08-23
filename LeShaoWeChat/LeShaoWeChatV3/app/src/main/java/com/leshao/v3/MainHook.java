@@ -10,8 +10,10 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.AntiRecallHook;
 import com.leshao.v3.hook.AntiDetectionHook;
 import com.leshao.v3.hook.AutoRemark;
+import com.leshao.v3.hook.BatchAddFriend;
 import com.leshao.v3.hook.BatchMessage;
 import com.leshao.v3.hook.CallFeatures;
+import com.leshao.v3.hook.ChatBackup;
 import com.leshao.v3.hook.ChatFooterEnhance;
 import com.leshao.v3.hook.ChatGroupHook;
 import com.leshao.v3.hook.ChatGroupUiInjector;
@@ -28,12 +30,15 @@ import com.leshao.v3.hook.HideContactFields;
 import com.leshao.v3.hook.HookManager;
 import com.leshao.v3.hook.LoginMonitor;
 import com.leshao.v3.hook.MessageHook;
+import com.leshao.v3.hook.MsgExport;
 import com.leshao.v3.hook.NotifyCustom;
 import com.leshao.v3.hook.PrivacyFeatures;
+import com.leshao.v3.hook.RedPacketAlert;
 import com.leshao.v3.hook.RedPacketHook;
 import com.leshao.v3.hook.SearchEnhance;
 import com.leshao.v3.hook.TtsVoiceSender;
 import com.leshao.v3.hook.ShakeCustom;
+import com.leshao.v3.hook.SignatureDump;
 import com.leshao.v3.hook.SnsFeatures;
 import com.leshao.v3.hook.StickyEnhance;
 import com.leshao.v3.hook.TabCustom;
@@ -91,89 +96,95 @@ public class MainHook implements IXposedHookLoadPackage {
             ContextManager.init(cl, lpparam.appInfo.sourceDir);
             ContextManager.hookAttachBaseContext(lpparam);
 
-            MessageHook.hook(cl);
-            TtsVoiceSender.hook(cl);
-            CornerMenu.hook(cl);
-            ChatRoomMuteHelper.hook(cl);
-            ChatFooterLongPressMenu.hook(cl);
-            ChatGroupUiInjector.hook(cl);
+            // 每个模块独立 try-catch: 任一模块失败不影响其他模块注册与 activateAll
+            safeRun("MessageHook", () -> MessageHook.hook(cl));
+            safeRun("TtsVoiceSender", () -> TtsVoiceSender.hook(cl));
+            safeRun("CornerMenu", () -> CornerMenu.hook(cl));
+            safeRun("ChatRoomMuteHelper", () -> ChatRoomMuteHelper.hook(cl));
+            safeRun("ChatFooterLongPressMenu", () -> ChatFooterLongPressMenu.hook(cl));
+            safeRun("ChatGroupUiInjector", () -> ChatGroupUiInjector.hook(cl));
             ContextManager.setOnReadyCallback(new Runnable() {
                 @Override
                 public void run() {
                     try {
                         Context ctx = ContextManager.getAppContext();
 
-                        TTSBroadcaster.init(ctx);
-                        VoiceAutoPlay.hook(cl);
+                        // 每个模块独立 try-catch: 任一模块失败不影响其他模块注册与 activateAll
+                        safeRun("SignatureDump", () -> SignatureDump.dump(cl));
+                        safeRun("TTSBroadcaster", () -> TTSBroadcaster.init(ctx));
+                        safeRun("VoiceAutoPlay", () -> VoiceAutoPlay.hook(cl));
+                        safeRun("ModuleConfig.initWxid", () -> ModuleConfig.initWxid(ctx));
+                        safeRun("VoiceHistoryDbHelper", () -> VoiceHistoryDbHelper.getInstance(ctx)
+                                .deleteExpired(System.currentTimeMillis() - 30L * 86400000L));
 
-                        ModuleConfig.initWxid(ctx);
+                        safeRun("AntiDetectionHook", () -> AntiDetectionHook.hook(cl));
+                        safeRun("AntiRecallHook", () -> HookManager.register(AntiRecallHook::hook));
+                        safeRun("RedPacketHook", () -> HookManager.register(RedPacketHook::hook));
+                        safeRun("RedPacketAlert", () -> HookManager.register(() -> RedPacketAlert.hook(cl)));
+                        safeRun("ChatGroupHook", () -> HookManager.register(() -> ChatGroupHook.hook(cl)));
+                        safeRun("FriendRequestHook", () -> FriendRequestHook.hook(cl));
 
-                        try {
-                            VoiceHistoryDbHelper.getInstance(ctx).deleteExpired(
-                                System.currentTimeMillis() - 30L * 86400000L);
-                        } catch (Throwable ignored) {}
+                        safeRun("VoiceForwardHook", () -> HookManager.register(VoiceForwardHook::hook));
+                        safeRun("TypingIndicator", () -> HookManager.register(() -> TypingIndicator.hook(cl)));
+                        safeRun("ChatFooterEnhance", () -> HookManager.register(() -> ChatFooterEnhance.hook(cl)));
+                        safeRun("ChatVoiceSwitchHook", () -> ChatVoiceSwitchHook.init(cl));
+                        safeRun("ChatUICustom", () -> HookManager.register(() -> ChatUICustom.hook(cl)));
+                        safeRun("BatchMessage", () -> HookManager.register(() -> BatchMessage.hook(cl)));
+                        safeRun("AutoRemark", () -> HookManager.register(() -> AutoRemark.hook(cl)));
+                        safeRun("SearchEnhance", () -> HookManager.register(() -> SearchEnhance.hook(cl)));
+                        safeRun("NotifyCustom", () -> HookManager.register(() -> NotifyCustom.hook(cl)));
+                        safeRun("UnreadBadge", () -> HookManager.register(() -> UnreadBadge.hook(cl)));
+                        safeRun("TabCustom", () -> HookManager.register(() -> TabCustom.hook(cl)));
+                        safeRun("ShakeCustom", () -> HookManager.register(() -> ShakeCustom.hook(cl)));
+                        safeRun("StickyEnhance", () -> HookManager.register(() -> StickyEnhance.hook(cl)));
+                        safeRun("DeleteDetect", () -> HookManager.register(() -> DeleteDetect.hook(cl)));
+                        safeRun("CallFeatures", () -> HookManager.register(() -> CallFeatures.hook(cl)));
 
-                        AntiDetectionHook.hook(cl);
-                        HookManager.register(AntiRecallHook::hook);
-                        HookManager.register(RedPacketHook::hook);
-                        HookManager.register(() -> ChatGroupHook.hook(cl));
-                        FriendRequestHook.hook(cl);
+                        safeRun("SnsFeatures", () -> HookManager.register(() -> SnsFeatures.hook(cl)));
 
-                        HookManager.register(VoiceForwardHook::hook);
-                        HookManager.register(() -> TypingIndicator.hook(cl));
-                        HookManager.register(() -> ChatFooterEnhance.hook(cl));
-                        ChatVoiceSwitchHook.init(cl);
-                        HookManager.register(() -> ChatUICustom.hook(cl));
-                        HookManager.register(() -> BatchMessage.hook(cl));
-                        HookManager.register(() -> AutoRemark.hook(cl));
-                        HookManager.register(() -> SearchEnhance.hook(cl));
-                        HookManager.register(() -> NotifyCustom.hook(cl));
-                        HookManager.register(() -> UnreadBadge.hook(cl));
-                        HookManager.register(() -> TabCustom.hook(cl));
-                        HookManager.register(() -> ShakeCustom.hook(cl));
-                        HookManager.register(() -> StickyEnhance.hook(cl));
-                        HookManager.register(() -> DeleteDetect.hook(cl));
-                        HookManager.register(() -> CallFeatures.hook(cl));
+                        safeRun("PrivacyFeatures", () -> HookManager.register(() -> PrivacyFeatures.hook(cl)));
+                        safeRun("LoginMonitor", () -> HookManager.register(() -> LoginMonitor.hook(cl)));
+                        safeRun("HideContactFields", () -> HookManager.register(() -> HideContactFields.hook(cl)));
+                        safeRun("ConvPrivacy", () -> HookManager.register(() -> ConvPrivacy.hook(cl)));
 
-                        HookManager.register(() -> SnsFeatures.hook(cl));
+                        safeRun("ContactChangeLog", () -> HookManager.register(() -> ContactChangeLog.hook(cl)));
+                        safeRun("GroupFeatures", () -> HookManager.register(() -> GroupFeatures.hook(cl)));
+                        safeRun("MsgExport", () -> HookManager.register(() -> MsgExport.hook(cl)));
+                        safeRun("ChatBackup", () -> HookManager.register(() -> ChatBackup.hook(cl)));
+                        safeRun("WmEntry", () -> WmEntry.injectAll(cl));
 
-                        HookManager.register(() -> PrivacyFeatures.hook(cl));
-                        HookManager.register(() -> LoginMonitor.hook(cl));
-                        HookManager.register(() -> HideContactFields.hook(cl));
-                        HookManager.register(() -> ConvPrivacy.hook(cl));
+                        safeRun("FakeAddSource", () -> FakeAddSource.hook(cl));
+                        safeRun("BatchAddFriend", () -> BatchAddFriend.hook(cl));
 
-                        HookManager.register(() -> ContactChangeLog.hook(cl));
-                        HookManager.register(() -> GroupFeatures.hook(cl));
-                        HookManager.register(() -> WmEntry.injectAll(cl));
-
-                        LogWriter.log(TAG, "[MainHook] 开始初始化 FakeAddSource");
-                        FakeAddSource.hook(cl);
-                        LogWriter.log(TAG, "[MainHook] FakeAddSource 初始化完成");
-
-                        try {
+                        safeRun("AiConfig+ChatHooks", () -> {
                             AiConfig.init(ctx);
                             ChatHooks.install(lpparam);
                             LogWriter.log(TAG, "[MainHook] AI 聊天助手已加载 v629");
-                        } catch (Throwable t) {
-                            LogWriter.log(TAG, "[MainHook] AI install FAIL: " + t.getMessage());
-                        }
+                        });
 
-                        try {
-                            TingMusicModule.hook(cl);
-                            LogWriter.log(TAG, "[MainHook] 听一听音乐模块已加载");
-                        } catch (Throwable t) {
-                            LogWriter.log(TAG, "[MainHook] TingMusic install FAIL: " + t.getMessage());
-                        }
-
-                        HookManager.activateAll();
+                        safeRun("TingMusicModule", () -> TingMusicModule.hook(cl));
                     } catch (Throwable t) {
                         LogWriter.log(TAG, "[MainHook] FATAL in onReadyCallback: " + t.getClass().getSimpleName()
                             + " " + t.getMessage());
+                    } finally {
+                        // 无论任何模块失败, 都激活全部已注册 hook
+                        try { HookManager.activateAll(); }
+                        catch (Throwable t) { LogWriter.log(TAG, "[MainHook] activateAll FAIL: " + t.getMessage()); }
                     }
                 }
             });
         } catch (Throwable t) {
             LogWriter.log(TAG, "LeShaoV3: FATAL during init: " + t.getMessage());
+        }
+    }
+
+    /** 独立执行模块初始化, 单个模块抛异常不影响后续模块 */
+    private static void safeRun(String name, Runnable task) {
+        try {
+            task.run();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[MainHook] " + name + " FAIL: " + t.getClass().getSimpleName()
+                    + " " + t.getMessage());
         }
     }
 }

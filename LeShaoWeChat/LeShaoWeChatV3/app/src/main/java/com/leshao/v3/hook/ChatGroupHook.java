@@ -28,7 +28,15 @@ public class ChatGroupHook {
     private static final List<LabelInfo> sCachedLabels = Collections.synchronizedList(new ArrayList<LabelInfo>());
     private static final Map<Integer, Set<String>> sShadowContactMap = Collections.synchronizedMap(new HashMap<>());
     private static volatile boolean sShadowMapBuilt = false;
-    private static int sNextFakeId = 10000;
+    // 内置虚拟标签 ID，避开 sNextFakeId 分配段，任何微信/分身环境恒存在
+    public static final int LABEL_ID_GROUP = 10000;
+    public static final int LABEL_ID_FRIEND = 10001;
+    public static final int LABEL_ID_SERVICE = 10002;
+    public static final String LABEL_NAME_GROUP = "\u7FA4\u804A";
+    public static final String LABEL_NAME_FRIEND = "\u597D\u53CB";
+    public static final String LABEL_NAME_SERVICE = "\u670D\u52A1";
+    // 动态标签 ID 起点：必须大于内置 ID 段，避免与内置标签冲突
+    private static int sNextFakeId = 20000;
 
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
@@ -200,12 +208,16 @@ public class ChatGroupHook {
     }
 
     private static void restoreShadowLabels() {
+        // 先固定注入内置虚拟标签，保证任何环境（含分身微信）恒存在
+        seedBuiltInLabels();
         try {
             List<ShadowLabelStore.ShadowLabel> shadows = ShadowLabelStore.getAll();
             if (shadows.isEmpty()) return;
             int maxId = 0;
             synchronized (sCachedLabels) {
                 for (ShadowLabelStore.ShadowLabel sl : shadows) {
+                    // 内置虚拟标签由 seedBuiltInLabels 统一管理，跳过持久化旧数据，避免 ID/名称错位
+                    if (sl.labelId == LABEL_ID_GROUP || sl.labelId == LABEL_ID_FRIEND || sl.labelId == LABEL_ID_SERVICE) continue;
                     boolean exists = false;
                     for (LabelInfo l : sCachedLabels) { if (l.labelName.equals(sl.labelName)) { exists = true; break; } }
                     if (exists) continue;
@@ -231,6 +243,27 @@ public class ChatGroupHook {
         } catch (Throwable e) { LogWriter.log(TAG, "restoreShadow: " + e.getMessage()); }
     }
 
+    /** 固定注入三个内置虚拟标签（群聊/好友/服务），不依赖 ShadowLabelStore 持久化数据 */
+    private static void seedBuiltInLabels() {
+        synchronized (sCachedLabels) {
+            seedBuiltInLabel(LABEL_ID_GROUP, LABEL_NAME_GROUP);
+            seedBuiltInLabel(LABEL_ID_FRIEND, LABEL_NAME_FRIEND);
+            seedBuiltInLabel(LABEL_ID_SERVICE, LABEL_NAME_SERVICE);
+        }
+    }
+
+    private static void seedBuiltInLabel(int id, String name) {
+        for (LabelInfo l : sCachedLabels) {
+            if (l.labelId == id) {
+                if (l.labelName == null || l.labelName.isEmpty()) l.labelName = name;
+                return;
+            }
+        }
+        LabelInfo li = new LabelInfo(id, name);
+        li.createTime = 0;
+        sCachedLabels.add(li);
+    }
+
     // ==================== 标签查询 ====================
     public static List<LabelInfo> getAllLabels() {
         List<LabelInfo> r = new ArrayList<>();
@@ -251,7 +284,7 @@ public class ChatGroupHook {
                 }
             }
         } catch (Throwable e) { LogWriter.log(TAG, "getAll: " + e.getMessage()); }
-        synchronized (sCachedLabels) { r.addAll(sCachedLabels); }
+        mergeCachedLabels(r);
         return r;
     }
 
@@ -274,7 +307,7 @@ public class ChatGroupHook {
                 }
             }
         } catch (Throwable e) { LogWriter.log(TAG, "getAllTemp: " + e.getMessage()); }
-        synchronized (sCachedLabels) { r.addAll(sCachedLabels); }
+        mergeCachedLabels(r);
         return r;
     }
 
@@ -283,7 +316,7 @@ public class ChatGroupHook {
         try {
             Object st = getLabelStorage();
             if (st != null) {
-                Object o = XposedHelpers.callMethod(st, "r1", id);
+                Object o = XposedHelpers.callMethod(st, "r1", labelId);
                 if (o != null) return toLabelInfo(o);
             }
         } catch (Throwable ignored) {}
@@ -364,8 +397,35 @@ public class ChatGroupHook {
                 }
             }
         } catch (Throwable e) { LogWriter.log(TAG, "getAllLight: " + e.getMessage()); }
+        mergeCachedLabels(r);
+        return r;
+    }
+
+    /**
+     * 仅返回模块自身的标签(内置虚拟标签 + 本模块创建的标签)，
+     * 不含微信通讯录用户手动创建的标签。
+     * 聊天分组顶部标签栏只应展示模块分组，不展示微信标签。
+     */
+    public static List<LabelInfo> getModuleLabels() {
+        List<LabelInfo> r = new ArrayList<>();
         synchronized (sCachedLabels) { r.addAll(sCachedLabels); }
         return r;
+    }
+
+    /**
+     * 将模块缓存标签合并进微信标签列表; 微信已成功创建的同名标签不重复追加,
+     * 避免 createLabel 写入微信后又留在模块缓存导致的标签双份显示。
+     */
+    private static void mergeCachedLabels(List<LabelInfo> r) {
+        synchronized (sCachedLabels) {
+            if (sCachedLabels.isEmpty()) return;
+            Set<String> names = new HashSet<>();
+            for (LabelInfo l : r) { if (l.labelName != null) names.add(l.labelName); }
+            for (LabelInfo l : sCachedLabels) {
+                if (l.labelName != null && !names.add(l.labelName)) continue;
+                r.add(l);
+            }
+        }
     }
 
     // ==================== 标签增删改 ====================
@@ -432,17 +492,22 @@ public class ChatGroupHook {
 
     public static boolean deleteLabel(String labelId) {
         int id = Integer.parseInt(labelId);
+        if (id == LABEL_ID_GROUP || id == LABEL_ID_FRIEND || id == LABEL_ID_SERVICE) return false;
+        boolean wechatDeleted = false;
         try {
             Object st = getLabelStorage();
-            if (st != null) { boolean ignored = (boolean) XposedHelpers.callMethod(st, "d", id); refreshCache(); }
-        } catch (Throwable ignored) {}
+            if (st != null) {
+                wechatDeleted = (boolean) XposedHelpers.callMethod(st, "d", labelId);
+                if (wechatDeleted) refreshCache();
+            }
+        } catch (Throwable e) { LogWriter.log(TAG, "delete wechat: " + e.getMessage()); }
         synchronized (sCachedLabels) {
             for (Iterator<LabelInfo> it = sCachedLabels.iterator(); it.hasNext(); ) {
                 if (it.next().labelId == id) it.remove();
             }
         }
         ShadowLabelStore.remove(id);
-        LogWriter.log(TAG, "delete: id=" + labelId);
+        LogWriter.log(TAG, "delete: id=" + labelId + " wechat=" + wechatDeleted);
         return true;
     }
 
@@ -450,12 +515,13 @@ public class ChatGroupHook {
         if (newName == null || newName.trim().isEmpty()) return false;
         newName = newName.trim();
         int id = Integer.parseInt(labelId);
+        if (id == LABEL_ID_GROUP || id == LABEL_ID_FRIEND || id == LABEL_ID_SERVICE) return false;
         // try WeChat rename
         try {
             Object st = getLabelStorage();
             ClassLoader cl = getClassLoader();
             if (st != null && cl != null) {
-                Object label = XposedHelpers.callMethod(st, "r1", id);
+                Object label = XposedHelpers.callMethod(st, "r1", labelId);
                 if (label != null) {
                     XposedHelpers.setObjectField(label, "field_labelName", newName);
                     try {
@@ -463,7 +529,7 @@ public class ChatGroupHook {
                         XposedHelpers.setObjectField(label, "field_labelPYFull", XposedHelpers.callStaticMethod(kc, "a", newName));
                         XposedHelpers.setObjectField(label, "field_labelPYShort", XposedHelpers.callStaticMethod(kc, "b", newName));
                     } catch (Throwable ignored) {}
-                    boolean ignored = (boolean) XposedHelpers.callMethod(st, "update", label);
+                    boolean ignored = (boolean) XposedHelpers.callMethod(st, "update", label, new String[]{"labelID"});
                     refreshCache();
                 }
             }

@@ -34,10 +34,18 @@ public class ShakeCustom {
     private static int shakeCount = 0;
     private static Handler mainHandler = new Handler(Looper.getMainLooper());
 
+    /** 热更新: 设置面板保存后调用, 无需重启微信即可生效 */
+    public static void applyConfig(android.content.SharedPreferences prefs) {
+        try {
+            if (prefs != null) action = prefs.getInt("shake_action", 3);
+        } catch (Throwable ignored) {}
+    }
+
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;
         ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
         if (config == null || !config.shakeCustomEnabled) return;
+        action = HookConfig.getInt("shake_action", 3);
 
         hookShakeDetect(cl);
     }

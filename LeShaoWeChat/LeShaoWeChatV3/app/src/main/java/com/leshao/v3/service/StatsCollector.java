@@ -40,7 +40,7 @@ public class StatsCollector {
         public final Map<String, Integer> memberCounts = new ConcurrentHashMap<>();
         public long lastActive;
 
-        void record(WeChatMessage msg) {
+        synchronized void record(WeChatMessage msg) {
             messageCount++;
             lastActive = System.currentTimeMillis();
             memberCounts.merge(msg.senderWxid, 1, Integer::sum);

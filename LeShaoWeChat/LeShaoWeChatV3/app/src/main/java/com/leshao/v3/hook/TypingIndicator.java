@@ -6,6 +6,8 @@ import de.robv.android.xposed.XposedHelpers;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.Toast;
+import com.leshao.v3.ContextManager;
+import com.leshao.v3.model.ModuleConfig;
 
 /**
  * [功能4] 对方正在输入提示 — 生产级完整实现
@@ -40,7 +42,9 @@ public class TypingIndicator {
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     public static void hook(ClassLoader cl) {
-        if (!sEnabled) return;
+        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
+        if (config == null || !config.typingIndicatorEnabled) return;
+        sEnabled = true;
         sClassLoader = cl;
         showToast = HookConfig.getInt("typing_show_toast", 0) == 1;
 
@@ -117,8 +121,8 @@ public class TypingIndicator {
         mainHandler.post(new Runnable() {
             public void run() {
                 try {
-                    android.content.Context act = com.leshao.v3.ContextManager.getAppContext();
-                    if (act != null) {
+                    android.content.Context ctx = com.leshao.v3.ContextManager.getAppContext();
+                    if (ctx != null) {
                         String name = talker;
                         try {
                             Class<?> d9 = VersionCompat.findMsgStorageShortClass(sClassLoader);
@@ -132,10 +136,8 @@ public class TypingIndicator {
                                 if (nickname != null && !nickname.isEmpty()) name = nickname;
                             }
                         } catch (Throwable ignored) {}
-                        if (act instanceof android.app.Activity) {
-                            Toast.makeText((android.app.Activity) act, name + " 正在输入...",
-                                    Toast.LENGTH_SHORT).show();
-                        }
+                        Toast.makeText(ctx, name + " 正在输入...",
+                                Toast.LENGTH_SHORT).show();
                     }
                 } catch (Throwable ignored) {}
             }

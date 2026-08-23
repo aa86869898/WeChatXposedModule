@@ -59,7 +59,7 @@ public class AiClient {
         int code = conn.getResponseCode();
         StringBuilder sb = new StringBuilder();
         try (BufferedReader br = new BufferedReader(new InputStreamReader(
-                code >= 400 ? conn.getErrorStream() : conn.getInputStream(), StandardCharsets.UTF_8))) {
+                responseStream(conn, code), StandardCharsets.UTF_8))) {
             String line;
             while ((line = br.readLine()) != null) sb.append(line);
         }
@@ -72,7 +72,7 @@ public class AiClient {
     }
 
     public static void chatStream(String system, List<ChatMessage> msgs, StreamCallback cb) {
-        Thread t = new Thread(() -> {
+        POOL.execute(() -> {
             HttpURLConnection conn = null;
             try {
                 String url = apiUrl(AiConfig.activeBaseUrl(), "/chat/completions");
@@ -95,7 +95,7 @@ public class AiClient {
                 if (code >= 400) {
                     StringBuilder sb = new StringBuilder();
                     try (BufferedReader br = new BufferedReader(new InputStreamReader(
-                            conn.getErrorStream(), StandardCharsets.UTF_8))) {
+                            responseStream(conn, code), StandardCharsets.UTF_8))) {
                         String line;
                         while ((line = br.readLine()) != null) sb.append(line);
                     }
@@ -135,8 +135,11 @@ public class AiClient {
                 if (conn != null) conn.disconnect();
             }
         });
-        t.setDaemon(true);
-        t.start();
+    }
+
+    private static java.io.InputStream responseStream(HttpURLConnection conn, int code) throws Exception {
+        java.io.InputStream is = code >= 400 ? conn.getErrorStream() : conn.getInputStream();
+        return is != null ? is : conn.getInputStream();
     }
 
     private static JSONObject buildBody(String system, List<ChatMessage> msgs, boolean stream) throws Exception {
@@ -168,7 +171,7 @@ public class AiClient {
                 int code = conn.getResponseCode();
                 StringBuilder sb = new StringBuilder();
                 try (BufferedReader br = new BufferedReader(new InputStreamReader(
-                        code >= 400 ? conn.getErrorStream() : conn.getInputStream(), StandardCharsets.UTF_8))) {
+                        responseStream(conn, code), StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = br.readLine()) != null) sb.append(line);
                 }

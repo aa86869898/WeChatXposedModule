@@ -3,6 +3,7 @@ package com.leshao.v3.wm.utils;
 import android.content.Context;
 import android.content.SharedPreferences;
 import com.leshao.v3.ContextManager;
+import com.leshao.v3.UnifiedPrefs;
 
 /** 偏好存储 — 复刻自微信大师 Prefs，接入现有 ContextManager */
 public class WmPrefs {
@@ -11,7 +12,7 @@ public class WmPrefs {
     public static void init() {
         try {
             Context c = ContextManager.getAppContext();
-            if (c != null) sp = c.getSharedPreferences("wm_prefs", 0);
+            if (c != null) sp = UnifiedPrefs.get(c, "wm_prefs");
         } catch (Throwable ignored) {}
     }
 
@@ -48,11 +49,10 @@ public class WmPrefs {
     public static boolean isMsgSearch() { return get("msg_search", true); }
     public static boolean isTTSCube() { return get("tts_cube", true); }
     public static boolean isBatchSend() { return get("batch_send", true); }
-    public static boolean isGroupList() { return get("group_list", true); }
-    public static boolean isQuickScan() { return get("quick_scan", true); }
     public static boolean isScheduledMoment() { return get("scheduled_moment", false); }
-    public static boolean isFileHelper() { return get("file_helper", true); }
     public static boolean isLongPressMenu() { return get("long_press_menu", true); }
+    public static boolean isCardOrder() { return get("card_order", false); }
+    public static boolean isVoiceOrder() { return get("voice_order", false); }
     public static boolean isQuoteEnhance() { return get("quote_enhance", true); }
     public static boolean isMergeForward() { return get("merge_forward", true); }
     public static boolean isWatermark() { return get("watermark", false); }

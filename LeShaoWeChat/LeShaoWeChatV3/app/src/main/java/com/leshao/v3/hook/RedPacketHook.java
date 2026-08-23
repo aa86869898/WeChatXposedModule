@@ -5,7 +5,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.TextView;
 
 import com.leshao.v3.ContextManager;
@@ -26,9 +25,14 @@ public class RedPacketHook {
     private static final String TAG = "RedPacket";
     private static final String PKG_WECHAT = "com.tencent.mm";
 
+    // 微信消息原始类型码
+    private static final int TYPE_REDPACKET = 436207665;   // 0x1A000031 微信红包
+    private static final int TYPE_TRANSFER = 419430449;    // 0x19000031 微信转账
+
     private static volatile boolean sEnabled = true;
     private static volatile boolean sPrivateEnabled = true;
     private static volatile boolean sGroupEnabled = false;
+    private static volatile boolean sTransferEnabled = true; // 转账自动收款, 独立于红包开关
     private static volatile boolean sTimeFilterOn = false;
     private static volatile String sTimeStart = "00:00";
     private static volatile String sTimeEnd = "06:00";
@@ -43,9 +47,13 @@ public class RedPacketHook {
     private static final Handler sHandler = new Handler(Looper.getMainLooper());
     private static final AtomicBoolean sProcessing = new AtomicBoolean(false);
 
+    // 已处理的红包/转账消息去重
+    private static final Set<Long> sHandledMsgs = new HashSet<>();
+
     public static void setEnabled(boolean v) { sEnabled = v; }
     public static void setPrivateEnabled(boolean v) { sPrivateEnabled = v; }
     public static void setGroupEnabled(boolean v) { sGroupEnabled = v; }
+    public static void setTransferEnabled(boolean v) { sTransferEnabled = v; }
     public static void setTimeFilter(boolean on, String start, String end) {
         sTimeFilterOn = on; sTimeStart = start; sTimeEnd = end;
     }
@@ -68,11 +76,183 @@ public class RedPacketHook {
             LogWriter.log(TAG, "hook ABORTED: ContextManager not ready");
             return;
         }
+        loadConfig();
         ClassLoader cl = ContextManager.getClassLoader();
         hookReceiveUIs(cl);
         hookChatListClick(cl);
         hookRedPacketUI(cl);
-        LogWriter.log(TAG, "hooks installed (open result + UI auto-click + TTS UI)");
+        hookTransferUIs(cl);
+        LogWriter.log(TAG, "hooks installed (event-driven auto grab + open + TTS + transfer)");
+    }
+
+    // 启动时从 SharedPreferences 加载配置, 保证开关/范围/过滤在重启后仍生效
+    private static void loadConfig() {
+        try {
+            android.content.SharedPreferences prefs = ContextManager.getPrefs();
+            if (prefs == null) return;
+            sEnabled = prefs.getBoolean("ls_redpacket_enabled", true);
+            sPrivateEnabled = prefs.getBoolean("ls_rp_private", true);
+            sGroupEnabled = prefs.getBoolean("ls_rp_group", false);
+            sTimeFilterOn = prefs.getBoolean("ls_rp_time_on", false);
+            sTimeStart = prefs.getString("ls_rp_time_start", "00:00");
+            sTimeEnd = prefs.getString("ls_rp_time_end", "06:00");
+            sKeywordExcludeOn = prefs.getBoolean("ls_rp_kw_exclude_on", false);
+            sKeywordExclude = parseKeywordSet(prefs.getString("ls_rp_kw_exclude", ""));
+            sKeywordIncludeOn = prefs.getBoolean("ls_rp_kw_include_on", false);
+            sKeywordInclude = parseKeywordSet(prefs.getString("ls_rp_kw_include", ""));
+            sFastPrivateWxids = parseIdSet(prefs.getString("ls_rp_fast_private", ""));
+            sFastGroupIds = parseIdSet(prefs.getString("ls_rp_fast_group", ""));
+            sTtsAnnounce = prefs.getBoolean("ls_rp_tts_announce", true);
+            sTransferEnabled = prefs.getBoolean("ls_transfer_enabled", true);
+            LogWriter.log(TAG, "config loaded: enabled=" + sEnabled + " private=" + sPrivateEnabled
+                + " group=" + sGroupEnabled + " tts=" + sTtsAnnounce
+                + " transfer=" + sTransferEnabled
+                + " contains(enabled)=" + prefs.contains("ls_redpacket_enabled")
+                + " contains(private)=" + prefs.contains("ls_rp_private"));
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "loadConfig err: " + t);
+        }
+    }
+
+    private static Set<String> parseKeywordSet(String raw) {
+        Set<String> set = new HashSet<>();
+        if (raw == null || raw.trim().isEmpty()) return set;
+        for (String kw : raw.split("\\s+")) {
+            if (!kw.trim().isEmpty()) set.add(kw.trim());
+        }
+        return set;
+    }
+
+    private static Set<String> parseIdSet(String raw) {
+        Set<String> set = new HashSet<>();
+        if (raw == null || raw.trim().isEmpty()) return set;
+        for (String id : raw.split(",")) {
+            if (!id.trim().isEmpty()) set.add(id.trim());
+        }
+        return set;
+    }
+
+    // ==================== 入口: 由 MessageHook 在新消息到达时调用 ====================
+    public static boolean isRedPacketType(int rawType) {
+        return rawType == TYPE_REDPACKET || rawType == 318767153; // 0x1A000031 / 0x13000031
+    }
+
+    public static boolean isTransferType(int rawType) {
+        return rawType == TYPE_TRANSFER; // 0x19000031
+    }
+
+    // 诊断辅助: 判断消息内容是否像红包/转账（用于校准类型码，命中时打印 rawType）
+    public static boolean looksLikeMoneyMessage(String content) {
+        if (content == null) return false;
+        String c = content.toLowerCase();
+        return c.contains("nativeurl") || c.contains("sendid")
+            || c.contains("channelid") || c.contains("transferid")
+            || c.contains("luckymoney") || c.contains("remittance")
+            || c.contains("hongbao");
+    }
+
+    public static void onIncomingMessage(int rawType, String talker, String content, long msgId) {
+        try {
+            if (isRedPacketType(rawType)) {
+                if (!sEnabled) return;
+                onRedPacketArrived(talker, content, msgId);
+            } else if (isTransferType(rawType)) {
+                if (!sTransferEnabled) return;
+                onTransferArrived(talker, content, msgId);
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "onIncomingMessage err: " + t);
+        }
+    }
+
+    private static void onRedPacketArrived(String talker, String content, long msgId) {
+        synchronized (sHandledMsgs) {
+            if (msgId != 0 && !sHandledMsgs.add(msgId)) return;
+            if (sHandledMsgs.size() > 200) {
+                Long oldest = sHandledMsgs.iterator().next();
+                sHandledMsgs.remove(oldest);
+            }
+        }
+        if (!shouldGrabRedPacket(talker, content)) return;
+        if (isRedPacketReceived(content)) return;
+
+        LogWriter.log(TAG, "RP arrived talker=" + talker + " msgId=" + msgId);
+        LuckMoneyBackend.grabRedPacket(talker, content, msgId);
+    }
+
+    private static void onTransferArrived(String talker, String content, long msgId) {
+        synchronized (sHandledMsgs) {
+            if (msgId != 0 && !sHandledMsgs.add(msgId)) return;
+            if (sHandledMsgs.size() > 200) {
+                Long oldest = sHandledMsgs.iterator().next();
+                sHandledMsgs.remove(oldest);
+            }
+        }
+        LogWriter.log(TAG, "TRANSFER arrived talker=" + talker + " msgId=" + msgId);
+        LuckMoneyBackend.grabTransfer(talker, content, msgId);
+    }
+
+    private static boolean shouldGrabRedPacket(String talker, String content) {
+        boolean isGroup = talker != null && talker.endsWith("@chatroom");
+        if (isGroup) {
+            if (!sGroupEnabled) return false;
+        } else {
+            if (!sPrivateEnabled) return false;
+        }
+        if (sTimeFilterOn && inTimeRange()) return false;
+        String wishing = extractXmlText(content, "des");
+        if (sKeywordIncludeOn && !sKeywordInclude.isEmpty()) {
+            boolean hit = false;
+            for (String kw : sKeywordInclude) {
+                if (wishing != null && wishing.contains(kw)) { hit = true; break; }
+            }
+            if (!hit) return false;
+        }
+        if (sKeywordExcludeOn && !sKeywordExclude.isEmpty()) {
+            for (String kw : sKeywordExclude) {
+                if (wishing != null && wishing.contains(kw)) return false;
+            }
+        }
+        return true;
+    }
+
+    // 时间段过滤: 在 [start, end] 区间内不领取
+    private static boolean inTimeRange() {
+        try {
+            Calendar now = Calendar.getInstance();
+            int cur = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+            int s = parseMinute(sTimeStart);
+            int e = parseMinute(sTimeEnd);
+            if (s <= e) return cur >= s && cur <= e;
+            return cur >= s || cur <= e; // 跨天区间
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private static int parseMinute(String hhmm) {
+        if (hhmm == null) return 0;
+        String[] p = hhmm.split(":");
+        try {
+            return Integer.parseInt(p[0].trim()) * 60 + Integer.parseInt(p[1].trim());
+        } catch (Throwable t) { return 0; }
+    }
+
+    private static boolean isRedPacketReceived(String content) {
+        if (content == null) return false;
+        return content.contains("<isReceivies>1</isReceivies>")
+            || content.contains("<isReceivies>true</isReceivies>")
+            || content.contains("<receiveStatus>1</receiveStatus>");
+    }
+
+    private static String extractXmlText(String xml, String tag) {
+        if (xml == null || tag == null) return null;
+        int s = xml.indexOf("<" + tag + ">");
+        if (s < 0) return null;
+        s += tag.length() + 2;
+        int e = xml.indexOf("</" + tag + ">", s);
+        if (e < 0) return null;
+        return xml.substring(s, e);
     }
 
     // ==================== TTS: LuckyMoneyDetailUI.onResume 读UI金额 ====================
@@ -88,7 +268,9 @@ public class RedPacketHook {
                         String amt = scanAmount(act.getWindow().getDecorView());
                         if (amt != null && !amt.isEmpty()) {
                             LogWriter.log(TAG, "RP: " + amt);
-                            TTSBroadcaster.announceRedPacket("好友", null, null, amt + "元");
+                            if (sTtsAnnounce) {
+                                TTSBroadcaster.announceRedPacket("好友", null, null, amt);
+                            }
                         }
                     }, 800);
                 }
@@ -114,14 +296,13 @@ public class RedPacketHook {
         return null;
     }
 
-    // ==================== 自动抢红包 (保留) ====================
+    // ==================== 领取页自动点"开" ====================
     private static void hookReceiveUIs(ClassLoader cl) {
         hookInitView(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNewReceiveUI", "initView");
         hookInitView(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI", "initView");
         tryHookAndClick(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI");
         tryHookAndClick(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2");
         tryHookAndClick(cl, PKG_WECHAT + ".plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI");
-        // 新增: HK红包详情和普通红包新版详情
         tryHookAndClick(cl, PKG_WECHAT + ".plugin.luckymoney.hk.ui.LuckyMoneyHKBeforeDetailUI");
         tryHookAndClick(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNewDetailUI");
         tryHookAndClick(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI");
@@ -158,84 +339,135 @@ public class RedPacketHook {
         sProcessing.set(true);
         try {
             View root = activity.getWindow().getDecorView();
-            Button btn = findButtonRecursive(root);
-            if (btn != null && btn.isEnabled() && isVisible(btn)) {
-                btn.performClick();
+            View open = findOpenView(root);
+            if (open != null && open.isEnabled() && isVisible(open)) {
+                open.performClick();
                 LogWriter.log(TAG, "auto-clicked open button");
+            } else {
+                LogWriter.log(TAG, "open button not found");
             }
         } catch (Throwable ignored) {} finally {
             sProcessing.set(false);
         }
     }
 
-    private static Button findButtonRecursive(View v) {
-        if (v instanceof Button) {
-            Button b = (Button) v;
-            CharSequence t = b.getText();
-            if (t != null) {
-                String s = t.toString();
-                if (s.contains("开") || s.contains("拆") || s.contains("领取")
-                    || s.contains("Open") || s.contains("OPEN")) return b;
-            }
-            try {
-                String resName = v.getResources().getResourceEntryName(v.getId());
-                if (resName != null && resName.toLowerCase().contains("open")) return b;
-            } catch (Throwable ignored) {}
+    // 查找红包领取页"开"按钮: 支持 Button/TextView/ImageView/自定义 View
+    private static View findOpenView(View v) {
+        if (v instanceof TextView) {
+            String s = ((TextView) v).getText().toString();
+            if (isOpenLabel(s)) return findClickableSelfOrParent(v);
         }
+        try {
+            if (v.getId() != View.NO_ID) {
+                String resName = v.getResources().getResourceEntryName(v.getId());
+                if (resName != null) {
+                    String rl = resName.toLowerCase();
+                    if (rl.contains("open") || rl.contains("receive")) {
+                        return findClickableSelfOrParent(v);
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
         if (v instanceof ViewGroup) {
             for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) {
-                Button r = findButtonRecursive(((ViewGroup) v).getChildAt(i));
+                View r = findOpenView(((ViewGroup) v).getChildAt(i));
                 if (r != null) return r;
             }
         }
         return null;
+    }
+
+    private static boolean isOpenLabel(String s) {
+        if (s == null) return false;
+        String t = s.trim();
+        if (t.isEmpty()) return false;
+        if (t.equals("开") || t.equals("拆") || t.equals("開")) return true;
+        if (t.length() <= 4 && (t.contains("开") || t.contains("拆"))) return true;
+        if (t.contains("领取") && t.length() <= 6) return true;
+        return t.contains("Open") || t.contains("OPEN");
     }
 
     private static boolean isVisible(View v) {
         return v.getVisibility() == View.VISIBLE && v.getWidth() > 0 && v.getHeight() > 0;
     }
 
-    private static void scanAndClickEnvelope(Activity activity) {
-        if (sProcessing.get()) return;
-        sProcessing.set(true);
-        try {
-            View root = activity.getWindow().getDecorView();
-            View envelope = findEnvelopeView(root);
-            if (envelope != null) {
-                envelope.performClick();
-                LogWriter.log(TAG, "auto clicked red packet in chat");
+    private static View findClickableSelfOrParent(View v) {
+        View cur = v;
+        while (cur != null) {
+            if (cur.isClickable() && isVisible(cur)) return cur;
+            cur = (View) cur.getParent();
+        }
+        return v;
+    }
+
+    // ==================== 转账自动确认收款 + 播报 ====================
+    private static void hookTransferUIs(ClassLoader cl) {
+        String[] candidates = {
+            PKG_WECHAT + ".plugin.remittance.ui.RemittanceDetailUI",
+            PKG_WECHAT + ".plugin.collect.ui.CollectDetailUI",
+        };
+        for (String clsName : candidates) {
+            try {
+                Class<?> cls = XposedHelpers.findClass(clsName, cl);
+                XposedBridge.hookAllMethods(cls, "onResume", new TransferDetailHook());
+                LogWriter.log(TAG, "[OK] " + clsName + ".onResume()");
+            } catch (Throwable ignored) {
+                LogWriter.log(TAG, "[MISS] " + clsName);
             }
-        } catch (Throwable ignored) {} finally {
-            sProcessing.set(false);
         }
     }
 
-    private static View findEnvelopeView(View v) {
+    static class TransferDetailHook extends XC_MethodHook {
+        @Override
+        protected void afterHookedMethod(MethodHookParam param) {
+            try {
+                if (!sTransferEnabled) return;
+                Activity act = (Activity) param.thisObject;
+                sHandler.postDelayed(() -> {
+                    try {
+                        View root = act.getWindow().getDecorView();
+                        String amt = scanAmount(root);
+                        // 方案1: 反编译确认的直接确认收款方法 RemittanceDetailUI.X6()
+                        // (拒绝方法为 Y6(); 底层 NetScene 为 model.n0)
+                        try {
+                            XposedHelpers.callMethod(param.thisObject, "X6");
+                            LogWriter.log(TAG, "auto-confirm transfer via RemittanceDetailUI.X6()");
+                            if (sTtsAnnounce && amt != null && !amt.isEmpty()) {
+                                TTSBroadcaster.announceTransfer("好友", null, amt, null);
+                            }
+                            return;
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "X6() 调用失败, 回退UI点击: " + t.getMessage());
+                        }
+                        // 方案2: 原UI点击兜底
+                        View receive = findReceiveView(root);
+                        if (receive != null && receive.isEnabled() && isVisible(receive)) {
+                            receive.performClick();
+                            LogWriter.log(TAG, "auto-clicked confirm receive button (fallback)");
+                            if (sTtsAnnounce && amt != null && !amt.isEmpty()) {
+                                TTSBroadcaster.announceTransfer("好友", null, amt, null);
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+                }, 600);
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    private static View findReceiveView(View v) {
         if (v instanceof TextView) {
-            CharSequence t = ((TextView) v).getText();
-            if (t != null) {
-                String s = t.toString();
-                if (s.contains("微信红包") || s.contains("红包")) {
-                    return findClickableParent(v);
-                }
+            String s = ((TextView) v).getText().toString();
+            if (s.contains("确认收款") || s.contains("收款")) {
+                return findClickableSelfOrParent(v);
             }
         }
         if (v instanceof ViewGroup) {
             for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) {
-                View r = findEnvelopeView(((ViewGroup) v).getChildAt(i));
+                View r = findReceiveView(((ViewGroup) v).getChildAt(i));
                 if (r != null) return r;
             }
         }
         return null;
-    }
-
-    private static View findClickableParent(View v) {
-        View parent = (View) v.getParent();
-        while (parent != null) {
-            if (parent.isClickable()) return parent;
-            parent = (View) parent.getParent();
-        }
-        return v;
     }
 
     static class ReceiveOpenHook extends XC_MethodHook {
@@ -260,13 +492,8 @@ public class RedPacketHook {
         @Override
         protected void afterHookedMethod(MethodHookParam param) {
             try {
-                if (!sEnabled) return;
                 Activity act = (Activity) param.thisObject;
                 VoiceAutoPlay.notifyChattingUIResume(act);
-                sHandler.postDelayed(new Runnable() {
-                    @Override
-                    public void run() { scanAndClickEnvelope(act); }
-                }, 300);
             } catch (Throwable ignored) {}
         }
     }

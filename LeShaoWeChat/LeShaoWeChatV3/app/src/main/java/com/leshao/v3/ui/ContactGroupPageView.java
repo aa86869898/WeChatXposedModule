@@ -69,6 +69,19 @@ public class ContactGroupPageView {
 
         root.addView(candyDivider(ctx, d));
 
+        // 群聊批量加好友卡片（模块内仅总开关，其余配置在群聊详情页按钮弹窗内）
+        LinearLayout cardBatch = makeCard(ctx, d);
+        boolean batchOn = prefs != null && prefs.getBoolean("ls_batch_add_enabled", false);
+        cardBatch.addView(switchRow(ctx, d, "群聊批量加好友", "群聊详情页右上角[批量加友]菜单内配置", batchOn, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean("ls_batch_add_enabled", on).apply();
+            BatchAddFriend.setEnabled(on);
+            Toast.makeText(ctx, "批量加好友已" + (on ? "开启" : "关闭")
+                    + "\n重启微信后生效", Toast.LENGTH_LONG).show();
+        }, null));
+        root.addView(cardBatch);
+
+        root.addView(candyDivider(ctx, d));
+
         LinearLayout cardFakeSource = makeCard(ctx, d);
         boolean fakeSourceOn = prefs != null && prefs.getBoolean("ls_fake_add_source_enabled", false);
         int fakeScene = prefs != null ? prefs.getInt("ls_fake_add_source_scene", 10) : 10;

@@ -190,10 +190,10 @@ public class CubeTtsPlayer {
         try {
             mp.setDataSource(wav.getAbsolutePath());
             mp.prepare();
-            mp.start();
             mp.setOnCompletionListener(m -> {
                 synchronized (mp) { mp.notify(); }
             });
+            mp.start();
             synchronized (mp) {
                 try { mp.wait(mp.getDuration() + 5000); } catch (InterruptedException ignored) {}
             }

@@ -1,10 +1,7 @@
 package com.leshao.v3.hook;
 
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.app.Dialog;
 import android.content.Context;
-import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -13,10 +10,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.widget.EditText;
-import android.widget.Button;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -24,13 +18,9 @@ import com.leshao.v3.ContextManager;
 import com.leshao.v3.IconLoader;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.AppColors;
-import com.leshao.v3.ui.ContactSelectorView;
 import com.leshao.v3.ui.TTSPageView;
-import com.leshao.v3.wm.utils.WmReflect;
 
 import java.lang.reflect.Constructor;
-import java.util.ArrayList;
-import java.util.List;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -260,7 +250,7 @@ public final class ChatVoiceSwitchHook {
         Activity act = getActivityFromContext(ctx);
         if (act == null || !isChatPage(act)) return;
 
-        if (edit.getContext().getSharedPreferences("wm_prefs", 0)
+        if (com.leshao.v3.UnifiedPrefs.get(edit.getContext(), "wm_prefs")
                 .getBoolean("input_buttons", true) == false) return;
 
         // 确保注入目标不是弹窗中的输入框
@@ -369,7 +359,7 @@ public final class ChatVoiceSwitchHook {
         TextView schedBtn = createBlueButton(ctx, "群发", IconLoader.IC_SCHEDULE_SEND, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                openScheduledSend(ctx);
+                openMassSend(ctx);
             }
         });
         LinearLayout.LayoutParams lpSched = new LinearLayout.LayoutParams(
@@ -438,106 +428,20 @@ public final class ChatVoiceSwitchHook {
         return btn;
     }
 
-    /** 定时群发：模块联系人选择器勾选群 + 输入内容 + 定时 → 发送 */
-    private static void openScheduledSend(Context ctx) {
+    /** 群发：打开乐少万群定时群发（完整版群发向导） */
+    private static void openMassSend(Context ctx) {
         final Activity act = getActivityFromContext(ctx);
         if (act == null) {
-            LogWriter.log(TAG, "定时群发: 无法获取 Activity");
+            LogWriter.log(TAG, "群发: 无法获取 Activity");
             return;
         }
         try {
-            // 使用模块联系人选择器（MODE_ALL）支持好友+群聊
-            ContactSelectorView.show(act, false, ContactSelectorView.MODE_ALL, selected -> {
-                if (selected == null || selected.isEmpty()) {
-                    Toast.makeText(act, "未选择联系人", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                final List<String> rooms = new ArrayList<>();
-                for (com.leshao.v3.model.ContactCard c : selected) rooms.add(c.username);
-
-                final EditText et = new EditText(act);
-                et.setHint("输入要定时群发的内容");
-                et.setMinLines(2);
-
-                final long[] triggerMs = {0};
-                final TextView timeLabel = new TextView(act);
-                timeLabel.setText("发送时间: 立即发送");
-                timeLabel.setTextSize(13);
-                timeLabel.setTextColor(AppColors.text2());
-                timeLabel.setPadding(0, dp(act, 8), 0, 0);
-
-                Button timeBtn = new Button(act);
-                timeBtn.setText("选择定时时间");
-                timeBtn.setTextSize(13);
-                timeBtn.setAllCaps(false);
-                timeBtn.setTextColor(AppColors.WHITE_TEXT);
-                GradientDrawable tbBg = new GradientDrawable();
-                tbBg.setColor(AppColors.accent());
-                tbBg.setCornerRadius(dp(act, 8));
-                timeBtn.setBackground(tbBg);
-                timeBtn.setOnClickListener(v -> showDateTimePicker(act, triggerMs, timeLabel));
-
-                LinearLayout content = new LinearLayout(act);
-                content.setOrientation(LinearLayout.VERTICAL);
-                content.setPadding(dp(act, 20), 0, dp(act, 20), 0);
-                content.addView(et);
-                content.addView(timeLabel);
-                content.addView(timeBtn);
-
-                new AlertDialog.Builder(act)
-                        .setTitle("定时群发到 " + rooms.size() + " 个联系人")
-                        .setView(content)
-                        .setPositiveButton("发送", (d, w) -> {
-                            String msg = et.getText().toString().trim();
-                            if (msg.isEmpty()) {
-                                Toast.makeText(act, "内容不能为空", Toast.LENGTH_SHORT).show();
-                                return;
-                            }
-                            ClassLoader cl = ContextManager.getClassLoader();
-                            if (cl == null) {
-                                Toast.makeText(act, "ClassLoader 不可用", Toast.LENGTH_SHORT).show();
-                                return;
-                            }
-                            if (triggerMs[0] > 0 && triggerMs[0] > System.currentTimeMillis()) {
-                                long delay = triggerMs[0] - System.currentTimeMillis();
-                                new android.os.Handler(Looper.getMainLooper()).postDelayed(() -> {
-                                    try {
-                                        WmReflect.broadcastRooms(cl, rooms, msg);
-                                    } catch (Throwable t) {
-                                        LogWriter.log(TAG, "定时群发执行异常: " + t.getMessage());
-                                    }
-                                }, delay);
-                                Toast.makeText(act, "已定时, " + delay / 1000 + " 秒后发送到 " + rooms.size() + " 个群", Toast.LENGTH_SHORT).show();
-                            } else {
-                                WmReflect.broadcastRooms(cl, rooms, msg);
-                                Toast.makeText(act, "已发送到 " + rooms.size() + " 个群", Toast.LENGTH_SHORT).show();
-                            }
-                        })
-                        .setNegativeButton("取消", null)
-                        .show();
-            });
+            ClassLoader cl = ContextManager.getClassLoader();
+            com.leshao.v3.wm.hook.WmChatHook.showMassSendFromCorner(act, cl);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "定时群发异常: " + t.getMessage());
-            Toast.makeText(act, "定时群发暂不可用", Toast.LENGTH_SHORT).show();
+            LogWriter.log(TAG, "群发异常: " + t.getMessage());
+            Toast.makeText(act, "群发暂不可用", Toast.LENGTH_SHORT).show();
         }
-    }
-
-    /** 日期+时间选择器（复用微信内置风格） */
-    private static void showDateTimePicker(final Activity act, final long[] result, final TextView label) {
-        final java.util.Calendar cal = java.util.Calendar.getInstance();
-        new android.app.DatePickerDialog(act, (view, year, month, dayOfMonth) -> {
-            final int y = year, mo = month, d = dayOfMonth;
-            new android.app.TimePickerDialog(act, (tv, hour, minute) -> {
-                cal.set(y, mo, d, hour, minute, 0);
-                result[0] = cal.getTimeInMillis();
-                label.setText("发送时间: " + new java.text.SimpleDateFormat("MM-dd HH:mm")
-                        .format(new java.util.Date(result[0])));
-            }, cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE), true).show();
-        }, cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH), cal.get(java.util.Calendar.DAY_OF_MONTH)).show();
-    }
-
-    private static int dp(Context ctx, int d) {
-        return (int) (d * ctx.getResources().getDisplayMetrics().density + 0.5f);
     }
 
     private static void openTtsPage(Context ctx) {

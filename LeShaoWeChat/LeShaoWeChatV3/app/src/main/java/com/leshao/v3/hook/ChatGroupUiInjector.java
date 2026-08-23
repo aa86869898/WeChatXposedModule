@@ -126,31 +126,20 @@ public class ChatGroupUiInjector {
     }
 
     private static View sConvListView;
+    private static volatile View sHeaderAttachedTo;
 
     private static void injectHeaderToConversationList() {
         try {
-            if (sHeaderAdded && sTagBarView != null && sTagBarView.getParent() != null) {
-                if (ChatGroupHook.isReady()) refreshAll();
-                return;
-            }
-
-            // getParent() null means old ListView was destroyed — recreate
-            if (sTagBarView != null && sTagBarView.getParent() == null) {
-                sTagBarView = null;
-                sTagContainer = null;
-                sHeaderAdded = false;
-            }
-
-            // Try to find ConversationListView via s5 capture first
             View convList = sConvListView;
-            if (convList == null) {
-                // Fallback: traverse from Activity DecorView
+            // 缓存引用可能因 Activity 重建（如切换暗色模式）而失效，重新从 DecorView 定位
+            boolean stale = convList == null || !convList.isAttachedToWindow();
+            if (stale) {
                 if (sCurrentActivity == null) return;
                 View root = sCurrentActivity.getWindow().getDecorView();
                 convList = findConversationListView(root);
                 if (convList != null) {
                     sConvListView = convList;
-                    logBoth("found convList via traverse: " + convList.getClass().getName());
+                    logBoth("relocated convList: " + convList.getClass().getName());
                 }
             }
 
@@ -159,9 +148,24 @@ public class ChatGroupUiInjector {
                 return;
             }
 
+            // 已附加到同一个 ListView：只刷新，避免重复 addHeaderView 造成多行标签
+            if (sHeaderAdded && sHeaderAttachedTo == convList) {
+                if (ChatGroupHook.isReady()) refreshAll();
+                return;
+            }
+
+            // ListView 已重建（header 附着到旧实例）：丢弃旧 View，重建
+            if (sTagBarView != null) {
+                sTagBarView = null;
+                sTagContainer = null;
+                sHeaderAdded = false;
+                sHeaderAttachedTo = null;
+            }
+
             // Try addHeaderView via reflection (for AbsListView subclasses)
             if (tryAddHeaderView(convList)) {
                 sHeaderAdded = true;
+                sHeaderAttachedTo = convList;
                 if (ChatGroupHook.isReady()) refreshAll();
                 logBoth("addHeaderView success");
                 return;
@@ -171,6 +175,7 @@ public class ChatGroupUiInjector {
             if (convList.getClass().getName().contains("RecyclerView")) {
                 injectAboveRecyclerView(convList);
                 sHeaderAdded = true;
+                sHeaderAttachedTo = convList;
                 logBoth("injectAboveRecyclerView done");
                 return;
             }
@@ -218,7 +223,6 @@ public class ChatGroupUiInjector {
             new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dp(48, recyclerView.getContext())));
-        if (sTagContainer == null) buildTagBarView(recyclerView.getContext());
         if (ChatGroupHook.isReady()) refreshAll();
     }
 
@@ -264,18 +268,17 @@ public class ChatGroupUiInjector {
         ll.setOrientation(LinearLayout.HORIZONTAL);
         ll.setGravity(Gravity.CENTER_VERTICAL);
         ll.setPadding(dp(8, ctx), dp(2, ctx), dp(8, ctx), dp(2, ctx));
-        FrameLayout.LayoutParams llLp = new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        llLp.gravity = Gravity.CENTER_HORIZONTAL;
-        hsv.addView(ll, llLp);
+        hsv.addView(ll, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         sTagContainer = ll;
         return hsv;
     }
 
-    /** Refresh label list from WeChat + cache (called on resume and after mutations) */
+    /** Refresh label list from module cache only (no WeChat labels in top bar) */
     public static void refreshLabelList() {
         long start = System.currentTimeMillis();
-        try { sLabels = ChatGroupHook.getAllLabelsLightweight(); }
+        // 只渲染模块自身的分组标签(内置+模块创建)，微信通讯录用户标签不进入顶部标签栏
+        try { sLabels = ChatGroupHook.getModuleLabels(); }
         catch (Throwable e) { logBoth("refreshLabel: " + e.getMessage()); }
         sLastLabelRefresh = System.currentTimeMillis();
         long dur = sLastLabelRefresh - start;
@@ -291,6 +294,10 @@ public class ChatGroupUiInjector {
         int curSelection = sSelectedLabelId;
         sTagContainer.removeAllViews();
         sTagContainer.addView(makeChip(ctx, "\u5168\u90E8", -1, curSelection == -1));
+        // 内置虚拟标签固定顺序：好友、群聊、服务
+        sTagContainer.addView(makeChip(ctx, ChatGroupHook.LABEL_NAME_FRIEND, ChatGroupHook.LABEL_ID_FRIEND, curSelection == ChatGroupHook.LABEL_ID_FRIEND));
+        sTagContainer.addView(makeChip(ctx, ChatGroupHook.LABEL_NAME_GROUP, ChatGroupHook.LABEL_ID_GROUP, curSelection == ChatGroupHook.LABEL_ID_GROUP));
+        sTagContainer.addView(makeChip(ctx, ChatGroupHook.LABEL_NAME_SERVICE, ChatGroupHook.LABEL_ID_SERVICE, curSelection == ChatGroupHook.LABEL_ID_SERVICE));
         List<LabelInfo> labels = sLabels;
         if (labels != null && !labels.isEmpty()) {
             // apply saved sort order
@@ -306,8 +313,11 @@ public class ChatGroupUiInjector {
                 sorted.addAll(idMap.values()); // append new unsorted ones
                 labels = sorted;
             }
-            sTagContainer.addView(spacer(ctx));
+            boolean firstUser = true;
             for (LabelInfo l : labels) {
+                // 内置标签已固定渲染，跳过
+                if (l.labelId == ChatGroupHook.LABEL_ID_GROUP || l.labelId == ChatGroupHook.LABEL_ID_FRIEND || l.labelId == ChatGroupHook.LABEL_ID_SERVICE) continue;
+                if (firstUser) { sTagContainer.addView(spacer(ctx)); firstUser = false; }
                 sTagContainer.addView(makeChip(ctx, l.labelName, l.labelId, curSelection == l.labelId));
             }
         }
@@ -316,13 +326,19 @@ public class ChatGroupUiInjector {
         centerChips(ctx);
     }
 
-    /** Center chips within the HorizontalScrollView once layout is complete */
+    /** 标签居中：总宽不足时用 padding 居中，超出时左对齐可滑动 */
     private static void centerChips(final Context ctx) {
         if (sTagContainer == null) return;
         final int basePad = dp(8, ctx);
         final int vPad = dp(2, ctx);
         sTagContainer.setPadding(basePad, vPad, basePad, vPad);
-        sTagContainer.postDelayed(() -> centerChipsNow(ctx), 150);
+        View parent = (View) sTagContainer.getParent();
+        if (parent == null) return;
+        if (parent.getWidth() > 0) {
+            centerChipsNow(ctx);
+        } else {
+            parent.post(() -> centerChipsNow(ctx));
+        }
     }
 
     private static void centerChipsNow(Context ctx) {
@@ -341,7 +357,14 @@ public class ChatGroupUiInjector {
                 LinearLayout.LayoutParams clp = (LinearLayout.LayoutParams) child.getLayoutParams();
                 totalW += child.getMeasuredWidth() + clp.leftMargin + clp.rightMargin;
             }
-            logBoth("centerChips barW=" + barW + " totalW=" + totalW);
+            int vPad = dp(2, ctx);
+            if (totalW < barW) {
+                int extra = (barW - totalW) / 2;
+                if (extra < dp(8, ctx)) extra = dp(8, ctx);
+                sTagContainer.setPadding(extra, vPad, extra, vPad);
+            } else {
+                sTagContainer.setPadding(dp(8, ctx), vPad, dp(8, ctx), vPad);
+            }
         } catch (Throwable ignored) {}
     }
 
@@ -379,7 +402,6 @@ public class ChatGroupUiInjector {
             bg.setStroke(dp(1, ctx), 0xB3FFFFFF);
             tv.setBackground(bg);
             tv.setTextColor(Color.WHITE);
-            tv.setTypeface(null, Typeface.BOLD);
             tv.setShadowLayer(dp(4, ctx), 0, 0, 0x40A855F7);
         } else {
             GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
@@ -485,9 +507,9 @@ public class ChatGroupUiInjector {
 
     private static String getLabelNameById(int id) {
         if (id == -1) return "\u5168\u90E8";
-        if (id == 10000) return "\u7FA4\u804A";
-        if (id == 10001) return "\u597D\u53CB";
-        if (id == 10002) return "\u670D\u52A1\u53F7";
+        if (id == ChatGroupHook.LABEL_ID_GROUP) return ChatGroupHook.LABEL_NAME_GROUP;
+        if (id == ChatGroupHook.LABEL_ID_FRIEND) return ChatGroupHook.LABEL_NAME_FRIEND;
+        if (id == ChatGroupHook.LABEL_ID_SERVICE) return ChatGroupHook.LABEL_NAME_SERVICE;
         List<LabelInfo> labels = ChatGroupHook.getAllLabels();
         if (labels != null) {
             for (LabelInfo li : labels) {
@@ -919,7 +941,7 @@ public class ChatGroupUiInjector {
     }
 
     private static boolean isBuiltInLabel(int labelId) {
-        return labelId == 10000 || labelId == 10001 || labelId == 10002;
+        return labelId == ChatGroupHook.LABEL_ID_GROUP || labelId == ChatGroupHook.LABEL_ID_FRIEND || labelId == ChatGroupHook.LABEL_ID_SERVICE;
     }
 
     private static void showLabelManage(Context ctx, int labelId, String labelName, View anchor) {

@@ -262,25 +262,22 @@ public class ChatRoomMuteHelper {
      * 一键设置所有群聊免打扰，返回成功数量
      */
     public static int muteAll(ClassLoader cl) {
-        List<String> rooms = getAllChatRooms(cl);
-        int count = 0;
-        for (String roomId : rooms) {
-            if (setOneRoom(cl, roomId, true)) count++;
-        }
-        LogWriter.log(TAG, "muteAll done: " + count + "/" + rooms.size());
-        return count;
+        return applyAll(cl, getAllChatRooms(cl), true);
     }
 
     /**
      * 一键取消所有群聊免打扰，返回成功数量
      */
     public static int unmuteAll(ClassLoader cl) {
-        List<String> rooms = getAllChatRooms(cl);
+        return applyAll(cl, getAllChatRooms(cl), false);
+    }
+
+    private static int applyAll(ClassLoader cl, List<String> rooms, boolean mute) {
         int count = 0;
         for (String roomId : rooms) {
-            if (setOneRoom(cl, roomId, false)) count++;
+            if (setOneRoom(cl, roomId, mute)) count++;
         }
-        LogWriter.log(TAG, "unmuteAll done: " + count + "/" + rooms.size());
+        LogWriter.log(TAG, (mute ? "muteAll" : "unmuteAll") + " done: " + count + "/" + rooms.size());
         return count;
     }
 
@@ -290,10 +287,11 @@ public class ChatRoomMuteHelper {
      * 异步执行全部免打扰（不阻塞主线程），完成后弹出 Toast
      */
     public static void muteAllAsync(ClassLoader cl, Context ctx) {
-        final int total = getAllChatRooms(cl).size();
-        Toast.makeText(ctx, "开始设置 " + total + " 个群聊免打扰...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(ctx, "开始设置群聊免打扰...", Toast.LENGTH_SHORT).show();
         sExecutor.execute(() -> {
-            int count = muteAll(cl);
+            List<String> rooms = getAllChatRooms(cl);
+            final int total = rooms.size();
+            final int count = applyAll(cl, rooms, true);
             new Handler(Looper.getMainLooper()).post(() ->
                     Toast.makeText(ctx, "√ 已免打扰 " + count + "/" + total + " 个群聊",
                             Toast.LENGTH_SHORT).show()
@@ -305,10 +303,11 @@ public class ChatRoomMuteHelper {
      * 异步执行取消全部免打扰，完成后弹出 Toast
      */
     public static void unmuteAllAsync(ClassLoader cl, Context ctx) {
-        final int total = getAllChatRooms(cl).size();
-        Toast.makeText(ctx, "开始取消 " + total + " 个群聊免打扰...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(ctx, "开始取消群聊免打扰...", Toast.LENGTH_SHORT).show();
         sExecutor.execute(() -> {
-            int count = unmuteAll(cl);
+            List<String> rooms = getAllChatRooms(cl);
+            final int total = rooms.size();
+            final int count = applyAll(cl, rooms, false);
             new Handler(Looper.getMainLooper()).post(() ->
                     Toast.makeText(ctx, "√ 已取消 " + count + "/" + total + " 个群聊免打扰",
                             Toast.LENGTH_SHORT).show()

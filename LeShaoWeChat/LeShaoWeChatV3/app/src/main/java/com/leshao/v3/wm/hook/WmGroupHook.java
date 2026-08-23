@@ -65,27 +65,6 @@ public class WmGroupHook {
         showPanel();
     }
 
-    public static void showGroupBtn(Activity act, ClassLoader cl, String room) {
-        dismissGroupBtn();
-        sAct = act;
-        sCL = cl;
-        sRoom = room;
-        sWM = (WindowManager) act.getSystemService(Context.WINDOW_SERVICE);
-        if (room == null || !WmReflect.isChatRoom(cl, room)) return;
-
-        if (com.leshao.v3.service.ActivationManager.isCurrentUserBlocked()) {
-            LogWriter.log(TAG, "🛡 group btn suppressed: user blacklisted");
-            return;
-        }
-
-        com.leshao.v3.wm.utils.WmUi.DragFloat f = new com.leshao.v3.wm.utils.WmUi.DragFloat(
-                act, sWM, "🛡", AppColors.accent(), "float_group",
-                () -> { if (sPanelOn) hidePanel(); else showPanel(); });
-        f.addToWindow();
-        sGrpFloat = f;
-        LogWriter.log(TAG, "🛡 group btn shown room=" + room);
-    }
-
     public static void dismissGroupBtn() {
         hidePanel();
         if (sGrpFloat != null) {

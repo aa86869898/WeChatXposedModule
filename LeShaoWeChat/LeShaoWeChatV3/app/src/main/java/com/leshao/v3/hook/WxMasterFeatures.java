@@ -6,7 +6,6 @@ import de.robv.android.xposed.XposedHelpers;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Color;
@@ -44,8 +43,7 @@ import java.util.List;
  *   2. 查看群公告弹窗   — 公告内容 + 编辑者 + 发布时间
  *   3. 定时发送消息     — 输入内容+延迟秒数，到期自动发送
  *   4. 群发/广播        — 广播到所有群 / 乐少万群定时群发
- *   5. 快捷扫码         — 一键启动微信扫一扫
- *   6. 私密备注         — 本地按联系人存取备注，不写入微信
+ *   5. 私密备注         — 本地按联系人存取备注，不写入微信
  *
  * 双重入口：
  *   A. 聊天页绿色悬浮按钮(⚡) — 自动使用当前聊天对象
@@ -197,7 +195,6 @@ public class WxMasterFeatures {
             items = new String[]{
                 "📨 群发/广播",
                 "⏰ 定时发送",
-                "📷 快捷扫码",
                 "📌 私密备注",
                 "🛡 打开群管理",
             };
@@ -205,7 +202,6 @@ public class WxMasterFeatures {
             items = new String[]{
                 "📨 群发/广播",
                 "⏰ 定时发送",
-                "📷 快捷扫码",
                 "📌 私密备注",
             };
         }
@@ -215,9 +211,8 @@ public class WxMasterFeatures {
                 switch (w) {
                     case 0: showBroadcastMenu(sAct, sCL); break;
                     case 1: scheduledSendTo(sAct, sCL, sUser); break;
-                    case 2: quickScan(sAct); break;
-                    case 3: privateNoteFor(sAct, sCL, sUser); break;
-                    case 4: showGroupPanel(); break;
+                    case 2: privateNoteFor(sAct, sCL, sUser); break;
+                    case 3: showGroupPanel(); break;
                 }
             })
             .setNegativeButton("取消", null)
@@ -534,22 +529,6 @@ public class WxMasterFeatures {
     }
 
     // ============================================================
-    // 快捷扫码
-    // ============================================================
-
-    public static void quickScan(Activity act) {
-        if (act == null) return;
-        try {
-            Intent i = new Intent();
-            i.setClassName("com.tencent.mm", "com.tencent.mm.plugin.scanner.ui.BaseScanUI");
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            act.startActivity(i);
-        } catch (Throwable t) {
-            toast(act, "启动扫一扫失败");
-        }
-    }
-
-    // ============================================================
     // 私密备注（本地存储，不写入微信）
     // ============================================================
 
@@ -767,7 +746,7 @@ public class WxMasterFeatures {
     }
 
     // ============================================================
-    // 所有群列表（群名 + 人数，点击群可继续操作）
+    // 导出全部群列表
     // ============================================================
 
     /** 导出全部群列表为 CSV（模块页面入口） */
@@ -796,91 +775,6 @@ public class WxMasterFeatures {
         }
     }
 
-    public static void listAllRooms(Activity act, ClassLoader cl) {        if (sWxCl != null) cl = sWxCl;
-        final ClassLoader fcl = cl;
-        if (act == null) return;
-        final List<String> rooms = getAllChatRooms(fcl);
-        if (rooms.isEmpty()) {
-            toast(act, "未获取到群聊列表");
-            return;
-        }
-        String[] labels = new String[rooms.size()];
-        for (int i = 0; i < rooms.size(); i++) {
-            labels[i] = displayRoom(act, fcl, rooms.get(i));
-        }
-        new AlertDialog.Builder(act)
-            .setTitle("所有群(" + rooms.size() + ")")
-            .setItems(labels, (d, w) -> {
-                String room = rooms.get(w);
-                if (room == null) return;
-                showRoomOps(act, fcl, room);
-            })
-            .setNegativeButton("关闭", null)
-            .show();
-    }
-
-    private static String displayRoom(Activity act, ClassLoader cl, String room) {
-        Object info = getChatroomInfo(cl, room);
-        String name = strField(info, "field_chatroomname", "");
-        int cnt = intField(info, "field_memberCount");
-        if (name == null || name.isEmpty()) name = room;
-        return name + "  (" + cnt + "人)";
-    }
-
-    private static void showRoomOps(Activity act, ClassLoader cl, String room) {
-        final String froom = room;
-        new AlertDialog.Builder(act)
-            .setTitle("群操作")
-            .setItems(new String[]{
-                "📋 群信息报告",
-                "📢 查看群公告",
-                "📨 群发到本群",
-                "⏰ 定时发送",
-                "📌 私密备注",
-            }, (d, w) -> {
-                switch (w) {
-                    case 0: exportRoomReportFor(act, cl, froom); break;
-                    case 1: showRoomNoticeFor(act, cl, froom); break;
-                    case 2: sendToRoom(act, cl, froom); break;
-                    case 3: scheduledSendTo(act, cl, froom); break;
-                    case 4: privateNoteFor(act, cl, froom); break;
-                }
-            })
-            .setNegativeButton("取消", null)
-            .show();
-    }
-
-    /** 发送消息到指定群 */
-    private static void sendToRoom(Activity act, ClassLoader cl, String room) {
-        final EditText et = new EditText(act);
-        et.setHint("输入要发送的内容");
-        et.setMinLines(2);
-        LinearLayout ll = new LinearLayout(act);
-        ll.setOrientation(LinearLayout.VERTICAL);
-        ll.setPadding(dp(act, 12), 0, dp(act, 12), 0);
-        ll.addView(et);
-        new AlertDialog.Builder(act)
-            .setTitle("群发到本群")
-            .setView(ll)
-            .setPositiveButton("发送", (d, w) -> {
-                String content = et.getText().toString().trim();
-                if (content.isEmpty()) { toast(act, "内容不能为空"); return; }
-                boolean ok = sendTextMessageSafe(cl, room, content);
-                toast(act, ok ? "发送成功" : "发送失败,请检查日志");
-            })
-            .setNegativeButton("取消", null)
-            .show();
-    }
-
-    private static boolean sendTextMessageSafe(ClassLoader cl, String room, String content) {
-        try {
-            GroupFeatures.sendTextMessage(cl, room, content);
-            return true;
-        } catch (Throwable t) {
-            return false;
-        }
-    }
-
     // ============================================================
     // 微信反射工具（移植自微信大师，全部 try/catch 降级）
     // ============================================================
@@ -890,7 +784,7 @@ public class WxMasterFeatures {
         if (sWxCl != null) cl = sWxCl;
         try {
             Class<?> j1 = XposedHelpers.findClass("hm0.j1", cl);
-            Class<?> fCls = XposedHelpers.findClass("f", cl);
+            Class<?> fCls = XposedHelpers.findClass("cw1.f", cl);
             Object svc = XposedHelpers.callStaticMethod(j1, "s", fCls);
             if (svc == null) return null;
             Object inst = XposedHelpers.callMethod(svc, "a");

@@ -11,17 +11,27 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Process;
+import android.widget.ImageView;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 
+import de.robv.android.xposed.XposedHelpers;
+
 import java.io.File;
 import java.io.FilenameFilter;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.security.MessageDigest;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class AvatarHelper {
 
@@ -30,6 +40,8 @@ public class AvatarHelper {
     private static volatile boolean sInited = false;
     private static volatile Class<?> sCachedJ1Class = null;
     private static volatile boolean sJ1InitDone = false;
+    private static boolean sDiagLocalPath = false;
+    private static boolean sDiagUrl = false;
 
     private static final int MAX_CACHE = 80;
     private static final Map<String, Bitmap> sCache = Collections.synchronizedMap(
@@ -39,6 +51,9 @@ public class AvatarHelper {
                     return size() > MAX_CACHE;
                 }
             });
+
+    private static final Handler sMain = new Handler(Looper.getMainLooper());
+    private static final ExecutorService sIo = Executors.newFixedThreadPool(2);
 
     private static void ensureInit() {
         if (sInited) return;
@@ -213,7 +228,249 @@ public class AvatarHelper {
         if (cached != null && !cached.isRecycled()) return cached;
 
         int target = sizePx > 0 ? sizePx : 80;
-        return loadFromLocalFile(wxid, target);
+
+        // 1) 微信内存缓存 Bitmap（头像被显示过时最快最准）
+        Bitmap mem = getCachedAvatarBitmap(wxid);
+        if (mem != null && !mem.isRecycled()) {
+            Bitmap round = makeRoundCorner(mem, target);
+            sCache.put(wxid, round);
+            if (mem != round) mem.recycle();
+            return round;
+        }
+
+        // 2) 微信头像本地文件路径（无需自己拼 md5 目录）
+        Bitmap fromPath = loadFromExactPath(getAvatarLocalPath(wxid), wxid, target);
+        if (fromPath != null) return fromPath;
+
+        // 3) 自拼 md5 磁盘路径兜底
+        Bitmap fromFile = loadFromLocalFile(wxid, target);
+        if (fromFile != null) return fromFile;
+
+        // 4) 头像 URL（CDN）下载兜底：主微信/分身微信统一，不依赖本地缓存
+        return loadFromUrl(wxid, target);
+    }
+
+    /**
+     * 异步加载头像：后台线程执行 IO/网络，完成后切回主线程绑定到 ImageView。
+     * fallback 先同步显示（通常是首字母占位图），避免列表项头像空白。
+     */
+    public static void loadAvatarAsync(final ImageView iv, final String wxid, final int sizePx, final Bitmap fallback) {
+        if (iv == null || wxid == null || wxid.isEmpty()) return;
+        iv.setTag(wxid);
+        if (fallback != null && !fallback.isRecycled()) iv.setImageBitmap(fallback);
+        sIo.execute(() -> {
+            try {
+                Bitmap bm = loadAvatar(wxid, sizePx);
+                if (bm != null && !bm.isRecycled()) {
+                    sMain.post(() -> {
+                        if (wxid.equals(iv.getTag())) iv.setImageBitmap(bm);
+                    });
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "loadAvatarAsync fail for " + wxid + ": " + t.getMessage());
+            }
+        });
+    }
+
+    private static Bitmap loadFromUrl(String wxid, int target) {
+        String url = getAvatarUrl(wxid, false);
+        if (url == null || url.isEmpty()) return null;
+        HttpURLConnection conn = null;
+        InputStream is = null;
+        try {
+            conn = (HttpURLConnection) new URL(url).openConnection();
+            conn.setConnectTimeout(6000);
+            conn.setReadTimeout(8000);
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) AppleWebKit/537.36");
+            is = conn.getInputStream();
+            Bitmap bm = BitmapFactory.decodeStream(is);
+            if (bm != null && !bm.isRecycled()) {
+                Bitmap round = makeRoundCorner(bm, target);
+                sCache.put(wxid, round);
+                if (bm != round) bm.recycle();
+                return round;
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "loadFromUrl fail for " + wxid + ": " + e.getMessage());
+        } finally {
+            if (is != null) { try { is.close(); } catch (Throwable ignored) {} }
+            if (conn != null) { try { conn.disconnect(); } catch (Throwable ignored) {} }
+        }
+        return null;
+    }
+
+    /**
+     * 微信原生头像服务：com.tencent.mm.modelavatar.d1.hj() -> r -> f(username,false,0,null)
+     * 读内存缓存 Bitmap；头像未被 UI 显示过时返回 null。
+     */
+    public static Bitmap getCachedAvatarBitmap(String wxid) {
+        try {
+            ClassLoader cl = ContextManager.getClassLoader();
+            if (cl == null) return null;
+            Class<?> d1 = XposedHelpers.findClass("com.tencent.mm.modelavatar.d1", cl);
+            Object r = XposedHelpers.callStaticMethod(d1, "hj");
+            if (r == null) return null;
+            return (Bitmap) XposedHelpers.callMethod(r, "f", wxid, false, 0, null);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getCachedAvatarBitmap fail: " + t.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 微信头像本地文件路径：com.tencent.mm.modelavatar.d1.ij() -> z -> f(username,false,false)
+     */
+    public static String getAvatarLocalPath(String wxid) {
+        try {
+            ClassLoader cl = ContextManager.getClassLoader();
+            if (cl == null) return null;
+            Class<?> d1 = XposedHelpers.findClass("com.tencent.mm.modelavatar.d1", cl);
+            Object z = XposedHelpers.callStaticMethod(d1, "ij");
+            if (z == null) {
+                if (!sDiagLocalPath) { sDiagLocalPath = true; LogWriter.log(TAG, "getAvatarLocalPath: z==null (d1.ij 无返回)"); }
+                return null;
+            }
+            String path = (String) XposedHelpers.callMethod(z, "f", wxid, false, false);
+            if (!sDiagLocalPath) {
+                sDiagLocalPath = true;
+                LogWriter.log(TAG, "getAvatarLocalPath sample: wxid=" + wxid + " -> " + path);
+            }
+            return path;
+        } catch (Throwable t) {
+            if (!sDiagLocalPath) { sDiagLocalPath = true; LogWriter.log(TAG, "getAvatarLocalPath fail: " + t.getMessage()); }
+            return null;
+        }
+    }
+
+    /**
+     * 微信头像 URL：com.tencent.mm.modelavatar.d1.mj() -> s0 -> x0(username) -> r0
+     * 大图 c()，小图 d()。
+     */
+    public static String getAvatarUrl(String wxid, boolean big) {
+        try {
+            ClassLoader cl = ContextManager.getClassLoader();
+            if (cl == null) return null;
+            Class<?> d1 = XposedHelpers.findClass("com.tencent.mm.modelavatar.d1", cl);
+            Object s0 = XposedHelpers.callStaticMethod(d1, "mj");
+            if (s0 == null) {
+                if (!sDiagUrl) { sDiagUrl = true; LogWriter.log(TAG, "getAvatarUrl: s0==null (d1.mj 无返回)"); }
+                return null;
+            }
+            Object r0 = XposedHelpers.callMethod(s0, "x0", wxid);
+            if (r0 == null) {
+                if (!sDiagUrl) { sDiagUrl = true; LogWriter.log(TAG, "getAvatarUrl: r0==null (x0 无返回)"); }
+                return null;
+            }
+            String url = (String) XposedHelpers.callMethod(r0, big ? "c" : "d");
+            if (!sDiagUrl) {
+                sDiagUrl = true;
+                LogWriter.log(TAG, "getAvatarUrl sample: wxid=" + wxid + " -> " + url);
+            }
+            return url;
+        } catch (Throwable t) {
+            if (!sDiagUrl) { sDiagUrl = true; LogWriter.log(TAG, "getAvatarUrl fail: " + t.getMessage()); }
+            return null;
+        }
+    }
+
+    private static Bitmap loadFromExactPath(String path, String wxid, int target) {
+        if (path == null || path.isEmpty()) return null;
+        File f = new File(path);
+        if (!f.exists()) return null;
+        try {
+            Bitmap bm = decodeFile(path, target);
+            if (bm != null) {
+                Bitmap round = makeRoundCorner(bm, target);
+                sCache.put(wxid, round);
+                if (bm != round) bm.recycle();
+                return round;
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "load err for " + wxid + " path=" + path + ": " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * 用微信官方 API 直接把真实头像绑定到 ImageView（跨进程异步加载）。
+     * 这是最可靠的头像显示方式，避免依赖磁盘路径/账号目录查找。
+     * @return true 表示已交给微信加载；false 表示调用失败，需回退其它方式
+     */
+    public static boolean bindAvatar(ImageView iv, String wxid) {
+        if (iv == null || wxid == null || wxid.isEmpty()) return false;
+        try {
+            ClassLoader cl = ContextManager.getClassLoader();
+            if (cl == null) return false;
+
+            // 方案1：AnyProcessAvatarAttacher（feature.avatar.s），文档推荐跨进程绑定
+            try {
+                Class<?> attacher = XposedHelpers.findClass("com.tencent.mm.feature.avatar.s", cl);
+                if (tryBind(attacher, iv, wxid, "feature.avatar.s", "hj")) return true;
+            } catch (Throwable e1) {
+                LogWriter.log(TAG, "feature.avatar.s 不可用: " + e1.getMessage());
+            }
+
+            // 方案2：pluginsdk.ui.a 的静态头像方法
+            try {
+                Class<?> a = XposedHelpers.findClass("com.tencent.mm.pluginsdk.ui.a", cl);
+                if (tryBind(a, iv, wxid, "pluginsdk.ui.a", "b")) return true;
+            } catch (Throwable e2) {
+                LogWriter.log(TAG, "pluginsdk.ui.a 不可用: " + e2.getMessage());
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "bindAvatar fail for " + wxid + ": " + e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * 在指定类里寻找「(ImageView 或其父类, String)」的静态头像绑定方法并调用。
+     * 优先按 preferredName 精确匹配，其次枚举所有静态方法兜底。
+     */
+    private static boolean tryBind(Class<?> c, ImageView iv, String wxid, String tag, String preferredName) {
+        // 1) 精确方法名 + (ImageView, String)
+        if (preferredName != null) {
+            if (invokeExact(c, preferredName, ImageView.class, iv, wxid, tag)) return true;
+            if (invokeExact(c, preferredName, android.view.View.class, iv, wxid, tag)) return true;
+        }
+        // 2) 枚举所有静态方法，匹配 (ImageView/View 兼容, String)
+        for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
+            if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+            Class<?>[] pts = m.getParameterTypes();
+            if (pts.length != 2) continue;
+            if (pts[1] != String.class) continue;
+            if (!pts[0].isAssignableFrom(ImageView.class)) continue;
+            try {
+                m.setAccessible(true);
+                m.invoke(null, iv, wxid);
+                LogWriter.log(TAG, "bindAvatar OK via " + tag + "." + m.getName()
+                        + "(" + pts[0].getSimpleName() + ",String)");
+                return true;
+            } catch (Throwable inv) {
+                LogWriter.log(TAG, "bindAvatar invoke " + tag + "." + m.getName() + " fail: " + inv.getMessage());
+            }
+        }
+        return false;
+    }
+
+    private static boolean invokeExact(Class<?> c, String name, Class<?> viewType,
+                                       ImageView iv, String wxid, String tag) {
+        try {
+            java.lang.reflect.Method m = c.getDeclaredMethod(name, viewType, String.class);
+            if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) return false;
+            m.setAccessible(true);
+            m.invoke(null, iv, wxid);
+            LogWriter.log(TAG, "bindAvatar OK via " + tag + "." + name + "("
+                    + viewType.getSimpleName() + ",String)");
+            return true;
+        } catch (NoSuchMethodException ignored) {
+            return false;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "bindAvatar " + tag + "." + name + "(" + viewType.getSimpleName()
+                    + ",String) invoke fail: " + t.getMessage());
+            return false;
+        }
     }
 
     private static Bitmap loadFromLocalFile(String wxid, int target) {

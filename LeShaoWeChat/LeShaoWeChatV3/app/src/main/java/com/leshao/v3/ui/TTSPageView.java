@@ -102,7 +102,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         boolean announceNickname = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_NICKNAME, true);
         boolean announceGroup = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_GROUP, false);
         boolean announcePat = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_PAT, false);
-        boolean announceAt = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_AT, false);
+        boolean announceAt = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_AT, true);
         boolean quietOn = prefs != null && prefs.getBoolean(KEY_QUIET_ON, false);
         String quietStart = prefs != null ? prefs.getString(KEY_QUIET_START, "23:00") : "23:00";
         String quietEnd = prefs != null ? prefs.getString(KEY_QUIET_END, "07:00") : "07:00";
@@ -120,6 +120,15 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
             if (prefs != null) prefs.edit().putBoolean(KEY_TTS_COMMAND, on).apply();
         }));
         root.addView(cardTts);
+
+        root.addView(candyDivider(ctx, d));
+
+        // 语音消息自动播放 (VoiceAutoPlay 读取 wm_prefs 的 auto_voice)
+        boolean autoVoice = WmPrefs.isAutoVoice();
+        LinearLayout cardAutoVoice = makeCard(ctx, d);
+        cardAutoVoice.addView(switchRow(ctx, d, "自动播放语音消息", "收到语音消息时自动转文字并播报(需播报白名单)",
+                autoVoice, (v, on) -> WmPrefs.set("auto_voice", on)));
+        root.addView(cardAutoVoice);
 
         root.addView(candyDivider(ctx, d));
         root.addView(sectionLabel(ctx, d, "\u81ea\u52a8\u64ad\u62a5\u7c7b\u578b"));
@@ -205,6 +214,11 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
 
         root.addView(candyDivider(ctx, d));
         LinearLayout card3 = makeCard(ctx, d);
+        boolean wlStrict = prefs != null && prefs.getBoolean("ls_tts_whitelist_strict", true);
+        card3.addView(switchRow(ctx, d, "\u64ad\u62a5\u767d\u540d\u5355\u4e25\u683c\u6a21\u5f0f", "\u5f00: \u767d\u540d\u5355\u4e3a\u7a7a\u65f6\u4e0d\u64ad\u62a5\u4efb\u4f55\u6d88\u606f; \u5173: \u767d\u540d\u5355\u4e3a\u7a7a\u65f6\u5168\u90e8\u64ad\u62a5", wlStrict, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean("ls_tts_whitelist_strict", on).apply();
+        }));
+        card3.addView(itemDivider(ctx, d));
         card3.addView(pickerRow(ctx, d, parentAct, "\u81ea\u52a8\u64ad\u62a5\u767d\u540d\u5355\u5217\u8868", "\u53ea\u64ad\u62a5\u6307\u5b9a\u597d\u53cb\u6216\u7fa4\u804a\u7684\u6d88\u606f", whitelist,
             ContactPickerDialog.MODE_FRIEND, val -> {
                 if (prefs != null) prefs.edit().putString(KEY_ANNOUNCE_WL, val).apply();
@@ -1061,22 +1075,23 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         listenBtn.setOnClickListener(v3 -> {
             new Thread(() -> {
                 String result = ttsPreviewVoice(key, vi.voiceId, "欢迎使用配音魔方");
-                parentAct.runOnUiThread(() -> {
-                    if (result.startsWith("OK:")) {
-                        try {
-                            MediaPlayer mp = new MediaPlayer();
-                            mp.setDataSource(result.substring(3));
-                            mp.prepare();
-                            mp.start();
-                            mp.setOnCompletionListener(MediaPlayer::release);
-                            Toast.makeText(parentAct, "试听: " + displayName, Toast.LENGTH_SHORT).show();
-                        } catch (Exception e) {
-                            Toast.makeText(parentAct, "播放失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                        }
-                    } else {
-                        Toast.makeText(parentAct, result, Toast.LENGTH_SHORT).show();
+                if (result.startsWith("OK:")) {
+                    MediaPlayer mp = new MediaPlayer();
+                    try {
+                        mp.setDataSource(result.substring(3));
+                        mp.prepare();
+                        mp.start();
+                        mp.setOnCompletionListener(MediaPlayer::release);
+                        parentAct.runOnUiThread(() ->
+                                Toast.makeText(parentAct, "试听: " + displayName, Toast.LENGTH_SHORT).show());
+                    } catch (Exception e) {
+                        parentAct.runOnUiThread(() ->
+                                Toast.makeText(parentAct, "播放失败: " + e.getMessage(), Toast.LENGTH_SHORT).show());
                     }
-                });
+                } else {
+                    parentAct.runOnUiThread(() ->
+                            Toast.makeText(parentAct, result, Toast.LENGTH_SHORT).show());
+                }
             }).start();
         });
 

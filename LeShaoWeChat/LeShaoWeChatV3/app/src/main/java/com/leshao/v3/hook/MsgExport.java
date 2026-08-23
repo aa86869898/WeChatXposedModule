@@ -150,7 +150,7 @@ public class MsgExport {
             }
 
             cursor = (Cursor) rawQuery.invoke(db,
-                "SELECT msgContent, createTime, isSend, type FROM message WHERE talker=? ORDER BY createTime ASC LIMIT 50000",
+                "SELECT content, createTime, isSend, type FROM message WHERE talker=? ORDER BY createTime ASC LIMIT 50000",
                 new String[]{talker});
 
             if (cursor == null || cursor.getCount() == 0) {

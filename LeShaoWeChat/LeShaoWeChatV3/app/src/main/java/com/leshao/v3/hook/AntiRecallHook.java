@@ -36,7 +36,8 @@ public class AntiRecallHook {
         hookProtoRevoke(cl);
         hookRecallRecorder(cl);
         hookKotlinRevoke(cl);
-        LogWriter.log(TAG, "anti-recall hooks installed (4 paths)");
+        hookF9Ta(cl);
+        LogWriter.log(TAG, "anti-recall hooks installed (5 paths)");
     }
 
     // ===== 路径1: XML 撤回阻断 — af5.a.run() =====
@@ -219,6 +220,66 @@ public class AntiRecallHook {
             catch (Throwable ignored) {}
         }
         return null;
+    }
+
+    // ===== 路径5: 保险 — storage.f9.Ta 拦截撤回标记消息重新入库 =====
+    // 反编译确认: 撤回时会构造类型为 285222674(0x11002712, 保留原文) 或
+    // 268445456(0x10002710, 清空内容) 的提示消息, 经 f9.Ta(long, e9, boolean) 重新入库。
+    // 即使 e01.u.f 阻断漏网, 此处也可阻止撤回提示消息显示。
+    private static void hookF9Ta(ClassLoader cl) {
+        try {
+            Class<?> f9 = VersionCompat.findMsgStorageClass(cl);
+            if (f9 == null) return;
+            XposedBridge.hookAllMethods(f9, "Ta", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    try {
+                        if (!sEnabled) return;
+                        Object msg = param.args.length > 1 ? param.args[1] : null;
+                        if (msg == null) return;
+                        int type = getMsgType(msg);
+                        if (type == 285222674 || type == 268445456) {
+                            // 撤回提示消息: 改写为普通文本「XXX 撤回了一条消息 [已拦截]」后放行入库,
+                            // 既保留可见的系统提示, 又标记拦截结果
+                            String tip = null;
+                            try {
+                                java.lang.reflect.Field f = msg.getClass().getDeclaredField("field_content");
+                                f.setAccessible(true);
+                                Object v = f.get(msg);
+                                if (v != null) tip = v.toString();
+                            } catch (Throwable ignored) {}
+                            try { trySetField(msg, "field_type", 1); } catch (Throwable ignored) {}
+                            try { trySetField(msg, "field_content",
+                                    (tip == null ? "对方撤回了一条消息" : tip) + " [已拦截]"); } catch (Throwable ignored) {}
+                            try {
+                                String talker = getField(msg, "field_talker", "talker", "getTalker");
+                                StatsCollector.recordRecall(talker, tip);
+                            } catch (Throwable ignored) {}
+                            LogWriter.log(TAG, "[Ta] 撤回提示改写为拦截提示: " + tip);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "[Ta] Hooked: f9.Ta()");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[Ta] f9.Ta hook err: " + t.getMessage());
+        }
+    }
+
+    private static int getMsgType(Object msg) {
+        try {
+            java.lang.reflect.Field f = msg.getClass().getDeclaredField("field_type");
+            f.setAccessible(true);
+            Object v = f.get(msg);
+            if (v instanceof Integer) return (Integer) v;
+            if (v instanceof Long) return (int) (long) (Long) v;
+        } catch (Throwable ignored) {}
+        try {
+            Object v = msg.getClass().getMethod("getType").invoke(msg);
+            if (v instanceof Integer) return (Integer) v;
+            if (v instanceof Long) return (int) (long) (Long) v;
+        } catch (Throwable ignored) {}
+        return 0;
     }
 
     // ===== 路径4: Kotlin协程撤回阻断 — bd0.s.invokeSuspend() ⭐新增 =====

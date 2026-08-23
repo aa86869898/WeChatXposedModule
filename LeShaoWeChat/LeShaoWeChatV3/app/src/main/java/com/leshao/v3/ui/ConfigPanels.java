@@ -15,6 +15,8 @@ import android.widget.*;
 
 import com.leshao.v3.hook.*;
 import com.leshao.v3.model.Contact;
+import com.leshao.v3.model.ContactCard;
+import com.leshao.v3.ContactRepository;
 import com.leshao.v3.ContextManager;
 
 import org.json.JSONObject;
@@ -139,12 +141,22 @@ public class ConfigPanels {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
 
-        EditText maxSelEt = addIntRow(act, root, "最大选择数 (默认999)", "999");
-        EditText splitEt = addIntRow(act, root, "转发分批大小 (默认50)", "50");
+        int curMax = prefs != null ? prefs.getInt("batch_max_select", 999) : 999;
+        int curSplit = prefs != null ? prefs.getInt("forward_split_size", 50) : 50;
+        EditText maxSelEt = addIntRow(act, root, "最大选择数 (默认999)", String.valueOf(curMax));
+        EditText splitEt = addIntRow(act, root, "转发分批大小 (默认50)", String.valueOf(curSplit));
 
         showDialog(act, "批量消息配置", new ScrollView(act) {{ addView(root); }}, () -> {
-            try { BatchMessage.maxSelectCount = Integer.parseInt(maxSelEt.getText().toString()); } catch (Throwable e) {}
-            try { BatchMessage.forwardSplitSize = Integer.parseInt(splitEt.getText().toString()); } catch (Throwable e) {}
+            try {
+                int v = Integer.parseInt(maxSelEt.getText().toString());
+                BatchMessage.maxSelectCount = v;
+                if (prefs != null) prefs.edit().putInt("batch_max_select", v).apply();
+            } catch (Throwable e) {}
+            try {
+                int v = Integer.parseInt(splitEt.getText().toString());
+                BatchMessage.forwardSplitSize = v;
+                if (prefs != null) prefs.edit().putInt("forward_split_size", v).apply();
+            } catch (Throwable e) {}
         });
     }
 
@@ -202,6 +214,7 @@ public class ConfigPanels {
             prefs.edit().putInt("badge_style", styleSp.getSelectedItemPosition()).apply();
             try { prefs.edit().putInt("badge_max", Integer.parseInt(maxEt.getText().toString())).apply(); } catch (Throwable e) {}
             try { prefs.edit().putInt("badge_color", parseColor(colorEt.getText().toString())).apply(); } catch (Throwable e) {}
+            UnreadBadge.applyConfig(prefs);
         });
     }
 
@@ -217,11 +230,55 @@ public class ConfigPanels {
         LinearLayout customRow = addSwitchRow(act, root, "使用自定义名称", TabCustom.customLabels);
         Switch customSw = (Switch) customRow.getChildAt(1);
 
+        // 隐藏 Tab: prefs "tab_visible" 存逗号分隔的 Tab 索引 (0=微信 1=联系人 2=发现 3=我)
+        java.util.Set<Integer> hidden = new java.util.HashSet<>();
+        String savedHidden = prefs != null ? prefs.getString("tab_visible", "") : "";
+        if (savedHidden != null && !savedHidden.isEmpty()) {
+            for (String s : savedHidden.split(",")) {
+                try { hidden.add(Integer.parseInt(s.trim())); } catch (Throwable ignored) {}
+            }
+        }
+        String[] tabNames = {"微信", "联系人", "发现", "我"};
+        LinearLayout[] hiddenRows = new LinearLayout[4];
+        for (int i = 0; i < 4; i++) {
+            final int idx = i;
+            hiddenRows[i] = addSwitchRow(act, root, "隐藏[" + tabNames[i] + "]", hidden.contains(idx));
+        }
+
         showDialog(act, "底部Tab配置", new ScrollView(act) {{ addView(root); }}, () -> {
             TabCustom.customLabels = customSw.isChecked();
             String labels = labelsEt.getText().toString().trim();
             if (!labels.isEmpty()) {
-                TabCustom.tabLabels = labels.split("\\|");
+                String[] parts = labels.split("\\|");
+                if (parts.length >= 4) {
+                    TabCustom.tabLabels = new String[]{parts[0].trim(), parts[1].trim(), parts[2].trim(), parts[3].trim()};
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < 4; i++) {
+                        if (i > 0) sb.append(",");
+                        sb.append(parts[i].trim());
+                    }
+                    if (prefs != null) prefs.edit().putString("tab_labels", sb.toString()).apply();
+                }
+            }
+            if (prefs != null) prefs.edit().putInt("tab_custom_labels", customSw.isChecked() ? 1 : 0).apply();
+
+            // 隐藏 Tab
+            StringBuilder hidSb = new StringBuilder();
+            for (int i = 0; i < 4; i++) {
+                boolean on = ((Switch) hiddenRows[i].getChildAt(1)).isChecked();
+                if (on) {
+                    if (hidSb.length() > 0) hidSb.append(",");
+                    hidSb.append(i);
+                }
+            }
+            if (prefs != null) prefs.edit().putString("tab_visible", hidSb.toString()).apply();
+            if (hidSb.length() == 0) {
+                TabCustom.hiddenTabs = new int[0];
+            } else {
+                String[] parts = hidSb.toString().split(",");
+                int[] arr = new int[parts.length];
+                for (int i = 0; i < parts.length; i++) arr[i] = Integer.parseInt(parts[i].trim());
+                TabCustom.hiddenTabs = arr;
             }
         });
     }
@@ -240,6 +297,7 @@ public class ConfigPanels {
 
         showDialog(act, "摇一摇配置", new ScrollView(act) {{ addView(root); }}, () -> {
             prefs.edit().putInt("shake_action", actionSp.getSelectedItemPosition()).apply();
+            ShakeCustom.applyConfig(prefs);
         });
     }
 
@@ -258,6 +316,32 @@ public class ConfigPanels {
         showDialog(act, "通话功能配置", new ScrollView(act) {{ addView(root); }}, () -> {
             CallFeatures.autoAnswerList.clear();
             CallFeatures.autoAnswerList.addAll(selected);
+            StringBuilder sb = new StringBuilder();
+            for (String s : selected) {
+                if (sb.length() > 0) sb.append(",");
+                sb.append(s);
+            }
+            prefs.edit().putString("ls_call_auto_list", sb.toString()).apply();
+        });
+    }
+
+    // ==================== RedPacketAlert ====================
+
+    public static void showRedAlert(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        boolean vibrate = prefs == null || prefs.getInt("rp_alert_vibrate", 1) == 1;
+        boolean ring = prefs == null || prefs.getInt("rp_alert_ring", 1) == 1;
+        LinearLayout vibrateRow = addSwitchRow(act, root, "强制震动", vibrate);
+        LinearLayout ringRow = addSwitchRow(act, root, "强制响铃", ring);
+
+        showDialog(act, "红包提醒配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            if (prefs != null) {
+                prefs.edit().putInt("rp_alert_vibrate", ((Switch) vibrateRow.getChildAt(1)).isChecked() ? 1 : 0).apply();
+                prefs.edit().putInt("rp_alert_ring", ((Switch) ringRow.getChildAt(1)).isChecked() ? 1 : 0).apply();
+            }
         });
     }
 
@@ -307,6 +391,10 @@ public class ConfigPanels {
         boolean hideNotif = prefs.getBoolean("conv_hide_notification", true);
         boolean hideList = prefs.getBoolean("conv_hide_convlist", true);
 
+        Set<String> hiddenContacts = new HashSet<>();
+        String convList = prefs.getString("conv_privacy_list", "");
+        if (!convList.isEmpty()) for (String s : convList.split(",")) hiddenContacts.add(s.trim());
+
         Spinner levelSp = addSpinnerRow(act, root, "隐私级别", level,
                 new String[]{"关闭", "全局隐藏", "按联系人隐藏", "仅隐藏内容"});
 
@@ -316,10 +404,37 @@ public class ConfigPanels {
         LinearLayout listRow = addSwitchRow(act, root, "隐藏会话列表内容", hideList);
         Switch listSw = (Switch) listRow.getChildAt(1);
 
+        addContactPickerRow(act, root, "按联系人隐藏 (级别选\"按联系人隐藏\"时生效)", hiddenContacts);
+        TextView convTv = addSelectedLabel(act, root, hiddenContacts);
+
         showDialog(act, "会话隐私配置", new ScrollView(act) {{ addView(root); }}, () -> {
             prefs.edit().putInt("conv_privacy_level", levelSp.getSelectedItemPosition()).apply();
             prefs.edit().putBoolean("conv_hide_notification", notifSw.isChecked()).apply();
             prefs.edit().putBoolean("conv_hide_convlist", listSw.isChecked()).apply();
+            StringBuilder sb = new StringBuilder();
+            for (String s : hiddenContacts) { if (sb.length() > 0) sb.append(","); sb.append(s); }
+            prefs.edit().putString("conv_privacy_list", sb.toString()).apply();
+        });
+    }
+
+    // ==================== PrivacyFeatures - fingerprint lock ====================
+
+    public static void showFingerprintLock(Activity act, SharedPreferences prefs) {
+        LinearLayout root = new LinearLayout(act);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
+
+        Set<String> locked = new HashSet<>();
+        String saved = prefs.getString("fingerprint_locked_chats", "");
+        if (!saved.isEmpty()) for (String s : saved.split(",")) locked.add(s.trim());
+
+        addContactPickerRow(act, root, "需要指纹锁定的聊天联系人", locked);
+        TextView tv = addSelectedLabel(act, root, locked);
+
+        showDialog(act, "指纹锁定聊天配置", new ScrollView(act) {{ addView(root); }}, () -> {
+            StringBuilder sb = new StringBuilder();
+            for (String s : locked) { if (sb.length() > 0) sb.append(","); sb.append(s); }
+            prefs.edit().putString("fingerprint_locked_chats", sb.toString()).apply();
         });
     }
 
@@ -461,8 +576,13 @@ public class ConfigPanels {
     }
 
     private static void showContactPicker(Activity act, Set<String> selected) {
-        // 联系人数据源已清空，待重写
         List<Contact> friends = new ArrayList<>();
+        for (ContactCard c : ContactRepository.getFriends()) {
+            friends.add(new Contact(c.username, c.displayName(), c.conRemark, c.alias, c.type));
+        }
+        for (ContactCard c : ContactRepository.getGroups()) {
+            friends.add(new Contact(c.username, c.displayName(), c.conRemark, c.alias, c.type));
+        }
         if (friends.isEmpty()) {
             Toast.makeText(act, "通讯录未加载，请先打开微信加载联系人", Toast.LENGTH_LONG).show();
             return;

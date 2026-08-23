@@ -32,6 +32,17 @@ public class UnreadBadge {
     private static int maxDisplay = 99;
     private static int badgeColor = 0xFFFA5151;
 
+    /** 热更新: 设置面板保存后调用, 无需重启微信即可生效 */
+    public static void applyConfig(android.content.SharedPreferences prefs) {
+        try {
+            if (prefs != null) {
+                badgeStyle = prefs.getInt("badge_style", 0);
+                maxDisplay = prefs.getInt("badge_max", 99);
+                badgeColor = prefs.getInt("badge_color", 0xFFFA5151);
+            }
+        } catch (Throwable ignored) {}
+    }
+
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;
         ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());

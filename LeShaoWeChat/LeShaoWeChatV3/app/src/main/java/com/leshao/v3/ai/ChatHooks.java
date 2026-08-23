@@ -7,6 +7,7 @@ import android.os.Looper;
 import android.widget.EditText;
 
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.hook.RedPacketHook;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.wm.utils.WmReflect;
 
@@ -53,10 +54,27 @@ public class ChatHooks {
                 protected void afterHookedMethod(MethodHookParam param) {
                     try {
                         Object msg = param.args[0];
+                        if (msg == null) return;
+                        int ty = WxReflect.type(msg);
+                        // 诊断: 对红包/转账特征消息打印类型码（用于校准）
+                        String diagContent = null;
+                        try { diagContent = WxReflect.content(msg); } catch (Throwable ignored) {}
+                        if (RedPacketHook.looksLikeMoneyMessage(diagContent)) {
+                            String dt = diagContent == null ? "" : diagContent;
+                            LogWriter.log(TAG, "入库Hook [RP-DIAG] type=" + ty
+                                + " talker=" + WxReflect.talker(msg)
+                                + " content=" + (dt.length() > 200 ? dt.substring(0, 200) : dt));
+                        }
+                        // 红包/转账检测: 复用本 hook, 独立于 AI 开关
+                        if (RedPacketHook.isRedPacketType(ty) || RedPacketHook.isTransferType(ty)) {
+                            String talker = WxReflect.talker(msg);
+                            String content = WxReflect.content(msg);
+                            long msgId = WxReflect.msgId(msg);
+                            RedPacketHook.onIncomingMessage(ty, talker, content, msgId);
+                        }
                         if (!AiConfig.masterEnabled() || !AiConfig.replyEnabled()) return;
                         WxReflect.dumpMsgInfoFields(msg);
                         if (!WxReflect.isIncomingText(msg)) {
-                            int ty = WxReflect.type(msg);
                             int sd = WxReflect.isSend(msg);
                             if (ty != lastDiagType || sd != lastDiagSend) {
                                 lastDiagType = ty;
@@ -177,6 +195,7 @@ public class ChatHooks {
                     MAIN.postDelayed(closeWindowTask, 300);
                     MAIN.removeCallbacks(hideBallTask);
                     MAIN.postDelayed(hideBallTask, 800);
+                    chatActivity = null;
                 }
             });
             LogWriter.log(TAG, "悬浮球: O0 挂载完成");

@@ -21,6 +21,8 @@ public class ConversationFilter {
     private static boolean sHookInstalled = false;
     private static final Handler sUnreadHandler = new Handler(android.os.Looper.getMainLooper());
     private static long sLastBadgeRefresh = 0;
+    private static long sLastUnreadScan = 0;
+    private static final long UNREAD_SCAN_INTERVAL = 2000;
 
     public static void install(ClassLoader cl, Object adapterInstance) {
         if (sHookInstalled) { LogWriter.log(TAG, "already installed"); return; }
@@ -80,14 +82,14 @@ public class ConversationFilter {
         LogWriter.log(TAG, "apply " + labelId + " name=" + labelName);
         if (labelId <= 0) { clearFilter(); return; }
 
-        // Determine filter rule based on label name (special virtual labels)
-        if ("\u7FA4\u804A".equals(labelName)) {
+        // Determine filter rule based on virtual label id (null-safe, 避免自定义标签名含关键词误判)
+        if (labelId == ChatGroupHook.LABEL_ID_GROUP) {
             sFilterRule = "group";
             buildFilteredByRule();
-        } else if (labelName.contains("\u670D\u52A1") || labelName.contains("\u516C\u4F17") || labelName.contains("\u8BA2\u9605")) {
+        } else if (labelId == ChatGroupHook.LABEL_ID_SERVICE) {
             sFilterRule = "service";
             buildFilteredByRule();
-        } else if ("\u597D\u53CB".equals(labelName)) {
+        } else if (labelId == ChatGroupHook.LABEL_ID_FRIEND) {
             sFilterRule = "friend";
             buildFilteredByRule();
         } else {
@@ -105,7 +107,6 @@ public class ConversationFilter {
         }
 
         sFilterActive = true;
-        scanUnreadCounts();
         notifyAdapterChanged();
         LogWriter.log(TAG, "ON rule=" + sFilterRule + " filtered=" + sFilteredPositions.size());
     }
@@ -116,7 +117,6 @@ public class ConversationFilter {
         sFilterRule = "";
         sAllowedUsernames = Collections.emptySet();
         sFilteredPositions = Collections.emptyList();
-        scanUnreadCounts();
         notifyAdapterChanged();
         LogWriter.log(TAG, "OFF");
     }
@@ -127,6 +127,9 @@ public class ConversationFilter {
     }
 
     static boolean scanUnreadCounts() {
+        long now = System.currentTimeMillis();
+        if (now - sLastUnreadScan < UNREAD_SCAN_INTERVAL) return false;
+        sLastUnreadScan = now;
         try {
             if (sAdapter == null) return false;
             Object q = XposedHelpers.getObjectField(sAdapter, "q");

@@ -42,7 +42,7 @@ public class ShadowLabelStore {
 
     public static void init(Context ctx) {
         if (sPrefs == null && ctx != null) {
-            sPrefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            sPrefs = UnifiedPrefs.get(ctx, PREFS_NAME);
         }
     }
 

@@ -165,7 +165,7 @@ public class CornerMenu {
                 layout.removeView(existing);
             }
 
-            boolean cornerMenuOn = layout.getContext().getSharedPreferences("wm_prefs", 0)
+            boolean cornerMenuOn = UnifiedPrefs.get(layout.getContext(), "wm_prefs")
                     .getBoolean("corner_menu", true);
             if (!cornerMenuOn) return;
 
@@ -212,27 +212,11 @@ public class CornerMenu {
                     java.util.List<String> items = new java.util.ArrayList<>();
                     java.util.List<Runnable> actions = new java.util.ArrayList<>();
 
-                    android.content.SharedPreferences sp = ctx.getSharedPreferences("wm_prefs", 0);
+                    android.content.SharedPreferences sp = UnifiedPrefs.get(ctx, "wm_prefs");
 
-                    if (sp.getBoolean("batch_send", true)) {
-                        items.add("乐少万群定时群发");
-                        actions.add(() -> { if (act != null) com.leshao.v3.wm.hook.WmChatHook.showMassSendFromCorner(act, sClassLoader); });
-                    }
-                    if (sp.getBoolean("group_list", true)) {
-                        items.add("所有群列表");
-                        actions.add(() -> { if (act != null) WmHomeHook.allGroups(act, sClassLoader); });
-                    }
-                    if (sp.getBoolean("quick_scan", true)) {
-                        items.add("快捷扫码");
-                        actions.add(() -> { if (act != null) WmHomeHook.quickScan(act); });
-                    }
                     if (sp.getBoolean("scheduled_moment", false)) {
                         items.add("朋友圈定时");
                         actions.add(() -> { if (act != null) WmHomeHook.scheduledMoment(act); });
-                    }
-                    if (sp.getBoolean("file_helper", true)) {
-                        items.add("文件助手");
-                        actions.add(() -> { if (act != null) WmHomeHook.fileHelper(act); });
                     }
                     items.add("一键免打扰");
                     actions.add(() -> ChatRoomMuteHelper.muteAllAsync(sClassLoader, ctx));

@@ -69,7 +69,7 @@ public class ContextManager {
 
     public static SharedPreferences getPrefs() {
         if (sAppContext == null) return null;
-        return sAppContext.getSharedPreferences("leshao_v3_prefs", Context.MODE_PRIVATE);
+        return UnifiedPrefs.get(sAppContext, "leshao_v3_prefs");
     }
 
     public static boolean waitForReady(long timeoutMs) {

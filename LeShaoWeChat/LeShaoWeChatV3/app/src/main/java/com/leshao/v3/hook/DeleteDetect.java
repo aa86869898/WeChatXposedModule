@@ -86,17 +86,6 @@ public class DeleteDetect {
                 }
             });
 
-            // Hook onResume — 兜底检查
-            XposedBridge.hookAllMethods(contactInfoUI, "onResume",
-                    new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    CrashTrace.t("DEL_RS_IN");
-                    checkContactStatus(param.thisObject);
-                    CrashTrace.t("DEL_RS_OUT");
-                }
-            });
-
             Logger.i("  ContactInfoUI.D2() + onResume() ✓");
         } catch (XposedHelpers.ClassNotFoundError e) {
             Logger.w("  ContactInfoUI 未找到");

@@ -58,7 +58,7 @@ public class TtsVoiceSender {
     private static final int FRAME_SAMPLES = TARGET_SAMPLE_RATE * FRAME_DURATION_MS / 1000;
     private static final int FRAME_PCM_BYTES = FRAME_SAMPLES * TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8;
     private static final int SILK_BITRATE = 30000;
-    private static final int SILK_COMPLEXITY = 5;
+    private static final int SILK_COMPLEXITY = 2;
     private static final long FAILURE_SUPPRESS_WINDOW_MS = 8000;
     private static volatile boolean sCrashHandlerInstalled;
 
@@ -121,6 +121,7 @@ public class TtsVoiceSender {
     private static String sVoiceTMethod;
     private static volatile long sLastTtsCommandAt;
     private static volatile String sLastTtsTalker;
+    public static volatile long sOrderCardSentAt;
     private static final Object sLock = new Object();
     private static final Set<String> sSceneSentIds = new HashSet<>();
     private static final Set<Integer> sSuppressedMessages = new HashSet<>();
@@ -1296,6 +1297,7 @@ public class TtsVoiceSender {
                                     + truncStr(content, 800) + " talker=" + getTalker(msg)
                                     + " msg=" + System.identityHashCode(msg));
                             captureIncomingVoice(msg, content);
+                            tryInterceptMusicCard(msg, content);
                             int msgKey = System.identityHashCode(msg);
                             boolean blocked = false;
                             synchronized (sSuppressedMessages) { blocked = sSuppressedMessages.remove(msgKey); }
@@ -1852,6 +1854,233 @@ public class TtsVoiceSender {
         return null;
     }
 
+    // ========== 音乐卡片转语音 ==========
+
+    private static void tryInterceptMusicCard(Object msg, String content) {
+        try {
+            if (content == null || !content.contains("<appmsg")) return;
+            if (!content.contains("<type>76</type>")) return;
+            dumpMusicSendStack();
+            if (getMsgIsSend(msg) != 1) return;
+            if (System.currentTimeMillis() - sOrderCardSentAt < 5000) {
+                LogWriter.log(TAG, "音乐卡片拦截: 点歌功能卡片，跳过转语音");
+                return;
+            }
+            String dataurl = extractXmlElement(content, "dataurl");
+            if (dataurl == null || dataurl.isEmpty()) return;
+            dataurl = xmlEntityDecode(dataurl);
+            String title = xmlEntityDecode(extractXmlElement(content, "title"));
+            String des = xmlEntityDecode(extractXmlElement(content, "des"));
+            String webUrl = xmlEntityDecode(extractXmlElement(content, "url"));
+            final String songmid = extractSongMid(webUrl);
+            final String talker = getTalker(msg);
+            LogWriter.log(TAG, "音乐卡片拦截: title=" + title + " des=" + des
+                    + " talker=" + talker + " dataurl=" + dataurl + " songmid=" + songmid);
+            final String url = dataurl;
+            final String tTitle = title;
+            new Thread(new Runnable() {
+                @Override public void run() {
+                    downloadAndSendVoice(talker, url, tTitle, songmid);
+                }
+            }, "music-to-voice").start();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "音乐卡片拦截 err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+        }
+    }
+
+    private static void dumpMusicSendStack() {
+        try {
+            StackTraceElement[] st = Thread.currentThread().getStackTrace();
+            StringBuilder sb = new StringBuilder("音乐发送栈:");
+            int count = 0;
+            for (StackTraceElement e : st) {
+                String cn = e.getClassName();
+                if (cn.startsWith("com.leshao.v3") || cn.startsWith("de.robv.android.xposed")
+                        || cn.startsWith("dalvik.") || cn.startsWith("java.lang")
+                        || cn.startsWith("java.util")) continue;
+                if (count >= 25) break;
+                if (count > 0) sb.append(" <- ");
+                sb.append(cn).append(".").append(e.getMethodName());
+                count++;
+            }
+            LogWriter.log(TAG, sb.toString());
+        } catch (Throwable ignored) {}
+    }
+
+    private static void downloadAndSendVoice(String talker, String url, String title, String songmid) {
+        HttpURLConnection conn = null;
+        InputStream in = null;
+        FileOutputStream out = null;
+        try {
+            String dir = ContextManager.getAppContext().getCacheDir().getAbsolutePath() + "/ting_music";
+            new File(dir).mkdirs();
+            String dlUrl = url;
+            if (songmid != null && !songmid.isEmpty()) {
+                String hq = getHighQualityUrl(songmid);
+                if (hq != null && !hq.isEmpty()) {
+                    dlUrl = hq;
+                    LogWriter.log(TAG, "音乐下载改用高音质: " + hq);
+                }
+            }
+            String ext = dlUrl.contains(".m4a") ? ".m4a" : (dlUrl.contains(".mp3") ? ".mp3" : ".audio");
+            final String path = dir + "/ting_" + System.currentTimeMillis() + ext;
+
+            conn = (HttpURLConnection) new URL(dlUrl).openConnection();
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(30000);
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36");
+            conn.setRequestProperty("Accept", "*/*");
+            int code = conn.getResponseCode();
+            if (code < 200 || code >= 300) {
+                LogWriter.log(TAG, "音乐下载失败 code=" + code + " url=" + dlUrl);
+                return;
+            }
+            in = conn.getInputStream();
+            out = new FileOutputStream(path);
+            byte[] buf = new byte[8192];
+            int n;
+            long total = 0;
+            while ((n = in.read(buf)) > 0) {
+                out.write(buf, 0, n);
+                total += n;
+            }
+            out.flush();
+            LogWriter.log(TAG, "音乐下载完成: " + path + " size=" + total + "B title=" + title);
+            sendMp3Voice(talker, path);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "音乐转语音 err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+        } finally {
+            try { if (out != null) out.close(); } catch (Throwable ignored) {}
+            try { if (in != null) in.close(); } catch (Throwable ignored) {}
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    private static String extractSongMid(String webUrl) {
+        try {
+            if (webUrl == null) return null;
+            int idx = webUrl.indexOf("songmid=");
+            if (idx < 0) return null;
+            int end = webUrl.indexOf('&', idx);
+            if (end < 0) end = webUrl.length();
+            return webUrl.substring(idx + 8, end);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static String getHighQualityUrl(String songmid) {
+        if (songmid == null || songmid.isEmpty()) return null;
+        try {
+            String reqJson = "{\"req_0\":{\"module\":\"vkey.GetVkeyServer\",\"method\":\"CgiGetVkey\","
+                    + "\"param\":{\"guid\":\"2000000049\",\"songmid\":[\"" + songmid + "\"],\"songtype\":[0,1],"
+                    + "\"uin\":\"0\",\"loginflag\":1,\"platform\":\"20\"}},"
+                    + "\"comm\":{\"uin\":0,\"format\":\"json\",\"ct\":24,\"cv\":0}}";
+            HttpURLConnection conn = (HttpURLConnection) new URL("https://u.y.qq.com/cgi-bin/musicu.fcg").openConnection();
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(10000);
+            conn.setReadTimeout(10000);
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36");
+            conn.setRequestProperty("Referer", "https://y.qq.com/");
+            conn.setRequestProperty("Origin", "https://y.qq.com");
+            OutputStream os = conn.getOutputStream();
+            os.write(reqJson.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            os.flush();
+            os.close();
+            int code = conn.getResponseCode();
+            if (code != 200) {
+                String errBody = "";
+                try {
+                    InputStream es = conn.getErrorStream();
+                    if (es != null) {
+                        java.io.ByteArrayOutputStream ebaos = new java.io.ByteArrayOutputStream();
+                        byte[] ebuf = new byte[2048];
+                        int en;
+                        while ((en = es.read(ebuf)) > 0) ebaos.write(ebuf, 0, en);
+                        es.close();
+                        errBody = new String(ebaos.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+                    }
+                } catch (Throwable ignored) {}
+                LogWriter.log(TAG, "[高音质] HTTP " + code + " err=" + errBody);
+                conn.disconnect();
+                return null;
+            }
+            InputStream is = conn.getInputStream();
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = is.read(buf)) > 0) baos.write(buf, 0, n);
+            is.close();
+            conn.disconnect();
+            String resp = new String(baos.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+            LogWriter.log(TAG, "[高音质] resp=" + resp);
+            org.json.JSONObject root = new org.json.JSONObject(resp);
+            org.json.JSONObject req0 = root.getJSONObject("req_0");
+            org.json.JSONObject data = req0.getJSONObject("data");
+            org.json.JSONArray midurlinfo = data.getJSONArray("midurlinfo");
+            org.json.JSONArray sip = data.getJSONArray("sip");
+            if (midurlinfo.length() == 0) return null;
+            String purl = null;
+            for (int i = midurlinfo.length() - 1; i >= 0; i--) {
+                String p = midurlinfo.getJSONObject(i).optString("purl");
+                if (p != null && !p.isEmpty()) { purl = p; break; }
+            }
+            if (purl == null || purl.isEmpty()) return null;
+            String base = sip.getString(0);
+            String fullUrl = base + purl;
+            LogWriter.log(TAG, "[高音质] songmid=" + songmid + " -> " + fullUrl);
+            return fullUrl;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[高音质] 获取失败: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return null;
+        }
+    }
+
+    private static String extractXmlElement(String xml, String tag) {
+        try {
+            String open = "<" + tag + ">";
+            int s = xml.indexOf(open);
+            if (s < 0) return null;
+            s += open.length();
+            int e = xml.indexOf("</" + tag + ">", s);
+            if (e < 0) return null;
+            return xml.substring(s, e);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static String xmlEntityDecode(String s) {
+        if (s == null) return null;
+        s = s.replace("&amp;", "&");
+        s = s.replace("&lt;", "<");
+        s = s.replace("&gt;", ">");
+        s = s.replace("&quot;", "\"");
+        s = s.replace("&apos;", "'");
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("&#(\\d+);").matcher(s);
+            StringBuffer sb = new StringBuffer();
+            while (m.find()) {
+                m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(String.valueOf((char) Integer.parseInt(m.group(1)))));
+            }
+            m.appendTail(sb);
+            s = sb.toString();
+        } catch (Throwable ignored) {}
+        try {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("&#x([0-9a-fA-F]+);").matcher(s);
+            StringBuffer sb = new StringBuffer();
+            while (m.find()) {
+                m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(String.valueOf((char) Integer.parseInt(m.group(1), 16))));
+            }
+            m.appendTail(sb);
+            s = sb.toString();
+        } catch (Throwable ignored) {}
+        return s;
+    }
+
     // ========== 路径工具 ==========
 
     private static VoiceFileInfo getVoiceFileInfo(Object msg) {
@@ -2285,12 +2514,21 @@ public class TtsVoiceSender {
                 + elapsedDecode + "ms, srcRate=" + srcRate + " ch=" + channels);
 
             byte[] rawPcm = fileReadAll(tempPcmFile);
+            int realRate = srcRate;
+            if (totalDurationUs > 0 && rawPcm.length > 0 && channels > 0) {
+                int inferred = (int) (rawPcm.length / 2L / channels * 1000000L / totalDurationUs);
+                if (inferred > 4000 && Math.abs(inferred - srcRate) > srcRate / 10) {
+                    LogWriter.log(TAG, "mp3ToPcm: 采样率修正 " + srcRate + " -> " + inferred
+                            + " (raw=" + rawPcm.length + "B durUs=" + totalDurationUs + ")");
+                    realRate = inferred;
+                }
+            }
             byte[] result;
-            if (srcRate == TARGET_SAMPLE_RATE && channels == 1) {
+            if (realRate == TARGET_SAMPLE_RATE && channels == 1) {
                 result = rawPcm;
                 LogWriter.log(TAG, "mp3ToPcm: already 16kHz mono, skip resample");
             } else {
-                result = resampleLanczos3(rawPcm, srcRate, channels, TARGET_SAMPLE_RATE);
+                result = resampleLanczos3(rawPcm, realRate, channels, TARGET_SAMPLE_RATE);
             }
 
             long elapsedTotal = System.currentTimeMillis() - startMs;
@@ -2728,32 +2966,13 @@ public class TtsVoiceSender {
 
             long handle = (Long) XposedHelpers.callStaticMethod(
                     XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
-                    "SilkEncInit", 16000, 30000, 5, 0L);
+                    "SilkEncInit", TARGET_SAMPLE_RATE, SILK_BITRATE, SILK_COMPLEXITY, 0L);
             LogWriter.log(TAG, "silk handle=" + handle);
             if (handle == 0) return null;
 
-            XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
-                    "SetVoiceSilkControl", 200, 0, handle);
-            XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
-                    "SetVoiceSilkControl", 203, 3, handle);
-            XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
-                    "SetVoiceSilkControl", 204, 1, handle);
-            XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
-                    "SetVoiceSilkControl", 205, 2, handle);
-            XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
-                    "SetVoiceSilkControl", 206, 1, handle);
-            XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
-                    "SetVoiceSilkControl", 207, 1, handle);
-
-            byte[] ob = new byte[640 * 6];
+            byte[] ob = new byte[FRAME_PCM_BYTES * 6];
             short[] ol = new short[1];
-            int fb = 640;
+            int fb = FRAME_PCM_BYTES;
             int tf = padPcm.length / fb;
 
             for (int i = 0; i < tf; i++) {

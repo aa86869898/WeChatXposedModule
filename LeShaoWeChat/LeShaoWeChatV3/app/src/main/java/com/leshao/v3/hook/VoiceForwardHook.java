@@ -834,7 +834,9 @@ public class VoiceForwardHook {
             for (java.io.File userDir : md.listFiles()) {
                 if (!userDir.isDirectory()) continue;
                 java.io.File v2 = new java.io.File(userDir, "voice2");
-                if (!v2.isDirectory()) { v2 = new java.io.File(userDir, "voice"); continue; }
+                if (!v2.isDirectory()) {
+                    v2 = new java.io.File(userDir, "voice");
+                }
                 if (!v2.isDirectory()) continue;
                 String found = searchFileRecursive(v2, targetName, 4);
                 if (found != null) return found;
@@ -1057,9 +1059,7 @@ public class VoiceForwardHook {
             } catch (Throwable e1) {
                 try {
                     // 试 (int,int,com.tencent.mm.modelbase.b)  — b31 的内部类型
-                    Class<?> bClass = VersionCompat.findModelBaseClass(cl);
-                    sender = XposedHelpers.newInstance(wClass,
-                        new Class[]{int.class, int.class, bClass}, 0, 0, null);
+                    sender = XposedHelpers.newInstance(wClass, 0, 0, null);
                 } catch (Throwable e2) {
                     LogWriter.log(TAG, "b31.w: all constructors failed: " + e2.getMessage());
                     return false;
@@ -1075,15 +1075,10 @@ public class VoiceForwardHook {
 
             // start 上传
             try {
-                XposedHelpers.callMethod(sender, "start",
-                    new Class[]{String.class}, voiceFile);
+                XposedHelpers.callMethod(sender, "start", voiceFile);
             } catch (Throwable e) {
-                try {
-                    XposedHelpers.callMethod(sender, "start", voiceFile);
-                } catch (Throwable e2) {
-                    LogWriter.log(TAG, "b31.w start() failed: " + e2.getMessage());
-                    return false;
-                }
+                LogWriter.log(TAG, "b31.w start() failed: " + e.getMessage());
+                return false;
             }
             LogWriter.log(TAG, "b31.w: start() called → sent");
             return true;

@@ -25,6 +25,7 @@ import java.util.Set;
 public class RedPacketConfigView {
 
     private static final String KEY_ENABLED = "ls_redpacket_enabled";
+    private static final String KEY_TRANSFER_ENABLED = "ls_transfer_enabled";
     private static final String KEY_DELAY = "ls_redpacket_delay";
     private static final String KEY_PRIVATE = "ls_rp_private";
     private static final String KEY_GROUP = "ls_rp_group";
@@ -48,7 +49,8 @@ public class RedPacketConfigView {
         root.setBackgroundColor(AppColors.bg());
         root.setPadding((int)(16 * d), (int)(16 * d), (int)(16 * d), (int)(16 * d));
 
-        boolean enabled = prefs != null && prefs.getBoolean(KEY_ENABLED, false);
+        boolean enabled = prefs != null && prefs.getBoolean(KEY_ENABLED, true);
+        boolean transferEnabled = prefs != null && prefs.getBoolean(KEY_TRANSFER_ENABLED, true);
         boolean priv = prefs != null && prefs.getBoolean(KEY_PRIVATE, true);
         boolean group = prefs != null && prefs.getBoolean(KEY_GROUP, false);
         boolean timeOn = prefs != null && prefs.getBoolean(KEY_TIME_ON, false);
@@ -68,6 +70,11 @@ public class RedPacketConfigView {
         card1.addView(switchRow(ctx, d, "自动秒抢红包", "检测到红包后自动点击按钮领取", enabled, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ENABLED, on).apply();
             RedPacketHook.setEnabled(on);
+        }));
+        card1.addView(candyDivider(ctx, d));
+        card1.addView(switchRow(ctx, d, "转账自动收款", "收到转账后自动点击确认收款并播报金额", transferEnabled, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean(KEY_TRANSFER_ENABLED, on).apply();
+            RedPacketHook.setTransferEnabled(on);
         }));
         root.addView(card1);
 

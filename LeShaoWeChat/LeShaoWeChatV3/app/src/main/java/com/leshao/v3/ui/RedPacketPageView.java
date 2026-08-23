@@ -41,6 +41,9 @@ public class RedPacketPageView {
                 cfg.redPacketAlertEnabled, (v, on) -> {
             cfg.redPacketAlertEnabled = on; cfg.save(prefs); RedPacketAlert.setEnabled(on);
         }));
+        root.addView(makeMenuEntry(ctx, d, 0x1F514, "提醒设置",
+                "配置提醒的震动/响铃方式",
+                v -> ConfigPanels.showRedAlert(parentAct, prefs)));
 
         return root;
     }

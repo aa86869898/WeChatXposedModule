@@ -72,18 +72,28 @@ public class WeChatMessage {
     }
 
     private static String reflectStr(Object obj, String field) {
-        try { Object v = obj.getClass().getDeclaredField(field).get(obj); return v != null ? v.toString() : ""; }
-        catch (Throwable ignored) {}
+        try {
+            java.lang.reflect.Field f = obj.getClass().getDeclaredField(field);
+            f.setAccessible(true);
+            Object v = f.get(obj);
+            return v != null ? v.toString() : "";
+        } catch (Throwable ignored) {}
         return "";
     }
 
     private static int reflectInt(Object obj, String field) {
-        try { return obj.getClass().getDeclaredField(field).getInt(obj); }
-        catch (Throwable ignored) { return 0; }
+        try {
+            java.lang.reflect.Field f = obj.getClass().getDeclaredField(field);
+            f.setAccessible(true);
+            return f.getInt(obj);
+        } catch (Throwable ignored) { return 0; }
     }
 
     private static long reflectLong(Object obj, String field) {
-        try { return obj.getClass().getDeclaredField(field).getLong(obj); }
-        catch (Throwable ignored) { return 0L; }
+        try {
+            java.lang.reflect.Field f = obj.getClass().getDeclaredField(field);
+            f.setAccessible(true);
+            return f.getLong(obj);
+        } catch (Throwable ignored) { return 0L; }
     }
 }
