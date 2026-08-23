@@ -3449,12 +3449,12 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
     }
 
 private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v802 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v803 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
         int duration = getVideoDuration(videoPath);
-        LogWriter.log(TAG, "v802 sendVideo duration=" + duration + "s size=" + f.length());
+        LogWriter.log(TAG, "v803 sendVideo duration=" + duration + "s size=" + f.length());
         sPendingVideoToUser = toUser;
         sPendingVideoPath = videoPath;
         sPendingVideoDuration = duration;
@@ -3465,7 +3465,7 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
             try {
                 java.io.File microMsg = new java.io.File("/data/data/com.tencent.mm/MicroMsg");
                 java.io.File[] userDirs = microMsg.listFiles();
-                if (userDirs == null) { LogWriter.log(TAG, "v802 MicroMsg listFiles null"); return; }
+                if (userDirs == null) { LogWriter.log(TAG, "v803 MicroMsg listFiles null"); return; }
                 java.io.File videoDir = null;
                 for (java.io.File ud : userDirs) {
                     if (ud.isDirectory() && ud.getName().length() == 32) {
@@ -3473,8 +3473,8 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                         if (vd.exists() && vd.isDirectory()) { videoDir = vd; break; }
                     }
                 }
-                if (videoDir == null) { LogWriter.log(TAG, "v802 videoDir not found"); return; }
-                LogWriter.log(TAG, "v802 videoDir=" + videoDir.getAbsolutePath());
+                if (videoDir == null) { LogWriter.log(TAG, "v803 videoDir not found"); return; }
+                LogWriter.log(TAG, "v803 videoDir=" + videoDir.getAbsolutePath());
                 String ext = videoPath.substring(videoPath.lastIndexOf('.'));
                 String dstPath = videoDir.getAbsolutePath() + "/" + System.currentTimeMillis() + ext;
                 java.io.FileInputStream fis = new java.io.FileInputStream(new java.io.File(videoPath));
@@ -3484,7 +3484,7 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 while ((n = fis.read(buf)) > 0) fos.write(buf, 0, n);
                 fis.close();
                 fos.close();
-                LogWriter.log(TAG, "v802 copied to " + dstPath);
+                LogWriter.log(TAG, "v803 copied to " + dstPath);
                 Class<?> v2Class = XposedHelpers.findClass("v21.v2", sCL);
                 Object v2 = v2Class.newInstance();
                 XposedHelpers.setObjectField(v2, "a", dstPath);
@@ -3508,32 +3508,77 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 long msgId = (Long) XposedHelpers.callStaticMethod(
                         XposedHelpers.findClass("e01.x9", sCL), "x", e9);
                 XposedHelpers.setObjectField(v2, "n", msgId);
-                LogWriter.log(TAG, "v802 built v2 msgId=" + msgId + " path=" + dstPath);
-                Object w2 = XposedHelpers.callStaticMethod(
-                        XposedHelpers.findClass("v21.o2", sCL), "qj");
-                boolean ret = (Boolean) XposedHelpers.callMethod(w2, "x", v2, true);
-                LogWriter.log(TAG, "v802 w2.x ret=" + ret);
-                if (ret) {
-                    Object p3 = XposedHelpers.callStaticMethod(
-                            XposedHelpers.findClass("v21.o2", sCL), "tj");
-                    Class<?> u1Class = XposedHelpers.findClass("vf0.u1", sCL);
-                    Object listener = java.lang.reflect.Proxy.newProxyInstance(
-                            u1Class.getClassLoader(),
-                            new Class[]{u1Class},
-                            (proxy, method, args) -> {
-                                if (method.getName().equals("g")) {
-                                    LogWriter.log(TAG, "v802 p3 listener callback: " + (args.length > 0 ? args[0] : "null"));
-                                }
-                                return null;
-                            });
-                    XposedHelpers.callMethod(p3, "c", dstPath, 3, listener);
-                    LogWriter.log(TAG, "v802 p3.c called ok");
+                LogWriter.log(TAG, "v803 built v2 msgId=" + msgId + " path=" + dstPath);
+                Class<?> d3Class = XposedHelpers.findClass("v21.d3", sCL);
+                boolean d3Called = false;
+                try {
+                    Object d3Inst = d3Class.newInstance();
+                    LogWriter.log(TAG, "v803 d3 newInstance OK");
+                    Object streamProto = null;
+                    try {
+                        Object vi = XposedHelpers.callMethod(d3Inst, "h", dstPath);
+                        if (vi != null) {
+                            streamProto = XposedHelpers.getObjectField(vi, "streamVideoProto");
+                            LogWriter.log(TAG, "v803 d3.h OK, streamProto=" + streamProto);
+                        }
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "v803 d3.h fail: " + t.getMessage());
+                    }
+                    boolean ret = (Boolean) XposedHelpers.callMethod(d3Inst, "q",
+                            dstPath, dstPath, duration, finalToUser,
+                            "", 0, "", 43,
+                            streamProto,
+                            dstPath,
+                            talker,
+                            "", "",
+                            true, msgId,
+                            null,
+                            "", "");
+                    LogWriter.log(TAG, "v803 d3.q ret=" + ret);
+                    d3Called = true;
+                } catch (Throwable t1) {
+                    LogWriter.log(TAG, "v803 d3 instance fail: " + t1.getMessage());
+                }
+                if (!d3Called) {
+                    try {
+                        boolean ret = (Boolean) XposedHelpers.callStaticMethod(d3Class, "q",
+                                dstPath, dstPath, duration, finalToUser,
+                                "", 0, "", 43, null, dstPath, talker, "", "",
+                                true, msgId, null, "", "");
+                        LogWriter.log(TAG, "v803 d3.q static ret=" + ret);
+                        d3Called = true;
+                    } catch (Throwable t2) {
+                        LogWriter.log(TAG, "v803 d3.q static fail: " + t2.getMessage());
+                    }
+                }
+                if (!d3Called) {
+                    LogWriter.log(TAG, "v803 fallback to w2.x + p3.c");
+                    Object w2 = XposedHelpers.callStaticMethod(
+                            XposedHelpers.findClass("v21.o2", sCL), "qj");
+                    boolean ret = (Boolean) XposedHelpers.callMethod(w2, "x", v2, true);
+                    LogWriter.log(TAG, "v803 w2.x ret=" + ret);
+                    if (ret) {
+                        Object p3 = XposedHelpers.callStaticMethod(
+                                XposedHelpers.findClass("v21.o2", sCL), "tj");
+                        Class<?> u1Class = XposedHelpers.findClass("vf0.u1", sCL);
+                        Object listener = java.lang.reflect.Proxy.newProxyInstance(
+                                u1Class.getClassLoader(),
+                                new Class[]{u1Class},
+                                (proxy, method, args) -> {
+                                    if (method.getName().equals("g")) {
+                                        LogWriter.log(TAG, "v803 p3 listener callback: " + (args.length > 0 ? args[0] : "null"));
+                                    }
+                                    return null;
+                                });
+                        XposedHelpers.callMethod(p3, "c", dstPath, 3, listener);
+                        LogWriter.log(TAG, "v803 p3.c called ok");
+                    }
                 }
             } catch (Throwable t) {
-                LogWriter.log(TAG, "v802 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
+                LogWriter.log(TAG, "v803 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
                 java.io.StringWriter sw = new java.io.StringWriter();
                 t.printStackTrace(new java.io.PrintWriter(sw));
-                LogWriter.log(TAG, "v802 sendVideo stack: " + sw.toString());
+                LogWriter.log(TAG, "v803 sendVideo stack: " + sw.toString());
             }
         });
         return true;
