@@ -2899,7 +2899,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v795 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v796 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -2970,6 +2970,10 @@ private static void hookVideoSendDebug() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     LogWriter.log(TAG, "v21.d3.q result=" + param.getResult());
+                    if (Boolean.FALSE.equals(param.getResult())) {
+                        param.setResult(true);
+                        LogWriter.log(TAG, "v21.d3.q forced result=true");
+                    }
                 }
             });
             LogWriter.log(TAG, "hookVideoSendDebug OK");
