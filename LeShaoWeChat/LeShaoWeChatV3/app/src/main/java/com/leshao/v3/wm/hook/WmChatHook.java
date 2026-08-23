@@ -2896,7 +2896,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v793 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v794 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3401,53 +3401,27 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
     }
 
 private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v793 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v794 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
         int duration = getVideoDuration(videoPath);
-        LogWriter.log(TAG, "v793 sendVideo duration=" + duration + "s size=" + f.length());
+        LogWriter.log(TAG, "v794 sendVideo duration=" + duration + "s size=" + f.length());
         sPendingVideoToUser = toUser;
         String finalToUser = toUser;
         sH.post(() -> {
             try {
-                Class<?> v2Class = XposedHelpers.findClass("v21.v2", sCL);
-                Object v2 = v2Class.newInstance();
-                XposedHelpers.setObjectField(v2, "a", videoPath);
-                XposedHelpers.setIntField(v2, "m", duration);
-                XposedHelpers.setObjectField(v2, "q", finalToUser);
-                XposedHelpers.setObjectField(v2, "r", finalToUser);
-                XposedHelpers.setIntField(v2, "i", 102);
-                XposedHelpers.setIntField(v2, "x", 1);
-                XposedHelpers.setBooleanField(v2, "W", true);
-                XposedHelpers.setBooleanField(v2, "X", true);
-                XposedHelpers.setObjectField(v2, "j", System.currentTimeMillis());
-                XposedHelpers.setObjectField(v2, "k", System.currentTimeMillis());
-                Class<?> w2Static = XposedHelpers.findClass("v21.w2", sCL);
-                int videoSize = (Integer) XposedHelpers.callStaticMethod(w2Static, "t", videoPath);
-                XposedHelpers.setIntField(v2, "f", videoSize);
-                int thumbSize = (Integer) XposedHelpers.callStaticMethod(w2Static, "t", videoPath);
-                XposedHelpers.setIntField(v2, "h", thumbSize);
-                Object talker = XposedHelpers.callMethod(v2, "i");
-                Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", sCL);
-                Object e9 = e9Class.newInstance();
-                XposedHelpers.callMethod(e9, "y1", talker);
-                XposedHelpers.callMethod(e9, "setType", 43);
-                XposedHelpers.callMethod(e9, "k1", 1);
-                XposedHelpers.callMethod(e9, "t1", 1);
-                Class<?> x9Class = XposedHelpers.findClass("e01.x9", sCL);
-                long msgId = (Long) XposedHelpers.callStaticMethod(x9Class, "x", e9);
-                XposedHelpers.setObjectField(v2, "n", msgId);
-                LogWriter.log(TAG, "v793 sendVideo built v2 msgId=" + msgId);
-                Class<?> o2Class = XposedHelpers.findClass("v21.o2", sCL);
-                Object w2 = XposedHelpers.callStaticMethod(o2Class, "qj");
-                boolean result = (Boolean) XposedHelpers.callMethod(w2, "x", v2, true);
-                LogWriter.log(TAG, "v793 sendVideo w2.x ret=" + result);
+                Object sendMgr = WmReflect.getSendMsgMgr(sCL);
+                Object msgIdTalker = XposedHelpers.getStaticObjectField(
+                        XposedHelpers.findClass("com.tencent.mm.plugin.msg.MsgIdTalker", sCL), "g");
+                XposedHelpers.callMethod(sendMgr, "Cj",
+                        sCtx, finalToUser, videoPath, "", duration, 0, null, false, false, "", "", msgIdTalker);
+                LogWriter.log(TAG, "v794 sendVideo Cj main-thread ok to=" + finalToUser);
             } catch (Throwable t) {
-                LogWriter.log(TAG, "v793 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
+                LogWriter.log(TAG, "v794 sendVideo Cj fail: " + t.getClass().getName() + ": " + t.getMessage());
                 java.io.StringWriter sw = new java.io.StringWriter();
                 t.printStackTrace(new java.io.PrintWriter(sw));
-                LogWriter.log(TAG, "v793 sendVideo stack: " + sw.toString());
+                LogWriter.log(TAG, "v794 sendVideo Cj stack: " + sw.toString());
             }
         });
         return true;
