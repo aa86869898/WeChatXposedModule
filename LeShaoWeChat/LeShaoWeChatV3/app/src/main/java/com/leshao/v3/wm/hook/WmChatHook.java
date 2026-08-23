@@ -2895,7 +2895,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v788 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v789 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3013,11 +3013,11 @@ private static void hookVideoSendDebug() {
                                 String path = (String) p.args[0];
                                 java.io.File f = new java.io.File(path);
                                 if (f.exists()) {
-                                    XposedHelpers.setObjectField(v2, "fileName", f.getName());
-                                    XposedHelpers.setIntField(v2, "totalLen", (int) f.length());
-                                    XposedHelpers.setIntField(v2, "videoLength", getVideoDuration(path));
-                                    XposedHelpers.setIntField(v2, "status", 0);
-                                    LogWriter.log(TAG, "v21.d3.h forced v2: fileName=" + f.getName() + " totalLen=" + f.length() + " videoLength=" + getVideoDuration(path));
+                                    XposedHelpers.setObjectField(v2, "a", f.getName());
+                                    XposedHelpers.setIntField(v2, "f", (int) f.length());
+                                    XposedHelpers.setIntField(v2, "m", getVideoDuration(path));
+                                    XposedHelpers.setIntField(v2, "i", 0);
+                                    LogWriter.log(TAG, "v21.d3.h forced v2: a=" + f.getName() + " f=" + f.length() + " m=" + getVideoDuration(path));
                                 }
                                 p.setResult(v2);
                             } catch (Throwable t2) {
