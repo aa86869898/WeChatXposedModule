@@ -2899,7 +2899,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v796 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v797 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3052,8 +3052,43 @@ private static void hookVideoSendDebug() {
             try {
                 XposedBridge.hookAllMethods(XposedHelpers.findClass("kl5.c2", sCL), "onPostExecute", new XC_MethodHook() {
                     @Override
-                    protected void beforeHookedMethod(MethodHookParam p) {
+                    protected void afterHookedMethod(MethodHookParam p) {
                         LogWriter.log(TAG, "kl5.c2.onPostExecute ENTER");
+                        if (sPendingVideoToUser == null || sPendingVideoPath == null) return;
+                        try {
+                            String fileName = (p.args.length > 0 && p.args[0] != null) ? p.args[0].toString() : null;
+                            if (fileName == null) return;
+                            LogWriter.log(TAG, "kl5.c2.onPostExecute fileName=" + fileName);
+                            Object v2 = XposedHelpers.findClass("v21.v2", sCL).newInstance();
+                            XposedHelpers.setObjectField(v2, "a", fileName);
+                            XposedHelpers.setIntField(v2, "m", sPendingVideoDuration);
+                            XposedHelpers.setObjectField(v2, "q", sPendingVideoToUser);
+                            XposedHelpers.setObjectField(v2, "r", sPendingVideoToUser);
+                            XposedHelpers.setIntField(v2, "i", 102);
+                            XposedHelpers.setIntField(v2, "x", 1);
+                            XposedHelpers.setBooleanField(v2, "W", true);
+                            XposedHelpers.setBooleanField(v2, "X", true);
+                            XposedHelpers.setObjectField(v2, "j", System.currentTimeMillis());
+                            XposedHelpers.setObjectField(v2, "k", System.currentTimeMillis());
+                            XposedHelpers.setIntField(v2, "f", (int) sPendingVideoSize);
+                            XposedHelpers.setIntField(v2, "h", (int) sPendingVideoSize);
+                            Object talker = XposedHelpers.callMethod(v2, "i");
+                            Object e9 = XposedHelpers.findClass("com.tencent.mm.storage.e9", sCL).newInstance();
+                            XposedHelpers.callMethod(e9, "y1", talker);
+                            XposedHelpers.callMethod(e9, "setType", 43);
+                            XposedHelpers.callMethod(e9, "k1", 1);
+                            XposedHelpers.callMethod(e9, "t1", 1);
+                            long msgId = (Long) XposedHelpers.callStaticMethod(
+                                    XposedHelpers.findClass("e01.x9", sCL), "x", e9);
+                            XposedHelpers.setObjectField(v2, "n", msgId);
+                            LogWriter.log(TAG, "kl5.c2.onPostExecute built v2 msgId=" + msgId);
+                            Object w2 = XposedHelpers.callStaticMethod(
+                                    XposedHelpers.findClass("v21.o2", sCL), "qj");
+                            boolean ret = (Boolean) XposedHelpers.callMethod(w2, "x", v2, true);
+                            LogWriter.log(TAG, "kl5.c2.onPostExecute w2.x ret=" + ret);
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "kl5.c2.onPostExecute w2.x fail: " + t.getMessage());
+                        }
                     }
                 });
                 XposedBridge.hookAllMethods(XposedHelpers.findClass("kl5.c2", sCL), "doInBackground", new XC_MethodHook() {
