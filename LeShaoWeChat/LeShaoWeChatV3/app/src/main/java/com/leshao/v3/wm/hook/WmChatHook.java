@@ -2894,7 +2894,7 @@ public class WmChatHook {
             hookP06Bypass(sCL);
             hookF9Debug();
             hookSendMsgMgrDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v776 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v777 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3236,24 +3236,39 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
     }
 
     private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v775 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v777 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
+        int duration = getVideoDuration(videoPath);
+        LogWriter.log(TAG, "v777 sendVideo duration=" + duration + "s");
         try {
             Object sendMgr = WmReflect.getSendMsgMgr(sCL);
             if (sendMgr == null) throw new RuntimeException("SendMsgMgr null");
-            XposedHelpers.callMethod(sendMgr, "Cj",
-                    sCtx, toUser, videoPath, "", 43, 0, null, false, false, "", "", null);
-            LogWriter.log(TAG, "v775 sendVideo Cj ok to=" + toUser);
+            XposedHelpers.callMethod(sendMgr, "Ej",
+                    sCtx, toUser, videoPath, "", duration, 0, false, false, "", "");
+            LogWriter.log(TAG, "v777 sendVideo Ej ok to=" + toUser);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "v775 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
+            LogWriter.log(TAG, "v777 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
             java.io.StringWriter sw = new java.io.StringWriter();
             t.printStackTrace(new java.io.PrintWriter(sw));
-            LogWriter.log(TAG, "v775 sendVideo stack: " + sw.toString());
+            LogWriter.log(TAG, "v777 sendVideo stack: " + sw.toString());
             throw new RuntimeException(t);
         }
         return true;
+    }
+
+    private static int getVideoDuration(String path) {
+        try {
+            android.media.MediaMetadataRetriever retriever = new android.media.MediaMetadataRetriever();
+            retriever.setDataSource(path);
+            String dur = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION);
+            retriever.release();
+            if (dur != null) return Integer.parseInt(dur) / 1000;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getVideoDuration err: " + t.getMessage());
+        }
+        return 10;
     }
 
     private static void copyMediaToWxDir(String srcPath, Object msg) {
