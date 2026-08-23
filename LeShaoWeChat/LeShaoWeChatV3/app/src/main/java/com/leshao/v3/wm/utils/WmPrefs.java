@@ -34,7 +34,6 @@ public class WmPrefs {
 
     // 各功能开关
     public static boolean isQuickReply() { return get("quick_reply", true); }
-    public static boolean isScheduledMsg() { return get("scheduled_msg", true); }
     public static boolean isExportChat() { return get("export_chat", true); }
     public static boolean isKeywordAlert() { return get("keyword_alert", true); }
     public static boolean isAutoTranslate() { return get("auto_translate", false); }

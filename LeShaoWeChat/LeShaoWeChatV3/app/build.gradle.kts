@@ -11,8 +11,8 @@ android {
         applicationId = "com.leshao.v3"
         minSdk = 24
         targetSdk = 35
-        versionCode = 661
-        versionName = "3.9.0-v615"
+        versionCode = 773
+        versionName = "3.9.0-v757"
     }
 
     signingConfigs {
@@ -21,6 +21,9 @@ android {
             storePassword = "leshao2024"
             keyAlias = "leshao"
             keyPassword = "leshao2024"
+            enableV1Signing = true
+            enableV2Signing = true
+            enableV3Signing = true
         }
     }
 

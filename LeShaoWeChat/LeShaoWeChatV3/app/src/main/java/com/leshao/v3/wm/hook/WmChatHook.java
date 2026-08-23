@@ -157,8 +157,7 @@ public class WmChatHook {
                 "⚡ 乐少大师", displayName));
 
         if (WmPrefs.isQuickReply()) btns.addView(WmUi.makeBtn(sAct, "📝 快捷回复", WmChatHook::showQuickReply));
-        if (WmPrefs.isBatchSend()) btns.addView(WmUi.makeBtn(sAct, "🚀 乐少万群定时群发", WmChatHook::showMassSend));
-        if (WmPrefs.isScheduledMsg()) btns.addView(WmUi.makeBtn(sAct, "⏰ 定时发送", WmChatHook::showScheduledMsg));
+        if (WmPrefs.isBatchSend()) btns.addView(WmUi.makeBtn(sAct, "乐少万群定时群发", WmChatHook::showMassSend));
         if (WmPrefs.isExportChat()) btns.addView(WmUi.makeBtn(sAct, "📤 导出聊天", WmChatHook::exportChat));
         if (WmPrefs.isKeywordAlert()) btns.addView(WmUi.makeBtn(sAct, "🔔 关键词设置", WmChatHook::showKeywordSet));
         if (WmPrefs.isAutoTranslate()) btns.addView(WmUi.makeBtn(sAct, "🌐 自动翻译", WmChatHook::toggleTranslate));
@@ -252,10 +251,10 @@ public class WmChatHook {
         try {
             Class<?> launcher = XposedHelpers.findClass("com.tencent.mm.ui.LauncherUI", sCL);
             Object inst = XposedHelpers.callStaticMethod(launcher, "getInstance");
-            Object frag = XposedHelpers.callMethod(inst, "getCurrentFragment");
+            Object frag = XposedHelpers.callMethod(inst, "getCurrentFragmet");
             if (frag == null) return null;
             return (View) XposedHelpers.getObjectField(frag, "mFooter");
-        } catch (Exception ignored) { return null; }
+        } catch (Throwable ignored) { return null; }
     }
 
     static boolean findEditTextAndSet(View v, String text) {
@@ -329,7 +328,7 @@ public class WmChatHook {
     }
 
     static void pickAudio(PickCallback cb) {
-        launchSystemFilePicker("audio/mpeg", cb);
+        launchSystemFilePicker("audio/*", cb);
     }
 
     private static void launchSystemFilePicker(String mimeType, PickCallback cb) {
@@ -354,17 +353,21 @@ public class WmChatHook {
             XposedBridge.hookMethod(m, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    int requestCode = (int) param.args[0];
-                    int resultCode = (int) param.args[1];
-                    Intent data = (Intent) param.args[2];
-                    if (requestCode == REQ_PICK_FILE && sPendingPickCallback != null) {
-                        String path = null;
-                        if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
-                            path = copyUriToTemp((Activity) param.thisObject, data.getData());
-                        }
-                        PickCallback cb = sPendingPickCallback;
-                        sPendingPickCallback = null;
-                        cb.onPick(path);
+                    try {
+                                        int requestCode = (int) param.args[0];
+                                        int resultCode = (int) param.args[1];
+                                        Intent data = (Intent) param.args[2];
+                                        if (requestCode == REQ_PICK_FILE && sPendingPickCallback != null) {
+                                            String path = null;
+                                            if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
+                                                path = copyUriToTemp((Activity) param.thisObject, data.getData());
+                                            }
+                                            PickCallback cb = sPendingPickCallback;
+                                            sPendingPickCallback = null;
+                                            cb.onPick(path);
+                                        }
+                    } catch (Throwable e) {
+                        LogWriter.log("WmChat", "cb err: " + e);
                     }
                 }
             });
@@ -409,126 +412,6 @@ public class WmChatHook {
             LogWriter.log(TAG, "copyUriToTemp err: " + e.getMessage());
             return null;
         }
-    }
-
-    // 2. 定时发送 — 文件选择器 + 自定义日期时间
-    static void showScheduledMsg() {
-        final String[] selectedImgPath = {null};
-        final String[] selectedMp3Path = {null};
-
-        // 构建预览布局
-        LinearLayout ll = new LinearLayout(sAct);
-        ll.setOrientation(LinearLayout.VERTICAL);
-
-        final EditText et = new EditText(sAct);
-        et.setHint("消息内容(可选, 纯文本可不填)");
-        et.setMinLines(2);
-        et.setPadding(dp(8), dp(8), dp(8), dp(8));
-        et.setBackgroundColor(AppColors.bg());
-        GradientDrawable etBg = new GradientDrawable();
-        etBg.setColor(AppColors.bg());
-        etBg.setCornerRadius(dp(8));
-        et.setBackground(etBg);
-        ll.addView(et);
-
-        // 图片选择行
-        final TextView imgLabel = new TextView(sAct);
-        imgLabel.setText("图片: 未选择");
-        imgLabel.setTextSize(12);
-        imgLabel.setTextColor(AppColors.text2());
-        imgLabel.setPadding(dp(8), dp(12), dp(8), 0);
-        ll.addView(imgLabel);
-
-        Button imgBtn = new Button(sAct);
-        imgBtn.setText("选择图片");
-        imgBtn.setTextSize(13);
-        imgBtn.setTextColor(AppColors.WHITE_TEXT);
-        GradientDrawable imgBtnBg = new GradientDrawable();
-        imgBtnBg.setColor(AppColors.accent());
-        imgBtnBg.setCornerRadius(dp(8));
-        imgBtn.setBackground(imgBtnBg);
-        imgBtn.setOnClickListener(v -> pickImage(path -> {
-            selectedImgPath[0] = path;
-            imgLabel.setText(path != null ? "图片: " + path.replace("/sdcard/", ".../") : "图片: 未选择");
-        }));
-        ll.addView(imgBtn);
-
-        // MP3选择行
-        final TextView mp3Label = new TextView(sAct);
-        mp3Label.setText("语音(MP3): 未选择");
-        mp3Label.setTextSize(12);
-        mp3Label.setTextColor(AppColors.text2());
-        mp3Label.setPadding(dp(8), dp(12), dp(8), 0);
-        ll.addView(mp3Label);
-
-        Button mp3Btn = new Button(sAct);
-        mp3Btn.setText("选择MP3");
-        mp3Btn.setTextSize(13);
-        mp3Btn.setTextColor(AppColors.WHITE_TEXT);
-        GradientDrawable mp3BtnBg = new GradientDrawable();
-        mp3BtnBg.setColor(AppColors.accent());
-        mp3BtnBg.setCornerRadius(dp(8));
-        mp3Btn.setBackground(mp3BtnBg);
-        mp3Btn.setOnClickListener(v -> pickAudio(path -> {
-            selectedMp3Path[0] = path;
-            mp3Label.setText(path != null ? "MP3: " + path.replace("/sdcard/", ".../") : "MP3: 未选择");
-        }));
-        ll.addView(mp3Btn);
-
-        // 时间设置 — DatePicker + TimePicker
-        final long[] selectedTimeMs = {0};
-        final TextView timeLabel = new TextView(sAct);
-        timeLabel.setText("发送时间: 未设置");
-        timeLabel.setTextSize(13);
-        timeLabel.setTextColor(AppColors.text2());
-        timeLabel.setPadding(dp(8), dp(12), dp(8), 0);
-        ll.addView(timeLabel);
-
-        Button timeBtn = new Button(sAct);
-        timeBtn.setText("选择发送时间");
-        timeBtn.setTextSize(13);
-        timeBtn.setTextColor(AppColors.WHITE_TEXT);
-        GradientDrawable timeBtnBg = new GradientDrawable();
-        timeBtnBg.setColor(AppColors.accent());
-        timeBtnBg.setCornerRadius(dp(8));
-        timeBtn.setBackground(timeBtnBg);
-        timeBtn.setOnClickListener(v -> showDateTimePicker(selectedTimeMs, timeLabel));
-        ll.addView(timeBtn);
-
-        new AlertDialog.Builder(sAct).setTitle("定时发送")
-                .setView(ll)
-                .setPositiveButton("预约发送", (d, w) -> {
-                    String msg = et.getText().toString().trim();
-                    String imgPath = selectedImgPath[0];
-                    String mp3Path = selectedMp3Path[0];
-                    if (TextUtils.isEmpty(msg) && imgPath == null && mp3Path == null) {
-                        toast("请至少选择一项发送内容"); return;
-                    }
-                    if (selectedTimeMs[0] <= 0) {
-                        toast("请设置发送时间"); return;
-                    }
-                    int delaySec = (int) ((selectedTimeMs[0] - System.currentTimeMillis()) / 1000);
-                    if (delaySec <= 0) { toast("时间必须在未来"); return; }
-                    final String fMsg = msg.isEmpty() ? null : msg;
-                    final String fImg = imgPath;
-                    final String fMp3 = mp3Path;
-                    final int fDelay = delaySec;
-                    SimpleDateFormat sdfHint = new SimpleDateFormat("MM月dd日 HH:mm");
-                    String hint = sdfHint.format(new Date(selectedTimeMs[0]));
-                    toast("已预约: " + hint + " 发送");
-                    sH.postDelayed(() -> {
-                        new Thread(() -> {
-                            try {
-                                if (fImg != null) sendImageViaXes(fImg);
-                                if (fMp3 != null) sendMp3AsVoice(fMp3);
-                                if (fMsg != null) WmReflect.sendTextMsg(sCL, fMsg, sUser);
-                                sH.post(() -> toast("定时消息已发送完毕"));
-                            } catch (Exception e) {
-                                sH.post(() -> toast("发送失败: " + e.getMessage()));
-                            }
-                        }).start();
-                    }, fDelay * 1000L);
-                }).setNegativeButton("取消", null).show();
     }
 
     /** 通过微信内部API发送图片 */
@@ -1326,13 +1209,13 @@ public class WmChatHook {
     // ===== 乐少万群定时群发 =====
 
     private static final String[] MASS_TYPES =
-        {"文本消息", "图片消息", "视频消息", "图文消息", "文视消息", "图文混合", "语音消息"};
+        {"文本消息", "图片消息", "视频消息", "图文消息", "文视消息", "语音消息"};
     private static final String[] MASS_TYPE_KEYS =
-        {"text", "image", "video", "image_text", "video_text", "image_mixed", "voice"};
+        {"text", "image", "video", "image_text", "video_text", "voice"};
     private static final String[] MASS_TYPE_ICONS =
-        {"💬", "🖼️", "🎬", "📄", "🎥", "🖼️💬", "🎵"};
+        {"💬", "🖼️", "🎬", "📄", "🎥", "🎵"};
     private static final String[] MASS_TYPE_DESCS =
-        {"纯文字消息群发", "多张图片批量发送", "视频文件群发", "图片+文字组合", "视频+文字组合", "多图+文字混合", "语音/音频文件"};
+        {"纯文字消息群发", "多张图片批量发送", "视频文件群发", "图片+文字组合", "视频+文字组合", "语音/音频文件"};
 
     // ==== 向导状态 ====
     private static int sWizardType = -1;
@@ -1626,7 +1509,7 @@ public class WmChatHook {
         LinearLayout grid = new LinearLayout(sAct);
         grid.setOrientation(LinearLayout.VERTICAL);
 
-        int[][] rows = {{0, 1}, {2, 3}, {4, 5}, {6, -1}};
+        int[][] rows = {{0, 1}, {2, 3}, {4, 5}};
         for (int r = 0; r < rows.length; r++) {
             LinearLayout row = new LinearLayout(sAct);
             row.setOrientation(LinearLayout.HORIZONTAL);
@@ -2160,7 +2043,7 @@ public class WmChatHook {
             boolean hasText = !sWizardText.isEmpty();
             boolean hasAttachment = false;
             switch (typeKey) {
-                case "image": case "image_text": case "image_mixed":
+                case "image": case "image_text":
                     hasAttachment = !sWizardImagePaths.isEmpty(); break;
                 case "video": case "video_text":
                     hasAttachment = sWizardVideoPath != null; break;
@@ -3008,9 +2891,46 @@ public class WmChatHook {
             }
             ensureReceiverRegistered();
             recoverMassSendTask();
-            LogWriter.log(TAG, "initOnAppStart OK build=v421 2026-08-10");
+            hookP06Bypass(sCL);
+            hookF9Debug();
+            LogWriter.log(TAG, "initOnAppStart OK v773 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
+        }
+    }
+
+    private static void hookF9Debug() {
+        try {
+            if (sCL == null) return;
+            Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", sCL);
+            XposedBridge.hookAllMethods(f9, "Ra", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam p) {
+                    StringBuilder sb = new StringBuilder("f9.Ra(");
+                    for (int i = 0; i < p.args.length; i++) {
+                        if (i > 0) sb.append(", ");
+                        sb.append(p.args[i] != null ? p.args[i].toString() : "null");
+                    }
+                    sb.append(")");
+                    XposedBridge.log("LeShaoV3: [DIAG] " + sb.toString());
+                    LogWriter.log(TAG, "DIAG f9.Ra: " + p.args.length + " args");
+                }
+            });
+            XposedBridge.hookAllMethods(f9, "I9", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam p) {
+                    StringBuilder sb = new StringBuilder("f9.I9(");
+                    for (int i = 0; i < p.args.length; i++) {
+                        if (i > 0) sb.append(", ");
+                        sb.append(p.args[i] != null ? p.args[i].toString() : "null");
+                    }
+                    sb.append(")");
+                    XposedBridge.log("LeShaoV3: [DIAG] " + sb.toString());
+                }
+            });
+            XposedBridge.log("LeShaoV3: [DIAG] f9 hooks installed OK");
+        } catch (Throwable t) {
+            XposedBridge.log("LeShaoV3: [DIAG] f9 hook FAIL: " + t.getMessage());
         }
     }
 
@@ -3107,6 +3027,9 @@ public class WmChatHook {
                                     sendVideoToUser(target, videoPath);
                                 else
                                     LogWriter.log(TAG, "massSend vid EMPTY path, skip");
+                                for (String imgPath : imgList) {
+                                    if (!imgPath.isEmpty()) sendImageToUser(target, imgPath);
+                                }
                             break;
                         case "image_text":
                             for (String imgPath : imgList) {
@@ -3116,8 +3039,6 @@ public class WmChatHook {
                         case "video_text":
                             if (videoPath != null && !videoPath.isEmpty())
                                 sendVideoToUser(target, videoPath);
-                            break;
-                        case "image_mixed":
                             for (String imgPath : imgList) {
                                 if (!imgPath.isEmpty()) sendImageToUser(target, imgPath);
                             }
@@ -3133,6 +3054,7 @@ public class WmChatHook {
                     success++;
                 } catch (Throwable t) {
                     fail++;
+                    LogWriter.log(TAG, "massSend fail: target=" + target + " type=" + type + " err=" + t.getMessage());
                     saveMassSendFailRecord(target, type, t.getMessage());
                 }
 
@@ -3183,44 +3105,138 @@ public class WmChatHook {
             }
          } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
     }
-    private static boolean sendImageToUser(String toUser, String imgPath) {
+    private static long getNextMsgId() {
+        android.database.Cursor c = null;
         try {
-            if (sCL == null) return false;
-            Object ms = getMsgInfoStorage();
-            if (ms == null) return false;
-            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", sCL);
-            Object msg = XposedHelpers.newInstance(e9Class, toUser);
-            XposedHelpers.callMethod(msg, "A1", 3);
-            XposedHelpers.callMethod(msg, "j1", imgPath);
-            XposedHelpers.callMethod(msg, "L1", System.currentTimeMillis());
-            copyMediaToWxDir(imgPath, msg);
-            long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
-            LogWriter.log(TAG, "sendImageToUser ok: msgId=" + msgId + " to=" + toUser);
-            return msgId > 0;
+            c = rawQueryMsg("SELECT MAX(msgId) FROM message", null);
+            if (c == null) {
+                XposedBridge.log("LeShaoV3: getNextMsgId CURSOR NULL");
+                LogWriter.log(TAG, "getNextMsgId: cursor null");
+                return System.currentTimeMillis();
+            }
+            if (c.moveToFirst()) {
+                long max = c.getLong(0);
+                long next = max + 1;
+                XposedBridge.log("LeShaoV3: getNextMsgId max=" + max + " next=" + next);
+                LogWriter.log(TAG, "getNextMsgId: max=" + max + " next=" + next);
+                return next;
+            }
+            XposedBridge.log("LeShaoV3: getNextMsgId moveToFirst=false count=" + c.getCount());
+            LogWriter.log(TAG, "getNextMsgId: moveToFirst=false count=" + c.getCount());
         } catch (Throwable t) {
-            LogWriter.log(TAG, "sendImageToUser err: " + t.getMessage());
-            return false;
+            XposedBridge.log("LeShaoV3: getNextMsgId err: " + t.getMessage());
+            LogWriter.log(TAG, "getNextMsgId err: " + t.getMessage());
+        } finally {
+            if (c != null) { try { c.close(); } catch (Throwable ignored) {} }
         }
+        return System.currentTimeMillis();
+    }
+
+    static boolean hookP06Bypass(ClassLoader cl) {
+        String[] pkgs = {
+            "com.tencent.mm", "com.tencent.mm.model", "com.tencent.mm.storage",
+            "com.tencent.mm.modelmulti", "com.tencent.mm.sdk", "com.tencent.mm.kernel",
+            "com.tencent.mm.plugin.messenger", "com.tencent.mm.plugin.messenger.foundation",
+            "com.tencent.mm.cb", "com.tencent.mm.bootstrap",
+            "com.tencent.mm.app", "com.tencent.mm.ui",
+            "com.tencent.mm.modelstat", "com.tencent.mm.modelsns",
+            "com.tencent.mm.platformtools", "com.tencent.mm.protocal",
+            "com.tencent.mm.network", "com.tencent.mm.algorithm",
+            "com.tencent.mm.compatible"
+        };
+        for (String pkg : pkgs) {
+            try {
+                Class<?> p06 = XposedHelpers.findClass(pkg + ".p06", cl);
+                XposedBridge.hookAllMethods(p06, "b", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        param.setResult(null);
+                    }
+                });
+                XposedBridge.log("LeShaoV3: WmChat: hookP06Bypass ok: " + pkg + ".p06.b hooked");
+                return true;
+            } catch (Throwable ignored) {}
+        }
+        try {
+            Class<?> p06 = XposedHelpers.findClass("p06", cl);
+            XposedBridge.hookAllMethods(p06, "b", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    param.setResult(null);
+                }
+            });
+            XposedBridge.log("LeShaoV3: WmChat: hookP06Bypass ok: p06.b (default pkg) hooked");
+            return true;
+        } catch (Throwable ignored) {}
+        try {
+            java.lang.reflect.Field f = ClassLoader.class.getDeclaredField("classes");
+            f.setAccessible(true);
+            java.util.Vector<Class<?>> classes = (java.util.Vector<Class<?>>) f.get(cl);
+            for (Class<?> c : classes) {
+                if (c.getName().endsWith(".p06") || c.getSimpleName().equals("p06")) {
+                    XposedBridge.log("LeShaoV3: WmChat: hookP06Bypass found via brute: " + c.getName());
+                    XposedBridge.hookAllMethods(c, "b", new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            param.setResult(null);
+                        }
+                    });
+                    return true;
+                }
+            }
+        } catch (Throwable ignored) {}
+        XposedBridge.log("LeShaoV3: WmChat: hookP06Bypass: p06 class NOT found");
+        return false;
+    }
+
+private static boolean sendImageToUser(String toUser, String imgPath) {
+        LogWriter.log(TAG, "v773 sendImage ENTER: to=" + toUser + " path=" + imgPath);
+        if (sCL == null) throw new RuntimeException("sCL null");
+        java.io.File f = new java.io.File(imgPath);
+        if (!f.exists()) throw new RuntimeException("file not found: " + imgPath);
+        Object ms = getMsgInfoStorage();
+        if (ms == null) throw new RuntimeException("MsgInfoStorage null");
+        Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", sCL);
+        Object msg = XposedHelpers.newInstance(e9Class, toUser);
+        XposedHelpers.callMethod(msg, "A1", 3);
+        XposedHelpers.callMethod(msg, "j1", imgPath);
+        try {
+            Object i9Ret = XposedHelpers.callMethod(ms, "I9", msg, true);
+            LogWriter.log(TAG, "v773 sendImage I9 ret=" + i9Ret + " cls=" + (i9Ret != null ? i9Ret.getClass().getSimpleName() : "null"));
+            long msgId = (Long) XposedHelpers.callMethod(msg, "H0");
+            LogWriter.log(TAG, "v773 sendImage H0 msgId=" + msgId);
+            XposedHelpers.callMethod(ms, "Ra", msgId, msg);
+            LogWriter.log(TAG, "v773 sendImage Ra ok to=" + toUser + " msgId=" + msgId);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "v773 sendImage fail: " + t.getClass().getName() + ": " + t.getMessage());
+            throw new RuntimeException(t);
+        }
+        return true;
     }
 
     private static boolean sendVideoToUser(String toUser, String videoPath) {
+        LogWriter.log(TAG, "v773 sendVideoToUser ENTER: to=" + toUser + " path=" + videoPath);
+        if (sCL == null) throw new RuntimeException("sCL null");
+        java.io.File f = new java.io.File(videoPath);
+        if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
+        Object ms = getMsgInfoStorage();
+        if (ms == null) throw new RuntimeException("MsgInfoStorage null");
+        Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", sCL);
+        Object msg = XposedHelpers.newInstance(e9Class, toUser);
+        XposedHelpers.callMethod(msg, "A1", 43);
+        XposedHelpers.callMethod(msg, "j1", videoPath);
         try {
-            if (sCL == null) return false;
-            Object ms = getMsgInfoStorage();
-            if (ms == null) return false;
-            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", sCL);
-            Object msg = XposedHelpers.newInstance(e9Class, toUser);
-            XposedHelpers.callMethod(msg, "A1", 43);
-            XposedHelpers.callMethod(msg, "j1", videoPath);
-            XposedHelpers.callMethod(msg, "L1", System.currentTimeMillis());
-            copyMediaToWxDir(videoPath, msg);
-            long msgId = (Long) XposedHelpers.callMethod(ms, "I9", msg, true);
-            LogWriter.log(TAG, "sendVideoToUser ok: msgId=" + msgId + " to=" + toUser);
-            return msgId > 0;
+            Object i9Ret = XposedHelpers.callMethod(ms, "I9", msg, true);
+            LogWriter.log(TAG, "v773 sendVideo I9 ret=" + i9Ret + " cls=" + (i9Ret != null ? i9Ret.getClass().getSimpleName() : "null"));
+            long msgId = (Long) XposedHelpers.callMethod(msg, "H0");
+            LogWriter.log(TAG, "v773 sendVideo H0 msgId=" + msgId);
+            XposedHelpers.callMethod(ms, "Ra", msgId, msg);
+            LogWriter.log(TAG, "v773 sendVideo Ra ok to=" + toUser + " msgId=" + msgId);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "sendVideoToUser err: " + t.getMessage());
-            return false;
+            LogWriter.log(TAG, "v773 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
+            throw new RuntimeException(t);
         }
+        return true;
     }
 
     private static void copyMediaToWxDir(String srcPath, Object msg) {
@@ -3261,9 +3277,12 @@ public class WmChatHook {
             if (shortCls == null) { LogWriter.log(TAG, "getMsgInfoStorage: shortCls null"); return null; }
             Object service = XposedHelpers.callStaticMethod(shortCls, "b");
             if (service == null) { LogWriter.log(TAG, "getMsgInfoStorage: service null"); return null; }
-            return XposedHelpers.callMethod(service, "u");
+            Object result = XposedHelpers.callMethod(service, "u");
+            XposedBridge.log("LeShaoV3: getMsgInfoStorage result=" + (result != null ? result.getClass().getName() : "null"));
+            return result;
         } catch (Throwable t) {
             LogWriter.log(TAG, "getMsgInfoStorage err: " + t.getMessage());
+            XposedBridge.log("LeShaoV3: getMsgInfoStorage err: " + t.getMessage());
             return null;
         }
     }
