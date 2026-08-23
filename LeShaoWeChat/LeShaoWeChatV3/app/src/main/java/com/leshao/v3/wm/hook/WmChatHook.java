@@ -2895,7 +2895,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v785 build=v421 2026-08-10");
+            LogWriter.log(TAG, "initOnAppStart OK v786 build=v421 2026-08-10");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -2981,6 +2981,28 @@ private static void hookVideoSendDebug() {
                     }
                 });
                 LogWriter.log(TAG, "hookVideoSendDebug2 OK");
+            try {
+                for (java.lang.reflect.Method dm : d3.getDeclaredMethods()) {
+                    if (dm.getName().equals("q")) continue;
+                    XposedBridge.hookMethod(dm, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam p) {
+                            String mn = p.method.getName();
+                            LogWriter.log(TAG, "v21.d3." + mn + " ENTER args=" + p.args.length);
+                            for (int i = 0; i < p.args.length && i < 5; i++) {
+                                LogWriter.log(TAG, "v21.d3." + mn + " arg" + i + "=" + p.args[i]);
+                            }
+                        }
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam p) {
+                            LogWriter.log(TAG, "v21.d3." + p.method.getName() + " result=" + p.getResult());
+                        }
+                    });
+                }
+                LogWriter.log(TAG, "hookVideoSendDebug3 OK");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "hookVideoSendDebug3 err: " + t.getMessage());
+            }
             } catch (Throwable t) {
                 LogWriter.log(TAG, "hookVideoSendDebug2 err: " + t.getMessage());
             }
