@@ -3668,7 +3668,7 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
             try {
                 String newFilename = null;
                 try {
-                    Class<?> c3Class = XposedHelpers.findClass("kl5.c3", sCL);
+                    Class<?> c3Class = XposedHelpers.findClass("v21.c3", sCL);
                     newFilename = (String) XposedHelpers.callStaticMethod(c3Class, "a", finalToUser);
                     LogWriter.log(TAG, "v809 c3.a newFilename=" + newFilename);
                 } catch (Throwable tc) {
@@ -3685,7 +3685,7 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 Class<?> u0Class = XposedHelpers.findClass("qh3.u0", sCL);
                 Object u0Service = XposedHelpers.callStaticMethod(
                         XposedHelpers.findClass("pa5.n0", sCL), "c", u0Class);
-                Class<?> f0Class = XposedHelpers.findClass("qh3.f0", sCL);
+                Class<?> f0Class = XposedHelpers.findClass("in5.f0", sCL);
                 Object f0_s = XposedHelpers.getStaticObjectField(f0Class, "s");
                 String vfsVideoPath = (String) XposedHelpers.callMethod(
                         u0Service, "Fj", null, f0_s, newFilename, true);
