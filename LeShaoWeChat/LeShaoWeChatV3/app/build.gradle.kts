@@ -12,7 +12,7 @@ android {
         minSdk = 24
         targetSdk = 35
         versionCode = 806
-        versionName = "3.9.0-v806"
+        versionName = "3.9.0-v806-fix"
     }
 
     signingConfigs {
