@@ -3689,16 +3689,12 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 tempThumb.delete();
                 LogWriter.log(TAG, "v814 thumb w6.d to " + vfsThumbPath);
                 Class<?> d3Class = XposedHelpers.findClass("v21.d3", sCL);
-                boolean ok = (Boolean) XposedHelpers.callStaticMethod(d3Class, "q",
-                        newFilename, "", duration, finalToUser,
-                        "", 0, "", 43,
-                        null, "", null, "", "",
-                        false, -1L, null, "", "");
-                LogWriter.log(TAG, "v814 d3.q ret=" + ok);
-                if (!ok) {
-                    sentError[0] = new RuntimeException("d3.q returned false");
-                    return;
-                }
+                Class<?> s5Class = XposedHelpers.findClass("kl5.s5", sCL);
+                XposedHelpers.callStaticMethod(s5Class, "Dj",
+                        sCtx, finalToUser, videoPath, newFilename,
+                        duration, 0, null, false, false,
+                        "", "", null, null, "", null);
+                LogWriter.log(TAG, "v814 kl5.s5.Dj called ok");
                 sentResult[0] = true;
             } catch (Throwable t) {
                 LogWriter.log(TAG, "v814 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
