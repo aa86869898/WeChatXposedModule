@@ -2897,7 +2897,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v811 d3q+VFS+CDN+thumb build=v429 2026-08-24");
+            LogWriter.log(TAG, "initOnAppStart OK v812 d3q+VFS+CDN+thumb build=v430 2026-08-24");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3649,12 +3649,12 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
     }
 
 private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v811 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v812 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
         int duration = getVideoDuration(videoPath);
-        LogWriter.log(TAG, "v811 sendVideo duration=" + duration + "s size=" + f.length());
+        LogWriter.log(TAG, "v812 sendVideo duration=" + duration + "s size=" + f.length());
         sPendingVideoToUser = toUser;
         sPendingVideoPath = videoPath;
         sPendingVideoDuration = duration;
@@ -3670,12 +3670,12 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 try {
                     Class<?> c3Class = XposedHelpers.findClass("v21.c3", sCL);
                     newFilename = (String) XposedHelpers.callStaticMethod(c3Class, "a", finalToUser);
-                    LogWriter.log(TAG, "v811 c3.a newFilename=" + newFilename);
+                    LogWriter.log(TAG, "v812 c3.a newFilename=" + newFilename);
                 } catch (Throwable tc) {
-                    LogWriter.log(TAG, "v811 c3.a fail: " + tc.getMessage());
+                    LogWriter.log(TAG, "v812 c3.a fail: " + tc.getMessage());
                     newFilename = new java.text.SimpleDateFormat("yyMMddHHmmss", java.util.Locale.getDefault())
                             .format(new java.util.Date()) + System.currentTimeMillis() % 1000;
-                    LogWriter.log(TAG, "v811 fallback newFilename=" + newFilename);
+                    LogWriter.log(TAG, "v812 fallback newFilename=" + newFilename);
                 }
                 if (newFilename == null) {
                     sentError[0] = new RuntimeException("unable to generate filename");
@@ -3691,26 +3691,32 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                         u0Service, "Fj", null, f0_s, newFilename, true);
                 String vfsThumbPath = (String) XposedHelpers.callMethod(
                         u0Service, "Ij", null, newFilename, true);
-                LogWriter.log(TAG, "v811 vfsVideo=" + vfsVideoPath + " vfsThumb=" + vfsThumbPath);
+                LogWriter.log(TAG, "v812 vfsVideo=" + vfsVideoPath + " vfsThumb=" + vfsThumbPath);
                 Class<?> w6Class = XposedHelpers.findClass("com.tencent.mm.vfs.w6", sCL);
                 XposedHelpers.callStaticMethod(w6Class, "d", videoPath, vfsVideoPath, false);
-                LogWriter.log(TAG, "v811 w6.d video copy ok");
+                LogWriter.log(TAG, "v812 w6.d video copy ok");
+                java.io.File tempThumb = new java.io.File(sCtx.getCacheDir(), "thumb_temp_" + System.currentTimeMillis() + ".jpg");
                 android.media.MediaMetadataRetriever retriever = new android.media.MediaMetadataRetriever();
-                retriever.setDataSource(videoPath);
-                android.graphics.Bitmap thumb = retriever.getFrameAtTime(1000000);
-                retriever.release();
-                java.io.FileOutputStream thumbFos = new java.io.FileOutputStream(vfsThumbPath);
-                thumb.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, thumbFos);
-                thumbFos.close();
-                thumb.recycle();
-                LogWriter.log(TAG, "v811 thumb generated to " + vfsThumbPath);
+                try {
+                    retriever.setDataSource(videoPath);
+                    android.graphics.Bitmap thumb = retriever.getFrameAtTime(1000000);
+                    java.io.FileOutputStream thumbFos = new java.io.FileOutputStream(tempThumb);
+                    thumb.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, thumbFos);
+                    thumbFos.close();
+                    thumb.recycle();
+                } finally {
+                    retriever.release();
+                }
+                XposedHelpers.callStaticMethod(w6Class, "d", tempThumb.getAbsolutePath(), vfsThumbPath, false);
+                tempThumb.delete();
+                LogWriter.log(TAG, "v812 thumb w6.d to " + vfsThumbPath);
                 Class<?> d3Class = XposedHelpers.findClass("v21.d3", sCL);
                 boolean ok = (Boolean) XposedHelpers.callStaticMethod(d3Class, "q",
                         newFilename, "", duration, finalToUser,
                         "", 0, "", 43,
                         null, "", null, "", "",
                         false, -1L, null, "", "");
-                LogWriter.log(TAG, "v811 d3.q ret=" + ok);
+                LogWriter.log(TAG, "v812 d3.q ret=" + ok);
                 if (!ok) {
                     sentError[0] = new RuntimeException("d3.q returned false");
                     return;
@@ -3720,7 +3726,7 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                     sentError[0] = new RuntimeException("d3.h returned null");
                     return;
                 }
-                LogWriter.log(TAG, "v811 d3.h OK, v2=" + v2Obj.getClass().getSimpleName());
+                LogWriter.log(TAG, "v812 d3.h OK, v2=" + v2Obj.getClass().getSimpleName());
                 try {
                     Class<?> wClass = XposedHelpers.findClass("pa5.w", sCL);
                     Object wService = XposedHelpers.callStaticMethod(
@@ -3733,20 +3739,20 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                     Object e9Msg2 = XposedHelpers.callStaticMethod(k0Class, "Wi",
                             new Class[]{String.class, long.class}, new Object[]{talker, msgId});
                     String taskId = (String) XposedHelpers.callMethod(wService, "rj", e9Msg, 2);
-                    LogWriter.log(TAG, "v811 CDN rj taskId=" + taskId);
+                    LogWriter.log(TAG, "v812 CDN rj taskId=" + taskId);
                     if (taskId != null && !taskId.isEmpty()) {
                         XposedHelpers.callMethod(wService, "wj", e9Msg2, 2, taskId, null);
-                        LogWriter.log(TAG, "v811 CDN wj registered ok");
+                        LogWriter.log(TAG, "v812 CDN wj registered ok");
                     }
                 } catch (Throwable tcdn) {
-                    LogWriter.log(TAG, "v811 CDN register fail: " + tcdn.getMessage());
+                    LogWriter.log(TAG, "v812 CDN register fail: " + tcdn.getMessage());
                 }
                 sentResult[0] = true;
             } catch (Throwable t) {
-                LogWriter.log(TAG, "v811 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
+                LogWriter.log(TAG, "v812 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
                 java.io.StringWriter sw = new java.io.StringWriter();
                 t.printStackTrace(new java.io.PrintWriter(sw));
-                LogWriter.log(TAG, "v811 sendVideo stack: " + sw.toString());
+                LogWriter.log(TAG, "v812 sendVideo stack: " + sw.toString());
                 sentError[0] = t;
             } finally {
                 latch.countDown();
@@ -3755,16 +3761,16 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
         try {
             boolean finished = latch.await(60, TimeUnit.SECONDS);
             if (!finished) {
-                LogWriter.log(TAG, "v811 sendVideo timeout for " + finalToUser);
+                LogWriter.log(TAG, "v812 sendVideo timeout for " + finalToUser);
                 throw new RuntimeException("video send timeout for " + finalToUser);
             }
             if (sentError[0] != null) {
                 throw new RuntimeException(sentError[0]);
             }
-            LogWriter.log(TAG, "v811 sendVideo done: to=" + finalToUser + " sent=" + sentResult[0]);
+            LogWriter.log(TAG, "v812 sendVideo done: to=" + finalToUser + " sent=" + sentResult[0]);
             return sentResult[0];
         } catch (InterruptedException e) {
-            LogWriter.log(TAG, "v811 sendVideo interrupted for " + finalToUser);
+            LogWriter.log(TAG, "v812 sendVideo interrupted for " + finalToUser);
             throw new RuntimeException("video send interrupted for " + finalToUser, e);
         }
     }
