@@ -75,11 +75,15 @@ public class ChatUICustom {
                     new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    reloadConfig();
-                    if (bgColor == 0) return;
-                    View contentView = (View) param.args[0];
-                    if (contentView != null) {
-                        contentView.setBackgroundColor(bgColor);
+                    try {
+                                        reloadConfig();
+                                        if (bgColor == 0) return;
+                                        View contentView = (View) param.args[0];
+                                        if (contentView != null) {
+                                            contentView.setBackgroundColor(bgColor);
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });
@@ -88,11 +92,15 @@ public class ChatUICustom {
                     new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    reloadConfig();
-                    if (bgColor == 0) return;
-                    View layoutView = (View) param.getResult();
-                    if (layoutView != null) {
-                        setChatAreaBackground(layoutView);
+                    try {
+                                        reloadConfig();
+                                        if (bgColor == 0) return;
+                                        View layoutView = (View) param.getResult();
+                                        if (layoutView != null) {
+                                            setChatAreaBackground(layoutView);
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });

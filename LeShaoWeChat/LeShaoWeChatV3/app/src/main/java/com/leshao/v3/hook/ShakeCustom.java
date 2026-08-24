@@ -60,8 +60,12 @@ public class ShakeCustom {
             XposedBridge.hookAllMethods(shakeUI, "onResume", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    shakeCount = 0;
-                    Logger.i("[Shake] 摇一摇界面已打开 (动作=" + getActionName() + ")");
+                    try {
+                                        shakeCount = 0;
+                                        Logger.i("[Shake] 摇一摇界面已打开 (动作=" + getActionName() + ")");
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
             totalHooked++;
@@ -69,7 +73,11 @@ public class ShakeCustom {
             XposedBridge.hookAllMethods(shakeUI, "onPause", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    Logger.i("[Shake] 摇一摇界面已关闭 (共摇动" + shakeCount + "次)");
+                    try {
+                                        Logger.i("[Shake] 摇一摇界面已关闭 (共摇动" + shakeCount + "次)");
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
             totalHooked++;
@@ -80,7 +88,11 @@ public class ShakeCustom {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
-                            onShakeDetected(param.thisObject);
+                            try {
+                                                        onShakeDetected(param.thisObject);
+                            } catch (Throwable e) {
+                                de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                            }
                         }
                     });
                     totalHooked++;
@@ -97,7 +109,11 @@ public class ShakeCustom {
                         XposedBridge.hookMethod(m, new XC_MethodHook() {
                             @Override
                             protected void afterHookedMethod(MethodHookParam param) {
-                                onShakeDetected(param.thisObject);
+                                try {
+                                                                onShakeDetected(param.thisObject);
+                                } catch (Throwable e) {
+                                    de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                                }
                             }
                         });
                         totalHooked++;

@@ -263,16 +263,20 @@ public class RedPacketHook {
             XposedBridge.hookMethod(m, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam p) {
-                    Activity act = (Activity) p.thisObject;
-                    sHandler.postDelayed(() -> {
-                        String amt = scanAmount(act.getWindow().getDecorView());
-                        if (amt != null && !amt.isEmpty()) {
-                            LogWriter.log(TAG, "RP: " + amt);
-                            if (sTtsAnnounce) {
-                                TTSBroadcaster.announceRedPacket("好友", null, null, amt);
-                            }
-                        }
-                    }, 800);
+                    try {
+                                        Activity act = (Activity) p.thisObject;
+                                        sHandler.postDelayed(() -> {
+                                            String amt = scanAmount(act.getWindow().getDecorView());
+                                            if (amt != null && !amt.isEmpty()) {
+                                                LogWriter.log(TAG, "RP: " + amt);
+                                                if (sTtsAnnounce) {
+                                                    TTSBroadcaster.announceRedPacket("好友", null, null, amt);
+                                                }
+                                            }
+                                        }, 800);
+                    } catch (Throwable e) {
+                        LogWriter.log("RedPacket", "cb err: " + e);
+                    }
                 }
             });
             LogWriter.log(TAG, "RP OK");

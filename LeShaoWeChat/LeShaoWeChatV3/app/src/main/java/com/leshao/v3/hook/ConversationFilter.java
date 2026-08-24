@@ -61,12 +61,16 @@ public class ConversationFilter {
             XposedBridge.hookAllMethods(adapterClass, "notifyDataSetChanged", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    if (param.thisObject == sAdapter) {
-                        long now = System.currentTimeMillis();
-                        if (now - sLastBadgeRefresh > 5000) {
-                            sLastBadgeRefresh = now;
-                            scanUnreadCounts(); // update counts only, no UI rebuild
-                        }
+                    try {
+                                        if (param.thisObject == sAdapter) {
+                                            long now = System.currentTimeMillis();
+                                            if (now - sLastBadgeRefresh > 5000) {
+                                                sLastBadgeRefresh = now;
+                                                scanUnreadCounts(); // update counts only, no UI rebuild
+                                            }
+                                        }
+                    } catch (Throwable e) {
+                        LogWriter.log("ConvFilter", "cb err: " + e);
                     }
                 }
             });

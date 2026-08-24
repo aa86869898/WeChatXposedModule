@@ -141,29 +141,37 @@ public class MessageHook {
                     XposedBridge.hookMethod(m,
                         new XC_MethodHook() {
                             @Override protected void beforeHookedMethod(MethodHookParam p) {
-                                sConsumedTtsOriginal.set(Boolean.FALSE);
-                                if (TtsVoiceSender.consumeBlockedOriginal(p.args[0])) {
-                                    LogWriter.log(TAG, "consume blocked #tts original x9." + m.getName()
-                                            + " return=" + returnType.getName());
-                                    sConsumedTtsOriginal.set(Boolean.TRUE);
-                                    p.setResult(defaultReturnValue(returnType));
-                                    return;
-                                }
-                                if (TtsVoiceSender.shouldConsumeTtsFailureMessage(p.args[0])) {
-                                    LogWriter.log(TAG, "consume #tts failure residue x9." + m.getName()
-                                            + " return=" + returnType.getName());
-                                    sConsumedTtsOriginal.set(Boolean.TRUE);
-                                    p.setResult(defaultReturnValue(returnType));
+                                try {
+                                                                sConsumedTtsOriginal.set(Boolean.FALSE);
+                                                                if (TtsVoiceSender.consumeBlockedOriginal(p.args[0])) {
+                                                                    LogWriter.log(TAG, "consume blocked #tts original x9." + m.getName()
+                                                                            + " return=" + returnType.getName());
+                                                                    sConsumedTtsOriginal.set(Boolean.TRUE);
+                                                                    p.setResult(defaultReturnValue(returnType));
+                                                                    return;
+                                                                }
+                                                                if (TtsVoiceSender.shouldConsumeTtsFailureMessage(p.args[0])) {
+                                                                    LogWriter.log(TAG, "consume #tts failure residue x9." + m.getName()
+                                                                            + " return=" + returnType.getName());
+                                                                    sConsumedTtsOriginal.set(Boolean.TRUE);
+                                                                    p.setResult(defaultReturnValue(returnType));
+                                                                }
+                                } catch (Throwable e) {
+                                    LogWriter.log("MessageHook", "cb err: " + e);
                                 }
                             }
 
                             @Override protected void afterHookedMethod(MethodHookParam p) {
-                                if (Boolean.TRUE.equals(sConsumedTtsOriginal.get())) {
-                                    sConsumedTtsOriginal.remove();
-                                    return;
+                                try {
+                                                                if (Boolean.TRUE.equals(sConsumedTtsOriginal.get())) {
+                                                                    sConsumedTtsOriginal.remove();
+                                                                    return;
+                                                                }
+                                                                sConsumedTtsOriginal.remove();
+                                                                onX9Message(p.args[0], paramCount >= 2 ? p.args[1] : null);
+                                } catch (Throwable e) {
+                                    LogWriter.log("MessageHook", "cb err: " + e);
                                 }
-                                sConsumedTtsOriginal.remove();
-                                onX9Message(p.args[0], paramCount >= 2 ? p.args[1] : null);
                             }
                         });
                     LogWriter.log(TAG, "hooked x9." + m.getName() + "(" + pts.length + ")");

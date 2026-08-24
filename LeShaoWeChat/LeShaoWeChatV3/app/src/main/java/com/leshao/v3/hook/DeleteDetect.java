@@ -70,9 +70,13 @@ public class DeleteDetect {
             XposedBridge.hookAllMethods(contactInfoUI, "D2", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    CrashTrace.t("DEL_D2_IN");
-                    checkContactStatus(param.thisObject);
-                    CrashTrace.t("DEL_D2_OUT");
+                    try {
+                                        CrashTrace.t("DEL_D2_IN");
+                                        checkContactStatus(param.thisObject);
+                                        CrashTrace.t("DEL_D2_OUT");
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
 
@@ -80,9 +84,13 @@ public class DeleteDetect {
                     new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    CrashTrace.t("DEL_RS_IN");
-                    checkContactStatus(param.thisObject);
-                    CrashTrace.t("DEL_RS_OUT");
+                    try {
+                                        CrashTrace.t("DEL_RS_IN");
+                                        checkContactStatus(param.thisObject);
+                                        CrashTrace.t("DEL_RS_OUT");
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
 

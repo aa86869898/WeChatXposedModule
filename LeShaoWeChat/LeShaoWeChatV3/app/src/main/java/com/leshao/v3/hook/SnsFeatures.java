@@ -305,7 +305,11 @@ public class SnsFeatures {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
-                            param.setResult(true);
+                            try {
+                                                        param.setResult(true);
+                            } catch (Throwable e) {
+                                de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                            }
                         }
                     });
                 }
@@ -324,8 +328,12 @@ public class SnsFeatures {
             XposedBridge.hookAllMethods(snsInfo, "getCreateTime", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    long orig = (Long) param.getResult();
-                    if (orig > 0 && timeOffsetMs != 0) param.setResult(orig + timeOffsetMs);
+                    try {
+                                        long orig = (Long) param.getResult();
+                                        if (orig > 0 && timeOffsetMs != 0) param.setResult(orig + timeOffsetMs);
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
         } catch (Throwable t) {}

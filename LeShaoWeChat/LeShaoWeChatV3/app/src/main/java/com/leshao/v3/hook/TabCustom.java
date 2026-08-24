@@ -68,7 +68,11 @@ public class TabCustom {
             XposedBridge.hookAllMethods(mainTab, "d", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    applyTabModifications(param.thisObject);
+                    try {
+                                        applyTabModifications(param.thisObject);
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
             XposedBridge.log("[Tab] MainTabUI.d() Hook完成");
@@ -84,7 +88,11 @@ public class TabCustom {
             XposedBridge.hookAllMethods(mainTab, "n", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    applyTabModifications(param.thisObject);
+                    try {
+                                        applyTabModifications(param.thisObject);
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
         } catch (Throwable t) {}

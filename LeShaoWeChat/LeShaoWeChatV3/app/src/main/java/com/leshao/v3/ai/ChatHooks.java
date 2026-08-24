@@ -168,19 +168,23 @@ public class ChatHooks {
             XposedBridge.hookMethod(m0, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    chatWindowOpen = true;
-                    Activity act = fragmentActivity(param.thisObject);
-                    if (act == null) { LogWriter.log(TAG, "悬浮球: M0 未获取到 Activity"); return; }
-                    chatActivity = act;
-                    setTalker(resolveTalkerFromActivity(act, param.thisObject));
-                    LogWriter.log(TAG, "悬浮球: M0 聊天窗口打开 Activity=" + act.getClass().getSimpleName()
-                            + " talker=" + currentTalker);
-                    MAIN.removeCallbacks(hideBallTask);
-                    MAIN.removeCallbacks(showBallTask);
-                    MAIN.removeCallbacks(closeWindowTask);
-                    MAIN.postDelayed(showBallTask, 300);
-                    final String openedTalker = currentTalker;
-                    MAIN.postDelayed(() -> ReplyFeature.onSessionOpened(openedTalker, lp.classLoader), 2000);
+                    try {
+                                        chatWindowOpen = true;
+                                        Activity act = fragmentActivity(param.thisObject);
+                                        if (act == null) { LogWriter.log(TAG, "悬浮球: M0 未获取到 Activity"); return; }
+                                        chatActivity = act;
+                                        setTalker(resolveTalkerFromActivity(act, param.thisObject));
+                                        LogWriter.log(TAG, "悬浮球: M0 聊天窗口打开 Activity=" + act.getClass().getSimpleName()
+                                                + " talker=" + currentTalker);
+                                        MAIN.removeCallbacks(hideBallTask);
+                                        MAIN.removeCallbacks(showBallTask);
+                                        MAIN.removeCallbacks(closeWindowTask);
+                                        MAIN.postDelayed(showBallTask, 300);
+                                        final String openedTalker = currentTalker;
+                                        MAIN.postDelayed(() -> ReplyFeature.onSessionOpened(openedTalker, lp.classLoader), 2000);
+                    } catch (Throwable e) {
+                        LogWriter.log("ChatHooks", "cb err: " + e);
+                    }
                 }
             });
             LogWriter.log(TAG, "悬浮球: M0 挂载完成");
@@ -189,13 +193,17 @@ public class ChatHooks {
             XposedBridge.hookMethod(o0, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    LogWriter.log(TAG, "悬浮球: O0 聊天窗口关闭, 延迟确认");
-                    MAIN.removeCallbacks(showBallTask);
-                    MAIN.removeCallbacks(closeWindowTask);
-                    MAIN.postDelayed(closeWindowTask, 300);
-                    MAIN.removeCallbacks(hideBallTask);
-                    MAIN.postDelayed(hideBallTask, 800);
-                    chatActivity = null;
+                    try {
+                                        LogWriter.log(TAG, "悬浮球: O0 聊天窗口关闭, 延迟确认");
+                                        MAIN.removeCallbacks(showBallTask);
+                                        MAIN.removeCallbacks(closeWindowTask);
+                                        MAIN.postDelayed(closeWindowTask, 300);
+                                        MAIN.removeCallbacks(hideBallTask);
+                                        MAIN.postDelayed(hideBallTask, 800);
+                                        chatActivity = null;
+                    } catch (Throwable e) {
+                        LogWriter.log("ChatHooks", "cb err: " + e);
+                    }
                 }
             });
             LogWriter.log(TAG, "悬浮球: O0 挂载完成");

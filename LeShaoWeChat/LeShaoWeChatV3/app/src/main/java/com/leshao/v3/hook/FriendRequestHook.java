@@ -82,19 +82,27 @@ public class FriendRequestHook {
             XposedBridge.hookAllMethods(sayHiUI, "N6", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    XposedBridge.log("[FriendReq] 验证已通过");
+                    try {
+                                        XposedBridge.log("[FriendReq] 验证已通过");
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
 
             XposedBridge.hookAllMethods(sayHiUI, "onSceneEnd", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    int errType = (Integer) param.args[0];
-                    int errCode = (Integer) param.args[1];
-                    if (errType == 0 && errCode == 0) {
-                        XposedBridge.log("[FriendReq] 好友添加成功");
-                    } else {
-                        XposedBridge.log("[FriendReq] 添加失败: " + param.args[2]);
+                    try {
+                                        int errType = (Integer) param.args[0];
+                                        int errCode = (Integer) param.args[1];
+                                        if (errType == 0 && errCode == 0) {
+                                            XposedBridge.log("[FriendReq] 好友添加成功");
+                                        } else {
+                                            XposedBridge.log("[FriendReq] 添加失败: " + param.args[2]);
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });
@@ -112,13 +120,17 @@ public class FriendRequestHook {
             XposedBridge.hookAllMethods(e01u, "q7", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    String type = (String) param.args[0];
-                    if ("addcontact".equals(type)) {
-                        java.util.Map map = (java.util.Map) param.args[1];
-                        if (map != null) {
-                            String content = (String) map.get(".sysmsg.addcontact.content");
-                            XposedBridge.log("[FriendReq] 收到好友申请: " + content);
-                        }
+                    try {
+                                        String type = (String) param.args[0];
+                                        if ("addcontact".equals(type)) {
+                                            java.util.Map map = (java.util.Map) param.args[1];
+                                            if (map != null) {
+                                                String content = (String) map.get(".sysmsg.addcontact.content");
+                                                XposedBridge.log("[FriendReq] 收到好友申请: " + content);
+                                            }
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });

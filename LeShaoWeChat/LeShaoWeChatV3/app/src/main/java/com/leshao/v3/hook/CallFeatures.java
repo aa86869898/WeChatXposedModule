@@ -105,7 +105,11 @@ public class CallFeatures {
             XposedBridge.hookAllMethods(voipModel, "d", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    stopRecording();
+                    try {
+                                        stopRecording();
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
             Logger.i("[CallRecord] model.c0.d() Hook完成");

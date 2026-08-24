@@ -46,7 +46,7 @@ public class ChatGroupHook {
         startSubSystems();
         if (isReady()) {
             restoreShadowLabels();
-            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> ChatGroupUiInjector.refreshTagData());
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { try { ChatGroupUiInjector.refreshTagData(); } catch (Throwable e) { LogWriter.log(TAG, "refreshTagData err: " + e); } });
             ContactRepository.loadAsync(null);
         } else {
             scheduleRetry(500);
@@ -65,7 +65,7 @@ public class ChatGroupHook {
                 if (isReady()) {
                     sRetryCount = 0;
                     restoreShadowLabels();
-                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> ChatGroupUiInjector.refreshTagData());
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { try { ChatGroupUiInjector.refreshTagData(); } catch (Throwable e) { LogWriter.log(TAG, "refreshTagData err: " + e); } });
                     ContactRepository.loadAsync(null);
                 } else if (sRetryCount < 6) {
                     scheduleRetry(delayMs + 300);
@@ -126,11 +126,19 @@ public class ChatGroupHook {
             XposedBridge.hookAllMethods(g4, "d", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam p) {
-                    LogWriter.log(TAG, "标签删除: ID=" + p.args[0]);
+                    try {
+                                        LogWriter.log(TAG, "标签删除: ID=" + p.args[0]);
+                    } catch (Throwable e) {
+                        LogWriter.log("ChatGroupHook", "cb err: " + e);
+                    }
                 }
                 @Override
                 protected void afterHookedMethod(MethodHookParam p) {
-                    if ((boolean) p.getResult()) EventBus.post(EventBus.Event.LABEL_DELETED, p.args[0]);
+                    try {
+                                        if ((boolean) p.getResult()) EventBus.post(EventBus.Event.LABEL_DELETED, p.args[0]);
+                    } catch (Throwable e) {
+                        LogWriter.log("ChatGroupHook", "cb err: " + e);
+                    }
                 }
             });
             XposedBridge.hookAllMethods(g4, "update", new XC_MethodHook() {
@@ -156,16 +164,16 @@ public class ChatGroupHook {
             LabelSyncHook.install(sClassLoader);
 
             EventBus.subscribe(EventBus.Event.LABEL_CREATED, (event, data) -> {
-                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> ChatGroupUiInjector.refreshTagData());
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { try { ChatGroupUiInjector.refreshTagData(); } catch (Throwable e) { LogWriter.log(TAG, "refreshTagData err: " + e); } });
             });
             EventBus.subscribe(EventBus.Event.LABEL_DELETED, (event, data) -> {
-                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> ChatGroupUiInjector.refreshTagData());
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { try { ChatGroupUiInjector.refreshTagData(); } catch (Throwable e) { LogWriter.log(TAG, "refreshTagData err: " + e); } });
             });
             EventBus.subscribe(EventBus.Event.LABEL_RENAMED, (event, data) -> {
-                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> ChatGroupUiInjector.refreshTagData());
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { try { ChatGroupUiInjector.refreshTagData(); } catch (Throwable e) { LogWriter.log(TAG, "refreshTagData err: " + e); } });
             });
             EventBus.subscribe(EventBus.Event.LABELS_SYNCED, (event, data) -> {
-                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> ChatGroupUiInjector.refreshTagData());
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { try { ChatGroupUiInjector.refreshTagData(); } catch (Throwable e) { LogWriter.log(TAG, "refreshTagData err: " + e); } });
             });
 
             LogWriter.log(TAG, "7个实时Hook已安装 (含4个UI刷新订阅)");

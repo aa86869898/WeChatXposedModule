@@ -84,7 +84,11 @@ public class CornerMenu {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param)
                             throws Throwable {
-                        inject(param.thisObject, cl);
+                                try {
+                                                        inject(param.thisObject, cl);
+                                } catch (Throwable e) {
+                                    LogWriter.log("CornerMenu", "cb err: " + e);
+                                }
                     }
                 });
             LogWriter.log(TAG, "hook: HomeUI.m() hooked");
@@ -96,11 +100,15 @@ public class CornerMenu {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param)
                             throws Throwable {
-                        Object homeUI = XposedHelpers.getObjectField(
-                            param.thisObject, "i");
-                        if (homeUI != null) {
-                            inject(homeUI, cl);
-                        }
+                                try {
+                                                        Object homeUI = XposedHelpers.getObjectField(
+                                                            param.thisObject, "i");
+                                                        if (homeUI != null) {
+                                                            inject(homeUI, cl);
+                                                        }
+                                } catch (Throwable e) {
+                                    LogWriter.log("CornerMenu", "cb err: " + e);
+                                }
                     }
                 });
             LogWriter.log(TAG, "hook: LauncherUI.onResume hooked OK");

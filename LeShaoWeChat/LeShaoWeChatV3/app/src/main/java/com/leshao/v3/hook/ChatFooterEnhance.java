@@ -52,7 +52,11 @@ public class ChatFooterEnhance {
                     new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    param.setResult("0");
+                    try {
+                                        param.setResult("0");
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
             Logger.i("[Footer] 字数限制已解除 (返回'0')");
@@ -61,8 +65,12 @@ public class ChatFooterEnhance {
                     new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    android.view.View root = (android.view.View) param.thisObject;
-                    removeTextLimit(root);
+                    try {
+                                        android.view.View root = (android.view.View) param.thisObject;
+                                        removeTextLimit(root);
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
 
@@ -107,8 +115,12 @@ public class ChatFooterEnhance {
                     new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    android.view.View root = (android.view.View) param.thisObject;
-                    setEditTextMaxLines(root);
+                    try {
+                                        android.view.View root = (android.view.View) param.thisObject;
+                                        setEditTextMaxLines(root);
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
         } catch (Throwable t) {}

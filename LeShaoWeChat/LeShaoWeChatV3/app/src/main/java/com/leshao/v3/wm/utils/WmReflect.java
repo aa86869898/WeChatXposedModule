@@ -92,7 +92,9 @@ public class WmReflect {
     public static void sendTextMsg(ClassLoader cl, String content, String toUser) {
         Object m = getSendMsgMgr(cl);
         if (m == null) return;
-        try { XposedHelpers.callMethod(m, "qj", content, toUser); } catch (Exception ignored) {}
+        try { XposedHelpers.callMethod(m, "qj", content, toUser); } catch (Exception e) {
+            LogWriter.log("WmReflect", "sendTextMsg err: " + e.getMessage());
+        }
     }
 
     public static void broadcastRooms(ClassLoader cl, List<String> rooms, String content) {

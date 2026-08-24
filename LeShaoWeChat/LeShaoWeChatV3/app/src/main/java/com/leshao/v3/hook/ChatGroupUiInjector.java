@@ -99,7 +99,11 @@ public class ChatGroupUiInjector {
                         logBoth("MainUI.v err: " + e.getMessage());
                     }
                     new Handler(Looper.getMainLooper()).post(() -> {
-                        injectHeaderToConversationList();
+                        try {
+                            injectHeaderToConversationList();
+                        } catch (Throwable e) {
+                            logBoth("injectHeaderToConversationList err: " + e.getMessage());
+                        }
                     });
                 }
             });
@@ -112,10 +116,18 @@ public class ChatGroupUiInjector {
                 XposedBridge.hookMethod(lrMethod, new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam p) {
-                        sCurrentActivity = (Activity) p.thisObject;
-                        new Handler(Looper.getMainLooper()).post(() -> {
-                            injectHeaderToConversationList();
-                        });
+                        try {
+                                                sCurrentActivity = (Activity) p.thisObject;
+                                                new Handler(Looper.getMainLooper()).post(() -> {
+                                                    try {
+                                                        injectHeaderToConversationList();
+                                                    } catch (Throwable e) {
+                                                        logBoth("LauncherUI injectHeader err: " + e.getMessage());
+                                                    }
+                                                });
+                        } catch (Throwable e) {
+                            LogWriter.log("ChatGroupUiInjector", "cb err: " + e);
+                        }
                     }
                 });
                 logBoth("LauncherUI.onResume hooked via hookMethod");

@@ -106,10 +106,14 @@ public class TypingIndicator {
             XposedBridge.hookAllMethods(chattingUI, "setMMTitle", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    if (!isTyping) return;
-                    String title = (String) param.args[0];
-                    if (title != null && !title.contains("正在输入")) {
-                        param.args[0] = title + " (正在输入...)";
+                    try {
+                                        if (!isTyping) return;
+                                        String title = (String) param.args[0];
+                                        if (title != null && !title.contains("正在输入")) {
+                                            param.args[0] = title + " (正在输入...)";
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });

@@ -291,9 +291,13 @@ public class AntiRecallHook {
             XposedBridge.hookAllMethods(bd0s, "invokeSuspend", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                    if (!sEnabled) return;
-                    param.setResult(null);
-                    LogWriter.log(TAG, "[协程] 阻止撤回成功: bd0.s.invokeSuspend()");
+                    try {
+                                        if (!sEnabled) return;
+                                        param.setResult(null);
+                                        LogWriter.log(TAG, "[协程] 阻止撤回成功: bd0.s.invokeSuspend()");
+                    } catch (Throwable e) {
+                        LogWriter.log("AntiRecallHook", "cb err: " + e);
+                    }
                 }
             });
             LogWriter.log(TAG, "[协程] Hooked: bd0.s.invokeSuspend()");

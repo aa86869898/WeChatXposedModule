@@ -284,30 +284,34 @@ public final class FakeAddSource {
             XposedBridge.hookAllConstructors(m3, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    StringBuilder sb = new StringBuilder("m3构造[");
-                    Object[] args = param.args;
-                    sb.append(args != null ? args.length : 0).append("]={");
-                    if (args != null) {
-                        for (int i = 0; i < args.length; i++) {
-                            if (i > 0) sb.append(", ");
-                            sb.append(i).append(":");
-                            if (args[i] == null) {
-                                sb.append("null");
-                            } else {
-                                sb.append(args[i].getClass().getSimpleName());
-                                if (args[i] instanceof Integer) sb.append("=").append(args[i]);
-                                else if (args[i] instanceof String) sb.append("=\"").append(args[i]).append("\"");
-                                else if (args[i] instanceof java.util.List) {
-                                    java.util.List<?> l = (java.util.List<?>) args[i];
-                                    sb.append("[size=").append(l.size());
-                                    if (!l.isEmpty()) sb.append(",0=").append(l.get(0));
-                                    sb.append("]");
-                                }
-                            }
-                        }
+                    try {
+                                        StringBuilder sb = new StringBuilder("m3构造[");
+                                        Object[] args = param.args;
+                                        sb.append(args != null ? args.length : 0).append("]={");
+                                        if (args != null) {
+                                            for (int i = 0; i < args.length; i++) {
+                                                if (i > 0) sb.append(", ");
+                                                sb.append(i).append(":");
+                                                if (args[i] == null) {
+                                                    sb.append("null");
+                                                } else {
+                                                    sb.append(args[i].getClass().getSimpleName());
+                                                    if (args[i] instanceof Integer) sb.append("=").append(args[i]);
+                                                    else if (args[i] instanceof String) sb.append("=\"").append(args[i]).append("\"");
+                                                    else if (args[i] instanceof java.util.List) {
+                                                        java.util.List<?> l = (java.util.List<?>) args[i];
+                                                        sb.append("[size=").append(l.size());
+                                                        if (!l.isEmpty()) sb.append(",0=").append(l.get(0));
+                                                        sb.append("]");
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        sb.append("}");
+                                        LogWriter.log(TAG, sb.toString());
+                    } catch (Throwable e) {
+                        LogWriter.log("FakeAddSource", "cb err: " + e);
                     }
-                    sb.append("}");
-                    LogWriter.log(TAG, sb.toString());
                 }
             });
             LogWriter.log(TAG, "m3 构造器追踪 Hook 注册成功");
@@ -321,13 +325,21 @@ public final class FakeAddSource {
             XposedBridge.hookAllMethods(sayHiUI, "onCreate", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    LogWriter.log(TAG, "SayHiSnsPermUI.onCreate 触发");
+                    try {
+                                        LogWriter.log(TAG, "SayHiSnsPermUI.onCreate 触发");
+                    } catch (Throwable e) {
+                        LogWriter.log("FakeAddSource", "cb err: " + e);
+                    }
                 }
             });
             XposedBridge.hookAllMethods(sayHiUI, "onDestroy", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    LogWriter.log(TAG, "SayHiSnsPermUI.onDestroy 触发 — 验证页面关闭");
+                    try {
+                                        LogWriter.log(TAG, "SayHiSnsPermUI.onDestroy 触发 — 验证页面关闭");
+                    } catch (Throwable e) {
+                        LogWriter.log("FakeAddSource", "cb err: " + e);
+                    }
                 }
             });
             XposedBridge.hookAllMethods(sayHiUI, "onSceneEnd", new XC_MethodHook() {
@@ -362,7 +374,11 @@ public final class FakeAddSource {
                         XposedBridge.hookMethod(m, new XC_MethodHook() {
                             @Override
                             protected void beforeHookedMethod(MethodHookParam p) {
-                                LogWriter.log(TAG, "SayHiSnsPermUI." + methodName + "() 触发");
+                                try {
+                                                                LogWriter.log(TAG, "SayHiSnsPermUI." + methodName + "() 触发");
+                                } catch (Throwable e) {
+                                    LogWriter.log("FakeAddSource", "cb err: " + e);
+                                }
                             }
                         });
                     }
@@ -380,7 +396,11 @@ public final class FakeAddSource {
             XposedBridge.hookAllMethods(sayHiUI, "onCreate", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    LogWriter.log(TAG, "SayHiEditUI.onCreate 触发（兜底）");
+                    try {
+                                        LogWriter.log(TAG, "SayHiEditUI.onCreate 触发（兜底）");
+                    } catch (Throwable e) {
+                        LogWriter.log("FakeAddSource", "cb err: " + e);
+                    }
                 }
             });
             LogWriter.log(TAG, "SayHiEditUI 兜底 Hook 注册成功");
@@ -405,19 +425,23 @@ public final class FakeAddSource {
                             XposedBridge.hookAllConstructors(c, new XC_MethodHook() {
                                 @Override
                                 protected void beforeHookedMethod(MethodHookParam param) {
-                                    StringBuilder sb = new StringBuilder(c.getSimpleName() + " 构造: args[");
-                                    if (param.args != null) {
-                                        sb.append(param.args.length).append("]={");
-                                        for (int i = 0; i < param.args.length; i++) {
-                                            if (i > 0) sb.append(",");
-                                            sb.append(i).append(":").append(param.args[i] == null ? "null" : param.args[i].getClass().getSimpleName());
-                                            if (param.args[i] instanceof String) sb.append("=\"").append(param.args[i]).append("\"");
-                                        }
-                                        sb.append("}");
-                                    } else {
-                                        sb.append("0]={}");
+                                    try {
+                                                                        StringBuilder sb = new StringBuilder(c.getSimpleName() + " 构造: args[");
+                                                                        if (param.args != null) {
+                                                                            sb.append(param.args.length).append("]={");
+                                                                            for (int i = 0; i < param.args.length; i++) {
+                                                                                if (i > 0) sb.append(",");
+                                                                                sb.append(i).append(":").append(param.args[i] == null ? "null" : param.args[i].getClass().getSimpleName());
+                                                                                if (param.args[i] instanceof String) sb.append("=\"").append(param.args[i]).append("\"");
+                                                                            }
+                                                                            sb.append("}");
+                                                                        } else {
+                                                                            sb.append("0]={}");
+                                                                        }
+                                                                        LogWriter.log(TAG, "[构造器 追踪] " + sb.toString());
+                                    } catch (Throwable e) {
+                                        LogWriter.log("FakeAddSource", "cb err: " + e);
                                     }
-                                    LogWriter.log(TAG, "[构造器 追踪] " + sb.toString());
                                 }
                             });
                         } catch (NoClassDefFoundError ignored) {
@@ -437,7 +461,11 @@ public final class FakeAddSource {
             XposedBridge.hookAllMethods(contactInfoUI, "D2", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    LogWriter.log(TAG, "ContactInfoUI.D2() 联系人详情已加载");
+                    try {
+                                        LogWriter.log(TAG, "ContactInfoUI.D2() 联系人详情已加载");
+                    } catch (Throwable e) {
+                        LogWriter.log("FakeAddSource", "cb err: " + e);
+                    }
                 }
             });
             LogWriter.log(TAG, "ContactInfoUI.D2 追踪 Hook 注册成功");

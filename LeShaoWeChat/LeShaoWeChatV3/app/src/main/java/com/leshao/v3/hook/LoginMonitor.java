@@ -56,21 +56,25 @@ public class LoginMonitor {
                     new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    loginTimestamp = System.currentTimeMillis();
-                    String fingerprint = collectDeviceFingerprint();
-                    String lastFingerprint = readLastFingerprint();
+                    try {
+                                        loginTimestamp = System.currentTimeMillis();
+                                        String fingerprint = collectDeviceFingerprint();
+                                        String lastFingerprint = readLastFingerprint();
 
-                    if (lastFingerprint != null && !lastFingerprint.isEmpty()
-                            && !lastFingerprint.equals(fingerprint)) {
-                        String alert = "检测到新设备登录!\n"
-                                + "上次: " + lastFingerprint + "\n"
-                                + "本次: " + fingerprint;
-                        Logger.w("[LoginMonitor] " + alert);
-                        showAlert(alert);
+                                        if (lastFingerprint != null && !lastFingerprint.isEmpty()
+                                                && !lastFingerprint.equals(fingerprint)) {
+                                            String alert = "检测到新设备登录!\n"
+                                                    + "上次: " + lastFingerprint + "\n"
+                                                    + "本次: " + fingerprint;
+                                            Logger.w("[LoginMonitor] " + alert);
+                                            showAlert(alert);
+                                        }
+
+                                        saveFingerprint(fingerprint);
+                                        writeLog("LOGIN", fingerprint);
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
-
-                    saveFingerprint(fingerprint);
-                    writeLog("LOGIN", fingerprint);
                 }
             });
             Logger.i("[LoginMonitor] LauncherUI.onCreate Hook完成");
@@ -88,8 +92,12 @@ public class LoginMonitor {
                     new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    long duration = (System.currentTimeMillis() - loginTimestamp) / 1000;
-                    writeLog("LOGOUT", "在线时长: " + formatDuration(duration));
+                    try {
+                                        long duration = (System.currentTimeMillis() - loginTimestamp) / 1000;
+                                        writeLog("LOGOUT", "在线时长: " + formatDuration(duration));
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
         } catch (Throwable t) {}

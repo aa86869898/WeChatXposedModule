@@ -49,13 +49,14 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
    - 日志文件路径: /data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt
    - 日志过滤 TAG: LeShaoV3
 
-### 自动推送 Git
-- Date: 2026-07-23
-- Context: 用户要求每次改完代码编译成功后自动提交并推送
+### 代码提交时机（用户确认后才提交）
+- Date: 2026-08-14
+- Context: 用户明确表示：未经允许不要自动提交代码，等问题解决后由他指示再提交
 - Category: 工作流协作
 - Instructions:
+  - 默认不自动执行 git commit / git push，除非用户明确说"提交"、"推送"等指令
+  - 用户问题解决后会主动让我提交，此时才执行 commit + push
   - 远程仓库: https://github.com/aa86869898/WeChatXposedModule.git
-  - 推送分支: 本地 master → 远程 main (强制推送)
-  - 每次代码修改编译成功后，自动执行 git add + commit + push
-  - APK 已解除 gitignore (!**/build/outputs/apk/debug/*.apk)，会随源码一起推送
-  - 推送命令: `git push` (推送到 master 分支)
+  - 提交时只 add 本次真实改动的文件，禁止使用 `git add -A`（会把历史遗留 APK、临时文件一并提交）
+  - APK 已解除 gitignore (!**/build/outputs/apk/debug/*.apk)，可随源码一起推送
+  - 推送命令: `git push`（本地 master → 远程 master）

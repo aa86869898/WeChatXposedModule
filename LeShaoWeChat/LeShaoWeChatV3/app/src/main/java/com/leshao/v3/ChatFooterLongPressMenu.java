@@ -156,7 +156,11 @@ public class ChatFooterLongPressMenu {
             XposedBridge.hookMethod(m, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam p) {
-                    onActivityResultHook(p);
+                    try {
+                                        onActivityResultHook(p);
+                    } catch (Throwable e) {
+                        LogWriter.log("CFLPMenu", "cb err: " + e);
+                    }
                 }
             });
             LogWriter.log(TAG, "onActivityResult hooked on " + c.getSimpleName());
@@ -266,10 +270,14 @@ public class ChatFooterLongPressMenu {
             XposedBridge.hookMethod(method, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam p) {
-                    String s = (String) p.args[1];
-                    if ("chat_left_side_audio_btn".equals(s) || "chat_left_side_keyboard_btn".equals(s)) {
-                        sLastChatFooter = p.thisObject;
-                        inject((View) p.args[0]);
+                    try {
+                                        String s = (String) p.args[1];
+                                        if ("chat_left_side_audio_btn".equals(s) || "chat_left_side_keyboard_btn".equals(s)) {
+                                            sLastChatFooter = p.thisObject;
+                                            inject((View) p.args[0]);
+                                        }
+                    } catch (Throwable e) {
+                        LogWriter.log("CFLPMenu", "cb err: " + e);
                     }
                 }
             });

@@ -88,6 +88,7 @@ public class WmChatHook {
     private static String sPendingVideoDstPath;
     private static long sPendingVideoSize;
     private static volatile boolean sMassSendRunning;
+    private static volatile Object sS5Instance;
 
     public static void showTitleBtn(Activity act, ClassLoader cl, String user) {
         dismissTitleBtn();
@@ -2898,7 +2899,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v814 d3q+VFS+CDN+thumb build=v430 2026-08-24");
+            LogWriter.log(TAG, "initOnAppStart OK v814 kl5.s5.Dj+thumb build=v430 2026-08-24");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -2923,6 +2924,12 @@ public class WmChatHook {
                     LogWriter.log(TAG, "kl5.s5 " + sb.toString());
                 }
             }
+            XposedBridge.hookAllConstructors(s5, new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    sS5Instance = p.thisObject;
+                    LogWriter.log(TAG, "kl5.s5 instance captured");
+                }
+            });
             XposedBridge.hookAllMethods(s5, "Cj", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     LogWriter.log(TAG, "kl5.s5.Cj ENTER this=" + (p.thisObject != null ? p.thisObject.getClass().getSimpleName() : "null"));
@@ -3644,36 +3651,7 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
         final Throwable[] sentError = {null};
         sH.post(() -> {
             try {
-                String newFilename = null;
-                try {
-                    Class<?> c3Class = XposedHelpers.findClass("v21.c3", sCL);
-                    newFilename = (String) XposedHelpers.callStaticMethod(c3Class, "a", finalToUser);
-                    LogWriter.log(TAG, "v814 c3.a newFilename=" + newFilename);
-                } catch (Throwable tc) {
-                    LogWriter.log(TAG, "v814 c3.a fail: " + tc.getMessage());
-                    newFilename = new java.text.SimpleDateFormat("yyMMddHHmmss", java.util.Locale.getDefault())
-                            .format(new java.util.Date()) + System.currentTimeMillis() % 1000;
-                    LogWriter.log(TAG, "v814 fallback newFilename=" + newFilename);
-                }
-                if (newFilename == null) {
-                    sentError[0] = new RuntimeException("unable to generate filename");
-                    return;
-                }
-                sPendingVideoDstPath = newFilename;
-                Class<?> u0Class = XposedHelpers.findClass("qh3.u0", sCL);
-                Object u0Service = XposedHelpers.callStaticMethod(
-                        XposedHelpers.findClass("pa5.n0", sCL), "c", u0Class);
-                Class<?> f0Class = XposedHelpers.findClass("in5.f0", sCL);
-                Object f0_s = XposedHelpers.getStaticObjectField(f0Class, "s");
-                String vfsVideoPath = (String) XposedHelpers.callMethod(
-                        u0Service, "Fj", null, f0_s, newFilename, true);
-                String vfsThumbPath = (String) XposedHelpers.callMethod(
-                        u0Service, "Ij", null, newFilename, true);
-                LogWriter.log(TAG, "v814 vfsVideo=" + vfsVideoPath + " vfsThumb=" + vfsThumbPath);
-                Class<?> w6Class = XposedHelpers.findClass("com.tencent.mm.vfs.w6", sCL);
-                XposedHelpers.callStaticMethod(w6Class, "d", videoPath, vfsVideoPath, false);
-                LogWriter.log(TAG, "v814 w6.d video copy ok");
-                java.io.File tempThumb = new java.io.File(sCtx.getCacheDir(), "thumb_temp_" + System.currentTimeMillis() + ".jpg");
+                java.io.File tempThumb = new java.io.File(sCtx.getCacheDir(), "thumb_" + System.currentTimeMillis() + ".jpg");
                 android.media.MediaMetadataRetriever retriever = new android.media.MediaMetadataRetriever();
                 try {
                     retriever.setDataSource(videoPath);
@@ -3685,13 +3663,19 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 } finally {
                     retriever.release();
                 }
-                XposedHelpers.callStaticMethod(w6Class, "d", tempThumb.getAbsolutePath(), vfsThumbPath, false);
-                tempThumb.delete();
-                LogWriter.log(TAG, "v814 thumb w6.d to " + vfsThumbPath);
-                Class<?> d3Class = XposedHelpers.findClass("v21.d3", sCL);
-                Class<?> s5Class = XposedHelpers.findClass("kl5.s5", sCL);
-                XposedHelpers.callStaticMethod(s5Class, "Dj",
-                        sCtx, finalToUser, videoPath, newFilename,
+                LogWriter.log(TAG, "v814 thumb generated: " + tempThumb.getAbsolutePath());
+
+                sPendingVideoPath = null;
+                sPendingVideoToUser = null;
+
+                if (sS5Instance == null) {
+                    LogWriter.log(TAG, "v814 sS5Instance null");
+                    sentError[0] = new RuntimeException("kl5.s5 instance not available");
+                    return;
+                }
+
+                XposedHelpers.callMethod(sS5Instance, "Dj",
+                        sCtx, finalToUser, videoPath, tempThumb.getAbsolutePath(),
                         duration, 0, null, false, false,
                         "", "", null, null, "", null);
                 LogWriter.log(TAG, "v814 kl5.s5.Dj called ok");

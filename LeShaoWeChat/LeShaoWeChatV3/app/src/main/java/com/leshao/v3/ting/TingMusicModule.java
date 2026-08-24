@@ -98,22 +98,30 @@ public class TingMusicModule {
             Method m0 = frag.getDeclaredMethod("M0");
             XposedBridge.hookMethod(m0, new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
-                    Activity act = fragmentActivity(p.thisObject);
-                    if (act == null) { LogWriter.log(TAG, "M0 未获取到 Activity"); return; }
-                    currentChatting = act;
-                    String user = WmReflect.getChatUserFromFragment(p.thisObject);
-                    if (user == null || user.isEmpty()) user = WmReflect.getCurrentChatUser(act.getIntent());
-                    currentUser = user;
-                    LogWriter.log(TAG, "聊天窗口打开 user=" + currentUser);
+                    try {
+                                        Activity act = fragmentActivity(p.thisObject);
+                                        if (act == null) { LogWriter.log(TAG, "M0 未获取到 Activity"); return; }
+                                        currentChatting = act;
+                                        String user = WmReflect.getChatUserFromFragment(p.thisObject);
+                                        if (user == null || user.isEmpty()) user = WmReflect.getCurrentChatUser(act.getIntent());
+                                        currentUser = user;
+                                        LogWriter.log(TAG, "聊天窗口打开 user=" + currentUser);
+                    } catch (Throwable e) {
+                        LogWriter.log("TingMusic", "cb err: " + e);
+                    }
                 }
             });
             Method o0 = frag.getDeclaredMethod("O0");
             XposedBridge.hookMethod(o0, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    LogWriter.log(TAG, "聊天窗口关闭");
-                    removeBall();
-                    hideSearchPanel();
-                    currentChatting = null;
+                    try {
+                                        LogWriter.log(TAG, "聊天窗口关闭");
+                                        removeBall();
+                                        hideSearchPanel();
+                                        currentChatting = null;
+                    } catch (Throwable e) {
+                        LogWriter.log("TingMusic", "cb err: " + e);
+                    }
                 }
             });
             LogWriter.log(TAG, "聊天窗口 M0/O0 hook 完成");
@@ -1609,8 +1617,12 @@ public class TingMusicModule {
                     try {
                         XposedBridge.hookMethod(m, new XC_MethodHook() {
                             @Override protected void afterHookedMethod(MethodHookParam p) {
-                                LogWriter.log(TAG, "[AudioFocus] requestAudioFocus 触发, result=" + p.getResult());
-                                dumpAnchorStack("AudioFocus");
+                                try {
+                                                                LogWriter.log(TAG, "[AudioFocus] requestAudioFocus 触发, result=" + p.getResult());
+                                                                dumpAnchorStack("AudioFocus");
+                                } catch (Throwable e) {
+                                    LogWriter.log("TingMusic", "cb err: " + e);
+                                }
                             }
                         });
                     } catch (Throwable ignored) {}
@@ -1623,8 +1635,12 @@ public class TingMusicModule {
             Method play = at.getDeclaredMethod("play");
             XposedBridge.hookMethod(play, new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
-                    LogWriter.log(TAG, "[AudioTrack] play 触发");
-                    dumpAnchorStack("AudioTrack");
+                    try {
+                                        LogWriter.log(TAG, "[AudioTrack] play 触发");
+                                        dumpAnchorStack("AudioTrack");
+                    } catch (Throwable e) {
+                        LogWriter.log("TingMusic", "cb err: " + e);
+                    }
                 }
             });
             LogWriter.log(TAG, "[AudioTrack] play 已 hook");
@@ -1740,7 +1756,11 @@ public class TingMusicModule {
                 try {
                     XposedBridge.hookMethod(c, new XC_MethodHook() {
                         @Override protected void afterHookedMethod(MethodHookParam p) {
-                            for (Object a : p.args) if (a instanceof String) logUrl((String) a);
+                            try {
+                                                        for (Object a : p.args) if (a instanceof String) logUrl((String) a);
+                            } catch (Throwable e) {
+                                LogWriter.log("TingMusic", "cb err: " + e);
+                            }
                         }
                     });
                 } catch (Throwable ignored) {}
@@ -1757,7 +1777,11 @@ public class TingMusicModule {
                     try {
                         XposedBridge.hookMethod(m, new XC_MethodHook() {
                             @Override protected void afterHookedMethod(MethodHookParam p) {
-                                for (Object a : p.args) if (a instanceof String) logUrl((String) a);
+                                try {
+                                                                for (Object a : p.args) if (a instanceof String) logUrl((String) a);
+                                } catch (Throwable e) {
+                                    LogWriter.log("TingMusic", "cb err: " + e);
+                                }
                             }
                         });
                         hooked++;
@@ -1794,9 +1818,13 @@ public class TingMusicModule {
                 try {
                     XposedBridge.hookMethod(c, new XC_MethodHook() {
                         @Override protected void afterHookedMethod(MethodHookParam p) {
-                            for (Object a : p.args) {
-                                if (a instanceof String) logFile((String) a);
-                                else if (a instanceof File) logFile(((File) a).getAbsolutePath());
+                            try {
+                                                        for (Object a : p.args) {
+                                                            if (a instanceof String) logFile((String) a);
+                                                            else if (a instanceof File) logFile(((File) a).getAbsolutePath());
+                                                        }
+                            } catch (Throwable e) {
+                                LogWriter.log("TingMusic", "cb err: " + e);
                             }
                         }
                     });

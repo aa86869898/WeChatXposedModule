@@ -142,12 +142,16 @@ public class ConvPrivacy {
             XposedBridge.hookAllMethods(convList, "c", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    if (privacyLevel == 1) {
-                        String digest = (String) param.getResult();
-                        if (digest != null && !digest.isEmpty()
-                                && !digest.equals("[新消息]")) {
-                            param.setResult("[新消息]");
-                        }
+                    try {
+                                        if (privacyLevel == 1) {
+                                            String digest = (String) param.getResult();
+                                            if (digest != null && !digest.isEmpty()
+                                                    && !digest.equals("[新消息]")) {
+                                                param.setResult("[新消息]");
+                                            }
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });

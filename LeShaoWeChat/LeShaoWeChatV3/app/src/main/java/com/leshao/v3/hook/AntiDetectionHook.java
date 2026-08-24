@@ -70,7 +70,11 @@ public class AntiDetectionHook {
             XposedBridge.hookAllMethods(h3, "a", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    param.setResult(Boolean.FALSE);
+                    try {
+                                        param.setResult(Boolean.FALSE);
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
             XposedBridge.log("[AntiDetect] h3.a() check handled");
@@ -86,7 +90,11 @@ public class AntiDetectionHook {
             XposedBridge.hookAllMethods(h3, "c", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    param.setResult(null);
+                    try {
+                                        param.setResult(null);
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
             XposedBridge.log("[AntiDetect] h3.c() crash protect handled");
@@ -103,9 +111,13 @@ public class AntiDetectionHook {
             XposedBridge.hookMethod(getPropMethod, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    String key = (String) param.args[0];
-                    if (key != null && (key.contains("xposed") || key.contains("Xposed"))) {
-                        param.setResult(null);
+                    try {
+                                        String key = (String) param.args[0];
+                                        if (key != null && (key.contains("xposed") || key.contains("Xposed"))) {
+                                            param.setResult(null);
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });
@@ -117,10 +129,14 @@ public class AntiDetectionHook {
             XposedBridge.hookMethod(getPropsMethod, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    java.util.Properties props = (java.util.Properties) param.getResult();
-                    if (props != null) {
-                        props.remove("xposed.version");
-                        props.remove("xposed.lib");
+                    try {
+                                        java.util.Properties props = (java.util.Properties) param.getResult();
+                                        if (props != null) {
+                                            props.remove("xposed.version");
+                                            props.remove("xposed.lib");
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });
@@ -137,11 +153,15 @@ public class AntiDetectionHook {
             XposedBridge.hookMethod(loadClassMethod, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    String className = (String) param.args[0];
-                    if (className != null && (
-                            className.contains(XP_PREFIX + "." + XP_SUFFIX) ||
-                            className.contains("org.meowcat") ||
-                            className.contains("io.github.lsposed"))) {
+                    try {
+                                        String className = (String) param.args[0];
+                                        if (className != null && (
+                                                className.contains(XP_PREFIX + "." + XP_SUFFIX) ||
+                                                className.contains("org.meowcat") ||
+                                                className.contains("io.github.lsposed"))) {
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });
@@ -156,19 +176,23 @@ public class AntiDetectionHook {
             XposedBridge.hookMethod(getStackTrace, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    StackTraceElement[] stack = (StackTraceElement[]) param.getResult();
-                    if (stack == null) return;
+                    try {
+                                        StackTraceElement[] stack = (StackTraceElement[]) param.getResult();
+                                        if (stack == null) return;
                     
-                    java.util.List<StackTraceElement> filtered = new java.util.ArrayList<>();
-                    for (StackTraceElement e : stack) {
-                        String cls = e.getClassName();
-                        if (cls == null || (!cls.contains(XP_PREFIX + "." + XP_SUFFIX) 
-                                && !cls.contains("XposedBridge"))) {
-                            filtered.add(e);
-                        }
-                    }
-                    if (filtered.size() != stack.length) {
-                        param.setResult(filtered.toArray(new StackTraceElement[0]));
+                                        java.util.List<StackTraceElement> filtered = new java.util.ArrayList<>();
+                                        for (StackTraceElement e : stack) {
+                                            String cls = e.getClassName();
+                                            if (cls == null || (!cls.contains(XP_PREFIX + "." + XP_SUFFIX) 
+                                                    && !cls.contains("XposedBridge"))) {
+                                                filtered.add(e);
+                                            }
+                                        }
+                                        if (filtered.size() != stack.length) {
+                                            param.setResult(filtered.toArray(new StackTraceElement[0]));
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });

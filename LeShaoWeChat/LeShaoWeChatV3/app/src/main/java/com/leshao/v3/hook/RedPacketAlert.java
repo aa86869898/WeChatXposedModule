@@ -120,9 +120,13 @@ public class RedPacketAlert {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void beforeHookedMethod(MethodHookParam param) {
-                            if (param.args.length >= 4) {
-                                if (forceRing) param.args[2] = true;
-                                if (forceVibrate) param.args[3] = true;
+                            try {
+                                                        if (param.args.length >= 4) {
+                                                            if (forceRing) param.args[2] = true;
+                                                            if (forceVibrate) param.args[3] = true;
+                                                        }
+                            } catch (Throwable e) {
+                                de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                             }
                         }
                     });

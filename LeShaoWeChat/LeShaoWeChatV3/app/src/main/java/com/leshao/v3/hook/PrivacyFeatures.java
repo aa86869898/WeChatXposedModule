@@ -104,8 +104,12 @@ public class PrivacyFeatures {
             XposedBridge.hookAllMethods(jsApi, "invoke", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    XposedBridge.log("[Privacy] 🛡️ 拦截小程序剪贴板写入");
-                    param.setResult(null);
+                    try {
+                                        XposedBridge.log("[Privacy] 🛡️ 拦截小程序剪贴板写入");
+                                        param.setResult(null);
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
             XposedBridge.log("[Privacy] #55 剪贴板保护 ✓");

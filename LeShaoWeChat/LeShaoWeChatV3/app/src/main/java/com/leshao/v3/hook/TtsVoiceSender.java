@@ -436,40 +436,44 @@ public class TtsVoiceSender {
             XposedBridge.hookMethod(d1, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    String content = (String) param.args[0];
-                    if (content == null) return;
-                    captureIncomingVoice(param.thisObject, content);
-                    if (content.startsWith(TTS_PREFIX)) {
-                        LogWriter.log(TAG, "e9.d1 before: thread=" + Thread.currentThread().getName()
-                                + " content='" + truncStr(content, 40) + "' this="
-                                + (param.thisObject == null ? "null" : param.thisObject.getClass().getName()));
-                    } else if (isMarkedMessage(param.thisObject)) {
-                        LogWriter.log(TAG, "e9.d1 before(marked): thread=" + Thread.currentThread().getName()
-                                + " content='" + truncStr(content, 40) + "'");
+                    try {
+                                        String content = (String) param.args[0];
+                                        if (content == null) return;
+                                        captureIncomingVoice(param.thisObject, content);
+                                        if (content.startsWith(TTS_PREFIX)) {
+                                            LogWriter.log(TAG, "e9.d1 before: thread=" + Thread.currentThread().getName()
+                                                    + " content='" + truncStr(content, 40) + "' this="
+                                                    + (param.thisObject == null ? "null" : param.thisObject.getClass().getName()));
+                                        } else if (isMarkedMessage(param.thisObject)) {
+                                            LogWriter.log(TAG, "e9.d1 before(marked): thread=" + Thread.currentThread().getName()
+                                                    + " content='" + truncStr(content, 40) + "'");
+                                        }
+                                        if (content == null || !content.startsWith(TTS_PREFIX)) return;
+
+                                        String text = content.substring(TTS_PREFIX.length()).trim();
+                                        LogWriter.log(TAG, "e9.d1 #tts matched: text='" + truncStr(text, 40) + "'");
+                                        if (text.isEmpty()) return;
+
+                                        if (markRecentText(text, System.currentTimeMillis())) {
+                                            Object dupMsg = param.thisObject;
+                                            suppressOriginal(param, dupMsg);
+                                            LogWriter.log(TAG, "e9.d1 duplicate #tts suppressed: " + text);
+                                            return;
+                                        }
+
+                                        Object msg = param.thisObject;
+                                        String talker = getTalker(msg);
+                                        String clientMsgId = getClientMsgId(msg);
+                                        markBlockedOriginal(msg);
+                                        markRecentTtsCommand(msg);
+
+                                        suppressOriginal(param, msg);
+                                        LogWriter.log(TAG, "e9.d1 suppress done -> async SceneVoice talker=" + talker
+                                                + " cid=" + clientMsgId + " text='" + truncStr(text, 40) + "'");
+                                        startAsyncTts(talker, clientMsgId, text, "d1");
+                    } catch (Throwable e) {
+                        LogWriter.log("TtsVoiceSender", "cb err: " + e);
                     }
-                    if (content == null || !content.startsWith(TTS_PREFIX)) return;
-
-                    String text = content.substring(TTS_PREFIX.length()).trim();
-                    LogWriter.log(TAG, "e9.d1 #tts matched: text='" + truncStr(text, 40) + "'");
-                    if (text.isEmpty()) return;
-
-                    if (markRecentText(text, System.currentTimeMillis())) {
-                        Object dupMsg = param.thisObject;
-                        suppressOriginal(param, dupMsg);
-                        LogWriter.log(TAG, "e9.d1 duplicate #tts suppressed: " + text);
-                        return;
-                    }
-
-                    Object msg = param.thisObject;
-                    String talker = getTalker(msg);
-                    String clientMsgId = getClientMsgId(msg);
-                    markBlockedOriginal(msg);
-                    markRecentTtsCommand(msg);
-
-                    suppressOriginal(param, msg);
-                    LogWriter.log(TAG, "e9.d1 suppress done -> async SceneVoice talker=" + talker
-                            + " cid=" + clientMsgId + " text='" + truncStr(text, 40) + "'");
-                    startAsyncTts(talker, clientMsgId, text, "d1");
                 }
 
                 @Override

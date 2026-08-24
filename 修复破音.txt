@@ -1,0 +1,39 @@
+严格执行
+
+// 常量保持原样无需改动
+private static final int TARGET_SAMPLE_RATE = 16000;
+private static final int TARGET_CHANNELS = 1;
+private static final int TARGET_BITS_PER_SAMPLE = 16;
+private static final int FRAME_DURATION_MS = 20;
+private static final int FRAME_SAMPLES = 16000 * 20 / 1000;
+private static final int FRAME_PCM_BYTES = 320 * 1 * 16 / 8;
+private static final int SILK_BITRATE = 16000;
+private static final int SILK_COMPLEXITY = 5;
+
+// 修复后的encodePcmToSilk编码方法
+void encodePcmToSilk(byte[] padPcm, String outPath, int rawPcmLen) {
+    SilkWriter writer = yl.g(TARGET_SAMPLE_RATE, SILK_BITRATE);
+    writer.setComplexity(SILK_COMPLEXITY);
+    writer.b(outPath);
+    int frameByteSize = FRAME_PCM_BYTES;
+    int totalFrameCount = padPcm.length / frameByteSize;
+    for (int i = 0; i < totalFrameCount; i++) {
+        int offset = i * frameByteSize;
+        byte[] singleFrame = new byte[frameByteSize];
+        System.arraycopy(padPcm, offset, singleFrame, 0, frameByteSize);
+        boolean isLastFrame = (i == totalFrameCount - 1);
+        writer.h0(singleFrame, frameByteSize, isLastFrame);
+        writer.silk.a(singleFrame, 0);
+    }
+    writer.silk.flush();
+    writer.d();
+}
+
+// sendMp3Voice内时长计算修复
+byte[] padPcm = padPcmToFrame(pcm);
+encodePcmToSilk(padPcm, tmpFile.getAbsolutePath(), pcm.length);
+int realDurationMs = pcm.length * 1000 / 32000;
+int reportedMs = realDurationMs > 60000 ? 2000 : realDurationMs;
+sendViaSceneVoice(talker, tmpFile.getAbsolutePath(), reportedMs);
+
+// padPcmToFrame函数必须实现规则：1.开头拼接640字节静音零PCM；2.音频幅值限制±28000防止削波破音；3.末尾补零至640字节整数倍；4.输入PCM严格为小端序16bit 16kHz单声道；编码前增加校验if (padPcm.length % FRAME_PCM_BYTES != 0)抛异常拦截错误帧数据

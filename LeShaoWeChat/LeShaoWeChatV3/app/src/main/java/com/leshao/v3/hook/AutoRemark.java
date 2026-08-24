@@ -35,18 +35,26 @@ public class AutoRemark {
             XposedBridge.hookAllMethods(contactInfoUI, "D2", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    CrashTrace.t("AUR_D2_IN");
-                    checkAndAutoRemark(param.thisObject);
-                    CrashTrace.t("AUR_D2_OUT");
+                    try {
+                                        CrashTrace.t("AUR_D2_IN");
+                                        checkAndAutoRemark(param.thisObject);
+                                        CrashTrace.t("AUR_D2_OUT");
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
 
             XposedBridge.hookAllMethods(contactInfoUI, "onResume", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    CrashTrace.t("AUR_RS_IN");
-                    checkAndAutoRemark(param.thisObject);
-                    CrashTrace.t("AUR_RS_OUT");
+                    try {
+                                        CrashTrace.t("AUR_RS_IN");
+                                        checkAndAutoRemark(param.thisObject);
+                                        CrashTrace.t("AUR_RS_OUT");
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                    }
                 }
             });
         } catch (Throwable t) {}

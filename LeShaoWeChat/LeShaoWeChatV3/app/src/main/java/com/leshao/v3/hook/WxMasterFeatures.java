@@ -89,7 +89,11 @@ public class WxMasterFeatures {
             XposedBridge.hookAllMethods(chattingUI, "O0", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    dismissFloatBtns();
+                    try {
+                                        dismissFloatBtns();
+                    } catch (Throwable e) {
+                        LogWriter.log("WxMaster", "cb err: " + e);
+                    }
                 }
             });
 

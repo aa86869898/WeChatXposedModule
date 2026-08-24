@@ -87,17 +87,25 @@ public class VoiceForwardHook {
             Class<?> cui = cl.loadClass("com.tencent.mm.ui.chatting.ChattingUI");
             XposedBridge.hookAllMethods(cui, "onResume", new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
-                    sChatAct = (Activity) param.thisObject;
-                    sCallCount.set(0);
-                    sMenuInjected = false;
-                    sMenuInjectedTime = 0;
-                    sPendingMsg = null;
-                    sPendingView = null;
+                    try {
+                                        sChatAct = (Activity) param.thisObject;
+                                        sCallCount.set(0);
+                                        sMenuInjected = false;
+                                        sMenuInjectedTime = 0;
+                                        sPendingMsg = null;
+                                        sPendingView = null;
+                    } catch (Throwable e) {
+                        LogWriter.log("VF", "cb err: " + e);
+                    }
                 }
             });
             XposedBridge.hookAllMethods(cui, "onPause", new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam param) {
-                    if (sChatAct == param.thisObject) sChatAct = null;
+                    try {
+                                        if (sChatAct == param.thisObject) sChatAct = null;
+                    } catch (Throwable e) {
+                        LogWriter.log("VF", "cb err: " + e);
+                    }
                 }
             });
         } catch (Throwable ignored) {}
@@ -106,24 +114,28 @@ public class VoiceForwardHook {
         try {
             XposedBridge.hookAllMethods(View.class, "performLongClick", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam param) {
-                    if (sChatAct == null) return;
-                    View v = (View) param.thisObject;
-                    Object tag = v.getTag();
-                    if (tag != null && tag.getClass().getName().contains("mm")) {
-                        sPendingView = v;
-                        sPendingMsg = tag;
-                        LogWriter.log(TAG, "LongClick: tag=" + tag.getClass().getSimpleName() + " msgId=" + extractMsgId(tag));
-                        for (int i = 0; i < 4; i++) {
-                            View p = (View) v.getParent();
-                            if (p == null) break;
-                            Object pt = p.getTag();
-                            if (pt != null && pt.getClass().getName().contains("mm")) {
-                                sPendingMsg = pt;
-                                LogWriter.log(TAG, "LongClick: parent[" + i + "] tag=" + pt.getClass().getSimpleName() + " msgId=" + extractMsgId(pt));
-                            }
-                            v = p;
-                            if (p instanceof RecyclerView) break;
-                        }
+                    try {
+                                        if (sChatAct == null) return;
+                                        View v = (View) param.thisObject;
+                                        Object tag = v.getTag();
+                                        if (tag != null && tag.getClass().getName().contains("mm")) {
+                                            sPendingView = v;
+                                            sPendingMsg = tag;
+                                            LogWriter.log(TAG, "LongClick: tag=" + tag.getClass().getSimpleName() + " msgId=" + extractMsgId(tag));
+                                            for (int i = 0; i < 4; i++) {
+                                                View p = (View) v.getParent();
+                                                if (p == null) break;
+                                                Object pt = p.getTag();
+                                                if (pt != null && pt.getClass().getName().contains("mm")) {
+                                                    sPendingMsg = pt;
+                                                    LogWriter.log(TAG, "LongClick: parent[" + i + "] tag=" + pt.getClass().getSimpleName() + " msgId=" + extractMsgId(pt));
+                                                }
+                                                v = p;
+                                                if (p instanceof RecyclerView) break;
+                                            }
+                                        }
+                    } catch (Throwable e) {
+                        LogWriter.log("VF", "cb err: " + e);
                     }
                 }
             });
@@ -146,13 +158,17 @@ public class VoiceForwardHook {
         try {
             XposedBridge.hookAllMethods(Activity.class, "onContextItemSelected", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam param) {
-                    if (param.args.length > 0 && param.args[0] instanceof MenuItem) {
-                        MenuItem item = (MenuItem) param.args[0];
-                        LogWriter.log(TAG, "Click: id=" + item.getItemId() + " menu=" + param.thisObject.getClass().getSimpleName());
-                        if (item.getItemId() == MENU_ID) {
-                            executeForward();
-                            param.setResult(true);
-                        }
+                    try {
+                                        if (param.args.length > 0 && param.args[0] instanceof MenuItem) {
+                                            MenuItem item = (MenuItem) param.args[0];
+                                            LogWriter.log(TAG, "Click: id=" + item.getItemId() + " menu=" + param.thisObject.getClass().getSimpleName());
+                                            if (item.getItemId() == MENU_ID) {
+                                                executeForward();
+                                                param.setResult(true);
+                                            }
+                                        }
+                    } catch (Throwable e) {
+                        LogWriter.log("VF", "cb err: " + e);
                     }
                 }
             });
@@ -173,26 +189,30 @@ public class VoiceForwardHook {
                 if (pts.length >= 3 && pts[pts.length - 1] == CharSequence.class) {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override protected void afterHookedMethod(MethodHookParam param) {
-                            long now = System.currentTimeMillis();
-                            long gap = now - sMenuAddLastTime;
-                            if (gap > 2000) sMenuAddBatch.set(0);
-                            sMenuAddLastTime = now;
-                            int n = sMenuAddBatch.incrementAndGet();
-                            if (n > 15) return;
-                            LogWriter.log(TAG, "MenuBuilder.add #" + n + " id=" + param.args[1] + " title=" + param.args[pts.length - 1] + " gap=" + gap + "ms");
-                            if (n == 1 && gap > 500) {
-                                sPendingMsg = null;
-                                sPendingView = null;
-                            }
-                            if (n > 2 && n <= 12 && !sMenuInjected) {
-                                for (Object arg : param.args) {
-                                    if (arg instanceof CharSequence && arg.toString().contains("文字")) {
-                                        sMenuInjected = true;
-                                        sMenuInjectedTime = now;
-                                        injectIntoMenuBuilder(param.thisObject);
-                                        return;
-                                    }
-                                }
+                            try {
+                                                        long now = System.currentTimeMillis();
+                                                        long gap = now - sMenuAddLastTime;
+                                                        if (gap > 2000) sMenuAddBatch.set(0);
+                                                        sMenuAddLastTime = now;
+                                                        int n = sMenuAddBatch.incrementAndGet();
+                                                        if (n > 15) return;
+                                                        LogWriter.log(TAG, "MenuBuilder.add #" + n + " id=" + param.args[1] + " title=" + param.args[pts.length - 1] + " gap=" + gap + "ms");
+                                                        if (n == 1 && gap > 500) {
+                                                            sPendingMsg = null;
+                                                            sPendingView = null;
+                                                        }
+                                                        if (n > 2 && n <= 12 && !sMenuInjected) {
+                                                            for (Object arg : param.args) {
+                                                                if (arg instanceof CharSequence && arg.toString().contains("文字")) {
+                                                                    sMenuInjected = true;
+                                                                    sMenuInjectedTime = now;
+                                                                    injectIntoMenuBuilder(param.thisObject);
+                                                                    return;
+                                                                }
+                                                            }
+                                                        }
+                            } catch (Throwable e) {
+                                LogWriter.log("VF", "cb err: " + e);
                             }
                         }
                     });

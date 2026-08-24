@@ -86,13 +86,17 @@ public class SearchEnhance {
                         XposedBridge.hookMethod(m, new XC_MethodHook() {
                             @Override
                             protected void afterHookedMethod(MethodHookParam param) {
-                                Cursor cursor = (Cursor) param.getResult();
-                                if (cursor != null) {
-                                    int count = cursor.getCount();
-                                    if (count > 0) {
-                                        Logger.i("[Search] FTS查询: "
-                                                + methodName + " → " + count + "条");
-                                    }
+                                try {
+                                                                Cursor cursor = (Cursor) param.getResult();
+                                                                if (cursor != null) {
+                                                                    int count = cursor.getCount();
+                                                                    if (count > 0) {
+                                                                        Logger.i("[Search] FTS查询: "
+                                                                                + methodName + " → " + count + "条");
+                                                                    }
+                                                                }
+                                } catch (Throwable e) {
+                                    de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                                 }
                             }
                         });
@@ -105,11 +109,15 @@ public class SearchEnhance {
                         XposedBridge.hookMethod(m, new XC_MethodHook() {
                             @Override
                             protected void afterHookedMethod(MethodHookParam param) {
-                                int val = (Integer) param.getResult();
-                                if (val == 100 || val == 200 || val == 50) {
-                                    param.setResult(maxResults);
-                                    Logger.i("[Search] 结果数限制: "
-                                            + val + " → " + maxResults);
+                                try {
+                                                                int val = (Integer) param.getResult();
+                                                                if (val == 100 || val == 200 || val == 50) {
+                                                                    param.setResult(maxResults);
+                                                                    Logger.i("[Search] 结果数限制: "
+                                                                            + val + " → " + maxResults);
+                                                                }
+                                } catch (Throwable e) {
+                                    de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                                 }
                             }
                         });

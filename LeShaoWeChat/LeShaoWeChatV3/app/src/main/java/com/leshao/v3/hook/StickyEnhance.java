@@ -38,9 +38,13 @@ public class StickyEnhance {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
-                            int val = (Integer) param.getResult();
-                            if (val > 0 && val <= 100) {
-                                param.setResult(maxSticky);
+                            try {
+                                                        int val = (Integer) param.getResult();
+                                                        if (val > 0 && val <= 100) {
+                                                            param.setResult(maxSticky);
+                                                        }
+                            } catch (Throwable e) {
+                                de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                             }
                         }
                     });
@@ -50,10 +54,14 @@ public class StickyEnhance {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
-                            boolean result = (Boolean) param.getResult();
-                            if (!result) {
-                                param.setResult(true);
-                                Logger.i("[Sticky] 置顶限制已绕过 (" + methodName + ")");
+                            try {
+                                                        boolean result = (Boolean) param.getResult();
+                                                        if (!result) {
+                                                            param.setResult(true);
+                                                            Logger.i("[Sticky] 置顶限制已绕过 (" + methodName + ")");
+                                                        }
+                            } catch (Throwable e) {
+                                de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                             }
                         }
                     });

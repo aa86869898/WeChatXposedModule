@@ -18,15 +18,19 @@ public class LabelSyncHook {
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam p) {
-                        int errType = (int) p.args[0];
-                        int errCode = (int) p.args[1];
-                        if (errType == 0 && errCode == 0) {
-                            GroupConfigManager.setLastSyncTime(System.currentTimeMillis());
-                            int count = ChatGroupHook.labelCount();
-                            LogWriter.log(TAG, "标签同步完成，" + count + " 个标签");
-                            EventBus.post(EventBus.Event.LABELS_SYNCED, count);
-                            if (GroupConfigManager.isAutoGroupEnabled()) AutoGroupEngine.runOnce();
-                            LabelBackup.backupIfNeeded(ChatGroupHook.getWeChatContext());
+                        try {
+                                                int errType = (int) p.args[0];
+                                                int errCode = (int) p.args[1];
+                                                if (errType == 0 && errCode == 0) {
+                                                    GroupConfigManager.setLastSyncTime(System.currentTimeMillis());
+                                                    int count = ChatGroupHook.labelCount();
+                                                    LogWriter.log(TAG, "标签同步完成，" + count + " 个标签");
+                                                    EventBus.post(EventBus.Event.LABELS_SYNCED, count);
+                                                    if (GroupConfigManager.isAutoGroupEnabled()) AutoGroupEngine.runOnce();
+                                                    LabelBackup.backupIfNeeded(ChatGroupHook.getWeChatContext());
+                                                }
+                        } catch (Throwable e) {
+                            LogWriter.log("LabelSyncHook", "cb err: " + e);
                         }
                     }
                 });

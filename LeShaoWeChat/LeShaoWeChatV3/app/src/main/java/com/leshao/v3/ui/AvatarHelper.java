@@ -263,7 +263,11 @@ public class AvatarHelper {
                 Bitmap bm = loadAvatar(wxid, sizePx);
                 if (bm != null && !bm.isRecycled()) {
                     sMain.post(() -> {
-                        if (wxid.equals(iv.getTag())) iv.setImageBitmap(bm);
+                        try {
+                            if (wxid.equals(iv.getTag())) iv.setImageBitmap(bm);
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "sMain setImage fail: " + t.getMessage());
+                        }
                     });
                 }
             } catch (Throwable t) {

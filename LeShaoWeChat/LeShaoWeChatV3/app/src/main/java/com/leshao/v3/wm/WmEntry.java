@@ -82,8 +82,12 @@ public class WmEntry {
             XposedBridge.hookMethod(o0, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam p) {
-                    WmChatHook.dismissTitleBtn();
-                    WmGroupHook.dismissGroupBtn();
+                    try {
+                                        WmChatHook.dismissTitleBtn();
+                                        WmGroupHook.dismissGroupBtn();
+                    } catch (Throwable e) {
+                        LogWriter.log("WmEntry", "cb err: " + e);
+                    }
                 }
             });
             LogWriter.log(TAG, "✓ chat window (M0/O0)");

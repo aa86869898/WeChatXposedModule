@@ -104,7 +104,11 @@ public class ContactChangeLog {
             XposedBridge.hookAllMethods(vClass, "a", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    LogWriter.log(TAG, "[v.a] fired args=" + param.args.length);
+                    try {
+                                        LogWriter.log(TAG, "[v.a] fired args=" + param.args.length);
+                    } catch (Throwable e) {
+                        LogWriter.log("ContactChangeLog", "cb err: " + e);
+                    }
                 }
             });
 
@@ -114,16 +118,24 @@ public class ContactChangeLog {
                 XposedBridge.hookAllMethods(gcs, "a", new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
-                        if (param.args.length > 0 && param.args[0] instanceof String) {
-                            LogWriter.log(TAG, "[GetContact.a] queued: " + param.args[0]);
+                        try {
+                                                if (param.args.length > 0 && param.args[0] instanceof String) {
+                                                    LogWriter.log(TAG, "[GetContact.a] queued: " + param.args[0]);
+                                                }
+                        } catch (Throwable e) {
+                            LogWriter.log("ContactChangeLog", "cb err: " + e);
                         }
                     }
                 });
                 XposedBridge.hookAllMethods(gcs, "b", new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
-                        if (param.args.length > 0 && param.args[0] instanceof String) {
-                            LogWriter.log(TAG, "[GetContact.b] queued: " + param.args[0]);
+                        try {
+                                                if (param.args.length > 0 && param.args[0] instanceof String) {
+                                                    LogWriter.log(TAG, "[GetContact.b] queued: " + param.args[0]);
+                                                }
+                        } catch (Throwable e) {
+                            LogWriter.log("ContactChangeLog", "cb err: " + e);
                         }
                     }
                 });
@@ -143,9 +155,13 @@ public class ContactChangeLog {
                 XposedBridge.hookAllMethods(storageClass, mn, new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
-                        LogWriter.log(TAG, "[j4." + mn + "] fired");
-                        if (param.args.length > 0 && param.args[0] != null) {
-                            detectChangesFromContact(param.args[0]);
+                        try {
+                                                LogWriter.log(TAG, "[j4." + mn + "] fired");
+                                                if (param.args.length > 0 && param.args[0] != null) {
+                                                    detectChangesFromContact(param.args[0]);
+                                                }
+                        } catch (Throwable e) {
+                            LogWriter.log("ContactChangeLog", "cb err: " + e);
                         }
                     }
                 });

@@ -63,12 +63,16 @@ public class BatchMessage {
                     new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    Menu menu = (Menu) param.args[0];
-                    if (menu != null) {
-                        menu.add(0, 99991, 0, "全选");
-                        menu.add(0, 99992, 0, "反选");
-                        menu.add(0, 99993, 0, "全选图片");
-                        menu.add(0, 99994, 0, "全选链接");
+                    try {
+                                        Menu menu = (Menu) param.args[0];
+                                        if (menu != null) {
+                                            menu.add(0, 99991, 0, "全选");
+                                            menu.add(0, 99992, 0, "反选");
+                                            menu.add(0, 99993, 0, "全选图片");
+                                            menu.add(0, 99994, 0, "全选链接");
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });
@@ -78,11 +82,15 @@ public class BatchMessage {
                     new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    MenuItem item = (MenuItem) param.args[0];
-                    int id = item.getItemId();
-                    if (id >= 99991 && id <= 99994) {
-                        performSelectAction(param.thisObject, id);
-                        param.setResult(true);
+                    try {
+                                        MenuItem item = (MenuItem) param.args[0];
+                                        int id = item.getItemId();
+                                        if (id >= 99991 && id <= 99994) {
+                                            performSelectAction(param.thisObject, id);
+                                            param.setResult(true);
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });
@@ -94,10 +102,14 @@ public class BatchMessage {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
-                            int val = (Integer) param.getResult();
-                            if (val == 9 || val == 50 || val == 100) {
-                                param.setResult(maxSelectCount);
-                                XposedBridge.log("[Batch] 限制: " + val + " → " + maxSelectCount);
+                            try {
+                                                        int val = (Integer) param.getResult();
+                                                        if (val == 9 || val == 50 || val == 100) {
+                                                            param.setResult(maxSelectCount);
+                                                            XposedBridge.log("[Batch] 限制: " + val + " → " + maxSelectCount);
+                                                        }
+                            } catch (Throwable e) {
+                                de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                             }
                         }
                     });
@@ -107,7 +119,11 @@ public class BatchMessage {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
-                            if (!(Boolean) param.getResult()) param.setResult(true);
+                            try {
+                                                        if (!(Boolean) param.getResult()) param.setResult(true);
+                            } catch (Throwable e) {
+                                de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                            }
                         }
                     });
                 }
@@ -129,7 +145,11 @@ public class BatchMessage {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
-                            if (!(Boolean) param.getResult()) param.setResult(true);
+                            try {
+                                                        if (!(Boolean) param.getResult()) param.setResult(true);
+                            } catch (Throwable e) {
+                                de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                            }
                         }
                     });
                 }
@@ -147,8 +167,12 @@ public class BatchMessage {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
-                            int val = (Integer) param.getResult();
-                            if (val > 0 && val <= 100) param.setResult(maxSelectCount);
+                            try {
+                                                        int val = (Integer) param.getResult();
+                                                        if (val > 0 && val <= 100) param.setResult(maxSelectCount);
+                            } catch (Throwable e) {
+                                de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                            }
                         }
                     });
                 }

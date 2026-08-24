@@ -76,32 +76,36 @@ public class UnreadBadge {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void beforeHookedMethod(MethodHookParam param) {
-                            int tabIndex = (Integer) param.args[0];
-                            int count = (Integer) param.args[1];
+                            try {
+                                                        int tabIndex = (Integer) param.args[0];
+                                                        int count = (Integer) param.args[1];
 
-                            if (count <= 0) return;
+                                                        if (count <= 0) return;
 
-                            switch (badgeStyle) {
-                                case 1:
-                                    param.args[1] = 1;
-                                    break;
-                                case 2:
-                                    break;
-                                case 3:
-                                    if (count > maxDisplay) {
-                                        param.args[1] = maxDisplay;
-                                    }
-                                    break;
-                                case 4:
-                                    applyBadgeColor(param.thisObject, tabIndex);
-                                    break;
-                                default:
-                                    break;
+                                                        switch (badgeStyle) {
+                                                            case 1:
+                                                                param.args[1] = 1;
+                                                                break;
+                                                            case 2:
+                                                                break;
+                                                            case 3:
+                                                                if (count > maxDisplay) {
+                                                                    param.args[1] = maxDisplay;
+                                                                }
+                                                                break;
+                                                            case 4:
+                                                                applyBadgeColor(param.thisObject, tabIndex);
+                                                                break;
+                                                            default:
+                                                                break;
+                                                        }
+
+                                                        Logger.i("[Badge] Tab[" + tabIndex + "] count="
+                                                                + count + " → " + param.args[1]
+                                                                + " (style=" + badgeStyle + ")");
+                            } catch (Throwable e) {
+                                de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                             }
-
-                            Logger.i("[Badge] Tab[" + tabIndex + "] count="
-                                    + count + " → " + param.args[1]
-                                    + " (style=" + badgeStyle + ")");
                         }
                     });
                 }
@@ -125,7 +129,11 @@ public class UnreadBadge {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
-                            Logger.i("[Badge] 清除Tab[" + param.args[0] + "]角标");
+                            try {
+                                                        Logger.i("[Badge] 清除Tab[" + param.args[0] + "]角标");
+                            } catch (Throwable e) {
+                                de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                            }
                         }
                     });
                 }

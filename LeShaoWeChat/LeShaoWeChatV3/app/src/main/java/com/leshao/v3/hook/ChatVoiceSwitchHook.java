@@ -2,6 +2,8 @@ package com.leshao.v3.hook;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.res.Configuration;
+import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -17,7 +19,6 @@ import android.widget.Toast;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.IconLoader;
 import com.leshao.v3.LogWriter;
-import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.TTSPageView;
 
 import java.lang.reflect.Constructor;
@@ -46,8 +47,6 @@ public final class ChatVoiceSwitchHook {
             0xFFFF94C2, 0xFFFF10F0, 0xFF7B2FF7, 0xFF36D1E8
     };
 
-    // 原文字 12 → 放大 = 14sp
-    private static final int BTN_TEXT_SIZE = 14;
     private static final long INJECT_DELAY_MS = 600;
     private static final int MAX_RETRY = 10;
 
@@ -79,8 +78,12 @@ public final class ChatVoiceSwitchHook {
                 XposedBridge.hookMethod(c, new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
-                        LogWriter.log(TAG, "方案A: MMEditText 构造触发");
-                        scheduleInject(param.thisObject);
+                        try {
+                                                LogWriter.log(TAG, "方案A: MMEditText 构造触发");
+                                                scheduleInject(param.thisObject);
+                        } catch (Throwable e) {
+                            LogWriter.log("ChatVoiceSwitchHook", "cb err: " + e);
+                        }
                     }
                 });
             }
@@ -119,10 +122,14 @@ public final class ChatVoiceSwitchHook {
             XposedBridge.hookAllMethods(TextView.class, "onTextChanged", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    Object tv = param.thisObject;
-                    if (tv instanceof EditText && isMMEditText((View) tv)) {
-                        LogWriter.log(TAG, "方案B: 捕获到输入框 " + tv.getClass().getName());
-                        scheduleInject((View) tv);
+                    try {
+                                        Object tv = param.thisObject;
+                                        if (tv instanceof EditText && isMMEditText((View) tv)) {
+                                            LogWriter.log(TAG, "方案B: 捕获到输入框 " + tv.getClass().getName());
+                                            scheduleInject((View) tv);
+                                        }
+                    } catch (Throwable e) {
+                        LogWriter.log("ChatVoiceSwitchHook", "cb err: " + e);
                     }
                 }
             });
@@ -139,10 +146,14 @@ public final class ChatVoiceSwitchHook {
             XposedBridge.hookAllConstructors(EditText.class, new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    if (param.thisObject == null) return;
-                    if (isMMEditText((View) param.thisObject)) {
-                        LogWriter.log(TAG, "方案C: EditText 构造触发 " + param.thisObject.getClass().getName());
-                        scheduleInject(param.thisObject);
+                    try {
+                                        if (param.thisObject == null) return;
+                                        if (isMMEditText((View) param.thisObject)) {
+                                            LogWriter.log(TAG, "方案C: EditText 构造触发 " + param.thisObject.getClass().getName());
+                                            scheduleInject(param.thisObject);
+                                        }
+                    } catch (Throwable e) {
+                        LogWriter.log("ChatVoiceSwitchHook", "cb err: " + e);
                     }
                 }
             });
@@ -159,10 +170,14 @@ public final class ChatVoiceSwitchHook {
             XposedBridge.hookAllMethods(View.class, "onAttachedToWindow", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    if (param.thisObject == null) return;
-                    if (isMMEditText((View) param.thisObject)) {
-                        LogWriter.log(TAG, "方案D: onAttachedToWindow 捕获 " + param.thisObject.getClass().getName());
-                        scheduleInject((View) param.thisObject);
+                    try {
+                                        if (param.thisObject == null) return;
+                                        if (isMMEditText((View) param.thisObject)) {
+                                            LogWriter.log(TAG, "方案D: onAttachedToWindow 捕获 " + param.thisObject.getClass().getName());
+                                            scheduleInject((View) param.thisObject);
+                                        }
+                    } catch (Throwable e) {
+                        LogWriter.log("ChatVoiceSwitchHook", "cb err: " + e);
                     }
                 }
             });
@@ -180,15 +195,19 @@ public final class ChatVoiceSwitchHook {
             XposedBridge.hookAllMethods(activityCls, "onResume", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    final Activity act = (Activity) param.thisObject;
-                    if (act == null) return;
-                    if (!isChatPage(act)) return;
-                    new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            scanAndInject(act);
-                        }
-                    }, 1200);
+                    try {
+                                        final Activity act = (Activity) param.thisObject;
+                                        if (act == null) return;
+                                        if (!isChatPage(act)) return;
+                                        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                                            @Override
+                                            public void run() {
+                                                scanAndInject(act);
+                                            }
+                                        }, 1200);
+                    } catch (Throwable e) {
+                        LogWriter.log("ChatVoiceSwitchHook", "cb err: " + e);
+                    }
                 }
             });
             LogWriter.log(TAG, "方案E: Activity.onResume 兜底已挂载");
@@ -396,34 +415,45 @@ public final class ChatVoiceSwitchHook {
         scroll.setHorizontalScrollBarEnabled(false);
         scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         scroll.setPadding(0, 0, 0, 0);
+        // 行占满整行宽度，按钮整体水平居中显示（不再居左）
+        row.setGravity(Gravity.CENTER);
         scroll.addView(row, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return scroll;
     }
 
-    /** 蓝色文字 + 图标 + 细边框背景的按钮（糖果霓虹风格） */
+    private static int dp(int dpi, Context ctx) {
+        return (int) (dpi * ctx.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private static boolean isDarkMode(Context ctx) {
+        return (ctx.getResources().getConfiguration().uiMode
+            & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    /** 纯文字按钮：样式/配色与聊天分组标签按钮（未选中态）一致，字符间加空格间距，边框内居中 */
     private static TextView createBlueButton(final Context ctx, String text,
                                              final int iconId, View.OnClickListener listener) {
         TextView btn = new TextView(ctx);
-        btn.setText(text);
-        btn.setTextSize(BTN_TEXT_SIZE);
-        btn.setTextColor(AppColors.accent());
-        btn.setTypeface(null, android.graphics.Typeface.BOLD);
+        // 每个文字之间隔一个空格：如 "音色" -> "音 色"
+        btn.setText(text.replaceAll("(?<=.)(?=.)", " "));
+        btn.setTextSize(15);
         btn.setGravity(Gravity.CENTER);
         btn.setSingleLine(true);
+        btn.setMinWidth(dp(50, ctx));
 
-        float density = ctx.getResources().getDisplayMetrics().density;
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(android.graphics.Color.TRANSPARENT);
-        bg.setStroke((int)(1 * density), AppColors.accent());
-        bg.setCornerRadius((int)(4 * density));
+        // 与聊天分组标签按钮未选中配色一致（浅色/暗色）
+        boolean dark = isDarkMode(ctx);
+        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+            dark ? new int[]{0x26FF6B8A, 0x26A855F7, 0x2638BDF8}
+                 : new int[]{0x1AFF6B8A, 0x1AA855F7, 0x1A38BDF8});
+        bg.setCornerRadius(dp(20, ctx));
+        bg.setStroke(dp(1, ctx), dark ? Color.parseColor("#C084FC") : Color.parseColor("#A855F7"));
         btn.setBackground(bg);
+        btn.setTextColor(dark ? Color.parseColor("#C8C8CE") : Color.parseColor("#555555"));
 
-        // 图标（若加载失败则仅显示文字）
-        IconLoader.setCompoundLeft(btn, IconLoader.load(ctx, iconId, 20));
-
-        btn.setPadding((int) (7 * density), (int) (7 * density),
-                (int) (7 * density), (int) (7 * density));
+        // 左右平均分配：对称内边距 + 水平居中
+        btn.setPadding(dp(15, ctx), dp(7, ctx), dp(15, ctx), dp(7, ctx));
         btn.setOnClickListener(listener);
         return btn;
     }

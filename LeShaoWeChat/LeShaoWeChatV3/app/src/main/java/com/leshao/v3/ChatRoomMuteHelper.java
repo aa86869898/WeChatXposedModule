@@ -336,8 +336,12 @@ public class ChatRoomMuteHelper {
             XposedBridge.hookMethod(methodOnCreate, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
-                            Context ctx = (Context) param.thisObject;
-                            registerBroadcastReceiver(cl, ctx);
+                            try {
+                                                        Context ctx = (Context) param.thisObject;
+                                                        registerBroadcastReceiver(cl, ctx);
+                            } catch (Throwable e) {
+                                LogWriter.log("ChatRoomMute", "cb err: " + e);
+                            }
                         }
                     });
 

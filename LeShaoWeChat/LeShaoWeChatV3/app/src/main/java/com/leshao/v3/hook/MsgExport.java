@@ -58,29 +58,37 @@ public class MsgExport {
             XposedBridge.hookAllMethods(chattingUI, "onCreateOptionsMenu", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    Menu menu = (Menu) param.args[0];
-                    if (menu == null) return;
-                    menu.add(0, 99980, 0, "导出聊天记录(TXT)");
-                    menu.add(0, 99981, 0, "导出聊天记录(HTML)");
+                    try {
+                                        Menu menu = (Menu) param.args[0];
+                                        if (menu == null) return;
+                                        menu.add(0, 99980, 0, "导出聊天记录(TXT)");
+                                        menu.add(0, 99981, 0, "导出聊天记录(HTML)");
+                    } catch (Throwable e) {
+                        LogWriter.log("MsgExport", "cb err: " + e);
+                    }
                 }
             });
 
             XposedBridge.hookAllMethods(chattingUI, "onOptionsItemSelected", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    MenuItem item = (MenuItem) param.args[0];
-                    int id = item.getItemId();
-                    if (id == 99980 || id == 99981) {
-                        String format = id == 99980 ? "txt" : "html";
-                        String talker = getTalker(param.thisObject);
-                        if (talker != null && !talker.isEmpty()) {
-                            final String t = talker;
-                            final String f = format;
-                            new Thread(() -> doExport(t, f)).start();
-                        } else {
-                            showToast("无法获取当前聊天对象");
-                        }
-                        param.setResult(true);
+                    try {
+                                        MenuItem item = (MenuItem) param.args[0];
+                                        int id = item.getItemId();
+                                        if (id == 99980 || id == 99981) {
+                                            String format = id == 99980 ? "txt" : "html";
+                                            String talker = getTalker(param.thisObject);
+                                            if (talker != null && !talker.isEmpty()) {
+                                                final String t = talker;
+                                                final String f = format;
+                                                new Thread(() -> doExport(t, f)).start();
+                                            } else {
+                                                showToast("无法获取当前聊天对象");
+                                            }
+                                            param.setResult(true);
+                                        }
+                    } catch (Throwable e) {
+                        LogWriter.log("MsgExport", "cb err: " + e);
                     }
                 }
             });

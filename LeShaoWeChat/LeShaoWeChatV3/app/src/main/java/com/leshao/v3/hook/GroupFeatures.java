@@ -136,10 +136,14 @@ public class GroupFeatures {
             XposedBridge.hookAllMethods(delUI, "R6", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    if (param.args.length >= 4) {
-                        String chatroom = "" + param.args[0];
-                        String who = "" + param.args[3];
-                        XposedBridge.log("[Group] 移除中: " + who + " from " + chatroom);
+                    try {
+                                        if (param.args.length >= 4) {
+                                            String chatroom = "" + param.args[0];
+                                            String who = "" + param.args[3];
+                                            XposedBridge.log("[Group] 移除中: " + who + " from " + chatroom);
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });
@@ -279,31 +283,39 @@ public class GroupFeatures {
             XposedBridge.hookAllMethods(gs, "onCreateOptionsMenu", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    android.view.Menu menu = (android.view.Menu) param.args[0];
-                    if (menu != null) {
-                        menu.add(0, 99990, 0, "导出成员列表");
-                        menu.add(0, 99991, 0, "批量踢出");
-                        menu.add(0, 99992, 0, "群信息报告");
-                        menu.add(0, 99993, 0, "查看群公告");
+                    try {
+                                        android.view.Menu menu = (android.view.Menu) param.args[0];
+                                        if (menu != null) {
+                                            menu.add(0, 99990, 0, "导出成员列表");
+                                            menu.add(0, 99991, 0, "批量踢出");
+                                            menu.add(0, 99992, 0, "群信息报告");
+                                            menu.add(0, 99993, 0, "查看群公告");
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });
             XposedBridge.hookAllMethods(gs, "onOptionsItemSelected", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    android.view.MenuItem item = (android.view.MenuItem) param.args[0];
-                    if (item.getItemId() == 99990) {
-                        exportMemberList(param.thisObject);
-                        param.setResult(true);
-                    } else if (item.getItemId() == 99991) {
-                        performBatchKick(param.thisObject);
-                        param.setResult(true);
-                    } else if (item.getItemId() == 99992) {
-                        WxMasterFeatures.exportRoomReport(param.thisObject);
-                        param.setResult(true);
-                    } else if (item.getItemId() == 99993) {
-                        WxMasterFeatures.showRoomNotice(param.thisObject);
-                        param.setResult(true);
+                    try {
+                                        android.view.MenuItem item = (android.view.MenuItem) param.args[0];
+                                        if (item.getItemId() == 99990) {
+                                            exportMemberList(param.thisObject);
+                                            param.setResult(true);
+                                        } else if (item.getItemId() == 99991) {
+                                            performBatchKick(param.thisObject);
+                                            param.setResult(true);
+                                        } else if (item.getItemId() == 99992) {
+                                            WxMasterFeatures.exportRoomReport(param.thisObject);
+                                            param.setResult(true);
+                                        } else if (item.getItemId() == 99993) {
+                                            WxMasterFeatures.showRoomNotice(param.thisObject);
+                                            param.setResult(true);
+                                        }
+                    } catch (Throwable e) {
+                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }
                 }
             });
