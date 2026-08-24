@@ -19,7 +19,7 @@
   - 推送命令格式: `git push https://<token>@github.com/aa86869898/WeChatXposedModule.git master`
   - 修改代码后编译通过检查没问题后，自动提交并推送，无需用户确认
   - 不要在回复中展示 token 值
-  - 编译成功后必须给出 APK 下载链接，APK 路径: `app/build/outputs/apk/debug/LeShaoWeChat-v{versionCode}.apk`
+  - 编译成功后必须给出 APK 下载链接（URL，不是文件路径），通过 deploy-website 部署 download.html 页面获取预览地址
 
 ### 语音自动播放调试经验
 - Date: 2026-08-01
