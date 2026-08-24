@@ -2897,7 +2897,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v806 d3q+CDN build=v424 2026-08-23");
+            LogWriter.log(TAG, "initOnAppStart OK v807 w2.x build=v425 2026-08-24");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3649,12 +3649,12 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
     }
 
 private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v806 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v807 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
         int duration = getVideoDuration(videoPath);
-        LogWriter.log(TAG, "v806 sendVideo duration=" + duration + "s size=" + f.length());
+        LogWriter.log(TAG, "v807 sendVideo duration=" + duration + "s size=" + f.length());
         sPendingVideoToUser = toUser;
         sPendingVideoPath = videoPath;
         sPendingVideoDuration = duration;
@@ -3666,147 +3666,101 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
         final Throwable[] sentError = {null};
         sH.post(() -> {
             try {
-                String newFilename = null;
-                String vfsVideoPath = null;
-                try {
-                    Class<?> c3Class = XposedHelpers.findClass("kl5.c3", sCL);
-                    Object talkerObj = XposedHelpers.callStaticMethod(
-                            XposedHelpers.findClass("com.tencent.mm.plugin.msg.MsgIdTalker", sCL),
-                            "a", finalToUser);
-                    newFilename = (String) XposedHelpers.callStaticMethod(c3Class, "a", talkerObj);
-                    LogWriter.log(TAG, "v806 c3.a newFilename=" + newFilename);
-                } catch (Throwable tc) {
-                    LogWriter.log(TAG, "v806 c3.a fail: " + tc.getMessage());
-                    newFilename = new java.text.SimpleDateFormat("yyMMddHHmmss", java.util.Locale.getDefault())
-                            .format(new java.util.Date()) + System.currentTimeMillis() % 1000;
-                    LogWriter.log(TAG, "v806 fallback newFilename=" + newFilename);
+                java.io.File microMsg = new java.io.File("/data/data/com.tencent.mm/MicroMsg");
+                java.io.File[] userDirs = microMsg.listFiles();
+                if (userDirs == null) { sentError[0] = new RuntimeException("MicroMsg listFiles null"); return; }
+                java.io.File videoDir = null;
+                for (java.io.File ud : userDirs) {
+                    if (ud.isDirectory() && ud.getName().length() == 32) {
+                        java.io.File vd = new java.io.File(ud, "video");
+                        if (vd.exists() && vd.isDirectory()) { videoDir = vd; break; }
+                    }
                 }
-                if (newFilename == null) {
-                    sentError[0] = new RuntimeException("unable to generate filename");
-                    return;
-                }
-                sPendingVideoDstPath = newFilename;
-                Object u0Service = XposedHelpers.callStaticMethod(
-                        XposedHelpers.findClass("pa5.n0", sCL), "c",
-                        XposedHelpers.findClass("qh3.u0", sCL));
-                Object y_j = XposedHelpers.getStaticObjectField(
-                        XposedHelpers.findClass("lin5.y", sCL), "j");
+                if (videoDir == null) { sentError[0] = new RuntimeException("videoDir not found"); return; }
+                LogWriter.log(TAG, "v807 videoDir=" + videoDir.getAbsolutePath());
+                String ext = videoPath.substring(videoPath.lastIndexOf('.'));
+                String dstPath = videoDir.getAbsolutePath() + "/" + System.currentTimeMillis() + ext;
+                java.io.FileInputStream fis = new java.io.FileInputStream(new java.io.File(videoPath));
+                java.io.FileOutputStream fos = new java.io.FileOutputStream(new java.io.File(dstPath));
+                byte[] buf = new byte[16384];
+                int n;
+                while ((n = fis.read(buf)) > 0) fos.write(buf, 0, n);
+                fis.close();
+                fos.close();
+                LogWriter.log(TAG, "v807 copied to " + dstPath);
+                sPendingVideoDstPath = dstPath;
+                Object v2 = XposedHelpers.findClass("v21.v2", sCL).newInstance();
+                XposedHelpers.setObjectField(v2, "a", dstPath);
+                XposedHelpers.setIntField(v2, "m", duration);
+                XposedHelpers.setObjectField(v2, "q", finalToUser);
+                XposedHelpers.setObjectField(v2, "r", finalToUser);
+                XposedHelpers.setIntField(v2, "i", 102);
+                XposedHelpers.setIntField(v2, "x", 1);
+                XposedHelpers.setBooleanField(v2, "W", true);
+                XposedHelpers.setBooleanField(v2, "X", true);
+                XposedHelpers.setObjectField(v2, "j", System.currentTimeMillis());
+                XposedHelpers.setObjectField(v2, "k", System.currentTimeMillis());
+                XposedHelpers.setIntField(v2, "f", (int) f.length());
+                XposedHelpers.setIntField(v2, "h", (int) f.length());
+                Object talker = XposedHelpers.callMethod(v2, "i");
+                Object e9 = XposedHelpers.findClass("com.tencent.mm.storage.e9", sCL).newInstance();
+                XposedHelpers.callMethod(e9, "y1", talker);
+                XposedHelpers.callMethod(e9, "setType", 43);
+                XposedHelpers.callMethod(e9, "k1", 1);
+                XposedHelpers.callMethod(e9, "t1", 1);
+                long msgId = (Long) XposedHelpers.callStaticMethod(
+                        XposedHelpers.findClass("e01.x9", sCL), "x", e9);
+                XposedHelpers.setObjectField(v2, "n", msgId);
+                LogWriter.log(TAG, "v807 built v2 msgId=" + msgId + " path=" + dstPath);
+                boolean sent = false;
                 try {
-                    Class<?> f0Class = XposedHelpers.findClass("qh3.f0", sCL);
-                    Object f0_s = XposedHelpers.getStaticObjectField(f0Class, "s");
-                    Object f0_t = XposedHelpers.getStaticObjectField(f0Class, "t");
-                    vfsVideoPath = (String) XposedHelpers.callMethod(
-                            u0Service, "Fj", y_j, f0_s, newFilename, true);
-                    String vfsThumbPath = (String) XposedHelpers.callMethod(
-                            u0Service, "Fj", y_j, f0_t, newFilename, true);
-                    LogWriter.log(TAG, "v806 vfsVideoPath=" + vfsVideoPath + " vfsThumbPath=" + vfsThumbPath);
-                    Class<?> w6Class = XposedHelpers.findClass("com.tencent.mm.vfs.w6", sCL);
-                    XposedHelpers.callStaticMethod(w6Class, "d", videoPath, vfsVideoPath, false);
-                    LogWriter.log(TAG, "v806 w6.d video copy ok");
-                    java.io.File srcVideo = new java.io.File(videoPath);
-                    String parentDir = srcVideo.getParent();
-                    String srcName = srcVideo.getName();
-                    String baseName = srcName.substring(0, srcName.lastIndexOf('.'));
-                    java.io.File thumbFile = null;
-                    java.io.File[] siblings = srcVideo.getParentFile().listFiles();
-                    if (siblings != null) {
-                        for (java.io.File sf : siblings) {
-                            String sn = sf.getName().toLowerCase();
-                            if (sf.isFile() && sn.startsWith(baseName.toLowerCase())
-                                    && (sn.contains("thumb") || sn.endsWith(".jpg") || sn.endsWith(".png"))) {
-                                thumbFile = sf;
-                                break;
+                    Object mgr = XposedHelpers.callStaticMethod(
+                            XposedHelpers.findClass("pa5.n0", sCL), "c",
+                            XposedHelpers.findClass("kl5.s5", sCL));
+                    if (mgr != null) {
+                        LogWriter.log(TAG, "v807 kl5.s5 mgr OK");
+                        try {
+                            XposedHelpers.callMethod(mgr, "Dj",
+                                    sCtx, dstPath, dstPath, finalToUser, duration, 43,
+                                    null, true, true, "", "", talker, null, "", null);
+                            LogWriter.log(TAG, "v807 kl5.s5.Dj OK");
+                            sent = true;
+                        } catch (Throwable tdj) {
+                            LogWriter.log(TAG, "v807 kl5.s5.Dj fail: " + tdj.getMessage());
+                            try {
+                                XposedHelpers.callMethod(mgr, "Cj",
+                                        sCtx, dstPath, dstPath, finalToUser, duration, 43,
+                                        null, true, true, "", "", talker);
+                                LogWriter.log(TAG, "v807 kl5.s5.Cj OK");
+                                sent = true;
+                            } catch (Throwable tcj) {
+                                LogWriter.log(TAG, "v807 kl5.s5.Cj fail: " + tcj.getMessage());
                             }
                         }
+                    } else {
+                        LogWriter.log(TAG, "v807 kl5.s5 mgr null");
                     }
-                    if (thumbFile != null && thumbFile.exists()) {
-                        XposedHelpers.callStaticMethod(w6Class, "d", thumbFile.getAbsolutePath(), vfsThumbPath, false);
-                        LogWriter.log(TAG, "v806 w6.d thumb copy ok");
-                    }
-                } catch (Throwable tv) {
-                    LogWriter.log(TAG, "v806 VFS copy fail: " + tv.getMessage() + ", fallback to manual");
-                    java.io.File microMsg = new java.io.File("/data/data/com.tencent.mm/MicroMsg");
-                    java.io.File[] userDirs = microMsg.listFiles();
-                    java.io.File videoDir = null;
-                    if (userDirs != null) {
-                        for (java.io.File ud : userDirs) {
-                            if (ud.isDirectory() && ud.getName().length() == 32) {
-                                java.io.File vd = new java.io.File(ud, "video");
-                                if (vd.exists() && vd.isDirectory()) { videoDir = vd; break; }
-                            }
-                        }
-                    }
-                    if (videoDir == null) { sentError[0] = new RuntimeException("videoDir not found"); return; }
-                    String ext = videoPath.substring(videoPath.lastIndexOf('.'));
-                    vfsVideoPath = videoDir.getAbsolutePath() + "/" + newFilename + ext;
-                    java.io.FileInputStream fis = new java.io.FileInputStream(new java.io.File(videoPath));
-                    java.io.FileOutputStream fos = new java.io.FileOutputStream(new java.io.File(vfsVideoPath));
-                    byte[] buf = new byte[16384];
-                    int n;
-                    while ((n = fis.read(buf)) > 0) fos.write(buf, 0, n);
-                    fis.close();
-                    fos.close();
-                    LogWriter.log(TAG, "v806 manual copy to " + vfsVideoPath);
+                } catch (Throwable tbl) {
+                    LogWriter.log(TAG, "v807 kl5.s5 err: " + tbl.getMessage());
                 }
-                Object talker = XposedHelpers.callStaticMethod(
-                        XposedHelpers.findClass("com.tencent.mm.plugin.msg.MsgIdTalker", sCL),
-                        "a", finalToUser);
-                LogWriter.log(TAG, "v806 talker obj OK");
-                Class<?> d3Class = XposedHelpers.findClass("v21.d3", sCL);
-                boolean d3Called = false;
-                try {
-                    Object d3Inst = d3Class.newInstance();
-                    boolean ret = (Boolean) XposedHelpers.callMethod(d3Inst, "q",
-                            newFilename, "", duration, finalToUser,
-                            "", 0, "", 43,
-                            null, "", talker, "", "",
-                            false, -1L, null, "", "");
-                    LogWriter.log(TAG, "v806 d3.q instance ret=" + ret);
-                    d3Called = true;
-                    sentResult[0] = ret;
-                } catch (Throwable t1) {
-                    LogWriter.log(TAG, "v806 d3 instance fail: " + t1.getMessage());
-                }
-                if (!d3Called) {
+                if (!sent) {
+                    LogWriter.log(TAG, "v807 kl5.s5 failed, try w2.x directly");
                     try {
-                        boolean ret = (Boolean) XposedHelpers.callStaticMethod(d3Class, "q",
-                                newFilename, "", duration, finalToUser,
-                                "", 0, "", 43, null, "", talker, "", "",
-                                false, -1L, null, "", "");
-                        LogWriter.log(TAG, "v806 d3.q static ret=" + ret);
-                        sentResult[0] = ret;
-                    } catch (Throwable t2) {
-                        LogWriter.log(TAG, "v806 d3.q static fail: " + t2.getMessage());
+                        Object w2 = XposedHelpers.callStaticMethod(
+                                XposedHelpers.findClass("v21.o2", sCL), "qj");
+                        boolean ret = (Boolean) XposedHelpers.callMethod(w2, "x", v2, true);
+                        LogWriter.log(TAG, "v807 w2.x ret=" + ret);
+                        sent = ret;
+                    } catch (Throwable tw) {
+                        LogWriter.log(TAG, "v807 w2.x fail: " + tw.getMessage());
                     }
                 }
-                if (sentResult[0]) {
-                    try {
-                        Object v2Info = XposedHelpers.callStaticMethod(d3Class, "h", newFilename);
-                        if (v2Info != null) {
-                            Object v2Talker = XposedHelpers.callMethod(v2Info, "i");
-                            long v2MsgId = XposedHelpers.getLongField(v2Info, "n");
-                            Class<?> k0Class = XposedHelpers.findClass("com.tencent.mm.storage.k0", sCL);
-                            Object e9Msg = XposedHelpers.callStaticMethod(k0Class, "Wi", v2Talker, v2MsgId);
-                            Object e9Msg2 = XposedHelpers.callStaticMethod(k0Class, "Wi", v2Talker, v2MsgId);
-                            Class<?> wClass = XposedHelpers.findClass("b31.w", sCL);
-                            Object wService = XposedHelpers.callStaticMethod(
-                                    XposedHelpers.findClass("pa5.n0", sCL), "c", wClass);
-                            String taskId = (String) XposedHelpers.callMethod(wService, "rj", e9Msg, 2);
-                            LogWriter.log(TAG, "v806 CDN rj taskId=" + taskId);
-                            if (taskId != null && !taskId.isEmpty()) {
-                                XposedHelpers.callMethod(wService, "wj", e9Msg2, 2, taskId, null);
-                                LogWriter.log(TAG, "v806 CDN wj registered ok");
-                            }
-                        }
-                    } catch (Throwable tcdn) {
-                        LogWriter.log(TAG, "v806 CDN register fail: " + tcdn.getMessage());
-                    }
-                }
+                sentResult[0] = sent;
             } catch (Throwable t) {
-                LogWriter.log(TAG, "v806 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
+                LogWriter.log(TAG, "v807 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
                 java.io.StringWriter sw = new java.io.StringWriter();
                 t.printStackTrace(new java.io.PrintWriter(sw));
-                LogWriter.log(TAG, "v806 sendVideo stack: " + sw.toString());
+                LogWriter.log(TAG, "v807 sendVideo stack: " + sw.toString());
                 sentError[0] = t;
             } finally {
                 latch.countDown();
@@ -3815,16 +3769,16 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
         try {
             boolean finished = latch.await(60, TimeUnit.SECONDS);
             if (!finished) {
-                LogWriter.log(TAG, "v806 sendVideo timeout for " + finalToUser);
+                LogWriter.log(TAG, "v807 sendVideo timeout for " + finalToUser);
                 throw new RuntimeException("video send timeout for " + finalToUser);
             }
             if (sentError[0] != null) {
                 throw new RuntimeException(sentError[0]);
             }
-            LogWriter.log(TAG, "v806 sendVideo done: to=" + finalToUser + " sent=" + sentResult[0]);
+            LogWriter.log(TAG, "v807 sendVideo done: to=" + finalToUser + " sent=" + sentResult[0]);
             return sentResult[0];
         } catch (InterruptedException e) {
-            LogWriter.log(TAG, "v806 sendVideo interrupted for " + finalToUser);
+            LogWriter.log(TAG, "v807 sendVideo interrupted for " + finalToUser);
             throw new RuntimeException("video send interrupted for " + finalToUser, e);
         }
     }
