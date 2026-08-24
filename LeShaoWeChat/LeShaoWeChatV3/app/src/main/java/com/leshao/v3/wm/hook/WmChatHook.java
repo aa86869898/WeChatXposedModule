@@ -87,6 +87,7 @@ public class WmChatHook {
     private static int sPendingVideoDuration;
     private static String sPendingVideoDstPath;
     private static long sPendingVideoSize;
+    private static volatile boolean sMassSendRunning;
 
     public static void showTitleBtn(Activity act, ClassLoader cl, String user) {
         dismissTitleBtn();
@@ -2897,7 +2898,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v812 d3q+VFS+CDN+thumb build=v430 2026-08-24");
+            LogWriter.log(TAG, "initOnAppStart OK v814 d3q+VFS+CDN+thumb build=v430 2026-08-24");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3102,37 +3103,6 @@ private static void hookVideoSendDebug() {
                     protected void afterHookedMethod(MethodHookParam p) {
                         java.lang.reflect.Method pm = (java.lang.reflect.Method) p.method;
                         LogWriter.log(TAG, "v21.d3.h returnType=" + pm.getReturnType().getName() + " result=" + p.getResult());
-                        if (p.getResult() == null) {
-                            try {
-                                Object v2 = pm.getReturnType().newInstance();
-                                String path = (String) p.args[0];
-                                java.io.File f = new java.io.File(path);
-                                if (f.exists()) {
-                                    XposedHelpers.setObjectField(v2, "a", f.getName());
-                                    XposedHelpers.setIntField(v2, "f", (int) f.length());
-                                    XposedHelpers.setIntField(v2, "m", getVideoDuration(path));
-                                    XposedHelpers.setIntField(v2, "i", 111);
-                                    if (sPendingVideoToUser != null) {
-                                        XposedHelpers.setObjectField(v2, "q", sPendingVideoToUser);
-                                        XposedHelpers.setObjectField(v2, "r", sPendingVideoToUser);
-                                    }
-                                    LogWriter.log(TAG, "v21.d3.h forced v2 from file: a=" + f.getName() + " f=" + f.length());
-                                } else if (sPendingVideoPath != null) {
-                                    XposedHelpers.setObjectField(v2, "a", path);
-                                    XposedHelpers.setIntField(v2, "f", (int) sPendingVideoSize);
-                                    XposedHelpers.setIntField(v2, "m", sPendingVideoDuration);
-                                    XposedHelpers.setIntField(v2, "i", 111);
-                                    if (sPendingVideoToUser != null) {
-                                        XposedHelpers.setObjectField(v2, "q", sPendingVideoToUser);
-                                        XposedHelpers.setObjectField(v2, "r", sPendingVideoToUser);
-                                    }
-                                    LogWriter.log(TAG, "v21.d3.h forced v2 from pending: a=" + path + " f=" + sPendingVideoSize + " m=" + sPendingVideoDuration);
-                                }
-                                p.setResult(v2);
-                            } catch (Throwable t2) {
-                                LogWriter.log(TAG, "v21.d3.h force fail: " + t2.getMessage());
-                            }
-                        }
                     }
                 });
                 LogWriter.log(TAG, "hookVideoSendDebug4 OK");
@@ -3384,9 +3354,14 @@ for (java.lang.reflect.Method o2m : o2.getDeclaredMethods()) {
     }
 
     private static void executeMassSendFromPrefs() {
+        if (sMassSendRunning) {
+            LogWriter.log(TAG, "massSend from prefs: already running, skip");
+            return;
+        }
+        sMassSendRunning = true;
         try {
             String type = WmPrefs.getStr("mass_send_type", "");
-            if (type.isEmpty()) return;
+            if (type.isEmpty()) { sMassSendRunning = false; return; }
             String text = WmPrefs.getStr("mass_send_text", "");
             String targetJson = WmPrefs.getStr("mass_send_targets", "");
             String imgJson = WmPrefs.getStr("mass_send_images", "");
@@ -3400,6 +3375,7 @@ for (java.lang.reflect.Method o2m : o2.getDeclaredMethods()) {
 
             if (sCL == null) {
                 LogWriter.log(TAG, "massSend from prefs: sCL is null, will retry on next window open");
+                sMassSendRunning = false;
                 return;
             }
 
@@ -3419,12 +3395,14 @@ for (java.lang.reflect.Method o2m : o2.getDeclaredMethods()) {
                 LogWriter.log(TAG, "massSend from prefs: no targets, skip");
                 WmPrefs.setStr("mass_send_type", "");
                 WmPrefs.setStr("mass_send_trigger_ms", "");
+                sMassSendRunning = false;
                 return;
             }
 
             executeMassSendOnWorker(type, text, targets, imgList, videoPath, audioPath, taskId, delay);
         } catch (Throwable t) {
             LogWriter.log(TAG, "executeMassSendFromPrefs err: " + t.getMessage());
+            sMassSendRunning = false;
         }
     }
 
@@ -3437,7 +3415,7 @@ for (java.lang.reflect.Method o2m : o2.getDeclaredMethods()) {
 
     // ==================== 发送执行 ====================
 
-    private static void executeMassSend(String type, String text, java.util.List<String> targets,
+private static void executeMassSend(String type, String text, java.util.List<String> targets,
                                          java.util.List<String> imgList, String videoPath,
                                          String audioPath, String taskId, boolean delay) {
         try {
@@ -3445,77 +3423,77 @@ for (java.lang.reflect.Method o2m : o2.getDeclaredMethods()) {
             int success = 0, fail = 0;
             java.util.Random rand = new java.util.Random();
 
-                for (String target : targets) {
-                    try {
-                        if (!text.isEmpty()) {
-                            WmReflect.sendTextMsg(sCL, text, target);
-                        }
+            for (String target : targets) {
+                try {
+                    if (!text.isEmpty()) {
+                        WmReflect.sendTextMsg(sCL, text, target);
+                    }
 
-                        switch (type) {
-                            case "image":
-                                LogWriter.log(TAG, "massSend img: target=" + target + " listSize=" + imgList.size());
-                                for (String imgPath : imgList) {
-                                    if (!imgPath.isEmpty()) sendImageToUser(target, imgPath);
-                                    else LogWriter.log(TAG, "massSend img empty path");
-                                }
-                                break;
-                            case "video":
-                                LogWriter.log(TAG, "massSend vid: target=" + target + " videoPath=" + videoPath);
-                                if (videoPath != null && !videoPath.isEmpty())
-                                    sendVideoToUser(target, videoPath);
-                                else
-                                    LogWriter.log(TAG, "massSend vid EMPTY path, skip");
-                                for (String imgPath : imgList) {
-                                    if (!imgPath.isEmpty()) sendImageToUser(target, imgPath);
-                                }
-                            break;
-                        case "image_text":
+                    switch (type) {
+                        case "image":
+                            LogWriter.log(TAG, "massSend img: target=" + target + " listSize=" + imgList.size());
                             for (String imgPath : imgList) {
                                 if (!imgPath.isEmpty()) sendImageToUser(target, imgPath);
+                                else LogWriter.log(TAG, "massSend img empty path");
                             }
                             break;
-                        case "video_text":
+                        case "video":
+                            LogWriter.log(TAG, "massSend vid: target=" + target + " videoPath=" + videoPath);
                             if (videoPath != null && !videoPath.isEmpty())
                                 sendVideoToUser(target, videoPath);
+                            else
+                                LogWriter.log(TAG, "massSend vid EMPTY path, skip");
                             for (String imgPath : imgList) {
                                 if (!imgPath.isEmpty()) sendImageToUser(target, imgPath);
                             }
-                            break;
-                        case "voice":
-                            if (audioPath != null && !audioPath.isEmpty())
-                                sendAudioFile(target, audioPath);
-                            break;
-                        default:
-                            // 纯文本已在上面 if (!text.isEmpty()) 统一发送，避免重复
-                            break;
-                    }
-                    success++;
-                } catch (Throwable t) {
-                    fail++;
-                    LogWriter.log(TAG, "massSend fail: target=" + target + " type=" + type + " err=" + t.getMessage());
-                    saveMassSendFailRecord(target, type, t.getMessage());
+                        break;
+                    case "image_text":
+                        for (String imgPath : imgList) {
+                            if (!imgPath.isEmpty()) sendImageToUser(target, imgPath);
+                        }
+                        break;
+                    case "video_text":
+                        if (videoPath != null && !videoPath.isEmpty())
+                            sendVideoToUser(target, videoPath);
+                        for (String imgPath : imgList) {
+                            if (!imgPath.isEmpty()) sendImageToUser(target, imgPath);
+                        }
+                        break;
+                    case "voice":
+                        if (audioPath != null && !audioPath.isEmpty())
+                            sendAudioFile(target, audioPath);
+                        break;
+                    default:
+                        break;
                 }
-
-                if (delay && targets.size() > 1) {
-                    Thread.sleep(1000 + rand.nextInt(9000));
-                }
+                success++;
+            } catch (Throwable t) {
+                fail++;
+                LogWriter.log(TAG, "massSend fail: target=" + target + " type=" + type + " err=" + t.getMessage());
+                saveMassSendFailRecord(target, type, t.getMessage());
             }
 
-            LogWriter.log(TAG, "massSend done: success=" + success + " fail=" + fail);
-            updateRecordStatus("completed", success, fail);
-
-            // 清理持久化数据
-            WmPrefs.setStr("mass_send_type", "");
-            WmPrefs.setStr("mass_send_text", "");
-            WmPrefs.setStr("mass_send_targets", "");
-            WmPrefs.setStr("mass_send_images", "");
-            WmPrefs.setStr("mass_send_video", "");
-            WmPrefs.setStr("mass_send_audio", "");
-            WmPrefs.setStr("mass_send_task_id", "");
-            WmPrefs.setStr("mass_send_trigger_ms", "");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "massSend err: " + t.getMessage());
+            if (delay && targets.size() > 1) {
+                Thread.sleep(1000 + rand.nextInt(9000));
+            }
         }
+
+        LogWriter.log(TAG, "massSend done: success=" + success + " fail=" + fail);
+        updateRecordStatus("completed", success, fail);
+
+        WmPrefs.setStr("mass_send_type", "");
+        WmPrefs.setStr("mass_send_text", "");
+        WmPrefs.setStr("mass_send_targets", "");
+        WmPrefs.setStr("mass_send_images", "");
+        WmPrefs.setStr("mass_send_video", "");
+        WmPrefs.setStr("mass_send_audio", "");
+        WmPrefs.setStr("mass_send_task_id", "");
+        WmPrefs.setStr("mass_send_trigger_ms", "");
+    } catch (Throwable t) {
+        LogWriter.log(TAG, "massSend err: " + t.getMessage());
+    } finally {
+        sMassSendRunning = false;
+    }
     }
 
     private static void updateRecordStatus(String status) {
@@ -3649,12 +3627,12 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
     }
 
 private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v812 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v814 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
         int duration = getVideoDuration(videoPath);
-        LogWriter.log(TAG, "v812 sendVideo duration=" + duration + "s size=" + f.length());
+        LogWriter.log(TAG, "v814 sendVideo duration=" + duration + "s size=" + f.length());
         sPendingVideoToUser = toUser;
         sPendingVideoPath = videoPath;
         sPendingVideoDuration = duration;
@@ -3670,12 +3648,12 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 try {
                     Class<?> c3Class = XposedHelpers.findClass("v21.c3", sCL);
                     newFilename = (String) XposedHelpers.callStaticMethod(c3Class, "a", finalToUser);
-                    LogWriter.log(TAG, "v812 c3.a newFilename=" + newFilename);
+                    LogWriter.log(TAG, "v814 c3.a newFilename=" + newFilename);
                 } catch (Throwable tc) {
-                    LogWriter.log(TAG, "v812 c3.a fail: " + tc.getMessage());
+                    LogWriter.log(TAG, "v814 c3.a fail: " + tc.getMessage());
                     newFilename = new java.text.SimpleDateFormat("yyMMddHHmmss", java.util.Locale.getDefault())
                             .format(new java.util.Date()) + System.currentTimeMillis() % 1000;
-                    LogWriter.log(TAG, "v812 fallback newFilename=" + newFilename);
+                    LogWriter.log(TAG, "v814 fallback newFilename=" + newFilename);
                 }
                 if (newFilename == null) {
                     sentError[0] = new RuntimeException("unable to generate filename");
@@ -3691,10 +3669,10 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                         u0Service, "Fj", null, f0_s, newFilename, true);
                 String vfsThumbPath = (String) XposedHelpers.callMethod(
                         u0Service, "Ij", null, newFilename, true);
-                LogWriter.log(TAG, "v812 vfsVideo=" + vfsVideoPath + " vfsThumb=" + vfsThumbPath);
+                LogWriter.log(TAG, "v814 vfsVideo=" + vfsVideoPath + " vfsThumb=" + vfsThumbPath);
                 Class<?> w6Class = XposedHelpers.findClass("com.tencent.mm.vfs.w6", sCL);
                 XposedHelpers.callStaticMethod(w6Class, "d", videoPath, vfsVideoPath, false);
-                LogWriter.log(TAG, "v812 w6.d video copy ok");
+                LogWriter.log(TAG, "v814 w6.d video copy ok");
                 java.io.File tempThumb = new java.io.File(sCtx.getCacheDir(), "thumb_temp_" + System.currentTimeMillis() + ".jpg");
                 android.media.MediaMetadataRetriever retriever = new android.media.MediaMetadataRetriever();
                 try {
@@ -3709,50 +3687,24 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 }
                 XposedHelpers.callStaticMethod(w6Class, "d", tempThumb.getAbsolutePath(), vfsThumbPath, false);
                 tempThumb.delete();
-                LogWriter.log(TAG, "v812 thumb w6.d to " + vfsThumbPath);
+                LogWriter.log(TAG, "v814 thumb w6.d to " + vfsThumbPath);
                 Class<?> d3Class = XposedHelpers.findClass("v21.d3", sCL);
                 boolean ok = (Boolean) XposedHelpers.callStaticMethod(d3Class, "q",
                         newFilename, "", duration, finalToUser,
                         "", 0, "", 43,
                         null, "", null, "", "",
                         false, -1L, null, "", "");
-                LogWriter.log(TAG, "v812 d3.q ret=" + ok);
+                LogWriter.log(TAG, "v814 d3.q ret=" + ok);
                 if (!ok) {
                     sentError[0] = new RuntimeException("d3.q returned false");
                     return;
                 }
-                Object v2Obj = XposedHelpers.callStaticMethod(d3Class, "h", newFilename);
-                if (v2Obj == null) {
-                    sentError[0] = new RuntimeException("d3.h returned null");
-                    return;
-                }
-                LogWriter.log(TAG, "v812 d3.h OK, v2=" + v2Obj.getClass().getSimpleName());
-                try {
-                    Class<?> wClass = XposedHelpers.findClass("pa5.w", sCL);
-                    Object wService = XposedHelpers.callStaticMethod(
-                            XposedHelpers.findClass("pa5.n0", sCL), "c", wClass);
-                    Object talker = XposedHelpers.callMethod(v2Obj, "i");
-                    long msgId = XposedHelpers.getLongField(v2Obj, "n");
-                    Class<?> k0Class = XposedHelpers.findClass("com.tencent.mm.storage.k0", sCL);
-                    Object e9Msg = XposedHelpers.callStaticMethod(k0Class, "Wi",
-                            new Class[]{String.class, long.class}, new Object[]{talker, msgId});
-                    Object e9Msg2 = XposedHelpers.callStaticMethod(k0Class, "Wi",
-                            new Class[]{String.class, long.class}, new Object[]{talker, msgId});
-                    String taskId = (String) XposedHelpers.callMethod(wService, "rj", e9Msg, 2);
-                    LogWriter.log(TAG, "v812 CDN rj taskId=" + taskId);
-                    if (taskId != null && !taskId.isEmpty()) {
-                        XposedHelpers.callMethod(wService, "wj", e9Msg2, 2, taskId, null);
-                        LogWriter.log(TAG, "v812 CDN wj registered ok");
-                    }
-                } catch (Throwable tcdn) {
-                    LogWriter.log(TAG, "v812 CDN register fail: " + tcdn.getMessage());
-                }
                 sentResult[0] = true;
             } catch (Throwable t) {
-                LogWriter.log(TAG, "v812 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
+                LogWriter.log(TAG, "v814 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
                 java.io.StringWriter sw = new java.io.StringWriter();
                 t.printStackTrace(new java.io.PrintWriter(sw));
-                LogWriter.log(TAG, "v812 sendVideo stack: " + sw.toString());
+                LogWriter.log(TAG, "v814 sendVideo stack: " + sw.toString());
                 sentError[0] = t;
             } finally {
                 latch.countDown();
@@ -3761,16 +3713,16 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
         try {
             boolean finished = latch.await(60, TimeUnit.SECONDS);
             if (!finished) {
-                LogWriter.log(TAG, "v812 sendVideo timeout for " + finalToUser);
+                LogWriter.log(TAG, "v814 sendVideo timeout for " + finalToUser);
                 throw new RuntimeException("video send timeout for " + finalToUser);
             }
             if (sentError[0] != null) {
                 throw new RuntimeException(sentError[0]);
             }
-            LogWriter.log(TAG, "v812 sendVideo done: to=" + finalToUser + " sent=" + sentResult[0]);
+            LogWriter.log(TAG, "v814 sendVideo done: to=" + finalToUser + " sent=" + sentResult[0]);
             return sentResult[0];
         } catch (InterruptedException e) {
-            LogWriter.log(TAG, "v812 sendVideo interrupted for " + finalToUser);
+            LogWriter.log(TAG, "v814 sendVideo interrupted for " + finalToUser);
             throw new RuntimeException("video send interrupted for " + finalToUser, e);
         }
     }
