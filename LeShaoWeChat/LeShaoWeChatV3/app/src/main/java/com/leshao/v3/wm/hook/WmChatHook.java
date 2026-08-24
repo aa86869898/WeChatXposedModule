@@ -2897,7 +2897,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v807 w2.x build=v425 2026-08-24");
+            LogWriter.log(TAG, "initOnAppStart OK v808 d3h+v2+w2x build=v426 2026-08-24");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3649,12 +3649,12 @@ private static boolean sendImageToUser(String toUser, String imgPath) {
     }
 
 private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v807 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v808 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
         int duration = getVideoDuration(videoPath);
-        LogWriter.log(TAG, "v807 sendVideo duration=" + duration + "s size=" + f.length());
+        LogWriter.log(TAG, "v808 sendVideo duration=" + duration + "s size=" + f.length());
         sPendingVideoToUser = toUser;
         sPendingVideoPath = videoPath;
         sPendingVideoDuration = duration;
@@ -3677,7 +3677,7 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                     }
                 }
                 if (videoDir == null) { sentError[0] = new RuntimeException("videoDir not found"); return; }
-                LogWriter.log(TAG, "v807 videoDir=" + videoDir.getAbsolutePath());
+                LogWriter.log(TAG, "v808 videoDir=" + videoDir.getAbsolutePath());
                 String ext = videoPath.substring(videoPath.lastIndexOf('.'));
                 String dstPath = videoDir.getAbsolutePath() + "/" + System.currentTimeMillis() + ext;
                 java.io.FileInputStream fis = new java.io.FileInputStream(new java.io.File(videoPath));
@@ -3687,9 +3687,20 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 while ((n = fis.read(buf)) > 0) fos.write(buf, 0, n);
                 fis.close();
                 fos.close();
-                LogWriter.log(TAG, "v807 copied to " + dstPath);
+                LogWriter.log(TAG, "v808 copied to " + dstPath);
                 sPendingVideoDstPath = dstPath;
-                Object v2 = XposedHelpers.findClass("v21.v2", sCL).newInstance();
+                Class<?> d3Class = XposedHelpers.findClass("v21.d3", sCL);
+                Object v2 = null;
+                try {
+                    v2 = XposedHelpers.callStaticMethod(d3Class, "h", dstPath);
+                    LogWriter.log(TAG, "v808 d3.h OK, v2=" + (v2 != null ? v2.getClass().getSimpleName() : "null"));
+                } catch (Throwable th) {
+                    LogWriter.log(TAG, "v808 d3.h fail: " + th.getMessage());
+                }
+                if (v2 == null) {
+                    sentError[0] = new RuntimeException("d3.h returned null v2");
+                    return;
+                }
                 XposedHelpers.setObjectField(v2, "a", dstPath);
                 XposedHelpers.setIntField(v2, "m", duration);
                 XposedHelpers.setObjectField(v2, "q", finalToUser);
@@ -3698,8 +3709,6 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 XposedHelpers.setIntField(v2, "x", 1);
                 XposedHelpers.setBooleanField(v2, "W", true);
                 XposedHelpers.setBooleanField(v2, "X", true);
-                XposedHelpers.setObjectField(v2, "j", System.currentTimeMillis());
-                XposedHelpers.setObjectField(v2, "k", System.currentTimeMillis());
                 XposedHelpers.setIntField(v2, "f", (int) f.length());
                 XposedHelpers.setIntField(v2, "h", (int) f.length());
                 Object talker = XposedHelpers.callMethod(v2, "i");
@@ -3711,56 +3720,56 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 long msgId = (Long) XposedHelpers.callStaticMethod(
                         XposedHelpers.findClass("e01.x9", sCL), "x", e9);
                 XposedHelpers.setObjectField(v2, "n", msgId);
-                LogWriter.log(TAG, "v807 built v2 msgId=" + msgId + " path=" + dstPath);
+                LogWriter.log(TAG, "v808 built v2 msgId=" + msgId + " path=" + dstPath);
                 boolean sent = false;
                 try {
                     Object mgr = XposedHelpers.callStaticMethod(
                             XposedHelpers.findClass("pa5.n0", sCL), "c",
                             XposedHelpers.findClass("kl5.s5", sCL));
                     if (mgr != null) {
-                        LogWriter.log(TAG, "v807 kl5.s5 mgr OK");
+                        LogWriter.log(TAG, "v808 kl5.s5 mgr OK");
                         try {
                             XposedHelpers.callMethod(mgr, "Dj",
                                     sCtx, dstPath, dstPath, finalToUser, duration, 43,
                                     null, true, true, "", "", talker, null, "", null);
-                            LogWriter.log(TAG, "v807 kl5.s5.Dj OK");
+                            LogWriter.log(TAG, "v808 kl5.s5.Dj OK");
                             sent = true;
                         } catch (Throwable tdj) {
-                            LogWriter.log(TAG, "v807 kl5.s5.Dj fail: " + tdj.getMessage());
+                            LogWriter.log(TAG, "v808 kl5.s5.Dj fail: " + tdj.getMessage());
                             try {
                                 XposedHelpers.callMethod(mgr, "Cj",
                                         sCtx, dstPath, dstPath, finalToUser, duration, 43,
                                         null, true, true, "", "", talker);
-                                LogWriter.log(TAG, "v807 kl5.s5.Cj OK");
+                                LogWriter.log(TAG, "v808 kl5.s5.Cj OK");
                                 sent = true;
                             } catch (Throwable tcj) {
-                                LogWriter.log(TAG, "v807 kl5.s5.Cj fail: " + tcj.getMessage());
+                                LogWriter.log(TAG, "v808 kl5.s5.Cj fail: " + tcj.getMessage());
                             }
                         }
                     } else {
-                        LogWriter.log(TAG, "v807 kl5.s5 mgr null");
+                        LogWriter.log(TAG, "v808 kl5.s5 mgr null");
                     }
                 } catch (Throwable tbl) {
-                    LogWriter.log(TAG, "v807 kl5.s5 err: " + tbl.getMessage());
+                    LogWriter.log(TAG, "v808 kl5.s5 err: " + tbl.getMessage());
                 }
                 if (!sent) {
-                    LogWriter.log(TAG, "v807 kl5.s5 failed, try w2.x directly");
+                    LogWriter.log(TAG, "v808 kl5.s5 failed, try w2.x with d3.h v2");
                     try {
                         Object w2 = XposedHelpers.callStaticMethod(
                                 XposedHelpers.findClass("v21.o2", sCL), "qj");
                         boolean ret = (Boolean) XposedHelpers.callMethod(w2, "x", v2, true);
-                        LogWriter.log(TAG, "v807 w2.x ret=" + ret);
+                        LogWriter.log(TAG, "v808 w2.x ret=" + ret);
                         sent = ret;
                     } catch (Throwable tw) {
-                        LogWriter.log(TAG, "v807 w2.x fail: " + tw.getMessage());
+                        LogWriter.log(TAG, "v808 w2.x fail: " + tw.getMessage());
                     }
                 }
                 sentResult[0] = sent;
             } catch (Throwable t) {
-                LogWriter.log(TAG, "v807 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
+                LogWriter.log(TAG, "v808 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
                 java.io.StringWriter sw = new java.io.StringWriter();
                 t.printStackTrace(new java.io.PrintWriter(sw));
-                LogWriter.log(TAG, "v807 sendVideo stack: " + sw.toString());
+                LogWriter.log(TAG, "v808 sendVideo stack: " + sw.toString());
                 sentError[0] = t;
             } finally {
                 latch.countDown();
@@ -3769,16 +3778,16 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
         try {
             boolean finished = latch.await(60, TimeUnit.SECONDS);
             if (!finished) {
-                LogWriter.log(TAG, "v807 sendVideo timeout for " + finalToUser);
+                LogWriter.log(TAG, "v808 sendVideo timeout for " + finalToUser);
                 throw new RuntimeException("video send timeout for " + finalToUser);
             }
             if (sentError[0] != null) {
                 throw new RuntimeException(sentError[0]);
             }
-            LogWriter.log(TAG, "v807 sendVideo done: to=" + finalToUser + " sent=" + sentResult[0]);
+            LogWriter.log(TAG, "v808 sendVideo done: to=" + finalToUser + " sent=" + sentResult[0]);
             return sentResult[0];
         } catch (InterruptedException e) {
-            LogWriter.log(TAG, "v807 sendVideo interrupted for " + finalToUser);
+            LogWriter.log(TAG, "v808 sendVideo interrupted for " + finalToUser);
             throw new RuntimeException("video send interrupted for " + finalToUser, e);
         }
     }
