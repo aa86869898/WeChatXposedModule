@@ -384,7 +384,6 @@ public final class FakeAddSource {
                     }
                 }
             }
-            LogWriter.log(TAG, "SayHiSnsPermUI 方法列表: " + methodList.toString().trim());
             LogWriter.log(TAG, "SayHiSnsPermUI 追踪 Hook 注册成功");
         } catch (Throwable t) {
             LogWriter.log(TAG, "SayHiSnsPermUI 追踪 Hook 失败: " + t.getMessage());

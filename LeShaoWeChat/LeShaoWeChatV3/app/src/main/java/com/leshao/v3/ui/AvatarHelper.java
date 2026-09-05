@@ -18,6 +18,7 @@ import android.widget.ImageView;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.hook.VersionCompat;
 
 import de.robv.android.xposed.XposedHelpers;
 
@@ -55,6 +56,10 @@ public class AvatarHelper {
     private static final Handler sMain = new Handler(Looper.getMainLooper());
     private static final ExecutorService sIo = Executors.newFixedThreadPool(2);
 
+    private static ClassLoader getWeChatCL() {
+        return ContextManager.getClassLoader();
+    }
+
     private static void ensureInit() {
         if (sInited) return;
         synchronized (AvatarHelper.class) {
@@ -63,7 +68,7 @@ public class AvatarHelper {
                 Context ctx = ContextManager.getAppContext();
                 if (ctx == null) return;
 
-                ClassLoader cl = ContextManager.getClassLoader();
+                ClassLoader cl = getWeChatCL();
                 if (cl != null) initJ1OnMainThread(cl);
 
                 sAccountDir = findAccountDir(ctx);
@@ -126,9 +131,9 @@ public class AvatarHelper {
         return null;
     }
 
-    private static String tryMethodB(Context ctx) {
+private static String tryMethodB(Context ctx) {
         try {
-            ClassLoader cl = ContextManager.getClassLoader();
+            ClassLoader cl = getWeChatCL();
             Class<?> mp0b = cl.loadClass("mp0.b");
             String base = (String) mp0b.getDeclaredMethod("X").invoke(null);
             if (base == null || base.isEmpty()) return null;
@@ -196,14 +201,14 @@ public class AvatarHelper {
         } catch (Throwable ignored) {}
 
         try {
-            ClassLoader cl = ContextManager.getClassLoader();
+            ClassLoader cl = getWeChatCL();
             Class<?> y3 = cl.loadClass("y3");
             long uin = (Long) y3.getDeclaredMethod("q0").invoke(null);
             if (uin > 0) return uin;
         } catch (Throwable ignored) {}
 
         try {
-            ClassLoader cl = ContextManager.getClassLoader();
+            ClassLoader cl = getWeChatCL();
             Class<?> y3 = cl.loadClass("y3");
             Object userInfo = y3.getDeclaredMethod("E0").invoke(null);
             long uin = (Long) userInfo.getClass().getDeclaredField("b").get(userInfo);
@@ -310,14 +315,17 @@ public class AvatarHelper {
      */
     public static Bitmap getCachedAvatarBitmap(String wxid) {
         try {
-            ClassLoader cl = ContextManager.getClassLoader();
+            ClassLoader cl = getWeChatCL();
             if (cl == null) return null;
+            LogWriter.log(TAG, "getCachedAvatarBitmap: cl ok, findClass...");
             Class<?> d1 = XposedHelpers.findClass("com.tencent.mm.modelavatar.d1", cl);
+            LogWriter.log(TAG, "getCachedAvatarBitmap: findClass ok, callStaticMethod hj...");
             Object r = XposedHelpers.callStaticMethod(d1, "hj");
+            LogWriter.log(TAG, "getCachedAvatarBitmap: hj ok, r=" + (r != null));
             if (r == null) return null;
             return (Bitmap) XposedHelpers.callMethod(r, "f", wxid, false, 0, null);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "getCachedAvatarBitmap fail: " + t.getMessage());
+            LogWriter.log(TAG, "getCachedAvatarBitmap fail: " + t.getClass().getSimpleName() + ": " + t.getMessage());
             return null;
         }
     }
@@ -327,7 +335,7 @@ public class AvatarHelper {
      */
     public static String getAvatarLocalPath(String wxid) {
         try {
-            ClassLoader cl = ContextManager.getClassLoader();
+            ClassLoader cl = getWeChatCL();
             if (cl == null) return null;
             Class<?> d1 = XposedHelpers.findClass("com.tencent.mm.modelavatar.d1", cl);
             Object z = XposedHelpers.callStaticMethod(d1, "ij");
@@ -353,7 +361,7 @@ public class AvatarHelper {
      */
     public static String getAvatarUrl(String wxid, boolean big) {
         try {
-            ClassLoader cl = ContextManager.getClassLoader();
+            ClassLoader cl = getWeChatCL();
             if (cl == null) return null;
             Class<?> d1 = XposedHelpers.findClass("com.tencent.mm.modelavatar.d1", cl);
             Object s0 = XposedHelpers.callStaticMethod(d1, "mj");
@@ -404,7 +412,7 @@ public class AvatarHelper {
     public static boolean bindAvatar(ImageView iv, String wxid) {
         if (iv == null || wxid == null || wxid.isEmpty()) return false;
         try {
-            ClassLoader cl = ContextManager.getClassLoader();
+            ClassLoader cl = getWeChatCL();
             if (cl == null) return false;
 
             // 方案1：AnyProcessAvatarAttacher（feature.avatar.s），文档推荐跨进程绑定
@@ -513,7 +521,7 @@ public class AvatarHelper {
 
     private static Bitmap loadFromWeChatApi(String wxid, int target) {
         try {
-            ClassLoader cl = ContextManager.getClassLoader();
+            ClassLoader cl = getWeChatCL();
             if (cl == null) return null;
 
             // com.tencent.mm.pluginsdk.ui.a$b is WeChat's avatar display helper

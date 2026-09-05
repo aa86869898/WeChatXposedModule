@@ -136,6 +136,9 @@ public class AiMsgDb {
 
             Object db = VersionCompat.openDatabase(dbCls, dbPath, password);
             if (db == null) {
+                db = VersionCompat.openDatabaseWcdb(cl, dbPath, password);
+            }
+            if (db == null) {
                 LogWriter.log(TAG, "openDb: openDatabase 返回 null");
             } else {
                 LogWriter.log(TAG, "openDb: 成功 db类=" + db.getClass().getName());

@@ -56,11 +56,18 @@ public class WmGroupHook {
 
     /** 群详情页直接打开面板（不依赖浮动按钮） */
     public static void showGroupPanel(Activity act, ClassLoader cl, String room) {
+        LogWriter.log(TAG, "showGroupPanel room=" + room + " act=" + (act != null ? act.getClass().getSimpleName() : "null"));
         sAct = act;
         sCL = cl;
         sRoom = room;
         sWM = (WindowManager) act.getSystemService(Context.WINDOW_SERVICE);
-        if (room == null || !WmReflect.isChatRoom(cl, room)) return;
+        if (room == null) { LogWriter.log(TAG, "showGroupPanel skip: room null"); return; }
+        try {
+            if (!WmReflect.isChatRoom(cl, room)) { LogWriter.log(TAG, "showGroupPanel skip: not chatroom"); return; }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "isChatRoom failed: " + e.getMessage() + " (proceeding)");
+        }
+        LogWriter.log(TAG, "showGroupPanel isChatRoom passed, sPanelOn=" + sPanelOn);
         if (sPanelOn) { hidePanel(); return; }
         showPanel();
     }
@@ -72,6 +79,11 @@ public class WmGroupHook {
             sGrpFloat = null;
         }
         sAct = null;
+    }
+
+    public static void setGroupFloat(com.leshao.v3.wm.utils.WmUi.DragFloat f) {
+        if (sGrpFloat != null) sGrpFloat.removeFromWindow();
+        sGrpFloat = f;
     }
 
     static void showPanel() {
@@ -149,8 +161,18 @@ public class WmGroupHook {
 
     /** 群信息摘要 */
     static String makeRoomSubtitle() {
-        int cnt = WmReflect.getMemberCount(sCL, sRoom);
-        String display = WmReflect.getRoomDisplayName(sCL, sRoom);
+        int cnt = 0;
+        try { cnt = WmReflect.getMemberCount(sCL, sRoom); } catch (Throwable t) {
+            if (!t.getMessage().contains("Kernel not initialized")) {
+                LogWriter.log(TAG, "makeRoomSubtitle getMemberCount err: " + t.getMessage());
+            }
+        }
+        String display = null;
+        try { display = WmReflect.getRoomDisplayName(sCL, sRoom); } catch (Throwable t) {
+            if (!t.getMessage().contains("Kernel not initialized")) {
+                LogWriter.log(TAG, "makeRoomSubtitle getRoomDisplayName err: " + t.getMessage());
+            }
+        }
         if (display == null || display.isEmpty()) display = sRoom;
         return "群聊名称 " + display + "\n成员人数 " + cnt + "人";
     }

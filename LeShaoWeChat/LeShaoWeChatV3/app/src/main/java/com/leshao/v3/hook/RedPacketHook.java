@@ -357,21 +357,41 @@ public class RedPacketHook {
 
     // 查找红包领取页"开"按钮: 支持 Button/TextView/ImageView/自定义 View
     private static View findOpenView(View v) {
-        if (v instanceof TextView) {
-            String s = ((TextView) v).getText().toString();
-            if (isOpenLabel(s)) return findClickableSelfOrParent(v);
-        }
+        // Check by resource ID (open/receive)
         try {
             if (v.getId() != View.NO_ID) {
                 String resName = v.getResources().getResourceEntryName(v.getId());
                 if (resName != null) {
                     String rl = resName.toLowerCase();
-                    if (rl.contains("open") || rl.contains("receive")) {
+                    if (rl.contains("open") || rl.contains("receive") || rl.contains("receive_btn")
+                            || rl.contains("open_btn") || rl.contains("btn_open")) {
                         return findClickableSelfOrParent(v);
                     }
                 }
             }
         } catch (Throwable ignored) {}
+
+        // Check by text
+        if (v instanceof TextView) {
+            String s = ((TextView) v).getText().toString();
+            if (isOpenLabel(s)) return findClickableSelfOrParent(v);
+        }
+
+        // Check by contentDescription (8.0.78 may use ImageView with content desc)
+        try {
+            CharSequence cd = v.getContentDescription();
+            if (cd != null) {
+                String cds = cd.toString().trim();
+                if (isOpenLabel(cds)) return findClickableSelfOrParent(v);
+            }
+        } catch (Throwable ignored) {}
+
+        // Check by class name (8.0.78 may use custom button classes)
+        String clsName = v.getClass().getSimpleName().toLowerCase();
+        if (clsName.contains("open") || clsName.contains("receive") || clsName.contains("luckymoney")) {
+            if (v.isClickable() && isVisible(v)) return v;
+        }
+
         if (v instanceof ViewGroup) {
             for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) {
                 View r = findOpenView(((ViewGroup) v).getChildAt(i));
@@ -416,7 +436,6 @@ public class RedPacketHook {
                 XposedBridge.hookAllMethods(cls, "onResume", new TransferDetailHook());
                 LogWriter.log(TAG, "[OK] " + clsName + ".onResume()");
             } catch (Throwable ignored) {
-                LogWriter.log(TAG, "[MISS] " + clsName);
             }
         }
     }

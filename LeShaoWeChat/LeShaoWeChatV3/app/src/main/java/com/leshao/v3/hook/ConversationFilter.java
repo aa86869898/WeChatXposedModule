@@ -1,10 +1,13 @@
 package com.leshao.v3.hook;
 
+import android.view.View;
+import android.widget.AbsListView;
 import com.leshao.v3.LogWriter;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.util.*;
+import java.lang.reflect.Field;
 import android.os.Handler;
 
 public class ConversationFilter {
@@ -18,73 +21,380 @@ public class ConversationFilter {
     private static Map<Integer, Integer> sUnreadByLabel = new HashMap<>();
 
     private static Object sAdapter;
+    private static Object sHeaderAdapter;
+    private static View sConvList;
     private static boolean sHookInstalled = false;
     private static final Handler sUnreadHandler = new Handler(android.os.Looper.getMainLooper());
     private static long sLastBadgeRefresh = 0;
     private static long sLastUnreadScan = 0;
     private static final long UNREAD_SCAN_INTERVAL = 2000;
+    private static int sGetCountCall = 0;
+    private static int sGetViewCall = 0;
+    private static volatile boolean sJustAppliedFilter = false;
+    // 锚定：首个可见会话的 username（跨过滤切换时 position 会错位，username 不会）+ 该行 top
+    private static String sAnchorUsername;
+    private static int sAnchorRawPos = -1;
+    private static int sAnchorChildTop = 0;
 
-    public static void install(ClassLoader cl, Object adapterInstance) {
-        if (sHookInstalled) { LogWriter.log(TAG, "already installed"); return; }
+    public static void install(ClassLoader cl, Object adapterInstance, View convList) {
         if (adapterInstance == null) { LogWriter.log(TAG, "adapter null"); return; }
 
-        sAdapter = adapterInstance;
+        // 8.0.78 会话列表为 ScrollControlRecyclerView，当前过滤仅适配 ListView
+        if (convList != null && convList.getClass().getName().contains("RecyclerView")) {
+            LogWriter.log(TAG, "convList is RecyclerView (" + convList.getClass().getSimpleName()
+                    + "), ConvFilter not installed (ListView-only)");
+            return;
+        }
+
+        // 允许在已安装后用真正的 convList 更新 sConvList（fallback 可能先以 null 安装）
+        if (convList != null) sConvList = convList;
+        if (sHookInstalled) { LogWriter.log(TAG, "already installed"); return; }
+
+        if (sConvList == null) { LogWriter.log(TAG, "convList null at install, layoutChildren hook deferred"); }
+
+        // 解包 HeaderViewListAdapter，获取真实 adapter
+        Object realAdapter = adapterInstance;
         try {
-            Class<?> adapterClass = XposedHelpers.findClass("fh5.w0", cl);
+            if (adapterInstance.getClass().getName().equals("android.widget.HeaderViewListAdapter")) {
+                sHeaderAdapter = adapterInstance;
+                realAdapter = XposedHelpers.callMethod(adapterInstance, "getWrappedAdapter");
+                LogWriter.log(TAG, "unwrapped HeaderViewListAdapter -> " + (realAdapter != null ? realAdapter.getClass().getName() : "null"));
+            }
+        } catch (Throwable ignored) {}
+        if (realAdapter == null) { LogWriter.log(TAG, "realAdapter null after unwrap"); return; }
 
-            XposedBridge.hookAllMethods(adapterClass, "getCount", new XC_MethodHook() {
+        // 防御: realAdapter 不是 Adapter 实例时跳过
+        if (!(realAdapter instanceof android.widget.Adapter)) {
+            LogWriter.log(TAG, "realAdapter is not an Adapter: " + realAdapter.getClass().getName());
+            return;
+        }
+
+        sAdapter = realAdapter;
+        try {
+            // 直接钩 HeaderViewListAdapter（Android 框架类，ListView 直接调用它的 getCount/getView）
+            // fh5.w0 的 hookAllMethods 在 LSPosed 下无法钩到继承/重写的方法
+            XposedBridge.hookAllMethods(android.widget.HeaderViewListAdapter.class, "getCount", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     try {
-                        if (sFilterActive && param.thisObject == sAdapter) {
-                            param.setResult(sFilteredPositions.size());
-                        }
-                    } catch (Throwable ignored) {}
-                }
-            });
-
-            XposedBridge.hookAllMethods(adapterClass, "getView", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    try {
-                        if (sFilterActive && param.thisObject == sAdapter) {
-                            Object arg = param.args[0];
-                            int requestedPos = arg instanceof Integer ? (Integer) arg : (int) arg;
-                            if (requestedPos >= 0 && requestedPos < sFilteredPositions.size()) {
-                                param.args[0] = sFilteredPositions.get(requestedPos);
+                        if (sFilterActive && param.thisObject == sHeaderAdapter) {
+                            java.util.ArrayList<?> headers = (java.util.ArrayList<?>) XposedHelpers.getObjectField(param.thisObject, "mHeaderViewInfos");
+                            java.util.ArrayList<?> footers = (java.util.ArrayList<?>) XposedHelpers.getObjectField(param.thisObject, "mFooterViewInfos");
+                            int hfCount = (headers != null ? headers.size() : 0) + (footers != null ? footers.size() : 0);
+                            param.setResult(hfCount + sFilteredPositions.size());
+                            if (++sGetCountCall % 20 == 1) {
+                                LogWriter.log(TAG, "getCount hooked: " + (hfCount + sFilteredPositions.size()));
                             }
                         }
                     } catch (Throwable ignored) {}
                 }
             });
 
-            XposedBridge.hookAllMethods(adapterClass, "notifyDataSetChanged", new XC_MethodHook() {
+            XposedBridge.hookAllMethods(android.widget.HeaderViewListAdapter.class, "getView", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (sFilterActive && param.thisObject == sHeaderAdapter) {
+                            int position = (int) param.args[0];
+                            java.util.ArrayList<?> headers = (java.util.ArrayList<?>) XposedHelpers.getObjectField(param.thisObject, "mHeaderViewInfos");
+                            int numHeaders = headers != null ? headers.size() : 0;
+                            if (position >= numHeaders) {
+                                int dataPos = position - numHeaders;
+                                if (dataPos >= 0 && dataPos < sFilteredPositions.size()) {
+                                    param.args[0] = numHeaders + sFilteredPositions.get(dataPos);
+                                    if (++sGetViewCall % 20 == 1) {
+                                        LogWriter.log(TAG, "getView hooked: " + dataPos + "->" + sFilteredPositions.get(dataPos));
+                                    }
+                                }
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+
+            // notifyDataSetChanged: fh5.w0 没重写，钩 BaseAdapter
+            XposedBridge.hookAllMethods(android.widget.BaseAdapter.class, "notifyDataSetChanged", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     try {
-                                        if (param.thisObject == sAdapter) {
-                                            long now = System.currentTimeMillis();
-                                            if (now - sLastBadgeRefresh > 5000) {
-                                                sLastBadgeRefresh = now;
-                                                scanUnreadCounts(); // update counts only, no UI rebuild
-                                            }
-                                        }
+                        if (param.thisObject == sAdapter) {
+                            long now = System.currentTimeMillis();
+                            if (now - sLastBadgeRefresh > 5000) {
+                                sLastBadgeRefresh = now;
+                                scanUnreadCounts();
+                            }
+                        }
                     } catch (Throwable e) {
                         LogWriter.log("ConvFilter", "cb err: " + e);
                     }
                 }
             });
 
+            // layoutChildren 内部会调用 handleDataChanged -> lookForSelectablePosition(0,true)
+            // 在 Android 14 上 lookForSelectablePosition 已移除，需要直接拦截 layoutChildren
+            // 过滤刚应用时按锚定恢复滚动位置（用户期望：切标签后保持原滚动位置，不跳回顶部）
+            try {
+                java.lang.reflect.Method lc = android.widget.AbsListView.class.getDeclaredMethod("layoutChildren");
+                XposedBridge.hookMethod(lc, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        if (sJustAppliedFilter && param.thisObject == sConvList) {
+                            try {
+                                restoreAnchorPosition((AbsListView) param.thisObject);
+                            } catch (Throwable ignored) {}
+                        }
+                    }
+                });
+                LogWriter.log(TAG, "layoutChildren hook installed");
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "layoutChildren hook failed: " + e.getMessage());
+            }
+
             sHookInstalled = true;
-            LogWriter.log(TAG, "hooks ok");
+            LogWriter.log(TAG, "hooks ok: HeaderViewListAdapter");
         } catch (Throwable e) {
             LogWriter.log(TAG, "install fail: " + e.getMessage());
         }
     }
 
+    private static Field sDataListField = null;
+    private static Object sDataOwner = null;
+
+    @SuppressWarnings("unchecked")
+    private static java.util.List<?> dataListOf() {
+        try {
+            if (sDataListField != null && sDataOwner != null) {
+                Object v = sDataListField.get(sDataOwner);
+                if (v instanceof java.util.List && ((java.util.List<?>) v).size() > 0) {
+                    return (java.util.List<?>) v;
+                }
+                sDataListField = null;
+                sDataOwner = null;
+            }
+            // Primary: direct sAdapter.q.d access (same path as scanUnreadCounts)
+            try {
+                Object q = XposedHelpers.getObjectField(sAdapter, "q");
+                if (q != null) {
+                    Class<?> qClass = q.getClass();
+                    java.lang.reflect.Field dField = null;
+                    while (qClass != null) {
+                        try {
+                            dField = qClass.getDeclaredField("d");
+                            break;
+                        } catch (NoSuchFieldException e) {
+                            qClass = qClass.getSuperclass();
+                        }
+                    }
+                    if (dField != null) {
+                        dField.setAccessible(true);
+                        Object d = dField.get(q);
+                        if (d instanceof java.util.List && ((java.util.List<?>) d).size() > 0) {
+                            sDataListField = dField;
+                            sDataOwner = q;
+                            LogWriter.log(TAG, "dataList direct: q.d size=" + ((java.util.List<?>) d).size());
+                            return (java.util.List<?>) d;
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+            // Fallback: deep search
+            java.util.List<Object> visited = new java.util.ArrayList<>();
+            Field best = findDataListFieldDeep(sAdapter, visited, 0);
+            if (best != null) {
+                sDataListField = best;
+                sDataOwner = findOwnerDeep(sAdapter, best);
+                LogWriter.log(TAG, "dataList discover: " + (sDataOwner != null ? sDataOwner.getClass().getName() : "null") + "." + best.getName() + " size=" + listSizeDeep(best, sDataOwner));
+                Object v = best.get(sDataOwner);
+                if (v instanceof java.util.List) return (java.util.List<?>) v;
+            }
+            LogWriter.log(TAG, "dataList discover: NOT FOUND");
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "dataListOf err: " + e.getMessage());
+        }
+        return Collections.emptyList();
+    }
+
+    private static Field findDataListFieldDeep(Object obj, java.util.List<Object> visited, int depth) {
+        if (obj == null || depth > 4 || !visited.add(obj)) return null;
+        Field best = null;
+        int bestScore = -1;
+        try {
+            for (Class<?> c = obj.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                for (Field f : c.getDeclaredFields()) {
+                    if (!java.util.List.class.isAssignableFrom(f.getType())) continue;
+                    try { f.setAccessible(true); } catch (Throwable ignored) {}
+                    Object v;
+                    try { v = f.get(obj); } catch (Throwable ignored) { continue; }
+                    if (!(v instanceof java.util.List)) continue;
+                    java.util.List<?> l = (java.util.List<?>) v;
+                    int size = l.size();
+                    if (size <= 0) continue;
+                    int sampleScore = 0;
+                    int sample = Math.min(size, 6);
+                    for (int i = 0; i < sample; i++) {
+                        Object it = l.get(i);
+                        if (it == null) continue;
+                        if (it.getClass().getName().startsWith("com.tencent.mm")) {
+                            sampleScore += Math.min(5, it.getClass().getDeclaredFields().length);
+                        }
+                    }
+                    int score = Math.min(size, 100) * 100 + sampleScore;
+                    if (score > bestScore) { bestScore = score; best = f; }
+                }
+            }
+            if (best == null && depth < 4) {
+                for (Class<?> c = obj.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                    for (Field f : c.getDeclaredFields()) {
+                        Class<?> ft = f.getType();
+                        if (ft == Object.class || ft.isPrimitive() || ft == String.class) continue;
+                        if (java.util.List.class.isAssignableFrom(ft) || java.util.Map.class.isAssignableFrom(ft)) continue;
+                        if (android.widget.Adapter.class.isAssignableFrom(ft)) continue;
+                        try { f.setAccessible(true); } catch (Throwable ignored) {}
+                        Object inner;
+                        try { inner = f.get(obj); } catch (Throwable ignored) { continue; }
+                        if (inner == null || inner == obj) continue;
+                        Field innerBest = findDataListFieldDeep(inner, visited, depth + 1);
+                        if (innerBest != null) return innerBest;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return best;
+    }
+
+    private static Object findOwnerDeep(Object root, Field target) {
+        if (target.getDeclaringClass().isInstance(root)) {
+            try {
+                Object v = target.get(root);
+                if (v instanceof java.util.List) return root;
+            } catch (Throwable ignored) {}
+        }
+        try {
+            for (Class<?> c = root.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                for (Field f : c.getDeclaredFields()) {
+                    Class<?> ft = f.getType();
+                    if (ft == Object.class || ft.isPrimitive() || ft == String.class) continue;
+                    if (java.util.List.class.isAssignableFrom(ft) || java.util.Map.class.isAssignableFrom(ft)) continue;
+                    try { f.setAccessible(true); } catch (Throwable ignored) {}
+                    Object inner = f.get(root);
+                    if (inner == null) continue;
+                    Object deep = findOwnerDeep(inner, target);
+                    if (deep != null) return deep;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return root;
+    }
+
+    private static int listSizeDeep(Field f, Object owner) {
+        try { Object v = f.get(owner); return (v instanceof java.util.List) ? ((java.util.List<?>) v).size() : 0; }
+        catch (Throwable ignored) { return 0; }
+    }
+
+    /** 会话行类型: G=群聊 / S=服务号 / F=好友。扫描 item 对象树里的标识串判断，兼容任意混淆结构 */
+    private static char kindOf(Object item) {
+        if (item == null) return 'X';
+        try { return scanKind(item, new HashSet<Object>(), 0); }
+        catch (Throwable ignored) { return 'X'; }
+    }
+
+    private static char scanKind(Object o, Set<Object> seen, int depth) {
+        if (o == null || depth > 4) return 'X';
+        if (o instanceof CharSequence || o instanceof Number || o instanceof Boolean || o instanceof Character) return 'X';
+        if (o instanceof android.graphics.drawable.Drawable || o instanceof android.graphics.Bitmap) return 'X';
+        if (!seen.add(o)) return 'X';
+        char fallback = 'X';
+        try {
+            if (o instanceof java.util.Map) {
+                for (Object e : ((java.util.Map<?, ?>) o).values()) {
+                    char k = scanKind(e, seen, depth + 1);
+                    if (k == 'G') return 'G';
+                    if (k == 'S' && fallback == 'X') fallback = 'S';
+                }
+            } else if (o instanceof java.util.Collection) {
+                for (Object e : (java.util.Collection<?>) o) {
+                    char k = scanKind(e, seen, depth + 1);
+                    if (k == 'G') return 'G';
+                    if (k == 'S' && fallback == 'X') fallback = 'S';
+                }
+            } else if (o.getClass().isArray()) {
+                int len = java.lang.reflect.Array.getLength(o);
+                for (int i = 0; i < len && i < 32; i++) {
+                    char k = scanKind(java.lang.reflect.Array.get(o, i), seen, depth + 1);
+                    if (k == 'G') return 'G';
+                    if (k == 'S' && fallback == 'X') fallback = 'S';
+                }
+            } else {
+                for (Class<?> c = o.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                    for (Field f : c.getDeclaredFields()) {
+                        try { f.setAccessible(true); } catch (Throwable ignored) {}
+                        Object v;
+                        try { v = f.get(o); } catch (Throwable ignored) { continue; }
+                        if (v instanceof String) {
+                            String s = (String) v;
+                            if (s != null && s.endsWith("@chatroom") && !s.endsWith("@im.chatroom")) return 'G';
+                            if (s != null && (s.startsWith("gh_")
+                                    || s.equals("weixin")
+                                    || s.contains("officialaccounts"))) {
+                                if (fallback == 'X') fallback = 'S';
+                            }
+                        } else if (v != null && !v.getClass().getName().startsWith("java.")
+                                && !v.getClass().getName().startsWith("android.") && depth < 3) {
+                            char k = scanKind(v, seen, depth + 1);
+                            if (k == 'G') return 'G';
+                            if (k == 'S' && fallback == 'X') fallback = 'S';
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return fallback;
+    }
+
+    /** 返回会话行可标识串：群=@chatroom、服务=gh_ 前缀串、普通好友=null（用于锚定/诊断） */
+    private static String idOf(Object item) {
+        if (item == null) return null;
+        try { return scanId(item, new HashSet<Object>(), 0); }
+        catch (Throwable ignored) { return null; }
+    }
+
+    private static String scanId(Object o, Set<Object> seen, int depth) {
+        if (o == null || depth > 4) return null;
+        if (o instanceof CharSequence || o instanceof Number || o instanceof Boolean) return null;
+        if (!seen.add(o)) return null;
+        try {
+            if (o instanceof java.util.Map) {
+                for (Object e : ((java.util.Map<?, ?>) o).values()) { String s = scanId(e, seen, depth + 1); if (s != null) return s; }
+            } else if (o instanceof java.util.Collection) {
+                for (Object e : (java.util.Collection<?>) o) { String s = scanId(e, seen, depth + 1); if (s != null) return s; }
+            } else {
+                for (Class<?> c = o.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                    for (Field f : c.getDeclaredFields()) {
+                        try { f.setAccessible(true); } catch (Throwable ignored) {}
+                        Object v;
+                        try { v = f.get(o); } catch (Throwable ignored) { continue; }
+                        if (v instanceof String) {
+                            String s = (String) v;
+                            if (s != null && s.endsWith("@chatroom") && !s.endsWith("@im.chatroom")) return s;
+                            if (s != null && s.startsWith("gh_")) return s;
+                        } else if (v != null && !v.getClass().getName().startsWith("java.")
+                                && !v.getClass().getName().startsWith("android.") && depth < 3) {
+                            String s = scanId(v, seen, depth + 1);
+                            if (s != null) return s;
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
     public static void applyFilter(int labelId, String labelName) {
         LogWriter.log(TAG, "apply " + labelId + " name=" + labelName);
         if (labelId <= 0) { clearFilter(); return; }
+
+        // 必须在修改过滤状态前捕获锚点（当前列表可能仍处于上一过滤状态）
+        captureAnchor();
 
         // Determine filter rule based on virtual label id (null-safe, 避免自定义标签名含关键词误判)
         if (labelId == ChatGroupHook.LABEL_ID_GROUP) {
@@ -110,18 +420,194 @@ public class ConversationFilter {
             }
         }
 
+        sJustAppliedFilter = true;
         sFilterActive = true;
         notifyAdapterChanged();
+        restoreScrollLater();
+        new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> sJustAppliedFilter = false, 800);
         LogWriter.log(TAG, "ON rule=" + sFilterRule + " filtered=" + sFilteredPositions.size());
+    }
+
+    /** 记录当前列表滚动锚点：ListView 原始 position（含 header）+ 首个可见 child 的 top。
+     *  恢复时 setSelectionFromTop(rawPos, childTop)，保证过滤前后视觉位置不跳（顶部=顶部、中部=中部）。
+     *  必须在任何状态变更（sFilterActive/sFilteredPositions）之前调用。
+     *  getChildAt(0) 在顶部下拉刷新等场景可能是已滚出屏幕的复用 view(top<0)，
+     *  因此扫描第一个 top>=0 的真正可见 child 作为锚点。 */
+    private static void captureAnchor() {
+        int oldRaw = sAnchorRawPos;
+        sAnchorRawPos = -1;
+        sAnchorChildTop = 0;
+        sAnchorUsername = null;
+        View v = sConvList;
+        if (v == null) { LogWriter.log(TAG, "captureAnchor: sConvList null"); return; }
+        try {
+            AbsListView lv = (AbsListView) v;
+            int raw = lv.getFirstVisiblePosition();
+            int childTop = 0;
+            String username = null;
+            try {
+                if (lv.getChildCount() > 0) {
+                    childTop = lv.getChildAt(0).getTop();
+                    if (childTop < 0) {
+                        for (int i = 0; i < lv.getChildCount(); i++) {
+                            View c = lv.getChildAt(i);
+                            if (c != null && c.getTop() >= 0) {
+                                childTop = c.getTop();
+                                raw = lv.getFirstVisiblePosition() + i;
+                                break;
+                            }
+                        }
+                    }
+                    // 取锚定行对应的会话 username（header 位置跳过）
+                    username = usernameAtPosition(lv, raw);
+                }
+            } catch (Throwable ignored) {}
+            sAnchorRawPos = raw;
+            sAnchorChildTop = childTop;
+            sAnchorUsername = username;
+            LogWriter.log(TAG, "captureAnchor raw=" + raw + " childTop=" + childTop
+                + " user=" + username + " rule=" + sFilterRule + " (old=" + oldRaw + ")");
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "captureAnchor err: " + e.getMessage());
+        }
+    }
+
+    /** 取 ListView 某 raw position 对应会话的标识(群=@chatroom/服务=gh_)；header/无效位置返回 null
+     *  过滤激活时须经 sFilteredPositions 映射到底层索引（getView 才有映射，getItem 没有） */
+    private static String usernameAtPosition(AbsListView lv, int rawPos) {
+        try {
+            Object adapter = lv.getAdapter();
+            if (adapter == null) return null;
+            int headerCount = headerCountOf(adapter);
+            int dataPos = rawPos - headerCount;
+            if (dataPos < 0) return null;
+            Object item = null;
+            if (sFilterActive && sFilteredPositions != null
+                    && dataPos < sFilteredPositions.size()) {
+                item = itemAt(sFilteredPositions.get(dataPos));
+            } else {
+                item = itemAt(dataPos);
+            }
+            if (item == null) return null;
+            return idOf(item);
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    /** 从底层 sAdapter 的会话数据列表取第 idx 个数据项（8.0.78 自适应反射） */
+    private static Object itemAt(int idx) {
+        try {
+            if (sAdapter == null || idx < 0) return null;
+            java.util.List<?> dataList = dataListOf();
+            if (dataList == null || idx >= dataList.size()) return null;
+            return dataList.get(idx);
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private static int headerCountOf(Object adapter) {
+        try {
+            Object h = XposedHelpers.getObjectField(adapter, "mHeaderViewInfos");
+            if (h instanceof List) return ((List<?>) h).size();
+        } catch (Throwable ignored) {}
+        return 0;
+    }
+
+    /** 过滤后：按锚定 rawPos 恢复滚动位置（clamp 到新列表范围），保持视觉原位 */
+    private static void restoreScrollLater() {
+        final View v = sConvList;
+        if (v == null) return;
+        v.post(() -> {
+            try { restoreAnchorPosition((AbsListView) v); } catch (Throwable ignored) {}
+        });
+        v.postDelayed(() -> {
+            try { restoreAnchorPosition((AbsListView) v); } catch (Throwable ignored) {}
+        }, 150);
+    }
+
+    /** 依据锚定信息恢复 AbsListView 滚动位置（兼容 layoutChildren 回调）
+     *  优先按 username 定位（跨过滤切换 position 会错位）；username 不在当前列表时回退顶部/raw */
+    private static void restoreAnchorPosition(AbsListView lv) {
+        if (lv == null) return;
+        int count;
+        try {
+            count = lv.getCount();
+        } catch (Throwable ignored) {
+            count = 0;
+        }
+        if (count <= 0) return;
+
+        int target = -1;
+        if (sAnchorUsername != null) {
+            int pos = findPositionByUsername(lv, sAnchorUsername);
+            if (pos >= 0) target = pos;
+        }
+        if (target < 0 && sAnchorRawPos >= 0) {
+            target = sAnchorRawPos;
+        }
+        if (target < 0) {
+            // username 已不在当前列表（跨分类过滤）且无 raw 锚点 -> 顶部
+            LogWriter.log(TAG, "restoreAnchor: user absent, goto top user=" + sAnchorUsername);
+            try { lv.setSelection(0); } catch (Throwable ignored) {}
+            return;
+        }
+        if (target >= count) target = count - 1;
+        try {
+            lv.setSelectionFromTop(target, sAnchorChildTop);
+            LogWriter.log(TAG, "restoreAnchor -> pos=" + target + " (raw=" + sAnchorRawPos
+                + ") childTop=" + sAnchorChildTop + " user=" + sAnchorUsername);
+        } catch (Throwable ignored) {}
+    }
+
+    /** 在当前列表（含过滤映射）中查找会话标识对应的 raw position；找不到返回 -1
+     *  过滤激活时返回 headerCount + 过滤索引；否则返回 headerCount + 底层索引 */
+    private static int findPositionByUsername(AbsListView lv, String username) {
+        if (username == null) return -1;
+        try {
+            Object adapter = lv.getAdapter();
+            if (adapter == null) return -1;
+            int headerCount = headerCountOf(adapter);
+            java.util.List<?> dataList = dataListOf();
+            if (sFilterActive && sFilteredPositions != null) {
+                for (int i = 0; i < sFilteredPositions.size(); i++) {
+                    Object item = itemAt(sFilteredPositions.get(i));
+                    if (item == null) continue;
+                    try {
+                        Object u = idOf(item);
+                        if (u instanceof String && username.equals(u)) {
+                            return headerCount + i;
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            } else {
+                if (dataList == null) return -1;
+                for (int i = 0; i < dataList.size(); i++) {
+                    Object item = dataList.get(i);
+                    if (item == null) continue;
+                    try {
+                        Object u = idOf(item);
+                        if (u instanceof String && username.equals(u)) {
+                            return headerCount + i;
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            }
+        } catch (Throwable ignored) {}
+        return -1;
     }
 
     public static void clearFilter() {
         if (!sFilterActive) return;
+        // 必须在清空状态前捕获锚点（当前列表仍处于过滤状态）
+        captureAnchor();
         sFilterActive = false;
         sFilterRule = "";
         sAllowedUsernames = Collections.emptySet();
         sFilteredPositions = Collections.emptyList();
+        sJustAppliedFilter = true;
         notifyAdapterChanged();
+        restoreScrollLater();
+        new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> sJustAppliedFilter = false, 800);
         LogWriter.log(TAG, "OFF");
     }
 
@@ -180,8 +666,10 @@ public class ConversationFilter {
             sUnreadByLabel.put(10001, friendUnread);
             sUnreadByLabel.put(10002, serviceUnread);
             boolean changed = (groupUnread != oldGroup || friendUnread != oldFriend || serviceUnread != oldService);
-            LogWriter.log(TAG, "unread scan: " + totalScanned + " items, " + totalWithUnread
-                + " unread, G=" + groupUnread + " F=" + friendUnread + " S=" + serviceUnread);
+            if (changed) {
+                LogWriter.log(TAG, "unread changed: " + totalScanned + " items, " + totalWithUnread
+                    + " unread, G=" + groupUnread + " F=" + friendUnread + " S=" + serviceUnread);
+            }
             return changed;
         } catch (Throwable e) {
             LogWriter.log(TAG, "scanUnread: " + e.getMessage());
@@ -190,44 +678,34 @@ public class ConversationFilter {
     }
 
     private static void buildFilteredByRule() {
+        if (sAdapter == null) { LogWriter.log(TAG, "sAdapter null buildFilteredByRule"); return; }
         List<Integer> positions = new ArrayList<>();
         try {
-            Object q = XposedHelpers.getObjectField(sAdapter, "q");
-            if (q == null) { LogWriter.log(TAG, "q null"); return; }
-
-            ArrayList<?> dataList = (ArrayList<?>) XposedHelpers.getObjectField(q, "d");
-            if (dataList == null) { LogWriter.log(TAG, "q.d null"); return; }
+            java.util.List<?> dataList = dataListOf();
+            if (dataList.isEmpty()) { LogWriter.log(TAG, "dataList empty"); return; }
 
             LogWriter.log(TAG, "scan " + dataList.size() + " items by rule " + sFilterRule);
             int dumpCount = 0;
             for (int i = 0; i < dataList.size(); i++) {
                 Object x = dataList.get(i);
                 if (x == null) continue;
-                Object k4 = XposedHelpers.getObjectField(x, "d");
-                if (k4 == null) continue;
-                String username = (String) XposedHelpers.callMethod(k4, "i1");
-                if (username == null) continue;
+                char kind = kindOf(x);
                 boolean match;
                 if ("group".equals(sFilterRule)) {
-                    match = username.endsWith("@chatroom") && !username.endsWith("@im.chatroom");
+                    match = kind == 'G';
                 } else if ("service".equals(sFilterRule)) {
-                    match = username.startsWith("gh_")
-                         || username.contains("officialaccounts")
-                         || username.equals("weixin");
+                    match = kind == 'S';
                 } else if ("friend".equals(sFilterRule)) {
-                    match = !username.endsWith("@chatroom")
-                         && !username.startsWith("gh_")
-                         && !username.contains("officialaccounts")
-                         && !username.startsWith("service_")
-                         && !username.equals("filehelper")
-                         && !username.equals("weixin");
+                    match = kind == 'F';
                 } else {
                     match = false;
                 }
+                // kindOf 未识别到任何群/服务标识时按普通好友处理（排除 F 需另判空行/分隔符场景）
+                if ("friend".equals(sFilterRule) && kind == 'X') match = true;
                 if (match) {
                     positions.add(i);
                     if (dumpCount < 5) {
-                        LogWriter.log(TAG, " match[" + dumpCount + "]=" + username);
+                        LogWriter.log(TAG, " match[" + dumpCount + "]=" + idOf(x) + " kind=" + kind);
                         dumpCount++;
                     }
                 }
@@ -236,9 +714,11 @@ public class ConversationFilter {
             LogWriter.log(TAG, "build err: " + e.getMessage());
         }
         sFilteredPositions = positions;
+        LogWriter.log(TAG, "rule " + sFilterRule + " -> filtered=" + positions.size());
     }
 
     private static void buildFilteredPositions() {
+        if (sAdapter == null) { LogWriter.log(TAG, "sAdapter null buildFilteredPositions"); return; }
         List<Integer> positions = new ArrayList<>();
         try {
             Object q = XposedHelpers.getObjectField(sAdapter, "q");
@@ -251,12 +731,14 @@ public class ConversationFilter {
             for (int i = 0; i < dataList.size(); i++) {
                 Object x = dataList.get(i);
                 if (x == null) continue;
-                Object k4 = XposedHelpers.getObjectField(x, "d");
-                if (k4 == null) continue;
-                String username = (String) XposedHelpers.callMethod(k4, "i1");
-                if (username != null && sAllowedUsernames.contains(username)) {
-                    positions.add(i);
-                }
+                try {
+                    Object k4 = XposedHelpers.getObjectField(x, "d");
+                    if (k4 == null) continue;
+                    String username = (String) XposedHelpers.callMethod(k4, "i1");
+                    if (username != null && sAllowedUsernames.contains(username)) {
+                        positions.add(i);
+                    }
+                } catch (Throwable ignored) {}
             }
         } catch (Throwable e) {
             LogWriter.log(TAG, "build err: " + e.getMessage());
@@ -266,8 +748,26 @@ public class ConversationFilter {
 
     private static void notifyAdapterChanged() {
         try {
-            XposedHelpers.callMethod(sAdapter, "notifyDataSetChanged");
-        } catch (Throwable ignored) {}
+            Object target = sHeaderAdapter != null ? sHeaderAdapter : sAdapter;
+            LogWriter.log(TAG, "notifyAdapterChanged target=" + (target != null ? target.getClass().getSimpleName() : "null") + " active=" + sFilterActive + " filtered=" + sFilteredPositions.size());
+            if (target == null) return;
+            // 防御: 仅对 Adapter 实例调用 notifyDataSetChanged，避免对 LinearLayout 等非法目标抛错
+            if (!(target instanceof android.widget.Adapter)) {
+                LogWriter.log(TAG, "notifyAdapterChanged skip: target is not Adapter");
+                return;
+            }
+            if (target.getClass().getName().equals("android.widget.HeaderViewListAdapter")) {
+                Object wrapped = XposedHelpers.callMethod(target, "getWrappedAdapter");
+                if (wrapped instanceof android.widget.Adapter) {
+                    XposedHelpers.callMethod(wrapped, "notifyDataSetChanged");
+                    LogWriter.log(TAG, "notifyAdapterChanged via wrapped adapter OK");
+                }
+            } else {
+                XposedHelpers.callMethod(target, "notifyDataSetChanged");
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "notifyAdapterChanged err: " + e.getMessage());
+        }
     }
 
     /* Returns all usernames matching a built-in label rule, or null if not built-in */

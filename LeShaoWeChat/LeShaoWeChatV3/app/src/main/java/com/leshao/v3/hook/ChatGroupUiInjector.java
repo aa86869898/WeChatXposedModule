@@ -36,29 +36,51 @@ public class ChatGroupUiInjector {
     private static volatile Activity sCurrentActivity;
     private static volatile List<LabelInfo> sLabels;
     private static volatile long sLastLabelRefresh;
+    private static volatile ClassLoader sClassLoader;
+    private static volatile java.util.Map<Integer, TextView> sChipTvById =
+        new java.util.LinkedHashMap<>();
 
     public static void hook(final ClassLoader cl) {
         logBoth("hook() start");
-        try { installTagFilterBar(cl); } catch (Throwable e) { logBoth("tag err: " + e.getMessage()); }
-        try { installContextMenuHooks(cl); } catch (Throwable e) { logBoth("menu err: " + e.getMessage()); }
+        sClassLoader = cl;
+        ClassLoader tkCL = VersionCompat.findTinkerClassLoader(cl);
+        if (tkCL != null) {
+            logBoth("hook: using Tinker ClassLoader");
+        }
+        final ClassLoader effectiveCL = tkCL != null ? tkCL : cl;
+        try { installTagFilterBar(effectiveCL); } catch (Throwable e) { logBoth("tag err: " + e.getMessage()); }
+        try { installContextMenuHooks(effectiveCL); } catch (Throwable e) { logBoth("menu err: " + e.getMessage()); }
+        try { installConvNativeMenuInjection(effectiveCL); } catch (Throwable e) { logBoth("convMenu err: " + e.getMessage()); }
         logBoth("hook() done");
     }
 
     private static boolean sHeaderAdded = false;
+    private static int sInjectRetryCount = 0;
     private static volatile String sPendingUsername;
     private static volatile String sPendingContextUsername;
+
+    private static volatile long sConvMenuArmTs = 0;
+    private static volatile String sConvMenuUser;
+    private static final long CONV_MENU_WINDOW_MS = 3000;
+    private static volatile boolean sConvPopupHooksInstalled = false;
+    private static final java.util.Set<android.view.View> sInjectedPopups =
+        java.util.Collections.synchronizedSet(new java.util.HashSet<android.view.View>());
+    private static final String[] CONV_MENU_MARKERS = new String[]{
+        "置顶聊天", "取消置顶", "标为未读", "标为已读", "删除该聊天", "不显示该聊天"
+    };
     private static View sTagBarView;
     private static final int CTX_MENU_BASE = 0x7F030000;
     private static final int CTX_MENU_MORE = CTX_MENU_BASE + 999999;
     private static final int CTX_MENU_NEW = CTX_MENU_BASE + 999998;
 
     private static void installTagFilterBar(final ClassLoader cl) {
-        // Hook s5.h to capture the ConversationListView reference
+        // Hook s5.h to capture the ConversationListView reference (fallback)
         try {
             Class<?> s5 = XposedHelpers.findClass("com.tencent.mm.ui.conversation.s5", cl);
             XposedBridge.hookAllMethods(s5, "h", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam p) {
+                    logBoth("s5.h FIRED");
                     try {
                         Object convList = XposedHelpers.getObjectField(p.thisObject, "f");
                         if (convList == null) return;
@@ -73,67 +95,93 @@ public class ChatGroupUiInjector {
             logBoth("s5.h hooked");
         } catch (Throwable e) { logBoth("s5: " + e.getMessage()); }
 
-        // Hook MainUI (conversation fragment) onResume via reflection+method hook
+        // Primary: hook Activity.onResume to detect LauncherUI (reliable, unlike s5.h/MainUI.onResume)
         try {
-            Class<?> mainUIConv = XposedHelpers.findClass("com.tencent.mm.ui.conversation.MainUI", cl);
-            java.lang.reflect.Method onResumeMethod = mainUIConv.getDeclaredMethod("onResume");
-            XposedBridge.hookMethod(onResumeMethod, new XC_MethodHook() {
+            XposedBridge.hookAllMethods(Activity.class, "onResume", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!"com.tencent.mm.ui.LauncherUI".equals(param.thisObject.getClass().getName())) return;
+                        logBoth("Activity.onResume -> LauncherUI detected");
+                        final Activity activity = (Activity) param.thisObject;
+                        sCurrentActivity = activity;
+                        // Try to find adapter from MainUI Fragment
+                        try {
+                            Object mainUI = XposedHelpers.callMethod(activity, "getSupportFragmentManager");
+                            if (mainUI != null) {
+                                Object frag = XposedHelpers.callMethod(mainUI, "findFragmentByTag", "com.tencent.mm.ui.conversation.MainUI");
+                                if (frag == null) {
+                                    java.util.List frags = (java.util.List) XposedHelpers.callMethod(mainUI, "getFragments");
+                                    if (frags != null) {
+                                        for (Object f : frags) {
+                                            if (f != null && "com.tencent.mm.ui.conversation.MainUI".equals(f.getClass().getName())) {
+                                                frag = f;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                if (frag != null) {
+                                    try {
+                                        Object adapter = XposedHelpers.getObjectField(frag, "v");
+                                        logBoth("MainUI.v=" + (adapter != null ? adapter.getClass().getName() : "null"));
+                                        if (adapter != null) {
+                                            ConversationFilter.install(cl, adapter, null);
+                                        }
+                                    } catch (Throwable e) {
+                                        logBoth("MainUI.v err: " + e.getMessage());
+                                    }
+                                }
+                            }
+                        } catch (Throwable e) {
+                            logBoth("find MainUI fragment err: " + e.getMessage());
+                        }
+                        new Handler(Looper.getMainLooper()).post(() -> {
+                            try {
+                                injectHeaderToConversationList();
+                            } catch (Throwable e) {
+                                logBoth("injectHeader err: " + e.getMessage());
+                            }
+                        });
+                    } catch (Throwable e) {
+                        logBoth("Activity.onResume cb err: " + e.getMessage());
+                    }
+                }
+            });
+            logBoth("Activity.onResume hook installed (LauncherUI)");
+        } catch (Throwable e) { logBoth("Activity.onResume hook failed: " + e.getMessage()); }
+
+        // Fallback: hook MainUI.onResume (kept in case Activity.onResume fails)
+        try {
+            final Class<?> mainUIConv = XposedHelpers.findClass("com.tencent.mm.ui.conversation.MainUI", cl);
+            XC_MethodHook mainUIHook = new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    String fragClsName = param.thisObject.getClass().getName();
+                    if (!"com.tencent.mm.ui.conversation.MainUI".equals(fragClsName)) return;
+                    logBoth("MainUI.onResume detected");
                     try {
                         sCurrentActivity = (Activity) XposedHelpers.callMethod(param.thisObject, "getActivity");
                     } catch (Throwable ignored) {}
                     try {
                         Object adapter = XposedHelpers.getObjectField(param.thisObject, "v");
-                        logBoth("MainUI.v=" + (adapter != null ? adapter.getClass().getName() : "null"));
                         if (adapter != null) {
-                            logBoth("ConvFilter call install");
-                            try {
-                                ConversationFilter.install(cl, adapter);
-                                logBoth("ConvFilter install returned");
-                            } catch (Throwable t) {
-                                logBoth("ConvFilter install threw: " + t);
-                            }
+                            ConversationFilter.install(cl, adapter, null);
                         }
-                    } catch (Throwable e) {
-                        logBoth("MainUI.v err: " + e.getMessage());
-                    }
+                    } catch (Throwable ignored) {}
                     new Handler(Looper.getMainLooper()).post(() -> {
                         try {
                             injectHeaderToConversationList();
                         } catch (Throwable e) {
-                            logBoth("injectHeaderToConversationList err: " + e.getMessage());
+                            logBoth("injectHeader err: " + e.getMessage());
                         }
                     });
                 }
-            });
-            logBoth("MainUI.conversation.onResume hooked via hookMethod");
+            };
+            XposedBridge.hookAllMethods(mainUIConv, "onResume", mainUIHook);
+            logBoth("MainUI.onResume hook installed (fallback)");
         } catch (Throwable e) {
-            logBoth("MainUI.conversation not found: " + e.getMessage());
-            try {
-                Class<?> launcherUI = XposedHelpers.findClass("com.tencent.mm.ui.LauncherUI", cl);
-                java.lang.reflect.Method lrMethod = launcherUI.getDeclaredMethod("onResume");
-                XposedBridge.hookMethod(lrMethod, new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam p) {
-                        try {
-                                                sCurrentActivity = (Activity) p.thisObject;
-                                                new Handler(Looper.getMainLooper()).post(() -> {
-                                                    try {
-                                                        injectHeaderToConversationList();
-                                                    } catch (Throwable e) {
-                                                        logBoth("LauncherUI injectHeader err: " + e.getMessage());
-                                                    }
-                                                });
-                        } catch (Throwable e) {
-                            LogWriter.log("ChatGroupUiInjector", "cb err: " + e);
-                        }
-                    }
-                });
-                logBoth("LauncherUI.onResume hooked via hookMethod");
-            } catch (Throwable e2) {
-                logBoth("LauncherUI onResume hook failed: " + e2.getMessage());
-            }
+            logBoth("MainUI Fragment hook failed: " + e.getMessage());
         }
     }
 
@@ -141,6 +189,7 @@ public class ChatGroupUiInjector {
     private static volatile View sHeaderAttachedTo;
 
     private static void injectHeaderToConversationList() {
+        logBoth("injectHeader start");
         try {
             View convList = sConvListView;
             // 缓存引用可能因 Activity 重建（如切换暗色模式）而失效，重新从 DecorView 定位
@@ -156,13 +205,30 @@ public class ChatGroupUiInjector {
             }
 
             if (convList == null) {
-                logBoth("injectHeader: convList not found");
+                logBoth("injectHeader: convList not found, will retry");
+                if (sInjectRetryCount < 3) {
+                    sInjectRetryCount++;
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        injectHeaderToConversationList();
+                    }, 500 * sInjectRetryCount);
+                }
                 return;
+            }
+
+            // 尽早安装 ConversationFilter，从 ListView 的 adapter 获取
+            if (sClassLoader != null) {
+                try {
+                    Object adapter = XposedHelpers.callMethod(convList, "getAdapter");
+                    if (adapter != null) {
+                        ConversationFilter.install(sClassLoader, adapter, convList);
+                        logBoth("ConvFilter installed from convList adapter");
+                    }
+                } catch (Throwable ignored) {}
             }
 
             // 已附加到同一个 ListView：只刷新，避免重复 addHeaderView 造成多行标签
             if (sHeaderAdded && sHeaderAttachedTo == convList) {
-                if (ChatGroupHook.isReady()) refreshAll();
+                refreshTagChips();
                 return;
             }
 
@@ -177,8 +243,9 @@ public class ChatGroupUiInjector {
             // Try addHeaderView via reflection (for AbsListView subclasses)
             if (tryAddHeaderView(convList)) {
                 sHeaderAdded = true;
+                sInjectRetryCount = 0;
                 sHeaderAttachedTo = convList;
-                if (ChatGroupHook.isReady()) refreshAll();
+                refreshTagChips();
                 logBoth("addHeaderView success");
                 return;
             }
@@ -305,6 +372,7 @@ public class ChatGroupUiInjector {
         if (sLabels == null) refreshLabelList();
         int curSelection = sSelectedLabelId;
         sTagContainer.removeAllViews();
+        sChipTvById.clear();
         sTagContainer.addView(makeChip(ctx, "\u5168\u90E8", -1, curSelection == -1));
         // 内置虚拟标签固定顺序：好友、群聊、服务
         sTagContainer.addView(makeChip(ctx, ChatGroupHook.LABEL_NAME_FRIEND, ChatGroupHook.LABEL_ID_FRIEND, curSelection == ChatGroupHook.LABEL_ID_FRIEND));
@@ -336,6 +404,48 @@ public class ChatGroupUiInjector {
         sTagContainer.addView(spacer(ctx));
         sTagContainer.addView(makeAddBtn(ctx));
         centerChips(ctx);
+    }
+
+    /** 单选选中态变化时只重绘 chip 视觉，不重建整行（避免水平滚动/居中导致的跳动） */
+    private static void refreshTagChipsSoft() {
+        if (sTagContainer == null) return;
+        Context ctx = sTagContainer.getContext();
+        if (ctx == null) return;
+        try {
+            int n = sTagContainer.getChildCount();
+            for (int i = 0; i < n; i++) {
+                View child = sTagContainer.getChildAt(i);
+                if (child == null || !(child instanceof FrameLayout)) continue;
+                Object tag = child.getTag();
+                if (!(tag instanceof Integer)) continue;
+                int id = (Integer) tag;
+                TextView tv = sChipTvById.get(id);
+                if (tv != null) styleChipVisual(ctx, tv, id == sSelectedLabelId);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static void styleChipVisual(Context ctx, TextView tv, boolean sel) {
+        try {
+            boolean dark = isDarkMode(ctx);
+            if (sel) {
+                GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                    new int[]{0xFFFF6B8A, 0xFFA855F7, 0xFF38BDF8});
+                bg.setCornerRadius(dp(20, ctx));
+                bg.setStroke(dp(1, ctx), 0xB3FFFFFF);
+                tv.setBackground(bg);
+                tv.setTextColor(Color.WHITE);
+                tv.setShadowLayer(dp(4, ctx), 0, 0, 0x40A855F7);
+            } else {
+                GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                    dark ? new int[]{0x26FF6B8A, 0x26A855F7, 0x2638BDF8}
+                         : new int[]{0x1AFF6B8A, 0x1AA855F7, 0x1A38BDF8});
+                bg.setCornerRadius(dp(20, ctx));
+                bg.setStroke(dp(1, ctx), dark ? Color.parseColor("#C084FC") : Color.parseColor("#A855F7"));
+                tv.setBackground(bg);
+                tv.setTextColor(dark ? Color.parseColor("#C8C8CE") : Color.parseColor("#555555"));
+            }
+        } catch (Throwable ignored) {}
     }
 
     /** 标签居中：总宽不足时用 padding 居中，超出时左对齐可滑动 */
@@ -406,24 +516,9 @@ public class ChatGroupUiInjector {
         tv.setPadding(dp(15, ctx), dp(7, ctx), dp(15, ctx), dp(7, ctx));
         tv.setGravity(Gravity.CENTER); tv.setSingleLine(true);
         tv.setMinWidth(dp(50, ctx));
-        boolean dark = isDarkMode(ctx);
-        if (sel) {
-            GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{0xFFFF6B8A, 0xFFA855F7, 0xFF38BDF8});
-            bg.setCornerRadius(dp(20, ctx));
-            bg.setStroke(dp(1, ctx), 0xB3FFFFFF);
-            tv.setBackground(bg);
-            tv.setTextColor(Color.WHITE);
-            tv.setShadowLayer(dp(4, ctx), 0, 0, 0x40A855F7);
-        } else {
-            GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                dark ? new int[]{0x26FF6B8A, 0x26A855F7, 0x2638BDF8}
-                     : new int[]{0x1AFF6B8A, 0x1AA855F7, 0x1A38BDF8});
-            bg.setCornerRadius(dp(20, ctx));
-            bg.setStroke(dp(1, ctx), dark ? Color.parseColor("#C084FC") : Color.parseColor("#A855F7"));
-            tv.setBackground(bg);
-            tv.setTextColor(dark ? Color.parseColor("#C8C8CE") : Color.parseColor("#555555"));
-        }
+        sChipTvById.put(id, tv);
+        fl.setTag(id);
+        styleChipVisual(ctx, tv, sel);
         FrameLayout.LayoutParams tvLp = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         tvLp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
@@ -454,7 +549,7 @@ public class ChatGroupUiInjector {
             fl.addView(badge, blp);
         }
 
-        tv.setOnClickListener(v -> {
+        View.OnClickListener chipClick = v -> {
             try {
                 logBoth("chip click id=" + id + " selected=" + sSelectedLabelId);
                 if (sSelectedLabelId == id) {
@@ -469,15 +564,39 @@ public class ChatGroupUiInjector {
                         logBoth("ConvFilter call applyFilter " + id);
                         ConversationFilter.applyFilter(id, name);
                         logBoth("ConvFilter applyFilter returned");
+                        logBoth("ConvFilter applyFilter returned");
+                        // 滚动由 ConversationFilter 中 lookForSelectablePosition hook 自动处理
                     }
                 }
-                refreshTagChips();
+                refreshTagChipsSoft();
+                logChipStateAfter(id);
             } catch (Throwable e) {
                 logBoth("chip click err: " + e.getMessage());
             }
-        });
+        };
+        tv.setOnClickListener(chipClick);
+        fl.setClickable(true);
+        fl.setFocusable(true);
+        fl.setOnClickListener(chipClick);
         if (id > 0) tv.setOnLongClickListener(v -> { showLabelManage(ctx, id, text, fl); return true; });
         return fl;
+    }
+
+    /** 点击标签后打印列表/标签行状态，用于定位"跳动" */
+    private static void logChipStateAfter(int id) {
+        try {
+            View list = sConvListView;
+            if (list != null && list.isAttachedToWindow()) {
+                int fp = -1, cnt = -1;
+                int scrollX = sTagContainer != null ? sTagContainer.getScrollX() : -1;
+                android.widget.AbsListView lv = (android.widget.AbsListView) list;
+                fp = lv.getFirstVisiblePosition();
+                cnt = lv.getCount();
+                int padL = sTagContainer != null ? sTagContainer.getPaddingLeft() : -1;
+                logBoth("chip state after id=" + id + " sel=" + sSelectedLabelId
+                    + " fp=" + fp + " count=" + cnt + " tagScrollX=" + scrollX + " padL=" + padL);
+            }
+        } catch (Throwable ignored) {}
     }
 
     private static View makeAddBtn(Context ctx) {
@@ -537,9 +656,688 @@ public class ChatGroupUiInjector {
         tryInstallSetTagHook(cl);
         tryInstallLauncherUIContextMenuHook(cl);
         tryInstallAdapterContextMenuHook(cl);
+        tryInstallActivityCtxMenuFallback();
         hookClassBroadForDiagnosis(cl, "kc5.g4", "menuG4");
         hookClassBroadForDiagnosis(cl, "kc5.h4", "menuItemH4");
         tryInstallMenuItemGetItemHook(cl);
+        logBoth("native context-menu hooks installed");
+    }
+
+    // ================= 微信原生会话长按菜单注入（不依赖 ContextMenu 框架） =================
+    // 背景：8.0.49 会话列表长按弹的是微信自定义弹窗，标准 android ContextMenu/OptionsMenu
+    // 链路全部不触发。这里改为两层：长按会话时打"臂"标记并记下用户名；随后全局捕获
+    // PopupWindow.show，若命中"臂"窗口即把分组管理菜单项追加进弹窗内容（保留微信原生菜单）。
+
+    private static void installConvNativeMenuInjection(final ClassLoader cl) {
+        hookConvListViewLongPressArm(cl);
+        hookConvPopupShowForInjection(cl);
+        hookConvLongPressImplsGated(cl);
+        logBoth("convNativeMenuInjection installed");
+    }
+
+    /** 会话列表触摸长按检测：只打臂标记（arm）+记用户名，不弹任何模块对话框，不消费事件。
+     *  微信自己的长按菜单照常弹出。 */
+    private static void hookConvListViewLongPressArm(ClassLoader cl) {
+        try {
+            Class<?> cls = XposedHelpers.findClass("com.tencent.mm.ui.conversation.ConversationListView", cl);
+            java.lang.reflect.Method m = null;
+            Class<?> cur = cls;
+            while (cur != null && cur != android.view.View.class) {
+                try { m = cur.getDeclaredMethod("onTouchEvent", android.view.MotionEvent.class); break; }
+                catch (NoSuchMethodException e) { cur = cur.getSuperclass(); }
+            }
+            if (m == null) { logBoth("convArm onTouchEvent not found"); return; }
+            m.setAccessible(true);
+            final Class<?> convCls = cls;
+            XposedBridge.hookMethod(m, new XC_MethodHook() {
+                private long downTime;
+                private float downX, downY;
+                private long lastDownLog;
+                private final Handler h = new Handler(Looper.getMainLooper());
+                private final Runnable armRunnable = new Runnable() {
+                    @Override public void run() {
+                        try {
+                            if (downTime <= 0) return;
+                            long t = downTime; downTime = 0;
+                            armConvListAt(t, (int) downX, (int) downY, (AbsListView) mThis);
+                        } catch (Throwable ignored) {}
+                    }
+                };
+                private AbsListView mThis;
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    try {
+                        if (p.thisObject == null) return;
+                        if (!(p.args[0] instanceof android.view.MotionEvent)) return;
+                        Object self = p.thisObject;
+                        boolean isConv = convCls.isAssignableFrom(self.getClass());
+                        if (!isConv) return;
+                        android.view.MotionEvent ev = (android.view.MotionEvent) p.args[0];
+                        int action = ev.getActionMasked();
+                        if (action == android.view.MotionEvent.ACTION_DOWN) {
+                            long now = System.currentTimeMillis();
+                            if (now - lastDownLog > 2000) {
+                                lastDownLog = now;
+                                logBoth("convTouch DOWN cls=" + self.getClass().getName());
+                            }
+                            downTime = System.currentTimeMillis();
+                            downX = ev.getX(); downY = ev.getY();
+                            mThis = (AbsListView) p.thisObject;
+                            h.removeCallbacks(armRunnable);
+                            h.postDelayed(armRunnable, 450);
+                        } else if (action == android.view.MotionEvent.ACTION_MOVE) {
+                            if (Math.abs(ev.getX() - downX) > 60 || Math.abs(ev.getY() - downY) > 60) {
+                                h.removeCallbacks(armRunnable);
+                                downTime = 0;
+                            }
+                        } else if (action == android.view.MotionEvent.ACTION_UP
+                                   || action == android.view.MotionEvent.ACTION_CANCEL) {
+                            h.removeCallbacks(armRunnable);
+                            long dur = System.currentTimeMillis() - downTime;
+                            if (dur >= 450 && Math.abs(ev.getX() - downX) < 60 && Math.abs(ev.getY() - downY) < 60) {
+                                armConvListAt(downTime, (int) downX, (int) downY, (AbsListView) p.thisObject);
+                            }
+                            downTime = 0;
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            logBoth("convArm onTouchEvent hooked: " + m.getDeclaringClass().getName());
+        } catch (Throwable e) {
+            logBoth("convArm hook err: " + e.getMessage());
+        }
+    }
+
+    /** 长按落点换算会话并打臂标记 */
+    private static void armConvListAt(long downTime, int x, int y, AbsListView lv) {
+        try {
+            int pos = lv.pointToPosition(x, y);
+            if (pos == AdapterView.INVALID_POSITION) { logBoth("convArm INVALID_POSITION"); return; }
+            View child = lv.getChildAt(pos - lv.getFirstVisiblePosition());
+            String username = child != null ? extractUsernameFromView(child) : null;
+            if (TextUtils.isEmpty(username)) username = extractUsernameFromList(lv, pos);
+            if (TextUtils.isEmpty(username)) { logBoth("convArm no user pos=" + pos); return; }
+            armConvMenu(username);
+            logBoth("convArm armed user=" + username + " pos=" + pos);
+        } catch (Throwable e) {
+            logBoth("convArm err: " + e.getMessage());
+        }
+    }
+
+    /** 打臂：记录最近长按的会话用户，供随后弹出的原生菜单注入使用 */
+    private static void armConvMenu(String username) {
+        if (TextUtils.isEmpty(username)) return;
+        sConvMenuUser = username;
+        sPendingUsername = username;
+        sPendingContextUsername = username;
+        sConvMenuArmTs = System.currentTimeMillis();
+    }
+
+    /** 门控实现类钩：命中会话列表 OnItemLongClickListener 时打臂（不弹窗） */
+    private static void hookConvLongPressImplsGated(ClassLoader cl) {
+        final List<String> impls = DexKitHelper.getConvLongPressImpls();
+        logBoth("convLPImpls count=" + impls.size());
+        if (impls.isEmpty()) {
+            DexKitHelper.setPostScanCallback(() -> hookConvLongPressImplsGated(cl));
+            return;
+        }
+        XC_MethodHook hook = new XC_MethodHook() {
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                try {
+                    AdapterView<?> parent = null;
+                    View view = null;
+                    int position = -1;
+                    if (p.args.length >= 2) {
+                        if (p.args[0] instanceof AdapterView) parent = (AdapterView<?>) p.args[0];
+                        if (p.args[1] instanceof View) view = (View) p.args[1];
+                    }
+                    if (p.args.length >= 3 && p.args[2] instanceof Integer) position = (Integer) p.args[2];
+                    if (parent == null
+                        || !"com.tencent.mm.ui.conversation.ConversationListView".equals(parent.getClass().getName())) return;
+                    String username = view != null ? extractUsernameFromView(view) : null;
+                    if (TextUtils.isEmpty(username) && position >= 0) username = extractUsernameFromList(parent, position);
+                    if (!TextUtils.isEmpty(username)) armConvMenu(username);
+                    logBoth("convLPImpl gated user=" + username);
+                } catch (Throwable ignored) {}
+            }
+        };
+        int ok = 0;
+        for (String cn : impls) {
+            try {
+                Class<?> c = XposedHelpers.findClass(cn, cl);
+                XposedBridge.hookAllMethods(c, "onItemLongClick", hook);
+                ok++;
+            } catch (Throwable ignored) {}
+        }
+        logBoth("convLPImpl gated hooks installed=" + ok + "/" + impls.size());
+    }
+
+    /** 全局捕获 PopupWindow 显示：命中臂窗口即注入"分组管理"行 */
+    private static void hookConvPopupShowForInjection(ClassLoader cl) {
+        if (sConvPopupHooksInstalled) return;
+        sConvPopupHooksInstalled = true;
+        XC_MethodHook hook = new XC_MethodHook() {
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                try {
+                    if (p.thisObject instanceof android.widget.PopupWindow) {
+                        injectConvMenuIntoPopup((android.widget.PopupWindow) p.thisObject);
+                    }
+                } catch (Throwable e) {
+                    logBoth("convPopup hook err: " + e.getMessage());
+                }
+            }
+        };
+        try { XposedBridge.hookAllMethods(android.widget.PopupWindow.class, "showAtLocation", hook).size();
+            logBoth("PopupWindow.showAtLocation hooked"); } catch (Throwable e) { logBoth("showAtLocation hook err: " + e.getMessage()); }
+        try { XposedBridge.hookAllMethods(android.widget.PopupWindow.class, "showAsDropDown", hook).size();
+            logBoth("PopupWindow.showAsDropDown hooked"); } catch (Throwable e) { logBoth("showAsDropDown hook err: " + e.getMessage()); }
+    }
+
+    /** 把"分组管理"菜单行追加进刚弹出的微信原生菜单内容（若该弹窗是会话长按菜单） */
+    private static void injectConvMenuIntoPopup(android.widget.PopupWindow pw) {
+        if (pw == null) return;
+        final View content;
+        try { content = pw.getContentView(); } catch (Throwable e) { return; }
+        injectConvMenuIntoView(content, new Runnable() {
+            @Override public void run() {
+                try { pw.dismiss(); } catch (Throwable ignored) {}
+            }
+        }, "convPopup");
+    }
+
+    /** 在任意"刚出现的菜单窗口内容"上执行注入（PopupWindow 内容 / Dialog decor 均可复用） */
+    private static void injectConvMenuIntoView(final View content, final Runnable dismisser, final String tag) {
+        if (content == null) return;
+        long now = System.currentTimeMillis();
+        if (sConvMenuArmTs == 0 || now - sConvMenuArmTs > CONV_MENU_WINDOW_MS) return;
+        String user = sConvMenuUser;
+        if (TextUtils.isEmpty(user)) return;
+        final String contentCls = content.getClass().getName();
+        if (sInjectedPopups.contains(content)) {
+            logBoth(tag + " already injected " + contentCls);
+            return;
+        }
+        tryInjectConvMenuInto(content, dismisser, tag, 0);
+    }
+
+    private static void tryInjectConvMenuInto(final View content, final Runnable dismisser,
+                                              final String tag, final int attempt) {
+        try {
+            if (content == null) return;
+            String user = sConvMenuUser;
+            final String contentCls = content.getClass().getName();
+            if (sInjectedPopups.contains(content)) { logBoth(tag + " already injected " + contentCls); return; }
+            ViewGroup container = findMenuListContainer(content);
+            if (container == null) {
+                if (attempt < 2 && content.isShown()) {
+                    logBoth(tag + " no container retry content=" + contentCls + " user=" + user + " try=" + attempt);
+                    content.postDelayed(() -> tryInjectConvMenuInto(content, dismisser, tag, attempt + 1), 90);
+                } else {
+                    logBoth(tag + " no container content=" + contentCls + " user=" + user);
+                }
+                return;
+            }
+            sInjectedPopups.add(content);
+            sConvMenuArmTs = 0;
+            logBoth(tag + " inject content=" + contentCls
+                + " container=" + container.getClass().getName() + " children=" + container.getChildCount() + " user=" + user);
+            final String fUser = user;
+            final Context ctx = container.getContext();
+            boolean dark = isDarkMode(ctx);
+            TextView row = new TextView(ctx);
+            row.setText("分组管理");
+            row.setTextSize(16);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setSingleLine(true);
+            row.setTextColor(dark ? 0xFFE4E4E8 : 0xFF1D1D1F);
+            int rowH = dp(48, ctx);
+            // 对齐同级行高，尽量贴近原生观感
+            for (int i = 0; i < container.getChildCount(); i++) {
+                View sib = container.getChildAt(i);
+                if (sib.getLayoutParams() != null && sib.getLayoutParams().height > 0) {
+                    rowH = sib.getLayoutParams().height;
+                    break;
+                }
+            }
+            ViewGroup.LayoutParams lp = new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, rowH);
+            row.setLayoutParams(lp);
+            row.setPadding(dp(16, ctx), 0, dp(16, ctx), 0);
+            row.setOnClickListener(v -> {
+                try {
+                    sConvMenuArmTs = 0;
+                    if (dismisser != null) { try { dismisser.run(); } catch (Throwable ignored) {} }
+                    String target = sConvMenuUser;
+                    if (TextUtils.isEmpty(target)) target = sPendingContextUsername;
+                    if (TextUtils.isEmpty(target)) target = sPendingUsername;
+                    if (TextUtils.isEmpty(target)) return;
+                    Activity act = sCurrentActivity;
+                    if ((act == null || act.isFinishing()) && ctx instanceof Activity) act = (Activity) ctx;
+                    if (act == null) return;
+                    sCurrentActivity = act;
+                    sPendingUsername = target;
+                    sPendingContextUsername = target;
+                    logBoth(tag + " item clicked user=" + target);
+                    showFullGroupDialogForUsername(target);
+                } catch (Throwable e) {
+                    logBoth(tag + " click err: " + e.getMessage());
+                }
+            });
+            container.addView(row);
+            try { content.requestLayout(); content.invalidate(); } catch (Throwable ignored) {}
+            logBoth(tag + " injected OK user=" + fUser);
+        } catch (Throwable e) {
+            logBoth(tag + " inject err: " + e.getMessage());
+        }
+    }
+
+    /** 找到装菜单行的竖向容器：其直接子视图中有 ≥2 个"短文本行"即视为菜单列表。
+     *  找不到短文本行时再退化为"直接子视图含微信菜单标记文案"的容器。 */
+    private static ViewGroup findMenuListContainer(View root) {
+        if (!(root instanceof ViewGroup)) return null;
+        ViewGroup top = (ViewGroup) root;
+        ViewGroup direct = findDirectRowContainer(top, 0);
+        if (direct != null) return direct;
+        if (containsMarkerText(root)) {
+            ViewGroup vg = (ViewGroup) root;
+            // 递归向深找包含标记行文本的容器
+            java.util.ArrayDeque<ViewGroup> q = new java.util.ArrayDeque<>();
+            q.add(vg);
+            ViewGroup deepest = null;
+            while (!q.isEmpty()) {
+                ViewGroup cur = q.poll();
+                if (hasDirectMarkerRow(cur)) deepest = cur;
+                for (int i = 0; i < cur.getChildCount(); i++) {
+                    View c = cur.getChildAt(i);
+                    if (c instanceof ViewGroup) q.add((ViewGroup) c);
+                }
+            }
+            return deepest;
+        }
+        return null;
+    }
+
+    private static ViewGroup findDirectRowContainer(ViewGroup vg, int depth) {
+        if (depth > 3) return null;
+        if (countRowLikeChildren(vg) >= 2) return vg;
+        for (int i = 0; i < vg.getChildCount(); i++) {
+            View c = vg.getChildAt(i);
+            if (c instanceof ViewGroup) {
+                ViewGroup r = findDirectRowContainer((ViewGroup) c, depth + 1);
+                if (r != null) return r;
+            }
+        }
+        return null;
+    }
+
+    private static int countRowLikeChildren(ViewGroup vg) {
+        int n = 0;
+        for (int i = 0; i < vg.getChildCount(); i++) {
+            View c = vg.getChildAt(i);
+            if (c instanceof TextView) {
+                CharSequence t = ((TextView) c).getText();
+                if (t != null && t.length() > 0 && t.length() <= 32) n++;
+            } else if (c instanceof ViewGroup) {
+                if (containsShortText((ViewGroup) c)) n++;
+            }
+        }
+        return n;
+    }
+
+    private static boolean containsShortText(ViewGroup vg) {
+        java.util.ArrayDeque<View> q = new java.util.ArrayDeque<>();
+        q.add(vg);
+        int depth = 0;
+        while (!q.isEmpty() && depth < 4) {
+            int sz = q.size();
+            for (int i = 0; i < sz; i++) {
+                View v = q.poll();
+                if (v instanceof TextView) {
+                    CharSequence t = ((TextView) v).getText();
+                    if (t != null && t.length() > 0 && t.length() <= 32) return true;
+                }
+                if (v instanceof ViewGroup) {
+                    ViewGroup g = (ViewGroup) v;
+                    for (int j = 0; j < g.getChildCount(); j++) q.add(g.getChildAt(j));
+                }
+            }
+            depth++;
+        }
+        return false;
+    }
+
+    private static boolean hasDirectMarkerRow(ViewGroup vg) {
+        for (int i = 0; i < vg.getChildCount(); i++) {
+            View c = vg.getChildAt(i);
+            String t = viewText(c);
+            if (t != null && containsMarker(t)) return true;
+            if (c instanceof ViewGroup && containsMarkerText((ViewGroup) c)) return true;
+        }
+        return false;
+    }
+
+    private static boolean containsMarkerText(View v) {
+        if (!(v instanceof ViewGroup)) return false;
+        java.util.ArrayDeque<View> q = new java.util.ArrayDeque<>();
+        q.add(v);
+        while (!q.isEmpty()) {
+            View cur = q.poll();
+            String t = viewText(cur);
+            if (t != null && containsMarker(t)) return true;
+            if (cur instanceof ViewGroup) {
+                ViewGroup g = (ViewGroup) cur;
+                for (int i = 0; i < g.getChildCount(); i++) q.add(g.getChildAt(i));
+            }
+        }
+        return false;
+    }
+
+    private static String viewText(View v) {
+        if (v instanceof TextView) {
+            CharSequence t = ((TextView) v).getText();
+            return t == null ? null : t.toString();
+        }
+        return null;
+    }
+
+    private static boolean containsMarker(String text) {
+        if (text == null) return false;
+        for (String m : CONV_MENU_MARKERS) {
+            if (text.contains(m)) return true;
+        }
+        return false;
+    }
+
+    /** 兜底方案：hook AbsListView.onLongPress —— item 长按在框架内的中央分发点，
+     *  无论是否注册 OnItemLongClickListener 都会走到（onLongPress → listener 或 child.performLongClick）。
+     *  在会话列表长按 item 时提取用户名并弹出分组管理对话框。
+     *  v878 用 getDeclaredMethod+hookMethod 安装失败（反射查找抛 NoSuchMethodError），
+     *  v879 改用 hookAllMethods 按名挂载，并放宽实例校验为类名校验（防列表重建后引用失效）。 */
+    private static void tryInstallAbsListViewOnLongPressHook(ClassLoader cl) {
+        final XC_MethodHook hook = new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam p) {
+                try {
+                    if (p.thisObject == null
+                        || !"com.tencent.mm.ui.conversation.ConversationListView".equals(p.thisObject.getClass().getName())) return;
+                    View v = null;
+                    int position = -1;
+                    if (p.args.length >= 2 && p.args[0] instanceof View) v = (View) p.args[0];
+                    if (p.args.length >= 3 && p.args[1] instanceof Integer) position = (Integer) p.args[1];
+                    String username = extractUsernameFromView(v);
+                    if (TextUtils.isEmpty(username) && position >= 0) {
+                        username = extractUsernameFromList((AdapterView<?>) p.thisObject, position);
+                    }
+                    if (TextUtils.isEmpty(username)) {
+                        LogWriter.log(TAG, "onLongPress: no username, v="
+                            + (v != null ? v.getClass().getSimpleName() : "null") + " pos=" + position);
+                        return;
+                    }
+                    LogWriter.log(TAG, "onLongPress user=" + username + " pos=" + position);
+                    triggerGroupDialog(username, v, p.thisObject);
+                } catch (Throwable ignored) {}
+            }
+        };
+        try {
+            int n = XposedBridge.hookAllMethods(android.widget.AbsListView.class, "onLongPress", hook).size();
+            LogWriter.log(TAG, "AbsListView.onLongPress hookAllMethods hooked=" + n);
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "onLongPress hookAllMethods err: " + e.getMessage());
+        }
+        // 子类可能重写 onLongPress：按名挂会话列表类及其父类链
+        try {
+            Class<?> cls = XposedHelpers.findClass("com.tencent.mm.ui.conversation.ConversationListView", cl);
+            Class<?> cur = cls;
+            while (cur != null && cur != android.widget.AbsListView.class) {
+                int n = -1;
+                try {
+                    n = XposedBridge.hookAllMethods(cur, "onLongPress", hook).size();
+                } catch (Throwable ignored) {}
+                if (n > 0) {
+                    LogWriter.log(TAG, "onLongPress override hooked: " + cur.getName() + " (" + n + ")");
+                    break;
+                }
+                cur = cur.getSuperclass();
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    /** 去重触发器：同一长按被多层 hook 命中时只弹一次分组对话框 */
+    private static volatile long sLastGroupDialogTs = 0;
+
+    private static void triggerGroupDialog(String username, View v, Object parent) {
+        long now = System.currentTimeMillis();
+        if (now - sLastGroupDialogTs < 1200) return;
+        sLastGroupDialogTs = now;
+        sPendingContextUsername = username;
+        sPendingUsername = username;
+        try {
+            if (v != null) sCurrentActivity = (Activity) v.getContext();
+            else if (parent instanceof View) sCurrentActivity = (Activity) ((View) parent).getContext();
+        } catch (Throwable ignored) {}
+        showFullGroupDialogForUsername(username);
+    }
+
+    /** 判断 v 是否位于会话列表内（按类名向上遍历，避免 sConvListView 实例过期） */
+    private static boolean inConversationList(View v) {
+        View cur = v;
+        while (cur != null) {
+            if ("com.tencent.mm.ui.conversation.ConversationListView".equals(cur.getClass().getName())) return true;
+            Object parent = cur.getParent();
+            if (!(parent instanceof View)) return false;
+            cur = (View) parent;
+        }
+        return false;
+    }
+
+    /** 长按第二层：hook View.performLongClick。
+     *  DexKit 证明 8.0.49 会话列表未注册 OnItemLongClickListener（convLongPress=null.null），
+     *  因此 onLongPress 无监听时会落到 item 的 performLongClick，这里直接兜住。 */
+    private static void tryInstallViewLongClickHook() {
+        try {
+            XposedBridge.hookAllMethods(android.view.View.class, "performLongClick", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    try {
+                        View v = (View) p.thisObject;
+                        if (v == null || !inConversationList(v)) return;
+                        String username = extractUsernameFromView(v);
+                        if (TextUtils.isEmpty(username)) return;
+                        LogWriter.log(TAG, "viewLongClick user=" + username);
+                        triggerGroupDialog(username, v, v.getParent());
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "View.performLongClick hook installed");
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "performLongClick hook err: " + e.getMessage());
+        }
+    }
+
+    /** 长按第三层（最稳兜底）：hook ConversationListView.onTouchEvent，
+     *  按下≥500ms 且无明显位移即视为长按，与微信菜单机制完全解耦。 */
+    private static volatile boolean sTouchDetectorHooked = false;
+
+    private static void installConvListLongPressDetector(ClassLoader cl) {
+        if (sTouchDetectorHooked) return;
+        try {
+            Class<?> cls = XposedHelpers.findClass("com.tencent.mm.ui.conversation.ConversationListView", cl);
+            java.lang.reflect.Method m = null;
+            Class<?> cur = cls;
+            while (cur != null && cur != android.view.View.class) {
+                try {
+                    m = cur.getDeclaredMethod("onTouchEvent", android.view.MotionEvent.class);
+                    break;
+                } catch (NoSuchMethodException e) {
+                    cur = cur.getSuperclass();
+                }
+            }
+            if (m == null) { LogWriter.log(TAG, "convList onTouchEvent not found"); return; }
+            m.setAccessible(true);
+            XposedBridge.hookMethod(m, new XC_MethodHook() {
+                private long downTime;
+                private float downX, downY;
+                private AbsListView mList;
+                private final Handler lpHandler = new Handler(Looper.getMainLooper());
+                private final Runnable lpCheck = new Runnable() {
+                    @Override public void run() {
+                        try {
+                            if (downTime <= 0 || mList == null) return;
+                            long dur = System.currentTimeMillis() - downTime;
+                            LogWriter.log(TAG, "longpress: timer FIRE dur=" + dur + " dx=" + Math.round(downX) + " dy=" + Math.round(downY));
+                            if (dur >= 400) {
+                                // 长按已成立：微信可能消费 UP/CANCEL，这里不依赖 UP 直接触发
+                                long t = downTime;
+                                downTime = 0;
+                                handleConvListLongPress(mList, (int) downX, (int) downY);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                };
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    try {
+                        if (p.thisObject == null
+                            || !"com.tencent.mm.ui.conversation.ConversationListView".equals(p.thisObject.getClass().getName())) return;
+                        if (!(p.args[0] instanceof android.view.MotionEvent)) return;
+                        android.view.MotionEvent ev = (android.view.MotionEvent) p.args[0];
+                        int action = ev.getActionMasked();
+                        if (action == android.view.MotionEvent.ACTION_DOWN) {
+                            downTime = System.currentTimeMillis();
+                            downX = ev.getX();
+                            downY = ev.getY();
+                            mList = (AbsListView) p.thisObject;
+                            lpHandler.removeCallbacks(lpCheck);
+                            lpHandler.postDelayed(lpCheck, 600);
+                            LogWriter.log(TAG, "longpress: DOWN x=" + Math.round(downX) + " y=" + Math.round(downY) + " 600ms timer set");
+                        } else if (action == android.view.MotionEvent.ACTION_MOVE) {
+                            if (Math.abs(ev.getX() - downX) > 60 || Math.abs(ev.getY() - downY) > 60) {
+                                lpHandler.removeCallbacks(lpCheck);
+                                LogWriter.log(TAG, "longpress: MOVE canceled dx=" + Math.round(ev.getX() - downX) + " dy=" + Math.round(ev.getY() - downY));
+                            }
+                        } else if (action == android.view.MotionEvent.ACTION_UP) {
+                            lpHandler.removeCallbacks(lpCheck);
+                            long dur = System.currentTimeMillis() - downTime;
+                            float dx = ev.getX() - downX, dy = ev.getY() - downY;
+                            LogWriter.log(TAG, "longpress: UP dur=" + dur + " dx=" + Math.round(dx) + " dy=" + Math.round(dy));
+                            if (dur >= 500 && Math.abs(dx) < 60 && Math.abs(dy) < 60) {
+                                handleConvListLongPress((AbsListView) p.thisObject, (int) downX, (int) downY);
+                            }
+                        } else if (action == android.view.MotionEvent.ACTION_CANCEL) {
+                            lpHandler.removeCallbacks(lpCheck);
+                            long dur = System.currentTimeMillis() - downTime;
+                            if (dur >= 500 && Math.abs(ev.getX() - downX) < 60 && Math.abs(ev.getY() - downY) < 60) {
+                                handleConvListLongPress((AbsListView) p.thisObject, (int) downX, (int) downY);
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            sTouchDetectorHooked = true;
+            LogWriter.log(TAG, "convList onTouchEvent long-press detector hooked: " + m.getDeclaringClass().getName());
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "convList onTouchEvent hook err: " + e.getMessage());
+        }
+    }
+
+    private static void handleConvListLongPress(AbsListView lv, int x, int y) {
+        try {
+            int pos = lv.pointToPosition(x, y);
+            if (pos == AdapterView.INVALID_POSITION) {
+                LogWriter.log(TAG, "viewLongPress: INVALID_POSITION");
+                return;
+            }
+            View child = lv.getChildAt(pos - lv.getFirstVisiblePosition());
+            String username = child != null ? extractUsernameFromView(child) : null;
+            if (TextUtils.isEmpty(username)) username = extractUsernameFromList(lv, pos);
+            if (TextUtils.isEmpty(username)) {
+                LogWriter.log(TAG, "viewLongPress: no username pos=" + pos);
+                return;
+            }
+            LogWriter.log(TAG, "viewLongPress user=" + username + " pos=" + pos);
+            triggerGroupDialog(username, child, lv);
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "viewLongPress err: " + e.getMessage());
+        }
+    }
+
+    /** 判断 v 是否为 root 的后代视图（含自身） */
+    private static boolean isDescendantOf(View v, View root) {
+        if (v == root) return true;
+        View cur = v;
+        while (cur != null) {
+            if (cur == root) return true;
+            Object parent = cur.getParent();
+            if (!(parent instanceof View)) return false;
+            cur = (View) parent;
+        }
+        return false;
+    }
+
+    /** 全包 hook OnItemLongClickListener 实现类(由 DexKit 运行时发现，8.0.49 为 f4/i/kb/o3/p9/q0/r3)。
+     *  直接钩各实现类的 onItemLongClick：先取用户名，长按即可管理分组。 */
+    private static void tryInstallLongPressImplHooks(final ClassLoader cl) {
+        final List<String> impls = DexKitHelper.getConvLongPressImpls();
+        LogWriter.log(TAG, "longPressImpls count=" + impls.size() + " -> " + impls);
+        if (impls.isEmpty()) {
+            DexKitHelper.setPostScanCallback(() -> tryInstallLongPressImplHooks(cl));
+            return;
+        }
+        final XC_MethodHook hook = new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam p) {
+                try {
+                    AdapterView<?> parent = null;
+                    View view = null;
+                    int position = -1;
+                    if (p.args.length >= 2) {
+                        if (p.args[0] instanceof AdapterView) parent = (AdapterView<?>) p.args[0];
+                        if (p.args[1] instanceof View) view = (View) p.args[1];
+                    }
+                    if (p.args.length >= 3 && p.args[2] instanceof Integer) position = (Integer) p.args[2];
+                    String username = extractUsernameFromView(view);
+                    if (TextUtils.isEmpty(username) && parent != null) {
+                        username = extractUsernameFromList(parent, position);
+                    }
+                    LogWriter.log(TAG, "longPressImpl user=" + username + " cls=" + p.thisObject.getClass().getName());
+                    if (!TextUtils.isEmpty(username)) {
+                        sPendingContextUsername = username;
+                        sPendingUsername = username;
+                    }
+                } catch (Throwable ignored) {}
+            }
+            @Override
+            protected void afterHookedMethod(MethodHookParam p) {
+                try {
+                    View view = null;
+                    AdapterView<?> parent = null;
+                    int position = -1;
+                    if (p.args.length >= 2) {
+                        if (p.args[0] instanceof AdapterView) parent = (AdapterView<?>) p.args[0];
+                        if (p.args[1] instanceof View) view = (View) p.args[1];
+                    }
+                    if (p.args.length >= 3 && p.args[2] instanceof Integer) position = (Integer) p.args[2];
+                    String username = sPendingContextUsername;
+                    if (TextUtils.isEmpty(username)) {
+                        username = extractUsernameFromView(view);
+                        if (TextUtils.isEmpty(username) && parent != null) username = extractUsernameFromList(parent, position);
+                    }
+                    if (!TextUtils.isEmpty(username)) {
+                        try { sCurrentActivity = (Activity) view.getContext(); } catch (Throwable ignored) {}
+                        LogWriter.log(TAG, "longPressImpl -> showGroupDialog user=" + username);
+                        showFullGroupDialogForUsername(username);
+                    }
+                } catch (Throwable ignored) {}
+            }
+        };
+        int installed = 0;
+        for (String cn : impls) {
+            try {
+                Class<?> cls = XposedHelpers.findClass(cn, cl);
+                XposedBridge.hookAllMethods(cls, "onItemLongClick", hook);
+                installed++;
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "longPressImpl hook fail " + cn + ": " + e.getMessage());
+            }
+        }
+        LogWriter.log(TAG, "longPressImpl hooks installed=" + installed + "/" + impls.size());
     }
 
     private static volatile long sLastCtxClickTime = 0;
@@ -642,7 +1440,11 @@ public class ChatGroupUiInjector {
                     }
                 });
                 logBoth("MenuItemImpl.invoke hooked: " + cn);
-            } catch (Throwable e) { logBoth("MenuItemImpl.invoke " + cn + ": " + e.getMessage()); }
+            } catch (Throwable e) {
+                if (!(e.getCause() instanceof ClassNotFoundException)) {
+                    logBoth("MenuItemImpl.invoke " + cn + ": " + e.getMessage());
+                }
+            }
         }
     }
 
@@ -733,7 +1535,7 @@ public class ChatGroupUiInjector {
     private static final Set<String> sHookedMenuClasses = new HashSet<>();
 
     /** 动态 hook 微信自定义 ContextMenu 运行时类：捕获一切含 MenuItem 参数的点击分发方法 */
-    private static void hookMenuClassDynamically(ContextMenu menu) {
+    private static void hookMenuClassDynamically(Menu menu) {
         try {
             Class<?> cls = menu.getClass();
             while (cls != null && cls != Object.class) {
@@ -784,6 +1586,98 @@ public class ChatGroupUiInjector {
             });
             logBoth("adapter ctxMenu hooked");
         } catch (Throwable e) { logBoth("adapter ctxMenu: " + e.getMessage()); }
+    }
+
+    /** 兜底：包装 ConversationListView 的 OnItemLongClickListener，长按时直接弹出分组对话框
+     *  (不依赖微信 ContextMenu 框架，微信 8.0.49 可能使用自定义弹窗) */
+    private static final java.util.Set<Object> sLongClickWrapped = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+    private static void tryInstallItemLongClick() {
+        try {
+            XposedBridge.hookAllMethods(android.widget.AbsListView.class,
+                    "setOnItemLongClickListener",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam p) {
+                            try {
+                                if (p.thisObject != sConvListView) return;
+                                if (sLongClickWrapped.contains(p.thisObject)) return;
+                                Object original = p.args[0];
+                                if (original == null) return;
+                                final AdapterView.OnItemLongClickListener orig =
+                                        (AdapterView.OnItemLongClickListener) original;
+                                AdapterView.OnItemLongClickListener wrapper =
+                                        new AdapterView.OnItemLongClickListener() {
+                                    @Override
+                                    public boolean onItemLongClick(AdapterView<?> parent, View view,
+                                                                   int position, long id) {
+                                        boolean consumed = false;
+                                        try { consumed = orig.onItemLongClick(parent, view, position, id); }
+                                        catch (Throwable ignored) {}
+                                        try {
+                                            String username = extractUsernameFromView(view);
+                                            if (TextUtils.isEmpty(username)) {
+                                                username = extractUsernameFromList(parent, position);
+                                            }
+                                            if (!TextUtils.isEmpty(username)) {
+                                                logBoth("itemLongClick user=" + username);
+                                                sCurrentActivity = (Activity) view.getContext();
+                                                showFullGroupDialogForUsername(username);
+                                            }
+                                        } catch (Throwable ignored) {}
+                                        return consumed;
+                                    }
+                                };
+                                sLongClickWrapped.add(p.thisObject);
+                                XposedHelpers.callMethod(p.thisObject, "setOnItemLongClickListener", wrapper);
+                                logBoth("itemLongClick wrapper installed");
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+            logBoth("itemLongClick hook installed");
+        } catch (Throwable e) { logBoth("itemLongClick: " + e.getMessage()); }
+    }
+
+    private static String extractUsernameFromList(AdapterView<?> parent, int position) {
+        try {
+            Object adapter = parent.getAdapter();
+            if (adapter == null) return null;
+            int headerCount = 0;
+            try {
+                Object h = XposedHelpers.getObjectField(adapter, "mHeaderViewInfos");
+                if (h instanceof List) headerCount = ((List<?>) h).size();
+            } catch (Throwable ignored) {}
+            Object item = null;
+            if (adapter instanceof android.widget.ListAdapter) {
+                item = ((android.widget.ListAdapter) adapter).getItem(position - headerCount);
+            }
+            if (item == null) return null;
+            Object d = XposedHelpers.getObjectField(item, "d");
+            if (d != null) return (String) XposedHelpers.callMethod(d, "i1");
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    /** Fallback: hook Activity.onCreateContextMenu to catch LauncherUI long-press menus */
+    private static void tryInstallActivityCtxMenuFallback() {
+        try {
+            XposedBridge.hookAllMethods(Activity.class, "onCreateContextMenu", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam p) {
+                    try {
+                        if (!"com.tencent.mm.ui.LauncherUI".equals(p.thisObject.getClass().getName())) return;
+                        ContextMenu menu = (ContextMenu) p.args[0];
+                        View view = (View) p.args[1];
+                        String username = sPendingUsername;
+                        if (TextUtils.isEmpty(username)) username = extractUsernameFromView(view);
+                        if (!TextUtils.isEmpty(username)) {
+                            logBoth("Activity ctxMenu fallback user=" + username);
+                            addGroupMenuItems(menu, username);
+                        }
+                    } catch (Throwable e) { logBoth("Activity ctxMenu fallback err: " + e.getMessage()); }
+                }
+            });
+            logBoth("Activity ctxMenu fallback hooked");
+        } catch (Throwable e) { logBoth("Activity ctxMenu fallback: " + e.getMessage()); }
     }
 
     private static void tryInstallR3Hook(ClassLoader cl) {
@@ -875,6 +1769,15 @@ public class ChatGroupUiInjector {
     }
 
     private static void addGroupMenuItems(ContextMenu menu, String username) {
+        logBoth("addMenu start user=" + username + " menu=" + (menu != null ? menu.getClass().getName() : "null"));
+        if (menu instanceof Menu) {
+            addGroupMenuItemsInternal((Menu) menu, username);
+            return;
+        }
+        addGroupMenuItemsInternal(menu, username);
+    }
+
+    private static void addGroupMenuItemsInternal(Menu menu, String username) {
         logBoth("addMenu start user=" + username + " menu=" + (menu != null ? menu.getClass().getName() : "null"));
         if (TextUtils.isEmpty(username)) { logBoth("addMenu return: empty user"); return; }
         final Context ctx = sCurrentActivity;

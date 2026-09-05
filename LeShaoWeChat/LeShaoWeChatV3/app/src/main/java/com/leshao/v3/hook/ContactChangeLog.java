@@ -141,7 +141,6 @@ public class ContactChangeLog {
                 });
                 LogWriter.log(TAG, "GetContactService hook ok");
             } catch (Throwable t) {
-                LogWriter.log(TAG, "GetContactService not found: " + t.getMessage());
             }
             LogWriter.log(TAG, "[v.b] hook ok");
 

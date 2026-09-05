@@ -39,6 +39,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.hook.DexKitHelper;
 import com.leshao.v3.hook.TtsVoiceSender;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
@@ -89,8 +90,18 @@ public class WmChatHook {
     private static long sPendingVideoSize;
     private static volatile boolean sMassSendRunning;
     private static volatile Object sS5Instance;
+    private static android.view.View sMoreIcon;
+    private static boolean sMoreAdded = false;
+    private static Dialog sMoreDialog;
+    private static int sMoreMarginPx = -1;
 
     public static void showTitleBtn(Activity act, ClassLoader cl, String user) {
+        // 幂等：轮询 reconciler 每 400ms 调用，已注入且同一会话时跳过重建避免闪烁
+        if (sFloatIcon != null && sUser != null && sUser.equals(user)
+                && sAct != null && !sAct.isFinishing()) {
+            if (act != null) sAct = act;
+            return;
+        }
         dismissTitleBtn();
         sAct = act;
         sCL = cl;
@@ -112,10 +123,12 @@ public class WmChatHook {
                 () -> { if (sPanelShow) hidePanel(); else showPanel(); });
         f.addToWindow();
         sFloatIcon = f;
+        ensureMoreButton(act);
     }
 
     public static void dismissTitleBtn() {
         hidePanel();
+        removeMoreButton();
         if (sFloatIcon != null) {
             sFloatIcon.removeFromWindow();
             sFloatIcon = null;
@@ -155,7 +168,12 @@ public class WmChatHook {
                     if (n != null && !n.isEmpty()) displayName = n;
                 }
             }
-        } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
+        } catch (Throwable t) {
+            String msg = t.getMessage();
+            if (msg == null || !msg.contains("Kernel not initialized")) {
+                LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + msg);
+            }
+        }
 
         ScrollView sv = new ScrollView(sAct);
         LinearLayout btns = new LinearLayout(sAct);
@@ -180,10 +198,14 @@ public class WmChatHook {
         if (WmPrefs.isMsgSearch()) btns.addView(WmUi.makeBtn(sAct, "🔍 消息搜索", WmChatHook::showMsgSearch));
 
         if (isGroup) {
-            com.leshao.v3.wm.hook.WmGroupHook.bind(sAct, sCL, sUser);
-            btns.addView(WmUi.makeDivider(sAct));
-            btns.addView(WmUi.makeHeader(sAct, "🛡 乐少群管理", com.leshao.v3.wm.hook.WmGroupHook.makeRoomSubtitle()));
-            com.leshao.v3.wm.hook.WmGroupHook.appendGroupButtons(btns);
+            try {
+                com.leshao.v3.wm.hook.WmGroupHook.bind(sAct, sCL, sUser);
+                btns.addView(WmUi.makeDivider(sAct));
+                btns.addView(WmUi.makeHeader(sAct, "🛡 乐少群管理", com.leshao.v3.wm.hook.WmGroupHook.makeRoomSubtitle()));
+                com.leshao.v3.wm.hook.WmGroupHook.appendGroupButtons(btns);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "WmChatHook group panel err: " + t.getMessage());
+            }
         }
 
         sv.addView(btns);
@@ -239,6 +261,235 @@ public class WmChatHook {
             sPanelDialog = null;
         }
         sPanelShow = false;
+    }
+
+
+    // ===== 标题栏右上角 自绘竖向 ⋮ 按钮 (已移除: 8.0.78 原生三点+MsgExport注入足够, 悬浮窗口会引发闪退) =====
+    private static void ensureMoreButton(Activity act) {
+        // 圆形三点已移除：微信 8.0.78 标题栏自带右上角溢出菜单，
+        // 配合 MsgExport 的 o.r 注入即可扩展功能，无需额外悬浮按钮。
+        // 悬浮 TYPE_APPLICATION_PANEL 窗口在 Activity 切换时 token 失效会导致闪退。
+    }
+
+    /** 扫描聊天标题栏右侧的可点击图标，返回"原生图标簇左侧"对应的右边距(px)。
+     *  找不到或未布局返回 -1。 */
+    private static int computeMoreRightMarginPx(Activity act) {
+        try {
+            View decor = act.getWindow() != null ? act.getWindow().getDecorView() : null;
+            if (decor == null || decor.getWidth() <= 0 || !decor.isShown()) return -1;
+            int screenW = decor.getWidth();
+            int sb = statusBarHeight(act);
+            int topBand = sb - dp(4);
+            int bottomBand = sb + dp(56);
+            final java.util.List<int[]> rects = new java.util.ArrayList<>();
+            collectTitleIconRects(decor, 0, 0, topBand, bottomBand, rects);
+            if (rects.isEmpty()) return -1;
+            java.util.Collections.sort(rects, (a, b) -> Integer.compare(a[0], b[0]));
+            int[] rightMost = rects.get(rects.size() - 1);
+            int clusterLeft = rightMost[0];
+            for (int i = rects.size() - 2; i >= 0; i--) {
+                int[] r = rects.get(i);
+                if (r[1] + dp(16) >= clusterLeft) clusterLeft = r[0];
+                else break;
+            }
+            int margin = screenW - clusterLeft + dp(8);
+            if (margin < dp(6)) margin = dp(6);
+            LogWriter.log(TAG, "more native clusterL=" + clusterLeft + " icons=" + rects.size()
+                    + " margin=" + margin);
+            return margin;
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    private static void collectTitleIconRects(View v, int baseLeft, int baseTop,
+                                              int topBand, int bottomBand, java.util.List<int[]> out) {
+        if (v == null) return;
+        int left = baseLeft + v.getLeft();
+        int top = baseTop + v.getTop();
+        int right = left + v.getWidth();
+        int bottom = top + v.getHeight();
+        if (bottom < topBand || top > bottomBand) return;
+        int w = v.getWidth(), h = v.getHeight();
+        boolean clickable = false;
+        try { clickable = v.isClickable(); } catch (Throwable ignored) {}
+        if (clickable && w > 0 && h > 0 && w <= dp(150) && h <= dp(120)) {
+            int cy = (top + bottom) / 2;
+            if (cy >= topBand && cy <= bottomBand) {
+                out.add(new int[]{left, right});
+            }
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            int n = g.getChildCount();
+            for (int i = 0; i < n; i++) {
+                View c = g.getChildAt(i);
+                if (c == null || c.getVisibility() != View.VISIBLE) continue;
+                collectTitleIconRects(c, left, top, topBand, bottomBand, out);
+            }
+        }
+    }
+
+    /** 微信布局完成/标题栏稳定后，按原生图标簇重排 ⋮ 位置，确保不遮挡 */
+    private static void repositionMoreButton(Activity act) {
+        try {
+            if (!sMoreAdded || sMoreIcon == null || act == null) return;
+            int m = computeMoreRightMarginPx(act);
+            if (m <= 0 || m == sMoreMarginPx) return;
+            sMoreMarginPx = m;
+            WindowManager.LayoutParams wp = (WindowManager.LayoutParams) sMoreIcon.getLayoutParams();
+            if (wp == null) return;
+            wp.x = m;
+            sWM.updateViewLayout(sMoreIcon, wp);
+            LogWriter.log(TAG, "more icon repositioned margin=" + m);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "more icon reposition err: " + t.getMessage());
+        }
+    }
+
+    private static void removeMoreButton() {
+        dismissMoreMenu();
+        if (sMoreAdded && sMoreIcon != null) {
+            try { sWM.removeView(sMoreIcon); } catch (Throwable ignored) {}
+        }
+        sMoreIcon = null;
+        sMoreAdded = false;
+        sMoreMarginPx = -1;
+    }
+
+    private static void showMoreMenu() {
+        if (sAct == null || sAct.isFinishing()) return;
+        if (sMoreDialog != null) return;
+        final Activity act = sAct;
+        boolean dark = (act.getResources().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        int bgCard = dark ? 0xFF2A2A2E : 0xFFFFFFFF;
+        int fgText = dark ? 0xFFE4E4E8 : 0xFF1D1D1F;
+        LinearLayout box = new LinearLayout(act);
+        box.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(bgCard);
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(1), dark ? 0xFF3A3A3E : 0xFFE5E5EA);
+        box.setBackground(bg);
+        box.setPadding(dp(4), dp(6), dp(4), dp(6));
+        if (WmPrefs.isExportChat()) {
+            box.addView(makeMoreRow(act, "导出聊天记录 (TXT)", fgText, v -> { dismissMoreMenu(); exportChat(); }));
+            box.addView(makeMoreRow(act, "导出聊天记录 (HTML)", fgText, v -> { dismissMoreMenu(); exportChatHtml(); }));
+        }
+        box.addView(makeMoreRow(act, "更多功能", fgText, v -> { dismissMoreMenu(); showPanel(); }));
+        Dialog d = new Dialog(act);
+        d.setContentView(box);
+        Window w = d.getWindow();
+        if (w == null) return;
+        w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+        WindowManager.LayoutParams lp = w.getAttributes();
+        w.setLayout(dp(200), WindowManager.LayoutParams.WRAP_CONTENT);
+        lp.gravity = Gravity.TOP | Gravity.RIGHT;
+        lp.x = sMoreMarginPx > 0 ? sMoreMarginPx : dp(8);
+        lp.y = statusBarHeight(act) + dp(48);
+        lp.dimAmount = 0f;
+        w.setAttributes(lp);
+        d.setCanceledOnTouchOutside(true);
+        d.setOnDismissListener(dd -> { sMoreDialog = null; });
+        d.show();
+        sMoreDialog = d;
+        LogWriter.log(TAG, "more menu shown");
+    }
+
+    private static void dismissMoreMenu() {
+        if (sMoreDialog != null) {
+            try { sMoreDialog.dismiss(); } catch (Throwable ignored) {}
+            sMoreDialog = null;
+        }
+    }
+
+    private static View makeMoreRow(Activity act, String text, int fg, View.OnClickListener click) {
+        TextView tv = new TextView(act);
+        tv.setText(text);
+        tv.setTextSize(15);
+        tv.setTextColor(fg);
+        tv.setGravity(Gravity.CENTER_VERTICAL);
+        tv.setPadding(dp(18), dp(13), dp(18), dp(13));
+        tv.setOnClickListener(click);
+        return tv;
+    }
+
+    private static int statusBarHeight(Activity act) {
+        try {
+            int id = act.getResources().getIdentifier("status_bar_height", "dimen", "android");
+            if (id > 0) return act.getResources().getDimensionPixelSize(id);
+        } catch (Throwable ignored) {}
+        return dp(24);
+    }
+
+    static void exportChatHtml() {
+        new Thread(() -> {
+            int count = exportChatHtmlReal();
+            sH.post(() -> {
+                if (count > 0) {
+                    toast("已导出" + count + "条消息到 /sdcard/WeChatMaster/ (HTML)");
+                } else if (count == -1) {
+                    toast("数据库未就绪,请稍后重试");
+                } else {
+                    toast("该会话无消息记录");
+                }
+            });
+        }).start();
+    }
+
+    static int exportChatHtmlReal() {
+        Cursor c = null;
+        FileOutputStream fos = null;
+        try {
+            c = rawQueryMsg(
+                "SELECT content, createTime, isSend, type FROM message WHERE talker=? ORDER BY createTime ASC LIMIT 50000",
+                new String[]{sUser});
+            if (c == null) return -1;
+            if (c.getCount() == 0) return 0;
+
+            File dir = new File(Environment.getExternalStorageDirectory(), "WeChatMaster");
+            dir.mkdirs();
+            File f = new File(dir, "chat_" + Math.abs(sUser.hashCode()) + "_" + System.currentTimeMillis() + ".html");
+            fos = new FileOutputStream(f);
+
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            fos.write(("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>" + escHtml(sUser)
+                + "</title><style>body{font-family:sans-serif;max-width:800px;margin:auto;padding:10px}"
+                + ".me{color:#07C160;text-align:right}.other{color:#333}.time{font-size:10px;color:#999}"
+                + ".bubble{display:inline-block;max-width:70%;padding:8px 12px;border-radius:8px;margin:2px 0}"
+                + ".me .bubble{background:#95EC69}.other .bubble{background:#fff;border:1px solid #eee}"
+                + "</style></head><body><h2>" + escHtml(sUser) + "</h2><hr>\n").getBytes("UTF-8"));
+            int cnt = 0;
+            while (c.moveToNext()) {
+                try {
+                    String content = c.getString(0); if (content == null) content = "";
+                    long tm = c.getLong(1);
+                    int isSend = c.getInt(2);
+                    int type = c.getInt(3);
+                    String cls = isSend == 1 ? "me" : "other";
+                    String row = "<div class='" + cls + "'><div class='bubble'>" + escHtml(content) + "</div>"
+                            + "<div class='time'>" + sdf.format(new Date(tm)) + " [" + typeMap(type) + "]</div></div>\n";
+                    fos.write(row.getBytes("UTF-8"));
+                    cnt++;
+                } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
+            }
+            fos.write("</body></html>".getBytes("UTF-8"));
+            return cnt;
+        } catch (Exception e) {
+            LogWriter.log(TAG, "exportChatHtml err: " + e.getMessage());
+            return -1;
+        } finally {
+            try { if (fos != null) fos.close(); } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
+            try { if (c != null) c.close(); } catch (Throwable t) { LogWriter.log(TAG, "WmChatHook error: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
+        }
+    }
+
+    private static String escHtml(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;")
+                .replace(">", "&gt;").replace("\n", "<br>");
     }
 
 
@@ -2899,7 +3150,7 @@ public class WmChatHook {
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
-            LogWriter.log(TAG, "initOnAppStart OK v814 kl5.s5.Dj+thumb build=v430 2026-08-24");
+            LogWriter.log(TAG, "initOnAppStart OK v815 kl5.s5.Dj+thumb build=v430 2026-08-24");
         } catch (Throwable t) {
             LogWriter.log(TAG, "initOnAppStart err: " + t.getMessage());
         }
@@ -3174,6 +3425,10 @@ private static void hookVideoSendDebug() {
                             LogWriter.log(TAG, "kl5.c2.onPostExecute w2.x ret=" + ret);
                         } catch (Throwable t) {
                             LogWriter.log(TAG, "kl5.c2.onPostExecute w2.x fail: " + t.getMessage());
+                        } finally {
+                            sPendingVideoToUser = null;
+                            sPendingVideoPath = null;
+                            sPendingVideoDstPath = null;
                         }
                     }
                 });
@@ -3555,7 +3810,44 @@ private static void executeMassSend(String type, String text, java.util.List<Str
         return System.currentTimeMillis();
     }
 
+    public static boolean hookP06BypassEarly(ClassLoader cl) {
+        // Try immediate bypass (before DexKit scan)
+        boolean immediate = hookP06Bypass(cl);
+        if (immediate) return true;
+
+        // Register post-scan callback: retry after DexKit scan completes
+        DexKitHelper.setPostScanCallback(() -> {
+            LogWriter.log(TAG, "hookP06Bypass: retrying after DexKit scan");
+            hookP06Bypass(cl);
+        });
+        return false;
+    }
+
     static boolean hookP06Bypass(ClassLoader cl) {
+        // Priority 1: use DexKit scan result
+        if (DexKitHelper.isScanComplete()) {
+            String p06Name = DexKitHelper.getP06ClassName();
+            if (p06Name != null) {
+                try {
+                    Class<?> p06 = XposedHelpers.findClass(p06Name, cl);
+                    XposedBridge.hookAllMethods(p06, "b", new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            if (param.getThrowable() != null) {
+                                param.setThrowable(null);
+                                param.setResult(null);
+                            }
+                        }
+                    });
+                    LogWriter.log(TAG, "hookP06Bypass OK (DexKit): " + p06Name + ".b hooked");
+                    return true;
+                } catch (Throwable e) {
+                    LogWriter.log(TAG, "hookP06Bypass DexKit class failed: " + e.getMessage());
+                }
+            }
+        }
+
+        // Priority 2: try known packages
         String[] pkgs = {
             "com.tencent.mm", "com.tencent.mm.model", "com.tencent.mm.storage",
             "com.tencent.mm.modelmulti", "com.tencent.mm.sdk", "com.tencent.mm.kernel",
@@ -3572,11 +3864,14 @@ private static void executeMassSend(String type, String text, java.util.List<Str
                 Class<?> p06 = XposedHelpers.findClass(pkg + ".p06", cl);
                 XposedBridge.hookAllMethods(p06, "b", new XC_MethodHook() {
                     @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        param.setResult(null);
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        if (param.getThrowable() != null) {
+                            param.setThrowable(null);
+                            param.setResult(null);
+                        }
                     }
                 });
-                XposedBridge.log("LeShaoV3: WmChat: hookP06Bypass ok: " + pkg + ".p06.b hooked");
+                LogWriter.log(TAG, "hookP06Bypass OK: " + pkg + ".p06.b hooked");
                 return true;
             } catch (Throwable ignored) {}
         }
@@ -3584,11 +3879,14 @@ private static void executeMassSend(String type, String text, java.util.List<Str
             Class<?> p06 = XposedHelpers.findClass("p06", cl);
             XposedBridge.hookAllMethods(p06, "b", new XC_MethodHook() {
                 @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    param.setResult(null);
+                protected void afterHookedMethod(MethodHookParam param) {
+                    if (param.getThrowable() != null) {
+                        param.setThrowable(null);
+                        param.setResult(null);
+                    }
                 }
             });
-            XposedBridge.log("LeShaoV3: WmChat: hookP06Bypass ok: p06.b (default pkg) hooked");
+            LogWriter.log(TAG, "hookP06Bypass OK: p06.b (default pkg) hooked");
             return true;
         } catch (Throwable ignored) {}
         try {
@@ -3597,18 +3895,24 @@ private static void executeMassSend(String type, String text, java.util.List<Str
             java.util.Vector<Class<?>> classes = (java.util.Vector<Class<?>>) f.get(cl);
             for (Class<?> c : classes) {
                 if (c.getName().endsWith(".p06") || c.getSimpleName().equals("p06")) {
-                    XposedBridge.log("LeShaoV3: WmChat: hookP06Bypass found via brute: " + c.getName());
+                    LogWriter.log(TAG, "hookP06Bypass OK via brute: " + c.getName());
                     XposedBridge.hookAllMethods(c, "b", new XC_MethodHook() {
                         @Override
-                        protected void beforeHookedMethod(MethodHookParam param) {
-                            param.setResult(null);
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            if (param.getThrowable() != null) {
+                                param.setThrowable(null);
+                                param.setResult(null);
+                            }
                         }
                     });
                     return true;
                 }
             }
         } catch (Throwable ignored) {}
-        XposedBridge.log("LeShaoV3: WmChat: hookP06Bypass: p06 class NOT found");
+        if (!DexKitHelper.isScanComplete()) {
+            return false;
+        }
+        LogWriter.log(TAG, "hookP06Bypass FAILED: p06 class NOT found in any package");
         return false;
     }
 
@@ -3665,10 +3969,9 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 }
                 LogWriter.log(TAG, "v814 thumb generated: " + tempThumb.getAbsolutePath());
 
-                sPendingVideoPath = null;
-                sPendingVideoToUser = null;
-
                 if (sS5Instance == null) {
+                    sPendingVideoPath = null;
+                    sPendingVideoToUser = null;
                     LogWriter.log(TAG, "v814 sS5Instance null");
                     sentError[0] = new RuntimeException("kl5.s5 instance not available");
                     return;

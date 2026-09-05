@@ -88,7 +88,6 @@ public class SignatureDump {
             Class<?> c = cl.loadClass(className);
             dumpClass(c, 0);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "类不存在(需反编译确认): " + className);
             w("<<< 类不存在: " + className + " (" + t.getClass().getSimpleName() + ": " + t.getMessage() + ") >>>");
         }
     }

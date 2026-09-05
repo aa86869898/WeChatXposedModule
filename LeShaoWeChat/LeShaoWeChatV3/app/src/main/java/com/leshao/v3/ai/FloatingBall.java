@@ -19,21 +19,37 @@ import com.leshao.v3.UnifiedPrefs;
 public class FloatingBall {
     private static final String TAG = "FloatingBall";
     private static final String SP = "leshao_ball_pos";
+    private static final int BALL_VERSION = 3;
+    private static final int MAX_RETRY = 5;
     private static WindowManager sWM;
     private static Activity sAct;
     private static View sBall;
     private static LinearLayout sMenu;
+    private static int sRetryCount = 0;
 
     public static void show(Activity act, ClassLoader cl) {
         hide();
         if (act == null) return;
+        try {
+            if (act.isFinishing() || act.isDestroyed()) {
+                LogWriter.log(TAG, "show: 跳过 (activity finishing/destroyed)");
+                return;
+            }
+        } catch (Throwable ignored) {}
         sAct = act;
         sWM = (WindowManager) act.getSystemService(Context.WINDOW_SERVICE);
+        try {
+            doShow(act);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "show: 注入失败: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+            sBall = null;
+        }
+    }
+
+    private static void doShow(Activity act) {
         float d = act.getResources().getDisplayMetrics().density;
         int sz = (int) (44 * d);
-
         int[] pos = restorePos(act, d, sz);
-
         sBall = makeBall(act);
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 sz, sz,
@@ -47,10 +63,25 @@ public class FloatingBall {
         try {
             sWM.addView(sBall, lp);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "show: addView 失败: " + t.getMessage());
             sBall = null;
+            if (sRetryCount < MAX_RETRY && !act.isFinishing() && !act.isDestroyed()) {
+                sRetryCount++;
+                LogWriter.log(TAG, "show: addView 失败，第" + sRetryCount + "次重试: " + t.getMessage());
+                android.os.Handler h = new android.os.Handler(act.getMainLooper());
+                h.postDelayed(() -> {
+                    try {
+                        doShow(act);
+                    } catch (Throwable th) {
+                        LogWriter.log(TAG, "show: 重试失败: " + th.getMessage());
+                        sBall = null;
+                    }
+                }, 500);
+                return;
+            }
+            LogWriter.log(TAG, "show: addView 最终失败: " + t.getMessage());
             return;
         }
+        sRetryCount = 0;
         LogWriter.log(TAG, "show: 注入悬浮球 x=" + pos[0] + " y=" + pos[1]);
         sBall.setOnTouchListener(makeTouch());
     }
@@ -58,9 +89,14 @@ public class FloatingBall {
     private static int[] restorePos(Activity act, float d, int sz) {
         int w = act.getResources().getDisplayMetrics().widthPixels;
         int h = act.getResources().getDisplayMetrics().heightPixels;
-        int defX = w - sz - (int) (14 * d);
-        int defY = h - sz - (int) (150 * d);
+        int defX = (int) (14 * d);
+        int defY = (int) (h * 0.45f);
         SharedPreferences sp = UnifiedPrefs.get(act, SP);
+        int savedVersion = sp.getInt("ball_version", 0);
+        if (savedVersion < BALL_VERSION) {
+            sp.edit().putInt("ball_version", BALL_VERSION).apply();
+            return new int[]{defX, defY};
+        }
         int x = sp.getInt("x", defX);
         int y = sp.getInt("y", defY);
         if (x < -w || x > w) x = defX;
@@ -192,14 +228,34 @@ public class FloatingBall {
     }
 
     public static void hide() {
+        sRetryCount = 0;
+        boolean removed = false;
         if (sWM != null) {
-            if (sBall != null) { try { sWM.removeView(sBall); } catch (Throwable ignored) {} }
-            if (sMenu != null) { try { sWM.removeView(sMenu); } catch (Throwable ignored) {} }
+            if (sBall != null) {
+                try {
+                    if (sBall.isAttachedToWindow()) sWM.removeView(sBall);
+                    removed = true;
+                } catch (Throwable ignored) {}
+            }
+            if (sMenu != null) {
+                try {
+                    if (sMenu.isAttachedToWindow()) sWM.removeView(sMenu);
+                    removed = true;
+                } catch (Throwable ignored) {}
+            }
+        }
+        if (removed || sBall != null || sMenu != null) {
+            LogWriter.log(TAG, "hide: ball=" + (sBall != null) + " menu=" + (sMenu != null)
+                    + " wm=" + (sWM != null) + " (caller=" + new Throwable().getStackTrace()[1].getClassName() + "." + new Throwable().getStackTrace()[1].getMethodName() + ")");
         }
         sBall = null;
         sMenu = null;
         sWM = null;
         sAct = null;
+    }
+
+    public static boolean isShowing() {
+        return sBall != null && sBall.isAttachedToWindow();
     }
 
     private static View makeBall(Activity act) {

@@ -432,7 +432,34 @@ public class TtsVoiceSender {
             }
             LogWriter.log(TAG, methods.toString());
 
-            java.lang.reflect.Method d1 = e9Class.getDeclaredMethod("d1", String.class);
+            // Try to find d1(String) method; 8.0.78 may rename it
+            java.lang.reflect.Method d1 = null;
+            try {
+                d1 = e9Class.getDeclaredMethod("d1", String.class);
+            } catch (NoSuchMethodException nsme) {
+                // 8.0.78: d1 may have changed signature - look for (String)void methods
+                // related to content/voice processing (b1/i1/j1 are field setters, skip them)
+                for (java.lang.reflect.Method m : e9Class.getDeclaredMethods()) {
+                    if (m.getParameterTypes().length == 1 && m.getParameterTypes()[0] == String.class
+                            && m.getReturnType() == void.class) {
+                        String n = m.getName();
+                        // Prefer d1, otherwise look for methods with 'd' prefix (d1/d2/etc)
+                        if ("d1".equals(n) || "d2".equals(n)) {
+                            d1 = m;
+                            LogWriter.log(TAG, "e9.d1 fallback: using " + n + "(String)");
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (d1 == null) {
+                // 8.0.78: d1 changed to d1(long)void, content setter moved elsewhere
+                LogWriter.log(TAG, "Hook e9.d1 FAIL: d1(String) not available in 8.0.78 (d1 is long-based)");
+                return;
+            }
+
+            final java.lang.reflect.Method targetMethod = d1;
             XposedBridge.hookMethod(d1, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
@@ -911,9 +938,21 @@ public class TtsVoiceSender {
     }
 
     private static void hookA21Oi(ClassLoader cl) {
+        // 8.0.78: a21.o may be renamed; try multiple candidates
+        String[] a21Candidates = {"a21.o", "a22.o", "a20.o", "a23.o", "b21.o", "b22.o"};
+        Class<?> a21o = null;
+        for (String candidate : a21Candidates) {
+            try {
+                a21o = XposedHelpers.findClass(candidate, cl);
+                break;
+            } catch (Throwable ignored) {}
+        }
+        if (a21o == null) {
+            LogWriter.log(TAG, "Hook a21.o.i: a21.o class not found");
+            return;
+        }
         try {
             checkCoroutineSuspended(cl);
-            Class<?> a21o = XposedHelpers.findClass("a21.o", cl);
             final Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
             for (java.lang.reflect.Method m : a21o.getDeclaredMethods()) {
                 if (!m.getName().equals("i")) continue;
@@ -1047,15 +1086,29 @@ public class TtsVoiceSender {
     }
 
     private static void checkCoroutineSuspended(ClassLoader cl) {
-        try {
-            Class<?> cs = XposedHelpers.findClass("kotlin.coroutines.intrinsics.CoroutineSingletons", cl);
-            Object suspended = XposedHelpers.getStaticObjectField(cs, "COROUTINE_SUSPENDED");
-            sCoroutineSuspended = suspended;
-            LogWriter.log(TAG, "COROUTINE_SUSPENDED accessible: " + (suspended != null)
-                    + " class=" + cs.getName());
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "COROUTINE_SUSPENDED FAIL: " + t.getClass().getSimpleName() + " " + t.getMessage());
+        String[] attempts = {
+            "kotlin.coroutines.intrinsics.CoroutineSingletons",
+            "kotlin.coroutines.intrinsics.IntrinsicsKt",
+            "kotlinx.coroutines.intrinsics.CoroutineSingletons",
+            "kotlin.coroutines.intrinsics.b"
+        };
+        for (String name : attempts) {
+            try {
+                Class<?> cs = XposedHelpers.findClass(name, cl);
+                Object suspended = XposedHelpers.getStaticObjectField(cs, "COROUTINE_SUSPENDED");
+                sCoroutineSuspended = suspended;
+                LogWriter.log(TAG, "COROUTINE_SUSPENDED accessible: " + (suspended != null)
+                        + " class=" + cs.getName());
+                return;
+            } catch (Throwable ignored) {}
         }
+        try {
+            Class<?> cs = XposedHelpers.findClass("kotlin.Result", cl);
+            try {
+                sCoroutineSuspended = XposedHelpers.getStaticObjectField(cs, "Companion");
+                if (sCoroutineSuspended != null) return;
+            } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {}
     }
 
     private static Object sCoroutineSuspended;
@@ -1094,13 +1147,11 @@ public class TtsVoiceSender {
                 if (fn.startsWith("com.tencent.mm.ui.chatting.")) continue;
                 if (sn.length() > 6) continue;
                 if (sDiscoveredClasses.add(fn)) {
-                    LogWriter.log(TAG, "autoDiscover from " + host.getSimpleName() + " field "
-                            + f.getName() + " -> " + fn);
                     hookNamedClassAll(fn, cl, sn);
                 }
             }
         } catch (Throwable t) {
-            LogWriter.log(TAG, "autoDiscover " + hostClass + " FAIL: " + t.getMessage());
+            // silent - class not found, skip
         }
     }
 
@@ -1466,7 +1517,9 @@ public class TtsVoiceSender {
         }
         int hooked = 0;
         for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
-            XposedBridge.hookMethod(m, new XC_MethodHook() {
+            if (java.lang.reflect.Modifier.isAbstract(m.getModifiers())) continue;
+            try {
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam p) {
                     try {
@@ -1479,6 +1532,7 @@ public class TtsVoiceSender {
                 }
             });
             hooked++;
+            } catch (Throwable ignored) {}
         }
         return hooked;
     }
@@ -2166,7 +2220,8 @@ public class TtsVoiceSender {
 
     private static void discoverVoiceApi(ClassLoader cl) {
         try {
-            String[] candidates = {"y21.x0", "y22.x0", "y20.x0", "y23.x0"};
+            // 8.0.78 candidates expanded
+            String[] candidates = {"y21.x0", "y22.x0", "y20.x0", "y23.x0", "y24.x0", "y25.x0", "y26.x0", "y27.x0"};
             for (String name : candidates) {
                 try {
                     Class<?> cls = XposedHelpers.findClass(name, cl);

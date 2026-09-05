@@ -110,13 +110,16 @@ public final class BatchAddFriend {
         LogWriter.log(TAG, "hook() 开始, enabled=" + sEnabled);
 
         try {
-            XposedBridge.hookAllMethods(cls(CHATROOM_INFO_UI), "onCreate",
+            XposedBridge.hookAllMethods(Activity.class, "onCreate",
                     new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam p) {
                             try {
-                                                        if (!sEnabled) return;
-                                                        injectButton((Activity) p.thisObject);
+                                String clsName = p.thisObject.getClass().getName();
+                                if (!CHATROOM_INFO_UI.equals(clsName)) return;
+                                LogWriter.log(TAG, "ChatroomInfoUI.onCreate triggered, enabled=" + sEnabled);
+                                if (!sEnabled) return;
+                                injectButton((Activity) p.thisObject);
                             } catch (Throwable e) {
                                 LogWriter.log("BatchAddFriend", "cb err: " + e);
                             }
@@ -162,10 +165,10 @@ public final class BatchAddFriend {
     }
 
     // ---------- ① 注入按钮 ----------
-    private static void injectButton(final Activity act) {
+private static void injectButton(final Activity act) {
         sMain.post(() -> {
             try {
-                Method addText = findAddTextOptionMenu();
+                Method addText = findAddTextOptionMenu(act);
                 if (addText == null) {
                     LogWriter.log(TAG, "injectButton: 未找到 addTextOptionMenu(4参)");
                     return;
@@ -188,22 +191,26 @@ public final class BatchAddFriend {
         });
     }
 
-    private static Method findAddTextOptionMenu() {
+    private static Method findAddTextOptionMenu(Activity act) {
         try {
-            Class<?> mmAct = Class.forName(MM_ACTIVITY, false, sCL);
-            for (Method m : mmAct.getMethods()) {
-                if (!"addTextOptionMenu".equals(m.getName())) continue;
-                Class<?>[] pts = m.getParameterTypes();
-                if (pts.length == 4 && pts[0] == int.class && pts[1] == String.class
-                        && pts[2] == int.class
-                        && pts[3] == MenuItem.OnMenuItemClickListener.class) {
-                    return m;
-                }
+            Class<?> actCls = act.getClass();
+            while (actCls != null && actCls != Object.class) {
+                try {
+                    for (Method m : actCls.getDeclaredMethods()) {
+                        if (m.getName().equals("addTextOptionMenu") && m.getParameterTypes().length == 4) {
+                            LogWriter.log(TAG, "findAddTextOptionMenu: " + actCls.getName());
+                            return m;
+                        }
+                    }
+                } catch (Throwable ignored) {}
+                actCls = actCls.getSuperclass();
             }
+            LogWriter.log(TAG, "injectButton: 未找到 addTextOptionMenu(4参)");
+            return null;
         } catch (Throwable t) {
-            LogWriter.log(TAG, "findAddTextOptionMenu err: " + t.getMessage());
+            LogWriter.log(TAG, "findAddTextOptionMenu err: " + t);
+            return null;
         }
-        return null;
     }
 
     // ---------- ② 成员模型 ----------

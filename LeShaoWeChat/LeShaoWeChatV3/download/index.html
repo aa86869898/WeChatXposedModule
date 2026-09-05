@@ -1,31 +1,34 @@
 <!DOCTYPE html>
-<html lang="zh">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LeShaoWeChat 下载</title>
+<html>
+<head><meta charset="utf-8"><title>LeShaoWeChat Download</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f5f5f5; }
-  .card { background: #fff; border-radius: 16px; padding: 40px; text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,0.08); max-width: 400px; width: 90%; }
-  h1 { font-size: 24px; color: #333; margin: 0 0 8px; }
-  .ver { color: #999; font-size: 14px; margin-bottom: 24px; }
-  .btn { display: inline-block; background: #07C160; color: #fff; padding: 14px 48px; border-radius: 8px; text-decoration: none; font-size: 18px; font-weight: 600; }
-  .btn:hover { background: #06ad56; }
-  .size { color: #999; font-size: 13px; margin-top: 16px; }
-  .changes { text-align: left; margin-top: 24px; padding-top: 20px; border-top: 1px solid #eee; font-size: 13px; color: #666; line-height: 1.8; }
+  body { font-family: Arial, sans-serif; margin: 40px; }
+  h1 { color: #333; }
+  .latest { background: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+  .latest a { font-size: 18px; font-weight: bold; color: #2e7d32; }
+  .history { margin-top: 30px; }
+  .history li { margin: 5px 0; }
+  .size { color: #666; font-size: 14px; }
 </style>
 </head>
 <body>
-<div class="card">
-  <h1>乐少微信</h1>
-  <div class="ver">v593</div>
-  <a class="btn" href="LeShaoWeChat-v593.apk" download>下载 APK</a>
-  <div class="size">8.5 MB</div>
-  <div class="changes">
-    <strong>v586 更新内容：</strong><br>
-    - ConversationFilter 日志前缀从 [CF] 改为 ConvFilter（纯 ASCII，避免 logcat 过滤）<br>
-    - v585: 统一使用 ChatGroupUiInjector tag
-  </div>
+<h1>LeShaoWeChat APK Downloads</h1>
+
+<div class="latest">
+  <h3>Latest Version</h3>
+  <p><a href="LeShaoWeChat-v833.apk" download>LeShaoWeChat v833 - DB opener prefer s-method + split APK debug logging</a></p>
+  <p class="size">12.0 MB</p>
+</div>
+
+<div class="history">
+  <h3>History</h3>
+  <ul>
+    <li><a href="LeShaoWeChat-v829.apk" download>v829</a> - DexKit init fix (LIFO order)</li>
+    <li><a href="LeShaoWeChat-v828.apk" download>v828</a> - DexKit MMKV cache</li>
+    <li><a href="LeShaoWeChat-v827.apk" download>v827</a> - Activity.onResume hook</li>
+    <li><a href="LeShaoWeChat-v826.apk" download>v826</a> - DB path / fix</li>
+    <li><a href="LeShaoWeChat-v814.apk" download>v814</a> - kl5.s5.Dj</li>
+  </ul>
 </div>
 </body>
 </html>

@@ -73,22 +73,30 @@ public class MsgExport {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     try {
-                                        MenuItem item = (MenuItem) param.args[0];
-                                        int id = item.getItemId();
-                                        if (id == 99980 || id == 99981) {
-                                            String format = id == 99980 ? "txt" : "html";
-                                            String talker = getTalker(param.thisObject);
-                                            if (talker != null && !talker.isEmpty()) {
-                                                final String t = talker;
-                                                final String f = format;
-                                                new Thread(() -> doExport(t, f)).start();
-                                            } else {
-                                                showToast("无法获取当前聊天对象");
-                                            }
-                                            param.setResult(true);
-                                        }
+                        MenuItem item = (MenuItem) param.args[0];
+                        int id = item.getItemId();
+                        if (id == 99980 || id == 99981) {
+                            handleExportClick(param, item, id);
+                        }
                     } catch (Throwable e) {
                         LogWriter.log("MsgExport", "cb err: " + e);
+                    }
+                }
+            });
+
+            // 8.0.78 fallback: onMenuItemSelected (Fragment menu dispatch)
+            XposedBridge.hookAllMethods(chattingUI, "onMenuItemSelected", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        MenuItem item = (MenuItem) param.args[param.args.length - 1];
+                        int id = item.getItemId();
+                        if (id == 99980 || id == 99981) {
+                            LogWriter.log(TAG, "onMenuItemSelected fallback hit id=" + id);
+                            handleExportClick(param, item, id);
+                        }
+                    } catch (Throwable e) {
+                        LogWriter.log("MsgExport", "onMenuItemSelected cb err: " + e);
                     }
                 }
             });
@@ -96,6 +104,20 @@ public class MsgExport {
         } catch (Throwable t) {
             LogWriter.log(TAG, "menu hook err: " + t.getClass().getSimpleName());
         }
+    }
+
+    private static void handleExportClick(XC_MethodHook.MethodHookParam param, MenuItem item, int id) {
+        String format = id == 99980 ? "txt" : "html";
+        String talker = getTalker(param.thisObject);
+        LogWriter.log(TAG, "native overflow selected format=" + format + " talker=" + talker);
+        if (talker != null && !talker.isEmpty()) {
+            final String t = talker;
+            final String f = format;
+            new Thread(() -> doExport(t, f)).start();
+        } else {
+            showToast("无法获取当前聊天对象");
+        }
+        param.setResult(true);
     }
 
     private static String getTalker(Object fragment) {

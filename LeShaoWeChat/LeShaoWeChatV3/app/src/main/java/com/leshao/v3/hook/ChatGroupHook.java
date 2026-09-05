@@ -76,10 +76,18 @@ public class ChatGroupHook {
 
     private static boolean initCoreServices() {
         try {
+            ClassLoader cl = sClassLoader;
+            // Try Tinker classloader for 8.0.78 obfuscated classes
+            ClassLoader tkCL = VersionCompat.findTinkerClassLoader(cl);
+            if (tkCL != null) {
+                cl = tkCL;
+                LogWriter.log(TAG, "initCoreServices: using Tinker ClassLoader");
+            }
+
             String[] cand = {"x93.r","x93.s","x93.q","x93.t","y93.r","w93.r"};
             for (String cn : cand) {
                 try {
-                    Class<?> cls = XposedHelpers.findClass(cn, sClassLoader);
+                    Class<?> cls = XposedHelpers.findClass(cn, cl);
                     Object r = XposedHelpers.callStaticMethod(cls, "hj");
                     if (r != null && "com.tencent.mm.storage.g4".equals(r.getClass().getName())) {
                         sLabelStorage = r;
@@ -87,16 +95,28 @@ public class ChatGroupHook {
                     }
                 } catch (Throwable ignored) {}
             }
-            Class<?> j1 = XposedHelpers.findClass("hm0.j1", sClassLoader);
-            Class<?> sc4 = XposedHelpers.findClass("sh3.c4", sClassLoader);
+            // 8.0.78: hm0.j1 -> gp0.j1.j (DexKit discovered)
+            Class<?> j1 = null;
+            for (String j1Name : new String[]{"gp0.j1.j", "hm0.j1"}) {
+                try {
+                    j1 = XposedHelpers.findClass(j1Name, cl);
+                    LogWriter.log(TAG, "initCoreServices: using j1=" + j1Name);
+                    break;
+                } catch (Throwable ignored) {}
+            }
+            if (j1 == null) {
+                LogWriter.log(TAG, "initCoreServices: j1 class not found (tried with Tinker cl=" + (tkCL != null) + ")");
+                return false;
+            }
+            Class<?> sc4 = XposedHelpers.findClass("sh3.c4", cl);
             sContactStorage = XposedHelpers.callMethod(XposedHelpers.callStaticMethod(j1, "s", sc4), "ij");
             if (sLabelStorage == null) {
                 try {
-                    Class<?> fallback = XposedHelpers.findClass("x93.r", sClassLoader);
+                    Class<?> fallback = XposedHelpers.findClass("x93.r", cl);
                     sLabelStorage = XposedHelpers.callStaticMethod(fallback, "hj");
                 } catch (Throwable ignored) {}
             }
-            LogWriter.log(TAG, "核心服务初始化完成");
+            LogWriter.log(TAG, "核心服务初始化完成 label=" + (sLabelStorage != null) + " contact=" + (sContactStorage != null));
             return sLabelStorage != null && sContactStorage != null;
         } catch (Throwable e) {
             LogWriter.log(TAG, "initCoreServices: " + e.toString());
@@ -209,8 +229,6 @@ public class ChatGroupHook {
     private static synchronized void ensureInit() {
         if (sInitDone) return;
         if (initCoreServices()) {
-            sInitDone = true;
-        } else if (sLabelStorage != null) {
             sInitDone = true;
         }
     }

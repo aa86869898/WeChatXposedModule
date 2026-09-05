@@ -1,5 +1,6 @@
 package com.leshao.v3.hook;
 
+import com.leshao.v3.LogWriter;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import java.util.Map;
@@ -9,52 +10,72 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.List;
 import java.util.ArrayList;
 
-/**
- * HookManager — 统一Hook管理
- * ==========================
- * 
- * 功能:
- *   1. 注册/注销Hook的统一入口
- *   2. Hook状态追踪（已注册方法数、成功/失败统计）
- *   3. 条件Hook（按版本/按开关动态启用）
- *   4. Hook性能监控
- *   5. 兼容原项目 Runnable 注册模式
- */
 public class HookManager {
 
+    private static final String TAG = "HookManager";
+
     private static final Map<String, XC_MethodHook.Unhook> trackedHooks = new ConcurrentHashMap<>();
-    private static final List<Runnable> pendingTasks = new CopyOnWriteArrayList<>();
+    private static final List<NamedTask> pendingTasks = new CopyOnWriteArrayList<>();
     private static final List<String> hookLog = new CopyOnWriteArrayList<>();
     private static final AtomicInteger successCount = new AtomicInteger(0);
     private static final AtomicInteger failCount = new AtomicInteger(0);
     private static boolean activated = false;
 
+    private static final class NamedTask {
+        final String name;
+        final Runnable task;
+
+        NamedTask(String name, Runnable task) {
+            this.name = name;
+            this.task = task;
+        }
+    }
+
+    public static void register(String name, Runnable task) {
+        NamedTask namedTask = new NamedTask(name, task);
+        LogWriter.log(TAG, "REGISTERED " + name + " activated=" + activated);
+        if (activated) { runTask(namedTask, 1, 1); }
+        else { pendingTasks.add(namedTask); }
+    }
+
     public static void register(Runnable task) {
-        if (activated) { task.run(); }
-        else { pendingTasks.add(task); }
+        register(task.getClass().getName(), task);
     }
 
     public static int pendingCount() { return pendingTasks.size(); }
 
     public static void activateAll() {
         activated = true;
-        XposedBridge.log("[HookManager] activateAll: " + pendingTasks.size() + " tasks (async)");
-        List<Runnable> tasks = new ArrayList<>(pendingTasks);
+        int total = pendingTasks.size();
+        LogWriter.log(TAG, "activateAll: " + total + " pending tasks (async)");
+        List<NamedTask> tasks = new ArrayList<>(pendingTasks);
         pendingTasks.clear();
-        // run hooks on background thread to avoid blocking main thread (attachBaseContext)
         new Thread(() -> {
             int idx = 0;
-            for (Runnable t : tasks) {
-                try {
-                    t.run();
-                } catch (Throwable ex) {
-                    XposedBridge.log("[HookManager] task[" + idx + "] failed: " + ex.getClass().getSimpleName()
-                        + " " + ex.getMessage());
-                }
+            int ok = 0;
+            int fail = 0;
+            for (NamedTask task : tasks) {
+                if (runTask(task, idx + 1, total)) ok++;
+                else fail++;
                 idx++;
             }
-            XposedBridge.log("[HookManager] activateAll DONE (async), success=" + successCount.get() + " fail=" + failCount.get());
+            LogWriter.log(TAG, "activateAll DONE: " + ok + " OK, " + fail + " FAIL");
         }, "leshao-hook-activate").start();
+    }
+
+    private static boolean runTask(NamedTask namedTask, int index, int total) {
+        long started = System.currentTimeMillis();
+        LogWriter.log(TAG, "[" + index + "/" + total + "] START " + namedTask.name);
+        try {
+            namedTask.task.run();
+            LogWriter.log(TAG, "[" + index + "/" + total + "] OK " + namedTask.name
+                    + " elapsed=" + (System.currentTimeMillis() - started) + "ms");
+            return true;
+        } catch (Throwable ex) {
+            LogWriter.log(TAG, "[" + index + "/" + total + "] FAIL " + namedTask.name + ": "
+                    + ex.getClass().getSimpleName() + " " + ex.getMessage());
+            return false;
+        }
     }
 
     /** 注册Hook并追踪 */

@@ -14,17 +14,23 @@ public class ContextManager {
 
     private static final String TAG = "ContextManager";
     private static volatile ClassLoader sClassLoader;
+    private static volatile ClassLoader sTinkerClassLoader;
     private static volatile String sApkPath;
     private static volatile boolean sReady = false;
     private static volatile Context sAppContext;
     private static Runnable sOnReadyCallback;
     private static volatile boolean sCallbackFired = false;
 
+    public static ClassLoader getTinkerClassLoader() {
+        return sTinkerClassLoader;
+    }
+
     public static void setOnReadyCallback(Runnable callback) {
         sOnReadyCallback = callback;
     }
 
     public static void init(ClassLoader cl, String apkPath) {
+        LogWriter.log(TAG, "=== init V2 START ===");
         sClassLoader = cl;
         sApkPath = apkPath;
         LogWriter.log(TAG, "init: apk=" + apkPath);

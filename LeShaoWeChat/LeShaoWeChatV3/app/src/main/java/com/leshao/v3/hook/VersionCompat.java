@@ -97,23 +97,469 @@ public class VersionCompat {
     // ==================== Database ====================
 
     public static Class<?> findDbOpenerClass(ClassLoader cl) {
-        return findClassMulti(cl, "ka5.f", "ka5.e", "ka4.f", "ka6.f", "ka5.g");
+        // Priority 1: use DexKit scan result
+        if (DexKitHelper.isScanComplete()) {
+            String clsName = DexKitHelper.getDbOpenerClass();
+            if (clsName != null) {
+                try {
+                    Class<?> result = XposedHelpers.findClass(clsName, cl);
+                    LogWriter.log(TAG, "findDbOpenerClass (DexKit): " + result.getName());
+                    return result;
+                } catch (Throwable e) {
+                    LogWriter.log(TAG, "findDbOpenerClass DexKit failed: " + e.getMessage());
+                }
+            }
+        }
+        Class<?> result = findClassMulti(cl, "ka5.f", "ka5.e", "ka4.f", "ka6.f", "ka5.g");
+        if (result == null) {
+            LogWriter.log(TAG, "findDbOpenerClass: ALL candidates NOT found");
+        } else {
+            LogWriter.log(TAG, "findDbOpenerClass: found " + result.getName());
+        }
+        return result;
     }
 
     public static Object openDatabase(Class<?> dbOpenerClass, String path, String password) {
+        Throwable lastErr = null;
+
+        // Priority 1: use DexKit method signature on ka5.f
+        if (DexKitHelper.isScanComplete()) {
+            String methodName = DexKitHelper.getDbOpenMethodName();
+            String[] paramTypes = DexKitHelper.getDbOpenMethodParamTypes();
+            if (methodName != null && paramTypes != null) {
+                try {
+                    Class<?>[] paramClasses = new Class<?>[paramTypes.length];
+                    for (int i = 0; i < paramTypes.length; i++) {
+                        paramClasses[i] = mapBasicType(paramTypes[i]);
+                    }
+                    Object[] args = new Object[paramTypes.length];
+                    args[0] = path;
+                    args[1] = password;
+                    for (int i = 2; i < paramTypes.length; i++) {
+                        if ("int".equals(paramTypes[i]) || "java.lang.Integer".equals(paramTypes[i])) {
+                            args[i] = 0;
+                        } else if ("boolean".equals(paramTypes[i]) || "java.lang.Boolean".equals(paramTypes[i])) {
+                            args[i] = false;
+                        } else {
+                            args[i] = null;
+                        }
+                    }
+                    try {
+                        tryInitCsoLoader(dbOpenerClass.getClassLoader());
+                        return dbOpenerClass.getDeclaredMethod(methodName, paramClasses)
+                            .invoke(null, args);
+                    } catch (Throwable e) {
+                        lastErr = e;
+                    }
+                } catch (Throwable e) {
+                    LogWriter.log(TAG, "openDatabase DexKit setup failed: " + e.getMessage());
+                }
+            }
+        }
+
+        // Priority 2: try known signatures on ka5.f
+        tryInitCsoLoader(dbOpenerClass.getClassLoader());
         for (int flags : new int[]{0, 1}) {
             for (boolean b : new boolean[]{true, false}) {
                 try {
                     return dbOpenerClass.getDeclaredMethod("s", String.class, String.class, int.class, boolean.class)
                         .invoke(null, path, password, flags, b);
-                } catch (Throwable ignored) {}
+                } catch (Throwable e) {
+                    lastErr = e;
+                }
             }
             try {
                 return dbOpenerClass.getDeclaredMethod("r", String.class, String.class, int.class)
                     .invoke(null, path, password, flags);
-            } catch (Throwable ignored) {}
+            } catch (Throwable e) {
+                lastErr = e;
+            }
+        }
+
+        // Priority 3: use com.tencent.wcdb.database.SQLiteDatabase directly (bypass ka5.f)
+        // Use WeChat's classloader, not the default Class.forName
+        ClassLoader wechatCL = dbOpenerClass.getClassLoader();
+        try {
+            Class<?> wcdbCls = wechatCL.loadClass("com.tencent.wcdb.database.SQLiteDatabase");
+            byte[] keyBytes = password != null ? password.getBytes("UTF-8") : new byte[0];
+            for (java.lang.reflect.Method m : wcdbCls.getDeclaredMethods()) {
+                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                if (!m.getReturnType().equals(wcdbCls)) continue;
+                String name = m.getName();
+                if (!name.contains("open") && !name.contains("Open")) continue;
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length < 2) continue;
+                if (!pts[0].equals(String.class)) continue;
+                try {
+                    Object[] args = new Object[pts.length];
+                    args[0] = path;
+                    if (pts[1] == byte[].class) {
+                        args[1] = keyBytes;
+                    } else if (pts[1] == String.class) {
+                        args[1] = password;
+                    } else {
+                        args[1] = null;
+                    }
+                    for (int i = 2; i < pts.length; i++) {
+                        args[i] = null;
+                    }
+                    Object db = m.invoke(null, args);
+                    if (db != null) {
+                        LogWriter.log(TAG, "openDatabase: WCDB." + name + " OK");
+                        return db;
+                    }
+                } catch (Throwable e) {
+                    lastErr = e;
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "openDatabase WCDB class load failed: " + e.getMessage());
+        }
+
+        boolean isNoClassDef = lastErr instanceof NoClassDefFoundError;
+        if (!isNoClassDef) {
+            LogWriter.log(TAG, "openDatabase FAILED for " + path + ": " + (lastErr != null ? lastErr.getClass().getSimpleName() + " " + lastErr.getMessage() : "unknown"));
         }
         return null;
+    }
+
+    public static Object openDatabaseWcdb(ClassLoader cl, String path, String password) {
+        ClassLoader wcdbCL = findTinkerClassLoader(cl);
+        if (wcdbCL == null) wcdbCL = cl;
+        LogWriter.log(TAG, "openDatabaseWcdb: using CL=" + wcdbCL.getClass().getSimpleName()
+            + " (original=" + cl.getClass().getSimpleName() + ")");
+
+        String dbOpenerClassName = DexKitHelper.getDbOpenerClass();
+        if (dbOpenerClassName == null) dbOpenerClassName = "ka5.f";
+
+        try {
+            Class<?> dbOpenerClass = wcdbCL.loadClass(dbOpenerClassName);
+
+            for (java.lang.reflect.Method mm : dbOpenerClass.getDeclaredMethods()) {
+                if (!java.lang.reflect.Modifier.isStatic(mm.getModifiers())) continue;
+                Class<?>[] pt = mm.getParameterTypes();
+                if (pt.length < 2) continue;
+                if (pt[0] != String.class) continue;
+                String mname = mm.getName();
+                if (!mname.equals("s") && !mname.equals("r") && !mname.equals("t") && !mname.equals("u") && !mname.equals("v") && !mname.equals("w")) continue;
+                mm.setAccessible(true);
+
+                Object[] args = new Object[pt.length];
+                args[0] = path;
+                for (int i = 1; i < pt.length; i++) {
+                    if (pt[i] == String.class) args[i] = password;
+                    else if (pt[i] == int.class) args[i] = 0;
+                    else if (pt[i] == boolean.class) args[i] = false;
+                    else if (pt[i] == byte[].class) args[i] = password != null ? password.getBytes("UTF-8") : new byte[0];
+                    else args[i] = null;
+                }
+                try {
+                    Object db = mm.invoke(null, args);
+                    if (db != null) {
+                        LogWriter.log(TAG, "openDatabaseWcdb: SUCCESS via " + dbOpenerClassName + "." + mname);
+                        return db;
+                    }
+                } catch (Throwable e) {
+                    // expected on non-Tinker threads, fallback to WCDB direct
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "openDatabaseWcdb: " + dbOpenerClassName + " class load failed: " + errDetail(e));
+        }
+
+        try {
+            Class<?> wcdbCls = wcdbCL.loadClass("com.tencent.wcdb.database.SQLiteDatabase");
+
+            byte[] keyBytes = password != null ? password.getBytes("UTF-8") : new byte[0];
+            java.lang.reflect.Method[] methods = wcdbCls.getDeclaredMethods();
+            for (java.lang.reflect.Method m : methods) {
+                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                if (!m.getReturnType().equals(wcdbCls)) continue;
+                String name = m.getName();
+                if (!name.contains("open")) continue;
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length < 2) continue;
+                if (pts[0] != String.class) continue;
+
+                Object[] args = new Object[pts.length];
+                args[0] = path;
+                if (pts[1] == byte[].class) {
+                    args[1] = keyBytes;
+                } else if (pts[1] == String.class) {
+                    args[1] = password;
+                } else {
+                    args[1] = null;
+                }
+                for (int i = 2; i < pts.length; i++) {
+                    if (pts[i] == int.class) args[i] = 0;
+                    else if (pts[i] == boolean.class) args[i] = false;
+                    else args[i] = null;
+                }
+                try {
+                    Object db = m.invoke(null, args);
+                    if (db != null) {
+                        LogWriter.log(TAG, "openDatabaseWcdb: SUCCESS via WCDB." + name);
+                        return db;
+                    }
+                } catch (Throwable e) {
+                    // expected on non-Tinker threads
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "openDatabaseWcdb: SQLiteDatabase class load failed: " + errDetail(e));
+        }
+        return null;
+    }
+
+    private static volatile boolean sTinkerNotFoundLogged = false;
+
+    public static ClassLoader findTinkerClassLoader(ClassLoader cl) {
+        // 优先使用 ContextManager 缓存的 Tinker ClassLoader
+        ClassLoader cached = com.leshao.v3.ContextManager.getTinkerClassLoader();
+        if (cached != null) {
+            return cached;
+        }
+        // 尝试从主线程的 context ClassLoader 查找
+        try {
+            java.lang.reflect.Field threadField = android.os.Looper.class.getDeclaredField("sThreadLocal");
+            threadField.setAccessible(true);
+            Object threadLocal = threadField.get(null);
+            java.lang.reflect.Method getMethod = threadLocal.getClass().getMethod("get");
+            Thread mainThread = (Thread) getMethod.invoke(threadLocal);
+            if (mainThread != null) {
+                ClassLoader mainCL = mainThread.getContextClassLoader();
+                if (mainCL != null) {
+                    ClassLoader current = mainCL;
+                    while (current != null) {
+                        if (current.getClass().getName().contains("DelegateLastClassLoader")) {
+                            LogWriter.log(TAG, "findTinkerClassLoader: found via main thread=" + current.getClass().getName());
+                            return current;
+                        }
+                        current = current.getParent();
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        for (ClassLoader start : new ClassLoader[] {
+            cl,
+            Thread.currentThread().getContextClassLoader(),
+            com.leshao.v3.ContextManager.getAppContext() != null
+                ? com.leshao.v3.ContextManager.getAppContext().getClassLoader() : null
+        }) {
+            if (start == null) continue;
+            ClassLoader current = start;
+            while (current != null) {
+                String name = current.getClass().getName();
+                if (name.contains("DelegateLastClassLoader")) {
+                    LogWriter.log(TAG, "findTinkerClassLoader: found " + name);
+                    return current;
+                }
+                current = current.getParent();
+            }
+        }
+        if (!sTinkerNotFoundLogged) {
+                    sTinkerNotFoundLogged = true;
+                    // Tinker CL not available yet (DexKit scan not complete), will be found later
+                }
+        return null;
+    }
+
+    private static String findNativeLibDir() {
+        try {
+            android.content.Context ctx = com.leshao.v3.ContextManager.getAppContext();
+            if (ctx != null) {
+                android.content.pm.ApplicationInfo ai = ctx.getPackageManager()
+                    .getApplicationInfo("com.tencent.mm", 0);
+                if (ai != null && ai.nativeLibraryDir != null) {
+                    return ai.nativeLibraryDir;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private static Class<?> mapBasicType(String typeName) {
+        switch (typeName) {
+            case "int": return int.class;
+            case "boolean": return boolean.class;
+            case "long": return long.class;
+            case "float": return float.class;
+            case "double": return double.class;
+            case "byte": return byte.class;
+            case "short": return short.class;
+            case "char": return char.class;
+            default:
+                try { return Class.forName(typeName); }
+                catch (Throwable e) { return Object.class; }
+        }
+    }
+
+    private static boolean sCsoLoaderTried = false;
+    private static volatile boolean sCsoLoaderReady = false;
+
+    public static boolean isCsoLoaderReady() { return sCsoLoaderReady; }
+
+    private static String errDetail(Throwable e) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(e.getClass().getSimpleName());
+        if (e.getMessage() != null) sb.append(": ").append(e.getMessage());
+        Throwable c = e.getCause();
+        while (c != null) {
+            sb.append(" << ").append(c.getClass().getSimpleName());
+            if (c.getMessage() != null) sb.append(": ").append(c.getMessage());
+            c = c.getCause();
+        }
+        return sb.toString();
+    }
+
+    private static void tryInitCsoLoader(ClassLoader cl) {
+        if (sCsoLoaderTried) return;
+        sCsoLoaderTried = true;
+        try {
+            ClassLoader tkCL = findTinkerClassLoader(cl);
+            if (tkCL == null) tkCL = cl;
+
+            String csoLoaderClass = DexKitHelper.getCsoLoaderClass();
+            if (csoLoaderClass == null) {
+                csoLoaderClass = "com.tencent.cso.CsoLoader";
+            }
+            Class<?> cls = XposedHelpers.findClass(csoLoaderClass, tkCL);
+
+            android.content.Context ctx = com.leshao.v3.ContextManager.getAppContext();
+            String pkgName = ctx != null ? ctx.getPackageName() : "com.tencent.mm";
+
+            for (java.lang.reflect.Method m : cls.getMethods()) {
+                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                if (m.getParameterTypes().length == 0) {
+                    try {
+                        m.invoke(null);
+                        sCsoLoaderReady = true;
+                        return;
+                    } catch (Throwable ignored) {}
+                }
+            }
+
+            for (java.lang.reflect.Method m : cls.getMethods()) {
+                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                int pc = m.getParameterTypes().length;
+                if (pc == 0) continue;
+                Object[] args = buildArgs(m.getParameterTypes(), ctx, cl, pkgName);
+                try {
+                    m.invoke(null, args);
+                    sCsoLoaderReady = true;
+                    return;
+                } catch (Throwable ignored) {}
+            }
+
+            for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                if (m.getParameterTypes().length == 0) {
+                    m.setAccessible(true);
+                    try {
+                        m.invoke(null);
+                        sCsoLoaderReady = true;
+                        return;
+                    } catch (Throwable ignored) {}
+                    continue;
+                }
+                m.setAccessible(true);
+                Object[] args = buildArgs(m.getParameterTypes(), ctx, cl, pkgName);
+                try {
+                    m.invoke(null, args);
+                    sCsoLoaderReady = true;
+                    return;
+                } catch (Throwable ignored) {}
+            }
+
+            Object instance = null;
+            java.lang.reflect.Constructor<?>[] ctors = cls.getDeclaredConstructors();
+            for (java.lang.reflect.Constructor<?> ctor : ctors) {
+                ctor.setAccessible(true);
+                Object[] ctorArgs = buildArgs(ctor.getParameterTypes(), ctx, cl, pkgName);
+                try {
+                    instance = ctor.newInstance(ctorArgs);
+                    break;
+                } catch (Throwable ignored) {}
+            }
+            if (instance == null) {
+                try {
+                    java.lang.reflect.Field f = Class.forName("sun.misc.Unsafe").getDeclaredField("theUnsafe");
+                    f.setAccessible(true);
+                    Object unsafe = f.get(null);
+                    instance = Class.forName("sun.misc.Unsafe").getMethod("allocateInstance", Class.class).invoke(unsafe, cls);
+                } catch (Throwable ignored) {}
+            }
+
+            if (instance != null) {
+                for (java.lang.reflect.Method m : cls.getMethods()) {
+                    if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                    boolean hasCsoLoaderParam = false;
+                    for (Class<?> pt : m.getParameterTypes()) {
+                        if (pt == cls) { hasCsoLoaderParam = true; break; }
+                    }
+                    if (!hasCsoLoaderParam) continue;
+                    Object[] args = buildArgs(m.getParameterTypes(), ctx, cl, pkgName);
+                    for (int i = 0; i < args.length; i++) {
+                        if (m.getParameterTypes()[i] == cls) args[i] = instance;
+                    }
+                    try {
+                        m.invoke(null, args);
+                        sCsoLoaderReady = true;
+                        return;
+                    } catch (Throwable ignored) {}
+                }
+
+                for (java.lang.reflect.Method m : cls.getMethods()) {
+                    if (java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                    if (m.getParameterTypes().length == 0) {
+                        try {
+                            m.invoke(instance);
+                            sCsoLoaderReady = true;
+                            return;
+                        } catch (Throwable ignored) {}
+                    }
+                }
+                for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+                    if (java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                    if ("nativeInitialize".equals(m.getName())
+                        || "preloadAllInternal".equals(m.getName())
+                        || "init".equals(m.getName())
+                        || "initialize".equals(m.getName())) {
+                        m.setAccessible(true);
+                        Object[] args = buildArgs(m.getParameterTypes(), ctx, cl, pkgName);
+                        try {
+                            m.invoke(instance, args);
+                            sCsoLoaderReady = true;
+                            return;
+                        } catch (Throwable ignored) {}
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static Object[] buildArgs(Class<?>[] paramTypes,
+            android.content.Context ctx, ClassLoader cl, String pkgName) {
+        Object[] args = new Object[paramTypes.length];
+        for (int i = 0; i < paramTypes.length; i++) {
+            Class<?> pt = paramTypes[i];
+            if (android.content.Context.class.isAssignableFrom(pt)) {
+                args[i] = ctx;
+            } else if (pt == java.lang.ClassLoader.class || pt == ClassLoader.class) {
+                args[i] = cl;
+            } else if (pt == String.class) {
+                args[i] = pkgName;
+            } else if (pt == boolean.class) {
+                args[i] = false;
+            } else if (pt == int.class) {
+                args[i] = 0;
+            } else if (pt == long.class) {
+                args[i] = 0L;
+            } else {
+                args[i] = null;
+            }
+        }
+        return args;
     }
 
     public static Class<?> findBaseDirClass(ClassLoader cl) {
@@ -122,16 +568,24 @@ public class VersionCompat {
     }
 
     public static String getBaseDir(ClassLoader cl, android.content.Context ctx) {
-        Class<?> baseClass = findBaseDirClass(cl);
+        ClassLoader tkCL = findTinkerClassLoader(cl);
+        ClassLoader useCL = tkCL != null ? tkCL : cl;
+        Class<?> baseClass = findBaseDirClass(useCL);
+        if (baseClass == null) baseClass = findBaseDirClass(cl);
         if (baseClass != null) {
             for (String m : new String[]{"X", "Y", "W", "getDataDir", "a"}) {
                 try {
                     Object r = XposedHelpers.callStaticMethod(baseClass, m);
-                    if (r instanceof String && !((String) r).isEmpty()) return (String) r;
+                    if (r instanceof String && !((String) r).isEmpty()) {
+                        LogWriter.log(TAG, "getBaseDir: " + r + " (via " + baseClass.getName() + "." + m + ")");
+                        return (String) r;
+                    }
                 } catch (Throwable ignored) {}
             }
         }
-        return ctx.getFilesDir().getParentFile().getAbsolutePath() + "/";
+        String fallback = ctx.getFilesDir().getParentFile().getAbsolutePath() + "/";
+        LogWriter.log(TAG, "getBaseDir fallback: " + fallback);
+        return fallback;
     }
 
     public static Class<?> findDbHashClass(ClassLoader cl) {
@@ -140,16 +594,24 @@ public class VersionCompat {
     }
 
     public static String getDbHash(ClassLoader cl, int uin) {
-        Class<?> hashClass = findDbHashClass(cl);
+        ClassLoader tkCL = findTinkerClassLoader(cl);
+        ClassLoader useCL = tkCL != null ? tkCL : cl;
+        Class<?> hashClass = findDbHashClass(useCL);
+        if (hashClass == null) hashClass = findDbHashClass(cl);
         if (hashClass != null) {
             for (String m : new String[]{"e", "f", "d", "a"}) {
                 try {
                     Object r = hashClass.getDeclaredMethod(m, int.class).invoke(null, uin);
-                    if (r instanceof String && !((String) r).isEmpty()) return (String) r;
+                    if (r instanceof String && !((String) r).isEmpty()) {
+                        LogWriter.log(TAG, "getDbHash: " + r + " (via " + hashClass.getName() + "." + m + ")");
+                        return (String) r;
+                    }
                 } catch (Throwable ignored) {}
             }
         }
-        return md5("mm" + uin);
+        String fallback = md5("mm" + uin);
+        LogWriter.log(TAG, "getDbHash fallback: " + fallback);
+        return fallback;
     }
 
     public static Class<?> findImeiClass(ClassLoader cl) {
@@ -158,13 +620,36 @@ public class VersionCompat {
     }
 
     public static String getImei(ClassLoader cl) {
-        Class<?> imeiClass = findImeiClass(cl);
+        ClassLoader tkCL = findTinkerClassLoader(cl);
+        ClassLoader useCL = tkCL != null ? tkCL : cl;
+
+        if (DexKitHelper.isScanComplete()) {
+            String imeiClass = DexKitHelper.getImeiClassName();
+            String imeiMethod = DexKitHelper.getImeiMethodName();
+            if (imeiClass != null && imeiMethod != null) {
+                try {
+                    Class<?> cls = XposedHelpers.findClass(imeiClass, useCL);
+                    String result = (String) cls.getDeclaredMethod(imeiMethod, boolean.class).invoke(null, true);
+                    LogWriter.log(TAG, "getImei (DexKit): " + imeiClass + "." + imeiMethod + " via " + useCL.getClass().getSimpleName());
+                    return result;
+                } catch (Throwable e) {
+                    // DexKit path fails silently, fallback to wo.w0.g always succeeds
+                }
+            }
+        }
+        Class<?> imeiClass = findImeiClass(useCL);
+        if (imeiClass == null) imeiClass = findImeiClass(cl);
         if (imeiClass != null) {
             for (String m : new String[]{"g", "f", "h", "e"}) {
-                try { return (String) imeiClass.getDeclaredMethod(m, boolean.class).invoke(null, true); }
+                try {
+                    String result = (String) imeiClass.getDeclaredMethod(m, boolean.class).invoke(null, true);
+                    LogWriter.log(TAG, "getImei: found via " + imeiClass.getName() + "." + m);
+                    return result;
+                }
                 catch (Throwable ignored) {}
             }
         }
+        LogWriter.log(TAG, "getImei fallback: 1234567890ABCDEF");
         return "1234567890ABCDEF";
     }
 

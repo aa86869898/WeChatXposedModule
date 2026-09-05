@@ -105,4 +105,28 @@ public class LogWriter {
         if (!ready || logFile == null) return;
         sQueue.offer(line);
     }
+
+    /** 崩溃等场景同步直写落盘，绕过异步队列，保证进程被杀前日志已持久化 */
+    public static void logSync(String tag, String msg) {
+        try {
+            String ts = new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(new Date());
+            String thread = Thread.currentThread().getName();
+            String line = ts + " [" + thread + "] " + tag + ": " + msg;
+            try { XposedBridge.log("LeShaoV3: " + tag + ": " + msg); } catch (Throwable ignored) {}
+            if (logFile == null) return;
+            java.io.FileWriter fw = null;
+            try {
+                if (logFile.exists() && logFile.length() > MAX_SIZE) {
+                    File bak = new File(logFile.getParent(), logFile.getName() + ".bak");
+                    bak.delete();
+                    logFile.renameTo(bak);
+                }
+                fw = new java.io.FileWriter(logFile, true);
+                fw.write(line);
+                fw.write('\n');
+            } finally {
+                if (fw != null) { try { fw.flush(); } catch (Throwable ignored) {} try { fw.close(); } catch (Throwable ignored) {} }
+            }
+        } catch (Throwable ignored) {}
+    }
 }

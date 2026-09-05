@@ -106,6 +106,9 @@ public class ChatRoomMuteHelper {
 
             db = VersionCompat.openDatabase(dbCls, dbPath, password);
             if (db == null) {
+                db = VersionCompat.openDatabaseWcdb(cl, dbPath, password);
+            }
+            if (db == null) {
                 LogWriter.log(TAG, "getAllChatRooms: db open FAILED");
                 return result;
             }

@@ -72,7 +72,16 @@ public class VoiceAutoPlay {
         sHandler = new Handler(Looper.getMainLooper());
 
         try { sK0Class = XposedHelpers.findClass("com.tencent.mm.model.k0", cl); }
-        catch (Throwable t) { LogWriter.log(TAG, "k0 class NOT found: " + t.getMessage()); }
+        catch (Throwable t) {
+            try { sK0Class = XposedHelpers.findClass("com.tencent.mm.k0", cl); }
+            catch (Throwable t2) {
+                try { sK0Class = XposedHelpers.findClass("com.tencent.mm.app.k0", cl); }
+                catch (Throwable t3) { sK0Class = null; }
+            }
+        }
+        if (sK0Class == null) {
+            LogWriter.log(TAG, "k0 class NOT found in any of the 4 alternatives");
+        }
         try { sSoClass = XposedHelpers.findClass("com.tencent.mm.ui.chatting.component.so", cl); }
         catch (Throwable t) { LogWriter.log(TAG, "so class NOT found: " + t.getMessage()); }
 

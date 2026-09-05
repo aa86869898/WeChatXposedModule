@@ -49,7 +49,7 @@ public class WmReflect {
         try {
             return XposedHelpers.callMethod(
                     XposedHelpers.callStaticMethod(XposedHelpers.findClass("e01.d9", cl), "b"), "q");
-        } catch (Exception e) { return null; }
+        } catch (Throwable e) { return null; }
     }
 
     private static volatile Class<?> sChatroomSvcIface;
@@ -60,23 +60,33 @@ public class WmReflect {
             sChatroomSvcIface = findChatroomSvcIface(cl);
         }
         if (sChatroomSvcIface == null) return null;
-        try {
-            Object svc = XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("hm0.j1", cl), "s", sChatroomSvcIface);
-            if (svc == null) {
-                LogWriter.log(TAG, "getChatroomInfo: svc null after cache");
+        for (int retry = 0; retry < 3; retry++) {
+            try {
+                Object svc = XposedHelpers.callStaticMethod(
+                        XposedHelpers.findClass("hm0.j1", cl), "s", sChatroomSvcIface);
+                if (svc == null) {
+                    if (retry < 2) { try { Thread.sleep(500); } catch (InterruptedException ignored) {} continue; }
+                    return null;
+                }
+                Object inst = XposedHelpers.callMethod(svc, "a");
+                if (inst == null) {
+                    if (retry < 2) { try { Thread.sleep(500); } catch (InterruptedException ignored) {} continue; }
+                    return null;
+                }
+                return XposedHelpers.callMethod(inst, "H0", room);
+            } catch (Throwable e) {
+                String msg = e.getMessage();
+                if (msg != null && msg.contains("Kernel not initialized")) {
+                    if (retry < 2) { try { Thread.sleep(500); } catch (InterruptedException ignored) {} continue; }
+                    return null;
+                }
+                if (retry >= 2) {
+                    LogWriter.log(TAG, "getChatroomInfo err: " + e.getMessage());
+                }
                 return null;
             }
-            Object inst = XposedHelpers.callMethod(svc, "a");
-            if (inst == null) {
-                LogWriter.log(TAG, "getChatroomInfo: inst null");
-                return null;
-            }
-            return XposedHelpers.callMethod(inst, "H0", room);
-        } catch (Exception e) {
-            LogWriter.log(TAG, "getChatroomInfo err: " + e.getMessage());
-            return null;
         }
+        return null;
     }
 
     private static Class<?> findChatroomSvcIface(ClassLoader cl) {
@@ -110,7 +120,7 @@ public class WmReflect {
     public static List<String> getMemberList(ClassLoader cl, String room) {
         try {
             return (List<String>) XposedHelpers.callStaticMethod(getChatroomLogic(cl), "m", room);
-        } catch (Exception e) { return new ArrayList<>(); }
+        } catch (Throwable e) { return new ArrayList<>(); }
     }
 
     public static boolean isChatRoom(ClassLoader cl, String name) {
@@ -118,7 +128,7 @@ public class WmReflect {
         if (name.endsWith("@chatroom") || name.endsWith("@im.chatroom")) return true;
         try {
             return (boolean) XposedHelpers.callStaticMethod(getChatroomLogic(cl), "B", name);
-        } catch (Exception e) { return false; }
+        } catch (Throwable e) { return false; }
     }
 
     public static int getMemberCount(ClassLoader cl, String room) {
@@ -147,7 +157,7 @@ public class WmReflect {
     public static Object getContact(ClassLoader cl, String username) {
         Object s = getContactStorage(cl);
         if (s == null) return null;
-        try { return XposedHelpers.callMethod(s, "n", username, true); } catch (Exception e) { return null; }
+        try { return XposedHelpers.callMethod(s, "n", username, true); } catch (Throwable e) { return null; }
     }
 
     public static String getWxid(Object c) {

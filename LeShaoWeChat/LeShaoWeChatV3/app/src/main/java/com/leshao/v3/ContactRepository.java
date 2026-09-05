@@ -105,6 +105,7 @@ public class ContactRepository {
 
             String imei = VersionCompat.getImei(cl);
             String baseDir = VersionCompat.getBaseDir(cl, ctx);
+            if (!baseDir.endsWith("/")) baseDir += "/";
             String dbHash = VersionCompat.getDbHash(cl, (int) uin);
             String dbPath = baseDir + "MicroMsg/" + dbHash + "/EnMicroMsg.db";
             String password = md5(imei + uin).substring(0, 7);
@@ -114,6 +115,9 @@ public class ContactRepository {
             if (dbCls == null) { LogWriter.log(TAG, "dbCls null"); return; }
 
             db = VersionCompat.openDatabase(dbCls, dbPath, password);
+            if (db == null) {
+                db = VersionCompat.openDatabaseWcdb(cl, dbPath, password);
+            }
             if (db == null) { LogWriter.log(TAG, "db open FAILED"); return; }
             LogWriter.log(TAG, "db opened in " + (System.currentTimeMillis() - t0) + "ms");
 
@@ -392,6 +396,7 @@ public class ContactRepository {
 
             String imei = VersionCompat.getImei(cl);
             String baseDir = VersionCompat.getBaseDir(cl, ctx);
+            if (!baseDir.endsWith("/")) baseDir += "/";
             String dbHash = VersionCompat.getDbHash(cl, (int) uin);
             String dbPath = baseDir + "MicroMsg/" + dbHash + "/EnMicroMsg.db";
             String password = md5(imei + uin).substring(0, 7);
@@ -400,6 +405,9 @@ public class ContactRepository {
             if (dbCls == null) return null;
 
             Object db = VersionCompat.openDatabase(dbCls, dbPath, password);
+            if (db == null) {
+                db = VersionCompat.openDatabaseWcdb(cl, dbPath, password);
+            }
             if (db == null) return null;
             Cursor cursor = null;
             try {

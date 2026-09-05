@@ -58,11 +58,16 @@ public final class ChatVoiceSwitchHook {
     }
 
     public static void init(final ClassLoader loader) {
-        hookMMEditText(loader, 0);
+        ClassLoader tkCL = VersionCompat.findTinkerClassLoader(loader);
+        if (tkCL != null) {
+            LogWriter.log(TAG, "init: using Tinker ClassLoader");
+        }
+        final ClassLoader effectiveCL = tkCL != null ? tkCL : loader;
+        hookMMEditText(effectiveCL, 0);
         hookGenericEditText();
         hookEditTextConstructors();
         hookOnAttachedToWindow();
-        hookActivityResume(loader);
+        hookActivityResume(effectiveCL);
     }
 
     // ==================== 方案A：Hook MMEditText 构造器 ====================
@@ -79,7 +84,6 @@ public final class ChatVoiceSwitchHook {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         try {
-                                                LogWriter.log(TAG, "方案A: MMEditText 构造触发");
                                                 scheduleInject(param.thisObject);
                         } catch (Throwable e) {
                             LogWriter.log("ChatVoiceSwitchHook", "cb err: " + e);
@@ -125,7 +129,6 @@ public final class ChatVoiceSwitchHook {
                     try {
                                         Object tv = param.thisObject;
                                         if (tv instanceof EditText && isMMEditText((View) tv)) {
-                                            LogWriter.log(TAG, "方案B: 捕获到输入框 " + tv.getClass().getName());
                                             scheduleInject((View) tv);
                                         }
                     } catch (Throwable e) {
@@ -149,7 +152,6 @@ public final class ChatVoiceSwitchHook {
                     try {
                                         if (param.thisObject == null) return;
                                         if (isMMEditText((View) param.thisObject)) {
-                                            LogWriter.log(TAG, "方案C: EditText 构造触发 " + param.thisObject.getClass().getName());
                                             scheduleInject(param.thisObject);
                                         }
                     } catch (Throwable e) {
@@ -173,7 +175,6 @@ public final class ChatVoiceSwitchHook {
                     try {
                                         if (param.thisObject == null) return;
                                         if (isMMEditText((View) param.thisObject)) {
-                                            LogWriter.log(TAG, "方案D: onAttachedToWindow 捕获 " + param.thisObject.getClass().getName());
                                             scheduleInject((View) param.thisObject);
                                         }
                     } catch (Throwable e) {
@@ -232,7 +233,6 @@ public final class ChatVoiceSwitchHook {
             if (decor == null) return;
             View target = findMMEditText(decor);
             if (target != null) {
-                LogWriter.log(TAG, "方案E: 扫描到输入框 " + target.getClass().getName());
                 scheduleInject(target);
             }
         } catch (Throwable t) {
@@ -288,6 +288,7 @@ public final class ChatVoiceSwitchHook {
         if (edit.getTag() == PENDING_TAG || edit.getTag() == INJECTED_TAG) return;
         edit.setTag(PENDING_TAG);
 
+        final int[] retry = {0};
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
@@ -299,6 +300,9 @@ public final class ChatVoiceSwitchHook {
                     if (injectAt(edit, row)) {
                         edit.setTag(INJECTED_TAG);
                         LogWriter.log(TAG, "注入成功!");
+                    } else if (retry[0] < 5) {
+                        retry[0]++;
+                        new Handler(Looper.getMainLooper()).postDelayed(this, 800);
                     } else {
                         edit.setTag(null);
                         LogWriter.log(TAG, "注入失败: 找不到合适的父容器");
@@ -313,27 +317,79 @@ public final class ChatVoiceSwitchHook {
 
     /** 多级兜底注入：返回是否成功（参照 ChatQuickBar 逆向结论） */
     private static boolean injectAt(View edit, View row) {
-        // 找到输入框行（MaxHeightScrollView，输入框第3层祖先）
         View mhs = findAncestor(edit, MAX_HEIGHT_SCROLL, 6);
-        if (mhs == null) return false;
 
-        // 优先：插入到输入框行父级的父级 LinearLayout（聊天根布局，输入框正上方）
-        ViewParent rel = mhs.getParent();
-        if (rel != null && rel.getParent() instanceof LinearLayout) {
-            LinearLayout grand = (LinearLayout) rel.getParent();
-            row.setLayoutParams(new LinearLayout.LayoutParams(
+        if (mhs != null) {
+            ViewParent rel = mhs.getParent();
+            if (rel != null && rel.getParent() instanceof LinearLayout) {
+                LinearLayout grand = (LinearLayout) rel.getParent();
+                row.setLayoutParams(new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                grand.addView(row, grand.indexOfChild((View) rel));
+                return true;
+            }
+            if (rel instanceof ViewGroup) {
+                ViewGroup relVg = (ViewGroup) rel;
+                row.setLayoutParams(new android.widget.RelativeLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                relVg.addView(row, relVg.indexOfChild(mhs));
+                return true;
+            }
+        }
+
+        ViewParent node = edit.getParent();
+        View child = edit;
+        for (int i = 0; i < 16 && node != null; i++) {
+            if (node instanceof LinearLayout && node.getParent() instanceof ViewGroup) {
+                ViewGroup parent = (ViewGroup) node.getParent();
+                int idx = parent.indexOfChild((View) node);
+                row.setLayoutParams(new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                parent.addView(row, idx);
+                return true;
+            }
+            if (node instanceof android.widget.FrameLayout && node.getParent() instanceof ViewGroup) {
+                ViewGroup parent = (ViewGroup) node.getParent();
+                int idx = parent.indexOfChild((View) node);
+                row.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                parent.addView(row, idx);
+                return true;
+            }
+            child = (View) node;
+            node = node.getParent();
+            if (node instanceof ViewGroup && ((ViewGroup) node).getChildCount() > 0) {
+                continue;
+            }
+        }
+
+        View root = edit.getRootView();
+        if (root instanceof ViewGroup) {
+            View inputArea = findAncestor(edit, "android.widget.LinearLayout", 15);
+            if (inputArea != null) {
+                ViewParent inputParent = inputArea.getParent();
+                if (inputParent instanceof ViewGroup) {
+                    ViewGroup ip = (ViewGroup) inputParent;
+                    int idx = ip.indexOfChild(inputArea);
+                    row.setLayoutParams(new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                    ip.addView(row, idx);
+                    return true;
+                }
+            }
+            ViewGroup rootVg = (ViewGroup) root;
+            if (rootVg instanceof android.widget.FrameLayout) {
+                row.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                rootVg.addView(row, 0);
+                return true;
+            }
+            row.setLayoutParams(new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            grand.addView(row, grand.indexOfChild((View) rel));
+            rootVg.addView(row, 0);
             return true;
         }
-        // 兜底：插入到输入框行的父 RelativeLayout 中，MaxHeightScrollView 之前
-        if (rel instanceof ViewGroup) {
-            ViewGroup relVg = (ViewGroup) rel;
-            row.setLayoutParams(new android.widget.RelativeLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            relVg.addView(row, relVg.indexOfChild(mhs));
-            return true;
-        }
+
         return false;
     }
 
@@ -489,9 +545,8 @@ public final class ChatVoiceSwitchHook {
     }
 
     private static void openMasterPanel(Context ctx, View anchor) {
-        Activity act = getActivityFromContext(ctx);
-        if (act == null) return;
         try {
+            Activity act = getActivityFromContext(ctx);
             com.leshao.v3.wm.hook.WmChatHook.showPanelInline(act);
         } catch (Throwable t) {
             LogWriter.log(TAG, "打开乐少大师面板失败: " + t.getMessage());

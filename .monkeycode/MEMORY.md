@@ -49,6 +49,18 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
    - 日志文件路径: /data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt
    - 日志过滤 TAG: LeShaoV3
 
+### 每次编译必须升版本号 + 清理缓存
+- Date: 2026-08-24
+- Context: 用户明确要求每次编译 APK 都要递增版本号并清理构建缓存，确保每次都是全新编译
+- Category: 构建编译
+- Instructions:
+  - 每次编译前，递增 `app/build.gradle.kts` 中的 `versionCode` 和 `versionName`（例如 v815 → v816 → v817）
+  - 编译命令必须使用 `./gradlew clean assembleDebug`（带 clean 清理缓存）
+  - 不要使用 `./gradlew assembleDebug`（不带 clean 会复用增量编译缓存）
+  - 编译后 APK 自动以版本号命名：`LeShaoWeChat-v{versionCode}.apk`
+  - 下载链接格式：`{预览地址}/LeShaoWeChat-v{versionCode}.apk`
+  - 当前实际生效部署：`python3 -m http.server 9100 --directory /workspace` 已在运行，`request_preview(9100)` 获取预览域名，下载链接为 `{预览地址}/LeShaoWeChat/LeShaoWeChatV3/app/build/outputs/apk/debug/LeShaoWeChat-v{versionCode}.apk`（返回 200 且 md5 一致即成功）
+
 ### 代码提交时机（用户确认后才提交）
 - Date: 2026-08-14
 - Context: 用户明确表示：未经允许不要自动提交代码，等问题解决后由他指示再提交
@@ -59,4 +71,5 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 远程仓库: https://github.com/aa86869898/WeChatXposedModule.git
   - 提交时只 add 本次真实改动的文件，禁止使用 `git add -A`（会把历史遗留 APK、临时文件一并提交）
   - APK 已解除 gitignore (!**/build/outputs/apk/debug/*.apk)，可随源码一起推送
+   - 编译后必须提供下载链接：将 APK 复制到 `/workspace/LeShaoWeChat/LeShaoWeChatV3/download/` 目录，通过 `request_preview` 端口 8000 获取预览地址，下载链接为 `预览地址/LeShaoWeChat-v814.apk`
   - 推送命令: `git push`（本地 master → 远程 master）

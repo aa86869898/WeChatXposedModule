@@ -11,6 +11,7 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.AppColors;
 
 /**
@@ -171,6 +172,7 @@ public final class WmUi {
         private final WindowManager mWM;
         private final String mPrefKey;
         private final Runnable mOnTap;
+        private boolean mAdded = false;
 
         public DragFloat(Activity act, WindowManager wm, String text,
                          int bgColor, String prefKey, Runnable onTap) {
@@ -197,11 +199,15 @@ public final class WmUi {
                     PixelFormat.TRANSLUCENT);
             wp.gravity = Gravity.TOP | Gravity.LEFT;
 
+            int sw = act.getResources().getDisplayMetrics().widthPixels;
+            int sh = act.getResources().getDisplayMetrics().heightPixels;
+            int defX = sw - sz - dp(act, 16);
+            int defY = (int) (sh * 0.33f);
             int lx = WmPrefs.getInt(prefKey + "_x", -1);
             int ly = WmPrefs.getInt(prefKey + "_y", -1);
-            if (lx < 0) {
-                wp.x = act.getResources().getDisplayMetrics().widthPixels - sz - dp(act, 16);
-                wp.y = (int) (act.getResources().getDisplayMetrics().heightPixels * 0.33f);
+            if (lx < 0 || lx > sw || ly < 0 || ly > sh) {
+                wp.x = defX;
+                wp.y = defY;
             } else {
                 wp.x = lx;
                 wp.y = ly;
@@ -228,8 +234,10 @@ public final class WmUi {
                     long dur = System.currentTimeMillis() - mDownTime;
                     int dx = Math.abs(wp.x - mInitX);
                     int dy = Math.abs(wp.y - mInitY);
+                    LogWriter.log("DragFloat", "tap detect dur=" + dur + " dx=" + dx + " dy=" + dy + " onTap=" + (mOnTap != null));
                     if (dur < 300 && dx < 15 && dy < 15 && mOnTap != null) {
-                        mOnTap.run();
+                        LogWriter.log("DragFloat", "tap FIRE");
+                        try { mOnTap.run(); } catch (Throwable t) { LogWriter.log("DragFloat", "tap err: " + t.getMessage()); }
                     }
                     WmPrefs.setInt(mPrefKey + "_x", wp.x);
                     WmPrefs.setInt(mPrefKey + "_y", wp.y);
@@ -239,11 +247,17 @@ public final class WmUi {
         }
 
         public void addToWindow() {
-            mWM.addView(mView, wp);
+            if (mAdded) return;
+            try {
+                mWM.addView(mView, wp);
+                mAdded = true;
+            } catch (Throwable ignored) {}
         }
 
         public void removeFromWindow() {
+            if (!mAdded) return;
             try { mWM.removeView(mView); } catch (Exception ignored) {}
+            mAdded = false;
         }
     }
 }

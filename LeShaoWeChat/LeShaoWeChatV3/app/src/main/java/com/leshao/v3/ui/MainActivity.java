@@ -36,6 +36,7 @@ import android.widget.Toast;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.IconLoader;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.hook.VersionCompat;
 import com.leshao.v3.model.Contact;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.ActivationManager;
@@ -160,7 +161,12 @@ public class MainActivity {
                 boolean found = false;
                 try {
                     ClassLoader cl = ContextManager.getClassLoader();
-                    if (cl != null) {
+                        ClassLoader tkCL = VersionCompat.findTinkerClassLoader(cl);
+                        if (tkCL != null) {
+                            cl = tkCL;
+                            LogWriter.log(TAG, "loadUserDetails: using Tinker ClassLoader");
+                        }
+                        if (cl != null) {
                         Object db = openDb(cl, uin);
                         if (db != null) {
                             try {
@@ -313,6 +319,11 @@ public class MainActivity {
     }
 
     private static Object openDb(ClassLoader cl, long uin) throws Exception {
+        ClassLoader tkCL = VersionCompat.findTinkerClassLoader(cl);
+        if (tkCL != null) {
+            cl = tkCL;
+            LogWriter.log(TAG, "openDb: using Tinker ClassLoader");
+        }
         String imei = "1234567890ABCDEF";
         try {
             Class<?> wo = cl.loadClass("wo.w0");

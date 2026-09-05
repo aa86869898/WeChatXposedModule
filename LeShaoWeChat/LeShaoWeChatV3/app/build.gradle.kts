@@ -11,8 +11,8 @@ android {
         applicationId = "com.leshao.v3"
         minSdk = 24
         targetSdk = 35
-        versionCode = 814
-        versionName = "3.9.0-v814"
+        versionCode = 896
+        versionName = "3.9.0-v895"
     }
 
     signingConfigs {
@@ -58,4 +58,6 @@ dependencies {
     implementation("com.google.android.material:material:1.10.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("com.github.xxinPro:SilkDecoder:1.0")
+    implementation("org.luckypray:dexkit:2.2.0")
+    implementation("com.tencent:mmkv:1.3.5")
 }
