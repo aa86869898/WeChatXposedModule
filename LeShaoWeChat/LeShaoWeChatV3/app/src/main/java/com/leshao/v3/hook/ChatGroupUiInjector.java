@@ -25,6 +25,7 @@ import de.robv.android.xposed.XC_MethodHook.MethodHookParam;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import java.util.*;
+import java.lang.ref.WeakReference;
 
 public class ChatGroupUiInjector {
 
@@ -33,7 +34,7 @@ public class ChatGroupUiInjector {
 
     private static volatile LinearLayout sTagContainer;
     private static volatile int sSelectedLabelId = -1;
-    private static volatile Activity sCurrentActivity;
+    private static volatile WeakReference<Activity> sCurrentActivity;
     private static volatile List<LabelInfo> sLabels;
     private static volatile long sLastLabelRefresh;
     private static volatile ClassLoader sClassLoader;
@@ -85,7 +86,7 @@ public class ChatGroupUiInjector {
                         Object convList = XposedHelpers.getObjectField(p.thisObject, "f");
                         if (convList == null) return;
                         View view = (View) convList;
-                        sCurrentActivity = (Activity) view.getContext();
+                        sCurrentActivity = new WeakReference<>((Activity) view.getContext());
                         sConvListView = view;
                     } catch (Throwable e) {
                         logBoth("s5.h err: " + e.getMessage());
@@ -104,7 +105,7 @@ public class ChatGroupUiInjector {
                         if (!"com.tencent.mm.ui.LauncherUI".equals(param.thisObject.getClass().getName())) return;
                         logBoth("Activity.onResume -> LauncherUI detected");
                         final Activity activity = (Activity) param.thisObject;
-                        sCurrentActivity = activity;
+                        sCurrentActivity = new WeakReference<>(activity);
                         // Try to find adapter from MainUI Fragment
                         try {
                             Object mainUI = XposedHelpers.callMethod(activity, "getSupportFragmentManager");
@@ -160,8 +161,8 @@ public class ChatGroupUiInjector {
                     String fragClsName = param.thisObject.getClass().getName();
                     if (!"com.tencent.mm.ui.conversation.MainUI".equals(fragClsName)) return;
                     logBoth("MainUI.onResume detected");
-                    try {
-                        sCurrentActivity = (Activity) XposedHelpers.callMethod(param.thisObject, "getActivity");
+                     try {
+                         sCurrentActivity = new WeakReference<>((Activity) XposedHelpers.callMethod(param.thisObject, "getActivity"));
                     } catch (Throwable ignored) {}
                     try {
                         Object adapter = XposedHelpers.getObjectField(param.thisObject, "v");
@@ -195,8 +196,9 @@ public class ChatGroupUiInjector {
             // 缓存引用可能因 Activity 重建（如切换暗色模式）而失效，重新从 DecorView 定位
             boolean stale = convList == null || !convList.isAttachedToWindow();
             if (stale) {
-                if (sCurrentActivity == null) return;
-                View root = sCurrentActivity.getWindow().getDecorView();
+                Activity activity = sCurrentActivity != null ? sCurrentActivity.get() : null;
+                if (activity == null) return;
+                View root = activity.getWindow().getDecorView();
                 convList = findConversationListView(root);
                 if (convList != null) {
                     sConvListView = convList;
@@ -498,6 +500,7 @@ public class ChatGroupUiInjector {
     }
 
     private static boolean isDarkMode(Context ctx) {
+        if (ctx == null) return false;
         return (ctx.getResources().getConfiguration().uiMode
             & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
     }
@@ -657,10 +660,28 @@ public class ChatGroupUiInjector {
         tryInstallLauncherUIContextMenuHook(cl);
         tryInstallAdapterContextMenuHook(cl);
         tryInstallActivityCtxMenuFallback();
-        hookClassBroadForDiagnosis(cl, "kc5.g4", "menuG4");
-        hookClassBroadForDiagnosis(cl, "kc5.h4", "menuItemH4");
-        tryInstallMenuItemGetItemHook(cl);
+        // Defer DexKit-dependent menu class discovery until scan completes
+        com.leshao.v3.hook.DexKitHelper.addPostScanCallback(() -> {
+            hookMenuClassByString(cl, "menuG4", "置顶聊天", "标为未读");
+            hookClassBroadForDiagnosis(cl, "kc5.g4", "menuG4");
+            hookClassBroadForDiagnosis(cl, "kc5.h4", "menuItemH4");
+        });
+        // Defer DexKit-dependent menu hook until scan completes
+        final ClassLoader fCl = cl;
+        com.leshao.v3.hook.DexKitHelper.addPostScanCallback(() -> tryInstallMenuItemGetItemHook(fCl));
         logBoth("native context-menu hooks installed");
+    }
+
+    /** 用 DexKit 字符串搜索动态发现菜单类 */
+    private static void hookMenuClassByString(ClassLoader cl, String tag, String... keywords) {
+        for (String kw : keywords) {
+            List<String> candidates = DexKitHelper.findClassesByString(cl, kw);
+            for (String cn : candidates) {
+                if (cn.contains("menu") || cn.contains("Menu") || cn.contains("kc5")) {
+                    logBoth(tag + " DexKit found: " + cn + " via keyword=" + kw);
+                }
+            }
+        }
     }
 
     // ================= 微信原生会话长按菜单注入（不依赖 ContextMenu 框架） =================
@@ -777,7 +798,7 @@ public class ChatGroupUiInjector {
         final List<String> impls = DexKitHelper.getConvLongPressImpls();
         logBoth("convLPImpls count=" + impls.size());
         if (impls.isEmpty()) {
-            DexKitHelper.setPostScanCallback(() -> hookConvLongPressImplsGated(cl));
+            DexKitHelper.addPostScanCallback(() -> hookConvLongPressImplsGated(cl));
             return;
         }
         XC_MethodHook hook = new XC_MethodHook() {
@@ -910,10 +931,10 @@ public class ChatGroupUiInjector {
                     if (TextUtils.isEmpty(target)) target = sPendingContextUsername;
                     if (TextUtils.isEmpty(target)) target = sPendingUsername;
                     if (TextUtils.isEmpty(target)) return;
-                    Activity act = sCurrentActivity;
+                    Activity act = sCurrentActivity != null ? sCurrentActivity.get() : null;
                     if ((act == null || act.isFinishing()) && ctx instanceof Activity) act = (Activity) ctx;
                     if (act == null) return;
-                    sCurrentActivity = act;
+                    sCurrentActivity = new WeakReference<>(act);
                     sPendingUsername = target;
                     sPendingContextUsername = target;
                     logBoth(tag + " item clicked user=" + target);
@@ -1111,8 +1132,8 @@ public class ChatGroupUiInjector {
         sPendingContextUsername = username;
         sPendingUsername = username;
         try {
-            if (v != null) sCurrentActivity = (Activity) v.getContext();
-            else if (parent instanceof View) sCurrentActivity = (Activity) ((View) parent).getContext();
+            if (v != null) sCurrentActivity = new WeakReference<>((Activity) v.getContext());
+            else if (parent instanceof View) sCurrentActivity = new WeakReference<>((Activity) ((View) parent).getContext());
         } catch (Throwable ignored) {}
         showFullGroupDialogForUsername(username);
     }
@@ -1277,7 +1298,7 @@ public class ChatGroupUiInjector {
         final List<String> impls = DexKitHelper.getConvLongPressImpls();
         LogWriter.log(TAG, "longPressImpls count=" + impls.size() + " -> " + impls);
         if (impls.isEmpty()) {
-            DexKitHelper.setPostScanCallback(() -> tryInstallLongPressImplHooks(cl));
+            DexKitHelper.addPostScanCallback(() -> tryInstallLongPressImplHooks(cl));
             return;
         }
         final XC_MethodHook hook = new XC_MethodHook() {
@@ -1320,7 +1341,7 @@ public class ChatGroupUiInjector {
                         if (TextUtils.isEmpty(username) && parent != null) username = extractUsernameFromList(parent, position);
                     }
                     if (!TextUtils.isEmpty(username)) {
-                        try { sCurrentActivity = (Activity) view.getContext(); } catch (Throwable ignored) {}
+                        try { sCurrentActivity = new WeakReference<>((Activity) view.getContext()); } catch (Throwable ignored) {}
                         LogWriter.log(TAG, "longPressImpl -> showGroupDialog user=" + username);
                         showFullGroupDialogForUsername(username);
                     }
@@ -1346,9 +1367,39 @@ public class ChatGroupUiInjector {
     /** 微信 8.0.76 点击分发：getItem(index) 是点击特征调用（渲染阶段只调 getTitle/size，不调 getItem）。
      *  在此捕获并直接执行分组动作，微信后续按 itemId 静默忽略即可。 */
     private static void tryInstallMenuItemGetItemHook(ClassLoader cl) {
+        // 8.0.78: kc5.g4 已混淆，动态搜索实现 Menu 接口的类
+        String[] menuClassCandidates = {"kc5.g4", "kc5.h4", "fh5.w0", "com.tencent.mm.ui.menu.g4", "com.tencent.mm.ui.menu.h4"};
+        Class<?> cls = null;
+        for (String candidate : menuClassCandidates) {
+            try {
+                cls = XposedHelpers.findClass(candidate, cl);
+                break;
+            } catch (Throwable ignored) {}
+        }
+        // 兜底: 搜索包含 "menu" 或 "Menu" 的类
+        if (cls == null) {
+            List<String> candidates = DexKitHelper.findClassesByString(cl, "menu");
+            for (String cn : candidates) {
+                try {
+                    Class<?> c = XposedHelpers.findClass(cn, cl);
+                    for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
+                        if ("getItem".equals(m.getName()) && m.getParameterCount() == 1
+                                && m.getParameterTypes()[0] == int.class) {
+                            cls = c;
+                            break;
+                        }
+                    }
+                    if (cls != null) break;
+                } catch (Throwable ignored) {}
+            }
+        }
+        if (cls == null) {
+            logBoth("ctxMenu getItem: no menu class found");
+            return;
+        }
+        final Class<?> menuCls = cls;
         try {
-            Class<?> cls = XposedHelpers.findClass("kc5.g4", cl);
-            XposedBridge.hookAllMethods(cls, "getItem", new XC_MethodHook() {
+            XposedBridge.hookAllMethods(menuCls, "getItem", new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     try {
                         Object r = p.getResult();
@@ -1367,7 +1418,7 @@ public class ChatGroupUiInjector {
                     } catch (Throwable e) { logBoth("ctxMenu getItem err: " + e.getMessage()); }
                 }
             });
-            logBoth("ctxMenu getItem hooked");
+            logBoth("ctxMenu getItem hooked: " + menuCls.getName());
         } catch (Throwable e) { logBoth("ctxMenu getItem: " + e.getMessage()); }
     }
 
@@ -1570,8 +1621,20 @@ public class ChatGroupUiInjector {
     }
 
     private static void tryInstallAdapterContextMenuHook(ClassLoader cl) {
+        // 8.0.78: fh5.w0 已混淆，动态搜索
+        String[] adapterCandidates = {"fh5.w0", "com.tencent.mm.ui.conversation.fh5"};
+        Class<?> adapterClass = null;
+        for (String candidate : adapterCandidates) {
+            try {
+                adapterClass = XposedHelpers.findClass(candidate, cl);
+                break;
+            } catch (Throwable ignored) {}
+        }
+        if (adapterClass == null) {
+            logBoth("adapter ctxMenu: adapter class not found (8.0.78 renamed)");
+            return;
+        }
         try {
-            Class<?> adapterClass = XposedHelpers.findClass("fh5.w0", cl);
             XposedBridge.hookAllMethods(adapterClass, "onCreateContextMenu", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam p) {
@@ -1620,7 +1683,7 @@ public class ChatGroupUiInjector {
                                             }
                                             if (!TextUtils.isEmpty(username)) {
                                                 logBoth("itemLongClick user=" + username);
-                                                sCurrentActivity = (Activity) view.getContext();
+                                                 sCurrentActivity = new WeakReference<>((Activity) view.getContext());
                                                 showFullGroupDialogForUsername(username);
                                             }
                                         } catch (Throwable ignored) {}
@@ -1780,7 +1843,7 @@ public class ChatGroupUiInjector {
     private static void addGroupMenuItemsInternal(Menu menu, String username) {
         logBoth("addMenu start user=" + username + " menu=" + (menu != null ? menu.getClass().getName() : "null"));
         if (TextUtils.isEmpty(username)) { logBoth("addMenu return: empty user"); return; }
-        final Context ctx = sCurrentActivity;
+        final Context ctx = sCurrentActivity != null ? sCurrentActivity.get() : null;
         if (ctx == null) { logBoth("addMenu return: sCurrentActivity null"); return; }
         sPendingContextUsername = username;
         hookMenuClassDynamically(menu);
@@ -1825,7 +1888,7 @@ public class ChatGroupUiInjector {
     }
 
     private static void showFullGroupDialog(String username, Set<Integer> curSet, List<LabelInfo> all) {
-        Activity ctx = sCurrentActivity;
+        Activity ctx = sCurrentActivity != null ? sCurrentActivity.get() : null;
         if (ctx == null) return;
         String[] names = new String[all.size()];
         boolean[] checked = new boolean[all.size()];
@@ -1841,7 +1904,7 @@ public class ChatGroupUiInjector {
     }
 
     private static void showCreateDialog(String username) {
-        Activity ctx = sCurrentActivity;
+        Activity ctx = sCurrentActivity != null ? sCurrentActivity.get() : null;
         if (ctx == null) return;
         EditText input = themedEdit(ctx, "\u8F93\u5165\u65B0\u5206\u7EC4\u540D\u79F0");
         showThemed(new AlertDialog.Builder(ctx).setTitle("\u65B0\u5EFA\u5206\u7EC4").setView(input)
@@ -2185,7 +2248,7 @@ public class ChatGroupUiInjector {
     }
 
     private static void toast(String msg) {
-        Activity ctx = sCurrentActivity;
+        Activity ctx = sCurrentActivity != null ? sCurrentActivity.get() : null;
         if (ctx == null) return;
         new Handler(Looper.getMainLooper()).post(() -> Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show());
     }
@@ -2195,12 +2258,15 @@ public class ChatGroupUiInjector {
     }
 
     // ==================== 统一模块配色 (浅色/暗色) ====================
-    private static int themeTitle() { return isDarkMode(sCurrentActivity) ? 0xFFE4E4E8 : 0xFF1D1D1F; }
-    private static int themeBody()   { return isDarkMode(sCurrentActivity) ? 0xFFB0B0B8 : 0xFF565659; }
-    private static int themeNote()   { return isDarkMode(sCurrentActivity) ? 0xFF707079 : 0xFF949499; }
-    private static int themeAccent() { return isDarkMode(sCurrentActivity) ? 0xFFC084FC : 0xFFA855F7; }
-    private static int themeBg()     { return isDarkMode(sCurrentActivity) ? 0xFF2A2A2E : 0xFFFFFFFF; }
-    private static int themeCard()   { return isDarkMode(sCurrentActivity) ? 0xFF1E1E22 : 0xFFF5F5F5; }
+    private static Context getCurrentActivityContext() {
+        return sCurrentActivity != null ? sCurrentActivity.get() : null;
+    }
+    private static int themeTitle() { return isDarkMode(getCurrentActivityContext()) ? 0xFFE4E4E8 : 0xFF1D1D1F; }
+    private static int themeBody()   { return isDarkMode(getCurrentActivityContext()) ? 0xFFB0B0B8 : 0xFF565659; }
+    private static int themeNote()   { return isDarkMode(getCurrentActivityContext()) ? 0xFF707079 : 0xFF949499; }
+    private static int themeAccent() { return isDarkMode(getCurrentActivityContext()) ? 0xFFC084FC : 0xFFA855F7; }
+    private static int themeBg()     { return isDarkMode(getCurrentActivityContext()) ? 0xFF2A2A2E : 0xFFFFFFFF; }
+    private static int themeCard()   { return isDarkMode(getCurrentActivityContext()) ? 0xFF1E1E22 : 0xFFF5F5F5; }
 
     private static void themeDialog(AlertDialog d) {
         try {

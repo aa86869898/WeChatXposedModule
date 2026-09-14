@@ -9,6 +9,7 @@ import com.leshao.v3.ShadowLabelStore;
 import com.leshao.v3.hook.model.LabelInfo;
 
 import java.util.*;
+import java.util.List;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -40,18 +41,23 @@ public class ChatGroupHook {
 
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
-        ensureInit();
+        // Phase 1: Render UI immediately (tag bar, context menu hooks)
         ShadowLabelStore.init(getWeChatContext());
         installRealTimeHooks();
-        startSubSystems();
-        if (isReady()) {
-            restoreShadowLabels();
-            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { try { ChatGroupUiInjector.refreshTagData(); } catch (Throwable e) { LogWriter.log(TAG, "refreshTagData err: " + e); } });
-            ContactRepository.loadAsync(null);
-        } else {
-            scheduleRetry(500);
-        }
-        LogWriter.log(TAG, "ChatGroupHook 初始化完成");
+        // Phase 2: Defer functionality initialization until DexKit scan completes
+        DexKitHelper.addPostScanCallback(() -> {
+            ensureInit();
+            startSubSystems();
+            if (isReady()) {
+                restoreShadowLabels();
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { try { ChatGroupUiInjector.refreshTagData(); } catch (Throwable e) { LogWriter.log(TAG, "refreshTagData err: " + e); } });
+                ContactRepository.loadAsync(null);
+            } else {
+                scheduleRetry(500);
+            }
+            LogWriter.log(TAG, "ChatGroupHook post-scan init done");
+        });
+        LogWriter.log(TAG, "ChatGroupHook 初始化完成 (功能等DexKit扫描后启用)");
     }
 
     private static int sRetryCount = 0;
@@ -77,13 +83,13 @@ public class ChatGroupHook {
     private static boolean initCoreServices() {
         try {
             ClassLoader cl = sClassLoader;
-            // Try Tinker classloader for 8.0.78 obfuscated classes
             ClassLoader tkCL = VersionCompat.findTinkerClassLoader(cl);
             if (tkCL != null) {
                 cl = tkCL;
                 LogWriter.log(TAG, "initCoreServices: using Tinker ClassLoader");
             }
 
+            // Find label storage
             String[] cand = {"x93.r","x93.s","x93.q","x93.t","y93.r","w93.r"};
             for (String cn : cand) {
                 try {
@@ -95,20 +101,84 @@ public class ChatGroupHook {
                     }
                 } catch (Throwable ignored) {}
             }
-            // 8.0.78: hm0.j1 -> gp0.j1.j (DexKit discovered)
+
+            // Find j1 service locator: verify s(Class) method exists
             Class<?> j1 = null;
-            for (String j1Name : new String[]{"gp0.j1.j", "hm0.j1"}) {
+            // Try DexKit-discovered j1 service class first
+            String dexKitJ1 = DexKitHelper.getJ1ServiceClass();
+            if (dexKitJ1 != null && !dexKitJ1.isEmpty()) {
                 try {
-                    j1 = XposedHelpers.findClass(j1Name, cl);
-                    LogWriter.log(TAG, "initCoreServices: using j1=" + j1Name);
-                    break;
+                    Class<?> j1Cls = XposedHelpers.findClass(dexKitJ1, cl);
+                    j1Cls.getDeclaredMethod("s", Class.class);
+                    j1 = j1Cls;
+                    LogWriter.log(TAG, "initCoreServices: using j1 from DexKit=" + dexKitJ1);
                 } catch (Throwable ignored) {}
             }
+            // Try DexKit-discovered p06 class (it's the actual service locator in 8.0.78)
             if (j1 == null) {
-                LogWriter.log(TAG, "initCoreServices: j1 class not found (tried with Tinker cl=" + (tkCL != null) + ")");
+                String dexKitP06 = DexKitHelper.getP06ClassName();
+                if (dexKitP06 != null && !dexKitP06.isEmpty()) {
+                    try {
+                        Class<?> j1Cls = XposedHelpers.findClass(dexKitP06, cl);
+                        j1Cls.getDeclaredMethod("s", Class.class);
+                        j1 = j1Cls;
+                        LogWriter.log(TAG, "initCoreServices: using j1 from DexKit p06=" + dexKitP06);
+                    } catch (Throwable ignored) {}
+                }
+            }
+            if (j1 == null) {
+                String[] j1Candidates = {"gp0.j1.j", "gp0$j1$j", "hm0.j1", "fp0.j1.j", "fp0$j1$j", "fp0.j1", "gp0.j1", "gp0$j1"};
+                for (String j1Name : j1Candidates) {
+                    try {
+                        Class<?> j1Cls = XposedHelpers.findClass(j1Name, cl);
+                        j1Cls.getDeclaredMethod("s", Class.class);
+                        j1 = j1Cls;
+                        LogWriter.log(TAG, "initCoreServices: using j1=" + j1Name);
+                        break;
+                    } catch (Throwable ignored) {}
+                }
+            }
+            if (j1 == null) {
+                LogWriter.log(TAG, "initCoreServices: j1 class not found (Tinker=" + (tkCL != null) + ")");
                 return false;
             }
-            Class<?> sc4 = XposedHelpers.findClass("sh3.c4", cl);
+
+            // Find contact storage via DexKit result first
+            Class<?> sc4 = null;
+            String dexKitContactStorage = DexKitHelper.getContactStorageClass();
+            if (dexKitContactStorage != null) {
+                try {
+                    sc4 = XposedHelpers.findClass(dexKitContactStorage, cl);
+                    LogWriter.log(TAG, "initCoreServices: contact storage via DexKit: " + dexKitContactStorage);
+                } catch (Throwable ignored) {}
+            }
+            if (sc4 == null) {
+                try { sc4 = XposedHelpers.findClass("sh3.c4", cl); } catch (Throwable ignored) {}
+            }
+            if (sc4 == null) {
+                // Fallback: search for ij() returning long
+                try {
+                    List<String> storageCandidates = DexKitHelper.findClassesByString(cl, "storage");
+                    for (String cn : storageCandidates) {
+                        try {
+                            Class<?> c = XposedHelpers.findClass(cn, cl);
+                            for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
+                                if ("ij".equals(m.getName()) && m.getParameterCount() == 0) {
+                                    sc4 = c;
+                                    LogWriter.log(TAG, "initCoreServices: contact storage via fallback: " + cn);
+                                    break;
+                                }
+                            }
+                            if (sc4 != null) break;
+                        } catch (Throwable ignored) {}
+                    }
+                } catch (Throwable ignored) {}
+            }
+            if (sc4 == null) {
+                LogWriter.log(TAG, "initCoreServices: contact storage not found");
+                return false;
+            }
+
             sContactStorage = XposedHelpers.callMethod(XposedHelpers.callStaticMethod(j1, "s", sc4), "ij");
             if (sLabelStorage == null) {
                 try {

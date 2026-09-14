@@ -4,15 +4,15 @@ plugins {
 
 android {
     namespace = "com.leshao.v3"
-    compileSdk = 35
+    compileSdk = 36
     buildToolsVersion = "35.0.0"
 
     defaultConfig {
         applicationId = "com.leshao.v3"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 896
-        versionName = "3.9.0-v895"
+        targetSdk = 36
+         versionCode = 912
+         versionName = "3.9.0-v912"
     }
 
     signingConfigs {

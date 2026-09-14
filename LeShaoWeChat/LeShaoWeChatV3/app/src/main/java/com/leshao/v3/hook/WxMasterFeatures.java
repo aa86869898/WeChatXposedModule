@@ -71,26 +71,37 @@ public class WxMasterFeatures {
             Class<?> chattingUI = XposedHelpers.findClass(
                     "com.tencent.mm.ui.chatting.ChattingUIFragment", cl);
 
-            XposedBridge.hookAllMethods(chattingUI, "M0", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    try {
-                        Activity act = (Activity) XposedHelpers.callMethod(param.thisObject, "getActivity");
-                        if (act == null) return;
-                        String user = act.getIntent() != null
-                                ? act.getIntent().getStringExtra("Chat_User") : null;
-                        if (user == null || user.isEmpty()) return;
-                        new Handler(Looper.getMainLooper()).postDelayed(
-                                () -> showFloatBtns(act, cl, user), 400);
-                    } catch (Throwable ignored) {}
-                }
-            });
+            // 动态查找 M0 方法（8.0.78 可能改名）
+            java.lang.reflect.Method m0Method = findMethodByName(chattingUI, "M0");
+            if (m0Method == null) {
+                // 兜底：找 0 参 void onResume 类方法
+                m0Method = findResumedEntry(chattingUI);
+            }
+            if (m0Method != null) {
+                XposedBridge.hookMethod(m0Method, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            Activity act = (Activity) XposedHelpers.callMethod(param.thisObject, "getActivity");
+                            if (act == null) return;
+                            String user = act.getIntent() != null
+                                    ? act.getIntent().getStringExtra("Chat_User") : null;
+                            if (user == null || user.isEmpty()) return;
+                            new Handler(Looper.getMainLooper()).postDelayed(
+                                    () -> showFloatBtns(act, cl, user), 400);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "M0 hook installed on " + m0Method.getName());
+            } else {
+                LogWriter.log(TAG, "M0 method not found on ChattingUIFragment");
+            }
 
             XposedBridge.hookAllMethods(chattingUI, "O0", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     try {
-                                        dismissFloatBtns();
+                        dismissFloatBtns();
                     } catch (Throwable e) {
                         LogWriter.log("WxMaster", "cb err: " + e);
                     }
@@ -101,6 +112,25 @@ public class WxMasterFeatures {
         } catch (Throwable t) {
             LogWriter.log(TAG, "hook err: " + t.getMessage());
         }
+    }
+
+    private static java.lang.reflect.Method findMethodByName(Class<?> clazz, String name) {
+        try {
+            return clazz.getDeclaredMethod(name);
+        } catch (NoSuchMethodException e) {
+            return null;
+        }
+    }
+
+    private static java.lang.reflect.Method findResumedEntry(Class<?> clazz) {
+        for (java.lang.reflect.Method m : clazz.getDeclaredMethods()) {
+            if (m.getParameterTypes().length == 0
+                    && m.getReturnType() == void.class
+                    && !m.getName().equals("<init>")) {
+                return m;
+            }
+        }
+        return null;
     }
 
     // ============================================================

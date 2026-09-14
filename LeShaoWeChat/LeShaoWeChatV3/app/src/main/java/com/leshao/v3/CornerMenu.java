@@ -157,8 +157,19 @@ public class CornerMenu {
 
     private static boolean darkMode(Context ctx) {
         try {
-            Class<?> bkClass = XposedHelpers.findClass("com.tencent.mm.ui.bk", sClassLoader);
-            return (boolean) XposedHelpers.callStaticMethod(bkClass, "C");
+            ClassLoader cl = sClassLoader;
+            // Dynamic discovery: find class with boolean C() method
+            Class<?> bkClass = VersionCompat.findClassMulti(cl,
+                "com.tencent.mm.ui.bk", "com.tencent.mm.ui.bl",
+                "com.tencent.mm.ui.bj", "com.tencent.mm.ui.bi");
+            if (bkClass == null) return false;
+            // Try C() first, then fallback to other boolean methods
+            for (String m : new String[]{"C", "D", "B", "E"}) {
+                try {
+                    return (boolean) XposedHelpers.callStaticMethod(bkClass, m);
+                } catch (Throwable ignored) {}
+            }
+            return false;
         } catch (Throwable ignored) { return false; }
     }
 

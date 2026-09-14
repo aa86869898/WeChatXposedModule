@@ -18,6 +18,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Enumeration;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.io.InputStream;
@@ -72,13 +73,17 @@ public class VoiceForwardHook {
         ClassLoader cl = ContextManager.getClassLoader();
         if (cl == null) { LogWriter.log(TAG, "cl not ready"); return; }
 
-        discoverVoiceApi(cl);
+        // Defer voice API discovery until DexKit scan completes
+        com.leshao.v3.hook.DexKitHelper.addPostScanCallback(() -> {
+            discoverVoiceApi(cl);
+            sHooked = true;
+            LogWriter.log(TAG, "VoiceForwardHook post-scan init done");
+        });
+
+        // UI hooks can be installed immediately (render-only)
         hookChatActivity(cl);
         hookChatFragmentForAdapter(cl);
         hookForwardTracing(cl);
-
-        sHooked = true;
-        LogWriter.log(TAG, "ready — do a native forward to trace API");
     }
 
     // ===== 聊天页 Activity =====
@@ -898,67 +903,66 @@ public class VoiceForwardHook {
 
     // ===== 版本无关的动态 API 发现 =====
     private static void discoverVoiceApi(ClassLoader cl) {
-        return;
-        /*
         try {
-            String apkPath = ContextManager.getApkPath();
-            if (apkPath == null) return;
-            dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
-            Enumeration<String> entries = dex.entries();
-
-            while (entries.hasMoreElements()) {
-                String cn = entries.nextElement();
+            // Try DexKit-discovered voice API class first
+            String dexKitVoiceApi = com.leshao.v3.hook.DexKitHelper.getVoiceApiClass();
+            if (dexKitVoiceApi != null && !dexKitVoiceApi.isEmpty()) {
                 try {
-                    Class<?> cls = cl.loadClass(cn);
+                    Class<?> cls = XposedHelpers.findClass(dexKitVoiceApi, cl);
                     for (Method m : cls.getDeclaredMethods()) {
-                        if (!Modifier.isStatic(m.getModifiers())) continue;
-                        if (m.getReturnType() != String.class) continue;
+                        if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
                         Class<?>[] pts = m.getParameterTypes();
-                        // 找 g(talker, prefix)→newName: (String,String)→String, 方法名≤3字符
-                        // ★ 验证: 返回值不能等于任一入参 (排除参数回显方法)
-                        if (pts.length == 2 && pts[0] == String.class && pts[1] == String.class
-                            && m.getName().length() <= 3 && sGMethod == null) {
-                            try {
-                                String test = (String) m.invoke(null, "test_talker", "amr_");
-                                if (test != null && !test.equals("test_talker") && !test.equals("amr_")
-                                    && test.matches("[0-9a-f]{20,}")) {
-                                    sGClass = cn;
-                                    sGMethod = m.getName();
-                                    LogWriter.log(TAG, "◆discovered g(): " + cn + "." + sGMethod + "(String,String)→String test=" + test);
-                                }
-                            } catch (Throwable ignored) {}
+                        if (sGMethod == null && m.getReturnType() == String.class
+                                && pts.length == 2 && pts[0] == String.class && pts[1] == String.class) {
+                            sGClass = dexKitVoiceApi;
+                            sGMethod = m.getName();
                         }
-                        // 找 t(name, dur, flag, e9)→bool: (String,int,int,Object)→boolean, 方法名≤3字符
-                        if (pts.length == 4 && pts[0] == String.class && pts[1] == int.class
-                            && pts[2] == int.class && sTMethod == null
-                            && m.getReturnType() == boolean.class && m.getName().length() <= 3) {
-                            sTClass = cn;
+                        if (sTMethod == null && m.getReturnType() == boolean.class
+                                && pts.length >= 4 && pts[0] == String.class
+                                && pts[1] == int.class && pts[2] == int.class) {
+                            sTClass = dexKitVoiceApi;
                             sTMethod = m.getName();
-                            LogWriter.log(TAG, "◆discovered t(): " + cn + "." + sTMethod + "(String,int,int,Object)→boolean");
                         }
                     }
-                    // 找 Mj(vfsType, name, flag)→path: (Object,String,boolean)→String
-                    if (sPathMethod == null) {
-                        for (Method m : cls.getDeclaredMethods()) {
-                            if (m.getReturnType() != String.class) continue;
-                            Class<?>[] pts = m.getParameterTypes();
-                            if (pts.length == 3 && pts[1] == String.class && pts[2] == boolean.class
-                                && m.getName().length() <= 3) {
-                                sPathServiceClass = cn;
-                                sPathMethod = m.getName();
-                                LogWriter.log(TAG, "◆discovered Mj(): " + cn + "." + sPathMethod + "(Object,String,boolean)→String");
-                                break;
-                            }
-                        }
+                    if (sGMethod != null && sTMethod != null) {
+                        LogWriter.log(TAG, "discoverVoiceApi from DexKit: " + dexKitVoiceApi);
+                        return;
                     }
-                    if (sGMethod != null && sTMethod != null && sPathMethod != null) break;
                 } catch (Throwable ignored) {}
             }
-            dex.close();
-            LogWriter.log(TAG, "discoverVoiceApi: g=" + sGClass + "." + sGMethod + " t=" + sTClass + "." + sTMethod + " path=" + sPathServiceClass + "." + sPathMethod);
-            LogWriter.log(TAG, "discoverVoiceApi error: " + t.getMessage());
+            // Search for g(String,String)→String and t(String,int,int,Object)→boolean
+            List<String> candidates = com.leshao.v3.hook.DexKitHelper.findClassesByString(cl, "voice2");
+            for (String cn : candidates) {
+                try {
+                    Class<?> cls = XposedHelpers.findClass(cn, cl);
+                    for (Method m : cls.getDeclaredMethods()) {
+                        if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                        Class<?>[] pts = m.getParameterTypes();
+                        if (sGMethod == null && m.getName().length() <= 3 && m.getReturnType() == String.class
+                                && pts.length == 2 && pts[0] == String.class && pts[1] == String.class) {
+                            String test = (String) m.invoke(null, "test_talker", "amr_");
+                            if (test != null && !test.equals("test_talker") && !test.equals("amr_")
+                                    && test.matches("[0-9a-f]{20,}")) {
+                                sGClass = cn;
+                                sGMethod = m.getName();
+                                LogWriter.log(TAG, "◆discovered g(): " + cn + "." + m.getName());
+                            }
+                        }
+                        if (sTMethod == null && m.getName().length() <= 3 && m.getReturnType() == boolean.class
+                                && pts.length >= 4 && pts[0] == String.class
+                                && pts[1] == int.class && pts[2] == int.class) {
+                            sTClass = cn;
+                            sTMethod = m.getName();
+                            LogWriter.log(TAG, "◆discovered t(): " + cn + "." + m.getName());
+                        }
+                    }
+                    if (sGMethod != null && sTMethod != null) break;
+                } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "discoverVoiceApi: g=" + sGClass + "." + sGMethod + " t=" + sTClass + "." + sTMethod);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "discoverVoiceApi err: " + t.getMessage());
         }
-        */
     }
 
     /**

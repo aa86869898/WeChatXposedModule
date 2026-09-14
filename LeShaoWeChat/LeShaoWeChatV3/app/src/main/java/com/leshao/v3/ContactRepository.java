@@ -186,13 +186,64 @@ public class ContactRepository {
         }
     }
 
+    private static java.lang.reflect.Method findQueryMethod(Class<?> dbClass) {
+        // 1) 优先精确匹配: 返回 Cursor, 恰好 2 个参数 (String, String[])
+        try {
+            java.lang.reflect.Method m = dbClass.getDeclaredMethod("u", String.class, String[].class);
+            m.setAccessible(true);
+            return m;
+        } catch (NoSuchMethodException ignored) {}
+        // 2) 尝试其他已知名称的 2 参 (String, String[]) 签名
+        String[] knownNames = {"rawQuery", "v", "w", "x", "y", "z", "rowQuery"};
+        for (String name : knownNames) {
+            try {
+                java.lang.reflect.Method m = dbClass.getDeclaredMethod(name, String.class, String[].class);
+                m.setAccessible(true);
+                return m;
+            } catch (NoSuchMethodException ignored) {}
+        }
+        // 3) 单参数 String 签名
+        for (String name : new String[]{"u", "rawQuery", "v", "w", "x", "y", "z", "rowQuery"}) {
+            try {
+                java.lang.reflect.Method m = dbClass.getDeclaredMethod(name, String.class);
+                m.setAccessible(true);
+                return m;
+            } catch (NoSuchMethodException ignored) {}
+        }
+        // 4) 兜底：遍历所有方法找返回 Cursor 的，按参数数量排序优先 2 参
+        java.lang.reflect.Method best = null;
+        for (java.lang.reflect.Method m : dbClass.getDeclaredMethods()) {
+            if (m.getReturnType() == android.database.Cursor.class) {
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length == 2 && pts[0] == String.class && pts[1] == String[].class) {
+                    m.setAccessible(true);
+                    return m;
+                }
+                if (best == null && pts.length >= 1 && pts[0] == String.class) {
+                    best = m;
+                }
+            }
+        }
+        if (best != null) best.setAccessible(true);
+        return best;
+    }
+
     private static List<ContactCard> query(Object db, String sql, Category defaultCat) {
         List<ContactCard> list = new ArrayList<>();
         Cursor cursor = null;
         try {
-            java.lang.reflect.Method m = db.getClass()
-                    .getDeclaredMethod("u", String.class, String[].class);
-            cursor = (Cursor) m.invoke(db, sql, null);
+            java.lang.reflect.Method queryMethod = findQueryMethod(db.getClass());
+            if (queryMethod == null) {
+                LogWriter.log(TAG, "query: no query method found");
+                return list;
+            }
+            // 根据参数数量决定如何调用
+            Class<?>[] paramTypes = queryMethod.getParameterTypes();
+            if (paramTypes.length == 1) {
+                cursor = (Cursor) queryMethod.invoke(db, sql);
+            } else {
+                cursor = (Cursor) queryMethod.invoke(db, sql, null);
+            }
             if (cursor == null) return list;
 
             while (cursor.moveToNext()) {
@@ -221,6 +272,13 @@ public class ContactRepository {
         return list;
     }
 
+    private static Cursor invokeQuery(java.lang.reflect.Method m, Object db, String sql) throws Exception {
+        if (m.getParameterTypes().length == 1) {
+            return (Cursor) m.invoke(db, sql);
+        }
+        return (Cursor) m.invoke(db, sql, (Object) null);
+    }
+
     private static void diagnoseContacts(Object db) {
         String sql = "SELECT username, nickname, type, verifyFlag, "
                 + "(type&1)!=0 AS b0, (type&8)!=0 AS b3, (type&32)!=0 AS b5, (type&64)!=0 AS b6 "
@@ -237,8 +295,9 @@ public class ContactRepository {
         Cursor c = null;
         Cursor c2 = null;
         try {
-            java.lang.reflect.Method m = db.getClass().getDeclaredMethod("u", String.class, String[].class);
-            c = (Cursor) m.invoke(db, sql, null);
+            java.lang.reflect.Method m = findQueryMethod(db.getClass());
+            if (m == null) { LogWriter.log(TAG, "DIAG err: no query method"); return; }
+            c = invokeQuery(m, db, sql);
             if (c == null || c.getCount() == 0) {
                 LogWriter.log(TAG, "DIAG: no suspicious contacts — filter is clean");
                 return;
@@ -260,7 +319,7 @@ public class ContactRepository {
                     + "(type&1)!=0 AS b0, (type&8)!=0 AS b3, (type&32)!=0 AS b5, (type&64)!=0 AS b6 "
                     + "FROM rcontact WHERE deleteFlag=0 AND username NOT LIKE '%@chatroom' "
                     + "GROUP BY type ORDER BY n DESC";
-            c2 = (Cursor) m.invoke(db, sqlDist, null);
+            c2 = invokeQuery(m, db, sqlDist);
             if (c2 != null && c2.getCount() > 0) {
                 LogWriter.log(TAG, "DIAG_TYPE: type distribution:");
                 while (c2.moveToNext()) {
@@ -291,9 +350,10 @@ public class ContactRepository {
      */
     private static void diagnoseStarContacts(Object db) {
         try {
-            java.lang.reflect.Method m = db.getClass().getDeclaredMethod("u", String.class, String[].class);
+            java.lang.reflect.Method m = findQueryMethod(db.getClass());
+            if (m == null) { LogWriter.log(TAG, "STAR_DIAG err: no query method"); return; }
             String sql = "SELECT username, nickname, type FROM rcontact WHERE deleteFlag=0 AND (type & 16384) != 0";
-            Cursor c = (Cursor) m.invoke(db, sql, null);
+            Cursor c = (Cursor) invokeQuery(m, db, sql);
             if (c == null) return;
             try {
                 int total = c.getCount();
@@ -325,9 +385,10 @@ public class ContactRepository {
         }
         // specialFlag 列可能不存在(版本差异), 单独尝试
         try {
-            java.lang.reflect.Method m = db.getClass().getDeclaredMethod("u", String.class, String[].class);
-            Cursor c = (Cursor) m.invoke(db,
-                    "SELECT username FROM rcontact WHERE specialFlag = 1", null);
+            java.lang.reflect.Method m = findQueryMethod(db.getClass());
+            if (m == null) { LogWriter.log(TAG, "STAR_DIAG: specialFlag column not present: no query method"); return; }
+            Cursor c = invokeQuery(m, db,
+                    "SELECT username FROM rcontact WHERE specialFlag = 1");
             if (c != null) {
                 try {
                     int total = c.getCount();
@@ -412,8 +473,9 @@ public class ContactRepository {
             Cursor cursor = null;
             try {
                 String sql = "SELECT nickname, conRemark FROM rcontact WHERE username = ?";
-                java.lang.reflect.Method m = db.getClass().getDeclaredMethod("u", String.class, String[].class);
-                cursor = (Cursor) m.invoke(db, sql, new String[]{wxid});
+                java.lang.reflect.Method m = findQueryMethod(db.getClass());
+                if (m == null) return null;
+                cursor = (Cursor) invokeQuery(m, db, sql);
                 if (cursor != null && cursor.moveToFirst()) {
                     String nickname = cursor.getString(0);
                     String remark = cursor.getString(1);

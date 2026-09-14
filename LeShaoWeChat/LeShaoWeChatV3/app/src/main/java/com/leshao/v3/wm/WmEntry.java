@@ -307,11 +307,12 @@ public class WmEntry {
                 final ClassLoader fCl = cl;
                 sHandler.postDelayed(new Runnable() {
                     @Override public void run() {
+                        if (sResumedActivity == null) return;
                         try { reconcileChatBall(fCl); } catch (Throwable ignored) {}
                         sHandler.postDelayed(this, 400);
                     }
                 }, 400);
-                LogWriter.log(TAG, "\u2713 chat window (reconcile poll started)");
+                LogWriter.log(TAG, "✓ chat window (reconcile poll started)");
             }
         } catch (Exception e) {
             LogWriter.log(TAG, "\u2717 chat:" + e.getMessage());

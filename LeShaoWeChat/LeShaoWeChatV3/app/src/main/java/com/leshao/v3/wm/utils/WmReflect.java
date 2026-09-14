@@ -33,22 +33,54 @@ public class WmReflect {
     // ===== 核心服务 =====
     public static Object getSendMsgMgr(ClassLoader cl) {
         try {
-            return XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("pa5.n0", cl), "c",
-                    XposedHelpers.findClass("kl5.s5", cl));
+            // Try DexKit-discovered j1 service first
+            Class<?> j1 = null;
+            String dexKitJ1 = com.leshao.v3.hook.DexKitHelper.getJ1ServiceClass();
+            if (dexKitJ1 != null && !dexKitJ1.isEmpty()) {
+                try { j1 = XposedHelpers.findClass(dexKitJ1, cl); } catch (Throwable ignored) {}
+            }
+            if (j1 == null) {
+                String[] j1Candidates = {"pa5.n0", "hm0.j1", "gp0.j1.j", "gp0.j1"};
+                for (String name : j1Candidates) {
+                    try { j1 = XposedHelpers.findClass(name, cl); break; } catch (Throwable ignored) {}
+                }
+            }
+            if (j1 == null) return null;
+            return XposedHelpers.callStaticMethod(j1, "c",
+                XposedHelpers.findClass("kl5.s5", cl));
         } catch (Exception e) { return null; }
     }
 
     public static Class<?> getChatroomLogic(ClassLoader cl) {
         try {
             return XposedHelpers.findClass("e01.v1", cl);
-        } catch (Throwable t) { return null; }
+        } catch (Throwable t) {
+            // Try DexKit candidates
+            String[] candidates = {"e01.v1", "e02.v1", "e00.v1", "e01.u1", "e01.w1"};
+            for (String name : candidates) {
+                try { return XposedHelpers.findClass(name, cl); } catch (Throwable ignored) {}
+            }
+            return null;
+        }
     }
 
     public static Object getContactStorage(ClassLoader cl) {
         try {
+            Class<?> contactCls = null;
+            // Try DexKit-discovered contact storage
+            String dexKitContact = com.leshao.v3.hook.DexKitHelper.getContactStorageClass();
+            if (dexKitContact != null && !dexKitContact.isEmpty()) {
+                try { contactCls = XposedHelpers.findClass(dexKitContact, cl); } catch (Throwable ignored) {}
+            }
+            if (contactCls == null) {
+                String[] candidates = {"e01.d9", "sh3.c4", "e32.a"};
+                for (String name : candidates) {
+                    try { contactCls = XposedHelpers.findClass(name, cl); break; } catch (Throwable ignored) {}
+                }
+            }
+            if (contactCls == null) return null;
             return XposedHelpers.callMethod(
-                    XposedHelpers.callStaticMethod(XposedHelpers.findClass("e01.d9", cl), "b"), "q");
+                    XposedHelpers.callStaticMethod(contactCls, "b"), "q");
         } catch (Throwable e) { return null; }
     }
 
@@ -90,12 +122,12 @@ public class WmReflect {
     }
 
     private static Class<?> findChatroomSvcIface(ClassLoader cl) {
-        try {
-            return XposedHelpers.findClass("cw1.f", cl);
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "getChatroomInfo: chatroom iface cw1.f not found: " + t.getMessage());
-            return null;
+        String[] candidates = {"cw1.f", "cw1.g", "cw2.f", "cw2.g"};
+        for (String name : candidates) {
+            try { return XposedHelpers.findClass(name, cl); } catch (Throwable ignored) {}
         }
+        LogWriter.log(TAG, "findChatroomSvcIface: no chatroom iface found");
+        return null;
     }
 
     // ===== 消息 =====

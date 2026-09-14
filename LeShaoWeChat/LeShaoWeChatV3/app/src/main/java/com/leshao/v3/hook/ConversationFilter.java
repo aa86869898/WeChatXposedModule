@@ -24,6 +24,7 @@ public class ConversationFilter {
     private static Object sHeaderAdapter;
     private static View sConvList;
     private static boolean sHookInstalled = false;
+    private static boolean sIsRecyclerView = false;
     private static final Handler sUnreadHandler = new Handler(android.os.Looper.getMainLooper());
     private static long sLastBadgeRefresh = 0;
     private static long sLastUnreadScan = 0;
@@ -39,11 +40,10 @@ public class ConversationFilter {
     public static void install(ClassLoader cl, Object adapterInstance, View convList) {
         if (adapterInstance == null) { LogWriter.log(TAG, "adapter null"); return; }
 
-        // 8.0.78 会话列表为 ScrollControlRecyclerView，当前过滤仅适配 ListView
+        // 8.0.78+ 会话列表为 RecyclerView，需要走 RecyclerView 适配路径
         if (convList != null && convList.getClass().getName().contains("RecyclerView")) {
-            LogWriter.log(TAG, "convList is RecyclerView (" + convList.getClass().getSimpleName()
-                    + "), ConvFilter not installed (ListView-only)");
-            return;
+            LogWriter.log(TAG, "convList is RecyclerView (" + convList.getClass().getSimpleName() + "), using RecyclerView filter path");
+            sIsRecyclerView = true;
         }
 
         // 允许在已安装后用真正的 convList 更新 sConvList（fallback 可能先以 null 安装）
@@ -70,6 +70,15 @@ public class ConversationFilter {
         }
 
         sAdapter = realAdapter;
+
+        if (sIsRecyclerView) {
+            installRecyclerViewHooks(cl);
+        } else {
+            installListViewHooks();
+        }
+    }
+
+    private static void installListViewHooks() {
         try {
             // 直接钩 HeaderViewListAdapter（Android 框架类，ListView 直接调用它的 getCount/getView）
             // fh5.w0 的 hookAllMethods 在 LSPosed 下无法钩到继承/重写的方法
@@ -151,9 +160,130 @@ public class ConversationFilter {
             }
 
             sHookInstalled = true;
-            LogWriter.log(TAG, "hooks ok: HeaderViewListAdapter");
+            LogWriter.log(TAG, "ListView hooks ok: HeaderViewListAdapter");
         } catch (Throwable e) {
             LogWriter.log(TAG, "install fail: " + e.getMessage());
+        }
+    }
+
+    private static void installRecyclerViewHooks(ClassLoader cl) {
+        try {
+            // Hook RecyclerView.Adapter.getItemCount for our adapter instances
+            XposedBridge.hookAllMethods(androidx.recyclerview.widget.RecyclerView.Adapter.class, "getItemCount", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (sFilterActive && param.thisObject == sAdapter) {
+                            param.setResult(sFilteredPositions.size());
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+
+            // Hook onBindViewHolder to map filtered position to real position
+            XposedBridge.hookAllMethods(androidx.recyclerview.widget.RecyclerView.Adapter.class, "onBindViewHolder", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (sFilterActive && param.thisObject == sAdapter) {
+                            int position = (int) param.args[1];
+                            if (position >= 0 && position < sFilteredPositions.size()) {
+                                param.args[1] = sFilteredPositions.get(position);
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+
+            // Hook onViewRecycled for unread count scanning trigger
+            XposedBridge.hookAllMethods(androidx.recyclerview.widget.RecyclerView.Adapter.class, "onViewRecycled", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (param.thisObject == sAdapter) {
+                            long now = System.currentTimeMillis();
+                            if (now - sLastBadgeRefresh > 5000) {
+                                sLastBadgeRefresh = now;
+                                scanUnreadCounts();
+                            }
+                        }
+                    } catch (Throwable e) {
+                        LogWriter.log("ConvFilter", "onViewRecycled cb err: " + e);
+                    }
+                }
+            });
+
+            // Hook RecyclerView.scrollToPosition for anchor restore
+            XposedBridge.hookAllMethods(androidx.recyclerview.widget.RecyclerView.class, "scrollToPosition", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (sJustAppliedFilter && param.thisObject == sConvList) {
+                            // Let the original call proceed; we restore anchor in afterHookedMethod
+                        }
+                    } catch (Throwable ignored) {}
+                }
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (sJustAppliedFilter && param.thisObject == sConvList) {
+                            restoreAnchorPositionRecyclerView((androidx.recyclerview.widget.RecyclerView) param.thisObject);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+
+            // Hook smoothScrollToPosition for anchor restore
+            XposedBridge.hookAllMethods(androidx.recyclerview.widget.RecyclerView.class, "smoothScrollToPosition", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (sJustAppliedFilter && param.thisObject == sConvList) {
+                            restoreAnchorPositionRecyclerView((androidx.recyclerview.widget.RecyclerView) param.thisObject);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+
+            sHookInstalled = true;
+            LogWriter.log(TAG, "RecyclerView hooks installed (getItemCount/onBindViewHolder/scrollToPosition)");
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "installRecyclerViewHooks fail: " + e.getMessage());
+        }
+    }
+
+    private static void restoreAnchorPositionRecyclerView(androidx.recyclerview.widget.RecyclerView rv) {
+        if (rv == null) return;
+        try {
+            androidx.recyclerview.widget.RecyclerView.LayoutManager lm = rv.getLayoutManager();
+            if (lm == null) return;
+
+            int target = -1;
+            if (sAnchorUsername != null) {
+                target = findPositionByUsername(null, sAnchorUsername);
+                if (target >= 0) {
+                    target -= headerCountOf(sAdapter);
+                }
+            }
+            if (target < 0 && sAnchorRawPos >= 0) {
+                target = sAnchorRawPos;
+            }
+            if (target < 0) {
+                rv.scrollToPosition(0);
+                return;
+            }
+            int itemCount = rv.getAdapter() != null ? rv.getAdapter().getItemCount() : 0;
+            if (target >= itemCount) target = Math.max(0, itemCount - 1);
+
+            if (lm instanceof androidx.recyclerview.widget.LinearLayoutManager) {
+                ((androidx.recyclerview.widget.LinearLayoutManager) lm).scrollToPositionWithOffset(target, sAnchorChildTop);
+                LogWriter.log(TAG, "restoreAnchor RV -> pos=" + target + " offset=" + sAnchorChildTop + " user=" + sAnchorUsername);
+            } else {
+                rv.scrollToPosition(target);
+                LogWriter.log(TAG, "restoreAnchor RV -> scrollToPosition=" + target + " user=" + sAnchorUsername);
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "restoreAnchor RV err: " + e.getMessage());
         }
     }
 
@@ -622,10 +752,8 @@ public class ConversationFilter {
         sLastUnreadScan = now;
         try {
             if (sAdapter == null) return false;
-            Object q = XposedHelpers.getObjectField(sAdapter, "q");
-            if (q == null) return false;
-            ArrayList<?> dataList = (ArrayList<?>) XposedHelpers.getObjectField(q, "d");
-            if (dataList == null) return false;
+            java.util.List<?> dataList = dataListOf();
+            if (dataList == null || dataList.isEmpty()) return false;
 
             int groupUnread = 0, friendUnread = 0, serviceUnread = 0;
             int totalScanned = 0, totalWithUnread = 0;
@@ -721,11 +849,8 @@ public class ConversationFilter {
         if (sAdapter == null) { LogWriter.log(TAG, "sAdapter null buildFilteredPositions"); return; }
         List<Integer> positions = new ArrayList<>();
         try {
-            Object q = XposedHelpers.getObjectField(sAdapter, "q");
-            if (q == null) { LogWriter.log(TAG, "q null"); return; }
-
-            ArrayList<?> dataList = (ArrayList<?>) XposedHelpers.getObjectField(q, "d");
-            if (dataList == null) { LogWriter.log(TAG, "q.d null"); return; }
+            java.util.List<?> dataList = dataListOf();
+            if (dataList == null || dataList.isEmpty()) { LogWriter.log(TAG, "dataList null/empty"); return; }
 
             LogWriter.log(TAG, "scan " + dataList.size() + " items by set");
             for (int i = 0; i < dataList.size(); i++) {
@@ -812,10 +937,8 @@ public class ConversationFilter {
     static void scanContactsForShadowLabels(Set<Integer> shadowIds, Map<Integer, Set<String>> shadowMap) {
         try {
             if (sAdapter == null || shadowIds.isEmpty()) return;
-            Object q = XposedHelpers.getObjectField(sAdapter, "q");
-            if (q == null) return;
-            ArrayList<?> dataList = (ArrayList<?>) XposedHelpers.getObjectField(q, "d");
-            if (dataList == null) return;
+            java.util.List<?> dataList = dataListOf();
+            if (dataList == null || dataList.isEmpty()) return;
             for (Object x : dataList) {
                 if (x == null) continue;
                 Object k4 = XposedHelpers.getObjectField(x, "d");

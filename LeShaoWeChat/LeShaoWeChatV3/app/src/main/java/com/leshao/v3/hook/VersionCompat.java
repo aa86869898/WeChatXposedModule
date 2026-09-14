@@ -311,15 +311,49 @@ public class VersionCompat {
         return null;
     }
 
-    private static volatile boolean sTinkerNotFoundLogged = false;
+    private static volatile ClassLoader sCachedTinkerClassLoader = null;
+    private static volatile boolean sTinkerSearchDone = false;
 
     public static ClassLoader findTinkerClassLoader(ClassLoader cl) {
+        // Return cached result if available
+        if (sCachedTinkerClassLoader != null) return sCachedTinkerClassLoader;
+        if (sTinkerSearchDone) return null;
+
         // 优先使用 ContextManager 缓存的 Tinker ClassLoader
         ClassLoader cached = com.leshao.v3.ContextManager.getTinkerClassLoader();
         if (cached != null) {
+            sCachedTinkerClassLoader = cached;
+            sTinkerSearchDone = true;
             return cached;
         }
-        // 尝试从主线程的 context ClassLoader 查找
+
+        // Try multiple classloader sources
+        ClassLoader[] candidates = new ClassLoader[] {
+            cl,
+            Thread.currentThread().getContextClassLoader(),
+            com.leshao.v3.ContextManager.getAppContext() != null
+                ? com.leshao.v3.ContextManager.getAppContext().getClassLoader() : null
+        };
+
+        for (ClassLoader start : candidates) {
+            if (start == null) continue;
+            ClassLoader current = start;
+            while (current != null) {
+                String name = current.getClass().getName();
+                // Tinker uses DelegateLastClassLoader or its subclass
+                if (name.contains("DelegateLastClassLoader")
+                    || name.contains("TinkerClassLoader")
+                    || name.contains("Tinker")) {
+                    LogWriter.log(TAG, "findTinkerClassLoader: found " + name);
+                    sCachedTinkerClassLoader = current;
+                    sTinkerSearchDone = true;
+                    return current;
+                }
+                current = current.getParent();
+            }
+        }
+
+        // Fallback: try main thread's context classloader
         try {
             java.lang.reflect.Field threadField = android.os.Looper.class.getDeclaredField("sThreadLocal");
             threadField.setAccessible(true);
@@ -328,39 +362,22 @@ public class VersionCompat {
             Thread mainThread = (Thread) getMethod.invoke(threadLocal);
             if (mainThread != null) {
                 ClassLoader mainCL = mainThread.getContextClassLoader();
-                if (mainCL != null) {
-                    ClassLoader current = mainCL;
-                    while (current != null) {
-                        if (current.getClass().getName().contains("DelegateLastClassLoader")) {
-                            LogWriter.log(TAG, "findTinkerClassLoader: found via main thread=" + current.getClass().getName());
-                            return current;
-                        }
-                        current = current.getParent();
+                while (mainCL != null) {
+                    String name = mainCL.getClass().getName();
+                    if (name.contains("DelegateLastClassLoader")
+                        || name.contains("TinkerClassLoader")
+                        || name.contains("Tinker")) {
+                        LogWriter.log(TAG, "findTinkerClassLoader: found via main thread=" + name);
+                        sCachedTinkerClassLoader = mainCL;
+                        sTinkerSearchDone = true;
+                        return mainCL;
                     }
+                    mainCL = mainCL.getParent();
                 }
             }
         } catch (Throwable ignored) {}
-        for (ClassLoader start : new ClassLoader[] {
-            cl,
-            Thread.currentThread().getContextClassLoader(),
-            com.leshao.v3.ContextManager.getAppContext() != null
-                ? com.leshao.v3.ContextManager.getAppContext().getClassLoader() : null
-        }) {
-            if (start == null) continue;
-            ClassLoader current = start;
-            while (current != null) {
-                String name = current.getClass().getName();
-                if (name.contains("DelegateLastClassLoader")) {
-                    LogWriter.log(TAG, "findTinkerClassLoader: found " + name);
-                    return current;
-                }
-                current = current.getParent();
-            }
-        }
-        if (!sTinkerNotFoundLogged) {
-                    sTinkerNotFoundLogged = true;
-                    // Tinker CL not available yet (DexKit scan not complete), will be found later
-                }
+
+        sTinkerSearchDone = true;
         return null;
     }
 
@@ -753,6 +770,13 @@ public class VersionCompat {
     }
 
     public static Class<?> findMsgInfoStorageClass(ClassLoader cl) {
+        // Try DexKit-discovered e9 class first
+        String dexKitE9 = com.leshao.v3.hook.DexKitHelper.getE9ClassName();
+        if (dexKitE9 != null && !dexKitE9.isEmpty()) {
+            try {
+                return XposedHelpers.findClass(dexKitE9, cl);
+            } catch (Throwable ignored) {}
+        }
         return findClassMulti(cl, "com.tencent.mm.storage.e9",
             "com.tencent.mm.storage.d9", "com.tencent.mm.storage.f9",
             "com.tencent.mm.storage.e8");

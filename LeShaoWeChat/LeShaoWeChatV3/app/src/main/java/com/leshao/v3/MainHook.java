@@ -82,7 +82,7 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v896";
+    public static final String MODULE_BUILD = "v912";
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -148,7 +148,6 @@ public class MainHook implements IXposedHookLoadPackage {
         LogWriter.log(TAG, "WeChat versionCode=" + wxVersion + " uid=" + Process.myUid() + " userId=" + userId);
         LogWriter.log(TAG, "当前实例: " + instanceLabel + ", process=" + lpparam.processName);
         installCrashHandler();
-        rearmCrashHandler();
 
         final int wxVerCode = wxVersion;
         final ClassLoader cl = lpparam.classLoader;
@@ -159,8 +158,34 @@ public class MainHook implements IXposedHookLoadPackage {
             ContextManager.init(cl, lpparam.appInfo.sourceDir);
             ContextManager.hookAttachBaseContext(lpparam);
 
-            safeRun("DexKitHelper.setVersionCode", () -> DexKitHelper.setVersionCode(wxVerCode));
-            safeRun("DexKitHelper.hookApplication", () -> DexKitHelper.hookApplication(lpparam));
+             safeRun("DexKitHelper.setVersionCode", () -> DexKitHelper.setVersionCode(wxVerCode));
+             safeRun("DexKitHelper.hookApplication", () -> DexKitHelper.hookApplication(lpparam));
+              DexKitHelper.setProgressCallback(new DexKitHelper.ScanProgressCallback() {
+                  @Override
+                  public void onProgress(int percent, String status, String detail) {
+                      com.leshao.v3.ui.DexKitScanDialog.updateProgress(percent, status, detail);
+                  }
+                  @Override
+                  public void onComplete() {
+                      // Don't auto-dismiss - let user close the dialog
+                  }
+              });
+             safeRun("DexKitScanDialog.initSteps", () -> {
+                 String[] steps = {
+                     "J1 服务定位器", "P06 核心类", "数据库接口", "设备标识 (IMEI)", "CsoLoader",
+                     "通讯录存储", "语音 API", "e9/a21 类", "头像服务", "标签存储",
+                     "会话列表适配器", "聊天窗口入口",
+                     "长按事件", "列表滚动", "菜单注入", "菜单实现类"
+                 };
+                 String[] details = {
+                     "查找静态 s(Class) 方法", "查找 P06 核心类", "查找数据库打开接口",
+                     "查找设备标识类", "查找 CsoLoader", "查找通讯录存储类",
+                     "查找语音 API 类", "查找 e9/a21 类", "查找头像服务类",
+                     "查找标签存储类", "查找会话列表适配器", "查找聊天窗口入口",
+                     "查找长按事件入口", "查找列表滚动入口", "查找菜单注入入口", "查找菜单实现类"
+                 };
+                 com.leshao.v3.ui.DexKitScanDialog.initSteps(steps, details);
+             });
             safeRun("MessageHook", () -> MessageHook.hook(cl));
             safeRun("TtsVoiceSender", () -> TtsVoiceSender.hook(cl));
             safeRun("CornerMenu", () -> CornerMenu.hook(cl));

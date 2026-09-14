@@ -29,9 +29,11 @@ import java.security.MessageDigest;
 import java.util.HashSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -61,6 +63,15 @@ public class TtsVoiceSender {
     private static final int SILK_COMPLEXITY = 2;
     private static final long FAILURE_SUPPRESS_WINDOW_MS = 8000;
     private static volatile boolean sCrashHandlerInstalled;
+    private static final java.util.concurrent.ExecutorService sTtsPool = 
+            java.util.concurrent.Executors.newSingleThreadExecutor(new java.util.concurrent.ThreadFactory() {
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = new Thread(r, "TtsVoiceSender");
+                    t.setDaemon(true);
+                    return t;
+                }
+            });
 
     private static void installCrashReporter() {
         if (sCrashHandlerInstalled) return;
@@ -123,10 +134,10 @@ public class TtsVoiceSender {
     private static volatile String sLastTtsTalker;
     public static volatile long sOrderCardSentAt;
     private static final Object sLock = new Object();
-    private static final Set<String> sSceneSentIds = new HashSet<>();
-    private static final Set<Integer> sSuppressedMessages = new HashSet<>();
-    private static final Set<Integer> sBlockedOriginalMessages = new HashSet<>();
-    private static final Set<Long> sMarkedMsgIds = new HashSet<>();
+    private static final Set<String> sSceneSentIds = ConcurrentHashMap.newKeySet();
+    private static final Set<Integer> sSuppressedMessages = ConcurrentHashMap.newKeySet();
+    private static final Set<Integer> sBlockedOriginalMessages = ConcurrentHashMap.newKeySet();
+    private static final Set<Long> sMarkedMsgIds = ConcurrentHashMap.newKeySet();
     private static final java.util.Map<Long, String> sIncomingVoiceIds = new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.Map<Long, String> sIncomingVoiceCids = new java.util.concurrent.ConcurrentHashMap<>();
     private static final Map<Integer, String> sSyncAmrMap = new HashMap<>();
@@ -166,15 +177,19 @@ public class TtsVoiceSender {
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
         installCrashReporter();
-        discoverVoiceApi(cl);
-        hookE9D1(cl);
+        // Defer voice API discovery until DexKit scan completes
+        com.leshao.v3.hook.DexKitHelper.addPostScanCallback(() -> {
+            discoverVoiceApi(cl);
+            LogWriter.log(TAG, "TtsVoiceSender post-scan init done");
+        });
+        DexKitHelper.addPostScanCallback(() -> hookE9D1(cl));
         hookSetTypeGuard(cl);
         hookChatFooterSend(cl);
         hookChattingUiSend(cl);
         hookE9Trace(cl);
         hookE9AllTrace(cl);
         hookE9Render(cl);
-        hookA21Oi(cl);
+        DexKitHelper.addPostScanCallback(() -> hookA21Oi(cl));
         hookChattingUiAll(cl);
         hookChattingUIFragmentAll(cl);
         hookConvertTo(cl);
@@ -210,37 +225,52 @@ public class TtsVoiceSender {
                 }
                 sTts = new TextToSpeech(ctx, status -> {
                     if (status == TextToSpeech.SUCCESS) {
-                        int result = sTts.setLanguage(Locale.CHINESE);
-                        sReady = (result != TextToSpeech.LANG_MISSING_DATA
-                                && result != TextToSpeech.LANG_NOT_SUPPORTED);
-                        LogWriter.log(TAG, "TTS init: " + (sReady ? "OK" : "FAIL lang"));
+                        try {
+                            int result = sTts.setLanguage(Locale.CHINESE);
+                            sReady = (result != TextToSpeech.LANG_MISSING_DATA
+                                    && result != TextToSpeech.LANG_NOT_SUPPORTED);
+                            LogWriter.log(TAG, "TTS init: " + (sReady ? "OK" : "FAIL lang"));
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "TTS setLanguage err: " + t.getMessage());
+                        }
                     } else {
                         LogWriter.log(TAG, "TTS init fail: status=" + status);
                     }
                 });
-
-                try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
-
-                if (!sReady) {
-                    LogWriter.log(TAG, "TTS not ready after 2s wait");
-                }
             } catch (Throwable t) {
                 LogWriter.log(TAG, "TTS init crash: " + t.getMessage());
                 return false;
+            }
+        }
+        // Wait with timeout on a background thread, not blocking caller
+        if (!sReady) {
+            final long deadline = System.currentTimeMillis() + 3000;
+            while (!sReady && System.currentTimeMillis() < deadline) {
+                try { Thread.sleep(200); } catch (InterruptedException ignored) {}
+            }
+            if (!sReady) {
+                LogWriter.log(TAG, "TTS not ready after 3s wait");
             }
         }
         return sReady;
     }
 
     private static String findAccPath() {
+        if (sAccPath != null) return sAccPath;
         try {
-            String path = (String) XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("com.tencent.mm.kernel.h", sClassLoader), "getAccPath");
-            if (path != null && !path.isEmpty()) {
-                path = normalizeDataPath(path);
-                LogWriter.log(TAG, "Acc via kernel.h.getAccPath");
-                return ensureTrailingSlash(path);
+            // Try multiple kernel classes for acc path
+            String[] kernelCandidates = {"com.tencent.mm.kernel.h", "com.tencent.mm.kernel.g"};
+            for (String kernelName : kernelCandidates) {
+                try {
+                    String path = (String) XposedHelpers.callStaticMethod(
+                            XposedHelpers.findClass(kernelName, sClassLoader), "getAccPath");
+                    if (path != null && !path.isEmpty()) {
+                        sAccPath = path;
+                        return path;
+                    }
+                } catch (Throwable ignored) {}
             }
+            LogWriter.log(TAG, "findAccPath: no kernel class found");
         } catch (Throwable ignored) {}
 
         try {
@@ -432,20 +462,43 @@ public class TtsVoiceSender {
             }
             LogWriter.log(TAG, methods.toString());
 
-            // Try to find d1(String) method; 8.0.78 may rename it
-            java.lang.reflect.Method d1 = null;
-            try {
-                d1 = e9Class.getDeclaredMethod("d1", String.class);
-            } catch (NoSuchMethodException nsme) {
-                // 8.0.78: d1 may have changed signature - look for (String)void methods
-                // related to content/voice processing (b1/i1/j1 are field setters, skip them)
+            // 1) 先用 DexKit 动态发现：查找 e9 类中包含 "voicemsg" 字符串的方法
+            java.lang.reflect.Method contentSetter = null;
+            List<String> methodCandidates = DexKitHelper.findMethodsByString(cl, e9Class.getName(), "voicemsg");
+            for (String sig : methodCandidates) {
+                try {
+                    String methodName = sig.substring(sig.indexOf('.') + 1, sig.indexOf('('));
+                    String paramStr = sig.substring(sig.indexOf('(') + 1, sig.indexOf(')'));
+                    if (paramStr.isEmpty()) continue;
+                    String[] paramNames = paramStr.split(",");
+                    Class<?>[] paramTypes = new Class<?>[paramNames.length];
+                    for (int i = 0; i < paramNames.length; i++) {
+                        paramTypes[i] = mapBasicType(paramNames[i].trim());
+                    }
+                    java.lang.reflect.Method m = e9Class.getDeclaredMethod(methodName, paramTypes);
+                    // 优先找 (String)void 类型的内容设置方法
+                    if (m.getReturnType() == void.class && paramTypes.length == 1 && paramTypes[0] == String.class) {
+                        contentSetter = m;
+                        LogWriter.log(TAG, "e9 content setter found via DexKit: " + methodName + "(String)");
+                        break;
+                    }
+                } catch (Throwable ignored) {}
+            }
+
+            // 2) 兜底：遍历 e9 自身方法找 (String)void 方法
+            if (contentSetter == null) {
                 for (java.lang.reflect.Method m : e9Class.getDeclaredMethods()) {
                     if (m.getParameterTypes().length == 1 && m.getParameterTypes()[0] == String.class
                             && m.getReturnType() == void.class) {
                         String n = m.getName();
-                        // Prefer d1, otherwise look for methods with 'd' prefix (d1/d2/etc)
-                        if ("d1".equals(n) || "d2".equals(n)) {
-                            d1 = m;
+                        // 8.0.78: 方法名已混淆为 X0/Y0/j1 等短名，不再有 d1(String)
+                        if ("d1".equals(n) || "d2".equals(n) || n.startsWith("set")
+                                || n.equals("X0") || n.equals("Y0") || n.equals("j1")
+                                || n.equals("b1") || n.equals("i1") || n.equals("m3")
+                                || n.equals("o3") || n.equals("p3") || n.equals("r1")
+                                || n.equals("r3") || n.equals("u3") || n.equals("w1")
+                                || n.equals("x1")) {
+                            contentSetter = m;
                             LogWriter.log(TAG, "e9.d1 fallback: using " + n + "(String)");
                             break;
                         }
@@ -453,14 +506,25 @@ public class TtsVoiceSender {
                 }
             }
 
-            if (d1 == null) {
-                // 8.0.78: d1 changed to d1(long)void, content setter moved elsewhere
-                LogWriter.log(TAG, "Hook e9.d1 FAIL: d1(String) not available in 8.0.78 (d1 is long-based)");
+            if (contentSetter == null) {
+                // 8.0.78: 最后兜底 - 取第一个 (String)void 方法
+                for (java.lang.reflect.Method m : e9Class.getDeclaredMethods()) {
+                    if (m.getParameterTypes().length == 1 && m.getParameterTypes()[0] == String.class
+                            && m.getReturnType() == void.class) {
+                        contentSetter = m;
+                        LogWriter.log(TAG, "e9.d1 last resort: using " + m.getName() + "(String)");
+                        break;
+                    }
+                }
+            }
+
+            if (contentSetter == null) {
+                LogWriter.log(TAG, "Hook e9.d1 FAIL: no (String)void method found in e9");
                 return;
             }
 
-            final java.lang.reflect.Method targetMethod = d1;
-            XposedBridge.hookMethod(d1, new XC_MethodHook() {
+            final java.lang.reflect.Method targetMethod = contentSetter;
+            XposedBridge.hookMethod(targetMethod, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     try {
@@ -517,6 +581,26 @@ public class TtsVoiceSender {
             LogWriter.log(TAG, "Hook e9.d1(String) OK");
         } catch (Throwable t) {
             LogWriter.log(TAG, "Hook e9.d1 FAIL: " + t.getMessage());
+        }
+    }
+
+    private static Class<?> mapBasicType(String typeName) {
+        switch (typeName) {
+            case "int": return int.class;
+            case "long": return long.class;
+            case "boolean": return boolean.class;
+            case "byte": return byte.class;
+            case "short": return short.class;
+            case "char": return char.class;
+            case "float": return float.class;
+            case "double": return double.class;
+            case "void": return void.class;
+            case "java.lang.String": return String.class;
+            case "java.lang.Integer": return int.class;
+            case "java.lang.Long": return long.class;
+            case "java.lang.Boolean": return boolean.class;
+            default:
+                try { return Class.forName(typeName); } catch (Throwable e) { return Object.class; }
         }
     }
 
@@ -601,8 +685,8 @@ public class TtsVoiceSender {
     }
 
     private static void startAsyncTts(final String talker, final String clientMsgId,
-            final String text, final String source) {
-        Thread worker = new Thread(() -> {
+                                     final String text, final String source) {
+        sTtsPool.execute(() -> {
             try {
                 LogWriter.log(TAG, "async start: source=" + source + " talker=" + talker
                         + " cid=" + clientMsgId + " text='" + truncStr(text, 40) + "'");
@@ -652,9 +736,7 @@ public class TtsVoiceSender {
             } catch (Throwable t) {
                 LogWriter.log(TAG, "async TTS crash: " + t.getClass().getSimpleName() + " " + t.getMessage());
             }
-        }, "leshao-tts-send");
-        worker.setDaemon(true);
-        worker.start();
+        });
     }
 
     private static String buildVoiceXmlStr(int amrSize, int durationMs, String clientMsgId) {
@@ -691,7 +773,7 @@ public class TtsVoiceSender {
     }
 
     private static void scheduleAmrFixup(final Object msg) {
-        Thread t = new Thread(() -> {
+        sTtsPool.execute(() -> {
             String amrPath;
             synchronized (sSyncAmrMap) {
                 amrPath = sSyncAmrMap.get(System.identityHashCode(msg));
@@ -721,8 +803,7 @@ public class TtsVoiceSender {
                 try { Thread.sleep(100); } catch (InterruptedException ignored) {}
             }
             LogWriter.log(TAG, "amr fixup: msgId not assigned within 8s, type=" + getMsgType(msg));
-        }, "leshao-amr-fixup");
-        t.start();
+        });
     }
 
     private static String buildVoicePath(String clientMsgId) {
@@ -938,17 +1019,60 @@ public class TtsVoiceSender {
     }
 
     private static void hookA21Oi(ClassLoader cl) {
-        // 8.0.78: a21.o may be renamed; try multiple candidates
-        String[] a21Candidates = {"a21.o", "a22.o", "a20.o", "a23.o", "b21.o", "b22.o"};
+        // 8.0.78: a21.o 已混淆，使用 DexKit 扫描结果
         Class<?> a21o = null;
-        for (String candidate : a21Candidates) {
+        String a21FromDexKit = DexKitHelper.getA21ClassName();
+        if (a21FromDexKit != null && !a21FromDexKit.isEmpty()) {
             try {
-                a21o = XposedHelpers.findClass(candidate, cl);
-                break;
+                a21o = XposedHelpers.findClass(a21FromDexKit, cl);
+                LogWriter.log(TAG, "hookA21Oi: a21 from DexKit: " + a21FromDexKit);
             } catch (Throwable ignored) {}
         }
         if (a21o == null) {
-            LogWriter.log(TAG, "Hook a21.o.i: a21.o class not found");
+            String[] a21Candidates = {"a21.o", "a22.o", "a20.o", "a23.o", "b21.o", "b22.o"};
+            for (String candidate : a21Candidates) {
+                try {
+                    a21o = XposedHelpers.findClass(candidate, cl);
+                    LogWriter.log(TAG, "hookA21Oi: a21 from candidate: " + candidate);
+                    break;
+                } catch (Throwable ignored) {}
+            }
+        }
+        if (a21o == null) {
+            // 兜底：搜索包含 "a21" 的类
+            List<String> candidates = DexKitHelper.findClassesByString(cl, "a21");
+            for (String cn : candidates) {
+                try {
+                    Class<?> c = XposedHelpers.findClass(cn, cl);
+                    for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
+                        if (m.getParameterCount() == 1 && m.getParameterTypes()[0] == int.class) {
+                            a21o = c;
+                            LogWriter.log(TAG, "hookA21Oi: a21 from DexKit string: " + cn);
+                            break;
+                        }
+                    }
+                    if (a21o != null) break;
+                } catch (Throwable ignored) {}
+            }
+        }
+        if (a21o == null) {
+            // 兜底：搜索包含 "a21" 的类
+            List<String> candidates = DexKitHelper.findClassesByString(cl, "a21");
+            for (String cn : candidates) {
+                try {
+                    Class<?> c = XposedHelpers.findClass(cn, cl);
+                    for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
+                        if ("i".equals(m.getName()) && m.getParameterCount() >= 2) {
+                            a21o = c;
+                            break;
+                        }
+                    }
+                    if (a21o != null) break;
+                } catch (Throwable ignored) {}
+            }
+        }
+        if (a21o == null) {
+            LogWriter.log(TAG, "Hook a21.o.i: a21.o class not found (8.0.78 renamed)");
             return;
         }
         try {
@@ -1783,7 +1907,7 @@ public class TtsVoiceSender {
     }
 
     private static void scheduleTraceState(final Object msg) {
-        new Thread(() -> {
+        sTtsPool.execute(() -> {
             try {
                 Thread.sleep(1500);
             } catch (InterruptedException ignored) {}
@@ -1806,7 +1930,7 @@ public class TtsVoiceSender {
             } catch (Throwable t) {
                 LogWriter.log(TAG, "e9 late state err: " + t.getMessage());
             }
-        }, "leshao-trace-state").start();
+        });
     }
 
     private static void hookChattingUiSend(ClassLoader cl) {
@@ -1936,11 +2060,11 @@ public class TtsVoiceSender {
                     + " talker=" + talker + " dataurl=" + dataurl + " songmid=" + songmid);
             final String url = dataurl;
             final String tTitle = title;
-            new Thread(new Runnable() {
+            sTtsPool.execute(new Runnable() {
                 @Override public void run() {
                     downloadAndSendVoice(talker, url, tTitle, songmid);
                 }
-            }, "music-to-voice").start();
+            });
         } catch (Throwable t) {
             LogWriter.log(TAG, "音乐卡片拦截 err: " + t.getClass().getSimpleName() + " " + t.getMessage());
         }
@@ -2220,9 +2344,35 @@ public class TtsVoiceSender {
 
     private static void discoverVoiceApi(ClassLoader cl) {
         try {
-            // 8.0.78 candidates expanded
-            String[] candidates = {"y21.x0", "y22.x0", "y20.x0", "y23.x0", "y24.x0", "y25.x0", "y26.x0", "y27.x0"};
-            for (String name : candidates) {
+            // Try DexKit-discovered voice API class first
+            String dexKitVoiceApi = com.leshao.v3.hook.DexKitHelper.getVoiceApiClass();
+            if (dexKitVoiceApi != null && !dexKitVoiceApi.isEmpty()) {
+                try {
+                    Class<?> cls = XposedHelpers.findClass(dexKitVoiceApi, cl);
+                    for (Method m : cls.getDeclaredMethods()) {
+                        if (!Modifier.isStatic(m.getModifiers())) continue;
+                        Class<?>[] pts = m.getParameterTypes();
+                        if (sVoiceGMethod == null && m.getReturnType() == String.class
+                                && pts.length == 2 && pts[0] == String.class && pts[1] == String.class) {
+                            sVoiceGClass = dexKitVoiceApi;
+                            sVoiceGMethod = m.getName();
+                        }
+                        if (sVoiceTMethod == null && m.getReturnType() == boolean.class
+                                && pts.length >= 4 && pts[0] == String.class
+                                && pts[1] == int.class && pts[2] == int.class) {
+                            sVoiceTClass = dexKitVoiceApi;
+                            sVoiceTMethod = m.getName();
+                        }
+                    }
+                    if (sVoiceGMethod != null && sVoiceTMethod != null) {
+                        LogWriter.log(TAG, "VoiceApi from DexKit: " + dexKitVoiceApi);
+                        return;
+                    }
+                } catch (Throwable ignored) {}
+            }
+            // Try hardcoded candidates
+            String[] dexKitCandidates = {"y21.x0", "y22.x0", "y20.x0", "y23.x0", "y24.x0", "y25.x0", "y26.x0", "y27.x0"};
+            for (String name : dexKitCandidates) {
                 try {
                     Class<?> cls = XposedHelpers.findClass(name, cl);
                     for (Method m : cls.getDeclaredMethods()) {
@@ -2241,6 +2391,33 @@ public class TtsVoiceSender {
                         }
                     }
                     if (sVoiceGMethod != null && sVoiceTMethod != null) break;
+                } catch (Throwable ignored) {}
+            }
+            // DexKit fallback: search for g(String,String)→String and t(String,int,int,Object)→boolean
+            if (sVoiceGMethod == null || sVoiceTMethod == null) {
+                try {
+                    List<String> candidates = com.leshao.v3.hook.DexKitHelper.findClassesByString(cl, "voice2");
+                    for (String cn : candidates) {
+                        try {
+                            Class<?> cls = XposedHelpers.findClass(cn, cl);
+                            for (Method m : cls.getDeclaredMethods()) {
+                                if (!Modifier.isStatic(m.getModifiers())) continue;
+                                Class<?>[] pts = m.getParameterTypes();
+                                if (sVoiceGMethod == null && m.getName().length() <= 3 && m.getReturnType() == String.class
+                                        && pts.length == 2 && pts[0] == String.class && pts[1] == String.class) {
+                                    sVoiceGClass = cn;
+                                    sVoiceGMethod = m.getName();
+                                }
+                                if (sVoiceTMethod == null && m.getName().length() <= 3 && m.getReturnType() == boolean.class
+                                        && pts.length >= 4 && pts[0] == String.class
+                                        && pts[1] == int.class && pts[2] == int.class) {
+                                    sVoiceTClass = cn;
+                                    sVoiceTMethod = m.getName();
+                                }
+                            }
+                            if (sVoiceGMethod != null && sVoiceTMethod != null) break;
+                        } catch (Throwable ignored) {}
+                    }
                 } catch (Throwable ignored) {}
             }
             LogWriter.log(TAG, "VoiceApi: g=" + sVoiceGClass + "." + sVoiceGMethod
@@ -3251,7 +3428,7 @@ public class TtsVoiceSender {
             LogWriter.log(TAG, "sendWavAsVoice: invalid args");
             return;
         }
-        Thread t = new Thread(() -> {
+        sTtsPool.execute(() -> {
             try {
                 String silkPath = wavToSilk(wavFilePath, clientMsgId);
                 if (silkPath == null) {
@@ -3266,9 +3443,7 @@ public class TtsVoiceSender {
             } catch (Throwable t2) {
                 LogWriter.log(TAG, "sendWavAsVoice error: " + t2.getClass().getSimpleName() + " " + t2.getMessage());
             }
-        }, "leshao-wav-voice");
-        t.setDaemon(true);
-        t.start();
+        });
     }
 
     private static String[] buildAccRoots() {

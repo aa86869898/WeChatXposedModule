@@ -41,8 +41,6 @@ public class AvatarHelper {
     private static volatile boolean sInited = false;
     private static volatile Class<?> sCachedJ1Class = null;
     private static volatile boolean sJ1InitDone = false;
-    private static boolean sDiagLocalPath = false;
-    private static boolean sDiagUrl = false;
 
     private static final int MAX_CACHE = 80;
     private static final Map<String, Bitmap> sCache = Collections.synchronizedMap(
@@ -105,10 +103,46 @@ public class AvatarHelper {
         synchronized (AvatarHelper.class) {
             if (sJ1InitDone) return;
             try {
-                sCachedJ1Class = cl.loadClass("j1");
-                sCachedJ1Class.getDeclaredMethod("u").setAccessible(true);
-                sCachedJ1Class.getDeclaredMethod("h").setAccessible(true);
-                LogWriter.log(TAG, "j1 Class cached on main thread OK");
+                // Try DexKit-discovered j1 service class first
+                String dexKitJ1 = com.leshao.v3.hook.DexKitHelper.getJ1ServiceClass();
+                if (dexKitJ1 != null && !dexKitJ1.isEmpty()) {
+                    try {
+                        sCachedJ1Class = cl.loadClass(dexKitJ1);
+                        for (java.lang.reflect.Method m : sCachedJ1Class.getDeclaredMethods()) {
+                            m.setAccessible(true);
+                        }
+                        LogWriter.log(TAG, "j1 Class from DexKit OK: " + dexKitJ1);
+                        sJ1InitDone = true;
+                        return;
+                    } catch (Throwable ignored) {}
+                }
+                // Fallback: try candidate list
+                String[] j1Candidates = {"gp0.j1.j", "gp0.j1", "hm0.j1"};
+                for (String j1Name : j1Candidates) {
+                    try {
+                        sCachedJ1Class = cl.loadClass(j1Name);
+                        for (java.lang.reflect.Method m : sCachedJ1Class.getDeclaredMethods()) {
+                            m.setAccessible(true);
+                        }
+                        LogWriter.log(TAG, "j1 Class cached on main thread OK: " + j1Name);
+                        break;
+                    } catch (Throwable ignored) {}
+                }
+                // Register post-scan callback to upgrade to DexKit result if needed
+                if (sCachedJ1Class == null || !"gp0.j1.j".equals(sCachedJ1Class.getName())) {
+                    com.leshao.v3.hook.DexKitHelper.addPostScanCallback(() -> {
+                        String dkJ1 = com.leshao.v3.hook.DexKitHelper.getJ1ServiceClass();
+                        if (dkJ1 != null && !dkJ1.isEmpty() && !dkJ1.equals(sCachedJ1Class.getName())) {
+                            try {
+                                sCachedJ1Class = cl.loadClass(dkJ1);
+                                for (java.lang.reflect.Method m : sCachedJ1Class.getDeclaredMethods()) {
+                                    m.setAccessible(true);
+                                }
+                                LogWriter.log(TAG, "j1 Class upgraded from DexKit: " + dkJ1);
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+                }
             } catch (Throwable e) {
                 LogWriter.log(TAG, "j1 Class not available: " + e.getMessage());
             }
@@ -119,11 +153,23 @@ public class AvatarHelper {
     private static String tryMethodA() {
         try {
             if (sCachedJ1Class == null) return null;
-            Object uInstance = sCachedJ1Class.getDeclaredMethod("u").invoke(null);
-            String path = (String) sCachedJ1Class.getDeclaredMethod("h").invoke(uInstance);
-            if (path != null && !path.isEmpty()) {
-                LogWriter.log(TAG, "MethodA (j1.u().h()) OK: " + path);
-                return path;
+            // Try to find a static method that returns an object with a method returning String path
+            for (java.lang.reflect.Method uMethod : sCachedJ1Class.getDeclaredMethods()) {
+                if (!java.lang.reflect.Modifier.isStatic(uMethod.getModifiers())) continue;
+                if (uMethod.getParameterCount() != 0) continue;
+                try {
+                    Object uInstance = uMethod.invoke(null);
+                    if (uInstance == null) continue;
+                    for (java.lang.reflect.Method hMethod : uInstance.getClass().getDeclaredMethods()) {
+                        if (hMethod.getReturnType() == String.class && hMethod.getParameterCount() == 0) {
+                            String path = (String) hMethod.invoke(uInstance);
+                            if (path != null && !path.isEmpty()) {
+                                LogWriter.log(TAG, "MethodA (" + uMethod.getName() + "." + hMethod.getName() + ") OK: " + path);
+                                return path;
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {}
             }
         } catch (Throwable e) {
             LogWriter.log(TAG, "MethodA fail: " + e.getMessage());
@@ -310,28 +356,43 @@ private static String tryMethodB(Context ctx) {
     }
 
     /**
-     * 微信原生头像服务：com.tencent.mm.modelavatar.d1.hj() -> r -> f(username,false,0,null)
+     * 微信原生头像服务：com.tencent.mm.modelavatar.d1
+     * 8.0.78: hj() 方法已不存在，改用 findClass 后反射遍历可用方法
      * 读内存缓存 Bitmap；头像未被 UI 显示过时返回 null。
      */
     public static Bitmap getCachedAvatarBitmap(String wxid) {
         try {
             ClassLoader cl = getWeChatCL();
             if (cl == null) return null;
-            LogWriter.log(TAG, "getCachedAvatarBitmap: cl ok, findClass...");
             Class<?> d1 = XposedHelpers.findClass("com.tencent.mm.modelavatar.d1", cl);
-            LogWriter.log(TAG, "getCachedAvatarBitmap: findClass ok, callStaticMethod hj...");
-            Object r = XposedHelpers.callStaticMethod(d1, "hj");
-            LogWriter.log(TAG, "getCachedAvatarBitmap: hj ok, r=" + (r != null));
-            if (r == null) return null;
-            return (Bitmap) XposedHelpers.callMethod(r, "f", wxid, false, 0, null);
+            // 8.0.78: hj() 不存在，尝试查找返回 Bitmap 的静态方法
+            for (java.lang.reflect.Method m : d1.getDeclaredMethods()) {
+                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                if (m.getReturnType() != Bitmap.class) continue;
+                if (m.getParameterCount() != 0) continue;
+                try {
+                    m.setAccessible(true);
+                    Object r = m.invoke(null);
+                    if (r == null) continue;
+                    return (Bitmap) XposedHelpers.callMethod(r, "f", wxid, false, 0, null);
+                } catch (Throwable ignored) {}
+            }
+            // 兜底：尝试 hj() 的旧逻辑
+            try {
+                Object r = XposedHelpers.callStaticMethod(d1, "hj");
+                if (r == null) return null;
+                return (Bitmap) XposedHelpers.callMethod(r, "f", wxid, false, 0, null);
+            } catch (NoSuchMethodError ignored) {}
+            return null;
         } catch (Throwable t) {
-            LogWriter.log(TAG, "getCachedAvatarBitmap fail: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+            LogWriter.log(TAG, "getCachedAvatarBitmap error: " + t.getMessage());
             return null;
         }
     }
 
     /**
      * 微信头像本地文件路径：com.tencent.mm.modelavatar.d1.ij() -> z -> f(username,false,false)
+     * 8.0.78: ij() 可能已更名，用 try/catch 兜底
      */
     public static String getAvatarLocalPath(String wxid) {
         try {
@@ -339,18 +400,11 @@ private static String tryMethodB(Context ctx) {
             if (cl == null) return null;
             Class<?> d1 = XposedHelpers.findClass("com.tencent.mm.modelavatar.d1", cl);
             Object z = XposedHelpers.callStaticMethod(d1, "ij");
-            if (z == null) {
-                if (!sDiagLocalPath) { sDiagLocalPath = true; LogWriter.log(TAG, "getAvatarLocalPath: z==null (d1.ij 无返回)"); }
-                return null;
-            }
+            if (z == null) return null;
             String path = (String) XposedHelpers.callMethod(z, "f", wxid, false, false);
-            if (!sDiagLocalPath) {
-                sDiagLocalPath = true;
-                LogWriter.log(TAG, "getAvatarLocalPath sample: wxid=" + wxid + " -> " + path);
-            }
             return path;
         } catch (Throwable t) {
-            if (!sDiagLocalPath) { sDiagLocalPath = true; LogWriter.log(TAG, "getAvatarLocalPath fail: " + t.getMessage()); }
+            LogWriter.log(TAG, "getAvatarLocalPath error: " + t.getMessage());
             return null;
         }
     }
@@ -358,6 +412,7 @@ private static String tryMethodB(Context ctx) {
     /**
      * 微信头像 URL：com.tencent.mm.modelavatar.d1.mj() -> s0 -> x0(username) -> r0
      * 大图 c()，小图 d()。
+     * 8.0.78: mj() 可能已更名，用 try/catch 兜底
      */
     public static String getAvatarUrl(String wxid, boolean big) {
         try {
@@ -365,23 +420,13 @@ private static String tryMethodB(Context ctx) {
             if (cl == null) return null;
             Class<?> d1 = XposedHelpers.findClass("com.tencent.mm.modelavatar.d1", cl);
             Object s0 = XposedHelpers.callStaticMethod(d1, "mj");
-            if (s0 == null) {
-                if (!sDiagUrl) { sDiagUrl = true; LogWriter.log(TAG, "getAvatarUrl: s0==null (d1.mj 无返回)"); }
-                return null;
-            }
+            if (s0 == null) return null;
             Object r0 = XposedHelpers.callMethod(s0, "x0", wxid);
-            if (r0 == null) {
-                if (!sDiagUrl) { sDiagUrl = true; LogWriter.log(TAG, "getAvatarUrl: r0==null (x0 无返回)"); }
-                return null;
-            }
+            if (r0 == null) return null;
             String url = (String) XposedHelpers.callMethod(r0, big ? "c" : "d");
-            if (!sDiagUrl) {
-                sDiagUrl = true;
-                LogWriter.log(TAG, "getAvatarUrl sample: wxid=" + wxid + " -> " + url);
-            }
             return url;
         } catch (Throwable t) {
-            if (!sDiagUrl) { sDiagUrl = true; LogWriter.log(TAG, "getAvatarUrl fail: " + t.getMessage()); }
+            LogWriter.log(TAG, "getAvatarUrl error: " + t.getMessage());
             return null;
         }
     }
@@ -418,7 +463,7 @@ private static String tryMethodB(Context ctx) {
             // 方案1：AnyProcessAvatarAttacher（feature.avatar.s），文档推荐跨进程绑定
             try {
                 Class<?> attacher = XposedHelpers.findClass("com.tencent.mm.feature.avatar.s", cl);
-                if (tryBind(attacher, iv, wxid, "feature.avatar.s", "hj")) return true;
+                if (tryBind(attacher, iv, wxid, "feature.avatar.s", null)) return true;
             } catch (Throwable e1) {
                 LogWriter.log(TAG, "feature.avatar.s 不可用: " + e1.getMessage());
             }
@@ -426,7 +471,7 @@ private static String tryMethodB(Context ctx) {
             // 方案2：pluginsdk.ui.a 的静态头像方法
             try {
                 Class<?> a = XposedHelpers.findClass("com.tencent.mm.pluginsdk.ui.a", cl);
-                if (tryBind(a, iv, wxid, "pluginsdk.ui.a", "b")) return true;
+                if (tryBind(a, iv, wxid, "pluginsdk.ui.a", null)) return true;
             } catch (Throwable e2) {
                 LogWriter.log(TAG, "pluginsdk.ui.a 不可用: " + e2.getMessage());
             }

@@ -110,7 +110,10 @@ public class CubeTtsPlayer {
                 conn.setRequestProperty("Content-Type", "application/json");
                 conn.setRequestProperty("X-API-Key", apiKey);
 
-                String jsonBody = "{\"voiceId\":\"" + voiceId + "\",\"text\":\"" + escapeJson(text) + "\"}";
+                String jsonBody = new org.json.JSONObject()
+                    .put("voiceId", voiceId)
+                    .put("text", text)
+                    .toString();
                 OutputStream os = null;
                 try {
                 os = conn.getOutputStream();
@@ -220,20 +223,5 @@ public class CubeTtsPlayer {
         } catch (Throwable ignored) {}
     }
 
-    private static String escapeJson(String s) {
-        if (s == null) return "";
-        StringBuilder sb = new StringBuilder(s.length());
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '"': sb.append("\\\""); break;
-                case '\\': sb.append("\\\\"); break;
-                case '\n': sb.append("\\n"); break;
-                case '\r': sb.append("\\r"); break;
-                case '\t': sb.append("\\t"); break;
-                default: sb.append(c);
-            }
-        }
-        return sb.toString();
-    }
+
 }

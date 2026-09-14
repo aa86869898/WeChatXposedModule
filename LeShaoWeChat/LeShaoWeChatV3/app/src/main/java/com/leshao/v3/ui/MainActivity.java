@@ -170,8 +170,18 @@ public class MainActivity {
                         Object db = openDb(cl, uin);
                         if (db != null) {
                             try {
-                                Method rawQuery = db.getClass().getMethod("rawQuery", String.class, String[].class);
-                                Object cursor = rawQuery.invoke(db, "SELECT username, nickname, alias FROM rcontact WHERE username=?", new String[]{sUserWxid});
+                                java.lang.reflect.Method queryMethod = findQueryMethod(db.getClass());
+                                if (queryMethod == null) {
+                                    LogWriter.log(TAG, "DB query: no query method found");
+                                    return;
+                                }
+                                String sql = "SELECT username, nickname, alias FROM rcontact WHERE username=?";
+                                Object cursor;
+                                if (queryMethod.getParameterTypes().length == 1) {
+                                    cursor = queryMethod.invoke(db, sql);
+                                } else {
+                                    cursor = queryMethod.invoke(db, sql, new String[]{sUserWxid});
+                                }
                                 if (cursor != null) {
                                     Method moveToFirst = cursor.getClass().getMethod("moveToFirst");
                                     if ((Boolean) moveToFirst.invoke(cursor)) {
@@ -186,7 +196,16 @@ public class MainActivity {
                             } catch (Throwable e) {
                                 LogWriter.log(TAG, "DB query failed: " + e.getMessage());
                             } finally {
-                                try { db.getClass().getMethod("close").invoke(db); } catch (Throwable ignored) {}
+                                try {
+                                    java.lang.reflect.Method closeMethod = db.getClass().getMethod("close");
+                                    closeMethod.invoke(db);
+                                } catch (Throwable e) {
+                                    try {
+                                        java.lang.reflect.Method c = db.getClass().getDeclaredMethod("c");
+                                        c.setAccessible(true);
+                                        c.invoke(db);
+                                    } catch (Throwable ignored) {}
+                                }
                             }
                         }
                     }
@@ -324,64 +343,54 @@ public class MainActivity {
             cl = tkCL;
             LogWriter.log(TAG, "openDb: using Tinker ClassLoader");
         }
-        String imei = "1234567890ABCDEF";
-        try {
-            Class<?> wo = cl.loadClass("wo.w0");
-            Method g = wo.getDeclaredMethod("g", boolean.class);
-            String s = (String) g.invoke(null, true);
-            if (s != null && !s.isEmpty() && !s.equals("1234567890ABCDEF")) imei = s;
-        } catch (Throwable e) {}
-
+        String imei = VersionCompat.getImei(cl);
+        String baseDir = VersionCompat.getBaseDir(cl, ContextManager.getAppContext());
+        if (!baseDir.endsWith("/")) baseDir += "/";
+        String dbHash = VersionCompat.getDbHash(cl, (int) uin);
+        String dbPath = baseDir + "MicroMsg/" + dbHash + "/EnMicroMsg.db";
         String password = md5(imei + uin).substring(0, 7);
-
-        String base = null;
-        try {
-            Class<?> mp0b = cl.loadClass("mp0.b");
-            base = (String) mp0b.getDeclaredMethod("X").invoke(null);
-        } catch (Throwable e) {
-            base = ContextManager.getAppContext().getFilesDir().getParentFile().getAbsolutePath() + "/";
-        }
-
-        String hash = null;
-        try {
-            Class<?> hm0b0 = cl.loadClass("hm0.b0");
-            hash = (String) hm0b0.getDeclaredMethod("e", int.class).invoke(null, (int) uin);
-        } catch (Throwable e) {
-            hash = md5("mm" + uin);
-        }
-
-        String dbPath = base + hash + "/EnMicroMsg.db";
         LogWriter.log(TAG, "DB path=" + dbPath);
 
-        Class<?> sqliteDB = cl.loadClass("com.tencent.wcdb.database.SQLiteDatabase");
-        Class<?> cursorFactoryCls = cl.loadClass("com.tencent.wcdb.database.SQLiteDatabase$CursorFactory");
-        byte[] pwdBytes = password.getBytes("UTF-8");
-
-        try {
-            Class<?> cipherClass = cl.loadClass("com.tencent.wcdb.database.SQLiteCipherSpec");
-            Method openDb = sqliteDB.getMethod("openDatabase", String.class, String.class, cipherClass,
-                cursorFactoryCls, int.class);
-            return openDb.invoke(null, dbPath, password, null, null, 0);
-        } catch (Exception e1) {
-            LogWriter.log(TAG, "DB: CipherSpec failed (" + e1.getClass().getSimpleName() + "), trying byte[]");
+        Class<?> dbCls = VersionCompat.findDbOpenerClass(cl);
+        if (dbCls == null) { LogWriter.log(TAG, "dbCls null"); return null; }
+        Object db = VersionCompat.openDatabase(dbCls, dbPath, password);
+        if (db == null) {
+            db = VersionCompat.openDatabaseWcdb(cl, dbPath, password);
         }
+        return db;
+    }
 
-        try {
-            Method openDb = sqliteDB.getMethod("openDatabase", String.class, byte[].class,
-                cursorFactoryCls, int.class);
-            return openDb.invoke(null, dbPath, pwdBytes, null, 0);
-        } catch (NoSuchMethodException e2) {
-            LogWriter.log(TAG, "DB: 4-arg byte[] not found, trying 5-arg");
+    private static java.lang.reflect.Method findQueryMethod(Class<?> dbClass) {
+        String[] knownNames = {"u", "rawQuery", "v", "w", "x", "y", "z", "rowQuery"};
+        for (String name : knownNames) {
+            try {
+                java.lang.reflect.Method m = dbClass.getDeclaredMethod(name, String.class, String[].class);
+                m.setAccessible(true);
+                return m;
+            } catch (NoSuchMethodException ignored) {}
         }
-
-        try {
-            Method openDb = sqliteDB.getMethod("openDatabase", String.class, byte[].class,
-                cursorFactoryCls, int.class,
-                cl.loadClass("com.tencent.wcdb.database.SQLiteDatabase$DatabaseErrorHandler"));
-            return openDb.invoke(null, dbPath, pwdBytes, null, 0, null);
-        } catch (NoSuchMethodException e3) {
-            throw new Exception("No compatible openDatabase method found on wcdb");
+        for (String name : knownNames) {
+            try {
+                java.lang.reflect.Method m = dbClass.getDeclaredMethod(name, String.class);
+                m.setAccessible(true);
+                return m;
+            } catch (NoSuchMethodException ignored) {}
         }
+        java.lang.reflect.Method best = null;
+        for (java.lang.reflect.Method m : dbClass.getDeclaredMethods()) {
+            if (m.getReturnType() == android.database.Cursor.class) {
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length == 2 && pts[0] == String.class && pts[1] == String[].class) {
+                    m.setAccessible(true);
+                    return m;
+                }
+                if (best == null && pts.length >= 1 && pts[0] == String.class) {
+                    best = m;
+                }
+            }
+        }
+        if (best != null) best.setAccessible(true);
+        return best;
     }
 
     private static String md5(String input) {

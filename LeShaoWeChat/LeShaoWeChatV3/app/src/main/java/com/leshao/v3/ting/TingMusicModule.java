@@ -95,38 +95,61 @@ public class TingMusicModule {
     private static void hookChatWindow(ClassLoader cl) {
         try {
             Class<?> frag = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUIFragment", cl);
-            Method m0 = frag.getDeclaredMethod("M0");
-            XposedBridge.hookMethod(m0, new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    try {
-                                        Activity act = fragmentActivity(p.thisObject);
-                                        if (act == null) { LogWriter.log(TAG, "M0 未获取到 Activity"); return; }
-                                        currentChatting = act;
-                                        String user = WmReflect.getChatUserFromFragment(p.thisObject);
-                                        if (user == null || user.isEmpty()) user = WmReflect.getCurrentChatUser(act.getIntent());
-                                        currentUser = user;
-                                        LogWriter.log(TAG, "聊天窗口打开 user=" + currentUser);
-                    } catch (Throwable e) {
-                        LogWriter.log("TingMusic", "cb err: " + e);
+
+            // 动态查找 M0 方法（8.0.78 可能改名）
+            Method m0 = findMethodQuiet(frag, "M0");
+            if (m0 == null) {
+                for (Method m : frag.getDeclaredMethods()) {
+                    if (m.getParameterCount() == 0 && m.getReturnType() == void.class) {
+                        m0 = m;
+                        break;
                     }
                 }
-            });
-            Method o0 = frag.getDeclaredMethod("O0");
-            XposedBridge.hookMethod(o0, new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    try {
-                                        LogWriter.log(TAG, "聊天窗口关闭");
-                                        removeBall();
-                                        hideSearchPanel();
-                                        currentChatting = null;
-                    } catch (Throwable e) {
-                        LogWriter.log("TingMusic", "cb err: " + e);
+            }
+            if (m0 != null) {
+                XposedBridge.hookMethod(m0, new XC_MethodHook() {
+                    @Override protected void afterHookedMethod(MethodHookParam p) {
+                        try {
+                            Activity act = fragmentActivity(p.thisObject);
+                            if (act == null) { LogWriter.log(TAG, "M0 未获取到 Activity"); return; }
+                            currentChatting = act;
+                            String user = WmReflect.getChatUserFromFragment(p.thisObject);
+                            if (user == null || user.isEmpty()) user = WmReflect.getCurrentChatUser(act.getIntent());
+                            currentUser = user;
+                            LogWriter.log(TAG, "聊天窗口打开 user=" + currentUser);
+                        } catch (Throwable e) {
+                            LogWriter.log("TingMusic", "cb err: " + e);
+                        }
                     }
-                }
-            });
+                });
+            }
+
+            Method o0 = findMethodQuiet(frag, "O0");
+            if (o0 != null) {
+                XposedBridge.hookMethod(o0, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        try {
+                            LogWriter.log(TAG, "聊天窗口关闭");
+                            removeBall();
+                            hideSearchPanel();
+                            currentChatting = null;
+                        } catch (Throwable e) {
+                            LogWriter.log("TingMusic", "cb err: " + e);
+                        }
+                    }
+                });
+            }
             LogWriter.log(TAG, "聊天窗口 M0/O0 hook 完成");
         } catch (Throwable t) {
             LogWriter.log(TAG, "聊天窗口 hook 失败: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+        }
+    }
+
+    private static Method findMethodQuiet(Class<?> clazz, String name) {
+        try {
+            return clazz.getDeclaredMethod(name);
+        } catch (NoSuchMethodException e) {
+            return null;
         }
     }
 

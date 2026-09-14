@@ -318,11 +318,11 @@ public class RootSharedPreferences implements SharedPreferences {
                 String err = readFully(p.getErrorStream());
                 int code = p.waitFor();
                 if (code == 0) {
-                    LogWriter.log(TAG, "execRoot OK via " + su + " (" + cmd + ")");
+                    LogWriter.log(TAG, "execRoot OK via " + su);
                     return out;
                 }
                 LogWriter.log(TAG, "execRoot FAIL via " + su + " code=" + code
-                    + " err=" + err.trim() + " cmd=" + cmd);
+                    + " err=" + err.trim());
             } catch (Throwable t) {
                 LogWriter.log(TAG, "execRoot EXCEPTION via " + su + ": "
                     + t.getClass().getSimpleName() + ":" + t.getMessage() + " cmd=" + cmd);

@@ -14,6 +14,7 @@ import com.leshao.v3.service.TTSBroadcaster;
 import java.util.Calendar;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -37,18 +38,18 @@ public class RedPacketHook {
     private static volatile String sTimeStart = "00:00";
     private static volatile String sTimeEnd = "06:00";
     private static volatile boolean sKeywordExcludeOn = false;
-    private static volatile Set<String> sKeywordExclude = new HashSet<>();
+    private static volatile Set<String> sKeywordExclude = ConcurrentHashMap.newKeySet();
     private static volatile boolean sKeywordIncludeOn = false;
-    private static volatile Set<String> sKeywordInclude = new HashSet<>();
-    private static volatile Set<String> sFastPrivateWxids = new HashSet<>();
-    private static volatile Set<String> sFastGroupIds = new HashSet<>();
+    private static volatile Set<String> sKeywordInclude = ConcurrentHashMap.newKeySet();
+    private static volatile Set<String> sFastPrivateWxids = ConcurrentHashMap.newKeySet();
+    private static volatile Set<String> sFastGroupIds = ConcurrentHashMap.newKeySet();
     private static volatile boolean sTtsAnnounce = true;
 
     private static final Handler sHandler = new Handler(Looper.getMainLooper());
     private static final AtomicBoolean sProcessing = new AtomicBoolean(false);
 
     // 已处理的红包/转账消息去重
-    private static final Set<Long> sHandledMsgs = new HashSet<>();
+    private static final Set<Long> sHandledMsgs = ConcurrentHashMap.newKeySet();
 
     public static void setEnabled(boolean v) { sEnabled = v; }
     public static void setPrivateEnabled(boolean v) { sPrivateEnabled = v; }

@@ -28,7 +28,8 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public class DexKitHelper {
 
     private static final String TAG = "DexKit";
-    private static final String MMKV_RESULTS_ID = "dexkit_scan";
+    private static final String MMKV_RESULTS_ID = "dexkit_scan_v3";
+    private static final String KEY_VERSION_CODE = "version_code";
     private static final String KEY_P06_CLASS = "p06_class";
     private static final String KEY_DB_OPENER_CLASS = "db_opener_class";
     private static final String KEY_DB_OPEN_METHOD = "db_open_method";
@@ -38,6 +39,7 @@ public class DexKitHelper {
     private static final String KEY_CSO_LOADER = "cso_loader";
     private static final String KEY_J1_CALLER_CLASS = "j1_caller_class";
     private static final String KEY_J1_CALLER_METHOD = "j1_caller_method";
+    private static final String KEY_J1_SERVICE = "j1_service";
     private static final String KEY_CONTACT_STORAGE = "contact_storage";
     private static final String KEY_CHAT_OPEN_CLASS = "chat_open_class";
     private static final String KEY_CHAT_OPEN_METHOD = "chat_open_method";
@@ -47,10 +49,62 @@ public class DexKitHelper {
     private static final String KEY_CONV_LONGPRESS_METHOD = "conv_longpress_method";
     private static final String KEY_CONV_MENU_CLASS = "conv_menu_class";
     private static final String KEY_CONV_MENU_METHOD = "conv_menu_method";
+    private static final String KEY_VOICE_API = "voice_api";
+    private static final String KEY_E9_CLASS = "e9_class";
+    private static final String KEY_A21_CLASS = "a21_class";
+    private static final String KEY_AVATAR_HELPER = "avatar_helper";
+    private static final String KEY_LABEL_STORAGE = "label_storage";
+    private static final String KEY_CONV_LIST_ADAPTER = "conv_list_adapter";
+    private static final String KEY_MENU_G4_IMPLS = "menu_g4_impls";
+    private static final String KEY_CONV_LP_IMPLS = "conv_lp_impls";
 
     private static final AtomicBoolean sLibraryLoaded = new AtomicBoolean(false);
     private static volatile boolean sScanComplete = false;
-    private static volatile Runnable sPostScanCallback;
+    private static volatile boolean sShouldShowScanDialog = false;
+    private static final java.util.List<Runnable> sPostScanCallbacks = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private static volatile ScanProgressCallback sProgressCallback;
+
+    public interface ScanProgressCallback {
+        void onProgress(int percent, String status, String detail);
+        void onComplete();
+    }
+
+    public static void setProgressCallback(ScanProgressCallback callback) {
+        sProgressCallback = callback;
+    }
+
+    private static void reportProgress(int percent, String status, String detail) {
+        if (sProgressCallback != null) {
+            try { sProgressCallback.onProgress(percent, status, detail); } catch (Throwable ignored) {}
+        }
+    }
+
+    private static void reportComplete() {
+        if (sProgressCallback != null) {
+            try { sProgressCallback.onComplete(); } catch (Throwable ignored) {}
+        }
+    }
+
+    public static boolean isScanComplete() { synchronized (DexKitHelper.class) { return sScanComplete; } }
+
+    public static void addPostScanCallback(Runnable callback) {
+        synchronized (DexKitHelper.class) {
+            if (sScanComplete) {
+                callback.run();
+            } else {
+                sPostScanCallbacks.add(callback);
+            }
+        }
+    }
+
+    private static void runPostScanCallbacks() {
+        synchronized (DexKitHelper.class) {
+            for (Runnable cb : sPostScanCallbacks) {
+                try { cb.run(); } catch (Throwable e) { LogWriter.log(TAG, "postScanCallback error: " + e.getMessage()); }
+            }
+            sPostScanCallbacks.clear();
+        }
+    }
 
     private static volatile String sP06ClassName;
     private static volatile String sDbOpenerClass;
@@ -70,6 +124,13 @@ public class DexKitHelper {
     private static volatile String sConvLongPressMethod;
     private static volatile String sConvMenuClass;
     private static volatile String sConvMenuMethod;
+    private static volatile String sJ1ServiceClass;
+    private static volatile String sVoiceApiClass;
+    private static volatile String sE9ClassName;
+    private static volatile String sA21ClassName;
+    private static volatile String sAvatarHelperClass;
+    private static volatile String sLabelStorageClass;
+    private static volatile String sConvListListAdapterClass;
     private static volatile List<String> sConvLongPressImpls = new java.util.ArrayList<>();
     private static volatile List<String> sMenuG4Impls = new java.util.ArrayList<>();
 
@@ -86,51 +147,185 @@ public class DexKitHelper {
         }
     });
 
-    public static boolean isScanComplete() { return sScanComplete; }
-
-    public static void setPostScanCallback(Runnable callback) {
-        if (sScanComplete) {
-            callback.run();
-        } else {
-            sPostScanCallback = callback;
+    private static DexKitCacheBridge.RecyclableBridge createBridge(ClassLoader cl) {
+        try {
+            return DexKitCacheBridge.create(
+                "wechat_" + (sVersionCode > 0 ? sVersionCode : ""),
+                cl != null ? cl : DexKitHelper.class.getClassLoader());
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "createBridge err: " + e.getMessage());
+            return null;
         }
     }
 
-    public static void setVersionCode(int versionCode) {
-        sVersionCode = versionCode;
+    /**
+     * 通用字符串搜索：在类名/方法体/字段名中查找包含 keyword 的类。
+     * 返回候选类名列表，按匹配度排序。
+     */
+    public static List<String> findClassesByString(ClassLoader cl, final String keyword) {
+        final List<String> results = new java.util.ArrayList<>();
+        if (keyword == null || keyword.isEmpty()) return results;
+        try {
+            DexKitCacheBridge.RecyclableBridge bridge = createBridge(cl);
+            if (bridge == null) return results;
+            try {
+                bridge.withBridge(new DexKitCacheBridge.RecyclableBridge.BridgeFunction() {
+                    @Override
+                    public void apply(DexKitBridge b) {
+                        try {
+                            MethodMatcher mMatcher = MethodMatcher.create().usingStrings(keyword);
+                            List<MethodData> methods = b.findMethod(FindMethod.create().matcher(mMatcher));
+                            for (MethodData m : methods) {
+                                String cn = m.getClassName();
+                                if (cn != null && !results.contains(cn)) results.add(cn);
+                            }
+                        } catch (Throwable ignored) {}
+                        try {
+                            ClassMatcher cMatcher = ClassMatcher.create().addFieldForType(keyword);
+                            List<ClassData> classes = b.findClass(FindClass.create().matcher(cMatcher));
+                            for (ClassData c : classes) {
+                                String cn = c.getName();
+                                if (cn != null && !results.contains(cn)) results.add(cn);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            } finally {
+                try { bridge.close(); } catch (Throwable ignored) {}
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findClassesByString err: " + e.getMessage());
+        }
+        LogWriter.log(TAG, "findClassesByString(" + keyword + "): " + results.size() + " candidates");
+        return results;
     }
 
-    public static String getP06ClassName() { return sP06ClassName; }
-    public static String getDbOpenerClass() { return sDbOpenerClass; }
-    public static String getDbOpenMethodName() { return sDbOpenMethodName; }
-    public static String[] getDbOpenMethodParamTypes() { return sDbOpenMethodParamTypes; }
-    public static String getImeiClassName() { return sImeiClassName; }
-    public static String getImeiMethodName() { return sImeiMethodName; }
-    public static String getCsoLoaderClass() { return sCsoLoaderClass; }
-    public static String getJ1CallerClass() { return sJ1CallerClass; }
-    public static String getJ1CallerMethod() { return sJ1CallerMethod; }
-    public static String getContactStorageClass() { return sContactStorageClass; }
-    public static String getChatOpenClass() { return sChatOpenClass; }
-    public static String getChatOpenMethod() { return sChatOpenMethod; }
-    public static String getConvScrollClass() { return sConvScrollClass; }
-    public static String getConvScrollMethod() { return sConvScrollMethod; }
-    public static String getConvLongPressClass() { return sConvLongPressClass; }
-    public static String getConvLongPressMethod() { return sConvLongPressMethod; }
-    public static String getConvMenuClass() { return sConvMenuClass; }
-    public static String getConvMenuMethod() { return sConvMenuMethod; }
-
-    /** 长按监听实现类列表（DexKit 全包反查 OnItemLongClickListener 实现），供 Bug3 hook 使用 */
-    public static List<String> getConvLongPressImpls() {
-        List<String> copy = new java.util.ArrayList<>();
-        for (String s : sConvLongPressImpls) copy.add(s);
-        return copy;
+    /**
+     * 通用字符串搜索：在指定类中查找包含 keyword 的方法。
+     * 如果 className 为 null，则在全包搜索。
+     */
+    public static List<String> findMethodsByString(ClassLoader cl, final String className, final String keyword) {
+        final List<String> results = new java.util.ArrayList<>();
+        if (keyword == null || keyword.isEmpty()) return results;
+        try {
+            DexKitCacheBridge.RecyclableBridge bridge = createBridge(cl);
+            if (bridge == null) return results;
+            try {
+                bridge.withBridge(new DexKitCacheBridge.RecyclableBridge.BridgeFunction() {
+                    @Override
+                    public void apply(DexKitBridge b) {
+                        try {
+                            MethodMatcher mMatcher = MethodMatcher.create().usingStrings(keyword);
+                            if (className != null) {
+                                mMatcher.declaredClass(className);
+                            }
+                            List<MethodData> methods = b.findMethod(FindMethod.create().matcher(mMatcher));
+                            for (MethodData m : methods) {
+                                String sig = m.getClassName() + "." + m.getName() +
+                                    "(" + String.join(",", m.getParamTypeNames()) + ")";
+                                if (!results.contains(sig)) results.add(sig);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            } finally {
+                try { bridge.close(); } catch (Throwable ignored) {}
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findMethodsByString err: " + e.getMessage());
+        }
+        LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): " + results.size());
+        return results;
     }
 
-    /** kc5.g4(Menu 接口) 的实现类列表，供菜单注入定位使用 */
-    public static List<String> getMenuG4Impls() {
-        List<String> copy = new java.util.ArrayList<>();
-        for (String s : sMenuG4Impls) copy.add(s);
-        return copy;
+    /**
+     * 通用方法查找：按类名+方法名+参数类型精确查找。
+     * 返回第一个匹配的 MethodData，用于后续反射调用。
+     */
+    public static MethodData findMethod(ClassLoader cl, final String className, final String methodName, final String... paramTypeNames) {
+        if (className == null || methodName == null) return null;
+        try {
+            DexKitCacheBridge.RecyclableBridge bridge = createBridge(cl);
+            if (bridge == null) return null;
+            try {
+                final MethodData[] result = new MethodData[1];
+                bridge.withBridge(new DexKitCacheBridge.RecyclableBridge.BridgeFunction() {
+                    @Override
+                    public void apply(DexKitBridge b) {
+                        try {
+                            MethodMatcher mMatcher = MethodMatcher.create().name(methodName);
+                            if (className != null) {
+                                mMatcher.declaredClass(className);
+                            }
+                            List<MethodData> methods = b.findMethod(FindMethod.create().matcher(mMatcher));
+                            if (!methods.isEmpty()) {
+                                if (paramTypeNames != null && paramTypeNames.length > 0) {
+                                    for (MethodData m : methods) {
+                                        List<String> pts = m.getParamTypeNames();
+                                        if (pts.size() == paramTypeNames.length) {
+                                            boolean match = true;
+                                            for (int i = 0; i < paramTypeNames.length; i++) {
+                                                if (!paramTypeNames[i].isEmpty() && !pts.get(i).equals(paramTypeNames[i])) {
+                                                    match = false; break;
+                                                }
+                                            }
+                                            if (match) { result[0] = m; return; }
+                                        }
+                                    }
+                                }
+                                result[0] = methods.get(0);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                return result[0];
+            } finally {
+                try { bridge.close(); } catch (Throwable ignored) {}
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findMethod err: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * 通用类查找：按类名精确查找（忽略包名）。
+     */
+    public static ClassData findClassByName(ClassLoader cl, final String simpleName) {
+        if (simpleName == null) return null;
+        try {
+            DexKitCacheBridge.RecyclableBridge bridge = createBridge(cl);
+            if (bridge == null) return null;
+            try {
+                final ClassData[] result = new ClassData[1];
+                bridge.withBridge(new DexKitCacheBridge.RecyclableBridge.BridgeFunction() {
+                    @Override
+                    public void apply(DexKitBridge b) {
+                        try {
+                            ClassMatcher cMatcher = ClassMatcher.create();
+                            List<ClassData> classes = b.findClass(FindClass.create().matcher(cMatcher));
+                            for (ClassData c : classes) {
+                                String cn = c.getName();
+                                if (cn != null && (cn.equals(simpleName) || cn.endsWith("." + simpleName))) {
+                                    result[0] = c;
+                                    return;
+                                }
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                return result[0];
+            } finally {
+                try { bridge.close(); } catch (Throwable ignored) {}
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findClassByName err: " + e.getMessage());
+        }
+        return null;
+    }
+
+    public interface KernelReadyCallback {
+        void onKernelReady(DexKitBridge bridge);
     }
 
     private static synchronized void loadDexKitLibrary(Application app) {
@@ -212,64 +407,93 @@ public class DexKitHelper {
     private static void loadResultsFromMMKV(Application app) {
         try {
             MMKV kv = MMKV.mmkvWithID(MMKV_RESULTS_ID, MMKV.MULTI_PROCESS_MODE);
-            String p06 = kv.decodeString(KEY_P06_CLASS, null);
-            String dbOpener = kv.decodeString(KEY_DB_OPENER_CLASS, null);
-            String dbMethod = kv.decodeString(KEY_DB_OPEN_METHOD, null);
-            String dbParams = kv.decodeString(KEY_DB_OPEN_PARAMS, null);
-            String imeiClass = kv.decodeString(KEY_IMEI_CLASS, null);
-            String imeiMethod = kv.decodeString(KEY_IMEI_METHOD, null);
-            String csoLoader = kv.decodeString(KEY_CSO_LOADER, null);
-            String j1CallerClass = kv.decodeString(KEY_J1_CALLER_CLASS, null);
-            String j1CallerMethod = kv.decodeString(KEY_J1_CALLER_METHOD, null);
-            String contactStorage = kv.decodeString(KEY_CONTACT_STORAGE, null);
-            String chatOpenClass = kv.decodeString(KEY_CHAT_OPEN_CLASS, null);
-            String chatOpenMethod = kv.decodeString(KEY_CHAT_OPEN_METHOD, null);
-            String convScrollClass = kv.decodeString(KEY_CONV_SCROLL_CLASS, null);
-            String convScrollMethod = kv.decodeString(KEY_CONV_SCROLL_METHOD, null);
-            String convLpClass = kv.decodeString(KEY_CONV_LONGPRESS_CLASS, null);
-            String convLpMethod = kv.decodeString(KEY_CONV_LONGPRESS_METHOD, null);
-            String convMenuClass = kv.decodeString(KEY_CONV_MENU_CLASS, null);
-            String convMenuMethod = kv.decodeString(KEY_CONV_MENU_METHOD, null);
-
-            if (p06 == null && dbOpener == null && imeiClass == null && csoLoader == null
-                && j1CallerClass == null && contactStorage == null
-                && chatOpenClass == null && convScrollClass == null && convLpClass == null
-                && convMenuClass == null) {
-                LogWriter.log(TAG, "loadResultsFromMMKV: no cached results");
+            int cachedVersion = kv.decodeInt(KEY_VERSION_CODE, 0);
+            if (cachedVersion != sVersionCode) {
+                LogWriter.log(TAG, "loadResultsFromMMKV: version mismatch (cached=" + cachedVersion + " current=" + sVersionCode + "), clearing cache");
+                kv.clearAll();
                 return;
             }
 
-            sP06ClassName = p06;
-            sDbOpenerClass = dbOpener;
-            sDbOpenMethodName = dbMethod;
+            sP06ClassName = kv.decodeString(KEY_P06_CLASS, null);
+            sDbOpenerClass = kv.decodeString(KEY_DB_OPENER_CLASS, null);
+            sDbOpenMethodName = kv.decodeString(KEY_DB_OPEN_METHOD, null);
+            String dbParams = kv.decodeString(KEY_DB_OPEN_PARAMS, null);
             if (dbParams != null && !dbParams.isEmpty()) {
                 sDbOpenMethodParamTypes = dbParams.split("\\|");
             }
-            sImeiClassName = imeiClass;
-            sImeiMethodName = imeiMethod;
-            sCsoLoaderClass = csoLoader;
-            sJ1CallerClass = j1CallerClass;
-            sJ1CallerMethod = j1CallerMethod;
-            sContactStorageClass = contactStorage;
-            sChatOpenClass = chatOpenClass;
-            sChatOpenMethod = chatOpenMethod;
-            sConvScrollClass = convScrollClass;
-            sConvScrollMethod = convScrollMethod;
-            sConvLongPressClass = convLpClass;
-            sConvLongPressMethod = convLpMethod;
-            sConvMenuClass = convMenuClass;
-            sConvMenuMethod = convMenuMethod;
+            sImeiClassName = kv.decodeString(KEY_IMEI_CLASS, null);
+            sImeiMethodName = kv.decodeString(KEY_IMEI_METHOD, null);
+            sCsoLoaderClass = kv.decodeString(KEY_CSO_LOADER, null);
+            sJ1CallerClass = kv.decodeString(KEY_J1_CALLER_CLASS, null);
+            sJ1CallerMethod = kv.decodeString(KEY_J1_CALLER_METHOD, null);
+            sJ1ServiceClass = kv.decodeString(KEY_J1_SERVICE, null);
+            sContactStorageClass = kv.decodeString(KEY_CONTACT_STORAGE, null);
+            sChatOpenClass = kv.decodeString(KEY_CHAT_OPEN_CLASS, null);
+            sChatOpenMethod = kv.decodeString(KEY_CHAT_OPEN_METHOD, null);
+            sConvScrollClass = kv.decodeString(KEY_CONV_SCROLL_CLASS, null);
+            sConvScrollMethod = kv.decodeString(KEY_CONV_SCROLL_METHOD, null);
+            sConvLongPressClass = kv.decodeString(KEY_CONV_LONGPRESS_CLASS, null);
+            sConvLongPressMethod = kv.decodeString(KEY_CONV_LONGPRESS_METHOD, null);
+            sConvMenuClass = kv.decodeString(KEY_CONV_MENU_CLASS, null);
+            sConvMenuMethod = kv.decodeString(KEY_CONV_MENU_METHOD, null);
+            sVoiceApiClass = kv.decodeString(KEY_VOICE_API, null);
+            sE9ClassName = kv.decodeString(KEY_E9_CLASS, null);
+            sA21ClassName = kv.decodeString(KEY_A21_CLASS, null);
+            sAvatarHelperClass = kv.decodeString(KEY_AVATAR_HELPER, null);
+            sLabelStorageClass = kv.decodeString(KEY_LABEL_STORAGE, null);
+            sConvListListAdapterClass = kv.decodeString(KEY_CONV_LIST_ADAPTER, null);
 
-            sScanComplete = true;
-            LogWriter.log(TAG, "loadResultsFromMMKV: loaded cached results");
-
-            if (sPostScanCallback != null) {
-                try {
-                    sPostScanCallback.run();
-                } catch (Throwable e) {
-                    LogWriter.log(TAG, "postScanCallback error: " + e.getMessage());
-                }
+            String lpImpls = kv.decodeString(KEY_CONV_LP_IMPLS, null);
+            if (lpImpls != null && !lpImpls.isEmpty()) {
+                sConvLongPressImpls = new java.util.ArrayList<>();
+                for (String s : lpImpls.split("\\|")) if (!s.isEmpty()) sConvLongPressImpls.add(s);
             }
+            String menuImpls = kv.decodeString(KEY_MENU_G4_IMPLS, null);
+            if (menuImpls != null && !menuImpls.isEmpty()) {
+                sMenuG4Impls = new java.util.ArrayList<>();
+                for (String s : menuImpls.split("\\|")) if (!s.isEmpty()) sMenuG4Impls.add(s);
+            }
+
+            boolean hasResults = (sP06ClassName != null && sDbOpenerClass != null && sDbOpenMethodName != null
+                && sImeiClassName != null && sImeiMethodName != null && sCsoLoaderClass != null
+                && sJ1CallerClass != null && sJ1CallerMethod != null && sJ1ServiceClass != null
+                && sContactStorageClass != null && sChatOpenClass != null && sChatOpenMethod != null
+                && sConvScrollClass != null && sConvScrollMethod != null && sConvLongPressClass != null
+                && sConvLongPressMethod != null && sConvMenuClass != null && sConvMenuMethod != null
+                && sVoiceApiClass != null && sE9ClassName != null && sA21ClassName != null
+                && sAvatarHelperClass != null && sLabelStorageClass != null && sConvListListAdapterClass != null);
+
+            if (!hasResults) {
+                LogWriter.log(TAG, "loadResultsFromMMKV: incomplete cached results, clearing cache");
+                kv.clearAll();
+                return;
+            }
+
+            LogWriter.log(TAG, "loadResultsFromMMKV: loaded cached results for version " + cachedVersion);
+
+            // Initialize DexKit bridge so post-scan callbacks can use findClassesByString
+            DexKitCacheBridge.RecyclableBridge bridge = null;
+            try {
+                loadDexKitLibrary(app);
+                initDexKitCache(app);
+                bridge = DexKitCacheBridge.create(
+                    "wechat_" + (sVersionCode > 0 ? sVersionCode : ""), app.getClassLoader());
+                if (bridge != null) {
+                    LogWriter.log(TAG, "loadResultsFromMMKV: DexKit bridge initialized");
+                }
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "loadResultsFromMMKV: bridge init err: " + e.getMessage());
+            }
+
+            runPostScanCallbacks();
+
+            // Close bridge after all callbacks have finished
+            if (bridge != null) {
+                try { bridge.close(); } catch (Throwable ignored) {}
+            }
+
+            // Mark scan complete AFTER callbacks have run and bridge is ready
+            sScanComplete = true;
         } catch (Throwable e) {
             LogWriter.log(TAG, "loadResultsFromMMKV error: " + e.getMessage());
         }
@@ -278,6 +502,9 @@ public class DexKitHelper {
     private static void saveResultsToMMKV() {
         try {
             MMKV kv = MMKV.mmkvWithID(MMKV_RESULTS_ID, MMKV.MULTI_PROCESS_MODE);
+            kv.clearAll();
+            kv.encode(KEY_VERSION_CODE, sVersionCode);
+
             if (sP06ClassName != null) kv.encode(KEY_P06_CLASS, sP06ClassName);
             if (sDbOpenerClass != null) kv.encode(KEY_DB_OPENER_CLASS, sDbOpenerClass);
             if (sDbOpenMethodName != null) kv.encode(KEY_DB_OPEN_METHOD, sDbOpenMethodName);
@@ -294,6 +521,7 @@ public class DexKitHelper {
             if (sCsoLoaderClass != null) kv.encode(KEY_CSO_LOADER, sCsoLoaderClass);
             if (sJ1CallerClass != null) kv.encode(KEY_J1_CALLER_CLASS, sJ1CallerClass);
             if (sJ1CallerMethod != null) kv.encode(KEY_J1_CALLER_METHOD, sJ1CallerMethod);
+            if (sJ1ServiceClass != null) kv.encode(KEY_J1_SERVICE, sJ1ServiceClass);
             if (sContactStorageClass != null) kv.encode(KEY_CONTACT_STORAGE, sContactStorageClass);
             if (sChatOpenClass != null) kv.encode(KEY_CHAT_OPEN_CLASS, sChatOpenClass);
             if (sChatOpenMethod != null) kv.encode(KEY_CHAT_OPEN_METHOD, sChatOpenMethod);
@@ -303,7 +531,30 @@ public class DexKitHelper {
             if (sConvLongPressMethod != null) kv.encode(KEY_CONV_LONGPRESS_METHOD, sConvLongPressMethod);
             if (sConvMenuClass != null) kv.encode(KEY_CONV_MENU_CLASS, sConvMenuClass);
             if (sConvMenuMethod != null) kv.encode(KEY_CONV_MENU_METHOD, sConvMenuMethod);
-            LogWriter.log(TAG, "saveResultsToMMKV: done");
+            if (sVoiceApiClass != null) kv.encode(KEY_VOICE_API, sVoiceApiClass);
+            if (sE9ClassName != null) kv.encode(KEY_E9_CLASS, sE9ClassName);
+            if (sA21ClassName != null) kv.encode(KEY_A21_CLASS, sA21ClassName);
+            if (sAvatarHelperClass != null) kv.encode(KEY_AVATAR_HELPER, sAvatarHelperClass);
+            if (sLabelStorageClass != null) kv.encode(KEY_LABEL_STORAGE, sLabelStorageClass);
+            if (sConvListListAdapterClass != null) kv.encode(KEY_CONV_LIST_ADAPTER, sConvListListAdapterClass);
+
+            if (!sConvLongPressImpls.isEmpty()) {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < sConvLongPressImpls.size(); i++) {
+                    if (i > 0) sb.append("|");
+                    sb.append(sConvLongPressImpls.get(i));
+                }
+                kv.encode(KEY_CONV_LP_IMPLS, sb.toString());
+            }
+            if (!sMenuG4Impls.isEmpty()) {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < sMenuG4Impls.size(); i++) {
+                    if (i > 0) sb.append("|");
+                    sb.append(sMenuG4Impls.get(i));
+                }
+                kv.encode(KEY_MENU_G4_IMPLS, sb.toString());
+            }
+            LogWriter.log(TAG, "saveResultsToMMKV: done for version " + sVersionCode);
         } catch (Throwable e) {
             LogWriter.log(TAG, "saveResultsToMMKV error: " + e.getMessage());
         }
@@ -312,31 +563,66 @@ public class DexKitHelper {
     private static void scanWechatTargets(final DexKitCacheBridge.RecyclableBridge cacheBridge) {
         LogWriter.log(TAG, "scanWechatTargets: using DexKitCacheBridge instance");
 
+        final String[] scanSteps = {
+            "J1 服务定位器", "P06 核心类", "数据库接口", "设备标识 (IMEI)", "CsoLoader",
+            "通讯录存储", "语音 API", "e9/a21 类", "头像服务", "标签存储",
+            "会话列表适配器", "聊天窗口入口",
+            "长按事件", "列表滚动", "菜单注入", "菜单实现类"
+        };
+        final int totalSteps = scanSteps.length;
+
         cacheBridge.withBridge(new DexKitCacheBridge.RecyclableBridge.BridgeFunction() {
             @Override
             public void apply(DexKitBridge b) {
+                reportProgress(0, "开始扫描 DexKit...", "共 " + totalSteps + " 项");
+                findJ1Service(b);
+                reportProgress(9, "扫描: " + scanSteps[0], "查找静态 s(Class) 方法");
                 findP06Class(b);
+                reportProgress(18, "扫描: " + scanSteps[1], "查找 P06 核心类");
                 findDbOpenerMethods(b);
+                reportProgress(27, "扫描: " + scanSteps[2], "查找数据库打开接口");
                 findImeiClass(b);
+                reportProgress(36, "扫描: " + scanSteps[3], "查找设备标识类");
                 findCsoLoader(b);
+                reportProgress(45, "扫描: " + scanSteps[4], "查找 CsoLoader");
                 findContactStorageAlt(b);
-                findJ1Methods(b);
-                findRealP06Class(b);
+                reportProgress(54, "扫描: " + scanSteps[5], "查找通讯录存储类");
+                findVoiceApi(b);
+                reportProgress(58, "扫描: " + scanSteps[6], "查找语音 API 类");
+                findE9AndA21(b);
+                reportProgress(62, "扫描: " + scanSteps[7], "查找 e9/a21 类");
+                findAvatarHelper(b);
+                reportProgress(66, "扫描: " + scanSteps[8], "查找头像服务类");
+                findLabelStorage(b);
+                reportProgress(70, "扫描: " + scanSteps[9], "查找标签存储类");
+                findConvListAdapter(b);
+                reportProgress(74, "扫描: " + scanSteps[10], "查找会话列表适配器");
                 findChatOpenEntry(b);
+                reportProgress(78, "扫描: " + scanSteps[11], "查找聊天窗口入口");
                 findConvLongPressEntry(b);
+                reportProgress(82, "扫描: " + scanSteps[12], "查找长按事件入口");
                 findConvScrollEntry(b);
+                reportProgress(86, "扫描: " + scanSteps[13], "查找列表滚动入口");
                 findConvMenuEntry(b);
+                reportProgress(90, "扫描: " + scanSteps[14], "查找菜单注入入口");
                 findMenuG4Impls(b);
-            }
+                 reportProgress(95, "扫描: " + scanSteps[15], "查找菜单实现类");
+             }
         });
 
         sScanComplete = true;
         LogWriter.log(TAG, "scan complete: p06=" + sP06ClassName
+            + " j1=" + sJ1ServiceClass
             + " dbOpener=" + sDbOpenerClass + "." + sDbOpenMethodName
             + " imei=" + sImeiClassName + "." + sImeiMethodName
             + " cso=" + sCsoLoaderClass
-            + " j1Caller=" + sJ1CallerClass + "." + sJ1CallerMethod
             + " contactStorage=" + sContactStorageClass
+            + " voiceApi=" + sVoiceApiClass
+            + " e9=" + sE9ClassName
+            + " a21=" + sA21ClassName
+            + " avatar=" + sAvatarHelperClass
+            + " label=" + sLabelStorageClass
+            + " convAdapter=" + sConvListListAdapterClass
             + " chatOpen=" + sChatOpenClass + "." + sChatOpenMethod
             + " convScroll=" + sConvScrollClass + "." + sConvScrollMethod
             + " convLongPress=" + sConvLongPressClass + "." + sConvLongPressMethod
@@ -344,13 +630,10 @@ public class DexKitHelper {
 
         saveResultsToMMKV();
 
-        if (sPostScanCallback != null) {
-            try {
-                sPostScanCallback.run();
-            } catch (Throwable e) {
-                LogWriter.log(TAG, "postScanCallback error: " + e.getMessage());
-            }
-        }
+        reportProgress(100, "扫描完成", "所有功能已就绪");
+        reportComplete();
+
+        runPostScanCallbacks();
     }
 
     private static void findP06Class(DexKitBridge bridge) {
@@ -558,36 +841,257 @@ public class DexKitHelper {
         }
     }
 
+    public static String getJ1ServiceClass() { return sJ1ServiceClass; }
+    public static String getVoiceApiClass() { return sVoiceApiClass; }
+    public static String getE9ClassName() { return sE9ClassName; }
+    public static String getA21ClassName() { return sA21ClassName; }
+    public static String getAvatarHelperClass() { return sAvatarHelperClass; }
+    public static String getLabelStorageClass() { return sLabelStorageClass; }
+    public static String getConvListListAdapterClass() { return sConvListListAdapterClass; }
+
+    public static void setVersionCode(int versionCode) {
+        sVersionCode = versionCode;
+    }
+
+    public static String getP06ClassName() { return sP06ClassName; }
+    public static String getDbOpenerClass() { return sDbOpenerClass; }
+    public static String getDbOpenMethodName() { return sDbOpenMethodName; }
+    public static String[] getDbOpenMethodParamTypes() { return sDbOpenMethodParamTypes; }
+    public static String getImeiClassName() { return sImeiClassName; }
+    public static String getImeiMethodName() { return sImeiMethodName; }
+    public static String getCsoLoaderClass() { return sCsoLoaderClass; }
+    public static String getJ1CallerClass() { return sJ1CallerClass; }
+    public static String getJ1CallerMethod() { return sJ1CallerMethod; }
+    public static String getContactStorageClass() { return sContactStorageClass; }
+    public static String getChatOpenClass() { return sChatOpenClass; }
+    public static String getChatOpenMethod() { return sChatOpenMethod; }
+    public static String getConvScrollClass() { return sConvScrollClass; }
+    public static String getConvScrollMethod() { return sConvScrollMethod; }
+    public static String getConvLongPressClass() { return sConvLongPressClass; }
+    public static String getConvLongPressMethod() { return sConvLongPressMethod; }
+    public static String getConvMenuClass() { return sConvMenuClass; }
+    public static String getConvMenuMethod() { return sConvMenuMethod; }
+
+    /** 长按监听实现类列表（DexKit 全包反查 OnItemLongClickListener 实现），供 Bug3 hook 使用 */
+    public static List<String> getConvLongPressImpls() {
+        List<String> copy = new java.util.ArrayList<>();
+        for (String s : sConvLongPressImpls) copy.add(s);
+        return copy;
+    }
+
+    /** kc5.g4(Menu 接口) 的实现类列表，供菜单注入定位使用 */
+    public static List<String> getMenuG4Impls() {
+        List<String> copy = new java.util.ArrayList<>();
+        for (String s : sMenuG4Impls) copy.add(s);
+        return copy;
+    }
+
+    private static void findVoiceApi(DexKitBridge bridge) {
+        try {
+            MethodMatcher mMatcher = MethodMatcher.create()
+                .usingStrings("voice2")
+                .paramCount(2)
+                .paramTypes("java.lang.String", "java.lang.String")
+                .returnType("java.lang.String");
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(mMatcher));
+            if (!methods.isEmpty()) {
+                sVoiceApiClass = methods.get(0).getClassName();
+                LogWriter.log(TAG, "findVoiceApi: " + sVoiceApiClass);
+                return;
+            }
+            // Fallback: any method with voice2 string
+            MethodMatcher m2 = MethodMatcher.create().usingStrings("voice2");
+            List<MethodData> m2s = bridge.findMethod(FindMethod.create().matcher(m2));
+            for (MethodData m : m2s) {
+                String cn = m.getClassName();
+                if (cn != null && !cn.equals(sVoiceApiClass)) {
+                    sVoiceApiClass = cn;
+                    LogWriter.log(TAG, "findVoiceApi (fallback): " + cn);
+                    return;
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findVoiceApi error: " + e.getMessage());
+        }
+    }
+
+    private static void findE9AndA21(DexKitBridge bridge) {
+        try {
+            // e9 class: contains d1(String) method for setting voice message content
+            MethodMatcher m1 = MethodMatcher.create()
+                .name("d1")
+                .paramTypes("java.lang.String")
+                .returnType("void");
+            List<MethodData> e9Methods = bridge.findMethod(FindMethod.create().matcher(m1));
+            for (MethodData m : e9Methods) {
+                String cn = m.getClassName();
+                if (cn != null && cn.contains("e9")) {
+                    sE9ClassName = cn;
+                    LogWriter.log(TAG, "findE9: " + cn + ".d1(String)");
+                    break;
+                }
+            }
+            if (sE9ClassName == null && !e9Methods.isEmpty()) {
+                sE9ClassName = e9Methods.get(0).getClassName();
+                LogWriter.log(TAG, "findE9 (fallback): " + sE9ClassName);
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findE9 error: " + e.getMessage());
+        }
+        try {
+            // a21 class: contains o(i) method
+            MethodMatcher m2 = MethodMatcher.create()
+                .usingStrings("voicemsg")
+                .paramCount(1);
+            List<MethodData> a21Methods = bridge.findMethod(FindMethod.create().matcher(m2));
+            for (MethodData m : a21Methods) {
+                String cn = m.getClassName();
+                if (cn != null && cn.contains("a21")) {
+                    sA21ClassName = cn;
+                    LogWriter.log(TAG, "findA21: " + cn);
+                    break;
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findA21 error: " + e.getMessage());
+        }
+    }
+
+    private static void findAvatarHelper(DexKitBridge bridge) {
+        try {
+            // AvatarHelper: class with method returning Bitmap and taking String param
+            MethodMatcher m1 = MethodMatcher.create()
+                .returnType("android.graphics.Bitmap")
+                .paramCount(1)
+                .paramTypes("java.lang.String");
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(m1));
+            for (MethodData m : methods) {
+                String cn = m.getClassName();
+                if (cn != null && (cn.contains("avatar") || cn.contains("Avatar") || cn.contains("mp0"))) {
+                    sAvatarHelperClass = cn;
+                    LogWriter.log(TAG, "findAvatarHelper: " + cn);
+                    return;
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findAvatarHelper error: " + e.getMessage());
+        }
+    }
+
+    private static void findLabelStorage(DexKitBridge bridge) {
+        try {
+            // Label storage: class with static hj() method returning g4
+            MethodMatcher m1 = MethodMatcher.create()
+                .name("hj")
+                .modifiers(java.lang.reflect.Modifier.STATIC);
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(m1));
+            for (MethodData m : methods) {
+                String cn = m.getClassName();
+                if (cn != null && cn.contains("x93")) {
+                    sLabelStorageClass = cn;
+                    LogWriter.log(TAG, "findLabelStorage: " + cn + ".hj()");
+                    return;
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findLabelStorage error: " + e.getMessage());
+        }
+    }
+
+    private static void findConvListAdapter(DexKitBridge bridge) {
+        try {
+            // Conversation list adapter: implements ListAdapter and has getView
+            ClassMatcher cm = ClassMatcher.create()
+                .addInterface("android.widget.ListAdapter");
+            List<ClassData> classes = bridge.findClass(FindClass.create().matcher(cm));
+            for (ClassData c : classes) {
+                String cn = c.getName();
+                if (cn != null && cn.contains("conversation") && cn.contains("Adapter")) {
+                    sConvListListAdapterClass = cn;
+                    LogWriter.log(TAG, "findConvListAdapter: " + cn);
+                    return;
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findConvListAdapter error: " + e.getMessage());
+        }
+    }
+
+    private static void findJ1Service(DexKitBridge bridge) {
+        try {
+            // Strategy 1: search for methods with s(Class) signature
+            MethodMatcher mMatcher = MethodMatcher.create()
+                .name("s")
+                .paramCount(1);
+            List<MethodData> methods = bridge.findMethod(
+                FindMethod.create().matcher(mMatcher)
+            );
+            LogWriter.log(TAG, "findJ1Service: " + methods.size() + " s(*) methods found");
+            for (MethodData m : methods) {
+                String clsName = m.getClassName();
+                if (clsName == null) continue;
+                List<String> pts = m.getParamTypeNames();
+                if (pts.size() == 1 && "java.lang.Class".equals(pts.get(0))) {
+                    if (clsName.contains(".j1") || clsName.contains("$j1") || clsName.contains("j1")) {
+                        sJ1ServiceClass = clsName;
+                        LogWriter.log(TAG, "findJ1Service: " + clsName + ".s(Class)");
+                        return;
+                    }
+                }
+            }
+            // Strategy 2: search for "Kernel not initialized" string (p06 has this)
+            MethodMatcher m2 = MethodMatcher.create()
+                .usingStrings("Kernel not initialized");
+            List<MethodData> m2s = bridge.findMethod(FindMethod.create().matcher(m2));
+            for (MethodData m : m2s) {
+                String clsName = m.getClassName();
+                if (clsName == null) continue;
+                if (clsName.contains(".j1") || clsName.contains("$j1") || clsName.contains("j1")) {
+                    sJ1ServiceClass = clsName;
+                    LogWriter.log(TAG, "findJ1Service (Kernel): " + clsName);
+                    return;
+                }
+            }
+            // Strategy 3: any s(Class) method regardless of class name
+            for (MethodData m : methods) {
+                String clsName = m.getClassName();
+                if (clsName == null) continue;
+                List<String> pts = m.getParamTypeNames();
+                if (pts.size() == 1 && "java.lang.Class".equals(pts.get(0))) {
+                    sJ1ServiceClass = clsName;
+                    LogWriter.log(TAG, "findJ1Service (any s(Class)): " + clsName);
+                    return;
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findJ1Service error: " + e.getMessage());
+        }
+    }
+
     private static void findJ1Caller(DexKitBridge bridge) {
         try {
-            MethodMatcher callerMatcher = MethodMatcher.create()
-                .addInvoke(MethodMatcher.create()
-                    .declaredClass("hm0.j1")
-                    .name("s")
-                    .paramTypes("java.lang.Class"));
-            List<MethodData> methods = bridge.findMethod(
-                FindMethod.create().matcher(callerMatcher)
-            );
-
-            LogWriter.log(TAG, "findJ1Caller: " + methods.size() + " methods invoke hm0.j1.s(Class)");
-            int limit = Math.min(methods.size(), 10);
-            for (int i = 0; i < limit; i++) {
-                MethodData m = methods.get(i);
-                LogWriter.log(TAG, "  j1 caller[" + i + "]: " + m.getClassName() + "." + m.getName()
-                    + " params=" + m.getParamTypeNames() + " return=" + m.getReturnTypeName());
+            // 8.0.78: j1 服务定位器混淆为 gp0.j1，不再用 hm0.j1
+            String[] j1Candidates = {"gp0.j1.j", "gp0.j1", "hm0.j1", "fp0.j1.j", "fp0.j1"};
+            for (String j1Class : j1Candidates) {
+                try {
+                    MethodMatcher callerMatcher = MethodMatcher.create()
+                        .addInvoke(MethodMatcher.create()
+                            .declaredClass(j1Class)
+                            .name("s")
+                            .paramTypes("java.lang.Class"));
+                    List<MethodData> methods = bridge.findMethod(
+                        FindMethod.create().matcher(callerMatcher)
+                    );
+                    if (!methods.isEmpty()) {
+                        MethodData first = methods.get(0);
+                        sJ1CallerClass = first.getClassName();
+                        sJ1CallerMethod = first.getName();
+                        LogWriter.log(TAG, "findJ1Caller: " + sJ1CallerClass + "." + sJ1CallerMethod + " via " + j1Class);
+                        return;
+                    }
+                } catch (Throwable ignored) {}
             }
-            if (methods.size() > 10) {
-                LogWriter.log(TAG, "  ... " + (methods.size() - 10) + " more j1 callers omitted");
-            }
-
-            if (!methods.isEmpty()) {
-                MethodData first = methods.get(0);
-                sJ1CallerClass = first.getClassName();
-                sJ1CallerMethod = first.getName();
-                LogWriter.log(TAG, "findJ1Caller: " + sJ1CallerClass + "." + sJ1CallerMethod);
-            } else {
-                LogWriter.log(TAG, "findJ1Caller: NOT found");
-            }
+            LogWriter.log(TAG, "findJ1Caller: NOT found");
         } catch (Throwable e) {
             LogWriter.log(TAG, "findJ1Caller error: " + e.getMessage());
         }
@@ -595,6 +1099,8 @@ public class DexKitHelper {
 
     private static void findContactStorageAlt(DexKitBridge bridge) {
         try {
+            // 8.0.78: contact storage 类已混淆为 e32.a 等短名，不再包含 "storage"
+            // 搜索所有 ij() 返回 long 的类，取第一个（通常只有一个）
             MethodMatcher mMatcher = MethodMatcher.create()
                 .name("ij")
                 .returnType("long");
@@ -602,37 +1108,28 @@ public class DexKitHelper {
                 FindMethod.create().matcher(mMatcher)
             );
             LogWriter.log(TAG, "findContactStorageAlt: " + methods.size() + " ij() returning long");
-            int ctLimit = Math.min(methods.size(), 10);
-            for (int i = 0; i < ctLimit; i++) {
-                MethodData m = methods.get(i);
+            for (MethodData m : methods) {
                 String clsName = m.getClassName();
-                LogWriter.log(TAG, "  ij candidate: " + clsName + "." + m.getName()
-                    + " return=" + m.getReturnTypeName());
-                if (clsName != null && clsName.contains("storage")) {
-                    sContactStorageClass = clsName;
-                    LogWriter.log(TAG, "findContactStorageAlt: " + clsName + ".ij()");
-                    return;
-                }
+                if (clsName == null) continue;
+                // 8.0.78: contact storage 类名可能是 e32.a 等短名
+                sContactStorageClass = clsName;
+                LogWriter.log(TAG, "findContactStorageAlt: " + clsName + ".ij()");
+                return;
             }
-            if (methods.size() > 10) {
-                LogWriter.log(TAG, "  ... " + (methods.size() - 10) + " more ij() results omitted");
-            }
-
+            // 兜底：搜索所有 ij() 方法
             MethodMatcher objMatcher = MethodMatcher.create()
                 .name("ij");
             List<MethodData> objMethods = bridge.findMethod(
                 FindMethod.create().matcher(objMatcher)
             );
-            LogWriter.log(TAG, "findContactStorageAlt: " + objMethods.size() + " total ij()");
             for (MethodData m : objMethods) {
                 String clsName = m.getClassName();
-                if (clsName != null && clsName.contains("storage")) {
+                if (clsName != null) {
                     sContactStorageClass = clsName;
-                    LogWriter.log(TAG, "findContactStorageAlt (storage): " + clsName + ".ij()");
+                    LogWriter.log(TAG, "findContactStorageAlt (any ij): " + clsName + ".ij()");
                     return;
                 }
             }
-
             LogWriter.log(TAG, "findContactStorageAlt: NOT found");
         } catch (Throwable e) {
             LogWriter.log(TAG, "findContactStorageAlt error: " + e.getMessage());
@@ -918,23 +1415,32 @@ public class DexKitHelper {
      *  直接 hook 接口无效（LSPosed 挂不上），必须 hook 具体实现类。 */
     private static void findMenuG4Impls(DexKitBridge bridge) {
         try {
+            // 8.0.78: kc5.g4 doesn't exist, search for Menu implementations with string "Menu" in class name
             ClassMatcher cm = ClassMatcher.create()
-                .addInterface("kc5.g4");
-            List<ClassData> impls = bridge.findClass(
-                FindClass.create().matcher(cm)
-            );
-            LogWriter.log(TAG, "findMenuG4Impls: " + impls.size()
-                + " classes implement kc5.g4");
+                .addInterface("android.view.Menu");
+            List<ClassData> impls = bridge.findClass(FindClass.create().matcher(cm));
+            LogWriter.log(TAG, "findMenuG4Impls: " + impls.size() + " classes implement android.view.Menu");
             List<String> newList = new java.util.ArrayList<>();
-            int limit = Math.min(impls.size(), 25);
-            for (int i = 0; i < limit; i++) {
-                String cn = impls.get(i).getName();
-                LogWriter.log(TAG, "  menuG4Impl[" + i + "]: " + cn);
-                newList.add(cn);
+            for (ClassData c : impls) {
+                String cn = c.getName();
+                if (cn != null && (cn.contains("menu") || cn.contains("Menu") || cn.contains("kc5"))) {
+                    LogWriter.log(TAG, "  menuImpl: " + cn);
+                    newList.add(cn);
+                }
             }
-            for (int i = limit; i < impls.size(); i++) {
-                newList.add(impls.get(i).getName());
-            }
+            // Also search by string "Menu" in class name
+            try {
+                ClassMatcher cm2 = ClassMatcher.create()
+                    .className(".*[Mm]enu.*");
+                List<ClassData> impls2 = bridge.findClass(FindClass.create().matcher(cm2));
+                for (ClassData c : impls2) {
+                    String cn = c.getName();
+                    if (cn != null && !newList.contains(cn) && !cn.startsWith("android.") && !cn.startsWith("java.")) {
+                        LogWriter.log(TAG, "  menuImpl2: " + cn);
+                        newList.add(cn);
+                    }
+                }
+            } catch (Throwable ignored) {}
             sMenuG4Impls = newList;
         } catch (Throwable e) {
             LogWriter.log(TAG, "findMenuG4Impls error: " + e.getMessage());
@@ -965,6 +1471,31 @@ public class DexKitHelper {
                         return;
                     }
 
+                    // Initialize MMKV first (needed for cache check)
+                    try {
+                        MMKV.initialize(app);
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "MMKV.initialize err: " + e.getMessage());
+                    }
+
+                    // Try loading from MMKV cache first — if hit, no scan needed
+                    try {
+                        MMKV kv = MMKV.mmkvWithID(MMKV_RESULTS_ID, MMKV.MULTI_PROCESS_MODE);
+                        int cachedVersion = kv.decodeInt(KEY_VERSION_CODE, 0);
+                        String cachedP06 = kv.decodeString(KEY_P06_CLASS, null);
+                        if (cachedVersion == sVersionCode && cachedP06 != null) {
+                            LogWriter.log(TAG, "hookApplication: MMKV cache hit for version " + cachedVersion);
+                            loadResultsFromMMKV(app);
+                            return;
+                        }
+                        LogWriter.log(TAG, "hookApplication: MMKV cache miss (cached=" + cachedVersion + " current=" + sVersionCode + ")");
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "hookApplication MMKV check err: " + e.getMessage());
+                    }
+
+                    // Cache miss — show scan dialog on next Activity creation
+                    sShouldShowScanDialog = true;
+
                     sExecutor.execute(new Runnable() {
                         @Override
                         public void run() {
@@ -973,6 +1504,8 @@ public class DexKitHelper {
                                 loadDexKitLibrary(app);
                                 if (!sLibraryLoaded.get()) {
                                     LogWriter.log(TAG, "DexKit library not loaded, skipping");
+                                    sShouldShowScanDialog = false;
+                                    com.leshao.v3.ui.DexKitScanDialog.dismiss();
                                     return;
                                 }
 
@@ -996,11 +1529,30 @@ public class DexKitHelper {
                                         cacheBridge.close();
                                     } catch (Throwable ignored) {}
                                 }
+                                // Do NOT dismiss dialog here — user closes manually
                             }
                         }
                     });
                 }
             });
+
+            // Hook Activity.onCreate to show dialog at the right time
+            try {
+                XposedBridge.hookAllMethods(android.app.Activity.class, "onCreate", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        if (!sShouldShowScanDialog) return;
+                        if (!"com.tencent.mm".equals(((android.app.Activity) param.thisObject).getPackageName())) return;
+                        // Only show on LauncherUI, not on splash activities
+                        if (!"com.tencent.mm.ui.LauncherUI".equals(param.thisObject.getClass().getName())) return;
+                        sShouldShowScanDialog = false;
+                        LogWriter.log(TAG, "DexKitScanDialog shown on LauncherUI");
+                        com.leshao.v3.ui.DexKitScanDialog.show((android.content.Context) param.thisObject);
+                    }
+                });
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "hookActivity onCreate err: " + e.getMessage());
+            }
 
             LogWriter.log(TAG, "ContextWrapper.attachBaseContext hook installed");
         } catch (Throwable e) {
@@ -1008,13 +1560,24 @@ public class DexKitHelper {
         }
     }
 
-    public interface KernelReadyCallback {
-        void onKernelReady(DexKitBridge bridge);
-    }
-
     public static void waitKernelInit(final ClassLoader cl, final KernelReadyCallback callback) {
         try {
-            Class<?> j1 = XposedHelpers.findClass("hm0.j1", cl);
+            // Use DexKit-discovered j1 class first, fall back to candidates
+            Class<?> j1 = null;
+            String dexKitJ1 = sJ1ServiceClass;
+            if (dexKitJ1 != null && !dexKitJ1.isEmpty()) {
+                try { j1 = XposedHelpers.findClass(dexKitJ1, cl); } catch (Throwable ignored) {}
+            }
+            if (j1 == null) {
+                String[] j1Candidates = {"gp0.j1.j", "hm0.j1", "gp0.j1", "fp0.j1.j"};
+                for (String name : j1Candidates) {
+                    try { j1 = XposedHelpers.findClass(name, cl); break; } catch (Throwable ignored) {}
+                }
+            }
+            if (j1 == null) {
+                LogWriter.log(TAG, "waitKernelInit: no j1 class found");
+                return;
+            }
             for (java.lang.reflect.Method m : j1.getDeclaredMethods()) {
                 if ("s".equals(m.getName()) && m.getParameterTypes().length == 1) {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
@@ -1061,8 +1624,7 @@ public class DexKitHelper {
                             });
                         }
                     });
-                    LogWriter.log(TAG, "waitKernelInit: hook installed on hm0.j1."
-                        + m.getName());
+                    LogWriter.log(TAG, "waitKernelInit: hook installed on " + j1.getName() + "." + m.getName());
                     return;
                 }
             }

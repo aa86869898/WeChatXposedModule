@@ -179,11 +179,14 @@ public class ChatHooks {
     private static final Runnable reconcileTask = new Runnable() {
         @Override public void run() {
             try {
+                if (sResumedActivity == null) {
+                    // No active WeChat activity, skip polling until resumed
+                    return;
+                }
                 boolean chatOpen = isChatOpen();
                 boolean shown = FloatingBall.isShowing();
                 if (chatOpen && !shown && AiConfig.masterEnabled() && sWindowFocused) {
                     Activity act = sResumedActivity;
-                    if (act == null) act = chatActivity;
                     if (act != null) {
                         chatActivity = act;
                         chatWindowOpen = true;
