@@ -1,8 +1,5 @@
 package com.leshao.v3.hook;
 
-import android.media.AudioFormat;
-import android.media.AudioManager;
-import android.media.AudioTrack;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Looper;
@@ -26,10 +23,9 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /**
- * 语音消息自动播放 v49
- * - 方案A(首选): 微信CDN流式API y21.x0.h(e9,voiceId)→y21.j→AudioTrack 后台播放
- * - 方案B(回退): SilkDecoder库 SILK→WAV→MediaPlayer 后台播放
- * - 方案C(回退): so.y()→v0.I(msg) 聊天内播放
+ * 语音消息自动播放 v50 (8.0.78 适配)
+ * - 方案A(首选): 等语音文件写入 voice2 后按格式直接播放 (AMR-NB 系统 MediaPlayer / SILK SilkDecoder)
+ * - 方案B(回退): so.y()→p 聊天内播放
  */
 public class VoiceAutoPlay {
 
@@ -46,11 +42,6 @@ public class VoiceAutoPlay {
     private static Class<?> sK0Class;
     private static Class<?> sSoClass;
     private static String sVoice2Dir;
-
-    // 微信CDN流式API类
-    private static Class<?> sU0Cls;       // y21.u0 — 解析voice内容
-    private static Class<?> sX0Cls;       // y21.x0 — 下载+解码
-    private static Class<?> sJCls;       // y21.j  — 音频流
 
     private static volatile Object sCurrentSo;
     private static volatile Object sCurrentPlayer;
@@ -85,16 +76,10 @@ public class VoiceAutoPlay {
         try { sSoClass = XposedHelpers.findClass("com.tencent.mm.ui.chatting.component.so", cl); }
         catch (Throwable t) { LogWriter.log(TAG, "so class NOT found: " + t.getMessage()); }
 
-        // 微信CDN流式API类
-        try { sU0Cls = cl.loadClass("y21.u0"); }
-        catch (Throwable t) { LogWriter.log(TAG, "y21.u0 NOT found: " + t.getMessage()); }
-        try { sX0Cls = cl.loadClass("y21.x0"); }
-        catch (Throwable t) { LogWriter.log(TAG, "y21.x0 NOT found: " + t.getMessage()); }
-        try { sJCls = cl.loadClass("y21.j"); }
-        catch (Throwable t) { LogWriter.log(TAG, "y21.j NOT found: " + t.getMessage()); }
+        // 8.0.78(3180): 微信旧 CDN 流式类 y21.u0/y21.x0/y21.j 已全部失效, 不再加载。
+        // 自动播放改为等语音文件写入 voice2 后按格式直接播放 (AMR-NB / SILK)。
 
-        LogWriter.log(TAG, "init: k0=" + (sK0Class != null) + " so=" + (sSoClass != null)
-            + " u0=" + (sU0Cls != null) + " x0=" + (sX0Cls != null) + " j=" + (sJCls != null));
+        LogWriter.log(TAG, "init: k0=" + (sK0Class != null) + " so=" + (sSoClass != null));
 
         findVoice2Dir();
         hookVoiceComponent(cl);
@@ -255,75 +240,9 @@ public class VoiceAutoPlay {
 
     // ========== 方案A: 微信CDN流式API ==========
 
+    /** 8.0.78(3180): y21.x0 CDN 流式链路已失效, 此方法不再使用, 保留空实现占位 */
     private static boolean playViaWxStream(Object e9, String talker, long msgId) {
-        try {
-            // Step 1: 提取 voiceId
-            String voiceId = extractVoiceId(e9, msgId);
-            if (voiceId == null) {
-                LogWriter.log(TAG, "stream: voiceId null msgId=" + msgId);
-                return false;
-            }
-            if (voiceId.equals(talker) || voiceId.contains("wxid_")) {
-                LogWriter.log(TAG, "stream: voiceId invalid (looks like talker)=" + trunc(voiceId, 40) + " msgId=" + msgId);
-                return false;
-            }
-            LogWriter.log(TAG, "stream: voiceId=" + trunc(voiceId, 40) + " msgId=" + msgId);
-
-            if (sX0Cls == null) {
-                LogWriter.log(TAG, "stream: y21.x0 class not found, cannot download");
-                return false;
-            }
-
-            // Step 2: y21.x0.h(e9, voiceId) → y21.j 音频流
-            Object stream = XposedHelpers.callStaticMethod(sX0Cls, "h", e9, voiceId);
-            if (stream == null) {
-                LogWriter.log(TAG, "stream: y21.x0.h() returned null msgId=" + msgId);
-                return false;
-            }
-            LogWriter.log(TAG, "stream: got stream class=" + stream.getClass().getName());
-
-            // Step 3: 读取PCM → AudioTrack播放
-            // 微信语音采样率16kHz,单声道,16bit PCM
-            int sampleRate = 16000;
-            int channelConfig = AudioFormat.CHANNEL_OUT_MONO;
-            int audioFormat = AudioFormat.ENCODING_PCM_16BIT;
-            int bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, audioFormat);
-
-            AudioTrack track = new AudioTrack(
-                AudioManager.STREAM_MUSIC,
-                sampleRate,
-                channelConfig,
-                audioFormat,
-                Math.max(bufferSize, 8192),
-                AudioTrack.MODE_STREAM
-            );
-            track.play();
-
-            byte[] buffer = new byte[4096];
-            int totalBytes = 0;
-            int read;
-            try {
-                while ((read = (Integer) XposedHelpers.callMethod(stream, "c", buffer, 0, buffer.length)) > 0) {
-                    track.write(buffer, 0, read);
-                    totalBytes += read;
-                }
-            } finally {
-                // 异常路径也释放 AudioTrack，避免资源泄漏
-                try { track.stop(); } catch (Throwable ignored) {}
-                try { track.release(); } catch (Throwable ignored) {}
-            }
-
-            LogWriter.log(TAG, "streamDone: msgId=" + msgId + " pcmBytes=" + totalBytes);
-
-            // Step 4: 清理
-            try { XposedHelpers.callMethod(stream, "b"); } catch (Throwable ignored) {}
-
-            return totalBytes > 0;
-
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "stream err: " + e.getMessage());
-            return false;
-        }
+        return false;
     }
 
     // ========== voiceId 提取 ==========
@@ -341,23 +260,7 @@ public class VoiceAutoPlay {
         }
 
         try {
-            // 方法1: e9.j() → y21.u0(content) → u0.a()
-            String content = (String) XposedHelpers.callMethod(e9, "j");
-            if (content != null && sU0Cls != null) {
-                LogWriter.log(TAG, "voice content=[" + trunc(content, 60) + "]");
-                Object u0Obj = XposedHelpers.newInstance(sU0Cls, content);
-                String voiceId = (String) XposedHelpers.callMethod(u0Obj, "a");
-                if (voiceId != null && !voiceId.isEmpty()) {
-                    LogWriter.log(TAG, "voiceId(from u0)=[" + trunc(voiceId, 40) + "]");
-                    return voiceId;
-                }
-            }
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "extractVoiceId: u0 err: " + e.getMessage());
-        }
-
-        try {
-            // 方法2: e9.j() → 直接解析 "voiceId:duration:flag:\n"
+            // 方法1: e9.j() → 直接解析 XML voiceid (8.0.78 旧 y21.u0 已失效)
             String content = (String) XposedHelpers.callMethod(e9, "j");
             if (content != null && content.contains("<voicemsg")) {
                 String v = extractXmlVoiceId(content);
@@ -423,35 +326,55 @@ public class VoiceAutoPlay {
 
             LogWriter.log(TAG, "bg: path=" + path + " size=" + f.length() + " msgId=" + msgId);
 
-            // SILK → WAV
-            String wavPath = path + ".dec.wav";
-            File wavFile = new File(wavPath);
-            if (wavFile.exists()) wavFile.delete();
+            // 8.0.78: 语音为 AMR-NB (#!AMR 头), 系统 MediaPlayer 原生支持直接播放;
+            // 仅当文件头非 AMR (旧 SILK) 时才走 SilkDecoder 转 WAV。
+            boolean isAmr = false;
+            try {
+                @SuppressWarnings("resource")
+                java.io.InputStream in = new java.io.FileInputStream(f);
+                byte[] hdr = new byte[6];
+                int n = in.read(hdr);
+                in.close();
+                isAmr = n >= 6 && hdr[0] == '#' && hdr[1] == '!' && hdr[2] == 'A'
+                    && hdr[3] == 'M' && hdr[4] == 'R' && hdr[5] == '\n';
+            } catch (Throwable ignored) {}
 
-            xyz.xxin.silkdecoder.SilkDecoder.decodeToWav(path, wavPath);
-            if (!wavFile.exists() || wavFile.length() == 0) {
-                LogWriter.log(TAG, "bg: decode failed, wav not created");
-                return false;
+            String srcPath = path;
+            String wavPath = null;
+            if (!isAmr) {
+                // SILK → WAV
+                wavPath = path + ".dec.wav";
+                File wavFile = new File(wavPath);
+                if (wavFile.exists()) wavFile.delete();
+
+                xyz.xxin.silkdecoder.SilkDecoder.decodeToWav(path, wavPath);
+                if (!wavFile.exists() || wavFile.length() == 0) {
+                    LogWriter.log(TAG, "bg: decode failed, wav not created");
+                    return false;
+                }
+                srcPath = wavPath;
+                LogWriter.log(TAG, "bg: wav=" + wavPath + " size=" + wavFile.length());
             }
-
-            LogWriter.log(TAG, "bg: wav=" + wavPath + " size=" + wavFile.length());
 
             // MediaPlayer 播放
             final String fWav = wavPath;
+            final String fAmr = isAmr ? path : null;
             MediaPlayer mp = new MediaPlayer();
             mp.setOnCompletionListener(m -> {
                 LogWriter.log(TAG, "bgDone: msgId=" + msgId);
                 m.release();
-                new File(fWav).delete();
+                if (fWav != null) new File(fWav).delete();
+                if (fAmr != null) new File(fAmr).delete();
             });
             mp.setOnErrorListener((m, what, extra) -> {
                 LogWriter.log(TAG, "bgErr: msgId=" + msgId + " what=" + what);
                 m.release();
-                new File(fWav).delete();
+                if (fWav != null) new File(fWav).delete();
+                if (fAmr != null) new File(fAmr).delete();
                 return true;
             });
             try {
-                mp.setDataSource(wavPath);
+                mp.setDataSource(srcPath);
                 mp.prepare();
             } catch (Throwable e) {
                 try { mp.release(); } catch (Throwable ignored) {}
@@ -497,24 +420,21 @@ public class VoiceAutoPlay {
         String clean = normalizeCid(cid);
         if (clean == null) return null;
 
-        try {
-            Class<?> h1Cls = com.leshao.v3.hook.VersionCompat.findPlayThreadClass(sClassLoader);
-            if (h1Cls != null) {
-                Object path = XposedHelpers.callStaticMethod(h1Cls, "d",
-                        sVoice2Dir.endsWith("/") ? sVoice2Dir : sVoice2Dir + "/",
-                        "msg_", clean, ".amr", 2, true);
-                if (path instanceof String && !((String) path).isEmpty() && new File((String) path).exists()) {
-                    return (String) path;
-                }
-            }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "resolveClientMsgIdPath h1.d err: " + t.getMessage());
-        }
-
         String md5 = md5(clean);
         if (md5 == null || md5.length() < 4) return null;
         String path = sVoice2Dir + "/" + md5.substring(0, 2) + "/" + md5.substring(2, 4) + "/msg_" + clean + ".amr";
         if (new File(path).exists()) return path;
+        // 8.0.78 下载语音分组: dir/<base>_<x>.amr, x = voice2 长度/分组反推
+        String dir = sVoice2Dir + "/" + md5.substring(0, 2) + "/" + md5.substring(2, 4);
+        File[] group = new File(dir).listFiles();
+        if (group != null) {
+            String prefix = "msg_" + clean + "_";
+            for (File f : group) {
+                if (f.getName().startsWith(prefix) && f.getName().endsWith(".amr")) {
+                    return f.getAbsolutePath();
+                }
+            }
+        }
         return null;
     }
 
@@ -626,28 +546,17 @@ public class VoiceAutoPlay {
                 LogWriter.log(TAG, "tts wait timeout id=" + pvm.msgId);
             }
 
-            boolean streamOk = playViaWxStream(pvm.msg, pvm.talker, pvm.msgId);
-            if (streamOk) {
-                LogWriter.log(TAG, "DONE(stream) id=" + pvm.msgId);
-                return;
-            }
-
-            boolean bgOk = playBackground(pvm.msg, pvm.talker, pvm.msgId);
-            if (bgOk) {
-                LogWriter.log(TAG, "DONE(bg) id=" + pvm.msgId);
-                return;
-            }
-
-            // 方案B'：等待语音文件下载到 voice2 后再解码播放（最多 ~5 秒）
+            // 8.0.78(3180): 旧 y21.x0 CDN 流式链路已失效。
+            // 首选: 等待语音文件写入 voice2 后直接播放 (AMR-NB 由系统 MediaPlayer 解码)
             long fileWaitStart = System.currentTimeMillis();
-            boolean bgWaitOk = false;
+            boolean bgOk = false;
             while ((System.currentTimeMillis() - fileWaitStart) < 5000) {
                 try { Thread.sleep(250); } catch (InterruptedException ignored) { break; }
-                bgWaitOk = playBackground(pvm.msg, pvm.talker, pvm.msgId);
-                if (bgWaitOk) break;
+                bgOk = playBackground(pvm.msg, pvm.talker, pvm.msgId);
+                if (bgOk) break;
             }
-            if (bgWaitOk) {
-                LogWriter.log(TAG, "DONE(bg-wait) id=" + pvm.msgId);
+            if (bgOk) {
+                LogWriter.log(TAG, "DONE(bg) id=" + pvm.msgId);
                 return;
             }
 

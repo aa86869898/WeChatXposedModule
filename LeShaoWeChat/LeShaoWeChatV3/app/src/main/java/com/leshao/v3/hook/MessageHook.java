@@ -37,11 +37,59 @@ public class MessageHook {
 
         // Defer message hook discovery until DexKit scan completes
         com.leshao.v3.hook.DexKitHelper.addPostScanCallback(() -> {
+            hookMsgStorageInsert(cl);
             hookX9Dispatch(cl);
             hookIEventBus(cl);
             LogWriter.log(TAG, "MessageHook post-scan init done");
         });
         hookSensitiveBlock(cl);
+    }
+
+    /**
+     * 8.0.78(3180) 播报主入口: f9.Bb(e9, boolean) = MsgInfoStorage.insertMsgInfo(MsgInfo, boolean)。
+     * 这是文档验证过的最稳入库入口(方案A推荐), 在 before 阶段捕获新消息并触发播报。
+     */
+    private static void hookMsgStorageInsert(ClassLoader cl) {
+        try {
+            Class<?> f9 = VersionCompat.findMsgStorageClass(cl);
+            if (f9 == null) {
+                LogWriter.log(TAG, "insertMsgInfo: f9 storage class not found");
+                return;
+            }
+            int hooked = 0;
+            for (java.lang.reflect.Method m : f9.getDeclaredMethods()) {
+                if (!m.getName().equals("Bb")) continue;
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length < 1 || pts[0] == null) continue;
+                // 参数0 必须为消息实体(com.tencent.mm.storage.e9 系)
+                String p0 = pts[0].getName();
+                if (!p0.endsWith(".e9") && !p0.contains("MsgInfo")) continue;
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        try {
+                            if (p.args.length < 1 || p.args[0] == null) return;
+                            onInsertMsgInfo(p.args[0]);
+                        } catch (Throwable e) {
+                            LogWriter.log("MessageHook", "insertMsgInfo cb err: " + e);
+                        }
+                    }
+                });
+                LogWriter.log(TAG, "hooked f9.Bb(" + pts.length + " args) p0=" + p0);
+                hooked++;
+            }
+            LogWriter.log(TAG, "insertMsgInfo hooks installed: " + hooked);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookMsgStorageInsert FAIL: " + t.getMessage());
+        }
+    }
+
+    /** f9.Bb 入口: 播报逻辑复用 onX9Message, 靠 msgId/svrId 去重避免与 x9 分发重复 */
+    static void onInsertMsgInfo(Object e9) {
+        try {
+            onX9Message(e9, null);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "onInsertMsgInfo err: " + t.getMessage());
+        }
     }
 
     /**
@@ -303,7 +351,13 @@ public class MessageHook {
             int isSend = -1;
             try { isSend = (Integer) XposedHelpers.callMethod(e9, "z0"); } catch (Throwable ignored) {}
             long msgId = 0;
-            try { msgId = (Long) XposedHelpers.callMethod(e9, "H0"); } catch (Throwable ignored) {}
+            // 8.0.78: getMsgId() 为验证有效入口; H0 为旧版兼容
+            try { msgId = (Long) XposedHelpers.callMethod(e9, "getMsgId"); } catch (Throwable ignored) {}
+            if (msgId == 0) try { msgId = (Long) XposedHelpers.callMethod(e9, "H0"); } catch (Throwable ignored) {}
+            // msgId 未分配时用 msgSvrId (F0, 文档验证) 兜底去重
+            long svrId = 0;
+            try { svrId = (Long) XposedHelpers.callMethod(e9, "F0"); } catch (Throwable ignored) {}
+            if (msgId == 0 && svrId != 0) msgId = -svrId;
 
             sCount++;
             boolean isVoice = (rawType == 34 || rawType == 228);
