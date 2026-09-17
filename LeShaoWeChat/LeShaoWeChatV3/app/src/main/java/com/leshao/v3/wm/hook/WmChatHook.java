@@ -690,27 +690,19 @@ public class WmChatHook {
         }
     }
 
-    /** MP3文件转换为SILK/AMR后通过微信语音发送 */
+    /** MP3文件转换为AMR后通过微信语音发送 (8.0.78: 走 TtsVoiceSender 新链路) */
     static String sendMp3AsVoice(String mp3Path) {
         try {
             File mp3File = new File(mp3Path);
             if (!mp3File.exists()) return "MP3文件不存在:" + mp3Path;
 
-            // 获取语音文件目录 (voice2目录)
-            String voiceDir = findVoice2Dir();
-            File voiceDirFile = new File(voiceDir);
-            if (!voiceDirFile.exists()) voiceDirFile.mkdirs();
+            String talker = sUser;
+            if (talker == null || talker.isEmpty()) {
+                return "无法确定目标会话, 请先进入聊天窗口";
+            }
 
-            // 用WeChat自带AudioTool转码 MP3→SILK
-            String silkPath = voiceDir + "leshao_" + System.currentTimeMillis() + ".silk";
-            boolean converted = convertMp3ToWeChat(silkPath, mp3File);
-            if (!converted) return "MP3转码失败(不支持的格式)";
-
-            // 构建 WeChat 语音消息并发送
-            Class<?> nm = XposedHelpers.findClass("com.tencent.mm.modelmulti.n", sCL);
-            Object voiceMsg = XposedHelpers.newInstance(nm, sUser, silkPath, 2, (Object) null);
-            XposedHelpers.callStaticMethod(nm, "b", voiceMsg);
-            return "语音已发送";
+            boolean ok = TtsVoiceSender.sendMp3Voice(talker, mp3Path);
+            return ok ? "语音已发送" : "发送失败(编码或网络)";
         } catch (Exception e) {
             LogWriter.log(TAG, "sendMp3AsVoice err: " + e.getMessage());
             return "发送失败: " + e.getMessage();

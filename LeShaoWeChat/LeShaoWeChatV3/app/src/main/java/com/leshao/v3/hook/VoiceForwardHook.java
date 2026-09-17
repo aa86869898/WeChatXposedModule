@@ -75,7 +75,7 @@ public class VoiceForwardHook {
 
         // Defer voice API discovery until DexKit scan completes
         com.leshao.v3.hook.DexKitHelper.addPostScanCallback(() -> {
-            discoverVoiceApi(cl);
+            TtsVoiceSender.discoverVoiceApi(cl);
             sHooked = true;
             LogWriter.log(TAG, "VoiceForwardHook post-scan init done");
         });
@@ -966,65 +966,17 @@ public class VoiceForwardHook {
     }
 
     /**
-     * 发送语音消息到目标会话 — WeKit方案
+     * 发送语音消息到目标会话 — 8.0.78(3180) 委托 TtsVoiceSender 新链路
      *
-     * g(target,"amr_") → 创建 w0，返回新文件名
-     * 手动复制文件到 voice2/msg_{newName}.amr
-     * t(newName, duration, 0, null) → 创建 e9 + 写 DB
-     * b31.w 上传
+     * v61.d1.h(talker,"amr_") → baseName
+     * pv.p0.ej 解析路径 → 写文件 → v61.d1.u(base, duration, 0, null, null)
      */
     static boolean sendViaSceneVoice(Activity act, ClassLoader cl, String targetWxid, String voiceFile, int duration, Object origE9) {
         try {
             LogWriter.log(TAG, "SceneVoice: target=" + targetWxid + " file=" + voiceFile + " dur=" + duration + "ms");
-
-            if (sGClass == null || sGMethod == null) {
-                LogWriter.log(TAG, "SceneVoice: voice API not discovered"); return false;
-            }
-
-            // Step 1: g(talker, "amr_") → 创建 w0 + 生成新文件名 (动态发现)
-            String newName = (String) XposedHelpers.callStaticMethod(
-                XposedHelpers.findClass(sGClass, cl), sGMethod, targetWxid, "amr_");
-            LogWriter.log(TAG, "SceneVoice: " + sGClass + "." + sGMethod + "() → " + newName);
-            if (newName == null) { LogWriter.log(TAG, "SceneVoice: g() null"); return false; }
-
-            // Step 2: h1.d() 计算正确 VFS 路径（和 v0.d() 内部一致）
-            Class<?> h1Cls = VersionCompat.findPlayThreadClass(cl);
-            if (h1Cls == null) { LogWriter.log(TAG, "h1 class not found"); return false; }
-
-            String voice2Dir = getVoice2Dir(voiceFile);
-            String dstPath = (String) XposedHelpers.callStaticMethod(h1Cls, "d",
-                voice2Dir + "/", "msg_", newName, ".amr", 2, true);
-            LogWriter.log(TAG, "SceneVoice: dstPath=" + dstPath);
-
-            // Step 3: copy 原始文件 → Mj() 返回的路径
-            // 用流复制，避免 java.nio.file.Files（API 26+）在低版本崩溃
-            new java.io.File(dstPath).getParentFile().mkdirs();
-            try (java.io.FileInputStream fis = new java.io.FileInputStream(voiceFile);
-                 java.io.FileOutputStream fos = new java.io.FileOutputStream(dstPath)) {
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = fis.read(buf)) != -1) fos.write(buf, 0, n);
-            }
-            LogWriter.log(TAG, "SceneVoice: copy to dstPath ok");
-
-            // Step 4: t(newName, duration, 0, null) → v0.d()→Lj()→同一个Mj()→文件存在→true (动态发现)
-            if (sTClass == null || sTMethod == null) {
-                LogWriter.log(TAG, "SceneVoice: t() not discovered"); return false;
-            }
-            boolean ok = (Boolean) XposedHelpers.callStaticMethod(
-                XposedHelpers.findClass(sTClass, cl), sTMethod,
-                newName, duration, 0, null);
-            LogWriter.log(TAG, "SceneVoice: " + sTMethod + "(" + newName + "," + duration + ",0,null) → " + ok);
-            if (!ok) { LogWriter.log(TAG, "SceneVoice: t() false, DB write failed"); return false; }
-
-            // Step 5: y21.p0.kj().e() 刷新 → tl.t0自动捡起上传
-            Class<?> y21p0 = VersionCompat.findVoicePlayerClass(cl);
-            if (y21p0 == null) { LogWriter.log(TAG, "y21p0 class not found"); return false; }
-            Object q0 = XposedHelpers.callStaticMethod(y21p0, "kj");
-            XposedHelpers.callMethod(q0, "e");
-            LogWriter.log(TAG, "SceneVoice: y21.p0.kj().e() refreshed");
-            return true;
-
+            boolean ok = TtsVoiceSender.sendViaSceneVoice(targetWxid, voiceFile, duration);
+            LogWriter.log(TAG, "SceneVoice: delegated to TtsVoiceSender → " + ok);
+            return ok;
         } catch (Throwable t) {
             LogWriter.log(TAG, "SceneVoice error: " + t.getClass().getSimpleName() + " " + t.getMessage());
             return false;

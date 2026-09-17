@@ -815,23 +815,40 @@ public class VersionCompat {
 
     public static Class<?> findVoiceMsgClass(ClassLoader cl) {
         return findClassMulti(cl, "e01.d9", "e02.d9", "e00.d9", "e03.d9",
-            "e01.e9", "e01.d8");
+            "e01.e9", "e01.d8", "v61.q1", "v61.q0", "v61.q2");
     }
 
     public static Class<?> findVoiceStreamClass(ClassLoader cl) {
-        return findClassMulti(cl, "b31.w", "b32.w", "b30.w", "b33.w",
-            "b31.v", "b31.x");
+        return findClassMulti(cl, "v61.b1", "v61.b2", "v61.b0", "v61.b3",
+            "b31.w", "b32.w", "b30.w", "b33.w", "b31.v", "b31.x");
     }
 
     public static Class<?> findVoicePlayerClass(ClassLoader cl) {
-        return findClassMulti(cl, "y21.p0", "y22.p0", "y20.p0", "y23.p0",
-            "y21.o0", "y21.q0");
+        return findClassMulti(cl, "pv.p0", "pv.p1", "pv.p2", "pv.o0", "pv.o1",
+            "wb0.c", "wb0.b",
+            "y21.p0", "y22.p0", "y20.p0", "y23.p0", "y21.o0", "y21.q0");
     }
 
     public static Class<?> findPlayThreadClass(ClassLoader cl) {
         return findClassMulti(cl, "com.tencent.mm.sdk.platformtools.h1",
             "com.tencent.mm.sdk.platformtools.h2",
             "com.tencent.mm.sdk.platformtools.g1");
+    }
+
+    /** 查找语音发送逻辑类 (v61.d1 VoiceLogic)，提供 h(注册)/u(发送)/s(直接发) 静态方法 */
+    public static Class<?> findVoiceLogicClass(ClassLoader cl) {
+        String dexKit = com.leshao.v3.hook.DexKitHelper.getVoiceApiClass();
+        if (dexKit != null && !dexKit.isEmpty()) {
+            try { return XposedHelpers.findClass(dexKit, cl); } catch (Throwable ignored) {}
+        }
+        return findClassMulti(cl, "v61.d1", "v61.d2", "v61.d0", "v61.d3",
+            "v61.e1", "v61.e0", "v61.f1", "v61.d4");
+    }
+
+    /** 查找语音路径服务类 (pv.p0 / wb0.b)，提供 ej/getAmrFullPath 静态或实例方法 */
+    public static Class<?> findVoicePathServiceClass(ClassLoader cl) {
+        return findClassMulti(cl, "pv.p0", "pv.p1", "pv.o0", "pv.o1",
+            "wb0.b", "wb0.c", "wb0.a");
     }
 
     // ==================== AntiRecall/Events ====================

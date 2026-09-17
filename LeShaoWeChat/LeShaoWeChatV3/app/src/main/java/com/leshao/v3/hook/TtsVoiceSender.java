@@ -59,8 +59,6 @@ public class TtsVoiceSender {
     private static final int FRAME_DURATION_MS = 20;
     private static final int FRAME_SAMPLES = TARGET_SAMPLE_RATE * FRAME_DURATION_MS / 1000;
     private static final int FRAME_PCM_BYTES = FRAME_SAMPLES * TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8;
-    private static final int SILK_BITRATE = 30000;
-    private static final int SILK_COMPLEXITY = 2;
     private static final long FAILURE_SUPPRESS_WINDOW_MS = 8000;
     private static volatile boolean sCrashHandlerInstalled;
     private static final java.util.concurrent.ExecutorService sTtsPool = 
@@ -130,6 +128,9 @@ public class TtsVoiceSender {
     private static String sVoiceGMethod;
     private static String sVoiceTClass;
     private static String sVoiceTMethod;
+    private static int sVoiceTParamCount = 4;
+    private static String sVoiceSClass;
+    private static String sVoiceSMethod;
     private static volatile long sLastTtsCommandAt;
     private static volatile String sLastTtsTalker;
     public static volatile long sOrderCardSentAt;
@@ -2311,23 +2312,69 @@ public class TtsVoiceSender {
     }
 
     private static String buildVoice2Path(String voice2Dir, String clientMsgId) {
-        try {
-            Class<?> h1Cls = VersionCompat.findPlayThreadClass(sClassLoader);
-            if (h1Cls != null) {
-                Object path = XposedHelpers.callStaticMethod(h1Cls, "d",
-                        ensureTrailingSlash(voice2Dir), "msg_", clientMsgId, ".amr", 2, true);
-                if (path instanceof String && !((String) path).isEmpty()) return (String) path;
-            }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "h1.d voice path fail: " + t.getMessage());
-        }
+        // 8.0.78(3180): 优先用 pv.p0.ej / wb0.b.Ej 解析完整路径 (getAmrFullPath)
+        String viaService = resolveVoicePathViaService(voice2Dir, clientMsgId);
+        if (viaService != null) return viaService;
 
+        // Fallback: md5 两级 hash 目录 (与 k1.d mode=2 规则一致)
         String md5 = md5(clientMsgId);
         if (md5.length() >= 4) {
             return ensureTrailingSlash(voice2Dir) + md5.substring(0, 2) + "/"
                     + md5.substring(2, 4) + "/msg_" + clientMsgId + ".amr";
         }
         return ensureTrailingSlash(voice2Dir) + "msg_" + clientMsgId + ".amr";
+    }
+
+    /** 通过新版语音路径服务 (pv.p0.ej / wb0.b.Ej) 解析完整路径 */
+    private static String resolveVoicePathViaService(String voice2Dir, String baseName) {
+        try {
+            Class<?> pathCls = VersionCompat.findVoicePathServiceClass(sClassLoader);
+            if (pathCls == null) return null;
+            // 先试静态方法 (wb0.b.Ej(x, base, true) 形态)
+            for (Method m : pathCls.getDeclaredMethods()) {
+                if (!Modifier.isStatic(m.getModifiers())) continue;
+                Class<?>[] pts = m.getParameterTypes();
+                if (m.getReturnType() == String.class && pts.length == 3
+                        && pts[1] == String.class && pts[2] == boolean.class) {
+                    try {
+                        Object r = XposedHelpers.callStaticMethod(pathCls, m.getName(),
+                                null, baseName, true);
+                        if (r instanceof String && !((String) r).isEmpty()) {
+                            LogWriter.log(TAG, "voice path via " + pathCls.getName() + "." + m.getName() + ": " + r);
+                            return (String) r;
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            }
+            // 再试实例方法: 从类上取第一个无参静态单例方法
+            for (Method m : pathCls.getDeclaredMethods()) {
+                if (!Modifier.isStatic(m.getModifiers())) continue;
+                if (m.getParameterTypes().length != 0) continue;
+                if (m.getReturnType() != pathCls && !pathCls.isAssignableFrom(m.getReturnType())) continue;
+                try {
+                    Object inst = XposedHelpers.callStaticMethod(pathCls, m.getName());
+                    if (inst == null) continue;
+                    for (Method m2 : pathCls.getDeclaredMethods()) {
+                        if (Modifier.isStatic(m2.getModifiers())) continue;
+                        Class<?>[] pts = m2.getParameterTypes();
+                        if (m2.getReturnType() == String.class && pts.length == 3
+                                && pts[1] == String.class && pts[2] == boolean.class) {
+                            try {
+                                Object r = XposedHelpers.callMethod(inst, m2.getName(),
+                                        inst, baseName, true);
+                                if (r instanceof String && !((String) r).isEmpty()) {
+                                    LogWriter.log(TAG, "voice path via " + pathCls.getName() + "." + m2.getName() + ": " + r);
+                                    return (String) r;
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "resolveVoicePathViaService err: " + t.getMessage());
+        }
+        return null;
     }
 
     private static String md5(String value) {
@@ -2342,7 +2389,7 @@ public class TtsVoiceSender {
         }
     }
 
-    private static void discoverVoiceApi(ClassLoader cl) {
+    static void discoverVoiceApi(ClassLoader cl) {
         try {
             // Try DexKit-discovered voice API class first
             String dexKitVoiceApi = com.leshao.v3.hook.DexKitHelper.getVoiceApiClass();
@@ -2357,44 +2404,59 @@ public class TtsVoiceSender {
                             sVoiceGClass = dexKitVoiceApi;
                             sVoiceGMethod = m.getName();
                         }
+                        if (sVoiceSMethod == null && m.getReturnType() == String.class
+                                && pts.length == 3 && pts[0] == String.class
+                                && pts[1] == String.class && pts[2] == int.class) {
+                            sVoiceSClass = dexKitVoiceApi;
+                            sVoiceSMethod = m.getName();
+                        }
                         if (sVoiceTMethod == null && m.getReturnType() == boolean.class
                                 && pts.length >= 4 && pts[0] == String.class
                                 && pts[1] == int.class && pts[2] == int.class) {
                             sVoiceTClass = dexKitVoiceApi;
                             sVoiceTMethod = m.getName();
+                            sVoiceTParamCount = pts.length;
                         }
                     }
-                    if (sVoiceGMethod != null && sVoiceTMethod != null) {
+                    if (sVoiceGMethod != null && (sVoiceTMethod != null || sVoiceSMethod != null)) {
                         LogWriter.log(TAG, "VoiceApi from DexKit: " + dexKitVoiceApi);
                         return;
                     }
                 } catch (Throwable ignored) {}
             }
-            // Try hardcoded candidates
-            String[] dexKitCandidates = {"y21.x0", "y22.x0", "y20.x0", "y23.x0", "y24.x0", "y25.x0", "y26.x0", "y27.x0"};
+            // Try hardcoded candidates (8.0.78 3180: VoiceLogic v61.d1)
+            String[] dexKitCandidates = {"v61.d1", "v61.d2", "v61.d0", "v61.d3",
+                "v61.e1", "v61.e0", "v61.f1", "v61.d4"};
             for (String name : dexKitCandidates) {
                 try {
                     Class<?> cls = XposedHelpers.findClass(name, cl);
                     for (Method m : cls.getDeclaredMethods()) {
                         if (!Modifier.isStatic(m.getModifiers())) continue;
                         Class<?>[] pts = m.getParameterTypes();
-                        if (m.getName().equals("g") && m.getReturnType() == String.class
+                        if (sVoiceGMethod == null && m.getReturnType() == String.class
                                 && pts.length == 2 && pts[0] == String.class && pts[1] == String.class) {
                             sVoiceGClass = name;
                             sVoiceGMethod = m.getName();
                         }
-                        if (m.getName().equals("t") && m.getReturnType() == boolean.class
+                        if (sVoiceSMethod == null && m.getReturnType() == String.class
+                                && pts.length == 3 && pts[0] == String.class
+                                && pts[1] == String.class && pts[2] == int.class) {
+                            sVoiceSClass = name;
+                            sVoiceSMethod = m.getName();
+                        }
+                        if (sVoiceTMethod == null && m.getReturnType() == boolean.class
                                 && pts.length >= 4 && pts[0] == String.class
                                 && pts[1] == int.class && pts[2] == int.class) {
                             sVoiceTClass = name;
                             sVoiceTMethod = m.getName();
+                            sVoiceTParamCount = pts.length;
                         }
                     }
-                    if (sVoiceGMethod != null && sVoiceTMethod != null) break;
+                    if (sVoiceGMethod != null && (sVoiceTMethod != null || sVoiceSMethod != null)) break;
                 } catch (Throwable ignored) {}
             }
-            // DexKit fallback: search for g(String,String)→String and t(String,int,int,Object)→boolean
-            if (sVoiceGMethod == null || sVoiceTMethod == null) {
+            // DexKit fallback: search for (String,String)→String and (String,int,int,...)→boolean
+            if ((sVoiceGMethod == null || (sVoiceTMethod == null && sVoiceSMethod == null))) {
                 try {
                     List<String> candidates = com.leshao.v3.hook.DexKitHelper.findClassesByString(cl, "voice2");
                     for (String cn : candidates) {
@@ -2408,20 +2470,28 @@ public class TtsVoiceSender {
                                     sVoiceGClass = cn;
                                     sVoiceGMethod = m.getName();
                                 }
+                                if (sVoiceSMethod == null && m.getName().length() <= 3 && m.getReturnType() == String.class
+                                        && pts.length == 3 && pts[0] == String.class
+                                        && pts[1] == String.class && pts[2] == int.class) {
+                                    sVoiceSClass = cn;
+                                    sVoiceSMethod = m.getName();
+                                }
                                 if (sVoiceTMethod == null && m.getName().length() <= 3 && m.getReturnType() == boolean.class
                                         && pts.length >= 4 && pts[0] == String.class
                                         && pts[1] == int.class && pts[2] == int.class) {
                                     sVoiceTClass = cn;
                                     sVoiceTMethod = m.getName();
+                                    sVoiceTParamCount = pts.length;
                                 }
                             }
-                            if (sVoiceGMethod != null && sVoiceTMethod != null) break;
+                            if (sVoiceGMethod != null && (sVoiceTMethod != null || sVoiceSMethod != null)) break;
                         } catch (Throwable ignored) {}
                     }
                 } catch (Throwable ignored) {}
             }
             LogWriter.log(TAG, "VoiceApi: g=" + sVoiceGClass + "." + sVoiceGMethod
-                    + " t=" + sVoiceTClass + "." + sVoiceTMethod);
+                    + " t=" + sVoiceTClass + "." + sVoiceTMethod + "/" + sVoiceTParamCount
+                    + " s=" + sVoiceSClass + "." + sVoiceSMethod);
         } catch (Throwable t) {
             LogWriter.log(TAG, "VoiceApi discover err: " + t.getMessage());
         }
@@ -2456,19 +2526,61 @@ public class TtsVoiceSender {
             fileCopy(voiceFile, dstPath);
             LogWriter.log(TAG, "SceneVoice: copied to " + dstPath);
 
-            boolean ok = (Boolean) XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass(sVoiceTClass, sClassLoader), sVoiceTMethod,
-                    newName, durationMs, 0, null);
-            LogWriter.log(TAG, "SceneVoice: t(" + newName + "," + durationMs + ",0,null)=" + ok);
+            boolean ok;
+            Class<?> vTClass = XposedHelpers.findClass(sVoiceTClass, sClassLoader);
+            if (sVoiceTParamCount >= 5) {
+                ok = (Boolean) XposedHelpers.callStaticMethod(vTClass, sVoiceTMethod,
+                        newName, durationMs, 0, null, null);
+            } else {
+                ok = (Boolean) XposedHelpers.callStaticMethod(vTClass, sVoiceTMethod,
+                        newName, durationMs, 0, null);
+            }
+            LogWriter.log(TAG, "SceneVoice: send(" + newName + "," + durationMs + ",0,...)="
+                    + ok + " method=" + sVoiceTClass + "." + sVoiceTMethod + " arity=" + sVoiceTParamCount);
             if (!ok) return false;
 
             try {
-                Class<?> y21p0 = VersionCompat.findVoicePlayerClass(sClassLoader);
-                Object q0 = XposedHelpers.callStaticMethod(y21p0, "kj");
-                XposedHelpers.callMethod(q0, "e");
-                LogWriter.log(TAG, "SceneVoice: refresh OK");
+                // 3180: 刷新语音缓存使用 pv.p0 (VoiceLogicService) 上的实例方法
+                Class<?> player = VersionCompat.findVoicePlayerClass(sClassLoader);
+                if (player != null) {
+                    boolean refreshed = false;
+                    for (Method m : player.getDeclaredMethods()) {
+                        if (!Modifier.isStatic(m.getModifiers())) continue;
+                        if (m.getParameterTypes().length == 0 && m.getReturnType() != void.class
+                                && m.getReturnType() != String.class) {
+                            try {
+                                Object svc = XposedHelpers.callStaticMethod(player, m.getName());
+                                if (svc != null) {
+                                    for (Method m2 : svc.getClass().getDeclaredMethods()) {
+                                        if (m2.getName().equals("e") && m2.getParameterTypes().length == 0) {
+                                            XposedHelpers.callMethod(svc, "e");
+                                            refreshed = true;
+                                            LogWriter.log(TAG, "SceneVoice: refresh via "
+                                                    + player.getName() + "." + m.getName() + "().e()");
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (refreshed) break;
+                            } catch (Throwable ignored) {}
+                        }
+                    }
+                    if (refreshed) return true;
+                }
             } catch (Throwable t) {
                 LogWriter.log(TAG, "SceneVoice: refresh err: " + t.getMessage());
+            }
+            try {
+                Class<?> y21p0 = VersionCompat.findVoicePlayerClass(sClassLoader);
+                if (y21p0 != null) {
+                    Object q0 = XposedHelpers.callStaticMethod(y21p0, "kj");
+                    if (q0 != null) {
+                        XposedHelpers.callMethod(q0, "e");
+                        LogWriter.log(TAG, "SceneVoice: refresh OK (legacy)");
+                    }
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "SceneVoice: refresh err (legacy): " + t.getMessage());
             }
             return true;
         } catch (Throwable t) {
@@ -2555,10 +2667,10 @@ public class TtsVoiceSender {
             if (splitSeconds <= 0) {
                 if (callback != null) callback.onProgress(0, 1);
                 byte[] padPcm = padPcmToFrame(pcm);
-                byte[] silkData = encodeSilkRaw(padPcm);
-                if (silkData == null || silkData.length == 0) return false;
-                String tmpPath = voice2 + "/mp3_" + System.currentTimeMillis();
-                fileWrite(new File(tmpPath), silkData);
+                byte[] amrData = encodeAmrNbRaw(padPcm);
+                if (amrData == null || amrData.length == 0) return false;
+                String tmpPath = voice2 + "/mp3_" + System.currentTimeMillis() + ".amr";
+                fileWrite(new File(tmpPath), amrData);
                 anySent = sendViaSceneVoice(talker, tmpPath, fakeDurationMs);
                 if (callback != null) callback.onProgress(1, 1);
             } else {
@@ -2577,15 +2689,15 @@ public class TtsVoiceSender {
                     System.arraycopy(pcm, off, segPcm, 0, len);
 
                     byte[] padPcm = padPcmToFrame(segPcm);
-                    byte[] silkData = encodeSilkRaw(padPcm);
-                    if (silkData == null || silkData.length == 0) {
+                    byte[] amrData = encodeAmrNbRaw(padPcm);
+                    if (amrData == null || amrData.length == 0) {
                         LogWriter.log(TAG, "sendMp3Voice: segment " + (seg+1) + "/" + totalSegments + " encode fail");
                         if (callback != null) callback.onProgress(seg + 1, totalSegments);
                         continue;
                     }
 
-                    String tmpPath = voice2 + "/mp3_" + System.currentTimeMillis() + "_" + (seg + 1);
-                    fileWrite(new File(tmpPath), silkData);
+                    String tmpPath = voice2 + "/mp3_" + System.currentTimeMillis() + "_" + (seg + 1) + ".amr";
+                    fileWrite(new File(tmpPath), amrData);
 
                     boolean sent = sendViaSceneVoice(talker, tmpPath, fakeDurationMs);
                     LogWriter.log(TAG, "sendMp3Voice: segment " + (seg+1) + "/"
@@ -2932,9 +3044,9 @@ public class TtsVoiceSender {
              }
 
              byte[] encodePcm = padPcmToFrame(pcm);
-             int amrSize = encodePcmToSilk(encodePcm, outAmrPath, pcm.length);
+             int amrSize = encodePcmToAmr(encodePcm, outAmrPath, pcm.length);
              int durationMs = pcmBytesToDurationMs(pcm.length);
-             LogWriter.log(TAG, "CubeTTS: silk " + amrSize + "b " + durationMs + "ms");
+             LogWriter.log(TAG, "CubeTTS: amr " + amrSize + "b " + durationMs + "ms");
              return new Object[]{amrSize, durationMs};
              } finally { audioConn.disconnect(); }
              } finally { is.close(); }
@@ -3016,16 +3128,16 @@ public class TtsVoiceSender {
             LogWriter.log(TAG, "PCM: " + pcm.length + " bytes");
 
             byte[] encodePcm = padPcmToFrame(pcm);
-            LogWriter.log(TAG, "Silk encode start: pcm=" + pcm.length + " padded=" + encodePcm.length);
-            int amrSize = encodePcmToSilk(encodePcm, outAmrPath, pcm.length);
-            LogWriter.log(TAG, "Silk encode done amrSize=" + amrSize);
+            LogWriter.log(TAG, "AMR encode start: pcm=" + pcm.length + " padded=" + encodePcm.length);
+            int amrSize = encodePcmToAmr(encodePcm, outAmrPath, pcm.length);
+            LogWriter.log(TAG, "AMR encode done amrSize=" + amrSize);
             if (amrSize <= 0) {
-                LogWriter.log(TAG, "Silk encode fail");
+                LogWriter.log(TAG, "AMR encode fail");
                 return null;
             }
 
             int durationMs = pcmBytesToDurationMs(pcm.length);
-            LogWriter.log(TAG, "Silk: " + amrSize + " bytes " + durationMs + "ms");
+            LogWriter.log(TAG, "AMR: " + amrSize + " bytes " + durationMs + "ms");
             LogWriter.log(TAG, "AMR: " + outAmrPath);
 
             return new Object[]{amrSize, durationMs};
@@ -3195,52 +3307,77 @@ public class TtsVoiceSender {
 
     private static final String AMR_WB_MIME = "audio/amr-wb";
 
-    private static byte[] encodeSilkRaw(byte[] padPcm) {
+    private static final String AMR_NB_MIME = "audio/amr";
+
+    /**
+     * 8.0.78(3180): 微信 SIlK 内部编码类(MediaRecorder.Silk*, yl.g, tl.h0)已全部失效。
+     * 改为系统 MediaCodec AMR-NB(8k/单声道) 编码，并前置 #!AMR\n 头，符合 v61.b1 魔数判定。
+     */
+    private static byte[] encodeAmrNbRaw(byte[] padPcm) {
+        MediaCodec codec = null;
         try {
-            ClassLoader cl = sClassLoader;
-            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            byte[] pcm8k = downsample16kTo8k(padPcm);
+            codec = MediaCodec.createEncoderByType(AMR_NB_MIME);
+            MediaFormat fmt = MediaFormat.createAudioFormat(AMR_NB_MIME, 8000, 1);
+            fmt.setInteger(MediaFormat.KEY_BIT_RATE, 12200);
+            codec.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            codec.start();
 
-            long handle = (Long) XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
-                    "SilkEncInit", TARGET_SAMPLE_RATE, SILK_BITRATE, SILK_COMPLEXITY, 0L);
-            LogWriter.log(TAG, "silk handle=" + handle);
-            if (handle == 0) return null;
+            int idx = codec.dequeueInputBuffer(10000);
+            ByteBuffer inBuf = codec.getInputBuffer(idx);
+            inBuf.clear();
+            inBuf.put(pcm8k);
+            codec.queueInputBuffer(idx, 0, pcm8k.length, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
 
-            byte[] ob = new byte[FRAME_PCM_BYTES * 6];
-            short[] ol = new short[1];
-            int fb = FRAME_PCM_BYTES;
-            int tf = padPcm.length / fb;
-
-            for (int i = 0; i < tf; i++) {
-                byte[] f = new byte[fb];
-                System.arraycopy(padPcm, i * fb, f, 0, fb);
-                boolean last = (i == tf - 1);
-                java.util.Arrays.fill(ob, (byte) 0);
-                ol[0] = 0;
-                XposedHelpers.callStaticMethod(
-                        XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
-                        "SilkDoEnc", f, (short) fb, ob, ol, last, handle);
-                int len = ol[0];
-                if (len <= 0) continue;
-                baos.write(ob, 0, len);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+            while (true) {
+                int outIdx = codec.dequeueOutputBuffer(info, 10000);
+                if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) continue;
+                if (outIdx < 0) break;
+                ByteBuffer outBuf = codec.getOutputBuffer(outIdx);
+                byte[] chunk = new byte[info.size];
+                outBuf.get(chunk);
+                baos.write(chunk);
+                codec.releaseOutputBuffer(outIdx, false);
             }
 
-            XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
-                    "SetVoiceSilkControl", 201, 1, handle);
+            byte[] body = baos.toByteArray();
+            byte[] result = new byte[6 + body.length];
+            result[0] = '#';
+            result[1] = '!';
+            result[2] = 'A';
+            result[3] = 'M';
+            result[4] = 'R';
+            result[5] = '\n';
+            System.arraycopy(body, 0, result, 6, body.length);
 
-            XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", cl),
-                    "SilkEncUnInit", handle);
-
-            byte[] silkBody = baos.toByteArray();
-
-            LogWriter.log(TAG, "SILK encode: " + padPcm.length + "b PCM -> " + silkBody.length + "b");
-            return silkBody;
+            LogWriter.log(TAG, "AMR-NB encode: " + padPcm.length + "b PCM(16k) -> " + result.length + "b");
+            return result;
         } catch (Throwable e) {
-            LogWriter.log(TAG, "encodeSilkRaw err: " + e.getMessage());
+            LogWriter.log(TAG, "encodeAmrNbRaw err: " + e.getMessage());
             return null;
+        } finally {
+            if (codec != null) {
+                try { codec.stop(); } catch (Throwable ignored) {}
+                try { codec.release(); } catch (Throwable ignored) {}
+            }
         }
+    }
+
+    private static byte[] downsample16kTo8k(byte[] pcm) {
+        if (pcm == null || pcm.length < 4) return pcm;
+        int inSamples = pcm.length / 2;
+        int outSamples = inSamples / 2;
+        byte[] out = new byte[outSamples * 2];
+        for (int i = 0; i < outSamples; i++) {
+            int s0 = (short) ((pcm[i * 4] & 0xff) | (pcm[i * 4 + 1] << 8));
+            int s1 = (short) ((pcm[i * 4 + 2] & 0xff) | (pcm[i * 4 + 3] << 8));
+            int avg = (s0 + s1) >> 1;
+            out[i * 2] = (byte) (avg & 0xff);
+            out[i * 2 + 1] = (byte) ((avg >> 8) & 0xff);
+        }
+        return out;
     }
 
     private static byte[] encodePcmToAmrWb(byte[] pcm, int sampleRate) {
@@ -3294,97 +3431,23 @@ public class TtsVoiceSender {
         }
     }
 
-    public static int encodePcmToSilk(byte[] pcm, String outPath, int originalPcmBytes) {
+    public static int encodePcmToAmr(byte[] pcm, String outPath, int originalPcmBytes) {
         try {
-            Class<?> silkCls = XposedHelpers.findClass("yl.g", sClassLoader);
-            Object silk = XposedHelpers.newInstance(silkCls, TARGET_SAMPLE_RATE, SILK_BITRATE);
-            configureSilkWriter(silk);
-
-            boolean inited = (Boolean) XposedHelpers.callMethod(silk, "b", outPath);
-            if (!inited) {
-                LogWriter.log(TAG, "SilkWriter.b() init fail");
-                return 0;
-            }
-
-            Class<?> h0Cls = XposedHelpers.findClass("tl.h0", sClassLoader);
-            int frameSize = FRAME_PCM_BYTES;
-            int totalFrames = pcm.length / frameSize;
-
-            LogWriter.log(TAG, "Silk V3 encoding: " + TARGET_SAMPLE_RATE + "Hz "
-                    + TARGET_CHANNELS + "ch " + TARGET_BITS_PER_SAMPLE + "bit, "
-                    + FRAME_DURATION_MS + "ms/frame, " + FRAME_SAMPLES + " samples, "
-                    + FRAME_PCM_BYTES + " bytes/frame, bitrate=" + SILK_BITRATE
-                    + "bps, complexity=" + SILK_COMPLEXITY + ", total="
-                    + originalPcmBytes + " bytes, encodedTotal=" + pcm.length
-                    + " bytes -> " + totalFrames + " frames");
-
-            int frameIndex = 0;
-            for (int off = 0; off < pcm.length; off += frameSize, frameIndex++) {
-                byte[] frame = new byte[frameSize];
-                System.arraycopy(pcm, off, frame, 0, frameSize);
-                boolean isLast = frameIndex == totalFrames - 1;
-
-                Object h0 = newH0(h0Cls, frame, frameSize, isLast);
-                if (h0 == null) return 0;
-
-                XposedHelpers.callMethod(silk, "a", h0, 0);
-                if (frameIndex == 0 || isLast) {
-                    LogWriter.log(TAG, "Silk frame push: idx=" + frameIndex
-                            + " ts=0 size=" + frameSize
-                            + " last=" + isLast);
-                }
-            }
-
-            XposedHelpers.callMethod(silk, "d");
-
+            byte[] amr = encodeAmrNbRaw(pcm);
+            if (amr == null || amr.length == 0) return 0;
+            File parent = new File(outPath).getParentFile();
+            if (parent != null) parent.mkdirs();
+            fileWrite(new File(outPath), amr);
             int fileSize = (int) new File(outPath).length();
-            LogWriter.log(TAG, "Silk encoded: " + fileSize + " bytes");
+            LogWriter.log(TAG, "AMR-NB encoded: " + fileSize + " bytes -> " + outPath);
             return fileSize;
-
         } catch (Throwable e) {
-            LogWriter.log(TAG, "Silk encode err: " + e.getMessage());
+            LogWriter.log(TAG, "encodePcmToAmr err: " + e.getMessage());
             return 0;
         }
     }
 
-    private static void configureSilkWriter(Object silk) {
-        boolean complexitySet = false;
-        for (String method : new String[]{"setComplexity", "setEncodeComplexity", "setEncComplexity"}) {
-            try {
-                XposedHelpers.callMethod(silk, method, SILK_COMPLEXITY);
-                LogWriter.log(TAG, "Silk complexity set via " + method + "=" + SILK_COMPLEXITY);
-                complexitySet = true;
-                break;
-            } catch (Throwable ignored) {}
-        }
-        if (!complexitySet) {
-            LogWriter.log(TAG, "Silk complexity setter not exposed, requested=" + SILK_COMPLEXITY);
-        }
-    }
-
-    private static Object newH0(Class<?> h0Cls, byte[] frame, int size, boolean isLast) {
-        try {
-            Object h0 = XposedHelpers.newInstance(h0Cls);
-            XposedHelpers.setObjectField(h0, "a", frame);
-            XposedHelpers.setIntField(h0, "b", size);
-            XposedHelpers.setBooleanField(h0, "c", isLast);
-            return h0;
-        } catch (Throwable e1) {
-            try {
-                return XposedHelpers.newInstance(h0Cls, new Object[]{frame, size, isLast});
-            } catch (Throwable e2) {
-                try {
-                    return XposedHelpers.newInstance(h0Cls, new Object[]{frame,
-                            Integer.valueOf(size), Boolean.valueOf(isLast)});
-                } catch (Throwable e3) {
-                    LogWriter.log(TAG, "newH0 all attempts failed: " + e3.getMessage());
-                    return null;
-                }
-            }
-        }
-    }
-
-    // ========== WAV → SILK 转码器 (配音魔方) ==========
+    // ========== WAV → AMR 转码器 (配音魔方) ==========
 
     public static String wavToSilk(String wavFilePath, String clientMsgId) {
         if (!sReady || sAccPath == null || sClassLoader == null) {
@@ -3409,14 +3472,14 @@ public class TtsVoiceSender {
             }
 
             byte[] encodePcm = padPcmToFrame(pcm);
-            String silkPath = buildVoicePath(clientMsgId);
-            int silkSize = encodePcmToSilk(encodePcm, silkPath, pcm.length);
-            if (silkSize <= 0) {
-                LogWriter.log(TAG, "wavToSilk: silk encode fail");
+            String amrPath = buildVoicePath(clientMsgId);
+            int amrSize = encodePcmToAmr(encodePcm, amrPath, pcm.length);
+            if (amrSize <= 0) {
+                LogWriter.log(TAG, "wavToAmr: amr encode fail");
                 return null;
             }
-            LogWriter.log(TAG, "wavToSilk: ok " + silkSize + "b -> " + silkPath);
-            return silkPath;
+            LogWriter.log(TAG, "wavToAmr: ok " + amrSize + "b -> " + amrPath);
+            return amrPath;
         } catch (Throwable t) {
             LogWriter.log(TAG, "wavToSilk error: " + t.getClass().getSimpleName() + " " + t.getMessage());
             return null;
@@ -3430,15 +3493,15 @@ public class TtsVoiceSender {
         }
         sTtsPool.execute(() -> {
             try {
-                String silkPath = wavToSilk(wavFilePath, clientMsgId);
-                if (silkPath == null) {
-                    LogWriter.log(TAG, "sendWavAsVoice: wavToSilk failed");
+                            String amrPath = wavToSilk(wavFilePath, clientMsgId);
+                if (amrPath == null) {
+                    LogWriter.log(TAG, "sendWavAsVoice: wavToAmr failed");
                     return;
                 }
                 File wavFile = new File(wavFilePath);
                 byte[] pcm = wavToPcm(wavFile);
                 int durationMs = pcmBytesToDurationMs(pcm != null ? pcm.length : 0);
-                boolean ok = sendViaSceneVoice(talker, silkPath, durationMs);
+                boolean ok = sendViaSceneVoice(talker, amrPath, durationMs);
                 LogWriter.log(TAG, "sendWavAsVoice sent=" + ok + " talker=" + talker);
             } catch (Throwable t2) {
                 LogWriter.log(TAG, "sendWavAsVoice error: " + t2.getClass().getSimpleName() + " " + t2.getMessage());

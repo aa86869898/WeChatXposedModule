@@ -888,18 +888,25 @@ public class DexKitHelper {
 
     private static void findVoiceApi(DexKitBridge bridge) {
         try {
-            MethodMatcher mMatcher = MethodMatcher.create()
-                .usingStrings("voice2")
-                .paramCount(2)
-                .paramTypes("java.lang.String", "java.lang.String")
-                .returnType("java.lang.String");
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(mMatcher));
-            if (!methods.isEmpty()) {
-                sVoiceApiClass = methods.get(0).getClassName();
-                LogWriter.log(TAG, "findVoiceApi: " + sVoiceApiClass);
-                return;
+            // 3180: VoiceLogic v61.d1.h(String talker, String prefix) → String (注册 voiceinfo 拿 baseName)
+            // 特征: 静态方法, 参数 (String,String), 返回 String, 方法体含 "amr_" 或 "voice2"
+            String[] keywords = {"amr_", "voice2", "voicemsg"};
+            for (String kw : keywords) {
+                try {
+                    MethodMatcher mMatcher = MethodMatcher.create()
+                        .usingStrings(kw)
+                        .paramCount(2)
+                        .paramTypes("java.lang.String", "java.lang.String")
+                        .returnType("java.lang.String");
+                    List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(mMatcher));
+                    if (!methods.isEmpty()) {
+                        sVoiceApiClass = methods.get(0).getClassName();
+                        LogWriter.log(TAG, "findVoiceApi (" + kw + "): " + sVoiceApiClass);
+                        return;
+                    }
+                } catch (Throwable ignored) {}
             }
-            // Fallback: any method with voice2 string
+            // Legacy: any method with voice2 string
             MethodMatcher m2 = MethodMatcher.create().usingStrings("voice2");
             List<MethodData> m2s = bridge.findMethod(FindMethod.create().matcher(m2));
             for (MethodData m : m2s) {
