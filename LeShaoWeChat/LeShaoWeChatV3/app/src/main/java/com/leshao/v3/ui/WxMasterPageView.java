@@ -27,42 +27,18 @@ public class WxMasterPageView {
         root.setPadding((int)(8 * d), (int)(16 * d), (int)(8 * d), (int)(16 * d));
 
         root.addView(headerBanner(ctx, d,
-                "⚡ 乐少助手增强",
-                "进聊天页右上角有 ⚡ 功能按钮；进群聊还会多一个红色 🛡 群管理按钮"));
+                "乐少万群定时群发",
+                "勾选多个群 + 输入内容 + 可选定时，一键群发"));
 
-        root.addView(sectionLabel(ctx, "📨 群发 / 广播"));
+        root.addView(sectionLabel(ctx, "📨 群发"));
         LinearLayout card1 = makeCard(ctx, d);
-        card1.addView(buttonRow(ctx, d, "广播到所有群", "一条消息发送到全部群聊", () -> WxMasterFeatures.broadcastAll(parentAct, cl)));
-        card1.addView(candyDivider(ctx, d));
         card1.addView(buttonRow(ctx, d, "乐少万群定时群发", "勾选多个群+定时发送", () -> WxMasterFeatures.batchSend(parentAct, cl)));
         root.addView(card1);
 
         root.addView(candyDivider(ctx, d));
 
-        root.addView(sectionLabel(ctx, "🛡 群工具"));
-        LinearLayout card2 = makeCard(ctx, d);
-        card2.addView(buttonRow(ctx, d, "群信息报告", "导出群资料到 TXT", () -> WxMasterFeatures.exportRoomReportPicker(parentAct, cl)));
-        card2.addView(candyDivider(ctx, d));
-        card2.addView(buttonRow(ctx, d, "查看群公告", "公告内容 + 编辑者 + 时间", () -> WxMasterFeatures.showRoomNoticePicker(parentAct, cl)));
-        card2.addView(candyDivider(ctx, d));
-        card2.addView(buttonRow(ctx, d, "导出全部群", "所有群信息 CSV 导出", () -> WxMasterFeatures.exportAllRooms(parentAct, cl)));
-        root.addView(card2);
-
-        root.addView(candyDivider(ctx, d));
-
-        root.addView(sectionLabel(ctx, "🔧 聊天工具"));
-        LinearLayout card3 = makeCard(ctx, d);
-        card3.addView(buttonRow(ctx, d, "定时发送", "设置延迟后自动发送", () -> WxMasterFeatures.scheduledSend(parentAct, cl)));
-        card3.addView(candyDivider(ctx, d));
-        card3.addView(buttonRow(ctx, d, "私密备注", "本地保存备注,不写入微信", () -> WxMasterFeatures.privateNote(parentAct, cl)));
-        root.addView(card3);
-
-        root.addView(candyDivider(ctx, d));
-
         TextView tip = new TextView(ctx);
-        tip.setText("提示：\n· 导出文件保存在 微信文档目录 WeChatMaster/\n"
-                + "· 进群聊点右上角 🛡 可直接操作当前群\n"
-                + "· 群信息报告 / 公告需手动输入目标群 wxid");
+        tip.setText("提示：\n· 点击后从联系人中选择多个群聊\n· 可立即发送，也可设置定时时间");
         tip.setTextSize(12);
         tip.setTextColor(AppColors.text2());
         tip.setPadding((int)(4 * d), 0, (int)(4 * d), 0);

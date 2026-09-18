@@ -13,6 +13,7 @@ import com.leshao.v3.hook.AntiDetectionHook;
 import com.leshao.v3.hook.AutoMethodDetector;
 import com.leshao.v3.hook.AutoRemark;
 import com.leshao.v3.hook.BatchAddFriend;
+import com.leshao.v3.hook.BatchInviteGroupsHook;
 import com.leshao.v3.hook.BatchMessage;
 import com.leshao.v3.hook.CallFeatures;
 import com.leshao.v3.hook.ChatBackup;
@@ -30,7 +31,6 @@ import com.leshao.v3.hook.FakeAddSource;
 import org.luckypray.dexkit.DexKitBridge;
 import org.luckypray.dexkit.query.matchers.MethodMatcher;
 import com.leshao.v3.hook.FriendRequestHook;
-import com.leshao.v3.hook.GroupFeatures;
 import com.leshao.v3.wm.WmEntry;
 import com.leshao.v3.wm.hook.WmChatHook;
 import com.leshao.v3.hook.HideContactFields;
@@ -82,7 +82,7 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v920";
+    public static final String MODULE_BUILD = "v927";
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -239,8 +239,8 @@ public class MainHook implements IXposedHookLoadPackage {
                         safeRun("ConvPrivacy", () -> HookManager.register("ConvPrivacy", () -> ConvPrivacy.hook(cl)));
 
                         safeRun("ContactChangeLog", () -> HookManager.register("ContactChangeLog", () -> ContactChangeLog.hook(cl)));
-                        safeRun("GroupFeatures", () -> HookManager.register("GroupFeatures", () -> GroupFeatures.hook(cl)));
                         safeRun("MsgExport", () -> HookManager.register("MsgExport", () -> MsgExport.hook(cl)));
+                        safeRun("BatchInviteGroups", () -> HookManager.register("BatchInviteGroups", () -> BatchInviteGroupsHook.hook(cl)));
                         safeRun("ChatBackup", () -> HookManager.register("ChatBackup", () -> ChatBackup.hook(cl)));
                         safeRun("WmEntry", () -> WmEntry.injectAll(cl));
 

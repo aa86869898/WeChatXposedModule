@@ -365,21 +365,6 @@ public class ConfigPanels {
         });
     }
 
-    // ==================== GroupFeatures - anonymous ====================
-
-    public static void showAnonymousName(Activity act, SharedPreferences prefs) {
-        LinearLayout root = new LinearLayout(act);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
-
-        String name = prefs.getString("anonymous_name", "匿名群友");
-        EditText nameEt = addTextRow(act, root, "匿名显示名称", name);
-
-        showDialog(act, "匿名名称配置", new ScrollView(act) {{ addView(root); }}, () -> {
-            prefs.edit().putString("anonymous_name", nameEt.getText().toString().trim()).apply();
-        });
-    }
-
     // ==================== ConvPrivacy ====================
 
     public static void showConvPrivacy(Activity act, SharedPreferences prefs) {

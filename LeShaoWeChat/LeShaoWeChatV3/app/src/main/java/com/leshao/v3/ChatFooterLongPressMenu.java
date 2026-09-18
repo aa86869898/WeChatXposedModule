@@ -59,6 +59,7 @@ import java.util.WeakHashMap;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
+import de.robv.android.xposed.XposedHelpers;
 
 public class ChatFooterLongPressMenu {
 
@@ -1111,7 +1112,7 @@ public class ChatFooterLongPressMenu {
     }
 
     private static String getTalker(Context ctx) {
-        // Primary: ChatFooter.d (confirmed: public String, holds userName)
+        // Primary: ChatFooter.d (输入栏绑定的当前实时会话, v923/v924 发送对象正确依赖此项)
         if (sLastChatFooter != null) {
             try {
                 Field f = findField(sLastChatFooter.getClass(), "d");
@@ -1120,7 +1121,8 @@ public class ChatFooterLongPressMenu {
                     Object val = f.get(sLastChatFooter);
                     if (val instanceof String) {
                         String s = (String) val;
-                        if (s != null && !s.isEmpty() && !s.equals("not_set")) {
+                        if (isValidTalker(s)) {
+                            sCurrentTalker = s;
                             LogWriter.log(TAG, "talker from ChatFooter.d: " + s);
                             return s;
                         }
@@ -1130,12 +1132,84 @@ public class ChatFooterLongPressMenu {
         }
 
         // Fallback: ChattingUI.onResume cache
-        if (sCurrentTalker != null && !sCurrentTalker.isEmpty()) {
+        if (isValidTalker(sCurrentTalker)) {
             return sCurrentTalker;
+        }
+
+        // Fallback: 当前 Activity intent/fragment 实时解析 (仅作兜底, 不可优先于 ChatFooter.d,
+        // 否则 activity intent 残留旧会话会覆盖真实目标)
+        Activity act = getActivityFromContext(ctx);
+        if (act != null) {
+            String s = resolveTalkerFromActivity(act);
+            if (isValidTalker(s)) {
+                sCurrentTalker = s;
+                LogWriter.log(TAG, "talker from activity: " + s);
+                return s;
+            }
         }
 
         // Fallback: scan Activity fields
         return getTalkerFromActivity(ctx);
+    }
+
+    /** 实时从当前 Activity 的 intent (Chat_User 等 key) 与 ChattingUI Fragment 解析真实会话 */
+    private static String resolveTalkerFromActivity(Activity act) {
+        try {
+            Intent it = act.getIntent();
+            if (it != null) {
+                String[] keys = { "Chat_User", "Chatroom_Name", "contact_username",
+                        "username", "Openim_User", "Contact_User", "Chat_User_To",
+                        "talker", "Talker" };
+                for (String k : keys) {
+                    try {
+                        String v = it.getStringExtra(k);
+                        if (isValidTalker(v)) return v;
+                    } catch (Throwable ignored) {}
+                }
+            }
+        } catch (Throwable ignored) {}
+        try {
+            Object fm = XposedHelpers.callMethod(act, "getSupportFragmentManager");
+            if (fm != null) {
+                List<?> frags = (List<?>) XposedHelpers.callMethod(fm, "getFragments");
+                if (frags != null) {
+                    for (Object f : frags) {
+                        if (f == null) continue;
+                        String cls = f.getClass().getName();
+                        if (!cls.contains("ChattingUI")) continue;
+                        try {
+                            Object args = XposedHelpers.callMethod(f, "getArguments");
+                            if (args instanceof android.os.Bundle) {
+                                String u = ((android.os.Bundle) args).getString("Chat_User");
+                                if (isValidTalker(u)) return u;
+                            }
+                        } catch (Throwable ignored) {}
+                        try {
+                            for (Field fl : f.getClass().getDeclaredFields()) {
+                                if (fl.getType() != String.class) continue;
+                                fl.setAccessible(true);
+                                Object v = fl.get(f);
+                                if (v instanceof String && isValidTalker((String) v)) return (String) v;
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    /** 判定字符串是否为合法的微信会话对象 (排除内部假用户/模板账号) */
+    private static boolean isValidTalker(String s) {
+        if (s == null) return false;
+        s = s.trim();
+        if (s.isEmpty() || "not_set".equals(s)) return false;
+        // 内部假用户/品牌模板消息等, 直接排除
+        if (s.contains("fakeuser") || s.contains("TemplateMsg") || s.contains("@bbn") ) return false;
+        return s.startsWith("wxid_") || s.startsWith("gh_")
+                || s.endsWith("@chatroom") || s.endsWith("@im.chatroom")
+                || s.endsWith("@openim") || s.endsWith("@qqim")
+                || s.matches("\\d{5,}");
     }
 
     private static String getTalkerFromActivity(Context ctx) {
@@ -1161,7 +1235,7 @@ public class ChatFooterLongPressMenu {
                 Object val = f.get(obj);
                 if (val instanceof String) {
                     String s = (String) val;
-                    if (s != null && !s.isEmpty() && !s.equals("not_set")) {
+                    if (isValidTalker(s)) {
                         LogWriter.log(TAG, "getTalker: found via " + fn + "=" + s);
                         return s;
                     }

@@ -176,8 +176,6 @@ public class SubPageActivity {
                 return SnsPageView.create(ctx, parentAct);
             case 11: // 隐私安全
                 return PrivacyPageView.create(ctx, parentAct);
-            case 5:  // 群管审核（自动踢人/广告关键词/黑名单）
-                return GroupGuardPageView.create(ctx, parentAct);
             case 16: // 数据统计
                 return StatsPageView.create(ctx, parentAct);
             default:

@@ -25,6 +25,12 @@ public class ConversationFilter {
     private static View sConvList;
     private static boolean sHookInstalled = false;
     private static boolean sIsRecyclerView = false;
+    // 数据层（按 聊天分组_新.md）：po5.u.q(zs3.s1) / jo5.f.a(List) 双路径
+    private static Object sRecyclerAdapter;
+    private static List<Object> sFullCache = Collections.emptyList();
+    private static volatile boolean sDataLayerReady = false;
+    private static volatile boolean sUseDataLayer = false;
+    private static volatile boolean sDataPathHooksInstalled = false;
     private static final Handler sUnreadHandler = new Handler(android.os.Looper.getMainLooper());
     private static long sLastBadgeRefresh = 0;
     private static long sLastUnreadScan = 0;
@@ -51,6 +57,13 @@ public class ConversationFilter {
         if (sHookInstalled) { LogWriter.log(TAG, "already installed"); return; }
 
         if (sConvList == null) { LogWriter.log(TAG, "convList null at install, layoutChildren hook deferred"); }
+
+        // 数据层双路径 Hook（按 聊天分组_新.md：po5.u.q(zs3.s1) 新路径 / jo5.f.a(List) 旧路径）
+        try {
+            installDataPathHooks(cl);
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "installDataPathHooks err: " + e.getMessage());
+        }
 
         // 解包 HeaderViewListAdapter，获取真实 adapter
         Object realAdapter = adapterInstance;
@@ -86,7 +99,7 @@ public class ConversationFilter {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     try {
-                        if (sFilterActive && param.thisObject == sHeaderAdapter) {
+                        if (sFilterActive && !sUseDataLayer && param.thisObject == sHeaderAdapter) {
                             java.util.ArrayList<?> headers = (java.util.ArrayList<?>) XposedHelpers.getObjectField(param.thisObject, "mHeaderViewInfos");
                             java.util.ArrayList<?> footers = (java.util.ArrayList<?>) XposedHelpers.getObjectField(param.thisObject, "mFooterViewInfos");
                             int hfCount = (headers != null ? headers.size() : 0) + (footers != null ? footers.size() : 0);
@@ -103,7 +116,7 @@ public class ConversationFilter {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     try {
-                        if (sFilterActive && param.thisObject == sHeaderAdapter) {
+                        if (sFilterActive && !sUseDataLayer && param.thisObject == sHeaderAdapter) {
                             int position = (int) param.args[0];
                             java.util.ArrayList<?> headers = (java.util.ArrayList<?>) XposedHelpers.getObjectField(param.thisObject, "mHeaderViewInfos");
                             int numHeaders = headers != null ? headers.size() : 0;
@@ -173,7 +186,7 @@ public class ConversationFilter {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     try {
-                        if (sFilterActive && param.thisObject == sAdapter) {
+                        if (sFilterActive && !sUseDataLayer && param.thisObject == sAdapter) {
                             param.setResult(sFilteredPositions.size());
                         }
                     } catch (Throwable ignored) {}
@@ -185,7 +198,7 @@ public class ConversationFilter {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     try {
-                        if (sFilterActive && param.thisObject == sAdapter) {
+                        if (sFilterActive && !sUseDataLayer && param.thisObject == sAdapter) {
                             int position = (int) param.args[1];
                             if (position >= 0 && position < sFilteredPositions.size()) {
                                 param.args[1] = sFilteredPositions.get(position);
@@ -249,6 +262,155 @@ public class ConversationFilter {
             LogWriter.log(TAG, "RecyclerView hooks installed (getItemCount/onBindViewHolder/scrollToPosition)");
         } catch (Throwable e) {
             LogWriter.log(TAG, "installRecyclerViewHooks fail: " + e.getMessage());
+        }
+    }
+
+    // ================================================================
+    // 数据层双路径 Hook（按 聊天分组_新.md）
+    //   新路径(RecyclerView): po5.u.q(zs3.s1) after -> s1.a 为全量 jo5.z
+    //   旧路径(ListView):     jo5.f.a(List)   before -> 参数即全量 jo5.z
+    // ================================================================
+
+    private static void installDataPathHooks(ClassLoader cl) {
+        if (sDataPathHooksInstalled) return;
+        // ---- 旧路径: jo5.f.a(List) before ----
+        try {
+            Class<?> jo5f = XposedHelpers.findClass("jo5.f", cl);
+            XposedBridge.hookAllMethods(jo5f, "a", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        for (int i = 0; i < param.args.length; i++) {
+                            if (param.args[i] instanceof List) {
+                                sFullCache = new ArrayList<>((List<?>) param.args[i]);
+                                sDataLayerReady = true;
+                                LogWriter.log(TAG, "jo5.f.a: cached " + sFullCache.size() + " useDataLayer=" + sUseDataLayer);
+                                if (sFilterActive && sUseDataLayer) {
+                                    param.args[i] = buildFilteredDataList();
+                                    LogWriter.log(TAG, "jo5.f.a: -> filtered " + ((List<?>) param.args[i]).size());
+                                }
+                            }
+                        }
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "jo5.f.a hook err: " + e.getMessage());
+                    }
+                }
+            });
+            LogWriter.log(TAG, "dataPath jo5.f.a(List) hooked");
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "jo5.f.a not found: " + e.getMessage());
+        }
+
+        // ---- 新路径: po5.u.q(zs3.s1) after ----
+        try {
+            Class<?> po5u = XposedHelpers.findClass("po5.u", cl);
+            XposedBridge.hookAllMethods(po5u, "q", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (param.args.length < 1) return;
+                        Object s1 = param.args[0];
+                        List<?> full = dataListFromS1(s1);
+                        if (full != null) {
+                            sRecyclerAdapter = param.thisObject;
+                            sFullCache = new ArrayList<>(full);
+                            sDataLayerReady = true;
+                            LogWriter.log(TAG, "po5.u.q: cached " + sFullCache.size() + " useDataLayer=" + sUseDataLayer);
+                        }
+                        if (sFilterActive && sUseDataLayer) {
+                            Object i = XposedHelpers.getObjectField(param.thisObject, "I");
+                            if (i != null) {
+                                Object r = XposedHelpers.getObjectField(i, "r");
+                                if (r instanceof List) {
+                                    List<Object> dst = (List<Object>) r;
+                                    dst.clear();
+                                    dst.addAll(buildFilteredDataList());
+                                    XposedHelpers.callMethod(param.thisObject, "notifyDataSetChanged");
+                                    LogWriter.log(TAG, "po5.u.q: I.r rebuilt -> " + dst.size());
+                                }
+                            }
+                        }
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "po5.u.q hook err: " + e.getMessage());
+                    }
+                }
+            });
+            LogWriter.log(TAG, "dataPath po5.u.q(zs3.s1) hooked");
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "po5.u.q not found: " + e.getMessage());
+        }
+        sDataPathHooksInstalled = true;
+    }
+
+    private static List<?> dataListFromS1(Object s1) {
+        try {
+            if (s1 == null) return null;
+            java.lang.reflect.Field f = s1.getClass().getDeclaredField("a");
+            f.setAccessible(true);
+            Object v = f.get(s1);
+            return (v instanceof List) ? (List<?>) v : null;
+        } catch (Throwable ignored) {
+            try { return (s1 instanceof List) ? (List<?>) s1 : null; } catch (Throwable e) { return null; }
+        }
+    }
+
+    /** 依据当前 sFilterRule / sAllowedUsernames 从 sFullCache 构建过滤后列表。
+     *  判断基于 jo5.z.d(k4).i1() 用户名（文档核心），失败时节向 kindOf/scanKind */
+    private static List<Object> buildFilteredDataList() {
+        List<Object> out = new ArrayList<>();
+        if (sFullCache == null || sFullCache.isEmpty()) return out;
+        for (Object item : sFullCache) {
+            if (item == null) continue;
+            String username = usernameOf(item);
+            if (username != null) {
+                if (matchesRule(username)) out.add(item);
+            } else {
+                // fallback: 对象树扫描
+                char kind = kindOf(item);
+                if (ruleMatchesKind(kind)) out.add(item);
+            }
+        }
+        return out;
+    }
+
+    private static boolean ruleMatchesKind(char kind) {
+        if ("group".equals(sFilterRule)) return kind == 'G';
+        if ("service".equals(sFilterRule)) return kind == 'S';
+        if ("friend".equals(sFilterRule)) return (kind == 'F' || kind == 'X');
+        return sAllowedUsernames != null && !sAllowedUsernames.isEmpty();
+    }
+
+    private static boolean matchesRule(String username) {
+        if (sFilterRule == null || sFilterRule.isEmpty()) return true;
+        if (sFilterRule.startsWith("label:")) {
+            return sAllowedUsernames.contains(username);
+        }
+        if ("group".equals(sFilterRule)) {
+            return username.endsWith("@chatroom") || username.endsWith("@im.chatroom")
+                    || username.endsWith("@lbsroom");
+        }
+        if ("service".equals(sFilterRule)) {
+            return username.startsWith("gh_") || username.contains("officialaccounts")
+                    || username.equals("weixin");
+        }
+        if ("friend".equals(sFilterRule)) {
+            return !(username.endsWith("@chatroom") || username.endsWith("@im.chatroom")
+                    || username.endsWith("@lbsroom"))
+                    && !username.startsWith("gh_") && !username.contains("officialaccounts")
+                    && !username.equals("weixin") && !username.equals("filehelper")
+                    && !username.startsWith("service_");
+        }
+        return sAllowedUsernames.contains(username);
+    }
+
+    private static String usernameOf(Object item) {
+        try {
+            Object k4 = XposedHelpers.getObjectField(item, "d");
+            if (k4 == null) return null;
+            Object u = XposedHelpers.callMethod(k4, "i1");
+            return (u instanceof String) ? (String) u : null;
+        } catch (Throwable e) {
+            return null;
         }
     }
 
@@ -529,33 +691,79 @@ public class ConversationFilter {
         // Determine filter rule based on virtual label id (null-safe, 避免自定义标签名含关键词误判)
         if (labelId == ChatGroupHook.LABEL_ID_GROUP) {
             sFilterRule = "group";
-            buildFilteredByRule();
         } else if (labelId == ChatGroupHook.LABEL_ID_SERVICE) {
             sFilterRule = "service";
-            buildFilteredByRule();
         } else if (labelId == ChatGroupHook.LABEL_ID_FRIEND) {
             sFilterRule = "friend";
-            buildFilteredByRule();
         } else {
             // Regular label: use contacts list
             sFilterRule = "label:" + labelName;
             List<String> contacts = ChatGroupHook.getContactsByLabelId(labelId);
             LogWriter.log(TAG, "contacts " + (contacts != null ? contacts.size() : -1));
             sAllowedUsernames = new HashSet<>(contacts != null ? contacts : Collections.emptyList());
-            sFilteredPositions = new ArrayList<>();
-            if (sAllowedUsernames.isEmpty()) {
-                LogWriter.log(TAG, "empty contacts - showing empty list");
-            } else {
-                buildFilteredPositions();
-            }
         }
 
         sJustAppliedFilter = true;
         sFilterActive = true;
+
+        // 数据层优先（文档核心）：已缓存全量且数据层 hook 生效时直接重建数据列表（新路径 I.r /
+        // 旧路径 jo5.f.a 参数替换），并关闭 View 层 position 兜底避免双重过滤；
+        // 数据层未就绪时才回退 View 层 position 映射。
+        boolean useDataLayer = sDataLayerReady && sFullCache != null && !sFullCache.isEmpty();
+        sUseDataLayer = useDataLayer;
+        boolean applied = false;
+        if (useDataLayer) {
+            sFilteredPositions = Collections.emptyList();
+            applied = applyDataLayerNow();
+            if (!applied && sRecyclerAdapter == null) {
+                // 旧路径：依赖 jo5.f.a before-hook 在 notifyDataSetChanged 时替换参数
+                applied = true;
+            }
+        }
+        if (!applied) {
+            sUseDataLayer = false;
+            // 兜底：View 层 position 映射（数据层未就绪/未缓存时）
+            if (sFilterRule.startsWith("label:")) {
+                if (sAllowedUsernames.isEmpty()) {
+                    LogWriter.log(TAG, "empty contacts - showing empty list");
+                } else {
+                    buildFilteredPositions();
+                }
+            } else {
+                buildFilteredByRule();
+            }
+        }
+
         notifyAdapterChanged();
         restoreScrollLater();
         new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> sJustAppliedFilter = false, 800);
-        LogWriter.log(TAG, "ON rule=" + sFilterRule + " filtered=" + sFilteredPositions.size());
+        LogWriter.log(TAG, "ON rule=" + sFilterRule + " filtered=" + sFilteredPositions.size() + " dataLayer=" + applied);
+    }
+
+    /** 数据层立即应用过滤：新路径重建 zs3.c0.I.r，旧路径触发 jo5.f.a 重新入数据。返回是否走数据层 */
+    private static boolean applyDataLayerNow() {
+        try {
+            if (sRecyclerAdapter != null) {
+                Object i = XposedHelpers.getObjectField(sRecyclerAdapter, "I");
+                if (i != null) {
+                    Object r = XposedHelpers.getObjectField(i, "r");
+                    if (r instanceof List) {
+                        List<Object> dst = (List<Object>) r;
+                        dst.clear();
+                        dst.addAll(buildFilteredDataList());
+                        try { XposedHelpers.callMethod(sRecyclerAdapter, "notifyDataSetChanged"); } catch (Throwable ignored) {}
+                        LogWriter.log(TAG, "dataLayer apply: I.r rebuilt -> " + dst.size());
+                        return true;
+                    }
+                }
+            }
+            // 旧路径：jo5.f.a(List) before-hook 会在下次数据回调时替换参数；
+            // 此处通过 notifyDataSetChanged 触发 adapter 刷新（若 jo5.f.a 未触发则由 View 层兜底）
+            return false;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "applyDataLayerNow err: " + e.getMessage());
+            return false;
+        }
     }
 
     /** 记录当前列表滚动锚点：ListView 原始 position（含 header）+ 首个可见 child 的 top。
@@ -735,10 +943,47 @@ public class ConversationFilter {
         sAllowedUsernames = Collections.emptySet();
         sFilteredPositions = Collections.emptyList();
         sJustAppliedFilter = true;
+
+        // 数据层优先：恢复全量缓存，关闭数据层过滤；否则走 View 层兜底
+        boolean useDataLayer = sDataLayerReady && sFullCache != null && !sFullCache.isEmpty();
+        sUseDataLayer = useDataLayer;
+        boolean restored = false;
+        if (useDataLayer) {
+            sFilteredPositions = Collections.emptyList();
+            restored = restoreFullCacheNow();
+            if (!restored && sRecyclerAdapter == null) {
+                // 旧路径：jo5.f.a 在下次回调时以全量恢复（sFilterActive=false 不替换参数）
+                restored = true;
+            }
+        }
         notifyAdapterChanged();
         restoreScrollLater();
         new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> sJustAppliedFilter = false, 800);
-        LogWriter.log(TAG, "OFF");
+        LogWriter.log(TAG, "OFF dataLayer=" + restored);
+    }
+
+    /** 数据层清除过滤：新路径重建 I.r 为全量缓存，旧路径返回 false 走 View 层兜底 */
+    private static boolean restoreFullCacheNow() {
+        try {
+            if (sRecyclerAdapter != null) {
+                Object i = XposedHelpers.getObjectField(sRecyclerAdapter, "I");
+                if (i != null) {
+                    Object r = XposedHelpers.getObjectField(i, "r");
+                    if (r instanceof List) {
+                        List<Object> dst = (List<Object>) r;
+                        dst.clear();
+                        dst.addAll(new ArrayList<>(sFullCache));
+                        try { XposedHelpers.callMethod(sRecyclerAdapter, "notifyDataSetChanged"); } catch (Throwable ignored) {}
+                        LogWriter.log(TAG, "dataLayer clear: I.r restored -> " + dst.size());
+                        return true;
+                    }
+                }
+            }
+            return false;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "restoreFullCacheNow err: " + e.getMessage());
+            return false;
+        }
     }
 
     public static int getUnreadForLabel(int labelId) {

@@ -45,7 +45,7 @@ import de.robv.android.xposed.XposedHelpers;
  * TTS 文字转语音 v2.2
  *
  * 1. Hook e9.d1(String) — 负责内容转换和语音文件生成
- * 2. before: TTS→WAV→PCM→Silk(yl.g)→voice2/标准路径
+ * 2. before: TTS→WAV→PCM→Silk(MediaRecorder.Silk*)→voice2/标准路径
  * 3. Hook e9.setType(int) — voiceXml 类型守卫
  * 4. 就地修改 e9: d1(voiceXml), j1(voicePath)
  */
@@ -60,6 +60,8 @@ public class TtsVoiceSender {
     private static final int FRAME_SAMPLES = TARGET_SAMPLE_RATE * FRAME_DURATION_MS / 1000;
     private static final int FRAME_PCM_BYTES = FRAME_SAMPLES * TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8;
     private static final long FAILURE_SUPPRESS_WINDOW_MS = 8000;
+    private static final int SILK_BITRATE = 30000;          // 微信原生 SILK 最高码率(参照 v8xx 旧版音质优化)
+    private static final int SILK_COMPLEXITY = 4;           // 参照 8.0.78 v61.w.c 转码参数 new v61/c0(16000,16000,4)
     private static volatile boolean sCrashHandlerInstalled;
     private static final java.util.concurrent.ExecutorService sTtsPool = 
             java.util.concurrent.Executors.newSingleThreadExecutor(new java.util.concurrent.ThreadFactory() {
@@ -2676,6 +2678,7 @@ public class TtsVoiceSender {
                 LogWriter.log(TAG, "sendMp3Voice: MP3 解码失败");
                 return false;
             }
+            pcm = enhanceVoicePcm(pcm);
 
             int bytesPerSec = TARGET_SAMPLE_RATE * TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8;
 
@@ -2705,10 +2708,10 @@ public class TtsVoiceSender {
             if (splitSeconds <= 0) {
                 if (callback != null) callback.onProgress(0, 1);
                 byte[] padPcm = padPcmToFrame(pcm);
-                byte[] amrData = encodeAmrNbRaw(padPcm);
-                if (amrData == null || amrData.length == 0) return false;
+                byte[] voiceData = encodeVoiceHighestQuality(padPcm);
+                if (voiceData == null || voiceData.length == 0) return false;
                 String tmpPath = voice2 + "/mp3_" + System.currentTimeMillis() + ".amr";
-                fileWrite(new File(tmpPath), amrData);
+                fileWrite(new File(tmpPath), voiceData);
                 anySent = sendViaSceneVoice(talker, tmpPath, fakeDurationMs);
                 if (callback != null) callback.onProgress(1, 1);
             } else {
@@ -2727,7 +2730,7 @@ public class TtsVoiceSender {
                     System.arraycopy(pcm, off, segPcm, 0, len);
 
                     byte[] padPcm = padPcmToFrame(segPcm);
-                    byte[] amrData = encodeAmrNbRaw(padPcm);
+                    byte[] amrData = encodeVoiceHighestQuality(padPcm);
                     if (amrData == null || amrData.length == 0) {
                         LogWriter.log(TAG, "sendMp3Voice: segment " + (seg+1) + "/" + totalSegments + " encode fail");
                         if (callback != null) callback.onProgress(seg + 1, totalSegments);
@@ -3350,24 +3353,202 @@ public class TtsVoiceSender {
     private static final String AMR_NB_MIME_ALT = "audio/amr";
 
     /**
-     * 8.0.78(3180): 微信 SIlK 内部编码类(MediaRecorder.Silk*, yl.g, tl.h0)已全部失效。
-     * 音质优化(v920): 恢复 v910 时代 16kHz/高码率 的听感。
-     * 优先 AMR-WB(16k/23850bps) —— 设备日志确认存在 audio/amr-wb 编码器, 采样率翻倍+码率近 2 倍于 AMR-NB;
-     * AMR-WB 头为 #!AMR-WB\n。仅当设备无 AMR-WB 编码器时才降级 AMR-NB(8k/12200)。
+     * 人声增强(编码前处理最高档): 16k/16bit/mono PCM 三件套与 SILK/AMR 编码共用:
+     *  1. 二阶 Butterworth 高通 fc=120Hz — 比一阶更陡(12dB/oct)地削除低频底噪/气流声/电流声,
+     *     同时保留 120Hz+ 人声基频与低频共振
+     *  2. Peaking EQ +3dB Q=1.0 fc=2.4kHz — 抬升人声清晰度关键频段(presence/齿音区),
+     *     让 TTS 与真人语音更通透明亮
+     *  3. 峰值归一化至 88% FS — 自动增益到接近满量程且防削波, 音量一致不忽大忽小
+     * 链式 DF2T (transposed direct form II) 逐样本 64bit 双精度处理, 无限内稳定性。
+     */
+    private static byte[] enhanceVoicePcm(byte[] pcm) {
+        if (pcm == null || pcm.length < 4) return pcm;
+        try {
+            final double fs = TARGET_SAMPLE_RATE;
+            int n = pcm.length / 2;
+            double[] samples = new double[n];
+            for (int i = 0; i < n; i++) {
+                int idx = i * 2;
+                int s = (pcm[idx] & 0xFF) | (pcm[idx + 1] << 8);
+                samples[i] = (short) s;
+            }
+
+            // --- 1. 二阶 Butterworth 高通 fc=120Hz (RBJ audio EQ cookbook) ---
+            double w0 = 2.0 * Math.PI * 120.0 / fs;
+            double alpha = Math.sin(w0) / Math.sqrt(2.0); // Q=1/sqrt(2)
+            double cosw = Math.cos(w0);
+            double b0 = (1.0 + cosw) / 2.0, b1 = -(1.0 + cosw), b2 = (1.0 + cosw) / 2.0;
+            double a0 = 1.0 + alpha, a1 = -2.0 * cosw, a2 = 1.0 - alpha;
+            // normalize
+            double ib0 = b0 / a0, ib1 = b1 / a0, ib2 = b2 / a0, ia1 = a1 / a0, ia2 = a2 / a0;
+            double hpZ1 = 0, hpZ2 = 0;
+            for (int i = 0; i < n; i++) {
+                double x = samples[i];
+                double y = ib0 * x + hpZ1;
+                hpZ1 = ib1 * x - ia1 * y + hpZ2;
+                hpZ2 = ib2 * x - ia2 * y;
+                samples[i] = y;
+            }
+
+            // --- 2. Peaking EQ +3dB Q=1.0 fc=2.4kHz ---
+            w0 = 2.0 * Math.PI * 2400.0 / fs;
+            alpha = Math.sin(w0) / (2.0 * 1.0);
+            cosw = Math.cos(w0);
+            double A = Math.pow(10.0, 3.0 / 40.0); // +3dB
+            b0 = 1.0 + alpha * A; b1 = -2.0 * cosw; b2 = 1.0 - alpha * A;
+            a0 = 1.0 + alpha / A; a1 = -2.0 * cosw; a2 = 1.0 - alpha / A;
+            double e0 = b0 / a0, e1 = b1 / a0, e2 = b2 / a0, ea1 = a1 / a0, ea2 = a2 / a0;
+            double eqZ1 = 0, eqZ2 = 0;
+            for (int i = 0; i < n; i++) {
+                double x = samples[i];
+                double y = e0 * x + eqZ1;
+                eqZ1 = e1 * x - ea1 * y + eqZ2;
+                eqZ2 = e2 * x - ea2 * y;
+                samples[i] = y;
+            }
+
+            // --- 3. 峰值归一化至 88% FS ---
+            double peak = 0;
+            for (int i = 0; i < n; i++) {
+                double m = Math.abs(samples[i]);
+                if (m > peak) peak = m;
+            }
+            double normTarget = 0.88 * 32767.0;
+            double gain = normTarget / peak;
+            if (gain > 12.0) gain = 12.0; // 增益上限, 防噪声放大
+            byte[] out = new byte[pcm.length];
+            for (int i = 0; i < n; i++) {
+                double y = samples[i] * gain;
+                if (y > 32767.0) y = 32767.0;
+                if (y < -32768.0) y = -32768.0;
+                int yi = (int) Math.round(y);
+                out[i * 2] = (byte) (yi & 0xFF);
+                out[i * 2 + 1] = (byte) ((yi >> 8) & 0xFF);
+            }
+            LogWriter.log(TAG, "enhanceVoicePcm(top): HPF120+EQ2400+3dB+norm peak="
+                    + Math.round(peak) + " gain=" + ((int)(gain*1000)/1000.0) + " " + pcm.length + "B");
+            return out;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "enhanceVoicePcm err: " + t.getMessage());
+            return pcm;
+        }
+    }
+
+    /**
+     * 编码策略(8.0.78/3180 反编译适配):
+     *  SILK(MediaRecorder.Silk*) 优先 —— 16k/30kbps, 音质远好于 AMR-NB(8k/12.2k)。
+     *  8.0.78 判定端 v61.b1.l: seek(1) 读9字节 endsWith("#!SILK_V3"), 文件形态
+     *  [1字节flag][#!SILK_V3][payload]; SilkDoEnc 首帧自身即含该头, 直接落盘即可。
+     *  若设备无 SILK native 编码, 回退 AMR-NB(8k/12200, #!AMR\n)。
+     */
+    private static byte[] encodeVoiceHighestQuality(byte[] padPcm) {
+        try {
+            byte[] silk = encodeSilkViaMediaRecorder(padPcm);
+            if (silk != null && silk.length > 6) {
+                LogWriter.log(TAG, "encodeVoiceHighestQuality: SILK(MediaRecorder) OK, " + silk.length + "b");
+                return silk;
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "encodeSILK(MediaRecorder) err: " + e.getMessage());
+        }
+        byte[] amr = encodeAmrNbRaw(padPcm);
+        if (amr != null && amr.length > 6) {
+            LogWriter.log(TAG, "encodeVoiceHighestQuality: AMR-NB fallback OK, " + amr.length + "b");
+            return amr;
+        }
+        return null;
+    }
+
+    /**
+     * 参照旧版(v8xx) MediaRecorder.SilkEncInit 链路: 16k/30kbps 最高音质
+     */
+    private static byte[] encodeSilkViaMediaRecorder(byte[] padPcm) {
+        try {
+            Class<?> rec = XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", sClassLoader);
+            long handle = (Long) XposedHelpers.callStaticMethod(rec,
+                    "SilkEncInit", TARGET_SAMPLE_RATE, SILK_BITRATE, SILK_COMPLEXITY, 0L);
+            LogWriter.log(TAG, "SILK(MediaRecorder) handle=" + handle);
+            if (handle == 0) return null;
+
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            byte[] ob = new byte[FRAME_PCM_BYTES * 6];
+            short[] ol = new short[1];
+            int fb = FRAME_PCM_BYTES;
+            int tf = padPcm.length / fb;
+
+            for (int i = 0; i < tf; i++) {
+                byte[] f = new byte[fb];
+                System.arraycopy(padPcm, i * fb, f, 0, fb);
+                boolean last = (i == tf - 1);
+                java.util.Arrays.fill(ob, (byte) 0);
+                ol[0] = 0;
+                XposedHelpers.callStaticMethod(rec, "SilkDoEnc", f, (short) fb, ob, ol, last, handle);
+                int len = ol[0];
+                if (len <= 0) continue;
+                baos.write(ob, 0, len);
+            }
+            try {
+                XposedHelpers.callStaticMethod(rec, "SetVoiceSilkControl", 201, 1, handle);
+            } catch (Throwable ignored) {}
+            try {
+                XposedHelpers.callStaticMethod(rec, "SilkEncUnInit", handle);
+            } catch (Throwable ignored) {}
+
+            byte[] silkBody = baos.toByteArray();
+            LogWriter.log(TAG, "SILK(MediaRecorder) body: " + padPcm.length + "b PCM -> " + silkBody.length + "b");
+            if (silkBody.length <= 0) return null;
+            // 8.0.78: SilkDoEnc 首帧自身即为 [flag][#!SILK_V3][payload], 判定端 v61.b1.l
+            // seek(1) 读9字节 endsWith("#!SILK_V3")。头已含于输出, 直接落盘, 不再自定义 wrap。
+            if (silkHasV3Header(silkBody)) return silkBody;
+            return wrapSilkV3(silkBody);
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "encodeSilkViaMediaRecorder err: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 8.0.78 v61.b1.m: SILK 存储形态 = [1字节flag][#!SILK_V3][payload];
+     * 判定 v61.b1.l seek(1) 读9字节 endsWith("#!SILK_V3")。头必须为大写 #!SILK_V3。
+     * flag 字节: 真机样品 msg_amr_*.amr 实测头 = 02 #!SILK_V3 ...
+     */
+    private static final byte[] SILK_V3_HEAD = {(byte) '#', (byte) '!', (byte) 'S', (byte) 'I',
+            (byte) 'L', (byte) 'K', (byte) '_', (byte) 'V', (byte) '3'};
+    /** 真机样品确认: SILK 文件首字节 flag = 0x02 */
+    private static final byte SILK_FLAG_BYTE = 0x02;
+
+    /** 判断 body 是否已含 [flag][#!SILK_V3] 结构(offset 0..8 或 1..9 匹配) */
+    private static boolean silkHasV3Header(byte[] body) {
+        if (body == null || body.length < 10) return false;
+        boolean at0 = true, at1 = true;
+        for (int i = 0; i < SILK_V3_HEAD.length; i++) {
+            if (body[i] != SILK_V3_HEAD[i]) at0 = false;
+            if (body[i + 1] != SILK_V3_HEAD[i]) at1 = false;
+        }
+        return at0 || at1;
+    }
+
+    /** SILK body 加容器头: [1字节flag=0x02][#!SILK_V3][payload] (大写V3, 无换行) */
+    private static byte[] wrapSilkV3(byte[] body) {
+        byte[] out = new byte[1 + SILK_V3_HEAD.length + body.length];
+        out[0] = SILK_FLAG_BYTE; // 真机样品确认 0x02
+        System.arraycopy(SILK_V3_HEAD, 0, out, 1, SILK_V3_HEAD.length);
+        System.arraycopy(body, 0, out, 1 + SILK_V3_HEAD.length, body.length);
+        return out;
+    }
+
+    /**
+     * 8.0.78(3180): 反编译确认 MediaRecorder.Silk* native 方法健在(yl.e1 加载 libwechatvoicesilk),
+     * v61.w.c 转码用 new v61/c0(16000,16000,4)+SilkDoEnc。encodeVoiceHighestQuality 已切 SILK 优先。
+     * AMR-NB(#!AMR\n, 8k/12200) 仅作无 SILK native 编码器兜底。
      */
     private static byte[] encodeAmrNbRaw(byte[] padPcm) {
-        byte[] amrWb = encodeAmrWith(AMR_WB_MIME, 16000, 23850, padPcm, "#!AMR-WB\n");
-        if (amrWb != null && amrWb.length > 6) {
-            LogWriter.log(TAG, "encodeAmrNbRaw: AMR-WB(16k/23850) OK, " + amrWb.length + "b");
-            return amrWb;
-        }
-
-        LogWriter.log(TAG, "encodeAmrNbRaw: AMR-WB unavailable, falling back to AMR-NB(8k/12200)");
         byte[] amrNb = encodeAmrWith(AMR_NB_MIME, 8000, 12200, downsample16kTo8k(padPcm), "#!AMR\n");
         if (amrNb != null && amrNb.length > 6) return amrNb;
         byte[] amrNbAlt = encodeAmrWith(AMR_NB_MIME_ALT, 8000, 12200, downsample16kTo8k(padPcm), "#!AMR\n");
         if (amrNbAlt != null && amrNbAlt.length > 6) return amrNbAlt;
 
+        LogWriter.log(TAG, "encodeAmrNbRaw: AMR-NB unavailable, return null (AMR-WB/SILK 对端空, 不做兜底)");
         dumpAudioEncoders();
         return null;
     }

@@ -93,6 +93,13 @@ public class CornerMenu {
                         try {
                             if (focused && ("com.tencent.mm.ui.LauncherUI".equals(clsName)
                                     || "com.tencent.mm.ui.HomeUI".equals(clsName))) {
+                                // 8.0.49+: 聊天窗口是 LauncherUI 内的 ChattingUIFragment，
+                                // 必须排除，否则聊天界面也注入三横菜单
+                                if (isInChatWindow((Activity) activity)) {
+                                    LogWriter.log(TAG, "skip inject: chat window active");
+                                    if (sMainIcon != null) removeAll();
+                                    return;
+                                }
                                 LogWriter.log(TAG, "Activity.onWindowFocusChanged -> main page focused");
                                 injectMain((Activity) activity, 0);
                             }
@@ -147,6 +154,32 @@ public class CornerMenu {
         canvas.drawLine(20f, 36f, 108f, 36f, paint);
         canvas.drawLine(20f, 64f, 108f, 64f, paint);
         canvas.drawLine(20f, 92f, 108f, 92f, paint);
+    }
+
+    /**
+     * 判断当前 LauncherUI 是否处于聊天窗口(8.0.49+ 聊天是内部 fragment)。
+     * 聊天中则不注入三横菜单。
+     */
+    private static boolean isInChatWindow(Activity act) {
+        try {
+            Object fm = XposedHelpers.callMethod(act, "getSupportFragmentManager");
+            if (fm == null) return false;
+            java.util.List fragments = (java.util.List) XposedHelpers.callMethod(fm, "getFragments");
+            if (fragments == null) return false;
+            for (Object f : fragments) {
+                if (!"com.tencent.mm.ui.chatting.ChattingUIFragment".equals(f.getClass().getName())) continue;
+                try {
+                    Object v = XposedHelpers.callMethod(f, "isVisible");
+                    if (v instanceof Boolean && (Boolean) v) return true;
+                } catch (Throwable ignored) {}
+                try {
+                    Object hidden = XposedHelpers.callMethod(f, "isHidden");
+                    if (hidden instanceof Boolean && !(Boolean) hidden) return true;
+                } catch (Throwable ignored) {}
+                return true;
+            }
+        } catch (Throwable ignored) {}
+        return false;
     }
 
     private static boolean isEnabled(Context ctx) {

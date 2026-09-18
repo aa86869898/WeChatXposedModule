@@ -76,17 +76,17 @@ public class MainActivity {
     private static final String[] ITEM_NAMES = {
         "联系人和群聊", "群管理助手", "聊天分组",
         "TTS语音播报", "红包转账", "数据备份", "通讯录日志",
-        "通用设置", "聊天增强", "朋友圈", "隐私安全", "群管审核", "数据统计"
+        "通用设置", "聊天增强", "朋友圈", "隐私安全", "数据统计"
     };
     private static final int[] ITEM_ICONS = {
         0x1F465, 0x1F6E1, 0x1F4CB,
         0x1F50A, 0x1F4B0, 0x1F4BE, 0x1F4CB,
-        0x2699, 0x1F4AC, 0x1F4F7, 0x1F512, 0x2696, 0x1F4CA
+        0x2699, 0x1F4AC, 0x1F4F7, 0x1F512, 0x1F4CA
     };
 
     private static final int[] PAGE_IDS = {
         3, 4, 14, 8, 9, 12, 13,
-        6, 7, 10, 11, 5, 16
+        6, 7, 10, 11, 16
     };
 
     private static final Map<Integer, String> PAGE_FEATURES = new HashMap<>();
@@ -100,7 +100,6 @@ public class MainActivity {
         PAGE_FEATURES.put(7, "聊天增强|正在输入|输入框增强|聊天界面|气泡|背景|圆角|批量消息|自动备注|全文搜索|通知|快捷回复");
         PAGE_FEATURES.put(10, "朋友圈|去广告|转发|复制|点赞|时间修改|视频画质|长视频");
         PAGE_FEATURES.put(11, "隐私安全|截图检测|剪贴板|WebView|指纹锁定|登录监控|隐藏字段|会话隐私");
-        PAGE_FEATURES.put(5, "群管|自动踢人|广告关键词|违规阈值|黑名单|入群欢迎|群功能增强|禁言|防炸群|踢人");
         PAGE_FEATURES.put(16, "统计|撤回记录|数据统计|好友数|群聊数");
     }
 

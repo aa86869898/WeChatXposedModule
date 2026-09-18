@@ -45,7 +45,10 @@ import com.leshao.v3.ui.SubPageActivity;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -67,23 +70,28 @@ public final class BatchAddFriend {
 
     private static final String TAG = "BatchAddFriend";
 
-    // ================= 符号表（复刻 SymbolTable DEFAULT，8.0.76 已核实） =================
-    private static final String KERNEL = "hm0.j1";
-    private static final String SERVICE_METHOD = "s";
-    private static final String NET_SERVICE_METHOD = "n";
+    // ================= 符号表(参照 群聊批量加友_新.md 二次审查核对版, 3180 已核实) =================
+    private static final String KERNEL = "gp0.j1";                       // 全局服务定位器: v(Class)→服务, q()→gp0.y
+    private static final String SERVICE_METHOD = "v";
+    private static final String NET_SERVICE_METHOD = "q";                // q()→gp0.y(持有字段 b = r1)
     private static final String NET_QUEUE_FIELD = "b";
-    private static final String MEMBERS_LOGIC = "e01.v1";
-    private static final String CHATROOM_MGR_IF = "cw1.f";
-    private static final String SELF = "e01.z1";
-    private static final String CONTACT_MGR_IF = "sh3.c4";
-    private static final String NETSCENE_VERIFY = "com.tencent.mm.pluginsdk.model.m3";
+    private static final String CHATROOM_MGR_IF = "q02.f";               // 群服务接口: p02.a.a() → a3
+    private static final String CHATROOM_STORE_IMPL = "p02.a";
+    private static final String CHATROOM_STORAGE = "com.tencent.mm.storage.a3";
+    private static final String CHATROOM_MEMBER = "com.tencent.mm.storage.z2";
+    private static final String SELF = "b41.y1";                         // 账号工具: u() = 我的 wxid
+    private static final String CONTACT_MGR_IF = "tn3.c4";               // 内核服务: cj()→j4 通讯录, lj()→f9 消息库
+    private static final String CONTACT_STORAGE = "com.tencent.mm.storage.j4";
+    private static final String NETSCENE_VERIFY = "com.tencent.mm.pluginsdk.model.m3"; // 3180 实测(文档 p3 为异版类名, 运行验证 m3 存在且仅多参构造)
+    private static final int OP_ADDCONTACT = 1;                          // 发好友申请
 
     private static final String CHATROOM_INFO_UI = "com.tencent.mm.chatroom.ui.ChatroomInfoUI";
     private static final String MM_ACTIVITY = "com.tencent.mm.ui.MMActivity";
     private static final String EXTRA_ROOM_ID = "RoomInfo_Id";
     private static final int MENU_ID_BATCH_ADD = 0x5E5E;
     // 群聊批量加好友固定使用「群聊」来源 scene
-    private static final int SCENE_GROUP_CHAT = 12;
+    private static final int SCENE_GROUP_CHAT = 2;
+    private static final int SCENE_CALLBACK_ID = 30;                     // r1.a(30, u0) 注册 verifyuser 回调
 
     // ================= 运行时状态 =================
     private static ClassLoader sCL;
@@ -462,9 +470,8 @@ private static void injectButton(final Activity act) {
         new Thread(() -> {
             try {
                 @SuppressWarnings("unchecked")
-                List<String> rawMembers = (List<String>) XposedHelpers
-                        .callStaticMethod(cls(MEMBERS_LOGIC), "m", roomName);
-                String self = (String) XposedHelpers.callStaticMethod(cls(SELF), "r");
+                List<String> rawMembers = (List<String>) getRoomMembers(roomName);
+                String self = getMyWxid();
 
                 Object storage = null;
                 try { storage = getContactStorage(); } catch (Throwable ignored) {}
@@ -508,11 +515,14 @@ private static void injectButton(final Activity act) {
             Object contact = XposedHelpers.callMethod(storage, "n", u, true);
             if (contact != null) {
                 try {
-                    remark = (String) XposedHelpers.getObjectField(contact, "field_conRemark");
+                    remark = (String) XposedHelpers.callMethod(contact, "g2");  // y3.g2() = 备注
                 } catch (Throwable ignored) {}
                 try {
-                    nick = (String) XposedHelpers.getObjectField(contact, "field_nickname");
+                    nick = (String) XposedHelpers.callMethod(contact, "i1");    // y3.i1() = username
                 } catch (Throwable ignored) {}
+                if (remark == null || remark.isEmpty()) {
+                    try { nick = (String) XposedHelpers.callMethod(contact, "getDisplayRemark"); } catch (Throwable ignored) {}
+                }
             }
         } catch (Throwable ignored) {}
         if (remark != null && !remark.isEmpty()) return remark;
@@ -776,7 +786,8 @@ private static void injectButton(final Activity act) {
                          + " greeting=" + greeting);
 
                 String owner = getRoomOwner(roomName);
-                String self = (String) XposedHelpers.callStaticMethod(cls(SELF), "r");
+                String self = getMyWxid();
+                Object roomEnt = getChatroomMember(roomName);
                 Object storage = getContactStorage();
                 Object queue = getNetSceneQueue();
 
@@ -803,14 +814,13 @@ private static void injectButton(final Activity act) {
                         record(u, "", false, "已排除(已是好友)");
                         continue;
                     }
-                    if (exAdmin && isAdmin(contact)) {
+                    if (exAdmin && isAdmin(roomEnt, u)) {
                         record(u, "", false, "已排除(管理员)");
                         continue;
                     }
 
                     try {
-                        Object sc = XposedHelpers.newInstance(
-                                cls(NETSCENE_VERIFY), 3, u, greeting, SCENE_GROUP_CHAT);
+                        Object sc = newVerifyScene(u, greeting, roomName);
                         XposedHelpers.callMethod(queue, "g", sc);
                         done++;
                         LogWriter.log(TAG, "已发送好友请求: " + u + " (" + done + ")");
@@ -857,45 +867,89 @@ private static void injectButton(final Activity act) {
         } catch (Throwable ignored) {}
     }
 
-    // ---------- ⑥ 工具 ----------
+    // ---------- ⑥ 工具 (3180: 参照 群聊批量加友_新.md 二次审查核对版) ----------
     private static Object svc(String iface) {
         return XposedHelpers.callStaticMethod(cls(KERNEL), SERVICE_METHOD, cls(iface));
     }
 
-    private static Object getChatroomInfo(String roomName) {
-        Object mgr = svc(CHATROOM_MGR_IF);
-        Object storage = XposedHelpers.callMethod(mgr, "a");
-        return XposedHelpers.callMethod(storage, "H0", roomName);
+    private static Object svcClass(Class<?> ifaceCls) {
+        return XposedHelpers.callStaticMethod(cls(KERNEL), SERVICE_METHOD, ifaceCls);
     }
 
+    /** a3 ChatroomStorage: (p02.a) gp0.j1.v(q02.f.class).a() */
+    private static Object getChatroomStorage() {
+        Object svc = svcClass(cls(CHATROOM_MGR_IF));
+        return XposedHelpers.callMethod(svc, "a");
+    }
+
+    /** z2 ChatRoomMember: chatStore.t1(room) */
+    private static Object getChatroomMember(String roomName) {
+        Object store = getChatroomStorage();
+        if (store == null) return null;
+        return XposedHelpers.callMethod(store, "t1", roomName);
+    }
+
+    /** 群成员全量: room.z0() */
+    @SuppressWarnings("unchecked")
+    private static List<String> getRoomMembers(String roomName) {
+        Object room = getChatroomMember(roomName);
+        if (room == null) return new ArrayList<>();
+        return (List<String>) XposedHelpers.callMethod(room, "z0");
+    }
+
+    /** 我的 wxid: b41.y1.u() */
+    private static String getMyWxid() {
+        return (String) XposedHelpers.callStaticMethod(cls(SELF), "u");
+    }
+
+    /** 群主: room.L0(u) */
     private static String getRoomOwner(String roomName) {
-        Object room = getChatroomInfo(roomName);
+        Object room = getChatroomMember(roomName);
         if (room == null) return null;
-        return (String) XposedHelpers.getObjectField(room, "field_roomowner");
+        List<String> wxids = getRoomMembers(roomName);
+        if (wxids == null) return null;
+        for (String u : wxids) {
+            try {
+                if ((Boolean) XposedHelpers.callMethod(room, "L0", u)) return u;
+            } catch (Throwable ignored) {}
+        }
+        return null;
     }
 
+    /** j4 通讯录: tn3.c4.cj() */
     private static Object getContactStorage() {
         Object mgr = svc(CONTACT_MGR_IF);
-        return XposedHelpers.callMethod(mgr, "ij");
+        return XposedHelpers.callMethod(mgr, "cj");
     }
 
-    private static boolean isAdmin(Object contact) {
-        if (contact == null) return false;
+    /** 管理员: room.E0(u) (RoomData Member Flag & 2048) */
+    private static boolean isAdmin(Object roomEnt, String u) {
+        if (roomEnt == null || u == null) return false;
         try {
-            int flag = XposedHelpers.getIntField(contact, "field_chatroomFlag");
-            return (flag & 2) != 0;
+            return (Boolean) XposedHelpers.callMethod(roomEnt, "E0", u);
         } catch (Throwable t) {
-            try {
-                return XposedHelpers.getIntField(contact, "T") == 0;
-            } catch (Throwable t2) {
-                return false;
-            }
+            return false;
         }
     }
 
+    /** r1 NetSceneQueue: gp0.j1.q().b */
     private static Object getNetSceneQueue() {
-        Object net = XposedHelpers.callStaticMethod(cls(KERNEL), NET_SERVICE_METHOD);
-        return XposedHelpers.getObjectField(net, NET_QUEUE_FIELD);
+        Object y = XposedHelpers.callStaticMethod(cls(KERNEL), NET_SERVICE_METHOD);
+        return XposedHelpers.getObjectField(y, NET_QUEUE_FIELD);
+    }
+
+    /** m3(11参, opcode=1 ADDCONTACT): new m3(1, [wxid], [scene], [], verify, verify, {}, room, "", "", []) */
+    private static Object newVerifyScene(String wxid, String verify, String roomName) {
+        LinkedList<String> users = new LinkedList<>();
+        users.add(wxid);
+        LinkedList<Integer> scenes = new LinkedList<>();
+        scenes.add(SCENE_GROUP_CHAT);
+        LinkedList<String> tickets = new LinkedList<>();
+        HashMap<String, Integer> flags = new HashMap<>();
+        LinkedList<String> labels = new LinkedList<>();
+        return XposedHelpers.newInstance(cls(NETSCENE_VERIFY),
+                OP_ADDCONTACT, users, scenes, tickets,
+                verify, verify, flags, roomName, "", "", labels);
     }
 
     private static int parseInt(String s) {

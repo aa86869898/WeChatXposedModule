@@ -106,7 +106,7 @@ public class ChatGroupUiInjector {
                         logBoth("Activity.onResume -> LauncherUI detected");
                         final Activity activity = (Activity) param.thisObject;
                         sCurrentActivity = new WeakReference<>(activity);
-                        // Try to find adapter from MainUI Fragment
+                        // Try to find adapter from MainUI Fragment (8.0.78: this.w = jo5.l0 会话列表适配器)
                         try {
                             Object mainUI = XposedHelpers.callMethod(activity, "getSupportFragmentManager");
                             if (mainUI != null) {
@@ -124,13 +124,13 @@ public class ChatGroupUiInjector {
                                 }
                                 if (frag != null) {
                                     try {
-                                        Object adapter = XposedHelpers.getObjectField(frag, "v");
-                                        logBoth("MainUI.v=" + (adapter != null ? adapter.getClass().getName() : "null"));
+                                        Object adapter = XposedHelpers.getObjectField(frag, "w");
+                                        logBoth("MainUI.w(jo5.l0)=" + (adapter != null ? adapter.getClass().getName() : "null"));
                                         if (adapter != null) {
                                             ConversationFilter.install(cl, adapter, null);
                                         }
                                     } catch (Throwable e) {
-                                        logBoth("MainUI.v err: " + e.getMessage());
+                                        logBoth("MainUI.w err: " + e.getMessage());
                                     }
                                 }
                             }
@@ -165,7 +165,7 @@ public class ChatGroupUiInjector {
                          sCurrentActivity = new WeakReference<>((Activity) XposedHelpers.callMethod(param.thisObject, "getActivity"));
                     } catch (Throwable ignored) {}
                     try {
-                        Object adapter = XposedHelpers.getObjectField(param.thisObject, "v");
+                        Object adapter = XposedHelpers.getObjectField(param.thisObject, "w");
                         if (adapter != null) {
                             ConversationFilter.install(cl, adapter, null);
                         }
@@ -183,6 +183,54 @@ public class ChatGroupUiInjector {
             logBoth("MainUI.onResume hook installed (fallback)");
         } catch (Throwable e) {
             logBoth("MainUI Fragment hook failed: " + e.getMessage());
+        }
+
+        // 文档核心注入点：MainUI.w0(Bundle) after -> this.o(u5).addHeaderView(按钮栏)；缓存 this.w(jo5.l0)
+        try {
+            final Class<?> mainUIConv = XposedHelpers.findClass("com.tencent.mm.ui.conversation.MainUI", cl);
+            XposedBridge.hookAllMethods(mainUIConv, "w0", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        Object thisObj = param.thisObject;
+                        // 缓存 this.w = jo5.l0 会话列表适配器/控制器
+                        try {
+                            Object w = XposedHelpers.getObjectField(thisObj, "w");
+                            logBoth("MainUI.w0 this.w=" + (w != null ? w.getClass().getName() : "null"));
+                            if (w != null) ConversationFilter.install(cl, w, null);
+                        } catch (Throwable e) {
+                            logBoth("MainUI.w0 this.w err: " + e.getMessage());
+                        }
+                        // 通过 this.o(u5) 提前缓存列表，交由 injectHeaderToConversationList 统一注入，
+                        // 避免此处与 onResume 各 addHeaderView 一次造成重复标签条(空白/残留)
+                        try {
+                            Object o = XposedHelpers.getObjectField(thisObj, "o");
+                            logBoth("MainUI.w0 this.o(u5)=" + (o != null ? o.getClass().getName() : "null"));
+                            if (o instanceof View) {
+                                View list = (View) o;
+                                if (isConversationList(list)) {
+                                    sConvListView = list;
+                                    logBoth("MainUI.w0 cached convList=" + list.getClass().getName());
+                                }
+                            }
+                            new Handler(Looper.getMainLooper()).post(() -> {
+                                try {
+                                    injectHeaderToConversationList();
+                                } catch (Throwable e) {
+                                    logBoth("MainUI.w0 inject err: " + e.getMessage());
+                                }
+                            });
+                        } catch (Throwable e) {
+                            logBoth("MainUI.w0 cb err: " + e.getMessage());
+                        }
+                    } catch (Throwable e) {
+                        logBoth("MainUI.w0 cb err: " + e.getMessage());
+                    }
+                }
+            });
+            logBoth("MainUI.w0(Bundle) hook installed");
+        } catch (Throwable e) {
+            logBoth("MainUI.w0 hook failed: " + e.getMessage());
         }
     }
 
@@ -305,6 +353,12 @@ public class ChatGroupUiInjector {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 dp(48, recyclerView.getContext())));
         if (ChatGroupHook.isReady()) refreshAll();
+    }
+
+    private static boolean isConversationList(View v) {
+        try {
+            return v.getClass().getName().contains("ConversationListView");
+        } catch (Throwable ignored) { return false; }
     }
 
     /** Traverse view tree to find ConversationListView */

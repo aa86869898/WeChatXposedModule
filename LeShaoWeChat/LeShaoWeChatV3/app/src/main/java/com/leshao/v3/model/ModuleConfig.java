@@ -122,7 +122,6 @@ public class ModuleConfig {
     public boolean deleteDetectEnabled = true;
     public boolean contactExportEnabled = true;
     public boolean contactChangeLogEnabled = true;
-    public boolean groupFeaturesEnabled = true;
 
     // 设置/其他
     public boolean stickyEnhanceEnabled = true;
@@ -130,6 +129,7 @@ public class ModuleConfig {
     public boolean tabCustomEnabled = true;
     public boolean callFeaturesEnabled = true;
     public boolean msgExportEnabled = true;
+    public boolean batchInviteGroupsEnabled = true;
     public boolean chatBackupEnabled = true;
     public boolean shakeCustomEnabled = true;
 
@@ -311,12 +311,12 @@ public class ModuleConfig {
         cfg.deleteDetectEnabled = prefs.getBoolean("ls_wp_deldetect", true);
         cfg.contactExportEnabled = prefs.getBoolean("ls_wp_contactexp", true);
         cfg.contactChangeLogEnabled = prefs.getBoolean("ls_wp_contactlog", true);
-        cfg.groupFeaturesEnabled = prefs.getBoolean("ls_wp_group", true);
         cfg.stickyEnhanceEnabled = prefs.getBoolean("ls_wp_sticky", true);
         cfg.unreadBadgeEnabled = prefs.getBoolean("ls_wp_unread", true);
         cfg.tabCustomEnabled = prefs.getBoolean("ls_wp_tabcustom", true);
         cfg.callFeaturesEnabled = prefs.getBoolean("ls_wp_call", true);
         cfg.msgExportEnabled = prefs.getBoolean("ls_wp_msgexport", true);
+        cfg.batchInviteGroupsEnabled = prefs.getBoolean("ls_wp_batchinvitegroups", true);
         cfg.chatBackupEnabled = prefs.getBoolean("ls_wp_chatbackup", true);
         cfg.shakeCustomEnabled = prefs.getBoolean("ls_wp_shake", true);
 
@@ -492,12 +492,12 @@ public class ModuleConfig {
         e.putBoolean("ls_wp_deldetect", deleteDetectEnabled);
         e.putBoolean("ls_wp_contactexp", contactExportEnabled);
         e.putBoolean("ls_wp_contactlog", contactChangeLogEnabled);
-        e.putBoolean("ls_wp_group", groupFeaturesEnabled);
         e.putBoolean("ls_wp_sticky", stickyEnhanceEnabled);
         e.putBoolean("ls_wp_unread", unreadBadgeEnabled);
         e.putBoolean("ls_wp_tabcustom", tabCustomEnabled);
         e.putBoolean("ls_wp_call", callFeaturesEnabled);
         e.putBoolean("ls_wp_msgexport", msgExportEnabled);
+        e.putBoolean("ls_wp_batchinvitegroups", batchInviteGroupsEnabled);
         e.putBoolean("ls_wp_chatbackup", chatBackupEnabled);
         e.putBoolean("ls_wp_shake", shakeCustomEnabled);
 
