@@ -168,15 +168,16 @@ public class CornerMenu {
             if (fragments == null) return false;
             for (Object f : fragments) {
                 if (!"com.tencent.mm.ui.chatting.ChattingUIFragment".equals(f.getClass().getName())) continue;
+                // 仅当 fragment 视图真正显示在屏幕上才算聊天中;
+                // 回主页后残留的隐藏/未附加 fragment 不算 (修复回主页后三横菜单不再注入的问题)
                 try {
                     Object v = XposedHelpers.callMethod(f, "isVisible");
                     if (v instanceof Boolean && (Boolean) v) return true;
                 } catch (Throwable ignored) {}
                 try {
-                    Object hidden = XposedHelpers.callMethod(f, "isHidden");
-                    if (hidden instanceof Boolean && !(Boolean) hidden) return true;
+                    Object viewObj = XposedHelpers.getObjectField(f, "mView");
+                    if (viewObj instanceof View && ((View) viewObj).isShown()) return true;
                 } catch (Throwable ignored) {}
-                return true;
             }
         } catch (Throwable ignored) {}
         return false;

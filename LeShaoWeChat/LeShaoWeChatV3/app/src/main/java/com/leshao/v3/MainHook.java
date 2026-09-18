@@ -82,7 +82,7 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v933";
+    public static final String MODULE_BUILD = "v934";
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;

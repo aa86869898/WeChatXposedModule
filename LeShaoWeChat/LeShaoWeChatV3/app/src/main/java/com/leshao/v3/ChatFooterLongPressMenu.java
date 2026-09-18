@@ -7,8 +7,6 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
 import android.net.Uri;
@@ -37,7 +35,6 @@ import android.app.AlertDialog;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.db.VoiceHistoryDbHelper;
 import com.leshao.v3.hook.TtsVoiceSender;
-import com.leshao.v3.ting.TingMusicModule;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
 import com.leshao.v3.wm.utils.WmPrefs;
@@ -47,8 +44,6 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -363,7 +358,7 @@ public class ChatFooterLongPressMenu {
 
         // 标题栏（横跨，居中）
         TextView titleBar = new TextView(ctx);
-        titleBar.setText("乐少音频转语音助手支持在线点歌");
+        titleBar.setText("乐少音频转语音助手");
         titleBar.setTextSize(13);
         titleBar.setTextColor(AppColors.text1());
         titleBar.setGravity(Gravity.CENTER);
@@ -375,39 +370,9 @@ public class ChatFooterLongPressMenu {
         root.addView(titleBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // 主体（水平）
-        LinearLayout body = new LinearLayout(ctx);
-        body.setOrientation(LinearLayout.HORIZONTAL);
-        root.addView(body);
-
-        // 左侧功能列表
-        LinearLayout leftList = new LinearLayout(ctx);
-        leftList.setOrientation(LinearLayout.VERTICAL);
-        body.addView(leftList, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        // 右侧容器
-        FrameLayout rightContainer = new FrameLayout(ctx);
-        LinearLayout.LayoutParams rcLp = new LinearLayout.LayoutParams(dp(ctx, 300),
-                ViewGroup.LayoutParams.WRAP_CONTENT);
-        rcLp.leftMargin = p8;
-        body.addView(rightContainer, rcLp);
-
-        // 子面板
+        // 音频转语音 单面板（取消左侧分类/右侧面板方式）
         View audioPanel = createAudioToVoicePanel(ctx);
-        View searchPanel = createSearchToVoicePanel(ctx);
-        rightContainer.addView(audioPanel);
-        rightContainer.addView(searchPanel);
-        searchPanel.setVisibility(View.GONE);
-
-        // 左侧按钮
-        final TextView audioBtn = makeSideButton(ctx, "高音质转换", "", true);
-        final TextView searchBtn = makeSideButton(ctx, "自动点歌", "", false);
-        leftList.addView(audioBtn);
-        leftList.addView(searchBtn);
-
-        audioBtn.setOnClickListener(v -> switchPanel(audioBtn, searchBtn, audioPanel, searchPanel));
-        searchBtn.setOnClickListener(v -> switchPanel(searchBtn, audioBtn, searchPanel, audioPanel));
+        root.addView(audioPanel);
 
         // PopupWindow
         popupWindow = new PopupWindow(root, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -441,33 +406,6 @@ public class ChatFooterLongPressMenu {
         }
         sLayoutListener = null;
         sLayoutAnchor = null;
-    }
-
-    private static TextView makeSideButton(Context ctx, String title, String sub, boolean selected) {
-        TextView btn = new TextView(ctx);
-        btn.setText((sub == null || sub.isEmpty()) ? title : title + "\n" + sub);
-        btn.setTextSize(12);
-        btn.setGravity(Gravity.CENTER);
-        btn.setPadding(dp(ctx, 4), dp(ctx, 14), dp(ctx, 4), dp(ctx, 14));
-        btn.setTextColor(selected ? AppColors.WHITE_TEXT : AppColors.text1());
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(selected ? AppColors.accent() : AppColors.inputBg());
-        bg.setCornerRadius(dp(ctx, 8));
-        btn.setBackground(bg);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.bottomMargin = dp(ctx, 6);
-        btn.setLayoutParams(lp);
-        return btn;
-    }
-
-    private static void switchPanel(TextView selectedBtn, TextView otherBtn, View showPanel, View hidePanel) {
-        selectedBtn.setTextColor(AppColors.WHITE_TEXT);
-        ((GradientDrawable) selectedBtn.getBackground()).setColor(AppColors.accent());
-        otherBtn.setTextColor(AppColors.text1());
-        ((GradientDrawable) otherBtn.getBackground()).setColor(AppColors.inputBg());
-        showPanel.setVisibility(View.VISIBLE);
-        hidePanel.setVisibility(View.GONE);
     }
 
     private static View createAudioToVoicePanel(Context ctx) {
@@ -582,9 +520,28 @@ public class ChatFooterLongPressMenu {
         progressText.setPadding(0, 0, 0, p6);
         panel.addView(progressText);
 
+        // 双模式开关: 人声增强 / 原音还原 (放转换按钮上面)
+        LinearLayout modeRow = new LinearLayout(ctx);
+        modeRow.setOrientation(LinearLayout.HORIZONTAL);
+        modeRow.setGravity(Gravity.CENTER_VERTICAL);
+        modeRow.setPadding(0, 0, 0, p6);
+        TextView modeLbl = new TextView(ctx);
+        modeLbl.setText("人声增强");
+        modeLbl.setTextSize(12);
+        modeLbl.setTextColor(text1);
+        LinearLayout.LayoutParams modeLblLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        modeLblLp.weight = 1f;
+        modeRow.addView(modeLbl, modeLblLp);
+        Switch modeSw = CandyUi.newSwitch(ctx);
+        modeSw.setChecked(WmPrefs.get("voice_enhance", false));
+        modeSw.setOnCheckedChangeListener((b, checked) -> WmPrefs.set("voice_enhance", checked));
+        modeRow.addView(modeSw);
+        panel.addView(modeRow);
+
         // 转码按钮
         final TextView convertBtn = new TextView(ctx);
-        convertBtn.setText("转码");
+        convertBtn.setText("转换");
         convertBtn.setTextSize(13);
         convertBtn.setTextColor(whiteOnAccent);
         convertBtn.setGravity(Gravity.CENTER);
@@ -647,38 +604,15 @@ public class ChatFooterLongPressMenu {
 
             if (popupWindow != null) popupWindow.dismiss();
 
-            final android.app.AlertDialog[] cfgDlgHolder = new android.app.AlertDialog[1];
-            android.app.AlertDialog cfgDlg = new android.app.AlertDialog.Builder(ctx)
-                .setTitle("音频转语音设置")
-                .setView(createConfigView(ctx))
-                .setPositiveButton("开始转换", (dialog, which) -> {
-                    String splitStr = ((EditText) cfgDlgHolder[0].findViewById(android.R.id.text1)).getText().toString().trim();
-                    String durStr = ((EditText) cfgDlgHolder[0].findViewById(android.R.id.text2)).getText().toString().trim();
-                    if (splitStr == null) splitStr = "0";
-                    if (durStr == null) durStr = "1";
-                    int splitSeconds = parseIntSafe(splitStr, 0);
-                    int fakeDurationSec = parseIntSafe(durStr, 1);
-                    if (fakeDurationSec < 1) fakeDurationSec = 1;
-                    if (fakeDurationSec > 60) fakeDurationSec = 60;
-                    final int finalSplit = splitSeconds;
-                    final int finalFakeMs = fakeDurationSec * 1000;
-                    final float cutBegin = sCutBeginSec;
-                    final float cutEnd = sCutEndSec;
-                    sCutBeginSec = 0;
-                    sCutEndSec = 0;
+            // 直接转换: 不再弹出切割/时长设置界面
+            final float cutBegin = sCutBeginSec;
+            final float cutEnd = sCutEndSec;
+            sCutBeginSec = 0;
+            sCutEndSec = 0;
 
-                    new Thread(() -> {
-                        transferAndReport(ctx, mp3Path, finalTalker, finalSplit, finalFakeMs, cutBegin, cutEnd);
-                    }, "leshao-mp3-send").start();
-                })
-                .setNegativeButton("取消", (dialog, which) -> {
-                    sCutBeginSec = 0;
-                    sCutEndSec = 0;
-                })
-                .create();
-            cfgDlgHolder[0] = cfgDlg;
-            cfgDlg.show();
-            themeAlertDialog(cfgDlg);
+            new Thread(() -> {
+                transferAndReport(ctx, mp3Path, finalTalker, 0, 1000, cutBegin, cutEnd);
+            }, "leshao-mp3-send").start();
         });
 
         // 文件选择回调更新显示
@@ -706,310 +640,9 @@ public class ChatFooterLongPressMenu {
         return panel;
     }
 
-    private static View createSearchToVoicePanel(Context ctx) {
-        int text1 = AppColors.text1();
-        int text2 = AppColors.text2();
-        int accent = AppColors.accent();
-        int whiteOnAccent = AppColors.WHITE_TEXT;
-
-        int p6 = dp(ctx, 6);
-        int p8 = dp(ctx, 8);
-        int p10 = dp(ctx, 10);
-
-        LinearLayout panel = new LinearLayout(ctx);
-        panel.setOrientation(LinearLayout.VERTICAL);
-
-        // 点歌功能（搜索框上方）
-        LinearLayout orderSection = new LinearLayout(ctx);
-        orderSection.setOrientation(LinearLayout.VERTICAL);
-        orderSection.setPadding(0, 0, 0, p8);
-
-        LinearLayout swRow = new LinearLayout(ctx);
-        swRow.setOrientation(LinearLayout.HORIZONTAL);
-        swRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView cardLbl = new TextView(ctx);
-        cardLbl.setText("卡片点歌");
-        cardLbl.setTextSize(12);
-        cardLbl.setTextColor(text1);
-        swRow.addView(cardLbl);
-
-        Switch cardSw = CandyUi.newSwitch(ctx);
-        cardSw.setChecked(WmPrefs.isCardOrder());
-        cardSw.setOnCheckedChangeListener((b, checked) -> WmPrefs.set("card_order", checked));
-        LinearLayout.LayoutParams cardSwLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        cardSwLp.leftMargin = dp(ctx, 4);
-        cardSwLp.rightMargin = dp(ctx, 12);
-        swRow.addView(cardSw, cardSwLp);
-
-        TextView voiceLbl = new TextView(ctx);
-        voiceLbl.setText("语音点歌");
-        voiceLbl.setTextSize(12);
-        voiceLbl.setTextColor(text1);
-        swRow.addView(voiceLbl);
-
-        Switch voiceSw = CandyUi.newSwitch(ctx);
-        voiceSw.setChecked(WmPrefs.isVoiceOrder());
-        voiceSw.setOnCheckedChangeListener((b, checked) -> WmPrefs.set("voice_order", checked));
-        LinearLayout.LayoutParams voiceSwLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        voiceSwLp.leftMargin = dp(ctx, 4);
-        swRow.addView(voiceSw, voiceSwLp);
-
-        orderSection.addView(swRow);
-
-        // 点歌记录按钮
-        TextView recordBtn = new TextView(ctx);
-        recordBtn.setText("点歌记录");
-        recordBtn.setTextSize(12);
-        recordBtn.setTextColor(AppColors.accent());
-        recordBtn.setGravity(Gravity.CENTER);
-        recordBtn.setPadding(dp(ctx, 4), p6, dp(ctx, 4), p6);
-        GradientDrawable recBg = new GradientDrawable();
-        recBg.setStroke(dp(ctx, 1), AppColors.accent());
-        recBg.setCornerRadius(p6);
-        recordBtn.setBackground(recBg);
-        recordBtn.setOnClickListener(v -> Toast.makeText(ctx, "点歌记录功能开发中", Toast.LENGTH_SHORT).show());
-        LinearLayout.LayoutParams recLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        recLp.topMargin = p6;
-        orderSection.addView(recordBtn, recLp);
-
-        panel.addView(orderSection);
-
-        // 搜索行
-        LinearLayout searchRow = new LinearLayout(ctx);
-        searchRow.setOrientation(LinearLayout.HORIZONTAL);
-        searchRow.setPadding(0, 0, 0, p8);
-
-        final EditText input = new EditText(ctx);
-        input.setHint("搜索歌曲");
-        input.setTextColor(text1);
-        input.setHintTextColor(text2);
-        input.setSingleLine(true);
-        input.setBackgroundColor(AppColors.inputBg());
-        input.setPadding(p8, p8, p8, p8);
-        LinearLayout.LayoutParams inputLp = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        searchRow.addView(input, inputLp);
-
-        TextView searchBtn = new TextView(ctx);
-        searchBtn.setText("搜索");
-        searchBtn.setTextSize(12);
-        searchBtn.setTextColor(whiteOnAccent);
-        searchBtn.setGravity(Gravity.CENTER);
-        searchBtn.        setPadding(dp(ctx, 4), p8, dp(ctx, 4), p8);
-        GradientDrawable sbg = new GradientDrawable();
-        sbg.setColor(accent);
-        sbg.setCornerRadius(p6);
-        searchBtn.setBackground(sbg);
-        LinearLayout.LayoutParams searchBtnLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        searchBtnLp.leftMargin = p8;
-        searchRow.addView(searchBtn, searchBtnLp);
-        panel.addView(searchRow);
-
-        // 结果列表（高度自适应：空时收起，有内容时向上扩展）
-        ScrollView scroll = new ScrollView(ctx);
-        final LinearLayout resultList = new LinearLayout(ctx);
-        resultList.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(resultList);
-        final LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(-1, 0);
-        panel.addView(scroll, scrollLp);
-
-        searchBtn.setOnClickListener(v -> {
-            String kw = input.getText().toString().trim();
-            if (kw.isEmpty()) {
-                Toast.makeText(ctx, "请输入关键词", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            resultList.removeAllViews();
-            TextView tip = new TextView(ctx);
-            tip.setText("搜索中...");
-            tip.setTextSize(12);
-            tip.setTextColor(text2);
-            resultList.addView(tip);
-            resizeResultScroll(scrollLp, scroll, 1);
-            TingMusicModule.searchForPanel(kw, new TingMusicModule.PanelSearchCallback() {
-                @Override public void onResult(List<Map<String, String>> songs) {
-                    resultList.removeAllViews();
-                    if (songs == null || songs.isEmpty()) {
-                        TextView t = new TextView(ctx);
-                        t.setText("无结果");
-                        t.setTextSize(12);
-                        t.setTextColor(text2);
-                        resultList.addView(t);
-                        resizeResultScroll(scrollLp, scroll, 1);
-                        return;
-                    }
-                    for (final Map<String, String> s : songs) {
-                        resultList.addView(makeSongRow(ctx, s));
-                    }
-                    resizeResultScroll(scrollLp, scroll, songs.size());
-                }
-                @Override public void onFail(String err) {
-                    resultList.removeAllViews();
-                    TextView t = new TextView(ctx);
-                    t.setText("搜索失败: " + err);
-                    t.setTextSize(12);
-                    t.setTextColor(0xFFFF8888);
-                    resultList.addView(t);
-                    resizeResultScroll(scrollLp, scroll, 1);
-                }
-            });
-        });
-
-        return panel;
-    }
-
-    private static void resizeResultScroll(LinearLayout.LayoutParams lp, ScrollView scroll, int rows) {
-        float d = scroll.getContext().getResources().getDisplayMetrics().density;
-        int rowH = (int) (56 * d);
-        int maxH = (int) (330 * d);
-        int h = rows <= 0 ? 0 : Math.min(rows * rowH, maxH);
-        lp.height = h;
-        scroll.setLayoutParams(lp);
-    }
-
-    private static View makeSongRow(Context ctx, final Map<String, String> s) {
-        float d = ctx.getResources().getDisplayMetrics().density;
-        LinearLayout row = new LinearLayout(ctx);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding((int)(4*d), (int)(8*d), (int)(4*d), (int)(8*d));
-
-        ImageView cover = new ImageView(ctx);
-        cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        GradientDrawable cbg = new GradientDrawable();
-        cbg.setColor(0x22000000);
-        cbg.setCornerRadius(8);
-        cover.setBackground(cbg);
-        int coverSize = (int)(38*d);
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(coverSize, coverSize);
-        row.addView(cover, cp);
-
-        LinearLayout mid = new LinearLayout(ctx);
-        mid.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        mp.leftMargin = (int)(10*d);
-        row.addView(mid, mp);
-
-        TextView name = new TextView(ctx);
-        name.setText(s.get("songName") == null ? "" : s.get("songName"));
-        name.setTextSize(14);
-        name.setTextColor(AppColors.text1());
-        name.setSingleLine(true);
-        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        mid.addView(name);
-
-        TextView singerTv = new TextView(ctx);
-        singerTv.setText(s.get("singer") == null ? "" : s.get("singer"));
-        singerTv.setTextSize(12);
-        singerTv.setTextColor(AppColors.text3());
-        singerTv.setSingleLine(true);
-        singerTv.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        mid.addView(singerTv);
-
-        TextView dur = new TextView(ctx);
-        int durSec = parseIntSafe(s.get("duration"), 0);
-        dur.setText(durSec > 0 ? formatSec(durSec) : "");
-        dur.setTextSize(12);
-        dur.setTextColor(AppColors.text3());
-        row.addView(dur);
-
-        row.setOnClickListener(v -> {
-            TingMusicModule.sendSongForPanel(
-                    s.get("songName"), s.get("singer"), s.get("dataUrl"),
-                    s.get("appid"), s.get("webUrl"), s.get("coverUrl"),
-                    s.get("mid"), s.get("lyric"));
-            Toast.makeText(ctx, "已发送: " + s.get("songName"), Toast.LENGTH_SHORT).show();
-            if (popupWindow != null) popupWindow.dismiss();
-        });
-
-        String coverUrl = s.get("coverUrl");
-        if (coverUrl != null && !coverUrl.isEmpty()) {
-            loadCover(ctx, coverUrl, cover, coverSize);
-        }
-        return row;
-    }
-
-    private static void loadCover(final Context ctx, final String url, final ImageView view, final int size) {
-        new Thread(() -> {
-            HttpURLConnection conn = null;
-            InputStream is = null;
-            try {
-                conn = (HttpURLConnection) new URL(url).openConnection();
-                conn.setConnectTimeout(8000);
-                conn.setReadTimeout(8000);
-                conn.setInstanceFollowRedirects(true);
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36");
-                conn.connect();
-                is = conn.getInputStream();
-                Bitmap bmp = BitmapFactory.decodeStream(is);
-                if (bmp == null) return;
-                Bitmap scaled = Bitmap.createScaledBitmap(bmp, size, size, true);
-                if (scaled != bmp) bmp.recycle();
-                final Bitmap fBmp = scaled;
-                new Handler(Looper.getMainLooper()).post(() -> {
-                    try { view.setImageBitmap(fBmp); } catch (Throwable ignored) {}
-                });
-            } catch (Throwable ignored) {
-            } finally {
-                if (is != null) { try { is.close(); } catch (Throwable ignored) {} }
-                if (conn != null) conn.disconnect();
-            }
-        }, "cflp-cover").start();
-    }
-
     private static String formatSec(float secs) {
         int total = (int) secs;
         return (total / 60) + ":" + String.format(java.util.Locale.US, "%02d", total % 60);
-    }
-
-    private static LinearLayout createConfigView(Context ctx) {
-        float d = ctx.getResources().getDisplayMetrics().density;
-        int p16 = (int)(16 * d);
-        LinearLayout layout = new LinearLayout(ctx);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(p16, p16, p16, 0);
-
-        TextView splitLabel = new TextView(ctx);
-        splitLabel.setText("切割时长(秒, 0=不切割)");
-        splitLabel.setTextSize(14);
-        splitLabel.setTextColor(AppColors.text1());
-        layout.addView(splitLabel);
-
-        EditText splitInput = new EditText(ctx);
-        splitInput.setId(android.R.id.text1);
-        splitInput.setText("0");
-        splitInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        splitInput.setTextColor(AppColors.text1());
-        splitInput.setBackgroundColor(AppColors.inputBg());
-        splitInput.setPadding(p16, (int)(10*d), p16, (int)(10*d));
-        layout.addView(splitInput);
-
-        View space = new View(ctx);
-        space.setLayoutParams(new LinearLayout.LayoutParams(-1, (int)(12*d)));
-        layout.addView(space);
-
-        TextView durLabel = new TextView(ctx);
-        durLabel.setText("误报时长(秒, 1-60)");
-        durLabel.setTextSize(14);
-        durLabel.setTextColor(AppColors.text1());
-        layout.addView(durLabel);
-
-        EditText durInput = new EditText(ctx);
-        durInput.setId(android.R.id.text2);
-        durInput.setText("1");
-        durInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        durInput.setTextColor(AppColors.text1());
-        durInput.setBackgroundColor(AppColors.inputBg());
-        durInput.setPadding(p16, (int)(10*d), p16, (int)(10*d));
-        layout.addView(durInput);
-
-        return layout;
     }
 
     private static void transferAndReport(Context ctx, String mp3Path, String talker,
@@ -1655,25 +1288,7 @@ public class ChatFooterLongPressMenu {
                         final String historyFilePath = item.filePath;
                         sCutBeginSec = 0;
                         sCutEndSec = 0;
-                        final android.app.AlertDialog[] cfgDlgHolder = new android.app.AlertDialog[1];
-                        android.app.AlertDialog historyCfgDlg = new android.app.AlertDialog.Builder(ctx)
-                            .setTitle("音频转语音设置")
-                            .setView(createConfigView(ctx))
-                            .setPositiveButton("开始转换", (dlg, which) -> {
-                                String splitStr = ((EditText) cfgDlgHolder[0].findViewById(android.R.id.text1)).getText().toString().trim();
-                                String durStr = ((EditText) cfgDlgHolder[0].findViewById(android.R.id.text2)).getText().toString().trim();
-                                if (splitStr == null) splitStr = "0";
-                                if (durStr == null) durStr = "1";
-                                final int splitSeconds = parseIntSafe(splitStr, 0);
-                                int rawFakeMs = parseIntSafe(durStr, 1) * 1000;
-                                final int fakeMs = Math.max(1000, Math.min(60000, rawFakeMs));
-                                new Thread(() -> transferAndReport(ctx, historyFilePath, talker, splitSeconds, fakeMs, 0, 0), "leshao-mp3-send").start();
-                            })
-                            .setNegativeButton("取消", null)
-                            .create();
-                        cfgDlgHolder[0] = historyCfgDlg;
-                        historyCfgDlg.show();
-                        themeAlertDialog(historyCfgDlg);
+                        new Thread(() -> transferAndReport(ctx, historyFilePath, talker, 0, 1000, 0, 0), "leshao-mp3-send").start();
                     });
                     row.addView(reuseBtn);
                 }
