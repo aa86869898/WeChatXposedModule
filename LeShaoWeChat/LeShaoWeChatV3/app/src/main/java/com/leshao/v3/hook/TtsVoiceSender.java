@@ -2956,7 +2956,7 @@ public class TtsVoiceSender {
         int srcSamples = rawPcm.length / 2 / channels;
         int dstSamples = (int) ((long) srcSamples * dstRate / srcRate);
         byte[] out = new byte[dstSamples * 2];
-        int lanczosWindow = 3;
+        int lanczosWindow = 5; // 方案2: Lanczos-3 -> Lanczos-5, 更少混叠/更高保真
         for (int i = 0; i < dstSamples; i++) {
             double srcPos = (double) i * srcRate / dstRate;
             int srcBase = (int) srcPos - lanczosWindow + 1;
@@ -2987,7 +2987,7 @@ public class TtsVoiceSender {
             out[i * 2] = (byte) (outSample & 0xFF);
             out[i * 2 + 1] = (byte) ((outSample >> 8) & 0xFF);
         }
-        LogWriter.log(TAG, "resample Lanczos-3: " + srcRate + "Hz/" + channels + "ch -> "
+        LogWriter.log(TAG, "resample Lanczos-5: " + srcRate + "Hz/" + channels + "ch -> "
                 + dstRate + "Hz/mono, " + rawPcm.length + " -> " + out.length + " bytes");
         return out;
     }
@@ -3280,7 +3280,7 @@ public class TtsVoiceSender {
 
         int dstSamples = (int) ((long) srcSamples * dstRate / srcRate);
         byte[] out = new byte[dstSamples * 2];
-        int lanczosWindow = 3;
+        int lanczosWindow = 5; // 方案2: Lanczos-3 -> Lanczos-5, 更少混叠/更高保真
         for (int i = 0; i < dstSamples; i++) {
             double srcPos = (double) i * srcRate / dstRate;
             int srcBase = (int) srcPos - lanczosWindow + 1;
@@ -3305,7 +3305,7 @@ public class TtsVoiceSender {
             out[i * 2 + 1] = (byte) ((outSample >> 8) & 0xff);
         }
 
-        LogWriter.log(TAG, "PCM resample (Lanczos-3): " + srcRate + "Hz/" + channels + "ch -> "
+        LogWriter.log(TAG, "PCM resample (Lanczos-5): " + srcRate + "Hz/" + channels + "ch -> "
                 + dstRate + "Hz/" + TARGET_CHANNELS + "ch " + TARGET_BITS_PER_SAMPLE
                 + "bit " + out.length + " bytes");
         return out;
