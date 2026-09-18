@@ -3360,6 +3360,10 @@ public class TtsVoiceSender {
     private static byte[] enhanceVoicePcm(byte[] pcm) {
         if (pcm == null || pcm.length < 4) return pcm;
         try {
+            // 方案7: 双模式开关 — voice_enhance=true 走人声增强链(v928), false 走原音还原链(v929/默认)
+            if (WmPrefs.get("voice_enhance", false)) {
+                return enhanceVoicePcmTop(pcm);
+            }
             final double fullScale = 32767.0;
             int n = pcm.length / 2;
             double peak = 0;
@@ -3385,6 +3389,114 @@ public class TtsVoiceSender {
                 out[idx + 1] = (byte) ((yi >> 8) & 0xFF);
             }
             LogWriter.log(TAG, "enhanceVoicePcm(restore): 透明化仅峰值归一化90%FS peak="
+                    + Math.round(peak) + " gain=" + ((int)(gain*1000)/1000.0) + " " + pcm.length + "B");
+            return out;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "enhanceVoicePcm err: " + t.getMessage());
+            return pcm;
+        }
+    }
+
+    /** 人声增强链(v928): 高通120Hz + Peaking EQ 2.4k/1.2k + 压缩器(-18dB 2.5:1) + 峰值归一化88%FS */
+    private static byte[] enhanceVoicePcmTop(byte[] pcm) {
+        if (pcm == null || pcm.length < 4) return pcm;
+        try {
+            final double fs = TARGET_SAMPLE_RATE;
+            int n = pcm.length / 2;
+            double[] samples = new double[n];
+            for (int i = 0; i < n; i++) {
+                int idx = i * 2;
+                int s = (pcm[idx] & 0xFF) | (pcm[idx + 1] << 8);
+                samples[i] = (short) s;
+            }
+
+            // --- 1. 二阶 Butterworth 高通 fc=120Hz (RBJ audio EQ cookbook) ---
+            double w0 = 2.0 * Math.PI * 120.0 / fs;
+            double alpha = Math.sin(w0) / Math.sqrt(2.0); // Q=1/sqrt(2)
+            double cosw = Math.cos(w0);
+            double b0 = (1.0 + cosw) / 2.0, b1 = -(1.0 + cosw), b2 = (1.0 + cosw) / 2.0;
+            double a0 = 1.0 + alpha, a1 = -2.0 * cosw, a2 = 1.0 - alpha;
+            double ib0 = b0 / a0, ib1 = b1 / a0, ib2 = b2 / a0, ia1 = a1 / a0, ia2 = a2 / a0;
+            double hpZ1 = 0, hpZ2 = 0;
+            for (int i = 0; i < n; i++) {
+                double x = samples[i];
+                double y = ib0 * x + hpZ1;
+                hpZ1 = ib1 * x - ia1 * y + hpZ2;
+                hpZ2 = ib2 * x - ia2 * y;
+                samples[i] = y;
+            }
+
+            // --- 2. Peaking EQ +3dB Q=1.0 fc=2.4kHz (presence/齿音) ---
+            double[][] eqs = {
+                {2400.0, 1.0, 3.0},   // fc, Q, gainDb
+                {1200.0, 0.6, 2.0}    // 方案D: 300Hz-3kHz 人声主体抬升
+            };
+            for (double[] eq : eqs) {
+                double f0 = eq[0], q = eq[1], gDb = eq[2];
+                w0 = 2.0 * Math.PI * f0 / fs;
+                alpha = Math.sin(w0) / (2.0 * q);
+                cosw = Math.cos(w0);
+                double A = Math.pow(10.0, gDb / 40.0);
+                b0 = 1.0 + alpha * A; b1 = -2.0 * cosw; b2 = 1.0 - alpha * A;
+                a0 = 1.0 + alpha / A; a1 = -2.0 * cosw; a2 = 1.0 - alpha / A;
+                double e0 = b0 / a0, e1 = b1 / a0, e2 = b2 / a0, ea1 = a1 / a0, ea2 = a2 / a0;
+                double eqZ1 = 0, eqZ2 = 0;
+                for (int i = 0; i < n; i++) {
+                    double x = samples[i];
+                    double y = e0 * x + eqZ1;
+                    eqZ1 = e1 * x - ea1 * y + eqZ2;
+                    eqZ2 = e2 * x - ea2 * y;
+                    samples[i] = y;
+                }
+            }
+
+            // --- 4. 轻量压缩器 threshold=-18dBFS ratio=2.5:1 (方案C) ---
+            final double fullScale = 32767.0;
+            final double thresholdDb = -18.0;
+            final double ratio = 2.5;
+            final double attackSmp = 0.002 * fs;   // 2ms
+            final double releaseSmp = 0.100 * fs;  // 100ms
+            double envDb = -120.0;
+            double smoothGain = 1.0;
+            for (int i = 0; i < n; i++) {
+                double absX = Math.abs(samples[i]) / fullScale;
+                double instDb = (absX > 1e-9) ? 20.0 * Math.log10(absX) : -120.0;
+                if (instDb > envDb) {
+                    envDb += (instDb - envDb) / attackSmp;
+                } else {
+                    envDb += (instDb - envDb) / releaseSmp;
+                }
+                double target = 1.0;
+                double over = envDb - thresholdDb;
+                if (over > 0) {
+                    double compressedDb = thresholdDb + over / ratio;
+                    target = Math.pow(10.0, (compressedDb - envDb) / 20.0);
+                }
+                double k = (target < smoothGain) ? 1.0 / attackSmp : 1.0 / releaseSmp;
+                if (k > 1.0) k = 1.0;
+                smoothGain += (target - smoothGain) * k;
+                samples[i] *= smoothGain;
+            }
+
+            // --- 5. 峰值归一化至 88% FS ---
+            double peak = 0;
+            for (int i = 0; i < n; i++) {
+                double m = Math.abs(samples[i]);
+                if (m > peak) peak = m;
+            }
+            double normTarget = 0.88 * 32767.0;
+            double gain = normTarget / peak;
+            if (gain > 12.0) gain = 12.0; // 增益上限, 防噪声放大
+            byte[] out = new byte[pcm.length];
+            for (int i = 0; i < n; i++) {
+                double y = samples[i] * gain;
+                if (y > 32767.0) y = 32767.0;
+                if (y < -32768.0) y = -32768.0;
+                int yi = (int) Math.round(y);
+                out[i * 2] = (byte) (yi & 0xFF);
+                out[i * 2 + 1] = (byte) ((yi >> 8) & 0xFF);
+            }
+            LogWriter.log(TAG, "enhanceVoicePcm(top): HPF120+EQ2400+EQ1200+comp(-18dB/2.5)+norm peak="
                     + Math.round(peak) + " gain=" + ((int)(gain*1000)/1000.0) + " " + pcm.length + "B");
             return out;
         } catch (Throwable t) {

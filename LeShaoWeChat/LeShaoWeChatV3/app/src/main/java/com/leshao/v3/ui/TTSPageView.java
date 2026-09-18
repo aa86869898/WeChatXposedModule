@@ -130,6 +130,13 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
                 autoVoice, (v, on) -> WmPrefs.set("auto_voice", on)));
         root.addView(cardAutoVoice);
 
+        // 方案7: 双模式开关 — 语音发送音质: 人声增强(v928, 音乐伴奏更清晰) vs 原音还原(v929, 默认保真)
+        boolean voiceEnhance = WmPrefs.get("voice_enhance", false);
+        LinearLayout cardVoiceMode = makeCard(ctx, d);
+        cardVoiceMode.addView(switchRow(ctx, d, "语音发送人声增强", "开启=人声增强链(高通+EQ+压缩, 音乐带伴奏人声更突出); 关闭=原音还原链(透明处理, 保真优先, 默认)",
+                voiceEnhance, (v, on) -> WmPrefs.set("voice_enhance", on)));
+        root.addView(cardVoiceMode);
+
         root.addView(candyDivider(ctx, d));
         root.addView(sectionLabel(ctx, d, "\u81ea\u52a8\u64ad\u62a5\u7c7b\u578b"));
 
