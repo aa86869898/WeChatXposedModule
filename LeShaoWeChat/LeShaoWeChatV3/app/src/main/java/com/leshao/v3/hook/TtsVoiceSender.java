@@ -53,7 +53,7 @@ public class TtsVoiceSender {
 
     private static final String TAG = "TtsVoiceSender";
     private static final String TTS_PREFIX = "#tts ";
-    private static final int TARGET_SAMPLE_RATE = 32000;    // 还原音质(B方案): 24k→32k, 进一步扩展高频带宽
+    private static final int TARGET_SAMPLE_RATE = 24000;    // 还原音质(B方案): 32k→24k(回退, v931 32k 接收端翻车)
     private static final int TARGET_CHANNELS = 1;
     private static final int TARGET_BITS_PER_SAMPLE = 16;
     private static final int FRAME_DURATION_MS = 20;
@@ -3610,10 +3610,10 @@ public class TtsVoiceSender {
         }
     }
 
-    /** 通用降采样: 从 TARGET_SAMPLE_RATE(现为32k) 降到 8k, 供 AMR-NB 兜底 */
+    /** 通用降采样: 从 TARGET_SAMPLE_RATE(现为24k) 降到 8k, 供 AMR-NB 兜底 */
     private static byte[] downsampleTo8k(byte[] pcm) {
         if (pcm == null || pcm.length < 4) return pcm;
-        int factor = TARGET_SAMPLE_RATE / 8000; // 32k/8k = 4
+        int factor = TARGET_SAMPLE_RATE / 8000; // 24k/8k = 3
         if (factor < 1) factor = 1;
         int inSamples = pcm.length / 2;
         int outSamples = inSamples / factor;
