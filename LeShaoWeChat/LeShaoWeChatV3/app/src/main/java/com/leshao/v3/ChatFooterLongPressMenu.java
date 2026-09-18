@@ -375,7 +375,9 @@ public class ChatFooterLongPressMenu {
         root.addView(audioPanel);
 
         // PopupWindow
-        popupWindow = new PopupWindow(root, ViewGroup.LayoutParams.WRAP_CONTENT,
+        // 宽度固定为屏宽 70% (用户要求), 高度自适应
+        int panelW = (int) (ctx.getResources().getDisplayMetrics().widthPixels * 0.7f);
+        popupWindow = new PopupWindow(root, panelW,
                 ViewGroup.LayoutParams.WRAP_CONTENT, true);
         popupWindow.setBackgroundDrawable(new ColorDrawable(0));
         popupWindow.setElevation(dp(ctx, 8));

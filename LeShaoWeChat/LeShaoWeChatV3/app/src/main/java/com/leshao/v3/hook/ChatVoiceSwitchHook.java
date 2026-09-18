@@ -406,10 +406,12 @@ public final class ChatVoiceSwitchHook {
         scroll.setHorizontalScrollBarEnabled(false);
         scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         scroll.setPadding(0, 0, 0, 0);
-        // 行占满整行宽度，按钮整体水平居中显示（不再居左）
+        // 按钮整体水平居中显示：HScrollView 子 view 宽度强制为内容宽(UNSPECIFIED)，
+        // 用 FrameLayout.LayoutParams 的 gravity 让内容行在整行内居中
         row.setGravity(Gravity.CENTER);
-        scroll.addView(row, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        scroll.addView(row, new android.widget.FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER_HORIZONTAL));
         return scroll;
     }
 

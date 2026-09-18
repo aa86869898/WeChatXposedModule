@@ -248,8 +248,64 @@ public class BatchInviteGroupsHook {
                 showToastAsync("没有可邀请的群(好友已在全部群中)");
                 return;
             }
-            showToastAsync("找到 " + invitable.size() + " 个可邀请群, 开始邀请...");
+            showGroupPickDialog(friend, invitable);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "doBatchInvite err: " + t.getMessage());
+            showToastAsync("批量邀请出错: " + t.getClass().getSimpleName());
+        }
+    }
 
+    /** 弹窗展示可邀请群列表(带勾选), 确认后逐群发送邀请 */
+    private static void showGroupPickDialog(final String friend, final List<Room> invitable) {
+        try {
+            final boolean[] checked = new boolean[invitable.size()];
+            for (int i = 0; i < checked.length; i++) checked[i] = true;
+            final String[] names = new String[invitable.size()];
+            for (int i = 0; i < invitable.size(); i++) {
+                Room r = invitable.get(i);
+                names[i] = r.name == null || r.name.isEmpty() ? r.username : r.name;
+            }
+
+            new Handler(Looper.getMainLooper()).post(() -> {
+                try {
+                    Context ctx = ContextManager.getAppContext();
+                    android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(ctx)
+                            .setTitle("选择要邀请的群 (" + invitable.size() + " 个)")
+                            .setMultiChoiceItems(names, checked, (d, which, isChecked) ->
+                                    checked[which] = isChecked)
+                            .setPositiveButton("全选", (d, w) -> {
+                                for (int i = 0; i < checked.length; i++) checked[i] = true;
+                            })
+                            .setNegativeButton("开始邀请", (d, w) -> {
+                                List<Room> selected = new ArrayList<>();
+                                for (int i = 0; i < checked.length; i++) {
+                                    if (checked[i]) selected.add(invitable.get(i));
+                                }
+                                if (selected.isEmpty()) {
+                                    showToastAsync("未选择任何群");
+                                    return;
+                                }
+                                final List<Room> targets = selected;
+                                showToastAsync("将邀请 " + friend + " 进入 " + targets.size() + " 个群...");
+                                new Thread(() -> runBatchInvite(friend, targets), "InviteGroups").start();
+                            })
+                            .create();
+                    dialog.show();
+                } catch (Throwable e) {
+                    LogWriter.log(TAG, "showGroupPickDialog err: " + e.getMessage());
+                    showToastAsync("弹窗失败, 改为全部邀请");
+                    new Thread(() -> runBatchInvite(friend, invitable), "InviteGroups").start();
+                }
+            });
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "showGroupPickDialog outer err: " + e.getMessage());
+            showToastAsync("弹窗失败, 改为全部邀请");
+            new Thread(() -> runBatchInvite(friend, invitable), "InviteGroups").start();
+        }
+    }
+
+    private static void runBatchInvite(final String friend, final List<Room> invitable) {
+        try {
             Object netSceneMgr = null;
             try {
                 netSceneMgr = getNetSceneManager();
@@ -276,7 +332,7 @@ public class BatchInviteGroupsHook {
             showToastAsync("批量邀请完成: 成功 " + success + " 失败 " + fail
                     + "; " + friend);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "doBatchInvite err: " + t.getMessage());
+            LogWriter.log(TAG, "runBatchInvite err: " + t.getMessage());
             showToastAsync("批量邀请出错: " + t.getClass().getSimpleName());
         }
     }
@@ -342,7 +398,14 @@ public class BatchInviteGroupsHook {
             Object req = XposedHelpers.newInstance(XposedHelpers.findClass(WxCls.U73_U, sCL));
             XposedHelpers.setObjectField(req, "c", friend);
             XposedHelpers.setIntField(req, "b", 6);
-            XposedHelpers.setObjectField(req, "p", new Handler(Looper.getMainLooper()));
+            // u73.u.p 字段类型是 com.tencent.mm.sdk.platformtools.q3 (微信 Handler 封装),
+            // 直接塞 android.os.Handler 会抛字段类型不匹配, 需反射创建 q3 实例
+            Object q3Handler = createQ3Handler();
+            if (q3Handler != null) {
+                XposedHelpers.setObjectField(req, "p", q3Handler);
+            } else {
+                LogWriter.log(TAG, "getCommonChatrooms: q3 handler unavailable, p left default");
+            }
 
             Class<?> cbIface = XposedHelpers.findClass(WxCls.T73_X, sCL);
             Object callback = Proxy.newProxyInstance(sCL, new Class<?>[]{cbIface},
@@ -366,6 +429,43 @@ public class BatchInviteGroupsHook {
             LogWriter.log(TAG, "getCommonChatrooms err: " + e.getMessage());
         }
         return out;
+    }
+
+    /** 反射创建 com.tencent.mm.sdk.platformtools.q3 (微信 Handler 封装) 实例。
+     *  多级兜底: 空构造 -> (Looper) -> (Looper, Callback) -> (Handler); 全失败返回 null。 */
+    private static Object createQ3Handler() {
+        try {
+            Class<?> q3 = XposedHelpers.findClass("com.tencent.mm.sdk.platformtools.q3", sCL);
+            Throwable last = null;
+            try {
+                return XposedHelpers.newInstance(q3);
+            } catch (Throwable t) { last = t; }
+            try {
+                return XposedHelpers.newInstance(q3, Looper.getMainLooper());
+            } catch (Throwable t) { last = t; }
+            try {
+                return XposedHelpers.newInstance(q3, Looper.getMainLooper(), null);
+            } catch (Throwable t) { last = t; }
+            try {
+                return XposedHelpers.newInstance(q3, new Handler(Looper.getMainLooper()));
+            } catch (Throwable t) { last = t; }
+            LogWriter.log(TAG, "createQ3Handler: all constructors failed: "
+                    + (last == null ? "?" : last.getMessage()));
+            return null;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "createQ3Handler err: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /** getType() 安全取值: 部分版本返回 null, 直接 (int) 拆箱抛 NPE */
+    private static int safeSceneType(Object scene) {
+        try {
+            Object t = XposedHelpers.callMethod(scene, "getType");
+            if (t instanceof Integer) return (Integer) t;
+            if (t instanceof Number) return ((Number) t).intValue();
+        } catch (Throwable ignored) {}
+        return 36; // qn.m = NetSceneAddChatRoomMember, type=36 (文档实证)
     }
 
     @SuppressWarnings("unchecked")
@@ -423,7 +523,8 @@ public class BatchInviteGroupsHook {
             Object scene = XposedHelpers.newInstance(
                     XposedHelpers.findClass(WxCls.QN_M, sCL),
                     room, Collections.singletonList(friend), "", null);
-            int type = (int) XposedHelpers.callMethod(scene, "getType");
+            // getType() 在部分版本返回 null, 直接 (int) 拆箱抛 NPE
+            int type = safeSceneType(scene);
             final boolean[] done = {false};
             final boolean[] ok = {false};
             final Object lock = new Object();
@@ -434,9 +535,9 @@ public class BatchInviteGroupsHook {
                         if (method.getName().equals("onSceneEnd") && args != null
                                 && args.length >= 3) {
                             synchronized (lock) {
-                                int errType = (int) args[0];
-                                int errCode = (int) args[1];
-                                String errMsg = (String) args[2];
+                                int errType = args[0] instanceof Integer ? (Integer) args[0] : 0;
+                                int errCode = args[1] instanceof Integer ? (Integer) args[1] : 0;
+                                String errMsg = args[2] == null ? null : String.valueOf(args[2]);
                                 LogWriter.log(TAG, "invite onSceneEnd room=" + room
                                         + " errType=" + errType + " errCode=" + errCode
                                         + " msg=" + errMsg);

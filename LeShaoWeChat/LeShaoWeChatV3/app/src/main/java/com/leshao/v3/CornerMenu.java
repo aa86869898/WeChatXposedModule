@@ -62,6 +62,10 @@ public class CornerMenu {
     private static WindowManager sMainWM;
     private static final Handler sH = new Handler(Looper.getMainLooper());
 
+    // 聊天窗口精确标志位: 由 ChattingUIFragment.onHiddenChanged 驱动,
+    // 比遍历 fragment 检查 view 状态更可靠 (回主页后 view 状态可能未同步/多实例误判)
+    private static volatile boolean sChatWindowActive;
+
     private static int dp(Context ctx, float dp) {
         return (int) (dp * ctx.getResources().getDisplayMetrics().density + 0.5f);
     }
@@ -114,6 +118,7 @@ public class CornerMenu {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         try {
+                            sChatWindowActive = false;
                             if (sMainIcon != null) {
                                 LogWriter.log(TAG, "Activity.onPause -> remove hamburger");
                                 removeAll();
@@ -122,6 +127,11 @@ public class CornerMenu {
                     }
                 });
             LogWriter.log(TAG, "hook: Activity.onPause hooked");
+
+            // 聊天窗口精确可见性标志: onHiddenChanged 驱动。
+            // 修复回主页后 isInChatWindow 误判导致三横菜单不注入的问题。
+            hookChatFragmentVisibility(cl);
+            LogWriter.log(TAG, "hook: ChattingUIFragment.onHiddenChanged hooked");
         } catch (Throwable e) {
             LogWriter.log(TAG, "hook: FAILED - " + e.getClass().getSimpleName()
                 + ": " + e.getMessage());
@@ -161,6 +171,10 @@ public class CornerMenu {
      * 聊天中则不注入三横菜单。
      */
     private static boolean isInChatWindow(Activity act) {
+        // 优先使用 onHiddenChanged 驱动的精确标志位:
+        // 回主页后 fragment view 可能仍短暂标记可见或存在多个实例,
+        // 遍历检查不可靠, 导致三横菜单偶发不显示。
+        if (sChatWindowActive) return true;
         try {
             Object fm = XposedHelpers.callMethod(act, "getSupportFragmentManager");
             if (fm == null) return false;
@@ -170,6 +184,10 @@ public class CornerMenu {
                 if (!"com.tencent.mm.ui.chatting.ChattingUIFragment".equals(f.getClass().getName())) continue;
                 // 仅当 fragment 视图真正显示在屏幕上才算聊天中;
                 // 回主页后残留的隐藏/未附加 fragment 不算 (修复回主页后三横菜单不再注入的问题)
+                try {
+                    Object h = XposedHelpers.callMethod(f, "isHidden");
+                    if (h instanceof Boolean && (Boolean) h) continue;
+                } catch (Throwable ignored) {}
                 try {
                     Object v = XposedHelpers.callMethod(f, "isVisible");
                     if (v instanceof Boolean && (Boolean) v) return true;
@@ -181,6 +199,44 @@ public class CornerMenu {
             }
         } catch (Throwable ignored) {}
         return false;
+    }
+
+    /** 聊天窗口精确可见性: hook ChattingUIFragment.onHiddenChanged 维护标志位。
+     *  同时拦截回主页瞬间(chat hidden)立即恢复注入, 修复偶发不显示。 */
+    private static void hookChatFragmentVisibility(ClassLoader cl) {
+        try {
+            Class<?> fragCls = XposedHelpers.findClass(
+                "com.tencent.mm.ui.chatting.ChattingUIFragment", cl);
+            XposedBridge.hookAllMethods(fragCls, "onHiddenChanged", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        boolean hidden = (Boolean) param.args[0];
+                        sChatWindowActive = !hidden;
+                        if (hidden) {
+                            // 回主页: 立即尝试恢复三横菜单(不依赖下次 onWindowFocusChanged)
+                            final Object frag = param.thisObject;
+                            sH.postDelayed(() -> {
+                                try {
+                                    if (frag == null || sChatWindowActive) return;
+                                    Activity act = (Activity) XposedHelpers.callMethod(frag, "getActivity");
+                                    if (act == null) return;
+                                    String clsName = act.getClass().getName();
+                                    if (!"com.tencent.mm.ui.LauncherUI".equals(clsName)
+                                            && !"com.tencent.mm.ui.HomeUI".equals(clsName)) return;
+                                    if (sMainIcon != null) return;
+                                    injectMain(act, 0);
+                                } catch (Throwable ignored) {}
+                            }, 100);
+                        }
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "onHiddenChanged cb err: " + e);
+                    }
+                }
+            });
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookChatFragmentVisibility err: " + t.getMessage());
+        }
     }
 
     private static boolean isEnabled(Context ctx) {

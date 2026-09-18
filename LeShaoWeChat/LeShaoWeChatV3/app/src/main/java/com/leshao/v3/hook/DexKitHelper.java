@@ -454,14 +454,14 @@ public class DexKitHelper {
                 for (String s : menuImpls.split("\\|")) if (!s.isEmpty()) sMenuG4Impls.add(s);
             }
 
+            // 仅核心必选字段纳入完整性判定; convScroll/convLongPress/convMenu/a21/label/
+            // convAdapter/j1Caller 在当前版本可能扫描不到(可选),缺失时不再判缓存不完整,
+            // 否则每次启动都会清缓存重扫(见 leshao_v3_log: incomplete cached results)。
             boolean hasResults = (sP06ClassName != null && sDbOpenerClass != null && sDbOpenMethodName != null
                 && sImeiClassName != null && sImeiMethodName != null && sCsoLoaderClass != null
-                && sJ1CallerClass != null && sJ1CallerMethod != null && sJ1ServiceClass != null
-                && sContactStorageClass != null && sChatOpenClass != null && sChatOpenMethod != null
-                && sConvScrollClass != null && sConvScrollMethod != null && sConvLongPressClass != null
-                && sConvLongPressMethod != null && sConvMenuClass != null && sConvMenuMethod != null
-                && sVoiceApiClass != null && sE9ClassName != null && sA21ClassName != null
-                && sAvatarHelperClass != null && sLabelStorageClass != null && sConvListListAdapterClass != null);
+                && sJ1ServiceClass != null && sContactStorageClass != null
+                && sChatOpenClass != null && sChatOpenMethod != null
+                && sVoiceApiClass != null && sE9ClassName != null && sAvatarHelperClass != null);
 
             if (!hasResults) {
                 LogWriter.log(TAG, "loadResultsFromMMKV: incomplete cached results, clearing cache");

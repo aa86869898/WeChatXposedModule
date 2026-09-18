@@ -199,6 +199,7 @@ public class TtsVoiceSender {
         hookB31W(cl);
         hookAdapterKJ(cl);
         hookF9I9(cl);
+        hookF9Bb(cl);
         // 自动发现微信内部类（功能所需）
         autoDiscoverClasses(cl, "com.tencent.mm.ui.chatting.ChattingUIFragment");
         autoDiscoverClasses(cl, "com.tencent.mm.ui.chatting.view.MMChattingListView");
@@ -1535,6 +1536,74 @@ public class TtsVoiceSender {
             LogWriter.log(TAG, "f9.I9 hooks: " + hooked);
         } catch (Throwable t) {
             LogWriter.log(TAG, "f9.I9 FAIL: " + t.getMessage());
+        }
+    }
+
+    /**
+     * 8.0.78(3180) TTS #tts 主入口适配: hook f9.Bb(e9, boolean) = MsgInfoStorage.insertMsgInfo。
+     * 文档方案A推荐的最稳入库入口，MessageHook 已验证当前版本可命中。
+     * 在入库前拦截发送的自定义 #tts 文本, 触发 TTS 合成 + SceneVoice 语音发送, 并抑制原文本入库。
+     */
+    private static void hookF9Bb(ClassLoader cl) {
+        try {
+            final Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
+            final Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
+            if (e9Class == null) {
+                LogWriter.log(TAG, "f9.Bb: e9 class not found");
+                return;
+            }
+            int hooked = 0;
+            for (java.lang.reflect.Method m : f9.getDeclaredMethods()) {
+                if (!m.getName().equals("Bb")) continue;
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length < 1 || pts[0] == null) continue;
+                String p0 = pts[0].getName();
+                if (!p0.endsWith(".e9") && !p0.contains("MsgInfo")) continue;
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam p) {
+                        try {
+                            if (p.args.length < 1 || p.args[0] == null) return;
+                            Object msg = p.args[0];
+                            if (!e9Class.isInstance(msg)) return;
+                            int isSend = getMsgIsSend(msg);
+                            if (isSend != 1) return;
+                            String content = getMsgContent(msg);
+                            if (content == null || !content.startsWith(TTS_PREFIX)) return;
+                            String text = content.substring(TTS_PREFIX.length()).trim();
+                            if (text.isEmpty()) return;
+                            if (markRecentText(text, System.currentTimeMillis())) {
+                                LogWriter.log(TAG, "f9.Bb duplicate #tts suppressed: " + text);
+                                return;
+                            }
+                            String talker = getTalker(msg);
+                            String clientMsgId = getClientMsgId(msg);
+                            markBlockedOriginal(msg);
+                            markRecentTtsCommand(msg);
+                            // 抑制原文本消息: 清空 content 字段使其以空文本入库(不可见),
+                            // 但不改动 f9.Bb 参数(args[0] 是消息对象, 非字符串)
+                            try { XposedHelpers.setObjectField(msg, "field_content", ""); } catch (Throwable ignored) {}
+                            try { XposedHelpers.callMethod(msg, "j1", ""); } catch (Throwable ignored) {}
+                            synchronized (sSuppressedMessages) {
+                                sSuppressedMessages.add(System.identityHashCode(msg));
+                            }
+                            if (clientMsgId != null) {
+                                synchronized (sSceneSentIds) { sSceneSentIds.add(clientMsgId); }
+                            }
+                            LogWriter.log(TAG, "f9.Bb #tts matched -> async SceneVoice talker=" + talker
+                                    + " cid=" + clientMsgId + " text='" + truncStr(text, 40) + "'");
+                            startAsyncTts(talker, clientMsgId, text, "f9.Bb");
+                        } catch (Throwable e) {
+                            LogWriter.log(TAG, "f9.Bb cb err: " + e.getMessage());
+                        }
+                    }
+                });
+                LogWriter.log(TAG, "Hook f9.Bb OK " + pts.length + " params p0=" + p0);
+                hooked++;
+            }
+            LogWriter.log(TAG, "f9.Bb hooks: " + hooked);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "f9.Bb FAIL: " + t.getMessage());
         }
     }
 
