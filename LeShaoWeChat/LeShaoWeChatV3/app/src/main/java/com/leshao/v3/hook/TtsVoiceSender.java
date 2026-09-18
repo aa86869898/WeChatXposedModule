@@ -53,14 +53,14 @@ public class TtsVoiceSender {
 
     private static final String TAG = "TtsVoiceSender";
     private static final String TTS_PREFIX = "#tts ";
-    private static final int TARGET_SAMPLE_RATE = 16000;
+    private static final int TARGET_SAMPLE_RATE = 24000;    // 还原音质(B方案): 16k→24k, 扩展高频带宽保留原始细节
     private static final int TARGET_CHANNELS = 1;
     private static final int TARGET_BITS_PER_SAMPLE = 16;
     private static final int FRAME_DURATION_MS = 20;
     private static final int FRAME_SAMPLES = TARGET_SAMPLE_RATE * FRAME_DURATION_MS / 1000;
     private static final int FRAME_PCM_BYTES = FRAME_SAMPLES * TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8;
     private static final long FAILURE_SUPPRESS_WINDOW_MS = 8000;
-    private static final int SILK_BITRATE = 40000;          // 微信原生 SILK 上限档(v927 为 30000, 现升 40k 提升吐字细节)
+    private static final int SILK_BITRATE = 50000;          // 微信原生 SILK 高码率档(v928 为 40000, 还原场景升 50k 承载更多细节)
     private static final int SILK_COMPLEXITY = 4;           // 参照 8.0.78 v61.w.c 转码参数 new v61/c0(16000,16000,4)
     private static volatile boolean sCrashHandlerInstalled;
     private static final java.util.concurrent.ExecutorService sTtsPool = 
@@ -3353,117 +3353,38 @@ public class TtsVoiceSender {
     private static final String AMR_NB_MIME_ALT = "audio/amr";
 
     /**
-     * 人声增强(编码前处理最高档): 16k/16bit/mono PCM 五段处理与 SILK/AMR 编码共用:
-     *  1. 二阶 Butterworth 高通 fc=120Hz — 比一阶更陡(12dB/oct)地削除低频底噪/气流声/电流声,
-     *     同时保留 120Hz+ 人声基频与低频共振
-     *  2. Peaking EQ +3dB Q=1.0 fc=2.4kHz — 抬升人声清晰度关键频段(presence/齿音区)
-     *  3. Peaking EQ +2dB Q=0.6 fc=1.2kHz — 抬升 300Hz-3kHz 人声主体频段(方案D),
-     *     让歌声中的人声旋律更突出于伴奏
-     *  4. 轻量压缩器 threshold=-18dBFS ratio=2.5:1 — 压缩伴奏峰值, 防止辅音/弱音
-     *     被乐器动态淹没(方案C)
-     *  5. 峰值归一化至 88% FS — 自动增益到接近满量程且防削波, 音量一致
-     * 链式 DF2T (transposed direct form II) 逐样本 64bit 双精度处理, 无限内稳定性。
+     * 还原音质(透明化处理): 16k->24k 采样后不再施加高通/EQ/压缩等音色改动,
+     * 仅做峰值归一化至 90% FS(只调音量防削波, 不改音色), 最大限度保留原曲保真度。
+     * SILK/AMR 编码共用此段。
      */
     private static byte[] enhanceVoicePcm(byte[] pcm) {
         if (pcm == null || pcm.length < 4) return pcm;
         try {
-            final double fs = TARGET_SAMPLE_RATE;
+            final double fullScale = 32767.0;
             int n = pcm.length / 2;
-            double[] samples = new double[n];
+            double peak = 0;
             for (int i = 0; i < n; i++) {
                 int idx = i * 2;
                 int s = (pcm[idx] & 0xFF) | (pcm[idx + 1] << 8);
-                samples[i] = (short) s;
-            }
-
-            // --- 1. 二阶 Butterworth 高通 fc=120Hz (RBJ audio EQ cookbook) ---
-            double w0 = 2.0 * Math.PI * 120.0 / fs;
-            double alpha = Math.sin(w0) / Math.sqrt(2.0); // Q=1/sqrt(2)
-            double cosw = Math.cos(w0);
-            double b0 = (1.0 + cosw) / 2.0, b1 = -(1.0 + cosw), b2 = (1.0 + cosw) / 2.0;
-            double a0 = 1.0 + alpha, a1 = -2.0 * cosw, a2 = 1.0 - alpha;
-            // normalize
-            double ib0 = b0 / a0, ib1 = b1 / a0, ib2 = b2 / a0, ia1 = a1 / a0, ia2 = a2 / a0;
-            double hpZ1 = 0, hpZ2 = 0;
-            for (int i = 0; i < n; i++) {
-                double x = samples[i];
-                double y = ib0 * x + hpZ1;
-                hpZ1 = ib1 * x - ia1 * y + hpZ2;
-                hpZ2 = ib2 * x - ia2 * y;
-                samples[i] = y;
-            }
-
-            // --- 2. Peaking EQ +3dB Q=1.0 fc=2.4kHz (presence/齿音) ---
-            double[][] eqs = {
-                {2400.0, 1.0, 3.0},   // fc, Q, gainDb
-                {1200.0, 0.6, 2.0}    // 方案D: 300Hz-3kHz 人声主体抬升
-            };
-            for (double[] eq : eqs) {
-                double f0 = eq[0], q = eq[1], gDb = eq[2];
-                w0 = 2.0 * Math.PI * f0 / fs;
-                alpha = Math.sin(w0) / (2.0 * q);
-                cosw = Math.cos(w0);
-                double A = Math.pow(10.0, gDb / 40.0);
-                b0 = 1.0 + alpha * A; b1 = -2.0 * cosw; b2 = 1.0 - alpha * A;
-                a0 = 1.0 + alpha / A; a1 = -2.0 * cosw; a2 = 1.0 - alpha / A;
-                double e0 = b0 / a0, e1 = b1 / a0, e2 = b2 / a0, ea1 = a1 / a0, ea2 = a2 / a0;
-                double eqZ1 = 0, eqZ2 = 0;
-                for (int i = 0; i < n; i++) {
-                    double x = samples[i];
-                    double y = e0 * x + eqZ1;
-                    eqZ1 = e1 * x - ea1 * y + eqZ2;
-                    eqZ2 = e2 * x - ea2 * y;
-                    samples[i] = y;
-                }
-            }
-
-            // --- 4. 轻量压缩器 threshold=-18dBFS ratio=2.5:1 (方案C) ---
-            final double fullScale = 32767.0;
-            final double thresholdDb = -18.0;
-            final double ratio = 2.5;
-            final double attackSmp = 0.002 * fs;   // 2ms
-            final double releaseSmp = 0.100 * fs;  // 100ms
-            double envDb = -120.0;
-            double smoothGain = 1.0;
-            for (int i = 0; i < n; i++) {
-                double absX = Math.abs(samples[i]) / fullScale;
-                double instDb = (absX > 1e-9) ? 20.0 * Math.log10(absX) : -120.0;
-                if (instDb > envDb) {
-                    envDb += (instDb - envDb) / attackSmp;
-                } else {
-                    envDb += (instDb - envDb) / releaseSmp;
-                }
-                double target = 1.0;
-                double over = envDb - thresholdDb;
-                if (over > 0) {
-                    double compressedDb = thresholdDb + over / ratio;
-                    target = Math.pow(10.0, (compressedDb - envDb) / 20.0);
-                }
-                double k = (target < smoothGain) ? 1.0 / attackSmp : 1.0 / releaseSmp;
-                if (k > 1.0) k = 1.0;
-                smoothGain += (target - smoothGain) * k;
-                samples[i] *= smoothGain;
-            }
-
-            // --- 5. 峰值归一化至 88% FS ---
-            double peak = 0;
-            for (int i = 0; i < n; i++) {
-                double m = Math.abs(samples[i]);
+                double v = (short) s;
+                double m = Math.abs(v);
                 if (m > peak) peak = m;
             }
-            double normTarget = 0.88 * 32767.0;
-            double gain = normTarget / peak;
+            double normTarget = 0.90 * fullScale;
+            double gain = (peak > 0) ? normTarget / peak : 1.0;
             if (gain > 12.0) gain = 12.0; // 增益上限, 防噪声放大
             byte[] out = new byte[pcm.length];
             for (int i = 0; i < n; i++) {
-                double y = samples[i] * gain;
-                if (y > 32767.0) y = 32767.0;
-                if (y < -32768.0) y = -32768.0;
-                int yi = (int) Math.round(y);
-                out[i * 2] = (byte) (yi & 0xFF);
-                out[i * 2 + 1] = (byte) ((yi >> 8) & 0xFF);
+                int idx = i * 2;
+                int s = (pcm[idx] & 0xFF) | (pcm[idx + 1] << 8);
+                double v = (short) s * gain;
+                if (v > 32767.0) v = 32767.0;
+                if (v < -32768.0) v = -32768.0;
+                int yi = (int) Math.round(v);
+                out[idx] = (byte) (yi & 0xFF);
+                out[idx + 1] = (byte) ((yi >> 8) & 0xFF);
             }
-            LogWriter.log(TAG, "enhanceVoicePcm(top): HPF120+EQ2400+EQ1200+comp(-18dB/2.5)+norm peak="
+            LogWriter.log(TAG, "enhanceVoicePcm(restore): 透明化仅峰值归一化90%FS peak="
                     + Math.round(peak) + " gain=" + ((int)(gain*1000)/1000.0) + " " + pcm.length + "B");
             return out;
         } catch (Throwable t) {
@@ -3581,9 +3502,9 @@ public class TtsVoiceSender {
      * AMR-NB(#!AMR\n, 8k/12200) 仅作无 SILK native 编码器兜底。
      */
     private static byte[] encodeAmrNbRaw(byte[] padPcm) {
-        byte[] amrNb = encodeAmrWith(AMR_NB_MIME, 8000, 12200, downsample16kTo8k(padPcm), "#!AMR\n");
+        byte[] amrNb = encodeAmrWith(AMR_NB_MIME, 8000, 12200, downsampleTo8k(padPcm), "#!AMR\n");
         if (amrNb != null && amrNb.length > 6) return amrNb;
-        byte[] amrNbAlt = encodeAmrWith(AMR_NB_MIME_ALT, 8000, 12200, downsample16kTo8k(padPcm), "#!AMR\n");
+        byte[] amrNbAlt = encodeAmrWith(AMR_NB_MIME_ALT, 8000, 12200, downsampleTo8k(padPcm), "#!AMR\n");
         if (amrNbAlt != null && amrNbAlt.length > 6) return amrNbAlt;
 
         LogWriter.log(TAG, "encodeAmrNbRaw: AMR-NB unavailable, return null (AMR-WB/SILK 对端空, 不做兜底)");
@@ -3689,15 +3610,21 @@ public class TtsVoiceSender {
         }
     }
 
-    private static byte[] downsample16kTo8k(byte[] pcm) {
+    /** 通用降采样: 从 TARGET_SAMPLE_RATE(现为24k) 降到 8k, 供 AMR-NB 兜底 */
+    private static byte[] downsampleTo8k(byte[] pcm) {
         if (pcm == null || pcm.length < 4) return pcm;
+        int factor = TARGET_SAMPLE_RATE / 8000; // 24k/8k = 3
+        if (factor < 1) factor = 1;
         int inSamples = pcm.length / 2;
-        int outSamples = inSamples / 2;
+        int outSamples = inSamples / factor;
         byte[] out = new byte[outSamples * 2];
         for (int i = 0; i < outSamples; i++) {
-            int s0 = (short) ((pcm[i * 4] & 0xff) | (pcm[i * 4 + 1] << 8));
-            int s1 = (short) ((pcm[i * 4 + 2] & 0xff) | (pcm[i * 4 + 3] << 8));
-            int avg = (s0 + s1) >> 1;
+            long sum = 0;
+            for (int j = 0; j < factor; j++) {
+                int o = (i * factor + j) * 2;
+                sum += (short) ((pcm[o] & 0xff) | (pcm[o + 1] << 8));
+            }
+            int avg = (int) (sum / factor);
             out[i * 2] = (byte) (avg & 0xff);
             out[i * 2 + 1] = (byte) ((avg >> 8) & 0xff);
         }
