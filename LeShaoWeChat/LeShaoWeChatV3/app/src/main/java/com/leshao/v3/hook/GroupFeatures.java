@@ -929,20 +929,53 @@ public class GroupFeatures {
     }
 
     public static void sendTextMessage(ClassLoader cl, String talker, String text) {
+        // 8.0.78(3180): 优先走 qs5.v5 新框架文本 (多类型群发2_新.md §3.1)
+        try {
+            com.leshao.v3.wm.utils.WmReflect.sendTextMsg(cl, text, talker);
+            XposedBridge.log("[Group] 文本已通过 qs5.v5 发送: " + talker);
+            return;
+        } catch (Throwable t) {
+            XposedBridge.log("[Group] qs5.v5 发送失败, 回退 e9 入库: " + t.getMessage());
+        }
         try {
             Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
             if (e9Class == null) return;
             Object msg = XposedHelpers.newInstance(e9Class, talker);
-            XposedHelpers.callMethod(msg, "A1", 1);
-            XposedHelpers.callMethod(msg, "X0", text);
-            XposedHelpers.callMethod(msg, "L1", System.currentTimeMillis());
+            // 8.0.78(3180) e9 setter: b1(content) u1(talker) e1(createTime) setType(int)
+            try {
+                XposedHelpers.callMethod(msg, "b1", text);
+            } catch (Throwable t1) {
+                try { XposedHelpers.callMethod(msg, "X0", text); } catch (Throwable ignored1) {}
+            }
+            try {
+                XposedHelpers.callMethod(msg, "u1", talker);
+            } catch (Throwable ignored) {}
+            try {
+                XposedHelpers.callMethod(msg, "e1", System.currentTimeMillis());
+            } catch (Throwable t2) {
+                try { XposedHelpers.callMethod(msg, "L1", System.currentTimeMillis()); } catch (Throwable ignored2) {}
+            }
+            try {
+                XposedHelpers.callMethod(msg, "setType", 1);
+            } catch (Throwable ignored) {}
 
             if (sMsgStorage != null) {
                 long msgId = System.currentTimeMillis();
                 XposedHelpers.callMethod(sMsgStorage, "Ra", msgId, msg);
                 XposedBridge.log("[Group] 消息已插入DB: " + text.substring(0, Math.min(20, text.length())));
             } else {
-                sendViaFooter(cl, talker, text);
+                // 兜底: f9.yb(e9) 入库
+                try {
+                    Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
+                    Object ctx = com.leshao.v3.ContextManager.getAppContext();
+                    Object y = XposedHelpers.callStaticMethod(f9, "yb", msg, 0);
+                    if (y != null) {
+                        XposedBridge.log("[Group] 消息已通过 f9.yb 入库");
+                    }
+                } catch (Throwable t3) {
+                    XposedBridge.log("[Group] f9.yb 失败, 回退 Footer: " + t3.getMessage());
+                    sendViaFooter(cl, talker, text);
+                }
             }
         } catch (Throwable t) {
             XposedBridge.log("[Group] 发送失败: " + t.getMessage());

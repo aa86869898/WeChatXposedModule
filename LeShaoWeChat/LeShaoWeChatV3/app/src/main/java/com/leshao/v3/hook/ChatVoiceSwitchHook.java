@@ -10,7 +10,6 @@ import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewParent;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -22,6 +21,7 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.TTSPageView;
 
 import java.lang.reflect.Constructor;
+import java.util.WeakHashMap;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -29,30 +29,29 @@ import de.robv.android.xposed.XposedHelpers;
 
 /**
  * 微信聊天输入框上方注入 "音色切换" 与 "万群转发" 按钮（渐变流体糖果霓虹风格）
- * 多方案兜底：
- *   方案A：Hook MMEditText 构造函数
- *   方案B：Hook TextView.onTextChanged 兜底捕获输入框
- *   方案C：Hook EditText 构造函数兜底
- *   方案D：View.onAttachedToWindow 兜底
- *   方案E：Activity onResume 主动扫描
+ * 参照《聊天窗口输入框上方注入按钮_新.md》：
+ *   方案A（主推）：Hook ChatFooter 构造器，attach 后向父容器 ChattingUILayout（垂直 LinearLayout）
+ *                 在 footer 前一索引插入按钮栏，即输入框上方，随键盘自动上移。
+ *   方案B（兜底）：Hook BaseChattingUIFragment.onResume，扫描 View 树找 ChatFooter 注入。
+ * 注意：本环境 R8 改写 XposedHelpers，varargs findAndHookMethod/findAndHookConstructor 不可用，
+ *       统一使用 findClass + getDeclaredMethod/getDeclaredConstructor + XposedBridge.hookMethod。
  */
 public final class ChatVoiceSwitchHook {
 
     private static final String TAG = "ChatVoiceSwitchHook";
-    private static final String MM_EDIT_TEXT = "com.tencent.mm.ui.widget.MMEditText";
-    private static final String MAX_HEIGHT_SCROLL = "com.tencent.mm.view.MaxHeightScrollView";
+    private static final String CHAT_FOOTER = "com.tencent.mm.pluginsdk.ui.chat.ChatFooter";
+    private static final String CHAT_UI_LAYOUT = "com.tencent.mm.pluginsdk.ui.chat.ChattingUILayout";
+    private static final String BASE_FRAGMENT = "com.tencent.mm.ui.chatting.BaseChattingUIFragment";
 
     // 糖果霓虹渐变（粉 → 霓虹粉 → 紫 → 青）
     private static final int[] NEON_GRADIENT = new int[]{
             0xFFFF94C2, 0xFFFF10F0, 0xFF7B2FF7, 0xFF36D1E8
     };
 
-    private static final long INJECT_DELAY_MS = 600;
     private static final int MAX_RETRY = 10;
 
-    // 用 view tag 防止同一输入框重复注入，同时避免多方案竞争
-    private static final Object PENDING_TAG = new Object();
-    private static final Object INJECTED_TAG = new Object();
+    // 防重复注入：以 footer View 实例为 key（文档做法），Activity 重建后新 footer 是新对象
+    private static final WeakHashMap<View, Boolean> sInjected = new WeakHashMap<>();
 
     private ChatVoiceSwitchHook() {
     }
@@ -63,39 +62,68 @@ public final class ChatVoiceSwitchHook {
             LogWriter.log(TAG, "init: using Tinker ClassLoader");
         }
         final ClassLoader effectiveCL = tkCL != null ? tkCL : loader;
-        hookMMEditText(effectiveCL, 0);
-        hookGenericEditText();
-        hookEditTextConstructors();
-        hookOnAttachedToWindow();
-        hookActivityResume(effectiveCL);
+        hookChatFooter(effectiveCL, 0);
+        hookFragmentResume(effectiveCL);
     }
 
-    // ==================== 方案A：Hook MMEditText 构造器 ====================
+    // ==================== 方案A：Hook ChatFooter 构造器（主推） ====================
 
-    private static void hookMMEditText(final ClassLoader loader, final int attempt) {
+    private static void hookChatFooter(final ClassLoader loader, final int attempt) {
         try {
-            Class<?> editClazz = findClassIfExists(MM_EDIT_TEXT, loader);
-            if (editClazz == null) {
+            Class<?> footerClazz = findClassIfExists(CHAT_FOOTER, loader);
+            if (footerClazz == null) {
                 retryHook(loader, attempt);
                 return;
             }
-            for (Constructor<?> c : editClazz.getDeclaredConstructors()) {
-                XposedBridge.hookMethod(c, new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        try {
-                                                scheduleInject(param.thisObject);
-                        } catch (Throwable e) {
-                            LogWriter.log("ChatVoiceSwitchHook", "cb err: " + e);
-                        }
-                    }
-                });
+            Class<?> clazzToHook = footerClazz;
+            // 优先 Hook 三参构造器 (Context, AttributeSet, int)，它是唯一真实构造器；
+            // 若三参不存在则遍历全部构造器覆盖所有创建路径。
+            try {
+                Constructor<?> c = clazzToHook.getDeclaredConstructor(
+                        Context.class, android.util.AttributeSet.class, int.class);
+                XposedBridge.hookMethod(c, footerHook());
+                LogWriter.log(TAG, "方案A: ChatFooter 三参构造器 Hook 已挂载");
+                return;
+            } catch (Throwable ignored) {
             }
-            LogWriter.log(TAG, "方案A: MMEditText Hook 已挂载");
+            for (Constructor<?> c : clazzToHook.getDeclaredConstructors()) {
+                XposedBridge.hookMethod(c, footerHook());
+            }
+            LogWriter.log(TAG, "方案A: ChatFooter 全部构造器 Hook 已挂载");
         } catch (Throwable t) {
             LogWriter.log(TAG, "方案A hook 异常: " + t);
             retryHook(loader, attempt);
         }
+    }
+
+    private static XC_MethodHook footerHook() {
+        return new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                try {
+                    if (param.thisObject == null) return;
+                    final View footer = (View) param.thisObject;
+                    // 等它真正 attach 到窗口再插（此时父容器已就绪）
+                    footer.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                        @Override
+                        public void onViewAttachedToWindow(View v) {
+                            footer.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    safeInject(footer);
+                                }
+                            });
+                        }
+
+                        @Override
+                        public void onViewDetachedFromWindow(View v) {
+                        }
+                    });
+                } catch (Throwable e) {
+                    LogWriter.log(TAG, "方案A cb err: " + e);
+                }
+            }
+        };
     }
 
     private static Class<?> findClassIfExists(String className, ClassLoader loader) {
@@ -114,106 +142,78 @@ public final class ChatVoiceSwitchHook {
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
-                hookMMEditText(loader, attempt + 1);
+                hookChatFooter(loader, attempt + 1);
             }
         }, 2000);
     }
 
-    // ==================== 方案B：通用捕获（任何版本都有效） ====================
+    // ==================== 方案B：Hook Fragment onResume 兜底 ====================
 
-    private static void hookGenericEditText() {
+    private static void hookFragmentResume(final ClassLoader loader) {
         try {
-            XposedBridge.hookAllMethods(TextView.class, "onTextChanged", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    try {
-                                        Object tv = param.thisObject;
-                                        if (tv instanceof EditText && isMMEditText((View) tv)) {
-                                            scheduleInject((View) tv);
-                                        }
-                    } catch (Throwable e) {
-                        LogWriter.log("ChatVoiceSwitchHook", "cb err: " + e);
-                    }
+            Class<?> baseFrag = findClassIfExists(BASE_FRAGMENT, loader);
+            if (baseFrag == null) {
+                // 版本变化时退到 Activity.onResume 扫描
+                hookActivityResume(loader);
+                return;
+            }
+            for (java.lang.reflect.Method m : baseFrag.getDeclaredMethods()) {
+                if ("onResume".equals(m.getName()) && m.getParameterTypes().length == 0) {
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            try {
+                                Object fragment = param.thisObject;
+                                View root = (View) XposedHelpers.callMethod(fragment, "getView");
+                                if (root == null) return;
+                                View footer = findFooter(root);
+                                if (footer != null) safeInject(footer);
+                            } catch (Throwable e) {
+                                LogWriter.log(TAG, "方案B cb err: " + e);
+                            }
+                        }
+                    });
+                    LogWriter.log(TAG, "方案B: BaseChattingUIFragment.onResume 兜底已挂载");
+                    return;
                 }
-            });
-            LogWriter.log(TAG, "方案B: TextView.onTextChanged 兜底已挂载");
+            }
+            LogWriter.log(TAG, "方案B: onResume 方法未找到，退到 Activity 扫描");
+            hookActivityResume(loader);
         } catch (Throwable t) {
             LogWriter.log(TAG, "方案B 挂载失败: " + t);
+            hookActivityResume(loader);
         }
     }
-
-    // ==================== 方案C：Hook EditText 构造函数兜底 ====================
-
-    private static void hookEditTextConstructors() {
-        try {
-            XposedBridge.hookAllConstructors(EditText.class, new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    try {
-                                        if (param.thisObject == null) return;
-                                        if (isMMEditText((View) param.thisObject)) {
-                                            scheduleInject(param.thisObject);
-                                        }
-                    } catch (Throwable e) {
-                        LogWriter.log("ChatVoiceSwitchHook", "cb err: " + e);
-                    }
-                }
-            });
-            LogWriter.log(TAG, "方案C: EditText 构造 Hook 已挂载");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "方案C 挂载失败: " + t);
-        }
-    }
-
-    // ==================== 方案D：onAttachedToWindow 兜底 ====================
-
-    private static void hookOnAttachedToWindow() {
-        try {
-            XposedBridge.hookAllMethods(View.class, "onAttachedToWindow", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    try {
-                                        if (param.thisObject == null) return;
-                                        if (isMMEditText((View) param.thisObject)) {
-                                            scheduleInject((View) param.thisObject);
-                                        }
-                    } catch (Throwable e) {
-                        LogWriter.log("ChatVoiceSwitchHook", "cb err: " + e);
-                    }
-                }
-            });
-            LogWriter.log(TAG, "方案D: View.onAttachedToWindow 兜底已挂载");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "方案D 挂载失败: " + t);
-        }
-    }
-
-    // ==================== 方案E：Activity onResume 主动扫描兜底 ====================
 
     private static void hookActivityResume(final ClassLoader loader) {
         try {
             Class<?> activityCls = XposedHelpers.findClass("android.app.Activity", loader);
-            XposedBridge.hookAllMethods(activityCls, "onResume", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    try {
-                                        final Activity act = (Activity) param.thisObject;
-                                        if (act == null) return;
-                                        if (!isChatPage(act)) return;
-                                        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
-                                            @Override
-                                            public void run() {
-                                                scanAndInject(act);
-                                            }
-                                        }, 1200);
-                    } catch (Throwable e) {
-                        LogWriter.log("ChatVoiceSwitchHook", "cb err: " + e);
-                    }
+            for (java.lang.reflect.Method m : activityCls.getDeclaredMethods()) {
+                if ("onResume".equals(m.getName()) && m.getParameterTypes().length == 0) {
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            try {
+                                if (param.thisObject == null) return;
+                                final Activity act = (Activity) param.thisObject;
+                                if (!isChatPage(act)) return;
+                                new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        scanAndInject(act);
+                                    }
+                                }, 1200);
+                            } catch (Throwable e) {
+                                LogWriter.log(TAG, "方案B Activity cb err: " + e);
+                            }
+                        }
+                    });
+                    LogWriter.log(TAG, "方案B: Activity.onResume 兜底已挂载");
+                    return;
                 }
-            });
-            LogWriter.log(TAG, "方案E: Activity.onResume 兜底已挂载");
+            }
         } catch (Throwable t) {
-            LogWriter.log(TAG, "方案E 挂载失败: " + t);
+            LogWriter.log(TAG, "方案B Activity 挂载失败: " + t);
         }
     }
 
@@ -231,50 +231,47 @@ public final class ChatVoiceSwitchHook {
         try {
             View decor = act.getWindow().getDecorView();
             if (decor == null) return;
-            View target = findMMEditText(decor);
-            if (target != null) {
-                scheduleInject(target);
+            View footer = findFooter(decor);
+            if (footer != null) {
+                safeInject(footer);
             }
         } catch (Throwable t) {
-            LogWriter.log(TAG, "方案E 扫描异常: " + t);
+            LogWriter.log(TAG, "方案B 扫描异常: " + t);
         }
     }
 
-    private static View findMMEditText(View view) {
-        if (isMMEditText(view)) return view;
+    private static View findFooter(View view) {
+        if (CHAT_FOOTER.equals(view.getClass().getName())) return view;
         if (view instanceof ViewGroup) {
             ViewGroup vg = (ViewGroup) view;
             for (int i = 0; i < vg.getChildCount(); i++) {
-                View found = findMMEditText(vg.getChildAt(i));
+                View found = findFooter(vg.getChildAt(i));
                 if (found != null) return found;
             }
         }
         return null;
     }
 
-    // ==================== 注入 ====================
+    // ==================== 注入核心 ====================
 
-    private static boolean isMMEditText(View view) {
-        if (view == null) return false;
-        return MM_EDIT_TEXT.equals(view.getClass().getName());
-    }
+    private static void safeInject(View footer) {
+        if (footer == null) return;
+        synchronized (sInjected) {
+            if (sInjected.containsKey(footer)) return;
+            sInjected.put(footer, Boolean.TRUE);
+        }
 
-    private static void scheduleInject(final Object editObj) {
-        if (editObj == null) return;
-        final View edit = (View) editObj;
-        if (!isMMEditText(edit)) return;
-
-        Context ctx = edit.getContext();
+        Context ctx = footer.getContext();
         if (ctx == null) return;
         Activity act = getActivityFromContext(ctx);
         if (act == null || !isChatPage(act)) return;
 
-        if (com.leshao.v3.UnifiedPrefs.get(edit.getContext(), "wm_prefs")
+        if (com.leshao.v3.UnifiedPrefs.get(ctx, "wm_prefs")
                 .getBoolean("input_buttons", true) == false) return;
 
-        // 确保注入目标不是弹窗中的输入框
+        // 确保注入目标不是弹窗中的输入栏
         try {
-            View root = edit.getRootView();
+            View root = footer.getRootView();
             if (root != null) {
                 String rootCls = root.getClass().getName();
                 if (rootCls.contains("Popup") || rootCls.contains("Dialog")
@@ -284,126 +281,64 @@ public final class ChatVoiceSwitchHook {
             }
         } catch (Throwable ignored) {}
 
-        // 多方案竞争防护：PENDING 表示已有方案在排队注入
-        if (edit.getTag() == PENDING_TAG || edit.getTag() == INJECTED_TAG) return;
-        edit.setTag(PENDING_TAG);
+        ViewGroup parent = (ViewGroup) footer.getParent();
+        if (parent == null) {
+            scheduleRetryInject(footer);
+            return;
+        }
 
+        View row = createButtonRow(ctx);
+        boolean ok;
+        // 父容器是垂直 LinearLayout（ChattingUILayout）：插到 footer 前面 == 输入框上方
+        if (parent instanceof LinearLayout
+                && ((LinearLayout) parent).getOrientation() == LinearLayout.VERTICAL) {
+            int idx = parent.indexOfChild(footer);
+            row.setLayoutParams(new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            parent.addView(row, idx);
+            ok = true;
+        } else {
+            // 万一父容器不是垂直 LinearLayout：插到 footer 之前，随 footer 布局
+            int idx = parent.indexOfChild(footer);
+            if (idx < 0) {
+                ok = false;
+            } else {
+                row.setLayoutParams(new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                parent.addView(row, idx);
+                ok = true;
+            }
+        }
+        if (ok) {
+            LogWriter.log(TAG, "注入成功! 父容器=" + parent.getClass().getName()
+                    + " idx=" + parent.indexOfChild(row));
+        } else {
+            sInjected.remove(footer);
+            LogWriter.log(TAG, "注入失败: 找不到合适的父容器");
+        }
+    }
+
+    private static void scheduleRetryInject(final View footer) {
         final int[] retry = {0};
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
                 try {
-                    if (edit.getTag() == INJECTED_TAG) return;
-                    Context ctx = edit.getContext();
-                    if (ctx == null) return;
-                    View row = createButtonRow(ctx);
-                    if (injectAt(edit, row)) {
-                        edit.setTag(INJECTED_TAG);
-                        LogWriter.log(TAG, "注入成功!");
+                    if (footer.getParent() != null) {
+                        safeInject(footer);
                     } else if (retry[0] < 5) {
                         retry[0]++;
                         new Handler(Looper.getMainLooper()).postDelayed(this, 800);
                     } else {
-                        edit.setTag(null);
-                        LogWriter.log(TAG, "注入失败: 找不到合适的父容器");
+                        sInjected.remove(footer);
+                        LogWriter.log(TAG, "注入失败: 父容器迟迟未就绪");
                     }
                 } catch (Throwable t) {
-                    edit.setTag(null);
+                    sInjected.remove(footer);
                     LogWriter.log(TAG, "注入异常: " + t);
                 }
             }
-        }, INJECT_DELAY_MS);
-    }
-
-    /** 多级兜底注入：返回是否成功（参照 ChatQuickBar 逆向结论） */
-    private static boolean injectAt(View edit, View row) {
-        View mhs = findAncestor(edit, MAX_HEIGHT_SCROLL, 6);
-
-        if (mhs != null) {
-            ViewParent rel = mhs.getParent();
-            if (rel != null && rel.getParent() instanceof LinearLayout) {
-                LinearLayout grand = (LinearLayout) rel.getParent();
-                row.setLayoutParams(new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                grand.addView(row, grand.indexOfChild((View) rel));
-                return true;
-            }
-            if (rel instanceof ViewGroup) {
-                ViewGroup relVg = (ViewGroup) rel;
-                row.setLayoutParams(new android.widget.RelativeLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                relVg.addView(row, relVg.indexOfChild(mhs));
-                return true;
-            }
-        }
-
-        ViewParent node = edit.getParent();
-        View child = edit;
-        for (int i = 0; i < 16 && node != null; i++) {
-            if (node instanceof LinearLayout && node.getParent() instanceof ViewGroup) {
-                ViewGroup parent = (ViewGroup) node.getParent();
-                int idx = parent.indexOfChild((View) node);
-                row.setLayoutParams(new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                parent.addView(row, idx);
-                return true;
-            }
-            if (node instanceof android.widget.FrameLayout && node.getParent() instanceof ViewGroup) {
-                ViewGroup parent = (ViewGroup) node.getParent();
-                int idx = parent.indexOfChild((View) node);
-                row.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                parent.addView(row, idx);
-                return true;
-            }
-            child = (View) node;
-            node = node.getParent();
-            if (node instanceof ViewGroup && ((ViewGroup) node).getChildCount() > 0) {
-                continue;
-            }
-        }
-
-        View root = edit.getRootView();
-        if (root instanceof ViewGroup) {
-            View inputArea = findAncestor(edit, "android.widget.LinearLayout", 15);
-            if (inputArea != null) {
-                ViewParent inputParent = inputArea.getParent();
-                if (inputParent instanceof ViewGroup) {
-                    ViewGroup ip = (ViewGroup) inputParent;
-                    int idx = ip.indexOfChild(inputArea);
-                    row.setLayoutParams(new LinearLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                    ip.addView(row, idx);
-                    return true;
-                }
-            }
-            ViewGroup rootVg = (ViewGroup) root;
-            if (rootVg instanceof android.widget.FrameLayout) {
-                row.setLayoutParams(new android.widget.FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                rootVg.addView(row, 0);
-                return true;
-            }
-            row.setLayoutParams(new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            rootVg.addView(row, 0);
-            return true;
-        }
-
-        return false;
-    }
-
-    private static View findAncestor(View view, String className, int maxDepth) {
-        ViewParent node = view.getParent();
-        int depth = 0;
-        while (node != null && depth < maxDepth) {
-            if (node.getClass().getName().equals(className)) {
-                return (View) node;
-            }
-            node = node.getParent();
-            depth++;
-        }
-        return null;
+        }, 800);
     }
 
     // ==================== UI ====================

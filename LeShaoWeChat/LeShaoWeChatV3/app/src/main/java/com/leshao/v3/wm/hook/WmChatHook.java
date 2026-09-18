@@ -83,13 +83,7 @@ public class WmChatHook {
     private static final String TAG = "WmChat";
     private static BroadcastReceiver sMassSendReceiver;
     private static Context sCtx;
-    private static String sPendingVideoToUser;
-    private static String sPendingVideoPath;
-    private static int sPendingVideoDuration;
-    private static String sPendingVideoDstPath;
-    private static long sPendingVideoSize;
     private static volatile boolean sMassSendRunning;
-    private static volatile Object sS5Instance;
     private static android.view.View sMoreIcon;
     private static boolean sMoreAdded = false;
     private static Dialog sMoreDialog;
@@ -3308,8 +3302,11 @@ private static void executeMassSend(String type, String text, java.util.List<Str
                         }
                         break;
                     case "voice":
-                        if (audioPath != null && !audioPath.isEmpty())
-                            sendAudioFile(target, audioPath);
+                        if (audioPath != null && !audioPath.isEmpty()) {
+                            boolean voiceOk = sendAudioFile(target, audioPath);
+                            LogWriter.log(TAG, "massSend voice: target=" + target + " ok=" + voiceOk + " audio=" + audioPath);
+                            if (!voiceOk) throw new RuntimeException("voice send failed");
+                        }
                         break;
                     default:
                         break;
@@ -3503,39 +3500,85 @@ private static void executeMassSend(String type, String text, java.util.List<Str
     }
 
 private static boolean sendImageToUser(String toUser, String imgPath) {
-        LogWriter.log(TAG, "v775 sendImage ENTER: to=" + toUser + " path=" + imgPath);
+        LogWriter.log(TAG, "v866 sendImage ENTER: to=" + toUser + " path=" + imgPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(imgPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + imgPath);
         try {
             Object sendMgr = WmReflect.getSendMsgMgr(sCL);
             if (sendMgr == null) throw new RuntimeException("SendMsgMgr null");
-            XposedHelpers.callMethod(sendMgr, "wj",
-                    sCtx, toUser, imgPath, 0, "", "", "", null);
-            LogWriter.log(TAG, "v775 sendImage wj ok to=" + toUser);
+            boolean ok = false;
+            // 8.0.78(3180): 图片走 qs5.v5.b(Context,toUser,fileName,i,...,k7,d) sendImg (旧 wj 已失效)
+            ok |= invokeSendImgViaB(sendMgr, toUser, imgPath);
+            if (!ok) throw new RuntimeException("sendImg(b) failed");
+            LogWriter.log(TAG, "v866 sendImage b ok to=" + toUser);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "v775 sendImage fail: " + t.getClass().getName() + ": " + t.getMessage());
+            LogWriter.log(TAG, "v866 sendImage fail: " + t.getClass().getName() + ": " + t.getMessage());
             java.io.StringWriter sw = new java.io.StringWriter();
             t.printStackTrace(new java.io.PrintWriter(sw));
-            LogWriter.log(TAG, "v775 sendImage stack: " + sw.toString());
+            LogWriter.log(TAG, "v866 sendImage stack: " + sw.toString());
             throw new RuntimeException(t);
         }
         return true;
     }
 
+    /**
+     * 8.0.78(3180): qs5.v5.b = sendImg(CDN)。多版本签名逐一尝试。
+     * 常见签名: b(Context,toUser,fileName,int,mode,...,k7,d)
+     */
+    private static boolean invokeSendImgViaB(Object sendMgr, String toUser, String imgPath) {
+        java.lang.reflect.Method[] ms = sendMgr.getClass().getDeclaredMethods();
+        // 穷举参数个数 7..16, 逐个尝试
+        for (java.lang.reflect.Method m : ms) {
+            if (!m.getName().equals("b")) continue;
+            try {
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length < 4 || pts.length > 18) continue;
+                Object[] args = new Object[pts.length];
+                for (int i = 0; i < pts.length; i++) {
+                    Class<?> p = pts[i];
+                    if (i == 0 && (p == android.content.Context.class || p.getName().endsWith("Context"))) {
+                        args[i] = sCtx;
+                    } else if (i == 1 && p == String.class) {
+                        args[i] = toUser;
+                    } else if (i == 2 && p == String.class) {
+                        args[i] = imgPath;
+                    } else if (i == 3 && p == int.class) {
+                        args[i] = 4; // 原图
+                    } else if (p == int.class) {
+                        args[i] = 0;
+                    } else if (p == long.class) {
+                        args[i] = 0L;
+                    } else if (p == boolean.class) {
+                        args[i] = false;
+                    } else if (p == String.class) {
+                        args[i] = "";
+                    } else {
+                        args[i] = null;
+                    }
+                }
+                m.setAccessible(true);
+                m.invoke(sendMgr, args);
+                LogWriter.log(TAG, "sendImage via b: params=" + pts.length);
+                return true;
+            } catch (Throwable ignored) {}
+        }
+        return false;
+    }
+
 private static boolean sendVideoToUser(String toUser, String videoPath) {
-        LogWriter.log(TAG, "v814 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
+        LogWriter.log(TAG, "v866 sendVideo ENTER: to=" + toUser + " path=" + videoPath);
         if (sCL == null) throw new RuntimeException("sCL null");
         java.io.File f = new java.io.File(videoPath);
         if (!f.exists()) throw new RuntimeException("file not found: " + videoPath);
         int duration = getVideoDuration(videoPath);
-        LogWriter.log(TAG, "v814 sendVideo duration=" + duration + "s size=" + f.length());
-        sPendingVideoToUser = toUser;
-        sPendingVideoPath = videoPath;
-        sPendingVideoDuration = duration;
-        sPendingVideoSize = f.length();
-        sPendingVideoDstPath = null;
-        String finalToUser = toUser;
+        LogWriter.log(TAG, "v866 sendVideo duration=" + duration + "s size=" + f.length());
+
+        Object sendMgr = WmReflect.getSendMsgMgr(sCL);
+        if (sendMgr == null) throw new RuntimeException("SendMsgMgr null");
+        final Object mgr = sendMgr;
+        final String finalToUser = toUser;
+        final int finalDuration = duration;
         final CountDownLatch latch = new CountDownLatch(1);
         final boolean[] sentResult = {false};
         final Throwable[] sentError = {null};
@@ -3553,27 +3596,17 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
                 } finally {
                     retriever.release();
                 }
-                LogWriter.log(TAG, "v814 thumb generated: " + tempThumb.getAbsolutePath());
+                LogWriter.log(TAG, "v866 thumb generated: " + tempThumb.getAbsolutePath());
 
-                if (sS5Instance == null) {
-                    sPendingVideoPath = null;
-                    sPendingVideoToUser = null;
-                    LogWriter.log(TAG, "v814 sS5Instance null");
-                    sentError[0] = new RuntimeException("kl5.s5 instance not available");
-                    return;
-                }
-
-                XposedHelpers.callMethod(sS5Instance, "Dj",
-                        sCtx, finalToUser, videoPath, tempThumb.getAbsolutePath(),
-                        duration, 0, null, false, false,
-                        "", "", null, null, "", null);
-                LogWriter.log(TAG, "v814 kl5.s5.Dj called ok");
+                boolean ok = invokeSendVideoViaSjTj(mgr, finalToUser, videoPath, tempThumb.getAbsolutePath(), finalDuration);
+                LogWriter.log(TAG, "v866 sendVideo invoked=" + ok);
+                if (!ok) throw new RuntimeException("sendVideo(sj/tj) failed");
                 sentResult[0] = true;
             } catch (Throwable t) {
-                LogWriter.log(TAG, "v814 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
+                LogWriter.log(TAG, "v866 sendVideo fail: " + t.getClass().getName() + ": " + t.getMessage());
                 java.io.StringWriter sw = new java.io.StringWriter();
                 t.printStackTrace(new java.io.PrintWriter(sw));
-                LogWriter.log(TAG, "v814 sendVideo stack: " + sw.toString());
+                LogWriter.log(TAG, "v866 sendVideo stack: " + sw.toString());
                 sentError[0] = t;
             } finally {
                 latch.countDown();
@@ -3582,18 +3615,68 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
         try {
             boolean finished = latch.await(60, TimeUnit.SECONDS);
             if (!finished) {
-                LogWriter.log(TAG, "v814 sendVideo timeout for " + finalToUser);
+                LogWriter.log(TAG, "v866 sendVideo timeout for " + finalToUser);
                 throw new RuntimeException("video send timeout for " + finalToUser);
             }
             if (sentError[0] != null) {
-                throw new RuntimeException(sentError[0]);
+                throw new RuntimeException("video send fail: " + sentError[0].getMessage());
             }
-            LogWriter.log(TAG, "v814 sendVideo done: to=" + finalToUser + " sent=" + sentResult[0]);
+            LogWriter.log(TAG, "v866 sendVideo done: to=" + finalToUser + " sent=" + sentResult[0]);
             return sentResult[0];
         } catch (InterruptedException e) {
-            LogWriter.log(TAG, "v814 sendVideo interrupted for " + finalToUser);
+            LogWriter.log(TAG, "v866 sendVideo interrupted for " + finalToUser);
             throw new RuntimeException("video send interrupted for " + finalToUser, e);
         }
+    }
+
+    /** 8.0.78(3180): qs5.v5.sj/tj = sendVedio(CDN)。穷举方法签名带 Context 的那组。 */
+    private static boolean invokeSendVideoViaSjTj(Object sendMgr, String toUser, String videoPath, String thumbPath, int durationSec) {
+        for (java.lang.reflect.Method m : sendMgr.getClass().getDeclaredMethods()) {
+            if (!m.getName().equals("sj") && !m.getName().equals("tj")) continue;
+            try {
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length < 4 || pts.length > 20) continue;
+                boolean hasCtx = false;
+                for (Class<?> p : pts) {
+                    if (p == android.content.Context.class || p.getName().endsWith("Context")) {
+                        hasCtx = true;
+                        break;
+                    }
+                }
+                if (!hasCtx) continue;
+                Object[] args = new Object[pts.length];
+                int strIdx = 0;
+                int intIdx = 0;
+                for (int i = 0; i < pts.length; i++) {
+                    Class<?> p = pts[i];
+                    if (p == android.content.Context.class || p.getName().endsWith("Context")) {
+                        args[i] = sCtx;
+                    } else if (p == int.class) {
+                        if (intIdx == 0) { args[i] = 62; }
+                        else if (intIdx == 1) { args[i] = durationSec; }
+                        else { args[i] = 0; }
+                        intIdx++;
+                    } else if (p == long.class) {
+                        args[i] = 0L;
+                    } else if (p == boolean.class) {
+                        args[i] = false;
+                    } else if (p == String.class) {
+                        if (strIdx == 0) { args[i] = toUser; }
+                        else if (strIdx == 1) { args[i] = videoPath; }
+                        else if (strIdx == 2) { args[i] = thumbPath; }
+                        else { args[i] = ""; }
+                        strIdx++;
+                    } else {
+                        args[i] = null;
+                    }
+                }
+                m.setAccessible(true);
+                m.invoke(sendMgr, args);
+                LogWriter.log(TAG, "sendVideo via " + m.getName() + ": params=" + pts.length);
+                return true;
+            } catch (Throwable ignored) {}
+        }
+        return false;
     }
 
     private static int getVideoDuration(String path) {

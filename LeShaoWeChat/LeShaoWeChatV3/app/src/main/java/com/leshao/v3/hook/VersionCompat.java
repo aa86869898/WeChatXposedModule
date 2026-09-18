@@ -770,16 +770,22 @@ public class VersionCompat {
     }
 
     public static Class<?> findMsgInfoStorageClass(ClassLoader cl) {
-        // Try DexKit-discovered e9 class first
+        // 8.0.78(3180) 真实消息类名 = com.tencent.mm.storage.e9 (已由 f9.Bb p0 实机验证)。
+        // DexKit fallback 曾误中 com.tencent.maas.instamovie.MJPublisherSessionMetrics(美颜SDK),
+        // 因此固定类名优先, DexKit 类名仅作候选兜底。
+        Class<?> fixed = findClassMulti(cl, "com.tencent.mm.storage.e9",
+            "com.tencent.mm.storage.d9", "com.tencent.mm.storage.f9",
+            "com.tencent.mm.storage.e8");
+        if (fixed != null) return fixed;
+
+        // 仅当固定类名全部缺失时才尝试 DexKit 发现结果 (且必须带 storage 包路径)
         String dexKitE9 = com.leshao.v3.hook.DexKitHelper.getE9ClassName();
-        if (dexKitE9 != null && !dexKitE9.isEmpty()) {
+        if (dexKitE9 != null && dexKitE9.contains(".mm.storage.")) {
             try {
                 return XposedHelpers.findClass(dexKitE9, cl);
             } catch (Throwable ignored) {}
         }
-        return findClassMulti(cl, "com.tencent.mm.storage.e9",
-            "com.tencent.mm.storage.d9", "com.tencent.mm.storage.f9",
-            "com.tencent.mm.storage.e8");
+        return null;
     }
 
     /** 查找消息分发类 (x9) */

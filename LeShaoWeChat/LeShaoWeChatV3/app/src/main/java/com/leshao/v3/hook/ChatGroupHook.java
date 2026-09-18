@@ -109,7 +109,7 @@ public class ChatGroupHook {
             if (dexKitJ1 != null && !dexKitJ1.isEmpty()) {
                 try {
                     Class<?> j1Cls = XposedHelpers.findClass(dexKitJ1, cl);
-                    j1Cls.getDeclaredMethod("s", Class.class);
+                    findMethodInHierarchy(j1Cls, "s", Class.class);
                     j1 = j1Cls;
                     LogWriter.log(TAG, "initCoreServices: using j1 from DexKit=" + dexKitJ1);
                 } catch (Throwable ignored) {}
@@ -120,7 +120,7 @@ public class ChatGroupHook {
                 if (dexKitP06 != null && !dexKitP06.isEmpty()) {
                     try {
                         Class<?> j1Cls = XposedHelpers.findClass(dexKitP06, cl);
-                        j1Cls.getDeclaredMethod("s", Class.class);
+                        findMethodInHierarchy(j1Cls, "s", Class.class);
                         j1 = j1Cls;
                         LogWriter.log(TAG, "initCoreServices: using j1 from DexKit p06=" + dexKitP06);
                     } catch (Throwable ignored) {}
@@ -131,7 +131,7 @@ public class ChatGroupHook {
                 for (String j1Name : j1Candidates) {
                     try {
                         Class<?> j1Cls = XposedHelpers.findClass(j1Name, cl);
-                        j1Cls.getDeclaredMethod("s", Class.class);
+                        findMethodInHierarchy(j1Cls, "s", Class.class);
                         j1 = j1Cls;
                         LogWriter.log(TAG, "initCoreServices: using j1=" + j1Name);
                         break;
@@ -192,6 +192,18 @@ public class ChatGroupHook {
             LogWriter.log(TAG, "initCoreServices: " + e.toString());
             return false;
         }
+    }
+
+    /** 沿继承链查找存在指定签名方法的类, 找不到抛 NoSuchMethodException */
+    private static void findMethodInHierarchy(Class<?> cls, String name, Class<?>... paramTypes)
+            throws NoSuchMethodException {
+        for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
+            try {
+                c.getDeclaredMethod(name, paramTypes);
+                return;
+            } catch (NoSuchMethodException ignored) {}
+        }
+        throw new NoSuchMethodException(name);
     }
 
     private static void installRealTimeHooks() {

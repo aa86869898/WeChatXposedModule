@@ -2539,6 +2539,9 @@ public class TtsVoiceSender {
                     + ok + " method=" + sVoiceTClass + "." + sVoiceTMethod + " arity=" + sVoiceTParamCount);
             if (!ok) return false;
 
+            // 语音转发_新.md §3: v61.d1.u 建消息后必须 v61.v0.dj().e() 踢 SceneVoiceService 上传队列
+            kickVoiceUploadQueue(sClassLoader);
+
             try {
                 // 3180: 刷新语音缓存使用 pv.p0 (VoiceLogicService) 上的实例方法
                 Class<?> player = VersionCompat.findVoicePlayerClass(sClassLoader);
@@ -2593,6 +2596,41 @@ public class TtsVoiceSender {
         int idx = voiceFile.indexOf("/voice2/");
         if (idx >= 0) return voiceFile.substring(0, idx + 8);
         return voiceFile.substring(0, voiceFile.lastIndexOf('/') + 1);
+    }
+
+    /**
+     * 语音转发_新.md §3: 发送入口 v61.d1.u 之后必须 v61.v0.dj().e() 踢 SceneVoiceService 上传队列。
+     * 3180 候选: v61.v0 / v61.v1 / yl.y0(文档, jadx 误显示), 方法名为 dj/di/d/a, 返回后调用无参 e()。
+     */
+    private static void kickVoiceUploadQueue(ClassLoader cl) {
+        String[] candidates = {"v61.v0", "v61.v1", "yl.y0", "v61.y0", "v61.v2", "yl.v0"};
+        String[] instMeth = {"dj", "di", "a", "b", "getInstance", "f"};
+        for (String cn : candidates) {
+            try {
+                Class<?> cls = XposedHelpers.findClass(cn, cl);
+                for (Method m : cls.getDeclaredMethods()) {
+                    if (!Modifier.isStatic(m.getModifiers())) continue;
+                    if (m.getParameterTypes().length != 0) continue;
+                    if (m.getReturnType() == void.class || m.getReturnType() == String.class) continue;
+                    for (String im : instMeth) {
+                        if (m.getName().equals(im)) {
+                            Object svc = null;
+                            try { svc = m.invoke(null); } catch (Throwable ignored) {}
+                            if (svc == null) break;
+                            for (Method e2 : svc.getClass().getDeclaredMethods()) {
+                                if (e2.getName().equals("e") && e2.getParameterTypes().length == 0) {
+                                    try { e2.invoke(svc); }
+                                    catch (Throwable t) { LogWriter.log(TAG, "kick queue svc.e() err: " + t.getMessage()); }
+                                    LogWriter.log(TAG, "kickVoiceUploadQueue OK: " + cn + "." + im + "().e()");
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        LogWriter.log(TAG, "kickVoiceUploadQueue: no SceneVoiceService found, refresh fallback only");
     }
 
     // ========== MP3 转语音消息 ==========
@@ -3307,55 +3345,122 @@ public class TtsVoiceSender {
 
     private static final String AMR_WB_MIME = "audio/amr-wb";
 
-    private static final String AMR_NB_MIME = "audio/amr";
+    private static final String AMR_NB_MIME = "audio/3gpp";
+
+    private static final String AMR_NB_MIME_ALT = "audio/amr";
 
     /**
      * 8.0.78(3180): 微信 SIlK 内部编码类(MediaRecorder.Silk*, yl.g, tl.h0)已全部失效。
-     * 改为系统 MediaCodec AMR-NB(8k/单声道) 编码，并前置 #!AMR\n 头，符合 v61.b1 魔数判定。
+     * 音质优化(v920): 恢复 v910 时代 16kHz/高码率 的听感。
+     * 优先 AMR-WB(16k/23850bps) —— 设备日志确认存在 audio/amr-wb 编码器, 采样率翻倍+码率近 2 倍于 AMR-NB;
+     * AMR-WB 头为 #!AMR-WB\n。仅当设备无 AMR-WB 编码器时才降级 AMR-NB(8k/12200)。
      */
     private static byte[] encodeAmrNbRaw(byte[] padPcm) {
+        byte[] amrWb = encodeAmrWith(AMR_WB_MIME, 16000, 23850, padPcm, "#!AMR-WB\n");
+        if (amrWb != null && amrWb.length > 6) {
+            LogWriter.log(TAG, "encodeAmrNbRaw: AMR-WB(16k/23850) OK, " + amrWb.length + "b");
+            return amrWb;
+        }
+
+        LogWriter.log(TAG, "encodeAmrNbRaw: AMR-WB unavailable, falling back to AMR-NB(8k/12200)");
+        byte[] amrNb = encodeAmrWith(AMR_NB_MIME, 8000, 12200, downsample16kTo8k(padPcm), "#!AMR\n");
+        if (amrNb != null && amrNb.length > 6) return amrNb;
+        byte[] amrNbAlt = encodeAmrWith(AMR_NB_MIME_ALT, 8000, 12200, downsample16kTo8k(padPcm), "#!AMR\n");
+        if (amrNbAlt != null && amrNbAlt.length > 6) return amrNbAlt;
+
+        dumpAudioEncoders();
+        return null;
+    }
+
+    private static void dumpAudioEncoders() {
+        try {
+            android.media.MediaCodecList list = new android.media.MediaCodecList(android.media.MediaCodecList.ALL_CODECS);
+            StringBuilder sb = new StringBuilder("audio encoders: ");
+            for (android.media.MediaCodecInfo ci : list.getCodecInfos()) {
+                if (!ci.isEncoder()) continue;
+                for (String t : ci.getSupportedTypes()) {
+                    if (t.startsWith("audio/")) sb.append(t).append(' ');
+                }
+            }
+            LogWriter.log(TAG, sb.toString());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "dumpAudioEncoders err: " + t.getMessage());
+        }
+    }
+
+    private static byte[] encodeAmrWith(String mime, int sampleRate, int bitRate, byte[] pcm, String magicHeader) {
+        if (pcm == null || pcm.length == 0) return null;
         MediaCodec codec = null;
         try {
-            byte[] pcm8k = downsample16kTo8k(padPcm);
-            codec = MediaCodec.createEncoderByType(AMR_NB_MIME);
-            MediaFormat fmt = MediaFormat.createAudioFormat(AMR_NB_MIME, 8000, 1);
-            fmt.setInteger(MediaFormat.KEY_BIT_RATE, 12200);
+            codec = MediaCodec.createEncoderByType(mime);
+            MediaFormat fmt = MediaFormat.createAudioFormat(mime, sampleRate, 1);
+            fmt.setInteger(MediaFormat.KEY_BIT_RATE, bitRate);
             codec.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             codec.start();
 
-            int idx = codec.dequeueInputBuffer(10000);
-            ByteBuffer inBuf = codec.getInputBuffer(idx);
-            inBuf.clear();
-            inBuf.put(pcm8k);
-            codec.queueInputBuffer(idx, 0, pcm8k.length, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-            while (true) {
-                int outIdx = codec.dequeueOutputBuffer(info, 10000);
-                if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) continue;
-                if (outIdx < 0) break;
-                ByteBuffer outBuf = codec.getOutputBuffer(outIdx);
-                byte[] chunk = new byte[info.size];
-                outBuf.get(chunk);
-                baos.write(chunk);
-                codec.releaseOutputBuffer(outIdx, false);
+            int pos = 0;
+            boolean inputDone = false;
+            boolean outputDone = false;
+            long ptsUs = 0;
+
+            while (!outputDone) {
+                // 喂入: 仅用已 dequeue 的 buffer 容量, 切勿用 getInputBuffer(0) 探测
+                if (!inputDone) {
+                    int inIdx = codec.dequeueInputBuffer(20000);
+                    if (inIdx >= 0) {
+                        ByteBuffer inBuf = codec.getInputBuffer(inIdx);
+                        inBuf.clear();
+                        int avail = inBuf.remaining();
+                        int chunk = Math.min(avail, pcm.length - pos);
+                        if (chunk > 0) inBuf.put(pcm, pos, chunk);
+                        pos += chunk;
+                        boolean eosInput = pos >= pcm.length;
+                        codec.queueInputBuffer(inIdx, 0, chunk, ptsUs,
+                                eosInput ? MediaCodec.BUFFER_FLAG_END_OF_STREAM : 0);
+                        ptsUs += (long) chunk * 1000000L / (sampleRate * 2);
+                        if (eosInput) inputDone = true;
+                        if (chunk <= 0) {
+                            inputDone = true;
+                            break;
+                        }
+                    }
+                }
+
+                // 收输出
+                int outIdx = codec.dequeueOutputBuffer(info, 20000);
+                if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    continue;
+                }
+                if (outIdx >= 0) {
+                    ByteBuffer outBuf = codec.getOutputBuffer(outIdx);
+                    outBuf.position(info.offset);
+                    outBuf.limit(info.offset + info.size);
+                    byte[] chunkData = new byte[info.size];
+                    outBuf.get(chunkData);
+                    baos.write(chunkData);
+                    boolean eos = (info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0;
+                    codec.releaseOutputBuffer(outIdx, false);
+                    if (eos) outputDone = true;
+                } else if (outIdx == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                    // 已喂完则短暂等待编码器吐帧, 避免忙等空转
+                    if (inputDone) {
+                        try { Thread.sleep(10); } catch (InterruptedException ignored) {}
+                    }
+                }
             }
 
             byte[] body = baos.toByteArray();
-            byte[] result = new byte[6 + body.length];
-            result[0] = '#';
-            result[1] = '!';
-            result[2] = 'A';
-            result[3] = 'M';
-            result[4] = 'R';
-            result[5] = '\n';
-            System.arraycopy(body, 0, result, 6, body.length);
+            byte[] magic = magicHeader.getBytes("UTF-8");
+            byte[] result = new byte[magic.length + body.length];
+            System.arraycopy(magic, 0, result, 0, magic.length);
+            System.arraycopy(body, 0, result, magic.length, body.length);
 
-            LogWriter.log(TAG, "AMR-NB encode: " + padPcm.length + "b PCM(16k) -> " + result.length + "b");
+            LogWriter.log(TAG, mime + " encode: " + pcm.length + "b PCM -> " + result.length + "b sr=" + sampleRate);
             return result;
         } catch (Throwable e) {
-            LogWriter.log(TAG, "encodeAmrNbRaw err: " + e.getMessage());
+            LogWriter.log(TAG, "encodeAmrWith(" + mime + ") err: " + e.getClass().getSimpleName() + ": " + e.getMessage());
             return null;
         } finally {
             if (codec != null) {

@@ -404,14 +404,14 @@ public class DexKitHelper {
         }
     }
 
-    private static void loadResultsFromMMKV(Application app) {
+    private static boolean loadResultsFromMMKV(Application app) {
         try {
             MMKV kv = MMKV.mmkvWithID(MMKV_RESULTS_ID, MMKV.MULTI_PROCESS_MODE);
             int cachedVersion = kv.decodeInt(KEY_VERSION_CODE, 0);
             if (cachedVersion != sVersionCode) {
                 LogWriter.log(TAG, "loadResultsFromMMKV: version mismatch (cached=" + cachedVersion + " current=" + sVersionCode + "), clearing cache");
                 kv.clearAll();
-                return;
+                return false;
             }
 
             sP06ClassName = kv.decodeString(KEY_P06_CLASS, null);
@@ -466,7 +466,7 @@ public class DexKitHelper {
             if (!hasResults) {
                 LogWriter.log(TAG, "loadResultsFromMMKV: incomplete cached results, clearing cache");
                 kv.clearAll();
-                return;
+                return false;
             }
 
             LogWriter.log(TAG, "loadResultsFromMMKV: loaded cached results for version " + cachedVersion);
@@ -494,8 +494,10 @@ public class DexKitHelper {
 
             // Mark scan complete AFTER callbacks have run and bridge is ready
             sScanComplete = true;
+            return true;
         } catch (Throwable e) {
             LogWriter.log(TAG, "loadResultsFromMMKV error: " + e.getMessage());
+            return false;
         }
     }
 
@@ -924,24 +926,10 @@ public class DexKitHelper {
 
     private static void findE9AndA21(DexKitBridge bridge) {
         try {
-            // e9 class: contains d1(String) method for setting voice message content
-            MethodMatcher m1 = MethodMatcher.create()
-                .name("d1")
-                .paramTypes("java.lang.String")
-                .returnType("void");
-            List<MethodData> e9Methods = bridge.findMethod(FindMethod.create().matcher(m1));
-            for (MethodData m : e9Methods) {
-                String cn = m.getClassName();
-                if (cn != null && cn.contains("e9")) {
-                    sE9ClassName = cn;
-                    LogWriter.log(TAG, "findE9: " + cn + ".d1(String)");
-                    break;
-                }
-            }
-            if (sE9ClassName == null && !e9Methods.isEmpty()) {
-                sE9ClassName = e9Methods.get(0).getClassName();
-                LogWriter.log(TAG, "findE9 (fallback): " + sE9ClassName);
-            }
+            // e9 class: 8.0.78(3180) 真实类名 com.tencent.mm.storage.e9 (已由 f9.Bb 参数实机验证)。
+            // 曾因 d1(String) fallback 误中 com.tencent.maas.instamovie.MJPublisherSessionMetrics(美颜SDK)。
+            sE9ClassName = "com.tencent.mm.storage.e9";
+            LogWriter.log(TAG, "findE9 (fixed): " + sE9ClassName);
         } catch (Throwable e) {
             LogWriter.log(TAG, "findE9 error: " + e.getMessage());
         }
@@ -1492,10 +1480,14 @@ public class DexKitHelper {
                         String cachedP06 = kv.decodeString(KEY_P06_CLASS, null);
                         if (cachedVersion == sVersionCode && cachedP06 != null) {
                             LogWriter.log(TAG, "hookApplication: MMKV cache hit for version " + cachedVersion);
-                            loadResultsFromMMKV(app);
-                            return;
+                            boolean ok = loadResultsFromMMKV(app);
+                            if (ok) {
+                                return;
+                            }
+                            LogWriter.log(TAG, "hookApplication: cache incomplete, falling back to scan");
+                        } else {
+                            LogWriter.log(TAG, "hookApplication: MMKV cache miss (cached=" + cachedVersion + " current=" + sVersionCode + ")");
                         }
-                        LogWriter.log(TAG, "hookApplication: MMKV cache miss (cached=" + cachedVersion + " current=" + sVersionCode + ")");
                     } catch (Throwable e) {
                         LogWriter.log(TAG, "hookApplication MMKV check err: " + e.getMessage());
                     }

@@ -33,6 +33,7 @@ public class VoiceAutoPlay {
 
     private static boolean sEnabled = true;
     private static long sLastPlayedMsgId = -1L;
+    private static long sX0HandledMsgId = -1L;
 
     private static ClassLoader sClassLoader;
     private static Handler sHandler;
@@ -42,6 +43,11 @@ public class VoiceAutoPlay {
     private static Class<?> sK0Class;
     private static Class<?> sSoClass;
     private static String sVoice2Dir;
+
+    // 8.0.78(3180) 自动播放调度器: com.tencent.mm.ui.chatting.x0 (日志 tag MicroMsg.AutoPlay)
+    private static Class<?> sX0Class;
+    private static volatile boolean sX0Hooked;
+    private static volatile Object sX0Instance;
 
     private static volatile Object sCurrentSo;
     private static volatile Object sCurrentPlayer;
@@ -84,6 +90,123 @@ public class VoiceAutoPlay {
         findVoice2Dir();
         hookVoiceComponent(cl);
         hookVolumeKeyPause(cl);
+        hookX0AutoPlay(cl);
+    }
+
+    // ========== 8.0.78(3180) x0.q(e9) 自动播放调度器 hook ==========
+    // 新文档: 自动播放收敛在 com.tencent.mm.ui.chatting.x0 (tag MicroMsg.AutoPlay)。
+    // 方案A: hook x0.q(Lcom/tencent/mm/storage/e9;)V 放开内部条件判断, 让微信原生自动播放。
+
+    private static void hookX0AutoPlay(ClassLoader cl) {
+        try {
+            sX0Class = XposedHelpers.findClass("com.tencent.mm.ui.chatting.x0", cl);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "x0 class NOT found: " + t.getMessage());
+            return;
+        }
+        try {
+            Class<?> e9Class = XposedHelpers.findClass("com.tencent.mm.storage.e9", cl);
+            java.lang.reflect.Method qMethod = sX0Class.getDeclaredMethod("q", e9Class);
+            XposedBridge.hookMethod(qMethod, new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        Object self = param.thisObject;
+                        if (self != null) sX0Instance = self;
+                        Object e9 = param.args[0];
+                        if (e9 == null) return;
+
+                        String talker = null;
+                        try { talker = (String) XposedHelpers.callMethod(e9, "N0"); }
+                        catch (Throwable ignored) {}
+                        if (talker == null) {
+                            try { talker = (String) XposedHelpers.getObjectField(e9, "field_talker"); }
+                            catch (Throwable ignored) {}
+                        }
+                        long msgId = -1L;
+                        try { msgId = (Long) XposedHelpers.callMethod(e9, "getMsgId"); }
+                        catch (Throwable t) {
+                            try { msgId = (Long) XposedHelpers.callMethod(e9, "H0"); }
+                            catch (Throwable t2) { msgId = -1L; }
+                        }
+
+                        LogWriter.log(TAG, "x0.q(before) id=" + msgId + " talker=" + talker
+                                + " enabled=" + sEnabled + " play=" + shouldAutoPlay(talker));
+
+                        if (!sEnabled || !shouldAutoPlay(talker)) return;
+                        if (msgId == sX0HandledMsgId) {
+                            LogWriter.log(TAG, "x0.q(before) skip handled id=" + msgId);
+                            return;
+                        }
+
+                        // 放开微信内部抑制标记 g (false = 不抑制), 允许微信原生自动播放
+                        try {
+                            XposedHelpers.setBooleanField(self, "g", false);
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "x0.q(before) set g fail: " + t.getMessage());
+                        }
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "x0.q(before) err: " + e.getMessage());
+                    }
+                }
+
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        Object self = param.thisObject;
+                        Object e9 = param.args[0];
+                        if (e9 == null) return;
+
+                        String talker = null;
+                        try { talker = (String) XposedHelpers.callMethod(e9, "N0"); }
+                        catch (Throwable ignored) {}
+                        if (talker == null) {
+                            try { talker = (String) XposedHelpers.getObjectField(e9, "field_talker"); }
+                            catch (Throwable ignored) {}
+                        }
+                        long msgId = -1L;
+                        try { msgId = (Long) XposedHelpers.callMethod(e9, "getMsgId"); }
+                        catch (Throwable t) {
+                            try { msgId = (Long) XposedHelpers.callMethod(e9, "H0"); }
+                            catch (Throwable t2) { msgId = -1L; }
+                        }
+                        if (!sEnabled || !shouldAutoPlay(talker)) return;
+                        if (msgId == sX0HandledMsgId) return;
+
+                        // 微信原生 q() 可能因 r.i / h9.e().n / 熄屏等条件跳过播放,
+                        // 这里强制入队 + 播放队首兜底。
+                        boolean playing = false;
+                        try { playing = (Boolean) XposedHelpers.callMethod(self, "o"); }
+                        catch (Throwable t) {
+                            try { playing = (Boolean) XposedHelpers.callMethod(self, "isPlaying"); }
+                            catch (Throwable t2) { playing = false; }
+                        }
+                        if (playing) {
+                            LogWriter.log(TAG, "x0.q(after) wx already playing id=" + msgId);
+                            sX0HandledMsgId = msgId;
+                            sLastPlayedMsgId = msgId;
+                            return;
+                        }
+
+                        try {
+                            XposedHelpers.callMethod(self, "f", e9);
+                            XposedHelpers.callMethod(self, "t");
+                            sX0HandledMsgId = msgId;
+                            sLastPlayedMsgId = msgId;
+                            LogWriter.log(TAG, "x0.q(after) forced f+t id=" + msgId + " talker=" + talker);
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "x0.q(after) force f/t fail: " + t.getMessage());
+                        }
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "x0.q(after) err: " + e.getMessage());
+                    }
+                }
+            });
+            sX0Hooked = true;
+            LogWriter.log(TAG, "x0.q(e9) auto-play hook OK");
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "x0.q(e9) hook fail: " + e.getMessage());
+        }
     }
 
     // ========== 音量键暂停播报 ==========
@@ -197,6 +320,10 @@ public class VoiceAutoPlay {
 
             if (msgId == sLastPlayedMsgId) {
                 android.util.Log.e(TAG, ">>> onVoiceMsg: DUPLICATE msgId=" + msgId);
+                return;
+            }
+            if (msgId == sX0HandledMsgId) {
+                android.util.Log.e(TAG, ">>> onVoiceMsg: X0-HANDLED msgId=" + msgId);
                 return;
             }
 
@@ -326,18 +453,19 @@ public class VoiceAutoPlay {
 
             LogWriter.log(TAG, "bg: path=" + path + " size=" + f.length() + " msgId=" + msgId);
 
-            // 8.0.78: 语音为 AMR-NB (#!AMR 头), 系统 MediaPlayer 原生支持直接播放;
-            // 仅当文件头非 AMR (旧 SILK) 时才走 SilkDecoder 转 WAV。
-            boolean isAmr = false;
-            try {
-                @SuppressWarnings("resource")
-                java.io.InputStream in = new java.io.FileInputStream(f);
-                byte[] hdr = new byte[6];
-                int n = in.read(hdr);
-                in.close();
-                isAmr = n >= 6 && hdr[0] == '#' && hdr[1] == '!' && hdr[2] == 'A'
-                    && hdr[3] == 'M' && hdr[4] == 'R' && hdr[5] == '\n';
-            } catch (Throwable ignored) {}
+             // 8.0.78: 语音为 AMR (系统 MediaPlayer 原生支持 AMR-NB #!AMR\n 与 AMR-WB #!AMR-WB\n);
+             // 仅当文件头非 AMR (旧 SILK) 时才走 SilkDecoder 转 WAV。
+             boolean isAmr = false;
+             try {
+                 @SuppressWarnings("resource")
+                 java.io.InputStream in = new java.io.FileInputStream(f);
+                 byte[] hdr = new byte[6];
+                 int n = in.read(hdr);
+                 in.close();
+                 isAmr = n >= 6 && hdr[0] == '#' && hdr[1] == '!'
+                     && hdr[2] == 'A' && hdr[3] == 'M' && hdr[4] == 'R'
+                     && (hdr[5] == '\n' || hdr[5] == '-');
+             } catch (Throwable ignored) {}
 
             String srcPath = path;
             String wavPath = null;
@@ -410,6 +538,48 @@ public class VoiceAutoPlay {
             }
         } catch (Throwable e) {
             LogWriter.log(TAG, "getVoicePath: y0() err: " + e.getMessage());
+        }
+
+        // 8.0.78(3180): e9.y0()(clientmsgid) 已删除, 补充可靠兜底:
+        // j()=field_content(格式 clientmsgid:时长:...) 冒号前缀 → resolveClientMsgIdPath
+        try {
+            String content = (String) XposedHelpers.callMethod(msg, "j");
+            if (content != null && !content.isEmpty()) {
+                int colon = content.indexOf(':');
+                if (colon > 0) {
+                    String cid = content.substring(0, colon).trim();
+                    if (!cid.isEmpty()) {
+                        String path = resolveClientMsgIdPath(cid);
+                        if (path != null) {
+                            LogWriter.log(TAG, "getVoicePath: via j() content cid=" + trunc(cid, 30));
+                            return path;
+                        }
+                    }
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "getVoicePath: j() err: " + e.getMessage());
+        }
+
+        // x0()=field_imgPath 语音文件名 → 反查 voice2 目录
+        try {
+            String imgPath = (String) XposedHelpers.callMethod(msg, "x0");
+            if (imgPath != null && !imgPath.isEmpty()) {
+                String name = imgPath;
+                int slash = name.lastIndexOf('/');
+                if (slash >= 0) name = name.substring(slash + 1);
+                if (name.startsWith("msg_")) name = name.substring(4);
+                if (name.endsWith(".amr")) name = name.substring(0, name.length() - 4);
+                if (!name.isEmpty()) {
+                    String path = resolveClientMsgIdPath(name);
+                    if (path != null) {
+                        LogWriter.log(TAG, "getVoicePath: via x0() img " + trunc(imgPath, 40));
+                        return path;
+                    }
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "getVoicePath: x0() err: " + e.getMessage());
         }
         return null;
     }
@@ -538,6 +708,19 @@ public class VoiceAutoPlay {
 
     private static void playOne(PendingVoiceMsg pvm) {
         try {
+            // 8.0.78(3180): 若 x0.q(e9) 调度器 hook 生效, 微信会原生自动播放。
+            // 等待一小段, 若该消息已由 x0 原生播放则跳过, 避免重复发声。
+            if (sX0Hooked) {
+                long x0WaitStart = System.currentTimeMillis();
+                while ((System.currentTimeMillis() - x0WaitStart) < 1500) {
+                    if (sX0HandledMsgId == pvm.msgId) {
+                        LogWriter.log(TAG, "handled by x0 native, skip id=" + pvm.msgId);
+                        return;
+                    }
+                    try { Thread.sleep(100); } catch (InterruptedException ignored) { break; }
+                }
+            }
+
             long waitStart = System.currentTimeMillis();
             while (TTSBroadcaster.hasPendingSpeak() && (System.currentTimeMillis() - waitStart) < 8000) {
                 try { Thread.sleep(150); } catch (InterruptedException ignored) { break; }

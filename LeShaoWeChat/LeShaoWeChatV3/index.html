@@ -1,39 +1,31 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>LeShaoWeChat V3 v757</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeShaoWeChat 下载</title>
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
-        h1 { color: #333; }
-        .btn { display: inline-block; padding: 12px 30px; background: #4CAF50; color: white;
-               text-decoration: none; border-radius: 5px; font-size: 16px; }
-        .info { margin: 20px 0; color: #666; }
-        .version { color: #888; font-size: 14px; }
-        ul { text-align: left; }
+        body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #333; }
+        h1 { font-size: 24px; }
+        .apk { display: block; padding: 16px 20px; margin: 12px 0; background: #f5f6fa; border-radius: 10px; text-decoration: none; color: #1a73e8; font-weight: 600; }
+        .apk:hover { background: #e8edf5; }
+        .meta { color: #888; font-size: 13px; margin-top: 4px; }
+        p { color: #666; line-height: 1.6; }
     </style>
 </head>
 <body>
-    <h1>LeShaoWeChat V3</h1>
-    <p class="version">v757 (build 757) 群发功能链路修复版</p>
-    <p class="info">聊天窗口输入框上方按钮去除图标，文字加空格间距并在边框内居中。</p>
-    <p>
-        <a class="btn" href="LeShaoWeChat-v757.apk" download>Download v757 APK</a>
-    </p>
-    <p style="margin-top:30px;color:#999;font-size:12px;">
-    本轮改动：
-    <ul style="font-size:13px;color:#555;">
-        <li><b>群发语音文件选择器修复</b>：文件选择器 MIME 类型从仅 mp3 扩展为全部音频格式（audio/*），支持 AMR/SILK/WAV 等。</li>
-        <li><b>群发文本发送异常日志</b>：text 类型发送失败时不再静默吞掉异常，增加日志以便排查。</li>
-        <li><b>移除冗余群发类型</b>：「图文混合」与「图文消息」功能完全重复，统一为 6 种类型（文本/图片/视频/图文/文视/语音），UI 布局 3×2 网格。</li>
-        <li>保留 v756：按钮居中显示；标签样式配色（未选中态）；字符间距；无图标。</li>
-    </ul>
-    </p>
-    <p style="margin-top:10px;color:#999;font-size:12px;">
-    重要：安装后必须 <b>重启微信</b> 使 hook 生效。若仍有功能无效，请提供：
-    1. 微信版本号（设置-关于微信）
-    2. LSPosed 日志（LSPosed 管理-日志，或 logcat 过滤 LeShaoV3/LeShao）
-    3. 日志文件 leshao_v3_log.txt 与 signature_dump.txt
-    </p>
+    <h1>LeShaoWeChat 模块下载</h1>
+    <p>微信 8.0.78(3180) 适配版，语音自动播放已按新文档接入 x0.q 调度器。下载 APK 后到 LSPosed 管理器中激活并重启微信。</p>
+    <a class="apk" href="LeShaoWeChat-v920.apk">
+        最新版 LeShaoWeChat-v920.apk
+        <div class="meta">v920 · 音质优化(AMR-WB 16k/23850bps 替代 AMR-NB 8k/12.2k)+语音转发修复(按文件名优先定位文件,过滤误提取的发送者wxid)</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v918.apk">
+        上一版 LeShaoWeChat-v918.apk
+        <div class="meta">v918 · 修复音频转语音/群发语音发送失败(AMR-NB mime改audio/3gpp+分块编码防BufferOverflow)</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v915.apk">
+        v915 · 修复 e9 误解析 + 接入 x0.q 语音自动播放
+    </a>
 </body>
 </html>

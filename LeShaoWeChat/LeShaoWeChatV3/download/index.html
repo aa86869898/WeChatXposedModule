@@ -1,36 +1,31 @@
 <!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>LeShaoWeChat Download</title>
-<style>
-  body { font-family: Arial, sans-serif; margin: 40px; }
-  h1 { color: #333; }
-  .latest { background: #e8f5e9; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-  .latest a { font-size: 18px; font-weight: bold; color: #2e7d32; }
-  .history { margin-top: 30px; }
-  .history li { margin: 5px 0; }
-  .size { color: #666; font-size: 14px; }
-</style>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeShaoWeChat 下载</title>
+    <style>
+        body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #333; }
+        h1 { font-size: 24px; }
+        .apk { display: block; padding: 16px 20px; margin: 12px 0; background: #f5f6fa; border-radius: 10px; text-decoration: none; color: #1a73e8; font-weight: 600; }
+        .apk:hover { background: #e8edf5; }
+        .meta { color: #888; font-size: 13px; margin-top: 4px; }
+        p { color: #666; line-height: 1.6; }
+    </style>
 </head>
 <body>
-<h1>LeShaoWeChat APK Downloads</h1>
-
-<div class="latest">
-  <h3>Latest Version</h3>
-  <p><a href="LeShaoWeChat-v914.apk" download>LeShaoWeChat v914 - 8.0.78(3180) TTS 播报适配: f9.Bb 入口 + AMR 直放</a></p>
-  <p class="size">11.3 MB</p>
-</div>
-
-<div class="history">
-  <h3>History</h3>
-  <ul>
-    <li><a href="LeShaoWeChat-v913.apk" download>v913</a> - audio-to-voice on 8.0.78(3180): v61.d1/pv.p0 AMR-NB chain</li>
-    <li><a href="LeShaoWeChat-v833.apk" download>v833</a> - DB opener prefer s-method + split APK debug logging</li>
-    <li><a href="LeShaoWeChat-v829.apk" download>v829</a> - DexKit init fix (LIFO order)</li>
-    <li><a href="LeShaoWeChat-v828.apk" download>v828</a> - DexKit MMKV cache</li>
-    <li><a href="LeShaoWeChat-v827.apk" download>v827</a> - Activity.onResume hook</li>
-    <li><a href="LeShaoWeChat-v826.apk" download>v826</a> - DB path / fix</li>
-    <li><a href="LeShaoWeChat-v814.apk" download>v814</a> - kl5.s5.Dj</li>
-  </ul>
-</div>
+    <h1>LeShaoWeChat 模块下载</h1>
+    <p>微信 8.0.78(3180) 适配版，语音自动播放已按新文档接入 x0.q 调度器。下载 APK 后到 LSPosed 管理器中激活并重启微信。</p>
+    <a class="apk" href="LeShaoWeChat-v920.apk">
+        最新版 LeShaoWeChat-v920.apk
+        <div class="meta">v920 · 音质优化(AMR-WB 16k/23850bps 替代 AMR-NB 8k/12.2k)+语音转发修复(按文件名优先定位文件,过滤误提取的发送者wxid)</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v918.apk">
+        上一版 LeShaoWeChat-v918.apk
+        <div class="meta">v918 · 修复音频转语音/群发语音发送失败(AMR-NB mime改audio/3gpp+分块编码防BufferOverflow)</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v915.apk">
+        v915 · 修复 e9 误解析 + 接入 x0.q 语音自动播放
+    </a>
 </body>
 </html>

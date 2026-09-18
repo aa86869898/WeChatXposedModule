@@ -20,11 +20,13 @@ import com.leshao.v3.LogWriter;
 
 /**
  * 微信反射核心 — 复刻自微信大师 WxReflect
- * 全部经 smali/反编译验证：
- * pa5.n0.c(Class) | kl5.s5.qj(String,String)V
- * e01.v1.m(List)/B(bool) | e01.d9.b().q()
- * hm0.j1.s(Class)->a().H0(room)
- * d24.h.a() 踢人 | kn.x 邀请
+ * 多类型群发2_新.md 实证:
+ * 核心发送管理器 qs5.v5(MicroMsg.SendMsgMgr), 服务定位 ph5.n0.c(X.class)
+ * 文本: mj/nj/oj/pj(toUser,content,type,flag) / hj(atStr,usersCsv,extra) 多群
+ * 图片: b(Context,toUser,fileName,i,...,k7,d) sendImg
+ * 视频: sj/tj(Context,toUser,file,thumb,i,i2,qn6,..) sendVedio
+ * 名片: ej/fj(String,String,Z,yl) sendContactCard
+ * AppMsg: dj(String,byte[],String,String,String,MsgIdTalker,String,Z,String) / cj 简版
  */
 public class WmReflect {
 
@@ -33,22 +35,28 @@ public class WmReflect {
     // ===== 核心服务 =====
     public static Object getSendMsgMgr(ClassLoader cl) {
         try {
-            // Try DexKit-discovered j1 service first
-            Class<?> j1 = null;
-            String dexKitJ1 = com.leshao.v3.hook.DexKitHelper.getJ1ServiceClass();
-            if (dexKitJ1 != null && !dexKitJ1.isEmpty()) {
-                try { j1 = XposedHelpers.findClass(dexKitJ1, cl); } catch (Throwable ignored) {}
-            }
-            if (j1 == null) {
-                String[] j1Candidates = {"pa5.n0", "hm0.j1", "gp0.j1.j", "gp0.j1"};
-                for (String name : j1Candidates) {
-                    try { j1 = XposedHelpers.findClass(name, cl); break; } catch (Throwable ignored) {}
+            // 8.0.78(3180): 发送管理器 = qs5.v5 (kl5.s5 已失效)。服务定位优先 ph5.n0.c(qs5.v5)
+            String[] locators = {"ph5.n0", "pa5.n0", "hm0.j1", "gp0.j1.j", "gp0.j1"};
+            String[] managers = {"qs5.v5", "kl5.s5"};
+            for (String mgrName : managers) {
+                for (String loc : locators) {
+                    try {
+                        Class<?> locCls = XposedHelpers.findClass(loc, cl);
+                        Class<?> mgrCls = XposedHelpers.findClass(mgrName, cl);
+                        Object inst = XposedHelpers.callStaticMethod(locCls, "c", mgrCls);
+                        if (inst != null) {
+                            LogWriter.log(TAG, "getSendMsgMgr OK: " + loc + ".c(" + mgrName + ") -> " + inst.getClass().getName());
+                            return inst;
+                        }
+                    } catch (Throwable ignored) {}
                 }
             }
-            if (j1 == null) return null;
-            return XposedHelpers.callStaticMethod(j1, "c",
-                XposedHelpers.findClass("kl5.s5", cl));
-        } catch (Exception e) { return null; }
+            LogWriter.log(TAG, "getSendMsgMgr FAILED: no qs5.v5/kl5.s5 via any locator");
+            return null;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getSendMsgMgr err: " + t.getMessage());
+            return null;
+        }
     }
 
     public static Class<?> getChatroomLogic(ClassLoader cl) {
@@ -134,9 +142,43 @@ public class WmReflect {
     public static void sendTextMsg(ClassLoader cl, String content, String toUser) {
         Object m = getSendMsgMgr(cl);
         if (m == null) return;
-        try { XposedHelpers.callMethod(m, "qj", content, toUser); } catch (Exception e) {
-            LogWriter.log("WmReflect", "sendTextMsg err: " + e.getMessage());
+        // 8.0.78(3180): 文本走 qs5.v5 新框架 mj/nj/oj/pj(toUser,content,type,flag);
+        // 旧 qj(content,toUser) 为相册名片, 不再用于文本。
+        String[] textMethods = {"oj", "nj", "mj", "pj"};
+        Throwable lastErr = null;
+        for (String mn : textMethods) {
+            try {
+                // 尝试 (String,String,int,int) 签名
+                XposedHelpers.callMethod(m, mn, toUser, content, 1, 0);
+                LogWriter.log(TAG, "sendTextMsg ok via " + mn + "(toUser,content,1,0)");
+                return;
+            } catch (Throwable t1) {
+                lastErr = t1;
+            }
+            try {
+                // 尝试 (String,String,int,int,int) 等变体
+                XposedHelpers.callMethod(m, mn, toUser, content, 1, 0, 0);
+                LogWriter.log(TAG, "sendTextMsg ok via " + mn + "(toUser,content,1,0,0)");
+                return;
+            } catch (Throwable ignored) {}
         }
+        try {
+            // 多目标文本 hj(atStr, usersCsv, extra) 单目标亦可
+            XposedHelpers.callMethod(m, "hj", (Object) null, toUser, (Object) null);
+            LogWriter.log(TAG, "sendTextMsg ok via hj(null,toUser,null)");
+            return;
+        } catch (Throwable t2) {
+            lastErr = t2;
+        }
+        try {
+            // 多目标 gj(str1,str2,str3,Z)
+            XposedHelpers.callMethod(m, "gj", (Object) null, toUser, (Object) null, true);
+            LogWriter.log(TAG, "sendTextMsg ok via gj(null,toUser,null,true)");
+            return;
+        } catch (Throwable t3) {
+            lastErr = t3;
+        }
+        LogWriter.log("WmReflect", "sendTextMsg FAILED: " + (lastErr != null ? lastErr.getMessage() : "no method"));
     }
 
     public static void broadcastRooms(ClassLoader cl, List<String> rooms, String content) {

@@ -464,11 +464,11 @@ public class WxMasterFeatures {
         }, cal.get(java.util.Calendar.YEAR), cal.get(java.util.Calendar.MONTH), cal.get(java.util.Calendar.DAY_OF_MONTH)).show();
     }
 
-    /** 群发核心：先尝试微信原生群发接口(qj 逗号分隔)，失败回退逐群发送 */
+    /** 群发核心：先尝试微信原生群发接口(多群文本)，失败回退逐群发送 */
     private static boolean sendBroadcast(ClassLoader cl, List<String> rooms, String content) {
         if (sWxCl != null) cl = sWxCl;
         if (rooms == null || rooms.isEmpty() || content == null) return false;
-        if (sendViaQj(cl, rooms, content)) return true;
+        if (sendViaMultiTarget(cl, rooms, content)) return true;
         int ok = 0;
         for (String room : rooms) {
             try {
@@ -479,24 +479,40 @@ public class WxMasterFeatures {
         return ok > 0;
     }
 
-    /** 微信原生群发接口：SendMsgMgr.qj(content, toUsersCsv) */
-    private static boolean sendViaQj(ClassLoader cl, List<String> rooms, String content) {
+    /**
+     * 8.0.78(3180) 多群文本: qs5.v5.hj(atStr, usersCsv, extra) / gj(str1,str2,str3,Z)。
+     * 旧 kl5.s5.qj(content, csv) 已失效(kl5.s5 不存在)。
+     */
+    private static boolean sendViaMultiTarget(ClassLoader cl, List<String> rooms, String content) {
         if (sWxCl != null) cl = sWxCl;
         try {
-            Class<?> n0 = XposedHelpers.findClass("pa5.n0", cl);
-            Class<?> s5 = XposedHelpers.findClass("kl5.s5", cl);
-            Object mgr = XposedHelpers.callStaticMethod(n0, "c", s5);
+            Object mgr = com.leshao.v3.wm.utils.WmReflect.getSendMsgMgr(cl);
             if (mgr == null) return false;
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < rooms.size(); i++) {
                 if (i > 0) sb.append(",");
                 sb.append(rooms.get(i));
             }
-            XposedHelpers.callMethod(mgr, "qj", content, sb.toString());
-            LogWriter.log(TAG, "sendViaQj ok, rooms=" + rooms.size());
-            return true;
+            String csv = sb.toString();
+            Throwable lastErr = null;
+            try {
+                XposedHelpers.callMethod(mgr, "hj", (Object) null, csv, (Object) null);
+                LogWriter.log(TAG, "sendViaMultiTarget hj ok, rooms=" + rooms.size());
+                return true;
+            } catch (Throwable t) {
+                lastErr = t;
+            }
+            try {
+                XposedHelpers.callMethod(mgr, "gj", (Object) null, csv, (Object) null, true);
+                LogWriter.log(TAG, "sendViaMultiTarget gj ok, rooms=" + rooms.size());
+                return true;
+            } catch (Throwable t) {
+                lastErr = t;
+            }
+            LogWriter.log(TAG, "sendViaMultiTarget fail: " + (lastErr != null ? lastErr.getMessage() : "no method"));
+            return false;
         } catch (Throwable t) {
-            LogWriter.log(TAG, "sendViaQj fail: " + t.getMessage());
+            LogWriter.log(TAG, "sendViaMultiTarget err: " + t.getMessage());
             return false;
         }
     }

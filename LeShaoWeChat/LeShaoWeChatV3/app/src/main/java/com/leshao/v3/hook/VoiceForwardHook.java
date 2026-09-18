@@ -742,17 +742,11 @@ public class VoiceForwardHook {
     }
 
     private static String findVoiceFile(Object e9) {
-        // y0() → clientmsgid → MD5 → 2级子目录 → voice2/XX/YY/msg_{cid}.amr
+        // 8.0.78(3180): e9.y0()(clientmsgid) 已删除。
+        // 兜底顺序: j()=field_content(冒号前缀=clientmsgid) → I0()=XML clientmsgid → x0()=field_imgPath(文件名)
         ClassLoader cl = ContextManager.getClassLoader();
 
-        String cid = null;
-        try { cid = (String) XposedHelpers.callMethod(e9, "y0"); } catch (Throwable ignored) {}
-        if (cid == null || cid.isEmpty()) {
-            try {
-                String xml = (String) XposedHelpers.callMethod(e9, "I0");
-                if (xml != null) cid = extractXmlAttr(xml, "clientmsgid");
-            } catch (Throwable ignored) {}
-        }
+        String cid = extractClientMsgId(e9);
         if (cid == null || cid.isEmpty()) {
             LogWriter.log(TAG, "voice: no clientmsgid");
             return null;
@@ -786,6 +780,55 @@ public class VoiceForwardHook {
             for (byte b : d) sb.append(String.format("%02x", b));
             return sb.toString();
         } catch (Throwable t) { return ""; }
+    }
+
+    /** 8.0.78(3180): e9.y0()(clientmsgid) 已删除。
+     *  可靠取值: x0()=field_imgPath(语音文件名) → I0()=XML clientmsgid → j()=field_content(过滤非 cid 形态)。
+     *  j() 的冒号前缀在部分消息上取到的是发送者 wxid(talker) 而非 clientmsgid，故放到最后并过滤。 */
+    static String extractClientMsgId(Object e9) {
+        if (e9 == null) return null;
+        // 1) e9.x0() field_imgPath: 语音文件名 msg_<cid>.amr / <cid>.amr / <cid> (最可靠)
+        try {
+            String imgPath = (String) XposedHelpers.callMethod(e9, "x0");
+            if (imgPath != null && !imgPath.isEmpty()) {
+                String name = imgPath;
+                int slash = name.lastIndexOf('/');
+                if (slash >= 0) name = name.substring(slash + 1);
+                if (name.startsWith("msg_")) name = name.substring(4);
+                if (name.endsWith(".amr")) name = name.substring(0, name.length() - 4);
+                if (!name.isEmpty() && isPlausibleCid(name)) return name;
+            }
+        } catch (Throwable ignored) {}
+        // 2) e9.I0() XML 内 clientmsgid 属性
+        try {
+            String xml = (String) XposedHelpers.callMethod(e9, "I0");
+            if (xml != null) {
+                String cid = extractXmlAttr(xml, "clientmsgid");
+                if (cid != null && !cid.isEmpty() && isPlausibleCid(cid)) return cid;
+            }
+        } catch (Throwable ignored) {}
+        // 3) e9.j() field_content: "clientmsgid:时长:..." 冒号前缀 (最后兜底)
+        try {
+            String content = (String) XposedHelpers.callMethod(e9, "j");
+            if (content != null && !content.isEmpty()) {
+                int colon = content.indexOf(':');
+                if (colon > 0) {
+                    String cid = content.substring(0, colon).trim();
+                    if (!cid.isEmpty() && isPlausibleCid(cid)) return cid;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    /** 过滤明显非 clientmsgid 的值: wxid/talker/群号/含 @ 等均丢弃 */
+    private static boolean isPlausibleCid(String cid) {
+        if (cid == null || cid.isEmpty()) return false;
+        if (cid.contains("@")) return false;
+        if (cid.startsWith("wxid_")) return false;
+        if (cid.contains("/") || cid.contains("\\")) return false;
+        if (cid.contains(" ")) return false;
+        return true;
     }
 
     private static String extractXmlAttr(String xml, String attr) {
@@ -851,7 +894,14 @@ public class VoiceForwardHook {
     }
 
     private static String searchVoice2Dir(String cid) {
-        String targetName = "msg_" + cid + ".amr";
+        // 覆盖微信多种落盘命名: msg_<cid>.amr / <cid>.amr / amr_<cid> / silk_<cid> / <cid>
+        String[] candidates = new String[]{
+            "msg_" + cid + ".amr",
+            cid + ".amr",
+            "amr_" + cid + ".amr",
+            "silk_" + cid + ".amr",
+            cid
+        };
         String[] roots = buildMicroMsgRoots();
         for (String root : roots) {
             java.io.File md = new java.io.File(root);
@@ -863,8 +913,10 @@ public class VoiceForwardHook {
                     v2 = new java.io.File(userDir, "voice");
                 }
                 if (!v2.isDirectory()) continue;
-                String found = searchFileRecursive(v2, targetName, 4);
-                if (found != null) return found;
+                for (String targetName : candidates) {
+                    String found = searchFileRecursive(v2, targetName, 4);
+                    if (found != null) return found;
+                }
             }
         }
         return null;
@@ -1167,7 +1219,9 @@ public class VoiceForwardHook {
 
     // ===== Send API 发现: 找 tl.p0/x0 + b31.w/j =====
     private static void hookForwardTracing(ClassLoader cl) {
-        findSceneVoiceRecorder(cl);
+        // 8.0.78(3180): VF 发送已完全委托 TtsVoiceSender (v61.d1.h/u 链路, 见 sendViaSceneVoice)。
+        // 全 DEX 扫描 findSceneVoiceRecorder 是遗留逻辑, 只会打印 g=null.null 误导日志, 已停用。
+        LogWriter.log(TAG, "hookForwardTracing: VF send delegated to TtsVoiceSender, legacy scan disabled");
     }
 
     private static void findSceneVoiceRecorder(ClassLoader cl) {
