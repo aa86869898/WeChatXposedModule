@@ -53,15 +53,15 @@ public class TtsVoiceSender {
 
     private static final String TAG = "TtsVoiceSender";
     private static final String TTS_PREFIX = "#tts ";
-    private static final int TARGET_SAMPLE_RATE = 24000;    // 还原音质(B方案): 16k→24k, 扩展高频带宽保留原始细节
+    private static final int TARGET_SAMPLE_RATE = 32000;    // 还原音质(B方案): 24k→32k, 进一步扩展高频带宽
     private static final int TARGET_CHANNELS = 1;
     private static final int TARGET_BITS_PER_SAMPLE = 16;
     private static final int FRAME_DURATION_MS = 20;
     private static final int FRAME_SAMPLES = TARGET_SAMPLE_RATE * FRAME_DURATION_MS / 1000;
     private static final int FRAME_PCM_BYTES = FRAME_SAMPLES * TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8;
     private static final long FAILURE_SUPPRESS_WINDOW_MS = 8000;
-    private static final int SILK_BITRATE = 50000;          // 微信原生 SILK 高码率档(v928 为 40000, 还原场景升 50k 承载更多细节)
-    private static final int SILK_COMPLEXITY = 4;           // 参照 8.0.78 v61.w.c 转码参数 new v61/c0(16000,16000,4)
+    private static final int SILK_BITRATE = 60000;          // 微信原生 SILK 高码率档(v930 为 50000, 升 60k 承载更多细节)
+    private static final int SILK_COMPLEXITY = 5;           // 参照 8.0.78 v61.w.c 转码参数 new v61/c0(16000,16000,4), 升满复杂度
     private static volatile boolean sCrashHandlerInstalled;
     private static final java.util.concurrent.ExecutorService sTtsPool = 
             java.util.concurrent.Executors.newSingleThreadExecutor(new java.util.concurrent.ThreadFactory() {
@@ -3610,10 +3610,10 @@ public class TtsVoiceSender {
         }
     }
 
-    /** 通用降采样: 从 TARGET_SAMPLE_RATE(现为24k) 降到 8k, 供 AMR-NB 兜底 */
+    /** 通用降采样: 从 TARGET_SAMPLE_RATE(现为32k) 降到 8k, 供 AMR-NB 兜底 */
     private static byte[] downsampleTo8k(byte[] pcm) {
         if (pcm == null || pcm.length < 4) return pcm;
-        int factor = TARGET_SAMPLE_RATE / 8000; // 24k/8k = 3
+        int factor = TARGET_SAMPLE_RATE / 8000; // 32k/8k = 4
         if (factor < 1) factor = 1;
         int inSamples = pcm.length / 2;
         int outSamples = inSamples / factor;
