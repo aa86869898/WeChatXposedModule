@@ -60,7 +60,7 @@ public class TtsVoiceSender {
     private static final int FRAME_SAMPLES = TARGET_SAMPLE_RATE * FRAME_DURATION_MS / 1000;
     private static final int FRAME_PCM_BYTES = FRAME_SAMPLES * TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8;
     private static final long FAILURE_SUPPRESS_WINDOW_MS = 8000;
-    private static final int SILK_BITRATE = 30000;          // 微信原生 SILK 最高码率(参照 v8xx 旧版音质优化)
+    private static final int SILK_BITRATE = 40000;          // 微信原生 SILK 上限档(v927 为 30000, 现升 40k 提升吐字细节)
     private static final int SILK_COMPLEXITY = 4;           // 参照 8.0.78 v61.w.c 转码参数 new v61/c0(16000,16000,4)
     private static volatile boolean sCrashHandlerInstalled;
     private static final java.util.concurrent.ExecutorService sTtsPool = 
@@ -3353,12 +3353,15 @@ public class TtsVoiceSender {
     private static final String AMR_NB_MIME_ALT = "audio/amr";
 
     /**
-     * 人声增强(编码前处理最高档): 16k/16bit/mono PCM 三件套与 SILK/AMR 编码共用:
+     * 人声增强(编码前处理最高档): 16k/16bit/mono PCM 五段处理与 SILK/AMR 编码共用:
      *  1. 二阶 Butterworth 高通 fc=120Hz — 比一阶更陡(12dB/oct)地削除低频底噪/气流声/电流声,
      *     同时保留 120Hz+ 人声基频与低频共振
-     *  2. Peaking EQ +3dB Q=1.0 fc=2.4kHz — 抬升人声清晰度关键频段(presence/齿音区),
-     *     让 TTS 与真人语音更通透明亮
-     *  3. 峰值归一化至 88% FS — 自动增益到接近满量程且防削波, 音量一致不忽大忽小
+     *  2. Peaking EQ +3dB Q=1.0 fc=2.4kHz — 抬升人声清晰度关键频段(presence/齿音区)
+     *  3. Peaking EQ +2dB Q=0.6 fc=1.2kHz — 抬升 300Hz-3kHz 人声主体频段(方案D),
+     *     让歌声中的人声旋律更突出于伴奏
+     *  4. 轻量压缩器 threshold=-18dBFS ratio=2.5:1 — 压缩伴奏峰值, 防止辅音/弱音
+     *     被乐器动态淹没(方案C)
+     *  5. 峰值归一化至 88% FS — 自动增益到接近满量程且防削波, 音量一致
      * 链式 DF2T (transposed direct form II) 逐样本 64bit 双精度处理, 无限内稳定性。
      */
     private static byte[] enhanceVoicePcm(byte[] pcm) {
@@ -3390,24 +3393,59 @@ public class TtsVoiceSender {
                 samples[i] = y;
             }
 
-            // --- 2. Peaking EQ +3dB Q=1.0 fc=2.4kHz ---
-            w0 = 2.0 * Math.PI * 2400.0 / fs;
-            alpha = Math.sin(w0) / (2.0 * 1.0);
-            cosw = Math.cos(w0);
-            double A = Math.pow(10.0, 3.0 / 40.0); // +3dB
-            b0 = 1.0 + alpha * A; b1 = -2.0 * cosw; b2 = 1.0 - alpha * A;
-            a0 = 1.0 + alpha / A; a1 = -2.0 * cosw; a2 = 1.0 - alpha / A;
-            double e0 = b0 / a0, e1 = b1 / a0, e2 = b2 / a0, ea1 = a1 / a0, ea2 = a2 / a0;
-            double eqZ1 = 0, eqZ2 = 0;
-            for (int i = 0; i < n; i++) {
-                double x = samples[i];
-                double y = e0 * x + eqZ1;
-                eqZ1 = e1 * x - ea1 * y + eqZ2;
-                eqZ2 = e2 * x - ea2 * y;
-                samples[i] = y;
+            // --- 2. Peaking EQ +3dB Q=1.0 fc=2.4kHz (presence/齿音) ---
+            double[][] eqs = {
+                {2400.0, 1.0, 3.0},   // fc, Q, gainDb
+                {1200.0, 0.6, 2.0}    // 方案D: 300Hz-3kHz 人声主体抬升
+            };
+            for (double[] eq : eqs) {
+                double f0 = eq[0], q = eq[1], gDb = eq[2];
+                w0 = 2.0 * Math.PI * f0 / fs;
+                alpha = Math.sin(w0) / (2.0 * q);
+                cosw = Math.cos(w0);
+                double A = Math.pow(10.0, gDb / 40.0);
+                b0 = 1.0 + alpha * A; b1 = -2.0 * cosw; b2 = 1.0 - alpha * A;
+                a0 = 1.0 + alpha / A; a1 = -2.0 * cosw; a2 = 1.0 - alpha / A;
+                double e0 = b0 / a0, e1 = b1 / a0, e2 = b2 / a0, ea1 = a1 / a0, ea2 = a2 / a0;
+                double eqZ1 = 0, eqZ2 = 0;
+                for (int i = 0; i < n; i++) {
+                    double x = samples[i];
+                    double y = e0 * x + eqZ1;
+                    eqZ1 = e1 * x - ea1 * y + eqZ2;
+                    eqZ2 = e2 * x - ea2 * y;
+                    samples[i] = y;
+                }
             }
 
-            // --- 3. 峰值归一化至 88% FS ---
+            // --- 4. 轻量压缩器 threshold=-18dBFS ratio=2.5:1 (方案C) ---
+            final double fullScale = 32767.0;
+            final double thresholdDb = -18.0;
+            final double ratio = 2.5;
+            final double attackSmp = 0.002 * fs;   // 2ms
+            final double releaseSmp = 0.100 * fs;  // 100ms
+            double envDb = -120.0;
+            double smoothGain = 1.0;
+            for (int i = 0; i < n; i++) {
+                double absX = Math.abs(samples[i]) / fullScale;
+                double instDb = (absX > 1e-9) ? 20.0 * Math.log10(absX) : -120.0;
+                if (instDb > envDb) {
+                    envDb += (instDb - envDb) / attackSmp;
+                } else {
+                    envDb += (instDb - envDb) / releaseSmp;
+                }
+                double target = 1.0;
+                double over = envDb - thresholdDb;
+                if (over > 0) {
+                    double compressedDb = thresholdDb + over / ratio;
+                    target = Math.pow(10.0, (compressedDb - envDb) / 20.0);
+                }
+                double k = (target < smoothGain) ? 1.0 / attackSmp : 1.0 / releaseSmp;
+                if (k > 1.0) k = 1.0;
+                smoothGain += (target - smoothGain) * k;
+                samples[i] *= smoothGain;
+            }
+
+            // --- 5. 峰值归一化至 88% FS ---
             double peak = 0;
             for (int i = 0; i < n; i++) {
                 double m = Math.abs(samples[i]);
@@ -3425,7 +3463,7 @@ public class TtsVoiceSender {
                 out[i * 2] = (byte) (yi & 0xFF);
                 out[i * 2 + 1] = (byte) ((yi >> 8) & 0xFF);
             }
-            LogWriter.log(TAG, "enhanceVoicePcm(top): HPF120+EQ2400+3dB+norm peak="
+            LogWriter.log(TAG, "enhanceVoicePcm(top): HPF120+EQ2400+EQ1200+comp(-18dB/2.5)+norm peak="
                     + Math.round(peak) + " gain=" + ((int)(gain*1000)/1000.0) + " " + pcm.length + "B");
             return out;
         } catch (Throwable t) {
