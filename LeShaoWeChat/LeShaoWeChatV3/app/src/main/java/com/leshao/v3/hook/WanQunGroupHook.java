@@ -269,6 +269,7 @@ public class WanQunGroupHook {
         if (!isAdmin(from)) { postSend(group, "无权限执行群管指令"); return; }
         String cmd = content.substring(3).trim();
         try {
+            // 注意顺序：长命令需优先于其前缀短命令（如"白名单列表"先于"白名单"）
             if (cmd.startsWith("进群时间")) {
                 String m = cmd.replace("进群时间", "").trim();
                 if (m.startsWith("@")) m = m.substring(1);
@@ -283,6 +284,8 @@ public class WanQunGroupHook {
             } else if (cmd.startsWith("取消白名单")) {
                 String m = cmd.replace("取消白名单", "").trim(); if (m.startsWith("@")) m = m.substring(1);
                 removeList("wq_white", group, m); postSend(group, "已移出白名单 " + m);
+            } else if (cmd.startsWith("白名单列表")) {
+                postSend(group, "本群白名单: " + listStr("wq_white", group));
             } else if (cmd.startsWith("白名单")) {
                 String m = cmd.replace("白名单", "").trim(); if (m.startsWith("@")) m = m.substring(1);
                 addList("wq_white", group, m); postSend(group, "已加入白名单 " + m);
@@ -291,8 +294,6 @@ public class WanQunGroupHook {
                 warnClear(group, m); postSend(group, "已取消 " + m + " 的警告");
             } else if (cmd.startsWith("黑名单")) {
                 postSend(group, "本群黑名单: " + listStr("wq_black", group));
-            } else if (cmd.startsWith("白名单列表")) {
-                postSend(group, "本群白名单: " + listStr("wq_white", group));
             }
         } catch (Throwable t) { LogWriter.log(TAG, "cmd err: " + t); }
     }

@@ -49,17 +49,16 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
    - 日志文件路径: /data/data/com.tencent.mm/files/leshao_v3/leshao_v3_log.txt
    - 日志过滤 TAG: LeShaoV3
 
-### 每次编译必须升版本号 + 清理缓存
-- Date: 2026-08-24
-- Context: 用户明确要求每次编译 APK 都要递增版本号并清理构建缓存，确保每次都是全新编译
+### 每次编译必须升版本号 + 清理缓存（当前以 release 构建为准）
+- Date: 2026-09-19
+- Context: 用户明确要求每次编译 APK 都要递增版本号并清理构建缓存，确保每次都是全新编译。自 v930 起实际使用 release 签名构建并推送
 - Category: 构建编译
 - Instructions:
-  - 每次编译前，递增 `app/build.gradle.kts` 中的 `versionCode` 和 `versionName`（例如 v815 → v816 → v817）
-  - 编译命令必须使用 `./gradlew clean assembleDebug`（带 clean 清理缓存）
-  - 不要使用 `./gradlew assembleDebug`（不带 clean 会复用增量编译缓存）
-  - 编译后 APK 自动以版本号命名：`LeShaoWeChat-v{versionCode}.apk`
-  - 下载链接格式：`{预览地址}/LeShaoWeChat-v{versionCode}.apk`
-  - 当前实际生效部署：`python3 -m http.server 9100 --directory /workspace` 已在运行，`request_preview(9100)` 获取预览域名，下载链接为 `{预览地址}/LeShaoWeChat/LeShaoWeChatV3/app/build/outputs/apk/debug/LeShaoWeChat-v{versionCode}.apk`（返回 200 且 md5 一致即成功）
+  - 每次编译前，同步递增 `app/build.gradle.kts` 中 `versionCode`/`versionName`、`MainHook.MODULE_BUILD`(如 "v936")与 `MainHook.MODULE_VERSION_CODE`(整数，与 DexKit 扫描缓存失效键相同)
+  - release 构建命令：`cd /workspace/LeShaoWeChat/LeShaoWeChatV3 && ./gradlew :app:assembleRelease --offline -x lint`（R8 会改写 XposedHelpers，varargs findAndHookMethod 不可用，须用 findClass+getDeclaredMethod+hookMethod 模式）
+  - release 产物：`app/build/outputs/apk/release/LeShaoWeChat-v{versionCode}.apk`；签名已配置在 build.gradle.kts signingConfigs(release.keystore)
+  - 分发：复制 APK 到 `/workspace/LeShaoWeChat/LeShaoWeChatV3/`（8899 服务根目录）与 `download/` 两个位置，同步更新两个 `index.html`（根目录 + download/）后方可访问
+  - 当前下载服务：`python3 -m http.server 8899 --bind 0.0.0.0`，根目录 `/workspace/LeShaoWeChat/LeShaoWeChatV3/`；预览地址 `http://localhost:8899/index.html`，APK 下载 `http://localhost:8899/LeShaoWeChat-v{versionCode}.apk`
 
 ### 代码提交时机（用户确认后才提交）
 - Date: 2026-08-14
