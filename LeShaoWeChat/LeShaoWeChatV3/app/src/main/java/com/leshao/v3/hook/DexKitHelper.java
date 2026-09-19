@@ -30,6 +30,7 @@ public class DexKitHelper {
     private static final String TAG = "DexKit";
     private static final String MMKV_RESULTS_ID = "dexkit_scan_v3";
     private static final String KEY_VERSION_CODE = "version_code";
+    private static final String KEY_MODULE_VERSION = "module_version"; // 模块版本, 更新模块强制重扫
     private static final String KEY_P06_CLASS = "p06_class";
     private static final String KEY_DB_OPENER_CLASS = "db_opener_class";
     private static final String KEY_DB_OPEN_METHOD = "db_open_method";
@@ -135,6 +136,7 @@ public class DexKitHelper {
     private static volatile List<String> sMenuG4Impls = new java.util.ArrayList<>();
 
     private static volatile int sVersionCode = 0;
+    private static volatile int sModuleVersion = 0;
 
     private static final ExecutorService sExecutor = Executors.newSingleThreadExecutor(new java.util.concurrent.ThreadFactory() {
         private final AtomicInteger threadNumber = new AtomicInteger(1);
@@ -408,8 +410,10 @@ public class DexKitHelper {
         try {
             MMKV kv = MMKV.mmkvWithID(MMKV_RESULTS_ID, MMKV.MULTI_PROCESS_MODE);
             int cachedVersion = kv.decodeInt(KEY_VERSION_CODE, 0);
-            if (cachedVersion != sVersionCode) {
-                LogWriter.log(TAG, "loadResultsFromMMKV: version mismatch (cached=" + cachedVersion + " current=" + sVersionCode + "), clearing cache");
+            int cachedModuleVersion = kv.decodeInt(KEY_MODULE_VERSION, 0);
+            if (cachedVersion != sVersionCode || cachedModuleVersion != sModuleVersion) {
+                LogWriter.log(TAG, "loadResultsFromMMKV: version mismatch (cachedVer=" + cachedVersion + " currentVer=" + sVersionCode
+                    + " cachedMod=" + cachedModuleVersion + " currentMod=" + sModuleVersion + "), clearing cache");
                 kv.clearAll();
                 return false;
             }
@@ -506,6 +510,7 @@ public class DexKitHelper {
             MMKV kv = MMKV.mmkvWithID(MMKV_RESULTS_ID, MMKV.MULTI_PROCESS_MODE);
             kv.clearAll();
             kv.encode(KEY_VERSION_CODE, sVersionCode);
+            kv.encode(KEY_MODULE_VERSION, sModuleVersion);
 
             if (sP06ClassName != null) kv.encode(KEY_P06_CLASS, sP06ClassName);
             if (sDbOpenerClass != null) kv.encode(KEY_DB_OPENER_CLASS, sDbOpenerClass);
@@ -853,6 +858,11 @@ public class DexKitHelper {
 
     public static void setVersionCode(int versionCode) {
         sVersionCode = versionCode;
+    }
+
+    /** 设置模块构建版本。模块更新后该值变化, 与微信版本一起作为缓存失效条件 */
+    public static void setModuleVersion(int moduleVersion) {
+        sModuleVersion = moduleVersion;
     }
 
     public static String getP06ClassName() { return sP06ClassName; }

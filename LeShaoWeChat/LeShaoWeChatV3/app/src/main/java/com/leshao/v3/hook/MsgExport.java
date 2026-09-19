@@ -63,6 +63,13 @@ public class MsgExport {
                                         if (menu == null) return;
                                         menu.add(0, 99980, 0, "导出聊天记录(TXT)");
                                         menu.add(0, 99981, 0, "导出聊天记录(HTML)");
+                                        // 乐少万群管理入口（仅群聊显示）
+                                        try {
+                                            String t = getTalker(param.thisObject);
+                                            if (t != null && t.endsWith("@chatroom")) {
+                                                menu.add(0, 99982, 0, "乐少·万群管理");
+                                            }
+                                        } catch (Throwable ignored) {}
                     } catch (Throwable e) {
                         LogWriter.log("MsgExport", "cb err: " + e);
                     }
@@ -77,6 +84,8 @@ public class MsgExport {
                         int id = item.getItemId();
                         if (id == 99980 || id == 99981) {
                             handleExportClick(param, item, id);
+                        } else if (id == 99982) {
+                            handleWanQunClick(param, item);
                         }
                     } catch (Throwable e) {
                         LogWriter.log("MsgExport", "cb err: " + e);
@@ -94,6 +103,9 @@ public class MsgExport {
                         if (id == 99980 || id == 99981) {
                             LogWriter.log(TAG, "onMenuItemSelected fallback hit id=" + id);
                             handleExportClick(param, item, id);
+                        } else if (id == 99982) {
+                            LogWriter.log(TAG, "onMenuItemSelected fallback hit wanqun id=" + id);
+                            handleWanQunClick(param, item);
                         }
                     } catch (Throwable e) {
                         LogWriter.log("MsgExport", "onMenuItemSelected cb err: " + e);
@@ -118,6 +130,24 @@ public class MsgExport {
             showToast("无法获取当前聊天对象");
         }
         param.setResult(true);
+    }
+
+    /** 乐少万群管理：打开配置面板（仅群聊），复用 param.thisObject 的活动上下文 */
+    private static void handleWanQunClick(XC_MethodHook.MethodHookParam param, MenuItem item) {
+        try {
+            String talker = getTalker(param.thisObject);
+            android.content.Context ctx = null;
+            try {
+                Object act = XposedHelpers.callMethod(param.thisObject, "getActivity");
+                if (act instanceof android.content.Context) ctx = (android.content.Context) act;
+            } catch (Throwable ignored) {}
+            if (ctx == null) ctx = ContextManager.getAppContext();
+            LogWriter.log(TAG, "乐少万群管理 selected talker=" + talker + " ctx=" + (ctx != null));
+            com.leshao.v3.hook.WanQunGroupHook.showConfigDialog(ctx, talker);
+            param.setResult(true);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "handleWanQunClick err: " + t.getMessage());
+        }
     }
 
     private static String getTalker(Object fragment) {

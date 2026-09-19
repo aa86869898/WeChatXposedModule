@@ -54,6 +54,7 @@ public class CornerMenu {
     private static final String HAMBURGER_TAG = "LESHAO_HAM_V2";
     private static final int MAX_RETRY = 10;
     private static final long RETRY_DELAY_MS = 200;
+    private static Runnable sRecheckRunnable;
     private static ClassLoader sClassLoader;
     private static Bitmap sBitmapLight;
     private static Bitmap sBitmapDark;
@@ -102,6 +103,8 @@ public class CornerMenu {
                                 if (isInChatWindow((Activity) activity)) {
                                     LogWriter.log(TAG, "skip inject: chat window active");
                                     if (sMainIcon != null) removeAll();
+                                    // 可能误判: fragment view 状态延迟同步, 延迟复核一次
+                                    scheduleRecheckInject((Activity) activity);
                                     return;
                                 }
                                 LogWriter.log(TAG, "Activity.onWindowFocusChanged -> main page focused");
@@ -236,6 +239,29 @@ public class CornerMenu {
             });
         } catch (Throwable t) {
             LogWriter.log(TAG, "hookChatFragmentVisibility err: " + t.getMessage());
+        }
+    }
+
+    /** 延迟复核注入: 修复回主页瞬间 fragment 遍历误判"在聊天中"导致三横菜单不显示。
+     *  若复核时已离开聊天窗口且无残留菜单, 立即注入。 */
+    private static void scheduleRecheckInject(final Activity act) {
+        try {
+            if (sRecheckRunnable != null) sH.removeCallbacks(sRecheckRunnable);
+            sRecheckRunnable = () -> {
+                try {
+                    if (act == null || act.isFinishing()) return;
+                    if (sMainIcon != null) return;
+                    if (isInChatWindow(act)) return;
+                    String clsName = act.getClass().getName();
+                    if (!"com.tencent.mm.ui.LauncherUI".equals(clsName)
+                            && !"com.tencent.mm.ui.HomeUI".equals(clsName)) return;
+                    LogWriter.log(TAG, "scheduleRecheckInject -> main page confirmed, inject");
+                    injectMain(act, 0);
+                } catch (Throwable ignored) {}
+            };
+            sH.postDelayed(sRecheckRunnable, 200);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "scheduleRecheckInject err: " + t.getMessage());
         }
     }
 

@@ -3865,13 +3865,15 @@ public class TtsVoiceSender {
 
     public static int encodePcmToAmr(byte[] pcm, String outPath, int originalPcmBytes) {
         try {
-            byte[] amr = encodeAmrNbRaw(pcm);
-            if (amr == null || amr.length == 0) return 0;
+            // 统一为音频转语音高音质参数: SILK(24k/60k/复杂度5) 优先, AMR-NB 仅作兜底。
+            // 此前 TTS 专用参数(AMR-NB 8k/12.2k)音质偏低, 现复用 encodeVoiceHighestQuality。
+            byte[] voice = encodeVoiceHighestQuality(pcm);
+            if (voice == null || voice.length == 0) return 0;
             File parent = new File(outPath).getParentFile();
             if (parent != null) parent.mkdirs();
-            fileWrite(new File(outPath), amr);
+            fileWrite(new File(outPath), voice);
             int fileSize = (int) new File(outPath).length();
-            LogWriter.log(TAG, "AMR-NB encoded: " + fileSize + " bytes -> " + outPath);
+            LogWriter.log(TAG, "encodePcmToAmr(high-q): " + fileSize + " bytes -> " + outPath);
             return fileSize;
         } catch (Throwable e) {
             LogWriter.log(TAG, "encodePcmToAmr err: " + e.getMessage());

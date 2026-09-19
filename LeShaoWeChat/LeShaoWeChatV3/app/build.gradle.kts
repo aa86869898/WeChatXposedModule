@@ -11,8 +11,8 @@ android {
         applicationId = "com.leshao.v3"
         minSdk = 24
         targetSdk = 36
-        versionCode = 935
-        versionName = "3.9.0-v935"
+        versionCode = 936
+        versionName = "3.9.0-v936"
     }
 
     signingConfigs {

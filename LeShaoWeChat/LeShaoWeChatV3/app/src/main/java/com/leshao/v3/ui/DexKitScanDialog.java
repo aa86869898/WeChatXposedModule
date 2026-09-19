@@ -29,6 +29,7 @@ public class DexKitScanDialog {
     private static volatile AlertDialog sDialog;
     private static volatile LinearLayout sStepContainer;
     private static volatile TextView sTitleText;
+    private static volatile TextView sCloseButton;
     private static volatile NeonProgressBar sProgressBar;
     private static volatile boolean sDismissed = false;
     private static volatile boolean sScanFinished = false;
@@ -102,10 +103,21 @@ public class DexKitScanDialog {
 
     public static void dismiss() {
         sDismissed = true;
+        sScanFinished = false;
         MAIN.post(() -> {
             try {
                 if (sDialog != null && sDialog.isShowing()) sDialog.dismiss();
                 sDialog = null;
+            } catch (Throwable ignored) {}
+        });
+    }
+
+    /** 扫描完成: 显示关闭按钮, 允许用户关闭弹窗 */
+    public static void onScanComplete() {
+        sScanFinished = true;
+        MAIN.post(() -> {
+            try {
+                if (sCloseButton != null) sCloseButton.setVisibility(View.VISIBLE);
             } catch (Throwable ignored) {}
         });
     }
@@ -207,6 +219,8 @@ public class DexKitScanDialog {
         closeBtn.setPadding(dp(ctx, 20), dp(ctx, 10), dp(ctx, 20), dp(ctx, 10));
         closeBtn.setBackgroundColor(Color.parseColor("#33FFFFFF"));
         closeBtn.setOnClickListener(v -> dismiss());
+        closeBtn.setVisibility(View.GONE);
+        sCloseButton = closeBtn;
         LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         closeLp.setMargins(0, dp(ctx, 16), 0, 0);

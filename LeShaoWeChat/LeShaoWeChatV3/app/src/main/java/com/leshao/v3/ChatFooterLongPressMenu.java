@@ -384,20 +384,15 @@ public class ChatFooterLongPressMenu {
         popupWindow.setOutsideTouchable(true);
         popupWindow.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
-        int[] loc = new int[2];
-        anchor.getLocationOnScreen(loc);
-        int x = Math.max(0, loc[0] - p8);
-        int y = Math.max(0, loc[1] - dp(ctx, 340));
-        popupWindow.showAtLocation(anchor, Gravity.TOP | Gravity.START, x, y);
+        // 水平居中显示（距顶部留白），满足“70% 屏宽 + 居中”需求
+        popupWindow.showAtLocation(anchor, Gravity.TOP | Gravity.CENTER_HORIZONTAL, 0, dp(ctx, 120));
         popupWindow.setOnDismissListener(() -> removeLayoutListener());
 
         sLayoutAnchor = anchor;
         sLayoutListener = () -> {
             if (popupWindow == null || !popupWindow.isShowing()) return;
-            int[] newLoc = new int[2];
-            anchor.getLocationOnScreen(newLoc);
-            int ny = Math.max(0, newLoc[1] - dp(ctx, 340));
-            popupWindow.update(newLoc[0] - p8, ny, -1, -1, true);
+            // 水平居中，垂直保持固定顶部留白
+            popupWindow.update(0, dp(ctx, 120), -1, -1, true);
         };
         anchor.getViewTreeObserver().addOnGlobalLayoutListener(sLayoutListener);
     }

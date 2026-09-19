@@ -38,6 +38,7 @@ import com.leshao.v3.hook.HookManager;
 import com.leshao.v3.hook.LoginMonitor;
 import com.leshao.v3.hook.MessageHook;
 import com.leshao.v3.hook.MsgExport;
+import com.leshao.v3.hook.WanQunGroupHook;
 import com.leshao.v3.hook.NotifyCustom;
 import com.leshao.v3.hook.PrivacyFeatures;
 import com.leshao.v3.hook.RedPacketAlert;
@@ -82,7 +83,10 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v935";
+    public static final String MODULE_BUILD = "v936";
+
+    /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
+    public static final int MODULE_VERSION_CODE = 936;
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -159,6 +163,7 @@ public class MainHook implements IXposedHookLoadPackage {
             ContextManager.hookAttachBaseContext(lpparam);
 
              safeRun("DexKitHelper.setVersionCode", () -> DexKitHelper.setVersionCode(wxVerCode));
+             safeRun("DexKitHelper.setModuleVersion", () -> DexKitHelper.setModuleVersion(MODULE_VERSION_CODE));
              safeRun("DexKitHelper.hookApplication", () -> DexKitHelper.hookApplication(lpparam));
               DexKitHelper.setProgressCallback(new DexKitHelper.ScanProgressCallback() {
                   @Override
@@ -168,6 +173,7 @@ public class MainHook implements IXposedHookLoadPackage {
                   @Override
                   public void onComplete() {
                       // Don't auto-dismiss - let user close the dialog
+                      com.leshao.v3.ui.DexKitScanDialog.onScanComplete();
                   }
               });
              safeRun("DexKitScanDialog.initSteps", () -> {
@@ -243,6 +249,11 @@ public class MainHook implements IXposedHookLoadPackage {
                         safeRun("BatchInviteGroups", () -> HookManager.register("BatchInviteGroups", () -> BatchInviteGroupsHook.hook(cl)));
                         safeRun("ChatBackup", () -> HookManager.register("ChatBackup", () -> ChatBackup.hook(cl)));
                         safeRun("WmEntry", () -> WmEntry.injectAll(cl));
+
+                        safeRun("WanQunGroupHook", () -> {
+                            WanQunGroupHook.init(cl);
+                            WanQunGroupHook.hookReceive(cl);
+                        });
 
                         safeRun("FakeAddSource", () -> FakeAddSource.hook(cl));
                         safeRun("BatchAddFriend", () -> BatchAddFriend.hook(cl));
