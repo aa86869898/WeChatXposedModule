@@ -41,6 +41,9 @@ public class DataToolsPageView {
     private static String exportDir(Context ctx) {
         return ctx.getFilesDir().getAbsolutePath() + "/leshao_v3_logs/exports/";
     }
+    private static String chatExportDir(Context ctx) {
+        return ctx.getFilesDir().getAbsolutePath() + "/leshao_v3_logs/chat_exports/";
+    }
 
     public static View create(Context ctx, Activity parentAct) {
         float d = ctx.getResources().getDisplayMetrics().density;
@@ -109,6 +112,63 @@ public class DataToolsPageView {
                 .show();
         }));
         root.addView(btnRow);
+
+        // ===== 一键导入导出聊天记录(JSON) =====
+        root.addView(spacer(ctx, d, 8));
+        LinearLayout card3 = makeCard(ctx, d);
+        card3.addView(switchRow(ctx, d, "一键导入/导出聊天记录(JSON)",
+                "遍历全部会话分页导出为 JSON · 从 JSON 恢复消息(不设 msgId 由微信自增)",
+                true, (v, on) -> {}));
+        root.addView(card3);
+
+        root.addView(spacer(ctx, d, 8));
+        btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setPadding((int)(2*d), 0, (int)(2*d), 0);
+        btnRow.addView(actionButton(ctx, d, "导出全部聊天记录", 1f, () -> {
+            showChatExportDialog(ctx, parentAct);
+        }));
+        View gap3 = new View(ctx);
+        gap3.setLayoutParams(new LinearLayout.LayoutParams((int)(8*d), -2));
+        btnRow.addView(gap3);
+        btnRow.addView(actionButton(ctx, d, "导入聊天记录(JSON)", 1f, () -> {
+            showChatImportDialog(ctx, parentAct);
+        }));
+        root.addView(btnRow);
+
+        root.addView(spacer(ctx, d, 8));
+        btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setPadding((int)(2*d), 0, (int)(2*d), 0);
+        btnRow.addView(actionButton(ctx, d, "清除聊天记录导出文件", 1f, () -> {
+            new AlertDialog.Builder(ctx)
+                .setTitle("确认清除")
+                .setMessage("确定要清除所有聊天记录 JSON 导出文件吗?")
+                .setPositiveButton("清除", (dialog, which) -> {
+                    int deleted = deleteAllFiles(new File(chatExportDir(ctx)));
+                    Toast.makeText(ctx, "已删除 " + deleted + " 个文件", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+        }));
+        View gap4 = new View(ctx);
+        gap4.setLayoutParams(new LinearLayout.LayoutParams((int)(8*d), -2));
+        btnRow.addView(gap4);
+        btnRow.addView(actionButton(ctx, d, "查看导出文件", 1f, () -> showChatExportList(ctx)));
+        root.addView(btnRow);
+
+        root.addView(spacer(ctx, d, 8));
+        LinearLayout card5 = makeCard(ctx, d);
+        card5.addView(sectionLabel(ctx, "微信更新管控"));
+        card5.addView(switchRow(ctx, d, "禁止微信热更新",
+                "阻断版本升级与 Tinker 热补丁，避免公众号/微信用静默更新", cfg.blockWechatUpdate, (v, on) -> {
+            cfg.blockWechatUpdate = on; cfg.save(prefs); WeChatUpdateBlocker.setEnabled(on);
+        }));
+        card5.addView(actionButton(ctx, d, "立即应用管控", 1f, () -> {
+            WeChatUpdateBlocker.setEnabled(cfg.blockWechatUpdate);
+            Toast.makeText(ctx, "管控设置已保存，重启微信后生效", Toast.LENGTH_SHORT).show();
+        }));
+        root.addView(card5);
 
         sv.addView(root);
         return sv;
@@ -185,6 +245,161 @@ public class DataToolsPageView {
 
     private static void showBackupList(Context ctx) {
         showFileListDialog(ctx, "备份文件列表", new File(backupDir(ctx)), "EnMicroMsg_");
+    }
+
+    /* ===== 一键导入/导出聊天记录(JSON) ===== */
+
+    private static void showChatExportDialog(Context ctx, Activity parentAct) {
+        new AlertDialog.Builder(ctx)
+                .setTitle("导出全部聊天记录(JSON)")
+                .setMessage("将遍历全部会话并分页导出为 JSON 文件。\n大号微信数据可能耗时较长，请耐心等待。")
+                .setPositiveButton("开始导出", (dialog, which) -> {
+                    ClassLoader cl = ContextManager.getClassLoader();
+                    if (cl == null) {
+                        Toast.makeText(ctx, "未捕获到微信 ClassLoader", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    File dir = new File(chatExportDir(ctx));
+                    if (!dir.exists()) dir.mkdirs();
+                    String path = new File(dir, "chat_export_" + System.currentTimeMillis() + ".json")
+                            .getAbsolutePath();
+                    Toast.makeText(ctx, "正在后台导出...", Toast.LENGTH_SHORT).show();
+                    new Thread(() -> {
+                        try {
+                            int n = com.leshao.v3.hook.ChatExportManager.exportAll(cl, path);
+                            final int fn = n;
+                            runOnUi(parentAct, () -> Toast.makeText(ctx,
+                                    "导出成功：" + fn + " 条\n" + path, Toast.LENGTH_LONG).show());
+                        } catch (Throwable t) {
+                            runOnUi(parentAct, () -> Toast.makeText(ctx,
+                                    "导出失败：" + t.getMessage(), Toast.LENGTH_LONG).show());
+                        }
+                    }, "leshao-chat-export").start();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private static void showChatImportDialog(Context ctx, Activity parentAct) {
+        float d = ctx.getResources().getDisplayMetrics().density;
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding((int)(16*d), (int)(12*d), (int)(16*d), (int)(12*d));
+        root.setBackgroundColor(AppColors.bg());
+
+        TextView header = new TextView(ctx);
+        header.setText("导入聊天记录(JSON)");
+        header.setTextSize(15);
+        header.setTextColor(AppColors.text1());
+        header.setTypeface(null, Typeface.BOLD);
+        header.setPadding(0, 0, 0, (int)(8*d));
+        root.addView(header);
+
+        TextView tip = new TextView(ctx);
+        tip.setText("从「导出全部聊天记录」生成的 chat_export_*.json 中选择。\n不设置 msgId，由微信自增分配，保留 createTime 保证排序。");
+        tip.setTextSize(12);
+        tip.setTextColor(AppColors.text2());
+        tip.setPadding(0, 0, 0, (int)(10*d));
+        root.addView(tip);
+
+        // 导出目录文件列表
+        File dir = new File(chatExportDir(ctx));
+        java.util.List<File> files = new ArrayList<>();
+        if (dir.exists()) {
+            File[] list = dir.listFiles();
+            if (list != null) {
+                for (File f : list) {
+                    if (f.isFile() && f.getName().endsWith(".json")) files.add(f);
+                }
+            }
+        }
+        Collections.sort(files, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+
+        if (!files.isEmpty()) {
+            LinearLayout card = makeCard(ctx, d);
+            for (int i = 0; i < files.size(); i++) {
+                File f = files.get(i);
+                if (i > 0) {
+                    View div = new View(ctx);
+                    div.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
+                    div.setBackgroundColor(AppColors.divider());
+                    card.addView(div);
+                }
+                LinearLayout row = new LinearLayout(ctx);
+                row.setOrientation(LinearLayout.VERTICAL);
+                row.setPadding((int)(14*d), (int)(10*d), (int)(14*d), (int)(10*d));
+                row.setBackgroundColor(AppColors.whiteCard());
+                TextView nameTv = new TextView(ctx);
+                nameTv.setText(f.getName());
+                nameTv.setTextSize(13);
+                nameTv.setTextColor(AppColors.text1());
+                row.addView(nameTv);
+                TextView infoTv = new TextView(ctx);
+                infoTv.setText(fileSdf.format(new Date(f.lastModified())) + "  " + formatSize(f.length()));
+                infoTv.setTextSize(11);
+                infoTv.setTextColor(AppColors.text2());
+                row.addView(infoTv);
+                final File selected = f;
+                row.setOnClickListener(v -> confirmChatImport(ctx, parentAct, selected));
+                card.addView(row);
+            }
+            root.addView(card);
+        } else {
+            TextView empty = new TextView(ctx);
+            empty.setText("未找到聊天记录 JSON 导出文件\n请先执行「导出全部聊天记录」");
+            empty.setTextSize(14);
+            empty.setTextColor(AppColors.text2());
+            empty.setPadding((int)(14*d), (int)(12*d), 0, 0);
+            root.addView(empty);
+        }
+
+        ScrollView sv = new ScrollView(ctx);
+        sv.addView(root);
+        new AlertDialog.Builder(ctx)
+                .setView(sv)
+                .setPositiveButton("关闭", null)
+                .show();
+    }
+
+    private static void confirmChatImport(Context ctx, Activity parentAct, File file) {
+        new AlertDialog.Builder(ctx)
+                .setTitle("确认导入")
+                .setMessage("将把 " + file.getName() + " 中的消息插入当前微信数据库。\n" +
+                        "已存在的消息(按会话+时间)可能重复，请谨慎操作。")
+                .setPositiveButton("导入", (dialog, which) -> {
+                    ClassLoader cl = ContextManager.getClassLoader();
+                    if (cl == null) {
+                        Toast.makeText(ctx, "未捕获到微信 ClassLoader", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    Toast.makeText(ctx, "正在后台导入...", Toast.LENGTH_SHORT).show();
+                    new Thread(() -> {
+                        try {
+                            int n = com.leshao.v3.hook.ChatImportManager.importFile(cl, file.getAbsolutePath());
+                            final int fn = n;
+                            runOnUi(parentAct, () -> Toast.makeText(ctx,
+                                    "导入成功：" + fn + " 条\n(重启微信后可见)", Toast.LENGTH_LONG).show());
+                        } catch (Throwable t) {
+                            runOnUi(parentAct, () -> Toast.makeText(ctx,
+                                    "导入失败：" + t.getMessage(), Toast.LENGTH_LONG).show());
+                        }
+                    }, "leshao-chat-import").start();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private static void showChatExportList(Context ctx) {
+        showFileListDialog(ctx, "聊天记录导出文件", new File(chatExportDir(ctx)), "chat_export_");
+    }
+
+    private static void runOnUi(Activity parentAct, Runnable r) {
+        if (parentAct != null) {
+            parentAct.runOnUiThread(r);
+        } else {
+            android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+            h.post(r);
+        }
     }
 
     private static void showExportList(Context ctx) {

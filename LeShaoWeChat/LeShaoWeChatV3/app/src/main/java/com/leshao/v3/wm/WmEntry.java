@@ -319,7 +319,7 @@ public class WmEntry {
         }
     }
 
-    /** 轮询对齐聊天窗口功能入口(⋮ 更多按钮)与聊天窗口状态（幂等，不依赖 fragment/生命周期 hook） */
+    /** 轮询对齐聊天窗口功能入口(输入框上方「助手」菜单)与聊天窗口状态（幂等，不依赖 fragment/生命周期 hook） */
     private static void reconcileChatEntry(ClassLoader cl) {
         Activity act = sResumedActivity;
         if (act == null || act.isFinishing()) return;

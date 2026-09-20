@@ -139,6 +139,9 @@ public class ModuleConfig {
     // 语音转发
     public boolean voiceForwardEnabled = true;
 
+    // 禁止微信热更新(版本升级/Tinker热补丁)
+    public boolean blockWechatUpdate = true;
+
     // 群发
     public Set<String> massSendTargetWxids = new HashSet<>();
     public String massSendTextContent = "";
@@ -319,6 +322,7 @@ public class ModuleConfig {
         cfg.batchInviteGroupsEnabled = prefs.getBoolean("ls_wp_batchinvitegroups", true);
         cfg.chatBackupEnabled = prefs.getBoolean("ls_wp_chatbackup", true);
         cfg.shakeCustomEnabled = prefs.getBoolean("ls_wp_shake", true);
+        cfg.blockWechatUpdate = prefs.getBoolean("ls_wp_blockupdate", true);
 
         cfg.sensitiveFilterEnabled = prefs.getBoolean("ls_sensitive_enabled", false);
         cfg.sensitiveWords.clear();
@@ -500,6 +504,7 @@ public class ModuleConfig {
         e.putBoolean("ls_wp_batchinvitegroups", batchInviteGroupsEnabled);
         e.putBoolean("ls_wp_chatbackup", chatBackupEnabled);
         e.putBoolean("ls_wp_shake", shakeCustomEnabled);
+        e.putBoolean("ls_wp_blockupdate", blockWechatUpdate);
 
         e.putBoolean("ls_sensitive_enabled", sensitiveFilterEnabled);
         JSONArray swArr = new JSONArray();

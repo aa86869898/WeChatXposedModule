@@ -116,8 +116,17 @@ public class ChatRoomMuteHelper {
             String sql = "SELECT username FROM rcontact WHERE deleteFlag = 0 "
                     + "AND username LIKE '%@chatroom' "
                     + "AND username NOT LIKE '%@im.chatroom'";
-            java.lang.reflect.Method u = db.getClass().getDeclaredMethod("u", String.class, String[].class);
-            cursor = (Cursor) u.invoke(db, sql, null);
+            java.lang.reflect.Method queryMethod = findQueryMethod(db.getClass());
+            if (queryMethod == null) {
+                LogWriter.log(TAG, "getAllChatRooms: no query method found");
+                return result;
+            }
+            Class<?>[] paramTypes = queryMethod.getParameterTypes();
+            if (paramTypes.length == 1) {
+                cursor = (Cursor) queryMethod.invoke(db, sql);
+            } else {
+                cursor = (Cursor) queryMethod.invoke(db, sql, null);
+            }
             if (cursor != null) {
                 while (cursor.moveToNext()) {
                     String username = cursor.getString(0);
@@ -126,7 +135,8 @@ public class ChatRoomMuteHelper {
                     }
                 }
             }
-            LogWriter.log(TAG, "found " + result.size() + " chatrooms from rcontact DB");
+            LogWriter.log(TAG, "found " + result.size() + " chatrooms from rcontact DB via "
+                    + queryMethod.getName());
 
         } catch (Throwable e) {
             LogWriter.log(TAG, "getAllChatRooms FAILED: " + e.getClass().getSimpleName()
@@ -159,6 +169,46 @@ public class ChatRoomMuteHelper {
         }
     }
 
+    /** 兼容 rawQuery 方法定位: 优先 (String,String[]) 2参, 退回 1参, 兜底遍历返回 Cursor 的方法。
+     *  与 ContactRepository.findQueryMethod 策略一致, 防止新版 DB opener 类方法名漂移。 */
+    private static java.lang.reflect.Method findQueryMethod(Class<?> dbClass) {
+        try {
+            java.lang.reflect.Method m = dbClass.getDeclaredMethod("u", String.class, String[].class);
+            m.setAccessible(true);
+            return m;
+        } catch (NoSuchMethodException ignored) {}
+        String[] knownNames = {"rawQuery", "v", "w", "x", "y", "z", "rowQuery"};
+        for (String name : knownNames) {
+            try {
+                java.lang.reflect.Method m = dbClass.getDeclaredMethod(name, String.class, String[].class);
+                m.setAccessible(true);
+                return m;
+            } catch (NoSuchMethodException ignored) {}
+        }
+        for (String name : new String[]{"u", "rawQuery", "v", "w", "x", "y", "z", "rowQuery"}) {
+            try {
+                java.lang.reflect.Method m = dbClass.getDeclaredMethod(name, String.class);
+                m.setAccessible(true);
+                return m;
+            } catch (NoSuchMethodException ignored) {}
+        }
+        java.lang.reflect.Method best = null;
+        for (java.lang.reflect.Method m : dbClass.getDeclaredMethods()) {
+            if (m.getReturnType() == android.database.Cursor.class) {
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length == 2 && pts[0] == String.class && pts[1] == String[].class) {
+                    m.setAccessible(true);
+                    return m;
+                }
+                if (best == null && pts.length >= 1 && pts[0] == String.class) {
+                    best = m;
+                }
+            }
+        }
+        if (best != null) best.setAccessible(true);
+        return best;
+    }
+
     private static String md5(String input) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
@@ -183,21 +233,63 @@ public class ChatRoomMuteHelper {
      */
     public static boolean setOneRoom(ClassLoader cl, String roomId, boolean mute) {
         try {
-            Class<?> c4Class = XposedHelpers.findClass("sh3.c4", cl);
-            Class<?> j1Class = XposedHelpers.findClass("hm0.j1", cl);
-            Object h2 = XposedHelpers.callStaticMethod(j1Class, "s", c4Class);
+            Class<?> j1Class = findServiceLocatorClass(cl);
+            Class<?> c4Class = findC4Class(cl);
+            if (j1Class == null || c4Class == null) {
+                LogWriter.log(TAG, "setOneRoom: j1=" + (j1Class != null) + " c4=" + (c4Class != null));
+                return false;
+            }
+            // h2 = j1.s(c4 / v(c4) — zip 用 v, 旧版用 s
+            Object h2 = null;
+            for (String mn : new String[]{"v", "s"}) {
+                try {
+                    java.lang.reflect.Method m = null;
+                    for (java.lang.reflect.Method mm : j1Class.getDeclaredMethods()) {
+                        if (mm.getName().equals(mn) && mm.getParameterCount() == 1
+                                && mm.getParameterTypes()[0] == Class.class) {
+                            m = mm;
+                            break;
+                        }
+                    }
+                    if (m == null) continue;
+                    m.setAccessible(true);
+                    h2 = m.invoke(null, c4Class);
+                    if (h2 != null) break;
+                } catch (Throwable ignored) {}
+            }
+            if (h2 == null) {
+                LogWriter.log(TAG, "setOneRoom: h2 null (j1=" + j1Class.getName() + ")");
+                return false;
+            }
 
-            // h2.ij() → com.tencent.mm.storage.j4 (ContactStorage)
-            Object j4Storage = XposedHelpers.callMethod(h2, "ij");
+            // h2.ij() → ContactStorage
+            Object j4Storage = callNoArg(h2, "ij");
+            if (j4Storage == null) {
+                LogWriter.log(TAG, "setOneRoom: ij() null");
+                return false;
+            }
 
-            // j4.n(username, true) → y3 (联系人存储对象)
-            Object y3Obj = XposedHelpers.callMethod(j4Storage, "n", roomId, true);
+            // j4.n(username, true) → y3 联系人存储对象
+            Object y3Obj = null;
+            for (String mn : new String[]{"n", "c", "o", "e"}) {
+                try {
+                    for (java.lang.reflect.Method mm : j4Storage.getClass().getDeclaredMethods()) {
+                        if (mm.getName().equals(mn) && mm.getParameterCount() == 2
+                                && mm.getParameterTypes()[0] == String.class) {
+                            mm.setAccessible(true);
+                            y3Obj = mm.invoke(j4Storage, roomId, true);
+                            break;
+                        }
+                    }
+                    if (y3Obj != null) break;
+                } catch (Throwable ignored) {}
+            }
             if (y3Obj == null) {
                 LogWriter.log(TAG, "y3 is null for " + roomId);
                 return false;
             }
 
-            // 读取 dm.f2.T 字段 (0=免打扰, 非0=正常)
+            // 读取 f2.T 字段 (0=免打扰, 非0=正常)
             int currentT = XposedHelpers.getIntField(y3Obj, "T");
             int newT = mute ? 0 : 1;
 
@@ -207,16 +299,16 @@ public class ChatRoomMuteHelper {
             }
 
             // 步骤1: y3.J2(newT) — 写 f2.T 字段并触发内存更新
-            // 源码: com.tencent.mm.contact.s.J2(int i)
-            //       ((f2)this).T = i; ((f2)this).u = true; j2();
-            XposedHelpers.callMethod(y3Obj, "J2", newT);
+            boolean wroteMem = tryInvoke(y3Obj, "J2", newT);
+            if (!wroteMem) {
+                try { XposedHelpers.setIntField(y3Obj, "T", newT); } catch (Throwable ignored) {}
+            }
 
             // 步骤2: j4.p0(username, y3) — 持久化到 SQLite rcontact 表
-            XposedHelpers.callMethod(j4Storage, "p0", roomId, y3Obj);
+            tryInvoke(j4Storage, "p0", roomId, y3Obj);
 
             // 步骤3: 可选 — 发 CGI 同步到微信服务器
-            // 对应: ((fd0.e) n0.c(fd0.e.class)).hj(roomId).h(roomId, flag, 0).b()
-            syncToServer(cl, roomId, newT);
+            syncToServerCompat(cl, roomId, newT);
 
             LogWriter.log(TAG, roomId + " T: " + currentT + " → " + newT
                     + " (" + (mute ? "免打扰" : "正常") + ")");
@@ -228,35 +320,101 @@ public class ChatRoomMuteHelper {
         }
     }
 
-    /**
-     * CGI 同步免打扰状态到微信服务器
-     * 
-     * 对应 ChatroomInfoUI 中的:
-     *   ((fd0.e) n0.c(fd0.e.class)).hj(this.A).h(this.A, i3, i4).b()
-     * 
-     * 如果此步骤失败（微信版本更新导致反射不到），不影响本地功能
-     */
-    private static void syncToServer(ClassLoader cl, String roomId, int muteFlag) {
+    private static Class<?> findServiceLocatorClass(ClassLoader cl) {
+        String dk = com.leshao.v3.hook.DexKitHelper.getJ1ServiceClass();
+        if (dk != null && !dk.isEmpty()) {
+            try { return XposedHelpers.findClass(dk, cl); } catch (Throwable ignored) {}
+        }
+        for (String n : new String[]{"gp0.j1", "gp0.j1.j", "hm0.j1", "fp0.j1", "fp0.j1.j"}) {
+            try { return XposedHelpers.findClass(n, cl); } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    private static Class<?> findC4Class(ClassLoader cl) {
+        for (String n : new String[]{"tn3.c4", "sh3.c4"}) {
+            try { return XposedHelpers.findClass(n, cl); } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    private static boolean tryInvoke(Object obj, String name, int arg) {
+        try {
+            for (java.lang.reflect.Method m : obj.getClass().getDeclaredMethods()) {
+                if (m.getName().equals(name) && m.getParameterCount() == 1
+                        && m.getParameterTypes()[0] == int.class) {
+                    m.setAccessible(true);
+                    m.invoke(obj, arg);
+                    return true;
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "tryInvoke " + name + " err: " + t.getMessage());
+        }
+        return false;
+    }
+
+    private static boolean tryInvoke(Object obj, String name, Object a1, Object a2) {
+        try {
+            for (java.lang.reflect.Method m : obj.getClass().getDeclaredMethods()) {
+                if (m.getName().equals(name) && m.getParameterCount() == 2) {
+                    m.setAccessible(true);
+                    m.invoke(obj, a1, a2);
+                    return true;
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "tryInvoke p0 err: " + t.getMessage());
+            return false;
+        }
+        return false;
+    }
+
+    private static Object callNoArg(Object obj, String name) {
+        try {
+            for (java.lang.reflect.Method m : obj.getClass().getDeclaredMethods()) {
+                if (m.getName().equals(name) && m.getParameterCount() == 0) {
+                    m.setAccessible(true);
+                    return m.invoke(obj);
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private static void syncToServerCompat(ClassLoader cl, String roomId, int muteFlag) {
         try {
             Class<?> n0Class = XposedHelpers.findClass("pa5.n0", cl);
             Class<?> fd0eClass = XposedHelpers.findClass("fd0.e", cl);
-            Object fd0eImpl = XposedHelpers.callStaticMethod(n0Class, "c", fd0eClass);
-
-            // fd0eImpl.hj(roomId) → builder
-            Object builder = XposedHelpers.callMethod(fd0eImpl, "hj", roomId);
-
-            // builder.h(roomId, isMute, defaultPushFlag) → builder
-            builder = XposedHelpers.callMethod(builder, "h", roomId, muteFlag, 0);
-
-            // builder.b() → 发送 CGI 请求
-            XposedHelpers.callMethod(builder, "b");
-
+            Object fd0eImpl = null;
+            for (java.lang.reflect.Method m : n0Class.getDeclaredMethods()) {
+                if (m.getName().equals("c") && m.getParameterCount() == 1) {
+                    m.setAccessible(true);
+                    fd0eImpl = m.invoke(null, fd0eClass);
+                    break;
+                }
+            }
+            if (fd0eImpl == null) { LogWriter.log(TAG, "CGI skipped: n0.c null"); return; }
+            Object builder = callAny(fd0eImpl, "hj", roomId);
+            if (builder == null) { LogWriter.log(TAG, "CGI skipped: hj null"); return; }
+            builder = callAny(builder, "h", roomId, muteFlag, 0);
+            if (builder != null) callNoArg(builder, "b");
             LogWriter.log(TAG, "CGI synced for " + roomId);
-
         } catch (Throwable e) {
-            // CGI 失败不影响本地功能，仅记录日志
             LogWriter.log(TAG, "CGI sync skipped for " + roomId + " (" + e.getMessage() + ")");
         }
+    }
+
+    private static Object callAny(Object obj, String name, Object... args) {
+        try {
+            for (java.lang.reflect.Method m : obj.getClass().getDeclaredMethods()) {
+                if (m.getName().equals(name) && m.getParameterCount() == args.length) {
+                    m.setAccessible(true);
+                    return m.invoke(obj, args);
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
     }
 
     // ==================== 批量操作 ====================

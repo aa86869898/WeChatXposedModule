@@ -484,9 +484,9 @@ public final class ChatVoiceSwitchHook {
     private static void openMasterPanel(Context ctx, View anchor) {
         try {
             Activity act = getActivityFromContext(ctx);
-            com.leshao.v3.wm.hook.WmChatHook.showPanelInline(act);
+            com.leshao.v3.wm.hook.WmChatHook.showAssistantMenu(act, anchor);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "打开乐少大师面板失败: " + t.getMessage());
+            LogWriter.log(TAG, "打开助手菜单失败: " + t.getMessage());
         }
     }
 

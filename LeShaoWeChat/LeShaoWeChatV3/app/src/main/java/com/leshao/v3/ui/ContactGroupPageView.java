@@ -59,6 +59,19 @@ public class ContactGroupPageView {
 
         root.addView(candyDivider(ctx, d));
 
+        // 自动转发卡片
+        boolean afOn = prefs != null && prefs.getBoolean("ls_autofw_enabled", false);
+        LinearLayout cardAutoFw = makeCard(ctx, d);
+        cardAutoFw.addView(switchRow(ctx, d, "自动转发", "来源消息自动转发给目标联系人/群聊", afOn, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean("ls_autofw_enabled", on).apply();
+            com.leshao.v3.hook.AutoForwardHook.setEnabled(on);
+            if (on) com.leshao.v3.hook.AutoForwardHook.updateConfig(prefs);
+            Toast.makeText(ctx, "自动转发已" + (on ? "开启" : "关闭"), Toast.LENGTH_SHORT).show();
+        }, v -> com.leshao.v3.hook.AutoForwardHook.showConfigDialog(act)));
+        root.addView(cardAutoFw);
+
+        root.addView(candyDivider(ctx, d));
+
         // 聊天分组卡片
         boolean chatGroupOn = prefs != null && prefs.getBoolean("ls_chat_group_enabled", true);
         LinearLayout cardGroup = makeCard(ctx, d);

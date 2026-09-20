@@ -16,8 +16,20 @@
 <body>
     <h1>LeShaoWeChat 模块下载</h1>
     <p>微信 8.0.78(3180) 适配版。下载 APK 后到 LSPosed 管理器中激活并重启微信。</p>
+    <a class="apk" href="LeShaoWeChat-v952.apk">
+        最新版 LeShaoWeChat-v952.apk
+        <div class="meta">v952 · ① 自动红包全链路修复: 消息识别改为"类型+内容特征"双重判定(修复线上红包/转账收不到, 支持普通+商家红包), 后台 Scene 自动领取(receivewxhb 锚点 DexKit 定位类, 7参构造), 抢到金额按 sceneAmount 分单位 TTS 播报 ② 新增自动转发(自动群发): 首页「联系人和群聊」卡片 + 聊天输入框「助手」菜单「自动转发」设置, 支持来源/目标/类型(文本/图片/AppMsg)过滤, 文本消息原文转发、图片按本地路径发送 ③ 一键免打扰/解除免打扰修复: 群列表查询不再硬编码 kh5.f.u(原线上 NoSuchMethodException 失效根因), 多级回退 + 服务器同步链路全反射兜底 ④ 新增「禁止微信热更新」(数据备份页): 阻断版本升级(Updater/NetSceneGetUpdateInfo/MMErrorProcessor/UpdaterManager)与 Tinker 热补丁(SubCoreHotpatch/TinkerBoots/TinkerClient/MergeHdiffApkService/CTinkerInstaller)十个锚点, 严格参照《禁止热更新.java》, 全部 DexKit 字符串定位防混淆</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v951.apk">
+        上一版 LeShaoWeChat-v951.apk
+        <div class="meta">v951 · ① 新增「成员改动记录查询」: 群聊详情页(群成员网格下方、群聊名称上方)注入「群成员昵称/头像管理」按钮, 点击弹出成员列表(头像+显示名+群昵称+微信昵称+修改时间), 支持查看大头像/修改我的群昵称(微信原生同步)/设置本地显示昵称(实时替换+修改时间)/进入成员资料页; 混淆类名按 zip DexKitResolver 锚点用 luckypray DexKit 动态定位 ② 「一键导入/导出聊天记录」升级: 工具页新增 JSON 全量备份/导入(遍历会话+500条分页拉取+JSON序列化, 导入不设 msgId 由微信自增/保留 createTime 保证排序), 存储桥 WxChatBridge 对齐 zip WxBridge(gp0.j1.v→h2→f9/l4, e9 实体 field_msgId 指纹定位)</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v950.apk">
+        上一版 LeShaoWeChat-v950.apk
+        <div class="meta">v950 · 死代码清理: 全局扫描151个类, 清除16个零引用死代码(无备份) — 早期Fragment版界面(TTS/Settings/Sns/Privacy/Stats/ContactPicker/AIControl), 未挂载Hook(ChatGroupMenuHook/ChatGroupTabBar), 过时工具(WeChatClasses混淆映射表/ReflectUtil), 已废弃入口(SettingsActivity桌面入口/WmMsgHook空壳), AI悬浮球残留(AiControlActivity/AIControlFragment/AiFeature); 同步移除 AndroidManifest 中 AiControlActivity 声明。功能均已被对应 PageView/Dialog/DexKit 接管, 无功能损失</div>
+    </a>
     <a class="apk" href="LeShaoWeChat-v948.apk">
-        最新版 LeShaoWeChat-v948.apk
+        上一版 LeShaoWeChat-v948.apk
         <div class="meta">v948 · 听一听(ting)模块彻底清除: 删除 com.leshao.v3.ting 包全部源码(TingMusicModule/TingMusicInfo, 无备份) + MainHook 注入点与 import, 监听/音乐搜索CGI/发送音乐到聊天/悬浮球等全部代码一并抹除; 音乐卡片转语音功能(独立vkey接口)保留, 其缓存目录名 ting_music 改为 music_card 消除残留字样</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v947.apk">

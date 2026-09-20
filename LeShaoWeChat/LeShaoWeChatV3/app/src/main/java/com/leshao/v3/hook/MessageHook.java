@@ -340,9 +340,7 @@ public class MessageHook {
             int rawType = (int) XposedHelpers.callMethod(e9, "getType");
             int type = mapType(rawType);
             String talker = (String) XposedHelpers.callMethod(e9, "N0");
-            String content = null;
-            try { content = (String) XposedHelpers.callMethod(e9, "I0"); } catch (Throwable ignored) {}
-            if (content == null) try { content = (String) XposedHelpers.callMethod(e9, "j"); } catch (Throwable ignored) {}
+            String content = readMsgContent(e9);
 
             if (content != null && (content.startsWith("<msgsource")
                 || content.startsWith("<pushcontent")))
@@ -393,7 +391,10 @@ public class MessageHook {
             }
 
             // 红包/转账消息: 不依赖 isSend 判断（收到的红包/转账在入库时 field_isSend 可能为 1 导致误判）
-            if (RedPacketHook.isRedPacketType(rawType) || RedPacketHook.isTransferType(rawType)) {
+            // 8.0.78+: 类型码可能漂移, 因此再叠加 content 特征识别（红包 XML 含 hongbao/receivewxhb 等锚点）
+            boolean rpByType = RedPacketHook.isRedPacketType(rawType) || RedPacketHook.isTransferType(rawType);
+            boolean rpByContent = RedPacketHook.looksLikeMoneyMessage(content);
+            if (rpByType || rpByContent) {
                 LogWriter.log(TAG, "RP/TRANSFER x9: rawType=" + rawType + " isSend=" + isSend
                     + " msgId=" + msgId + " talker=" + trunc(talker, 20));
                 final int rpRawType = rawType;

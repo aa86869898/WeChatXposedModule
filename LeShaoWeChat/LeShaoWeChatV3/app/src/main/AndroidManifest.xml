@@ -23,11 +23,6 @@
             android:name="xposedscope"
             android:value="com.tencent.mm" />
 
-        <activity
-            android:name="com.leshao.v3.ai.AiControlActivity"
-            android:exported="true"
-            android:label="AI 聊天助手"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
 
     </application>
 

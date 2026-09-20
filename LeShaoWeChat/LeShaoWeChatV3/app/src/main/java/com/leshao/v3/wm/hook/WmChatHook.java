@@ -68,7 +68,7 @@ import org.json.JSONObject;
 
 /**
  * 聊天窗口功能注入 — 复刻自微信大师 ChatFeatureHook
- * 标题栏右上角 ⋮ 按钮 → 弹出功能面板(14项)
+ * 输入框上方「助手」按钮 → 弹出助手菜单(原 ⋮ 三点菜单功能已迁移)
  */
 public class WmChatHook {
     private static Dialog sPanelDialog;
@@ -83,14 +83,12 @@ public class WmChatHook {
     private static BroadcastReceiver sMassSendReceiver;
     private static Context sCtx;
     private static volatile boolean sMassSendRunning;
-    private static android.view.View sMoreIcon;
-    private static boolean sMoreAdded = false;
-    private static Dialog sMoreDialog;
-    private static int sMoreMarginPx = -1;
+    private static android.widget.PopupWindow sAssistantPopup;
+    private static volatile boolean sInjected = false;
 
     public static void showTitleBtn(Activity act, ClassLoader cl, String user) {
         // 幂等：轮询 reconciler 每 400ms 调用，已注入且同一会话时跳过重建避免闪烁
-        if (sMoreAdded && sMoreIcon != null && sUser != null && sUser.equals(user)
+        if (sInjected && sUser != null && sUser.equals(user)
                 && sAct != null && !sAct.isFinishing()) {
             if (act != null) sAct = act;
             return;
@@ -110,14 +108,14 @@ public class WmChatHook {
             return;
         }
         LogWriter.log(TAG, "chat window opened user=" + user);
-
-        ensureMoreButton(act);
+        sInjected = true;
     }
 
     public static void dismissTitleBtn() {
         hidePanel();
-        removeMoreButton();
+        dismissAssistantMenu();
         sAct = null;
+        sInjected = false;
     }
 
     public static void showPanelInline(Activity act) {
@@ -221,148 +219,13 @@ public class WmChatHook {
     }
 
 
-    // ===== 标题栏右上角 自绘 ⋮ 三点按钮 (替代原生三点菜单注入) =====
-    // 8.0.78 原生三点菜单注入 (MsgExport 99980/99981/99982) 不触发 onOptionsItemSelected 回调链,
-    // 故改为自绘悬浮三点按钮: 点击弹出自定义菜单, 优先"乐少·万群管理"(仅群聊), 再导出聊天记录。
-    private static void ensureMoreButton(Activity act) {
-        try {
-            if (sMoreAdded && sMoreIcon != null) return;
-            removeMoreButton();
-            if (act == null || act.isFinishing()) return;
-            sAct = act;
-            sCtx = act.getApplicationContext();
-            sWM = (WindowManager) act.getSystemService(Context.WINDOW_SERVICE);
-            if (sWM == null) return;
-
-            TextView dots = new TextView(act);
-            dots.setText("\u22EE");  // ⋮ 竖三点
-            dots.setTextSize(24);
-            dots.setTextColor(AppColors.text1());
-            dots.setGravity(Gravity.CENTER);
-            dots.setClickable(true);
-            dots.setFocusable(true);
-            dots.setTag("LESHAO_MORE_BTN");
-            dots.setOnClickListener(v -> showMoreMenu());
-
-            int sz = dp(44);
-            WindowManager.LayoutParams wp = new WindowManager.LayoutParams(
-                    sz, sz,
-                    WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                    PixelFormat.TRANSLUCENT);
-            wp.gravity = Gravity.TOP | Gravity.RIGHT;
-            int m = computeMoreRightMarginPx(act);
-            wp.x = (m > 0 ? m : dp(8));
-            wp.y = statusBarHeight(act) + dp(10);
-
-            sWM.addView(dots, wp);
-            sMoreIcon = dots;
-            sMoreAdded = true;
-            sMoreMarginPx = m;
-            LogWriter.log(TAG, "三点按钮注入 margin=" + m);
-            // 标题栏布局稳定后按原生图标簇重排, 避免遮挡微信自带三点
-            final Activity fAct = act;
-            sH.postDelayed(() -> {
-                try { repositionMoreButton(fAct); } catch (Throwable ignored) {}
-            }, 350);
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "ensureMoreButton err: " + t.getMessage());
-            sMoreAdded = false;
-            sMoreIcon = null;
-        }
-    }
-
-    /** 扫描聊天标题栏右侧的可点击图标，返回"原生图标簇左侧"对应的右边距(px)。
-     *  找不到或未布局返回 -1。 */
-    private static int computeMoreRightMarginPx(Activity act) {
-        try {
-            View decor = act.getWindow() != null ? act.getWindow().getDecorView() : null;
-            if (decor == null || decor.getWidth() <= 0 || !decor.isShown()) return -1;
-            int screenW = decor.getWidth();
-            int sb = statusBarHeight(act);
-            int topBand = sb - dp(4);
-            int bottomBand = sb + dp(56);
-            final java.util.List<int[]> rects = new java.util.ArrayList<>();
-            collectTitleIconRects(decor, 0, 0, topBand, bottomBand, rects);
-            if (rects.isEmpty()) return -1;
-            java.util.Collections.sort(rects, (a, b) -> Integer.compare(a[0], b[0]));
-            int[] rightMost = rects.get(rects.size() - 1);
-            int clusterLeft = rightMost[0];
-            for (int i = rects.size() - 2; i >= 0; i--) {
-                int[] r = rects.get(i);
-                if (r[1] + dp(16) >= clusterLeft) clusterLeft = r[0];
-                else break;
-            }
-            int margin = screenW - clusterLeft + dp(8);
-            if (margin < dp(6)) margin = dp(6);
-            LogWriter.log(TAG, "more native clusterL=" + clusterLeft + " icons=" + rects.size()
-                    + " margin=" + margin);
-            return margin;
-        } catch (Throwable t) {
-            return -1;
-        }
-    }
-
-    private static void collectTitleIconRects(View v, int baseLeft, int baseTop,
-                                              int topBand, int bottomBand, java.util.List<int[]> out) {
-        if (v == null) return;
-        int left = baseLeft + v.getLeft();
-        int top = baseTop + v.getTop();
-        int right = left + v.getWidth();
-        int bottom = top + v.getHeight();
-        if (bottom < topBand || top > bottomBand) return;
-        int w = v.getWidth(), h = v.getHeight();
-        boolean clickable = false;
-        try { clickable = v.isClickable(); } catch (Throwable ignored) {}
-        if (clickable && w > 0 && h > 0 && w <= dp(150) && h <= dp(120)) {
-            int cy = (top + bottom) / 2;
-            if (cy >= topBand && cy <= bottomBand) {
-                out.add(new int[]{left, right});
-            }
-        }
-        if (v instanceof ViewGroup) {
-            ViewGroup g = (ViewGroup) v;
-            int n = g.getChildCount();
-            for (int i = 0; i < n; i++) {
-                View c = g.getChildAt(i);
-                if (c == null || c.getVisibility() != View.VISIBLE) continue;
-                collectTitleIconRects(c, left, top, topBand, bottomBand, out);
-            }
-        }
-    }
-
-    /** 微信布局完成/标题栏稳定后，按原生图标簇重排 ⋮ 位置，确保不遮挡 */
-    private static void repositionMoreButton(Activity act) {
-        try {
-            if (!sMoreAdded || sMoreIcon == null || act == null) return;
-            int m = computeMoreRightMarginPx(act);
-            if (m <= 0 || m == sMoreMarginPx) return;
-            sMoreMarginPx = m;
-            WindowManager.LayoutParams wp = (WindowManager.LayoutParams) sMoreIcon.getLayoutParams();
-            if (wp == null) return;
-            wp.x = m;
-            sWM.updateViewLayout(sMoreIcon, wp);
-            LogWriter.log(TAG, "more icon repositioned margin=" + m);
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "more icon reposition err: " + t.getMessage());
-        }
-    }
-
-    private static void removeMoreButton() {
-        dismissMoreMenu();
-        if (sMoreAdded && sMoreIcon != null) {
-            try { sWM.removeView(sMoreIcon); } catch (Throwable ignored) {}
-        }
-        sMoreIcon = null;
-        sMoreAdded = false;
-        sMoreMarginPx = -1;
-    }
-
-    private static void showMoreMenu() {
-        if (sAct == null || sAct.isFinishing()) return;
-        if (sMoreDialog != null) return;
-        final Activity act = sAct;
+    /**
+     * 助手菜单：原右上角 ⋮ 三点菜单全部功能迁移至此，由输入框上方「助手」按钮触发，
+     * 弹窗显示在触发按钮正上方（不在屏幕顶部）。
+     */
+    public static void showAssistantMenu(Activity act, View anchor) {
+        if (act == null || act.isFinishing() || anchor == null) return;
+        sAct = act;
         boolean dark = (act.getResources().getConfiguration().uiMode
                 & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
                 == android.content.res.Configuration.UI_MODE_NIGHT_YES;
@@ -377,40 +240,55 @@ public class WmChatHook {
         box.setBackground(bg);
         box.setPadding(dp(4), dp(6), dp(4), dp(6));
         if (sUser != null && (sUser.endsWith("@chatroom") || sUser.endsWith("@im.chatroom"))) {
-            box.addView(makeMoreRow(act, "乐少·万群管理", fgText, v -> { dismissMoreMenu(); openWanQun(); }));
+            box.addView(makeMoreRow(act, "乐少·万群管理", fgText, v -> { dismissAssistantMenu(); openWanQun(); }));
         }
         if (WmPrefs.isExportChat()) {
-            box.addView(makeMoreRow(act, "导出聊天记录 (TXT)", fgText, v -> { dismissMoreMenu(); exportChat(); }));
-            box.addView(makeMoreRow(act, "导出聊天记录 (HTML)", fgText, v -> { dismissMoreMenu(); exportChatHtml(); }));
+            box.addView(makeMoreRow(act, "导出聊天记录 (TXT)", fgText, v -> { dismissAssistantMenu(); exportChat(); }));
+            box.addView(makeMoreRow(act, "导出聊天记录 (HTML)", fgText, v -> { dismissAssistantMenu(); exportChatHtml(); }));
         }
-        box.addView(makeMoreRow(act, "更多功能", fgText, v -> { dismissMoreMenu(); showPanel(); }));
-        Dialog d = new Dialog(act);
-        d.setContentView(box);
-        Window w = d.getWindow();
-        if (w == null) return;
-        w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
-        WindowManager.LayoutParams lp = w.getAttributes();
-        w.setLayout(dp(200), WindowManager.LayoutParams.WRAP_CONTENT);
-        lp.gravity = Gravity.TOP | Gravity.RIGHT;
-        lp.x = sMoreMarginPx > 0 ? sMoreMarginPx : dp(8);
-        lp.y = statusBarHeight(act) + dp(48);
-        lp.dimAmount = 0f;
-        w.setAttributes(lp);
-        d.setCanceledOnTouchOutside(true);
-        d.setOnDismissListener(dd -> { sMoreDialog = null; });
-        d.show();
-        sMoreDialog = d;
-        LogWriter.log(TAG, "more menu shown");
+        box.addView(makeMoreRow(act, "自动转发", fgText, v -> {
+            dismissAssistantMenu();
+            com.leshao.v3.hook.AutoForwardHook.showConfigDialog(act);
+        }));
+        box.addView(makeMoreRow(act, "更多功能", fgText, v -> { dismissAssistantMenu(); showPanel(); }));
+        box.setClickable(true);
+
+        android.util.DisplayMetrics dm = act.getResources().getDisplayMetrics();
+        int menuW = dp(220);
+        box.measure(View.MeasureSpec.makeMeasureSpec(menuW, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int menuH = box.getMeasuredHeight();
+
+        final android.widget.PopupWindow popup = new android.widget.PopupWindow(box, menuW,
+                ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        popup.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0));
+        popup.setElevation(dp(8));
+        popup.setOutsideTouchable(true);
+        popup.setFocusable(true);
+
+        int[] loc = new int[2];
+        anchor.getLocationInWindow(loc);
+        int anchorW = Math.max(anchor.getWidth(), 1);
+        int x = loc[0] + anchorW / 2 - menuW / 2;
+        int y = loc[1] - menuH - dp(8);
+        if (x < 0) x = 0;
+        if (x + menuW > dm.widthPixels) x = dm.widthPixels - menuW;
+        if (y < 0) y = loc[1] + anchor.getHeight() + dp(8);
+        if (y + menuH > dm.heightPixels) y = dm.heightPixels - menuH - dp(8);
+
+        sAssistantPopup = popup;
+        popup.showAtLocation(anchor, Gravity.TOP | Gravity.LEFT, x, y);
+        LogWriter.log(TAG, "助手菜单已显示");
     }
 
-    private static void dismissMoreMenu() {
-        if (sMoreDialog != null) {
-            try { sMoreDialog.dismiss(); } catch (Throwable ignored) {}
-            sMoreDialog = null;
+    private static void dismissAssistantMenu() {
+        if (sAssistantPopup != null) {
+            try { sAssistantPopup.dismiss(); } catch (Throwable ignored) {}
+            sAssistantPopup = null;
         }
     }
 
-    /** 乐少·万群管理: 复用 WanQunGroupHook 配置面板, 修复原生三点菜单点击无界面问题 */
+    /** 乐少·万群管理: 复用 WanQunGroupHook 配置面板 */
     private static void openWanQun() {
         try {
             if (sAct == null || sUser == null) { toast("无法获取当前群聊"); return; }

@@ -9,6 +9,7 @@ import android.os.Process;
 
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.AntiRecallHook;
+import com.leshao.v3.hook.AutoForwardHook;
 import com.leshao.v3.hook.AntiDetectionHook;
 import com.leshao.v3.hook.AutoMethodDetector;
 import com.leshao.v3.hook.AutoRemark;
@@ -31,6 +32,8 @@ import com.leshao.v3.hook.FakeAddSource;
 import org.luckypray.dexkit.DexKitBridge;
 import org.luckypray.dexkit.query.matchers.MethodMatcher;
 import com.leshao.v3.hook.FriendRequestHook;
+import com.leshao.v3.hook.GroupMemberResolver;
+import com.leshao.v3.hook.GroupMemberTools;
 import com.leshao.v3.wm.WmEntry;
 import com.leshao.v3.wm.hook.WmChatHook;
 import com.leshao.v3.hook.HideContactFields;
@@ -54,6 +57,7 @@ import com.leshao.v3.hook.TypingIndicator;
 import com.leshao.v3.hook.UnreadBadge;
 import com.leshao.v3.hook.VoiceForwardHook;
 import com.leshao.v3.hook.VoiceAutoPlay;
+import com.leshao.v3.hook.WeChatUpdateBlocker;
 import com.leshao.v3.db.VoiceHistoryDbHelper;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.TTSBroadcaster;
@@ -82,11 +86,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-public static final String MODULE_BUILD = "v948";
+public static final String MODULE_BUILD = "v952";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 948;
+    public static final int MODULE_VERSION_CODE = 952;
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -235,6 +239,8 @@ public static final String MODULE_BUILD = "v948";
                         safeRun("FriendRequestHook", () -> FriendRequestHook.hook(cl));
 
                         safeRun("VoiceForwardHook", () -> HookManager.register("VoiceForwardHook", VoiceForwardHook::hook));
+                        safeRun("AutoForwardHook", () -> HookManager.register("AutoForwardHook", () -> AutoForwardHook.hook(cl)));
+                        safeRun("WeChatUpdateBlocker", () -> HookManager.register("WeChatUpdateBlocker", () -> WeChatUpdateBlocker.hook(cl)));
                         safeRun("TypingIndicator", () -> HookManager.register("TypingIndicator", () -> TypingIndicator.hook(cl)));
                         safeRun("ChatFooterEnhance", () -> HookManager.register("ChatFooterEnhance", () -> ChatFooterEnhance.hook(cl)));
                         safeRun("ChatVoiceSwitchHook", () -> ChatVoiceSwitchHook.init(cl));
@@ -270,6 +276,15 @@ public static final String MODULE_BUILD = "v948";
 
                         safeRun("FakeAddSource", () -> FakeAddSource.hook(cl));
                         safeRun("BatchAddFriend", () -> BatchAddFriend.hook(cl));
+
+                        safeRun("GroupMemberTools", () -> {
+                            try {
+                                GroupMemberTools.init(cl);
+                                GroupMemberTools.hook(cl);
+                            } catch (Throwable t) {
+                                LogWriter.log(TAG, "[MainHook] GroupMemberTools FAIL: " + t.getMessage());
+                            }
+                        });
 
                         safeRun("AiConfig+ChatHooks", () -> {
                             AiConfig.init(ctx);
