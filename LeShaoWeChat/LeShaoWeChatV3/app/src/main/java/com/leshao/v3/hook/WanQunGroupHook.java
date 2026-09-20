@@ -7,8 +7,12 @@ import android.os.Looper;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Switch;
+import android.widget.TextView;
 
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.ui.AppColors;
+import com.leshao.v3.ui.CandyUi;
 import com.leshao.v3.wm.utils.WmPrefs;
 import com.leshao.v3.wm.utils.WmReflect;
 
@@ -381,82 +385,267 @@ public class WanQunGroupHook {
     /* ================= 配置面板（三点菜单入口调用） ================= */
     public static void showConfigDialog(final Context ctx, final String group) {
         if (ctx == null) return;
-        final LinearLayout root = new LinearLayout(ctx);
-        root.setOrientation(LinearLayout.VERTICAL);
+        final float d = ctx.getResources().getDisplayMetrics().density;
         final int pad = dp(ctx, 16);
-        root.setPadding(pad, pad, pad, pad);
-
         final String room = group == null ? "" : group;
 
-        final EditText welcomeText = cfgField(ctx, "欢迎语（新成员入群自动发送）",
-                Cfg.str("wq_welcome_text", "欢迎新成员进群！"));
-        final EditText welcomeOn = cfgField(ctx, "欢迎开关 true/false",
-                String.valueOf(Cfg.bool("wq_welcome_enabled", true)));
-        final EditText byeText = cfgField(ctx, "退群提示语",
-                Cfg.str("wq_bye_text", "有人退群了。"));
-        final EditText byeOn = cfgField(ctx, "退群提示开关 true/false",
-                String.valueOf(Cfg.bool("wq_bye_enabled", true)));
-        final EditText forbidden = cfgField(ctx, "违禁词（逗号分隔，支持正则）",
-                join(Cfg.strList("wq_forbidden_words", new String[]{"广告", "加微信", "https?://"}), ","));
-        final EditText warnThreshold = cfgField(ctx, "警告触发踢人阈值（数字）",
-                String.valueOf(Cfg.integer("wq_warn_threshold", 3)));
-        final EditText kickMsgTypes = cfgField(ctx, "自动踢人的消息类型（逗号分隔，空=关）",
-                Cfg.str("wq_kick_msg_types", ""));
-        final EditText adminUsers = cfgField(ctx, "群管指令管理员（wxid 逗号分隔，空=所有人）",
-                join(Cfg.strList("wq_admin_users", new String[]{}), ","));
-        final EditText cmdOn = cfgField(ctx, "群管指令开关 true/false",
-                String.valueOf(Cfg.bool("wq_command_enabled", true)));
-        final EditText blackList = cfgField(ctx, "【本群】黑名单 wxid（逗号分隔）",
-                listStr("wq_black", room));
-        final EditText whiteList = cfgField(ctx, "【本群】白名单 wxid（逗号分隔）",
-                listStr("wq_white", room));
-
-        root.addView(welcomeText);
-        root.addView(welcomeOn);
-        root.addView(byeText);
-        root.addView(byeOn);
-        root.addView(forbidden);
-        root.addView(warnThreshold);
-        root.addView(kickMsgTypes);
-        root.addView(adminUsers);
-        root.addView(cmdOn);
-        root.addView(blackList);
-        root.addView(whiteList);
-
-        ScrollView sv = new ScrollView(ctx);
+        final ScrollView sv = new ScrollView(ctx);
+        final LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(pad, dp(ctx, 8), pad, dp(ctx, 16));
         sv.addView(root);
 
-        new AlertDialog.Builder(ctx)
-                .setTitle("乐少·万群管理  (" + (room.isEmpty() ? "全部" : room) + ")")
+        // ===== 顶部品牌头 =====
+        root.addView(makeSectionHeader(ctx, "乐少·万群管理",
+                room.isEmpty() ? "全部群聊 · 全局设置" : room, AppColors.accent(), true));
+
+        // ===== 一、入群欢迎 =====
+        root.addView(makeGroupHeader(ctx, "入群欢迎", "新成员入群自动发送欢迎语"));
+        final EditText welcomeText = cfgField(ctx, "欢迎语（新成员入群自动发送）",
+                Cfg.str("wq_welcome_text", "欢迎新成员进群！"), 3);
+        final LinearLayout welcomeOn = makeSwitchRow(ctx, "开启入群欢迎", Cfg.bool("wq_welcome_enabled", true));
+        root.addView(wrapField(ctx, "欢迎语（新成员入群自动发送）", welcomeText));
+        root.addView(welcomeOn);
+
+        // ===== 二、退群提示 =====
+        root.addView(makeGroupHeader(ctx, "退群提示", "成员退群时自动播报"));
+        final EditText byeText = cfgField(ctx, "退群提示语",
+                Cfg.str("wq_bye_text", "有人退群了。"), 2);
+        final LinearLayout byeOn = makeSwitchRow(ctx, "开启退群提示", Cfg.bool("wq_bye_enabled", true));
+        root.addView(wrapField(ctx, "退群提示语", byeText));
+        root.addView(byeOn);
+
+        // ===== 三、违禁词过滤 =====
+        root.addView(makeGroupHeader(ctx, "违禁词过滤", "命中后自动警告，超阈值踢人"));
+        final EditText forbidden = cfgField(ctx, "违禁词（逗号分隔，支持正则）",
+                join(Cfg.strList("wq_forbidden_words", new String[]{"广告", "加微信", "https?://"}), ","), 3);
+        final EditText warnThreshold = cfgField(ctx, "警告触发踢人阈值（数字）",
+                String.valueOf(Cfg.integer("wq_warn_threshold", 3)), 1);
+        final EditText kickMsgTypes = cfgField(ctx, "自动踢人的消息类型（逗号分隔，空=关）",
+                Cfg.str("wq_kick_msg_types", ""), 2);
+        root.addView(wrapField(ctx, "违禁词（逗号分隔，支持正则）", forbidden));
+        root.addView(wrapField(ctx, "警告触发踢人阈值（数字）", warnThreshold));
+        root.addView(wrapField(ctx, "自动踢人的消息类型（逗号分隔，空=关）", kickMsgTypes));
+
+        // ===== 四、群管指令 =====
+        root.addView(makeGroupHeader(ctx, "群管指令", "在群内发指令管理本群"));
+        final EditText adminUsers = cfgField(ctx, "管理员 wxid（逗号分隔，空=所有人）",
+                join(Cfg.strList("wq_admin_users", new String[]{}), ","), 2);
+        final LinearLayout cmdOn = makeSwitchRow(ctx, "开启群管指令", Cfg.bool("wq_command_enabled", true));
+        root.addView(wrapField(ctx, "管理员 wxid（逗号分隔，空=所有人）", adminUsers));
+        root.addView(cmdOn);
+
+        // ===== 五、名单管理（仅本群） =====
+        root.addView(makeGroupHeader(ctx, "名单管理",
+                room.isEmpty() ? "当前未指定群聊，将应用到「全部」" : "仅对当前群生效"));
+        final EditText blackList = cfgField(ctx, "黑名单 wxid（逗号分隔）",
+                listStr("wq_black", room), 2);
+        final EditText whiteList = cfgField(ctx, "白名单 wxid（逗号分隔）",
+                listStr("wq_white", room), 2);
+        root.addView(wrapField(ctx, "黑名单 wxid（逗号分隔）", blackList));
+        root.addView(wrapField(ctx, "白名单 wxid（逗号分隔）", whiteList));
+
+        // ===== 底部操作栏 =====
+        LinearLayout btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        btnRow.setPadding(0, dp(ctx, 16), 0, 0);
+
+        android.widget.Button saveBtn = makeActionBtn(ctx, "保存设置", AppColors.accent(), AppColors.WHITE_TEXT);
+        android.widget.Button cancelBtn = makeActionBtn(ctx, "取消", AppColors.card(), AppColors.text1());
+        android.widget.LinearLayout.LayoutParams bLp = new android.widget.LinearLayout.LayoutParams(0,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        saveBtn.setLayoutParams(bLp);
+        android.widget.LinearLayout.LayoutParams bLp2 = new android.widget.LinearLayout.LayoutParams(0,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        bLp2.setMargins(dp(ctx, 12), 0, 0, 0);
+        cancelBtn.setLayoutParams(bLp2);
+        btnRow.addView(saveBtn);
+        btnRow.addView(cancelBtn);
+        root.addView(btnRow);
+
+        AlertDialog dialog = new AlertDialog.Builder(ctx)
                 .setView(sv)
-                .setPositiveButton("保存", (d, w) -> {
-                    Cfg.setStr("wq_welcome_text", value(welcomeText));
-                    Cfg.setStr("wq_bye_text", value(byeText));
-                    Cfg.setStr("wq_forbidden_words", value(forbidden).replace("，", ","));
-                    Cfg.setStr("wq_kick_msg_types", value(kickMsgTypes).replace("，", ","));
-                    Cfg.setStr("wq_admin_users", value(adminUsers).replace("，", ","));
-                    setCfgStrList("wq_black", room, value(blackList));
-                    setCfgStrList("wq_white", room, value(whiteList));
-                    try { Cfg.setBool("wq_welcome_enabled", Boolean.parseBoolean(value(welcomeOn).trim())); } catch (Throwable ignored) {}
-                    try { Cfg.setBool("wq_bye_enabled", Boolean.parseBoolean(value(byeOn).trim())); } catch (Throwable ignored) {}
-                    try { Cfg.setBool("wq_command_enabled", Boolean.parseBoolean(value(cmdOn).trim())); } catch (Throwable ignored) {}
-                    try { Cfg.setInt("wq_warn_threshold", Integer.parseInt(value(warnThreshold).trim())); } catch (Throwable ignored) {}
-                    LogWriter.log(TAG, "万群管理配置已保存");
-                    toast(ctx, "万群管理配置已保存");
-                })
-                .setNegativeButton("取消", null)
-                .show();
+                .setCancelable(true)
+                .create();
+        try {
+            dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
+            android.view.Window w = dialog.getWindow();
+            android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+            w.setLayout((int) (dm.widthPixels * 0.92f), (int) (dm.heightPixels * 0.82f));
+        } catch (Throwable ignored) {}
+
+        saveBtn.setOnClickListener(v -> {
+            Cfg.setStr("wq_welcome_text", value(welcomeText));
+            Cfg.setStr("wq_bye_text", value(byeText));
+            Cfg.setStr("wq_forbidden_words", value(forbidden).replace("，", ","));
+            Cfg.setStr("wq_kick_msg_types", value(kickMsgTypes).replace("，", ","));
+            Cfg.setStr("wq_admin_users", value(adminUsers).replace("，", ","));
+            setCfgStrList("wq_black", room, value(blackList));
+            setCfgStrList("wq_white", room, value(whiteList));
+            Cfg.setBool("wq_welcome_enabled", switchOf(welcomeOn));
+            Cfg.setBool("wq_bye_enabled", switchOf(byeOn));
+            Cfg.setBool("wq_command_enabled", switchOf(cmdOn));
+            try { Cfg.setInt("wq_warn_threshold", Integer.parseInt(value(warnThreshold).trim())); } catch (Throwable ignored) {}
+            LogWriter.log(TAG, "万群管理配置已保存");
+            toast(ctx, "万群管理配置已保存");
+            try { dialog.dismiss(); } catch (Throwable ignored) {}
+        });
+        cancelBtn.setOnClickListener(v -> {
+            try { dialog.dismiss(); } catch (Throwable ignored) {}
+        });
+        dialog.show();
     }
 
-    private static EditText cfgField(Context ctx, String label, String text) {
+    // ===== 现代化 UI 组件 =====
+
+    private static android.graphics.drawable.GradientDrawable rounded(Context ctx, int color, int radius) {
+        android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
+        gd.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(dp(ctx, radius));
+        gd.setColor(color);
+        return gd;
+    }
+
+    /** 顶部品牌头：渐变背景 + 标题 + 副标题 */
+    private static android.view.View makeSectionHeader(Context ctx, String title, String subtitle, int accent, boolean big) {
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(ctx, 20), dp(ctx, 18), dp(ctx, 20), dp(ctx, 16));
+        android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[]{accent, AppColors.candyPink()});
+        gd.setCornerRadius(dp(ctx, 14));
+        box.setBackground(gd);
+
+        TextView tv = new TextView(ctx);
+        tv.setText(title);
+        tv.setTextColor(android.graphics.Color.WHITE);
+        tv.setTextSize(18);
+        tv.setTypeface(null, android.graphics.Typeface.BOLD);
+        box.addView(tv);
+
+        TextView sub = new TextView(ctx);
+        sub.setText(subtitle);
+        sub.setTextColor(0xEEFFFFFF);
+        sub.setTextSize(12);
+        android.widget.LinearLayout.LayoutParams subLp = new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        subLp.setMargins(0, dp(ctx, 4), 0, 0);
+        box.addView(sub, subLp);
+        return box;
+    }
+
+    /** 分组标题 */
+    private static android.view.View makeGroupHeader(Context ctx, String title, String desc) {
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(0, dp(ctx, 16), 0, dp(ctx, 8));
+        TextView tv = new TextView(ctx);
+        tv.setText(title);
+        tv.setTextSize(15);
+        tv.setTextColor(AppColors.accent());
+        tv.setTypeface(null, android.graphics.Typeface.BOLD);
+        box.addView(tv);
+        TextView ds = new TextView(ctx);
+        ds.setText(desc);
+        ds.setTextSize(11);
+        ds.setTextColor(AppColors.text3());
+        android.widget.LinearLayout.LayoutParams dsLp = new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        dsLp.setMargins(0, dp(ctx, 2), 0, 0);
+        box.addView(ds, dsLp);
+        return box;
+    }
+
+    /** 带标签的圆角输入框 */
+    private static EditText cfgField(Context ctx, String label, String text, int lines) {
         EditText et = new EditText(ctx);
-        et.setHint(label);
         et.setText(text == null ? "" : text);
         et.setSingleLine(false);
+        et.setMinLines(lines);
+        et.setMaxLines(lines > 2 ? lines + 2 : 4);
+        et.setTextSize(14);
+        et.setTextColor(AppColors.text1());
+        et.setHintTextColor(AppColors.text3());
+        et.setHint(label);
+        et.setBackground(rounded(ctx, AppColors.inputBg(), 8));
+        et.setPadding(dp(ctx, 10), dp(ctx, 6), dp(ctx, 10), dp(ctx, 6));
         return et;
     }
 
+    /** 卡片容器包裹：标签 + 输入框 */
+    private static LinearLayout wrapField(Context ctx, String label, EditText et) {
+        LinearLayout wrap = new LinearLayout(ctx);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(dp(ctx, 12), dp(ctx, 10), dp(ctx, 12), dp(ctx, 10));
+        wrap.setBackground(rounded(ctx, AppColors.card(), 10));
+        android.widget.LinearLayout.LayoutParams wl = new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        wl.setMargins(0, 0, 0, dp(ctx, 10));
+        wrap.setLayoutParams(wl);
+
+        TextView labelTv = new TextView(ctx);
+        labelTv.setText(label);
+        labelTv.setTextSize(13);
+        labelTv.setTextColor(AppColors.text2());
+        labelTv.setTypeface(null, android.graphics.Typeface.BOLD);
+        wrap.addView(labelTv);
+
+        android.widget.LinearLayout.LayoutParams el = new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        el.setMargins(0, dp(ctx, 6), 0, 0);
+        wrap.addView(et, el);
+        return wrap;
+    }
+
+    /** 开关行：标题 + Switch，返回包含行布局，Switch 可通过 tag("wq_switch") 取回 */
+    private static LinearLayout makeSwitchRow(Context ctx, String label, boolean checked) {
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(ctx, 12), dp(ctx, 6), dp(ctx, 12), dp(ctx, 6));
+        row.setBackground(rounded(ctx, AppColors.card(), 10));
+        android.widget.LinearLayout.LayoutParams rl = new android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        rl.setMargins(0, 0, 0, dp(ctx, 10));
+        row.setLayoutParams(rl);
+
+        TextView tv = new TextView(ctx);
+        tv.setText(label);
+        tv.setTextSize(14);
+        tv.setTextColor(AppColors.text1());
+        android.widget.LinearLayout.LayoutParams tvLp = new android.widget.LinearLayout.LayoutParams(0,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        row.addView(tv, tvLp);
+
+        Switch sw = CandyUi.newSwitch(ctx);
+        sw.setChecked(checked);
+        sw.setTag("wq_switch");
+        row.addView(sw);
+        return row;
+    }
+
+    private static android.widget.Button makeActionBtn(Context ctx, String text, int bg, int fg) {
+        android.widget.Button btn = new android.widget.Button(ctx);
+        btn.setText(text);
+        btn.setTextSize(15);
+        btn.setAllCaps(false);
+        btn.setTextColor(fg);
+        btn.setTypeface(null, android.graphics.Typeface.BOLD);
+        btn.setGravity(android.view.Gravity.CENTER);
+        btn.setBackground(rounded(ctx, bg, 12));
+        btn.setPadding(0, dp(ctx, 12), 0, dp(ctx, 12));
+        return btn;
+    }
+
     private static String value(EditText et) { return et == null ? "" : (et.getText() == null ? "" : et.getText().toString()); }
+
+    private static boolean switchOf(LinearLayout row) {
+        if (row == null) return false;
+        android.view.View sw = row.findViewWithTag("wq_switch");
+        return sw instanceof Switch && ((Switch) sw).isChecked();
+    }
 
     private static int dp(Context ctx, int v) {
         try { return (int) (v * ctx.getResources().getDisplayMetrics().density + 0.5f); } catch (Throwable t) { return v; }

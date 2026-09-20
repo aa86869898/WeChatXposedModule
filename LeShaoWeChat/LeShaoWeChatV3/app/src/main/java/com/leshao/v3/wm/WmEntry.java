@@ -68,7 +68,7 @@ public class WmEntry {
                         String clsName = p.thisObject.getClass().getName();
                         LogWriter.log(TAG, "onResume: " + clsName);
                         if (clsName.equals("com.tencent.mm.ui.LauncherUI")) {
-                            // 返回主页，关闭悬浮球（MMEditText detach 不触发，微信只隐藏视图）
+                            // 返回主页，关闭聊天窗口功能入口（MMEditText detach 不触发，微信只隐藏视图）
                             WmChatHook.dismissTitleBtn();
                             WmGroupHook.dismissGroupBtn();
                         } else if (clsName.equals("com.tencent.mm.ui.chatting.ChattingUI")) {
@@ -81,7 +81,7 @@ public class WmEntry {
             });
 
             // ChattingUI 自身的 onCreate/onResume（子类重写版本，二次进入时 MMEditText 复用不重新 attach，
-            // 必须由这些生命周期兜底触发悬浮球重显）
+            // 必须由这些生命周期兜底触发聊天入口重显）
             try {
                 XposedBridge.hookAllMethods(chatClass, "onCreate", new XC_MethodHook() {
                     @Override
@@ -183,7 +183,7 @@ public class WmEntry {
             }
 
             // ChattingUIFragment 自身生命周期：二次进入(fragment 复用)时 MMEditText 不会重新 attach、
-            // M0 不再调用，必须由 onHiddenChanged/setUserVisibleHint/onResume 兜底重显悬浮球
+            // M0 不再调用，必须由 onHiddenChanged/setUserVisibleHint/onResume 兜底重显聊天入口
             try {
                 Class<?> fragClass = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUIFragment", cl);
                 hookChatFragMethod(fragClass, "onHiddenChanged", new Class<?>[]{boolean.class}, new XC_MethodHook() {
@@ -260,7 +260,7 @@ public class WmEntry {
             }
 
             // 从会话列表进入第二个聊天窗口时：ChattingUI 为复用 Activity，MMEditText 不会重新 attach，
-            // 通过 onNewIntent 检测切换会话并重显悬浮球
+            // 通过 onNewIntent 检测切换会话并重显聊天入口
             try {
                 Class<?> chatUiClass = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUI", cl);
                 XposedBridge.hookAllMethods(chatUiClass, "onNewIntent", new XC_MethodHook() {
@@ -279,7 +279,7 @@ public class WmEntry {
                 LogWriter.log(TAG, "onNewIntent hook err: " + e.getMessage());
             }
 
-            // 离开聊天窗口时关闭悬浮球（MMEditText detach）
+            // 离开聊天窗口时关闭聊天入口（MMEditText detach）
             try {
                 XposedBridge.hookAllMethods(View.class, "onDetachedFromWindow", new XC_MethodHook() {
                     @Override
@@ -308,7 +308,7 @@ public class WmEntry {
                 sHandler.postDelayed(new Runnable() {
                     @Override public void run() {
                         if (sResumedActivity == null) return;
-                        try { reconcileChatBall(fCl); } catch (Throwable ignored) {}
+                        try { reconcileChatEntry(fCl); } catch (Throwable ignored) {}
                         sHandler.postDelayed(this, 400);
                     }
                 }, 400);
@@ -319,8 +319,8 @@ public class WmEntry {
         }
     }
 
-    /** 轮询对齐 ⚡ 悬浮球与聊天窗口状态（幂等，不依赖 fragment/生命周期 hook） */
-    private static void reconcileChatBall(ClassLoader cl) {
+    /** 轮询对齐聊天窗口功能入口(⋮ 更多按钮)与聊天窗口状态（幂等，不依赖 fragment/生命周期 hook） */
+    private static void reconcileChatEntry(ClassLoader cl) {
         Activity act = sResumedActivity;
         if (act == null || act.isFinishing()) return;
         String clsName = act.getClass().getName();
@@ -453,8 +453,8 @@ public class WmEntry {
     }
 
     // ===== 群详情页入口 =====
-    // 用户要求: 聊天详情页不显示悬浮球。群管理功能已集成在聊天窗口 ⚡ 面板的"乐少群管理"区域，
-    // 因此不再在 ChatroomInfoUI 注入 🛡 悬浮球，仅保留日志观测。
+    // 用户要求: 聊天详情页不注入悬浮球。群管理功能已集成在聊天窗口面板的"乐少群管理"区域，
+    // 因此不再在 ChatroomInfoUI 注入 🛡 浮标，仅保留日志观测。
     static void injectGroupInfo(ClassLoader cl) {
         try {
             XposedHelpers.findClass("com.tencent.mm.chatroom.ui.ChatroomInfoUI", cl);
@@ -472,7 +472,7 @@ public class WmEntry {
                         if (room == null || room.isEmpty()) {
                             room = WmReflect.getCurrentChatUser(act.getIntent());
                         }
-                        LogWriter.log(TAG, "ChatroomInfoUI.onResume room=" + room + " (详情页悬浮球已移除)");
+                        LogWriter.log(TAG, "ChatroomInfoUI.onResume room=" + room + " (详情页浮标已移除)");
                     } catch (Exception e) {
                         LogWriter.log(TAG, "group info err: " + e.getMessage());
                     }

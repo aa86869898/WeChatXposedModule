@@ -352,7 +352,7 @@ public final class ChatVoiceSwitchHook {
         row.setPadding(0, (int) (5 * density),
                 0, (int) (5 * density));
 
-        // 音色：文字蓝色 + 音色列表图标（细边框背景）
+        // 音色：文字蓝色 + 音色列表图标（带边框背景）
         TextView btn = createBlueButton(ctx, "音色", IconLoader.IC_VOICE_LIST, new View.OnClickListener() {
             @Override
             public void onClick(View v) {

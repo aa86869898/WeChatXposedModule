@@ -723,6 +723,28 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         outerLayout.addView(titleBar);
         outerLayout.addView(candyDivider(ctx, d));
 
+        // 音色库标题
+        LinearLayout tabRow = new LinearLayout(ctx);
+        tabRow.setOrientation(LinearLayout.HORIZONTAL);
+        tabRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        tabRow.setPadding((int)(12 * d), (int)(4 * d), (int)(12 * d), (int)(4 * d));
+
+        TextView tabCube = new TextView(ctx);
+        tabCube.setText("配音魔方音色库");
+        tabCube.setTextSize(13);
+        tabCube.setGravity(android.view.Gravity.CENTER);
+        tabCube.setPadding((int)(12 * d), (int)(8 * d), (int)(12 * d), (int)(8 * d));
+        final android.graphics.drawable.GradientDrawable tabCubeBg = new android.graphics.drawable.GradientDrawable();
+        tabCubeBg.setColor(AppColors.accent());
+        tabCubeBg.setCornerRadius((int)(16 * d));
+        tabCube.setBackground(tabCubeBg);
+        tabCube.setTextColor(AppColors.WHITE_TEXT);
+        LinearLayout.LayoutParams tabL2 = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        tabL2.setMargins((int)(6 * d), 0, 0, 0);
+        tabRow.addView(tabCube, tabL2);
+        outerLayout.addView(tabRow);
+
         // 内容区卡片（可滚动，weight=1）
         LinearLayout contentCard = new LinearLayout(ctx);
         contentCard.setOrientation(LinearLayout.VERTICAL);
@@ -812,6 +834,22 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         closeBtn.setOnClickListener(v -> dialog.dismiss());
         saveBtn.setOnClickListener(v -> dialog.dismiss());
 
+        // 加载配音魔方音色库
+        tabCube.setOnClickListener(v -> {
+            String k = WmPrefs.getStr("tts_cube_key", "");
+            if (k.isEmpty()) {
+                TextView hintTv = new TextView(ctx);
+                hintTv.setText("点击右上角齿轮设置 Key 后加载音色");
+                hintTv.setTextSize(13);
+                hintTv.setTextColor(AppColors.text2());
+                hintTv.setPadding((int)(12 * d), (int)(12 * d), (int)(12 * d), 0);
+                voiceList.removeAllViews();
+                voiceList.addView(hintTv);
+            } else {
+                loadVoices(ctx, parentAct, d, voiceList, statusTv, k);
+            }
+        });
+
         // 自动加载：已有 Key 时直接加载音色，无需点击齿轮
         if (savedKey.isEmpty()) {
             TextView hintTv = new TextView(ctx);
@@ -825,7 +863,8 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         }
     }
 
-    private static void loadVoices(Context ctx, Activity parentAct, float d,
+    /** 加载配音魔方音色列表到指定容器，public 以便跨类调用 */
+    public static void loadVoices(Context ctx, Activity parentAct, float d,
                                    LinearLayout voiceList, TextView statusTv, String key) {
         voiceList.removeAllViews();
         voiceList.addView(statusTv);
@@ -1235,7 +1274,8 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         return list;
     }
 
-    private static String ttsPreviewVoice(String key, String voiceId, String text) {
+    /** 配音魔方下载合成音频到缓存 WAV，返回 "OK:绝对路径" 或错误文本 */
+    public static String ttsPreviewVoice(String key, String voiceId, String text) {
         try {
             JSONObject req = new JSONObject();
             req.put("voiceId", voiceId);

@@ -14,6 +14,7 @@ import android.content.BroadcastReceiver;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.PixelFormat;
 import android.graphics.drawable.GradientDrawable;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaPlayer;
@@ -67,10 +68,9 @@ import org.json.JSONObject;
 
 /**
  * 聊天窗口功能注入 — 复刻自微信大师 ChatFeatureHook
- * 标题栏右上角⚡按钮 → 弹出功能面板(14项)
+ * 标题栏右上角 ⋮ 按钮 → 弹出功能面板(14项)
  */
 public class WmChatHook {
-    private static com.leshao.v3.wm.utils.WmUi.DragFloat sFloatIcon;
     private static Dialog sPanelDialog;
     private static WindowManager sWM;
     private static String sUser;
@@ -90,7 +90,7 @@ public class WmChatHook {
 
     public static void showTitleBtn(Activity act, ClassLoader cl, String user) {
         // 幂等：轮询 reconciler 每 400ms 调用，已注入且同一会话时跳过重建避免闪烁
-        if (sFloatIcon != null && sUser != null && sUser.equals(user)
+        if (sMoreAdded && sMoreIcon != null && sUser != null && sUser.equals(user)
                 && sAct != null && !sAct.isFinishing()) {
             if (act != null) sAct = act;
             return;
@@ -111,21 +111,12 @@ public class WmChatHook {
         }
         LogWriter.log(TAG, "chat window opened user=" + user);
 
-        com.leshao.v3.wm.utils.WmUi.DragFloat f = new com.leshao.v3.wm.utils.WmUi.DragFloat(
-                act, sWM, "⚡", AppColors.accent(), "float_chat",
-                () -> { if (sPanelShow) hidePanel(); else showPanel(); });
-        f.addToWindow();
-        sFloatIcon = f;
         ensureMoreButton(act);
     }
 
     public static void dismissTitleBtn() {
         hidePanel();
         removeMoreButton();
-        if (sFloatIcon != null) {
-            sFloatIcon.removeFromWindow();
-            sFloatIcon = null;
-        }
         sAct = null;
     }
 
@@ -174,7 +165,7 @@ public class WmChatHook {
         btns.setPadding(0, 0, 0, dp(0));
 
         btns.addView(com.leshao.v3.wm.utils.WmUi.makeHeader(sAct,
-                "⚡ 实用工具", displayName));
+                "实用工具", displayName));
 
         if (WmPrefs.isBatchSend()) btns.addView(WmUi.makeBtn(sAct, "乐少万群定时群发", WmChatHook::showMassSend));
         if (WmPrefs.isExportChat()) btns.addView(WmUi.makeBtn(sAct, "📤 导出聊天", WmChatHook::exportChat));
@@ -217,24 +208,7 @@ public class WmChatHook {
         w.setLayout(pw, ph);
         WindowManager.LayoutParams lp = w.getAttributes();
         lp.dimAmount = 0.05f;
-
-        if (sFloatIcon != null) {
-            int[] loc = new int[2];
-            try { sFloatIcon.btn.getLocationOnScreen(loc); } catch (Exception e) { LogWriter.log(TAG, "WmChatHook error: " + e.getClass().getSimpleName() + " " + e.getMessage()); }
-            int fx = loc[0] + sFloatIcon.btn.getWidth() / 2 - pw / 2;
-            int fy = loc[1] - ph - dp(8);
-            int screenW = sAct.getResources().getDisplayMetrics().widthPixels;
-            int screenH = sAct.getResources().getDisplayMetrics().heightPixels;
-            if (fx < 0) fx = dp(5);
-            if (fx + pw > screenW) fx = screenW - pw - dp(5);
-            if (fy < 0) fy = dp(5);
-            if (fy + ph > screenH) fy = screenH - ph - dp(5);
-            lp.gravity = Gravity.TOP | Gravity.LEFT;
-            lp.x = fx;
-            lp.y = fy;
-        } else {
-            lp.gravity = Gravity.CENTER;
-        }
+        lp.gravity = Gravity.CENTER;
         w.setAttributes(lp);
     }
 
@@ -247,11 +221,56 @@ public class WmChatHook {
     }
 
 
-    // ===== 标题栏右上角 自绘竖向 ⋮ 按钮 (已移除: 8.0.78 原生三点+MsgExport注入足够, 悬浮窗口会引发闪退) =====
+    // ===== 标题栏右上角 自绘 ⋮ 三点按钮 (替代原生三点菜单注入) =====
+    // 8.0.78 原生三点菜单注入 (MsgExport 99980/99981/99982) 不触发 onOptionsItemSelected 回调链,
+    // 故改为自绘悬浮三点按钮: 点击弹出自定义菜单, 优先"乐少·万群管理"(仅群聊), 再导出聊天记录。
     private static void ensureMoreButton(Activity act) {
-        // 圆形三点已移除：微信 8.0.78 标题栏自带右上角溢出菜单，
-        // 配合 MsgExport 的 o.r 注入即可扩展功能，无需额外悬浮按钮。
-        // 悬浮 TYPE_APPLICATION_PANEL 窗口在 Activity 切换时 token 失效会导致闪退。
+        try {
+            if (sMoreAdded && sMoreIcon != null) return;
+            removeMoreButton();
+            if (act == null || act.isFinishing()) return;
+            sAct = act;
+            sCtx = act.getApplicationContext();
+            sWM = (WindowManager) act.getSystemService(Context.WINDOW_SERVICE);
+            if (sWM == null) return;
+
+            TextView dots = new TextView(act);
+            dots.setText("\u22EE");  // ⋮ 竖三点
+            dots.setTextSize(24);
+            dots.setTextColor(AppColors.text1());
+            dots.setGravity(Gravity.CENTER);
+            dots.setClickable(true);
+            dots.setFocusable(true);
+            dots.setTag("LESHAO_MORE_BTN");
+            dots.setOnClickListener(v -> showMoreMenu());
+
+            int sz = dp(44);
+            WindowManager.LayoutParams wp = new WindowManager.LayoutParams(
+                    sz, sz,
+                    WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                    PixelFormat.TRANSLUCENT);
+            wp.gravity = Gravity.TOP | Gravity.RIGHT;
+            int m = computeMoreRightMarginPx(act);
+            wp.x = (m > 0 ? m : dp(8));
+            wp.y = statusBarHeight(act) + dp(10);
+
+            sWM.addView(dots, wp);
+            sMoreIcon = dots;
+            sMoreAdded = true;
+            sMoreMarginPx = m;
+            LogWriter.log(TAG, "三点按钮注入 margin=" + m);
+            // 标题栏布局稳定后按原生图标簇重排, 避免遮挡微信自带三点
+            final Activity fAct = act;
+            sH.postDelayed(() -> {
+                try { repositionMoreButton(fAct); } catch (Throwable ignored) {}
+            }, 350);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "ensureMoreButton err: " + t.getMessage());
+            sMoreAdded = false;
+            sMoreIcon = null;
+        }
     }
 
     /** 扫描聊天标题栏右侧的可点击图标，返回"原生图标簇左侧"对应的右边距(px)。
@@ -357,6 +376,9 @@ public class WmChatHook {
         bg.setStroke(dp(1), dark ? 0xFF3A3A3E : 0xFFE5E5EA);
         box.setBackground(bg);
         box.setPadding(dp(4), dp(6), dp(4), dp(6));
+        if (sUser != null && (sUser.endsWith("@chatroom") || sUser.endsWith("@im.chatroom"))) {
+            box.addView(makeMoreRow(act, "乐少·万群管理", fgText, v -> { dismissMoreMenu(); openWanQun(); }));
+        }
         if (WmPrefs.isExportChat()) {
             box.addView(makeMoreRow(act, "导出聊天记录 (TXT)", fgText, v -> { dismissMoreMenu(); exportChat(); }));
             box.addView(makeMoreRow(act, "导出聊天记录 (HTML)", fgText, v -> { dismissMoreMenu(); exportChatHtml(); }));
@@ -385,6 +407,17 @@ public class WmChatHook {
         if (sMoreDialog != null) {
             try { sMoreDialog.dismiss(); } catch (Throwable ignored) {}
             sMoreDialog = null;
+        }
+    }
+
+    /** 乐少·万群管理: 复用 WanQunGroupHook 配置面板, 修复原生三点菜单点击无界面问题 */
+    private static void openWanQun() {
+        try {
+            if (sAct == null || sUser == null) { toast("无法获取当前群聊"); return; }
+            LogWriter.log(TAG, "打开乐少万群管理 group=" + sUser);
+            com.leshao.v3.hook.WanQunGroupHook.showConfigDialog(sAct, sUser);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "openWanQun err: " + t.getMessage());
         }
     }
 

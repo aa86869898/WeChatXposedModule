@@ -75,18 +75,15 @@ public class MainActivity {
 
     private static final String[] ITEM_NAMES = {
         "联系人和群聊", "群管理助手", "聊天分组",
-        "TTS语音播报", "红包转账", "数据备份", "通讯录日志",
-        "通用设置", "聊天增强", "朋友圈", "隐私安全", "数据统计"
+        "TTS语音播报", "红包转账", "数据备份", "通讯录日志"
     };
     private static final int[] ITEM_ICONS = {
         0x1F465, 0x1F6E1, 0x1F4CB,
-        0x1F50A, 0x1F4B0, 0x1F4BE, 0x1F4CB,
-        0x2699, 0x1F4AC, 0x1F4F7, 0x1F512, 0x1F4CA
+        0x1F50A, 0x1F4B0, 0x1F4BE, 0x1F4CB
     };
 
     private static final int[] PAGE_IDS = {
-        3, 4, 14, 8, 9, 12, 13,
-        6, 7, 10, 11, 16
+        3, 4, 14, 8, 9, 12, 13
     };
 
     private static final Map<Integer, String> PAGE_FEATURES = new HashMap<>();
@@ -96,11 +93,6 @@ public class MainActivity {
         PAGE_FEATURES.put(8, "语音播报|TTS播报|排版引擎|配音|API|Voice|间隔|熔断|消息类型|免打扰|安静时段|播报参数|音量|语速|音调|TTS|文字消息播报|语音消息播报|图片消息播报|播报发送人昵称|播报群聊消息|截断长文字");
         PAGE_FEATURES.put(9, "自动抢红包|秒抢|红包震动|响铃|红包提醒|转账收款|私聊红包|群聊红包|时间段过滤|延时抢红包|排除群列|目标群聊|播报金额|关键词过滤");
         PAGE_FEATURES.put(12, "消息导出|聊天备份|导出聊天|备份数据|查看记录|清除记录|数据备份|导出|自动每日备份|导入外部记录|通讯录变更|变更日志");
-        PAGE_FEATURES.put(6, "通用设置|防撤回|抢红包|反Xposed检测|反检测|自动通过好友|好友欢迎语|删除检测|置顶|未读角标|Tab自定义|通话录音|消息导出|聊天记录备份|摇一摇|关键词回复|敏感词|总开关");
-        PAGE_FEATURES.put(7, "聊天增强|正在输入|输入框增强|聊天界面|气泡|背景|圆角|批量消息|自动备注|全文搜索|通知|快捷回复");
-        PAGE_FEATURES.put(10, "朋友圈|去广告|转发|复制|点赞|时间修改|视频画质|长视频");
-        PAGE_FEATURES.put(11, "隐私安全|截图检测|剪贴板|WebView|指纹锁定|登录监控|隐藏字段|会话隐私");
-        PAGE_FEATURES.put(16, "统计|撤回记录|数据统计|好友数|群聊数");
     }
 
     public static void open(Activity act) {

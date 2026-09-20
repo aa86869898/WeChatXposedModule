@@ -168,16 +168,6 @@ public class SubPageActivity {
                 return BatchAddRecordPageView.create(ctx, parentAct);
             case 98: // 管理员工具
                 return AdminPageView.create(ctx, parentAct);
-            case 6:  // 通用设置
-                return SettingsPageView.create(ctx, parentAct);
-            case 7:  // 聊天增强
-                return ChatEnhancePageView.create(ctx, parentAct);
-            case 10: // 朋友圈
-                return SnsPageView.create(ctx, parentAct);
-            case 11: // 隐私安全
-                return PrivacyPageView.create(ctx, parentAct);
-            case 16: // 数据统计
-                return StatsPageView.create(ctx, parentAct);
             default:
                 return makePlaceholder(ctx, parentAct);
         }

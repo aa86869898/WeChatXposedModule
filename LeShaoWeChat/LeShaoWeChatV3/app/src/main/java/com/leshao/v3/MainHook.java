@@ -59,7 +59,6 @@ import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.TTSBroadcaster;
 import com.leshao.v3.ai.AiConfig;
 import com.leshao.v3.ai.ChatHooks;
-import com.leshao.v3.ting.TingMusicModule;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -83,16 +82,29 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v936";
+public static final String MODULE_BUILD = "v948";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
-    public static final int MODULE_VERSION_CODE = 936;
+
+    public static final int MODULE_VERSION_CODE = 948;
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
 
     private static void installCrashHandler() {
         rearmCrashHandler();
+    }
+
+    /**
+     * 捕获模块自身 APK 路径。LSPosed 运行时会向 LoadPackageParam 注入 modulePath 字段（编译期 api-82 无此字段，用反射读）。
+     */
+    private static void captureModuleApkPath(XC_LoadPackage.LoadPackageParam lp) {
+        try {
+            Object v = XposedHelpers.getObjectField(lp, "modulePath");
+            if (v != null) ContextManager.setModuleApkPath(String.valueOf(v));
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "modulePath capture fail: " + t.getMessage());
+        }
     }
 
     /** 微信/Bugly 可能在 Application 初始化时覆盖默认 handler，onReady 后再装一次并链到其已有 handler */
@@ -160,6 +172,7 @@ public class MainHook implements IXposedHookLoadPackage {
 
         try {
             ContextManager.init(cl, lpparam.appInfo.sourceDir);
+            captureModuleApkPath(lpparam);
             ContextManager.hookAttachBaseContext(lpparam);
 
              safeRun("DexKitHelper.setVersionCode", () -> DexKitHelper.setVersionCode(wxVerCode));
@@ -263,8 +276,6 @@ public class MainHook implements IXposedHookLoadPackage {
                             ChatHooks.install(lpparam);
                             LogWriter.log(TAG, "[MainHook] AI 聊天助手已加载 v629");
                         });
-
-                        safeRun("TingMusicModule", () -> TingMusicModule.hook(cl));
 
                         safeRun("AutoMethodDetector", () -> {
                             DexKitHelper.waitKernelInit(cl, new DexKitHelper.KernelReadyCallback() {

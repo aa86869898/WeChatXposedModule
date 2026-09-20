@@ -33,10 +33,10 @@ public class MsgExport {
 
     public static void hook(ClassLoader cl) {
         if (!sEnabled) return;
-        sCL = cl;
-        ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
-        if (config == null || !config.msgExportEnabled) return;
-        hookMenu(cl);
+        // 原生三点菜单注入已停用（8.0.78 不触发 onOptionsItemSelected 回调链）。
+        // 导出聊天记录 / 乐少万群管理改为由 WmChatHook 自绘三点按钮弹出自定义菜单。
+        // 保留 doExport / openWeChatDb 等底层实现供自绘菜单复用。
+        return;
     }
 
     private static void hookMenu(ClassLoader cl) {

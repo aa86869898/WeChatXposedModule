@@ -135,30 +135,17 @@ public class ChatHooks {
                 LogWriter.log(TAG, "会话Fragment Hook: onCreate 未找到");
             }
 
-            hookChatWindowBall(lp);
+            hookChatWindowState(lp);
         } catch (Throwable t) {
             LogWriter.log(TAG, "会话Fragment Hook: 失败: " + t.getMessage());
         }
     }
 
     private static boolean sWindowFocused = false;
-    private static final Runnable showBallTask = new Runnable() {
-        @Override public void run() {
-            if (AiConfig.masterEnabled() && chatActivity != null) {
-                FloatingBall.show(chatActivity, reflectClassLoader);
-            }
-        }
-    };
-    private static final Runnable hideBallTask = new Runnable() {
-        @Override public void run() {
-            FloatingBall.hide();
-            ReplyBanner.hide();
-        }
-    };
     private static final Runnable closeWindowTask = new Runnable() {
         @Override public void run() {
             chatWindowOpen = false;
-            LogWriter.log(TAG, "悬浮球: 窗口关闭确认(延迟)");
+            LogWriter.log(TAG, "窗口关闭确认(延迟)");
         }
     };
 
@@ -175,7 +162,7 @@ public class ChatHooks {
         return false;
     }
 
-    /** 轮询 reconciler：悬浮球显示状态与聊天开/关状态对齐，兜底修复卡住/不显示 */
+    /** 轮询 reconciler：推荐回复横幅显示状态与聊天开/关状态对齐 */
     private static final Runnable reconcileTask = new Runnable() {
         @Override public void run() {
             try {
@@ -184,20 +171,9 @@ public class ChatHooks {
                     return;
                 }
                 boolean chatOpen = isChatOpen();
-                boolean shown = FloatingBall.isShowing();
-                if (chatOpen && !shown && AiConfig.masterEnabled() && sWindowFocused) {
-                    Activity act = sResumedActivity;
-                    if (act != null) {
-                        chatActivity = act;
-                        chatWindowOpen = true;
-                        FloatingBall.show(act, reflectClassLoader);
-                        LogWriter.log(TAG, "悬浮球: reconciler show (chat open)");
-                    }
-                } else if (!chatOpen && shown) {
+                if (!chatOpen) {
                     chatWindowOpen = false;
-                    FloatingBall.hide();
                     ReplyBanner.hide();
-                    LogWriter.log(TAG, "悬浮球: reconciler hide (chat closed)");
                 }
             } catch (Throwable ignored) {}
             MAIN.postDelayed(reconcileTask, 400);
@@ -205,10 +181,10 @@ public class ChatHooks {
     };
     private static ClassLoader reflectClassLoader;
 
-    private static void hookChatWindowBall(XC_LoadPackage.LoadPackageParam lp) {
+    private static void hookChatWindowState(XC_LoadPackage.LoadPackageParam lp) {
         reflectClassLoader = lp.classLoader;
         try {
-            // 窗口焦点追踪：只在窗口获得焦点后才允许显示悬浮球，避免过渡态 addView 崩溃
+            // 窗口焦点追踪：记录当前窗口是否获得焦点，供聊天状态判定使用
             XposedBridge.hookAllMethods(Activity.class, "onWindowFocusChanged", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam p) {
@@ -219,19 +195,14 @@ public class ChatHooks {
                         String cls = act.getClass().getName();
                         if (focused && (cls.equals("com.tencent.mm.ui.LauncherUI")
                                 || cls.equals("com.tencent.mm.ui.chatting.ChattingUI"))) {
-                            // 窗口获得焦点后，若聊天仍打开，尝试显示悬浮球
-                            if (chatWindowOpen && !FloatingBall.isShowing() && chatActivity != null) {
-                                MAIN.removeCallbacks(showBallTask);
-                                MAIN.postDelayed(showBallTask, 200);
-                                LogWriter.log(TAG, "悬浮球: onWindowFocusChanged 触发 showBallTask");
-                            }
+                            LogWriter.log(TAG, "窗口状态: onWindowFocusChanged focused=" + focused);
                         }
                     } catch (Throwable ignored) {}
                 }
             });
-            LogWriter.log(TAG, "悬浮球: Activity.onWindowFocusChanged 已挂载");
+            LogWriter.log(TAG, "窗口状态: Activity.onWindowFocusChanged 已挂载");
 
-            // 返回主页时关闭悬浮球，返回聊天窗口时重新显示
+            // 窗口状态追踪：记录当前 Activity 与聊天会话状态
             XposedBridge.hookAllMethods(Activity.class, "onResume", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam p) {
@@ -241,65 +212,46 @@ public class ChatHooks {
                         if (clsName.equals("com.tencent.mm.ui.LauncherUI")) {
                             // 8.0.49 聊天窗口是 LauncherUI 内的 fragment：
                             // 从详情页(ChatroomInfoUI)返回时 LauncherUI.onResume 也会触发，
-                            // 此时若 ChattingUIFragment 仍在显示，应重新显示悬浮球而非隐藏
+                            // 此时若 ChattingUIFragment 仍在显示，应识别为聊天仍在打开
                             Activity act = (Activity) p.thisObject;
                             String chatUser = findChatUserFromActivity(act);
                             boolean chatVisible = isChatFragmentVisible(act);
-                            LogWriter.log(TAG, "悬浮球: LauncherUI.onResume chatVisible=" + chatVisible
-                                + " user=" + chatUser + " focused=" + sWindowFocused);
+                            LogWriter.log(TAG, "窗口状态: LauncherUI.onResume chatVisible=" + chatVisible
+                                    + " user=" + chatUser + " focused=" + sWindowFocused);
                             if (chatVisible && chatUser != null && !chatUser.isEmpty()) {
                                 chatActivity = act;
                                 chatWindowOpen = true;
                                 setTalker(chatUser);
-                                MAIN.removeCallbacks(hideBallTask);
-                                MAIN.removeCallbacks(showBallTask);
                                 MAIN.removeCallbacks(closeWindowTask);
-                                // 窗口已焦点则直接显示，否则等 onWindowFocusChanged
-                                if (sWindowFocused) {
-                                    MAIN.postDelayed(showBallTask, 300);
-                                } else {
-                                    LogWriter.log(TAG, "悬浮球: 窗口未焦点，延迟到 onWindowFocusChanged 显示");
-                                }
                                 return;
                             }
-                            // 真正回到主页: 隐藏悬浮球
-                            MAIN.removeCallbacks(showBallTask);
+                            // 真正回到主页: 隐藏推荐回复横幅并标记窗口关闭
                             MAIN.removeCallbacks(closeWindowTask);
                             MAIN.postDelayed(closeWindowTask, 300);
-                            FloatingBall.hide();
                             ReplyBanner.hide();
                             chatActivity = null;
                         } else if (clsName.equals("com.tencent.mm.chatroom.ui.ChatroomInfoUI")) {
-                            // 聊天详情页: 隐藏 AI 悬浮球（返回聊天窗口时重新显示）
-                            MAIN.removeCallbacks(showBallTask);
-                            FloatingBall.hide();
+                            // 聊天详情页: 隐藏推荐回复横幅
                             ReplyBanner.hide();
                         } else if (clsName.equals("com.tencent.mm.ui.chatting.ChattingUI")) {
                             Activity act = (Activity) p.thisObject;
                             String user = findChatUserFromActivity(act);
-                            LogWriter.log(TAG, "悬浮球: ChattingUI.onResume user=" + user
-                                + " focused=" + sWindowFocused);
+                            LogWriter.log(TAG, "窗口状态: ChattingUI.onResume user=" + user
+                                    + " focused=" + sWindowFocused);
                             if (user == null || user.isEmpty()) return;
                             chatActivity = act;
                             chatWindowOpen = true;
                             setTalker(user);
-                            MAIN.removeCallbacks(hideBallTask);
-                            MAIN.removeCallbacks(showBallTask);
                             MAIN.removeCallbacks(closeWindowTask);
-                            if (sWindowFocused) {
-                                MAIN.postDelayed(showBallTask, 300);
-                            } else {
-                                LogWriter.log(TAG, "悬浮球: 窗口未焦点，延迟到 onWindowFocusChanged 显示");
-                            }
                         }
                     } catch (Throwable e) {
                         LogWriter.log(TAG, "Activity.onResume err: " + e);
                     }
                 }
             });
-            LogWriter.log(TAG, "悬浮球: Activity.onResume 已挂载");
+            LogWriter.log(TAG, "窗口状态: Activity.onResume 已挂载");
 
-            // 悬浮球卡住根因修复：任意 Activity 暂停（Home/back/详情页覆盖）立即隐藏。
+            // 任意 Activity 暂停（Home/back/详情页覆盖）立即隐藏推荐回复横幅。
             // 8.0.49 聊天是 LauncherUI 内 fragment，返回主列表不触发任何 onResume 变更，
             // 因此仅靠 onResume 分支无法隐藏，onPause + 轮询 reconciler 双保险。
             try {
@@ -308,12 +260,11 @@ public class ChatHooks {
                     protected void afterHookedMethod(MethodHookParam p) {
                         try {
                             if (p.thisObject == sResumedActivity) sResumedActivity = null;
-                            FloatingBall.hide();
                             ReplyBanner.hide();
                         } catch (Throwable ignored) {}
                     }
                 });
-                LogWriter.log(TAG, "悬浮球: Activity.onPause 已挂载");
+                LogWriter.log(TAG, "窗口状态: Activity.onPause 已挂载");
             } catch (Throwable e) {
                 LogWriter.log(TAG, "Activity.onPause hook err: " + e.getMessage());
             }
@@ -327,19 +278,17 @@ public class ChatHooks {
                 XposedBridge.hookAllMethods(chatUi, "onPause", new XC_MethodHook() {
                     @Override protected void afterHookedMethod(MethodHookParam p) {
                         sChatUiResumed = false;
-                        FloatingBall.hide();
                     }
                 });
-                LogWriter.log(TAG, "悬浮球: ChattingUI onResume/onPause 已挂载");
+                LogWriter.log(TAG, "窗口状态: ChattingUI onResume/onPause 已挂载");
             } catch (Throwable e) {
                 LogWriter.log(TAG, "ChattingUI hook err: " + e.getMessage());
             }
 
-            // 轮询 reconciler：每 400ms 将悬浮球显示状态与"聊天是否打开"对齐。
-            // 修复①返回主列表后悬浮球卡住关不掉；修复②第二次进聊天不显示悬浮球。
+            // 轮询 reconciler：每 400ms 将聊天窗口状态与推荐回复横幅对齐。
             MAIN.removeCallbacks(reconcileTask);
             MAIN.postDelayed(reconcileTask, 400);
-            LogWriter.log(TAG, "悬浮球: reconciler 已启动");
+            LogWriter.log(TAG, "窗口状态: reconciler 已启动");
 
             // 8.0.49 关键: 聊天窗口是 LauncherUI 内的 fragment。
             // hook fragment 可见性生命周期(onResume/onHiddenChanged/setUserVisibleHint)，
@@ -354,15 +303,12 @@ public class ChatHooks {
                     try {
                                         chatWindowOpen = true;
                                         Activity act = fragmentActivity(param.thisObject);
-                                        if (act == null) { LogWriter.log(TAG, "悬浮球: M0 未获取到 Activity"); return; }
+                                        if (act == null) { LogWriter.log(TAG, "窗口状态: M0 未获取到 Activity"); return; }
                                         chatActivity = act;
                                         setTalker(resolveTalkerFromActivity(act, param.thisObject));
-                                        LogWriter.log(TAG, "悬浮球: M0 聊天窗口打开 Activity=" + act.getClass().getSimpleName()
+                                        LogWriter.log(TAG, "窗口状态: M0 聊天窗口打开 Activity=" + act.getClass().getSimpleName()
                                                 + " talker=" + currentTalker);
-                                        MAIN.removeCallbacks(hideBallTask);
-                                        MAIN.removeCallbacks(showBallTask);
                                         MAIN.removeCallbacks(closeWindowTask);
-                                        MAIN.postDelayed(showBallTask, 300);
                                         final String openedTalker = currentTalker;
                                         MAIN.postDelayed(() -> ReplyFeature.onSessionOpened(openedTalker, lp.classLoader), 2000);
                     } catch (Throwable e) {
@@ -370,26 +316,23 @@ public class ChatHooks {
                     }
                 }
             });
-            LogWriter.log(TAG, "悬浮球: M0 挂载完成");
+            LogWriter.log(TAG, "窗口状态: M0 挂载完成");
 
             Method o0 = frag.getDeclaredMethod("O0");
             XposedBridge.hookMethod(o0, new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     try {
-                                        LogWriter.log(TAG, "悬浮球: O0 聊天窗口关闭, 延迟确认");
-                                        MAIN.removeCallbacks(showBallTask);
+                                        LogWriter.log(TAG, "窗口状态: O0 聊天窗口关闭, 延迟确认");
                                         MAIN.removeCallbacks(closeWindowTask);
                                         MAIN.postDelayed(closeWindowTask, 300);
-                                        MAIN.removeCallbacks(hideBallTask);
-                                        MAIN.postDelayed(hideBallTask, 800);
                                         chatActivity = null;
                     } catch (Throwable e) {
                         LogWriter.log("ChatHooks", "cb err: " + e);
                     }
                 }
             });
-            LogWriter.log(TAG, "悬浮球: O0 挂载完成");
+            LogWriter.log(TAG, "窗口状态: O0 挂载完成");
 
             // Fallback: M0/O0 在 8.0.50 不可靠，用 MMEditText onAttachedToWindow 检测
             try {
@@ -402,15 +345,12 @@ public class ChatHooks {
                             Activity act = (Activity) v.getContext();
                             if (act == null) return;
                             String user = findChatUserFromActivity(act);
-                            LogWriter.log(TAG, "悬浮球: MMEditText attached talker=" + user);
+                            LogWriter.log(TAG, "窗口状态: MMEditText attached talker=" + user);
                             if (user == null || user.isEmpty()) return;
                             chatWindowOpen = true;
                             chatActivity = act;
                             setTalker(user);
-                            MAIN.removeCallbacks(hideBallTask);
-                            MAIN.removeCallbacks(showBallTask);
                             MAIN.removeCallbacks(closeWindowTask);
-                            MAIN.postDelayed(showBallTask, 300);
                             final String openedTalker = currentTalker;
                             MAIN.postDelayed(() -> ReplyFeature.onSessionOpened(openedTalker, lp.classLoader), 2000);
                         } catch (Throwable e) {
@@ -418,12 +358,12 @@ public class ChatHooks {
                         }
                     }
                 });
-                LogWriter.log(TAG, "悬浮球: MMEditText onAttachedToWindow 兜底已挂载");
+                LogWriter.log(TAG, "窗口状态: MMEditText onAttachedToWindow 兜底已挂载");
             } catch (Throwable e) {
                 LogWriter.log(TAG, "MMEditText hook err: " + e.getMessage());
             }
 
-            // 离开聊天窗口时关闭悬浮球
+            // 离开聊天窗口时关闭窗口状态
             try {
                 XposedBridge.hookAllMethods(android.view.View.class, "onDetachedFromWindow", new XC_MethodHook() {
                     @Override
@@ -431,24 +371,21 @@ public class ChatHooks {
                         try {
                             android.view.View v = (android.view.View) p.thisObject;
                             if (!"com.tencent.mm.ui.widget.MMEditText".equals(v.getClass().getName())) return;
-                            LogWriter.log(TAG, "悬浮球: MMEditText detached, 关闭窗口");
-                            MAIN.removeCallbacks(showBallTask);
+                            LogWriter.log(TAG, "窗口状态: MMEditText detached, 关闭窗口");
                             MAIN.removeCallbacks(closeWindowTask);
                             MAIN.postDelayed(closeWindowTask, 300);
-                            MAIN.removeCallbacks(hideBallTask);
-                            MAIN.postDelayed(hideBallTask, 800);
                             chatActivity = null;
                         } catch (Throwable e) {
                             LogWriter.log(TAG, "MMEditText detach err: " + e);
                         }
                     }
                 });
-                LogWriter.log(TAG, "悬浮球: MMEditText onDetachedFromWindow 已挂载");
+                LogWriter.log(TAG, "窗口状态: MMEditText onDetachedFromWindow 已挂载");
             } catch (Throwable e) {
                 LogWriter.log(TAG, "MMEditText detach hook err: " + e.getMessage());
             }
         } catch (Throwable t) {
-            LogWriter.log(TAG, "悬浮球: ChattingUIFragment M0/O0 hook 失败: " + t.getMessage());
+            LogWriter.log(TAG, "窗口状态: ChattingUIFragment M0/O0 hook 失败: " + t.getMessage());
         }
     }
 
@@ -466,13 +403,10 @@ public class ChatHooks {
                         chatWindowOpen = true;
                         chatActivity = act;
                         String user = resolveTalkerFromFragment(frag);
-                        LogWriter.log(TAG, "悬浮球: fragment可见 talker=" + user);
+                        LogWriter.log(TAG, "窗口状态: fragment可见 talker=" + user);
                         if (user == null || user.isEmpty()) return;
                         setTalker(user);
-                        MAIN.removeCallbacks(hideBallTask);
-                        MAIN.removeCallbacks(showBallTask);
                         MAIN.removeCallbacks(closeWindowTask);
-                        MAIN.postDelayed(showBallTask, 300);
                     } catch (Throwable e) {
                         LogWriter.log(TAG, "frag visible err: " + e);
                     }
@@ -482,10 +416,8 @@ public class ChatHooks {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     try {
                         boolean hidden = (Boolean) p.args[0];
-                        LogWriter.log(TAG, "悬浮球: onHiddenChanged hidden=" + hidden);
+                        LogWriter.log(TAG, "窗口状态: onHiddenChanged hidden=" + hidden);
                         if (hidden) {
-                            MAIN.removeCallbacks(showBallTask);
-                            FloatingBall.hide();
                         } else {
                             sLastVisibleFragment = p.thisObject;
                             MAIN.post(openRunnable);
@@ -497,7 +429,7 @@ public class ChatHooks {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     try {
                         boolean visible = (Boolean) p.args[0];
-                        LogWriter.log(TAG, "悬浮球: setUserVisibleHint visible=" + visible);
+                        LogWriter.log(TAG, "窗口状态: setUserVisibleHint visible=" + visible);
                         if (visible) {
                             sLastVisibleFragment = p.thisObject;
                             MAIN.post(openRunnable);
@@ -513,7 +445,7 @@ public class ChatHooks {
                     } catch (Throwable e) { LogWriter.log(TAG, "frag onResume err: " + e); }
                 }
             });
-            LogWriter.log(TAG, "悬浮球: ChattingUIFragment 可见性 hook 已挂载");
+            LogWriter.log(TAG, "窗口状态: ChattingUIFragment 可见性 hook 已挂载");
         } catch (Throwable e) {
             LogWriter.log(TAG, "fragment visibility hook err: " + e.getMessage());
         }
@@ -535,7 +467,7 @@ public class ChatHooks {
             }
             if (m == null) return;
             XposedBridge.hookMethod(m, hook);
-            LogWriter.log(TAG, "悬浮球: fragment " + name + " hook 已挂载(" + m.getDeclaringClass().getSimpleName() + ")");
+            LogWriter.log(TAG, "窗口状态: fragment " + name + " hook 已挂载(" + m.getDeclaringClass().getSimpleName() + ")");
         } catch (Throwable e) {
             LogWriter.log(TAG, "fragment " + name + " hook err: " + e.getMessage());
         }

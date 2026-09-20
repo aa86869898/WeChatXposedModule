@@ -16,6 +16,7 @@ public class ContextManager {
     private static volatile ClassLoader sClassLoader;
     private static volatile ClassLoader sTinkerClassLoader;
     private static volatile String sApkPath;
+    private static volatile String sModuleApkPath;
     private static volatile boolean sReady = false;
     private static volatile Context sAppContext;
     private static Runnable sOnReadyCallback;
@@ -70,6 +71,14 @@ public class ContextManager {
     public static ClassLoader getClassLoader() { return sClassLoader; }
 
     public static String getApkPath() { return sApkPath; }
+
+    /** 设置模块自身 APK 路径（LSPosed 运行时会向 LoadPackageParam 注入 modulePath 字段） */
+    public static void setModuleApkPath(String moduleApkPath) {
+        sModuleApkPath = moduleApkPath;
+        if (moduleApkPath != null) LogWriter.log(TAG, "moduleApkPath=" + moduleApkPath);
+    }
+
+    public static String getModuleApkPath() { return sModuleApkPath; }
 
     public static Context getAppContext() { return sAppContext; }
 

@@ -56,11 +56,13 @@ public class CornerMenu {
     private static final long RETRY_DELAY_MS = 200;
     private static Runnable sRecheckRunnable;
     private static ClassLoader sClassLoader;
+    private static boolean sSelfHealStarted;
     private static Bitmap sBitmapLight;
     private static Bitmap sBitmapDark;
 
     private static View sMainIcon;
     private static WindowManager sMainWM;
+    private static Activity sHomeAct;
     private static final Handler sH = new Handler(Looper.getMainLooper());
 
     // 聊天窗口精确标志位: 由 ChattingUIFragment.onHiddenChanged 驱动,
@@ -98,6 +100,7 @@ public class CornerMenu {
                         try {
                             if (focused && ("com.tencent.mm.ui.LauncherUI".equals(clsName)
                                     || "com.tencent.mm.ui.HomeUI".equals(clsName))) {
+                                sHomeAct = (Activity) activity;
                                 // 8.0.49+: 聊天窗口是 LauncherUI 内的 ChattingUIFragment，
                                 // 必须排除，否则聊天界面也注入三横菜单
                                 if (isInChatWindow((Activity) activity)) {
@@ -113,6 +116,33 @@ public class CornerMenu {
                         } catch (Throwable e) {
                             LogWriter.log(TAG, "Activity.onWindowFocusChanged cb err: " + e);
                         }
+                    }
+                });
+            // 兜底注入路径: 主页 onResume (onWindowFocusChanged 在焦点不变/悬浮窗被系统移除
+            // 等场景不触发, 三横菜单会"偶尔消失")。延迟至窗口就绪后再注入。
+            XposedBridge.hookAllMethods(Activity.class, "onResume",
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!(param.thisObject instanceof Activity)) return;
+                            Activity act = (Activity) param.thisObject;
+                            String clsName = act.getClass().getName();
+                            if (!"com.tencent.mm.ui.LauncherUI".equals(clsName)
+                                    && !"com.tencent.mm.ui.HomeUI".equals(clsName)) return;
+                            sHomeAct = act;
+                            // 延迟至窗口树就绪, 避免 BadToken; 若已有效注入则跳过
+                            final Activity fAct = act;
+                            sH.postDelayed(() -> {
+                                try {
+                                    if (fAct == null || fAct.isFinishing() || sChatWindowActive) return;
+                                    if (hasActiveMenu()) return;
+                                    if (isInChatWindow(fAct)) return;
+                                    LogWriter.log(TAG, "onResume 兜底注入 hamburger");
+                                    injectMain(fAct, 0);
+                                } catch (Throwable ignored) {}
+                            }, 150);
+                        } catch (Throwable ignored) {}
                     }
                 });
             LogWriter.log(TAG, "hook: Activity.onWindowFocusChanged hooked");
@@ -135,10 +165,41 @@ public class CornerMenu {
             // 修复回主页后 isInChatWindow 误判导致三横菜单不注入的问题。
             hookChatFragmentVisibility(cl);
             LogWriter.log(TAG, "hook: ChattingUIFragment.onHiddenChanged hooked");
+
+            // 自愈轮询: 主页停留期间悬浮窗可能被系统/微信布局刷新移除, 而聚焦事件不再触发。
+            // 低频率检查弥补"偶尔消失", 无副作用(主页且无有效菜单时补注入)。
+            if (!sSelfHealStarted) {
+                sSelfHealStarted = true;
+                sH.postDelayed(new Runnable() {
+                    @Override public void run() {
+                        try {
+                            selfHealMainMenu();
+                        } catch (Throwable ignored) {}
+                        sH.postDelayed(this, 2000);
+                    }
+                }, 2000);
+                LogWriter.log(TAG, "self-heal poll started");
+            }
         } catch (Throwable e) {
             LogWriter.log(TAG, "hook: FAILED - " + e.getClass().getSimpleName()
                 + ": " + e.getMessage());
         }
+    }
+
+    /** 自愈: 若当前处于主页且三横菜单缺失, 补注入 */
+    private static void selfHealMainMenu() {
+        try {
+            Activity act = sHomeAct;
+            if (act == null || act.isFinishing()) return;
+            if (sChatWindowActive) return;
+            String clsName = act.getClass().getName();
+            if (!"com.tencent.mm.ui.LauncherUI".equals(clsName)
+                    && !"com.tencent.mm.ui.HomeUI".equals(clsName)) return;
+            if (hasActiveMenu()) return;
+            if (isInChatWindow(act)) return;
+            LogWriter.log(TAG, "self-heal: hamburger missing on main page, reinject");
+            injectMain(act, 0);
+        } catch (Throwable ignored) {}
     }
 
     /** 绘制三横 (≡) 菜单图标 */
@@ -204,6 +265,14 @@ public class CornerMenu {
         return false;
     }
 
+    /** 三横菜单是否"真正有效显示"（view 存在且仍挂载在窗口树）。
+     *  悬浮窗 view 可能被系统/微信移除但引用残留, 此时应视为无菜单并可重新注入,
+     *  避免 sMainIcon != null 判断永久阻挡注入导致"偶尔消失"。 */
+    private static boolean hasActiveMenu() {
+        if (sMainIcon == null) return false;
+        try { return sMainIcon.getParent() != null; } catch (Throwable t) { return false; }
+    }
+
     /** 聊天窗口精确可见性: hook ChattingUIFragment.onHiddenChanged 维护标志位。
      *  同时拦截回主页瞬间(chat hidden)立即恢复注入, 修复偶发不显示。 */
     private static void hookChatFragmentVisibility(ClassLoader cl) {
@@ -227,7 +296,7 @@ public class CornerMenu {
                                     String clsName = act.getClass().getName();
                                     if (!"com.tencent.mm.ui.LauncherUI".equals(clsName)
                                             && !"com.tencent.mm.ui.HomeUI".equals(clsName)) return;
-                                    if (sMainIcon != null) return;
+                                    if (hasActiveMenu()) return;
                                     injectMain(act, 0);
                                 } catch (Throwable ignored) {}
                             }, 100);
@@ -250,7 +319,7 @@ public class CornerMenu {
             sRecheckRunnable = () -> {
                 try {
                     if (act == null || act.isFinishing()) return;
-                    if (sMainIcon != null) return;
+                    if (hasActiveMenu()) return;
                     if (isInChatWindow(act)) return;
                     String clsName = act.getClass().getName();
                     if (!"com.tencent.mm.ui.LauncherUI".equals(clsName)

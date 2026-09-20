@@ -2166,7 +2166,7 @@ public class TtsVoiceSender {
         InputStream in = null;
         FileOutputStream out = null;
         try {
-            String dir = ContextManager.getAppContext().getCacheDir().getAbsolutePath() + "/ting_music";
+            String dir = ContextManager.getAppContext().getCacheDir().getAbsolutePath() + "/music_card";
             new File(dir).mkdirs();
             String dlUrl = url;
             if (songmid != null && !songmid.isEmpty()) {

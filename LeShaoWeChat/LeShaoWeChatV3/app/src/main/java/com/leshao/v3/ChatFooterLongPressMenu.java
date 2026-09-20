@@ -375,8 +375,9 @@ public class ChatFooterLongPressMenu {
         root.addView(audioPanel);
 
         // PopupWindow
-        // 宽度固定为屏宽 70% (用户要求), 高度自适应
-        int panelW = (int) (ctx.getResources().getDisplayMetrics().widthPixels * 0.7f);
+        // 宽度固定为屏宽 85% (放大), 高度自适应
+        android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        int panelW = (int) (dm.widthPixels * 0.85f);
         popupWindow = new PopupWindow(root, panelW,
                 ViewGroup.LayoutParams.WRAP_CONTENT, true);
         popupWindow.setBackgroundDrawable(new ColorDrawable(0));
@@ -384,15 +385,39 @@ public class ChatFooterLongPressMenu {
         popupWindow.setOutsideTouchable(true);
         popupWindow.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
-        // 水平居中显示（距顶部留白），满足“70% 屏宽 + 居中”需求
-        popupWindow.showAtLocation(anchor, Gravity.TOP | Gravity.CENTER_HORIZONTAL, 0, dp(ctx, 120));
+        // 定位到触发按钮正上方（先测量高度）
+        root.measure(View.MeasureSpec.makeMeasureSpec(panelW, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int panelH = root.getMeasuredHeight();
+
+        int[] loc = new int[2];
+        anchor.getLocationInWindow(loc);
+        int anchorW = Math.max(anchor.getWidth(), 1);
+        int x = loc[0] + anchorW / 2 - panelW / 2;
+        int y = loc[1] - panelH - dp(ctx, 10);
+        if (x < 0) x = 0;
+        if (x + panelW > dm.widthPixels) x = dm.widthPixels - panelW;
+        if (y < 0) y = loc[1] + anchor.getHeight() + dp(ctx, 10);
+        if (y + panelH > dm.heightPixels) y = dm.heightPixels - panelH - dp(ctx, 8);
+
+        popupWindow.showAtLocation(anchor, Gravity.TOP | Gravity.LEFT, x, y);
         popupWindow.setOnDismissListener(() -> removeLayoutListener());
 
         sLayoutAnchor = anchor;
         sLayoutListener = () -> {
             if (popupWindow == null || !popupWindow.isShowing()) return;
-            // 水平居中，垂直保持固定顶部留白
-            popupWindow.update(0, dp(ctx, 120), -1, -1, true);
+            // 跟随按钮位置更新：保持显示在按钮正上方
+            try {
+                int[] cur = new int[2];
+                anchor.getLocationInWindow(cur);
+                int cx = cur[0] + anchorW / 2 - panelW / 2;
+                int cy = cur[1] - panelH - dp(ctx, 10);
+                if (cx < 0) cx = 0;
+                if (cx + panelW > dm.widthPixels) cx = dm.widthPixels - panelW;
+                if (cy < 0) cy = cur[1] + anchor.getHeight() + dp(ctx, 10);
+                if (cy + panelH > dm.heightPixels) cy = dm.heightPixels - panelH - dp(ctx, 8);
+                popupWindow.update(cx, cy, -1, -1, true);
+            } catch (Throwable ignored) {}
         };
         anchor.getViewTreeObserver().addOnGlobalLayoutListener(sLayoutListener);
     }
