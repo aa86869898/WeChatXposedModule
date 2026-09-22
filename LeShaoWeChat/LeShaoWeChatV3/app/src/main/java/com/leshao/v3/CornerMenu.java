@@ -264,7 +264,12 @@ public class CornerMenu {
         return chatFragmentVisible(act);
     }
 
-    /** fragment 实际可见性扫描(仅统计真正显示在屏幕上的聊天 fragment)。 */
+    /** fragment 实际可见性扫描(仅统计真正铺满屏幕的聊天 fragment)。
+     *  v981: 原实现用 isVisible()/mView.isShown() 判断, 但微信主界面与聊天页常处于同一
+     *  ViewPager/容器中, 离屏页的 view 依然 isShown()=true, 导致停留在主页时被误判为
+     *  “在聊天中” → onWindowFocusChanged 里 removeAll 且 self-heal/restore 全部被挡,
+     *  三横菜单被移除后不再注入(用户反馈“时不时不显示”)。改为用 view 在屏幕上的实际
+     *  可见矩形判定: 只有可见宽高均 >= 屏幕 2/5 才认为聊天页在前台。 */
     private static boolean chatFragmentVisible(Activity act) {
         try {
             Object fm = XposedHelpers.callMethod(act, "getSupportFragmentManager");
@@ -273,23 +278,49 @@ public class CornerMenu {
             if (fragments == null) return false;
             for (Object f : fragments) {
                 if (!"com.tencent.mm.ui.chatting.ChattingUIFragment".equals(f.getClass().getName())) continue;
-                // 仅当 fragment 视图真正显示在屏幕上才算聊天中;
-                // 回主页后残留的隐藏/未附加 fragment 不算 (修复回主页后三横菜单不再注入的问题)
-                try {
-                    Object h = XposedHelpers.callMethod(f, "isHidden");
-                    if (h instanceof Boolean && (Boolean) h) continue;
-                } catch (Throwable ignored) {}
-                try {
-                    Object v = XposedHelpers.callMethod(f, "isVisible");
-                    if (v instanceof Boolean && (Boolean) v) return true;
-                } catch (Throwable ignored) {}
-                try {
-                    Object viewObj = XposedHelpers.getObjectField(f, "mView");
-                    if (viewObj instanceof View && ((View) viewObj).isShown()) return true;
-                } catch (Throwable ignored) {}
+                Object viewObj = null;
+                try { viewObj = XposedHelpers.getObjectField(f, "mView"); } catch (Throwable ignored) {}
+                if (!(viewObj instanceof View)) {
+                    try { viewObj = XposedHelpers.callMethod(f, "getView"); } catch (Throwable ignored) {}
+                }
+                if (viewObj instanceof View && occupiesScreen((View) viewObj)) {
+                    logChatVisible((View) viewObj);
+                    return true;
+                }
             }
         } catch (Throwable ignored) {}
         return false;
+    }
+
+    /** 视图是否真正铺满屏幕(离屏/被父容器裁剪的 ViewPager 页返回 false)。 */
+    private static boolean occupiesScreen(View v) {
+        try {
+            if (v.getVisibility() != View.VISIBLE) return false;
+            if (v.getWindowToken() == null) return false;
+            android.graphics.Rect r = new android.graphics.Rect();
+            if (!v.getGlobalVisibleRect(r)) return false;
+            int sw = v.getResources().getDisplayMetrics().widthPixels;
+            int sh = v.getResources().getDisplayMetrics().heightPixels;
+            return r.width() >= sw * 2 / 5 && r.height() >= sh * 2 / 5;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private static long sLastChatVisibleLogAt;
+
+    /** 诊断: 记录判定为“聊天页可见”时 view 的实际屏幕可见矩形 */
+    private static void logChatVisible(View v) {
+        long now = System.currentTimeMillis();
+        if (now - sLastChatVisibleLogAt < 3000) return;
+        sLastChatVisibleLogAt = now;
+        try {
+            android.graphics.Rect r = new android.graphics.Rect();
+            v.getGlobalVisibleRect(r);
+            LogWriter.log(TAG, "chatFragmentVisible: rect=" + r.width() + "x" + r.height()
+                    + " screen=" + v.getResources().getDisplayMetrics().widthPixels
+                    + "x" + v.getResources().getDisplayMetrics().heightPixels);
+        } catch (Throwable ignored) {}
     }
 
     /** 三横菜单是否"真正有效显示"（view 存在且仍挂载在窗口树）。
