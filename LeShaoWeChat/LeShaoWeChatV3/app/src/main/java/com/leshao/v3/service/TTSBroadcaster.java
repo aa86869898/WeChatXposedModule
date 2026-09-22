@@ -50,14 +50,6 @@ public class TTSBroadcaster {
         }
     }
 
-    public static void announceRedPacket(String sender, String chatroom, String wishing, String amount) {
-        if (sHandler != null) sHandler.announceRedPacket(sender, chatroom, wishing, amount);
-    }
-
-    public static void announceTransfer(String sender, String chatroom, String amount, String desc) {
-        if (sHandler != null) sHandler.announceTransfer(sender, chatroom, amount, desc);
-    }
-
     public static boolean isSpeaking() {
         if (sEngine != null && sEngine.isSpeaking()) return true;
         if (sCubePlayer != null && sCubePlayer.isSpeaking()) return true;

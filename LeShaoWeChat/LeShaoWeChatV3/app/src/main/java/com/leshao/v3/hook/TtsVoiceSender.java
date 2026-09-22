@@ -61,6 +61,8 @@ public class TtsVoiceSender {
     private static final int FRAME_SAMPLES = TARGET_SAMPLE_RATE * FRAME_DURATION_MS / 1000;
     private static final int FRAME_PCM_BYTES = FRAME_SAMPLES * TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8;
     private static final long FAILURE_SUPPRESS_WINDOW_MS = 8000;
+    /** v985: TTS 合成等待上限。原 30s 过长, 一旦引擎卡住会占满单线程池拖慢后续回复, 缩短到 12s。 */
+    private static final long SYNTH_TIMEOUT_MS = 12000;
     private static final int SILK_BITRATE = 60000;          // 微信原生 SILK 高码率档(v930 为 50000, 升 60k 承载更多细节)
     private static final int SILK_COMPLEXITY = 5;           // 参照 8.0.78 v61.w.c 转码参数 new v61/c0(16000,16000,4), 升满复杂度
     private static volatile boolean sCrashHandlerInstalled;
@@ -691,21 +693,65 @@ public class TtsVoiceSender {
 
     /** AI 回复转语音消息发出(异步)。失败只记日志, 由调用方决定是否回退发文本。 */
     public static void sendAiReplyAsVoice(String talker, String text, String clientMsgId) {
+        sendAiReplyAsVoice(talker, text, clientMsgId, null);
+    }
+
+    /**
+     * AI 回复转语音消息发出(异步 + 失败回退)。
+     *
+     * <p>合成/发送失败或超时时, 在 TTS 后台线程回调 {@code onFail}, 供调用方回退发文本,
+     * 避免"AI 没回消息"。传入 null 表示不回调。</p>
+     */
+    public static void sendAiReplyAsVoice(String talker, String text, String clientMsgId,
+                                          Runnable onFail) {
+        sendAiReplyAsVoice(talker, text, clientMsgId, null, onFail);
+    }
+
+    /**
+     * v985: 带音色覆盖的 AI 回复转语音。voiceId 非空时用该音色(会话/模板多音色随机选出的)，
+     * 否则回退全局 tts_cube_voice。
+     */
+    public static void sendAiReplyAsVoice(String talker, String text, String clientMsgId,
+                                          String voiceId, Runnable onFail) {
         if (talker == null || talker.isEmpty() || text == null || text.trim().isEmpty()) {
             LogWriter.log(TAG, "sendAiReplyAsVoice skip: empty talker/text");
+            notifyTtsFail(onFail, "empty talker/text");
             return;
         }
         String cid = (clientMsgId == null || clientMsgId.isEmpty())
                 ? ("ai-" + System.currentTimeMillis()) : clientMsgId;
-        startAsyncTts(talker, cid, text.trim(), "AiReply");
+        startAsyncTts(talker, cid, text.trim(), "AiReply", onFail, voiceId);
+    }
+
+    /** TTS 失败/超时时回调回退动作(发送文本)。 */
+    private static void notifyTtsFail(Runnable onFail, String reason) {
+        LogWriter.log(TAG, "TTS 失败回退文本: " + reason);
+        if (onFail == null) return;
+        try {
+            onFail.run();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "TTS onFail 回退异常: " + t);
+        }
     }
 
     private static void startAsyncTts(final String talker, final String clientMsgId,
                                      final String text, final String source) {
+        startAsyncTts(talker, clientMsgId, text, source, null, null);
+    }
+
+    private static void startAsyncTts(final String talker, final String clientMsgId,
+                                     final String text, final String source, final Runnable onFail) {
+        startAsyncTts(talker, clientMsgId, text, source, onFail, null);
+    }
+
+    private static void startAsyncTts(final String talker, final String clientMsgId,
+                                     final String text, final String source, final Runnable onFail,
+                                     final String voiceOverride) {
         sTtsPool.execute(() -> {
             try {
                 LogWriter.log(TAG, "async start: source=" + source + " talker=" + talker
-                        + " cid=" + clientMsgId + " text='" + truncStr(text, 40) + "'");
+                        + " cid=" + clientMsgId + " voice=" + voiceOverride
+                        + " text='" + truncStr(text, 40) + "'");
 
                 boolean useCube = WmPrefs.isTTSCube();
                 LogWriter.log(TAG, "async useCube=" + useCube + " source=" + source);
@@ -716,12 +762,14 @@ public class TtsVoiceSender {
                     }
                     if (sAccPath == null || sClassLoader == null) {
                         LogWriter.log(TAG, "async cube accPath/classLoader null: " + source);
+                        notifyTtsFail(onFail, "cube accPath/classLoader null");
                         return;
                     }
                     String amrPath = buildVoicePath(clientMsgId);
-                    Object[] ttsResult = doCubeTTS(text, amrPath);
+                    Object[] ttsResult = doCubeTTS(text, amrPath, voiceOverride);
                     if (ttsResult == null) {
                         LogWriter.log(TAG, "async cube TTS synth fail: " + source);
+                        notifyTtsFail(onFail, "cube synth fail");
                         return;
                     }
                     int amrSize = (Integer) ttsResult[0];
@@ -729,9 +777,13 @@ public class TtsVoiceSender {
                     LogWriter.log(TAG, "async cube scene send start: dur=" + durationMs);
                     boolean sceneSent = sendViaSceneVoice(talker, amrPath, durationMs);
                     LogWriter.log(TAG, "async cube scene sent=" + sceneSent + " cid=" + clientMsgId);
+                    if (!sceneSent) {
+                        notifyTtsFail(onFail, "cube scene send fail");
+                    }
                 } else {
                     if (!ensureTtsReady()) {
                         LogWriter.log(TAG, "async TTS not ready: " + source);
+                        notifyTtsFail(onFail, "TTS not ready");
                         return;
                     }
                     LogWriter.log(TAG, "async ensureTtsReady OK: " + source);
@@ -740,6 +792,7 @@ public class TtsVoiceSender {
                     Object[] ttsResult = doTTS(text, amrPath);
                     if (ttsResult == null) {
                         LogWriter.log(TAG, "async TTS synth fail: " + source);
+                        notifyTtsFail(onFail, "TTS synth fail");
                         return;
                     }
                     int amrSize = (Integer) ttsResult[0];
@@ -748,9 +801,13 @@ public class TtsVoiceSender {
                     boolean sceneSent = sendViaSceneVoice(talker, amrPath, durationMs);
                     LogWriter.log(TAG, "async scene sent=" + sceneSent + " cid=" + clientMsgId
                             + " bytes=" + amrSize + " dur=" + durationMs);
+                    if (!sceneSent) {
+                        notifyTtsFail(onFail, "scene send fail");
+                    }
                 }
             } catch (Throwable t) {
                 LogWriter.log(TAG, "async TTS crash: " + t.getClass().getSimpleName() + " " + t.getMessage());
+                notifyTtsFail(onFail, "crash " + t.getClass().getSimpleName());
             }
         });
     }
@@ -3185,9 +3242,15 @@ public class TtsVoiceSender {
     // ========== 配音魔方 TTS (Cube) ==========
 
     private static Object[] doCubeTTS(String text, String outAmrPath) {
+        return doCubeTTS(text, outAmrPath, null);
+    }
+
+    private static Object[] doCubeTTS(String text, String outAmrPath, String voiceOverride) {
         try {
             String apiKey = WmPrefs.getStr("tts_cube_key", "");
-            String voiceId = WmPrefs.getStr("tts_cube_voice", "");
+            String voiceId = (voiceOverride != null && !voiceOverride.trim().isEmpty())
+                    ? voiceOverride.trim()
+                    : WmPrefs.getStr("tts_cube_voice", "");
             if (apiKey.isEmpty() || voiceId.isEmpty()) {
                 LogWriter.log(TAG, "CubeTTS: key or voice empty");
                 return null;
@@ -3337,7 +3400,7 @@ public class TtsVoiceSender {
                 return null;
             }
 
-            latch.await(30, TimeUnit.SECONDS);
+            latch.await(SYNTH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             LogWriter.log(TAG, "synth latch released ok=" + ok[0]);
             if (!ok[0]) {
                 LogWriter.log(TAG, "synth timeout");

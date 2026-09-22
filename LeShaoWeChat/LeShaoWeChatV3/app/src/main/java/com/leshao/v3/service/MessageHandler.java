@@ -184,22 +184,6 @@ public class MessageHandler {
             handleLocation(content);
             return;
         }
-        if (content.contains("luckymoney") || content.contains("lucky money")
-                || content.contains("红包")) {
-            if (isGroup)
-                speak(str(mGroupName) + "群正在发红包");
-            else
-                speak(str(mSenderName) + "给你发来一个红包");
-            return;
-        }
-        if (cfg.announceTransfer && (content.contains("transferid") || content.contains("remittance")
-                || content.contains("transfer"))) {
-            if (isGroup)
-                speak(str(mSenderName) + "在" + str(mGroupName) + "群发来转账");
-            else
-                speak(str(mSenderName) + "给你发来转账");
-            return;
-        }
         if (content.contains("<type>57</type>")) {
             handleQuote(content, isGroup);
             return;
@@ -290,25 +274,6 @@ public class MessageHandler {
             case "49": return "链接";
             default:   return "消息";
         }
-    }
-
-    // ========== 红包/转账领取播报 ==========
-
-    public void announceRedPacket(String sender, String chatroom, String wishing, String amount) {
-        String senderName = sender != null ? mNick.resolveDisplayName(sender) : "好友";
-        boolean isGroup = chatroom != null && chatroom.endsWith("@chatroom");
-
-        if (isGroup) {
-            String groupName = mNick.resolveDisplayName(chatroom);
-            speak("成功抢到" + groupName + "群" + senderName + "发的红包，金额" + amount + "元");
-        } else {
-            speak("成功领取" + senderName + "给你的红包，金额" + amount + "元");
-        }
-    }
-
-    public void announceTransfer(String sender, String chatroom, String amount, String desc) {
-        String senderName = sender != null ? mNick.resolveDisplayName(sender) : "好友";
-        speak("成功领取" + senderName + "给你的转账，金额" + amount + "元");
     }
 
     // ========== 工具方法 ==========

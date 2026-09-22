@@ -47,8 +47,6 @@ public class TTSPageView {
     private static final String KEY_ANNOUNCE_IMAGE = "ls_announce_image";
     private static final String KEY_ANNOUNCE_VIDEO = "ls_announce_video";
     private static final String KEY_ANNOUNCE_LOCATION = "ls_announce_location";
-    private static final String KEY_ANNOUNCE_REDBAG = "ls_announce_redbag";
-    private static final String KEY_ANNOUNCE_TRANSFER = "ls_announce_transfer";
     private static final String KEY_ANNOUNCE_CARD = "ls_announce_card";
     private static final String KEY_ANNOUNCE_FILE = "ls_announce_file";
     private static final String KEY_ANNOUNCE_STICKER = "ls_announce_sticker";
@@ -90,8 +88,6 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         boolean announceImage = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_IMAGE, true);
         boolean announceVideo = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_VIDEO, true);
         boolean announceLocation = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_LOCATION, true);
-        boolean announceRedBag = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_REDBAG, true);
-        boolean announceTransfer = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TRANSFER, true);
         boolean announceCard = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_CARD, true);
         boolean announceFile = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_FILE, true);
         boolean announceSticker = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_STICKER, false);
@@ -160,14 +156,6 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         card1.addView(itemDivider(ctx, d));
         card1.addView(switchRow(ctx, d, "\u4f4d\u7f6e\u6d88\u606f\u64ad\u62a5", null, announceLocation, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_LOCATION, on).apply();
-        }));
-        card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "\u7ea2\u5305\u6d88\u606f\u64ad\u62a5", null, announceRedBag, (v, on) -> {
-            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_REDBAG, on).apply();
-        }));
-        card1.addView(itemDivider(ctx, d));
-        card1.addView(switchRow(ctx, d, "\u8f6c\u8d26\u6d88\u606f\u64ad\u62a5", null, announceTransfer, (v, on) -> {
-            if (prefs != null) prefs.edit().putBoolean(KEY_ANNOUNCE_TRANSFER, on).apply();
         }));
         card1.addView(itemDivider(ctx, d));
         card1.addView(switchRow(ctx, d, "\u540d\u7247\u6d88\u606f\u64ad\u62a5", null, announceCard, (v, on) -> {
@@ -1190,17 +1178,26 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
 
     // ===== 音色数据模型 =====
 
-    static class VoiceItem {
-        String voiceId;
-        String group;       // 影视剧名
-        String displayName;  // 角色名
-        String actor;        // 演员
-        VoiceItem(String voiceId, String group, String displayName, String actor) {
+    public static class VoiceItem {
+        public String voiceId;
+        public String group;       // 影视剧名
+        public String displayName;  // 角色名
+        public String actor;        // 演员
+        public VoiceItem(String voiceId, String group, String displayName, String actor) {
             this.voiceId = voiceId;
             this.group = group;
             this.displayName = displayName;
             this.actor = actor;
         }
+    }
+
+    /** v985: 供 AI 助手会话/模板配置复用: 拉取配音魔方全部音色(内置 + 我的)。 */
+    public static java.util.List<VoiceItem> fetchAllVoices(String key) {
+        java.util.List<VoiceItem> all = new java.util.ArrayList<>();
+        if (key == null || key.trim().isEmpty()) return all;
+        all.addAll(fetchBuiltinVoices(key));
+        all.addAll(fetchUserVoices(key));
+        return all;
     }
 
     // ===== API 调用 =====

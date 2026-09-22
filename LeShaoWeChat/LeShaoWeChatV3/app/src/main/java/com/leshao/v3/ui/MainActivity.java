@@ -76,24 +76,23 @@ public class MainActivity {
 
     private static final String[] ITEM_NAMES = {
         "联系人和群聊", "群管理助手", "聊天分组",
-        "TTS语音播报", "红包转账", "数据备份", "通讯录日志"
+        "TTS语音播报", "关于模块"
     };
     private static final int[] ITEM_ICONS = {
         0x1F465, 0x1F6E1, 0x1F4CB,
-        0x1F50A, 0x1F4B0, 0x1F4BE, 0x1F4CB
+        0x1F50A, 0x2139
     };
 
     private static final int[] PAGE_IDS = {
-        3, 4, 14, 8, 9, 12, 13
+        3, 4, 14, 8, 20
     };
 
     private static final Map<Integer, String> PAGE_FEATURES = new HashMap<>();
     static {
         PAGE_FEATURES.put(14, "聊天分组|标签分组|分组管理|标签管理|ChatGroup");
-        PAGE_FEATURES.put(3, "通讯录导出|联系人变更日志|通讯录|联系人|防撤回|消息防撤回|语音转发|语音消息转发");
+        PAGE_FEATURES.put(3, "通讯录导出|通讯录|联系人|防撤回|消息防撤回|语音转发|语音消息转发");
         PAGE_FEATURES.put(8, "语音播报|TTS播报|排版引擎|配音|API|Voice|间隔|熔断|消息类型|免打扰|安静时段|播报参数|音量|语速|音调|TTS|文字消息播报|语音消息播报|图片消息播报|播报发送人昵称|播报群聊消息|截断长文字");
-        PAGE_FEATURES.put(9, "自动抢红包|秒抢|转账收款|私聊红包|群聊红包|时间段过滤|延时抢红包|排除群列|目标群聊|播报金额|关键词过滤");
-        PAGE_FEATURES.put(12, "消息导出|聊天备份|导出聊天|备份数据|查看记录|清除记录|数据备份|导出|自动每日备份|导入外部记录|通讯录变更|变更日志");
+        PAGE_FEATURES.put(20, "关于模块|版本|模块版本|热更新|更新管控|禁止微信热更新|WeChatUpdateBlocker");
     }
 
     public static void open(Activity act) {

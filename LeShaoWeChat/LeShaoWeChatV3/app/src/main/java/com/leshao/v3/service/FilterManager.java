@@ -42,10 +42,6 @@ public class FilterManager {
                 if (content == null) return true;
                 if (content.contains("<location")) return cfg.announceLocation;
                 if (content.contains("<type>57</type>")) return cfg.announceQuote;
-                if (content.contains("luckymoney") || content.contains("lucky money")
-                        || content.contains("红包")) return cfg.announceRedBag;
-                if (content.contains("transferid") || content.contains("remittance")
-                        || content.contains("transfer")) return cfg.announceTransfer;
                 return true;
             case com.leshao.v3.model.WeChatMessage.TYPE_STICKER:
                 return cfg.announceSticker;

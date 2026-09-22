@@ -489,36 +489,6 @@ public class MessageHook {
             }
 
 
-            // 诊断: 对红包/转账特征消息打印 rawType（用于校准当前微信版本的真实类型码）
-            if (RedPacketHook.looksLikeMoneyMessage(content)) {
-                LogWriter.log(TAG, "[RP-DIAG] rawType=" + rawType + " isSend=" + isSend
-                    + " msgId=" + msgId + " talker=" + trunc(talker, 20)
-                    + " content=" + trunc(content, 200));
-            }
-
-            // 红包/转账消息: 不依赖 isSend 判断（收到的红包/转账在入库时 field_isSend 可能为 1 导致误判）
-            // 8.0.78+: 类型码可能漂移, 因此再叠加 content 特征识别（红包 XML 含 hongbao/receivewxhb 等锚点）
-            boolean rpByType = RedPacketHook.isRedPacketType(rawType) || RedPacketHook.isTransferType(rawType);
-            boolean rpByContent = RedPacketHook.looksLikeMoneyMessage(content);
-            if (rpByType || rpByContent) {
-                LogWriter.log(TAG, "RP/TRANSFER x9: rawType=" + rawType + " isSend=" + isSend
-                    + " msgId=" + msgId + " talker=" + trunc(talker, 20)
-                    + " rpByType=" + rpByType + " rpByContent=" + rpByContent
-                    + " contentLen=" + (content == null ? 0 : content.length())
-                    + " contentHead=" + trunc(content, 120));
-                final int rpRawType = rawType;
-                final String rpTalker = talker;
-                final String rpContent = content;
-                final long rpMsgId = msgId;
-                sMainHandler.post(() -> {
-                    try {
-                        RedPacketHook.onIncomingMessage(rpRawType, rpTalker, rpContent, rpMsgId);
-                    } catch (Throwable e) {
-                        LogWriter.log(TAG, "RP notify err: " + e.getMessage());
-                    }
-                });
-            }
-
             if (isSend != 1) {
                 final int fType = type;
                 final String fTalker = talker;

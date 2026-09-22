@@ -11,8 +11,6 @@ public class WeChatMessage {
     public static final int TYPE_STICKER = 47;
     public static final int TYPE_APPMSG = 49;
     public static final int TYPE_VOIP = 50;
-    public static final int TYPE_REDPACKET = 318767153;
-    public static final int TYPE_TRANSFER = 419430449;
 
     public final String talker;
     public final String senderWxid;
@@ -36,8 +34,6 @@ public class WeChatMessage {
     public boolean isVoice() { return type == TYPE_VOICE; }
     public boolean isCard() { return type == TYPE_CARD; }
     public boolean isSticker() { return type == TYPE_STICKER; }
-    public boolean isRedBag() { return type == TYPE_REDPACKET; }
-    public boolean isTransfer() { return type == TYPE_TRANSFER; }
     public boolean isAppMsg() { return type == TYPE_APPMSG; }
     public boolean isVoip() { return type == TYPE_VOIP; }
 

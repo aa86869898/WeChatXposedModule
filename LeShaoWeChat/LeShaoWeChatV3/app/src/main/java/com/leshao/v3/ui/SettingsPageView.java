@@ -18,14 +18,11 @@ import com.leshao.v3.ContactRepository;
 import com.leshao.v3.hook.AntiRecallHook;
 import com.leshao.v3.hook.AntiDetectionHook;
 import com.leshao.v3.hook.FriendRequestHook;
-import com.leshao.v3.hook.RedPacketHook;
 import com.leshao.v3.hook.DeleteDetect;
 import com.leshao.v3.hook.StickyEnhance;
 import com.leshao.v3.hook.UnreadBadge;
 import com.leshao.v3.hook.TabCustom;
 import com.leshao.v3.hook.CallFeatures;
-import com.leshao.v3.hook.MsgExport;
-import com.leshao.v3.hook.ChatBackup;
 import com.leshao.v3.hook.ShakeCustom;
 import com.leshao.v3.model.KeywordRule;
 import com.leshao.v3.model.ModuleConfig;
@@ -61,11 +58,6 @@ public class SettingsPageView {
         cardSecurity.addView(M3Page.switchRow(ctx, "🛡", "防撤回", "拦截消息撤回，保留聊天记录",
                 cfg.antiRecall, (v, on) -> {
                     cfg.antiRecall = on; cfg.save(prefs); AntiRecallHook.setEnabled(on);
-                }));
-        cardSecurity.addView(M3Page.divider(ctx));
-        cardSecurity.addView(M3Page.switchRow(ctx, "🧧", "抢红包", "自动领取微信红包",
-                cfg.redPacketGrab, (v, on) -> {
-                    cfg.redPacketGrab = on; cfg.save(prefs); RedPacketHook.setEnabled(on);
                 }));
         cardSecurity.addView(M3Page.divider(ctx));
         cardSecurity.addView(M3Page.switchRow(ctx, "🥷", "反 Xposed 检测", "隐藏模块特征，防止被检测",
@@ -128,16 +120,6 @@ public class SettingsPageView {
         cardCall.addView(M3Page.divider(ctx));
         cardCall.addView(M3Page.clickRow(ctx, "📞", "通话功能设置", "配置录音与自动接听参数",
                 () -> ConfigPanels.showCallFeatures(act, prefs)));
-        cardCall.addView(M3Page.divider(ctx));
-        cardCall.addView(M3Page.switchRow(ctx, "📤", "消息导出", "导出聊天记录为文本",
-                cfg.msgExportEnabled, (v, on) -> {
-                    cfg.msgExportEnabled = on; cfg.save(prefs); MsgExport.setEnabled(on);
-                }));
-        cardCall.addView(M3Page.divider(ctx));
-        cardCall.addView(M3Page.switchRow(ctx, "💾", "聊天记录备份", "本地备份聊天数据库",
-                cfg.chatBackupEnabled, (v, on) -> {
-                    cfg.chatBackupEnabled = on; cfg.save(prefs); ChatBackup.setEnabled(on);
-                }));
         cardCall.addView(M3Page.divider(ctx));
         cardCall.addView(M3Page.switchRow(ctx, "📳", "摇一摇自定义", "自定义摇一摇触发动作",
                 cfg.shakeCustomEnabled, (v, on) -> {

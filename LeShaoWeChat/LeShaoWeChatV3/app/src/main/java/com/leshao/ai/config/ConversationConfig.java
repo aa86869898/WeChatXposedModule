@@ -38,11 +38,16 @@ public class ConversationConfig {
         public String systemPrompt;
         public String model;
         public Double temperature;
+        /** v985: 本会话/模板可多选的配音魔方音色 voiceId 列表。 */
+        public List<String> voices;
+        /** v985: 多音色随机回复开关: 开=每条随机取 voices 中一个; 关=用第一个/全局。 */
+        public Boolean randomVoice;
 
         public boolean isEmpty() {
             return autoReply == null && onlyWhenMentioned == null && ttsEnabled == null
                     && TextUtils.isEmpty(systemPrompt) && TextUtils.isEmpty(model)
-                    && temperature == null;
+                    && temperature == null
+                    && (voices == null || voices.isEmpty()) && randomVoice == null;
         }
 
         public Entry copy() {
@@ -53,6 +58,8 @@ public class ConversationConfig {
             e.systemPrompt = systemPrompt;
             e.model = model;
             e.temperature = temperature;
+            e.voices = voices == null ? null : new ArrayList<>(voices);
+            e.randomVoice = randomVoice;
             return e;
         }
 
@@ -64,6 +71,14 @@ public class ConversationConfig {
             if (!TextUtils.isEmpty(systemPrompt)) o.put("systemPrompt", systemPrompt);
             if (!TextUtils.isEmpty(model)) o.put("model", model);
             if (temperature != null) o.put("temperature", temperature.doubleValue());
+            if (voices != null && !voices.isEmpty()) {
+                JSONArray arr = new JSONArray();
+                for (String v : voices) {
+                    if (!TextUtils.isEmpty(v)) arr.put(v);
+                }
+                o.put("voices", arr);
+            }
+            if (randomVoice != null) o.put("randomVoice", randomVoice.booleanValue());
             return o;
         }
 
@@ -79,6 +94,18 @@ public class ConversationConfig {
             e.model = o.optString("model", null);
             if (o.has("temperature") && !o.isNull("temperature")) {
                 e.temperature = o.optDouble("temperature");
+            }
+            JSONArray voices = o.optJSONArray("voices");
+            if (voices != null && voices.length() > 0) {
+                List<String> vs = new ArrayList<>();
+                for (int i = 0; i < voices.length(); i++) {
+                    String v = voices.optString(i, null);
+                    if (!TextUtils.isEmpty(v)) vs.add(v);
+                }
+                if (!vs.isEmpty()) e.voices = vs;
+            }
+            if (o.has("randomVoice") && !o.isNull("randomVoice")) {
+                e.randomVoice = o.optBoolean("randomVoice");
             }
             return e;
         }

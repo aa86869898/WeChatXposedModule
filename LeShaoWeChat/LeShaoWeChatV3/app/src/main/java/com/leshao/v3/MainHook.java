@@ -16,13 +16,11 @@ import com.leshao.v3.hook.BatchAddFriend;
 import com.leshao.v3.hook.BatchInviteGroupsHook;
 import com.leshao.v3.hook.BatchMessage;
 import com.leshao.v3.hook.CallFeatures;
-import com.leshao.v3.hook.ChatBackup;
 import com.leshao.v3.hook.ChatFooterEnhance;
 import com.leshao.v3.hook.ChatGroupHook;
 import com.leshao.v3.hook.ChatGroupUiInjector;
 import com.leshao.v3.hook.ChatVoiceSwitchHook;
 import com.leshao.v3.hook.ChatUICustom;
-import com.leshao.v3.hook.ContactChangeLog;
 import com.leshao.v3.hook.ConvPrivacy;
 import com.leshao.v3.hook.DeleteDetect;
 import com.leshao.v3.hook.DexKitHelper;
@@ -36,11 +34,9 @@ import com.leshao.v3.hook.HideContactFields;
 import com.leshao.v3.hook.HookManager;
 import com.leshao.v3.hook.LoginMonitor;
 import com.leshao.v3.hook.MessageHook;
-import com.leshao.v3.hook.MsgExport;
 import com.leshao.v3.hook.WanQunGroupHook;
 import com.leshao.v3.hook.NotifyCustom;
 import com.leshao.v3.hook.PrivacyFeatures;
-import com.leshao.v3.hook.RedPacketHook;
 import com.leshao.v3.hook.SearchEnhance;
 import com.leshao.v3.hook.TtsVoiceSender;
 import com.leshao.v3.hook.ShakeCustom;
@@ -80,11 +76,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v984";
+    public static final String MODULE_BUILD = "v985";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 984;
+    public static final int MODULE_VERSION_CODE = 985;
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -251,7 +247,6 @@ public class MainHook implements IXposedHookLoadPackage {
 
                         safeRun("AntiDetectionHook", () -> AntiDetectionHook.hook(cl));
                         safeRun("AntiRecallHook", () -> HookManager.register("AntiRecallHook", AntiRecallHook::hook));
-                        safeRun("RedPacketHook", () -> HookManager.register("RedPacketHook", RedPacketHook::hook));
                         safeRun("ChatGroupHook", () -> HookManager.register("ChatGroupHook", () -> ChatGroupHook.hook(cl)));
                         safeRun("FriendRequestHook", () -> FriendRequestHook.hook(cl));
 
@@ -280,10 +275,7 @@ public class MainHook implements IXposedHookLoadPackage {
                         safeRun("HideContactFields", () -> HookManager.register("HideContactFields", () -> HideContactFields.hook(cl)));
                         safeRun("ConvPrivacy", () -> HookManager.register("ConvPrivacy", () -> ConvPrivacy.hook(cl)));
 
-                        safeRun("ContactChangeLog", () -> HookManager.register("ContactChangeLog", () -> ContactChangeLog.hook(cl)));
-                        safeRun("MsgExport", () -> HookManager.register("MsgExport", () -> MsgExport.hook(cl)));
                         safeRun("BatchInviteGroups", () -> HookManager.register("BatchInviteGroups", () -> BatchInviteGroupsHook.hook(cl)));
-                        safeRun("ChatBackup", () -> HookManager.register("ChatBackup", () -> ChatBackup.hook(cl)));
                         safeRun("WmEntry", () -> WmEntry.injectAll(cl));
 
                         safeRun("WanQunGroupHook", () -> {

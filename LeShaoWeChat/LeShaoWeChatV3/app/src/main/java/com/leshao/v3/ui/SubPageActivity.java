@@ -153,14 +153,8 @@ public class SubPageActivity {
                 return WxMasterPageView.create(ctx, parentAct);
             case 8:  // TTS语音播报
                 return TTSPageView.create(ctx, parentAct);
-            case 9:  // 红包转账
-                return RedPacketPageView.create(ctx, parentAct);
-            case 12: // 数据备份
-                return DataToolsPageView.create(ctx, parentAct);
-            case 13: // 通讯录更新日志
-                return ContactChangeLogPageView.create(ctx, parentAct);
-            case 91: // 红包转账 > 自动秒抢红包
-                return RedPacketConfigView.create(ctx, parentAct);
+            case 20: // 关于模块
+                return AboutPageView.create(ctx, parentAct);
             case 99: // 个人中心
                 return ProfilePageView.create(ctx, parentAct);
             case 14: // 聊天分组

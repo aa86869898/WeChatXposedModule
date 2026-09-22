@@ -36,14 +36,6 @@ public class ContactGroupPageView {
         root.setBackground(CandyUi.pageGradient());
         root.setPadding((int)(16 * d), (int)(16 * d), (int)(16 * d), (int)(16 * d));
 
-        LinearLayout cardContact = makeCard(ctx, d);
-        cardContact.addView(switchRow(ctx, d, "联系人变更日志", null, cfg.contactChangeLogEnabled, (v, on) -> {
-            cfg.contactChangeLogEnabled = on; cfg.save(prefs); ContactChangeLog.setEnabled(on);
-        }, v -> SubPageActivity.open(act, "通讯录更新日志", 13)));
-        root.addView(cardContact);
-
-        root.addView(candyDivider(ctx, d));
-
         LinearLayout cardChat = makeCard(ctx, d);
         boolean recallOn = prefs != null && prefs.getBoolean("ls_recall_enabled", false);
         boolean vfOn = prefs != null && prefs.getBoolean("ls_voice_forward", false);

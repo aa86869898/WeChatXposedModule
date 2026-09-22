@@ -136,7 +136,11 @@ public class CornerMenu {
                             sH.postDelayed(() -> {
                                 try {
                                     if (fAct == null || fAct.isFinishing()) return;
-                                    if (hasActiveMenu()) return;
+                                    if (hasActiveMenu()) {
+                                        // v985: 已存在但可能被后加的子视图盖住, 重新置顶保持可见
+                                        bringMenuToFront();
+                                        return;
+                                    }
                                     // v969: 交由 isInChatWindow 复核(可纠正卡死的标志位)
                                     if (isInChatWindow(fAct)) return;
                                     LogWriter.log(TAG, "onResume 兜底注入 hamburger");
@@ -195,7 +199,10 @@ public class CornerMenu {
             String clsName = act.getClass().getName();
             if (!"com.tencent.mm.ui.LauncherUI".equals(clsName)
                     && !"com.tencent.mm.ui.HomeUI".equals(clsName)) return;
-            if (hasActiveMenu()) return;
+            if (hasActiveMenu()) {
+                bringMenuToFront();
+                return;
+            }
             // v969: 不再用 sChatWindowActive 直接拦截, 交给 isInChatWindow 复核
             // (可自动纠正卡死在 true 的标志位, 修复三横菜单偶发不再出现)
             if (isInChatWindow(act)) return;
@@ -512,9 +519,10 @@ public class CornerMenu {
                 return;
             }
             final ViewGroup decor = (ViewGroup) decorV;
-            // 已经挂在当前页面的视图树中: 只恢复可见性, 避免反复增删
+            // 已经挂在当前页面的视图树中: 恢复可见性并置顶, 避免被微信后加的子视图覆盖
             if (sMainIcon != null && sMainIcon.getParent() == decor) {
                 if (sMainIcon.getVisibility() != View.VISIBLE) sMainIcon.setVisibility(View.VISIBLE);
+                try { decor.bringChildToFront(sMainIcon); } catch (Throwable ignored) {}
                 return;
             }
             removeAll();
@@ -543,6 +551,9 @@ public class CornerMenu {
             } catch (Throwable ignored) {}
 
             icon.setOnClickListener(v -> showMenu(v.getContext(), act));
+            // v985: 抬高 Z 序, 避免微信主页后续添加的全屏子视图把三横菜单盖住
+            // (表现为"有时有有时无")。
+            try { icon.setElevation(dp(ctx, 30)); } catch (Throwable ignored) {}
 
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(iconW, iconH);
             lp.gravity = Gravity.TOP | Gravity.LEFT;
@@ -596,6 +607,15 @@ public class CornerMenu {
         if (sMainIcon != null) {
             try { sMainIcon.setVisibility(View.GONE); } catch (Throwable ignored) {}
         }
+    }
+
+    /** 把已注入的三横菜单重新置顶(防止被微信后加的子视图覆盖而"消失") */
+    private static void bringMenuToFront() {
+        try {
+            if (sMainIcon == null) return;
+            android.view.ViewParent p = sMainIcon.getParent();
+            if (p instanceof ViewGroup) ((ViewGroup) p).bringChildToFront(sMainIcon);
+        } catch (Throwable ignored) {}
     }
 
     private static int statusBarHeight(Activity act) {

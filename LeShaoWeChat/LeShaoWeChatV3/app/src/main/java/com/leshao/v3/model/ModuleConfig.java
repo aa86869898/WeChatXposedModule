@@ -19,7 +19,7 @@ public class ModuleConfig {
 
     // 播报类型
     public boolean announceText = true, announceImage = true, announceVideo = true;
-    public boolean announceRedBag = true, announceTransfer = true, announceCard = true;
+    public boolean announceCard = true;
     public boolean announceFile = true, announceLocation = true, announceSticker = false;
     public boolean announceCall = true, announceNickname = true, announceGroup = false;
     public boolean announceQuote = true;
@@ -93,7 +93,6 @@ public class ModuleConfig {
 
     // 安全
     public boolean antiRecall = false;
-    public boolean redPacketGrab = true;
     public boolean recallLogEnabled = false;
     public boolean antiDetection = true;          // 反Xposed/LSPosed检测
 
@@ -120,16 +119,13 @@ public class ModuleConfig {
     // 联系人与群管
     public boolean deleteDetectEnabled = true;
     public boolean contactExportEnabled = true;
-    public boolean contactChangeLogEnabled = true;
 
     // 设置/其他
     public boolean stickyEnhanceEnabled = true;
     public boolean unreadBadgeEnabled = true;
     public boolean tabCustomEnabled = true;
     public boolean callFeaturesEnabled = true;
-    public boolean msgExportEnabled = true;
     public boolean batchInviteGroupsEnabled = true;
-    public boolean chatBackupEnabled = true;
     public boolean shakeCustomEnabled = true;
 
     // 视频解析
@@ -241,8 +237,6 @@ public class ModuleConfig {
         cfg.announceText = prefs.getBoolean("ls_announce_text", true);
         cfg.announceImage = prefs.getBoolean("ls_announce_image", true);
         cfg.announceVideo = prefs.getBoolean("ls_announce_video", true);
-        cfg.announceRedBag = prefs.getBoolean("ls_announce_redbag", true);
-        cfg.announceTransfer = prefs.getBoolean("ls_announce_transfer", true);
         cfg.announceCard = prefs.getBoolean("ls_announce_card", true);
         cfg.announceFile = prefs.getBoolean("ls_announce_file", true);
         cfg.announceLocation = prefs.getBoolean("ls_announce_location", true);
@@ -293,7 +287,6 @@ public class ModuleConfig {
         cfg.deepseekPersona = prefs.getString("ls_ds_persona", "");
 
         cfg.recallLogEnabled = prefs.getBoolean("ls_recall_log", false);
-        cfg.redPacketGrab = prefs.getBoolean("ls_redpacket_enabled", true);
 
         // WeChatPlus 增强功能
         cfg.typingIndicatorEnabled = prefs.getBoolean("ls_wp_typing", true);
@@ -311,14 +304,11 @@ public class ModuleConfig {
         cfg.convPrivacyEnabled = prefs.getBoolean("ls_wp_convprivacy", true);
         cfg.deleteDetectEnabled = prefs.getBoolean("ls_wp_deldetect", true);
         cfg.contactExportEnabled = prefs.getBoolean("ls_wp_contactexp", true);
-        cfg.contactChangeLogEnabled = prefs.getBoolean("ls_wp_contactlog", true);
         cfg.stickyEnhanceEnabled = prefs.getBoolean("ls_wp_sticky", true);
         cfg.unreadBadgeEnabled = prefs.getBoolean("ls_wp_unread", true);
         cfg.tabCustomEnabled = prefs.getBoolean("ls_wp_tabcustom", true);
         cfg.callFeaturesEnabled = prefs.getBoolean("ls_wp_call", true);
-        cfg.msgExportEnabled = prefs.getBoolean("ls_wp_msgexport", true);
         cfg.batchInviteGroupsEnabled = prefs.getBoolean("ls_wp_batchinvitegroups", true);
-        cfg.chatBackupEnabled = prefs.getBoolean("ls_wp_chatbackup", true);
         cfg.shakeCustomEnabled = prefs.getBoolean("ls_wp_shake", true);
         cfg.blockWechatUpdate = prefs.getBoolean("ls_wp_blockupdate", true);
 
@@ -426,8 +416,6 @@ public class ModuleConfig {
         e.putBoolean("ls_announce_text", announceText);
         e.putBoolean("ls_announce_image", announceImage);
         e.putBoolean("ls_announce_video", announceVideo);
-        e.putBoolean("ls_announce_redbag", announceRedBag);
-        e.putBoolean("ls_announce_transfer", announceTransfer);
         e.putBoolean("ls_announce_card", announceCard);
         e.putBoolean("ls_announce_file", announceFile);
         e.putBoolean("ls_announce_location", announceLocation);
@@ -474,7 +462,6 @@ public class ModuleConfig {
         e.putBoolean("ls_recall_enabled", antiRecall);
         e.putBoolean("ls_anti_detection", antiDetection);
         e.putBoolean("ls_recall_log", recallLogEnabled);
-        e.putBoolean("ls_redpacket_enabled", redPacketGrab);
 
         // WeChatPlus 增强功能
         e.putBoolean("ls_wp_typing", typingIndicatorEnabled);
@@ -492,14 +479,11 @@ public class ModuleConfig {
         e.putBoolean("ls_wp_convprivacy", convPrivacyEnabled);
         e.putBoolean("ls_wp_deldetect", deleteDetectEnabled);
         e.putBoolean("ls_wp_contactexp", contactExportEnabled);
-        e.putBoolean("ls_wp_contactlog", contactChangeLogEnabled);
         e.putBoolean("ls_wp_sticky", stickyEnhanceEnabled);
         e.putBoolean("ls_wp_unread", unreadBadgeEnabled);
         e.putBoolean("ls_wp_tabcustom", tabCustomEnabled);
         e.putBoolean("ls_wp_call", callFeaturesEnabled);
-        e.putBoolean("ls_wp_msgexport", msgExportEnabled);
         e.putBoolean("ls_wp_batchinvitegroups", batchInviteGroupsEnabled);
-        e.putBoolean("ls_wp_chatbackup", chatBackupEnabled);
         e.putBoolean("ls_wp_shake", shakeCustomEnabled);
         e.putBoolean("ls_wp_blockupdate", blockWechatUpdate);
 

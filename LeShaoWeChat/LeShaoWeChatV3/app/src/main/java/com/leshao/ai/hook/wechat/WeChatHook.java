@@ -221,6 +221,11 @@ public final class WeChatHook implements IXposedHookLoadPackage {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     try {
+                        // v985: hookAllMethods 会沿继承链 hook 到基类声明的
+                        // onCreateOptionsMenu, 从而波及主页(LauncherUI)等其它 Fragment,
+                        // 导致「AI 助手」菜单项也出现在主页右上角。这里强制校验
+                        // 回调方确为聊天 Fragment 才注入。
+                        if (!fragment.isInstance(param.thisObject)) return;
                         if (param.args[0] instanceof Menu) {
                             injectAiMenu((Menu) param.args[0], param.thisObject);
                         }

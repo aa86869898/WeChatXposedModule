@@ -13,6 +13,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -29,6 +30,8 @@ import com.leshao.ai.util.Whitelist;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
+import com.leshao.v3.ui.TTSPageView;
+import com.leshao.v3.wm.utils.WmPrefs;
 import com.leshao.v3.ui.widgets.ModernButton;
 import com.leshao.v3.ui.widgets.M3Page;
 import com.leshao.v3.ui.widgets.SectionHeader;
@@ -55,6 +58,8 @@ public final class AiAssistantPanel {
     private static final double TEMP_SCALE = 100.0 / 2.0;
     /** 当前打开的弹窗, 用于面板间切换时先关旧窗 */
     private static volatile PopupWindow sPopup;
+    /** v985: 模板编辑草稿, 跨「选择音色」子页面保留未保存改动(新建模板时无正式名可持久化) */
+    private static ConversationConfig.Entry sTemplateDraft;
 
     private AiAssistantPanel() {
     }
@@ -106,144 +111,76 @@ public final class AiAssistantPanel {
             android.content.Context actx = anchor.getContext();
             int panelW = (int) (dm.widthPixels * 0.94f);
 
-            // v971: 计算真实可用显示区。部分 ROM(如 ColorOS)的 getWindowVisibleDisplayFrame
-            // 会返回比物理屏更大的 frame(实测 availH=2659 > 物理屏), 弹窗居中后底部按钮越过
-            // 屏幕下沿被裁掉。这里以物理屏为基准, 并扣除状态栏/导航栏/手势条高度。
-            android.graphics.Rect frame = new android.graphics.Rect();
-            try { anchor.getWindowVisibleDisplayFrame(frame); } catch (Throwable ignored) {}
+            // v985: 可用显示区改为以「物理屏 - 真实系统栏内边距」为准。此前依赖
+            // getWindowVisibleDisplayFrame, 在 ColorOS 上会返回比物理屏更大的 frame, 且
+            // navigation_bar_height 取不到时回退 0, 导致弹窗居中后底部按钮落到屏幕/手势区
+            // 之外被裁掉。现在内边距优先取根窗口 WindowInsets, 并有 48dp 兜底。
             int screenH = dm.heightPixels;
             int insetTop = systemInsetTop(actx);
-            int insetBottom = systemInsetBottom(actx);
-            int availTop = Math.max(0, Math.min(frame.top, screenH));
-            int availBottom = frame.bottom > 0 ? Math.min(frame.bottom, screenH) : screenH;
-            availTop = Math.max(availTop, insetTop);
-            availBottom = Math.min(availBottom, screenH - insetBottom);
-            // frame 明显异常时(高度过小)回退到纯物理屏扣除系统栏
+            int insetBottom = systemInsetBottom(actx, anchor);
+            int availTop = Math.max(0, insetTop);
+            int availBottom = screenH - Math.max(0, insetBottom);
             if (availBottom - availTop < dp(actx, 240)) {
-                availTop = insetTop;
-                availBottom = screenH - insetBottom;
+                availTop = dp(actx, 24);
+                availBottom = screenH - dp(actx, 48);
             }
             int availH = Math.max(dp(actx, 240), availBottom - availTop);
             int margin = dp(actx, 12);
             int maxPanelH = Math.max(dp(actx, 200), availH - margin * 2);
 
-            // v976: PopupWindow 会给内容视图补上默认的 MATCH_PARENT 布局参数, 即便弹窗高度设为
-            // WRAP_CONTENT, 内容也会被撑满整个可用高度, 底部按钮被推到导航栏/手势条下方遮挡。
-            // 这里显式给内容视图 WRAP_CONTENT 高度, 让弹窗真正按内容收缩。
-            try {
-                root.setLayoutParams(new ViewGroup.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        heightPx > 0 ? ViewGroup.LayoutParams.MATCH_PARENT
-                                     : ViewGroup.LayoutParams.WRAP_CONTENT));
-            } catch (Throwable ignored) {}
-
-            PopupWindow pw = new PopupWindow(root, panelW, ViewGroup.LayoutParams.WRAP_CONTENT, true);
-            pw.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            try { pw.setElevation(dp(actx, 8)); } catch (Throwable ignored) {}
-            pw.setOutsideTouchable(true);
-            // v969: 弹窗高度已显式限高, 键盘改用 PAN(整体上移)而非 RESIZE,
-            // 避免 RESIZE 时固定高度内容被裁掉导致底部按钮消失。
-            pw.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN);
-
-            // v976: 内容型面板(heightPx<=0)不再显式 setHeight(实测值)。实机测量与真实布局存在
-            // 细微差异(dp→px 取整), 显式高度会把底部按钮下沿裁掉 1~2px。改为交给 PopupWindow
-            // 按内容自适应(构造时即 WRAP_CONTENT), 预测量仅用于估算高度做居中与溢出收缩。
+            // v985: 面板高度改为「确定值」并让根视图 MATCH_PARENT 填满。
+            // 内容不超限时按内容高度(紧凑); 超限时压缩滚动区后取 maxPanelH,
+            // 由于高度确定, 底部按钮恒定落在可用区内, 不再随内容被推出屏幕。
             boolean wrap = heightPx <= 0;
             int panelH;
-            int targetH = heightPx > 0 ? Math.min(heightPx, maxPanelH) : maxPanelH;
             try {
                 root.measure(View.MeasureSpec.makeMeasureSpec(panelW, View.MeasureSpec.EXACTLY),
-                        View.MeasureSpec.makeMeasureSpec(targetH, View.MeasureSpec.AT_MOST));
+                        View.MeasureSpec.makeMeasureSpec(maxPanelH, View.MeasureSpec.AT_MOST));
                 int measured = root.getMeasuredHeight();
-                // v973: 内容(标题 + 滚动区 + 底部按钮)超出可用高度时, 之前只把滚动区压到上限,
-                // 其余固定子视图仍会把总高撑破 targetH, 导致底部按钮被弹窗下沿裁掉。
-                // 这里把「溢出量」从滚动区上限中扣除后重新测量, 保证底部按钮完整可见。
-                if (measured > targetH) {
+                if (measured > maxPanelH) {
                     CappedScrollView sv = findCappedScroll(root);
                     if (sv != null) {
                         int cur = sv.getMaxHeight();
                         int newCap = Math.max(dp(actx, 100),
-                                (cur > 0 ? cur : targetH) - (measured - targetH));
+                                (cur > 0 ? cur : maxPanelH) - (measured - maxPanelH));
                         sv.setMaxHeight(newCap);
                         root.measure(View.MeasureSpec.makeMeasureSpec(panelW, View.MeasureSpec.EXACTLY),
-                                View.MeasureSpec.makeMeasureSpec(targetH, View.MeasureSpec.AT_MOST));
+                                View.MeasureSpec.makeMeasureSpec(maxPanelH, View.MeasureSpec.AT_MOST));
                         measured = root.getMeasuredHeight();
                     }
                 }
-                panelH = wrap ? Math.max(dp(actx, 120), Math.min(measured, maxPanelH)) : targetH;
+                if (!wrap) {
+                    panelH = Math.min(heightPx, maxPanelH);
+                } else {
+                    // 留 2dp 余量吸收 dp→px 取整误差, 避免底部按钮下沿被裁 1~2px。
+                    int slack = measured < maxPanelH ? dp(actx, 2) : 0;
+                    panelH = Math.min(Math.max(dp(actx, 120), measured + slack), maxPanelH);
+                }
             } catch (Throwable t) {
-                panelH = wrap ? maxPanelH : ViewGroup.LayoutParams.WRAP_CONTENT;
+                panelH = wrap ? maxPanelH : Math.min(heightPx, maxPanelH);
             }
-            if (!wrap && panelH > 0) pw.setHeight(panelH);
+
+            try {
+                root.setLayoutParams(new ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            } catch (Throwable ignored) {}
+
+            PopupWindow pw = new PopupWindow(root, panelW, panelH, true);
+            pw.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            try { pw.setElevation(dp(actx, 8)); } catch (Throwable ignored) {}
+            pw.setOutsideTouchable(true);
+            // 高度已确定且底部按钮在可用区内, 键盘改为压缩滚动区自适应的 RESIZE。
+            pw.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
             sPopup = pw;
             try {
                 int x = Math.max(0, (dm.widthPixels - panelW) / 2);
-                int y = availTop + Math.max(0, (availH - (panelH > 0 ? panelH : maxPanelH)) / 2);
+                int y = availTop + Math.max(0, (availH - panelH) / 2);
                 // 兜底: 保证弹窗下沿不越过可用区下沿(否则底部按钮会被裁掉)
-                if (panelH > 0 && y + panelH > availBottom) {
+                if (y + panelH > availBottom) {
                     y = Math.max(availTop, availBottom - panelH);
                 }
                 pw.showAtLocation(anchor, Gravity.TOP | Gravity.LEFT, x, y);
-                if (wrap) {
-                    // v976/v979: WRAP_CONTENT 面板的真实高度只有布局后才确定。布局完成后:
-                    // ① 打印面板与底部按钮的实际屏幕边界(便于定位遮挡);
-                    // ② 若内容仍超出可用高度, 压缩滚动区后重新布局一次, 保证底部按钮可见;
-                    // ③ 按真实高度重新居中, 并把弹窗高度显式固定为实测真实高度(内容精确贴合, 不再裁切)。
-                    final int fAvailTop = availTop;
-                    final int fAvailBottom = availBottom;
-                    final int fAvailH = availH;
-                    final int fX = x;
-                    final int fPanelW = panelW;
-                    final int[] pass = {0};
-                    root.post(new Runnable() {
-                        @Override public void run() {
-                            try {
-                                int realH = root.getHeight();
-                                if (realH <= 0) return;
-                                int[] rl = new int[2];
-                                root.getLocationOnScreen(rl);
-                                View last = null;
-                                if (root instanceof ViewGroup) {
-                                    ViewGroup rg = (ViewGroup) root;
-                                    if (rg.getChildCount() > 0) {
-                                        last = rg.getChildAt(rg.getChildCount() - 1);
-                                    }
-                                }
-                                int lastTop = -1, lastBottom = -1;
-                                if (last != null) {
-                                    int[] ll = new int[2];
-                                    last.getLocationOnScreen(ll);
-                                    lastTop = ll[1];
-                                    lastBottom = ll[1] + last.getHeight();
-                                }
-                                LogWriter.log(TAG, "showPopup layout: scene=" + scene
-                                        + " realH=" + realH + " rootTop=" + rl[1]
-                                        + " rootBottom=" + (rl[1] + realH)
-                                        + " lastTop=" + lastTop + " lastBottom=" + lastBottom
-                                        + " screenH=" + dm.heightPixels
-                                        + " availTop=" + fAvailTop + " availBottom=" + fAvailBottom
-                                        + " availH=" + fAvailH + " pass=" + pass[0]);
-                                if (realH > fAvailH && pass[0] == 0) {
-                                    CappedScrollView sv = findCappedScroll(root);
-                                    if (sv != null) {
-                                        int cur = sv.getMaxHeight();
-                                        int over = realH - fAvailH + dp(actx, 4);
-                                        sv.setMaxHeight(Math.max(dp(actx, 100),
-                                                (cur > 0 ? cur : realH) - over));
-                                        pass[0]++;
-                                        root.requestLayout();
-                                        root.post(this);
-                                        return;
-                                    }
-                                }
-                                int ny = fAvailTop + Math.max(0, (fAvailH - realH) / 2);
-                                if (ny + realH > fAvailBottom) ny = Math.max(fAvailTop, fAvailBottom - realH);
-                                pw.update(fX, ny, fPanelW, realH);
-                            } catch (Throwable ignored) {}
-                        }
-                    });
-                }
                 LogWriter.log(TAG, "showPopup OK: scene=" + scene + " panelH=" + panelH
                         + " availTop=" + availTop + " availBottom=" + availBottom
                         + " availH=" + availH + " y=" + y);
@@ -271,13 +208,27 @@ public final class AiAssistantPanel {
         return dp(ctx, 24);
     }
 
-    /** 底部系统栏(导航栏/手势条)高度(px), 取不到时回退 0。 */
-    private static int systemInsetBottom(Context ctx) {
+    /** 底部系统栏(导航栏/手势条)高度(px), 优先 WindowInsets, 取不到回退 48dp。 */
+    private static int systemInsetBottom(Context ctx, View anchor) {
+        // 1) 根窗口 WindowInsets: 导航栏/手势条真实高度
+        try {
+            android.view.WindowInsets wi = anchor.getRootWindowInsets();
+            if (wi != null) {
+                int b = wi.getSystemWindowInsetBottom();
+                if (b <= 0) b = wi.getStableInsetBottom();
+                if (b > 0) return b;
+            }
+        } catch (Throwable ignored) {}
+        // 2) 系统资源
         try {
             int id = ctx.getResources().getIdentifier("navigation_bar_height", "dimen", "android");
-            if (id > 0) return ctx.getResources().getDimensionPixelSize(id);
+            if (id > 0) {
+                int h = ctx.getResources().getDimensionPixelSize(id);
+                if (h > 0) return h;
+            }
         } catch (Throwable ignored) {}
-        return 0;
+        // 3) 兜底: 手势/三键导航均至少预留 48dp
+        return dp(ctx, 48);
     }
 
     /** 把模型提供商面板的填写内容持久化(接口地址/密钥/模型/温度)。 */
@@ -954,6 +905,114 @@ public final class AiAssistantPanel {
         list.addView(row);
     }
 
+    /** v985: 会话/模板通用的「音色」区: 多选音色 + 多音色随机开关。 */
+    private static void addVoiceSection(LinearLayout list, Context ctx, final Activity activity,
+                                        final ConversationConfig.Entry entry, final Runnable persist,
+                                        final Runnable onBack) {
+        list.addView(newSection(ctx, "音色", "配音魔方音色, 可多选"));
+        final Switch swRand = makeSwitch(ctx, entry.randomVoice != null && entry.randomVoice);
+        list.addView(newRow(ctx, "🎙", "选择音色", voiceSummary(entry))
+                .arrow(() -> {
+                    dismissCurrent();
+                    showVoicePicker(activity, entry, persist, onBack);
+                }));
+        addSwitchRow(list, ctx, swRand, "🎲", "多音色随机", "开=多选时每条随机取一个");
+        swRand.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            entry.randomVoice = isChecked;
+            if (persist != null) persist.run();
+        });
+    }
+
+    private static String voiceSummary(ConversationConfig.Entry e) {
+        if (e == null || e.voices == null || e.voices.isEmpty()) return "默认音色";
+        if (e.voices.size() == 1) return "已选 1 个: " + e.voices.get(0);
+        return "已选 " + e.voices.size() + " 个音色";
+    }
+
+    /** v985: 配音魔方音色多选页。选中结果写回 entry.voices 并触发 persist。 */
+    private static void showVoicePicker(final Activity activity, final ConversationConfig.Entry entry,
+                                        final Runnable persist, final Runnable onBack) {
+        if (activity == null || activity.isFinishing()) return;
+        final Context ctx = activity;
+        LinearLayout root = newRoot(ctx);
+        root.addView(newTitle(ctx, "选择音色"));
+        final LinearLayout list = new LinearLayout(ctx);
+        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.55f));
+
+        final TextView loading = new TextView(ctx);
+        loading.setText("正在加载配音魔方音色...");
+        loading.setTextSize(13);
+        loading.setTextColor(AppColors.textTertiary());
+        list.addView(loading);
+
+        final java.util.LinkedHashSet<String> selected = new java.util.LinkedHashSet<>();
+        if (entry.voices != null) selected.addAll(entry.voices);
+
+        final Handler h = new Handler(Looper.getMainLooper());
+        final String key = WmPrefs.getStr("tts_cube_key", "");
+        new Thread(() -> {
+            List<TTSPageView.VoiceItem> items;
+            try {
+                items = TTSPageView.fetchAllVoices(key);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "voices load err: " + t);
+                items = new ArrayList<>();
+            }
+            final List<TTSPageView.VoiceItem> fi = items;
+            h.post(() -> {
+                if (activity.isFinishing()) return;
+                list.removeAllViews();
+                if (fi.isEmpty()) {
+                    TextView empty = new TextView(ctx);
+                    empty.setText("未获取到音色, 请先在「TTS 语音」页配置配音魔方 API Key");
+                    empty.setTextSize(13);
+                    empty.setTextColor(AppColors.textTertiary());
+                    list.addView(empty);
+                    return;
+                }
+                for (TTSPageView.VoiceItem vi : fi) {
+                    CheckBox cb = new CheckBox(ctx);
+                    String text = vi.displayName;
+                    if (!TextUtils.isEmpty(vi.group)) text = vi.group + " · " + text;
+                    if (!TextUtils.isEmpty(vi.actor)) text = text + " (配音:" + vi.actor + ")";
+                    cb.setText(text);
+                    cb.setTextColor(AppColors.textPrimary());
+                    cb.setTextSize(14);
+                    cb.setChecked(selected.contains(vi.voiceId));
+                    cb.setPadding(0, dp(ctx, 4), 0, dp(ctx, 4));
+                    cb.setOnCheckedChangeListener((b, on) -> {
+                        if (on) selected.add(vi.voiceId);
+                        else selected.remove(vi.voiceId);
+                    });
+                    list.addView(cb);
+                }
+            });
+        }).start();
+
+        ModernButton btnSave = new ModernButton(ctx, "保存", ModernButton.STYLE_PRIMARY);
+        btnSave.onClick(() -> {
+            entry.voices = new ArrayList<>(selected);
+            if (persist != null) persist.run();
+            dismissCurrent();
+            if (onBack != null) onBack.run();
+        });
+        ModernButton btnClear = new ModernButton(ctx, "清空", ModernButton.STYLE_GHOST);
+        btnClear.onClick(() -> {
+            entry.voices = new ArrayList<>();
+            if (persist != null) persist.run();
+            dismissCurrent();
+            if (onBack != null) onBack.run();
+        });
+        ModernButton btnClose = new ModernButton(ctx, "返回", ModernButton.STYLE_GHOST);
+        btnClose.onClick(() -> {
+            dismissCurrent();
+            if (onBack != null) onBack.run();
+        });
+
+        root.addView(newBtnRow(ctx, btnSave, btnClear, btnClose));
+        showPopup(activity, root, 0, "voicepick");
+    }
+
     private static void showConversationList(final Activity activity, final boolean isGroup) {
         LogWriter.log(TAG, "showConversationList: enter group=" + isGroup);
         if (activity == null || activity.isFinishing()) return;
@@ -1136,6 +1195,10 @@ public final class AiAssistantPanel {
         addSwitchRow(list, ctx, swTts, "🔊", "语音消息发送", "开=转语音发出; 关=发文本");
         final Switch swOnlyF = swOnly;
 
+        addVoiceSection(list, ctx, activity, entry,
+                () -> { cc.put(talker, entry); cc.save(); },
+                () -> showConvEdit(activity, talker, isGroup));
+
         list.addView(newSection(ctx, "人设与模型", "留空表示继承全局"));
         final EditText etSys = M3Page.input(ctx, "人设提示词 (留空 = 全局)");
         etSys.setSingleLine(false);
@@ -1158,6 +1221,8 @@ public final class AiAssistantPanel {
                 out.ttsEnabled = swTts.isChecked();
                 out.systemPrompt = str(etSys).trim();
                 out.model = str(etModel).trim();
+                out.voices = entry.voices == null ? null : new ArrayList<>(entry.voices);
+                out.randomVoice = entry.randomVoice != null && entry.randomVoice;
                 cc.put(talker, out);
                 cc.save();
                 reload();
@@ -1341,9 +1406,10 @@ public final class AiAssistantPanel {
             toastQuiet(ctx, "AI 核心未初始化");
             return;
         }
-        ConversationConfig.Entry e = originalName != null ? cc.getTemplate(originalName)
-                : new ConversationConfig.Entry();
+        ConversationConfig.Entry e = sTemplateDraft != null ? sTemplateDraft
+                : (originalName != null ? cc.getTemplate(originalName) : new ConversationConfig.Entry());
         if (e == null) e = new ConversationConfig.Entry();
+        sTemplateDraft = e;
 
         LinearLayout root = newRoot(ctx);
         root.addView(newTitle(ctx, originalName == null ? "新建模板" : "编辑模板"));
@@ -1364,6 +1430,10 @@ public final class AiAssistantPanel {
         boolean effTts = e.ttsEnabled != null ? e.ttsEnabled : cfg.isTtsEnabled();
         final Switch swTts = makeSwitch(ctx, effTts);
         addSwitchRow(list, ctx, swTts, "🔊", "语音消息发送", "开=转语音发出; 关=发文本");
+        final ConversationConfig.Entry tplEntry = e;
+
+        addVoiceSection(list, ctx, activity, tplEntry, null,
+                () -> showTemplateEdit(activity, originalName));
 
         list.addView(newSection(ctx, "人设与模型", "留空表示套用后继承全局"));
         final EditText etSys = M3Page.input(ctx, "人设提示词 (可留空)");
@@ -1394,6 +1464,8 @@ public final class AiAssistantPanel {
                 out.ttsEnabled = swTts.isChecked();
                 out.systemPrompt = str(etSys).trim();
                 out.model = str(etModel).trim();
+                out.voices = tplEntry.voices == null ? null : new ArrayList<>(tplEntry.voices);
+                out.randomVoice = tplEntry.randomVoice != null && tplEntry.randomVoice;
                 cc.putTemplate(name, out);
                 cc.save();
                 reload();
@@ -1402,6 +1474,7 @@ public final class AiAssistantPanel {
                 LogWriter.log(TAG, "template save err: " + t);
                 toastQuiet(ctx, "保存失败");
             }
+            sTemplateDraft = null;
             dismissCurrent();
             showTemplateList(activity);
         });
@@ -1420,12 +1493,14 @@ public final class AiAssistantPanel {
             } catch (Throwable t) {
                 LogWriter.log(TAG, "template del err: " + t);
             }
+            sTemplateDraft = null;
             dismissCurrent();
             showTemplateList(activity);
         });
 
         ModernButton btnClose = new ModernButton(ctx, "返回", ModernButton.STYLE_GHOST);
         btnClose.onClick(() -> {
+            sTemplateDraft = null;
             dismissCurrent();
             showTemplateList(activity);
         });

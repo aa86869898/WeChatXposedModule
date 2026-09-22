@@ -45,16 +45,16 @@ public class AppConfig {
     private int maxTokens = 800;
     /** 系统提示词（人设）。 */
     private String systemPrompt = "你是一个贴心、幽默的微信AI助手，用中文回答用户问题。";
-    /** 是否把 AI 回复转成语音消息发出。默认开。 */
-    private boolean ttsEnabled = true;
+    /** 是否把 AI 回复转成语音消息发出。默认关。 */
+    private boolean ttsEnabled = false;
     /** 机器人名字，如 小乐。 */
     private String botName = "小乐";
     /** 唤醒关键词（触发 AI 的关键词）。 */
     private String wakeKeyword = "";
-    /** 是否在群聊中自动回复。 */
-    private boolean autoReplyInGroups = true;
-    /** 是否在私聊中自动回复。 */
-    private boolean autoReplyInPrivate = true;
+    /** 是否在群聊中自动回复。默认关。 */
+    private boolean autoReplyInGroups = false;
+    /** 是否在私聊中自动回复。默认关。 */
+    private boolean autoReplyInPrivate = false;
     /** 是否仅在 @机器人/提到机器名 时回复。 */
     private boolean onlyWhenMentioned = false;
     /** 记忆保留的最大历史消息条数（环形上限）。 */
@@ -172,11 +172,11 @@ public class AppConfig {
         temperature = 0.7;
         maxTokens = 800;
         systemPrompt = "你是一个贴心、幽默的微信AI助手，用中文回答用户问题。";
-        ttsEnabled = true;
+        ttsEnabled = false;
         botName = "小乐";
         wakeKeyword = "";
-        autoReplyInGroups = true;
-        autoReplyInPrivate = true;
+        autoReplyInGroups = false;
+        autoReplyInPrivate = false;
         onlyWhenMentioned = false;
         maxHistoryMessages = 50;
     }

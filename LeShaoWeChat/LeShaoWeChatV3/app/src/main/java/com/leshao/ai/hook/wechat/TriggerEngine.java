@@ -103,6 +103,18 @@ public final class TriggerEngine {
             final ConversationConfig.Entry over = ov;
             final boolean tts = (ov != null && ov.ttsEnabled != null)
                     ? ov.ttsEnabled.booleanValue() : c.isTtsEnabled();
+            // v985: 会话/模板多音色: 开启随机时每条从音色列表随机取一个, 否则用列表首个。
+            String voiceOverride = null;
+            if (ov != null && ov.voices != null && !ov.voices.isEmpty()) {
+                boolean random = ov.randomVoice != null && ov.randomVoice.booleanValue();
+                if (random && ov.voices.size() > 1) {
+                    voiceOverride = ov.voices.get(
+                            new java.util.Random().nextInt(ov.voices.size()));
+                } else {
+                    voiceOverride = ov.voices.get(0);
+                }
+            }
+            final String voiceFinal = voiceOverride;
             Log.i(TAG, "触发 AI: talker=" + talker + " group=" + isGroup
                     + " sender=" + sender + " len=" + body.length());
             AIBotCore.ask(talker, incoming, "", over, new AIBotCore.ResultCallback() {
@@ -115,7 +127,14 @@ public final class TriggerEngine {
                         if (tts) {
                             String cid = "ai-" + System.currentTimeMillis();
                             Log.i(TAG, "AI 回复走语音消息 talker=" + talker + " cid=" + cid);
-                            TtsVoiceSender.sendAiReplyAsVoice(talker, reply, cid);
+                            // v985: 语音合成/发送失败或超时时自动回退发文本, 避免"AI 没回复"。
+                            TtsVoiceSender.sendAiReplyAsVoice(talker, reply, cid, voiceFinal, () -> {
+                                try {
+                                    WeChatMessenger.sendText(talker, SendGuard.mark(reply), cl);
+                                } catch (Throwable t2) {
+                                    Log.w(TAG, "AI 文本回退失败: " + t2);
+                                }
+                            });
                         } else {
                             WeChatMessenger.sendText(talker, SendGuard.mark(reply), cl);
                         }
