@@ -274,7 +274,8 @@ public final class AiAssistantPanel {
         // v968: 左右边距收紧(原 20dp), 让右侧开关等尾部控件更贴边不局促
         // v971: 底部内边距加大, 让底部按钮不贴边
         // v974: 底部内边距 16 -> 18dp, 底部栏按钮距对话窗下沿再加 2dp
-        root.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 12), dp(ctx, 18));
+        // v978: 底部内边距 18 -> 21dp, 底部按钮下沿再多留 3dp(窗口整体高 3dp)
+        root.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 12), dp(ctx, 21));
         return root;
     }
 
