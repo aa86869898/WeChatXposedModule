@@ -16,8 +16,12 @@
 <body>
     <h1>LeShaoWeChat 模块下载</h1>
     <p>微信 8.0.78(3180) 适配版。下载 APK 后到 LSPosed 管理器中激活并重启微信。</p>
+    <a class="apk" href="LeShaoWeChat-v971.apk">
+        最新版 LeShaoWeChat-v971.apk
+        <div class="meta">v971 · 密钥与弹窗显示修复: ① 修复「正确密钥仍报 401」: 强化密钥清理, 自动剔除从网页复制带入的不可见字符(零宽空格 U+200B/U+FEFF、不换行空格 U+00A0 等)、首尾引号/空格与误粘贴的 Bearer 前缀, 仅保留 sk- 等合法 token 字符, 并在日志中脱敏打印密钥(保留首3末4)便于核对 ② 「获取模型」失败给出可操作中文提示: 401 提示重新生成并完整粘贴 Key, 403 提示开通模型权限, 404 提示检查接口地址 ③ 修复 AI 助手弹窗底部按钮被屏幕下沿裁掉: 以物理屏高度为基准并扣除状态栏/导航栏(手势条)高度计算可用区, 增加兜底下沿保护, 各界面底部按钮均完整显示</div>
+    </a>
     <a class="apk" href="LeShaoWeChat-v970.apk">
-        最新版 LeShaoWeChat-v970.apk
+        上一版 LeShaoWeChat-v970.apk
         <div class="meta">v970 · 模型提供商修复与优化: ① 修复接口地址重复 /v1 导致请求失败的问题(接口地址填 https://api.deepseek.com 或 https://api.deepseek.com/v1 均可, 统一规范化拼接, 不再出现 /v1/v1) ② 「获取模型」增强: 自动去除密钥首尾空格与误粘贴的 Bearer 前缀, 先请求 /v1/models, 端点不存在时回退 /models, 失败提示附带端点与服务器原始返回便于排查(如 401 会显示服务端说明) ③ 接口地址 / 模型名称默认留空, 由用户填写(不再内置 OpenAI 默认值) ④ 全部配置持久化: 点「获取模型」或选择某个模型即自动保存接口地址/密钥/模型/温度, 无需再点保存 ⑤ 未填写接口地址或模型名称时给出明确提示, 不再发起无效请求</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v969.apk">

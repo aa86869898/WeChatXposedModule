@@ -106,13 +106,26 @@ public final class AiAssistantPanel {
             android.content.Context actx = anchor.getContext();
             int panelW = (int) (dm.widthPixels * 0.94f);
 
-            // v969: 按“可见显示区”(排除状态栏/导航栏/手势条)计算可用高度并据此限高,
-            // 避免弹窗居中后底部按钮被屏幕边缘或导航栏遮挡(表现为下半部分显示不全)。
+            // v971: 计算真实可用显示区。部分 ROM(如 ColorOS)的 getWindowVisibleDisplayFrame
+            // 会返回比物理屏更大的 frame(实测 availH=2659 > 物理屏), 弹窗居中后底部按钮越过
+            // 屏幕下沿被裁掉。这里以物理屏为基准, 并扣除状态栏/导航栏/手势条高度。
             android.graphics.Rect frame = new android.graphics.Rect();
             try { anchor.getWindowVisibleDisplayFrame(frame); } catch (Throwable ignored) {}
-            int availH = frame.height() > 0 ? frame.height() : dm.heightPixels;
+            int screenH = dm.heightPixels;
+            int insetTop = systemInsetTop(actx);
+            int insetBottom = systemInsetBottom(actx);
+            int availTop = Math.max(0, Math.min(frame.top, screenH));
+            int availBottom = frame.bottom > 0 ? Math.min(frame.bottom, screenH) : screenH;
+            availTop = Math.max(availTop, insetTop);
+            availBottom = Math.min(availBottom, screenH - insetBottom);
+            // frame 明显异常时(高度过小)回退到纯物理屏扣除系统栏
+            if (availBottom - availTop < dp(actx, 240)) {
+                availTop = insetTop;
+                availBottom = screenH - insetBottom;
+            }
+            int availH = Math.max(dp(actx, 240), availBottom - availTop);
             int margin = dp(actx, 12);
-            int maxPanelH = Math.max(dp(actx, 240), availH - margin * 2);
+            int maxPanelH = Math.max(dp(actx, 200), availH - margin * 2);
 
             PopupWindow pw = new PopupWindow(root, panelW, ViewGroup.LayoutParams.WRAP_CONTENT, true);
             pw.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -140,9 +153,14 @@ public final class AiAssistantPanel {
             sPopup = pw;
             try {
                 int x = Math.max(0, (dm.widthPixels - panelW) / 2);
-                int y = frame.top + Math.max(0, (availH - (panelH > 0 ? panelH : maxPanelH)) / 2);
+                int y = availTop + Math.max(0, (availH - (panelH > 0 ? panelH : maxPanelH)) / 2);
+                // 兜底: 保证弹窗下沿不越过可用区下沿(否则底部按钮会被裁掉)
+                if (panelH > 0 && y + panelH > availBottom) {
+                    y = Math.max(availTop, availBottom - panelH);
+                }
                 pw.showAtLocation(anchor, Gravity.TOP | Gravity.LEFT, x, y);
                 LogWriter.log(TAG, "showPopup OK: scene=" + scene + " panelH=" + panelH
+                        + " availTop=" + availTop + " availBottom=" + availBottom
                         + " availH=" + availH + " y=" + y);
             } catch (Throwable t) {
                 sPopup = null;
@@ -157,6 +175,24 @@ public final class AiAssistantPanel {
 
     private static int dp(Context ctx, float v) {
         return (int) (v * ctx.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    /** 状态栏高度(px), 取系统资源, 失败回退 24dp。 */
+    private static int systemInsetTop(Context ctx) {
+        try {
+            int id = ctx.getResources().getIdentifier("status_bar_height", "dimen", "android");
+            if (id > 0) return ctx.getResources().getDimensionPixelSize(id);
+        } catch (Throwable ignored) {}
+        return dp(ctx, 24);
+    }
+
+    /** 底部系统栏(导航栏/手势条)高度(px), 取不到时回退 0。 */
+    private static int systemInsetBottom(Context ctx) {
+        try {
+            int id = ctx.getResources().getIdentifier("navigation_bar_height", "dimen", "android");
+            if (id > 0) return ctx.getResources().getDimensionPixelSize(id);
+        } catch (Throwable ignored) {}
+        return 0;
     }
 
     /** 把模型提供商面板的填写内容持久化(接口地址/密钥/模型/温度)。 */
@@ -191,7 +227,8 @@ public final class AiAssistantPanel {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.dialogBg(ctx));
         // v968: 左右边距收紧(原 20dp), 让右侧开关等尾部控件更贴边不局促
-        root.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 12), dp(ctx, 12));
+        // v971: 底部内边距加大, 让底部按钮不贴边
+        root.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 12), dp(ctx, 16));
         return root;
     }
 
@@ -499,12 +536,23 @@ public final class AiAssistantPanel {
 
         btnFetch.onClick(() -> {
             final String base = str(etBaseUrl).trim();
-            final String key = com.leshao.ai.api.ApiUrl.normalizeKey(str(etApiKey));
+            final String rawKey = str(etApiKey);
+            final String key = com.leshao.ai.api.ApiUrl.normalizeKey(rawKey);
             final String ptype = config.getProviderType();
-            LogWriter.log(TAG, "click(提供商): 获取模型 base=" + base + " keyLen=" + key.length());
+            LogWriter.log(TAG, "click(提供商): 获取模型 base=" + base
+                    + " rawKeyLen=" + rawKey.length() + " cleanKeyLen=" + key.length()
+                    + " key=" + com.leshao.ai.api.ApiUrl.mask(key));
             if (TextUtils.isEmpty(base)) {
                 toastQuiet(ctx, "请先填写接口地址");
                 return;
+            }
+            if (TextUtils.isEmpty(key)) {
+                toastQuiet(ctx, "请先填写 Api Key 密钥");
+                return;
+            }
+            if (rawKey.trim().length() != key.length()) {
+                // 粘贴内容含空格/换行/引号/零宽字符等, 已自动清理
+                toastQuiet(ctx, "密钥含多余字符，已自动清理后再试");
             }
             // 先把当前填写内容持久化, 避免后续丢失
             persistProvider(config, etBaseUrl, etApiKey, etModel, tempRef[0]);
@@ -529,7 +577,7 @@ public final class AiAssistantPanel {
                     btnFetch.setEnabled(true);
                     modelResults.removeAllViews();
                     if (errFinal != null) {
-                        toastQuiet(ctx, "获取失败: " + errFinal);
+                        toastQuiet(ctx, friendlyApiError(errFinal));
                         return;
                     }
                     if (listFinal == null || listFinal.isEmpty()) {
@@ -1437,6 +1485,25 @@ public final class AiAssistantPanel {
 
     private static void updateTempLabel(TextView tv, int progress) {
         tv.setText("温度: " + String.format(Locale.US, "%.1f", progress / TEMP_SCALE));
+    }
+
+    /** 把接口返回的原始错误翻译成用户可操作的中文提示。 */
+    private static String friendlyApiError(String err) {
+        if (err == null) return "获取失败";
+        String low = err.toLowerCase(Locale.US);
+        if (err.contains("401") || low.contains("authentication fails") || low.contains("invalid api key")) {
+            return "密钥无效(401): 请到服务商控制台重新生成 Key 并完整粘贴(勿带空格/换行/隐藏字符)";
+        }
+        if (err.contains("403")) {
+            return "密钥无权限(403): 请确认该 Key 已开通对应模型权限";
+        }
+        if (err.contains("404")) {
+            return "接口地址不对(404): 请检查是否填写了正确的域名(如 https://api.deepseek.com)";
+        }
+        if (low.contains("unknownhost") || low.contains("failed to connect") || low.contains("timeout")) {
+            return "网络连接失败: 请检查网络或接口地址";
+        }
+        return "获取失败: " + err;
     }
 
     /** 解析 providerType 字符串为枚举(兼容 "openai" 别名) */
