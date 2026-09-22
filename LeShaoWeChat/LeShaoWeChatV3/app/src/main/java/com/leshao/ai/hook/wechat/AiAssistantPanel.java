@@ -22,7 +22,6 @@ import android.widget.TextView;
 import com.leshao.ai.api.model.ProviderType;
 import com.leshao.ai.config.AppConfig;
 import com.leshao.ai.util.Whitelist;
-import com.leshao.v3.InstanceManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
@@ -35,13 +34,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * AI 助手弹窗(v962): 微信会话页 ⋮ 菜单点击后在微信进程内展示。
+ * AI 助手弹窗(v964): 微信会话页 ⋮ 菜单点击后在微信进程内展示。
  *
- * <p>v961 用 AlertDialog 在微信进程内显示不可靠(主题/token/触摸不确定性, 实机日志无任何点击痕迹);
- * v962 改用 PopupWindow —— 与 ChatFooterLongPressMenu 音频面板同机制, 微信 3180 实测可显示可交互。
- * 所有入口与按钮均写 LogWriter 日志 + Toast 反馈, 下次实机日志可完整定位点击链路。</p>
- *
- * <p>v962: 白名单删除改两步确认(首次点击标记, 再次点击删除), 防误删。</p>
+ * <p>PopupWindow 展示(v962 起, AlertDialog 在微信 3180 不可靠)。一级窗口放全部功能开关,
+ * 二级「完整设置」只放服务商/接口/人设等配置, 两级内容不重复。TTS 开关语义:
+ * 开=AI 回复转成语音消息发出, 关=直接发文本。</p>
  */
 public final class AiAssistantPanel {
 
@@ -214,10 +211,10 @@ public final class AiAssistantPanel {
                         LogWriter.log(TAG, "click: AI助手总开关 -> " + checked);
                         persist(ctx, config, c -> c.setEnabled(checked), "AI助手已" + (checked ? "开启" : "关闭"));
                     }));
-            list.addView(new SettingRow(ctx, "🔊", "语音播报", "收到消息时朗读AI回复内容")
+            list.addView(new SettingRow(ctx, "🔊", "语音消息发送", "开=AI回复转语音消息发出; 关=直接发文本")
                     .switchOn(config.isTtsEnabled(), (btn, checked) -> {
-                        LogWriter.log(TAG, "click: 语音播报 -> " + checked);
-                        persist(ctx, config, c -> c.setTtsEnabled(checked), "语音播报已" + (checked ? "开启" : "关闭"));
+                        LogWriter.log(TAG, "click: 语音消息发送 -> " + checked);
+                        persist(ctx, config, c -> c.setTtsEnabled(checked), "语音消息发送已" + (checked ? "开启" : "关闭"));
                     }));
             list.addView(new SettingRow(ctx, "👥", "群聊自动回复", "在白名单群内自动回复")
                     .switchOn(config.isAutoReplyInGroups(), (btn, checked) -> {
@@ -234,30 +231,6 @@ public final class AiAssistantPanel {
                         LogWriter.log(TAG, "click: 仅被@时回复 -> " + checked);
                         persist(ctx, config, c -> c.setOnlyWhenMentioned(checked), "已更新@回复规则");
                     }));
-
-            // v962: 实例信息(主微信/分身隔离状态), 与任务2 InstanceManager 联动
-            list.addView(new SectionHeader(ctx, "当前微信实例", "主微信与分身配置互相独立"));
-            try {
-                int userId = InstanceManager.userId();
-                boolean primary = InstanceManager.isPrimary();
-                boolean enabled = InstanceManager.isEnabled();
-                list.addView(new SettingRow(ctx, "🧩", "实例",
-                        primary ? "主微信 (user 0)" : ("系统分身 (user " + userId + ")")));
-                list.addView(new SettingRow(ctx, "⚡", "本实例模块开关",
-                        enabled ? "已开启,重启微信后生效" : "已关闭,重启微信后不再加载")
-                        .switchOn(enabled, (btn, checked) -> {
-                            LogWriter.log(TAG, "click: 实例模块开关 userId=" + userId + " -> " + checked);
-                            try {
-                                InstanceManager.setEnabled(checked);
-                                toastQuiet(ctx, checked ? "本实例已开启(重启生效)" : "本实例已关闭(重启生效)");
-                            } catch (Throwable t) {
-                                LogWriter.log(TAG, "InstanceManager.setEnabled err: " + t);
-                                toastQuiet(ctx, "开关写入失败");
-                            }
-                        }));
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "instance info err: " + t);
-            }
         }
 
         ModernButton btnSettings = new ModernButton(ctx, "完整设置", ModernButton.STYLE_GHOST);
@@ -397,28 +370,8 @@ public final class AiAssistantPanel {
         etSystemPrompt.setText(safe(config.getSystemPrompt()));
         list.addView(etSystemPrompt);
 
-        // ---- 回复策略 ----
-        list.addView(new SectionHeader(ctx, "回复策略", "自动回复与播报"));
-        list.addView(new SettingRow(ctx, "📣", "仅被@时回复", "群聊中只有被提到时才回复")
-                .switchOn(config.isOnlyWhenMentioned(), (btn, checked) -> {
-                    LogWriter.log(TAG, "click(设置页): 仅被@时回复 -> " + checked);
-                    config.setOnlyWhenMentioned(checked);
-                }));
-        list.addView(new SettingRow(ctx, "🔊", "语音播报", "收到消息时朗读AI回复内容")
-                .switchOn(config.isTtsEnabled(), (btn, checked) -> {
-                    LogWriter.log(TAG, "click(设置页): 语音播报 -> " + checked);
-                    config.setTtsEnabled(checked);
-                }));
-        list.addView(new SettingRow(ctx, "👥", "群聊自动回复", "在白名单群内自动回复")
-                .switchOn(config.isAutoReplyInGroups(), (btn, checked) -> {
-                    LogWriter.log(TAG, "click(设置页): 群聊自动回复 -> " + checked);
-                    config.setAutoReplyInGroups(checked);
-                }));
-        list.addView(new SettingRow(ctx, "💬", "私聊自动回复", "对白名单联系人自动回复")
-                .switchOn(config.isAutoReplyInPrivate(), (btn, checked) -> {
-                    LogWriter.log(TAG, "click(设置页): 私聊自动回复 -> " + checked);
-                    config.setAutoReplyInPrivate(checked);
-                }));
+        // ---- 记忆 ----
+        list.addView(new SectionHeader(ctx, "记忆", "上下文消息条数"));
         final EditText etMemory = M3Page.input(ctx, "记忆条数(上下文消息数)");
         etMemory.setText(String.valueOf(config.getMaxHistoryMessages()));
         list.addView(etMemory);

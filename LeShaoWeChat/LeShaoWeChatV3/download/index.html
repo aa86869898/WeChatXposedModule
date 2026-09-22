@@ -16,12 +16,16 @@
 <body>
     <h1>LeShaoWeChat 模块下载</h1>
     <p>微信 8.0.78(3180) 适配版。下载 APK 后到 LSPosed 管理器中激活并重启微信。</p>
+    <a class="apk" href="LeShaoWeChat-v966.apk">
+        最新版 LeShaoWeChat-v966.apk
+        <div class="meta">v966 · 三横菜单两 bug 修复 + 音频转语音 UI 改版: ① CornerMenu.onHiddenChanged 补 thisObject 过滤(该方法声明在 MMFragment 基类, 原先主页任意 tab fragment 的 show 都把 sChatWindowActive 错误置 true, 挡死 self-heal/restore/onResume 兜底全部恢复路径, 表现为按钮消失后须重启微信才恢复) ② 进聊天瞬间(fragment onResume/onHiddenChanged(false))立即移除悬浮按钮, 聊天窗口不再显示三横 ③ 处理选项新增播放图标(位于音频切割与历史记录之间, 点击试播选中音频, 点其它按钮暂停) ④ 历史记录改版: 条目改「勾选-音频名-播放-发送-删除」图标行, 发送/删除文字改图标, 底部操作栏「全选/删除/发送」, 「关闭」改「返回」, 条数不做上限 ⑤ 文案精简: 「请选择需要转换的音频文件」替代音频文件标题, 删处理选项与开始转换标题小字, 开始转换按钮右侧加发送图标 ⑥ LogWriter.init() 移至主进程判定之后, 消除微信子进程重复 STARTUP 日志</div>
+    </a>
     <a class="apk" href="LeShaoWeChat-v965.apk">
-        最新版 LeShaoWeChat-v965.apk
+        上一版 LeShaoWeChat-v965.apk
         <div class="meta">v965 · 系统克隆分身(App-Clone)拦截: ① MainHook.handleLoadPackage 最开头(LogWriter.init 之前)经 InstanceManager.isCloneApp() 判定系统应用克隆分身即直接 return, 分身进程对模块零执行零日志零文件写入(判定走系统 API 动态识别 Profile Group, 不写死任何 userId 数字) ② WeChatHook.install 入口加入相同 isCloneApp 防护, 防其它调用路径绕开主入口 ③ InstanceManager.isEnabled 默认值改回 isPrimary()(对齐微信模块隔离.md 规范: 主微信默认开, 分身默认关) ④ 完整删除从未被调用的 ConfigSync 死代码(主→分身 su prefs 推送)并清理 UnifiedPrefs 相关注释 ⑤ 机主用户(userId=0)与 LSPosed MultiApp 虚拟用户原有全部 Hook 业务逻辑原样保留, MultiApp 用户启停完全由 LSPosed 作用域(安装到用户 xxx)控制</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v964.apk">
-        上一版 LeShaoWeChat-v964.apk
+        历史版本 LeShaoWeChat-v964.apk
         <div class="meta">v964 · 按用户纠正回退 AI 助手并重做三项: ① AI 助手去掉「当前微信实例」(与 AI 无关, 隔离留在主页/InstanceManager); 一级窗口放全部功能开关, 二级完整设置只放服务商/接口/人设/记忆配置, 两级内容不重复 ② TTS 开关改「语音消息发送」(默认开): 开=AI回复合成后以语音消息发出, 关=直接发文本; 不再本地朗读 ③ 音频转语音: 人声增强改为 SettingRow 右侧开关; 「开始转换」进度弹窗改 PopupWindow(原 AlertDialog 把标题当 ProgressBar 强转崩掉被吞, 弹窗永不显示)</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v963.apk">

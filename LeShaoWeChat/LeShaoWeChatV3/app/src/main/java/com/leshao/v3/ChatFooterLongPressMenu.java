@@ -19,6 +19,7 @@ import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -27,7 +28,6 @@ import android.widget.PopupWindow;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.app.AlertDialog;
@@ -51,6 +51,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -72,6 +74,27 @@ public class ChatFooterLongPressMenu {
     private static AlertDialog sHistoryDialog;
     private static float sCutBeginSec;
     private static float sCutEndSec;
+    private static PopupWindow sProgressPopup;
+    private static ProgressBar sProgressBar;
+    private static TextView sProgressPct;
+    private static TextView sProgressLabel;
+
+    // v966: 处理选项播放图标
+    private static MediaPlayer sPanelPlayer;
+    private static ImageView sPanelPlayBtn;
+    private static String sPanelPlayingPath;
+    private static ImageView sHistPlayBtn;
+    // v966: 历史记录勾选状态
+    private static final java.util.Set<Long> sHistorySelected = new java.util.HashSet<>();
+    private static final Map<Long, CheckBox> sHistoryChecks = new HashMap<>();
+    private static TextView sHistorySelectAllBtn;
+    private static boolean sHistoryAllSelected;
+
+    // v966: 自绘图标类型
+    private static final int GLYPH_PLAY = 0;
+    private static final int GLYPH_PAUSE = 1;
+    private static final int GLYPH_SEND = 2;
+    private static final int GLYPH_DELETE = 3;
 
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
@@ -414,7 +437,12 @@ public class ChatFooterLongPressMenu {
         // showAtLocation 的 token 失效/子view冲突等异常已在 showPanel 全量兜底
         try {
             popupWindow.showAtLocation(anchor, Gravity.CENTER, 0, 0);
-            popupWindow.setOnDismissListener(() -> removeLayoutListener());
+            popupWindow.setOnDismissListener(() -> {
+                // v966: 面板关闭时停止试播并释放播放器
+                stopPanelPlayback();
+                sPanelPlayBtn = null;
+                removeLayoutListener();
+            });
         } catch (Throwable t) {
             LogWriter.log(TAG, "showAtLocation FAILED: " + android.util.Log.getStackTraceString(t));
             try {
@@ -434,6 +462,124 @@ public class ChatFooterLongPressMenu {
         sLayoutAnchor = null;
     }
 
+    /** v966: 历史记录底部操作栏按钮等分布局参数 */
+    private static LinearLayout.LayoutParams barLp(Context ctx) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lp.leftMargin = dp(ctx, 4);
+        lp.rightMargin = dp(ctx, 4);
+        return lp;
+    }
+
+    /** v966: 自绘单色矢量小图标(播放/暂停/发送/删除) */
+    private static android.graphics.Bitmap makeGlyphIcon(Context ctx, int type, int sizeDp, int color) {
+        int size = Math.max(dp(ctx, sizeDp), 1);
+        android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(
+                size, size, android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas c = new android.graphics.Canvas(bmp);
+        android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        p.setColor(color);
+        float w = size, h = size;
+        switch (type) {
+            case GLYPH_PLAY: {
+                p.setStyle(android.graphics.Paint.Style.FILL);
+                android.graphics.Path tri = new android.graphics.Path();
+                tri.moveTo(w * 0.28f, h * 0.18f);
+                tri.lineTo(w * 0.84f, h * 0.50f);
+                tri.lineTo(w * 0.28f, h * 0.82f);
+                tri.close();
+                c.drawPath(tri, p);
+                break;
+            }
+            case GLYPH_PAUSE: {
+                p.setStyle(android.graphics.Paint.Style.FILL);
+                c.drawRoundRect(new android.graphics.RectF(w * 0.22f, h * 0.18f, w * 0.40f, h * 0.82f), 2, 2, p);
+                c.drawRoundRect(new android.graphics.RectF(w * 0.60f, h * 0.18f, w * 0.78f, h * 0.82f), 2, 2, p);
+                break;
+            }
+            case GLYPH_SEND: {
+                p.setStyle(android.graphics.Paint.Style.FILL);
+                android.graphics.Path plane = new android.graphics.Path();
+                plane.moveTo(w * 0.08f, h * 0.52f);
+                plane.lineTo(w * 0.92f, h * 0.12f);
+                plane.lineTo(w * 0.56f, h * 0.90f);
+                plane.lineTo(w * 0.42f, h * 0.62f);
+                plane.close();
+                c.drawPath(plane, p);
+                p.setColor(0x88000000 | (color & 0x00FFFFFF));
+                android.graphics.Path fold = new android.graphics.Path();
+                fold.moveTo(w * 0.42f, h * 0.62f);
+                fold.lineTo(w * 0.92f, h * 0.12f);
+                fold.lineTo(w * 0.50f, h * 0.74f);
+                fold.close();
+                c.drawPath(fold, p);
+                break;
+            }
+            case GLYPH_DELETE: {
+                p.setStyle(android.graphics.Paint.Style.STROKE);
+                p.setStrokeWidth(Math.max(size * 0.09f, 1f));
+                p.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+                c.drawLine(w * 0.14f, h * 0.24f, w * 0.86f, h * 0.24f, p);
+                c.drawLine(w * 0.36f, h * 0.13f, w * 0.64f, h * 0.13f, p);
+                c.drawRoundRect(new android.graphics.RectF(w * 0.24f, h * 0.32f, w * 0.76f, h * 0.88f), 3, 3, p);
+                c.drawLine(w * 0.40f, h * 0.46f, w * 0.40f, h * 0.74f, p);
+                c.drawLine(w * 0.60f, h * 0.46f, w * 0.60f, h * 0.74f, p);
+                break;
+            }
+        }
+        return bmp;
+    }
+
+    /** v966: 开始播放指定音频(自动停止现有播放); 返回是否成功 */
+    private static boolean startPanelPlayback(Context ctx, String path) {
+        stopPanelPlayback();
+        try {
+            MediaPlayer mp = new MediaPlayer();
+            mp.setDataSource(path);
+            mp.setOnCompletionListener(m -> stopPanelPlayback());
+            mp.prepare();
+            mp.start();
+            sPanelPlayer = mp;
+            sPanelPlayingPath = path;
+            if (sPanelPlayBtn != null) {
+                sPanelPlayBtn.setImageBitmap(makeGlyphIcon(ctx, GLYPH_PAUSE, 20, AppColors.accent()));
+            }
+            return true;
+        } catch (Throwable t) {
+            stopPanelPlayback();
+            Toast.makeText(ctx, "播放失败: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+            return false;
+        }
+    }
+
+    /** v966: 主面板播放图标点击(播放/暂停当前选中音频) */
+    private static void togglePanelPlayback(Context ctx, String path) {
+        if (sPanelPlayer != null && path != null && path.equals(sPanelPlayingPath)) {
+            stopPanelPlayback();
+            return;
+        }
+        startPanelPlayback(ctx, path);
+    }
+
+    /** v966: 停止试播并恢复播放图标(其它操作按钮点击时调用) */
+    private static void stopPanelPlayback() {
+        if (sPanelPlayer != null) {
+            try { sPanelPlayer.stop(); } catch (Throwable ignored) {}
+            try { sPanelPlayer.release(); } catch (Throwable ignored) {}
+            sPanelPlayer = null;
+        }
+        sPanelPlayingPath = null;
+        if (sPanelPlayBtn != null) {
+            sPanelPlayBtn.setImageBitmap(makeGlyphIcon(
+                    sPanelPlayBtn.getContext(), GLYPH_PLAY, 20, AppColors.accent()));
+        }
+        if (sHistPlayBtn != null) {
+            sHistPlayBtn.setImageBitmap(makeGlyphIcon(
+                    sHistPlayBtn.getContext(), GLYPH_PLAY, 18, AppColors.accent()));
+            sHistPlayBtn = null;
+        }
+    }
+
     private static View createAudioToVoicePanel(Context ctx) {
         int text1 = AppColors.text1();
         int text2 = AppColors.text2();
@@ -450,7 +596,7 @@ public class ChatFooterLongPressMenu {
         panel.setBackgroundColor(0x00000000);
 
         // ===== 分区1: 音频文件(卡片) =====
-        panel.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "音频文件", "选择要转换的音频"));
+        panel.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "请选择需要转换的音频文件"));
         LinearLayout cardFile = com.leshao.v3.ui.widgets.M3Page.card(ctx);
 
         // 文件选择行: [路径文本] [选择]
@@ -499,7 +645,7 @@ public class ChatFooterLongPressMenu {
         panel.addView(cardFile);
 
         // ===== 分区2: 处理选项(卡片) =====
-        panel.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "处理选项", "切割 / 历史 / 音质模式"));
+        panel.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "处理选项"));
         LinearLayout cardOpt = com.leshao.v3.ui.widgets.M3Page.card(ctx);
 
         // 音频切割 / 历史记录 按钮行
@@ -525,6 +671,31 @@ public class ChatFooterLongPressMenu {
         cutLp.rightMargin = p6;
         btnRow.addView(cutBtn, cutLp);
 
+        // v966: 播放图标(位于音频切割与历史记录之间, 点击试播当前选中音频, 再点暂停)
+        final ImageView playIcon = new ImageView(ctx);
+        playIcon.setImageBitmap(makeGlyphIcon(ctx, GLYPH_PLAY, 20, AppColors.accent()));
+        playIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        playIcon.setPadding(dp(ctx, 8), p6, dp(ctx, 8), p6);
+        GradientDrawable playBg = new GradientDrawable();
+        playBg.setColor(AppColors.surfaceContainerHigh());
+        playBg.setStroke(dp(ctx, 1), AppColors.outlineVariant());
+        playBg.setCornerRadius(dp(ctx, 20));
+        playIcon.setBackground(playBg);
+        LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(ctx, 32));
+        playLp.leftMargin = p6;
+        playLp.rightMargin = p6;
+        btnRow.addView(playIcon, playLp);
+        sPanelPlayBtn = playIcon;
+        playIcon.setOnClickListener(pv -> {
+            String p = pathText.getText().toString().trim();
+            if (p.isEmpty() || p.equals("未选择文件")) {
+                Toast.makeText(ctx, "请先选择需要转换的音频文件", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            togglePanelPlayback(ctx, p);
+        });
+
         final TextView historyBtn = new TextView(ctx);
         historyBtn.setText("历史记录");
         historyBtn.setTextSize(12);
@@ -543,12 +714,13 @@ public class ChatFooterLongPressMenu {
         cardOpt.addView(btnRow);
         cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
 
-        // 双模式开关: 人声增强 / 原音还原 (M3 列表行)
-        Switch modeSw = CandyUi.newSwitch(ctx);
-        modeSw.setChecked(WmPrefs.get("voice_enhance", false));
-        modeSw.setOnCheckedChangeListener((b, checked) -> WmPrefs.set("voice_enhance", checked));
-        cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.tailRow(ctx, "🎙", "人声增强",
-                "开启=人声增强链; 关闭=原音还原(默认)", modeSw));
+        // 人声增强: 必须用 SettingRow.switchOn 把开关放右侧, 禁止自定义按钮
+        cardOpt.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "🎙", "人声增强",
+                "开启=人声增强链; 关闭=原音还原(默认)")
+                .switchOn(WmPrefs.get("voice_enhance", false), (b, checked) -> {
+                    LogWriter.log(TAG, "click: 人声增强 -> " + checked);
+                    WmPrefs.set("voice_enhance", checked);
+                }));
         cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
 
         // 进度条(归入选项卡片, M3 主色)
@@ -571,7 +743,7 @@ public class ChatFooterLongPressMenu {
         panel.addView(cardOpt);
 
         // ===== 分区3: 转换(独立卡片 + M3 filled 按钮) =====
-        panel.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "开始转换", "MP3/音频 → 微信语音消息"));
+        // v966: 删除「开始转换」标题及小字, 仅保留按钮(按钮右侧带发送图标)
         LinearLayout cardConv = com.leshao.v3.ui.widgets.M3Page.card(ctx);
         LinearLayout convRow = new LinearLayout(ctx);
         convRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -590,6 +762,14 @@ public class ChatFooterLongPressMenu {
         cvtBg.setColor(AppColors.primary());
         cvtBg.setCornerRadius(dp(ctx, 20));
         convertBtn.setBackground(cvtBg);
+        // v966: 按钮文字右侧加发送图标
+        try {
+            android.graphics.drawable.Drawable sendIc = new android.graphics.drawable.BitmapDrawable(
+                    ctx.getResources(), makeGlyphIcon(ctx, GLYPH_SEND, 16, AppColors.textOnPrimary()));
+            sendIc.setBounds(0, 0, dp(ctx, 16), dp(ctx, 16));
+            convertBtn.setCompoundDrawables(null, null, sendIc, null);
+            convertBtn.setCompoundDrawablePadding(dp(ctx, 6));
+        } catch (Throwable ignored) {}
         LinearLayout.LayoutParams cvtLp = new LinearLayout.LayoutParams(-1, dp(ctx, 44));
         convertBtn.setLayoutParams(cvtLp);
         convRow.addView(convertBtn);
@@ -598,6 +778,7 @@ public class ChatFooterLongPressMenu {
 
         // 事件绑定
         browseBtn.setOnClickListener(v -> {
+            stopPanelPlayback();
             Activity act = getActivityFromContext(ctx);
             if (act == null) {
                 Toast.makeText(ctx, "无法打开文件选择器", Toast.LENGTH_SHORT).show();
@@ -621,6 +802,7 @@ public class ChatFooterLongPressMenu {
         });
 
         cutBtn.setOnClickListener(cutV -> {
+            stopPanelPlayback();
             String mp3Path = pathText.getText().toString().trim();
             if (mp3Path.isEmpty() || mp3Path.equals("未选择文件")) {
                 Toast.makeText(ctx, "请先选择MP3文件", Toast.LENGTH_SHORT).show();
@@ -629,9 +811,13 @@ public class ChatFooterLongPressMenu {
             showCutDialog(ctx, mp3Path, fileNameTv);
         });
 
-        historyBtn.setOnClickListener(histV -> showHistoryDialog(ctx));
+        historyBtn.setOnClickListener(histV -> {
+            stopPanelPlayback();
+            showHistoryDialog(ctx);
+        });
 
         convertBtn.setOnClickListener(v -> {
+            stopPanelPlayback();
             final String mp3Path = pathText.getText().toString().trim();
             if (mp3Path.isEmpty() || mp3Path.equals("未选择文件")) {
                 Toast.makeText(ctx, "请先选择MP3文件", Toast.LENGTH_SHORT).show();
@@ -648,7 +834,9 @@ public class ChatFooterLongPressMenu {
 
             if (popupWindow != null) popupWindow.dismiss();
 
-            // 直接转换: 不再弹出切割/时长设置界面
+            LogWriter.log(TAG, "click: 开始转换 talker=" + finalTalker + " path=" + mp3Path);
+
+            // 直接转换: 先弹进度窗, 再后台转码发送
             final float cutBegin = sCutBeginSec;
             final float cutEnd = sCutEndSec;
             sCutBeginSec = 0;
@@ -692,28 +880,12 @@ public class ChatFooterLongPressMenu {
     private static void transferAndReport(Context ctx, String mp3Path, String talker,
             int splitSeconds, int fakeDurationMs, float cutBeginSec, float cutEndSec) {
         final android.os.Handler h = new android.os.Handler(Looper.getMainLooper());
-        final float d = ctx.getResources().getDisplayMetrics().density;
-
-        final android.widget.ProgressBar[] barHolder = new android.widget.ProgressBar[1];
-        final TextView[] pctHolder = new TextView[1];
-        final TextView[] labelHolder = new TextView[1];
-        final android.app.AlertDialog[] dlgHolder = new android.app.AlertDialog[1];
-
+        final CountDownLatch shown = new CountDownLatch(1);
         h.post(() -> {
-            try {
-                LinearLayout pv = createProgressView(ctx, d);
-                barHolder[0] = (android.widget.ProgressBar) pv.getChildAt(0);
-                pctHolder[0] = (TextView) pv.getChildAt(1);
-                labelHolder[0] = (TextView) pv.getChildAt(2);
-
-                dlgHolder[0] = new android.app.AlertDialog.Builder(ctx)
-                    .setView(pv)
-                    .setCancelable(false)
-                    .create();
-                dlgHolder[0].show();
-                themeAlertDialog(dlgHolder[0]);
-            } catch (Throwable ignored) {}
+            showConvertProgress(ctx);
+            shown.countDown();
         });
+        try { shown.await(2, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
 
         try {
             VoiceHistoryDbHelper db = null;
@@ -732,31 +904,37 @@ public class ChatFooterLongPressMenu {
                     public void onProgress(int current, int total) {
                         h.post(() -> {
                             try {
-                                android.widget.ProgressBar bar = barHolder[0];
-                                TextView pct = pctHolder[0];
-                                TextView label = labelHolder[0];
+                                ProgressBar bar = sProgressBar;
+                                TextView pct = sProgressPct;
+                                TextView label = sProgressLabel;
                                 if (bar == null) return;
                                 if (total == 100) {
                                     bar.setIndeterminate(false);
                                     bar.setMax(100);
                                     bar.setProgress(Math.min(current, 99));
-                                    pct.setText("正在转码 " + Math.min(current, 99) + "%");
-                                    pct.setVisibility(View.VISIBLE);
-                                    label.setText("");
+                                    if (pct != null) {
+                                        pct.setText("正在转码 " + Math.min(current, 99) + "%");
+                                        pct.setVisibility(View.VISIBLE);
+                                    }
+                                    if (label != null) label.setText("");
                                 } else if (total <= 1) {
                                     bar.setIndeterminate(false);
                                     bar.setProgress(bar.getMax());
-                                    pct.setText("转码完成 即将发送");
-                                    pct.setVisibility(View.VISIBLE);
-                                    label.setText("");
+                                    if (pct != null) {
+                                        pct.setText("转码完成 即将发送");
+                                        pct.setVisibility(View.VISIBLE);
+                                    }
+                                    if (label != null) label.setText("");
                                 } else {
                                     bar.setIndeterminate(false);
                                     bar.setMax(total);
                                     bar.setProgress(current);
                                     int percent = total > 0 ? current * 100 / total : 0;
-                                    pct.setText(percent + "%");
-                                    pct.setVisibility(View.VISIBLE);
-                                    label.setText("发送中 (" + current + "/" + total + "段)");
+                                    if (pct != null) {
+                                        pct.setText(percent + "%");
+                                        pct.setVisibility(View.VISIBLE);
+                                    }
+                                    if (label != null) label.setText("发送中 (" + current + "/" + total + "段)");
                                 }
                             } catch (Throwable ignored) {}
                         });
@@ -771,18 +949,12 @@ public class ChatFooterLongPressMenu {
 
             final boolean finalOk = ok;
             h.post(() -> {
-                try {
-                    android.app.AlertDialog dlg = dlgHolder[0];
-                    if (dlg != null) dlg.dismiss();
-                } catch (Throwable ignored) {}
+                dismissConvertProgress();
                 Toast.makeText(ctx, finalOk ? "语音已发送" : "发送失败", Toast.LENGTH_SHORT).show();
             });
         } catch (Throwable t) {
             h.post(() -> {
-                try {
-                    android.app.AlertDialog dlg = dlgHolder[0];
-                    if (dlg != null) dlg.dismiss();
-                } catch (Throwable ignored) {}
+                dismissConvertProgress();
                 Toast.makeText(ctx, "转换失败: " + t.getMessage(), Toast.LENGTH_SHORT).show();
             });
         }
@@ -1264,6 +1436,7 @@ public class ChatFooterLongPressMenu {
 
         float d = ctx.getResources().getDisplayMetrics().density;
         int p12 = (int)(12 * d);
+        int p10 = (int)(10 * d);
         int p8 = (int)(8 * d);
 
         ScrollView scroll = new ScrollView(ctx);
@@ -1288,6 +1461,7 @@ public class ChatFooterLongPressMenu {
             root.addView(empty);
         } else {
             java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault());
+            sHistoryChecks.clear();
 
             for (final VoiceHistoryDbHelper.VoiceHistoryItem item : items) {
                 LinearLayout row = new LinearLayout(ctx);
@@ -1295,12 +1469,27 @@ public class ChatFooterLongPressMenu {
                 row.setPadding(0, p8, 0, p8);
                 row.setGravity(Gravity.CENTER_VERTICAL);
 
+                // v966: 勾选区域(行首)
+                CheckBox cb = new CheckBox(ctx);
+                cb.setChecked(sHistorySelected.contains(item.id));
+                cb.setOnCheckedChangeListener((b, checked) -> {
+                    if (checked) sHistorySelected.add(item.id);
+                    else sHistorySelected.remove(item.id);
+                    sHistoryAllSelected = !items.isEmpty()
+                            && sHistorySelected.size() >= items.size();
+                    if (sHistorySelectAllBtn != null) {
+                        sHistorySelectAllBtn.setText(sHistoryAllSelected ? "全不选" : "全选");
+                    }
+                });
+                row.addView(cb);
+                sHistoryChecks.put(item.id, cb);
+
                 LinearLayout info = new LinearLayout(ctx);
                 info.setOrientation(LinearLayout.VERTICAL);
                 LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(0,
                         ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
 
-                boolean fileExists = new java.io.File(item.filePath).exists();
+                boolean fileExists = new File(item.filePath).exists();
 
                 TextView nameTv = new TextView(ctx);
                 nameTv.setText(item.fileName);
@@ -1321,12 +1510,28 @@ public class ChatFooterLongPressMenu {
                 row.addView(info, infoLp);
 
                 if (fileExists) {
-                    TextView reuseBtn = new TextView(ctx);
-                    reuseBtn.setText("发送");
-                    reuseBtn.setTextSize(11);
-                    reuseBtn.setTextColor(accent);
-                    reuseBtn.setPadding(p8, p8, p8, p8);
-                    reuseBtn.setOnClickListener(reuseV -> {
+                    // v966: 播放图标
+                    final ImageView playIc = new ImageView(ctx);
+                    playIc.setImageBitmap(makeGlyphIcon(ctx, GLYPH_PLAY, 18, AppColors.accent()));
+                    playIc.setPadding(p8, p8, p8, p8);
+                    playIc.setOnClickListener(pv -> {
+                        if (sPanelPlayer != null && item.filePath.equals(sPanelPlayingPath)) {
+                            stopPanelPlayback();
+                            return;
+                        }
+                        if (startPanelPlayback(ctx, item.filePath)) {
+                            playIc.setImageBitmap(makeGlyphIcon(ctx, GLYPH_PAUSE, 18, AppColors.accent()));
+                            sHistPlayBtn = playIc;
+                        }
+                    });
+                    row.addView(playIc);
+
+                    // v966: 发送图标(原「发送」文字)
+                    ImageView sendIc = new ImageView(ctx);
+                    sendIc.setImageBitmap(makeGlyphIcon(ctx, GLYPH_SEND, 18, AppColors.accent()));
+                    sendIc.setPadding(p8, p8, p8, p8);
+                    sendIc.setOnClickListener(reuseV -> {
+                        stopPanelPlayback();
                         dismissHistoryDialog();
                         String talker = item.talker;
                         final String historyFilePath = item.filePath;
@@ -1334,21 +1539,21 @@ public class ChatFooterLongPressMenu {
                         sCutEndSec = 0;
                         new Thread(() -> transferAndReport(ctx, historyFilePath, talker, 0, 1000, 0, 0), "leshao-mp3-send").start();
                     });
-                    row.addView(reuseBtn);
+                    row.addView(sendIc);
                 }
 
-                TextView delBtn = new TextView(ctx);
-                delBtn.setText("删除");
-                delBtn.setTextSize(11);
-                delBtn.setTextColor(AppColors.text3());
-                delBtn.setPadding(p8, p8, p8, p8);
-                delBtn.setOnClickListener(delV -> {
+                // v966: 删除图标(原「删除」文字)
+                ImageView delIc = new ImageView(ctx);
+                delIc.setImageBitmap(makeGlyphIcon(ctx, GLYPH_DELETE, 18, 0xFFB3261E));
+                delIc.setPadding(p8, p8, p8, p8);
+                delIc.setOnClickListener(delV -> {
                     db.deleteById(item.id);
+                    sHistorySelected.remove(item.id);
                     dismissHistoryDialog();
                     if (popupWindow != null) popupWindow.dismiss();
                     showHistoryDialog(ctx);
                 });
-                row.addView(delBtn);
+                row.addView(delIc);
 
                 root.addView(row);
 
@@ -1364,25 +1569,99 @@ public class ChatFooterLongPressMenu {
         root.addView(btnSep);
 
         if (!items.isEmpty()) {
-            TextView clearBtn = new TextView(ctx);
-            clearBtn.setText("清空历史");
-            clearBtn.setTextSize(13);
-            clearBtn.setTextColor(AppColors.text3());
-            clearBtn.setGravity(Gravity.CENTER);
-            clearBtn.setPadding(0, p8, 0, p8);
-            clearBtn.setOnClickListener(clearV -> {
-                db.clearAll();
+            // v966: 底部操作栏(全选 / 删除 / 发送)
+            LinearLayout bar = new LinearLayout(ctx);
+            bar.setOrientation(LinearLayout.HORIZONTAL);
+            bar.setGravity(Gravity.CENTER_VERTICAL);
+
+            sHistorySelectAllBtn = new TextView(ctx);
+            sHistorySelectAllBtn.setText(sHistoryAllSelected ? "全不选" : "全选");
+            sHistorySelectAllBtn.setTextSize(13);
+            sHistorySelectAllBtn.setTextColor(AppColors.primary());
+            sHistorySelectAllBtn.setGravity(Gravity.CENTER);
+            sHistorySelectAllBtn.setPadding(p8, p10, p8, p10);
+            GradientDrawable selBg = new GradientDrawable();
+            selBg.setStroke(1, AppColors.outline());
+            selBg.setCornerRadius(dp(ctx, 20));
+            selBg.setColor(0x00000000);
+            sHistorySelectAllBtn.setBackground(selBg);
+            sHistorySelectAllBtn.setOnClickListener(selV -> {
+                boolean target = !sHistoryAllSelected;
+                for (CheckBox c : sHistoryChecks.values()) c.setChecked(target);
+            });
+            bar.addView(sHistorySelectAllBtn, barLp(ctx));
+
+            TextView barDelBtn = new TextView(ctx);
+            barDelBtn.setText("删除");
+            barDelBtn.setTextSize(13);
+            barDelBtn.setTextColor(0xFFB3261E);
+            barDelBtn.setGravity(Gravity.CENTER);
+            barDelBtn.setPadding(p8, p10, p8, p10);
+            GradientDrawable delBg = new GradientDrawable();
+            delBg.setStroke(1, AppColors.outline());
+            delBg.setCornerRadius(dp(ctx, 20));
+            delBg.setColor(0x00000000);
+            barDelBtn.setBackground(delBg);
+            barDelBtn.setOnClickListener(dv -> {
+                stopPanelPlayback();
+                if (sHistorySelected.isEmpty()) {
+                    Toast.makeText(ctx, "请先勾选记录", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                for (Long id : new ArrayList<>(sHistorySelected)) db.deleteById(id);
+                sHistorySelected.clear();
+                sHistoryAllSelected = false;
                 dismissHistoryDialog();
                 if (popupWindow != null) popupWindow.dismiss();
                 showHistoryDialog(ctx);
             });
-            root.addView(clearBtn);
+            bar.addView(barDelBtn, barLp(ctx));
+
+            TextView barSendBtn = new TextView(ctx);
+            barSendBtn.setText("发送");
+            barSendBtn.setTextSize(13);
+            barSendBtn.setTextColor(AppColors.textOnPrimary());
+            barSendBtn.setGravity(Gravity.CENTER);
+            barSendBtn.setPadding(p8, p10, p8, p10);
+            GradientDrawable sendBg = new GradientDrawable();
+            sendBg.setColor(AppColors.primary());
+            sendBg.setCornerRadius(dp(ctx, 20));
+            barSendBtn.setBackground(sendBg);
+            barSendBtn.setOnClickListener(sv -> {
+                stopPanelPlayback();
+                if (sHistorySelected.isEmpty()) {
+                    Toast.makeText(ctx, "请先勾选记录", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                List<VoiceHistoryDbHelper.VoiceHistoryItem> valid = new ArrayList<>();
+                for (VoiceHistoryDbHelper.VoiceHistoryItem it : items) {
+                    if (sHistorySelected.contains(it.id) && new File(it.filePath).exists()) {
+                        valid.add(it);
+                    }
+                }
+                if (valid.isEmpty()) {
+                    Toast.makeText(ctx, "所选文件已不存在", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                dismissHistoryDialog();
+                if (popupWindow != null) popupWindow.dismiss();
+                sHistorySelected.clear();
+                sHistoryAllSelected = false;
+                new Thread(() -> {
+                    for (VoiceHistoryDbHelper.VoiceHistoryItem it : valid) {
+                        transferAndReport(ctx, it.filePath, it.talker, 0, 1000, 0, 0);
+                    }
+                }, "leshao-mp3-send").start();
+            });
+            bar.addView(barSendBtn, barLp(ctx));
+
+            root.addView(bar);
         }
 
         AlertDialog dialog = new AlertDialog.Builder(ctx)
             .setTitle("历史记录")
             .setView(scroll)
-            .setPositiveButton("关闭", null)
+            .setPositiveButton("返回", null)
             .create();
 
         sHistoryDialog = dialog;
@@ -1444,8 +1723,49 @@ public class ChatFooterLongPressMenu {
         }
     }
 
+    private static void showConvertProgress(Context ctx) {
+        try {
+            dismissConvertProgress();
+            Activity act = getActivityFromContext(ctx);
+            View anchor = null;
+            if (act != null && act.getWindow() != null) {
+                try { anchor = act.getWindow().peekDecorView(); } catch (Throwable ignored) {}
+                if (anchor == null) {
+                    try { anchor = act.findViewById(android.R.id.content); } catch (Throwable ignored) {}
+                }
+            }
+            if (anchor == null) {
+                LogWriter.log(TAG, "showConvertProgress: anchor null");
+                return;
+            }
+            float d = ctx.getResources().getDisplayMetrics().density;
+            LinearLayout pv = createProgressView(ctx, d);
+            int w = (int) (ctx.getResources().getDisplayMetrics().widthPixels * 0.78f);
+            PopupWindow pw = new PopupWindow(pv, w, ViewGroup.LayoutParams.WRAP_CONTENT, false);
+            pw.setBackgroundDrawable(new ColorDrawable(0));
+            try { pw.setElevation(dp(ctx, 8)); } catch (Throwable ignored) {}
+            pw.setOutsideTouchable(false);
+            pw.setFocusable(false);
+            sProgressPopup = pw;
+            pw.showAtLocation(anchor, Gravity.CENTER, 0, 0);
+            LogWriter.log(TAG, "showConvertProgress OK");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "showConvertProgress err: " + android.util.Log.getStackTraceString(t));
+        }
+    }
+
+    private static void dismissConvertProgress() {
+        try {
+            PopupWindow pw = sProgressPopup;
+            sProgressPopup = null;
+            sProgressBar = null;
+            sProgressPct = null;
+            sProgressLabel = null;
+            if (pw != null && pw.isShowing()) pw.dismiss();
+        } catch (Throwable ignored) {}
+    }
+
     private static LinearLayout createProgressView(Context ctx, float d) {
-        // v955 M3: 28dp 圆角对话框 + 主色百分比 + 层级化文案
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
@@ -1462,19 +1782,22 @@ public class ChatFooterLongPressMenu {
         title.setPadding(0, 0, 0, (int)(12 * d));
         root.addView(title);
 
-        android.widget.ProgressBar bar = new android.widget.ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal);
+        ProgressBar bar = new ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal);
         bar.setIndeterminate(true);
-        int barH = (int)(6 * d);
-        bar.setLayoutParams(new LinearLayout.LayoutParams(-1, barH));
+        bar.setMax(100);
+        bar.setLayoutParams(new LinearLayout.LayoutParams(-1, (int)(6 * d)));
         root.addView(bar);
+        sProgressBar = bar;
 
         TextView pct = new TextView(ctx);
+        pct.setText("准备中");
         pct.setTextSize(28);
         pct.setTextColor(AppColors.primary());
         pct.setTypeface(null, android.graphics.Typeface.BOLD);
         pct.setGravity(Gravity.CENTER);
         pct.setPadding(0, (int)(10 * d), 0, 0);
         root.addView(pct);
+        sProgressPct = pct;
 
         TextView label = new TextView(ctx);
         label.setText("正在解码音频...");
@@ -1483,6 +1806,7 @@ public class ChatFooterLongPressMenu {
         label.setGravity(Gravity.CENTER);
         label.setPadding(0, (int)(4 * d), 0, 0);
         root.addView(label);
+        sProgressLabel = label;
 
         return root;
     }

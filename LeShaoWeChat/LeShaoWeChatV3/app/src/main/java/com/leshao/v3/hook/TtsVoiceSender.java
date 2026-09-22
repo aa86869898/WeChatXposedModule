@@ -26,6 +26,7 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -688,6 +689,17 @@ public class TtsVoiceSender {
         return new TtsSendResult(sceneSent, voiceFile.clientMsgId);
     }
 
+    /** AI 回复转语音消息发出(异步)。失败只记日志, 由调用方决定是否回退发文本。 */
+    public static void sendAiReplyAsVoice(String talker, String text, String clientMsgId) {
+        if (talker == null || talker.isEmpty() || text == null || text.trim().isEmpty()) {
+            LogWriter.log(TAG, "sendAiReplyAsVoice skip: empty talker/text");
+            return;
+        }
+        String cid = (clientMsgId == null || clientMsgId.isEmpty())
+                ? ("ai-" + System.currentTimeMillis()) : clientMsgId;
+        startAsyncTts(talker, cid, text.trim(), "AiReply");
+    }
+
     private static void startAsyncTts(final String talker, final String clientMsgId,
                                      final String text, final String source) {
         sTtsPool.execute(() -> {
@@ -1082,52 +1094,104 @@ public class TtsVoiceSender {
         try {
             checkCoroutineSuspended(cl);
             final Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
-            java.lang.reflect.Method target = null;
-            for (java.lang.reflect.Method m : a21o.getDeclaredMethods()) {
-                if (!m.getName().equals("i")) continue;
-                target = m;
-                break;
+            // v963: 实机 dump a21.o 仅 Object invoke() — Kotlin lambda stub, 真正方法在外层 a21
+            // 或同包其它类。先认 stub, 再扩到 enclosing / 同包 / DexKit a21* 候选。
+            List<Class<?>> searchClasses = new ArrayList<>();
+            searchClasses.add(a21o);
+            Class<?> enclosing = a21o.getEnclosingClass();
+            if (enclosing != null) {
+                searchClasses.add(enclosing);
+                LogWriter.log(TAG, "hookA21Oi: enclosing=" + enclosing.getName());
             }
-            if (target == null) {
-                // v957: 3180 方法名再混淆, 按签名兜底: >=2 参数, 第2参数类型含 b 字段(e9 载体)
-                // v962: 放宽为沿继承链找字段 b / 字段类型为 e9 / 参数类型即 e9, 覆盖字段被上提基类的情况
-                for (java.lang.reflect.Method m : a21o.getDeclaredMethods()) {
-                    if (m.getParameterCount() < 2) continue;
-                    if (m.getReturnType().isPrimitive()) continue;
+            String pkg = a21o.getName();
+            int lastDot = pkg.lastIndexOf('.');
+            if (lastDot > 0) {
+                String pkgName = pkg.substring(0, lastDot);
+                String outerSimple = pkgName.substring(pkgName.lastIndexOf('.') + 1);
+                if (outerSimple.length() <= 4) {
                     try {
-                        Class<?> p1 = m.getParameterTypes()[1];
-                        boolean match = false;
-                        for (Class<?> c = p1; c != null && c != Object.class && !match; c = c.getSuperclass()) {
-                            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
-                                if ("b".equals(f.getName())
-                                        || (e9Class != null && f.getType() == e9Class)) {
-                                    match = true;
-                                    break;
-                                }
-                            }
+                        Class<?> outer = XposedHelpers.findClass(pkgName, cl);
+                        if (!searchClasses.contains(outer)) {
+                            searchClasses.add(outer);
+                            LogWriter.log(TAG, "hookA21Oi: outer pkg class=" + outer.getName());
                         }
-                        if (!match && e9Class != null && e9Class.isAssignableFrom(p1)) match = true;
-                        if (!match) continue;
-                        target = m;
-                        LogWriter.log(TAG, "hookA21Oi: i 方法改名, 签名兜底命中: " + m.getName()
-                                + "(" + m.getParameterCount() + " args)");
-                        break;
                     } catch (Throwable ignored) {}
                 }
+                List<String> a21Classes = DexKitHelper.findClassesByString(cl, pkgName);
+                int added = 0;
+                for (String cn : a21Classes) {
+                    if (cn == null || !cn.startsWith(pkgName)) continue;
+                    try {
+                        Class<?> c = XposedHelpers.findClass(cn, cl);
+                        if (!searchClasses.contains(c)) {
+                            searchClasses.add(c);
+                            added++;
+                            if (added >= 24) break;
+                        }
+                    } catch (Throwable ignored) {}
+                }
+                if (added > 0) LogWriter.log(TAG, "hookA21Oi: +DexKit siblings=" + added);
+            }
+            java.lang.reflect.Method target = null;
+            String hitHint = null;
+            for (Class<?> cls : searchClasses) {
+                for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+                    if (!m.getName().equals("i")) continue;
+                    if (m.getParameterCount() < 1) continue;
+                    target = m;
+                    a21o = cls;
+                    hitHint = "name=i class=" + cls.getName();
+                    break;
+                }
+                if (target != null) break;
             }
             if (target == null) {
-                // v962: 仍未命中, 输出候选类全部方法签名, 便于下次实机日志精确定位
-                StringBuilder dump = new StringBuilder("Hook a21.o.i: method not found, class="
-                        + a21o.getName() + " methods:");
-                for (java.lang.reflect.Method m : a21o.getDeclaredMethods()) {
-                    dump.append("\n  ").append(m.getReturnType().getSimpleName()).append(' ')
-                        .append(m.getName()).append('(');
-                    Class<?>[] pts = m.getParameterTypes();
-                    for (int i = 0; i < pts.length; i++) {
-                        if (i > 0) dump.append(',');
-                        dump.append(pts[i].getSimpleName());
+                for (Class<?> cls : searchClasses) {
+                    for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+                        if (m.getParameterCount() < 2) continue;
+                        if (m.getReturnType().isPrimitive()) continue;
+                        try {
+                            Class<?>[] pts = m.getParameterTypes();
+                            boolean match = false;
+                            for (Class<?> p : pts) {
+                                if (e9Class != null && e9Class.isAssignableFrom(p)) { match = true; break; }
+                                for (Class<?> c = p; c != null && c != Object.class && !match; c = c.getSuperclass()) {
+                                    for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                                        if ("b".equals(f.getName())
+                                                || (e9Class != null && f.getType() == e9Class)) {
+                                            match = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if (!match) continue;
+                            target = m;
+                            a21o = cls;
+                            hitHint = "sig class=" + cls.getName() + " " + m.getName()
+                                    + "(" + m.getParameterCount() + ")";
+                            break;
+                        } catch (Throwable ignored) {}
                     }
-                    dump.append(')');
+                    if (target != null) break;
+                }
+            }
+            if (hitHint != null) LogWriter.log(TAG, "hookA21Oi: 命中 " + hitHint);
+            if (target == null) {
+                StringBuilder dump = new StringBuilder("Hook a21.o.i: method not found, searched=")
+                        .append(searchClasses.size()).append(" classes:");
+                for (Class<?> cls : searchClasses) {
+                    dump.append("\n  class=").append(cls.getName());
+                    for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+                        dump.append("\n    ").append(m.getReturnType().getSimpleName()).append(' ')
+                            .append(m.getName()).append('(');
+                        Class<?>[] pts = m.getParameterTypes();
+                        for (int i = 0; i < pts.length; i++) {
+                            if (i > 0) dump.append(',');
+                            dump.append(pts[i].getSimpleName());
+                        }
+                        dump.append(')');
+                    }
                 }
                 LogWriter.log(TAG, dump.toString());
                 return;

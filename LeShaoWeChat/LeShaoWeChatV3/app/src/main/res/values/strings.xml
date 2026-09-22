@@ -37,7 +37,7 @@
     <string name="desc_at_trigger">仅在 @机器人或提及机器人名字时回复</string>
     <string name="label_manage_whitelist">管理白名单</string>
     <string name="btn_manage_whitelist">已添加 %1$d 个联系人</string>
-    <string name="label_tts">TTS 语音回复</string>
+    <string name="label_tts">语音消息发送</string>
     <string name="label_auto_group">群聊自动回复</string>
     <string name="label_auto_private">私聊自动回复</string>
     <string name="label_memory_count">记忆条数</string>

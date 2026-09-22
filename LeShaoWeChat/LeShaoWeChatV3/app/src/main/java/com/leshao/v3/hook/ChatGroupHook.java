@@ -157,74 +157,58 @@ public class ChatGroupHook {
             }
             sJ1Class = j1;
 
-            // Find contact storage via DexKit result first
-            Class<?> sc4 = null;
-            String dexKitContactStorage = DexKitHelper.getContactStorageClass();
-            if (dexKitContactStorage != null) {
-                try {
-                    sc4 = XposedHelpers.findClass(dexKitContactStorage, cl);
-                    LogWriter.log(TAG, "initCoreServices: contact storage via DexKit: " + dexKitContactStorage);
-                } catch (Throwable ignored) {}
-            }
-            if (sc4 == null) {
-                // v955: 服务接口类经调用特征定位 — j1.v/s(Class) 的实参类型即存储服务接口。
-                // 遍历 DexKit 检索到的 j1 定位方法, 用其参数中的 Class 字面量调用方反查不可行,
-                // 此处按项目既有约定保留 tn3.c4 现行接口候选(3180 dex 实证), 旧版 sh3.c4 兜底。
-                for (String cn : new String[]{"tn3.c4", "sh3.c4"}) {
-                    try { sc4 = XposedHelpers.findClass(cn, cl); break; } catch (Throwable ignored) {}
-                }
-            }
-            if (sc4 == null) {
-                // Fallback: search for ij() returning long
-                try {
-                    List<String> storageCandidates = DexKitHelper.findClassesByString(cl, "storage");
-                    for (String cn : storageCandidates) {
-                        try {
-                            Class<?> c = XposedHelpers.findClass(cn, cl);
-                            for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
-                                if ("ij".equals(m.getName()) && m.getParameterCount() == 0) {
-                                    sc4 = c;
-                                    LogWriter.log(TAG, "initCoreServices: contact storage via fallback: " + cn);
-                                    break;
-                                }
-                            }
-                            if (sc4 != null) break;
-                        } catch (Throwable ignored) {}
-                    }
-                } catch (Throwable ignored) {}
-            }
-            if (sc4 == null) {
-                LogWriter.log(TAG, "initCoreServices: contact storage not found");
-                return false;
-            }
-
-            // v955: 3180 服务定位方法是 v(Class), 旧版 s(Class) 兜底
+            // v963: j1.v 必须传 IM 服务接口(tn3.c4/sh3.c4), 不能传 DexKit 扫到的实现类 e32.a
+            // 实机 v962: DexKit=e32.a, j1.v(e32.a)=null, 接口 f32.r 无 ij() 被跳过
+            // 正确链路(BatchAddFriend/BatchInvite 实证): j1.v(tn3.c4) -> h2 -> cj() -> j4
             Object svc = null;
-            for (String mn : new String[]{"v", "s"}) {
+            Class<?> imIface = null;
+            for (String cn : new String[]{"tn3.c4", "sh3.c4"}) {
                 try {
-                    svc = XposedHelpers.callStaticMethod(j1, mn, sc4);
-                    if (svc != null) break;
+                    imIface = XposedHelpers.findClass(cn, cl);
+                    LogWriter.log(TAG, "initCoreServices: IM iface=" + cn);
+                    break;
                 } catch (Throwable ignored) {}
+            }
+            if (imIface != null) {
+                for (String mn : new String[]{"v", "s"}) {
+                    try {
+                        Object r = XposedHelpers.callStaticMethod(j1, mn, imIface);
+                        if (r != null) {
+                            svc = r;
+                            LogWriter.log(TAG, "initCoreServices: j1." + mn + "(" + imIface.getName()
+                                    + ") OK class=" + r.getClass().getName());
+                            break;
+                        }
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "initCoreServices: j1." + mn + "(" + imIface.getName()
+                                + ") err: " + t);
+                    }
+                }
             }
             if (svc == null) {
-                // v962: 服务定位器按接口类检索(WmChatHook.copyMediaToWxDir 实证: 传实现类返回 null,
-                // 须传声明目标方法的接口类)。e32.a 沿继承链收集接口, 取声明 ij() 者作为入参重试。
-                List<Class<?>> ifaces = new ArrayList<>();
-                for (Class<?> c = sc4; c != null && c != Object.class; c = c.getSuperclass()) {
-                    for (Class<?> iface : c.getInterfaces()) ifaces.add(iface);
+                Class<?> sc4 = null;
+                String dexKitContactStorage = DexKitHelper.getContactStorageClass();
+                if (dexKitContactStorage != null) {
+                    try {
+                        sc4 = XposedHelpers.findClass(dexKitContactStorage, cl);
+                        LogWriter.log(TAG, "initCoreServices: contact storage via DexKit: " + dexKitContactStorage);
+                    } catch (Throwable ignored) {}
                 }
-                for (Class<?> iface : ifaces) {
-                    boolean hasIj = false;
-                    for (java.lang.reflect.Method m : iface.getDeclaredMethods()) {
-                        if ("ij".equals(m.getName())) { hasIj = true; break; }
+                List<Class<?>> tryArgs = new ArrayList<>();
+                if (sc4 != null) {
+                    tryArgs.add(sc4);
+                    for (Class<?> c = sc4; c != null && c != Object.class; c = c.getSuperclass()) {
+                        for (Class<?> iface : c.getInterfaces()) tryArgs.add(iface);
                     }
-                    if (!hasIj) continue;
+                }
+                for (Class<?> arg : tryArgs) {
                     for (String mn : new String[]{"v", "s"}) {
                         try {
-                            Object s2 = XposedHelpers.callStaticMethod(j1, mn, iface);
-                            if (s2 != null) {
-                                svc = s2;
-                                LogWriter.log(TAG, "initCoreServices: j1." + mn + " iface 命中: " + iface.getName());
+                            Object r = XposedHelpers.callStaticMethod(j1, mn, arg);
+                            if (r != null) {
+                                svc = r;
+                                LogWriter.log(TAG, "initCoreServices: j1." + mn + " fallback 命中: "
+                                        + arg.getName() + " -> " + r.getClass().getName());
                                 break;
                             }
                         } catch (Throwable ignored) {}
@@ -233,15 +217,35 @@ public class ChatGroupHook {
                 }
             }
             if (svc == null) {
-                StringBuilder ifaceList = new StringBuilder();
-                for (Class<?> iface : sc4.getInterfaces()) {
-                    if (ifaceList.length() > 0) ifaceList.append(',');
-                    ifaceList.append(iface.getName());
-                }
-                LogWriter.log(TAG, "initCoreServices: j1.v/s(c4) null, e32.a interfaces=[" + ifaceList + "]");
+                LogWriter.log(TAG, "initCoreServices: j1.v/s 仍 null, imIface="
+                        + (imIface == null ? "null" : imIface.getName())
+                        + " dexKit=" + DexKitHelper.getContactStorageClass());
                 return false;
             }
-            sContactStorage = XposedHelpers.callMethod(svc, "ij");
+            sContactStorage = null;
+            for (String gn : new String[]{"cj", "ij"}) {
+                try {
+                    Object r = XposedHelpers.callMethod(svc, gn);
+                    if (r != null) {
+                        sContactStorage = r;
+                        LogWriter.log(TAG, "initCoreServices: contact via " + gn + "()="
+                                + r.getClass().getName());
+                        break;
+                    }
+                } catch (Throwable ignored) {}
+            }
+            if (sContactStorage == null) {
+                StringBuilder dump = new StringBuilder("initCoreServices: svc=")
+                        .append(svc.getClass().getName()).append(" 无 cj/ij, 0-arg getters:");
+                for (java.lang.reflect.Method m : svc.getClass().getDeclaredMethods()) {
+                    if (m.getParameterCount() == 0 && !m.getReturnType().isPrimitive()) {
+                        dump.append("\n  ").append(m.getReturnType().getSimpleName())
+                            .append(' ').append(m.getName()).append("()");
+                    }
+                }
+                LogWriter.log(TAG, dump.toString());
+                return false;
+            }
             if (sLabelStorage == null) {
                 // v955: x93.r 3180 已不存在, 该 fallback 仅对旧版有效; 3180 走上方 jf3.z.bj()
                 try {

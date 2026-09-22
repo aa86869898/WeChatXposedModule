@@ -84,11 +84,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-public static final String MODULE_BUILD = "v965";
+public static final String MODULE_BUILD = "v966";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 965;
+    public static final int MODULE_VERSION_CODE = 966;
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -156,10 +156,12 @@ public static final String MODULE_BUILD = "v965";
             return;
         }
 
-        LogWriter.init();
-
+        // v966: LogWriter.init() 移至主进程判定之后 —— 原先在过滤前调用, 微信全部
+        // 子进程(push/support 等)也会写日志, 造成同秒多条重复 "=== STARTUP ===" 记录
         boolean isMain = WX_PKG.equals(lpparam.processName);
         if (!isMain) return;
+
+        LogWriter.init();
 
         if (sMainInitialized) return;
         sMainInitialized = true;

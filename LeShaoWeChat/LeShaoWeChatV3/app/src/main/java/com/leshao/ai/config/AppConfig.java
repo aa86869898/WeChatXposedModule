@@ -45,8 +45,8 @@ public class AppConfig {
     private int maxTokens = 800;
     /** 系统提示词（人设）。 */
     private String systemPrompt = "你是一个贴心、幽默的微信AI助手，用中文回答用户问题。";
-    /** 是否启用文本转语音。 */
-    private boolean ttsEnabled = false;
+    /** 是否把 AI 回复转成语音消息发出。默认开。 */
+    private boolean ttsEnabled = true;
     /** 机器人名字，如 小乐。 */
     private String botName = "小乐";
     /** 唤醒关键词（触发 AI 的关键词）。 */
@@ -172,7 +172,7 @@ public class AppConfig {
         temperature = 0.7;
         maxTokens = 800;
         systemPrompt = "你是一个贴心、幽默的微信AI助手，用中文回答用户问题。";
-        ttsEnabled = false;
+        ttsEnabled = true;
         botName = "小乐";
         wakeKeyword = "";
         autoReplyInGroups = true;

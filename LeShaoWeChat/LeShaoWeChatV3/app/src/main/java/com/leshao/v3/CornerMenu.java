@@ -299,10 +299,20 @@ public class CornerMenu {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         try {
+                            // v966: 该方法声明在 MMFragment 基类, 主页所有 fragment 都会触发;
+                            // 必须过滤出聊天 fragment, 否则主页 tab show 会把 sChatWindowActive
+                            // 错误置 true, 挡死 self-heal/restore/onResume 兜底全部恢复路径
+                            // (表现为按钮消失后须重启微信才恢复)
+                            Object thiz = param.thisObject;
+                            if (thiz == null || !fragCls.isAssignableFrom(thiz.getClass())) return;
                             boolean hidden = (Boolean) param.args[0];
                             sChatWindowActive = !hidden;
                             if (hidden) {
-                                restoreMainMenuFromFragment(param.thisObject);
+                                restoreMainMenuFromFragment(thiz);
+                            } else {
+                                // v966: 进入聊天瞬间移除悬浮按钮
+                                // (Activity 级悬浮窗不会随 fragment 切换自动消失)
+                                if (sMainIcon != null) removeAll();
                             }
                         } catch (Throwable e) {
                             LogWriter.log(TAG, "onHiddenChanged cb err: " + e);
@@ -315,8 +325,13 @@ public class CornerMenu {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         try {
+                            // v966: 防御性过滤, 仅聊天 fragment 生效
+                            Object thiz = param.thisObject;
+                            if (thiz == null || !fragCls.isAssignableFrom(thiz.getClass())) return;
                             sChatWindowActive = true;
                             sChatResumeAt = android.os.SystemClock.elapsedRealtime();
+                            // v966: 进入聊天立即移除, 双保险(onHiddenChanged(false) 可能未触发)
+                            if (sMainIcon != null) removeAll();
                         } catch (Throwable e) {
                             LogWriter.log(TAG, "chat onResume cb err: " + e);
                         }
@@ -328,8 +343,11 @@ public class CornerMenu {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         try {
+                            // v966: 防御性过滤, 仅聊天 fragment 生效
+                            Object thiz = param.thisObject;
+                            if (thiz == null || !fragCls.isAssignableFrom(thiz.getClass())) return;
                             sChatWindowActive = false;
-                            restoreMainMenuFromFragment(param.thisObject);
+                            restoreMainMenuFromFragment(thiz);
                         } catch (Throwable e) {
                             LogWriter.log(TAG, "chat onPause cb err: " + e);
                         }
