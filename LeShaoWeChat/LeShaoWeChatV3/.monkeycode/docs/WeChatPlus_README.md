@@ -54,7 +54,6 @@
 | 44 | 聊天备份 | ChatBackup.java |
 | 46 | 搜索增强 | SearchEnhance.java |
 | 51 | 自动抢红包 | LuckyMoney.java |
-| 52 | 红包提醒 | RedPacketAlert.java |
 | 54 | 截图检测 | PrivacyFeatures.java |
 | 55 | 剪贴板保护 | PrivacyFeatures.java |
 | 56 | WebView隐私 | PrivacyFeatures.java |

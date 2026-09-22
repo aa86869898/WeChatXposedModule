@@ -326,26 +326,6 @@ public class ConfigPanels {
         });
     }
 
-    // ==================== RedPacketAlert ====================
-
-    public static void showRedAlert(Activity act, SharedPreferences prefs) {
-        LinearLayout root = new LinearLayout(act);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 12));
-
-        boolean vibrate = prefs == null || prefs.getInt("rp_alert_vibrate", 1) == 1;
-        boolean ring = prefs == null || prefs.getInt("rp_alert_ring", 1) == 1;
-        LinearLayout vibrateRow = addSwitchRow(act, root, "强制震动", vibrate);
-        LinearLayout ringRow = addSwitchRow(act, root, "强制响铃", ring);
-
-        showDialog(act, "红包提醒配置", new ScrollView(act) {{ addView(root); }}, () -> {
-            if (prefs != null) {
-                prefs.edit().putInt("rp_alert_vibrate", ((Switch) vibrateRow.getChildAt(1)).isChecked() ? 1 : 0).apply();
-                prefs.edit().putInt("rp_alert_ring", ((Switch) ringRow.getChildAt(1)).isChecked() ? 1 : 0).apply();
-            }
-        });
-    }
-
     // ==================== SnsFeatures - time_edit ====================
 
     public static void showSnsTimeOffset(Activity act, SharedPreferences prefs) {

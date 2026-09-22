@@ -94,7 +94,6 @@ public class ModuleConfig {
     // 安全
     public boolean antiRecall = false;
     public boolean redPacketGrab = true;
-    public boolean redPacketAlertEnabled = true;  // 红包震动/响铃提醒
     public boolean recallLogEnabled = false;
     public boolean antiDetection = true;          // 反Xposed/LSPosed检测
 
@@ -295,7 +294,6 @@ public class ModuleConfig {
 
         cfg.recallLogEnabled = prefs.getBoolean("ls_recall_log", false);
         cfg.redPacketGrab = prefs.getBoolean("ls_redpacket_enabled", true);
-        cfg.redPacketAlertEnabled = prefs.getBoolean("ls_wp_redalert", true);
 
         // WeChatPlus 增强功能
         cfg.typingIndicatorEnabled = prefs.getBoolean("ls_wp_typing", true);
@@ -477,7 +475,6 @@ public class ModuleConfig {
         e.putBoolean("ls_anti_detection", antiDetection);
         e.putBoolean("ls_recall_log", recallLogEnabled);
         e.putBoolean("ls_redpacket_enabled", redPacketGrab);
-        e.putBoolean("ls_wp_redalert", redPacketAlertEnabled);
 
         // WeChatPlus 增强功能
         e.putBoolean("ls_wp_typing", typingIndicatorEnabled);

@@ -40,7 +40,6 @@ import com.leshao.v3.hook.MsgExport;
 import com.leshao.v3.hook.WanQunGroupHook;
 import com.leshao.v3.hook.NotifyCustom;
 import com.leshao.v3.hook.PrivacyFeatures;
-import com.leshao.v3.hook.RedPacketAlert;
 import com.leshao.v3.hook.RedPacketHook;
 import com.leshao.v3.hook.SearchEnhance;
 import com.leshao.v3.hook.TtsVoiceSender;
@@ -81,11 +80,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v983";
+    public static final String MODULE_BUILD = "v984";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 983;
+    public static final int MODULE_VERSION_CODE = 984;
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -253,7 +252,6 @@ public class MainHook implements IXposedHookLoadPackage {
                         safeRun("AntiDetectionHook", () -> AntiDetectionHook.hook(cl));
                         safeRun("AntiRecallHook", () -> HookManager.register("AntiRecallHook", AntiRecallHook::hook));
                         safeRun("RedPacketHook", () -> HookManager.register("RedPacketHook", RedPacketHook::hook));
-                        safeRun("RedPacketAlert", () -> HookManager.register("RedPacketAlert", () -> RedPacketAlert.hook(cl)));
                         safeRun("ChatGroupHook", () -> HookManager.register("ChatGroupHook", () -> ChatGroupHook.hook(cl)));
                         safeRun("FriendRequestHook", () -> FriendRequestHook.hook(cl));
 
