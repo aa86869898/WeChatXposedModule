@@ -242,9 +242,6 @@ public final class AiAssistantPanel {
         // v968: 左右边距收紧(原 20dp), 让右侧开关等尾部控件更贴边不局促
         // v971: 底部内边距加大, 让底部按钮不贴边
         root.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 12), dp(ctx, 16));
-        // v973: 允许底部按钮的描边绘制到内边距区域, 避免按钮边框下缘被自身裁剪
-        root.setClipChildren(false);
-        root.setClipToPadding(false);
         return root;
     }
 
@@ -958,7 +955,9 @@ public final class AiAssistantPanel {
             String name = (tgt.length > 1 && !TextUtils.isEmpty(tgt[1])) ? tgt[1] : talker;
             boolean isCfg = cfgSet.contains(talker);
             String sub = isCfg ? ("已配置 · " + entrySummary(cc.get(talker))) : "未配置 · 点击可配置";
-            list.addView(new SettingRow(ctx, isCfg ? "✅" : (isGroup ? "👥" : "👤"), name, sub)
+            list.addView(new SettingRow(ctx, isGroup ? "👥" : "👤",
+                    (isCfg ? "✅ " : "") + name, sub)
+                    .avatar(talker)
                     .arrow(() -> {
                         LogWriter.log(TAG, "click: 个性化配置 " + talker);
                         dismissCurrent();
@@ -1431,6 +1430,7 @@ public final class AiAssistantPanel {
                 final String target = id;
                 SettingRow row = new SettingRow(ctx, "✅", label(target),
                         target + (target.endsWith("@chatroom") ? "  (群)" : ""));
+                row.avatar(target);
                 row.setOnClickListener(v -> {
                     if (!target.equals(pendingDelete[0])) {
                         pendingDelete[0] = target;

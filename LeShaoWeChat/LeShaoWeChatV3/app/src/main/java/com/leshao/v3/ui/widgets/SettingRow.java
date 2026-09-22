@@ -1,6 +1,7 @@
 package com.leshao.v3.ui.widgets;
 
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
@@ -8,6 +9,7 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.CompoundButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -123,6 +125,33 @@ public class SettingRow extends LinearLayout {
     /** 尾部自定义视图 */
     public SettingRow tail(View v) {
         try { mTail.addView(v); } catch (Throwable ignored) {}
+        return this;
+    }
+
+    /** v974: 用联系人/群真实头像替换图标位(加载失败回退首字母底色块)。 */
+    public SettingRow avatar(String username) {
+        try {
+            if (TextUtils.isEmpty(username)) return this;
+            float d = getResources().getDisplayMetrics().density;
+            int size = (int) (40 * d);
+            ImageView iv = new ImageView(getContext());
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            Bitmap fallback = com.leshao.v3.ui.AvatarHelper.letterAvatar(
+                    username.substring(0, Math.min(1, username.length())), size);
+            com.leshao.v3.ui.AvatarHelper.loadAvatarAsync(iv, username, size, fallback);
+            LayoutParams lp = (LayoutParams) mIcon.getLayoutParams();
+            if (lp == null) {
+                lp = new LayoutParams(size, size);
+                lp.setMarginEnd((int) (16 * d));
+            }
+            int idx = indexOfChild(mIcon);
+            if (idx >= 0) {
+                removeView(mIcon);
+                addView(iv, idx, lp);
+            } else {
+                addView(iv, 0, lp);
+            }
+        } catch (Throwable ignored) {}
         return this;
     }
 

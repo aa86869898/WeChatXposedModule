@@ -347,7 +347,9 @@ public class ContactSelectorView {
         // Avatar
         int avatarSize = dp(act, 40);
         ImageView avatar = new ImageView(act);
-        Bitmap fallback = letterAvatar(act, c.sortKey().substring(0, 1), avatarSize);
+        String sortKey = c.sortKey();
+        Bitmap fallback = AvatarHelper.letterAvatar(
+                (sortKey == null || sortKey.isEmpty()) ? "?" : sortKey, avatarSize);
         AvatarHelper.loadAvatarAsync(avatar, c.username, avatarSize, fallback);
         LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(avatarSize, avatarSize);
         alp.setMargins(0, 0, p12, 0);
@@ -415,24 +417,6 @@ public class ContactSelectorView {
         if (c.pyInitial != null && c.pyInitial.toLowerCase().contains(q)) return true;
         if (c.quanPin != null && c.quanPin.toLowerCase().contains(q)) return true;
         return false;
-    }
-
-    private static Bitmap letterAvatar(Activity act, String letter, int size) {
-        Paint paint = new Paint();
-        paint.setColor(AppColors.WHITE_TEXT);
-        paint.setTextSize(size * 0.45f);
-        paint.setAntiAlias(true);
-        paint.setTextAlign(Paint.Align.CENTER);
-        paint.setFakeBoldText(true);
-
-        Bitmap bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(bm);
-        Paint bgPaint = new Paint();
-        bgPaint.setColor(AppColors.TEXT_NOTE);
-        canvas.drawRoundRect(0, 0, size, size, size / 2f, size / 2f, bgPaint);
-        float y = size / 2f - (paint.descent() + paint.ascent()) / 2f;
-        canvas.drawText(letter, size / 2f, y, paint);
-        return bm;
     }
 
     private static TextView dialogBtn(Activity act, String text, int textColor, int bgColor, int radius) {

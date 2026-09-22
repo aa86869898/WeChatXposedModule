@@ -684,6 +684,27 @@ private static String tryMethodB(Context ctx) {
         } catch (Throwable e) { return source; }
     }
 
+    /** 首字母占位头像(圆形底色 + 文字), 用于真实头像加载前的兜底显示。 */
+    public static Bitmap letterAvatar(String letter, int sizePx) {
+        int size = sizePx > 0 ? sizePx : 80;
+        if (letter == null || letter.isEmpty()) letter = "?";
+        Bitmap bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bm);
+        Paint bg = new Paint();
+        bg.setAntiAlias(true);
+        bg.setColor(0xFF8A8F8B);
+        canvas.drawRoundRect(0, 0, size, size, size / 2f, size / 2f, bg);
+        Paint txt = new Paint();
+        txt.setAntiAlias(true);
+        txt.setColor(0xFFFFFFFF);
+        txt.setTextSize(size * 0.45f);
+        txt.setTextAlign(Paint.Align.CENTER);
+        txt.setFakeBoldText(true);
+        float y = size / 2f - (txt.descent() + txt.ascent()) / 2f;
+        canvas.drawText(letter.substring(0, 1).toUpperCase(), size / 2f, y, txt);
+        return bm;
+    }
+
     public static void clearCache() {
         sCache.clear();
     }
