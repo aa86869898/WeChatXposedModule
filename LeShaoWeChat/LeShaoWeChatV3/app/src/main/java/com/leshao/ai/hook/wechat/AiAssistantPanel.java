@@ -159,6 +159,24 @@ public final class AiAssistantPanel {
         return (int) (v * ctx.getResources().getDisplayMetrics().density + 0.5f);
     }
 
+    /** 把模型提供商面板的填写内容持久化(接口地址/密钥/模型/温度)。 */
+    private static boolean persistProvider(AppConfig config, EditText etBaseUrl, EditText etApiKey,
+                                           EditText etModel, SeekBar seekTemp) {
+        if (config == null) return false;
+        try {
+            config.setBaseUrl(str(etBaseUrl).trim());
+            config.setApiKey(com.leshao.ai.api.ApiUrl.normalizeKey(str(etApiKey)));
+            config.setModel(str(etModel).trim());
+            if (seekTemp != null) {
+                config.setTemperature(seekTemp.getProgress() / TEMP_SCALE);
+            }
+            return config.save();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "persistProvider err: " + t);
+            return false;
+        }
+    }
+
     private static TextView fieldLabel(Context ctx, String text) {
         TextView tv = new TextView(ctx);
         tv.setText(text);
@@ -443,9 +461,11 @@ public final class AiAssistantPanel {
 
         // ---- 接口 ----
         list.addView(new SectionHeader(ctx, "接口", "服务商提供的接入信息"));
+        // 温度 SeekBar 在下方创建, 用 holder 让上方按钮的持久化回调能拿到它
+        final SeekBar[] tempRef = new SeekBar[1];
         final TextView lbUrl = fieldLabel(ctx, "接口地址");
         list.addView(lbUrl);
-        final EditText etBaseUrl = M3Page.input(ctx, "如 https://api.deepseek.com/v1");
+        final EditText etBaseUrl = M3Page.input(ctx, "如 https://api.deepseek.com");
         etBaseUrl.setText(safe(config.getBaseUrl()));
         list.addView(etBaseUrl);
         final TextView lbKey = fieldLabel(ctx, "Api Key密钥");
@@ -479,13 +499,15 @@ public final class AiAssistantPanel {
 
         btnFetch.onClick(() -> {
             final String base = str(etBaseUrl).trim();
-            final String key = str(etApiKey);
+            final String key = com.leshao.ai.api.ApiUrl.normalizeKey(str(etApiKey));
             final String ptype = config.getProviderType();
-            LogWriter.log(TAG, "click(提供商): 获取模型 base=" + base);
+            LogWriter.log(TAG, "click(提供商): 获取模型 base=" + base + " keyLen=" + key.length());
             if (TextUtils.isEmpty(base)) {
                 toastQuiet(ctx, "请先填写接口地址");
                 return;
             }
+            // 先把当前填写内容持久化, 避免后续丢失
+            persistProvider(config, etBaseUrl, etApiKey, etModel, tempRef[0]);
             modelResults.removeAllViews();
             btnFetch.setText("获取中…");
             btnFetch.setEnabled(false);
@@ -502,6 +524,7 @@ public final class AiAssistantPanel {
                 final List<String> listFinal = models;
                 final String errFinal = err;
                 ui.post(() -> {
+                    if (activity.isFinishing()) return;
                     btnFetch.setText("获取模型");
                     btnFetch.setEnabled(true);
                     modelResults.removeAllViews();
@@ -521,7 +544,8 @@ public final class AiAssistantPanel {
                         row.setOnClickListener(v -> {
                             etModel.setText(modelId);
                             modelResults.removeAllViews();
-                            toastQuiet(ctx, "已选择模型: " + modelId);
+                            persistProvider(config, etBaseUrl, etApiKey, etModel, tempRef[0]);
+                            toastQuiet(ctx, "已选择模型并保存: " + modelId);
                         });
                         modelResults.addView(row);
                         shown++;
@@ -540,6 +564,7 @@ public final class AiAssistantPanel {
         list.addView(tvTemp);
         final SeekBar seekTemp = new SeekBar(ctx);
         seekTemp.setMax(200);
+        tempRef[0] = seekTemp;
         list.addView(seekTemp);
         int initProgress = Math.max(0, Math.min(200, (int) Math.round(config.getTemperature() * TEMP_SCALE)));
         seekTemp.setProgress(initProgress);
@@ -561,19 +586,10 @@ public final class AiAssistantPanel {
         ModernButton btnSave = new ModernButton(ctx, "保存", ModernButton.STYLE_PRIMARY);
         btnSave.onClick(() -> {
             LogWriter.log(TAG, "click(提供商): 保存");
-            try {
-                config.setBaseUrl(str(etBaseUrl));
-                config.setApiKey(str(etApiKey));
-                config.setModel(str(etModel));
-                config.setTemperature(seekTemp.getProgress() / TEMP_SCALE);
-                boolean ok = config.save();
-                LogWriter.log(TAG, "provider saved ok=" + ok);
-                reload();
-                toastQuiet(ctx, "已保存");
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "provider save err: " + t);
-                toastQuiet(ctx, "保存失败");
-            }
+            boolean ok = persistProvider(config, etBaseUrl, etApiKey, etModel, seekTemp);
+            LogWriter.log(TAG, "provider saved ok=" + ok);
+            if (ok) reload();
+            toastQuiet(ctx, ok ? "已保存" : "保存失败");
             dismissCurrent();
             show(activity);
         });

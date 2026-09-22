@@ -32,11 +32,38 @@ public final class ModelCatalogClient {
      * @throws Exception 网络/鉴权/解析失败
      */
     public static List<String> fetch(String providerType, String baseUrl, String apiKey) throws Exception {
-        String base = normalizeBase(baseUrl);
-        if (base == null) {
+        String base = baseUrl == null ? "" : baseUrl.trim();
+        if (base.isEmpty()) {
             throw new IllegalArgumentException("接口地址为空");
         }
-        String endpoint = base + "/models";
+        String key = ApiUrl.normalizeKey(apiKey);
+        boolean anthropic = isAnthropic(providerType);
+        // 先按 OpenAI/DeepSeek 约定尝试 /v1/models, 失败再回退到 /models
+        Exception last = null;
+        for (String path : new String[]{"/v1/models", "/models"}) {
+            String endpoint = ApiUrl.join(base, path);
+            try {
+                return request(endpoint, key, anthropic);
+            } catch (HttpError e) {
+                last = e;
+                // 仅当端点不存在(404)时才回退到下一个路径; 鉴权/其他错误直接抛出
+                if (e.code != 404) throw e;
+            }
+        }
+        throw last != null ? last : new IllegalStateException("获取模型失败");
+    }
+
+    /** 带 HTTP 状态码的异常, 便于决定是否回退路径。 */
+    private static final class HttpError extends Exception {
+        final int code;
+
+        HttpError(int code, String message) {
+            super(message);
+            this.code = code;
+        }
+    }
+
+    private static List<String> request(String endpoint, String key, boolean anthropic) throws Exception {
         HttpURLConnection conn = null;
         try {
             conn = (HttpURLConnection) new URL(endpoint).openConnection();
@@ -44,18 +71,17 @@ public final class ModelCatalogClient {
             conn.setConnectTimeout(20000);
             conn.setReadTimeout(30000);
             conn.setRequestProperty("Accept", "application/json");
-            boolean anthropic = isAnthropic(providerType);
             if (anthropic) {
-                conn.setRequestProperty("x-api-key", apiKey == null ? "" : apiKey);
+                conn.setRequestProperty("x-api-key", key);
                 conn.setRequestProperty("anthropic-version", "2023-06-01");
             } else {
-                conn.setRequestProperty("Authorization", "Bearer " + (apiKey == null ? "" : apiKey));
+                conn.setRequestProperty("Authorization", "Bearer " + key);
             }
             int code = conn.getResponseCode();
             InputStream in = code >= 200 && code < 300 ? conn.getInputStream() : conn.getErrorStream();
             String body = readAll(in);
             if (code < 200 || code >= 300) {
-                throw new IllegalStateException("HTTP " + code + ": " + brief(body));
+                throw new HttpError(code, "HTTP " + code + " (" + endpoint + "): " + brief(body));
             }
             return parseModelIds(body);
         } finally {
@@ -69,18 +95,6 @@ public final class ModelCatalogClient {
         if (providerType == null) return false;
         String t = providerType.toLowerCase();
         return t.contains("anthropic") || t.contains("claude");
-    }
-
-    /** 规范化 base: 补齐 /v1(若未包含), 去掉尾部斜杠。 */
-    private static String normalizeBase(String baseUrl) {
-        if (baseUrl == null) return null;
-        String b = baseUrl.trim();
-        if (b.isEmpty()) return null;
-        while (b.endsWith("/")) b = b.substring(0, b.length() - 1);
-        if (!b.contains("/v1") && !b.endsWith("/v1")) {
-            b = b + "/v1";
-        }
-        return b;
     }
 
     private static List<String> parseModelIds(String body) throws Exception {

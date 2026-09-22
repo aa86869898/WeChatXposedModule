@@ -33,12 +33,12 @@ public class AppConfig {
     private boolean enabled = false;
     /** 服务商类型，如 "openai" / "deepseek" / "qwen" / "custom" 等。 */
     private String providerType = "openai";
-    /** 服务商 API Base URL。 */
-    private String baseUrl = "https://api.openai.com/v1";
+    /** 服务商 API Base URL（默认留空, 由用户填写）。 */
+    private String baseUrl = "";
     /** API 密钥。 */
     private String apiKey = "";
-    /** 使用的模型名，如 gpt-4o-mini / deepseek-chat。 */
-    private String model = "gpt-4o-mini";
+    /** 使用的模型名，如 gpt-4o-mini / deepseek-chat（默认留空, 由用户填写）。 */
+    private String model = "";
     /** 采样温度，0.0 ~ 2.0。 */
     private double temperature = 0.7;
     /** 生成回复的最大 token 数。 */
@@ -166,9 +166,9 @@ public class AppConfig {
     public synchronized void reset() {
         enabled = false;
         providerType = "openai";
-        baseUrl = "https://api.openai.com/v1";
+        baseUrl = "";
         apiKey = "";
-        model = "gpt-4o-mini";
+        model = "";
         temperature = 0.7;
         maxTokens = 800;
         systemPrompt = "你是一个贴心、幽默的微信AI助手，用中文回答用户问题。";

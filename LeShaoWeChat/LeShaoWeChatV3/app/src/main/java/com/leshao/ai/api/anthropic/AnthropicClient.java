@@ -119,7 +119,7 @@ public class AnthropicClient {
         }
         body.put("messages", arr);
 
-        String raw = postJson(baseUrl + "/v1/messages", body);
+        String raw = postJson(com.leshao.ai.api.ApiUrl.join(baseUrl, "/v1/messages"), body);
         JSONObject json = new JSONObject(raw);
 
         // 解析 content[0].text
@@ -150,7 +150,7 @@ public class AnthropicClient {
 
             conn.setRequestProperty("Content-Type", "application/json");
             conn.setRequestProperty("Accept", "application/json");
-            conn.setRequestProperty("x-api-key", apiKey);
+            conn.setRequestProperty("x-api-key", com.leshao.ai.api.ApiUrl.normalizeKey(apiKey));
             conn.setRequestProperty("anthropic-version", API_VERSION);
 
             byte[] bodyBytes = json.toString().getBytes(StandardCharsets.UTF_8);

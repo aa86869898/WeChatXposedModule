@@ -112,7 +112,7 @@ public class OpenAIClient {
             body.put("input", input);
         }
 
-        String raw = postJson(baseUrl + endpoint, body);
+        String raw = postJson(com.leshao.ai.api.ApiUrl.join(baseUrl, endpoint), body);
         JSONObject json = new JSONObject(raw);
 
         String text;
@@ -149,8 +149,9 @@ public class OpenAIClient {
 
             conn.setRequestProperty("Content-Type", "application/json");
             conn.setRequestProperty("Accept", "application/json");
-            if (apiKey != null && !apiKey.isEmpty()) {
-                conn.setRequestProperty("Authorization", "Bearer " + apiKey);
+            String key = com.leshao.ai.api.ApiUrl.normalizeKey(apiKey);
+            if (!key.isEmpty()) {
+                conn.setRequestProperty("Authorization", "Bearer " + key);
             }
 
             byte[] bodyBytes = json.toString().getBytes(StandardCharsets.UTF_8);

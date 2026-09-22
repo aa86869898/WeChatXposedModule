@@ -208,10 +208,18 @@ public final class AIBotCore {
         String model = (override != null && override.model != null
                 && !override.model.trim().isEmpty()) ? override.model : c.getModel();
 
+        String baseUrl = c.getBaseUrl();
+        if (baseUrl == null || baseUrl.trim().isEmpty()) {
+            throw new IllegalStateException("未配置模型接口地址(请在 AI 助手 - 模型提供商 中填写)");
+        }
+        if (model == null || model.trim().isEmpty()) {
+            throw new IllegalStateException("未配置模型名称(请在 AI 助手 - 模型提供商 中填写或点击获取模型)");
+        }
+
         switch (provider) {
             case OPENAI_RESPONSES:
             case OPENAI_CHAT: {
-                OpenAIClient client = new OpenAIClient(provider, c.getBaseUrl(), c.getApiKey(), model);
+                OpenAIClient client = new OpenAIClient(provider, baseUrl, c.getApiKey(), model);
                 return client.chat(messages, system);
             }
             default: {
