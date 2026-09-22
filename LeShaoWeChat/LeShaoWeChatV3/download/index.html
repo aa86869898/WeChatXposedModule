@@ -16,8 +16,12 @@
 <body>
     <h1>LeShaoWeChat 模块下载</h1>
     <p>微信 8.0.78(3180) 适配版。下载 APK 后到 LSPosed 管理器中激活并重启微信。</p>
+    <a class="apk" href="LeShaoWeChat-v983.apk">
+        最新版 LeShaoWeChat-v983.apk
+        <div class="meta">v983 · 修复 AI 配置/白名单同步失败: 微信进程日志报 Failed to find provider info for com.leshao.v3.aiconfig —— 根因有两个: ① Android 11+ 包可见性使微信无法解析模块 app 的 ContentProvider; ② 镜像写到了 files/leshao_ai 而 AIBotCore 读取的是 leshao_ai, 路径不一致。现改为显式广播直带 config/whitelist JSON payload 为主通道, ContentProvider 仅作兜底; 微信启动时主动向模块 app 拉取一次(覆盖"保存时微信未运行"的冷启动旧数据); 会话列表改走广播回传; manifest 补 queries(com.tencent.mm)。</div>
+    </a>
     <a class="apk" href="LeShaoWeChat-v982.apk">
-        最新版 LeShaoWeChat-v982.apk
+        上一版 LeShaoWeChat-v982.apk
         <div class="meta">v982 · 三横菜单改为注入式(根除悬浮窗不稳): 放弃 WindowManager.TYPE_APPLICATION_PANEL 悬浮窗, 改为把三横按钮作为子 View 直接注入微信主页 decorView —— 随窗口一起显示/隐藏, 彻底规避 BadToken、窗口 token 失效、被系统/微信布局刷新移除等偶发消失问题; 进入聊天时隐藏(GONE)不遮挡微信右上角菜单, 回主页直接恢复可见(不再反复增删 view)。</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v981.apk">

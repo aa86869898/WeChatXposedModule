@@ -162,14 +162,8 @@ public class SettingsActivity extends Activity {
             public void onClick(View v) {
                 saveFieldsToConfig();
                 boolean ok = config.save();
-                // 通知微信进程重新同步配置（Provider 为数据源）
-                try {
-                    Intent refresh = new Intent(
-                            com.leshao.ai.data.AiDataProvider.ACTION_REFRESH_CONFIG);
-                    refresh.setPackage("com.tencent.mm");
-                    sendBroadcast(refresh);
-                } catch (Throwable ignored) {
-                }
+                // 通知微信进程同步配置（广播直带 payload，绕过 Android 11+ 包可见性）
+                com.leshao.ai.data.AiDataProvider.pushRefresh(SettingsActivity.this);
                 Toast.makeText(SettingsActivity.this,
                         ok ? R.string.settings_saved_toast : R.string.settings_save_failed_toast,
                         Toast.LENGTH_SHORT).show();
@@ -183,13 +177,7 @@ public class SettingsActivity extends Activity {
         // 离开页面时兜底持久化并通知微信进程
         saveFieldsToConfig();
         config.save();
-        try {
-            Intent refresh = new Intent(
-                    com.leshao.ai.data.AiDataProvider.ACTION_REFRESH_CONFIG);
-            refresh.setPackage("com.tencent.mm");
-            sendBroadcast(refresh);
-        } catch (Throwable ignored) {
-        }
+        com.leshao.ai.data.AiDataProvider.pushRefresh(SettingsActivity.this);
     }
 
     /** 把当前界面值写入 config（仅内存），调用方负责 save()。 */

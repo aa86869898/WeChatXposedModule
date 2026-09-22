@@ -3,6 +3,11 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Android 11+ 包可见性：模块 app 需主动向微信进程发广播（刷新配置/会话中转） -->
+    <queries>
+        <package android:name="com.tencent.mm" />
+    </queries>
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
@@ -37,6 +42,17 @@
             android:authorities="com.leshao.v3.aiconfig"
             android:exported="true"
             android:grantUriPermissions="true" />
+
+        <!-- 微信侧（模块 hook 进程）通过显式广播请求配置 / 回传会话，
+             因 Android 11+ 包可见性无法让微信反向解析本 app 的 ContentProvider。 -->
+        <receiver
+            android:name="com.leshao.ai.data.BridgeReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.leshao.ai.action.REQUEST_CONFIG" />
+                <action android:name="com.leshao.ai.action.PUSH_SESSIONS" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

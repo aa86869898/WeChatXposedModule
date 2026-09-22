@@ -2,7 +2,6 @@ package com.leshao.ai.ui.activity;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
@@ -264,13 +263,8 @@ public class WhitelistActivity extends Activity {
 
     private void save() {
         boolean ok = whitelist.save();
-        // 通知微信进程重新同步白名单
-        try {
-            Intent refresh = new Intent(AiDataProvider.ACTION_REFRESH_CONFIG);
-            refresh.setPackage("com.tencent.mm");
-            sendBroadcast(refresh);
-        } catch (Throwable ignored) {
-        }
+        // 通知微信进程同步白名单（广播直带 payload）
+        AiDataProvider.pushRefresh(this);
         Toast.makeText(this,
                 ok ? R.string.whitelist_saved_toast : R.string.whitelist_save_failed_toast,
                 Toast.LENGTH_SHORT).show();

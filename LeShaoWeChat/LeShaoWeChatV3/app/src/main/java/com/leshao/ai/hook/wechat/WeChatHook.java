@@ -141,11 +141,17 @@ public final class WeChatHook implements IXposedHookLoadPackage {
             return;
         }
         try {
-            // 0) 先从模块进程同步配置/白名单（数据源在模块 files 目录）
+            // 0) 先从模块进程同步配置/白名单（广播 payload 为主，Provider 兜底）
             try {
                 ConfigBridge.syncFromProvider(appContext);
             } catch (Throwable t) {
                 Log.w(TAG, "配置同步失败: " + t);
+            }
+            // 主动请求模块 app 推送一次（覆盖“设置页保存时微信未运行”的冷启动旧数据）
+            try {
+                ConfigBridge.requestConfig(appContext);
+            } catch (Throwable t) {
+                Log.w(TAG, "配置拉取请求失败: " + t);
             }
 
             // 1) 初始化业务核心（配置/记忆/知识库/白名单，落微信 data 目录）
