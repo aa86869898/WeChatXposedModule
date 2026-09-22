@@ -71,6 +71,13 @@ public final class WeChatHook implements IXposedHookLoadPackage {
      * 由 {@link HookEntry} 或 MainHook 调用，装配全部 hook。
      */
     public static void install(XC_LoadPackage.LoadPackageParam lpparam) {
+        // v965: 系统克隆分身(App-Clone)拦截 —— 与 MainHook.handleLoadPackage 一致的防护,
+        // 防止其它调用路径绕开主入口; 判定走系统 API 动态识别 Profile Group, 不写死 userId 数字,
+        // LSPosed MultiApp 等独立虚拟用户不受影响, 由 LSPosed 作用域控制。
+        if (com.leshao.v3.InstanceManager.isCloneApp()) {
+            Log.w(TAG, "系统克隆分身进程, WeChatHook 拦截, 不执行任何模块代码");
+            return;
+        }
         final ClassLoader cl = lpparam.classLoader;
 
         // TTS 等需要的微信 Application Context

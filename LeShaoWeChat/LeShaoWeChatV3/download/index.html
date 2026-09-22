@@ -16,8 +16,20 @@
 <body>
     <h1>LeShaoWeChat 模块下载</h1>
     <p>微信 8.0.78(3180) 适配版。下载 APK 后到 LSPosed 管理器中激活并重启微信。</p>
+    <a class="apk" href="LeShaoWeChat-v965.apk">
+        最新版 LeShaoWeChat-v965.apk
+        <div class="meta">v965 · 系统克隆分身(App-Clone)拦截: ① MainHook.handleLoadPackage 最开头(LogWriter.init 之前)经 InstanceManager.isCloneApp() 判定系统应用克隆分身即直接 return, 分身进程对模块零执行零日志零文件写入(判定走系统 API 动态识别 Profile Group, 不写死任何 userId 数字) ② WeChatHook.install 入口加入相同 isCloneApp 防护, 防其它调用路径绕开主入口 ③ InstanceManager.isEnabled 默认值改回 isPrimary()(对齐微信模块隔离.md 规范: 主微信默认开, 分身默认关) ④ 完整删除从未被调用的 ConfigSync 死代码(主→分身 su prefs 推送)并清理 UnifiedPrefs 相关注释 ⑤ 机主用户(userId=0)与 LSPosed MultiApp 虚拟用户原有全部 Hook 业务逻辑原样保留, MultiApp 用户启停完全由 LSPosed 作用域(安装到用户 xxx)控制</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v964.apk">
+        上一版 LeShaoWeChat-v964.apk
+        <div class="meta">v964 · 按用户纠正回退 AI 助手并重做三项: ① AI 助手去掉「当前微信实例」(与 AI 无关, 隔离留在主页/InstanceManager); 一级窗口放全部功能开关, 二级完整设置只放服务商/接口/人设/记忆配置, 两级内容不重复 ② TTS 开关改「语音消息发送」(默认开): 开=AI回复合成后以语音消息发出, 关=直接发文本; 不再本地朗读 ③ 音频转语音: 人声增强改为 SettingRow 右侧开关; 「开始转换」进度弹窗改 PopupWindow(原 AlertDialog 把标题当 ProgressBar 强转崩掉被吞, 弹窗永不显示)</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v963.apk">
+        上一版 LeShaoWeChat-v963.apk
+        <div class="meta">v963 · 基于 v962 实机日志(微信 8.0.78/3180)修复两处仍失败项: ① ChatGroupHook j1.v/s(c4) null: 根因是 DexKit 扫到实现类 e32.a 后直接 j1.v(e32.a) 必返回 null(接口 f32.r 无 ij 被跳过)。改为优先 j1.v(tn3.c4/sh3.c4) 取 IM 服务, 再 cj()/ij() 取联系人存储(BatchAddFriend/BatchInvite 实证链路), 失败时 dump 0-arg getter ② TtsVoiceSender a21.o.i method not found: 实机 dump a21.o 仅 Object invoke() — Kotlin lambda stub。改为沿 enclosing/外层包/DexKit 同包兄弟类搜索 i 方法或含 e9 载体签名, 未命中输出全部候选类方法清单</div>
+    </a>
     <a class="apk" href="LeShaoWeChat-v962.apk">
-        最新版 LeShaoWeChat-v962.apk
+        上一版 LeShaoWeChat-v962.apk
         <div class="meta">v962 · 基于 v961 实机日志(2187 行, 微信 8.0.78/3180)完成四项任务: ① 音频转语音「语音」按钮点击无反应修复(根因): ChatFooterLongPressMenu 487 行 panel.addView(fileRow) 与 489 行 cardFile.addView(fileRow) 对同一视图重复 addView, 二次必抛 IllegalStateException: The specified child already has a parent(实机日志 ×16), 面板构建中断导致按钮无反应, 删除重复 addView 修复 ② AI 助手弹窗按钮全部可用: AiAssistantPanel 由 AlertDialog 改 PopupWindow(与音频面板同机制, 微信 3180 实测可显示可交互), 全部入口/按钮/开关写 LogWriter 日志 + Toast 反馈, 白名单删除改两步确认(首次点击标记, 再次点击删除), 设置/白名单页高度 85% 屏高可滚动 ③ 主微信/系统分身独立隔离(按《微信模块隔离.md》): 新增 InstanceManager(userId=Process.myUid()/100000, 配置寄生微信进程 SP xposed_wechat_iso 按 user 自动隔离), ContextManager.attachBaseContext 最早初始化, 实例总开关门控 onReady 功能加载(关闭后本实例重启微信不加载 Hook, 悬浮球菜单仍可进入设置恢复), AI 助手面板与模块主页新增实例状态行+开关, 日志目录主微信 files/分身 cache 已按 user 隔离 ④ 日志问题修复: ChatGroupHook initCoreServices j1.v/s(c4) null 修复(服务定位器按接口类检索, WmChatHook 实证传实现类返回 null, 沿 e32.a 继承链收集接口取声明 ij() 者重试, 未命中时输出接口清单诊断); TtsVoiceSender a21.o.i method not found 修复(签名兜底放宽: 沿继承链找字段 b/字段类型 e9/参数即 e9, 未命中时输出候选类全部方法签名供下次精确定位)</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v961.apk">

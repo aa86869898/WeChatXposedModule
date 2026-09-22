@@ -2,7 +2,13 @@ package com.leshao.v3;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.IBinder;
 import android.os.Process;
+import android.os.UserHandle;
+
+import java.util.List;
+
+import de.robv.android.xposed.XposedBridge;
 
 /**
  * 主微信/系统分身实例隔离管理器(v962, 依《微信模块隔离.md》实现)。
@@ -20,8 +26,10 @@ import android.os.Process;
  *   <li>严禁把实例配置写到模块自身包名下 —— 分身 user 可能无权访问模块目录</li>
  * </ol>
  *
- * <p>v962 决策: 实例总开关默认对所有实例开启(LSPosed 作用域激活即用户显式授权),
- * 各实例可在 AI 助手面板独立关闭; 关闭后该实例重启微信时不再加载任何 Hook。</p>
+ * <p>v965 决策: 系统克隆分身(ColorOS 应用分身 / AOSP App-Clone)进程在模块入口即被
+ * {@link #isCloneApp()} 拦截, 完全不执行模块代码; 实例总开关默认值对齐《微信模块隔离.md》
+ * 规范 —— 主微信默认开启, 分身默认关闭。LSPosed MultiApp 等独立虚拟用户不受入口拦截影响,
+ * 其模块启停完全由 LSPosed 作用域(勾选【安装到用户 xxx】)控制。</p>
  */
 public final class InstanceManager {
 
@@ -60,7 +68,7 @@ public final class InstanceManager {
             // 关键: 存到微信进程自己的 SP, 系统按 user 隔离文件路径
             sPrefs = ctx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
             LogWriter.log(TAG, "init DONE: userId=" + sUserId + " primary=" + sPrimary
-                    + " enabled=" + isEnabled() + " dataDir=" + sDataDir
+                    + " cloneApp=" + isCloneApp() + " enabled=" + isEnabled() + " dataDir=" + sDataDir
                     + " prefs=" + PREF_NAME);
         } catch (Throwable t) {
             // 兜底: 至少保证 userId 可用(SP 不可用时 isEnabled 走默认值)
@@ -95,14 +103,14 @@ public final class InstanceManager {
     }
 
     /**
-     * 当前实例总开关。默认开启; 分身实例如需默认关闭可改 sPrefs.getBoolean(KEY_ENABLED, isPrimary())。
+     * 当前实例总开关。默认值对齐《微信模块隔离.md》规范: 主微信默认开启, 分身默认关闭。
      */
     public static boolean isEnabled() {
-        if (sPrefs == null) return true;
+        if (sPrefs == null) return isPrimary();
         try {
-            return sPrefs.getBoolean(KEY_ENABLED, true);
+            return sPrefs.getBoolean(KEY_ENABLED, isPrimary());
         } catch (Throwable t) {
-            return true;
+            return isPrimary();
         }
     }
 
@@ -144,5 +152,112 @@ public final class InstanceManager {
     /** 实例可读名称, 用于日志与 UI 展示 */
     public static String label() {
         return isPrimary() ? "主微信(user0)" : ("系统分身(user" + userId() + ")");
+    }
+
+    // ---------------- v965: 系统克隆分身(App-Clone)拦截 ----------------
+
+    /**
+     * 判断当前进程是否为系统应用克隆分身(ColorOS 应用分身 / AOSP App-Clone)。
+     *
+     * <p>判定原则(全部走系统 API 动态识别, 不写死任何 userId 数字):</p>
+     * <ol>
+     *   <li>机主用户(userId=0)直接放行, 完整运行模块全部功能;</li>
+     *   <li>优先 binder 直查 IUserManager.getProfileIds(自身): 系统克隆分身与机主用户
+     *       同属一个 Profile Group(组内同时包含机主用户与自身), 命中即拦截;</li>
+     *   <li>兜底经 ActivityThread.getSystemContext() 依次尝试 Context.isCloneApp()(API 34+)、
+     *       UserManager.isCloneProfile()(API 31+), 以及 getUserProfiles() 组内包含自身判定;</li>
+     *   <li>所有系统 API 均不可用时放行 —— LSPosed MultiApp 等独立虚拟用户自成一组
+     *       (组内无机主用户), 天然不会被本判定拦截, 模块能否运行完全交给 LSPosed
+     *       作用域控制(须在 LSP 界面手动选择【安装到用户 xxx】才会注入)。</li>
+     * </ol>
+     *
+     * <p>本方法设计为在 handleLoadPackage 最早阶段(无 Application Context)即可调用,
+     * 日志经 XposedBridge.log 落 LSPosed 日志, 不触碰 LogWriter(分身进程零写入)。</p>
+     */
+    public static boolean isCloneApp() {
+        final int myUserId = Process.myUid() / 100000;
+        if (myUserId == 0) {
+            return false; // 机主用户, 完整运行
+        }
+        try {
+            // 一级判定: binder 直查自身所属 Profile Group, 无需 Context, 权限要求最低
+            int[] group = getProfileGroupIds(myUserId);
+            if (group != null) {
+                for (int id : group) {
+                    if (id == 0) {
+                        xlog("isCloneApp: userId=" + myUserId
+                                + " 与机主用户同 Profile Group -> 系统克隆分身, 拦截");
+                        return true;
+                    }
+                }
+                xlog("isCloneApp: userId=" + myUserId
+                        + " 独立 Profile Group(组内无机主用户) -> 非克隆分身, 放行(由 LSPosed 控制)");
+                return false;
+            }
+
+            // 二级判定: systemContext 上的系统 API 逐级尝试
+            Object at = Class.forName("android.app.ActivityThread")
+                    .getMethod("currentActivityThread").invoke(null);
+            if (at != null) {
+                Context sysCtx = (Context) Class.forName("android.app.ActivityThread")
+                        .getMethod("getSystemContext").invoke(at);
+                if (sysCtx != null) {
+                    try {
+                        Object r = sysCtx.getClass().getMethod("isCloneApp").invoke(sysCtx);
+                        if (r instanceof Boolean) {
+                            xlog("isCloneApp: Context.isCloneApp()=" + r);
+                            return (Boolean) r;
+                        }
+                    } catch (Throwable ignored) {}
+                    try {
+                        Object um = sysCtx.getSystemService(Context.USER_SERVICE);
+                        Object r = um.getClass().getMethod("isCloneProfile").invoke(um);
+                        if (r instanceof Boolean) {
+                            xlog("isCloneApp: UserManager.isCloneProfile()=" + r);
+                            return (Boolean) r;
+                        }
+                    } catch (Throwable ignored) {}
+                    try {
+                        Object um = sysCtx.getSystemService(Context.USER_SERVICE);
+                        List<?> profiles =
+                                (List<?>) um.getClass().getMethod("getUserProfiles").invoke(um);
+                        if (profiles != null && profiles.contains(Process.myUserHandle())) {
+                            xlog("isCloneApp: userId=" + myUserId
+                                    + " 出现在机主用户 Profile Group 中 -> 系统克隆分身, 拦截");
+                            return true;
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            }
+            xlog("isCloneApp: 系统判定 API 全部不可用, userId=" + myUserId
+                    + " 放行(由 LSPosed 作用域控制)");
+        } catch (Throwable t) {
+            xlog("isCloneApp err(放行): " + t);
+        }
+        return false;
+    }
+
+    /** 反射 IUserManager.getProfileIds(userId, false) 查询自身所属 Profile Group, 失败返回 null */
+    private static int[] getProfileGroupIds(int myUserId) {
+        try {
+            IBinder binder = (IBinder) Class.forName("android.os.ServiceManager")
+                    .getMethod("getService", String.class).invoke(null, "user");
+            if (binder == null) return null;
+            Object um = Class.forName("android.os.IUserManager$Stub")
+                    .getMethod("asInterface", IBinder.class).invoke(null, binder);
+            return (int[]) um.getClass()
+                    .getMethod("getProfileIds", int.class, boolean.class)
+                    .invoke(um, myUserId, false);
+        } catch (Throwable t) {
+            xlog("getProfileGroupIds err: " + t);
+            return null;
+        }
+    }
+
+    /** 早期入口日志(LSPosed 日志), 此时 LogWriter 尚未 init, 分身进程不产生任何文件写入 */
+    private static void xlog(String msg) {
+        try {
+            XposedBridge.log("[LeShaoV3/InstanceManager] " + msg);
+        } catch (Throwable ignored) {}
     }
 }

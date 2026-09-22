@@ -84,11 +84,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-public static final String MODULE_BUILD = "v962";
+public static final String MODULE_BUILD = "v965";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 962;
+    public static final int MODULE_VERSION_CODE = 965;
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -145,6 +145,16 @@ public static final String MODULE_BUILD = "v962";
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
         if (!WX_PKG.equals(lpparam.packageName)) return;
+
+        // v965: 系统应用克隆分身(App-Clone)拦截 —— 必须位于 LogWriter.init() 之前,
+        // 保证克隆分身进程对模块完全零执行、零日志、零文件写入。
+        // 判定走系统 API 动态识别 Profile Group(见 InstanceManager.isCloneApp), 不写死任何 userId 数字;
+        // LSPosed MultiApp 等独立虚拟用户不属于克隆分组, 不受本拦截影响, 其启停由 LSPosed 作用域控制。
+        if (InstanceManager.isCloneApp()) {
+            XposedBridge.log("[LeShaoV3] " + MODULE_BUILD
+                    + " 系统克隆分身进程, 拦截模块加载, 不执行任何代码");
+            return;
+        }
 
         LogWriter.init();
 
