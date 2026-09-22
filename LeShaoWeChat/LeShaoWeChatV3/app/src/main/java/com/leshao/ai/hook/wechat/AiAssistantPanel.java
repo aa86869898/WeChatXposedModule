@@ -127,6 +127,16 @@ public final class AiAssistantPanel {
             int margin = dp(actx, 12);
             int maxPanelH = Math.max(dp(actx, 200), availH - margin * 2);
 
+            // v976: PopupWindow 会给内容视图补上默认的 MATCH_PARENT 布局参数, 即便弹窗高度设为
+            // WRAP_CONTENT, 内容也会被撑满整个可用高度, 底部按钮被推到导航栏/手势条下方遮挡。
+            // 这里显式给内容视图 WRAP_CONTENT 高度, 让弹窗真正按内容收缩。
+            try {
+                root.setLayoutParams(new ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        heightPx > 0 ? ViewGroup.LayoutParams.MATCH_PARENT
+                                     : ViewGroup.LayoutParams.WRAP_CONTENT));
+            } catch (Throwable ignored) {}
+
             PopupWindow pw = new PopupWindow(root, panelW, ViewGroup.LayoutParams.WRAP_CONTENT, true);
             pw.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             try { pw.setElevation(dp(actx, 8)); } catch (Throwable ignored) {}
