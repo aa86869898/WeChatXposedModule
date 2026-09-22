@@ -16,8 +16,12 @@
 <body>
     <h1>LeShaoWeChat 模块下载</h1>
     <p>微信 8.0.78(3180) 适配版。下载 APK 后到 LSPosed 管理器中激活并重启微信。</p>
+    <a class="apk" href="LeShaoWeChat-v980.apk">
+        最新版 LeShaoWeChat-v980.apk
+        <div class="meta">v980 · 性能专项(启动卡顿/聊天窗口卡顿): ① 移除遗留的 AutoMethodDetector 诊断代码 —— 它会 hook 全 App 所有 void(String) 方法(数量以千计), 造成大范围方法去优化, 是启动与聊天卡顿的重大来源; ② 将 DexKit 依赖模块 GroupMemberTools(实测阻塞主线程 916ms)、LeshaoAI(294ms) 从主线程改为后台守护线程延迟安装, 目标均为后段 UI, 不丢 hook 时机; ③ 聊天窗口 adapter.k.j 每条消息渲染原会无条件做递归反射扫描(最深 4 层), 现加快速路径: 无标记消息且不在发送窗口内直接跳过</div>
+    </a>
     <a class="apk" href="LeShaoWeChat-v979.apk">
-        最新版 LeShaoWeChat-v979.apk
+        上一版 LeShaoWeChat-v979.apk
         <div class="meta">v979 · 定位底部按钮遮挡(加诊断日志): 布局完成后按面板真实高度重新居中并显式固定窗口高度(内容精确贴合不再裁切); 若内容仍超出可用高度则自动压缩滚动区重新布局; 同时打印面板与底部按钮的实际屏幕边界(rootBottom/lastBottom/screenH/availBottom)用于定位遮挡来源</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v978.apk">
@@ -132,35 +136,35 @@
     </a>
     <a class="apk" href="LeShaoWeChat-v947.apk">
         上一版 LeShaoWeChat-v947.apk
-        <div class="meta">v947 · 悬浮球彻底抹除: ① AI 悬浮球 FloatingBall 类文件+全部引用(show/hide/isShowing/showBallTask/hideBallTask/reconciler)整体删除, 未保留任何替代入口 ② ⚡ 球 DragFloat 创建/定位/面板跟随逻辑与残留命名(WmEntry reconciler 改名、日志注释)全部清除 ③ 豆包功能(源码/voices.json/备份)已彻底删除不留备份 ④ 乐少万群管理全新卡片化UI ⑤ 音频转语音弹窗改为按钮正上方+85%屏宽</div>
+        <div class="meta">v947 · 悬浮球彻底抹除: ① AI 悬浮球 FloatingBall 类文件+全部引用(show/hide/isShowing/showBallTask/hideBallTask/reconciler)整体删除, 未保留任何替代入口 ② ⚡ 球 DragFloat 创建/定位/面板跟随逻辑与残留命名(WmEntry reconciler 改名、日志注释)全部清除 ③ 第三方功能(源码/voices.json/备份)已彻底删除不留备份 ④ 乐少万群管理全新卡片化UI ⑤ 音频转语音弹窗改为按钮正上方+85%屏宽</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v946.apk">
         上一版 LeShaoWeChat-v946.apk
-        <div class="meta">v946 · 彻底移除豆包音色功能: ① 删除 doubao 桥包(桥/定位/音色/面板/入口)+转音按钮+豆包tab+HookEntry, 二次全仓审查无残留 ② 悬浮球(⚡+AI)视觉移除, AI助手功能(总结/润色/情绪分析/关键词/控制面板)迁移至右上角 ⋮ 菜单「AI 助手」入口 ③ 乐少万群管理全新卡片化UI: 渐变品牌头+按功能分组+圆角卡片输入框+Switch开关+底部操作栏 ④ 音频转语音弹窗改为在触发按钮正上方弹出且放大至85%屏宽</div>
+        <div class="meta">v946 · 彻底移除第三方音色功能: ① 删除 doubao 桥包(桥/定位/音色/面板/入口)+转音按钮+第三方tab+HookEntry, 二次全仓审查无残留 ② 悬浮球(⚡+AI)视觉移除, AI助手功能(总结/润色/情绪分析/关键词/控制面板)迁移至右上角 ⋮ 菜单「AI 助手」入口 ③ 乐少万群管理全新卡片化UI: 渐变品牌头+按功能分组+圆角卡片输入框+Switch开关+底部操作栏 ④ 音频转语音弹窗改为在触发按钮正上方弹出且放大至85%屏宽</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v945.apk">
         上一版 LeShaoWeChat-v945.apk
-        <div class="meta">v945 · 「转音」方案C(抓云真请求·绕过豆包)起步: 桥内新增网络层hook(okhttp3 OkHttpClient.newCall/newWebSocket + RealCall.execute/enqueue + RealWebSocket.send/onReadMessage), CAPTURE合成期间逐条记录 TTS 云端真实请求 URL/方法/headers/请求体、响应码与 WebSocket收发消息, 持久化进 Download/voice_bridge/doubao_bridge.log, 供实测后核对豆包 TTS 云端协议(端点/token/签名)是否可被微信侧直接复现</div>
+        <div class="meta">v945 · 「转音」方案C(抓云真请求·绕过第三方)起步: 桥内新增网络层hook(okhttp3 OkHttpClient.newCall/newWebSocket + RealCall.execute/enqueue + RealWebSocket.send/onReadMessage), CAPTURE合成期间逐条记录 TTS 云端真实请求 URL/方法/headers/请求体、响应码与 WebSocket收发消息, 持久化进 Download/voice_bridge/doubao_bridge.log, 供实测后核对第三方 TTS 云端协议(端点/token/签名)是否可被微信侧直接复现</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v943.apk">
         上一版 LeShaoWeChat-v943.apk
-        <div class="meta">v943 · 修复「转音」合成内容被截断不完整 + 重复操作卡顿: ① doSynthesize 原以"1秒无新音频=完成"判定, 豆包流式推音频块间停顿>1s 会被误判提前结束(实测三次均固定 68540B≈1.4s 被截断), 现新增 z.b 回调 boolean 参数作为"最后一包"完成信号 + 450ms 稳定确认, 无信号时 2s 兜底, 超时延至 20s, 捕获完整内容 ② 新增合成缓存(text+音色→WAV 存豆包 files/voice_cache, MD5), 重复预览/发送秒回 ③ 音频回调逐块打印 chunk 大小/last/total 日志便于核对</div>
+        <div class="meta">v943 · 修复「转音」合成内容被截断不完整 + 重复操作卡顿: ① doSynthesize 原以"1秒无新音频=完成"判定, 第三方流式推音频块间停顿>1s 会被误判提前结束(实测三次均固定 68540B≈1.4s 被截断), 现新增 z.b 回调 boolean 参数作为"最后一包"完成信号 + 450ms 稳定确认, 无信号时 2s 兜底, 超时延至 20s, 捕获完整内容 ② 新增合成缓存(text+音色→WAV 存第三方 files/voice_cache, MD5), 重复预览/发送秒回 ③ 音频回调逐块打印 chunk 大小/last/total 日志便于核对</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v942.apk">
         上一版 LeShaoWeChat-v942.apk
-        <div class="meta">v942 · 修复「转音」合成音频无法播放/无法作为语音发送 + 合成时不再让豆包App出声: ① WAV头改为手写小端序(原用 DataOutputStream.writeInt 大端写入, 导致 wavToPcm 报 "WAV data chunk missing", 发送失败且浏览器保存的音频无法播放) ② 桥端新增 AudioTrack.write 静音hook(CAPTURE 合成期间把送入扬声器的数据填零, 只采集不出声, 豆包App不再播报) ③ doSynthesize 增加采样率/时长/WAV头hex详细日志便于定位</div>
+        <div class="meta">v942 · 修复「转音」合成音频无法播放/无法作为语音发送 + 合成时不再让第三方App出声: ① WAV头改为手写小端序(原用 DataOutputStream.writeInt 大端写入, 导致 wavToPcm 报 "WAV data chunk missing", 发送失败且浏览器保存的音频无法播放) ② 桥端新增 AudioTrack.write 静音hook(CAPTURE 合成期间把送入扬声器的数据填零, 只采集不出声, 第三方App不再播报) ③ doSynthesize 增加采样率/时长/WAV头hex详细日志便于定位</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v941.apk">
         上一版 LeShaoWeChat-v941.apk
-        <div class="meta">v941 · 修复「转音」豆包音色读取(彻底): 实测确认微信进程 PackageManager 查不到 com.leshao.v3(NameNotFoundException) 且 ClassLoader 路径提取无效(LSPosed 内存dex注入), 改为将 100 个豆包音色数据直接内嵌为代码常量 VoicesData, 零依赖模块APK路径/PackageManager/ClassLoader, 打开转音必然有列表; 豆包音色桥/转音逻辑不变; DoubaoBridge 全链路日志保留</div>
+        <div class="meta">v941 · 修复「转音」第三方音色读取(彻底): 实测确认微信进程 PackageManager 查不到 com.leshao.v3(NameNotFoundException) 且 ClassLoader 路径提取无效(LSPosed 内存dex注入), 改为将 100 个第三方音色数据直接内嵌为代码常量 VoicesData, 零依赖模块APK路径/PackageManager/ClassLoader, 打开转音必然有列表; 第三方音色桥/转音逻辑不变; DoubaoBridge 全链路日志保留</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v940.apk">
         上一版 LeShaoWeChat-v940.apk
-        <div class="meta">v939 · 修复「转音」拉取不到豆包音色(改读模块自身 APK 的 assets/voices.json, 不再误读宿主微信 APK); 集成 DoubaoLocator: 豆包音色桥的音色列表/TTS切换/TTS合成/音频回调四处 hook 改为「硬编码类名优先、DexKit 字符串指纹兜底」, 豆包升级后自动自适应; 全程加 DoubaoBridge 日志便于定位</div>
+        <div class="meta">v939 · 修复「转音」拉取不到第三方音色(改读模块自身 APK 的 assets/voices.json, 不再误读宿主微信 APK); 集成 DoubaoLocator: 第三方音色桥的音色列表/TTS切换/TTS合成/音频回调四处 hook 改为「硬编码类名优先、DexKit 字符串指纹兜底」, 第三方升级后自动自适应; 全程加 DoubaoBridge 日志便于定位</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v938.apk">
         上一版 LeShaoWeChat-v938.apk
-        <div class="meta">v938 · 新增「转音」功能: 聊天输入框上方全新「转音」按钮 → 自绘悬浮窗面板(6行文本输入框 + 保存音频/预览/语音发送三按钮 + 豆包全套音色库/配音魔方音色库双tab + 上下滑动音色列表勾选试听「嘻嘻, 有你真开心」) 可将任意文本用豆包/配音魔方音色合成语音保存或直接发为语音消息; 集成豆包音色桥(模块作用域需勾选豆包 com.larus.nova); 「音色」对话框顶部新增双音色库tab行; 模块主页 TTS 引擎卡片新增转音入口</div>
+        <div class="meta">v938 · 新增「转音」功能: 聊天输入框上方全新「转音」按钮 → 自绘悬浮窗面板(6行文本输入框 + 保存音频/预览/语音发送三按钮 + 第三方全套音色库/配音魔方音色库双tab + 上下滑动音色列表勾选试听「嘻嘻, 有你真开心」) 可将任意文本用第三方/配音魔方音色合成语音保存或直接发为语音消息; 集成第三方音色桥(模块作用域需勾选第三方 com.larus.nova); 「音色」对话框顶部新增双音色库tab行; 模块主页 TTS 引擎卡片新增转音入口</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v937.apk">
         上一版 LeShaoWeChat-v937.apk

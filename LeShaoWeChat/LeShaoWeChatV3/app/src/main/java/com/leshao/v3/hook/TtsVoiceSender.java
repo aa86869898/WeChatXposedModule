@@ -1494,6 +1494,14 @@ public class TtsVoiceSender {
                         try {
                             Object item = p.args[0];
                             if (item == null) return;
+                            // v980: 快速路径 —— 无任何标记消息且不在 TTS 抑制窗口内时, 本条消息
+                            // 与标记移除无关, 直接返回; 避免每次消息渲染都做深度反射扫描
+                            // (findMarkedMessageIn 最深递归 4 层), 这是聊天窗口卡顿的主因之一。
+                            if (sBlockedOriginalMessages.isEmpty() && sMarkedMsgIds.isEmpty()
+                                    && System.currentTimeMillis() - sLastTtsCommandAt
+                                        > FAILURE_SUPPRESS_WINDOW_MS) {
+                                return;
+                            }
                             long now = System.currentTimeMillis();
                             if (now - sLastKjCallLogAt > 3000) {
                                 sLastKjCallLogAt = now;

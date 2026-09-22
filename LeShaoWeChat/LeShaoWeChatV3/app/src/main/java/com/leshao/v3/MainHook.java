@@ -11,7 +11,6 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.AntiRecallHook;
 import com.leshao.v3.hook.AutoForwardHook;
 import com.leshao.v3.hook.AntiDetectionHook;
-import com.leshao.v3.hook.AutoMethodDetector;
 import com.leshao.v3.hook.AutoRemark;
 import com.leshao.v3.hook.BatchAddFriend;
 import com.leshao.v3.hook.BatchInviteGroupsHook;
@@ -28,9 +27,6 @@ import com.leshao.v3.hook.ConvPrivacy;
 import com.leshao.v3.hook.DeleteDetect;
 import com.leshao.v3.hook.DexKitHelper;
 import com.leshao.v3.hook.FakeAddSource;
-
-import org.luckypray.dexkit.DexKitBridge;
-import org.luckypray.dexkit.query.matchers.MethodMatcher;
 import com.leshao.v3.hook.FriendRequestHook;
 import com.leshao.v3.hook.GroupMemberResolver;
 import com.leshao.v3.hook.GroupMemberTools;
@@ -76,19 +72,20 @@ public class MainHook implements IXposedHookLoadPackage {
     private static final String TAG = "LeShaoV3";
     private static final String WX_PKG = "com.tencent.mm";
     private static volatile boolean sMainInitialized = false;
-    private static final List<String> sModuleResults = new ArrayList<>();
-    private static int sModuleTotal = 0;
-    private static int sModuleOk = 0;
-    private static int sModuleFail = 0;
+    private static final List<String> sModuleResults =
+            java.util.Collections.synchronizedList(new ArrayList<>());
+    private static volatile int sModuleTotal = 0;
+    private static volatile int sModuleOk = 0;
+    private static volatile int sModuleFail = 0;
     private static long sStartTime = 0;
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v979";
+    public static final String MODULE_BUILD = "v980";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 979;
+    public static final int MODULE_VERSION_CODE = 980;
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -299,7 +296,11 @@ public class MainHook implements IXposedHookLoadPackage {
                         safeRun("FakeAddSource", () -> FakeAddSource.hook(cl));
                         safeRun("BatchAddFriend", () -> BatchAddFriend.hook(cl));
 
-                        safeRun("GroupMemberTools", () -> {
+                        // v980: 以下两个模块依赖 DexKit 联网解析, 原实现直接在主线程同步执行,
+                        // 实测 GroupMemberTools 阻塞主线程 916ms、LeshaoAI 294ms, 是启动卡顿主因。
+                        // 二者 hook 的目标(群资料页/聊天菜单)均在后段 UI 才加载, 改为后台线程延迟安装,
+                        // 既不丢 hook 时机, 又消除启动期主线程阻塞。
+                        deferRun("GroupMemberTools", () -> {
                             try {
                                 GroupMemberTools.init(cl);
                                 GroupMemberTools.hook(cl);
@@ -308,35 +309,11 @@ public class MainHook implements IXposedHookLoadPackage {
                             }
                         });
 
-                        safeRun("LeshaoAI", () -> {
+                        deferRun("LeshaoAI", () -> {
                             com.leshao.ai.hook.HookEntry.appClassLoader = cl;
                             com.leshao.ai.util.DexKitBridgeHolder.init(cl);
                             com.leshao.ai.hook.wechat.WeChatHook.install(lpparam);
                             LogWriter.log(TAG, "[MainHook] LeshaoAI 模块已加载");
-                        });
-
-                        safeRun("AutoMethodDetector", () -> {
-                            DexKitHelper.waitKernelInit(cl, new DexKitHelper.KernelReadyCallback() {
-                                @Override
-                                public void onKernelReady(DexKitBridge bridge) {
-                                    MethodMatcher matcher = MethodMatcher.create()
-                                        .paramCount(1)
-                                        .paramTypes("java.lang.String")
-                                        .returnType("void");
-
-                                    XC_MethodHook realHook = new XC_MethodHook() {
-                                        @Override
-                                        protected void afterHookedMethod(MethodHookParam param) {
-                                            LogWriter.log("AutoDetect",
-                                                "Business method called: "
-                                                + param.method.getDeclaringClass().getName());
-                                        }
-                                    };
-
-                                    AutoMethodDetector.detect(bridge, cl, matcher,
-                                        realHook, "example", 30000L);
-                                }
-                            });
                         });
                     } catch (Throwable t) {
                         LogWriter.log(TAG, "[MainHook] FATAL in onReadyCallback: " + t.getClass().getSimpleName()
@@ -433,5 +410,33 @@ public class MainHook implements IXposedHookLoadPackage {
             LogWriter.log(TAG, "[Module] FAIL " + name + " elapsed="
                     + (System.currentTimeMillis() - started) + "ms: " + err);
         }
+    }
+
+    /**
+     * v980: 将耗时模块移出主线程执行 —— onReady 回调运行于 Application.attachBaseContext 主线程,
+     * 任何同步 DexKit 解析都会直接拖慢微信冷启动。deferRun 用独立守护线程异步安装 hook,
+     * 目标类均为后段 UI(getView/view 相关), 异步安装不丢时机。
+     */
+    private static void deferRun(String name, Runnable task) {
+        sModuleTotal++;
+        LogWriter.log(TAG, "[Module] DEFER " + name);
+        Thread t = new Thread(() -> {
+            long started = System.currentTimeMillis();
+            try {
+                task.run();
+                sModuleOk++;
+                sModuleResults.add("  [OK] " + name + " (async)");
+                LogWriter.log(TAG, "[Module] OK " + name + " elapsed="
+                        + (System.currentTimeMillis() - started) + "ms (async)");
+            } catch (Throwable e) {
+                sModuleFail++;
+                String err = e.getClass().getSimpleName() + ": " + e.getMessage();
+                sModuleResults.add("  [FAIL] " + name + " - " + err);
+                LogWriter.log(TAG, "[Module] FAIL " + name + " elapsed="
+                        + (System.currentTimeMillis() - started) + "ms (async): " + err);
+            }
+        }, "leshao-defer-" + name);
+        t.setDaemon(true);
+        t.start();
     }
 }
