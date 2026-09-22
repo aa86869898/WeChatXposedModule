@@ -12,6 +12,8 @@ public class MessageHandler {
 
     private static final Pattern SENDER_PREFIX_WXID = Pattern.compile("^(wxid_[a-zA-Z0-9]+):\\s*");
     private static final Pattern SENDER_PREFIX_ANY = Pattern.compile("^([a-zA-Z0-9_]+):\\s*");
+    /** v961: 中文/混合昵称前缀(兜底, 避免前缀残留被 TTS 念出); 不含 / . < > 防误伤 URL/XML */
+    private static final Pattern SENDER_PREFIX_CN = Pattern.compile("^([\\u4e00-\\u9fa5\\w][\\u4e00-\\u9fa5\\w\\-]{0,31}):\\s*");
 
     private final TtsEngine mTts;
     private final CubeTtsPlayer mCubeTts;
@@ -313,14 +315,97 @@ public class MessageHandler {
 
     static String cleanText(String content) {
         if (content == null) return "";
-        String t = content
+        String t = sanitizeForTts(content);
+        t = t
             .replace("<![CDATA[", "").replace("]]>", "")
             .replaceAll("<[^>]+>", "")
             .replaceAll("https?://\\S+", "链接")
             .replaceAll("@\\S+\\s+", "")
             .replaceAll("\\[\\w+\\]", "")
             .replace("\n", " ").trim();
+        // 连续空白压缩为单个空格(零宽过滤后可能残留)
+        t = t.replaceAll("\\s{2,}", " ").trim();
         return t.length() > 300 ? t.substring(0, 300) + "等长内容" : t;
+    }
+
+    /**
+     * v961: TTS 朗读文本清洗 —— 去除 emoji/零宽水印/控制字符/HTML实体,
+     * 修复"播报乱码"(TTS 引擎把 emoji、零宽字符、&amp; 实体读成异常音节)。
+     */
+    static String sanitizeForTts(String s) {
+        if (s == null || s.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            // 控制字符(含 \r \t)与不可见格式字符
+            if (c < 0x20 || c == 0x7F) {
+                sb.append(' ');
+                continue;
+            }
+            // 零宽字符/水印/BOM/变体选择符/双向控制符
+            if ((c >= 0x200B && c <= 0x200F) || c == 0x2060 || c == 0xFEFF
+                    || (c >= 0x202A && c <= 0x202E) || (c >= 0x2066 && c <= 0x2069)) {
+                continue;
+            }
+            // 代理对高位: 整个码点判定, emoji/符号区直接丢弃
+            if (Character.isHighSurrogate(c)) {
+                if (i + 1 < s.length() && Character.isLowSurrogate(s.charAt(i + 1))) {
+                    int cp = Character.toCodePoint(c, s.charAt(i + 1));
+                    if (isEmojiOrSymbol(cp)) {
+                        i++; // 跳过低位代理
+                        continue;
+                    }
+                    sb.append(c).append(s.charAt(i + 1));
+                    i++;
+                    continue;
+                }
+                continue; // 孤立高位代理, 丢弃
+            }
+            if (Character.isLowSurrogate(c)) {
+                continue; // 孤立低位代理, 丢弃
+            }
+            // BMP 内 emoji/符号/装饰区块
+            if (c >= 0x2190 && c <= 0x2BFF) continue;   // 箭头/数学/杂项符号/装饰
+            if (c >= 0x1F000 && c <= 0x1FAFF) continue; // 部分 ROM 的 BMP 映射区
+            if (c >= 0x2600 && c <= 0x27BF) continue;   // 杂项符号/装饰符号(☀☎✂)
+            if (c >= 0xFE00 && c <= 0xFE0F) continue;   // 变体选择符
+            if (c >= 0x1F1E6 && c <= 0x1F1FF) continue; // 区域指示符(旗帜)
+            if (c >= 0xFE0F || (c >= 0x2B00 && c <= 0x2BFF)) continue;
+            if (c >= 0xFF00 && c <= 0xFF0F) continue;   // 全角符号(！＠＃等非字母数字)
+            sb.append(c);
+        }
+        String out = sb.toString();
+        // 常见 HTML 实体
+        out = out.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+                 .replace("&quot;", "\"").replace("&#39;", "'").replace("&apos;", "'")
+                 .replace("&nbsp;", " ").replace("&#x27;", "'");
+        // 其余数字/十六进制实体
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("&#(x?[0-9a-fA-F]+);").matcher(out);
+        StringBuffer decoded = new StringBuffer();
+        while (m.find()) {
+            String body = m.group(1);
+            try {
+                int cp = body.startsWith("x") || body.startsWith("X")
+                        ? Integer.parseInt(body.substring(1), 16)
+                        : Integer.parseInt(body);
+                if (cp > 0 && cp < 0x110000 && !isEmojiOrSymbol(cp)) {
+                    m.appendReplacement(decoded, new String(Character.toChars(cp)));
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        m.appendTail(decoded);
+        return decoded.toString();
+    }
+
+    private static boolean isEmojiOrSymbol(int cp) {
+        return (cp >= 0x1F000 && cp <= 0x1FAFF)   // emoji/ pictographs
+                || (cp >= 0x2600 && cp <= 0x27BF) // 杂项符号
+                || (cp >= 0x2190 && cp <= 0x21FF) // 箭头
+                || (cp >= 0x2B00 && cp <= 0x2BFF) // 箭头补充/杂项
+                || (cp >= 0x1F1E6 && cp <= 0x1F1FF) // 旗帜
+                || (cp >= 0xFE00 && cp <= 0xFE0F);   // 变体选择符
     }
 
     static String parseLocation(String content) {
@@ -361,6 +446,8 @@ public class MessageHandler {
         if (m.find()) return m.group(1);
         m = SENDER_PREFIX_ANY.matcher(content);
         if (m.find()) return m.group(1);
+        m = SENDER_PREFIX_CN.matcher(content);
+        if (m.find()) return m.group(1);
         return null;
     }
 
@@ -369,6 +456,8 @@ public class MessageHandler {
         Matcher m = SENDER_PREFIX_WXID.matcher(content);
         if (m.find()) return content.substring(m.end());
         m = SENDER_PREFIX_ANY.matcher(content);
+        if (m.find()) return content.substring(m.end());
+        m = SENDER_PREFIX_CN.matcher(content);
         if (m.find()) return content.substring(m.end());
         return content;
     }

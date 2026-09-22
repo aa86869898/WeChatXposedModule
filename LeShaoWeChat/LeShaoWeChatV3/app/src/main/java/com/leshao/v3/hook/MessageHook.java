@@ -466,13 +466,13 @@ public class MessageHook {
             sCount++;
             boolean isVoice = (rawType == 34 || rawType == 228);
             boolean isTts = content != null && content.startsWith("#tts");
-            if (isVoice || isTts) {
-                LogWriter.log(TAG, "#" + sCount
-                    + " type=" + rawType + "->" + type
-                    + " isSend=" + isSend + " msgId=" + msgId
-                    + " talker=" + trunc(talker, 20)
-                    + " content=" + trunc(content, 40));
-            }
+            // v961: 全类型打印消息内容(旧实现仅语音/#tts 打印, 文字等消息内容看不到)
+            LogWriter.log(TAG, "#" + sCount
+                + " type=" + rawType + "->" + type
+                + " isSend=" + isSend + " msgId=" + msgId
+                + " talker=" + trunc(talker, 20)
+                + " voice=" + isVoice + " tts=" + isTts
+                + " content=" + trunc(content, 200));
 
             // 去重: 同一个 msgId 只处理一次
             synchronized (sSeenMsgIds) {

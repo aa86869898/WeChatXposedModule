@@ -65,9 +65,11 @@ public class CornerMenu {
     private static Activity sHomeAct;
     private static final Handler sH = new Handler(Looper.getMainLooper());
 
-    // 聊天窗口精确标志位: 由 ChattingUIFragment.onHiddenChanged 驱动,
+    // 聊天窗口精确标志位: 由 ChattingUIFragment(基类)onHiddenChanged/onResume/onPause 驱动,
     // 比遍历 fragment 检查 view 状态更可靠 (回主页后 view 状态可能未同步/多实例误判)
     private static volatile boolean sChatWindowActive;
+    /** 聊天 fragment 最近一次 onResume 时间(elapsedRealtime), 防残留 fragment 误判 */
+    private static volatile long sChatResumeAt;
 
     private static int dp(Context ctx, float dp) {
         return (int) (dp * ctx.getResources().getDisplayMetrics().density + 0.5f);
@@ -235,10 +237,16 @@ public class CornerMenu {
      * 聊天中则不注入三横菜单。
      */
     private static boolean isInChatWindow(Activity act) {
-        // 优先使用 onHiddenChanged 驱动的精确标志位:
+        // 优先使用 onHiddenChanged/onResume 驱动的精确标志位:
         // 回主页后 fragment view 可能仍短暂标记可见或存在多个实例,
         // 遍历检查不可靠, 导致三横菜单偶发不显示。
         if (sChatWindowActive) return true;
+        // v961: 最近 3s 内聊天 fragment 有过 onResume 视为聊天中;
+        // 残留(已 detach/hide)的 fragment 不满足该时间条件, 不再误判
+        if (sChatResumeAt > 0
+                && android.os.SystemClock.elapsedRealtime() - sChatResumeAt < 3000) {
+            return true;
+        }
         try {
             Object fm = XposedHelpers.callMethod(act, "getSupportFragmentManager");
             if (fm == null) return false;
@@ -273,41 +281,105 @@ public class CornerMenu {
         try { return sMainIcon.getParent() != null; } catch (Throwable t) { return false; }
     }
 
-    /** 聊天窗口精确可见性: hook ChattingUIFragment.onHiddenChanged 维护标志位。
-     *  同时拦截回主页瞬间(chat hidden)立即恢复注入, 修复偶发不显示。 */
+    /** 聊天窗口精确可见性: hook ChattingUIFragment(含继承链上的基类方法)维护标志位。
+     *  同时拦截回主页瞬间(chat hidden)立即恢复注入, 修复偶发不显示。
+     *
+     *  v961: 3180 的 onHiddenChanged 声明在基类 MMFragment 上, 原
+     *  hookAllMethods(ChattingUIFragment, ...) 只 hook 子类自身声明的方法,
+     *  hook 从未触发 → 回主页后无恢复路径。改为沿继承链查找声明方法再 hook
+     *  (与 WmEntry.hookChatFragMethod 同策略), 并增加 onResume/onPause 驱动
+     *  sChatWindowActive + sChatResumeAt 时间戳(防残留 fragment mView.isShown 误判)。 */
     private static void hookChatFragmentVisibility(ClassLoader cl) {
         try {
             Class<?> fragCls = XposedHelpers.findClass(
                 "com.tencent.mm.ui.chatting.ChattingUIFragment", cl);
-            XposedBridge.hookAllMethods(fragCls, "onHiddenChanged", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    try {
-                        boolean hidden = (Boolean) param.args[0];
-                        sChatWindowActive = !hidden;
-                        if (hidden) {
-                            // 回主页: 立即尝试恢复三横菜单(不依赖下次 onWindowFocusChanged)
-                            final Object frag = param.thisObject;
-                            sH.postDelayed(() -> {
-                                try {
-                                    if (frag == null || sChatWindowActive) return;
-                                    Activity act = (Activity) XposedHelpers.callMethod(frag, "getActivity");
-                                    if (act == null) return;
-                                    String clsName = act.getClass().getName();
-                                    if (!"com.tencent.mm.ui.LauncherUI".equals(clsName)
-                                            && !"com.tencent.mm.ui.HomeUI".equals(clsName)) return;
-                                    if (hasActiveMenu()) return;
-                                    injectMain(act, 0);
-                                } catch (Throwable ignored) {}
-                            }, 100);
+            // v961: 沿继承链向上找声明方法(onHiddenChanged 在 MMFragment 基类)
+            hookChatFragMethod(fragCls, "onHiddenChanged", new Class<?>[]{boolean.class},
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            boolean hidden = (Boolean) param.args[0];
+                            sChatWindowActive = !hidden;
+                            if (hidden) {
+                                restoreMainMenuFromFragment(param.thisObject);
+                            }
+                        } catch (Throwable e) {
+                            LogWriter.log(TAG, "onHiddenChanged cb err: " + e);
                         }
-                    } catch (Throwable e) {
-                        LogWriter.log(TAG, "onHiddenChanged cb err: " + e);
                     }
-                }
-            });
+                });
+            // v961: onResume 置位 + 记录时间戳(进入聊天)
+            hookChatFragMethod(fragCls, "onResume", new Class<?>[0],
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            sChatWindowActive = true;
+                            sChatResumeAt = android.os.SystemClock.elapsedRealtime();
+                        } catch (Throwable e) {
+                            LogWriter.log(TAG, "chat onResume cb err: " + e);
+                        }
+                    }
+                });
+            // v961: onPause 置位 + 回主页恢复注入
+            hookChatFragMethod(fragCls, "onPause", new Class<?>[0],
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            sChatWindowActive = false;
+                            restoreMainMenuFromFragment(param.thisObject);
+                        } catch (Throwable e) {
+                            LogWriter.log(TAG, "chat onPause cb err: " + e);
+                        }
+                    }
+                });
         } catch (Throwable t) {
             LogWriter.log(TAG, "hookChatFragmentVisibility err: " + t.getMessage());
+        }
+    }
+
+    /** 回主页后恢复三横菜单(延迟至 fragment 状态稳定)。 */
+    private static void restoreMainMenuFromFragment(final Object frag) {
+        final Object f = frag;
+        sH.postDelayed(() -> {
+            try {
+                if (f == null || sChatWindowActive) return;
+                Activity act = (Activity) XposedHelpers.callMethod(f, "getActivity");
+                if (act == null) return;
+                String clsName = act.getClass().getName();
+                if (!"com.tencent.mm.ui.LauncherUI".equals(clsName)
+                        && !"com.tencent.mm.ui.HomeUI".equals(clsName)) return;
+                if (hasActiveMenu()) return;
+                if (isInChatWindow(act)) return;
+                LogWriter.log(TAG, "restore: hamburger missing after leaving chat, reinject");
+                injectMain(act, 0);
+            } catch (Throwable ignored) {}
+        }, 100);
+    }
+
+    /** 沿继承链查找 fragment 方法并 hook(onHiddenChanged 等在基类声明)。 */
+    private static void hookChatFragMethod(Class<?> fragCls, String name,
+                                           Class<?>[] paramTypes, XC_MethodHook hook) {
+        try {
+            java.lang.reflect.Method m = null;
+            Class<?> cur = fragCls;
+            while (cur != null && cur != Object.class) {
+                try {
+                    m = cur.getDeclaredMethod(name, paramTypes);
+                    break;
+                } catch (NoSuchMethodException e) {
+                    cur = cur.getSuperclass();
+                }
+            }
+            if (m == null) return;
+            m.setAccessible(true);
+            XposedBridge.hookMethod(m, hook);
+            LogWriter.log(TAG, "hook: ChattingUIFragment." + name
+                + " (" + m.getDeclaringClass().getSimpleName() + ") hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookChatFragMethod " + name + " err: " + t.getMessage());
         }
     }
 

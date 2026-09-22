@@ -9,6 +9,7 @@ import org.luckypray.dexkit.DexKitBridge;
 import org.luckypray.dexkit.DexKitCacheBridge;
 import org.luckypray.dexkit.query.FindClass;
 import org.luckypray.dexkit.query.FindMethod;
+import org.luckypray.dexkit.query.enums.StringMatchType;
 import org.luckypray.dexkit.query.matchers.ClassMatcher;
 import org.luckypray.dexkit.query.matchers.MethodMatcher;
 import org.luckypray.dexkit.result.ClassData;
@@ -1513,14 +1514,12 @@ public class DexKitHelper {
     /** 撤回事件监听类: 特征字符串(日志TAG, 首选) */
     private static void findRevokeListeners(DexKitBridge bridge) {
         java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
-        // v960: 特征串扩容(3180 实测原两个 TAG 均未命中, 需多路检索)
+        // v961: 特征串收紧 —— v960 的裸 "revoke"/"revokeMsg" 误伤 300+ 类
+        // (含 FinderRedDotNotifyReportStruct 等无关类, 其 callback 被 setResult(null)
+        // 会破坏微信功能)。仅保留精确日志TAG + 回调签名 + 实证类名候选。
         for (String tag : new String[]{
                 "MicroMsg.RevokeReceiveMessageListener",
-                "MicroMsg.RevokeMsgListener",
-                "revokeMsg",
-                "RevokeMsgEvent",
-                "onRevokeMsg",
-                "revoke"}) {
+                "MicroMsg.RevokeMsgListener"}) {
             try {
                 List<ClassData> classes = bridge.findClass(FindClass.create()
                     .matcher(ClassMatcher.create().usingStrings(tag)));
@@ -1534,7 +1533,7 @@ public class DexKitHelper {
                 LogWriter.log(TAG, "findRevokeListeners(" + tag + ") err: " + e.getMessage());
             }
         }
-        // v960 路径2: 类名候选直查(注释实证的 3180 链路: RevokeMsgListener/chatroom listener)
+        // 路径2: 类名候选直查(v955/v956 实证的 3180 链路)
         if (out.isEmpty()) {
             for (String cn : new String[]{
                     "com.tencent.mm.ui.chatting.RevokeMsgListener",
@@ -1552,7 +1551,7 @@ public class DexKitHelper {
                 }
             }
         }
-        // v960 路径3: 方法签名检索 —— callback 方法且参数含撤回事件(autogen.fm.ks)
+        // 路径3: callback 方法签名检索 —— 参数含撤回事件(autogen.fm.ks), 精确类型匹配
         if (out.isEmpty()) {
             try {
                 List<MethodData> methods = bridge.findMethod(FindMethod.create()
@@ -1562,7 +1561,7 @@ public class DexKitHelper {
                     if (pts == null) continue;
                     boolean hit = false;
                     for (String pt : pts) {
-                        if (pt != null && (pt.contains("fm.ks") || pt.contains("Revoke"))) {
+                        if (pt != null && pt.contains("fm.ks")) {
                             hit = true;
                             break;
                         }
@@ -1572,9 +1571,25 @@ public class DexKitHelper {
                         if (cn != null) out.add(cn);
                     }
                 }
-                LogWriter.log(TAG, "findRevokeListeners(byCallback): " + out.size() + " cands");
+                LogWriter.log(TAG, "findRevokeListeners(byCallback fm.ks): " + out.size() + " cands");
             } catch (Throwable e) {
                 LogWriter.log(TAG, "findRevokeListeners(byCallback) err: " + e.getMessage());
+            }
+        }
+        // v961: 兜底仍为空时, 用类名含 Revoke 的宽匹配(比裸字符串安全得多)
+        if (out.isEmpty()) {
+            try {
+                List<ClassData> classes = bridge.findClass(FindClass.create()
+                    .matcher(ClassMatcher.create().className("Revoke", StringMatchType.Contains, false)));
+                for (ClassData c : classes) {
+                    String cn = c.getName();
+                    if (cn == null) continue;
+                    String simple = cn.substring(cn.lastIndexOf('.') + 1);
+                    if (simple.toLowerCase().contains("revoke")) out.add(cn);
+                }
+                LogWriter.log(TAG, "findRevokeListeners(byClassName Revoke): " + out.size() + " cands");
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "findRevokeListeners(byClassName) err: " + e.getMessage());
             }
         }
         sRevokeListenerClasses = new java.util.ArrayList<>(out);

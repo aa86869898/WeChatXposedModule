@@ -347,8 +347,26 @@ public class ChatFooterLongPressMenu {
     @SuppressLint("RtlHardcoded")
     private static void showPanel(View anchor) {
         if (!WmPrefs.isLongPressMenu()) return;
+        // v961: 全量兜底 —— v960 只包了 showAtLocation, 构建/PopupWindow 构造阶段的
+        // IllegalStateException(child already has a parent)仍会冒泡到按钮点击, 表现为"点了没反应"
+        try {
+            showPanelInner(anchor);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "showPanel err: " + android.util.Log.getStackTraceString(t));
+            try {
+                if (popupWindow != null && popupWindow.isShowing()) popupWindow.dismiss();
+            } catch (Throwable ignored) {}
+            popupWindow = null;
+            removeLayoutListener();
+        }
+    }
+
+    private static void showPanelInner(View anchor) {
         if (popupWindow != null) {
-            if (popupWindow.isShowing()) popupWindow.dismiss();
+            try {
+                if (popupWindow.isShowing()) popupWindow.dismiss();
+            } catch (Throwable ignored) {}
+            popupWindow = null;
             removeLayoutListener();
         }
 
@@ -392,28 +410,13 @@ public class ChatFooterLongPressMenu {
         popupWindow.setOutsideTouchable(true);
         popupWindow.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
-        // 定位到触发按钮正上方（先测量高度）
-        root.measure(View.MeasureSpec.makeMeasureSpec(panelW, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int panelH = root.getMeasuredHeight();
-
-        int[] loc = new int[2];
-        anchor.getLocationInWindow(loc);
-        int anchorW = Math.max(anchor.getWidth(), 1);
-        int x = loc[0] + anchorW / 2 - panelW / 2;
-        int y = loc[1] - panelH - dp(ctx, 10);
-        if (x < 0) x = 0;
-        if (x + panelW > dm.widthPixels) x = dm.widthPixels - panelW;
-        if (y < 0) y = loc[1] + anchor.getHeight() + dp(ctx, 10);
-        if (y + panelH > dm.heightPixels) y = dm.heightPixels - panelH - dp(ctx, 8);
-
-        // v960: showAtLocation 可能因 token 失效抛 BadTokenException(实测闪退),
-        // 所有展示/失败路径必须兜底, 不得让异常冒泡到微信 UI 线程
+        // v961: 屏幕正中居中显示(Gravity.CENTER), 不再跟随按钮定位;
+        // showAtLocation 的 token 失效/子view冲突等异常已在 showPanel 全量兜底
         try {
-            popupWindow.showAtLocation(anchor, Gravity.TOP | Gravity.LEFT, x, y);
+            popupWindow.showAtLocation(anchor, Gravity.CENTER, 0, 0);
             popupWindow.setOnDismissListener(() -> removeLayoutListener());
         } catch (Throwable t) {
-            LogWriter.log("ChatFooterLongPressMenu", "showAtLocation FAILED: " + t);
+            LogWriter.log(TAG, "showAtLocation FAILED: " + android.util.Log.getStackTraceString(t));
             try {
                 if (popupWindow != null && popupWindow.isShowing()) popupWindow.dismiss();
             } catch (Throwable ignored) {}
@@ -421,24 +424,6 @@ public class ChatFooterLongPressMenu {
             removeLayoutListener();
             return;
         }
-
-        sLayoutAnchor = anchor;
-        sLayoutListener = () -> {
-            if (popupWindow == null || !popupWindow.isShowing()) return;
-            // 跟随按钮位置更新：保持显示在按钮正上方
-            try {
-                int[] cur = new int[2];
-                anchor.getLocationInWindow(cur);
-                int cx = cur[0] + anchorW / 2 - panelW / 2;
-                int cy = cur[1] - panelH - dp(ctx, 10);
-                if (cx < 0) cx = 0;
-                if (cx + panelW > dm.widthPixels) cx = dm.widthPixels - panelW;
-                if (cy < 0) cy = cur[1] + anchor.getHeight() + dp(ctx, 10);
-                if (cy + panelH > dm.heightPixels) cy = dm.heightPixels - panelH - dp(ctx, 8);
-                popupWindow.update(cx, cy, -1, -1, true);
-            } catch (Throwable ignored) {}
-        };
-        anchor.getViewTreeObserver().addOnGlobalLayoutListener(sLayoutListener);
     }
 
     private static void removeLayoutListener() {

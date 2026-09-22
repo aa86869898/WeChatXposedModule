@@ -119,6 +119,7 @@ public class AntiRecallHook {
                         try {
                             if (!sEnabled) return;
                             // 记录撤回(事件对象在 args[0])
+                            boolean isRevokeEvent = false;
                             try {
                                 Object evt = param.args != null && param.args.length > 0 ? param.args[0] : null;
                                 if (evt != null) {
@@ -130,6 +131,7 @@ public class AntiRecallHook {
                                         gf.setAccessible(true);
                                         Object ks = gf.get(evt);
                                         if (ks != null) {
+                                            isRevokeEvent = true;
                                             Object msg = null;
                                             for (java.lang.reflect.Field f : ks.getClass().getFields()) {
                                                 if (f.getType().getName().equals("com.tencent.mm.storage.e9")) {
@@ -150,8 +152,12 @@ public class AntiRecallHook {
                                     }
                                 }
                             } catch (Throwable ignored) {}
-                            param.setResult(null);
-                            LogWriter.log(TAG, "[事件] 阻止撤回处理: " + clsName);
+                            // v961: 仅对确认的撤回事件拦截; 非撤回 callback(误挂类)不得 setResult,
+                            // 否则会破坏微信无关功能(如红点上报/公告回调)
+                            if (isRevokeEvent) {
+                                param.setResult(null);
+                                LogWriter.log(TAG, "[事件] 阻止撤回处理: " + clsName);
+                            }
                         } catch (Throwable ignored) {}
                     }
                 });

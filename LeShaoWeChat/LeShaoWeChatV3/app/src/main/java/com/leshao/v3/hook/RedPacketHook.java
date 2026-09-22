@@ -44,6 +44,8 @@ public class RedPacketHook {
     private static volatile Set<String> sFastPrivateWxids = ConcurrentHashMap.newKeySet();
     private static volatile Set<String> sFastGroupIds = ConcurrentHashMap.newKeySet();
     private static volatile boolean sTtsAnnounce = true;
+    /** v961: 金额播报去重时间戳(UI扫描与场景回调双路, 5s 窗) */
+    private static volatile long sLastRpAnnounceAt = 0L;
 
     private static final Handler sHandler = new Handler(Looper.getMainLooper());
     private static final AtomicBoolean sProcessing = new AtomicBoolean(false);
@@ -256,33 +258,50 @@ public class RedPacketHook {
         return xml.substring(s, e);
     }
 
-    // ==================== TTS: LuckyMoneyDetailUI.onResume 读UI金额 ====================
+    // ==================== TTS: 详情页 onResume 读UI金额 ====================
     public static void hookRedPacketUI(ClassLoader cl) {
-        try {
-            Class<?> cls = cl.loadClass(PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyDetailUI");
-            java.lang.reflect.Method m = cls.getDeclaredMethod("onResume");
-            XposedBridge.hookMethod(m, new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam p) {
-                    try {
-                                        Activity act = (Activity) p.thisObject;
-                                        sHandler.postDelayed(() -> {
-                                            String amt = scanAmount(act.getWindow().getDecorView());
-                                            if (amt != null && !amt.isEmpty()) {
-                                                LogWriter.log(TAG, "RP: " + amt);
-                                                if (sTtsAnnounce) {
-                                                    TTSBroadcaster.announceRedPacket("好友", null, null, amt);
-                                                }
-                                            }
-                                        }, 800);
-                    } catch (Throwable e) {
-                        LogWriter.log("RedPacket", "cb err: " + e);
+        // v961: 3180 详情页类名为 LuckyMoneyNewDetailUI/LuckyMoneyBeforeDetailUI,
+        // 旧实现只 hook 已不存在的 LuckyMoneyDetailUI, 导致金额从不播报
+        String[] detailClasses = {
+            PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNewDetailUI",
+            PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI",
+            PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyDetailUI",
+            PKG_WECHAT + ".plugin.luckymoney.hk.ui.LuckyMoneyHKDetailUI",
+        };
+        boolean anyOk = false;
+        for (String cn : detailClasses) {
+            try {
+                Class<?> cls = cl.loadClass(cn);
+                XposedBridge.hookAllMethods(cls, "onResume", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        try {
+                            Activity act = (Activity) p.thisObject;
+                            sHandler.postDelayed(() -> {
+                                String amt = scanAmount(act.getWindow().getDecorView());
+                                if (amt != null && !amt.isEmpty()) {
+                                    LogWriter.log(TAG, "RP: " + amt);
+                                    // v961: 与 LuckMoneyBackend 场景回调播报去重(5s 窗)
+                                    long now = System.currentTimeMillis();
+                                    if (now - sLastRpAnnounceAt > 5000) {
+                                        sLastRpAnnounceAt = now;
+                                        if (sTtsAnnounce) {
+                                            TTSBroadcaster.announceRedPacket("好友", null, null, amt);
+                                        }
+                                    }
+                                }
+                            }, 800);
+                        } catch (Throwable e) {
+                            LogWriter.log("RedPacket", "detail cb err: " + e);
+                        }
                     }
-                }
-            });
-            LogWriter.log(TAG, "RP OK");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "RP fail: " + t);
+                });
+                LogWriter.log(TAG, "[OK] detail " + cn + ".onResume()");
+                anyOk = true;
+            } catch (Throwable ignored) {}
+        }
+        if (!anyOk) {
+            LogWriter.log(TAG, "RP detail UI: no class matched (amount announce disabled)");
         }
     }
 
@@ -303,14 +322,16 @@ public class RedPacketHook {
 
     // ==================== 领取页自动点"开" ====================
     private static void hookReceiveUIs(ClassLoader cl) {
-        hookInitView(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNewReceiveUI", "initView");
-        hookInitView(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI", "initView");
+        // v961: 3180 领取页是 LuckyMoneyNewReceiveUI/NotHookReceiveUI, "开"按钮在领取页;
+        // 旧实现 initView 只挂 ReceiveOpenHook(false) 不点击, 详情页才点击(找不到按钮),
+        // 导致后台 dispatch 后红包停在领取页。改为领取页 initView 即自动点"开"。
+        tryHookAndClick(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNewReceiveUI", "initView");
+        tryHookAndClick(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNotHookReceiveUI", "initView");
         tryHookAndClick(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUI");
         tryHookAndClick(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBusiReceiveUIV2");
         tryHookAndClick(cl, PKG_WECHAT + ".plugin.luckymoney.hk.ui.LuckyMoneyHKReceiveUI");
         tryHookAndClick(cl, PKG_WECHAT + ".plugin.luckymoney.hk.ui.LuckyMoneyHKBeforeDetailUI");
-        tryHookAndClick(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyNewDetailUI");
-        tryHookAndClick(cl, PKG_WECHAT + ".plugin.luckymoney.ui.LuckyMoneyBeforeDetailUI");
+        // v961: 详情页无"开"按钮, 不再尝试点击; 金额读取/播报由 hookRedPacketUI 负责
     }
 
     private static void hookInitView(ClassLoader cl, String className, String methodName) {
@@ -322,10 +343,14 @@ public class RedPacketHook {
     }
 
     private static void tryHookAndClick(ClassLoader cl, String className) {
+        tryHookAndClick(cl, className, "onCreate");
+    }
+
+    private static void tryHookAndClick(ClassLoader cl, String className, String methodName) {
         try {
             Class<?> cls = XposedHelpers.findClass(className, cl);
-            XposedBridge.hookAllMethods(cls, "onCreate", new ReceiveOpenHook(true));
-            LogWriter.log(TAG, "[OK] " + className + ".onCreate()");
+            XposedBridge.hookAllMethods(cls, methodName, new ReceiveOpenHook(true));
+            LogWriter.log(TAG, "[OK] " + className + "." + methodName + "()");
         } catch (Throwable ignored) {}
     }
 
