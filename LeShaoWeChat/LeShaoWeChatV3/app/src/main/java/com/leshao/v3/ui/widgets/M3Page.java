@@ -165,10 +165,52 @@ public final class M3Page {
         et.setTextColor(AppColors.onSurface());
         et.setHintTextColor(AppColors.onSurfaceVariant());
         et.setSingleLine(true);
+        // 长内容(如接口地址/密钥)支持左右拖动查看, 不被截断
+        et.setHorizontallyScrolling(true);
         et.setBackground(CandyUi.inputBg(ctx));
         int p = dp(ctx, 14);
         et.setPadding(p, dp(ctx, 12), p, dp(ctx, 12));
         return et;
+    }
+
+    /**
+     * 为单行输入框附加「自动剔除首尾空白」能力。
+     *
+     * <p>从网页/聊天窗口复制密钥或接口地址时, 首尾常带空格、换行、不可换行空格(U+00A0)、
+     * 全角空格(U+3000)、零宽空格(U+200B/U+FEFF) 等, 输入框内即时清理, 避免因多余字符
+     * 导致鉴权失败。仅处理首尾, 不改动中间内容。</p>
+     */
+    public static void trimEdgesOnInput(final android.widget.EditText et) {
+        if (et == null) return;
+        et.setHorizontallyScrolling(true);
+        et.addTextChangedListener(new android.text.TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(android.text.Editable s) {
+                if (s == null) return;
+                int len = s.length();
+                int start = 0, end = len;
+                while (start < end && isEdgeBlank(s.charAt(start))) start++;
+                while (end > start && isEdgeBlank(s.charAt(end - 1))) end--;
+                if (start == 0 && end == len) return;
+                CharSequence cleaned = s.subSequence(start, end);
+                et.setText(cleaned);
+                et.setSelection(cleaned.length());
+            }
+        });
+    }
+
+    /** 首尾需剔除的空白/不可见字符 */
+    private static boolean isEdgeBlank(char c) {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\r'
+                || c == '\u00A0' || c == '\u3000' || c == '\u200B' || c == '\uFEFF';
     }
 
     /** 页面区块间距 */

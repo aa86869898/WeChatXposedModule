@@ -503,11 +503,13 @@ public final class AiAssistantPanel {
         final TextView lbUrl = fieldLabel(ctx, "接口地址");
         list.addView(lbUrl);
         final EditText etBaseUrl = M3Page.input(ctx, "如 https://api.deepseek.com");
+        M3Page.trimEdgesOnInput(etBaseUrl);
         etBaseUrl.setText(safe(config.getBaseUrl()));
         list.addView(etBaseUrl);
         final TextView lbKey = fieldLabel(ctx, "Api Key密钥");
         list.addView(lbKey);
         final EditText etApiKey = M3Page.input(ctx, "sk-...");
+        M3Page.trimEdgesOnInput(etApiKey);
         etApiKey.setText(safe(config.getApiKey()));
         list.addView(etApiKey);
         final TextView lbModel = fieldLabel(ctx, "模型名称");
@@ -518,6 +520,7 @@ public final class AiAssistantPanel {
         modelRow.setOrientation(LinearLayout.HORIZONTAL);
         modelRow.setGravity(Gravity.CENTER_VERTICAL);
         final EditText etModel = M3Page.input(ctx, "如 deepseek-chat");
+        M3Page.trimEdgesOnInput(etModel);
         etModel.setText(safe(config.getModel()));
         etModel.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         modelRow.addView(etModel);
