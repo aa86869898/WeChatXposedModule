@@ -135,7 +135,10 @@ public final class AiAssistantPanel {
             // 避免 RESIZE 时固定高度内容被裁掉导致底部按钮消失。
             pw.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN);
 
-            // 预测量: 内容按可用高度收缩, 取实际面板高度用于精确居中(不越过可见区)
+            // v976: 内容型面板(heightPx<=0)不再显式 setHeight(实测值)。实机测量与真实布局存在
+            // 细微差异(dp→px 取整), 显式高度会把底部按钮下沿裁掉 1~2px。改为交给 PopupWindow
+            // 按内容自适应(构造时即 WRAP_CONTENT), 预测量仅用于估算高度做居中与溢出收缩。
+            boolean wrap = heightPx <= 0;
             int panelH;
             int targetH = heightPx > 0 ? Math.min(heightPx, maxPanelH) : maxPanelH;
             try {
@@ -157,11 +160,11 @@ public final class AiAssistantPanel {
                         measured = root.getMeasuredHeight();
                     }
                 }
-                panelH = heightPx > 0 ? targetH : Math.min(measured, targetH);
+                panelH = wrap ? Math.max(dp(actx, 120), Math.min(measured, maxPanelH)) : targetH;
             } catch (Throwable t) {
-                panelH = ViewGroup.LayoutParams.WRAP_CONTENT;
+                panelH = wrap ? maxPanelH : ViewGroup.LayoutParams.WRAP_CONTENT;
             }
-            if (panelH > 0) pw.setHeight(panelH);
+            if (!wrap && panelH > 0) pw.setHeight(panelH);
 
             sPopup = pw;
             try {
@@ -172,6 +175,25 @@ public final class AiAssistantPanel {
                     y = Math.max(availTop, availBottom - panelH);
                 }
                 pw.showAtLocation(anchor, Gravity.TOP | Gravity.LEFT, x, y);
+                if (wrap) {
+                    // v976: WRAP_CONTENT 面板的真实高度只有布局后才确定, 布局完成再按真实高度
+                    // 重新居中, 保证上下留白均匀且不越过可用区下沿。
+                    final int fAvailTop = availTop;
+                    final int fAvailBottom = availBottom;
+                    final int fAvailH = availH;
+                    final int fX = x;
+                    root.post(new Runnable() {
+                        @Override public void run() {
+                            try {
+                                int realH = root.getHeight();
+                                if (realH <= 0) return;
+                                int ny = fAvailTop + Math.max(0, (fAvailH - realH) / 2);
+                                if (ny + realH > fAvailBottom) ny = Math.max(fAvailTop, fAvailBottom - realH);
+                                pw.update(fX, ny, -1, -1);
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+                }
                 LogWriter.log(TAG, "showPopup OK: scene=" + scene + " panelH=" + panelH
                         + " availTop=" + availTop + " availBottom=" + availBottom
                         + " availH=" + availH + " y=" + y);
