@@ -241,8 +241,31 @@ public final class AiAssistantPanel {
         root.setBackground(CandyUi.dialogBg(ctx));
         // v968: 左右边距收紧(原 20dp), 让右侧开关等尾部控件更贴边不局促
         // v971: 底部内边距加大, 让底部按钮不贴边
-        root.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 12), dp(ctx, 16));
+        // v974: 底部内边距 16 -> 18dp, 底部栏按钮距对话窗下沿再加 2dp
+        root.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 12), dp(ctx, 18));
         return root;
+    }
+
+    /**
+     * v974: AI 助手专用菜单行 —— 左内边距收窄, 让左侧图标对齐到对话窗左边 18dp
+     * (root 左内边距 16dp + 行左内边距 2dp); 右内边距收窄, 让右侧开关/箭头对齐到右边 18dp
+     * (root 右内边距 12dp + 行右内边距 6dp)。上下内边距保持 SettingRow 默认值。
+     */
+    private static SettingRow newRow(Context ctx, String icon, String title, String sub) {
+        SettingRow row = new SettingRow(ctx, icon, title, sub);
+        try {
+            row.setPadding(dp(ctx, 2), row.getPaddingTop(), dp(ctx, 6), row.getPaddingBottom());
+        } catch (Throwable ignored) {}
+        return row;
+    }
+
+    /** v974: AI 助手专用分组标题 —— 左对齐到 18dp(root 16 + 2), 右内边距保持原值。 */
+    private static SectionHeader newSection(Context ctx, String title, String sub) {
+        SectionHeader h = new SectionHeader(ctx, title, sub);
+        try {
+            h.setPadding(dp(ctx, 2), h.getPaddingTop(), h.getPaddingRight(), h.getPaddingBottom());
+        } catch (Throwable ignored) {}
+        return h;
     }
 
     private static TextView newTitle(Context ctx, String text) {
@@ -389,23 +412,23 @@ public final class AiAssistantPanel {
             newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.60f));
 
             // ---- 1. 功能开关 ----
-            list.addView(new SectionHeader(ctx, "功能开关", "修改后即时生效"));
-            list.addView(new SettingRow(ctx, "🤖", "AI 助手", "总开关,关闭后全部 AI 能力停用")
+            list.addView(newSection(ctx, "功能开关", "修改后即时生效"));
+            list.addView(newRow(ctx, "🤖", "AI 助手", "总开关,关闭后全部 AI 能力停用")
                     .switchOn(config.isEnabled(), (btn, checked) -> {
                         LogWriter.log(TAG, "click: AI助手总开关 -> " + checked);
                         persist(ctx, config, c -> c.setEnabled(checked), "AI助手已" + (checked ? "开启" : "关闭"));
                     }));
-            list.addView(new SettingRow(ctx, "🔊", "语音消息发送", "开=AI回复转语音消息发出; 关=直接发文本")
+            list.addView(newRow(ctx, "🔊", "语音消息发送", "开=AI回复转语音消息发出; 关=直接发文本")
                     .switchOn(config.isTtsEnabled(), (btn, checked) -> {
                         LogWriter.log(TAG, "click: 语音消息发送 -> " + checked);
                         persist(ctx, config, c -> c.setTtsEnabled(checked), "语音消息发送已" + (checked ? "开启" : "关闭"));
                     }));
 
             // ---- 2. 自动回复 ----
-            list.addView(new SectionHeader(ctx, "自动回复", "按会话类型控制触发范围"));
+            list.addView(newSection(ctx, "自动回复", "按会话类型控制触发范围"));
             // v973: 群聊个性化配置 —— 行内开关控制群聊总开关; 点击整行进入「群聊个性化配置」
             // 页面(列出全部群聊, 点群聊自定义人设/关键词等, 支持模板一键套用)。
-            SettingRow rowGroup = new SettingRow(ctx, "👥", "群聊个性化配置",
+            SettingRow rowGroup = newRow(ctx, "👥", "群聊个性化配置",
                     overrideSub(true) + " · 点整行进入配置");
             rowGroup.switchOn(config.isAutoReplyInGroups(), (btn, checked) -> {
                 LogWriter.log(TAG, "click: 群聊个性化配置开关 -> " + checked);
@@ -419,7 +442,7 @@ public final class AiAssistantPanel {
             list.addView(rowGroup);
 
             // v973: 联系人个性化配置 —— 行内开关控制私聊总开关; 点击整行进入页面(列出全部联系人)。
-            SettingRow rowPrivate = new SettingRow(ctx, "💬", "联系人个性化配置",
+            SettingRow rowPrivate = newRow(ctx, "💬", "联系人个性化配置",
                     overrideSub(false) + " · 点整行进入配置");
             rowPrivate.switchOn(config.isAutoReplyInPrivate(), (btn, checked) -> {
                 LogWriter.log(TAG, "click: 联系人个性化配置开关 -> " + checked);
@@ -432,17 +455,17 @@ public final class AiAssistantPanel {
             });
             list.addView(rowPrivate);
 
-            list.addView(new SettingRow(ctx, "📣", "仅被@时自动回复", "群聊中只有被提到时才回复")
+            list.addView(newRow(ctx, "📣", "仅被@时自动回复", "群聊中只有被提到时才回复")
                     .switchOn(config.isOnlyWhenMentioned(), (btn, checked) -> {
                         LogWriter.log(TAG, "click: 仅被@时回复 -> " + checked);
                         persist(ctx, config, c -> c.setOnlyWhenMentioned(checked), "已更新@回复规则");
                     }));
 
             // ---- 3. 模型与参数(点击进入配置) ----
-            list.addView(new SectionHeader(ctx, "模型与参数", "服务商接入与核心参数"));
+            list.addView(newSection(ctx, "模型与参数", "服务商接入与核心参数"));
             final String providerSub = providerLabel(providerTypeOf(config.getProviderType()))
                     + (TextUtils.isEmpty(config.getModel()) ? "" : " · " + config.getModel());
-            list.addView(new SettingRow(ctx, "☁", "模型提供商", providerSub)
+            list.addView(newRow(ctx, "☁", "模型提供商", providerSub)
                     .arrow(() -> {
                         LogWriter.log(TAG, "click: 模型提供商");
                         dismissCurrent();
@@ -450,13 +473,13 @@ public final class AiAssistantPanel {
                     }));
             final String coreSub = (TextUtils.isEmpty(config.getBotName()) ? "未命名" : config.getBotName())
                     + " · 记忆 " + config.getMaxHistoryMessages() + " 条";
-            list.addView(new SettingRow(ctx, "🛠", "AI 核心参数配置", coreSub)
+            list.addView(newRow(ctx, "🛠", "AI 核心参数配置", coreSub)
                     .arrow(() -> {
                         LogWriter.log(TAG, "click: AI核心参数配置");
                         dismissCurrent();
                         showCoreConfig(activity);
                     }));
-            list.addView(new SettingRow(ctx, "🧩", "模板配置", templateSub())
+            list.addView(newRow(ctx, "🧩", "模板配置", templateSub())
                     .arrow(() -> {
                         LogWriter.log(TAG, "click: 模板配置");
                         dismissCurrent();
@@ -509,13 +532,13 @@ public final class AiAssistantPanel {
         newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.60f));
 
         // ---- 服务商 ----
-        list.addView(new SectionHeader(ctx, "服务商", "API 协议类型"));
+        list.addView(newSection(ctx, "服务商", "API 协议类型"));
         final SettingRow[] providerRows = new SettingRow[ProviderType.values().length];
         ProviderType[] types = ProviderType.values();
         for (int i = 0; i < types.length; i++) {
             final ProviderType pt = types[i];
             boolean sel = providerMatches(pt, config.getProviderType());
-            SettingRow row = new SettingRow(ctx, "☁", providerLabel(pt), sel ? "当前使用" : "点击选择");
+            SettingRow row = newRow(ctx, "☁", providerLabel(pt), sel ? "当前使用" : "点击选择");
             providerRows[i] = row;
             row.arrow(() -> {
                 LogWriter.log(TAG, "click: 服务商 -> " + pt.name());
@@ -533,7 +556,7 @@ public final class AiAssistantPanel {
         }
 
         // ---- 接口 ----
-        list.addView(new SectionHeader(ctx, "接口", "服务商提供的接入信息"));
+        list.addView(newSection(ctx, "接口", "服务商提供的接入信息"));
         // 温度 SeekBar 在下方创建, 用 holder 让上方按钮的持久化回调能拿到它
         final SeekBar[] tempRef = new SeekBar[1];
         final TextView lbUrl = fieldLabel(ctx, "接口地址");
@@ -627,7 +650,7 @@ public final class AiAssistantPanel {
                     for (String id : listFinal) {
                         if (shown >= 60) break;
                         final String modelId = id;
-                        SettingRow row = new SettingRow(ctx, "🧠", modelId, "点击填入模型名称");
+                        SettingRow row = newRow(ctx, "🧠", modelId, "点击填入模型名称");
                         row.setOnClickListener(v -> {
                             etModel.setText(modelId);
                             modelResults.removeAllViews();
@@ -643,7 +666,7 @@ public final class AiAssistantPanel {
         });
 
         // ---- 生成参数 ----
-        list.addView(new SectionHeader(ctx, "生成参数", "温度越高回复越随机"));
+        list.addView(newSection(ctx, "生成参数", "温度越高回复越随机"));
         final TextView tvTemp = new TextView(ctx);
         tvTemp.setTextSize(14);
         tvTemp.setTextColor(AppColors.textTertiary());
@@ -718,7 +741,7 @@ public final class AiAssistantPanel {
         newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.60f));
 
         // ---- 身份 ----
-        list.addView(new SectionHeader(ctx, "身份", "AI 对外展示的名字与唤醒词"));
+        list.addView(newSection(ctx, "身份", "AI 对外展示的名字与唤醒词"));
         final EditText etBotName = M3Page.input(ctx, "AI 昵称, 如 小乐");
         etBotName.setText(safe(config.getBotName()));
         list.addView(etBotName);
@@ -727,7 +750,7 @@ public final class AiAssistantPanel {
         list.addView(etWakeKeyword);
 
         // ---- 人设 ----
-        list.addView(new SectionHeader(ctx, "人设提示词", "System Prompt, 决定 AI 的语气与身份"));
+        list.addView(newSection(ctx, "人设提示词", "System Prompt, 决定 AI 的语气与身份"));
         final EditText etSystemPrompt = M3Page.input(ctx, "人设提示词");
         etSystemPrompt.setSingleLine(false);
         etSystemPrompt.setMinLines(4);
@@ -736,7 +759,7 @@ public final class AiAssistantPanel {
         list.addView(etSystemPrompt);
 
         // ---- 记忆 ----
-        list.addView(new SectionHeader(ctx, "上下文记忆", "带入对话的历史消息条数"));
+        list.addView(newSection(ctx, "上下文记忆", "带入对话的历史消息条数"));
         final EditText etMemory = M3Page.input(ctx, "记忆条数, 如 50");
         etMemory.setText(String.valueOf(config.getMaxHistoryMessages()));
         list.addView(etMemory);
@@ -850,7 +873,7 @@ public final class AiAssistantPanel {
 
     private static void addSwitchRow(LinearLayout list, Context ctx, Switch sw,
                                      String icon, String title, String sub) {
-        SettingRow row = new SettingRow(ctx, icon, title, sub);
+        SettingRow row = newRow(ctx, icon, title, sub);
         row.tail(sw);
         row.setOnClickListener(v -> {
             try { sw.toggle(); } catch (Throwable ignored) {}
@@ -955,7 +978,7 @@ public final class AiAssistantPanel {
             String name = (tgt.length > 1 && !TextUtils.isEmpty(tgt[1])) ? tgt[1] : talker;
             boolean isCfg = cfgSet.contains(talker);
             String sub = isCfg ? ("已配置 · " + entrySummary(cc.get(talker))) : "未配置 · 点击可配置";
-            list.addView(new SettingRow(ctx, isGroup ? "👥" : "👤",
+            list.addView(newRow(ctx, isGroup ? "👥" : "👤",
                     (isCfg ? "✅ " : "") + name, sub)
                     .avatar(talker)
                     .arrow(() -> {
@@ -1016,14 +1039,14 @@ public final class AiAssistantPanel {
         LinearLayout list = new LinearLayout(ctx);
         newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.55f));
 
-        list.addView(new SectionHeader(ctx, "模板", "一键套用预设"));
-        list.addView(new SettingRow(ctx, "🧩", "套用模板", templateSub())
+        list.addView(newSection(ctx, "模板", "一键套用预设"));
+        list.addView(newRow(ctx, "🧩", "套用模板", templateSub())
                 .arrow(() -> {
                     dismissCurrent();
                     showTemplatePicker(activity, talker, isGroup);
                 }));
 
-        list.addView(new SectionHeader(ctx, "独立开关", "保存后独立于全局"));
+        list.addView(newSection(ctx, "独立开关", "保存后独立于全局"));
         boolean effAuto = entry.autoReply != null ? entry.autoReply
                 : (isGroup ? cfg.isAutoReplyInGroups() : cfg.isAutoReplyInPrivate());
         final Switch swAuto = makeSwitch(ctx, effAuto);
@@ -1040,7 +1063,7 @@ public final class AiAssistantPanel {
         addSwitchRow(list, ctx, swTts, "🔊", "语音消息发送", "开=转语音发出; 关=发文本");
         final Switch swOnlyF = swOnly;
 
-        list.addView(new SectionHeader(ctx, "人设与模型", "留空表示继承全局"));
+        list.addView(newSection(ctx, "人设与模型", "留空表示继承全局"));
         final EditText etSys = M3Page.input(ctx, "人设提示词 (留空 = 全局)");
         etSys.setSingleLine(false);
         etSys.setMinLines(3);
@@ -1122,7 +1145,7 @@ public final class AiAssistantPanel {
         newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.50f));
         for (String name : names) {
             final String tpl = name;
-            list.addView(new SettingRow(ctx, "🧩", tpl, entrySummary(cc.getTemplate(tpl)))
+            list.addView(newRow(ctx, "🧩", tpl, entrySummary(cc.getTemplate(tpl)))
                     .arrow(() -> {
                         LogWriter.log(TAG, "click(套用模板): " + tpl + " -> " + talker);
                         try {
@@ -1192,7 +1215,7 @@ public final class AiAssistantPanel {
             final String[] pendingDelete = {null};
             for (String name : names) {
                 final String tpl = name;
-                SettingRow row = new SettingRow(ctx, "🧩", tpl, entrySummary(cc.getTemplate(tpl)));
+                SettingRow row = newRow(ctx, "🧩", tpl, entrySummary(cc.getTemplate(tpl)));
                 row.arrow(null);
                 row.setOnClickListener(v -> {
                     if (!tpl.equals(pendingDelete[0])) {
@@ -1258,7 +1281,7 @@ public final class AiAssistantPanel {
         etName.setText(safe(originalName));
         list.addView(etName);
 
-        list.addView(new SectionHeader(ctx, "开关", "留空则套用后仍可单独调整"));
+        list.addView(newSection(ctx, "开关", "留空则套用后仍可单独调整"));
         boolean effAuto = e.autoReply != null ? e.autoReply : cfg.isAutoReplyInGroups();
         final Switch swAuto = makeSwitch(ctx, effAuto);
         addSwitchRow(list, ctx, swAuto, "💬", "自动回复", "套用后本会话自动回复开关");
@@ -1269,7 +1292,7 @@ public final class AiAssistantPanel {
         final Switch swTts = makeSwitch(ctx, effTts);
         addSwitchRow(list, ctx, swTts, "🔊", "语音消息发送", "开=转语音发出; 关=发文本");
 
-        list.addView(new SectionHeader(ctx, "人设与模型", "留空表示套用后继承全局"));
+        list.addView(newSection(ctx, "人设与模型", "留空表示套用后继承全局"));
         final EditText etSys = M3Page.input(ctx, "人设提示词 (可留空)");
         etSys.setSingleLine(false);
         etSys.setMinLines(3);
@@ -1428,7 +1451,7 @@ public final class AiAssistantPanel {
         } else {
             for (String id : items) {
                 final String target = id;
-                SettingRow row = new SettingRow(ctx, "✅", label(target),
+                SettingRow row = newRow(ctx, "✅", label(target),
                         target + (target.endsWith("@chatroom") ? "  (群)" : ""));
                 row.avatar(target);
                 row.setOnClickListener(v -> {
