@@ -47,7 +47,11 @@ public class MessageHook {
 
     /**
      * 8.0.78(3180) 播报主入口: f9.Bb(e9, boolean) = MsgInfoStorage.insertMsgInfo(MsgInfo, boolean)。
-     * 这是文档验证过的最稳入库入口(方案A推荐), 在 before 阶段捕获新消息并触发播报。
+     * 这是文档验证过的最稳入库入口(方案A推荐)。
+     * <p>
+     * v960: 回调时机由 before 改为 <b>after</b> —— before 阶段 e9 实体的
+     * field_content 尚未填充(文字/位置/红包 content 全为空, 实测导致文字不播报/
+     * 位置未知/红包取不到 nativeUrl), after 阶段入库完成 content 必然已设置。
      */
     private static void hookMsgStorageInsert(ClassLoader cl) {
         try {
@@ -65,7 +69,7 @@ public class MessageHook {
                 String p0 = pts[0].getName();
                 if (!p0.endsWith(".e9") && !p0.contains("MsgInfo")) continue;
                 XposedBridge.hookMethod(m, new XC_MethodHook() {
-                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    @Override protected void afterHookedMethod(MethodHookParam p) {
                         try {
                             if (p.args.length < 1 || p.args[0] == null) return;
                             onInsertMsgInfo(p.args[0]);
@@ -86,7 +90,7 @@ public class MessageHook {
     /** f9.Bb 入口: 播报逻辑复用 onX9Message, 靠 msgId/svrId 去重避免与 x9 分发重复 */
     static void onInsertMsgInfo(Object e9) {
         try {
-            onX9Message(e9, null);
+            onX9Message(e9, null, true);
         } catch (Throwable t) {
             LogWriter.log(TAG, "onInsertMsgInfo err: " + t.getMessage());
         }
@@ -159,7 +163,95 @@ public class MessageHook {
             Object v = XposedHelpers.callMethod(msg, "I0");
             if (v != null) return v.toString();
         } catch (Throwable ignored) {}
+        // v960 兜底1: 遍历字段(含父类)找名字含 content 的 String 字段(防混淆改名)
+        try {
+            String v = readContentByFieldScan(msg);
+            if (v != null) return v;
+        } catch (Throwable ignored) {}
+        // v960 兜底2: 混淆方法名 j()(MessageHook DB 重读路径同款)
+        try {
+            Object v = XposedHelpers.callMethod(msg, "j");
+            if (v != null) return v.toString();
+        } catch (Throwable ignored) {}
+        // v960 兜底3: 首个 XML/文本形态 String 字段(排除 talker 类字段)
+        try {
+            String v = readContentByHeuristic(msg);
+            if (v != null) return v;
+        } catch (Throwable ignored) {}
         return null;
+    }
+
+    /** v960: 遍历字段(含父类)找名字含 content 的 String 字段。 */
+    private static String readContentByFieldScan(Object msg) {
+        Class<?> c = msg.getClass();
+        while (c != null && !c.equals(Object.class)) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                if (f.getType() == String.class) {
+                    String n = f.getName().toLowerCase();
+                    if (n.contains("content") || n.equals("msg") || n.equals("text")) {
+                        try {
+                            f.setAccessible(true);
+                            Object v = f.get(msg);
+                            if (v != null && !((String) v).isEmpty()) return (String) v;
+                        } catch (Throwable ignored) {}
+                    }
+                }
+            }
+            c = c.getSuperclass();
+        }
+        return null;
+    }
+
+    /** v960: 启发式取 content —— 首个 XML 头或合理长度纯文本 String 字段。 */
+    private static String readContentByHeuristic(Object msg) {
+        Class<?> c = msg.getClass();
+        while (c != null && !c.equals(Object.class)) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                if (f.getType() != String.class) continue;
+                String n = f.getName().toLowerCase();
+                if (n.contains("talker") || n.contains("username") || n.contains("wxid")
+                        || n.contains("nick") || n.contains("remark") || n.contains("imgsource")
+                        || n.contains("msgsource") || n.contains("pushcontent")) continue;
+                try {
+                    f.setAccessible(true);
+                    Object v = f.get(msg);
+                    if (v == null) continue;
+                    String s = (String) v;
+                    if (s.isEmpty()) continue;
+                    if (s.startsWith("<") || (s.length() <= 4096 && !s.contains("="))) return s;
+                } catch (Throwable ignored) {}
+            }
+            c = c.getSuperclass();
+        }
+        return null;
+    }
+
+    /** v960 诊断: dump 消息类全部字段名与值摘要(仅 content 读取失败时调用, 每类只 dump 一次)。 */
+    private static final java.util.Set<String> sDumpedClasses =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+
+    static void dumpMsgFields(Object msg) {
+        if (msg == null) return;
+        String cn = msg.getClass().getName();
+        if (!sDumpedClasses.add(cn)) return;
+        try {
+            StringBuilder sb = new StringBuilder("fields of " + cn + ": ");
+            Class<?> c = msg.getClass();
+            while (c != null && !c.equals(Object.class)) {
+                for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                    try {
+                        f.setAccessible(true);
+                        Object v = f.get(msg);
+                        String vs = v == null ? "null" : v.toString();
+                        if (vs.length() > 60) vs = vs.substring(0, 60) + "...";
+                        sb.append(f.getName()).append("(").append(f.getType().getSimpleName())
+                          .append(")=").append(vs).append(" | ");
+                    } catch (Throwable ignored) {}
+                }
+                c = c.getSuperclass();
+            }
+            LogWriter.log("MessageHook", "[DUMP] " + sb);
+        } catch (Throwable ignored) {}
     }
 
     // ====== x9 分发 (接收消息: TTS + 语音播放) ======
@@ -318,7 +410,7 @@ public class MessageHook {
                                                                     return;
                                                                 }
                                                                 sConsumedTtsOriginal.remove();
-                                                                onX9Message(p.args[0], paramCount >= 2 ? p.args[1] : null);
+                                                                onX9Message(p.args[0], paramCount >= 2 ? p.args[1] : null, false);
                                 } catch (Throwable e) {
                                     LogWriter.log("MessageHook", "cb err: " + e);
                                 }
@@ -335,12 +427,26 @@ public class MessageHook {
         }
     }
 
-    static void onX9Message(Object e9, Object p0) {
+    static void onX9Message(Object e9, Object p0, boolean fromInsert) {
         try {
             int rawType = (int) XposedHelpers.callMethod(e9, "getType");
             int type = mapType(rawType);
             String talker = (String) XposedHelpers.callMethod(e9, "N0");
             String content = readMsgContent(e9);
+
+            // v960: x9 分发阶段 content 可能尚未就绪(入库前), 非语音消息直接跳过,
+            // 交给 f9.Bb 入库后(after)处理; 语音消息 content 本就为空, 两条路径都放行
+            if (!fromInsert && (content == null || content.isEmpty())
+                    && rawType != 34 && rawType != 228) {
+                return;
+            }
+
+            // v960: 非语音消息 content 为空 = 读取异常, dump 字段辅助定位(语音 content 本就为空)
+            if (content == null || content.isEmpty()) {
+                if (rawType != 34 && rawType != 228) {
+                    dumpMsgFields(e9);
+                }
+            }
 
             if (content != null && (content.startsWith("<msgsource")
                 || content.startsWith("<pushcontent")))

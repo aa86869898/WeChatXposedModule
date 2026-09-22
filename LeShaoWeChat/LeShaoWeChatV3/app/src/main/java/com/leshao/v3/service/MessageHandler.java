@@ -325,14 +325,23 @@ public class MessageHandler {
 
     static String parseLocation(String content) {
         if (content == null) return "未知位置";
-        String label = extractXmlAttr(content, "label");
-        String poiname = extractXmlAttr(content, "poiname");
+        // v960: 微信位置消息中 label/poiname 是 XML 标签文本(带坐标属性), 不是属性;
+        // 旧实现按属性提取必然落空 -> "未知位置"。先标签提取, 属性方式仅作兜底。
+        String label = stripCdata(extractXmlTag(content, "label"));
+        String poiname = stripCdata(extractXmlTag(content, "poiname"));
+        if (label.isEmpty()) label = extractXmlAttr(content, "label");
+        if (poiname.isEmpty()) poiname = extractXmlAttr(content, "poiname");
 
         if (label.isEmpty() && poiname.isEmpty()) return "未知位置";
         if (label.isEmpty()) return poiname;
         if (poiname.isEmpty()) return label;
         if (poiname.startsWith(label)) return poiname;
         return label + poiname;
+    }
+
+    private static String stripCdata(String s) {
+        if (s == null || s.isEmpty()) return "";
+        return s.replace("<![CDATA[", "").replace("]]>", "").trim();
     }
 
     private static String str(String s) { return s != null ? s : ""; }

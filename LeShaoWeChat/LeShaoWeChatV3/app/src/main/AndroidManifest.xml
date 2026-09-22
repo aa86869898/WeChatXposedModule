@@ -29,7 +29,7 @@
             android:theme="@style/Theme.LeshaoAI" />
         <activity
             android:name="com.leshao.ai.ui.activity.WhitelistActivity"
-            android:exported="false"
+            android:exported="true"
             android:theme="@style/Theme.LeshaoAI" />
 
         <provider

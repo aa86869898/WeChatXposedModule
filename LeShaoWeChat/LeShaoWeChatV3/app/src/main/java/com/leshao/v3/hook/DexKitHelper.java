@@ -1513,18 +1513,68 @@ public class DexKitHelper {
     /** 撤回事件监听类: 特征字符串(日志TAG, 首选) */
     private static void findRevokeListeners(DexKitBridge bridge) {
         java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
-        for (String tag : new String[]{"MicroMsg.RevokeReceiveMessageListener", "MicroMsg.RevokeMsgListener"}) {
+        // v960: 特征串扩容(3180 实测原两个 TAG 均未命中, 需多路检索)
+        for (String tag : new String[]{
+                "MicroMsg.RevokeReceiveMessageListener",
+                "MicroMsg.RevokeMsgListener",
+                "revokeMsg",
+                "RevokeMsgEvent",
+                "onRevokeMsg",
+                "revoke"}) {
             try {
                 List<ClassData> classes = bridge.findClass(FindClass.create()
                     .matcher(ClassMatcher.create().usingStrings(tag)));
                 for (ClassData c : classes) {
                     String cn = c.getName();
                     if (cn == null) continue;
-                    // 特征字符串已唯一定位(日志TAG), 直接收录; 父类特征由 hook 侧 callback 方法名兜底确认
                     out.add(cn);
                 }
+                LogWriter.log(TAG, "findRevokeListeners(" + tag + "): " + classes.size() + " cands");
             } catch (Throwable e) {
                 LogWriter.log(TAG, "findRevokeListeners(" + tag + ") err: " + e.getMessage());
+            }
+        }
+        // v960 路径2: 类名候选直查(注释实证的 3180 链路: RevokeMsgListener/chatroom listener)
+        if (out.isEmpty()) {
+            for (String cn : new String[]{
+                    "com.tencent.mm.ui.chatting.RevokeMsgListener",
+                    "com.tencent.mm.ui.chatting.RevokeReceiveMessageListener",
+                    "com.tencent.mm.chatroom.plugin.listener.n0"}) {
+                try {
+                    List<ClassData> classes = bridge.findClass(FindClass.create()
+                        .matcher(ClassMatcher.create().className(cn)));
+                    for (ClassData c : classes) {
+                        if (c.getName() != null) out.add(c.getName());
+                    }
+                    LogWriter.log(TAG, "findRevokeListeners(byName " + cn + "): " + classes.size() + " cands");
+                } catch (Throwable e) {
+                    LogWriter.log(TAG, "findRevokeListeners(byName " + cn + ") err: " + e.getMessage());
+                }
+            }
+        }
+        // v960 路径3: 方法签名检索 —— callback 方法且参数含撤回事件(autogen.fm.ks)
+        if (out.isEmpty()) {
+            try {
+                List<MethodData> methods = bridge.findMethod(FindMethod.create()
+                    .matcher(MethodMatcher.create().name("callback")));
+                for (MethodData m : methods) {
+                    List<String> pts = m.getParamTypeNames();
+                    if (pts == null) continue;
+                    boolean hit = false;
+                    for (String pt : pts) {
+                        if (pt != null && (pt.contains("fm.ks") || pt.contains("Revoke"))) {
+                            hit = true;
+                            break;
+                        }
+                    }
+                    if (hit) {
+                        String cn = m.getClassName();
+                        if (cn != null) out.add(cn);
+                    }
+                }
+                LogWriter.log(TAG, "findRevokeListeners(byCallback): " + out.size() + " cands");
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "findRevokeListeners(byCallback) err: " + e.getMessage());
             }
         }
         sRevokeListenerClasses = new java.util.ArrayList<>(out);

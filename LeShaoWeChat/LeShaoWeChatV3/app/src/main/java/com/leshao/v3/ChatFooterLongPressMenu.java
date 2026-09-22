@@ -316,11 +316,21 @@ public class ChatFooterLongPressMenu {
         }
         LogWriter.log(TAG, "Inject: " + btnView.getClass().getSimpleName());
         btnView.setOnLongClickListener(v -> {
-            showPanel(v);
+            // v960: 长按弹面板异常必须兜底(展示/构建失败不得闪退)
+            try {
+                showPanel(v);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "long click err: " + t.getMessage());
+            }
             return true;
         });
         btnView.setOnTouchListener((v, e) -> {
-            if (e.getAction() == 0) v.getParent().requestDisallowInterceptTouchEvent(true);
+            // v960: v.getParent() 未判空在触摸时 NPE 闪退
+            try {
+                if (e.getAction() == 0 && v.getParent() != null) {
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                }
+            } catch (Throwable ignored) {}
             return false;
         });
     }
@@ -397,8 +407,20 @@ public class ChatFooterLongPressMenu {
         if (y < 0) y = loc[1] + anchor.getHeight() + dp(ctx, 10);
         if (y + panelH > dm.heightPixels) y = dm.heightPixels - panelH - dp(ctx, 8);
 
-        popupWindow.showAtLocation(anchor, Gravity.TOP | Gravity.LEFT, x, y);
-        popupWindow.setOnDismissListener(() -> removeLayoutListener());
+        // v960: showAtLocation 可能因 token 失效抛 BadTokenException(实测闪退),
+        // 所有展示/失败路径必须兜底, 不得让异常冒泡到微信 UI 线程
+        try {
+            popupWindow.showAtLocation(anchor, Gravity.TOP | Gravity.LEFT, x, y);
+            popupWindow.setOnDismissListener(() -> removeLayoutListener());
+        } catch (Throwable t) {
+            LogWriter.log("ChatFooterLongPressMenu", "showAtLocation FAILED: " + t);
+            try {
+                if (popupWindow != null && popupWindow.isShowing()) popupWindow.dismiss();
+            } catch (Throwable ignored) {}
+            popupWindow = null;
+            removeLayoutListener();
+            return;
+        }
 
         sLayoutAnchor = anchor;
         sLayoutListener = () -> {

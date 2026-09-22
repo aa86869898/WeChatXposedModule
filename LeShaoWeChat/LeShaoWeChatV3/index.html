@@ -16,8 +16,12 @@
 <body>
     <h1>LeShaoWeChat 模块下载</h1>
     <p>微信 8.0.78(3180) 适配版。下载 APK 后到 LSPosed 管理器中激活并重启微信。</p>
-    <a class="apk" href="LeShaoWeChat-v959.apk">
-        最新版 LeShaoWeChat-v959.apk
+    <a class="apk" href="LeShaoWeChat-v960.apk">
+        最新版 LeShaoWeChat-v960.apk
+        <div class="meta">v960 · 基于 v959 实机日志(1092 行, 微信 8.0.78/3180)修复六项实测问题: ① 文字TTS不播报/位置播报「未知位置」/红包无效共同根因修复: f9.Bb 入库 hook 由 beforeHookedMethod 改 afterHookedMethod(before 阶段 field_content 未填充, 实测 contentLen=0), readMsgContent 增强(字段遍历/启发式/j() 兜底) + dumpMsgFields 诊断, x9 分发路径加来源标记(content 空的非语音消息交回 f9.Bb 处理后置, 避免空 content 抢占 msgId 去重) ② 位置播报改 extractXmlTag(content, label/poiname) 标签提取(微信位置 content 是标签文本非属性, 旧 extractXmlAttr 必然落空) + CDATA 清理 ③ 防撤回修复: findRevokeListeners 三路检索增强(6 特征串 + 类名候选 RevokeMsgListener/chatroom listener + callback 方法签名含 fm.ks, 原 2 个 TAG 在 3180 实测零命中) ④ AI 助手弹窗: 菜单注入改 DexKit ready 后安装 + 10 次重试链(原 install() 时 findChattingUIFragment 返回 null 即永久跳过), 点击由跨进程 startActivity 改为微信进程内 Material 3 弹窗(新增 AiAssistantPanel, 复用 v3 widgets 组件: 快捷开关 5 项直接读写 AppConfig 落盘 + 完整设置/白名单入口), WhitelistActivity 改 exported 支持跨进程拉起 ⑤ 音频转语音闪退修复: ChatFooterLongPressMenu showAtLocation 包 try/catch(BadTokenException, 同排其它按钮都有兜底唯语音裸奔)、inject() OnLongClickListener/OnTouchListener getParent() 判空 ⑥ 弹窗挂载点: LauncherUI.onResume 记录前台 Activity(AI 助手弹窗需 Activity 级 Context)</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v960.apk">
+        上一版 LeShaoWeChat-v959.apk
         <div class="meta">v959 · 依据三份逆向文档对 LeshaoAI 模块彻底修复(AI 功能此前完全不工作): ① 补收消息总闸门 f9.Bb(e9,Z) hook(此前零 hook, 消息进不来), 消息字段走 field_* 未混淆名取数, 过滤链(零宽水印→isSend→文本类型)后进触发引擎 ② 发送链 v51.r1 按文档坐标反射(newInstance+setObjectField l=v51.p1.d(TEXT)+h(talker)/e(content)/i(1)/b()), 替换此前臆造类名(storage.MsgInfoStorage/model.b), sendTextWithAt 兜底在正文前加 @显示名 ③ DexKitAdapter 全锚点重写(f9/e9/r1/p1/aa/g2/l4/j4/g/e/h9 按文档 §15.4/§20 字符串+签名定位, ChattingUIFragment 按 onCreateOptionsMenu 签名定位), 类名缓存+dump() ④ 新增 GroupMsgParser: 群判定 @chatroom 结尾、b41.aa.u 拆分 &lt;sender&gt;:\n正文、isAtMe 解析 msgsource atuserlist+兜底 @机器人名/@所有人/@all ⑤ 防死循环零宽水印 SendGuard(v51.r1 协程异步, ThreadLocal 有时间窗) ⑥ TriggerEngine 按文档 §16.5 决策链: 总开关→群/私聊分开关→群唤醒@/关键词→白名单非空过滤→LLM→水印发送→TTS ⑦ 菜单注入改 hook ChattingUIFragment.onCreateOptionsMenu 加「AI 助手」(此前 hook Fragment onCreate 却不加菜单项, 入口失效), 点击跨进程启动设置页(exported) ⑧ deferUntilReady: LauncherUI onResume 后再挂核心 hook(v51.r1 协程要求进程初始化完成), 只执行一次 ⑨ 修复设置永久无效: 配置/白名单唯一数据源改模块 files, 新增 AiDataProvider(com.leshao.v3.aiconfig, /config /whitelist /sessions 三通道), 微信侧 ConfigBridge query 镜像+广播刷新(ACTION_REFRESH_CONFIG), 替代此前微信直读/设置页直写的断裂设计 ⑩ 新增 StorageHub(b41.h9.d→b41.e→v/r/q 反射链, 返回类型双重校验): selfWxid/selfNickname/历史 f9.H2/末条 f9.G7; ContactQuery(j4 实现接口 d8, 备注>昵称>wxid); ConversationQuery(g2 单例+g()→k4.z0) ⑪ 白名单改 talker(wxid/群 id)语义+「从微信会话导入」按钮(读 Provider /sessions 多选), 三处群判定统一 @chatroom(原 ChatUtils 用 | 结尾错误格式, 导致群消息全判为私聊) ⑫ 模块设置页/白名单页 onPause 兜底落盘+广播刷新。沿用 v958 全部(移除 v629 AI 整包零残留)</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v958.apk">

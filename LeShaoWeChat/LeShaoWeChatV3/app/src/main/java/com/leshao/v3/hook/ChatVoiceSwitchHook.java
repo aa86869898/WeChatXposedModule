@@ -396,7 +396,12 @@ public final class ChatVoiceSwitchHook {
         TextView mp3Btn = createBlueButton(ctx, "语音", IconLoader.IC_SCHEDULE_SEND, new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                com.leshao.v3.ChatFooterLongPressMenu.showPanelStatic(v);
+                // v960: 面板展示异常(BadTokenException 等)必须兜底, 否则点击即闪退
+                try {
+                    com.leshao.v3.ChatFooterLongPressMenu.showPanelStatic(v);
+                } catch (Throwable t) {
+                    com.leshao.v3.LogWriter.log("ChatVoiceSwitchHook", "voice btn click err: " + t);
+                }
             }
         });
         mp3Btn.setLayoutParams(new LinearLayout.LayoutParams(
