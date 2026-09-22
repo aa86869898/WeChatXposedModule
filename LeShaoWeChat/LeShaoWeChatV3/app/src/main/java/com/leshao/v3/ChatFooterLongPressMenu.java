@@ -714,6 +714,39 @@ public class ChatFooterLongPressMenu {
         cardOpt.addView(btnRow);
         cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
 
+        // v968: 误报语音时长(0-60 秒, 默认 1 秒) —— 发出的语音气泡所显示时长
+        LinearLayout durTail = new LinearLayout(ctx);
+        durTail.setOrientation(LinearLayout.HORIZONTAL);
+        durTail.setGravity(Gravity.CENTER_VERTICAL);
+        final android.widget.EditText etFakeDur =
+                com.leshao.v3.ui.widgets.M3Page.input(ctx, "1");
+        etFakeDur.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        etFakeDur.setGravity(Gravity.CENTER);
+        etFakeDur.setText(String.valueOf(WmPrefs.getInt("voice_fake_duration_sec", 1)));
+        etFakeDur.setLayoutParams(new LinearLayout.LayoutParams(dp(ctx, 56),
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        durTail.addView(etFakeDur);
+        TextView durUnit = new TextView(ctx);
+        durUnit.setText(" 秒");
+        durUnit.setTextSize(14);
+        durUnit.setTextColor(text2);
+        durTail.addView(durUnit);
+        etFakeDur.addTextChangedListener(new android.text.TextWatcher() {
+            public void afterTextChanged(android.text.Editable s) {
+                try {
+                    int v = Integer.parseInt(s.toString().trim());
+                    if (v < 0) v = 0;
+                    if (v > 60) v = 60;
+                    WmPrefs.setInt("voice_fake_duration_sec", v);
+                } catch (Throwable ignored) {}
+            }
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            public void onTextChanged(CharSequence s, int a, int b, int c) {}
+        });
+        cardOpt.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "⏱", "误报语音时长",
+                "0-60 秒, 默认 1 秒(语音气泡显示时长)").tail(durTail));
+        cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+
         // 人声增强: 必须用 SettingRow.switchOn 把开关放右侧, 禁止自定义按钮
         cardOpt.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "🎙", "人声增强",
                 "开启=人声增强链; 关闭=原音还原(默认)")
@@ -843,7 +876,7 @@ public class ChatFooterLongPressMenu {
             sCutEndSec = 0;
 
             new Thread(() -> {
-                transferAndReport(ctx, mp3Path, finalTalker, 0, 1000, cutBegin, cutEnd);
+                transferAndReport(ctx, mp3Path, finalTalker, 0, fakeVoiceDurationMs(), cutBegin, cutEnd);
             }, "leshao-mp3-send").start();
         });
 
@@ -873,6 +906,14 @@ public class ChatFooterLongPressMenu {
         updateFileName.onGlobalLayout();
 
         return panel;
+    }
+
+    /** v968: 误报语音时长(毫秒) —— 取「误报语音时长」设置(0-60 秒), 默认 1 秒 */
+    private static int fakeVoiceDurationMs() {
+        int sec = WmPrefs.getInt("voice_fake_duration_sec", 1);
+        if (sec < 0) sec = 0;
+        if (sec > 60) sec = 60;
+        return sec * 1000;
     }
 
     private static String formatSec(float secs) {
@@ -1374,7 +1415,7 @@ public class ChatFooterLongPressMenu {
                     return;
                 }
                 new Thread(() -> {
-                    transferAndReport(ctx, mp3Path, fTalker, 0, 1000, fBegin, fEnd);
+                    transferAndReport(ctx, mp3Path, fTalker, 0, fakeVoiceDurationMs(), fBegin, fEnd);
                 }, "leshao-mp3-send").start();
             })
             .setNegativeButton("取消", (dlg, w) -> {
@@ -1540,7 +1581,7 @@ public class ChatFooterLongPressMenu {
                         final String historyFilePath = item.filePath;
                         sCutBeginSec = 0;
                         sCutEndSec = 0;
-                        new Thread(() -> transferAndReport(ctx, historyFilePath, talker, 0, 1000, 0, 0), "leshao-mp3-send").start();
+                        new Thread(() -> transferAndReport(ctx, historyFilePath, talker, 0, fakeVoiceDurationMs(), 0, 0), "leshao-mp3-send").start();
                     });
                     row.addView(sendIc);
                 }
@@ -1652,7 +1693,7 @@ public class ChatFooterLongPressMenu {
                 sHistoryAllSelected = false;
                 new Thread(() -> {
                     for (VoiceHistoryDbHelper.VoiceHistoryItem it : valid) {
-                        transferAndReport(ctx, it.filePath, it.talker, 0, 1000, 0, 0);
+                        transferAndReport(ctx, it.filePath, it.talker, 0, fakeVoiceDurationMs(), 0, 0);
                     }
                 }, "leshao-mp3-send").start();
             });

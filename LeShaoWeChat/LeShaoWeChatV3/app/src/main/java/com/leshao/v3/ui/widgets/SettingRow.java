@@ -91,7 +91,11 @@ public class SettingRow extends LinearLayout {
             Switch sw = CandyUi.newSwitch(getContext());
             sw.setChecked(checked);
             if (listener != null) sw.setOnCheckedChangeListener(listener);
-            mTail.addView(sw);
+            // v968: 固定开关为 52×32dp, 防止父容器把轨道拉伸变形
+            float d = getResources().getDisplayMetrics().density;
+            int swW = (int) (AppColors.SWITCH_WIDTH_DP * d + 0.5f);
+            int swH = (int) (AppColors.SWITCH_HEIGHT_DP * d + 0.5f);
+            mTail.addView(sw, new LayoutParams(swW, swH));
             // v967 M3 规范: 整行可点 —— 点击行进任意位置切换开关, 修复仅能点中开关
             // 才生效导致的"点按钮没反应"体验问题。
             setOnClickListener(v -> {

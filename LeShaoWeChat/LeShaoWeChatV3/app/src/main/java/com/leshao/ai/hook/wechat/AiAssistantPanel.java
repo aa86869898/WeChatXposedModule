@@ -99,7 +99,7 @@ public final class AiAssistantPanel {
             dismissCurrent();
 
             android.util.DisplayMetrics dm = anchor.getResources().getDisplayMetrics();
-            int panelW = (int) (dm.widthPixels * 0.9f);
+            int panelW = (int) (dm.widthPixels * 0.94f);
             int h = heightPx > 0 ? heightPx : ViewGroup.LayoutParams.WRAP_CONTENT;
             PopupWindow pw = new PopupWindow(root, panelW, h, true);
             pw.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -129,8 +129,8 @@ public final class AiAssistantPanel {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.dialogBg(ctx));
-        int pad = dp(ctx, 20);
-        root.setPadding(pad, pad, pad, pad);
+        // v968: 左右边距收紧(原 20dp), 让右侧开关等尾部控件更贴边不局促
+        root.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 12), dp(ctx, 12));
         return root;
     }
 
@@ -144,11 +144,33 @@ public final class AiAssistantPanel {
         return title;
     }
 
-    /** 可滚动内容区(占据剩余高度, 修复固定高度弹窗内容裁剪) */
-    private static ScrollView newScroll(LinearLayout root, LinearLayout list) {
-        ScrollView scroll = new ScrollView(root.getContext());
+    /** 内容超出上限才可滚动、否则按内容收缩的 ScrollView(v968: 消除底部栏上方大片空白) */
+    private static final class CappedScrollView extends ScrollView {
+        private int mMaxHeight;
+
+        CappedScrollView(Context c) {
+            super(c);
+        }
+
+        void setMaxHeight(int h) {
+            mMaxHeight = h;
+        }
+
+        @Override
+        protected void onMeasure(int widthSpec, int heightSpec) {
+            if (mMaxHeight > 0) {
+                heightSpec = MeasureSpec.makeMeasureSpec(mMaxHeight, MeasureSpec.AT_MOST);
+            }
+            super.onMeasure(widthSpec, heightSpec);
+        }
+    }
+
+    /** 可滚动内容区: 高度按内容收缩, 上限 maxHeightPx(超出才滚动) */
+    private static ScrollView newScroll(LinearLayout root, LinearLayout list, int maxHeightPx) {
+        CappedScrollView scroll = new CappedScrollView(root.getContext());
+        scroll.setMaxHeight(maxHeightPx);
         scroll.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         scroll.setOverScrollMode(ScrollView.OVER_SCROLL_NEVER);
         list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list);
@@ -228,7 +250,7 @@ public final class AiAssistantPanel {
             root.addView(tip);
         } else {
             LinearLayout list = new LinearLayout(ctx);
-            newScroll(root, list);
+            newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.60f));
 
             // ---- 1. 功能开关 ----
             list.addView(new SectionHeader(ctx, "功能开关", "修改后即时生效"));
@@ -296,8 +318,8 @@ public final class AiAssistantPanel {
         });
 
         root.addView(newBtnRow2(ctx, btnWhitelist, btnClose));
-        android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-        showPopup(activity, root, (int) (dm.heightPixels * 0.85f), "main");
+        // v968: WRAP_CONTENT 高度, 面板按内容收缩, 底部栏紧贴内容
+        showPopup(activity, root, 0, "main");
     }
 
     // ==================== 二级: 模型提供商 ====================
@@ -323,7 +345,7 @@ public final class AiAssistantPanel {
         LinearLayout root = newRoot(ctx);
         root.addView(newTitle(ctx, "模型提供商"));
         LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list);
+        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.60f));
 
         // ---- 服务商 ----
         list.addView(new SectionHeader(ctx, "服务商", "API 协议类型"));
@@ -416,8 +438,7 @@ public final class AiAssistantPanel {
         });
 
         root.addView(newBtnRow2(ctx, btnSave, btnClose));
-        android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-        showPopup(activity, root, (int) (dm.heightPixels * 0.85f), "provider");
+        showPopup(activity, root, 0, "provider");
     }
 
     // ==================== 二级: AI 核心参数 ====================
@@ -443,7 +464,7 @@ public final class AiAssistantPanel {
         LinearLayout root = newRoot(ctx);
         root.addView(newTitle(ctx, "AI 核心参数"));
         LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list);
+        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.60f));
 
         // ---- 身份 ----
         list.addView(new SectionHeader(ctx, "身份", "AI 对外展示的名字与唤醒词"));
@@ -520,8 +541,7 @@ public final class AiAssistantPanel {
         });
 
         root.addView(newBtnRow(ctx, btnSave, btnReset, btnClose));
-        android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-        showPopup(activity, root, (int) (dm.heightPixels * 0.85f), "core");
+        showPopup(activity, root, 0, "core");
     }
 
     // ==================== 二级: 白名单 ====================

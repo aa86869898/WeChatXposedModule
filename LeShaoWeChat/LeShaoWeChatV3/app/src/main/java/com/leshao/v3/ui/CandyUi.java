@@ -70,6 +70,10 @@ public class CandyUi {
             tOn.setSize(thumbOn, thumbOn);
             thumb.addState(new int[]{android.R.attr.state_checked}, tOn);
             if (android.os.Build.VERSION.SDK_INT >= 16) sw.setThumbDrawable(thumb);
+            // v968 关键修复: 清除 Switch 默认背景(其自带 padding 会把 52dp 轨道撑宽导致
+            // 开关显示变形/thumb 行程错位), 并显式固定最小宽度与 thumb 行程为整轨。
+            sw.setBackground(null);
+            sw.setSwitchMinWidth(w);
         } catch (Throwable ignored) {}
         return sw;
     }
