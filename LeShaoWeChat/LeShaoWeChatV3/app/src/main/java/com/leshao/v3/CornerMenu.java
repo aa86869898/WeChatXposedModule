@@ -1,16 +1,13 @@
 /**
  * ============================================================
- * 左上角三横菜单 — 微信 Xposed 模块 (WindowManager 悬浮窗方式)
+ * 左上角三横菜单 — 微信 Xposed 模块 (注入式, 非悬浮窗)
  * ============================================================
  * 依赖: 仅 de.robv.android.xposed (无第三方)
  * 兼容: Java 7+ / API 19+
  *
- * 采用 WindowManager.TYPE_APPLICATION_PANEL 悬浮窗方式注入，
- * 不依赖微信 ActionBar 内部布局，确保图标始终可见。
- * 仅在主页 (LauncherUI/HomeUI) 注入左上角"三横"按钮，点击弹出快捷菜单。
- * 聊天窗口 (ChattingUI) 不注入任何元素，避免遮挡微信自带的右上角三点菜单
- * (导出聊天记录等功能)。
- * ============================================================
+     * v982: 按钮直接注入微信主页 decorView(子 View), 不再走 WindowManager 悬浮窗。
+     * 聊天中隐藏(GONE), 回主页恢复; 仅主页显示, 避免遮挡微信右上角菜单。
+     * ============================================================
  */
 package com.leshao.v3;
 
@@ -37,6 +34,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -61,7 +59,7 @@ public class CornerMenu {
     private static Bitmap sBitmapDark;
 
     private static View sMainIcon;
-    private static WindowManager sMainWM;
+    private static ViewGroup sMainContainer;
     private static Activity sHomeAct;
     private static final Handler sH = new Handler(Looper.getMainLooper());
 
@@ -107,7 +105,7 @@ public class CornerMenu {
                                 // 必须排除，否则聊天界面也注入三横菜单
                                 if (isInChatWindow((Activity) activity)) {
                                     LogWriter.log(TAG, "skip inject: chat window active");
-                                    if (sMainIcon != null) removeAll();
+                                    hideMainMenu();
                                     // 可能误判: fragment view 状态延迟同步, 延迟复核一次
                                     scheduleRecheckInject((Activity) activity);
                                     return;
@@ -156,8 +154,8 @@ public class CornerMenu {
                         try {
                             sChatWindowActive = false;
                             if (sMainIcon != null) {
-                                LogWriter.log(TAG, "Activity.onPause -> remove hamburger");
-                                removeAll();
+                                LogWriter.log(TAG, "Activity.onPause -> hide hamburger");
+                                hideMainMenu();
                             }
                         } catch (Throwable ignored) {}
                     }
@@ -169,7 +167,7 @@ public class CornerMenu {
             hookChatFragmentVisibility(cl);
             LogWriter.log(TAG, "hook: ChattingUIFragment.onHiddenChanged hooked");
 
-            // 自愈轮询: 主页停留期间悬浮窗可能被系统/微信布局刷新移除, 而聚焦事件不再触发。
+            // 自愈轮询: 主页停留期间按钮可能被微信重建 decorView 时移除, 而聚焦事件不再触发。
             // 低频率检查弥补"偶尔消失", 无副作用(主页且无有效菜单时补注入)。
             if (!sSelfHealStarted) {
                 sSelfHealStarted = true;
@@ -323,12 +321,14 @@ public class CornerMenu {
         } catch (Throwable ignored) {}
     }
 
-    /** 三横菜单是否"真正有效显示"（view 存在且仍挂载在窗口树）。
-     *  悬浮窗 view 可能被系统/微信移除但引用残留, 此时应视为无菜单并可重新注入,
-     *  避免 sMainIcon != null 判断永久阻挡注入导致"偶尔消失"。 */
+    /** 三横菜单是否"真正有效显示"（view 存在、仍挂载在视图树且可见）。
+     *  v982: 注入式后 view 挂在 decorView 上, 被微信移除时会 parent 为空, 需重新注入;
+     *  聊天中我们主动置 GONE, 此时不算有效显示。 */
     private static boolean hasActiveMenu() {
         if (sMainIcon == null) return false;
-        try { return sMainIcon.getParent() != null; } catch (Throwable t) { return false; }
+        try {
+            return sMainIcon.getParent() != null && sMainIcon.getVisibility() == View.VISIBLE;
+        } catch (Throwable t) { return false; }
     }
 
     /** 聊天窗口精确可见性: hook ChattingUIFragment(含继承链上的基类方法)维护标志位。
@@ -360,9 +360,9 @@ public class CornerMenu {
                             if (hidden) {
                                 restoreMainMenuFromFragment(thiz);
                             } else {
-                                // v966: 进入聊天瞬间移除悬浮按钮
-                                // (Activity 级悬浮窗不会随 fragment 切换自动消失)
-                                if (sMainIcon != null) removeAll();
+                                // v966: 进入聊天瞬间隐藏按钮
+                                // (Activity 级注入不会随 fragment 切换自动消失)
+                                hideMainMenu();
                             }
                         } catch (Throwable e) {
                             LogWriter.log(TAG, "onHiddenChanged cb err: " + e);
@@ -380,8 +380,8 @@ public class CornerMenu {
                             if (thiz == null || !fragCls.isAssignableFrom(thiz.getClass())) return;
                             sChatWindowActive = true;
                             sChatResumeAt = android.os.SystemClock.elapsedRealtime();
-                            // v966: 进入聊天立即移除, 双保险(onHiddenChanged(false) 可能未触发)
-                            if (sMainIcon != null) removeAll();
+                            // v966: 进入聊天立即隐藏, 双保险(onHiddenChanged(false) 可能未触发)
+                            hideMainMenu();
                         } catch (Throwable e) {
                             LogWriter.log(TAG, "chat onResume cb err: " + e);
                         }
@@ -498,16 +498,27 @@ public class CornerMenu {
         } catch (Throwable ignored) { return false; }
     }
 
-    /** 主页左上角三横菜单，注入失败时自动重试（修复启动时 window token 未就绪导致的 BadTokenException） */
+    /** 主页左上角三横菜单: 作为子 View 注入微信主页面 decorView。
+     *  v982 弃用 WindowManager 悬浮窗, 彻底规避 BadToken / 被系统移除等不稳定问题。
+     *  若微信重建 decorView, parent 失效, 此处会重新注入。 */
     private static void injectMain(final Activity act, final int attempt) {
         try {
             if (act == null || act.isFinishing()) return;
             if (!isEnabled(act)) return;
+            Window win = act.getWindow();
+            View decorV = win != null ? win.getDecorView() : null;
+            if (!(decorV instanceof ViewGroup)) {
+                retryInject(act, attempt);
+                return;
+            }
+            final ViewGroup decor = (ViewGroup) decorV;
+            // 已经挂在当前页面的视图树中: 只恢复可见性, 避免反复增删
+            if (sMainIcon != null && sMainIcon.getParent() == decor) {
+                if (sMainIcon.getVisibility() != View.VISIBLE) sMainIcon.setVisibility(View.VISIBLE);
+                return;
+            }
             removeAll();
             Context ctx = act;
-            WindowManager wm = act.getWindowManager();
-            if (wm == null) return;
-            sMainWM = wm;
 
             int iconW = dp(ctx, 40);
             int iconH = dp(ctx, 40);
@@ -518,7 +529,7 @@ public class CornerMenu {
             icon.setClickable(true);
             icon.setFocusable(true);
             icon.setEnabled(true);
-            // v955 M3: 悬浮入口加圆角容器底（surfaceContainerLowest + 主色描边），提升可见性与质感
+            // v955 M3: 入口加圆角容器底（surfaceContainerLowest + 主色描边），提升可见性与质感
             try {
                 int r = dp(ctx, 12);
                 GradientDrawable iconBg = new GradientDrawable();
@@ -533,28 +544,19 @@ public class CornerMenu {
 
             icon.setOnClickListener(v -> showMenu(v.getContext(), act));
 
-            WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-                    iconW, iconH,
-                    WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                    PixelFormat.TRANSLUCENT);
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(iconW, iconH);
             lp.gravity = Gravity.TOP | Gravity.LEFT;
-            lp.x = dp(ctx, 6);
-            lp.y = statusBarHeight(act) + dp(ctx, 6);
+            lp.leftMargin = dp(ctx, 6);
+            lp.topMargin = statusBarHeight(act) + dp(ctx, 6);
 
-            wm.addView(icon, lp);
+            decor.addView(icon, lp);
             sMainIcon = icon;
-            if (attempt == 0) {
-                LogWriter.log(TAG, "injectMain: added hamburger x=" + lp.x + " y=" + lp.y);
-            } else {
-                LogWriter.log(TAG, "injectMain: added hamburger (retry " + attempt + ") x=" + lp.x + " y=" + lp.y);
-            }
+            sMainContainer = decor;
+            LogWriter.log(TAG, "injectMain: added hamburger(注入式) left=" + lp.leftMargin
+                    + " top=" + lp.topMargin + (attempt > 0 ? " retry=" + attempt : ""));
         } catch (Throwable e) {
-            if (attempt == 0) {
-                LogWriter.log(TAG, "injectMain: FAILED - " + e.getClass().getSimpleName()
+            LogWriter.log(TAG, "injectMain: FAILED - " + e.getClass().getSimpleName()
                     + ": " + e.getMessage() + ", 开始重试");
-            }
             retryInject(act, attempt);
         }
     }
@@ -577,10 +579,22 @@ public class CornerMenu {
         }
     }
 
+    /** 从视图树中移除三横按钮（微信重建 decorView 或真正需要移除时使用） */
     private static void removeAll() {
         if (sMainIcon != null) {
-            try { if (sMainWM != null) sMainWM.removeView(sMainIcon); } catch (Throwable ignored) {}
+            try {
+                android.view.ViewParent p = sMainIcon.getParent();
+                if (p instanceof ViewGroup) ((ViewGroup) p).removeView(sMainIcon);
+            } catch (Throwable ignored) {}
             sMainIcon = null;
+        }
+        sMainContainer = null;
+    }
+
+    /** 仅隐藏（保留已注入的 View, 回主页时直接恢复, 避免反复增删导致闪烁/丢失） */
+    private static void hideMainMenu() {
+        if (sMainIcon != null) {
+            try { sMainIcon.setVisibility(View.GONE); } catch (Throwable ignored) {}
         }
     }
 

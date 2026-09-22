@@ -16,8 +16,12 @@
 <body>
     <h1>LeShaoWeChat 模块下载</h1>
     <p>微信 8.0.78(3180) 适配版。下载 APK 后到 LSPosed 管理器中激活并重启微信。</p>
+    <a class="apk" href="LeShaoWeChat-v982.apk">
+        最新版 LeShaoWeChat-v982.apk
+        <div class="meta">v982 · 三横菜单改为注入式(根除悬浮窗不稳): 放弃 WindowManager.TYPE_APPLICATION_PANEL 悬浮窗, 改为把三横按钮作为子 View 直接注入微信主页 decorView —— 随窗口一起显示/隐藏, 彻底规避 BadToken、窗口 token 失效、被系统/微信布局刷新移除等偶发消失问题; 进入聊天时隐藏(GONE)不遮挡微信右上角菜单, 回主页直接恢复可见(不再反复增删 view)。</div>
+    </a>
     <a class="apk" href="LeShaoWeChat-v981.apk">
-        最新版 LeShaoWeChat-v981.apk
+        上一版 LeShaoWeChat-v981.apk
         <div class="meta">v981 · 修复左上角三横菜单「时不时不显示」: 根因是聊天页可见性判定用了 isVisible()/isShown(), 而微信主界面与聊天页同处一个 ViewPager/容器, 离屏聊天页的 view 依旧 isShown()=true, 于是停留在主页时被误判为「在聊天中」→ onWindowFocusChanged 里移除悬浮按钮, 且 self-heal/restore 全部被挡死。改为按 view 在屏幕上的实际可见矩形判定(可见宽高均需 >= 屏幕 2/5), 离屏页会被父容器裁剪从而正确判为「不在聊天」; 并加入可见矩形诊断日志</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v980.apk">
