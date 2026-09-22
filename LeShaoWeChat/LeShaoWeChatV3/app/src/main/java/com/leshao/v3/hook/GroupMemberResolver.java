@@ -56,7 +56,12 @@ public class GroupMemberResolver {
             r.prefScreen = pickClass(cl, "notifyDataSetChanged", "getView", "preference");
             r.imY1 = pickClass(cl, "field_selfDisplayName", "field_modifytime", null);
             r.a3 = firstClass(cl, "MicroMsg.ChatroomMembersLogic");
-            r.j4 = firstClass(cl, "MicroMsg.ContactStorage");
+            // 优先复用 DexKit 已扫描确认的 ContactStorage 类名(ChatGroupHook 同一来源),
+            // 避免 firstClass("MicroMsg.ContactStorage") 误选 i4 而真实类是 v7。
+            r.j4 = DexKitHelper.getContactStorageClass();
+            if (r.j4 == null || r.j4.isEmpty()) {
+                r.j4 = firstClass(cl, "MicroMsg.ContactStorage");
+            }
             r.roomSvc = null;
             r.roomFactory = null;
             r.sceneCb = null;

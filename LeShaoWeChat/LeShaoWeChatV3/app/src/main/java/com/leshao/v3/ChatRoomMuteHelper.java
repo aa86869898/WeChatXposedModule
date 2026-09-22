@@ -262,61 +262,188 @@ public class ChatRoomMuteHelper {
                 return false;
             }
 
-            // h2.ij() → ContactStorage
-            Object j4Storage = callNoArg(h2, "ij");
-            if (j4Storage == null) {
-                LogWriter.log(TAG, "setOneRoom: ij() null");
-                return false;
+            // ============ v955 修复: 3180 免打扰改走会话存储(rconversation flag) ============
+            // 逆向实证(3180): h2.ij() 返回 com.tencent.mm.storage.v7(FriendUser 好友存储),
+            // 联系人/会话存储需按返回类型识别:
+            //   h2.ej() → com.tencent.mm.storage.l4 (ConversationStorage, rconversation)
+            //   l4.p(username) → com.tencent.mm.storage.k4 (会话对象, 继承 vp.a)
+            //   k4.c2(0x800000)=加免打扰flag / k4.e2(0x800000)=移除 / k4.d2(0x800000)=检查
+            //   l4.W(k4, username) → 持久化
+            // 旧版(3141)的 y3.J2(T) 联系人表路径在 3180 已不可达(ij() 返回 v7, y3 恒 null)。
+            boolean ok = setMuteViaConversation(h2, roomId, mute);
+            if (ok) {
+                syncToServerCompat(cl, roomId, mute ? 0 : 1);
+                return true;
             }
-
-            // j4.n(username, true) → y3 联系人存储对象
-            Object y3Obj = null;
-            for (String mn : new String[]{"n", "c", "o", "e"}) {
-                try {
-                    for (java.lang.reflect.Method mm : j4Storage.getClass().getDeclaredMethods()) {
-                        if (mm.getName().equals(mn) && mm.getParameterCount() == 2
-                                && mm.getParameterTypes()[0] == String.class) {
-                            mm.setAccessible(true);
-                            y3Obj = mm.invoke(j4Storage, roomId, true);
-                            break;
-                        }
-                    }
-                    if (y3Obj != null) break;
-                } catch (Throwable ignored) {}
+            // 兜底: 直接 SQL 改 rconversation.flag (本地态保证, UI 刷新靠微信自身读库)
+            boolean sqlOk = setMuteViaSql(cl, roomId, mute);
+            if (sqlOk) {
+                LogWriter.log(TAG, roomId + " mute via SQL: " + mute);
+                syncToServerCompat(cl, roomId, mute ? 0 : 1);
             }
-            if (y3Obj == null) {
-                LogWriter.log(TAG, "y3 is null for " + roomId);
-                return false;
-            }
-
-            // 读取 f2.T 字段 (0=免打扰, 非0=正常)
-            int currentT = XposedHelpers.getIntField(y3Obj, "T");
-            int newT = mute ? 0 : 1;
-
-            if (currentT == newT) {
-                // 已处于目标状态，跳过
-                return false;
-            }
-
-            // 步骤1: y3.J2(newT) — 写 f2.T 字段并触发内存更新
-            boolean wroteMem = tryInvoke(y3Obj, "J2", newT);
-            if (!wroteMem) {
-                try { XposedHelpers.setIntField(y3Obj, "T", newT); } catch (Throwable ignored) {}
-            }
-
-            // 步骤2: j4.p0(username, y3) — 持久化到 SQLite rcontact 表
-            tryInvoke(j4Storage, "p0", roomId, y3Obj);
-
-            // 步骤3: 可选 — 发 CGI 同步到微信服务器
-            syncToServerCompat(cl, roomId, newT);
-
-            LogWriter.log(TAG, roomId + " T: " + currentT + " → " + newT
-                    + " (" + (mute ? "免打扰" : "正常") + ")");
-            return true;
+            return sqlOk;
 
         } catch (Throwable e) {
             LogWriter.log(TAG, "setOneRoom failed for " + roomId + ": " + e.getMessage());
             return false;
+        }
+    }
+
+    /** 3180 免打扰主路径: 会话存储对象 API */
+    private static boolean setMuteViaConversation(Object h2, String roomId, boolean mute) {
+        try {
+            // 1) 按返回类型找会话存储方法 (3180: ej() 返回 com.tencent.mm.storage.l4)
+            Object convStorage = null;
+            for (java.lang.reflect.Method mm : h2.getClass().getDeclaredMethods()) {
+                try {
+                    if (mm.getParameterCount() != 0) continue;
+                    Class<?> rt = mm.getReturnType();
+                    if (rt == null || !rt.getName().equals("com.tencent.mm.storage.l4")) continue;
+                    mm.setAccessible(true);
+                    convStorage = mm.invoke(h2);
+                    if (convStorage != null) {
+                        LogWriter.log(TAG, "setMute: convStorage via " + mm.getName()
+                                + " -> " + convStorage.getClass().getName());
+                        break;
+                    }
+                } catch (Throwable ignored) {}
+            }
+            if (convStorage == null) {
+                LogWriter.log(TAG, "setMute: convStorage(l4) not found on " + h2.getClass().getName());
+                return false;
+            }
+
+            // 2) 取会话对象: l4.p(username) / x(username) 单参 String 返回非空非String
+            Object convObj = null;
+            for (String mn : new String[]{"p", "x", "n"}) {
+                for (java.lang.reflect.Method mm : convStorage.getClass().getDeclaredMethods()) {
+                    try {
+                        if (!mm.getName().equals(mn) || mm.getParameterCount() != 1) continue;
+                        if (mm.getParameterTypes()[0] != String.class) continue;
+                        Class<?> rt = mm.getReturnType();
+                        if (rt == null || rt.isPrimitive() || rt == String.class) continue;
+                        mm.setAccessible(true);
+                        convObj = mm.invoke(convStorage, roomId);
+                        if (convObj != null) break;
+                    } catch (Throwable ignored) {}
+                }
+                if (convObj != null) break;
+            }
+            if (convObj == null) {
+                LogWriter.log(TAG, "setMute: convObj(k4) null for " + roomId);
+                return false;
+            }
+
+            // 3) flag 操作: c2(0x800000) 免打扰 / e2(0x800000) 取消
+            final int MUTE_FLAG = 0x800000;
+            String opName = mute ? "c2" : "e2";
+            boolean opDone = false;
+            for (java.lang.reflect.Method mm : convObj.getClass().getDeclaredMethods()) {
+                if (mm.getName().equals(opName) && mm.getParameterCount() == 1
+                        && mm.getParameterTypes()[0] == int.class) {
+                    mm.setAccessible(true);
+                    mm.invoke(convObj, MUTE_FLAG);
+                    opDone = true;
+                    break;
+                }
+            }
+            // 父类方法兜底 (vp.a)
+            if (!opDone) {
+                Class<?> cur = convObj.getClass().getSuperclass();
+                while (cur != null && !opDone) {
+                    for (java.lang.reflect.Method mm : cur.getDeclaredMethods()) {
+                        if (mm.getName().equals(opName) && mm.getParameterCount() == 1
+                                && mm.getParameterTypes()[0] == int.class) {
+                            mm.setAccessible(true);
+                            mm.invoke(convObj, MUTE_FLAG);
+                            opDone = true;
+                            break;
+                        }
+                    }
+                    cur = cur.getSuperclass();
+                }
+            }
+            if (!opDone) {
+                LogWriter.log(TAG, "setMute: " + opName + "(int) not found on " + convObj.getClass().getName());
+                return false;
+            }
+
+            // 4) 持久化: l4.W(k4, username) / X(k4, username, boolean)
+            boolean persisted = false;
+            for (String mn : new String[]{"W", "X", "Y"}) {
+                for (java.lang.reflect.Method mm : convStorage.getClass().getDeclaredMethods()) {
+                    try {
+                        if (!mm.getName().equals(mn) || mm.getParameterCount() < 2) continue;
+                        if (mm.getParameterTypes()[0] != convObj.getClass()) continue;
+                        mm.setAccessible(true);
+                        if (mm.getParameterCount() == 2) {
+                            mm.invoke(convStorage, convObj, roomId);
+                        } else {
+                            mm.invoke(convStorage, convObj, roomId, true);
+                        }
+                        persisted = true;
+                        break;
+                    } catch (Throwable ignored) {}
+                }
+                if (persisted) break;
+            }
+            LogWriter.log(TAG, roomId + " mute=" + mute + " via convObj(" + opName
+                    + ") persisted=" + persisted);
+            return true;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "setMuteViaConversation err: " + t.getMessage());
+            return false;
+        }
+    }
+
+    /** 免打扰 SQL 兜底: 直接改 rconversation.flag 位 (0x800000=消息免打扰) */
+    private static boolean setMuteViaSql(ClassLoader cl, String roomId, boolean mute) {
+        android.database.Cursor cursor = null;
+        Object db = null;
+        try {
+            Context ctx = ContextManager.getAppContext();
+            if (ctx == null) return false;
+            long uin = getUin(ctx);
+            if (uin <= 0) return false;
+            String imei = VersionCompat.getImei(cl);
+            String baseDir = VersionCompat.getBaseDir(cl, ctx);
+            String dbHash = VersionCompat.getDbHash(cl, (int) uin);
+            String dbPath = baseDir + "MicroMsg/" + dbHash + "/EnMicroMsg.db";
+            String password = md5(imei + uin).substring(0, 7);
+
+            Class<?> dbCls = VersionCompat.findDbOpenerClass(cl);
+            if (dbCls == null) return false;
+            db = VersionCompat.openDatabase(dbCls, dbPath, password);
+            if (db == null) db = VersionCompat.openDatabaseWcdb(cl, dbPath, password);
+            if (db == null) return false;
+
+            // WCDB execSQL 反射
+            java.lang.reflect.Method exec = null;
+            for (java.lang.reflect.Method m : db.getClass().getDeclaredMethods()) {
+                if (m.getName().equals("execSQL") && m.getParameterCount() >= 1
+                        && m.getParameterTypes()[0] == String.class) {
+                    exec = m;
+                    break;
+                }
+            }
+            if (exec == null) return false;
+            exec.setAccessible(true);
+            String sql = mute
+                    ? "UPDATE rconversation SET flag = flag | 8388608 WHERE username = '" + roomId + "'"
+                    : "UPDATE rconversation SET flag = flag & ~8388608 WHERE username = '" + roomId + "'";
+            exec.invoke(db, sql);
+            LogWriter.log(TAG, "setMuteViaSql ok: " + roomId + " mute=" + mute);
+            return true;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "setMuteViaSql err: " + t.getMessage());
+            return false;
+        } finally {
+            if (db != null) {
+                try {
+                    java.lang.reflect.Method close = db.getClass().getDeclaredMethod("c");
+                    close.invoke(db);
+                } catch (Throwable ignored) {}
+            }
         }
     }
 
@@ -384,7 +511,17 @@ public class ChatRoomMuteHelper {
 
     private static void syncToServerCompat(ClassLoader cl, String roomId, int muteFlag) {
         try {
-            Class<?> n0Class = XposedHelpers.findClass("pa5.n0", cl);
+            // v955: 服务定位器经 DexKit 动态检索(特征字符串 "MicroMsg.ServiceManager"), 严禁硬编码;
+            // 旧版 pa5.n0 候选兜底(历史版本)。
+            String locatorName = com.leshao.v3.hook.DexKitHelper.getServiceLocatorClass();
+            Class<?> n0Class = null;
+            if (locatorName != null && !locatorName.isEmpty()) {
+                try { n0Class = XposedHelpers.findClass(locatorName, cl); } catch (Throwable ignored) {}
+            }
+            if (n0Class == null) {
+                try { n0Class = XposedHelpers.findClass("pa5.n0", cl); } catch (Throwable ignored) {}
+            }
+            if (n0Class == null) { LogWriter.log(TAG, "CGI skipped: locator not found"); return; }
             Class<?> fd0eClass = XposedHelpers.findClass("fd0.e", cl);
             Object fd0eImpl = null;
             for (java.lang.reflect.Method m : n0Class.getDeclaredMethods()) {

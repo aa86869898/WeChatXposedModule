@@ -26,6 +26,7 @@ import android.widget.Toast;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.service.TTSBroadcaster;
 import com.leshao.v3.wm.utils.WmPrefs;
+import com.leshao.v3.ui.widgets.M3Page;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -235,6 +236,9 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
             ContactPickerDialog.MODE_FRIEND, val -> {
                 if (prefs != null) prefs.edit().putString(KEY_ANNOUNCE_BL, val).apply();
             }));
+        // v955: 白名单生效状态警示(修复"TTS播报无效"实为白名单严格过滤的用户困惑)
+        card3.addView(itemDivider(ctx, d));
+        card3.addView(buildWhitelistStatusRow(ctx, d, whitelist, wlStrict));
         root.addView(card3);
 
         root.addView(candyDivider(ctx, d));
@@ -274,8 +278,42 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         return scrollView;
     }
 
-    private static View timeRangeRow(Context ctx, float d, String start, String end, TimeCallback cb) {
+    /** v955: 白名单生效状态警示行 — 白名单非空且严格模式时醒目提示拦截范围 */
+    private static View buildWhitelistStatusRow(Context ctx, float d, String whitelist, boolean strict) {
+        int wlCount = 0;
+        if (whitelist != null && !whitelist.trim().isEmpty()) {
+            wlCount = whitelist.split("[,，]").length;
+        }
         LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.VERTICAL);
+        row.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
+        row.setBackgroundColor(AppColors.whiteCard());
+
+        TextView status = new TextView(ctx);
+        status.setTextSize(13);
+        status.setSingleLine(false);
+
+        if (wlCount == 0) {
+            // 白名单为空: 严格模式下全静音(与 FilterManager 逻辑对应)
+            if (strict) {
+                status.setText("⚠️ 当前状态：白名单为空 + 严格模式开启 → 所有消息都不会播报！请添加白名单或关闭严格模式");
+                status.setTextColor(AppColors.error());
+            } else {
+                status.setText("✅ 当前状态：白名单为空 + 严格模式关闭 → 全部消息播报");
+                status.setTextColor(AppColors.onSurfaceVariant());
+            }
+        } else if (strict) {
+            status.setText("⚠️ 当前状态：仅播报白名单内 " + wlCount + " 个会话，其他一切消息将被拦截（如收不到播报请检查此处）");
+            status.setTextColor(AppColors.warning());
+        } else {
+            status.setText("✅ 当前状态：白名单 " + wlCount + " 个会话优先播报，其他会话也播报（非严格模式）");
+            status.setTextColor(AppColors.onSurfaceVariant());
+        }
+        row.addView(status);
+        return row;
+    }
+
+    private static View timeRangeRow(Context ctx, float d, String start, String end, TimeCallback cb) {        LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
@@ -1391,14 +1429,6 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
     }
 
     private static View candyDivider(Context ctx, float d) {
-        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
-        View v = new View(ctx);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
-        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
-        v.setLayoutParams(lp);
-        v.setBackground(gd);
-        return v;
+        return M3Page.divider(ctx);
     }
 }

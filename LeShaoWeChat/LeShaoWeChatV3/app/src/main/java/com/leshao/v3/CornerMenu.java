@@ -202,7 +202,7 @@ public class CornerMenu {
         } catch (Throwable ignored) {}
     }
 
-    /** 绘制三横 (≡) 菜单图标 */
+    /** 绘制三横 (≡) 菜单图标（v955 M3：主色绘制，微信浅色底/暗色底均清晰） */
     private static void createBitmaps() {
         int size = 128;
         Paint paint = new Paint();
@@ -215,12 +215,12 @@ public class CornerMenu {
 
         sBitmapLight = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(sBitmapLight);
-        paint.setColor(0xFF333333);
+        paint.setColor(0xFF006C4C); // M3 primary（浅色）
         drawLines(canvas, paint);
 
         sBitmapDark = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         canvas = new Canvas(sBitmapDark);
-        paint.setColor(0xFFE0E0E0);
+        paint.setColor(0xFF6CDBAC); // M3 primary（暗色）
         drawLines(canvas, paint);
     }
 
@@ -369,8 +369,8 @@ public class CornerMenu {
             if (wm == null) return;
             sMainWM = wm;
 
-            int iconW = dp(ctx, 36);
-            int iconH = dp(ctx, 44);
+            int iconW = dp(ctx, 40);
+            int iconH = dp(ctx, 40);
             ImageView icon = new ImageView(ctx);
             icon.setTag(HAMBURGER_TAG);
             icon.setImageBitmap(darkMode(ctx) ? sBitmapDark : sBitmapLight);
@@ -378,6 +378,18 @@ public class CornerMenu {
             icon.setClickable(true);
             icon.setFocusable(true);
             icon.setEnabled(true);
+            // v955 M3: 悬浮入口加圆角容器底（surfaceContainerLowest + 主色描边），提升可见性与质感
+            try {
+                int r = dp(ctx, 12);
+                GradientDrawable iconBg = new GradientDrawable();
+                iconBg.setShape(GradientDrawable.RECTANGLE);
+                iconBg.setCornerRadius(r);
+                iconBg.setColor(AppColors.surfaceContainerLowest());
+                iconBg.setStroke(dp(ctx, 1), AppColors.primary());
+                icon.setBackground(iconBg);
+                int pad = dp(ctx, 7);
+                icon.setPadding(pad, pad, pad, pad);
+            } catch (Throwable ignored) {}
 
             icon.setOnClickListener(v -> showMenu(v.getContext(), act));
 
@@ -478,16 +490,22 @@ public class CornerMenu {
 
             Window window = dialog.getWindow();
             if (window != null) {
-                int cardBg = AppColors.card();
-                int textColor = AppColors.text1();
-                window.setBackgroundDrawable(new ColorDrawable(cardBg));
+                // v955 M3: 28dp extra-large 圆角弹窗 + surfaceContainerHigh 底
+                int r = dp(ctx, 28);
+                GradientDrawable winBg = new GradientDrawable();
+                winBg.setShape(GradientDrawable.RECTANGLE);
+                winBg.setCornerRadius(r);
+                winBg.setColor(AppColors.surfaceContainerHigh());
+                window.setBackgroundDrawable(winBg);
                 window.setDimAmount(0.3f);
 
                 ListView listView = dialog.getListView();
                 if (listView != null) {
-                    listView.setBackgroundColor(cardBg);
-                    listView.setDivider(new ColorDrawable(AppColors.divider()));
+                    listView.setBackgroundColor(0x00000000);
+                    listView.setDivider(new ColorDrawable(AppColors.outlineVariant()));
                     listView.setDividerHeight(1);
+                    listView.setPadding(dp(ctx, 8), dp(ctx, 8), dp(ctx, 8), dp(ctx, 8));
+                    listView.setClipToPadding(false);
                     final android.graphics.drawable.Drawable settingsIcon =
                         IconLoader.load(ctx, IconLoader.IC_LESHAO_ICON, 14);
                     listView.setAdapter(new ArrayAdapter<String>(ctx,
@@ -495,14 +513,25 @@ public class CornerMenu {
                         @Override
                         public View getView(int pos, View convertView, ViewGroup parent) {
                             TextView tv = (TextView) super.getView(pos, convertView, parent);
-                            tv.setTextColor(textColor);
+                            // v955 M3 列表行：15sp onSurface + 48dp 行高 + 16dp 水平边距
+                            tv.setTextColor(AppColors.onSurface());
+                            tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 15);
+                            tv.setMinimumHeight(dp(ctx, 48));
+                            int p = dp(ctx, 16);
+                            tv.setPadding(p, 0, p, 0);
+                            tv.setGravity(Gravity.CENTER_VERTICAL);
+                            try {
+                                GradientDrawable rowBg = new GradientDrawable();
+                                rowBg.setShape(GradientDrawable.RECTANGLE);
+                                rowBg.setCornerRadius(dp(ctx, 12));
+                                rowBg.setColor(0x00000000);
+                                tv.setBackground(rowBg);
+                            } catch (Throwable ignored) {}
                             if (pos == 0 && settingsIcon != null) {
-                                settingsIcon.setBounds(0, 0,
-                                    (int) (18 * ctx.getResources().getDisplayMetrics().density),
-                                    (int) (18 * ctx.getResources().getDisplayMetrics().density));
+                                int iconSize = dp(ctx, 20);
+                                settingsIcon.setBounds(0, 0, iconSize, iconSize);
                                 tv.setCompoundDrawables(settingsIcon, null, null, null);
-                                tv.setCompoundDrawablePadding(
-                                    (int) (8 * ctx.getResources().getDisplayMetrics().density));
+                                tv.setCompoundDrawablePadding(dp(ctx, 12));
                             }
                             return tv;
                         }
@@ -512,7 +541,7 @@ public class CornerMenu {
                 try {
                     int titleId = ctx.getResources().getIdentifier("alertTitle", "id", "android");
                     TextView titleView = dialog.findViewById(titleId);
-                    if (titleView != null) titleView.setTextColor(textColor);
+                    if (titleView != null) titleView.setTextColor(AppColors.onSurface());
                 } catch (Throwable ignored) {}
 
                 WindowManager.LayoutParams lp = window.getAttributes();

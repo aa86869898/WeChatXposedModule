@@ -626,7 +626,7 @@ public class MainActivity {
         root.setBackground(CandyUi.pageGradient());
 
         root.addView(buildTopBar(ctx, d, act));
-        root.addView(candyDivider(ctx, d));
+        root.addView(buildUserCard(ctx, d, act));
         View searchCard = buildSearchCard(ctx, d);
         root.addView(searchCard);
         root.addView(candyDivider(ctx, d));
@@ -689,24 +689,121 @@ public class MainActivity {
         dlg.show();
     }
 
+    // ===== User Card (v955 新增) =====
+
+    private static View buildUserCard(Context ctx, float d, Activity act) {
+        LinearLayout card = new LinearLayout(ctx);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(dp(d, 16), dp(d, 12), dp(d, 16), 0);
+        card.setLayoutParams(lp);
+        card.setBackground(CandyUi.cardBg(ctx));
+        card.setPadding(dp(d, 16), dp(d, 14), dp(d, 16), dp(d, 14));
+        card.setClickable(true);
+        card.setFocusable(true);
+
+        // v955 M3: 头像 44dp 圆角容器(tertiaryContainer 占位底)
+        final android.widget.ImageView avatar = new android.widget.ImageView(ctx);
+        int avSize = dp(d, 44);
+        GradientDrawable avBg = new GradientDrawable();
+        avBg.setShape(GradientDrawable.RECTANGLE);
+        avBg.setCornerRadius(dp(d, 22));
+        avBg.setColor(AppColors.tertiaryContainer());
+        avatar.setBackground(avBg);
+        avatar.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams(avSize, avSize);
+        avLp.setMarginEnd(dp(d, 12));
+        avatar.setLayoutParams(avLp);
+        card.addView(avatar);
+        try {
+            String wxid = getUserWxid();
+            if (wxid != null && !wxid.isEmpty() && AvatarHelper.bindAvatar(avatar, wxid)) {
+                // 已绑定真实头像
+            } else {
+                TextView ph = new TextView(ctx);
+                ph.setText("\uD83D\uDC64");
+                ph.setTextSize(20);
+                ph.setGravity(Gravity.CENTER);
+                card.addView(ph);
+            }
+        } catch (Throwable ignored) {}
+
+        LinearLayout textCol = new LinearLayout(ctx);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+
+        String nick = getUserNickname();
+        TextView nameTv = new TextView(ctx);
+        nameTv.setText(nick != null && !nick.isEmpty() ? nick : "微信用户");
+        nameTv.setTextSize(16);
+        nameTv.setTypeface(null, Typeface.BOLD);
+        nameTv.setTextColor(AppColors.text1());
+        nameTv.setSingleLine(true);
+        textCol.addView(nameTv);
+
+        TextView subTv = new TextView(ctx);
+        subTv.setText((getVipLevel() != null ? getVipLevel() : "") + " · "
+            + (getUserWxid() != null && !getUserWxid().isEmpty() ? getUserWxid() : "点击查看个人中心"));
+        subTv.setTextSize(11);
+        subTv.setTextColor(AppColors.textTertiary());
+        subTv.setSingleLine(true);
+        subTv.setPadding(0, dp(d, 2), 0, 0);
+        textCol.addView(subTv);
+
+        card.addView(textCol);
+
+        TextView arrow = new TextView(ctx);
+        arrow.setText("›");
+        arrow.setTextSize(20);
+        arrow.setTextColor(AppColors.arrow());
+        card.addView(arrow);
+
+        card.setOnClickListener(v -> {
+            dismissDialog();
+            SubPageActivity.openFromMain(act, "个人中心", 99);
+        });
+
+        return card;
+    }
+
     // ===== Top Bar =====
 
     private static View buildTopBar(Context ctx, float d, Activity act) {
         LinearLayout bar = new LinearLayout(ctx);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(d, 16), dp(d, 12), dp(d, 16), dp(d, 12));
-        bar.setBackgroundColor(AppColors.accent());
+        bar.setPadding(dp(d, 20), dp(d, 18), dp(d, 20), dp(d, 18));
+        // v955 M3: 主色 hero 顶栏 + 28dp 底部圆角(M3 extra-large shape)
+        GradientDrawable barBg = new GradientDrawable();
+        barBg.setShape(GradientDrawable.RECTANGLE);
+        barBg.setColor(AppColors.primary());
+        barBg.setCornerRadii(new float[]{
+            dp(d, 28), dp(d, 28), dp(d, 28), dp(d, 28),
+            0, 0, 0, 0});
+        bar.setBackground(barBg);
+
+        LinearLayout textCol = new LinearLayout(ctx);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
 
         TextView titleTv = new TextView(ctx);
-        titleTv.setText("乐少助手 " + ContextManager.getVersionName());
-        titleTv.setTextSize(17);
-        titleTv.setTextColor(AppColors.WHITE_TEXT);
+        titleTv.setText("乐少助手");
+        titleTv.setTextSize(22);
+        titleTv.setTextColor(AppColors.onPrimary());
         titleTv.setTypeface(null, Typeface.BOLD);
         titleTv.setGravity(Gravity.CENTER);
-        titleTv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        textCol.addView(titleTv);
 
-        bar.addView(titleTv);
+        TextView verTv = new TextView(ctx);
+        verTv.setText("v" + ContextManager.getVersionName() + " · 微信功能增强模块");
+        verTv.setTextSize(11);
+        verTv.setTextColor(0xB3FFFFFF);
+        verTv.setGravity(Gravity.CENTER);
+        verTv.setPadding(0, dp(d, 3), 0, 0);
+        textCol.addView(verTv);
+
+        bar.addView(textCol);
 
         return bar;
     }
@@ -715,29 +812,42 @@ public class MainActivity {
 
     private static View buildSearchCard(Context ctx, float d) {
         LinearLayout card = new LinearLayout(ctx);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(d, 12), 0, dp(d, 12), 0);
-        GradientDrawable cardBg = new GradientDrawable();
-        cardBg.setCornerRadius(dp(d, 8));
-        cardBg.setColor(AppColors.card());
-        card.setBackground(cardBg);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(-1, -2);
+        cardLp.setMargins(dp(d, 16), 0, dp(d, 16), 0);
+        card.setLayoutParams(cardLp);
+        // v955 M3 search bar: surfaceContainerHigh + 28dp 全圆角
+        GradientDrawable searchBg = new GradientDrawable();
+        searchBg.setShape(GradientDrawable.RECTANGLE);
+        searchBg.setCornerRadius(dp(d, 28));
+        searchBg.setColor(AppColors.surfaceContainerHigh());
+        card.setBackground(searchBg);
+        card.setPadding(dp(d, 16), dp(d, 12), dp(d, 16), dp(d, 12));
+
+        // v955: 放大镜图标
+        TextView searchIcon = new TextView(ctx);
+        searchIcon.setText("\uD83D\uDD0D");
+        searchIcon.setTextSize(15);
+        searchIcon.setPadding(0, 0, dp(d, 8), 0);
+        card.addView(searchIcon);
 
         EditText searchBox = new EditText(ctx);
         searchBox.setHint("搜索模块功能...");
         searchBox.setTextSize(14);
         searchBox.setTextColor(AppColors.text1());
-        searchBox.setHintTextColor(AppColors.text2());
+        searchBox.setHintTextColor(AppColors.textTertiary());
         searchBox.setSingleLine(true);
-        searchBox.setBackground(CandyUi.inputBg(ctx));
-        searchBox.setPadding(0, dp(d, 10), 0, dp(d, 10));
-        searchBox.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+        searchBox.setBackgroundColor(Color.TRANSPARENT);
+        searchBox.setPadding(0, 0, 0, 0);
+        LinearLayout.LayoutParams boxLp = new LinearLayout.LayoutParams(0, -2, 1.0f);
+        searchBox.setLayoutParams(boxLp);
         searchBox.setTag("search_box");
         card.addView(searchBox);
         card.setTag("search_card");
 
         return card;
     }
-
     private static void setupSearch(final EditText searchBox,
                                       final HashMap<View, String> searchMap,
                                       final LinearLayout itemsContainer) {
@@ -776,11 +886,11 @@ public class MainActivity {
     private static LinearLayout buildCard(Context ctx, float d) {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(d, 12), 0, dp(d, 12), 0);
-        GradientDrawable cardBg = new GradientDrawable();
-        cardBg.setCornerRadius(dp(d, 8));
-        cardBg.setColor(AppColors.card());
-        card.setBackground(cardBg);
+        card.setPadding(dp(d, 4), dp(d, 4), dp(d, 4), dp(d, 4));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(dp(d, 16), 0, dp(d, 16), 0);
+        card.setLayoutParams(lp);
+        card.setBackground(CandyUi.cardBg(ctx));
         return card;
     }
 
@@ -793,15 +903,29 @@ public class MainActivity {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(d, 16), dp(d, 13), dp(d, 16), dp(d, 13));
-        row.setBackgroundColor(Color.TRANSPARENT);
+        row.setBackground(CandyUi.rowPressBg(ctx));
         row.setOnClickListener(onClick);
         row.setClickable(true);
 
+        // v955 M3: 图标 40dp 圆角容器(secondaryContainer)
+        LinearLayout iconWrap = new LinearLayout(ctx);
+        iconWrap.setGravity(Gravity.CENTER);
+        int iconBox = dp(d, 40);
+        GradientDrawable iconBg = new GradientDrawable();
+        iconBg.setShape(GradientDrawable.RECTANGLE);
+        iconBg.setCornerRadius(dp(d, 12));
+        iconBg.setColor(AppColors.secondaryContainer());
+        iconWrap.setBackground(iconBg);
+        LinearLayout.LayoutParams iconWrapLp = new LinearLayout.LayoutParams(iconBox, iconBox);
+        iconWrapLp.setMarginEnd(dp(d, 12));
+        iconWrap.setLayoutParams(iconWrapLp);
+
         TextView icon = new TextView(ctx);
         icon.setText(new String(Character.toChars(emoji)));
-        icon.setTextSize(18);
-        icon.setPadding(0, 0, dp(d, 12), 0);
-        row.addView(icon);
+        icon.setTextSize(17);
+        icon.setGravity(Gravity.CENTER);
+        iconWrap.addView(icon);
+        row.addView(iconWrap);
 
         TextView tv = new TextView(ctx);
         tv.setText(title);
@@ -812,8 +936,8 @@ public class MainActivity {
         row.addView(tv);
 
         TextView arrow = new TextView(ctx);
-        arrow.setText(">");
-        arrow.setTextSize(16);
+        arrow.setText("›");
+        arrow.setTextSize(20);
         arrow.setTextColor(AppColors.arrow());
         row.addView(arrow);
 
@@ -1023,27 +1147,31 @@ public class MainActivity {
         LinearLayout bar = new LinearLayout(ctx);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(d, 12), dp(d, 10), dp(d, 12), dp(d, 10));
-        GradientDrawable barBg = new GradientDrawable(
-            GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{AppColors.accent2(), AppColors.accent()});
+        bar.setPadding(dp(d, 12), dp(d, 14), dp(d, 12), dp(d, 14));
+        // v955 M3: 主色底 + 28dp 底部圆角
+        GradientDrawable barBg = new GradientDrawable();
+        barBg.setShape(GradientDrawable.RECTANGLE);
+        barBg.setColor(AppColors.primary());
+        barBg.setCornerRadii(new float[]{
+            dp(d, 28), dp(d, 28), dp(d, 28), dp(d, 28),
+            0, 0, 0, 0});
         bar.setBackground(barBg);
 
         if (showBack) {
             TextView back = new TextView(ctx);
-            back.setText("< 返回");
-            back.setTextSize(13);
-            back.setTextColor(AppColors.whiteCard());
+            back.setText("‹");
+            back.setTextSize(26);
+            back.setTextColor(AppColors.onPrimary());
             back.setPadding(0, 0, dp(d, 8), 0);
-            back.setPaintFlags(back.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
+            back.setClickable(true);
             back.setOnClickListener(v -> { if (onBack != null) onBack.run(); });
             bar.addView(back);
         }
 
         TextView tv = new TextView(ctx);
         tv.setText(title);
-        tv.setTextSize(17);
-        tv.setTextColor(AppColors.whiteCard());
+        tv.setTextSize(20);
+        tv.setTextColor(AppColors.onPrimary());
         tv.setTypeface(null, Typeface.BOLD);
         tv.setGravity(Gravity.CENTER);
         tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
@@ -1051,7 +1179,7 @@ public class MainActivity {
 
         if (showBack) {
             View spacer = new View(ctx);
-            spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 0, 0));
+            spacer.setLayoutParams(new LinearLayout.LayoutParams(dp(d, 8), 0));
             bar.addView(spacer);
         }
 
@@ -1062,7 +1190,7 @@ public class MainActivity {
         float d = ctx.getResources().getDisplayMetrics().density;
         View v = new View(ctx);
         v.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(d, 6)));
-        v.setBackgroundColor(AppColors.bg());
+        v.setBackground(CandyUi.pageGradient());
         return v;
     }
 

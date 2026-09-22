@@ -20,6 +20,7 @@ import com.leshao.v3.ShadowLabelStore;
 import com.leshao.v3.model.ContactCard;
 import com.leshao.v3.hook.model.LabelInfo;
 import com.leshao.v3.ui.AvatarHelper;
+import com.leshao.v3.ui.AppColors;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XC_MethodHook.MethodHookParam;
 import de.robv.android.xposed.XposedBridge;
@@ -866,8 +867,7 @@ public class ChatGroupUiInjector {
                         if (p.args[1] instanceof View) view = (View) p.args[1];
                     }
                     if (p.args.length >= 3 && p.args[2] instanceof Integer) position = (Integer) p.args[2];
-                    if (parent == null
-                        || !"com.tencent.mm.ui.conversation.ConversationListView".equals(parent.getClass().getName())) return;
+                    if (parent == null || !isConversationListView(parent)) return;
                     String username = view != null ? extractUsernameFromView(view) : null;
                     if (TextUtils.isEmpty(username) && position >= 0) username = extractUsernameFromList(parent, position);
                     if (!TextUtils.isEmpty(username)) armConvMenu(username);
@@ -958,12 +958,14 @@ public class ChatGroupUiInjector {
             final String fUser = user;
             final Context ctx = container.getContext();
             boolean dark = isDarkMode(ctx);
+            // v955 M3: 注入行改用 M3 列表项样式（primary 文字 + 图标前缀 + 行高压反馈）
             TextView row = new TextView(ctx);
-            row.setText("分组管理");
+            row.setText("👥  分组管理");
             row.setTextSize(16);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setSingleLine(true);
-            row.setTextColor(dark ? 0xFFE4E4E8 : 0xFF1D1D1F);
+            row.setTextColor(AppColors.primary());
+            row.setTypeface(row.getTypeface(), android.graphics.Typeface.BOLD);
             int rowH = dp(48, ctx);
             // 对齐同级行高，尽量贴近原生观感
             for (int i = 0; i < container.getChildCount(); i++) {
@@ -977,6 +979,13 @@ public class ChatGroupUiInjector {
                 ViewGroup.LayoutParams.MATCH_PARENT, rowH);
             row.setLayoutParams(lp);
             row.setPadding(dp(16, ctx), 0, dp(16, ctx), 0);
+            try {
+                android.graphics.drawable.GradientDrawable rowBg = new android.graphics.drawable.GradientDrawable();
+                rowBg.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+                rowBg.setCornerRadius(dp(12, ctx));
+                rowBg.setColor(0x00000000);
+                row.setBackground(rowBg);
+            } catch (Throwable ignored) {}
             row.setOnClickListener(v -> {
                 try {
                     sConvMenuArmTs = 0;
@@ -1224,6 +1233,18 @@ public class ChatGroupUiInjector {
             LogWriter.log(TAG, "View.performLongClick hook installed");
         } catch (Throwable e) {
             LogWriter.log(TAG, "performLongClick hook err: " + e.getMessage());
+        }
+    }
+
+    /** 跨版本稳健判定：类名含 ConversationListView，或 conversation 包下的 AbsListView（兼容未来改名/混淆）。
+     *  3180 实证：com.tencent.mm.ui.conversation.ConversationListView 仍存在，contains 判定等价命中。 */
+    private static boolean isConversationListView(android.widget.AdapterView<?> v) {
+        try {
+            String n = v.getClass().getName();
+            if (n != null && n.contains("ConversationListView")) return true;
+            return (v instanceof android.widget.AbsListView) && n != null && n.contains("conversation");
+        } catch (Throwable t) {
+            return false;
         }
     }
 

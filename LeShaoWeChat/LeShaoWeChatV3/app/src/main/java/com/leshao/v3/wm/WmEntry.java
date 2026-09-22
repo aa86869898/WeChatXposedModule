@@ -116,35 +116,45 @@ public class WmEntry {
             }
 
             // ChattingUIFragment lifecycle: M0=open, O0=close
+            // v957: M0/O0 在 3180 已改名, 逐个 try-catch 隔离, 单点失败不再跳过后续兜底
             try {
                 Class<?> fragClass = XposedHelpers.findClass("com.tencent.mm.ui.chatting.ChattingUIFragment", cl);
-                java.lang.reflect.Method m0 = fragClass.getDeclaredMethod("M0");
-                XposedBridge.hookMethod(m0, new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam p) {
-                        try {
-                            Object frag = p.thisObject;
-                            LogWriter.log(TAG, "ChattingUIFragment.M0() open");
-                            handleChatResume(frag, cl);
-                        } catch (Exception e) {
-                            LogWriter.log(TAG, "M0 err: " + e.getMessage());
+                try {
+                    java.lang.reflect.Method m0 = fragClass.getDeclaredMethod("M0");
+                    XposedBridge.hookMethod(m0, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam p) {
+                            try {
+                                Object frag = p.thisObject;
+                                LogWriter.log(TAG, "ChattingUIFragment.M0() open");
+                                handleChatResume(frag, cl);
+                            } catch (Exception e) {
+                                LogWriter.log(TAG, "M0 err: " + e.getMessage());
+                            }
                         }
-                    }
-                });
-                java.lang.reflect.Method o0 = fragClass.getDeclaredMethod("O0");
-                XposedBridge.hookMethod(o0, new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam p) {
-                        try {
-                            LogWriter.log(TAG, "ChattingUIFragment.O0() close");
-                            WmChatHook.dismissTitleBtn();
-                            WmGroupHook.dismissGroupBtn();
-                        } catch (Throwable e) {
-                            LogWriter.log("WmEntry", "O0 err: " + e);
+                    });
+                    LogWriter.log(TAG, "\u2713 chat window (ChattingUIFragment M0)");
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "M0 hook 跳过(3180 改名): " + t.getMessage());
+                }
+                try {
+                    java.lang.reflect.Method o0 = fragClass.getDeclaredMethod("O0");
+                    XposedBridge.hookMethod(o0, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam p) {
+                            try {
+                                LogWriter.log(TAG, "ChattingUIFragment.O0() close");
+                                WmChatHook.dismissTitleBtn();
+                                WmGroupHook.dismissGroupBtn();
+                            } catch (Throwable e) {
+                                LogWriter.log("WmEntry", "O0 err: " + e);
+                            }
                         }
-                    }
-                });
-                LogWriter.log(TAG, "\u2713 chat window (ChattingUIFragment M0/O0)");
+                    });
+                    LogWriter.log(TAG, "\u2713 chat window (ChattingUIFragment O0)");
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "O0 hook 跳过(3180 改名): " + t.getMessage());
+                }
             } catch (Throwable e) {
                 LogWriter.log(TAG, "ChattingUIFragment hook err: " + e.getMessage());
             }

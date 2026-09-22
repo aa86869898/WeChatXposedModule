@@ -23,6 +23,20 @@
             android:name="xposedscope"
             android:value="com.tencent.mm" />
 
+        <activity
+            android:name="com.leshao.ai.ui.activity.SettingsActivity"
+            android:exported="true"
+            android:theme="@style/Theme.LeshaoAI" />
+        <activity
+            android:name="com.leshao.ai.ui.activity.WhitelistActivity"
+            android:exported="false"
+            android:theme="@style/Theme.LeshaoAI" />
+
+        <provider
+            android:name="com.leshao.ai.data.AiDataProvider"
+            android:authorities="com.leshao.v3.aiconfig"
+            android:exported="true"
+            android:grantUriPermissions="true" />
 
     </application>
 

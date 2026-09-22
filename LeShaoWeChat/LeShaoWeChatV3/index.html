@@ -16,8 +16,24 @@
 <body>
     <h1>LeShaoWeChat 模块下载</h1>
     <p>微信 8.0.78(3180) 适配版。下载 APK 后到 LSPosed 管理器中激活并重启微信。</p>
+    <a class="apk" href="LeShaoWeChat-v959.apk">
+        最新版 LeShaoWeChat-v959.apk
+        <div class="meta">v959 · 依据三份逆向文档对 LeshaoAI 模块彻底修复(AI 功能此前完全不工作): ① 补收消息总闸门 f9.Bb(e9,Z) hook(此前零 hook, 消息进不来), 消息字段走 field_* 未混淆名取数, 过滤链(零宽水印→isSend→文本类型)后进触发引擎 ② 发送链 v51.r1 按文档坐标反射(newInstance+setObjectField l=v51.p1.d(TEXT)+h(talker)/e(content)/i(1)/b()), 替换此前臆造类名(storage.MsgInfoStorage/model.b), sendTextWithAt 兜底在正文前加 @显示名 ③ DexKitAdapter 全锚点重写(f9/e9/r1/p1/aa/g2/l4/j4/g/e/h9 按文档 §15.4/§20 字符串+签名定位, ChattingUIFragment 按 onCreateOptionsMenu 签名定位), 类名缓存+dump() ④ 新增 GroupMsgParser: 群判定 @chatroom 结尾、b41.aa.u 拆分 &lt;sender&gt;:\n正文、isAtMe 解析 msgsource atuserlist+兜底 @机器人名/@所有人/@all ⑤ 防死循环零宽水印 SendGuard(v51.r1 协程异步, ThreadLocal 有时间窗) ⑥ TriggerEngine 按文档 §16.5 决策链: 总开关→群/私聊分开关→群唤醒@/关键词→白名单非空过滤→LLM→水印发送→TTS ⑦ 菜单注入改 hook ChattingUIFragment.onCreateOptionsMenu 加「AI 助手」(此前 hook Fragment onCreate 却不加菜单项, 入口失效), 点击跨进程启动设置页(exported) ⑧ deferUntilReady: LauncherUI onResume 后再挂核心 hook(v51.r1 协程要求进程初始化完成), 只执行一次 ⑨ 修复设置永久无效: 配置/白名单唯一数据源改模块 files, 新增 AiDataProvider(com.leshao.v3.aiconfig, /config /whitelist /sessions 三通道), 微信侧 ConfigBridge query 镜像+广播刷新(ACTION_REFRESH_CONFIG), 替代此前微信直读/设置页直写的断裂设计 ⑩ 新增 StorageHub(b41.h9.d→b41.e→v/r/q 反射链, 返回类型双重校验): selfWxid/selfNickname/历史 f9.H2/末条 f9.G7; ContactQuery(j4 实现接口 d8, 备注>昵称>wxid); ConversationQuery(g2 单例+g()→k4.z0) ⑪ 白名单改 talker(wxid/群 id)语义+「从微信会话导入」按钮(读 Provider /sessions 多选), 三处群判定统一 @chatroom(原 ChatUtils 用 | 结尾错误格式, 导致群消息全判为私聊) ⑫ 模块设置页/白名单页 onPause 兜底落盘+广播刷新。沿用 v958 全部(移除 v629 AI 整包零残留)</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v958.apk">
+        上一版 LeShaoWeChat-v958.apk
+        <div class="meta">v958 · 彻底移除内置「AI 聊天助手 v629」(com.leshao.v3.ai 整包 13 个类 + MainHook 加载块 + proguard keep 规则 + 孤儿布局 activity_ai_control.xml, 源码与 DEX 双重验证零残留); 保留 LeshaoAI 独立模块(自动回复/@唤醒/关键词/白名单/分群记忆/知识库/TTS语音回复); 沿用 v957 全部修复(WmEntry M0/O0 隔离/AI 按钮链路日志化/a21.o.i 签名兜底)。注: 原 v629 的「AI总结/智能推荐回复/会话记忆」功能随之移除, 如后续需要将随 LeshaoAI 统一重建</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v954.apk">
+        上一版 LeShaoWeChat-v954.apk
+        <div class="meta">v954 · 线上三修复: ① 修复「乐小AI」入口未注入(LeshaoAI 加载 NoSuchMethodError): 根因为 proguard -keep de.robv.android.xposed.** 把裁剪版 xposed-api-82.jar 打进 DEX(编译期 findAndHookMethod 返回 void, 与 LSPosed 运行时返回 Unhook 签名不符), 已移除该 keep 规则排除打包 + WeChatHook 四处 findAndHookMethod 全部改为 hookAllMethods(与运行时签名一致) ② 修复一键免打扰无效(0/95 群): 8.0.78 ContactStorage(v7) 取联系人实为单参 m(String), 新增单参兜底遍历 ③ 修复群聊详情页「成员改动记录」文字不显示/点击无反应: PreferenceScreen 插入后补 notifyDataSetChanged 刷新 ListView + 点击代理改按签名匹配(不再依赖方法名 a) + ContactStorage 复用 DexKit 已确认类名 + 成员备注读取补单参 m() 兜底</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v953.apk">
+        上一版 LeShaoWeChat-v953.apk
+        <div class="meta">v953 · ① 线上七项修复: 自动红包增加 DB 兜底(消息锚点缺失时按 msgSvrId 延迟回读 EnMicroMsg.db 重试领取)+类型/内容双重判定诊断日志; 一键免打扰改为双存储路径(i4 类 ij/cj)+全签名遍历兜底(修复 0/95 群静音失效); 批量邀请进群反射安全调用(修复 unbox 'int' NPE)+弹窗改走当前 Activity 上下文(修复 token null); 群成员按钮按参数签名反射(替代失效混淆方法 J/P/S/K); 导出聊天记录修复 rawQuery 签名误配(boolean vs String[])与作用域存储 ENOENT; TTS 空白名单不再全拦(白名单为空时 strict 失效放行全部) ② 集成「乐小AI」模块: 全新 AI 智能助手(OpenAI Chat/Responses + Anthropic 三端接入, 白名单群聊自动回复/私聊自动回复/@唤醒/关键词触发, 分群记忆+知识库检索, 系统 TTS 语音回复), 入口为设置页「乐小AI 设置」(SettingsActivity/WhitelistActivity 双界面, 布局原样集成未改动)</div>
+    </a>
     <a class="apk" href="LeShaoWeChat-v952.apk">
-        最新版 LeShaoWeChat-v952.apk
+        上一版 LeShaoWeChat-v952.apk
         <div class="meta">v952 · ① 自动红包全链路修复: 消息识别改为"类型+内容特征"双重判定(修复线上红包/转账收不到, 支持普通+商家红包), 后台 Scene 自动领取(receivewxhb 锚点 DexKit 定位类, 7参构造), 抢到金额按 sceneAmount 分单位 TTS 播报 ② 新增自动转发(自动群发): 首页「联系人和群聊」卡片 + 聊天输入框「助手」菜单「自动转发」设置, 支持来源/目标/类型(文本/图片/AppMsg)过滤, 文本消息原文转发、图片按本地路径发送 ③ 一键免打扰/解除免打扰修复: 群列表查询不再硬编码 kh5.f.u(原线上 NoSuchMethodException 失效根因), 多级回退 + 服务器同步链路全反射兜底 ④ 新增「禁止微信热更新」(数据备份页): 阻断版本升级(Updater/NetSceneGetUpdateInfo/MMErrorProcessor/UpdaterManager)与 Tinker 热补丁(SubCoreHotpatch/TinkerBoots/TinkerClient/MergeHdiffApkService/CTinkerInstaller)十个锚点, 严格参照《禁止热更新.java》, 全部 DexKit 字符串定位防混淆</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v951.apk">

@@ -23,10 +23,9 @@ public class FilterManager {
         if (!cfg.announceWhitelist.isEmpty()) {
             boolean inWl = cfg.announceWhitelist.contains(talker);
             if (!inWl) return false;
-        } else if (cfg.whitelistStrict) {
-            // 白名单严格模式: 白名单为空 = 不播报任何消息
-            return false;
         }
+        // 白名单为空时 strict 模式无拦截对象, 全部放行(避免默认配置下 TTS 被静音)。
+        // 只有"配置了白名单且开启严格模式"才对非白名单会话拦截。
 
         switch (msgType) {
             case com.leshao.v3.model.WeChatMessage.TYPE_TEXT:

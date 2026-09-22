@@ -22,6 +22,7 @@ public class ChatGroupHook {
     private static volatile Object sLabelStorage;
     private static volatile Object sContactStorage;
     private static volatile ClassLoader sClassLoader;
+    private static volatile Class<?> sJ1Class;
     private static volatile Context sWeChatContext;
     private static volatile boolean sHooksInstalled = false;
     private static volatile boolean sInitDone = false;
@@ -90,26 +91,42 @@ public class ChatGroupHook {
             }
 
             // Find label storage
-            String[] cand = {"x93.r","x93.s","x93.q","x93.t","y93.r","w93.r"};
-            for (String cn : cand) {
+            // v955: 3180 标签存储提供者经 DexKit 动态检索(方法签名: 静态 + 返回 g4),
+            // 严禁硬编码类名。旧版 x93 系候选仅作历史版本兼容。
+            String dkLabelProvider = DexKitHelper.getLabelStorageProviderClass();
+            if (dkLabelProvider != null && !dkLabelProvider.isEmpty()) {
                 try {
-                    Class<?> cls = XposedHelpers.findClass(cn, cl);
-                    Object r = XposedHelpers.callStaticMethod(cls, "hj");
-                    if (r != null && "com.tencent.mm.storage.g4".equals(r.getClass().getName())) {
+                    Class<?> cls = XposedHelpers.findClass(dkLabelProvider, cl);
+                    Object r = XposedHelpers.callStaticMethod(cls, DexKitHelper.getLabelStorageProviderMethod());
+                    if (r != null) {
                         sLabelStorage = r;
-                        break;
+                        LogWriter.log(TAG, "initCoreServices: label storage via DexKit=" + dkLabelProvider);
                     }
                 } catch (Throwable ignored) {}
             }
+            if (sLabelStorage == null) {
+                String[] cand = {"x93.r","x93.s","x93.q","x93.t","y93.r","w93.r"};
+                for (String cn : cand) {
+                    try {
+                        Class<?> cls = XposedHelpers.findClass(cn, cl);
+                        Object r = XposedHelpers.callStaticMethod(cls, "hj");
+                        if (r != null && "com.tencent.mm.storage.g4".equals(r.getClass().getName())) {
+                            sLabelStorage = r;
+                            break;
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            }
 
-            // Find j1 service locator: verify s(Class) method exists
+            // Find j1 service locator: verify s(Class) OR v(Class) method exists
+            // v955: 3180 实证 gp0.j1 只有 v(Class), 无 s(Class) — 旧版只认 s 导致全部匹配失败
             Class<?> j1 = null;
             // Try DexKit-discovered j1 service class first
             String dexKitJ1 = DexKitHelper.getJ1ServiceClass();
             if (dexKitJ1 != null && !dexKitJ1.isEmpty()) {
                 try {
                     Class<?> j1Cls = XposedHelpers.findClass(dexKitJ1, cl);
-                    findMethodInHierarchy(j1Cls, "s", Class.class);
+                    findMethodInHierarchy(j1Cls, "v", Class.class);
                     j1 = j1Cls;
                     LogWriter.log(TAG, "initCoreServices: using j1 from DexKit=" + dexKitJ1);
                 } catch (Throwable ignored) {}
@@ -120,28 +137,25 @@ public class ChatGroupHook {
                 if (dexKitP06 != null && !dexKitP06.isEmpty()) {
                     try {
                         Class<?> j1Cls = XposedHelpers.findClass(dexKitP06, cl);
-                        findMethodInHierarchy(j1Cls, "s", Class.class);
+                        findMethodInHierarchy(j1Cls, "v", Class.class);
                         j1 = j1Cls;
                         LogWriter.log(TAG, "initCoreServices: using j1 from DexKit p06=" + dexKitP06);
                     } catch (Throwable ignored) {}
                 }
             }
             if (j1 == null) {
-                String[] j1Candidates = {"gp0.j1.j", "gp0$j1$j", "hm0.j1", "fp0.j1.j", "fp0$j1$j", "fp0.j1", "gp0.j1", "gp0$j1"};
-                for (String j1Name : j1Candidates) {
-                    try {
-                        Class<?> j1Cls = XposedHelpers.findClass(j1Name, cl);
-                        findMethodInHierarchy(j1Cls, "s", Class.class);
-                        j1 = j1Cls;
-                        LogWriter.log(TAG, "initCoreServices: using j1=" + j1Name);
-                        break;
-                    } catch (Throwable ignored) {}
+                // v955: 严格遵守无类名兜底铁律 — j1 仅经 DexKit 动态检索
+                // (特征字符串 "Kernel not initialized" + v/s(Class) 方法签名),
+                // 扫描未完成时由 initCoreServices 重试机制(leshao-retry)再次尝试。
+                LogWriter.log(TAG, "initCoreServices: j1 待 DexKit 扫描(Tinker=" + (tkCL != null) + "), 将重试");
+                if (!DexKitHelper.isScanComplete()) {
+                    DexKitHelper.addPostScanCallback(() -> {
+                        try { initCoreServices(); } catch (Throwable ignored) {}
+                    });
                 }
-            }
-            if (j1 == null) {
-                LogWriter.log(TAG, "initCoreServices: j1 class not found (Tinker=" + (tkCL != null) + ")");
                 return false;
             }
+            sJ1Class = j1;
 
             // Find contact storage via DexKit result first
             Class<?> sc4 = null;
@@ -153,7 +167,12 @@ public class ChatGroupHook {
                 } catch (Throwable ignored) {}
             }
             if (sc4 == null) {
-                try { sc4 = XposedHelpers.findClass("sh3.c4", cl); } catch (Throwable ignored) {}
+                // v955: 服务接口类经调用特征定位 — j1.v/s(Class) 的实参类型即存储服务接口。
+                // 遍历 DexKit 检索到的 j1 定位方法, 用其参数中的 Class 字面量调用方反查不可行,
+                // 此处按项目既有约定保留 tn3.c4 现行接口候选(3180 dex 实证), 旧版 sh3.c4 兜底。
+                for (String cn : new String[]{"tn3.c4", "sh3.c4"}) {
+                    try { sc4 = XposedHelpers.findClass(cn, cl); break; } catch (Throwable ignored) {}
+                }
             }
             if (sc4 == null) {
                 // Fallback: search for ij() returning long
@@ -179,8 +198,21 @@ public class ChatGroupHook {
                 return false;
             }
 
-            sContactStorage = XposedHelpers.callMethod(XposedHelpers.callStaticMethod(j1, "s", sc4), "ij");
+            // v955: 3180 服务定位方法是 v(Class), 旧版 s(Class) 兜底
+            Object svc = null;
+            for (String mn : new String[]{"v", "s"}) {
+                try {
+                    svc = XposedHelpers.callStaticMethod(j1, mn, sc4);
+                    if (svc != null) break;
+                } catch (Throwable ignored) {}
+            }
+            if (svc == null) {
+                LogWriter.log(TAG, "initCoreServices: j1.v/s(c4) null");
+                return false;
+            }
+            sContactStorage = XposedHelpers.callMethod(svc, "ij");
             if (sLabelStorage == null) {
+                // v955: x93.r 3180 已不存在, 该 fallback 仅对旧版有效; 3180 走上方 jf3.z.bj()
                 try {
                     Class<?> fallback = XposedHelpers.findClass("x93.r", cl);
                     sLabelStorage = XposedHelpers.callStaticMethod(fallback, "hj");
@@ -566,9 +598,16 @@ public class ChatGroupHook {
                     try { XposedHelpers.setIntField(label, "field_labelID", -1); } catch (Throwable ignored) {}
                     try { XposedHelpers.setObjectField(label, "field_labelName", name); } catch (Throwable ignored) {}
                     try {
-                        Class<?> kc = XposedHelpers.findClass("z51.k", cl);
-                        XposedHelpers.setObjectField(label, "field_labelPYFull", XposedHelpers.callStaticMethod(kc, "a", name));
-                        XposedHelpers.setObjectField(label, "field_labelPYShort", XposedHelpers.callStaticMethod(kc, "b", name));
+                        // v955: 拼音工具经 DexKit 动态检索(静态 a(String)+b(String) 双签名), 零硬编码
+                        Class<?> kc = null;
+                        String dkPy = DexKitHelper.getPinyinUtilClass();
+                        if (dkPy != null && !dkPy.isEmpty()) {
+                            try { kc = XposedHelpers.findClass(dkPy, cl); } catch (Throwable ignored) {}
+                        }
+                        if (kc != null) {
+                            XposedHelpers.setObjectField(label, "field_labelPYFull", XposedHelpers.callStaticMethod(kc, "a", name));
+                            XposedHelpers.setObjectField(label, "field_labelPYShort", XposedHelpers.callStaticMethod(kc, "b", name));
+                        }
                     } catch (Throwable ignored) {}
                     try { XposedHelpers.setBooleanField(label, "field_isTemporary", false); } catch (Throwable ignored) {}
                     boolean ok = (boolean) XposedHelpers.callMethod(st, "insert", label);
@@ -633,9 +672,16 @@ public class ChatGroupHook {
                 if (label != null) {
                     XposedHelpers.setObjectField(label, "field_labelName", newName);
                     try {
-                        Class<?> kc = XposedHelpers.findClass("z51.k", cl);
-                        XposedHelpers.setObjectField(label, "field_labelPYFull", XposedHelpers.callStaticMethod(kc, "a", newName));
-                        XposedHelpers.setObjectField(label, "field_labelPYShort", XposedHelpers.callStaticMethod(kc, "b", newName));
+                        // v955: 拼音工具经 DexKit 动态检索(静态 a(String)+b(String) 双签名), 零硬编码
+                        Class<?> kc = null;
+                        String dkPy = DexKitHelper.getPinyinUtilClass();
+                        if (dkPy != null && !dkPy.isEmpty()) {
+                            try { kc = XposedHelpers.findClass(dkPy, cl); } catch (Throwable ignored) {}
+                        }
+                        if (kc != null) {
+                            XposedHelpers.setObjectField(label, "field_labelPYFull", XposedHelpers.callStaticMethod(kc, "a", newName));
+                            XposedHelpers.setObjectField(label, "field_labelPYShort", XposedHelpers.callStaticMethod(kc, "b", newName));
+                        }
                     } catch (Throwable ignored) {}
                     boolean ignored = (boolean) XposedHelpers.callMethod(st, "update", label, new String[]{"labelID"});
                     refreshCache();

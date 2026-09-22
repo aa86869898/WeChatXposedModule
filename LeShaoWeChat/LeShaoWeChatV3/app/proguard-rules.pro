@@ -21,9 +21,12 @@
 -keep class com.leshao.v3.dispatch.**$* { *; }
 -keep class com.leshao.v3.ui.** { *; }
 -keep class com.leshao.v3.ui.**$* { *; }
--keep class com.leshao.v3.ai.** { *; }
--keep class com.leshao.v3.ai.**$* { *; }
 -keep class com.leshao.v3.ContextManager { *; }
+
+# ========== LeshaoAI 模块 (com.leshao.ai) ==========
+-keep class com.leshao.ai.** { *; }
+-keep class com.leshao.ai.**$* { *; }
+
 
 # ========== 6. 关闭 R8 危险优化（关键！避免匿名回调被销毁）==========
 -dontshrink
@@ -33,7 +36,9 @@
 
 # ========== 7. 屏蔽 Xposed 无关警告 ==========
 -dontwarn de.robv.android.xposed.**
--keep class de.robv.android.xposed.** { *; }
+# 注意: 不能 -keep de.robv.android.xposed.** —— 会把 libs/xposed-api-82.jar 的裁剪版
+# 类打进 APK DEX, 与 LSPosed 运行时真实 API 冲突(如 findAndHookMethod 编译期为 void、
+# 运行时返回 Unhook, 造成 NoSuchMethodError)。xposed api 由框架在运行时提供, 必须排除打包。
 
 # ========== Xposed 回调方法保持 ==========
 -keepclasseswithmembers class * {

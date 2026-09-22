@@ -61,8 +61,6 @@ import com.leshao.v3.hook.WeChatUpdateBlocker;
 import com.leshao.v3.db.VoiceHistoryDbHelper;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.TTSBroadcaster;
-import com.leshao.v3.ai.AiConfig;
-import com.leshao.v3.ai.ChatHooks;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -86,11 +84,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-public static final String MODULE_BUILD = "v952";
+public static final String MODULE_BUILD = "v959";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 952;
+    public static final int MODULE_VERSION_CODE = 959;
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -286,10 +284,11 @@ public static final String MODULE_BUILD = "v952";
                             }
                         });
 
-                        safeRun("AiConfig+ChatHooks", () -> {
-                            AiConfig.init(ctx);
-                            ChatHooks.install(lpparam);
-                            LogWriter.log(TAG, "[MainHook] AI 聊天助手已加载 v629");
+                        safeRun("LeshaoAI", () -> {
+                            com.leshao.ai.hook.HookEntry.appClassLoader = cl;
+                            com.leshao.ai.util.DexKitBridgeHolder.init(cl);
+                            com.leshao.ai.hook.wechat.WeChatHook.install(lpparam);
+                            LogWriter.log(TAG, "[MainHook] LeshaoAI 模块已加载");
                         });
 
                         safeRun("AutoMethodDetector", () -> {

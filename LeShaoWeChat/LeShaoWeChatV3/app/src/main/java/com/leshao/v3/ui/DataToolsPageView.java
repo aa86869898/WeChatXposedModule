@@ -22,6 +22,7 @@ import android.widget.Toast;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.hook.*;
 import com.leshao.v3.model.ModuleConfig;
+import com.leshao.v3.ui.widgets.M3Page;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -889,14 +890,6 @@ public class DataToolsPageView {
     }
 
     private static View candyDivider(Context ctx, float d) {
-        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
-        View v = new View(ctx);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
-        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
-        v.setLayoutParams(lp);
-        v.setBackground(gd);
-        return v;
+        return M3Page.divider(ctx);
     }
 }

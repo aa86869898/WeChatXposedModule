@@ -71,15 +71,20 @@ public class AntiRecallHook {
         LogWriter.log(TAG, "[XML] 未找到 af*.run() 类，请更新类名");
     }
 
-    // ===== 路径2: Protobuf 撤回阻断 — e01.u.f() =====
+    // ===== 路径2: 事件监听阻断 — 3180 撤回改事件驱动(RevokeMsgEvent) =====
+    // v955: 旧 e01.u.f() protobuf 阻断链在 3180 全部改名失效(e01.u/e02.u/e00.u/e01.t/e02.t 均不存在,
+    // dex 实证)。3180 撤回链路: 撤回推送 → RevokeMsgEvent(autogen.fm.ks 含 e9) →
+    // com.tencent.mm.ui.chatting.RevokeMsgListener.callback / chatroom.plugin.listener.n0.callback。
+    // 新路径: hook 这些监听器的 callback 阻断撤回 UI 处理 + 旧 protobuf 候选保留兜底。
 
     private static void hookProtoRevoke(ClassLoader cl) {
+        // v955: 3180 撤回监听类全部经 DexKit 动态检索(特征字符串: 日志TAG),
+        // 严禁硬编码类名。扫描完成后经 addPostScanCallback 安装。
+        DexKitHelper.addPostScanCallback(() -> installRevokeListenerHooks(cl));
+        // 旧 protobuf 候选兜底(历史版本, 非 3180 路径)
         for (String clsName : new String[]{
-            "e01.u",      // 实测 8.0.76 有效
-            "e02.u",      // 备选
-            "e00.u",      // 备选
-            "e01.t",      // 备选
-            "e02.t",      // 备选
+            "e01.u",      // 8.0.76
+            "e02.u", "e00.u", "e01.t", "e02.t",
         }) {
             try {
                 Class<?> c = XposedHelpers.findClass(clsName, cl);
@@ -98,10 +103,67 @@ public class AntiRecallHook {
             } catch (XposedHelpers.ClassNotFoundError ignored) {
             } catch (Throwable t) { LogWriter.log(TAG, "[Proto] " + clsName + " err: " + t.getMessage()); }
         }
-        LogWriter.log(TAG, "[Proto] 未找到 e*.f() 类，请更新类名");
+        LogWriter.log(TAG, "[Proto] 旧 protobuf 候选未命中(3180 已由事件路径接管)");
     }
 
-    // ===== 路径3: 撤回记录 + 系统提示插入 =====
+    /** v955: DexKit 检索结果安装撤回监听 hook(特征字符串定位, 零硬编码) */
+    private static void installRevokeListenerHooks(ClassLoader cl) {
+        java.util.List<String> listeners = DexKitHelper.getRevokeListenerClasses();
+        LogWriter.log(TAG, "[事件] DexKit 撤回监听类: " + listeners);
+        for (String clsName : listeners) {
+            try {
+                Class<?> c = XposedHelpers.findClass(clsName, cl);
+                XposedBridge.hookAllMethods(c, "callback", new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        try {
+                            if (!sEnabled) return;
+                            // 记录撤回(事件对象在 args[0])
+                            try {
+                                Object evt = param.args != null && param.args.length > 0 ? param.args[0] : null;
+                                if (evt != null) {
+                                    java.lang.reflect.Field gf = null;
+                                    for (java.lang.reflect.Field f : evt.getClass().getFields()) {
+                                        if (f.getType().getName().equals("fm.ks")) { gf = f; break; }
+                                    }
+                                    if (gf != null) {
+                                        gf.setAccessible(true);
+                                        Object ks = gf.get(evt);
+                                        if (ks != null) {
+                                            Object msg = null;
+                                            for (java.lang.reflect.Field f : ks.getClass().getFields()) {
+                                                if (f.getType().getName().equals("com.tencent.mm.storage.e9")) {
+                                                    f.setAccessible(true);
+                                                    msg = f.get(ks);
+                                                    break;
+                                                }
+                                            }
+                                            if (msg != null) {
+                                                String talker = getField(msg, "field_talker", "talker", "getTalker");
+                                                String content = getField(msg, "field_content", "getContent");
+                                                if (content != null) {
+                                                    StatsCollector.recordRecall(talker, content);
+                                                    LogWriter.log(TAG, "[事件] 撤回已记录: " + talker);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (Throwable ignored) {}
+                            param.setResult(null);
+                            LogWriter.log(TAG, "[事件] 阻止撤回处理: " + clsName);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "[事件] Hooked: " + clsName + ".callback()");
+            } catch (Throwable t) { LogWriter.log(TAG, "[事件] " + clsName + " err: " + t.getMessage()); }
+        }
+    }
+
+    // ===== 路径3: 撤回记录 — 3180 modelmulti.p/q 已失效, 改事件监听记录 =====
+    // v955: com.tencent.mm.modelmulti.p/q 在 3180 不存在(dex 实证)。
+    // 撤回记录改由路径2 的 RevokeMsgListener 事件 hook 内完成(StatsCollector.recordRecall),
+    // 此处保留旧类 hook 作历史版本兜底。
 
     private static void hookRecallRecorder(ClassLoader cl) {
         for (String className : new String[]{
@@ -124,9 +186,8 @@ public class AntiRecallHook {
                                                 String content = getField(msgObj, "field_content", "getContent");
                                                 if (content != null) {
                                                     StatsCollector.recordRecall(talker, content);
-                                                    LogWriter.log(TAG, "recall recorded: " + talker + " -> " + (content.length() > 20 ? content.substring(0, 20) + "..." : content));
+                                                    LogWriter.log(TAG, "recall recorded: " + talker);
                                                 }
-                                                // 尝试插入系统提示 "xxx撤回了一条消息"
                                                 tryInsertSystemTip(msgObj, talker);
                                             }
                                         } catch (Throwable ignored) {}

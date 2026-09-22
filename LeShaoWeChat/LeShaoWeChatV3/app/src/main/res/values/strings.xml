@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 应用 / 模块名 -->
+    <string name="app_name">乐小AI</string>
+
+    <!-- 设置页 -->
+    <string name="settings_title">乐小AI 设置</string>
+    <string name="settings_saved_toast">设置已保存</string>
+    <string name="settings_save_failed_toast">设置保存失败，请检查存储权限</string>
+    <string name="settings_whitelist_empty_toast">白名单为空，AI 将不会在 @时被触发</string>
+
+    <!-- 区块标题 -->
+    <string name="section_general">通用</string>
+    <string name="section_provider">服务商</string>
+    <string name="section_persona">人设与模型</string>
+    <string name="section_trigger">触发规则</string>
+    <string name="section_reply">回复设置</string>
+
+    <!-- 行标签 -->
+    <string name="label_master_switch">启用 AI 回复</string>
+    <string name="desc_master_switch">关闭后模块不再处理任何微信消息</string>
+    <string name="label_provider">服务商</string>
+    <string name="label_base_url">Base URL</string>
+    <string name="hint_base_url">https://api.openai.com/v1</string>
+    <string name="label_api_key">API Key</string>
+    <string name="hint_api_key">sk-…</string>
+    <string name="label_model">模型名</string>
+    <string name="hint_model">gpt-4o-mini</string>
+    <string name="label_system_prompt">人设系统提示</string>
+    <string name="hint_system_prompt">你是一个贴心、幽默的微信AI助手…</string>
+    <string name="label_temperature">温度（采样随机性）</string>
+    <string name="label_bot_name">机器人名字</string>
+    <string name="hint_bot_name">小乐</string>
+    <string name="label_wake_keyword">唤醒关键词</string>
+    <string name="hint_wake_keyword">可输入多个，用逗号分隔</string>
+    <string name="label_at_trigger">@触发回复</string>
+    <string name="desc_at_trigger">仅在 @机器人或提及机器人名字时回复</string>
+    <string name="label_manage_whitelist">管理白名单</string>
+    <string name="btn_manage_whitelist">已添加 %1$d 个联系人</string>
+    <string name="label_tts">TTS 语音回复</string>
+    <string name="label_auto_group">群聊自动回复</string>
+    <string name="label_auto_private">私聊自动回复</string>
+    <string name="label_memory_count">记忆条数</string>
+    <string name="hint_memory_count">50</string>
+    <string name="label_temperature_value">当前：%1$s</string>
+    <string name="label_temperature_default">当前：0.7</string>
+
+    <!-- 服务商选项 -->
+    <string-array name="provider_options">
+        <item>OpenAI Chat</item>
+        <item>OpenAI Responses</item>
+        <item>Anthropic</item>
+    </string-array>
+
+    <!-- 操作按钮 -->
+    <string name="btn_save">保存</string>
+    <string name="btn_reset">重置</string>
+
+    <!-- 白名单页 -->
+    <string name="whitelist_title">白名单管理</string>
+    <string name="whitelist_hint_add">输入会话 ID（wxid / 群 id）</string>
+    <string name="whitelist_btn_add">添加</string>
+    <string name="whitelist_btn_import">从微信会话导入</string>
+    <string name="whitelist_empty">暂无白名单会话</string>
+    <string name="whitelist_saved_toast">白名单已保存</string>
+    <string name="whitelist_save_failed_toast">白名单保存失败</string>
+    <string name="whitelist_delete_desc">点击条目可从白名单移除</string>
+    <string name="whitelist_add_empty_toast">请输入要添加的会话 ID</string>
+    <string name="whitelist_import_title">选择要加入白名单的会话</string>
+    <string name="whitelist_import_empty_toast">未获取到微信会话，请先在微信主界面停留后再试</string>
+</resources>

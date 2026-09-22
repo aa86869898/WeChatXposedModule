@@ -97,27 +97,32 @@ public class PrivacyFeatures {
             });
         } catch (Throwable t) {}
 
-        // ⚠️ 修复: 使用正确类名（点号而非$号）
-        try {
-            Class<?> jsApi = XposedHelpers.findClass(
-                    "com.tencent.mm.plugin.appbrand.jsapi.JsApiSetClipboardDataWC", cl);
-            XposedBridge.hookAllMethods(jsApi, "invoke", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    try {
-                                        XposedBridge.log("[Privacy] 🛡️ 拦截小程序剪贴板写入");
-                                        param.setResult(null);
-                    } catch (Throwable e) {
-                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
-                    }
+        // v955: jsapi 类名经 DexKit 动态检索(特征字符串 "setClipboardData"), 严禁硬编码;
+// 扫描完成前不安装, 经后扫描回调安装。
+com.leshao.v3.hook.DexKitHelper.addPostScanCallback(() -> {
+    String jsApiCls = com.leshao.v3.hook.DexKitHelper.getClipboardJsApiClass();
+    if (jsApiCls == null || jsApiCls.isEmpty()) {
+        XposedBridge.log("[Privacy] 剪贴板 jsapi DexKit 未检索到, 跳过");
+        return;
+    }
+    try {
+        Class<?> jsApi = XposedHelpers.findClass(jsApiCls, cl);
+        XposedBridge.hookAllMethods(jsApi, "invoke", new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                try {
+                    XposedBridge.log("[Privacy] 🛡️ 拦截小程序剪贴板写入");
+                    param.setResult(null);
+                } catch (Throwable e) {
+                    de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                 }
-            });
-            XposedBridge.log("[Privacy] #55 剪贴板保护 ✓");
-        } catch (XposedHelpers.ClassNotFoundError e) {
-            XposedBridge.log("[Privacy] #55 剪贴板API类未找到(可能被混淆)");
-        } catch (Throwable t) {
-            XposedBridge.log("[Privacy] #55 剪贴板异常: " + t.getMessage());
-        }
+            }
+        });
+        XposedBridge.log("[Privacy] #55 剪贴板保护 ✓ (" + jsApiCls + ")");
+    } catch (Throwable t) {
+        XposedBridge.log("[Privacy] #55 剪贴板异常: " + t.getMessage());
+    }
+    });
     }
 
     /** #56 WebView隐私 */

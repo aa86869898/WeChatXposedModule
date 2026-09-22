@@ -399,8 +399,28 @@ private static String tryMethodB(Context ctx) {
             ClassLoader cl = getWeChatCL();
             if (cl == null) return null;
             Class<?> d1 = XposedHelpers.findClass("com.tencent.mm.modelavatar.d1", cl);
-            Object z = XposedHelpers.callStaticMethod(d1, "ij");
-            if (z == null) return null;
+            Object z = null;
+            // v955: ij() 在 3180 已不存在(实证 NoSuchMethod), 改为枚举静态无参方法
+            // 返回非空非基本类型的候选(头像存储服务), 逐个尝试 f(String,boolean,boolean)
+            try {
+                z = XposedHelpers.callStaticMethod(d1, "ij");
+            } catch (Throwable ignored) {}
+            if (z == null) {
+                for (java.lang.reflect.Method m : d1.getDeclaredMethods()) {
+                    if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                    if (m.getParameterCount() != 0) continue;
+                    Class<?> rt = m.getReturnType();
+                    if (rt == null || rt.isPrimitive() || rt == String.class || rt == Void.class) continue;
+                    try {
+                        m.setAccessible(true);
+                        Object cand = m.invoke(null);
+                        if (cand == null) continue;
+                        String p = (String) XposedHelpers.callMethod(cand, "f", wxid, false, false);
+                        if (p != null && !p.isEmpty()) return p;
+                    } catch (Throwable ignored) {}
+                }
+                return null;
+            }
             String path = (String) XposedHelpers.callMethod(z, "f", wxid, false, false);
             return path;
         } catch (Throwable t) {

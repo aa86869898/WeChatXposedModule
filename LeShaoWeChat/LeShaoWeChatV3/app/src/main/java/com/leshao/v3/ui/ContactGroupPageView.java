@@ -19,6 +19,7 @@ import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.*;
 import com.leshao.v3.model.ModuleConfig;
+import com.leshao.v3.ui.widgets.M3Page;
 
 import android.widget.Toast;
 
@@ -32,7 +33,7 @@ public class ContactGroupPageView {
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(AppColors.bg());
+        root.setBackground(CandyUi.pageGradient());
         root.setPadding((int)(16 * d), (int)(16 * d), (int)(16 * d), (int)(16 * d));
 
         LinearLayout cardContact = makeCard(ctx, d);
@@ -104,7 +105,7 @@ public class ContactGroupPageView {
         rowFake.setOrientation(LinearLayout.HORIZONTAL);
         rowFake.setGravity(Gravity.CENTER_VERTICAL);
         rowFake.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        rowFake.setBackgroundColor(AppColors.whiteCard());
+        rowFake.setBackground(CandyUi.cardBg(ctx));
 
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
@@ -142,7 +143,7 @@ public class ContactGroupPageView {
             LinearLayout dlgRoot = new LinearLayout(ctx);
             dlgRoot.setOrientation(LinearLayout.VERTICAL);
             dlgRoot.setPadding((int)(14*d), (int)(14*d), (int)(14*d), (int)(8*d));
-            dlgRoot.setBackgroundColor(AppColors.card());
+            dlgRoot.setBackground(CandyUi.cardBg(ctx));
 
             TextView dlgTitle = new TextView(ctx);
             dlgTitle.setText("选择伪装来源");
@@ -243,7 +244,7 @@ public class ContactGroupPageView {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding((int)(2 * d), (int)(2 * d), (int)(2 * d), (int)(2 * d));
-        card.setBackgroundColor(AppColors.card());
+        card.setBackground(CandyUi.cardBg(ctx));
         return card;
     }
 
@@ -254,7 +255,7 @@ public class ContactGroupPageView {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setBackground(CandyUi.cardBg(ctx));
 
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
@@ -301,15 +302,7 @@ public class ContactGroupPageView {
     }
 
     private static View candyDivider(Context ctx, float d) {
-        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
-        View v = new View(ctx);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
-        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
-        v.setLayoutParams(lp);
-        v.setBackground(gd);
-        return v;
+        return M3Page.divider(ctx);
     }
 
     private static View spacerV(Context ctx, float d, int dp) {

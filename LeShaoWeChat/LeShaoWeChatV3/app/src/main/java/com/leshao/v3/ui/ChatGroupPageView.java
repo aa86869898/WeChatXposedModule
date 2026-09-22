@@ -13,6 +13,9 @@ import android.widget.*;
 import com.leshao.v3.hook.*;
 import com.leshao.v3.hook.model.AutoRule;
 import com.leshao.v3.hook.model.LabelInfo;
+import com.leshao.v3.ui.widgets.M3Page;
+import com.leshao.v3.ui.widgets.ModernButton;
+import com.leshao.v3.ui.widgets.SegmentedControl;
 
 import java.io.File;
 import java.util.*;
@@ -117,11 +120,9 @@ public class ChatGroupPageView {
         searchEt.setSingleLine(true);
         searchEt.setPadding((int)(8*d), (int)(6*d), (int)(8*d), (int)(6*d));
         searchEt.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-        GradientDrawable sbg = new GradientDrawable();
-        sbg.setColor(AppColors.inputBg());
-        sbg.setCornerRadius((int)(6*d));
-        sbg.setStroke((int)(1.5f*d), AppColors.candyPink());
-        searchEt.setBackground(sbg);
+        searchEt.setBackground(CandyUi.inputBg(ctx));
+        int sp = (int)(10*d);
+        searchEt.setPadding(sp, sp, sp, sp);
         searchEt.setHintTextColor(AppColors.text3());
         actionRow.addView(searchEt);
 
@@ -181,7 +182,7 @@ public class ChatGroupPageView {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14*d), (int)(10*d), (int)(14*d), (int)(10*d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setBackground(CandyUi.rowPressBg(ctx));
 
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
@@ -210,7 +211,7 @@ public class ChatGroupPageView {
 
         TextView delBtn = new TextView(ctx);
         delBtn.setText("删除"); delBtn.setTextSize(11);
-        delBtn.setTextColor(0xFFE53935);
+        delBtn.setTextColor(AppColors.error());
         delBtn.setPadding((int)(6*d), (int)(6*d), (int)(6*d), (int)(6*d));
         delBtn.setOnClickListener(v -> showDeleteLabelDialog(ctx, parentAct, d, String.valueOf(label.labelId), label.labelName, refresh));
         if (label.labelId != ChatGroupHook.LABEL_ID_GROUP && label.labelId != ChatGroupHook.LABEL_ID_FRIEND && label.labelId != ChatGroupHook.LABEL_ID_SERVICE) {
@@ -421,7 +422,7 @@ public class ChatGroupPageView {
 
                 TextView del = new TextView(ctx);
                 del.setText("删除");
-                del.setTextSize(11); del.setTextColor(0xFFE53935);
+                del.setTextSize(11); del.setTextColor(AppColors.error());
                 del.setPadding((int)(4*d), 0, 0, 0);
                 del.setOnClickListener(v2 -> {
                     LabelBackup.deleteBackup(f.getAbsolutePath());
@@ -751,7 +752,7 @@ public class ChatGroupPageView {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14*d), (int)(8*d), (int)(14*d), (int)(8*d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setBackground(CandyUi.rowPressBg(ctx));
 
         TextView tv = new TextView(ctx);
         tv.setText(title); tv.setTextSize(13); tv.setTextColor(AppColors.text1());
@@ -768,19 +769,17 @@ public class ChatGroupPageView {
     private static LinearLayout makeCard(Context ctx, float d) {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(AppColors.card());
-        bg.setCornerRadius((int)(8*d));
-        card.setBackground(bg);
+        card.setBackground(CandyUi.cardBg(ctx));
+        int p = (int)(4*d);
+        card.setPadding(p, p, p, p);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, (int)(8*d));
+        card.setLayoutParams(lp);
         return card;
     }
 
     private static View candyDivider(Context ctx, float d) {
-        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
-        View v = new View(ctx);
-        v.setLayoutParams(new LinearLayout.LayoutParams(-1, (int)(1.5f*d)));
-        return v;
+        return M3Page.divider(ctx);
     }
 
     private static View spacerV(Context ctx, float d, int dp) {

@@ -1,9 +1,13 @@
 package com.leshao.v3.hook;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.widget.EditText;
+import android.view.Gravity;
+import android.view.View;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
@@ -322,61 +326,219 @@ public class AutoForwardHook {
         LogWriter.log(TAG, "sendXmlAsAppMsg: q3.G not found");
     }
 
-    // ==================== 配置 UI 弹窗 ====================
+    // ==================== 配置 UI 弹窗（v955 M3 重排 + 联系人选择器 + 类型多选按钮） ====================
+
+    /** 可转发的消息类型（WeChat msgType）: 值 → 显示名 */
+    private static final int[] FW_TYPE_CODES = {1, 3, 43, 34, 47, 49, 42, 48, 6};
+    private static final String[] FW_TYPE_NAMES = {"文本", "图片", "视频", "语音", "表情", "链接", "名片", "位置", "文件"};
 
     public static void showConfigDialog(Context ctx) {
         SharedPreferences prefs = ContextManager.getPrefs();
         if (prefs == null) { Toast.makeText(ctx, "prefs 不可用", Toast.LENGTH_SHORT).show(); return; }
+        final Activity act = ctx instanceof Activity ? (Activity) ctx : null;
 
         float d = ctx.getResources().getDisplayMetrics().density;
+
+        // ===== M3 弹窗根 =====
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int) (14 * d);
-        root.setPadding(pad, pad, pad, pad);
+        root.setBackground(com.leshao.v3.ui.CandyUi.dialogBg(ctx));
+        root.setPadding((int) (12 * d), (int) (12 * d), (int) (12 * d), (int) (12 * d));
 
-        TextViewTitle lblEnabled = new TextViewTitle(ctx, "自动转发");
-        root.addView(lblEnabled);
-        final android.widget.Switch swEnabled = new android.widget.Switch(ctx);
+        ScrollView sv = new ScrollView(ctx);
+        LinearLayout content = new LinearLayout(ctx);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding((int) (4 * d), 0, (int) (4 * d), 0);
+
+        // ===== 总开关 =====
+        content.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "自动转发", "命中来源的消息自动转发到目标"));
+        LinearLayout cardMain = com.leshao.v3.ui.widgets.M3Page.card(ctx);
+        final android.widget.Switch swEnabled = com.leshao.v3.ui.CandyUi.newSwitch(ctx);
         swEnabled.setChecked(prefs.getBoolean(PREF_ENABLED, false));
-        root.addView(swEnabled);
+        cardMain.addView(com.leshao.v3.ui.widgets.M3Page.tailRow(ctx, "🔁", "启用自动转发",
+                "关闭后不转发任何消息", swEnabled));
+        content.addView(cardMain);
 
-        root.addView(new TextViewTitle(ctx, "来源 (逗号分隔, 留空=所有)"));
-        final EditText etSrc = new EditText(ctx);
-        etSrc.setText(prefs.getString(PREF_SOURCES, ""));
-        etSrc.setSingleLine(false);
-        root.addView(etSrc);
+        // ===== 来源（联系人选择器） =====
+        content.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "转发来源", "留空 = 所有会话"));
+        LinearLayout cardSrc = com.leshao.v3.ui.widgets.M3Page.card(ctx);
+        final String[] srcHolder = {prefs.getString(PREF_SOURCES, "")};
+        final TextView srcVal = new TextView(ctx);
+        srcVal.setText(srcHolder[0].isEmpty() ? "全部会话" : srcHolder[0]);
+        srcVal.setTextSize(13);
+        srcVal.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
+        srcVal.setSingleLine(true);
+        srcVal.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        cardSrc.addView(com.leshao.v3.ui.widgets.M3Page.tailRow(ctx, "📥", "选择来源会话",
+                "仅转发这些会话的消息", srcVal));
+        cardSrc.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+        cardSrc.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "📥", "从通讯录选择来源",
+                "打开联系人选择器多选", () -> {
+            if (act == null) { Toast.makeText(ctx, "当前上下文不支持选择器", Toast.LENGTH_SHORT).show(); return; }
+            com.leshao.v3.ui.ContactPickerDialog.show(act, srcHolder[0],
+                    com.leshao.v3.ui.ContactPickerDialog.MODE_FRIEND,
+                    (wxids, display) -> {
+                        srcHolder[0] = wxids == null || wxids.isEmpty() ? ""
+                                : android.text.TextUtils.join(",", wxids);
+                        srcVal.setText(srcHolder[0].isEmpty() ? "全部会话" : display);
+                    });
+        }));
+        cardSrc.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+        cardSrc.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "🧹", "清空来源", "恢复为全部会话",
+                () -> { srcHolder[0] = ""; srcVal.setText("全部会话"); }));
+        content.addView(cardSrc);
 
-        root.addView(new TextViewTitle(ctx, "目标 (逗号分隔, 必填)"));
-        final EditText etTgt = new EditText(ctx);
-        etTgt.setText(prefs.getString(PREF_TARGETS, ""));
-        etTgt.setSingleLine(false);
-        root.addView(etTgt);
+        // ===== 目标（联系人选择器, 群聊优先） =====
+        content.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "转发目标", "必填, 消息将转发到这些会话"));
+        LinearLayout cardTgt = com.leshao.v3.ui.widgets.M3Page.card(ctx);
+        final String[] tgtHolder = {prefs.getString(PREF_TARGETS, "")};
+        final TextView tgtVal = new TextView(ctx);
+        tgtVal.setText(tgtHolder[0].isEmpty() ? "未设置" : tgtHolder[0]);
+        tgtVal.setTextSize(13);
+        tgtVal.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
+        tgtVal.setSingleLine(true);
+        tgtVal.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        cardTgt.addView(com.leshao.v3.ui.widgets.M3Page.tailRow(ctx, "📤", "已选目标",
+                "消息转发目的地", tgtVal));
+        cardTgt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+        cardTgt.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "📤", "从通讯录选择目标",
+                "打开联系人选择器多选(可切好友/群聊)", () -> {
+            if (act == null) { Toast.makeText(ctx, "当前上下文不支持选择器", Toast.LENGTH_SHORT).show(); return; }
+            com.leshao.v3.ui.ContactPickerDialog.show(act, tgtHolder[0],
+                    com.leshao.v3.ui.ContactPickerDialog.MODE_GROUP,
+                    (wxids, display) -> {
+                        tgtHolder[0] = wxids == null || wxids.isEmpty() ? ""
+                                : android.text.TextUtils.join(",", wxids);
+                        tgtVal.setText(tgtHolder[0].isEmpty() ? "未设置" : display);
+                    });
+        }));
+        content.addView(cardTgt);
 
-        root.addView(new TextViewTitle(ctx, "类型 (留空=文本+图片+AppMsg; 如 1,3,49)"));
-        final EditText etType = new EditText(ctx);
-        etType.setText(prefs.getString(PREF_TYPES, ""));
-        root.addView(etType);
+        // ===== 类型（多选按钮组） =====
+        content.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "转发类型", "默认 文本+图片+链接; 全不选=默认"));
+        LinearLayout cardType = com.leshao.v3.ui.widgets.M3Page.card(ctx);
+        final java.util.Set<Integer> typeSel = new java.util.LinkedHashSet<>();
+        String savedTypes = prefs.getString(PREF_TYPES, "");
+        if (savedTypes != null && !savedTypes.trim().isEmpty()) {
+            for (String t : savedTypes.split("[,，]")) {
+                try { typeSel.add(Integer.parseInt(t.trim())); } catch (Throwable ignored) {}
+            }
+        } else {
+            typeSel.add(1); typeSel.add(3); typeSel.add(49);
+        }
+        final TextView typeSummary = new TextView(ctx);
+        typeSummary.setTextSize(13);
+        typeSummary.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
+        typeSummary.setPadding((int) (16 * d), (int) (10 * d), (int) (16 * d), (int) (4 * d));
+        cardType.addView(typeSummary);
+
+        // 多选按钮流式网格(每行3个)
+        LinearLayout typeGrid = new LinearLayout(ctx);
+        typeGrid.setOrientation(LinearLayout.VERTICAL);
+        typeGrid.setPadding((int) (12 * d), (int) (4 * d), (int) (12 * d), (int) (10 * d));
+        final java.util.List<TextView> typeBtns = new java.util.ArrayList<>();
+        for (int i = 0; i < FW_TYPE_CODES.length; i++) {
+            if (i % 3 == 0) {
+                LinearLayout row = new LinearLayout(ctx);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setPadding(0, (int) (4 * d), 0, 0);
+                typeGrid.addView(row);
+            }
+            final int code = FW_TYPE_CODES[i];
+            TextView tb = new TextView(ctx);
+            tb.setText(FW_TYPE_NAMES[i]);
+            tb.setTextSize(13);
+            tb.setGravity(Gravity.CENTER);
+            tb.setSingleLine(true);
+            tb.setClickable(true);
+            tb.setFocusable(true);
+            LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, (int) (36 * d), 1f);
+            tlp.setMargins((int) (3 * d), 0, (int) (3 * d), 0);
+            tb.setLayoutParams(tlp);
+            tb.setOnClickListener(v -> {
+                if (typeSel.contains(code)) typeSel.remove(code); else typeSel.add(code);
+                refreshTypeButtons(typeBtns, FW_TYPE_CODES, typeSel, typeSummary);
+            });
+            typeBtns.add(tb);
+            ((LinearLayout) typeGrid.getChildAt(typeGrid.getChildCount() - 1)).addView(tb);
+        }
+        refreshTypeButtons(typeBtns, FW_TYPE_CODES, typeSel, typeSummary);
+        cardType.addView(typeGrid);
+        content.addView(cardType);
+
+        sv.addView(content);
+        LinearLayout.LayoutParams svLp = new LinearLayout.LayoutParams(-1, 0, 1f);
+        sv.setLayoutParams(svLp);
+        root.addView(sv);
+
+        // ===== 底部按钮 =====
+        LinearLayout btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setGravity(Gravity.CENTER);
+        btnRow.setPadding((int) (12 * d), (int) (8 * d), (int) (12 * d), (int) (4 * d));
+        com.leshao.v3.ui.widgets.ModernButton btnCancel =
+                new com.leshao.v3.ui.widgets.ModernButton(ctx, "取消", com.leshao.v3.ui.widgets.ModernButton.STYLE_GHOST);
+        com.leshao.v3.ui.widgets.ModernButton btnSave =
+                new com.leshao.v3.ui.widgets.ModernButton(ctx, "保存", com.leshao.v3.ui.widgets.ModernButton.STYLE_PRIMARY);
+        btnRow.addView(btnCancel);
+        View spacer = new View(ctx);
+        spacer.setLayoutParams(new LinearLayout.LayoutParams((int) (12 * d), 1));
+        btnRow.addView(spacer);
+        btnRow.addView(btnSave);
+        root.addView(btnRow);
 
         int theme = com.leshao.v3.ui.AppColors.isDarkMode()
                 ? android.R.style.Theme_DeviceDefault_Dialog_Alert
                 : android.R.style.Theme_DeviceDefault_Light_Dialog_Alert;
-        android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(ctx, theme)
-                .setTitle("自动转发设置")
+        final android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(ctx, theme)
                 .setView(root)
-                .setPositiveButton("保存", (dlgB, w) -> {
-                    prefs.edit()
-                        .putBoolean(PREF_ENABLED, swEnabled.isChecked())
-                        .putString(PREF_SOURCES, etSrc.getText().toString().trim())
-                        .putString(PREF_TARGETS, etTgt.getText().toString().trim())
-                        .putString(PREF_TYPES, etType.getText().toString().trim())
-                        .apply();
-                    updateConfig(prefs);
-                    Toast.makeText(ctx, "已保存" + (sEnabled ? "，自动转发已开启" : ""),
-                            Toast.LENGTH_SHORT).show();
-                })
-                .setNegativeButton("取消", null)
+                .setCancelable(true)
                 .create();
+        btnCancel.onClick(() -> dlg.dismiss());
+        btnSave.onClick(() -> {
+            StringBuilder types = new StringBuilder();
+            for (Integer t : typeSel) {
+                if (types.length() > 0) types.append(",");
+                types.append(t);
+            }
+            prefs.edit()
+                .putBoolean(PREF_ENABLED, swEnabled.isChecked())
+                .putString(PREF_SOURCES, srcHolder[0].trim())
+                .putString(PREF_TARGETS, tgtHolder[0].trim())
+                .putString(PREF_TYPES, types.toString())
+                .apply();
+            updateConfig(prefs);
+            Toast.makeText(ctx, "已保存" + (sEnabled ? "，自动转发已开启" : ""),
+                    Toast.LENGTH_SHORT).show();
+            dlg.dismiss();
+        });
         dlg.show();
+    }
+
+    /** 刷新类型多选按钮态 + 摘要文字 */
+    private static void refreshTypeButtons(java.util.List<TextView> btns, int[] codes,
+                                           java.util.Set<Integer> sel, TextView summary) {
+        for (int i = 0; i < btns.size() && i < codes.length; i++) {
+            TextView tb = btns.get(i);
+            boolean on = sel.contains(codes[i]);
+            tb.setBackground(com.leshao.v3.ui.CandyUi.pillBg(on, tb.getContext()));
+            tb.setTextColor(on ? com.leshao.v3.ui.AppColors.textOnPrimary()
+                    : com.leshao.v3.ui.AppColors.onSurfaceVariant());
+        }
+        if (summary != null) {
+            if (sel.isEmpty()) {
+                summary.setText("当前: 默认(文本+图片+链接)");
+            } else {
+                StringBuilder sb = new StringBuilder("当前: ");
+                for (int i = 0; i < codes.length; i++) {
+                    if (sel.contains(codes[i])) {
+                        if (sb.length() > 4) sb.append("、");
+                        sb.append(FW_TYPE_NAMES[i]);
+                    }
+                }
+                summary.setText(sb.toString());
+            }
+        }
     }
 
     private static class TextViewTitle extends android.widget.TextView {

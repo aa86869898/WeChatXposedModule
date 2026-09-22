@@ -1,0 +1,374 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:background="@color/background">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- ========== 1. 总开关 ========== -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingVertical="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Widget.LeshaoAI.RowLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/label_master_switch" />
+
+                <TextView
+                    style="@style/Widget.LeshaoAI.RowDesc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/desc_master_switch" />
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/switch_enabled"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/divider" />
+
+        <!-- ========== 2. 区块：通用 / 服务商 ========== -->
+        <TextView
+            style="@style/Widget.LeshaoAI.SectionTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/section_provider" />
+
+        <!-- 2. 服务商选择 -->
+        <TextView
+            style="@style/Widget.LeshaoAI.RowLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/label_provider" />
+
+        <Spinner
+            android:id="@+id/spinner_provider"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" />
+
+        <!-- 3. Base URL -->
+        <TextView
+            style="@style/Widget.LeshaoAI.RowLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/label_base_url" />
+
+        <EditText
+            android:id="@+id/edit_base_url"
+            style="@style/Widget.LeshaoAI.Input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:inputType="textUri"
+            android:hint="@string/hint_base_url" />
+
+        <!-- 4. API Key -->
+        <TextView
+            style="@style/Widget.LeshaoAI.RowLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/label_api_key" />
+
+        <EditText
+            android:id="@+id/edit_api_key"
+            style="@style/Widget.LeshaoAI.Input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:inputType="textPassword"
+            android:hint="@string/hint_api_key" />
+
+        <!-- ========== 区块：人设与模型 ========== -->
+        <TextView
+            style="@style/Widget.LeshaoAI.SectionTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/section_persona" />
+
+        <!-- 8. 机器人名字 -->
+        <TextView
+            style="@style/Widget.LeshaoAI.RowLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/label_bot_name" />
+
+        <EditText
+            android:id="@+id/edit_bot_name"
+            style="@style/Widget.LeshaoAI.Input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:hint="@string/hint_bot_name" />
+
+        <!-- 5. 模型名 -->
+        <TextView
+            style="@style/Widget.LeshaoAI.RowLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/label_model" />
+
+        <EditText
+            android:id="@+id/edit_model"
+            style="@style/Widget.LeshaoAI.Input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:hint="@string/hint_model" />
+
+        <!-- 6. 人设系统提示 -->
+        <TextView
+            style="@style/Widget.LeshaoAI.RowLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/label_system_prompt" />
+
+        <EditText
+            android:id="@+id/edit_system_prompt"
+            style="@style/Widget.LeshaoAI.Input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:inputType="textMultiLine"
+            android:minLines="3"
+            android:gravity="top"
+            android:hint="@string/hint_system_prompt" />
+
+        <!-- 7. 温度 -->
+        <TextView
+            style="@style/Widget.LeshaoAI.RowLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/label_temperature" />
+
+        <TextView
+            android:id="@+id/text_temperature_value"
+            style="@style/Widget.LeshaoAI.RowDesc"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/label_temperature_default" />
+
+        <SeekBar
+            android:id="@+id/seek_temperature"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:max="200"
+            android:progress="70" />
+
+        <!-- ========== 区块：触发规则 ========== -->
+        <TextView
+            style="@style/Widget.LeshaoAI.SectionTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/section_trigger" />
+
+        <!-- 9. 唤醒关键词 -->
+        <TextView
+            style="@style/Widget.LeshaoAI.RowLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/label_wake_keyword" />
+
+        <EditText
+            android:id="@+id/edit_wake_keyword"
+            style="@style/Widget.LeshaoAI.Input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:hint="@string/hint_wake_keyword" />
+
+        <!-- 10. @触发开关 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingVertical="10dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Widget.LeshaoAI.RowLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/label_at_trigger" />
+
+                <TextView
+                    style="@style/Widget.LeshaoAI.RowDesc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/desc_at_trigger" />
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/switch_at_trigger"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <!-- 白名单管理入口按钮 -->
+        <Button
+            android:id="@+id/btn_whitelist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:backgroundTint="@color/colorPrimary"
+            android:textColor="@android:color/white"
+            android:text="@string/label_manage_whitelist" />
+
+        <!-- ========== 区块：回复设置 ========== -->
+        <TextView
+            style="@style/Widget.LeshaoAI.SectionTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/section_reply" />
+
+        <!-- 11. TTS -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingVertical="8dp">
+
+            <TextView
+                style="@style/Widget.LeshaoAI.RowLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/label_tts" />
+
+            <Switch
+                android:id="@+id/switch_tts"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <!-- 12. 群聊 / 私聊自动回复 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingVertical="8dp">
+
+            <TextView
+                style="@style/Widget.LeshaoAI.RowLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/label_auto_group" />
+
+            <Switch
+                android:id="@+id/switch_auto_group"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingVertical="8dp">
+
+            <TextView
+                style="@style/Widget.LeshaoAI.RowLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/label_auto_private" />
+
+            <Switch
+                android:id="@+id/switch_auto_private"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <!-- 13. 记忆条数 -->
+        <TextView
+            style="@style/Widget.LeshaoAI.RowLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/label_memory_count" />
+
+        <EditText
+            android:id="@+id/edit_memory_count"
+            style="@style/Widget.LeshaoAI.Input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:inputType="number"
+            android:hint="@string/hint_memory_count" />
+
+        <!-- 底部操作按钮 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btn_reset"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:text="@string/btn_reset" />
+
+            <Button
+                android:id="@+id/btn_save"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:backgroundTint="@color/colorPrimary"
+                android:textColor="@android:color/white"
+                android:text="@string/btn_save" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="24dp" />
+
+    </LinearLayout>
+</ScrollView>

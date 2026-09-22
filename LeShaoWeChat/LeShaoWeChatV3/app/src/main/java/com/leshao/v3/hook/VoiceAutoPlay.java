@@ -68,11 +68,12 @@ public class VoiceAutoPlay {
         sClassLoader = cl;
         sHandler = new Handler(Looper.getMainLooper());
 
-        try { sK0Class = XposedHelpers.findClass("com.tencent.mm.model.k0", cl); }
+        // v955: 3180 实证 k0 存活于 com.tencent.mm.app.k0(model.k0/k0 已改名), 优先现行包名
+        try { sK0Class = XposedHelpers.findClass("com.tencent.mm.app.k0", cl); }
         catch (Throwable t) {
-            try { sK0Class = XposedHelpers.findClass("com.tencent.mm.k0", cl); }
+            try { sK0Class = XposedHelpers.findClass("com.tencent.mm.model.k0", cl); }
             catch (Throwable t2) {
-                try { sK0Class = XposedHelpers.findClass("com.tencent.mm.app.k0", cl); }
+                try { sK0Class = XposedHelpers.findClass("com.tencent.mm.k0", cl); }
                 catch (Throwable t3) { sK0Class = null; }
             }
         }

@@ -19,6 +19,7 @@ import com.leshao.v3.ContextManager;
 import com.leshao.v3.IconLoader;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.TTSPageView;
+import com.leshao.v3.ui.AppColors;
 
 import java.lang.reflect.Constructor;
 import java.util.WeakHashMap;
@@ -45,7 +46,7 @@ public final class ChatVoiceSwitchHook {
 
     // 糖果霓虹渐变（粉 → 霓虹粉 → 紫 → 青）
     private static final int[] NEON_GRADIENT = new int[]{
-            0xFFFF94C2, 0xFFFF10F0, 0xFF7B2FF7, 0xFF36D1E8
+            AppColors.primary(), AppColors.primaryDark(), AppColors.tertiary(), AppColors.secondary()
     };
 
     private static final int MAX_RETRY = 10;
@@ -441,9 +442,9 @@ public final class ChatVoiceSwitchHook {
             dark ? new int[]{0x26FF6B8A, 0x26A855F7, 0x2638BDF8}
                  : new int[]{0x1AFF6B8A, 0x1AA855F7, 0x1A38BDF8});
         bg.setCornerRadius(dp(20, ctx));
-        bg.setStroke(dp(1, ctx), dark ? Color.parseColor("#C084FC") : Color.parseColor("#A855F7"));
+        bg.setStroke(dp(1, ctx), AppColors.primary());
         btn.setBackground(bg);
-        btn.setTextColor(dark ? Color.parseColor("#C8C8CE") : Color.parseColor("#555555"));
+        btn.setTextColor(AppColors.onSurface());
 
         // 左右平均分配：对称内边距 + 水平居中
         btn.setPadding(dp(15, ctx), dp(7, ctx), dp(15, ctx), dp(7, ctx));

@@ -1,15 +1,11 @@
 package com.leshao.v3.ui;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.ImageView;
@@ -19,45 +15,47 @@ import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.service.ActivationManager;
+import com.leshao.v3.ui.widgets.M3Page;
+import com.leshao.v3.ui.widgets.ModernButton;
 
-import java.io.File;
 import java.lang.reflect.Method;
 
+/**
+ * 个人中心页（v955 M3 重排）：用户信息大卡 + 管理员入口。
+ * 业务逻辑（头像异步加载/DB 昵称回查/复制 wxid/管理员可见性）与原版完全一致。
+ */
 public class ProfilePageView {
 
     public static View create(Context ctx, Activity parentAct) {
         float d = ctx.getResources().getDisplayMetrics().density;
 
-        LinearLayout root = new LinearLayout(ctx);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(AppColors.bg());
-        root.setPadding((int)(8 * d), (int)(16 * d), (int)(8 * d), (int)(16 * d));
+        LinearLayout root = M3Page.root(ctx);
 
         // ===== 用户信息卡片 =====
-        root.addView(sectionLabel(ctx, d, "用户信息"));
-        LinearLayout infoCard = makeCard(ctx, d);
+        root.addView(M3Page.section(ctx, "用户信息"));
+        LinearLayout infoCard = M3Page.card(ctx);
 
-        // 头像+昵称/ID 水平布局
+        // 头像+昵称/ID 水平布局（M3 list item 双行结构）
         LinearLayout userRow = new LinearLayout(ctx);
         userRow.setOrientation(LinearLayout.HORIZONTAL);
         userRow.setGravity(Gravity.CENTER_VERTICAL);
-        userRow.setPadding((int)(16 * d), (int)(14 * d), (int)(16 * d), (int)(14 * d));
+        int p16 = dpInt(ctx, 16);
+        userRow.setPadding(p16, dpInt(ctx, 14), p16, dpInt(ctx, 14));
 
-        // 头像左侧
+        // 头像左侧（M3 56dp 圆形容器）
         ImageView avatar = new ImageView(ctx);
-        int avatarSize = (int)(56 * d);
+        int avatarSize = dpInt(ctx, 56);
         LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(avatarSize, avatarSize);
-        alp.setMargins(0, 0, (int)(14 * d), 0);
+        alp.setMarginEnd(dpInt(ctx, 16));
         avatar.setLayoutParams(alp);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable avatarBg = new GradientDrawable();
         avatarBg.setCornerRadius(avatarSize / 2f);
-        avatarBg.setColor(AppColors.bg());
+        avatarBg.setColor(AppColors.tertiaryContainer());
         avatar.setBackground(avatarBg);
-        avatar.setClipToOutline(true);
 
         // 优先使用 AvatarHelper 多路径加载（内部含微信缓存/本地文件/CDN 兜底）
-        int avatarSizePx = (int)(56 * d);
+        int avatarSizePx = avatarSize;
         AvatarHelper.loadAvatarAsync(avatar, MainActivity.getUserWxid(), avatarSizePx, null);
         userRow.addView(avatar);
 
@@ -65,13 +63,15 @@ public class ProfilePageView {
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
         textCol.setGravity(Gravity.CENTER_VERTICAL);
+        textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
         TextView nickTv = new TextView(ctx);
         nickTv.setText("加载中...");
-        nickTv.setTextSize(16);
-        nickTv.setTextColor(AppColors.text1());
+        nickTv.setTextSize(20);
+        nickTv.setTextColor(AppColors.onSurface());
         nickTv.setTypeface(null, Typeface.BOLD);
-        nickTv.setPadding(0, 0, 0, (int)(6 * d));
+        nickTv.setSingleLine(true);
+        nickTv.setPadding(0, 0, 0, dpInt(ctx, 6));
         textCol.addView(nickTv);
 
         // 始终从 DB 加载真实昵称
@@ -85,7 +85,6 @@ public class ProfilePageView {
                 } catch (Throwable ignored) {}
             }
             if (realNick == null || realNick.isEmpty()) {
-                // 回退到 prefs/MainActivity 缓存
                 realNick = MainActivity.getUserNickname();
             }
             if (realNick == null || realNick.isEmpty() || realNick.startsWith("wxid_")) {
@@ -101,40 +100,38 @@ public class ProfilePageView {
 
         TextView wxidTv = new TextView(ctx);
         wxidTv.setText(MainActivity.getUserWxid());
-        wxidTv.setTextSize(12);
-        wxidTv.setTextColor(AppColors.text2());
+        wxidTv.setTextSize(14);
+        wxidTv.setTextColor(AppColors.onSurfaceVariant());
+        wxidTv.setSingleLine(true);
+        wxidTv.setEllipsize(android.text.TextUtils.TruncateAt.END);
         wxidRow.addView(wxidTv);
 
-        TextView copyBtn = new TextView(ctx);
-        copyBtn.setText("复制");
-        copyBtn.setTextSize(10);
-        copyBtn.setTextColor(AppColors.accent());
-        copyBtn.setPadding((int)(8 * d), (int)(3 * d), (int)(8 * d), (int)(3 * d));
-        GradientDrawable cpBg = new GradientDrawable();
-        cpBg.setCornerRadius((int)(3 * d));
-        cpBg.setStroke((int)(1 * d), AppColors.accent());
-        cpBg.setColor(android.graphics.Color.TRANSPARENT);
-        copyBtn.setBackground(cpBg);
-        copyBtn.setOnClickListener(v -> {
-            android.content.ClipboardManager cm = (android.content.ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
-            android.content.ClipData cd = android.content.ClipData.newPlainText("wxid", MainActivity.getUserWxid());
-            cm.setPrimaryClip(cd);
-            Toast.makeText(ctx, "微信ID已复制", Toast.LENGTH_SHORT).show();
+        // M3 复制按钮（text button 风格）
+        ModernButton copyBtn = new ModernButton(ctx, "复制", ModernButton.STYLE_TEXT);
+        LinearLayout.LayoutParams copyLp = new LinearLayout.LayoutParams(-2, -2);
+        copyLp.setMarginStart(dpInt(ctx, 8));
+        copyBtn.setLayoutParams(copyLp);
+        copyBtn.onClick(() -> {
+            try {
+                android.content.ClipboardManager cm = (android.content.ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
+                android.content.ClipData cd = android.content.ClipData.newPlainText("wxid", MainActivity.getUserWxid());
+                cm.setPrimaryClip(cd);
+                Toast.makeText(ctx, "微信ID已复制", Toast.LENGTH_SHORT).show();
+            } catch (Throwable ignored) {}
         });
-        copyBtn.setPaintFlags(copyBtn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         wxidRow.addView(copyBtn);
 
         textCol.addView(wxidRow);
         userRow.addView(textCol);
         infoCard.addView(userRow);
 
-        infoCard.addView(itemDivider(ctx, d));
+        infoCard.addView(M3Page.divider(ctx));
 
         // 微信号
         String alias = MainActivity.getUserAlias();
         if (alias != null && !alias.isEmpty() && !alias.equals(MainActivity.getUserWxid())) {
-            infoCard.addView(profileRow(ctx, d, "微信号", alias));
-            infoCard.addView(itemDivider(ctx, d));
+            infoCard.addView(M3Page.infoRow(ctx, "微信号", alias));
+            infoCard.addView(M3Page.divider(ctx));
         }
 
         root.addView(infoCard);
@@ -142,135 +139,18 @@ public class ProfilePageView {
         // 管理员配置入口 (仅管理员可见)
         String currentWxid = MainActivity.getUserWxid();
         if (currentWxid != null && ActivationManager.isAdmin(currentWxid)) {
-            root.addView(candyDivider(ctx, d));
-            root.addView(sectionLabel(ctx, d, "管理员工具"));
-            LinearLayout adminCard = makeCard(ctx, d);
-
-            LinearLayout adminRow = new LinearLayout(ctx);
-            adminRow.setOrientation(LinearLayout.HORIZONTAL);
-            adminRow.setGravity(Gravity.CENTER_VERTICAL);
-            adminRow.setPadding((int)(16 * d), (int)(8 * d), (int)(16 * d), (int)(8 * d));
-            adminRow.setBackgroundColor(AppColors.whiteCard());
-
-            TextView adminLabel = new TextView(ctx);
-            adminLabel.setText("模块黑名单管理");
-            adminLabel.setTextSize(13);
-            adminLabel.setTextColor(AppColors.accent());
-            adminLabel.setTypeface(null, Typeface.BOLD);
-            adminLabel.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-            adminRow.addView(adminLabel);
-
-            TextView adminArrow = new TextView(ctx);
-            adminArrow.setText(">");
-            adminArrow.setTextSize(16);
-            adminArrow.setTextColor(AppColors.text2());
-            adminRow.addView(adminArrow);
-
-            adminRow.setOnClickListener(v -> {
-                SubPageActivity.open(parentAct, "管理员工具", 98);
-            });
-            adminCard.addView(adminRow);
+            root.addView(M3Page.section(ctx, "管理员工具"));
+            LinearLayout adminCard = M3Page.card(ctx);
+            adminCard.addView(M3Page.clickRow(ctx, "🛡", "模块黑名单管理", "管理模块功能黑名单用户",
+                    () -> SubPageActivity.open(parentAct, "管理员工具", 98)));
             root.addView(adminCard);
         }
 
-        final SharedPreferences prefs = ContextManager.getPrefs();
-
-        return root;
+        return M3Page.scroll(ctx, root);
     }
 
-    // ===== 组件工厂 =====
-
-    private static View profileRow(Context ctx, float d, String label, String value) {
-        LinearLayout row = new LinearLayout(ctx);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding((int)(16 * d), (int)(10 * d), (int)(16 * d), (int)(10 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
-
-        TextView labelTv = new TextView(ctx);
-        labelTv.setText(label);
-        labelTv.setTextSize(13);
-        labelTv.setTextColor(AppColors.text2());
-        labelTv.setLayoutParams(new LinearLayout.LayoutParams((int)(72 * d), -2));
-        row.addView(labelTv);
-
-        TextView valueTv = new TextView(ctx);
-        valueTv.setText(value != null ? value : "");
-        valueTv.setTextSize(13);
-        valueTv.setTextColor(AppColors.text1());
-        valueTv.setTypeface(null, Typeface.BOLD);
-        valueTv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-        row.addView(valueTv);
-
-        return row;
-    }
-
-    private static TextView makeBtn(Context ctx, float d, String text) {
-        TextView btn = new TextView(ctx);
-        btn.setText(text);
-        btn.setTextSize(13);
-        btn.setTextColor(AppColors.WHITE_TEXT);
-        btn.setTypeface(null, Typeface.BOLD);
-        btn.setPadding((int)(16 * d), (int)(8 * d), (int)(16 * d), (int)(8 * d));
-        btn.setGravity(Gravity.CENTER);
-
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius((int)(6 * d));
-        bg.setColor(AppColors.accent());
-        btn.setBackground(bg);
-
-        return btn;
-    }
-
-    private static TextView makeSmallBtn(Context ctx, float d, String text, int color) {
-        TextView btn = new TextView(ctx);
-        btn.setText(text);
-        btn.setTextSize(12);
-        btn.setTextColor(AppColors.WHITE_TEXT);
-        btn.setTypeface(null, Typeface.BOLD);
-        btn.setPadding((int)(14 * d), (int)(6 * d), (int)(14 * d), (int)(6 * d));
-        btn.setGravity(Gravity.CENTER);
-
-        GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius((int)(6 * d));
-        bg.setColor(color);
-        btn.setBackground(bg);
-
-        return btn;
-    }
-
-    private static TextView sectionLabel(Context ctx, float d, String text) {
-        TextView tv = new TextView(ctx);
-        tv.setText(text);
-        tv.setTextSize(13);
-        tv.setTextColor(AppColors.text2());
-        tv.setPadding(0, 0, 0, (int)(6 * d));
-        return tv;
-    }
-
-    private static LinearLayout makeCard(Context ctx, float d) {
-        LinearLayout card = new LinearLayout(ctx);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding((int)(2 * d), (int)(2 * d), (int)(2 * d), (int)(2 * d));
-        card.setBackgroundColor(AppColors.card());
-        return card;
-    }
-
-    private static View itemDivider(Context ctx, float d) {
-        View v = new View(ctx);
-        v.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
-        v.setBackgroundColor(AppColors.divider());
-        return v;
-    }
-
-    private static View spacerV(Context ctx, float d, int dpVal) {
-        View v = new View(ctx);
-        v.setLayoutParams(new LinearLayout.LayoutParams(-1, (int)(dpVal * d)));
-        return v;
-    }
-
-    private static String getExpireTime() {
-        return "永久有效";
+    private static int dpInt(Context ctx, int dp) {
+        return (int) (dp * ctx.getResources().getDisplayMetrics().density + 0.5f);
     }
 
     private static String findNicknameFromDb(String wxid, Context ctx) {
@@ -330,17 +210,5 @@ public class ProfilePageView {
             }
         } catch (Throwable ignored) {}
         return null;
-    }
-
-    private static View candyDivider(Context ctx, float d) {
-        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
-        View v = new View(ctx);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
-        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
-        v.setLayoutParams(lp);
-        v.setBackground(gd);
-        return v;
     }
 }

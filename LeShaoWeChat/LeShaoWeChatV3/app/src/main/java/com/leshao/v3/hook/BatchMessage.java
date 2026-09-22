@@ -45,93 +45,101 @@ public class BatchMessage {
      * ⚠️ 修复: 使用正确类名 + 安全查找
      */
     private static void hookChatMoreSelect(ClassLoader cl) {
-        // ⚠️ 修复: 使用正确的点分隔类名, 并安全查找
-        Class<?> moreSelect = null;
-        try {
-            moreSelect = XposedHelpers.findClass(
-                    "com.tencent.mm.ui.chatting.ChatMoreSelectUI", cl);
-        } catch (XposedHelpers.ClassNotFoundError e) {
-            XposedBridge.log("[Batch] ChatMoreSelectUI 在当前版本被混淆, 跳过");
-            return;
-        }
+        // v955: ChatMoreSelectUI 在 3180 已改名, 多选 UI 经 DexKit 动态检索
+        // (方法签名: onCreateOptionsMenu + onOptionsItemSelected 同类, 类名含 Select/More),
+        // 严禁硬编码类名。扫描完成前不安装, 经后扫描回调安装。
+        com.leshao.v3.hook.DexKitHelper.addPostScanCallback(() -> {
+            java.util.List<String> candidates = com.leshao.v3.hook.DexKitHelper.getChatMoreSelectClasses();
+            if (candidates.isEmpty()) {
+                XposedBridge.log("[Batch] 多选 UI DexKit 未检索到, 跳过");
+                return;
+            }
+            for (String cn : candidates) {
+                try {
+                    installChatMoreSelectHooks(cl, cn);
+                } catch (Throwable t) {
+                    XposedBridge.log("[Batch] " + cn + " hook err: " + t.getMessage());
+                }
+            }
+        });
+    }
 
+    private static void installChatMoreSelectHooks(ClassLoader cl, String clsName) {
+        Class<?> moreSelect = XposedHelpers.findClass(clsName, cl);
         if (moreSelect == null) return;
 
-        try {
-            // Hook onCreateOptionsMenu — 添加全选/反选
-            XposedBridge.hookAllMethods(moreSelect, "onCreateOptionsMenu",
-                    new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    try {
-                                        Menu menu = (Menu) param.args[0];
-                                        if (menu != null) {
-                                            menu.add(0, 99991, 0, "全选");
-                                            menu.add(0, 99992, 0, "反选");
-                                            menu.add(0, 99993, 0, "全选图片");
-                                            menu.add(0, 99994, 0, "全选链接");
-                                        }
-                    } catch (Throwable e) {
-                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
-                    }
+        // Hook onCreateOptionsMenu — 添加全选/反选
+        XposedBridge.hookAllMethods(moreSelect, "onCreateOptionsMenu",
+                new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                try {
+                                    Menu menu = (Menu) param.args[0];
+                                    if (menu != null) {
+                                        menu.add(0, 99991, 0, "全选");
+                                        menu.add(0, 99992, 0, "反选");
+                                        menu.add(0, 99993, 0, "全选图片");
+                                        menu.add(0, 99994, 0, "全选链接");
+                                    }
+                } catch (Throwable e) {
+                    de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                 }
-            });
+            }
+        });
 
-            // Hook onOptionsItemSelected — 处理点击
-            XposedBridge.hookAllMethods(moreSelect, "onOptionsItemSelected",
-                    new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    try {
-                                        MenuItem item = (MenuItem) param.args[0];
-                                        int id = item.getItemId();
-                                        if (id >= 99991 && id <= 99994) {
-                                            performSelectAction(param.thisObject, id);
-                                            param.setResult(true);
-                                        }
-                    } catch (Throwable e) {
-                        de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
-                    }
+        // Hook onOptionsItemSelected — 处理点击
+        XposedBridge.hookAllMethods(moreSelect, "onOptionsItemSelected",
+                new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                try {
+                                    MenuItem item = (MenuItem) param.args[0];
+                                    int id = item.getItemId();
+                                    if (id >= 99991 && id <= 99994) {
+                                        performSelectAction(param.thisObject, id);
+                                        param.setResult(true);
+                                    }
+                } catch (Throwable e) {
+                    de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                 }
-            });
+            }
+        });
+        XposedBridge.log("[Batch] 多选 UI hooks installed: " + clsName);
 
-            // Hook 选中数量限制
-            for (java.lang.reflect.Method m : moreSelect.getDeclaredMethods()) {
-                if (m.getReturnType() == int.class
-                        && m.getParameterTypes().length == 0) {
-                    XposedBridge.hookMethod(m, new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            try {
+        // Hook 选中数量限制(突破 9/50/100 上限)
+        for (java.lang.reflect.Method m : moreSelect.getDeclaredMethods()) {
+            if (m.getReturnType() == int.class
+                    && m.getParameterTypes().length == 0) {
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
                                                         int val = (Integer) param.getResult();
                                                         if (val == 9 || val == 50 || val == 100) {
                                                             param.setResult(maxSelectCount);
                                                             XposedBridge.log("[Batch] 限制: " + val + " → " + maxSelectCount);
                                                         }
-                            } catch (Throwable e) {
-                                de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
-                            }
+                        } catch (Throwable e) {
+                            de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                         }
-                    });
-                }
-                if (m.getReturnType() == boolean.class
-                        && m.getParameterTypes().length == 0) {
-                    XposedBridge.hookMethod(m, new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            try {
-                                                        if (!(Boolean) param.getResult()) param.setResult(true);
-                            } catch (Throwable e) {
-                                de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
-                            }
-                        }
-                    });
-                }
+                    }
+                });
             }
-            XposedBridge.log("[Batch] ChatMoreSelectUI Hook完成");
-        } catch (Throwable t) {
-            XposedBridge.log("[Batch] ChatMoreSelectUI异常: " + t.getMessage());
+            if (m.getReturnType() == boolean.class
+                    && m.getParameterTypes().length == 0) {
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                                                        if (!(Boolean) param.getResult()) param.setResult(true);
+                        } catch (Throwable e) {
+                            de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
+                        }
+                    }
+                });
+            }
         }
+        XposedBridge.log("[Batch] 多选 UI Hook完成: " + clsName);
     }
 
     private static void hookForwardLimit(ClassLoader cl) {

@@ -18,6 +18,7 @@ import android.widget.TextView;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.hook.RedPacketHook;
+import com.leshao.v3.ui.widgets.M3Page;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -46,7 +47,7 @@ public class RedPacketConfigView {
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(AppColors.bg());
+        root.setBackground(CandyUi.pageGradient());
         root.setPadding((int)(16 * d), (int)(16 * d), (int)(16 * d), (int)(16 * d));
 
         boolean enabled = prefs != null && prefs.getBoolean(KEY_ENABLED, true);
@@ -177,7 +178,7 @@ public class RedPacketConfigView {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setBackground(CandyUi.cardBg(ctx));
 
         TextView label = new TextView(ctx);
         label.setText("时间段:  ");
@@ -193,7 +194,7 @@ public class RedPacketConfigView {
         etStart.setInputType(InputType.TYPE_CLASS_DATETIME);
         etStart.setWidth((int)(60 * d));
         etStart.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
-        etStart.setBackgroundColor(AppColors.bg());
+        etStart.setBackground(CandyUi.pageGradient());
         row.addView(etStart);
 
         TextView sep = new TextView(ctx);
@@ -210,7 +211,7 @@ public class RedPacketConfigView {
         etEnd.setInputType(InputType.TYPE_CLASS_DATETIME);
         etEnd.setWidth((int)(60 * d));
         etEnd.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
-        etEnd.setBackgroundColor(AppColors.bg());
+        etEnd.setBackground(CandyUi.pageGradient());
         row.addView(etEnd);
 
         TextView save = new TextView(ctx);
@@ -232,7 +233,7 @@ public class RedPacketConfigView {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding((int)(14 * d), (int)(10 * d), (int)(14 * d), (int)(10 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setBackground(CandyUi.cardBg(ctx));
 
         EditText et = new EditText(ctx);
         et.setHint(hint);
@@ -244,7 +245,7 @@ public class RedPacketConfigView {
         et.setMinLines(1);
         et.setMaxLines(3);
         et.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
-        et.setBackgroundColor(AppColors.bg());
+        et.setBackground(CandyUi.pageGradient());
         row.addView(et);
 
         TextView save = new TextView(ctx);
@@ -266,7 +267,7 @@ public class RedPacketConfigView {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setBackground(CandyUi.cardBg(ctx));
 
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
@@ -318,7 +319,7 @@ public class RedPacketConfigView {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setBackground(CandyUi.cardBg(ctx));
 
         LinearLayout labelRow = new LinearLayout(ctx);
         labelRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -370,7 +371,7 @@ public class RedPacketConfigView {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding((int)(2 * d), (int)(2 * d), (int)(2 * d), (int)(2 * d));
-        card.setBackgroundColor(AppColors.card());
+        card.setBackground(CandyUi.cardBg(ctx));
         return card;
     }
 
@@ -380,7 +381,7 @@ public class RedPacketConfigView {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setBackground(CandyUi.cardBg(ctx));
 
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
@@ -400,7 +401,7 @@ public class RedPacketConfigView {
             textCol.addView(dv);
         }
         row.addView(textCol);
-        Switch sw = new Switch(ctx);
+        Switch sw = CandyUi.newSwitch(ctx);
         sw.setChecked(checked);
         styleSwitch(sw, checked, ctx);
         sw.setOnCheckedChangeListener(listener);
@@ -477,14 +478,6 @@ public class RedPacketConfigView {
     public interface StringCallback { void onChange(String value); }
 
     private static View candyDivider(Context ctx, float d) {
-        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
-        View v = new View(ctx);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
-        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
-        v.setLayoutParams(lp);
-        v.setBackground(gd);
-        return v;
+        return M3Page.divider(ctx);
     }
 }

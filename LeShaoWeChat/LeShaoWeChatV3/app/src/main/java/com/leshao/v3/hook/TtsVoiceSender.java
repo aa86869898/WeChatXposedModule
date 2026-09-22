@@ -1082,8 +1082,36 @@ public class TtsVoiceSender {
         try {
             checkCoroutineSuspended(cl);
             final Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
+            java.lang.reflect.Method target = null;
             for (java.lang.reflect.Method m : a21o.getDeclaredMethods()) {
                 if (!m.getName().equals("i")) continue;
+                target = m;
+                break;
+            }
+            if (target == null) {
+                // v957: 3180 方法名再混淆, 按签名兜底: >=2 参数, 第2参数类型含 b 字段(e9 载体)
+                for (java.lang.reflect.Method m : a21o.getDeclaredMethods()) {
+                    if (m.getParameterCount() < 2) continue;
+                    if (m.getReturnType().isPrimitive()) continue;
+                    try {
+                        boolean hasB = false;
+                        for (java.lang.reflect.Field f : m.getParameterTypes()[1].getDeclaredFields()) {
+                            if ("b".equals(f.getName())) { hasB = true; break; }
+                        }
+                        if (!hasB) continue;
+                        target = m;
+                        LogWriter.log(TAG, "hookA21Oi: i 方法改名, 签名兜底命中: " + m.getName()
+                                + "(" + m.getParameterCount() + " args)");
+                        break;
+                    } catch (Throwable ignored) {}
+                }
+            }
+            if (target == null) {
+                LogWriter.log(TAG, "Hook a21.o.i: method not found");
+                return;
+            }
+            {
+                java.lang.reflect.Method m = target;
                 final String mName = m.getName();
                 StringBuilder sig = new StringBuilder(mName).append('(');
                 for (Class<?> pt : m.getParameterTypes()) {
@@ -1207,7 +1235,6 @@ public class TtsVoiceSender {
                 LogWriter.log(TAG, "Hook a21.o.i OK sig=" + sigStr);
                 return;
             }
-            LogWriter.log(TAG, "Hook a21.o.i: method not found");
         } catch (Throwable t) {
             LogWriter.log(TAG, "Hook a21.o.i FAIL: " + t.getMessage());
         }

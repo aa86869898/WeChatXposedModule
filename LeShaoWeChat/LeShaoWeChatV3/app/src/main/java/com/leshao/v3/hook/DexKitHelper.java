@@ -614,6 +614,8 @@ public class DexKitHelper {
                 reportProgress(90, "扫描: " + scanSteps[14], "查找菜单注入入口");
                 findMenuG4Impls(b);
                  reportProgress(95, "扫描: " + scanSteps[15], "查找菜单实现类");
+                findV955Targets(b);
+                reportProgress(97, "扫描: v955 3180 适配目标", "撤回监听/标签提供者/拼音/服务定位/媒体路径");
              }
         });
 
@@ -1024,23 +1026,27 @@ public class DexKitHelper {
 
     private static void findJ1Service(DexKitBridge bridge) {
         try {
-            // Strategy 1: search for methods with s(Class) signature
-            MethodMatcher mMatcher = MethodMatcher.create()
-                .name("s")
-                .paramCount(1);
-            List<MethodData> methods = bridge.findMethod(
-                FindMethod.create().matcher(mMatcher)
-            );
-            LogWriter.log(TAG, "findJ1Service: " + methods.size() + " s(*) methods found");
-            for (MethodData m : methods) {
-                String clsName = m.getClassName();
-                if (clsName == null) continue;
-                List<String> pts = m.getParamTypeNames();
-                if (pts.size() == 1 && "java.lang.Class".equals(pts.get(0))) {
-                    if (clsName.contains(".j1") || clsName.contains("$j1") || clsName.contains("j1")) {
-                        sJ1ServiceClass = clsName;
-                        LogWriter.log(TAG, "findJ1Service: " + clsName + ".s(Class)");
-                        return;
+            // Strategy 1: search for methods with s(Class) OR v(Class) signature
+            // v955: 3180 实证服务定位方法为 v(Class)(gp0.j1.v), 旧版 s(Class); 双签名兼容
+            List<MethodData> methods = null;
+            for (String mn : new String[]{"v", "s"}) {
+                MethodMatcher mMatcher = MethodMatcher.create()
+                    .name(mn)
+                    .paramCount(1);
+                methods = bridge.findMethod(
+                    FindMethod.create().matcher(mMatcher)
+                );
+                LogWriter.log(TAG, "findJ1Service: " + methods.size() + " " + mn + "(*) methods found");
+                for (MethodData m : methods) {
+                    String clsName = m.getClassName();
+                    if (clsName == null) continue;
+                    List<String> pts = m.getParamTypeNames();
+                    if (pts.size() == 1 && "java.lang.Class".equals(pts.get(0))) {
+                        if (clsName.contains(".j1") || clsName.contains("$j1") || clsName.contains("j1")) {
+                            sJ1ServiceClass = clsName;
+                            LogWriter.log(TAG, "findJ1Service: " + clsName + "." + mn + "(Class)");
+                            return;
+                        }
                     }
                 }
             }
@@ -1057,7 +1063,7 @@ public class DexKitHelper {
                     return;
                 }
             }
-            // Strategy 3: any s(Class) method regardless of class name
+            // Strategy 3: any s(Class)/v(Class) method regardless of class name
             for (MethodData m : methods) {
                 String clsName = m.getClassName();
                 if (clsName == null) continue;
@@ -1076,25 +1082,28 @@ public class DexKitHelper {
     private static void findJ1Caller(DexKitBridge bridge) {
         try {
             // 8.0.78: j1 服务定位器混淆为 gp0.j1，不再用 hm0.j1
+            // v955: 3180 定位方法为 v(Class)(旧版 s), 双签名兼容
             String[] j1Candidates = {"gp0.j1.j", "gp0.j1", "hm0.j1", "fp0.j1.j", "fp0.j1"};
             for (String j1Class : j1Candidates) {
-                try {
-                    MethodMatcher callerMatcher = MethodMatcher.create()
-                        .addInvoke(MethodMatcher.create()
-                            .declaredClass(j1Class)
-                            .name("s")
-                            .paramTypes("java.lang.Class"));
-                    List<MethodData> methods = bridge.findMethod(
-                        FindMethod.create().matcher(callerMatcher)
-                    );
-                    if (!methods.isEmpty()) {
-                        MethodData first = methods.get(0);
-                        sJ1CallerClass = first.getClassName();
-                        sJ1CallerMethod = first.getName();
-                        LogWriter.log(TAG, "findJ1Caller: " + sJ1CallerClass + "." + sJ1CallerMethod + " via " + j1Class);
-                        return;
-                    }
-                } catch (Throwable ignored) {}
+                for (String mn : new String[]{"v", "s"}) {
+                    try {
+                        MethodMatcher callerMatcher = MethodMatcher.create()
+                            .addInvoke(MethodMatcher.create()
+                                .declaredClass(j1Class)
+                                .name(mn)
+                                .paramTypes("java.lang.Class"));
+                        List<MethodData> methods = bridge.findMethod(
+                            FindMethod.create().matcher(callerMatcher)
+                        );
+                        if (!methods.isEmpty()) {
+                            MethodData first = methods.get(0);
+                            sJ1CallerClass = first.getClassName();
+                            sJ1CallerMethod = first.getName();
+                            LogWriter.log(TAG, "findJ1Caller: " + sJ1CallerClass + "." + sJ1CallerMethod + " via " + j1Class + "." + mn);
+                            return;
+                        }
+                    } catch (Throwable ignored) {}
+                }
             }
             LogWriter.log(TAG, "findJ1Caller: NOT found");
         } catch (Throwable e) {
@@ -1375,18 +1384,28 @@ public class DexKitHelper {
     }
 
     /** 规则4(bug3)：定位会话列表长按菜单创建入口。
-     *  微信 8.0.49 长按弹出的是自定义菜单/对话框，不在标准 ContextMenu 链路，
-     *  用常见菜单文案字符串反查创建方法。 */
+     *  微信 3180(8.0.78) 起长按菜单文案("置顶聊天"/"标为未读"/"删除该聊天"/"不显示该聊天")
+     *  已从 dex 常量迁入 R.string 资源(gqi/gqe/gqc/gq6/bl9)，dex 中已无线索，
+     *  旧 usingStrings 组合 5 个串中 3 个消失，AND 语义下必然 0 命中。
+     *  3180 新架构(逆向实证)：
+     *   - com.tencent.mm.ui.conversation.s3 "ConversationLongClickListener"
+     *     同时实现 AdapterView$OnItemLongClickListener + View$OnCreateContextMenuListener，
+     *     onItemLongClick 内 new eu5.s0(...).g(view,pos,id,this,...) 弹 MMListPopupWindow；
+     *   - 菜单项经 s3.onCreateContextMenu(ContextMenu,View,ContextMenuInfo) 的
+     *     contextMenu.add(groupId,itemId,order,"置顶"/"取消置顶") 加入("置顶"系硬编码残留)；
+     *   - s0.g() 回调 onCreateContextMenuListener.onCreateContextMenu(自建 ContextMenu 实现, ...)，
+     *     条目存入 f314615d(ArrayList&lt;MenuItem&gt;) 后经 kj5.f5(继承 PopupWindow).showAtLocation 展示。
+     *  因此改用日志 TAG 特征字符串(双特征组合，符合 特征字符串>方法签名>父类接口 优先级)。 */
     private static void findConvMenuEntry(DexKitBridge bridge) {
         try {
+            // 特征1(首选·特征字符串): ConversationLongClickListener 日志 TAG, 3180 dex 命中 1 处(s3.onItemLongClick 内 Log.i)
             MethodMatcher mMatcher = MethodMatcher.create()
-                .usingStrings("置顶聊天", "标为未读", "不显示", "删除该聊天", "cancel")
-                .paramCount(1);
+                .usingStrings("MicroMsg.ConversationLongClickListener");
             List<MethodData> methods = bridge.findMethod(
                 FindMethod.create().matcher(mMatcher)
             );
             LogWriter.log(TAG, "findConvMenuEntry: " + methods.size()
-                + " methods use menu strings");
+                + " methods use 'MicroMsg.ConversationLongClickListener'");
             int limit = Math.min(methods.size(), 20);
             for (int i = 0; i < limit; i++) {
                 MethodData m = methods.get(i);
@@ -1411,8 +1430,248 @@ public class DexKitHelper {
                 sConvMenuMethod = m.getName();
                 LogWriter.log(TAG, "findConvMenuEntry: selected(any) " + sConvMenuClass + "." + sConvMenuMethod);
             }
+
+            // 特征2(父类/接口特征): 同时实现长按监听 + 建菜单监听的类, 3180 实证为 s3
+            ClassMatcher cm = ClassMatcher.create()
+                .addInterface("android.widget.AdapterView$OnItemLongClickListener")
+                .addInterface("android.view.View$OnCreateContextMenuListener");
+            List<ClassData> impls = bridge.findClass(FindClass.create().matcher(cm));
+            LogWriter.log(TAG, "findConvMenuEntry: " + impls.size()
+                + " classes impl OnItemLongClickListener+OnCreateContextMenuListener");
+            for (ClassData c : impls) {
+                String cn = c.getName();
+                LogWriter.log(TAG, "  menuImpl: " + cn);
+                if (cn != null && cn.contains("conversation")) {
+                    sConvMenuClass = cn;
+                    sConvMenuMethod = "onCreateContextMenu";
+                    LogWriter.log(TAG, "findConvMenuEntry: selected(impl) " + cn + ".onCreateContextMenu");
+                    return;
+                }
+            }
+            if (!impls.isEmpty()) {
+                sConvMenuClass = impls.get(0).getName();
+                sConvMenuMethod = "onCreateContextMenu";
+                LogWriter.log(TAG, "findConvMenuEntry: selected(impl any) " + sConvMenuClass);
+                return;
+            }
+
+            // 特征3(兜底·特征字符串): MMPopupMenu 日志 TAG, 3180 dex 命中 2 处(eu5.s0 内)
+            MethodMatcher popupMatcher = MethodMatcher.create()
+                .usingStrings("MicroMsg.MMPopupMenu");
+            List<MethodData> popupMethods = bridge.findMethod(
+                FindMethod.create().matcher(popupMatcher)
+            );
+            LogWriter.log(TAG, "findConvMenuEntry: " + popupMethods.size()
+                + " methods use 'MicroMsg.MMPopupMenu'");
+            for (MethodData m : popupMethods) {
+                LogWriter.log(TAG, "  popupImpl: " + m.getClassName() + "." + m.getName());
+            }
+            if (!popupMethods.isEmpty()) {
+                sConvMenuClass = popupMethods.get(0).getClassName();
+                sConvMenuMethod = popupMethods.get(0).getName();
+                LogWriter.log(TAG, "findConvMenuEntry: selected(popup) "
+                    + sConvMenuClass + "." + sConvMenuMethod);
+            }
         } catch (Throwable e) {
             LogWriter.log(TAG, "findConvMenuEntry error: " + e.getMessage());
+        }
+    }
+
+    // ==================== v955: 3180 适配目标检索（严格遵守 特征字符串 > 方法签名 > 父类/接口） ====================
+
+    private static volatile java.util.List<String> sRevokeListenerClasses = new java.util.ArrayList<>();
+    private static volatile String sLabelStorageProviderClass;
+    private static volatile String sLabelStorageProviderMethod = "bj";
+    private static volatile String sPinyinUtilClass;
+    private static volatile String sServiceLocatorClass;      // ph5.n0 等价物(ServiceManager)
+    private static volatile String sMediaPathServiceClass;    // Nj(...) 媒体路径服务
+    private static volatile String sMediaPathMethod = "Nj";
+    private static volatile String sClipboardJsApiClass;      // setClipboardData jsapi
+    private static volatile java.util.List<String> sChatMoreSelectClasses = new java.util.ArrayList<>();
+
+    public static java.util.List<String> getRevokeListenerClasses() { return sRevokeListenerClasses; }
+    public static String getLabelStorageProviderClass() { return sLabelStorageProviderClass; }
+    public static String getLabelStorageProviderMethod() { return sLabelStorageProviderMethod; }
+    public static String getPinyinUtilClass() { return sPinyinUtilClass; }
+    public static String getServiceLocatorClass() { return sServiceLocatorClass; }
+    public static String getMediaPathServiceClass() { return sMediaPathServiceClass; }
+    public static String getMediaPathMethod() { return sMediaPathMethod; }
+    public static String getClipboardJsApiClass() { return sClipboardJsApiClass; }
+    public static java.util.List<String> getChatMoreSelectClasses() { return sChatMoreSelectClasses; }
+
+    /** v955 3180 适配目标统一检索入口 */
+    private static void findV955Targets(DexKitBridge bridge) {
+        findRevokeListeners(bridge);
+        findLabelStorageProvider(bridge);
+        findPinyinUtil(bridge);
+        findServiceLocator(bridge);
+        findMediaPathService(bridge);
+        findClipboardJsApi(bridge);
+        findChatMoreSelect(bridge);
+    }
+
+    /** 撤回事件监听类: 特征字符串(日志TAG, 首选) */
+    private static void findRevokeListeners(DexKitBridge bridge) {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        for (String tag : new String[]{"MicroMsg.RevokeReceiveMessageListener", "MicroMsg.RevokeMsgListener"}) {
+            try {
+                List<ClassData> classes = bridge.findClass(FindClass.create()
+                    .matcher(ClassMatcher.create().usingStrings(tag)));
+                for (ClassData c : classes) {
+                    String cn = c.getName();
+                    if (cn == null) continue;
+                    // 特征字符串已唯一定位(日志TAG), 直接收录; 父类特征由 hook 侧 callback 方法名兜底确认
+                    out.add(cn);
+                }
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "findRevokeListeners(" + tag + ") err: " + e.getMessage());
+            }
+        }
+        sRevokeListenerClasses = new java.util.ArrayList<>(out);
+        LogWriter.log(TAG, "findRevokeListeners: " + sRevokeListenerClasses);
+    }
+
+    /** 标签存储提供者: 方法签名(静态 + 返回 com.tencent.mm.storage.g4) */
+    private static void findLabelStorageProvider(DexKitBridge bridge) {
+        try {
+            List<MethodData> methods = bridge.findMethod(FindMethod.create()
+                    .matcher(MethodMatcher.create()
+                            .modifiers(java.lang.reflect.Modifier.STATIC)
+                            .returnType("com.tencent.mm.storage.g4")));
+            for (MethodData m : methods) {
+                if (m.getParamTypeNames().isEmpty()) {
+                    sLabelStorageProviderClass = m.getClassName();
+                    sLabelStorageProviderMethod = m.getName();
+                    LogWriter.log(TAG, "findLabelStorageProvider: " + sLabelStorageProviderClass
+                            + "." + sLabelStorageProviderMethod + "()");
+                    return;
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findLabelStorageProvider err: " + e.getMessage());
+        }
+    }
+
+    /** 拼音工具类: 方法签名(静态 a(String)→String 且 静态 b(String)→String 同类) */
+    private static void findPinyinUtil(DexKitBridge bridge) {
+        try {
+            List<MethodData> aMethods = bridge.findMethod(FindMethod.create()
+                    .matcher(MethodMatcher.create()
+                            .modifiers(java.lang.reflect.Modifier.STATIC)
+                            .name("a")
+                            .paramCount(1)
+                            .paramTypes("java.lang.String")
+                            .returnType("java.lang.String")));
+            for (MethodData am : aMethods) {
+                String cn = am.getClassName();
+                if (cn == null) continue;
+                List<MethodData> bMethods = bridge.findMethod(FindMethod.create()
+                        .matcher(MethodMatcher.create()
+                                .modifiers(java.lang.reflect.Modifier.STATIC)
+                                .name("b")
+                                .paramCount(1)
+                                .paramTypes("java.lang.String")
+                                .returnType("java.lang.String")
+                                .declaredClass(cn)));
+                if (!bMethods.isEmpty()) {
+                    sPinyinUtilClass = cn;
+                    LogWriter.log(TAG, "findPinyinUtil: " + cn);
+                    return;
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findPinyinUtil err: " + e.getMessage());
+        }
+    }
+
+    /** 服务定位器(ph5.n0 等价物): 特征字符串 "MicroMsg.ServiceManager" + 静态 c(Class) 签名 */
+    private static void findServiceLocator(DexKitBridge bridge) {
+        try {
+            List<ClassData> classes = bridge.findClass(FindClass.create()
+                    .matcher(ClassMatcher.create().usingStrings("MicroMsg.ServiceManager")));
+            for (ClassData c : classes) {
+                String cn = c.getName();
+                if (cn == null) continue;
+                List<MethodData> cms = bridge.findMethod(FindMethod.create()
+                        .matcher(MethodMatcher.create()
+                                .modifiers(java.lang.reflect.Modifier.STATIC)
+                                .name("c")
+                                .paramCount(1)
+                                .paramTypes("java.lang.Class")
+                                .declaredClass(cn)));
+                if (!cms.isEmpty()) {
+                    sServiceLocatorClass = cn;
+                    LogWriter.log(TAG, "findServiceLocator: " + cn + ".c(Class)");
+                    return;
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findServiceLocator err: " + e.getMessage());
+        }
+    }
+
+    /** 媒体路径服务: 方法签名 Nj(4参)→String */
+    private static void findMediaPathService(DexKitBridge bridge) {
+        try {
+            List<MethodData> methods = bridge.findMethod(FindMethod.create()
+                    .matcher(MethodMatcher.create()
+                            .name("Nj")
+                            .paramCount(4)
+                            .returnType("java.lang.String")));
+            for (MethodData m : methods) {
+                sMediaPathServiceClass = m.getClassName();
+                sMediaPathMethod = m.getName();
+                LogWriter.log(TAG, "findMediaPathService: " + sMediaPathServiceClass + "." + sMediaPathMethod);
+                return;
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findMediaPathService err: " + e.getMessage());
+        }
+    }
+
+    /** 小程序剪贴板 jsapi: 特征字符串 "setClipboardData"(jsapi 名稳定) */
+    private static void findClipboardJsApi(DexKitBridge bridge) {
+        try {
+            List<ClassData> classes = bridge.findClass(FindClass.create()
+                    .matcher(ClassMatcher.create().usingStrings("setClipboardData")));
+            for (ClassData c : classes) {
+                String cn = c.getName();
+                if (cn != null && cn.contains("jsapi")) {
+                    sClipboardJsApiClass = cn;
+                    LogWriter.log(TAG, "findClipboardJsApi: " + cn);
+                    return;
+                }
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findClipboardJsApi err: " + e.getMessage());
+        }
+    }
+
+    /** 聊天多选 UI(ChatMoreSelectUI 等价物): 方法签名(onCreateOptionsMenu + onOptionsItemSelected 同类) */
+    private static void findChatMoreSelect(DexKitBridge bridge) {
+        try {
+            List<MethodData> methods = bridge.findMethod(FindMethod.create()
+                    .searchPackages("com.tencent.mm.ui.chatting")
+                    .matcher(MethodMatcher.create()
+                            .name("onCreateOptionsMenu")
+                            .paramCount(1)));
+            java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+            for (MethodData m : methods) {
+                String cn = m.getClassName();
+                if (cn == null) continue;
+                List<MethodData> oim = bridge.findMethod(FindMethod.create()
+                        .matcher(MethodMatcher.create()
+                                .name("onOptionsItemSelected")
+                                .paramCount(1)
+                                .declaredClass(cn)));
+                if (!oim.isEmpty() && (cn.contains("Select") || cn.contains("More"))) {
+                    out.add(cn);
+                }
+            }
+            sChatMoreSelectClasses = new java.util.ArrayList<>(out);
+            LogWriter.log(TAG, "findChatMoreSelect: " + sChatMoreSelectClasses);
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "findChatMoreSelect err: " + e.getMessage());
         }
     }
 

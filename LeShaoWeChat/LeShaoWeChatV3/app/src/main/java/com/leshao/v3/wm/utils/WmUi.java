@@ -22,22 +22,22 @@ public final class WmUi {
 
     private WmUi() {}
 
-    public static final int C_BG       = AppColors.bg();   // 页面背景
-    public static final int C_CARD     = AppColors.card();   // 卡片白
-    public static final int C_TEXT     = AppColors.text1();   // 主文字
-    public static final int C_TEXT2    = AppColors.text2();   // 次要文字
-    public static final int C_ACCENT   = AppColors.accent();   // 主色
-    public static final int C_ACCENT2  = AppColors.accent();   // 辅助色
-    public static final int C_GREEN    = AppColors.accent();
-    public static final int C_RED      = AppColors.accent();
-    public static final int C_BORDER   = AppColors.bg();
+    public static final int C_BG       = AppColors.surface();               // M3 surface
+    public static final int C_CARD     = AppColors.surfaceContainerLow();    // M3 filled card
+    public static final int C_TEXT     = AppColors.onSurface();              // M3 onSurface
+    public static final int C_TEXT2    = AppColors.onSurfaceVariant();       // M3 onSurfaceVariant
+    public static final int C_ACCENT   = AppColors.primary();                // M3 primary
+    public static final int C_ACCENT2  = AppColors.primaryDark();            // M3 primary 深阶
+    public static final int C_GREEN    = AppColors.primary();
+    public static final int C_RED      = AppColors.error();
+    public static final int C_BORDER   = AppColors.outlineVariant();         // M3 outlineVariant
 
     public static LinearLayout makePanel(Activity act) {
         LinearLayout panel = new LinearLayout(act);
         panel.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(C_CARD);
-        bg.setCornerRadius(dp(act, 18));
+        bg.setCornerRadius(dp(act, 16));
         bg.setStroke(dp(act, 1), C_BORDER);
         panel.setBackground(bg);
         panel.setElevation(dp(act, 14));
@@ -47,25 +47,24 @@ public final class WmUi {
     public static LinearLayout makeHeader(Activity act, String title, String subtitle) {
         LinearLayout head = new LinearLayout(act);
         head.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable hb = new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{C_ACCENT, C_ACCENT2});
-        hb.setCornerRadii(new float[]{dp(act,18), dp(act,18), dp(act,18), dp(act,18), 0, 0, 0, 0});
+        GradientDrawable hb = new GradientDrawable();
+        hb.setColor(C_ACCENT);
+        hb.setCornerRadii(new float[]{dp(act,28), dp(act,28), dp(act,28), dp(act,28), 0, 0, 0, 0});
         head.setBackground(hb);
-        head.setPadding(dp(act, 14), dp(act, 12), dp(act, 14), dp(act, 12));
+        head.setPadding(dp(act, 16), dp(act, 14), dp(act, 16), dp(act, 14));
 
         TextView tv = new TextView(act);
         tv.setText(title);
-        tv.setTextSize(16);
-        tv.setTextColor(Color.WHITE);
+        tv.setTextSize(18);
+        tv.setTextColor(AppColors.onPrimary());
         tv.setGravity(Gravity.CENTER_VERTICAL);
         head.addView(tv);
 
         if (subtitle != null && !subtitle.isEmpty()) {
             TextView dv = new TextView(act);
             dv.setText(subtitle);
-            dv.setTextSize(11);
-            dv.setTextColor(AppColors.text1());
+            dv.setTextSize(12);
+            dv.setTextColor(0xB3FFFFFF);
             dv.setPadding(0, dp(act, 3), 0, 0);
             head.addView(dv);
         }
@@ -75,28 +74,28 @@ public final class WmUi {
     public static TextView makeSection(Activity act, String text) {
         TextView tv = new TextView(act);
         tv.setText(text);
-        tv.setTextSize(12);
+        tv.setTextSize(14);
         tv.setTextColor(C_TEXT2);
-        tv.setPadding(dp(act, 14), dp(act, 10), dp(act, 14), dp(act, 4));
+        tv.setPadding(dp(act, 16), dp(act, 12), dp(act, 16), dp(act, 4));
         return tv;
     }
 
     public static Button makeBtn(Activity act, String text, Runnable action) {
         Button btn = new Button(act);
         btn.setText(text);
-        btn.setTextSize(13);
+        btn.setTextSize(14);
         btn.setAllCaps(false);
         btn.setTextColor(C_TEXT);
         btn.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        btn.setPadding(dp(act, 12), 0, dp(act, 12), 0);
+        btn.setPadding(dp(act, 16), 0, dp(act, 16), 0);
 
         GradientDrawable gd = new GradientDrawable();
-        gd.setColor(C_BG);
+        gd.setColor(AppColors.surfaceContainerHigh());
         gd.setCornerRadius(dp(act, 12));
         btn.setBackground(gd);
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(act, 38));
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(act, 40));
         lp.setMargins(dp(act, 8), 0, dp(act, 8), dp(act, 4));
         btn.setLayoutParams(lp);
 
@@ -108,11 +107,10 @@ public final class WmUi {
 
     public static Button makePrimaryBtn(Activity act, String text, Runnable action) {
         Button btn = makeBtn(act, text, action);
-        btn.setTextColor(Color.WHITE);
-        GradientDrawable gd = new GradientDrawable(
-                GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{C_ACCENT, C_ACCENT2});
-        gd.setCornerRadius(dp(act, 12));
+        btn.setTextColor(AppColors.onPrimary());
+        GradientDrawable gd = new GradientDrawable();
+        gd.setColor(C_ACCENT);
+        gd.setCornerRadius(dp(act, 20));
         btn.setBackground(gd);
         btn.setGravity(Gravity.CENTER);
         return btn;
@@ -133,7 +131,7 @@ public final class WmUi {
      */
     public static View makeOverlay(Activity act, View panel, Runnable onDismiss) {
         android.widget.FrameLayout overlay = new android.widget.FrameLayout(act);
-        overlay.setBackgroundColor(0x66000000);
+        overlay.setBackgroundColor(AppColors.bgMask());
         overlay.setClickable(true);
         overlay.setFocusable(true);
         overlay.setOnClickListener(v -> { if (onDismiss != null) onDismiss.run(); });

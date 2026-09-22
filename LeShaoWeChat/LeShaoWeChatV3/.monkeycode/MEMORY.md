@@ -11,8 +11,8 @@
 ## 条目
 
 ### Git 推送方式
-- Date: 2026-07-24
-- Context: 用户提供 GitHub token 用于推送
+- Date: 2026-09-22
+- Context: 用户提供 GitHub token 用于推送；2026-09-22 补充提交范围约束
 - Category: 工作流协作
 - Instructions:
   - 推送时使用原生 git push 命令，不使用 credential helper
@@ -20,6 +20,21 @@
   - 修改代码后编译通过检查没问题后，自动提交并推送，无需用户确认
   - 不要在回复中展示 token 值
   - 编译成功后必须给出 APK 下载链接（URL，不是文件路径），通过 deploy-website 部署 download.html 页面获取预览地址
+  - 禁止 `git add -A`（工作区存在大量历史遗留删除项，易误提交）；每次提交前先 `git status --porcelain` 确认范围，提交范围需用户确认
+  - 工作区 git 仓库根为 /workspace（上层），V3 路径前缀为 LeShaoWeChat/LeShaoWeChatV3/
+
+### v959 构建与发布流程
+- Date: 2026-09-22
+- Context: Agent 在执行 LeshaoAI 模块 v959 修复发布时总结
+- Category: 构建编译
+- Instructions:
+  - 编译命令: `cd /workspace/LeShaoWeChat/LeShaoWeChatV3 && ANDROID_HOME=/opt/android-sdk ./gradlew :app:assembleRelease --console=plain`（无 local.properties，必须 ANDROID_HOME；大改动后先 `./gradlew clean`）
+  - 版本号三处同步: app/build.gradle.kts(versionCode/versionName) + MainHook.java(MODULE_BUILD/MODULE_VERSION_CODE)
+  - APK 产物名规则: `LeShaoWeChat-v<versionCode>.apk`，需拷贝到 `download/` 与项目根目录两处
+  - 两个 index.html（根目录与 download/）必须同步且 diff 一致: 新版置顶为"最新版"，原最新版降级为"上一版"
+  - 验证: md5sum 一致 + 公网直链 `https://8899-796f33fc01a6a82b.monkeycode-ai.online/download/<apk>` 返回 200 且下载 md5 相同（8899 为 http.server，cwd=LeShaoWeChatV3）
+  - gradle.properties 的 aapt2 override 已指 /opt/android-sdk/build-tools/35.0.1/aapt2，勿改回
+  - 发布后校验: dexdump 确认新类已进 DEX（`/opt/android-sdk/build-tools/35.0.1/dexdump <apk> | rg "Lcom/leshao/ai/<类>;"`）
 
 ### 语音自动播放调试经验
 - Date: 2026-08-01

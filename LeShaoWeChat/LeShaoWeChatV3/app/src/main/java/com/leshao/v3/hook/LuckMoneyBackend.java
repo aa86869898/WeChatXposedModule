@@ -61,17 +61,116 @@ public class LuckMoneyBackend {
 
     // ==================== 红包入口 ====================
 
-    public static void grabRedPacket(String talker, String content, long msgId) {
+    /** 延迟(1.2s)后从微信 DB 按 msgSvrId 读取完整 content, 再递归抢红包。
+     *  x9 分发阶段 e9.field_content 可能为空, DB 入库后必含完整 XML。 */
+    private static void retryFromDb(ClassLoader cl, final String talker, final String content,
+            final long msgId) {
+        try {
+            long svrId = msgId < 0 ? -msgId : msgId;
+            new Thread(() -> {
+                try {
+                    Thread.sleep(1200);
+                } catch (InterruptedException ignored) {}
+                try {
+                    String full = readContentFromDb(svrId);
+                    if (full == null || full.isEmpty()) {
+                        LogWriter.log(TAG, "grab: DB retry content null/empty (svrId=" + svrId + ")");
+                        return;
+                    }
+                    String url = parseNativeUrl(cl, full);
+                    if (url == null || url.isEmpty()) {
+                        LogWriter.log(TAG, "grab: DB retry still no nativeUrl (svrId=" + svrId
+                            + ") contentHead=" + truncate(full, 160));
+                        return;
+                    }
+                    LogWriter.log(TAG, "grab: DB retry got nativeUrl (svrId=" + svrId + ")");
+                    doGrab(cl, talker, full, msgId, url);
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "grab: DB retry err: " + t);
+                }
+            }, "RP-DBRetry").start();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "grab: retryFromDb err: " + t);
+        }
+    }
+
+    /** 打开微信消息库, 按 msgSvrId 查完整 content */
+    private static String readContentFromDb(long svrId) {
         try {
             ClassLoader cl = ContextManager.getClassLoader();
-            if (cl == null) return;
-            init(cl);
+            android.content.Context ctx = ContextManager.getAppContext();
+            if (cl == null || ctx == null) return null;
+            long uin = readUin(ctx);
+            if (uin <= 0) return null;
+            String imei = com.leshao.v3.hook.VersionCompat.getImei(cl);
+            String base = com.leshao.v3.hook.VersionCompat.getBaseDir(cl, ctx);
+            String hash = com.leshao.v3.hook.VersionCompat.getDbHash(cl, (int) uin);
+            String dbPath = base + "MicroMsg/" + hash + "/EnMicroMsg.db";
+            String pwd = md5(imei + uin).substring(0, 7);
+            Class<?> opener = com.leshao.v3.hook.VersionCompat.findDbOpenerClass(cl);
+            if (opener == null) return null;
+            Object db = com.leshao.v3.hook.VersionCompat.openDatabase(opener, dbPath, pwd);
+            if (db == null) db = com.leshao.v3.hook.VersionCompat.openDatabaseWcdb(cl, dbPath, pwd);
+            if (db == null) return null;
+            try {
+                for (java.lang.reflect.Method m : db.getClass().getMethods()) {
+                    if (m.getName().equals("rawQuery")
+                            && m.getParameterCount() == 2
+                            && m.getParameterTypes()[0] == String.class
+                            && m.getParameterTypes()[1] == String[].class) {
+                        m.setAccessible(true);
+                        android.database.Cursor c = (android.database.Cursor) m.invoke(db,
+                                "SELECT content FROM message WHERE msgSvrId=? LIMIT 1",
+                                new String[]{String.valueOf(svrId)});
+                        if (c != null) {
+                            try {
+                                if (c.moveToFirst()) {
+                                    String v = c.getString(0);
+                                    if (v != null && !v.isEmpty()) return v;
+                                }
+                            } finally {
+                                c.close();
+                            }
+                        }
+                        break;
+                    }
+                }
+            } catch (Throwable ignored) {}
+            return null;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "readContentFromDb err: " + t);
+            return null;
+        }
+    }
 
-            String nativeUrl = parseNativeUrl(cl, content);
-            if (nativeUrl == null || nativeUrl.isEmpty()) {
-                LogWriter.log(TAG, "grab: no nativeUrl (msgId=" + msgId + ")");
-                return;
+    private static long readUin(android.content.Context ctx) {
+        try {
+            android.content.SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
+            Object uv = sp.getAll().get("default_uin");
+            if (uv != null) {
+                String s = uv.toString();
+                if (s.matches("\\d+")) return Long.parseLong(s);
             }
+        } catch (Throwable ignored) {}
+        return 0;
+    }
+
+    private static String md5(String input) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+            byte[] d = md.digest(input.getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : d) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
+    /** 解析出 URL 后统一走领取链路 (从 grabRedPacket 抽出的公共逻辑) */
+    private static void doGrab(ClassLoader cl, String talker, String content, long msgId,
+            String nativeUrl) {
+        try {
             LogWriter.log(TAG, "grab: nativeUrl=" + truncate(nativeUrl, 90));
 
             // 只抢可识别红包类型（普通/商家）
@@ -109,6 +208,27 @@ public class LuckMoneyBackend {
             boolean dispatched = dispatchScene(cl, scene);
             LogWriter.log(TAG, "grab: dispatched=" + dispatched + " scene="
                 + scene.getClass().getName());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "doGrab err: " + t);
+        }
+    }
+
+    public static void grabRedPacket(String talker, String content, long msgId) {
+        try {
+            ClassLoader cl = ContextManager.getClassLoader();
+            if (cl == null) return;
+            init(cl);
+
+            String nativeUrl = parseNativeUrl(cl, content);
+            if (nativeUrl == null || nativeUrl.isEmpty()) {
+                // 兜底: x9 分发时 e9.content 可能尚未填充, 延迟从 DB 按 msgSvrId 回读完整 content 再解析
+                LogWriter.log(TAG, "grab: no nativeUrl in content (msgId=" + msgId
+                    + ") contentLen=" + (content == null ? 0 : content.length())
+                    + " will retry via DB");
+                retryFromDb(cl, talker, content, msgId);
+                return;
+            }
+            doGrab(cl, talker, content, msgId, nativeUrl);
         } catch (Throwable t) {
             LogWriter.log(TAG, "grabRedPacket err: " + t);
         }

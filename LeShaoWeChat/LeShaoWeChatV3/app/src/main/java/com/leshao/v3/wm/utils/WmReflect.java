@@ -19,7 +19,7 @@ import de.robv.android.xposed.XposedHelpers;
 import com.leshao.v3.LogWriter;
 
 /**
- * 微信反射核心 — 复刻自微信大师 WxReflect
+ * 微信反射核心
  * 多类型群发2_新.md 实证:
  * 核心发送管理器 qs5.v5(MicroMsg.SendMsgMgr), 服务定位 ph5.n0.c(X.class)
  * 文本: mj/nj/oj/pj(toUser,content,type,flag) / hj(atStr,usersCsv,extra) 多群
@@ -36,7 +36,15 @@ public class WmReflect {
     public static Object getSendMsgMgr(ClassLoader cl) {
         try {
             // 8.0.78(3180): 发送管理器 = qs5.v5 (kl5.s5 已失效)。服务定位优先 ph5.n0.c(qs5.v5)
-            String[] locators = {"ph5.n0", "pa5.n0", "hm0.j1", "gp0.j1.j", "gp0.j1"};
+            // v955: 定位器首位改用 DexKit 动态检索结果(特征字符串 "MicroMsg.ServiceManager"),
+            // 严禁硬编码类名作主查找; 下列候选仅作历史版本兜底。
+            java.util.List<String> locatorList = new java.util.ArrayList<>();
+            String dkLoc = com.leshao.v3.hook.DexKitHelper.getServiceLocatorClass();
+            if (dkLoc != null && !dkLoc.isEmpty()) locatorList.add(dkLoc);
+            for (String l : new String[]{"ph5.n0", "pa5.n0", "hm0.j1", "gp0.j1.j", "gp0.j1"}) {
+                if (!locatorList.contains(l)) locatorList.add(l);
+            }
+            String[] locators = locatorList.toArray(new String[0]);
             String[] managers = {"qs5.v5", "kl5.s5"};
             for (String mgrName : managers) {
                 for (String loc : locators) {

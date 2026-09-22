@@ -31,6 +31,7 @@ import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.ui.AppColors;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -157,6 +158,62 @@ public class GroupMemberTools {
         return XposedHelpers.findClass(name, sCL);
     }
 
+    /** 按方法参数签名反射调用(名称已混淆漂移, 兼容 J/P/S/K 等短名与标准 setXxx 全名) */
+    private static boolean invokeBySig(Object obj, String logical, Object[] args) {
+        String[] candidates = new String[]{logical, shortName(logical)};
+        for (String name : candidates) {
+            try {
+                for (Method m : obj.getClass().getMethods()) {
+                    if (!m.getName().equals(name)) continue;
+                    Class<?>[] pts = m.getParameterTypes();
+                    if (pts.length != args.length) continue;
+                    boolean okSig = true;
+                    for (int i = 0; i < args.length; i++) {
+                        Class<?> p = pts[i];
+                        if (p.isPrimitive()) {
+                            if (!primitiveMatch(p, args[i])) { okSig = false; break; }
+                        } else if (args[i] != null && !p.isAssignableFrom(args[i].getClass())
+                                && !interfaceMatch(p, args[i])) {
+                            okSig = false; break;
+                        }
+                    }
+                    if (okSig) {
+                        m.setAccessible(true);
+                        m.invoke(obj, args);
+                        return true;
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        LogWriter.log(TAG, "invokeBySig " + logical + " NOT matched on " + obj.getClass().getName());
+        return false;
+    }
+
+    /** setKey -> K, setTitle -> P, setSummary -> S, setOnPreferenceClickListener -> K */
+    private static String shortName(String logical) {
+        switch (logical) {
+            case "setKey": return "J";
+            case "setTitle": return "P";
+            case "setSummary": return "S";
+            case "setOnPreferenceClickListener": return "K";
+            default: return "";
+        }
+    }
+
+    private static boolean primitiveMatch(Class<?> p, Object v) {
+        if (v == null) return !p.isPrimitive();
+        if (p == int.class) return v instanceof Integer;
+        if (p == boolean.class) return v instanceof Boolean;
+        if (p == long.class) return v instanceof Long;
+        if (p == float.class) return v instanceof Float;
+        if (p == double.class) return v instanceof Double;
+        return false;
+    }
+
+    private static boolean interfaceMatch(Class<?> p, Object v) {
+        return p.isInstance(v);
+    }
+
     /* ================== ① 注入按钮(群成员下方、群聊名称上方) ================== */
     private static void injectButton(Context activity) {
         try {
@@ -170,15 +227,22 @@ public class GroupMemberTools {
             Object btn = load(CLS_BUTTON_PREF)
                     .getConstructor(Context.class, android.util.AttributeSet.class)
                     .newInstance(activity, null);
-            XposedHelpers.callMethod(btn, "J", KEY_BTN);                              // setKey
-            XposedHelpers.callMethod(btn, "P", "◆ 群成员昵称/头像管理");               // setTitle
-            XposedHelpers.callMethod(btn, "S", "成员改动记录 · 修改昵称/查看头像");      // setSummary
+            // 8.0.78 混淆方法名漂移: J/P/S/K 可能变化,
+            // 改为按"方法参数签名"反射调用(setKey(String)/setTitle(String)/setSummary(String)/setOnPreferenceClickListener(接口))
+            invokeBySig(btn, "setKey", new Object[]{KEY_BTN});                              // J
+            invokeBySig(btn, "setTitle", new Object[]{"◆ 群成员昵称/头像管理"});              // P
+            invokeBySig(btn, "setSummary", new Object[]{"成员改动记录 · 修改昵称/查看头像"});   // S
 
             // 点击监听: 动态代理 p0 接口(a(Preference,Object)Z)
+            // 不依赖方法名"a"——8.0.78 接口方法名可能漂移, 改为按签名匹配:
+            // 返回 boolean 且首个参数为 Preference 基类(或 2 参)的方法即视为点击回调
             final Class<?> listenerIface = load(CLS_PREF_CLICK_LISTENER);
             Object listener = Proxy.newProxyInstance(sCL, new Class<?>[]{listenerIface},
                     (proxy, method, args) -> {
-                        if ("a".equals(method.getName())) {
+                        if ("a".equals(method.getName())
+                                || (method.getReturnType() == boolean.class
+                                && method.getParameterTypes().length >= 1
+                                && method.getParameterTypes()[0].isInstance(btn))) {
                             try {
                                 showMemberManager(activity, roomId);
                                 return Boolean.TRUE;
@@ -189,12 +253,16 @@ public class GroupMemberTools {
                         }
                         return defaultReturn(method);
                     });
-            XposedHelpers.callMethod(btn, "K", listener); // setOnPreferenceClickListener
+            invokeBySig(btn, "setOnPreferenceClickListener", new Object[]{listener}); // K
 
             // 插入到 room_name 之前(即群聊名称上方、群成员网格下方)
             int pos = (Integer) XposedHelpers.callMethod(screen, "m", "room_name");
             if (pos < 0) pos = 0;
             XposedHelpers.callMethod(screen, "d", btn, pos);
+            // 关键: PreferenceScreen 插入后需刷新 ListView, 否则文字不显示/点击无效
+            try {
+                XposedHelpers.callMethod(screen, "notifyDataSetChanged");
+            } catch (Throwable ignored) {}
             LogWriter.log(TAG, "injected at pos=" + pos + " room=" + roomId);
         } catch (Throwable t) {
             LogWriter.log(TAG, "injectButton err: " + t);
@@ -236,11 +304,11 @@ public class GroupMemberTools {
         head.setText("群名:" + roomName + "  群资料修改:" + fmt(roomModify)
                 + "\n我的群昵称:" + myRoomNick + "  成员:" + items.size());
         head.setTextSize(13);
-        head.setTextColor(0xFF333333);
+        head.setTextColor(AppColors.onSurface());
         root.addView(head);
 
         ListView list = new ListView(ctx);
-        list.setDivider(new ColorDrawable(0xFFEEEEEE));
+        list.setDivider(new ColorDrawable(AppColors.outlineVariant()));
         list.setDividerHeight(1);
         final MemberAdapter adapter = new MemberAdapter(ctx, items);
         list.setAdapter(adapter);
@@ -438,6 +506,10 @@ public class GroupMemberTools {
             Object svc = callStatic(CLS_J1, "v", load(CLS_C4));
             Object stg = XposedHelpers.callMethod(svc, "cj");
             Object contact = XposedHelpers.callMethod(stg, "n", username, true);
+            if (contact == null) {
+                // 8.0.78 ContactStorage(v7) 取联系人实际是单参 m(String)
+                contact = XposedHelpers.callMethod(stg, "m", username);
+            }
             if (contact != null) {
                 m.wxNick = str(XposedHelpers.callMethod(contact, "M0"));
                 m.remark = str(XposedHelpers.callMethod(contact, "r0"));
@@ -677,7 +749,7 @@ public class GroupMemberTools {
             TextView t1 = new TextView(ctx);
             t1.setText(safe(m.display));
             t1.setTextSize(15);
-            t1.setTextColor(0xFF111111);
+            t1.setTextColor(AppColors.onSurface());
             t1.setSingleLine(true);
             col.addView(t1);
 
@@ -689,7 +761,7 @@ public class GroupMemberTools {
             sub.append("修改:").append(fmt(m.lastModify));
             t2.setText(sub.toString());
             t2.setTextSize(11);
-            t2.setTextColor(0xFF888888);
+            t2.setTextColor(AppColors.onSurfaceVariant());
             t2.setSingleLine(true);
             col.addView(t2);
 

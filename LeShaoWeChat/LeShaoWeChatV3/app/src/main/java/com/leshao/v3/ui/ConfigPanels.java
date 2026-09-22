@@ -12,6 +12,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.*;
+import android.widget.LinearLayout;
 
 import com.leshao.v3.hook.*;
 import com.leshao.v3.model.Contact;
@@ -456,7 +457,7 @@ public class ConfigPanels {
         LinearLayout root = new LinearLayout(act);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding((int)(2*d), (int)(2*d), (int)(2*d), (int)(2*d));
-        root.setBackgroundColor(AppColors.card());
+        root.setBackground(CandyUi.cardBg(act));
 
         String[] keys = {"contact_info_mobile", "contact_info_region", "contact_info_source",
             "contact_info_alias", "contact_info_signature", "contact_info_remark",
@@ -491,7 +492,7 @@ public class ConfigPanels {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14*d), (int)(10*d), (int)(14*d), (int)(10*d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setBackground(CandyUi.cardBg(act));
         CheckBox cb = new CheckBox(act);
         cb.setText(label);
         cb.setTextSize(14);

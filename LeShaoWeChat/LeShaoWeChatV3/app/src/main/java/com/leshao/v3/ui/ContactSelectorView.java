@@ -24,6 +24,7 @@ import android.widget.TextView;
 import com.leshao.v3.ContactRepository;
 import com.leshao.v3.model.ContactCard;
 import com.leshao.v3.model.ContactCard.Category;
+import com.leshao.v3.ui.widgets.M3Page;
 
 import java.util.ArrayList;
 import java.util.Collections;

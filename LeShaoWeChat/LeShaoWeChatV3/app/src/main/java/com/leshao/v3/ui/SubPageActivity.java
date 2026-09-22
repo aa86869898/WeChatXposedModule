@@ -19,6 +19,7 @@ import android.widget.Toast;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.ActivationManager;
+import com.leshao.v3.ui.widgets.M3Page;
 
 public class SubPageActivity {
 

@@ -58,7 +58,16 @@ public class WanQunGroupHook {
     private static String[] CT_OPLIST       = { "d61.k", "d61.j" };
     private static String[] CT_STORAGE_Z2   = { "com.tencent.mm.storage.z2", "com.tencent.mm.storage.z3",
                                                 "com.tencent.mm.storage.a3" };
+    // v955: 定位器 DexKit 动态检索优先(见 getSvcLocatorClasses), 硬编码仅历史兜底
     private static String[] CT_SVC_N0       = { "ph5.n0", "pa5.n0" };
+
+    private static String[] getSvcLocatorClasses() {
+        java.util.List<String> list = new java.util.ArrayList<>();
+        String dk = com.leshao.v3.hook.DexKitHelper.getServiceLocatorClass();
+        if (dk != null && !dk.isEmpty()) list.add(dk);
+        for (String s : CT_SVC_N0) if (!list.contains(s)) list.add(s);
+        return list.toArray(new String[0]);
+    }
     private static String[] CT_MSG_SVC      = { "com.tencent.mm.plugin.messenger.foundation.h2",
                                                 "com.tencent.mm.plugin.messenger.foundation.h3" };
 
@@ -356,7 +365,7 @@ public class WanQunGroupHook {
             Class<?> z2 = first(CT_STORAGE_Z2);
             if (z2 == null) return null;
             Object svc = null;
-            Class<?> svcN0 = first(CT_SVC_N0);
+            Class<?> svcN0 = first(getSvcLocatorClasses());
             Class<?> msgSvc = first(CT_MSG_SVC);
             if (svcN0 != null && msgSvc != null) {
                 svc = XposedHelpers.callStaticMethod(svcN0, "c", new Object[]{msgSvc});

@@ -213,11 +213,13 @@ public class WxChatBridge {
     /* ================== 反射工具 ================== */
 
     private static Class<?> findJ1Class(ClassLoader cl) {
+        // v955: DexKit 动态检索优先(特征字符串 "Kernel not initialized" + v/s(Class) 签名),
+        // 硬编码候选仅历史版本兜底; 3180 实证为 gp0.j1(仅 v(Class) 方法)
         String dk = DexKitHelper.getJ1ServiceClass();
         if (dk != null && !dk.isEmpty()) {
             try { return XposedHelpers.findClass(dk, cl); } catch (Throwable ignored) {}
         }
-        for (String n : new String[]{C_J1, C_J1_ALT, "hm0.j1", "fp0.j1", "fp0.j1.j"}) {
+        for (String n : new String[]{C_J1, C_J1_ALT, "gp0.j1", "hm0.j1", "fp0.j1", "fp0.j1.j"}) {
             try { return XposedHelpers.findClass(n, cl); } catch (Throwable ignored) {}
         }
         return null;

@@ -17,6 +17,7 @@ import android.widget.TextView;
 
 import com.leshao.v3.hook.ContactChangeLog;
 import com.leshao.v3.model.ContactChangeRecord;
+import com.leshao.v3.ui.widgets.M3Page;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -42,7 +43,7 @@ public class ContactChangeLogPageView {
 
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackgroundColor(AppColors.card());
+        card.setBackground(CandyUi.cardBg(ctx));
         card.setPadding((int)(2*d), (int)(2*d), (int)(2*d), (int)(2*d));
         final LinearLayout cardRef = card;
 
@@ -116,7 +117,7 @@ public class ContactChangeLogPageView {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.VERTICAL);
         row.setPadding((int)(14*d), (int)(10*d), (int)(14*d), (int)(10*d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setBackground(CandyUi.cardBg(ctx));
 
         LinearLayout header = new LinearLayout(ctx);
         header.setOrientation(LinearLayout.HORIZONTAL);
@@ -273,14 +274,6 @@ public class ContactChangeLogPageView {
     }
 
     private static View candyDivider(Context ctx, float d) {
-        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
-        View v = new View(ctx);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
-        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
-        v.setLayoutParams(lp);
-        v.setBackground(gd);
-        return v;
+        return M3Page.divider(ctx);
     }
 }

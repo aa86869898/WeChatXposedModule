@@ -761,8 +761,8 @@ private static void injectButton(final Activity act) {
 
     private static GradientDrawable makeAvatarBg(String u) {
         int[] candy = AppColors.isDarkMode()
-                ? new int[]{0xFF7A4A63, 0xFF5B3A8A, 0xFF2E6E8E, 0xFF8A6E3A, 0xFF2E6E5B, 0xFF4A4A8A}
-                : new int[]{0xFFFF6B8A, 0xFFA855F7, 0xFF38BDF8, 0xFFF59E0B, 0xFF10B981, 0xFF6366F1};
+                ? new int[]{AppColors.primaryDark(), AppColors.tertiary(), AppColors.secondary(), AppColors.primary(), AppColors.primaryDark(), AppColors.tertiary()}
+                : new int[]{AppColors.primary(), AppColors.tertiary(), AppColors.secondary(), AppColors.primaryDark(), AppColors.primary(), AppColors.tertiary()};
         int idx = Math.abs(u == null ? 0 : u.hashCode()) % candy.length;
         GradientDrawable gd = new GradientDrawable();
         gd.setColor(candy[idx]);

@@ -2,100 +2,87 @@ package com.leshao.v3.ui;
 
 import android.app.Activity;
 import android.content.Context;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
-import android.widget.LinearLayout;
-import android.widget.ScrollView;
+import android.view.ViewGroup;
 import android.widget.TextView;
+import android.widget.LinearLayout;
 
 import com.leshao.v3.ContactRepository;
 import com.leshao.v3.service.StatsCollector;
+import com.leshao.v3.ui.widgets.M3Page;
 
 import java.util.List;
 
+/**
+ * 数据统计页（v955 M3 重排）：联系人统计 + 撤回记录。
+ * 业务逻辑（ContactRepository 异步加载/StatsCollector）与原版一致。
+ */
 public class StatsPageView {
 
     public static View create(Context ctx, Activity parentAct) {
-        float d = ctx.getResources().getDisplayMetrics().density;
+        LinearLayout root = M3Page.root(ctx);
 
-        LinearLayout root = new LinearLayout(ctx);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(d, 16), dp(d, 16), dp(d, 16), dp(d, 16));
+        // ============ 数据统计 ============
+        root.addView(M3Page.section(ctx, "数据统计"));
 
-        root.addView(sLabel(ctx, d, "数据统计"));
-
+        LinearLayout cardStats = M3Page.card(ctx);
         final TextView friendTv = new TextView(ctx);
+        friendTv.setTextSize(14);
+        friendTv.setTextColor(AppColors.onSurface());
         final TextView groupTv = new TextView(ctx);
-        root.addView(infoRow(ctx, d, "好友数", friendTv));
-        root.addView(infoRow(ctx, d, "群聊数", groupTv));
+        groupTv.setTextSize(14);
+        groupTv.setTextColor(AppColors.onSurface());
+
+        View friendRow = M3Page.infoRow(ctx, "好友数", "");
+        replaceValueSlot(friendRow, friendTv);
+        cardStats.addView(friendRow);
+        cardStats.addView(M3Page.divider(ctx));
+        View groupRow = M3Page.infoRow(ctx, "群聊数", "");
+        replaceValueSlot(groupRow, groupTv);
+        cardStats.addView(groupRow);
+        root.addView(cardStats);
+
         updateCounts(friendTv, groupTv);
         ContactRepository.loadAsync(() ->
                 new Handler(Looper.getMainLooper()).post(() -> updateCounts(friendTv, groupTv)));
 
-        root.addView(candyDivider(ctx, d));
-
-        root.addView(sLabel(ctx, d, "最近撤回记录"));
+        // ============ 最近撤回记录 ============
+        root.addView(M3Page.section(ctx, "最近撤回记录"));
         List<String> recalls = StatsCollector.getRecallRecords();
         if (recalls.isEmpty()) {
-            root.addView(tv(ctx, d, "暂无撤回记录"));
+            root.addView(M3Page.empty(ctx, "📭", "暂无撤回记录"));
         } else {
+            LinearLayout cardRecall = M3Page.card(ctx);
             int start = Math.max(0, recalls.size() - 20);
+            boolean first = true;
             for (int i = start; i < recalls.size(); i++) {
-                root.addView(tv(ctx, d, recalls.get(i)));
+                if (!first) cardRecall.addView(M3Page.divider(ctx));
+                first = false;
+                cardRecall.addView(M3Page.infoRow(ctx, recalls.get(i), null));
             }
+            root.addView(cardRecall);
         }
 
-        ScrollView sv = new ScrollView(ctx);
-        sv.addView(root);
-        return sv;
+        return M3Page.scroll(ctx, root);
     }
 
-    private static TextView sLabel(Context ctx, float d, String t) {
-        TextView tv = new TextView(ctx); tv.setText(t); tv.setTextSize(18);
-        tv.setPadding(0, dp(d, 16), 0, dp(d, 8)); tv.getPaint().setFakeBoldText(true); return tv;
-    }
-
-    private static LinearLayout infoRow(Context ctx, float d, String label, String value) {
-        LinearLayout row = new LinearLayout(ctx); row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(0, dp(d, 4), 0, dp(d, 4));
-        TextView t1 = new TextView(ctx); t1.setText(label + ": "); t1.setTextSize(14);
-        t1.getPaint().setFakeBoldText(true); row.addView(t1);
-        TextView t2 = new TextView(ctx); t2.setText(value); t2.setTextSize(14);
-        row.addView(t2); return row;
-    }
-
-    private static LinearLayout infoRow(Context ctx, float d, String label, TextView valueTv) {
-        LinearLayout row = new LinearLayout(ctx); row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(0, dp(d, 4), 0, dp(d, 4));
-        TextView t1 = new TextView(ctx); t1.setText(label + ": "); t1.setTextSize(14);
-        t1.getPaint().setFakeBoldText(true); row.addView(t1);
-        valueTv.setTextSize(14);
-        row.addView(valueTv); return row;
+    /** 把 infoRow 的值槽位替换为可动态更新的 TextView */
+    private static void replaceValueSlot(View row, TextView valueTv) {
+        try {
+            if (row instanceof ViewGroup && ((ViewGroup) row).getChildCount() >= 2) {
+                ViewGroup vg = (ViewGroup) row;
+                vg.removeViewAt(1);
+                vg.addView(valueTv);
+            }
+        } catch (Throwable ignored) {}
     }
 
     private static void updateCounts(TextView friendTv, TextView groupTv) {
-        friendTv.setText(String.valueOf(ContactRepository.getFriends().size()));
-        groupTv.setText(String.valueOf(ContactRepository.getGroups().size()));
+        try {
+            friendTv.setText(String.valueOf(ContactRepository.getFriends().size()));
+            groupTv.setText(String.valueOf(ContactRepository.getGroups().size()));
+        } catch (Throwable ignored) {}
     }
-
-    private static TextView tv(Context ctx, float d, String text) {
-        TextView t = new TextView(ctx); t.setText(text); t.setTextSize(13);
-        t.setPadding(0, dp(d, 2), 0, dp(d, 2)); return t;
-    }
-
-    private static View candyDivider(Context ctx, float d) {
-        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
-        View v = new View(ctx);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
-        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
-        v.setLayoutParams(lp);
-        v.setBackground(gd);
-        return v;
-    }
-
-    private static int dp(float density, int dp) { return (int) (dp * density + 0.5f); }
 }

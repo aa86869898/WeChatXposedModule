@@ -846,14 +846,32 @@ public class VoiceForwardHook {
 
     private static String getUinHash(ClassLoader cl) {
         try {
+            // v955: kernel.g/h 在 3180 已并入 gp0.j1(服务定位器); 旧候选保留, 新增 3180 路径
             for (String clsName : new String[]{
                 "com.tencent.mm.kernel.h",
                 "com.tencent.mm.kernel.g",
+                "gp0.j1",
                 "com.tencent.mm.sdk.platformtools.x"
             }) {
                 try {
-                    Object acc = XposedHelpers.callStaticMethod(
-                        XposedHelpers.findClass(clsName, cl), "c");
+                    Object acc = null;
+                    Class<?> kc = XposedHelpers.findClass(clsName, cl);
+                    // kernel.g/h: c() 取 account; gp0.j1: b() 取 kernel(再取 account)
+                    for (String mn : new String[]{"c", "b"}) {
+                        try {
+                            Object r = XposedHelpers.callStaticMethod(kc, mn);
+                            if (r != null) {
+                                if (mn.equals("b")) {
+                                    // gp0.j1.b() → kernel 对象, 再试其 c()/account
+                                    try { acc = XposedHelpers.callMethod(r, "c"); } catch (Throwable ignored) {}
+                                    if (acc == null) acc = r;
+                                } else {
+                                    acc = r;
+                                }
+                                if (acc != null) break;
+                            }
+                        } catch (Throwable ignored) {}
+                    }
                     if (acc != null) {
                         long uin = 0;
                         try { uin = XposedHelpers.getIntField(acc, "e"); } catch (Throwable ignored) {}

@@ -12,6 +12,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.leshao.v3.hook.BatchAddRecordStore;
+import com.leshao.v3.ui.widgets.M3Page;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -39,7 +40,7 @@ public class BatchAddRecordPageView {
         LinearLayout tabBar = new LinearLayout(ctx);
         tabBar.setOrientation(LinearLayout.HORIZONTAL);
         tabBar.setGravity(Gravity.CENTER);
-        tabBar.setBackgroundColor(AppColors.card());
+        tabBar.setBackground(CandyUi.cardBg(ctx));
         tabBar.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
         GradientDrawable tabBg = new GradientDrawable();
         tabBg.setColor(AppColors.card());
@@ -156,7 +157,7 @@ public class BatchAddRecordPageView {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14 * d), (int)(10 * d), (int)(14 * d), (int)(10 * d));
-        row.setBackgroundColor(AppColors.card());
+        row.setBackground(CandyUi.cardBg(ctx));
 
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
@@ -203,14 +204,6 @@ public class BatchAddRecordPageView {
     }
 
     private static View candyDivider(Context ctx, float d) {
-        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
-        View v = new View(ctx);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
-        lp.setMargins((int)(12 * d), (int)(8 * d), (int)(12 * d), (int)(8 * d));
-        v.setLayoutParams(lp);
-        v.setBackground(gd);
-        return v;
+        return M3Page.divider(ctx);
     }
 }

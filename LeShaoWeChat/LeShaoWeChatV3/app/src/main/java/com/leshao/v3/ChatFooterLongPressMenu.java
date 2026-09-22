@@ -350,23 +350,20 @@ public class ChatFooterLongPressMenu {
         int p10 = dp(ctx, 10);
         int p12 = dp(ctx, 12);
 
-        // 主容器（垂直）
+        // 主容器（垂直）— v955 M3: 28dp extra-large 圆角对话框
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(cardBg);
+        root.setBackground(CandyUi.dialogBg(ctx));
         root.setPadding(p8, dp(ctx, 4), p8, p8);
 
-        // 标题栏（横跨，居中）
+        // 标题栏（横跨，居中）— v955 M3: 20sp onSurface 粗体
         TextView titleBar = new TextView(ctx);
         titleBar.setText("乐少音频转语音助手");
-        titleBar.setTextSize(13);
-        titleBar.setTextColor(AppColors.text1());
+        titleBar.setTextSize(18);
+        titleBar.setTextColor(AppColors.onSurface());
+        titleBar.setTypeface(null, android.graphics.Typeface.BOLD);
         titleBar.setGravity(Gravity.CENTER);
-        titleBar.setPadding(0, dp(ctx, 3), 0, p6);
-        GradientDrawable titleBg = new GradientDrawable();
-        titleBg.setColor(AppColors.inputBg());
-        titleBg.setCornerRadius(p6);
-        titleBar.setBackground(titleBg);
+        titleBar.setPadding(0, dp(ctx, 6), 0, p8);
         root.addView(titleBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -434,27 +431,31 @@ public class ChatFooterLongPressMenu {
         int text1 = AppColors.text1();
         int text2 = AppColors.text2();
         int accent = AppColors.accent();
-        int divider = AppColors.divider();
-        int whiteOnAccent = AppColors.WHITE_TEXT;
 
         int p6 = dp(ctx, 6);
         int p8 = dp(ctx, 8);
         int p10 = dp(ctx, 10);
         int p12 = dp(ctx, 12);
 
+        // v955 M3 重排: 分区卡片结构(文件→选项→转换)
         LinearLayout panel = new LinearLayout(ctx);
         panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(0x00000000);
+
+        // ===== 分区1: 音频文件(卡片) =====
+        panel.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "音频文件", "选择要转换的音频"));
+        LinearLayout cardFile = com.leshao.v3.ui.widgets.M3Page.card(ctx);
 
         // 文件选择行: [路径文本] [选择]
         LinearLayout fileRow = new LinearLayout(ctx);
         fileRow.setOrientation(LinearLayout.HORIZONTAL);
-        fileRow.setPadding(0, 0, 0, p8);
+        fileRow.setPadding(p12, p10, p12, p8);
 
         final TextView pathText = new TextView(ctx);
         pathText.setTextSize(12);
         pathText.setTextColor(text1);
         pathText.setPadding(p8, p8, p8, p8);
-        pathText.setBackgroundColor(AppColors.inputBg());
+        pathText.setBackground(CandyUi.inputBg(ctx));
         pathText.setText(sLastPickedPath != null ? sLastPickedPath : "未选择文件");
         pathText.setMaxLines(1);
         pathText.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
@@ -465,12 +466,12 @@ public class ChatFooterLongPressMenu {
         TextView browseBtn = new TextView(ctx);
         browseBtn.setText("选择");
         browseBtn.setTextSize(12);
-        browseBtn.setTextColor(whiteOnAccent);
+        browseBtn.setTextColor(AppColors.textOnPrimary());
         browseBtn.setGravity(Gravity.CENTER);
         browseBtn.        setPadding(dp(ctx, 4), p8, dp(ctx, 4), p8);
         GradientDrawable browseBg = new GradientDrawable();
-        browseBg.setColor(accent);
-        browseBg.setCornerRadius(p6);
+        browseBg.setColor(AppColors.primary());
+        browseBg.setCornerRadius(dp(ctx, 20));
         browseBtn.setBackground(browseBg);
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -478,18 +479,25 @@ public class ChatFooterLongPressMenu {
         fileRow.addView(browseBtn, btnLp);
         panel.addView(fileRow);
 
+        cardFile.addView(fileRow);
+
         // 已选文件名显示
         final TextView fileNameTv = new TextView(ctx);
-        fileNameTv.setTextSize(11);
+        fileNameTv.setTextSize(13);
         fileNameTv.setTextColor(text2);
-        fileNameTv.setPadding(0, 0, 0, p6);
+        fileNameTv.setPadding(p12, 0, p12, p10);
         fileNameTv.setVisibility(View.GONE);
-        panel.addView(fileNameTv);
+        cardFile.addView(fileNameTv);
+        panel.addView(cardFile);
+
+        // ===== 分区2: 处理选项(卡片) =====
+        panel.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "处理选项", "切割 / 历史 / 音质模式"));
+        LinearLayout cardOpt = com.leshao.v3.ui.widgets.M3Page.card(ctx);
 
         // 音频切割 / 历史记录 按钮行
         LinearLayout btnRow = new LinearLayout(ctx);
         btnRow.setOrientation(LinearLayout.HORIZONTAL);
-        btnRow.setPadding(0, 0, 0, p8);
+        btnRow.setPadding(p12, p10, p12, p8);
 
         final TextView cutBtn = new TextView(ctx);
         cutBtn.setText("音频切割");
@@ -498,9 +506,11 @@ public class ChatFooterLongPressMenu {
         cutBtn.setGravity(Gravity.CENTER);
         cutBtn.setPadding(dp(ctx, 4), p6, dp(ctx, 4), p6);
         GradientDrawable cutBg = new GradientDrawable();
-        cutBg.setStroke(dp(ctx, 1), accent);
-        cutBg.setCornerRadius(p6);
+        cutBg.setStroke(dp(ctx, 1), AppColors.outline());
+        cutBg.setCornerRadius(dp(ctx, 20));
+        cutBg.setColor(0x00000000);
         cutBtn.setBackground(cutBg);
+        cutBtn.setTextColor(AppColors.primary());
         cutBtn.setVisibility(View.GONE);
         LinearLayout.LayoutParams cutLp = new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -514,65 +524,69 @@ public class ChatFooterLongPressMenu {
         historyBtn.setGravity(Gravity.CENTER);
         historyBtn.setPadding(dp(ctx, 4), p6, dp(ctx, 4), p6);
         GradientDrawable hBg = new GradientDrawable();
-        hBg.setColor(AppColors.inputBg());
-        hBg.setStroke(dp(ctx, 1), divider);
-        hBg.setCornerRadius(p6);
+        hBg.setColor(AppColors.surfaceContainerHigh());
+        hBg.setStroke(dp(ctx, 1), AppColors.outlineVariant());
+        hBg.setCornerRadius(dp(ctx, 20));
         historyBtn.setBackground(hBg);
         LinearLayout.LayoutParams histLp = new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         histLp.leftMargin = p6;
         btnRow.addView(historyBtn, histLp);
-        panel.addView(btnRow);
+        cardOpt.addView(btnRow);
+        cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
 
-        // 进度条
+        // 双模式开关: 人声增强 / 原音还原 (M3 列表行)
+        Switch modeSw = CandyUi.newSwitch(ctx);
+        modeSw.setChecked(WmPrefs.get("voice_enhance", false));
+        modeSw.setOnCheckedChangeListener((b, checked) -> WmPrefs.set("voice_enhance", checked));
+        cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.tailRow(ctx, "🎙", "人声增强",
+                "开启=人声增强链; 关闭=原音还原(默认)", modeSw));
+        cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+
+        // 进度条(归入选项卡片, M3 主色)
         final ProgressBar progressBar = new ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal);
         progressBar.setMax(100);
         progressBar.setProgress(0);
         progressBar.setVisibility(View.GONE);
-        LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(-1, dp(ctx, 4));
-        pbLp.bottomMargin = p8;
-        panel.addView(progressBar, pbLp);
+        LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(-1, dp(ctx, 6));
+        pbLp.setMargins(p12, p8, p12, 0);
+        cardOpt.addView(progressBar, pbLp);
 
         // 进度文字
         final TextView progressText = new TextView(ctx);
-        progressText.setTextSize(11);
+        progressText.setTextSize(13);
         progressText.setTextColor(text2);
         progressText.setGravity(Gravity.CENTER);
         progressText.setVisibility(View.GONE);
-        progressText.setPadding(0, 0, 0, p6);
-        panel.addView(progressText);
+        progressText.setPadding(p12, p6, p12, p10);
+        cardOpt.addView(progressText);
+        panel.addView(cardOpt);
 
-        // 双模式开关: 人声增强 / 原音还原 (放转换按钮上面)
-        LinearLayout modeRow = new LinearLayout(ctx);
-        modeRow.setOrientation(LinearLayout.HORIZONTAL);
-        modeRow.setGravity(Gravity.CENTER_VERTICAL);
-        modeRow.setPadding(0, 0, 0, p6);
-        TextView modeLbl = new TextView(ctx);
-        modeLbl.setText("人声增强");
-        modeLbl.setTextSize(12);
-        modeLbl.setTextColor(text1);
-        LinearLayout.LayoutParams modeLblLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        modeLblLp.weight = 1f;
-        modeRow.addView(modeLbl, modeLblLp);
-        Switch modeSw = CandyUi.newSwitch(ctx);
-        modeSw.setChecked(WmPrefs.get("voice_enhance", false));
-        modeSw.setOnCheckedChangeListener((b, checked) -> WmPrefs.set("voice_enhance", checked));
-        modeRow.addView(modeSw);
-        panel.addView(modeRow);
+        // ===== 分区3: 转换(独立卡片 + M3 filled 按钮) =====
+        panel.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "开始转换", "MP3/音频 → 微信语音消息"));
+        LinearLayout cardConv = com.leshao.v3.ui.widgets.M3Page.card(ctx);
+        LinearLayout convRow = new LinearLayout(ctx);
+        convRow.setOrientation(LinearLayout.HORIZONTAL);
+        convRow.setPadding(p12, p10, p12, p10);
 
         // 转码按钮
+        // v955 M3: 转换按钮改 ModernButton filled(全圆角主色, 40dp 高)
         final TextView convertBtn = new TextView(ctx);
-        convertBtn.setText("转换");
-        convertBtn.setTextSize(13);
-        convertBtn.setTextColor(whiteOnAccent);
+        convertBtn.setText("开始转换");
+        convertBtn.setTextSize(15);
+        convertBtn.setTextColor(AppColors.textOnPrimary());
+        convertBtn.setTypeface(null, android.graphics.Typeface.BOLD);
         convertBtn.setGravity(Gravity.CENTER);
-        convertBtn.setPadding(dp(ctx, 4), p8, dp(ctx, 4), p8);
+        convertBtn.setPadding(dp(ctx, 16), dp(ctx, 12), dp(ctx, 16), dp(ctx, 12));
         GradientDrawable cvtBg = new GradientDrawable();
-        cvtBg.setColor(accent);
-        cvtBg.setCornerRadius(p6);
+        cvtBg.setColor(AppColors.primary());
+        cvtBg.setCornerRadius(dp(ctx, 20));
         convertBtn.setBackground(cvtBg);
-        panel.addView(convertBtn);
+        LinearLayout.LayoutParams cvtLp = new LinearLayout.LayoutParams(-1, dp(ctx, 44));
+        convertBtn.setLayoutParams(cvtLp);
+        convRow.addView(convertBtn);
+        cardConv.addView(convRow);
+        panel.addView(cardConv);
 
         // 事件绑定
         browseBtn.setOnClickListener(v -> {
@@ -961,7 +975,7 @@ public class ChatFooterLongPressMenu {
         startInput.setText("0");
         startInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         startInput.setTextColor(text1);
-        startInput.setBackgroundColor(AppColors.inputBg());
+        startInput.setBackground(CandyUi.inputBg(ctx));
         startInput.setPadding(p12, p8, p12, p8);
         root.addView(startInput);
 
@@ -980,7 +994,7 @@ public class ChatFooterLongPressMenu {
         endInput.setText("0");
         endInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         endInput.setTextColor(text1);
-        endInput.setBackgroundColor(AppColors.inputBg());
+        endInput.setBackground(CandyUi.inputBg(ctx));
         endInput.setPadding(p12, p8, p12, p8);
         root.addView(endInput);
 
@@ -1423,30 +1437,41 @@ public class ChatFooterLongPressMenu {
     }
 
     private static LinearLayout createProgressView(Context ctx, float d) {
+        // v955 M3: 28dp 圆角对话框 + 主色百分比 + 层级化文案
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
-        root.setPadding((int)(16 * d), (int)(10 * d), (int)(16 * d), (int)(10 * d));
-        root.setMinimumWidth((int)(240 * d));
+        root.setBackground(CandyUi.dialogBg(ctx));
+        root.setPadding((int)(24 * d), (int)(24 * d), (int)(24 * d), (int)(20 * d));
+        root.setMinimumWidth((int)(260 * d));
+
+        TextView title = new TextView(ctx);
+        title.setText("音频转语音");
+        title.setTextSize(18);
+        title.setTextColor(AppColors.onSurface());
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(0, 0, 0, (int)(12 * d));
+        root.addView(title);
 
         android.widget.ProgressBar bar = new android.widget.ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal);
         bar.setIndeterminate(true);
-        int barH = (int)(4 * d);
+        int barH = (int)(6 * d);
         bar.setLayoutParams(new LinearLayout.LayoutParams(-1, barH));
         root.addView(bar);
 
         TextView pct = new TextView(ctx);
-        pct.setTextSize(24);
-        pct.setTextColor(AppColors.accent());
+        pct.setTextSize(28);
+        pct.setTextColor(AppColors.primary());
         pct.setTypeface(null, android.graphics.Typeface.BOLD);
         pct.setGravity(Gravity.CENTER);
-        pct.setPadding(0, (int)(6 * d), 0, 0);
+        pct.setPadding(0, (int)(10 * d), 0, 0);
         root.addView(pct);
 
         TextView label = new TextView(ctx);
         label.setText("正在解码音频...");
         label.setTextSize(14);
-        label.setTextColor(AppColors.text2());
+        label.setTextColor(AppColors.onSurfaceVariant());
         label.setGravity(Gravity.CENTER);
         label.setPadding(0, (int)(4 * d), 0, 0);
         root.addView(label);

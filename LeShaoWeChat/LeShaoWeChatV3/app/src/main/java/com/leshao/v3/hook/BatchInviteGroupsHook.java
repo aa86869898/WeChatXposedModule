@@ -4,6 +4,7 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.model.ModuleConfig;
 
+import android.app.Activity;
 import android.content.Context;
 import android.database.Cursor;
 import android.os.Handler;
@@ -268,7 +269,10 @@ public class BatchInviteGroupsHook {
 
             new Handler(Looper.getMainLooper()).post(() -> {
                 try {
-                    Context ctx = ContextManager.getAppContext();
+                    // application context 无 window token 会抛 "Unable to add window -- token null",
+                    // 必须用当前可见 Activity context
+                    Context ctx = currentActivityContext();
+                    if (ctx == null) ctx = ContextManager.getAppContext();
                     android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(ctx)
                             .setTitle("选择要邀请的群 (" + invitable.size() + " 个)")
                             .setMultiChoiceItems(names, checked, (d, which, isChecked) ->
@@ -516,15 +520,18 @@ public class BatchInviteGroupsHook {
         }
     }
 
-    /** ④-a. 直连网络场景: new qn.m(room, [friend], "", null) + r1 派发 */
+    /** ④-a. 直连网络场景: new qn.m(room, [friend], "", null) + 设置 scene 回调字段 + r1 派发
+     *  v955 修复(3180 实证): qn.m.onSceneEnd 第182行 this.f398658e.onSceneEnd(...) 无 null 检查,
+     *  旧版只把 callback 注册进 NetSceneQueue(r1.a) 而未设置 scene.f398658e 字段,
+     *  CGI 响应回来必然 NPE 闪退。且 r1.a() 内部的 n2.b 泄漏检测对 Proxy 抛
+     *  InvocationTargetException(message=null)。修复: 直接反射写 f398658e 字段 + g() 派发,
+     *  队列注册非必需(qn.m 不走队列回调路径)。 */
     private static boolean inviteViaNetScene(final Object netSceneMgr, final String room,
             final String friend) {
         try {
             Object scene = XposedHelpers.newInstance(
                     XposedHelpers.findClass(WxCls.QN_M, sCL),
                     room, Collections.singletonList(friend), "", null);
-            // getType() 在部分版本返回 null, 直接 (int) 拆箱抛 NPE
-            int type = safeSceneType(scene);
             final boolean[] done = {false};
             final boolean[] ok = {false};
             final Object lock = new Object();
@@ -548,16 +555,104 @@ public class BatchInviteGroupsHook {
                         }
                         return null;
                     });
-            XposedHelpers.callMethod(netSceneMgr, "a", type, cb);
-            XposedHelpers.callMethod(netSceneMgr, "g", scene);
+            // v955: 必须先写 scene 自身回调字段, 否则 onSceneEnd 内 this.f398658e NPE 闪退
+            boolean cbSet = false;
+            for (java.lang.reflect.Field f : scene.getClass().getFields()) {
+                if (f.getType() == u0) {
+                    f.setAccessible(true);
+                    f.set(scene, cb);
+                    cbSet = true;
+                    LogWriter.log(TAG, "inviteViaNetScene: scene callback field set: " + f.getName());
+                    break;
+                }
+            }
+            // 字段名兜底(实证字段名 f398658e)
+            if (!cbSet) {
+                for (String fn : new String[]{"f398658e", "e"}) {
+                    try {
+                        java.lang.reflect.Field f = scene.getClass().getField(fn);
+                        f.setAccessible(true);
+                        f.set(scene, cb);
+                        cbSet = true;
+                        LogWriter.log(TAG, "inviteViaNetScene: scene callback field set by name: " + fn);
+                        break;
+                    } catch (Throwable ignored) {}
+                }
+            }
+            if (!cbSet) {
+                LogWriter.log(TAG, "inviteViaNetScene: scene callback field NOT set, abort to avoid crash");
+                return false;
+            }
+
+            // 派发: r1.g(NetScene)
+            boolean disp = invokeNetSceneCall(netSceneMgr, "g", new Object[]{scene});
+            if (!disp) {
+                LogWriter.log(TAG, "inviteViaNetScene: netSceneMgr.g() not found");
+                return false;
+            }
             synchronized (lock) {
-                if (!done[0]) lock.wait(8000);
+                if (!done[0]) lock.wait(10000);
             }
             return ok[0];
         } catch (Throwable e) {
             LogWriter.log(TAG, "inviteViaNetScene err: " + e.getMessage());
             return false;
         }
+    }
+
+    /** 反射安全调用 netSceneMgr 方法: 不拆箱原始类型(返回 int 但 null 时不再抛 NPE) */
+    private static boolean invokeNetSceneCall(Object mgr, String name, Object[] args) {
+        try {
+            Class<?>[] pts = new Class<?>[args.length];
+            for (int i = 0; i < args.length; i++) pts[i] = args[i] == null ? Object.class : args[i].getClass();
+            java.lang.reflect.Method m = null;
+            for (java.lang.reflect.Method mm : mgr.getClass().getDeclaredMethods()) {
+                if (!mm.getName().equals(name)) continue;
+                if (mm.getParameterCount() != args.length) continue;
+                boolean match = true;
+                for (int i = 0; i < args.length; i++) {
+                    Class<?> p = mm.getParameterTypes()[i];
+                    if (p == boolean.class) { match = false; break; }
+                    if (p.isPrimitive()) {
+                        if (!isAssignablePrimitive(p, pts[i])) { match = false; break; }
+                    } else if (!p.isAssignableFrom(pts[i]) && args[i] != null
+                            && !isBoxedAssignable(p, pts[i])) {
+                        match = false; break;
+                    }
+                }
+                if (match) { m = mm; break; }
+            }
+            if (m == null) {
+                // 兜底: 按参数个数 + 参数0类型宽松匹配
+                for (java.lang.reflect.Method mm : mgr.getClass().getDeclaredMethods()) {
+                    if (mm.getName().equals(name) && mm.getParameterCount() == args.length) {
+                        m = mm; break;
+                    }
+                }
+            }
+            if (m == null) return false;
+            m.setAccessible(true);
+            Object r = m.invoke(mgr, args);
+            LogWriter.log(TAG, "invokeNetSceneCall " + name + " -> " + r);
+            return true;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "invokeNetSceneCall " + name + " err: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private static boolean isAssignablePrimitive(Class<?> p, Class<?> v) {
+        if (v == null) return !p.isPrimitive();
+        if (p == int.class) return v == Integer.class || v == Integer.TYPE;
+        if (p == boolean.class) return v == Boolean.class || v == Boolean.TYPE;
+        if (p == long.class) return v == Long.class || v == Long.TYPE;
+        if (p == float.class) return v == Float.class || v == Float.TYPE;
+        if (p == double.class) return v == Double.class || v == Double.TYPE;
+        return true;
+    }
+
+    private static boolean isBoxedAssignable(Class<?> p, Class<?> v) {
+        return p.isAssignableFrom(v);
     }
 
     /** ④-b. 群操作服务路线: uf0.e.bj(群名) -> pe5.f.j(群名,List,原因,null) */
@@ -583,6 +678,59 @@ public class BatchInviteGroupsHook {
     private static Object getNetSceneManager() throws Throwable {
         Class<?> h9 = XposedHelpers.findClass(WxCls.H9, sCL);
         return XposedHelpers.callStaticMethod(h9, "e");
+    }
+
+    /** 获取当前 resume 的 Activity context(遍历 ActivityThread 中的 mActivities) */
+    private static Context currentActivityContext() {
+        try {
+            Class<?> atCls = Class.forName("android.app.ActivityThread");
+            java.lang.reflect.Method cur = atCls.getDeclaredMethod("currentActivityThread");
+            cur.setAccessible(true);
+            Object at = cur.invoke(null);
+            if (at == null) return null;
+            java.lang.reflect.Field mActivities = atCls.getDeclaredField("mActivities");
+            mActivities.setAccessible(true);
+            Object actMap = mActivities.get(at);
+            if (!(actMap instanceof java.util.Map)) return null;
+            java.util.Map<?, ?> map = (java.util.Map<?, ?>) actMap;
+            Activity ca = null;
+            Activity resume = null;
+            for (Object v : map.values()) {
+                if (v == null) continue;
+                try {
+                    Activity a = (Activity) readField(v, "activity");
+                    if (a == null) continue;
+                    ca = a;
+                    if (resume != null) break;
+                } catch (Throwable ignored) {}
+            }
+            return ca;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "currentActivityContext err: " + t.getMessage());
+            return null;
+        }
+    }
+
+    private static String trunc(String s, int max) {
+        if (s == null) return "";
+        return s.length() <= max ? s : s.substring(0, max) + "...";
+    }
+
+    /** 反射读取字段(兼容隐藏 API 访问) */
+    private static Object readField(Object obj, String name) {
+        try {
+            Class<?> c = obj.getClass();
+            while (c != null && c != Object.class) {
+                try {
+                    java.lang.reflect.Field f = c.getDeclaredField(name);
+                    f.setAccessible(true);
+                    return f.get(obj);
+                } catch (NoSuchFieldException ignored) {
+                    c = c.getSuperclass();
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
     }
 
     private static void showToastAsync(final String msg) {

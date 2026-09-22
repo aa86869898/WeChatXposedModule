@@ -396,7 +396,10 @@ public class MessageHook {
             boolean rpByContent = RedPacketHook.looksLikeMoneyMessage(content);
             if (rpByType || rpByContent) {
                 LogWriter.log(TAG, "RP/TRANSFER x9: rawType=" + rawType + " isSend=" + isSend
-                    + " msgId=" + msgId + " talker=" + trunc(talker, 20));
+                    + " msgId=" + msgId + " talker=" + trunc(talker, 20)
+                    + " rpByType=" + rpByType + " rpByContent=" + rpByContent
+                    + " contentLen=" + (content == null ? 0 : content.length())
+                    + " contentHead=" + trunc(content, 120));
                 final int rpRawType = rawType;
                 final String rpTalker = talker;
                 final String rpContent = content;

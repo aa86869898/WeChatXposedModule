@@ -318,6 +318,24 @@ public class WmChatHook {
         return dp(24);
     }
 
+    /** 导出目录: 优先应用私有外部目录(免 scoped storage 权限), 回退公共目录 */
+    private static File exportDir() {
+        try {
+            Context c = com.leshao.v3.ContextManager.getAppContext();
+            if (c != null) {
+                File f = c.getExternalFilesDir(null);
+                if (f != null) {
+                    File d = new File(f, "WeChatMaster");
+                    d.mkdirs();
+                    return d;
+                }
+            }
+        } catch (Throwable ignored) {}
+        File d = new File(Environment.getExternalStorageDirectory(), "WeChatMaster");
+        d.mkdirs();
+        return d;
+    }
+
     static void exportChatHtml() {
         new Thread(() -> {
             int count = exportChatHtmlReal();
@@ -343,8 +361,7 @@ public class WmChatHook {
             if (c == null) return -1;
             if (c.getCount() == 0) return 0;
 
-            File dir = new File(Environment.getExternalStorageDirectory(), "WeChatMaster");
-            dir.mkdirs();
+            File dir = exportDir();
             File f = new File(dir, "chat_" + Math.abs(sUser.hashCode()) + "_" + System.currentTimeMillis() + ".html");
             fos = new FileOutputStream(f);
 
@@ -545,7 +562,9 @@ public class WmChatHook {
         for (String mn : new String[]{"u", "rowQuery", "v", "w", "x", "y", "z"}) {
             for (Method m : db.getClass().getMethods()) {
                 if (m.getName().equals(mn) && m.getParameterCount() == 2
-                        && m.getParameterTypes()[0] == String.class) {
+                        && m.getParameterTypes()[0] == String.class
+                        // 必须精确匹配 String[] 第二参, 避免选中 x(String,boolean) 等无关重载
+                        && m.getParameterTypes()[1] == String[].class) {
                     sCachedRawQueryMethod = m;
                     Cursor c = invokeRawQuery(db, m, sql, args);
                     if (c != null) return c;
@@ -558,7 +577,9 @@ public class WmChatHook {
     private static boolean isRawQuery2(Method m) {
         return m.getName().equals("rawQuery")
                 && m.getParameterCount() == 2
-                && m.getParameterTypes()[0] == String.class;
+                && m.getParameterTypes()[0] == String.class
+                // 8.0.78 混淆库同时存在 rawQuery(String,boolean) 等重载, 必须校验第二参
+                && m.getParameterTypes()[1] == String[].class;
     }
 
     private static Cursor invokeRawQuery(Object db, Method m, String sql, String[] args) {
@@ -636,8 +657,7 @@ public class WmChatHook {
             if (c == null) return -1;
             if (c.getCount() == 0) return 0;
 
-            File dir = new File(Environment.getExternalStorageDirectory(), "WeChatMaster");
-            dir.mkdirs();
+            File dir = exportDir();
             File f = new File(dir, "chat_" + Math.abs(sUser.hashCode()) + "_" + System.currentTimeMillis() + ".txt");
             fos = new FileOutputStream(f);
 
@@ -2998,14 +3018,38 @@ private static boolean sendVideoToUser(String toUser, String videoPath) {
     private static void copyMediaToWxDir(String srcPath, Object msg) {
         try {
             if (srcPath == null || !new java.io.File(srcPath).exists()) return;
-            Object u0Service = XposedHelpers.callStaticMethod(
-                XposedHelpers.findClass("pa5.n0", sCL), "c",
-                XposedHelpers.findClass("qh3.u0", sCL));
-            Object y_j = XposedHelpers.getStaticObjectField(
-                XposedHelpers.findClass("lin5.y", sCL), "j");
+            // v955: 服务定位器与媒体路径服务全部经 DexKit 动态检索(特征字符串"MicroMsg.ServiceManager"
+            // + 方法签名 Nj(4参)→String), 严禁硬编码类名。
+            String locatorCls = com.leshao.v3.hook.DexKitHelper.getServiceLocatorClass();
+            String mediaCls = com.leshao.v3.hook.DexKitHelper.getMediaPathServiceClass();
+            if (locatorCls == null || mediaCls == null) {
+                LogWriter.log(TAG, "copyMediaToWxDir: DexKit 定位失败(locator=" + locatorCls + " media=" + mediaCls + ")");
+                return;
+            }
+            Class<?> locator = XposedHelpers.findClass(locatorCls, sCL);
+            Class<?> mediaImpl = XposedHelpers.findClass(mediaCls, sCL);
+            // 从实现类找声明 Nj 的服务接口(locator.c 需要接口类)
+            Class<?> svcInterface = null;
+            for (Class<?> iface : mediaImpl.getInterfaces()) {
+                for (java.lang.reflect.Method m : iface.getDeclaredMethods()) {
+                    if (m.getName().equals(com.leshao.v3.hook.DexKitHelper.getMediaPathMethod())
+                            && m.getParameterCount() == 4) {
+                        svcInterface = iface;
+                        break;
+                    }
+                }
+                if (svcInterface != null) break;
+            }
+            if (svcInterface == null) svcInterface = mediaImpl;
+            Object u0Service = XposedHelpers.callStaticMethod(locator, "c", svcInterface);
+            if (u0Service == null) {
+                LogWriter.log(TAG, "copyMediaToWxDir: service null");
+                return;
+            }
             String ext = srcPath.substring(srcPath.lastIndexOf('.'));
             String dstPath = (String) XposedHelpers.callMethod(
-                u0Service, "Nj", y_j, System.currentTimeMillis() + ext, false, true);
+                u0Service, com.leshao.v3.hook.DexKitHelper.getMediaPathMethod(),
+                null, System.currentTimeMillis() + ext, false, true);
             if (dstPath == null) return;
             new java.io.File(dstPath).getParentFile().mkdirs();
             java.io.FileInputStream fis = null;

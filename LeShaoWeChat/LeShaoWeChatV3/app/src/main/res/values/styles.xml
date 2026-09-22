@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.LeshaoAI" parent="android:Theme.Material.Light">
+        <item name="android:colorPrimary">@color/colorPrimary</item>
+        <item name="android:colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="android:colorAccent">@color/colorAccent</item>
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:navigationBarColor">@color/colorPrimaryDark</item>
+        <item name="android:statusBarColor">@color/colorPrimaryDark</item>
+    </style>
+
+    <!-- 子样式共同父级（显式继承 android:Widget，消除 AAPT 隐式父级解析依赖） -->
+    <style name="Widget.LeshaoAI" parent="android:Widget" />
+
+    <!-- 区块标题 -->
+    <style name="Widget.LeshaoAI.SectionTitle">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/section_title</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:paddingEnd">4dp</item>
+    </style>
+
+    <!-- 行标签 -->
+    <style name="Widget.LeshaoAI.RowLabel">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/text_primary</item>
+    </style>
+
+    <!-- 行描述 -->
+    <style name="Widget.LeshaoAI.RowDesc">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/text_secondary</item>
+    </style>
+
+    <!-- 输入框 -->
+    <style name="Widget.LeshaoAI.Input">
+        <item name="android:inputType">text</item>
+        <item name="android:background">@color/input_background</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textColorHint">@color/text_secondary</item>
+    </style>
+</resources>

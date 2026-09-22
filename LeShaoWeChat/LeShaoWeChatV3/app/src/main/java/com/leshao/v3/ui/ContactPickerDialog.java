@@ -6,6 +6,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.text.Editable;
@@ -22,6 +23,9 @@ import android.widget.TextView;
 import com.leshao.v3.ContactRepository;
 import com.leshao.v3.model.ContactCard;
 import com.leshao.v3.model.ContactCard.Category;
+import com.leshao.v3.ui.widgets.ModernButton;
+import com.leshao.v3.ui.widgets.ModernTopBar;
+import com.leshao.v3.ui.widgets.SegmentedControl;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -75,7 +79,6 @@ public class ContactPickerDialog {
     private static void showDialog(Activity act, List<ContactCard> items,
                                    Set<String> selected, int initialMode,
                                    OnContactsSelected callback) {
-        int p20 = dp(act, 20);
         int p16 = dp(act, 16);
         int p12 = dp(act, 12);
         int p8 = dp(act, 8);
@@ -84,18 +87,12 @@ public class ContactPickerDialog {
         LinearLayout root = new LinearLayout(act);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setMinimumHeight(dp(act, 520));
+        root.setBackground(CandyUi.dialogBg(act));
 
-        // Title
-        TextView title = new TextView(act);
-        title.setText("\u9009\u62e9\u8054\u7cfb\u4eba");
-        title.setTextSize(16);
-        title.setTextColor(AppColors.TEXT_TITLE);
-        title.setPadding(p16, p16, p16, p12);
-        title.setGravity(Gravity.CENTER);
-        root.addView(title);
+        final ModernTopBar topBar = new ModernTopBar(act, "\u9009\u62e9\u8054\u7cfb\u4eba", false, null);
+        root.addView(topBar, new LinearLayout.LayoutParams(-1, -2));
 
-        // Tab bar: 好友 | 群聊 with counts
-        // 计数必须基于全部联系人, 而非 initialMode 单列表(否则好友模式时群计数恒为 0)
+        // Tab bar: 好友 | 群聊 counts
         int friendCount = 0, groupCount = 0;
         for (ContactCard c : ContactRepository.getFriends()) {
             if (c.category == Category.FRIEND) friendCount++;
@@ -105,31 +102,33 @@ public class ContactPickerDialog {
         }
         final int fFriendCount = friendCount, fGroupCount = groupCount;
 
-        final int[] currentTab = {initialMode};
-        LinearLayout tabs = new LinearLayout(act);
-        tabs.setOrientation(LinearLayout.HORIZONTAL);
-        tabs.setGravity(Gravity.CENTER);
-        tabs.setPadding(p12, 0, p12, p12);
-
-        TextView tabFriend = buildTab(act, "\u597d\u53cb(" + fFriendCount + ")", currentTab[0] == MODE_FRIEND);
-        TextView tabGroup = buildTab(act, "\u7fa4\u804a(" + fGroupCount + ")", currentTab[0] == MODE_GROUP);
-        tabs.addView(tabFriend);
-        tabs.addView(space(act, p20));
-        tabs.addView(tabGroup);
-        root.addView(tabs);
+        final int[] currentTab = {initialMode == MODE_FRIEND ? 0 : 1};
+        final Runnable[] refreshHolder = new Runnable[1];
+        SegmentedControl tabs = new SegmentedControl(act,
+                new String[]{"\u597d\u53cb(" + fFriendCount + ")", "\u7fa4\u804a(" + fGroupCount + ")"},
+                currentTab[0]);
+        tabs.setOnSegmentChangedListener((index, label) -> {
+            currentTab[0] = index;
+            refreshHolder[0].run();
+        });
+        LinearLayout tabsContainer = new LinearLayout(act);
+        tabsContainer.setOrientation(LinearLayout.VERTICAL);
+        tabsContainer.setPadding(p12, 0, p12, p8);
+        tabsContainer.addView(tabs, new LinearLayout.LayoutParams(-1, -2));
+        root.addView(tabsContainer);
 
         // Search
         EditText search = new EditText(act);
         search.setHint("\u641c\u7d22...");
-        search.setHintTextColor(AppColors.TEXT_NOTE);
+        search.setHintTextColor(AppColors.onSurfaceVariant());
         search.setTextSize(14);
-        search.setTextColor(AppColors.TEXT_BODY);
+        search.setTextColor(AppColors.onSurface());
         search.setPadding(p16, p10(act), p16, p10(act));
-        search.setBackground(roundBg(act, AppColors.INPUT_BG, dp(act, 20)));
+        search.setBackground(CandyUi.inputBg(act));
         search.setSingleLine(true);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        slp.setMargins(p16, 0, p16, p8);
+        slp.setMargins(p12, 0, p12, p8);
         root.addView(search, slp);
 
         // List container
@@ -144,13 +143,11 @@ public class ContactPickerDialog {
 
         List<ContactCard>[] filteredHolder = new List[]{items};
 
-        Runnable[] refreshHolder = new Runnable[1];
         refreshHolder[0] = () -> {
             listRoot.removeAllViews();
             String f = search.getText().toString().toLowerCase().trim();
 
-            // Filter by tab
-            if (currentTab[0] == MODE_FRIEND) {
+            if (currentTab[0] == 0) {
                 filteredHolder[0] = ContactRepository.getFriends();
             } else {
                 filteredHolder[0] = ContactRepository.getGroups();
@@ -172,24 +169,13 @@ public class ContactPickerDialog {
                 TextView empty = new TextView(act);
                 empty.setText("\u65e0\u5339\u914d\u8054\u7cfb\u4eba");
                 empty.setTextSize(14);
-                empty.setTextColor(AppColors.TEXT_NOTE);
+                empty.setTextColor(AppColors.onSurfaceVariant());
                 empty.setGravity(Gravity.CENTER);
                 empty.setPadding(0, dp(act, 40), 0, 0);
                 listRoot.addView(empty);
             }
-            title.setText("\u5df2\u9009 " + selected.size() + " \u4eba");
+            topBar.setTitle("\u5df2\u9009 " + selected.size() + " \u4eba");
         };
-
-        tabFriend.setOnClickListener(v -> {
-            currentTab[0] = MODE_FRIEND;
-            updateTabs(act, tabFriend, tabGroup, MODE_FRIEND);
-            refreshHolder[0].run();
-        });
-        tabGroup.setOnClickListener(v -> {
-            currentTab[0] = MODE_GROUP;
-            updateTabs(act, tabFriend, tabGroup, MODE_GROUP);
-            refreshHolder[0].run();
-        });
 
         search.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
@@ -213,16 +199,9 @@ public class ContactPickerDialog {
         btnLp.leftMargin = p4;
         btnLp.rightMargin = p4;
 
-        int btnRadius = dp(act, 20);
-        TextView cancel = dialogBtn(act, "\u53d6\u6d88", AppColors.TEXT_NOTE, AppColors.DIVIDER, btnRadius);
-        TextView toggleAll = new TextView(act);
-        toggleAll.setTextSize(13);
-        toggleAll.setTextColor(AppColors.WHITE_TEXT);
-        toggleAll.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
-        toggleAll.setBackground(roundBg(act, AppColors.ACCENT, btnRadius));
-        toggleAll.setGravity(Gravity.CENTER);
-        toggleAll.setPaintFlags(toggleAll.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
-        TextView confirm = dialogBtn(act, "\u786e\u5b9a", AppColors.WHITE_TEXT, AppColors.ACCENT, btnRadius);
+        final ModernButton cancel = new ModernButton(act, "\u53d6\u6d88", ModernButton.STYLE_GHOST);
+        final ModernButton toggleAll = new ModernButton(act, "\u5168\u9009", ModernButton.STYLE_TEXT);
+        final ModernButton confirm = new ModernButton(act, "\u786e\u5b9a", ModernButton.STYLE_PRIMARY);
 
         btns.addView(cancel, btnLp);
         btns.addView(space(act, p16));
@@ -237,12 +216,11 @@ public class ContactPickerDialog {
                 .setCancelable(true)
                 .create();
 
-        cancel.setOnClickListener(v -> {
-            // 取消: 不回调, 保留原有配置(避免把已保存的白/黑名单清空)
+        cancel.onClick(() -> {
             dialog.dismiss();
         });
 
-        confirm.setOnClickListener(v -> {
+        confirm.onClick(() -> {
             if (callback != null) {
                 StringBuilder sb = new StringBuilder();
                 int i = 0;
@@ -261,7 +239,7 @@ public class ContactPickerDialog {
             dialog.dismiss();
         });
 
-        toggleAll.setOnClickListener(v -> {
+        toggleAll.onClick(() -> {
             List<ContactCard> source = filteredHolder[0];
             if (source == null) return;
             String f = search.getText().toString().toLowerCase().trim();
@@ -303,28 +281,6 @@ public class ContactPickerDialog {
         dialog.show();
     }
 
-    private static void updateTabs(Activity act, TextView tFriend, TextView tGroup, int mode) {
-        int radius = dp(act, 20);
-        boolean friendActive = mode == MODE_FRIEND;
-        tFriend.setTextColor(friendActive ? AppColors.WHITE_TEXT : AppColors.TEXT_BODY);
-        tFriend.setBackground(roundBg(act, friendActive ? AppColors.ACCENT : AppColors.DIVIDER, radius));
-        tGroup.setTextColor(friendActive ? AppColors.TEXT_BODY : AppColors.WHITE_TEXT);
-        tGroup.setBackground(roundBg(act, friendActive ? AppColors.DIVIDER : AppColors.ACCENT, radius));
-    }
-
-    private static TextView buildTab(Activity act, String text, boolean selected) {
-        int radius = dp(act, 20);
-        TextView tv = new TextView(act);
-        tv.setText(text);
-        tv.setTextSize(13);
-        tv.setTextColor(selected ? AppColors.WHITE_TEXT : AppColors.TEXT_BODY);
-        tv.setGravity(Gravity.CENTER);
-        tv.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
-        tv.setBackground(roundBg(act, selected ? AppColors.ACCENT : AppColors.DIVIDER, radius));
-        tv.setPaintFlags(tv.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
-        return tv;
-    }
-
     private static ContactCard findCard(List<ContactCard> items, String wxid) {
         for (ContactCard c : items) {
             if (wxid.equals(c.username)) return c;
@@ -340,6 +296,7 @@ public class ContactPickerDialog {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(p12, p6(act), p12, p6(act));
+        row.setBackground(CandyUi.rowPressBg(act));
 
         // Styled checkbox
         ImageView cb = new ImageView(act);
@@ -367,7 +324,7 @@ public class ContactPickerDialog {
         TextView name = new TextView(act);
         name.setText(c.displayName());
         name.setTextSize(14);
-        name.setTextColor(AppColors.TEXT_TITLE);
+        name.setTextColor(AppColors.onSurface());
         textCol.addView(name);
 
         row.addView(textCol, new LinearLayout.LayoutParams(0,
@@ -383,13 +340,8 @@ public class ContactPickerDialog {
         Canvas canvas = new Canvas(bm);
 
         if (checked) {
-            android.graphics.LinearGradient lg = new android.graphics.LinearGradient(
-                    0, 0, size, size,
-                    new int[]{AppColors.ACCENT, 0xFF1976D2, 0xFF0D47A1},
-                    new float[]{0f, 0.5f, 1f},
-                    android.graphics.Shader.TileMode.CLAMP);
             Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
-            fill.setShader(lg);
+            fill.setColor(AppColors.primary());
             canvas.drawCircle(size / 2f, size / 2f, size / 2f - 1, fill);
 
             Paint check = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -406,12 +358,12 @@ public class ContactPickerDialog {
         } else {
             Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
             stroke.setStyle(Paint.Style.STROKE);
-            stroke.setColor(AppColors.DIVIDER);
+            stroke.setColor(AppColors.outline());
             stroke.setStrokeWidth(dp(act, 2));
             canvas.drawCircle(size / 2f, size / 2f, size / 2f - 1, stroke);
         }
 
-        return new android.graphics.drawable.BitmapDrawable(act.getResources(), bm);
+        return new BitmapDrawable(act.getResources(), bm);
     }
 
     private static boolean matchesFilter(ContactCard c, String q) {
@@ -423,7 +375,7 @@ public class ContactPickerDialog {
 
     private static Bitmap letterAvatar(Activity act, String letter, int size) {
         Paint paint = new Paint();
-        paint.setColor(AppColors.WHITE_TEXT);
+        paint.setColor(Color.WHITE);
         paint.setTextSize(size * 0.45f);
         paint.setAntiAlias(true);
         paint.setTextAlign(Paint.Align.CENTER);
@@ -432,23 +384,11 @@ public class ContactPickerDialog {
         Bitmap bm = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bm);
         Paint bgPaint = new Paint();
-        bgPaint.setColor(AppColors.TEXT_NOTE);
+        bgPaint.setColor(AppColors.secondaryContainer());
         canvas.drawRoundRect(0, 0, size, size, size / 2f, size / 2f, bgPaint);
         float y = size / 2f - (paint.descent() + paint.ascent()) / 2f;
         canvas.drawText(letter, size / 2f, y, paint);
         return bm;
-    }
-
-    private static TextView dialogBtn(Activity act, String text, int textColor, int bgColor, int radius) {
-        TextView btn = new TextView(act);
-        btn.setText(text);
-        btn.setTextSize(14);
-        btn.setTextColor(textColor);
-        btn.setGravity(Gravity.CENTER);
-        btn.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
-        btn.setBackground(roundBg(act, bgColor, radius));
-        btn.setPaintFlags(btn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
-        return btn;
     }
 
     private static View space(Activity act, int w) {
