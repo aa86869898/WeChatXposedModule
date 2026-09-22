@@ -1090,15 +1090,24 @@ public class TtsVoiceSender {
             }
             if (target == null) {
                 // v957: 3180 方法名再混淆, 按签名兜底: >=2 参数, 第2参数类型含 b 字段(e9 载体)
+                // v962: 放宽为沿继承链找字段 b / 字段类型为 e9 / 参数类型即 e9, 覆盖字段被上提基类的情况
                 for (java.lang.reflect.Method m : a21o.getDeclaredMethods()) {
                     if (m.getParameterCount() < 2) continue;
                     if (m.getReturnType().isPrimitive()) continue;
                     try {
-                        boolean hasB = false;
-                        for (java.lang.reflect.Field f : m.getParameterTypes()[1].getDeclaredFields()) {
-                            if ("b".equals(f.getName())) { hasB = true; break; }
+                        Class<?> p1 = m.getParameterTypes()[1];
+                        boolean match = false;
+                        for (Class<?> c = p1; c != null && c != Object.class && !match; c = c.getSuperclass()) {
+                            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                                if ("b".equals(f.getName())
+                                        || (e9Class != null && f.getType() == e9Class)) {
+                                    match = true;
+                                    break;
+                                }
+                            }
                         }
-                        if (!hasB) continue;
+                        if (!match && e9Class != null && e9Class.isAssignableFrom(p1)) match = true;
+                        if (!match) continue;
                         target = m;
                         LogWriter.log(TAG, "hookA21Oi: i 方法改名, 签名兜底命中: " + m.getName()
                                 + "(" + m.getParameterCount() + " args)");
@@ -1107,7 +1116,20 @@ public class TtsVoiceSender {
                 }
             }
             if (target == null) {
-                LogWriter.log(TAG, "Hook a21.o.i: method not found");
+                // v962: 仍未命中, 输出候选类全部方法签名, 便于下次实机日志精确定位
+                StringBuilder dump = new StringBuilder("Hook a21.o.i: method not found, class="
+                        + a21o.getName() + " methods:");
+                for (java.lang.reflect.Method m : a21o.getDeclaredMethods()) {
+                    dump.append("\n  ").append(m.getReturnType().getSimpleName()).append(' ')
+                        .append(m.getName()).append('(');
+                    Class<?>[] pts = m.getParameterTypes();
+                    for (int i = 0; i < pts.length; i++) {
+                        if (i > 0) dump.append(',');
+                        dump.append(pts[i].getSimpleName());
+                    }
+                    dump.append(')');
+                }
+                LogWriter.log(TAG, dump.toString());
                 return;
             }
             {

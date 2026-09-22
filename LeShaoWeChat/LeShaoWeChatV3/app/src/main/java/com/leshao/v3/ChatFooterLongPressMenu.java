@@ -484,8 +484,9 @@ public class ChatFooterLongPressMenu {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         btnLp.leftMargin = p8;
         fileRow.addView(browseBtn, btnLp);
-        panel.addView(fileRow);
-
+        // v962 修复: 原 487 行 panel.addView(fileRow) 与 489 行 cardFile.addView(fileRow)
+        // 对同一 view 重复 addView, 第二次必抛 IllegalStateException(child already has a
+        // parent), 面板构建中断 → 语音按钮点击无反应(实测 v961 日志 16 次)。fileRow 只属 cardFile。
         cardFile.addView(fileRow);
 
         // 已选文件名显示

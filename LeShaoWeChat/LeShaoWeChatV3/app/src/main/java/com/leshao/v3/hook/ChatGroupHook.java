@@ -207,7 +207,38 @@ public class ChatGroupHook {
                 } catch (Throwable ignored) {}
             }
             if (svc == null) {
-                LogWriter.log(TAG, "initCoreServices: j1.v/s(c4) null");
+                // v962: 服务定位器按接口类检索(WmChatHook.copyMediaToWxDir 实证: 传实现类返回 null,
+                // 须传声明目标方法的接口类)。e32.a 沿继承链收集接口, 取声明 ij() 者作为入参重试。
+                List<Class<?>> ifaces = new ArrayList<>();
+                for (Class<?> c = sc4; c != null && c != Object.class; c = c.getSuperclass()) {
+                    for (Class<?> iface : c.getInterfaces()) ifaces.add(iface);
+                }
+                for (Class<?> iface : ifaces) {
+                    boolean hasIj = false;
+                    for (java.lang.reflect.Method m : iface.getDeclaredMethods()) {
+                        if ("ij".equals(m.getName())) { hasIj = true; break; }
+                    }
+                    if (!hasIj) continue;
+                    for (String mn : new String[]{"v", "s"}) {
+                        try {
+                            Object s2 = XposedHelpers.callStaticMethod(j1, mn, iface);
+                            if (s2 != null) {
+                                svc = s2;
+                                LogWriter.log(TAG, "initCoreServices: j1." + mn + " iface 命中: " + iface.getName());
+                                break;
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                    if (svc != null) break;
+                }
+            }
+            if (svc == null) {
+                StringBuilder ifaceList = new StringBuilder();
+                for (Class<?> iface : sc4.getInterfaces()) {
+                    if (ifaceList.length() > 0) ifaceList.append(',');
+                    ifaceList.append(iface.getName());
+                }
+                LogWriter.log(TAG, "initCoreServices: j1.v/s(c4) null, e32.a interfaces=[" + ifaceList + "]");
                 return false;
             }
             sContactStorage = XposedHelpers.callMethod(svc, "ij");

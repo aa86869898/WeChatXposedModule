@@ -47,6 +47,12 @@ public class ContextManager {
                     // sAppContext 并被静态引用导致 Activity 泄漏
                     if (!(param.thisObject instanceof Application)) return;
                     sAppContext = (Context) param.thisObject;
+                    // v962: 主/分身实例隔离管理器初始化(须早于一切业务 Hook, 见《微信模块隔离.md》)
+                    try {
+                        InstanceManager.init(sAppContext);
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "InstanceManager.init FAILED: " + t.getMessage());
+                    }
                     if (!sReady) {
                         sReady = true;
                         LogWriter.log(TAG, "attachBaseContext DONE, ready=true");

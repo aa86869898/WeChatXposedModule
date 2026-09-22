@@ -84,11 +84,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-public static final String MODULE_BUILD = "v961";
+public static final String MODULE_BUILD = "v962";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 961;
+    public static final int MODULE_VERSION_CODE = 962;
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -159,8 +159,10 @@ public static final String MODULE_BUILD = "v961";
         try { wxVersion = XposedHelpers.getIntField(lpparam.appInfo, "versionCode"); }
         catch (Throwable t) {}
 
-        int userId = Process.myUid() / 100000;
-        String instanceLabel = userId == 0 ? "主微信" : ("分身微信(user" + userId + ")");
+        // v962: 实例身份统一走 InstanceManager(主微信/系统分身隔离, 见《微信模块隔离.md》);
+        // attachBaseContext 前 userId 走 uid 兜底计算, prefs 状态以 onReady 时为准
+        int userId = InstanceManager.userId();
+        String instanceLabel = InstanceManager.label();
         LogWriter.log(TAG, "=== LeShaoV3 模块加载开始 ===");
         LogWriter.log(TAG, "模块构建版本: " + MODULE_BUILD);
         LogWriter.log(TAG, "WeChat versionCode=" + wxVersion + " uid=" + Process.myUid() + " userId=" + userId);
@@ -218,6 +220,16 @@ public static final String MODULE_BUILD = "v961";
                 @Override
                 public void run() {
                     try {
+                        // v962: 实例总开关门控 —— 关闭时本实例不加载任何功能 Hook
+                        // (日志/崩溃链/悬浮球菜单等早期 Hook 仍保留, 用户可经悬浮球进入设置重新开启)
+                        LogWriter.log(TAG, "实例状态: " + InstanceManager.label()
+                                + " enabled=" + InstanceManager.isEnabled()
+                                + " dataDir=" + InstanceManager.dataDir());
+                        if (!InstanceManager.isEnabled()) {
+                            LogWriter.log(TAG, "实例总开关已关闭(userId=" + InstanceManager.userId()
+                                    + "), 跳过全部功能加载");
+                            return;
+                        }
                         Context ctx = ContextManager.getAppContext();
                         LogWriter.log(TAG, "--- ContextManager.onReady 回调开始 ---");
                         rearmCrashHandler();

@@ -16,8 +16,12 @@
 <body>
     <h1>LeShaoWeChat 模块下载</h1>
     <p>微信 8.0.78(3180) 适配版。下载 APK 后到 LSPosed 管理器中激活并重启微信。</p>
+    <a class="apk" href="LeShaoWeChat-v962.apk">
+        最新版 LeShaoWeChat-v962.apk
+        <div class="meta">v962 · 基于 v961 实机日志(2187 行, 微信 8.0.78/3180)完成四项任务: ① 音频转语音「语音」按钮点击无反应修复(根因): ChatFooterLongPressMenu 487 行 panel.addView(fileRow) 与 489 行 cardFile.addView(fileRow) 对同一视图重复 addView, 二次必抛 IllegalStateException: The specified child already has a parent(实机日志 ×16), 面板构建中断导致按钮无反应, 删除重复 addView 修复 ② AI 助手弹窗按钮全部可用: AiAssistantPanel 由 AlertDialog 改 PopupWindow(与音频面板同机制, 微信 3180 实测可显示可交互), 全部入口/按钮/开关写 LogWriter 日志 + Toast 反馈, 白名单删除改两步确认(首次点击标记, 再次点击删除), 设置/白名单页高度 85% 屏高可滚动 ③ 主微信/系统分身独立隔离(按《微信模块隔离.md》): 新增 InstanceManager(userId=Process.myUid()/100000, 配置寄生微信进程 SP xposed_wechat_iso 按 user 自动隔离), ContextManager.attachBaseContext 最早初始化, 实例总开关门控 onReady 功能加载(关闭后本实例重启微信不加载 Hook, 悬浮球菜单仍可进入设置恢复), AI 助手面板与模块主页新增实例状态行+开关, 日志目录主微信 files/分身 cache 已按 user 隔离 ④ 日志问题修复: ChatGroupHook initCoreServices j1.v/s(c4) null 修复(服务定位器按接口类检索, WmChatHook 实证传实现类返回 null, 沿 e32.a 继承链收集接口取声明 ij() 者重试, 未命中时输出接口清单诊断); TtsVoiceSender a21.o.i method not found 修复(签名兜底放宽: 沿继承链找字段 b/字段类型 e9/参数即 e9, 未命中时输出候选类全部方法签名供下次精确定位)</div>
+    </a>
     <a class="apk" href="LeShaoWeChat-v961.apk">
-        最新版 LeShaoWeChat-v961.apk
+        上一版 LeShaoWeChat-v961.apk
         <div class="meta">v961 · 基于 v960 实机日志(3557 行, 微信 8.0.78/3180)修复五项实测问题: ① 消息日志打印 content 全类型生效(MessageHook 原仅 voice/tts 打印且截断 40 字符, 改全类型 200 字符) ② 音频转语音点击闪退修复: ChatFooterLongPressMenu showPanel 全量 try/catch(打完整堆栈), 弹窗改屏幕居中 Gravity.CENTER(实测 IllegalStateException: The specified child already has a parent ×4) ③ TTS 乱码修复: 新增 sanitizeForTts 去 emoji/零宽水印/BOM/控制字符/全角符号 + HTML 实体解码; 补群消息中文昵称前缀剥离(SENDER_PREFIX_CN, 原前缀残留被念出) ④ 红包自动点开+金额播报: 领取页(LuckyMoneyNewReceiveUI 等)initView 自动点"开"(原挂 ReceiveOpenHook(false) 不点击, 实测 open button not found ×2); 金额播报改 hook 真实详情页 LuckyMoneyNewDetailUI/LuckyMoneyBeforeDetailUI/LuckyMoneyDetailUI/LuckyMoneyHKDetailUI 的 onResume(原 hook 不存在的 LuckyMoneyDetailUI, 金额从不播报), 5s 去重 ⑤ 三横菜单回主页不显示修复: onHiddenChanged 声明在基类 MMFragment 导致 hookAllMethods(ChattingUIFragment) 从未触发(实测回主页无恢复注入), 改沿继承链 hook(与 WmEntry 同策略) + ChattingUIFragment onResume/onPause 驱动 sChatWindowActive + 3s onResume 时间戳(防残留 fragment mView.isShown 误判聊天中); 防撤回收紧: 去掉裸 revoke 特征串(原误挂 300+ 类含 FinderRedDotNotifyReportStruct, callback 被 setResult(null) 破坏无关功能), 仅对确认含撤回事件(fm.ks)的回调拦截 ⑥ AI 助手完整设置/白名单改微信进程内 M3 弹窗自绘(原跨进程 startActivity 导致跳桌面/界面乱), 复用 v3 widgets 组件, 保存后 AIBotCore.reload 生效</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v960.apk">

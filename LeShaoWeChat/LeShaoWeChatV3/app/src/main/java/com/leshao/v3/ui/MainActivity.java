@@ -35,6 +35,7 @@ import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.IconLoader;
+import com.leshao.v3.InstanceManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.VersionCompat;
 import com.leshao.v3.model.Contact;
@@ -637,6 +638,20 @@ public class MainActivity {
         card1.addView(makeListRow(ctx, d, 0x1F464, "个人中心", 0, false, v -> {
             dismissDialog();
             SubPageActivity.openFromMain(act, "个人中心", 99);
+        }));
+        card1.addView(candyDivider(ctx, d));
+        // v962: 主微信/分身实例隔离开关(各实例独立, 关闭后本实例重启微信不再加载 Hook,
+        // 仍可经悬浮球菜单进入本面板重新开启)
+        boolean instEnabled = InstanceManager.isEnabled();
+        String instLabel = "实例隔离: " + InstanceManager.label()
+                + (instEnabled ? " (已开启)" : " (已关闭)");
+        card1.addView(makeListRow(ctx, d, 0x1F9E9, instLabel, 0, false, v -> {
+            boolean next = !InstanceManager.isEnabled();
+            InstanceManager.setEnabled(next);
+            Toast.makeText(ctx, next ? "本实例已开启, 重启微信生效" : "本实例已关闭, 重启微信生效",
+                    Toast.LENGTH_SHORT).show();
+            dismissDialog();
+            showMainPanel(act);
         }));
         root.addView(card1);
 
