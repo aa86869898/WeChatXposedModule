@@ -92,6 +92,11 @@ public class SettingRow extends LinearLayout {
             sw.setChecked(checked);
             if (listener != null) sw.setOnCheckedChangeListener(listener);
             mTail.addView(sw);
+            // v967 M3 规范: 整行可点 —— 点击行进任意位置切换开关, 修复仅能点中开关
+            // 才生效导致的"点按钮没反应"体验问题。
+            setOnClickListener(v -> {
+                try { sw.toggle(); } catch (Throwable ignored) {}
+            });
         } catch (Throwable ignored) {}
         return this;
     }

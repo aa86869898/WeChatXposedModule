@@ -11,6 +11,7 @@ import android.view.MenuItem;
 
 import com.leshao.ai.hook.HookEntry;
 import com.leshao.ai.hook.dexkit.DexKitAdapter;
+import com.leshao.v3.LogWriter;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -224,6 +225,7 @@ public final class WeChatHook implements IXposedHookLoadPackage {
             });
             menuInstalled.set(true);
             Log.i(TAG, "菜单注入成功: " + fragment.getName() + " (attempt " + attempt + ")");
+            LogWriter.log(TAG, "菜单注入成功: " + fragment.getName() + " (attempt " + attempt + ")");
         } catch (Throwable t) {
             Log.w(TAG, "菜单注入失败(" + attempt + "): " + t);
             scheduleMenuRetry(cl, attempt);
@@ -233,6 +235,7 @@ public final class WeChatHook implements IXposedHookLoadPackage {
     private static void scheduleMenuRetry(final ClassLoader cl, final int attempt) {
         if (attempt >= MENU_RETRY_MAX || menuInstalled.get()) {
             Log.w(TAG, "ChattingUIFragment 未定位，菜单注入放弃 (attempt " + attempt + ")");
+            LogWriter.log(TAG, "菜单注入放弃: ChattingUIFragment 未定位 (attempt " + attempt + ")");
             return;
         }
         Log.w(TAG, "ChattingUIFragment 未定位，" + MENU_RETRY_DELAY_MS + "ms 后重试 (" + attempt + ")");
@@ -245,15 +248,20 @@ public final class WeChatHook implements IXposedHookLoadPackage {
             return;
         }
         MenuItem item = menu.add(0, MENU_AI_ITEM, 0, "AI 助手");
+        LogWriter.log(TAG, "injectAiMenu: 已注入「AI 助手」菜单项");
         item.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
             @Override
             public boolean onMenuItemClick(MenuItem mi) {
                 // v960: 微信进程内 Material 3 弹窗(替代跨进程 startActivity)
                 try {
+                    LogWriter.log(TAG, "click: AI 助手菜单项");
                     Activity act = resolveActivity(fragment);
+                    LogWriter.log(TAG, "click: resolveActivity="
+                            + (act == null ? "null" : act.getClass().getName()));
                     AiAssistantPanel.show(act);
                 } catch (Throwable t) {
                     Log.w(TAG, "AI 助手弹窗失败: " + t);
+                    LogWriter.log(TAG, "AI 助手弹窗失败: " + t);
                 }
                 return true;
             }

@@ -32,13 +32,17 @@ import com.leshao.v3.ui.widgets.SettingRow;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
- * AI 助手弹窗(v964): 微信会话页 ⋮ 菜单点击后在微信进程内展示。
+ * AI 助手弹窗(v967): 微信会话页 ⋮ 菜单点击后在微信进程内展示。
  *
- * <p>PopupWindow 展示(v962 起, AlertDialog 在微信 3180 不可靠)。一级窗口放全部功能开关,
- * 二级「完整设置」只放服务商/接口/人设等配置, 两级内容不重复。TTS 开关语义:
- * 开=AI 回复转成语音消息发出, 关=直接发文本。</p>
+ * <p>PopupWindow 展示(v962 起, AlertDialog 在微信 3180 不可靠)。首页放全部功能开关与
+ * 配置入口(模型提供商 / AI 核心参数配置), 不再有「完整设置」二级总入口;
+ * TTS 开关语义: 开=AI 回复转成语音消息发出, 关=直接发文本。</p>
+ *
+ * <p>v967 关键修复: 首页 PopupWindow 高度改为固定 85% 屏高 + 中部 ScrollView weight=1,
+ * 解决 WRAP_CONTENT 内容超高时底部按钮被屏幕裁剪、点击不到的问题。</p>
  */
 public final class AiAssistantPanel {
 
@@ -95,7 +99,7 @@ public final class AiAssistantPanel {
             dismissCurrent();
 
             android.util.DisplayMetrics dm = anchor.getResources().getDisplayMetrics();
-            int panelW = (int) (dm.widthPixels * 0.85f);
+            int panelW = (int) (dm.widthPixels * 0.9f);
             int h = heightPx > 0 ? heightPx : ViewGroup.LayoutParams.WRAP_CONTENT;
             PopupWindow pw = new PopupWindow(root, panelW, h, true);
             pw.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -124,9 +128,7 @@ public final class AiAssistantPanel {
     private static LinearLayout newRoot(Context ctx) {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        try {
-            root.setBackground(CandyUi.dialogBg(ctx));
-        } catch (Throwable ignored) {}
+        root.setBackground(CandyUi.dialogBg(ctx));
         int pad = dp(ctx, 20);
         root.setPadding(pad, pad, pad, pad);
         return root;
@@ -140,6 +142,36 @@ public final class AiAssistantPanel {
         title.setTextColor(AppColors.textPrimary());
         title.setPadding(0, 0, 0, dp(ctx, 4));
         return title;
+    }
+
+    /** 可滚动内容区(占据剩余高度, 修复固定高度弹窗内容裁剪) */
+    private static ScrollView newScroll(LinearLayout root, LinearLayout list) {
+        ScrollView scroll = new ScrollView(root.getContext());
+        scroll.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        scroll.setOverScrollMode(ScrollView.OVER_SCROLL_NEVER);
+        list.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(list);
+        root.addView(scroll);
+        return scroll;
+    }
+
+    /** 底部两按钮行(等宽): 左 / 右 */
+    private static LinearLayout newBtnRow2(Context ctx, ModernButton left, ModernButton right) {
+        LinearLayout btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams lpLeft = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lpLeft.setMargins(0, dp(ctx, 16), dp(ctx, 4), 0);
+        LinearLayout.LayoutParams lpRight = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lpRight.setMargins(dp(ctx, 4), dp(ctx, 16), 0, 0);
+        left.setLayoutParams(lpLeft);
+        right.setLayoutParams(lpRight);
+        btnRow.addView(left);
+        btnRow.addView(right);
+        return btnRow;
     }
 
     /** 底部三按钮行(等宽) */
@@ -162,7 +194,7 @@ public final class AiAssistantPanel {
         return btnRow;
     }
 
-    // ==================== 主弹窗(快捷开关) ====================
+    // ==================== 主弹窗(功能开关 + 配置入口) ====================
 
     public static void show(Activity activity) {
         LogWriter.log(TAG, "show: enter activity="
@@ -189,24 +221,18 @@ public final class AiAssistantPanel {
         if (config == null) {
             LogWriter.log(TAG, "show: config null, 仅展示提示");
             TextView tip = new TextView(ctx);
-            tip.setText("AI 核心尚未初始化,请先打开完整设置完成配置。");
+            tip.setText("AI 核心尚未初始化,请稍后重试。");
             tip.setTextSize(13);
             tip.setTextColor(AppColors.textTertiary());
             tip.setPadding(0, dp(ctx, 12), 0, dp(ctx, 16));
             root.addView(tip);
         } else {
-            ScrollView scroll = new ScrollView(ctx);
-            scroll.setLayoutParams(new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            scroll.setOverScrollMode(ScrollView.OVER_SCROLL_NEVER);
             LinearLayout list = new LinearLayout(ctx);
-            list.setOrientation(LinearLayout.VERTICAL);
-            scroll.addView(list);
-            root.addView(scroll);
+            newScroll(root, list);
 
-            list.addView(new SectionHeader(ctx, "快捷开关", "修改后即时生效"));
-
-            list.addView(new SettingRow(ctx, "🤖", "AI 助手", "总开关,关闭后全部AI能力停用")
+            // ---- 1. 功能开关 ----
+            list.addView(new SectionHeader(ctx, "功能开关", "修改后即时生效"));
+            list.addView(new SettingRow(ctx, "🤖", "AI 助手", "总开关,关闭后全部 AI 能力停用")
                     .switchOn(config.isEnabled(), (btn, checked) -> {
                         LogWriter.log(TAG, "click: AI助手总开关 -> " + checked);
                         persist(ctx, config, c -> c.setEnabled(checked), "AI助手已" + (checked ? "开启" : "关闭"));
@@ -216,6 +242,9 @@ public final class AiAssistantPanel {
                         LogWriter.log(TAG, "click: 语音消息发送 -> " + checked);
                         persist(ctx, config, c -> c.setTtsEnabled(checked), "语音消息发送已" + (checked ? "开启" : "关闭"));
                     }));
+
+            // ---- 2. 自动回复 ----
+            list.addView(new SectionHeader(ctx, "自动回复", "按会话类型控制触发范围"));
             list.addView(new SettingRow(ctx, "👥", "群聊自动回复", "在白名单群内自动回复")
                     .switchOn(config.isAutoReplyInGroups(), (btn, checked) -> {
                         LogWriter.log(TAG, "click: 群聊自动回复 -> " + checked);
@@ -226,20 +255,33 @@ public final class AiAssistantPanel {
                         LogWriter.log(TAG, "click: 私聊自动回复 -> " + checked);
                         persist(ctx, config, c -> c.setAutoReplyInPrivate(checked), "私聊自动回复已" + (checked ? "开启" : "关闭"));
                     }));
-            list.addView(new SettingRow(ctx, "📣", "仅被@时回复", "群聊中只有被提到时才回复")
+            list.addView(new SettingRow(ctx, "📣", "仅被@时自动回复", "群聊中只有被提到时才回复")
                     .switchOn(config.isOnlyWhenMentioned(), (btn, checked) -> {
                         LogWriter.log(TAG, "click: 仅被@时回复 -> " + checked);
                         persist(ctx, config, c -> c.setOnlyWhenMentioned(checked), "已更新@回复规则");
                     }));
+
+            // ---- 3. 模型与参数(点击进入配置) ----
+            list.addView(new SectionHeader(ctx, "模型与参数", "服务商接入与核心参数"));
+            final String providerSub = providerLabel(providerTypeOf(config.getProviderType()))
+                    + (TextUtils.isEmpty(config.getModel()) ? "" : " · " + config.getModel());
+            list.addView(new SettingRow(ctx, "☁", "模型提供商", providerSub)
+                    .arrow(() -> {
+                        LogWriter.log(TAG, "click: 模型提供商");
+                        dismissCurrent();
+                        showProviderConfig(activity);
+                    }));
+            final String coreSub = (TextUtils.isEmpty(config.getBotName()) ? "未命名" : config.getBotName())
+                    + " · 记忆 " + config.getMaxHistoryMessages() + " 条";
+            list.addView(new SettingRow(ctx, "🛠", "AI 核心参数配置", coreSub)
+                    .arrow(() -> {
+                        LogWriter.log(TAG, "click: AI核心参数配置");
+                        dismissCurrent();
+                        showCoreConfig(activity);
+                    }));
         }
 
-        ModernButton btnSettings = new ModernButton(ctx, "完整设置", ModernButton.STYLE_GHOST);
-        btnSettings.onClick(() -> {
-            LogWriter.log(TAG, "click: 完整设置");
-            dismissCurrent();
-            showSettings(activity);
-        });
-
+        // ---- 底部栏: 左(白名单) 右(关闭) ----
         ModernButton btnWhitelist = new ModernButton(ctx, "白名单", ModernButton.STYLE_GHOST);
         btnWhitelist.onClick(() -> {
             LogWriter.log(TAG, "click: 白名单");
@@ -253,25 +295,23 @@ public final class AiAssistantPanel {
             dismissCurrent();
         });
 
-        root.addView(newBtnRow(ctx, btnSettings, btnWhitelist, btnClose));
-        showPopup(activity, root, 0, "main");
+        root.addView(newBtnRow2(ctx, btnWhitelist, btnClose));
+        android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        showPopup(activity, root, (int) (dm.heightPixels * 0.85f), "main");
     }
 
-    // ==================== 完整设置(v962 内嵌) ====================
+    // ==================== 二级: 模型提供商 ====================
 
-    private static void showSettings(final Activity activity) {
-        LogWriter.log(TAG, "showSettings: enter");
-        if (activity == null || activity.isFinishing()) {
-            LogWriter.log(TAG, "showSettings skipped: activity null/finishing");
-            return;
-        }
+    private static void showProviderConfig(final Activity activity) {
+        LogWriter.log(TAG, "showProviderConfig: enter");
+        if (activity == null || activity.isFinishing()) return;
         final Context ctx = activity;
 
         final AppConfig config;
         try {
             config = AIBotCore.config();
         } catch (Throwable t) {
-            LogWriter.log(TAG, "showSettings config err: " + t);
+            LogWriter.log(TAG, "showProviderConfig config err: " + t);
             toastQuiet(ctx, "AI 核心未初始化");
             return;
         }
@@ -281,33 +321,25 @@ public final class AiAssistantPanel {
         }
 
         LinearLayout root = newRoot(ctx);
-        root.addView(newTitle(ctx, "AI 完整设置"));
-
-        ScrollView scroll = new ScrollView(ctx);
-        scroll.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        scroll.setOverScrollMode(ScrollView.OVER_SCROLL_NEVER);
+        root.addView(newTitle(ctx, "模型提供商"));
         LinearLayout list = new LinearLayout(ctx);
-        list.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(list);
-        root.addView(scroll);
+        newScroll(root, list);
 
         // ---- 服务商 ----
         list.addView(new SectionHeader(ctx, "服务商", "API 协议类型"));
         final SettingRow[] providerRows = new SettingRow[ProviderType.values().length];
-        final String currentProvider = config.getProviderType();
         ProviderType[] types = ProviderType.values();
         for (int i = 0; i < types.length; i++) {
             final ProviderType pt = types[i];
-            boolean sel = pt.name().toLowerCase(java.util.Locale.US).equals(currentProvider);
-            SettingRow row = new SettingRow(ctx, "☁", providerLabel(pt), sel ? "当前" : "点击选择");
+            boolean sel = providerMatches(pt, config.getProviderType());
+            SettingRow row = new SettingRow(ctx, "☁", providerLabel(pt), sel ? "当前使用" : "点击选择");
             providerRows[i] = row;
             row.arrow(() -> {
                 LogWriter.log(TAG, "click: 服务商 -> " + pt.name());
                 try {
-                    config.setProviderType(pt.name().toLowerCase(java.util.Locale.US));
+                    config.setProviderType(pt.name().toLowerCase(Locale.US));
                     for (int j = 0; j < providerRows.length; j++) {
-                        providerRows[j].setSub(j == pt.ordinal() ? "当前" : "点击选择");
+                        providerRows[j].setSub(j == pt.ordinal() ? "当前使用" : "点击选择");
                     }
                     toastQuiet(ctx, "已选择 " + providerLabel(pt));
                 } catch (Throwable t) {
@@ -355,94 +387,144 @@ public final class AiAssistantPanel {
             }
         });
 
-        // ---- 人设与触发 ----
-        list.addView(new SectionHeader(ctx, "人设与触发", "机器人身份与唤醒规则"));
-        final EditText etBotName = M3Page.input(ctx, "机器人名");
+        // ---- 底部按钮 ----
+        ModernButton btnSave = new ModernButton(ctx, "保存", ModernButton.STYLE_PRIMARY);
+        btnSave.onClick(() -> {
+            LogWriter.log(TAG, "click(提供商): 保存");
+            try {
+                config.setBaseUrl(str(etBaseUrl));
+                config.setApiKey(str(etApiKey));
+                config.setModel(str(etModel));
+                config.setTemperature(seekTemp.getProgress() / TEMP_SCALE);
+                boolean ok = config.save();
+                LogWriter.log(TAG, "provider saved ok=" + ok);
+                reload();
+                toastQuiet(ctx, "已保存");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "provider save err: " + t);
+                toastQuiet(ctx, "保存失败");
+            }
+            dismissCurrent();
+            show(activity);
+        });
+
+        ModernButton btnClose = new ModernButton(ctx, "返回", ModernButton.STYLE_GHOST);
+        btnClose.onClick(() -> {
+            LogWriter.log(TAG, "click(提供商): 返回");
+            dismissCurrent();
+            show(activity);
+        });
+
+        root.addView(newBtnRow2(ctx, btnSave, btnClose));
+        android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        showPopup(activity, root, (int) (dm.heightPixels * 0.85f), "provider");
+    }
+
+    // ==================== 二级: AI 核心参数 ====================
+
+    private static void showCoreConfig(final Activity activity) {
+        LogWriter.log(TAG, "showCoreConfig: enter");
+        if (activity == null || activity.isFinishing()) return;
+        final Context ctx = activity;
+
+        final AppConfig config;
+        try {
+            config = AIBotCore.config();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "showCoreConfig config err: " + t);
+            toastQuiet(ctx, "AI 核心未初始化");
+            return;
+        }
+        if (config == null) {
+            toastQuiet(ctx, "AI 核心未初始化");
+            return;
+        }
+
+        LinearLayout root = newRoot(ctx);
+        root.addView(newTitle(ctx, "AI 核心参数"));
+        LinearLayout list = new LinearLayout(ctx);
+        newScroll(root, list);
+
+        // ---- 身份 ----
+        list.addView(new SectionHeader(ctx, "身份", "AI 对外展示的名字与唤醒词"));
+        final EditText etBotName = M3Page.input(ctx, "AI 昵称, 如 小乐");
         etBotName.setText(safe(config.getBotName()));
         list.addView(etBotName);
-        final EditText etWakeKeyword = M3Page.input(ctx, "唤醒词");
+        final EditText etWakeKeyword = M3Page.input(ctx, "唤醒词(多个用逗号分隔)");
         etWakeKeyword.setText(safe(config.getWakeKeyword()));
         list.addView(etWakeKeyword);
-        final EditText etSystemPrompt = M3Page.input(ctx, "系统人设提示词");
+
+        // ---- 人设 ----
+        list.addView(new SectionHeader(ctx, "人设提示词", "System Prompt, 决定 AI 的语气与身份"));
+        final EditText etSystemPrompt = M3Page.input(ctx, "人设提示词");
         etSystemPrompt.setSingleLine(false);
-        etSystemPrompt.setMinLines(3);
+        etSystemPrompt.setMinLines(4);
         etSystemPrompt.setGravity(Gravity.TOP);
         etSystemPrompt.setText(safe(config.getSystemPrompt()));
         list.addView(etSystemPrompt);
 
         // ---- 记忆 ----
-        list.addView(new SectionHeader(ctx, "记忆", "上下文消息条数"));
-        final EditText etMemory = M3Page.input(ctx, "记忆条数(上下文消息数)");
+        list.addView(new SectionHeader(ctx, "上下文记忆", "带入对话的历史消息条数"));
+        final EditText etMemory = M3Page.input(ctx, "记忆条数, 如 50");
         etMemory.setText(String.valueOf(config.getMaxHistoryMessages()));
         list.addView(etMemory);
 
         // ---- 底部按钮 ----
         ModernButton btnSave = new ModernButton(ctx, "保存", ModernButton.STYLE_PRIMARY);
         btnSave.onClick(() -> {
-            LogWriter.log(TAG, "click(设置页): 保存");
-            collectAndSave(config, etBaseUrl, etApiKey, etModel, etBotName, etWakeKeyword,
-                    etSystemPrompt, etMemory, seekTemp);
+            LogWriter.log(TAG, "click(核心参数): 保存");
+            try {
+                config.setBotName(str(etBotName));
+                config.setWakeKeyword(str(etWakeKeyword));
+                config.setSystemPrompt(str(etSystemPrompt));
+                String mem = str(etMemory);
+                if (!TextUtils.isEmpty(mem)) {
+                    try {
+                        config.setMaxHistoryMessages(Integer.parseInt(mem.trim()));
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+                boolean ok = config.save();
+                LogWriter.log(TAG, "core saved ok=" + ok);
+                reload();
+                toastQuiet(ctx, "已保存");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "core save err: " + t);
+                toastQuiet(ctx, "保存失败");
+            }
             dismissCurrent();
-            toastQuiet(ctx, "已保存");
+            show(activity);
         });
 
         ModernButton btnReset = new ModernButton(ctx, "恢复默认", ModernButton.STYLE_GHOST);
         btnReset.onClick(() -> {
-            LogWriter.log(TAG, "click(设置页): 恢复默认");
+            LogWriter.log(TAG, "click(核心参数): 恢复默认");
             try {
                 config.reset();
                 config.save();
-                AIBotCore.reload();
+                reload();
                 toastQuiet(ctx, "已恢复默认");
-                dismissCurrent();
             } catch (Throwable t) {
                 LogWriter.log(TAG, "reset err: " + t);
                 toastQuiet(ctx, "恢复默认失败");
             }
+            dismissCurrent();
+            show(activity);
         });
 
-        ModernButton btnClose = new ModernButton(ctx, "关闭", ModernButton.STYLE_GHOST);
+        ModernButton btnClose = new ModernButton(ctx, "返回", ModernButton.STYLE_GHOST);
         btnClose.onClick(() -> {
-            LogWriter.log(TAG, "click(设置页): 关闭");
+            LogWriter.log(TAG, "click(核心参数): 返回");
             dismissCurrent();
+            show(activity);
         });
 
         root.addView(newBtnRow(ctx, btnSave, btnReset, btnClose));
         android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-        showPopup(activity, root, (int) (dm.heightPixels * 0.85f), "settings");
+        showPopup(activity, root, (int) (dm.heightPixels * 0.85f), "core");
     }
 
-    private static void collectAndSave(AppConfig config, EditText etBaseUrl, EditText etApiKey,
-                                       EditText etModel, EditText etBotName, EditText etWakeKeyword,
-                                       EditText etSystemPrompt, EditText etMemory, SeekBar seekTemp) {
-        try {
-            config.setBaseUrl(str(etBaseUrl));
-            config.setApiKey(str(etApiKey));
-            config.setModel(str(etModel));
-            config.setBotName(str(etBotName));
-            config.setWakeKeyword(str(etWakeKeyword));
-            config.setSystemPrompt(str(etSystemPrompt));
-            config.setTemperature(seekTemp.getProgress() / TEMP_SCALE);
-            String mem = str(etMemory);
-            if (!TextUtils.isEmpty(mem)) {
-                try {
-                    config.setMaxHistoryMessages(Integer.parseInt(mem.trim()));
-                } catch (NumberFormatException ignored) {
-                }
-            }
-            boolean ok = config.save();
-            LogWriter.log(TAG, "settings saved ok=" + ok);
-            try {
-                AIBotCore.reload();
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "reload after save err: " + t);
-            }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "collectAndSave err: " + t);
-        }
-    }
-
-    // ==================== 白名单(v962 内嵌) ====================
+    // ==================== 二级: 白名单 ====================
 
     private static void showWhitelist(final Activity activity) {
         LogWriter.log(TAG, "showWhitelist: enter");
@@ -469,7 +551,7 @@ public final class AiAssistantPanel {
         final List<String> items = new ArrayList<>(wl.list());
         final List<String> labels = new ArrayList<>();
         rebuildLabels(items, labels);
-        // v962: 两步删除确认 — 首次点击只标记, 再次点击同一条目才真删
+        // 两步删除确认 — 首次点击只标记, 再次点击同一条目才真删
         final String[] pendingDelete = {null};
 
         LinearLayout root = newRoot(ctx);
@@ -544,14 +626,15 @@ public final class AiAssistantPanel {
         });
         root.addView(listView);
 
-        ModernButton btnClose = new ModernButton(ctx, "关闭", ModernButton.STYLE_GHOST);
+        ModernButton btnClose = new ModernButton(ctx, "返回", ModernButton.STYLE_GHOST);
         LinearLayout.LayoutParams lpC = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lpC.setMargins(0, dp(ctx, 12), 0, 0);
         btnClose.setLayoutParams(lpC);
         btnClose.onClick(() -> {
-            LogWriter.log(TAG, "click(白名单): 关闭");
+            LogWriter.log(TAG, "click(白名单): 返回");
             dismissCurrent();
+            show(activity);
         });
         root.addView(btnClose);
 
@@ -577,15 +660,19 @@ public final class AiAssistantPanel {
             mutator.apply(config);
             boolean ok = config.save();
             LogWriter.log(TAG, "persist ok=" + ok);
-            try {
-                AIBotCore.reload();
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "reload err: " + t);
-            }
+            reload();
             toastQuiet(ctx, toast);
         } catch (Throwable t) {
             LogWriter.log(TAG, "persist err: " + t);
             toastQuiet(ctx, "保存失败");
+        }
+    }
+
+    private static void reload() {
+        try {
+            AIBotCore.reload();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "reload err: " + t);
         }
     }
 
@@ -598,7 +685,24 @@ public final class AiAssistantPanel {
     }
 
     private static void updateTempLabel(TextView tv, int progress) {
-        tv.setText("温度: " + String.format(java.util.Locale.US, "%.1f", progress / TEMP_SCALE));
+        tv.setText("温度: " + String.format(Locale.US, "%.1f", progress / TEMP_SCALE));
+    }
+
+    /** 解析 providerType 字符串为枚举(兼容 "openai" 别名) */
+    private static ProviderType providerTypeOf(String current) {
+        if (current == null) return ProviderType.OPENAI_CHAT;
+        String c = current.toLowerCase(Locale.US).trim();
+        for (ProviderType pt : ProviderType.values()) {
+            if (pt.name().toLowerCase(Locale.US).equals(c)) return pt;
+        }
+        if ("openai".equals(c) || "chat".equals(c) || "gpt".equals(c)) return ProviderType.OPENAI_CHAT;
+        if ("responses".equals(c)) return ProviderType.OPENAI_RESPONSES;
+        if ("claude".equals(c)) return ProviderType.ANTHROPIC;
+        return ProviderType.OPENAI_CHAT;
+    }
+
+    private static boolean providerMatches(ProviderType pt, String current) {
+        return providerTypeOf(current) == pt;
     }
 
     private static String providerLabel(ProviderType pt) {

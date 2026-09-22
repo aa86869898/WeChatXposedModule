@@ -21,7 +21,7 @@ public class CandyUi {
         return (int) (v * ctx.getResources().getDisplayMetrics().density + 0.5f);
     }
 
-    /** M3 Switch：轨道 52×32dp 圆角16，未选中 thumb 16dp(surfaceVariant)，选中 thumb 24dp(onPrimary) */
+    /** M3 Switch：轨道 52×32dp 圆角16，未选中 thumb 18dp(outline)，选中 thumb 24dp(onPrimary) */
     @SuppressWarnings("deprecation")
     public static Switch newSwitch(Context ctx) {
         Switch sw = new Switch(ctx);
@@ -29,6 +29,8 @@ public class CandyUi {
         int w = (int) (AppColors.SWITCH_WIDTH_DP * d);
         int h = (int) (AppColors.SWITCH_HEIGHT_DP * d);
         int trackR = (int) (AppColors.SWITCH_RADIUS_DP * d);
+        int thumbOff = (int) (18 * d);
+        int thumbOn = (int) (24 * d);
         sw.setMinimumWidth(w);
         sw.setMinimumHeight(h);
         sw.setPadding(0, 0, 0, 0);
@@ -36,32 +38,36 @@ public class CandyUi {
         sw.setTextOn("");
         sw.setShowText(false);
         try {
-            // 轨道：关=surfaceVariant+outline描边 / 开=primary
+            // v967 关键修复: 自定义 track/thumb 为 GradientDrawable 时无 intrinsic size,
+            // Switch 测量不到尺寸 → 开关整体不可见(人声增强/AI助手等所有 SettingRow 开关丢失)。
+            // 必须对每个 drawable 调用 setSize() 显式提供 intrinsic 尺寸。
             StateListDrawable track = new StateListDrawable();
             GradientDrawable off = new GradientDrawable();
             off.setShape(GradientDrawable.RECTANGLE);
             off.setCornerRadius(trackR);
             off.setColor(AppColors.surfaceContainerHighest());
             off.setStroke(dp(ctx, 2), AppColors.outline());
+            off.setSize(w, h);
             track.addState(new int[]{-android.R.attr.state_checked}, off);
             GradientDrawable on = new GradientDrawable();
             on.setShape(GradientDrawable.RECTANGLE);
             on.setCornerRadius(trackR);
             on.setColor(AppColors.primary());
+            on.setSize(w, h);
             track.addState(new int[]{android.R.attr.state_checked}, on);
             if (android.os.Build.VERSION.SDK_INT >= 16) sw.setTrackDrawable(track);
 
-            // thumb：关=16dp outline 圆点 / 开=24dp onPrimary 圆点
+            // thumb：关=18dp outline 圆点 / 开=24dp onPrimary 圆点
             StateListDrawable thumb = new StateListDrawable();
             GradientDrawable tOff = new GradientDrawable();
-            tOff.setShape(GradientDrawable.RECTANGLE);
-            tOff.setCornerRadius(dp(ctx, 8));
+            tOff.setShape(GradientDrawable.OVAL);
             tOff.setColor(AppColors.outline());
-            GradientDrawable tOn = new GradientDrawable();
-            tOn.setShape(GradientDrawable.RECTANGLE);
-            tOn.setCornerRadius(dp(ctx, 12));
-            tOn.setColor(AppColors.onPrimary());
+            tOff.setSize(thumbOff, thumbOff);
             thumb.addState(new int[]{-android.R.attr.state_checked}, tOff);
+            GradientDrawable tOn = new GradientDrawable();
+            tOn.setShape(GradientDrawable.OVAL);
+            tOn.setColor(AppColors.onPrimary());
+            tOn.setSize(thumbOn, thumbOn);
             thumb.addState(new int[]{android.R.attr.state_checked}, tOn);
             if (android.os.Build.VERSION.SDK_INT >= 16) sw.setThumbDrawable(thumb);
         } catch (Throwable ignored) {}

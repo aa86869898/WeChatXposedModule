@@ -850,7 +850,8 @@ public class ChatFooterLongPressMenu {
         // 文件选择回调更新显示
         final ViewTreeObserver.OnGlobalLayoutListener updateFileName = () -> {
             String name = new java.io.File(pathText.getText().toString().trim()).getName();
-            if (!name.isEmpty() && !name.equals("未选择文件")) {
+            boolean hasFile = !name.isEmpty() && !name.equals("未选择文件");
+            if (hasFile) {
                 String label = "已选: " + name;
                 if (sCutBeginSec > 0 || sCutEndSec > 0) {
                     label += " (裁剪 " + formatSec(sCutBeginSec) + "-" + formatSec(sCutEndSec) + ")";
@@ -861,6 +862,8 @@ public class ChatFooterLongPressMenu {
             } else {
                 cutBtn.setVisibility(View.GONE);
             }
+            // v967: 未选音频文件前不显示播放图标
+            playIcon.setVisibility(hasFile ? View.VISIBLE : View.GONE);
         };
         pathText.addTextChangedListener(new android.text.TextWatcher() {
             public void afterTextChanged(android.text.Editable s) { updateFileName.onGlobalLayout(); }
