@@ -186,20 +186,60 @@ public final class AiAssistantPanel {
                 }
                 pw.showAtLocation(anchor, Gravity.TOP | Gravity.LEFT, x, y);
                 if (wrap) {
-                    // v976: WRAP_CONTENT 面板的真实高度只有布局后才确定, 布局完成再按真实高度
-                    // 重新居中, 保证上下留白均匀且不越过可用区下沿。
+                    // v976/v979: WRAP_CONTENT 面板的真实高度只有布局后才确定。布局完成后:
+                    // ① 打印面板与底部按钮的实际屏幕边界(便于定位遮挡);
+                    // ② 若内容仍超出可用高度, 压缩滚动区后重新布局一次, 保证底部按钮可见;
+                    // ③ 按真实高度重新居中, 并把弹窗高度显式固定为实测真实高度(内容精确贴合, 不再裁切)。
                     final int fAvailTop = availTop;
                     final int fAvailBottom = availBottom;
                     final int fAvailH = availH;
                     final int fX = x;
+                    final int fPanelW = panelW;
+                    final int[] pass = {0};
                     root.post(new Runnable() {
                         @Override public void run() {
                             try {
                                 int realH = root.getHeight();
                                 if (realH <= 0) return;
+                                int[] rl = new int[2];
+                                root.getLocationOnScreen(rl);
+                                View last = null;
+                                if (root instanceof ViewGroup) {
+                                    ViewGroup rg = (ViewGroup) root;
+                                    if (rg.getChildCount() > 0) {
+                                        last = rg.getChildAt(rg.getChildCount() - 1);
+                                    }
+                                }
+                                int lastTop = -1, lastBottom = -1;
+                                if (last != null) {
+                                    int[] ll = new int[2];
+                                    last.getLocationOnScreen(ll);
+                                    lastTop = ll[1];
+                                    lastBottom = ll[1] + last.getHeight();
+                                }
+                                LogWriter.log(TAG, "showPopup layout: scene=" + scene
+                                        + " realH=" + realH + " rootTop=" + rl[1]
+                                        + " rootBottom=" + (rl[1] + realH)
+                                        + " lastTop=" + lastTop + " lastBottom=" + lastBottom
+                                        + " screenH=" + dm.heightPixels
+                                        + " availTop=" + fAvailTop + " availBottom=" + fAvailBottom
+                                        + " availH=" + fAvailH + " pass=" + pass[0]);
+                                if (realH > fAvailH && pass[0] == 0) {
+                                    CappedScrollView sv = findCappedScroll(root);
+                                    if (sv != null) {
+                                        int cur = sv.getMaxHeight();
+                                        int over = realH - fAvailH + dp(actx, 4);
+                                        sv.setMaxHeight(Math.max(dp(actx, 100),
+                                                (cur > 0 ? cur : realH) - over));
+                                        pass[0]++;
+                                        root.requestLayout();
+                                        root.post(this);
+                                        return;
+                                    }
+                                }
                                 int ny = fAvailTop + Math.max(0, (fAvailH - realH) / 2);
                                 if (ny + realH > fAvailBottom) ny = Math.max(fAvailTop, fAvailBottom - realH);
-                                pw.update(fX, ny, -1, -1);
+                                pw.update(fX, ny, fPanelW, realH);
                             } catch (Throwable ignored) {}
                         }
                     });
