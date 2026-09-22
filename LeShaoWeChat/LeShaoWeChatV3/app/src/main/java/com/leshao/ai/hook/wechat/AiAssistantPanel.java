@@ -137,16 +137,29 @@ public final class AiAssistantPanel {
 
             // 预测量: 内容按可用高度收缩, 取实际面板高度用于精确居中(不越过可见区)
             int panelH;
-            if (heightPx > 0) {
-                panelH = Math.min(heightPx, maxPanelH);
-            } else {
-                try {
-                    root.measure(View.MeasureSpec.makeMeasureSpec(panelW, View.MeasureSpec.EXACTLY),
-                            View.MeasureSpec.makeMeasureSpec(maxPanelH, View.MeasureSpec.AT_MOST));
-                    panelH = Math.min(root.getMeasuredHeight(), maxPanelH);
-                } catch (Throwable t) {
-                    panelH = ViewGroup.LayoutParams.WRAP_CONTENT;
+            int targetH = heightPx > 0 ? Math.min(heightPx, maxPanelH) : maxPanelH;
+            try {
+                root.measure(View.MeasureSpec.makeMeasureSpec(panelW, View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(targetH, View.MeasureSpec.AT_MOST));
+                int measured = root.getMeasuredHeight();
+                // v973: 内容(标题 + 滚动区 + 底部按钮)超出可用高度时, 之前只把滚动区压到上限,
+                // 其余固定子视图仍会把总高撑破 targetH, 导致底部按钮被弹窗下沿裁掉。
+                // 这里把「溢出量」从滚动区上限中扣除后重新测量, 保证底部按钮完整可见。
+                if (measured > targetH) {
+                    CappedScrollView sv = findCappedScroll(root);
+                    if (sv != null) {
+                        int cur = sv.getMaxHeight();
+                        int newCap = Math.max(dp(actx, 100),
+                                (cur > 0 ? cur : targetH) - (measured - targetH));
+                        sv.setMaxHeight(newCap);
+                        root.measure(View.MeasureSpec.makeMeasureSpec(panelW, View.MeasureSpec.EXACTLY),
+                                View.MeasureSpec.makeMeasureSpec(targetH, View.MeasureSpec.AT_MOST));
+                        measured = root.getMeasuredHeight();
+                    }
                 }
+                panelH = heightPx > 0 ? targetH : Math.min(measured, targetH);
+            } catch (Throwable t) {
+                panelH = ViewGroup.LayoutParams.WRAP_CONTENT;
             }
             if (panelH > 0) pw.setHeight(panelH);
 
@@ -229,6 +242,9 @@ public final class AiAssistantPanel {
         // v968: 左右边距收紧(原 20dp), 让右侧开关等尾部控件更贴边不局促
         // v971: 底部内边距加大, 让底部按钮不贴边
         root.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 12), dp(ctx, 16));
+        // v973: 允许底部按钮的描边绘制到内边距区域, 避免按钮边框下缘被自身裁剪
+        root.setClipChildren(false);
+        root.setClipToPadding(false);
         return root;
     }
 
@@ -252,6 +268,10 @@ public final class AiAssistantPanel {
 
         void setMaxHeight(int h) {
             mMaxHeight = h;
+        }
+
+        int getMaxHeight() {
+            return mMaxHeight;
         }
 
         @Override
@@ -281,6 +301,20 @@ public final class AiAssistantPanel {
         scroll.addView(list);
         root.addView(scroll);
         return scroll;
+    }
+
+    /** 深度优先查找面板内的收缩滚动区(用于按溢出量动态降低其高度上限)。 */
+    private static CappedScrollView findCappedScroll(View v) {
+        if (v == null) return null;
+        if (v instanceof CappedScrollView) return (CappedScrollView) v;
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                CappedScrollView r = findCappedScroll(g.getChildAt(i));
+                if (r != null) return r;
+            }
+        }
+        return null;
     }
 
     /** 底部两按钮行(等宽): 左 / 右 */
@@ -372,30 +406,35 @@ public final class AiAssistantPanel {
 
             // ---- 2. 自动回复 ----
             list.addView(new SectionHeader(ctx, "自动回复", "按会话类型控制触发范围"));
-            list.addView(new SettingRow(ctx, "👥", "群聊自动回复", "在白名单群内自动回复")
-                    .switchOn(config.isAutoReplyInGroups(), (btn, checked) -> {
-                        LogWriter.log(TAG, "click: 群聊自动回复 -> " + checked);
-                        persist(ctx, config, c -> c.setAutoReplyInGroups(checked), "群聊自动回复已" + (checked ? "开启" : "关闭"));
-                    }));
-            // v969: 按群独立配置入口(点击进入, 不影响上面的总开关)
-            list.addView(new SettingRow(ctx, "🧩", "按群聊独立配置", overrideSub(true))
-                    .arrow(() -> {
-                        LogWriter.log(TAG, "click: 群聊独立配置");
-                        dismissCurrent();
-                        showConversationList(activity, true);
-                    }));
-            list.addView(new SettingRow(ctx, "💬", "私聊自动回复", "对白名单联系人自动回复")
-                    .switchOn(config.isAutoReplyInPrivate(), (btn, checked) -> {
-                        LogWriter.log(TAG, "click: 私聊自动回复 -> " + checked);
-                        persist(ctx, config, c -> c.setAutoReplyInPrivate(checked), "私聊自动回复已" + (checked ? "开启" : "关闭"));
-                    }));
-            // v969: 按联系人独立配置入口
-            list.addView(new SettingRow(ctx, "🧩", "按联系人独立配置", overrideSub(false))
-                    .arrow(() -> {
-                        LogWriter.log(TAG, "click: 私聊独立配置");
-                        dismissCurrent();
-                        showConversationList(activity, false);
-                    }));
+            // v973: 群聊个性化配置 —— 行内开关控制群聊总开关; 点击整行进入「群聊个性化配置」
+            // 页面(列出全部群聊, 点群聊自定义人设/关键词等, 支持模板一键套用)。
+            SettingRow rowGroup = new SettingRow(ctx, "👥", "群聊个性化配置",
+                    overrideSub(true) + " · 点整行进入配置");
+            rowGroup.switchOn(config.isAutoReplyInGroups(), (btn, checked) -> {
+                LogWriter.log(TAG, "click: 群聊个性化配置开关 -> " + checked);
+                persist(ctx, config, c -> c.setAutoReplyInGroups(checked), "群聊自动回复已" + (checked ? "开启" : "关闭"));
+            });
+            rowGroup.setOnClickListener(v -> {
+                LogWriter.log(TAG, "click: 进入群聊个性化配置");
+                dismissCurrent();
+                showConversationList(activity, true);
+            });
+            list.addView(rowGroup);
+
+            // v973: 联系人个性化配置 —— 行内开关控制私聊总开关; 点击整行进入页面(列出全部联系人)。
+            SettingRow rowPrivate = new SettingRow(ctx, "💬", "联系人个性化配置",
+                    overrideSub(false) + " · 点整行进入配置");
+            rowPrivate.switchOn(config.isAutoReplyInPrivate(), (btn, checked) -> {
+                LogWriter.log(TAG, "click: 联系人个性化配置开关 -> " + checked);
+                persist(ctx, config, c -> c.setAutoReplyInPrivate(checked), "私聊自动回复已" + (checked ? "开启" : "关闭"));
+            });
+            rowPrivate.setOnClickListener(v -> {
+                LogWriter.log(TAG, "click: 进入联系人个性化配置");
+                dismissCurrent();
+                showConversationList(activity, false);
+            });
+            list.addView(rowPrivate);
+
             list.addView(new SettingRow(ctx, "📣", "仅被@时自动回复", "群聊中只有被提到时才回复")
                     .switchOn(config.isOnlyWhenMentioned(), (btn, checked) -> {
                         LogWriter.log(TAG, "click: 仅被@时回复 -> " + checked);
@@ -826,76 +865,19 @@ public final class AiAssistantPanel {
         LogWriter.log(TAG, "showConversationList: enter group=" + isGroup);
         if (activity == null || activity.isFinishing()) return;
         final Context ctx = activity;
-        final ConversationConfig cc = AIBotCore.conversationConfig();
-        if (cc == null) {
+        if (AIBotCore.conversationConfig() == null) {
             toastQuiet(ctx, "AI 核心未初始化");
             return;
         }
-
-        LinearLayout root = newRoot(ctx);
-        root.addView(newTitle(ctx, isGroup ? "群聊独立配置" : "私聊独立配置"));
-
-        TextView tip = new TextView(ctx);
-        tip.setText("为指定会话单独设置自动回复 / 人设 / 模型; 未配置的会话沿用全局。");
-        tip.setTextSize(12);
-        tip.setTextColor(AppColors.textTertiary());
-        tip.setPadding(0, dp(ctx, 4), 0, dp(ctx, 8));
-        root.addView(tip);
-
-        ModernButton btnAdd = new ModernButton(ctx, "＋ 添加会话", ModernButton.STYLE_PRIMARY);
-        LinearLayout.LayoutParams lpAdd = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lpAdd.setMargins(0, 0, 0, dp(ctx, 8));
-        btnAdd.setLayoutParams(lpAdd);
-        btnAdd.onClick(() -> {
-            LogWriter.log(TAG, "click: 添加会话 group=" + isGroup);
-            dismissCurrent();
-            showSessionPicker(activity, isGroup);
+        // v973: 先加载模块通讯录(全部群聊/联系人), 再构建「个性化配置」列表
+        com.leshao.v3.ContactRepository.loadAsync(() -> {
+            if (activity.isFinishing()) return;
+            activity.runOnUiThread(() -> buildConversationList(activity, isGroup));
         });
-        root.addView(btnAdd);
-
-        LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.60f));
-
-        List<String> keys = cc.keysByType(isGroup);
-        if (keys.isEmpty()) {
-            TextView empty = new TextView(ctx);
-            empty.setText("暂无独立配置, 点击上方「添加会话」开始。");
-            empty.setTextSize(13);
-            empty.setTextColor(AppColors.textTertiary());
-            empty.setPadding(dp(ctx, 4), dp(ctx, 12), 0, dp(ctx, 12));
-            list.addView(empty);
-        } else {
-            for (String t : keys) {
-                final String talker = t;
-                list.addView(new SettingRow(ctx, isGroup ? "👥" : "👤",
-                        label(talker), entrySummary(cc.get(talker)))
-                        .arrow(() -> {
-                            LogWriter.log(TAG, "click: 编辑独立配置 " + talker);
-                            dismissCurrent();
-                            showConvEdit(activity, talker, isGroup);
-                        }));
-            }
-        }
-
-        ModernButton btnClose = new ModernButton(ctx, "返回", ModernButton.STYLE_GHOST);
-        LinearLayout.LayoutParams lpC = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lpC.setMargins(0, dp(ctx, 12), 0, 0);
-        btnClose.setLayoutParams(lpC);
-        btnClose.onClick(() -> {
-            LogWriter.log(TAG, "click(独立配置): 返回");
-            dismissCurrent();
-            show(activity);
-        });
-        root.addView(btnClose);
-
-        android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-        showPopup(activity, root, (int) (dm.heightPixels * 0.85f), "convlist");
     }
 
-    private static void showSessionPicker(final Activity activity, final boolean isGroup) {
-        LogWriter.log(TAG, "showSessionPicker: enter group=" + isGroup);
+    /** v973: 群聊/联系人个性化配置列表 —— 列出全部会话, 已配置的标注并置顶。 */
+    private static void buildConversationList(final Activity activity, final boolean isGroup) {
         if (activity == null || activity.isFinishing()) return;
         final Context ctx = activity;
         final ConversationConfig cc = AIBotCore.conversationConfig();
@@ -904,63 +886,95 @@ public final class AiAssistantPanel {
             return;
         }
 
-        LinearLayout root = newRoot(ctx);
-        root.addView(newTitle(ctx, isGroup ? "选择要配置的群" : "选择要配置的联系人"));
-
-        LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.55f));
-
-        int count = 0;
+        // 1) 通讯录全部群聊/联系人
+        List<String[]> targets = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
         try {
-            List<String[]> sessions = ConversationQuery.listSessions();
-            if (sessions != null) {
-                for (String[] s : sessions) {
-                    if (s == null || s.length < 1 || s[0] == null) continue;
-                    final String talker = s[0];
-                    if (ConversationConfig.isGroupTalker(talker) != isGroup) continue;
-                    if (cc.get(talker) != null) continue;
-                    String name = (s.length > 1 && s[1] != null && !s[1].trim().isEmpty())
-                            ? s[1] : label(talker);
-                    list.addView(new SettingRow(ctx, isGroup ? "👥" : "👤", name, talker)
-                            .arrow(() -> {
-                                LogWriter.log(TAG, "click: 选中会话 " + talker);
-                                dismissCurrent();
-                                showConvEdit(activity, talker, isGroup);
-                            }));
-                    count++;
+            List<com.leshao.v3.model.ContactCard> cards = isGroup
+                    ? com.leshao.v3.ContactRepository.getGroups()
+                    : com.leshao.v3.ContactRepository.getFriends();
+            if (cards != null) {
+                for (com.leshao.v3.model.ContactCard c : cards) {
+                    if (c == null || TextUtils.isEmpty(c.username)) continue;
+                    if (!seen.add(c.username)) continue;
+                    String nm = c.displayName();
+                    targets.add(new String[]{c.username, TextUtils.isEmpty(nm) ? c.username : nm});
                 }
             }
         } catch (Throwable t) {
-            LogWriter.log(TAG, "showSessionPicker listSessions err: " + t);
+            LogWriter.log(TAG, "buildConversationList contacts err: " + t);
         }
-        if (count == 0) {
+        // 2) 通讯录未就绪时回退到会话列表
+        if (targets.isEmpty()) {
+            try {
+                List<String[]> sessions = ConversationQuery.listSessions();
+                if (sessions != null) {
+                    for (String[] s : sessions) {
+                        if (s == null || s.length < 1 || s[0] == null) continue;
+                        if (ConversationConfig.isGroupTalker(s[0]) != isGroup) continue;
+                        if (!seen.add(s[0])) continue;
+                        String nm = (s.length > 1 && !TextUtils.isEmpty(s[1])) ? s[1] : label(s[0]);
+                        targets.add(new String[]{s[0], nm});
+                    }
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "buildConversationList sessions err: " + t);
+            }
+        }
+        // 3) 已配置但不在通讯录中的会话补全
+        final List<String> configured = cc.keysByType(isGroup);
+        final java.util.Set<String> cfgSet = new java.util.HashSet<>(configured);
+        for (String talker : configured) {
+            if (talker == null || !seen.add(talker)) continue;
+            targets.add(new String[]{talker, label(talker)});
+        }
+        // 4) 已配置置顶, 其余按名称排序
+        java.util.Collections.sort(targets, (a, b) -> {
+            boolean ca = cfgSet.contains(a[0]);
+            boolean cb = cfgSet.contains(b[0]);
+            if (ca != cb) return ca ? -1 : 1;
+            String na = (a.length > 1 && a[1] != null) ? a[1] : a[0];
+            String nb = (b.length > 1 && b[1] != null) ? b[1] : b[0];
+            return na.compareToIgnoreCase(nb);
+        });
+
+        LinearLayout root = newRoot(ctx);
+        root.addView(newTitle(ctx, isGroup ? "群聊个性化配置" : "联系人个性化配置"));
+
+        TextView tip = new TextView(ctx);
+        tip.setText((isGroup ? "点群聊" : "点联系人")
+                + "可自定义人设 / 关键词 / 模型等整套内容, 支持模板一键配置; ✅ 表示已配置。");
+        tip.setTextSize(12);
+        tip.setTextColor(AppColors.textTertiary());
+        tip.setPadding(0, dp(ctx, 4), 0, dp(ctx, 8));
+        root.addView(tip);
+
+        LinearLayout list = new LinearLayout(ctx);
+        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.62f));
+
+        int shown = 0;
+        for (String[] tgt : targets) {
+            final String talker = tgt[0];
+            String name = (tgt.length > 1 && !TextUtils.isEmpty(tgt[1])) ? tgt[1] : talker;
+            boolean isCfg = cfgSet.contains(talker);
+            String sub = isCfg ? ("已配置 · " + entrySummary(cc.get(talker))) : "未配置 · 点击可配置";
+            list.addView(new SettingRow(ctx, isCfg ? "✅" : (isGroup ? "👥" : "👤"), name, sub)
+                    .arrow(() -> {
+                        LogWriter.log(TAG, "click: 个性化配置 " + talker);
+                        dismissCurrent();
+                        showConvEdit(activity, talker, isGroup);
+                    }));
+            shown++;
+        }
+        if (shown == 0) {
             TextView empty = new TextView(ctx);
-            empty.setText("未读取到可选会话, 可在下方手动输入 talker / 群 id 添加。");
+            empty.setText((isGroup ? "未读取到群聊" : "未读取到联系人")
+                    + ", 请确认已登录微信后重试。");
             empty.setTextSize(13);
             empty.setTextColor(AppColors.textTertiary());
             empty.setPadding(dp(ctx, 4), dp(ctx, 12), 0, dp(ctx, 12));
             list.addView(empty);
         }
-
-        LinearLayout addRow = new LinearLayout(ctx);
-        addRow.setOrientation(LinearLayout.HORIZONTAL);
-        addRow.setGravity(Gravity.CENTER_VERTICAL);
-        final EditText etId = M3Page.input(ctx, "手动输入 talker / 群 id");
-        etId.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        addRow.addView(etId);
-        ModernButton btnAdd = new ModernButton(ctx, "添加", ModernButton.STYLE_PRIMARY);
-        btnAdd.onClick(() -> {
-            String id = str(etId).trim();
-            if (TextUtils.isEmpty(id)) {
-                toastQuiet(ctx, "请输入 talker");
-                return;
-            }
-            LogWriter.log(TAG, "click(选择会话): 手动添加 " + id);
-            dismissCurrent();
-            showConvEdit(activity, id, ConversationConfig.isGroupTalker(id));
-        });
-        addRow.addView(btnAdd);
-        root.addView(addRow);
 
         ModernButton btnClose = new ModernButton(ctx, "返回", ModernButton.STYLE_GHOST);
         LinearLayout.LayoutParams lpC = new LinearLayout.LayoutParams(
@@ -968,13 +982,13 @@ public final class AiAssistantPanel {
         lpC.setMargins(0, dp(ctx, 12), 0, 0);
         btnClose.setLayoutParams(lpC);
         btnClose.onClick(() -> {
+            LogWriter.log(TAG, "click(个性化配置): 返回");
             dismissCurrent();
-            showConversationList(activity, isGroup);
+            show(activity);
         });
         root.addView(btnClose);
 
-        android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-        showPopup(activity, root, (int) (dm.heightPixels * 0.85f), "sessionpick");
+        showPopup(activity, root, 0, "convlist");
     }
 
     private static void showConvEdit(final Activity activity, final String talker,
@@ -1219,8 +1233,7 @@ public final class AiAssistantPanel {
         });
         root.addView(btnClose);
 
-        android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-        showPopup(activity, root, (int) (dm.heightPixels * 0.85f), "tpllist");
+        showPopup(activity, root, 0, "tpllist");
     }
 
     private static void showTemplateEdit(final Activity activity, final String originalName) {
@@ -1351,8 +1364,6 @@ public final class AiAssistantPanel {
         }
 
         final List<String> items = new ArrayList<>(wl.list());
-        final List<String> labels = new ArrayList<>();
-        rebuildLabels(items, labels);
         // 两步删除确认 — 首次点击只标记, 再次点击同一条目才真删
         final String[] pendingDelete = {null};
 
@@ -1360,73 +1371,88 @@ public final class AiAssistantPanel {
         root.addView(newTitle(ctx, "白名单管理"));
 
         TextView tip = new TextView(ctx);
-        tip.setText("名单非空时, AI 仅响应名单内会话(wxid / 群 id); 点击条目两次确认删除。");
+        tip.setText("名单非空时, 仅名单内会话自动回复; 名单外会话在被@时仍会回复。"
+                + "点「从通讯录选择」勾选, 点条目两次确认删除。");
         tip.setTextSize(12);
         tip.setTextColor(AppColors.textTertiary());
         tip.setPadding(0, dp(ctx, 4), 0, dp(ctx, 8));
         root.addView(tip);
 
-        LinearLayout addRow = new LinearLayout(ctx);
-        addRow.setOrientation(LinearLayout.HORIZONTAL);
-        addRow.setGravity(Gravity.CENTER_VERTICAL);
-        final EditText etAdd = M3Page.input(ctx, "输入 talker / 群 id");
-        etAdd.setLayoutParams(new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        addRow.addView(etAdd);
-        ModernButton btnAdd = new ModernButton(ctx, "添加", ModernButton.STYLE_PRIMARY);
-        btnAdd.onClick(() -> {
-            String id = str(etAdd);
-            if (TextUtils.isEmpty(id)) {
-                LogWriter.log(TAG, "click(白名单): 添加-空输入");
-                toastQuiet(ctx, "请输入 talker");
-                return;
-            }
-            LogWriter.log(TAG, "click(白名单): 添加 " + id);
+        // v973: 使用模块联系人选择器(多选)维护白名单
+        ModernButton btnPick = new ModernButton(ctx, "＋ 从通讯录选择", ModernButton.STYLE_PRIMARY);
+        LinearLayout.LayoutParams lpPick = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lpPick.setMargins(0, 0, 0, dp(ctx, 8));
+        btnPick.setLayoutParams(lpPick);
+        btnPick.onClick(() -> {
+            LogWriter.log(TAG, "click(白名单): 从通讯录选择");
+            dismissCurrent();
             try {
-                wl.add(id);
-                wl.save();
-                items.add(id);
-                rebuildLabels(items, labels);
-                etAdd.setText("");
-                toastQuiet(ctx, "已添加 " + id);
+                com.leshao.v3.ui.ContactSelectorView.show(activity, false,
+                        com.leshao.v3.ui.ContactSelectorView.MODE_ALL,
+                        new ArrayList<>(wl.list()),
+                        selected -> {
+                            try {
+                                wl.clear();
+                                if (selected != null) {
+                                    for (com.leshao.v3.model.ContactCard c : selected) {
+                                        if (c != null && !TextUtils.isEmpty(c.username)) {
+                                            wl.add(c.username);
+                                        }
+                                    }
+                                }
+                                wl.save();
+                                toastQuiet(activity, "白名单已更新: " + wl.list().size() + " 个");
+                            } catch (Throwable t) {
+                                LogWriter.log(TAG, "whitelist pick save err: " + t);
+                                toastQuiet(activity, "保存失败");
+                            }
+                            showWhitelist(activity);
+                        });
             } catch (Throwable t) {
-                LogWriter.log(TAG, "wl add err: " + t);
-                toastQuiet(ctx, "添加失败");
+                LogWriter.log(TAG, "whitelist pick err: " + t);
+                showWhitelist(activity);
             }
         });
-        addRow.addView(btnAdd);
-        root.addView(addRow);
+        root.addView(btnPick);
 
-        ListView listView = new ListView(ctx);
-        listView.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        final ArrayAdapter<String> adapter = new ArrayAdapter<>(ctx,
-                android.R.layout.simple_list_item_1, labels);
-        listView.setAdapter(adapter);
-        listView.setOnItemClickListener((parent, view, position, id) -> {
-            if (position < 0 || position >= items.size()) return;
-            final String target = items.get(position);
-            if (target == null) return;
-            if (!target.equals(pendingDelete[0])) {
-                pendingDelete[0] = target;
-                LogWriter.log(TAG, "click(白名单): 标记删除 " + target);
-                toastQuiet(ctx, "再次点击确认删除 " + target);
-                return;
+        LinearLayout list = new LinearLayout(ctx);
+        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.60f));
+
+        if (items.isEmpty()) {
+            TextView empty = new TextView(ctx);
+            empty.setText("当前名单为空 → 全部会话均自动回复(不受白名单限制)。");
+            empty.setTextSize(13);
+            empty.setTextColor(AppColors.textTertiary());
+            empty.setPadding(dp(ctx, 4), dp(ctx, 12), 0, dp(ctx, 12));
+            list.addView(empty);
+        } else {
+            for (String id : items) {
+                final String target = id;
+                SettingRow row = new SettingRow(ctx, "✅", label(target),
+                        target + (target.endsWith("@chatroom") ? "  (群)" : ""));
+                row.setOnClickListener(v -> {
+                    if (!target.equals(pendingDelete[0])) {
+                        pendingDelete[0] = target;
+                        LogWriter.log(TAG, "click(白名单): 标记删除 " + target);
+                        toastQuiet(ctx, "再次点击确认删除 " + target);
+                        return;
+                    }
+                    LogWriter.log(TAG, "click(白名单): 确认删除 " + target);
+                    try {
+                        wl.remove(target);
+                        wl.save();
+                        toastQuiet(ctx, "已移除 " + target);
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "wl remove err: " + t);
+                        toastQuiet(ctx, "删除失败");
+                    }
+                    dismissCurrent();
+                    showWhitelist(activity);
+                });
+                list.addView(row);
             }
-            LogWriter.log(TAG, "click(白名单): 确认删除 " + target);
-            try {
-                wl.remove(target);
-                wl.save();
-                items.remove(position);
-                pendingDelete[0] = null;
-                rebuildLabels(items, labels);
-                toastQuiet(ctx, "已移除 " + target);
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "wl remove err: " + t);
-                toastQuiet(ctx, "删除失败");
-            }
-        });
-        root.addView(listView);
+        }
 
         ModernButton btnClose = new ModernButton(ctx, "返回", ModernButton.STYLE_GHOST);
         LinearLayout.LayoutParams lpC = new LinearLayout.LayoutParams(
@@ -1440,15 +1466,7 @@ public final class AiAssistantPanel {
         });
         root.addView(btnClose);
 
-        android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-        showPopup(activity, root, (int) (dm.heightPixels * 0.85f), "whitelist");
-    }
-
-    private static void rebuildLabels(List<String> items, List<String> labels) {
-        labels.clear();
-        for (String s : items) {
-            labels.add(s + (s != null && s.endsWith("@chatroom") ? "  (群)" : ""));
-        }
+        showPopup(activity, root, 0, "whitelist");
     }
 
     // ==================== 工具 ====================

@@ -49,6 +49,14 @@ public class ContactSelectorView {
     }
 
     public static void show(Activity activity, boolean voiceOnlyMode, int mode, Callback callback) {
+        show(activity, voiceOnlyMode, mode, null, callback);
+    }
+
+    /**
+     * 带「预选」的选择器：{@code preselectUsernames} 中的会话在打开时即处于勾选态。
+     */
+    public static void show(Activity activity, boolean voiceOnlyMode, int mode,
+                            java.util.Collection<String> preselectUsernames, Callback callback) {
         if (activity == null || activity.isFinishing()) return;
 
         ContactRepository.loadAsync(() -> {
@@ -69,6 +77,13 @@ public class ContactSelectorView {
             final List<ContactCard> items = new ArrayList<>(all);
             Collections.sort(items, Comparator.comparing(c -> c.sortKey()));
             final Set<ContactCard> selected = new LinkedHashSet<>();
+            if (preselectUsernames != null && !preselectUsernames.isEmpty()) {
+                for (ContactCard c : items) {
+                    if (c.username != null && preselectUsernames.contains(c.username)) {
+                        selected.add(c);
+                    }
+                }
+            }
 
             activity.runOnUiThread(() -> showDialog(activity, items, selected, callback));
         });

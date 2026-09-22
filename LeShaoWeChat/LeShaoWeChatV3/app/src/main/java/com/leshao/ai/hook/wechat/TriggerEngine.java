@@ -75,27 +75,25 @@ public final class TriggerEngine {
             }
 
             // ② 群聊唤醒判定
+            boolean atMe = false;
             if (isGroup) {
-                boolean atMe = GroupMsgParser.isAtMe(msgInfo, StorageHub.get().selfWxid(),
+                atMe = GroupMsgParser.isAtMe(msgInfo, StorageHub.get().selfWxid(),
                         body, c.getBotName());
                 boolean kwHit = GroupMsgParser.matchKeyword(body, c.getWakeKeywords());
-                boolean onlyMentioned = (ov != null && ov.onlyWhenMentioned != null)
-                        ? ov.onlyWhenMentioned.booleanValue() : c.isOnlyWhenMentioned();
-                if (onlyMentioned) {
-                    // 仅 @/关键词 模式：未唤醒不响应
-                    if (!atMe && !kwHit) {
-                        return;
-                    }
-                } else if (!atMe && !kwHit) {
-                    // 文档 §16.5：群聊默认不响应未唤醒消息
+                // 文档 §16.5：群聊默认不响应未唤醒消息(仅@/关键词模式同理)
+                if (!atMe && !kwHit) {
                     return;
                 }
             }
 
-            // ③ 白名单（非空时仅名单内会话）
+            // ③ 白名单: 非空时仅名单内会话自动回复; 名单外会话不主动回复,
+            // 但群聊中被@时放行(可正常回复)。
             Whitelist wl = AIBotCore.whitelist();
             if (wl != null && !wl.isEmpty() && !wl.contains(talker)) {
-                return;
+                if (!(isGroup && atMe)) {
+                    return;
+                }
+                Log.i(TAG, "白名单外会话被@, 放行: " + talker);
             }
 
             // ④⑤ 生成 + 回复
