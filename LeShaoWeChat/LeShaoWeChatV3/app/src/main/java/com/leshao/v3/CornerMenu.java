@@ -137,8 +137,9 @@ public class CornerMenu {
                             final Activity fAct = act;
                             sH.postDelayed(() -> {
                                 try {
-                                    if (fAct == null || fAct.isFinishing() || sChatWindowActive) return;
+                                    if (fAct == null || fAct.isFinishing()) return;
                                     if (hasActiveMenu()) return;
+                                    // v969: 交由 isInChatWindow 复核(可纠正卡死的标志位)
                                     if (isInChatWindow(fAct)) return;
                                     LogWriter.log(TAG, "onResume 兜底注入 hamburger");
                                     injectMain(fAct, 0);
@@ -193,11 +194,12 @@ public class CornerMenu {
         try {
             Activity act = sHomeAct;
             if (act == null || act.isFinishing()) return;
-            if (sChatWindowActive) return;
             String clsName = act.getClass().getName();
             if (!"com.tencent.mm.ui.LauncherUI".equals(clsName)
                     && !"com.tencent.mm.ui.HomeUI".equals(clsName)) return;
             if (hasActiveMenu()) return;
+            // v969: 不再用 sChatWindowActive 直接拦截, 交给 isInChatWindow 复核
+            // (可自动纠正卡死在 true 的标志位, 修复三横菜单偶发不再出现)
             if (isInChatWindow(act)) return;
             LogWriter.log(TAG, "self-heal: hamburger missing on main page, reinject");
             injectMain(act, 0);
@@ -240,13 +242,30 @@ public class CornerMenu {
         // 优先使用 onHiddenChanged/onResume 驱动的精确标志位:
         // 回主页后 fragment view 可能仍短暂标记可见或存在多个实例,
         // 遍历检查不可靠, 导致三横菜单偶发不显示。
-        if (sChatWindowActive) return true;
+        if (sChatWindowActive) {
+            // v969: 标志位可能因残留 fragment / 生命周期回调缺失而卡在 true,
+            // 从而永久挡死 self-heal/restore 全部恢复路径(表现为三横菜单消失后不再出现)。
+            // 最近 3s 内确实发生过聊天 onResume 才信任; 否则用 fragment 实际可见性复核,
+            // 复核为“不在聊天”时立刻纠正卡死的标志位。
+            long since = sChatResumeAt > 0
+                    ? android.os.SystemClock.elapsedRealtime() - sChatResumeAt
+                    : Long.MAX_VALUE;
+            if (since < 3000) return true;
+            if (chatFragmentVisible(act)) return true;
+            sChatWindowActive = false;
+            return false;
+        }
         // v961: 最近 3s 内聊天 fragment 有过 onResume 视为聊天中;
         // 残留(已 detach/hide)的 fragment 不满足该时间条件, 不再误判
         if (sChatResumeAt > 0
                 && android.os.SystemClock.elapsedRealtime() - sChatResumeAt < 3000) {
             return true;
         }
+        return chatFragmentVisible(act);
+    }
+
+    /** fragment 实际可见性扫描(仅统计真正显示在屏幕上的聊天 fragment)。 */
+    private static boolean chatFragmentVisible(Activity act) {
         try {
             Object fm = XposedHelpers.callMethod(act, "getSupportFragmentManager");
             if (fm == null) return false;

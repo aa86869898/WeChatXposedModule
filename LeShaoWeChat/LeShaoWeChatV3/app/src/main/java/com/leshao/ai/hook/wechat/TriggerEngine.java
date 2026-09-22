@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.Log;
 
 import com.leshao.ai.config.AppConfig;
+import com.leshao.ai.config.ConversationConfig;
 import com.leshao.ai.hook.HookEntry;
 import com.leshao.ai.util.Whitelist;
 import com.leshao.v3.hook.TtsVoiceSender;
@@ -56,12 +57,14 @@ public final class TriggerEngine {
                 return;
             }
 
-            // ① 群/私聊分开关 + 群内容拆分
+            // ① 群/私聊分开关 + 群内容拆分(会话级独立配置优先, 未设置则继承全局)
             boolean isGroup = GroupMsgParser.isGroupTalker(talker);
-            if (isGroup && !c.isAutoReplyInGroups()) {
-                return;
-            }
-            if (!isGroup && !c.isAutoReplyInPrivate()) {
+            ConversationConfig cc = AIBotCore.conversationConfig();
+            ConversationConfig.Entry ov = cc != null ? cc.get(talker) : null;
+            boolean autoReply = (ov != null && ov.autoReply != null)
+                    ? ov.autoReply.booleanValue()
+                    : (isGroup ? c.isAutoReplyInGroups() : c.isAutoReplyInPrivate());
+            if (!autoReply) {
                 return;
             }
             String[] sp = GroupMsgParser.splitGroupContent(rawContent, isGroup);
@@ -76,7 +79,9 @@ public final class TriggerEngine {
                 boolean atMe = GroupMsgParser.isAtMe(msgInfo, StorageHub.get().selfWxid(),
                         body, c.getBotName());
                 boolean kwHit = GroupMsgParser.matchKeyword(body, c.getWakeKeywords());
-                if (c.isOnlyWhenMentioned()) {
+                boolean onlyMentioned = (ov != null && ov.onlyWhenMentioned != null)
+                        ? ov.onlyWhenMentioned.booleanValue() : c.isOnlyWhenMentioned();
+                if (onlyMentioned) {
                     // 仅 @/关键词 模式：未唤醒不响应
                     if (!atMe && !kwHit) {
                         return;
@@ -97,16 +102,19 @@ public final class TriggerEngine {
             final AppConfig cfg = c;
             final String incoming = body;
             final ClassLoader cl = HookEntry.appClassLoader;
+            final ConversationConfig.Entry over = ov;
+            final boolean tts = (ov != null && ov.ttsEnabled != null)
+                    ? ov.ttsEnabled.booleanValue() : c.isTtsEnabled();
             Log.i(TAG, "触发 AI: talker=" + talker + " group=" + isGroup
                     + " sender=" + sender + " len=" + body.length());
-            AIBotCore.ask(talker, incoming, "", new AIBotCore.ResultCallback() {
+            AIBotCore.ask(talker, incoming, "", over, new AIBotCore.ResultCallback() {
                 @Override
                 public void onResult(String reply) {
                     if (reply == null || reply.isEmpty()) {
                         return;
                     }
                     try {
-                        if (cfg.isTtsEnabled()) {
+                        if (tts) {
                             String cid = "ai-" + System.currentTimeMillis();
                             Log.i(TAG, "AI 回复走语音消息 talker=" + talker + " cid=" + cid);
                             TtsVoiceSender.sendAiReplyAsVoice(talker, reply, cid);

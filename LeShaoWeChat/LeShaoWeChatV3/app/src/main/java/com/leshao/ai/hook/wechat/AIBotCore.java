@@ -7,6 +7,7 @@ import com.leshao.ai.api.model.ChatMessage;
 import com.leshao.ai.api.model.ProviderType;
 import com.leshao.ai.api.openai.OpenAIClient;
 import com.leshao.ai.config.AppConfig;
+import com.leshao.ai.config.ConversationConfig;
 import com.leshao.ai.knowledge.KnowledgeBase;
 import com.leshao.ai.memory.ChatMemory;
 import com.leshao.ai.util.ChatUtils;
@@ -35,6 +36,7 @@ public final class AIBotCore {
     private static final int DEFAULT_MAX_MEMORY = 40;
 
     private static volatile AppConfig config;
+    private static volatile ConversationConfig conversationConfig;
     private static volatile ChatMemory memory;
     private static volatile KnowledgeBase knowledge;
     private static volatile Whitelist whitelist;
@@ -51,6 +53,8 @@ public final class AIBotCore {
         try {
             config = new AppConfig(hostDataDir);
             config.load();
+            conversationConfig = new ConversationConfig(hostDataDir);
+            conversationConfig.load();
             memory = new ChatMemory(hostDataDir, DEFAULT_MAX_MEMORY);
             knowledge = new KnowledgeBase(hostDataDir);
             whitelist = new Whitelist(hostDataDir);
@@ -72,6 +76,9 @@ public final class AIBotCore {
         try {
             if (config != null) {
                 config.load();
+            }
+            if (conversationConfig != null) {
+                conversationConfig.load();
             }
             if (whitelist != null) {
                 whitelist.load();
@@ -95,6 +102,11 @@ public final class AIBotCore {
         return whitelist;
     }
 
+    /** 获取按会话独立配置 / 模板（可能为 null，代表未初始化）。 */
+    public static ConversationConfig conversationConfig() {
+        return conversationConfig;
+    }
+
     /**
      * 异步生成回复。
      *
@@ -105,6 +117,17 @@ public final class AIBotCore {
      */
     public static void ask(final String chatId, final String incoming,
                            final String queryThread, final ResultCallback callback) {
+        ask(chatId, incoming, queryThread, null, callback);
+    }
+
+    /**
+     * 异步生成回复（带按会话覆盖项）。
+     *
+     * @param override 会话级覆盖(人设/模型/温度)，为 null 时完全使用全局配置
+     */
+    public static void ask(final String chatId, final String incoming,
+                           final String queryThread, final ConversationConfig.Entry override,
+                           final ResultCallback callback) {
         final AppConfig c = cfg();
         if (c == null) {
             callback.onResult("配置未初始化");
@@ -115,7 +138,7 @@ public final class AIBotCore {
             public void run() {
                 final String reply;
                 try {
-                    reply = generateReply(c, chatId, incoming, queryThread);
+                    reply = generateReply(c, chatId, incoming, queryThread, override);
                 } catch (Throwable t) {
                     Log.w(TAG, "生成回复异常: " + t, t);
                     callback.onResult("AI 服务暂时不可用");
@@ -135,8 +158,11 @@ public final class AIBotCore {
     }
 
     /** 组装请求并调用所选 LLM。 */
-    private static String generateReply(AppConfig c, String chatId, String incoming, String queryThread) throws Exception {
-        String system = c.getSystemPrompt();
+    private static String generateReply(AppConfig c, String chatId, String incoming,
+                                        String queryThread, ConversationConfig.Entry override) throws Exception {
+        String system = (override != null && override.systemPrompt != null
+                && !override.systemPrompt.trim().isEmpty())
+                ? override.systemPrompt : c.getSystemPrompt();
         if (system == null || system.trim().isEmpty()) {
             system = "你是一个友好的 AI 助手，名叫" + (c.getBotName() == null ? "小乐" : c.getBotName()) + "。";
         }
@@ -179,13 +205,13 @@ public final class AIBotCore {
         messages.add(new ChatMessage("user", incoming, 0));
 
         ProviderType provider = resolveProvider(c.getProviderType());
-        double temp = c.getTemperature();
-        int maxTokens = c.getMaxTokens();
+        String model = (override != null && override.model != null
+                && !override.model.trim().isEmpty()) ? override.model : c.getModel();
 
         switch (provider) {
             case OPENAI_RESPONSES:
             case OPENAI_CHAT: {
-                OpenAIClient client = new OpenAIClient(provider, c.getBaseUrl(), c.getApiKey(), c.getModel());
+                OpenAIClient client = new OpenAIClient(provider, c.getBaseUrl(), c.getApiKey(), model);
                 return client.chat(messages, system);
             }
             default: {
@@ -194,7 +220,7 @@ public final class AIBotCore {
                 if (base == null || base.trim().isEmpty()) {
                     base = "https://api.anthropic.com";
                 }
-                AnthropicClient client = new AnthropicClient(base, c.getApiKey(), c.getModel());
+                AnthropicClient client = new AnthropicClient(base, c.getApiKey(), model);
                 return client.chat(messages, system);
             }
         }
