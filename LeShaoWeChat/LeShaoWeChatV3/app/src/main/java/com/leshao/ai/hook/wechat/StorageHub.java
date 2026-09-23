@@ -1,9 +1,11 @@
 package com.leshao.ai.hook.wechat;
 
+import android.os.SystemClock;
 import android.util.Log;
 
 import com.leshao.ai.hook.HookEntry;
 import com.leshao.ai.hook.dexkit.DexKitAdapter;
+import com.leshao.v3.LogWriter;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -45,6 +47,11 @@ public final class StorageHub {
     private volatile boolean bound;
     private volatile String cachedSelfWxid;
 
+    /** 绑定失败后的冷却截止时间(uptimeMs)；0 表示无冷却。
+     *  内核未就绪时绑定会持续失败，若每次调用都重跑 DexKit 定位会卡死调用线程(尤其主线程)。 */
+    private volatile long bindRetryAfterMs = 0L;
+    private static final long BIND_FAIL_COOLDOWN_MS = 10000L;
+
     private StorageHub() {
     }
 
@@ -63,73 +70,141 @@ public final class StorageHub {
     /**
      * 绑定存储链（幂等）。
      *
-     * @return 绑定成功返回 true（至少拿到 MsgInfoStorage 与 ConfigStorage）
+     * @return 绑定成功返回 true（MsgInfoStorage / RContactStorage / ConfigStorage 任一可用）
      */
     public boolean ensureBound() {
         if (bound) {
             return true;
         }
+        // 失败冷却：内核未就绪时避免高频重复 DexKit 定位阻塞调用线程
+        if (bindRetryAfterMs != 0L && SystemClock.uptimeMillis() < bindRetryAfterMs) {
+            return false;
+        }
         synchronized (lock) {
             if (bound) {
                 return true;
+            }
+            if (bindRetryAfterMs != 0L && SystemClock.uptimeMillis() < bindRetryAfterMs) {
+                return false;
             }
             try {
                 bindInternal();
             } catch (Throwable t) {
                 Log.w(TAG, "bindInternal 异常: " + t);
             }
-            bound = msgInfoStorage != null && configStorage != null;
-            Log.i(TAG, "存储链绑定: msgInfoStorage=" + (msgInfoStorage != null)
+            // v1019: v()/r()/q() 独立绑定，任一成功即视为可服务（联系人不依赖 MsgInfoStorage）
+            bound = msgInfoStorage != null || rcontactStorage != null || configStorage != null;
+            if (bound) {
+                bindRetryAfterMs = 0L;
+            } else {
+                bindRetryAfterMs = SystemClock.uptimeMillis() + BIND_FAIL_COOLDOWN_MS;
+            }
+            LogWriter.log(TAG, "存储链绑定: msgInfoStorage=" + (msgInfoStorage != null)
                     + " rcontactStorage=" + (rcontactStorage != null)
                     + " configStorage=" + (configStorage != null));
             return bound;
         }
     }
 
+    /** 内核就绪后清除失败冷却，允许立即重试绑定。 */
+    public void resetBindingCooldown() {
+        bindRetryAfterMs = 0L;
+    }
+
     private void bindInternal() throws Throwable {
         ClassLoader cl = HookEntry.appClassLoader;
         if (cl == null) {
-            Log.w(TAG, "appClassLoader 未就绪，跳过绑定");
+            // 兜底: 从当前 Application 取类加载器
+            try {
+                Object app = XposedHelpers.callStaticMethod(
+                        XposedHelpers.findClass("android.app.ActivityThread", null),
+                        "currentApplication");
+                if (app != null) {
+                    cl = app.getClass().getClassLoader();
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        if (cl == null) {
+            LogWriter.log(TAG, "appClassLoader 未就绪，跳过绑定");
             return;
         }
         Class<?> hubClass = DexKitAdapter.findCoreHubClass();
         Class<?> accClass = DexKitAdapter.findAccountStorageClass();
         Class<?> msgClass = DexKitAdapter.findMsgInfoStorageClass();
         Class<?> rcontactClass = DexKitAdapter.findRContactStorageClass();
-        if (hubClass == null || accClass == null || msgClass == null) {
-            Log.w(TAG, "DexKit 定位失败: hub=" + hubClass + " acc=" + accClass
-                    + " msg=" + msgClass);
+        LogWriter.log(TAG, "bindInternal: hub=" + cn(hubClass) + " acc=" + cn(accClass)
+                + " msg=" + cn(msgClass) + " rcontact=" + cn(rcontactClass));
+
+        // DexKit 结果可能因 bridge 回收而不可用，按 3180 类名兜底
+        if (hubClass == null) {
+            try { hubClass = XposedHelpers.findClass("b41.h9", cl); } catch (Throwable ignored) {}
+        }
+        if (accClass == null) {
+            try { accClass = XposedHelpers.findClass("b41.e", cl); } catch (Throwable ignored) {}
+        }
+        if (hubClass == null || accClass == null) {
+            LogWriter.log(TAG, "bindInternal: Hub/AccountStorage 定位失败 hub=" + cn(hubClass)
+                    + " acc=" + cn(accClass));
             return;
         }
 
-        // 1) b41.h9.d() → Hub 单例
+        // 1) b41.h9.d() → Hub 单例（d() 返回自身）
         Object hub = callStaticNoArg(hubClass, "d", hubClass);
         if (hub == null) {
-            Log.w(TAG, "hub.d() 失败");
-            return;
+            hub = callStaticNoArg(hubClass, "d", null);
         }
 
-        // 2) hub.b() → AccountStorage
-        Object acc = callNoArgTyped(hub, "b", accClass);
+        // 2) hub.b() → AccountStorage；兜底 静态 hub.b()
+        Object acc = hub != null ? callNoArgTyped(hub, "b", accClass) : null;
         if (acc == null) {
-            Log.w(TAG, "hub.b() 失败");
+            acc = callStaticNoArg(hubClass, "b", accClass);
+        }
+        if (acc == null) {
+            LogWriter.log(TAG, "bindInternal: AccountStorage 获取失败 hub=" + (hub != null));
             return;
         }
 
-        // 3) acc.v() → MsgInfoStorage(f9)
-        msgInfoStorage = callNoArgTyped(acc, "v", msgClass);
+        // 3) acc.v() → MsgInfoStorage(f9)，独立绑定：失败不再阻断 r()/q()
+        try {
+            msgInfoStorage = callNoArgTyped(acc, "v", msgClass);
+        } catch (Throwable t) {
+            Log.w(TAG, "acc.v() 异常: " + t);
+        }
         if (msgInfoStorage == null) {
-            Log.w(TAG, "acc.v() 失败");
-            return;
+            LogWriter.log(TAG, "bindInternal: acc.v() 失败 (acc=" + cn(acc.getClass()) + ")，继续尝试 r/q");
         }
 
-        // 4) acc.r() → RContactStorage(j4)
-        if (rcontactClass != null) {
+        // 4) acc.r() → RContactStorage(j4)，独立绑定
+        try {
             rcontactStorage = callNoArgTyped(acc, "r", rcontactClass);
+        } catch (Throwable t) {
+            Log.w(TAG, "acc.r() 异常: " + t);
+        }
+        if (rcontactStorage == null) {
+            try {
+                rcontactStorage = callNoArgTyped(acc, "r", null);
+            } catch (Throwable t) {
+                Log.w(TAG, "acc.r() 二次尝试异常: " + t);
+            }
+        }
+        if (rcontactStorage == null) {
+            LogWriter.log(TAG, "bindInternal: acc.r() 失败 (acc=" + cn(acc.getClass()) + ")");
         }
 
-        // 5) acc.q() → ConfigStorage(q3)，无类型校验
-        configStorage = callNoArg(acc, "q");
+        // 5) acc.q() → ConfigStorage(q3)，无类型校验，独立绑定
+        try {
+            configStorage = callNoArg(acc, "q");
+        } catch (Throwable t) {
+            Log.w(TAG, "acc.q() 异常: " + t);
+        }
+        LogWriter.log(TAG, "bindInternal: msg=" + (msgInfoStorage != null)
+                + " rcontact=" + (rcontactStorage != null)
+                + " config=" + (configStorage != null));
+    }
+
+    private static String cn(Class<?> c) {
+        return c == null ? "null" : c.getName();
     }
 
     /** 自己 wxid（ConfigStorage key 2）。取不到返回 null。 */

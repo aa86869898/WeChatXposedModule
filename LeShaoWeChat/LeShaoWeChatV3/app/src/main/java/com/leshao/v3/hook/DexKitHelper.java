@@ -39,6 +39,7 @@ public class DexKitHelper {
     private static final String KEY_IMEI_CLASS = "imei_class";
     private static final String KEY_IMEI_METHOD = "imei_method";
     private static final String KEY_CSO_LOADER = "cso_loader";
+    private static final String KEY_CSO_LOADER_METHOD = "cso_loader_method";
     private static final String KEY_J1_CALLER_CLASS = "j1_caller_class";
     private static final String KEY_J1_CALLER_METHOD = "j1_caller_method";
     private static final String KEY_J1_SERVICE = "j1_service";
@@ -115,6 +116,7 @@ public class DexKitHelper {
     private static volatile String sImeiClassName;
     private static volatile String sImeiMethodName;
     private static volatile String sCsoLoaderClass;
+    private static volatile String sCsoLoaderMethod;
     private static volatile String sJ1CallerClass;
     private static volatile String sJ1CallerMethod;
     private static volatile String sContactStorageClass;
@@ -429,6 +431,7 @@ public class DexKitHelper {
             sImeiClassName = kv.decodeString(KEY_IMEI_CLASS, null);
             sImeiMethodName = kv.decodeString(KEY_IMEI_METHOD, null);
             sCsoLoaderClass = kv.decodeString(KEY_CSO_LOADER, null);
+            sCsoLoaderMethod = kv.decodeString(KEY_CSO_LOADER_METHOD, null);
             sJ1CallerClass = kv.decodeString(KEY_J1_CALLER_CLASS, null);
             sJ1CallerMethod = kv.decodeString(KEY_J1_CALLER_METHOD, null);
             sJ1ServiceClass = kv.decodeString(KEY_J1_SERVICE, null);
@@ -527,6 +530,7 @@ public class DexKitHelper {
             if (sImeiClassName != null) kv.encode(KEY_IMEI_CLASS, sImeiClassName);
             if (sImeiMethodName != null) kv.encode(KEY_IMEI_METHOD, sImeiMethodName);
             if (sCsoLoaderClass != null) kv.encode(KEY_CSO_LOADER, sCsoLoaderClass);
+            if (sCsoLoaderMethod != null) kv.encode(KEY_CSO_LOADER_METHOD, sCsoLoaderMethod);
             if (sJ1CallerClass != null) kv.encode(KEY_J1_CALLER_CLASS, sJ1CallerClass);
             if (sJ1CallerMethod != null) kv.encode(KEY_J1_CALLER_METHOD, sJ1CallerMethod);
             if (sJ1ServiceClass != null) kv.encode(KEY_J1_SERVICE, sJ1ServiceClass);
@@ -765,6 +769,7 @@ public class DexKitHelper {
 
             if (!methods.isEmpty()) {
                 sCsoLoaderClass = methods.get(0).getClassName();
+                sCsoLoaderMethod = methods.get(0).getName();
                 LogWriter.log(TAG, "findCsoLoader: " + sCsoLoaderClass + "." + methods.get(0).getName());
                 return;
             }
@@ -780,6 +785,7 @@ public class DexKitHelper {
                 String clsName = m.getClassName();
                 if (clsName != null && clsName.contains("CsoLoader")) {
                     sCsoLoaderClass = clsName;
+                    sCsoLoaderMethod = m.getName();
                     LogWriter.log(TAG, "findCsoLoader (name match): " + clsName + "." + m.getName());
                     return;
                 }
@@ -787,6 +793,7 @@ public class DexKitHelper {
 
             if (!methods2.isEmpty()) {
                 sCsoLoaderClass = methods2.get(0).getClassName();
+                sCsoLoaderMethod = methods2.get(0).getName();
                 LogWriter.log(TAG, "findCsoLoader (first): " + sCsoLoaderClass + "." + methods2.get(0).getName());
                 return;
             }
@@ -875,6 +882,7 @@ public class DexKitHelper {
     public static String getImeiClassName() { return sImeiClassName; }
     public static String getImeiMethodName() { return sImeiMethodName; }
     public static String getCsoLoaderClass() { return sCsoLoaderClass; }
+    public static String getCsoLoaderMethod() { return sCsoLoaderMethod; }
     public static String getJ1CallerClass() { return sJ1CallerClass; }
     public static String getJ1CallerMethod() { return sJ1CallerMethod; }
     public static String getContactStorageClass() { return sContactStorageClass; }

@@ -1,5 +1,6 @@
 package com.leshao.ai.hook.wechat;
 
+import android.content.Context;
 import android.util.Log;
 
 import com.leshao.ai.api.anthropic.AnthropicClient;
@@ -11,7 +12,7 @@ import com.leshao.ai.config.ConversationConfig;
 import com.leshao.ai.knowledge.KnowledgeBase;
 import com.leshao.ai.memory.ChatMemory;
 import com.leshao.ai.util.ChatUtils;
-import com.leshao.ai.util.Whitelist;
+import com.leshao.v3.LogWriter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,13 +22,12 @@ import java.util.concurrent.Executors;
 /**
  * AI 机器人业务中枢。
  * <p>
- * 串联「配置 + 白名单 + 记忆 + 知识库 + LLM 客户端」，对外提供线程安全的能力：
+ * 串联「配置 + 记忆 + 知识库 + LLM 客户端」，对外提供线程安全的能力：
  * <ul>
- *   <li>{@link #shouldReply} 判定某条消息是否要响应（白名单 / @ / 关键词 / 开关）</li>
  *   <li>{@link #ask} 异步生成回复并写回记忆</li>
  *   <li>内部组装人设 + 知识库上下文 + 历史记忆后调用 LLM</li>
  * </ul>
- * 全部实现与子代理产出的实际 API 签名对齐（经核验）。
+ * 触发门控（总开关 / 全局类型开关 / 会话个性化配置）见 {@link TriggerEngine}。
  */
 public final class AIBotCore {
 
@@ -39,7 +39,6 @@ public final class AIBotCore {
     private static volatile ConversationConfig conversationConfig;
     private static volatile ChatMemory memory;
     private static volatile KnowledgeBase knowledge;
-    private static volatile Whitelist whitelist;
     private static final ExecutorService executor = Executors.newFixedThreadPool(2);
 
     private AIBotCore() {
@@ -57,11 +56,31 @@ public final class AIBotCore {
             conversationConfig.load();
             memory = new ChatMemory(hostDataDir, DEFAULT_MAX_MEMORY);
             knowledge = new KnowledgeBase(hostDataDir);
-            whitelist = new Whitelist(hostDataDir);
             Log.i(TAG, "AIBotCore 初始化完成: enabled=" + config.isEnabled());
+            LogWriter.log(TAG, "AIBotCore 初始化完成: enabled=" + config.isEnabled());
         } catch (Throwable t) {
             Log.w(TAG, "AIBotCore 初始化异常: " + t, t);
+            LogWriter.log(TAG, "AIBotCore 初始化异常: " + t);
         }
+    }
+
+    /**
+     * 从微信侧 Context 推导宿主 data 目录后初始化（供面板自愈兜底调用）。
+     * 与 {@link #ensureInit(String)} 等价，幂等、线程安全。
+     */
+    public static void ensureInit(Context ctx) {
+        if (ctx == null) {
+            return;
+        }
+        String hostDataDir = null;
+        try {
+            hostDataDir = ctx.getFilesDir().getParent();
+        } catch (Throwable ignored) {
+        }
+        if (hostDataDir == null) {
+            hostDataDir = "/data/user/0/com.tencent.mm";
+        }
+        ensureInit(hostDataDir);
     }
 
     private static AppConfig cfg() {
@@ -69,7 +88,7 @@ public final class AIBotCore {
     }
 
     /**
-     * 重新加载配置与白名单（设置页保存后由 {@link ConfigBridge} 广播触发）。
+     * 重新加载配置（设置页保存后由 {@link ConfigBridge} 广播触发）。
      * 记忆/知识库为微信侧自管数据，不在此列。
      */
     public static synchronized void reload() {
@@ -79,9 +98,6 @@ public final class AIBotCore {
             }
             if (conversationConfig != null) {
                 conversationConfig.load();
-            }
-            if (whitelist != null) {
-                whitelist.load();
             }
             Log.i(TAG, "AIBotCore 配置已重载: enabled=" + (config != null && config.isEnabled()));
         } catch (Throwable t) {
@@ -95,11 +111,6 @@ public final class AIBotCore {
             return null;
         }
         return config;
-    }
-
-    /** 获取白名单（可能为 null，代表未初始化）。 */
-    public static Whitelist whitelist() {
-        return whitelist;
     }
 
     /** 获取按会话独立配置 / 模板（可能为 null，代表未初始化）。 */
@@ -160,12 +171,24 @@ public final class AIBotCore {
     /** 组装请求并调用所选 LLM。 */
     private static String generateReply(AppConfig c, String chatId, String incoming,
                                         String queryThread, ConversationConfig.Entry override) throws Exception {
+        StringBuilder sys = new StringBuilder();
+        // v1019: 会话级身份/名称提升 (各会话独立)
+        if (override != null) {
+            if (override.aiName != null && !override.aiName.trim().isEmpty()) {
+                sys.append("你是").append(override.aiName.trim()).append("\n");
+            }
+            if (override.aiIdentity != null && !override.aiIdentity.trim().isEmpty()) {
+                sys.append(override.aiIdentity.trim()).append('\n');
+            }
+        }
         String system = (override != null && override.systemPrompt != null
                 && !override.systemPrompt.trim().isEmpty())
                 ? override.systemPrompt : c.getSystemPrompt();
         if (system == null || system.trim().isEmpty()) {
             system = "你是一个友好的 AI 助手，名叫" + (c.getBotName() == null ? "小乐" : c.getBotName()) + "。";
         }
+        sys.append(system);
+        final String systemFinal = sys.toString();
         List<ChatMessage> messages = new ArrayList<>();
 
         // 知识库上下文
@@ -184,21 +207,31 @@ public final class AIBotCore {
         StringBuilder hist = new StringBuilder();
         try {
             if (memory != null) {
-                int n = Math.max(4, c.getMaxHistoryMessages() / 2);
-                List<com.leshao.ai.memory.ChatMessage> recent =
-                        memory.getRecent(chatId, n);
-                if (recent != null) {
-                    for (com.leshao.ai.memory.ChatMessage m : recent) {
-                        String role = m.getRole() == null ? "user" : m.getRole();
-                        hist.append("user".equals(role) ? "用户: " : "助手: ")
-                                .append(m.getContent()).append('\n');
+                // v1019: 会话级记忆开关与窗口覆盖全局
+                boolean memOn = override == null || override.memoryEnabled == null
+                        || override.memoryEnabled.booleanValue();
+                if (memOn) {
+                    int n;
+                    if (override != null && override.memoryLimit != null && override.memoryLimit.intValue() > 0) {
+                        n = override.memoryLimit.intValue();
+                    } else {
+                        n = Math.max(4, c.getMaxHistoryMessages() / 2);
+                    }
+                    List<com.leshao.ai.memory.ChatMessage> recent =
+                            memory.getRecent(chatId, n);
+                    if (recent != null) {
+                        for (com.leshao.ai.memory.ChatMessage m : recent) {
+                            String role = m.getRole() == null ? "user" : m.getRole();
+                            hist.append("user".equals(role) ? "用户: " : "助手: ")
+                                    .append(m.getContent()).append('\n');
+                        }
                     }
                 }
             }
         } catch (Throwable ignored) {
         }
 
-        messages.add(new ChatMessage("system", system, 0));
+        messages.add(new ChatMessage("system", systemFinal, 0));
         if (hist.length() > 0) {
             messages.add(new ChatMessage("system", "历史对话：\n" + hist, 0));
         }

@@ -333,7 +333,7 @@ public class GroupMemberTools {
                 "设置/修改该成员显示昵称(本地+修改时间)",
                 "进入成员资料页(查看/改备注)"
         };
-        new AlertDialog.Builder(ctx)
+        AlertDialog dlgOps = new AlertDialog.Builder(ctx)
                 .setTitle(safe(m.display))
                 .setItems(ops, (d, w) -> {
                     try {
@@ -348,13 +348,14 @@ public class GroupMemberTools {
                         LogWriter.log(TAG, "op err " + t);
                     }
                 })
-                .show();
+                .create();
+        dlgOps.show();
     }
 
     /* ---------- 修改「我的群昵称」(微信原生协议, 可同步服务器) ---------- */
     private static void modifyMyRoomNick(final Context ctx, final String roomId) {
         final EditText et = new EditText(ctx);
-        new AlertDialog.Builder(ctx)
+        AlertDialog dlgNick = new AlertDialog.Builder(ctx)
                 .setTitle("修改我的群昵称")
                 .setView(et)
                 .setPositiveButton("保存", (d, w) -> {
@@ -399,7 +400,8 @@ public class GroupMemberTools {
                     }).start();
                 })
                 .setNegativeButton("取消", null)
-                .show();
+                .create();
+        dlgNick.show();
     }
 
     /* ---------- 设置本地自定义昵称 + 修改时间 ---------- */
@@ -407,7 +409,7 @@ public class GroupMemberTools {
         final EditText et = new EditText(ctx);
         et.setHint("留空表示清除自定义昵称");
         et.setText(safe(m.custom));
-        new AlertDialog.Builder(ctx)
+        AlertDialog dlgEdit = new AlertDialog.Builder(ctx)
                 .setTitle("设置显示昵称（本地，实时替换）")
                 .setView(et)
                 .setPositiveButton("保存", (d, w) -> {
@@ -421,7 +423,8 @@ public class GroupMemberTools {
                     toast(ctx, "已保存，修改时间：" + fmt(now));
                 })
                 .setNegativeButton("取消", null)
-                .show();
+                .create();
+        dlgEdit.show();
     }
 
     /* ---------- 查看大头像 ---------- */

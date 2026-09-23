@@ -1,0 +1,267 @@
+================================================================================
+  WeChatPlus 新功能集成 — 全局代码扫描报告
+  扫描时间: 2026-07-23
+  项目路径: /workspace/LeShaoWeChat/LeShaoWeChatV3
+================================================================================
+
+一、文件复制清单 (共 33 个 Java 文件 + 7 个参考文档)
+--------------------------------------------------------------------------------
+
+com.wechatplus (31 个类):
+  AntiRevoke.java         AutoRemark.java         AutoReply.java
+  BatchMessage.java       CallFeatures.java       ChatBackup.java
+  ChatFooterEnhance.java  ChatUICustom.java       ContactChangeLog.java
+  ContactExport.java      ConvPrivacy.java        DeleteDetect.java
+  GroupFeatures.java      HideContactFields.java  LoginMonitor.java
+  LuckyMoney.java         MainHook.java           MsgExport.java
+  NotifyCustom.java       PrivacyFeatures.java
+  ScheduledSend.java      SearchEnhance.java      SettingsActivity.java
+  ShakeCustom.java        SnsFeatures.java        StickyEnhance.java
+  TabCustom.java          TypingIndicator.java    UnreadBadge.java
+  WeChatClasses.java
+
+com.wechatplus.utils (2 个类):
+  Logger.java             ReflectUtil.java
+
+资源/配置文件:
+  app/src/main/assets/xposed_init          (已合并双入口)
+  app/src/main/res/values/arrays_new.xml   (未激活)
+  .monkeycode/docs/WeChatPlus_*.md         (7 个参考文档)
+
+
+二、编译错误 (编译阻断)
+--------------------------------------------------------------------------------
+
+问题 1: MainHook 引用 16 个不存在的类
+
+  文件: app/src/main/java/com/wechatplus/MainHook.java
+  现象: 16 处 "cannot find symbol" 编译错误
+  原因: zip 包中功能已合并为 4 个合集类，MainHook 仍引用旧版独立类名。
+
+  【映射表】引用 (不存在) → 应改为 (现有合集类):
+
+  第116行  SnsAdBlock.hook(cl);        ┐
+  第117行  SnsForward.hook(cl);        │
+  第118行  SnsFakeLike.hook(cl);       ├─→ SnsFeatures.hook(cl);      (SnsFeatures.java:48)
+  第119行  SnsTimeEdit.hook(cl);       │   公开方法: hook(ClassLoader) 内部分发到6个子功能
+  第120行  SnsVideoQuality.hook(cl);   │
+  第121行  SnsLongVideo.hook(cl);      ┘
+
+  第127行  ScreenshotDetect.hook(cl);  ┐
+  第128行  ClipboardProtect.hook(cl);  ├─→ PrivacyFeatures.hook(cl);  (PrivacyFeatures.java:34)
+  第129行  WebViewPrivacy.hook(cl);    │   公开方法: hook(ClassLoader) 内部分发到4个子功能
+  第130行  FingerprintLock.hook(cl);   ┘
+
+  第138行  CallRecord.hook(cl);        ┬─→ CallFeatures.hook(cl);      (CallFeatures.java:48)
+  第139行  AutoAnswer.hook(cl);        ┘   公开方法: hook(ClassLoader) 内部分发到2个子功能
+
+  第142行  GroupMemberLog.hook(cl);    ┐
+  第143行  GroupAnnounce.hook(cl);     ├─→ GroupFeatures.hook(cl);     (GroupFeatures.java:54)
+  第144行  GroupBatchOp.hook(cl);      │   公开方法: hook(ClassLoader) 内部分发到4个子功能
+  第145行  AnonymousChat.hook(cl);     ┘
+
+
+三、类名冲突 (不同包下同名，运行时可能冲突)
+--------------------------------------------------------------------------------
+
+问题 2: 两个 MainHook 同时注册
+
+  旧: com.leshao.v3.MainHook          (实现 IXposedHookLoadPackage)
+  新: com.wechatplus.MainHook          (实现 IXposedHookLoadPackage + IXposedHookZygoteInit)
+  影响: 两者均在主进程处理 com.tencent.mm，会重复钩取同一微信方法。
+
+问题 3: 两个 SettingsActivity
+
+  旧: com.leshao.v3.SettingsActivity   (已在 AndroidManifest 声明，action=com.leshao.v3.action.SETTINGS)
+  新: com.wechatplus.SettingsActivity  (未在 AndroidManifest 声明，期望 LAUNCHER intent)
+  影响: 新 SettingsActivity 未声明，无法启动；旧 SettingsActivity 正常工作。
+
+
+四、xposed_init 双入口
+--------------------------------------------------------------------------------
+
+问题 4: 两个入口类
+
+  当前内容:
+    com.leshao.v3.MainHook
+    com.wechatplus.MainHook
+
+  风险: 两个 MainHook 同时加载，均在 handleLoadPackage 中对 WX_PKG 做过滤处理，
+        可能导致钩子重复注册、回调执行两次。
+
+
+五、AndroidManifest 缺失声明
+--------------------------------------------------------------------------------
+
+问题 5: 新 SettingsActivity 未注册
+
+  缺失:
+    <activity
+        android:name="com.wechatplus.SettingsActivity"
+        android:exported="true"
+        android:label="WeChatPlus">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+    </activity>
+
+  注意: 若添加该声明，将有2个 LAUNCHER Activity (另一为 com.leshao.v3.SettingsActivity)，
+        桌面会出现两个图标，需合并为一个或去掉 LAUNCHER。
+
+问题 6: xposed_scope 资源引用缺失
+
+  新 manifest 使用 @array/xposed_scope 方式，当前 manifest 使用内联值方式。
+  arrays_new.xml 中包含 xposed_scope 数组定义但文件未被编译系统识别。
+
+
+六、资源配置文件
+--------------------------------------------------------------------------------
+
+问题 7: arrays_new.xml 未激活
+
+  文件: app/src/main/res/values/arrays_new.xml
+  内容:
+    <?xml version="1.0" encoding="utf-8"?>
+    <resources>
+        <string-array name="xposed_scope">
+            <item>com.tencent.mm</item>
+        </string-array>
+    </resources>
+
+  需要: 重命名为 arrays.xml 或在现有 values 文件中添加该数组定义。
+  注意: 当前项目无 arrays.xml，直接改名即可生效。
+
+
+七、依赖检查 (无问题)
+--------------------------------------------------------------------------------
+
+  所有新文件仅依赖:
+    - de.robv.android.xposed:api:82    (当前项目使用 libs/xposed-api-82.jar，等效)
+    - android.util.Log / android.app   (Android SDK 标准库)
+    - java.lang.reflect / java.io      (Java 标准库)
+  
+  无第三方外部依赖缺失。
+
+
+八、交叉引用检查 (无问题)
+--------------------------------------------------------------------------------
+
+  新文件内部引用仅涉及:
+    com.wechatplus.utils.Logger        (存在)
+    com.wechatplus.utils.ReflectUtil   (存在)
+    com.wechatplus.WeChatClasses       (存在)
+    com.wechatplus.MainHook            (存在)
+  
+  无跨模块缺失引用。
+
+
+================================================================================
+  问题严重度分类汇总
+================================================================================
+
+  [严重] 编译阻断  1 项: MainHook 16 处符号缺失
+  [高]   类名冲突  2 项: MainHook + SettingsActivity
+  [高]   入口冲突  1 项: xposed_init 双入口
+  [中]   清单缺失  1 项: 新 SettingsActivity 未注册
+  [中]   资源未激活 1 项: arrays_new.xml 需改名
+  [低]   配置差异  1 项: xposedminversion 不一致 (82 vs 102)
+
+
+================================================================================
+  需要你确认的决策项 (共 5 个问题)
+================================================================================
+
+说明: 以下问题的答案直接影响融合方案。请逐一回复"用旧"/"用新"/"合并"/"都保留"。
+     若某个新功能你不需要,直接说"删掉XXX"即可。
+
+
+决策 1 [核心架构]: 两个 MainHook 怎么合并?
+
+  旧 MainHook (com.leshao.v3.MainHook):
+    已有功能 — AntiRecall, AntiDetection, MessageHook, RedPacketHook,
+    AutoCollectHook, FriendRequestHook, VoiceForwardHook, ThemeHook,
+    SettingsInjectProvider, SchedulerService, TTSBroadcaster
+
+  新 MainHook (com.wechatplus.MainHook):
+    37项新功能 — 防撤回/自动回复/朋友圈/通讯录/群管/隐私/抢红包/备份等
+
+  方案 A (推荐): 删除新 MainHook,在新 hook 调用全部加入旧 MainHook
+      → 只有一个入口,清晰可控
+  方案 B: 删除旧 MainHook,在新 MainHook 中补充旧功能调用
+      → 需要反向移植旧功能到新入口
+  方案 C: 保留两个入口,通过 SharedPreferences 开关互斥
+      → 灵活但复杂,两个入口都存在
+
+  你在新 MainHook 的 37 项功能中,有哪些不需要的? (列出名字即可)
+
+
+决策 2 [UI 入口]: 两个 SettingsActivity 怎么处理?
+
+  旧: com.leshao.v3.SettingsActivity — 乐少助手设置页面 (已声明,已可用)
+  新: com.wechatplus.SettingsActivity — 纯 TextView 信息页 (未声明,不可用)
+
+  方案 A (推荐): 删除新 SettingsActivity,保留旧的
+  方案 B: 删除旧的,用新的替换并补上 intent-filter
+  方案 C: 合并两者 — 把新 SettingsActivity 的内容作为旧页面的一部分
+
+
+决策 3 [功能重叠]: 红包/转账功能用谁的?
+
+  旧版 (已调试好): RedPacketHook (红包播报) + AutoCollectHook (转账收款)
+  新版 (未测试):  LuckyMoney (自动抢红包)
+
+  说明: LuckyMoney 实现"自动点击开红包",
+        与旧版的"播报金额+自动收款"侧重点不同,可互补。
+
+  方案 A (推荐): 都保留 — 新功能负责抢,旧功能负责播报+收款
+  方案 B: 只用旧的,删掉 LuckyMoney
+  方案 C: 只用新的,删掉 RedPacketHook + AutoCollectHook
+
+
+决策 4 [日志体系]: 新功能的 Logger 要不要换成旧项目的 LogWriter?
+
+  新功能全部使用 com.wechatplus.utils.Logger (调用 android.util.Log)
+  旧功能全部使用 com.leshao.v3.LogWriter (写文件+Logcat)
+
+  方案 A (推荐): 把 Logger 内部实现替换为调用 LogWriter,不改各功能文件
+      → 只改 Logger.java 一个文件,所有新功能自动接入旧日志体系
+  方案 B: 不改,各自独立日志通道
+  方案 C: 把每个新功能文件的 import 逐个改成 LogWriter
+
+
+决策 5 [新功能去留]: 以下新功能中有没有你不想要的?
+
+  完整清单 (按功能分组):
+
+  聊天增强 (7):  AntiRevoke, TypingIndicator, AutoReply, ScheduledSend,
+                  ChatFooterEnhance, ChatUICustom, BatchMessage
+
+  通讯录 (5):    DeleteDetect, ContactExport, AutoRemark, ContactChangeLog,
+                  HideContactFields
+
+  会话列表 (3):  ConvPrivacy, StickyEnhance, UnreadBadge
+
+  朋友圈 (6合1): SnsFeatures (去广告/转发/假点赞/时间修改/视频画质/长视频)
+
+  全局UI (1):    TabCustom
+
+  隐私安全 (4合1): PrivacyFeatures (截图检测/剪贴板保护/WebView隐私/指纹锁定)
+
+  登录设备 (1):  LoginMonitor
+
+  红包 (1):      LuckyMoney
+
+  通话 (2合1):   CallFeatures (通话录音/自动接听)
+
+  群管理 (4合1): GroupFeatures (成员变更日志/公告回执/批量操作/匿名发言)
+
+  数据管理 (3):  MsgExport, ChatBackup, SearchEnhance
+
+  效率交互 (1):  ShakeCustom
+
+  通知增强 (1):  NotifyCustom
+
+  如果全部都要,回复"全部保留"即可。
+
+================================================================================

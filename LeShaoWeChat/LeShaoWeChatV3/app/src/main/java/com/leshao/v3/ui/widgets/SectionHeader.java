@@ -33,7 +33,8 @@ public class SectionHeader extends LinearLayout {
         addView(mTitle);
 
         mSub = new TextView(ctx);
-        mSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        // v998: 说明小字再缩小 3dp
+        mSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8);
         mSub.setTextColor(AppColors.textTertiary());
         mSub.setGravity(Gravity.START);
         if (sub != null && !sub.isEmpty()) {

@@ -238,9 +238,50 @@ public class ChatGroupUiInjector {
     private static View sConvListView;
     private static volatile View sHeaderAttachedTo;
 
+    /** v998: 读取"聊天分组标签栏"开关(默认开启)。 */
+    public static boolean isTagBarEnabled() {
+        try {
+            android.content.SharedPreferences sp = com.leshao.v3.ContextManager.getPrefs();
+            if (sp != null) return sp.getBoolean("ls_chat_group_enabled", true);
+        } catch (Throwable ignored) {}
+        return true;
+    }
+
+    /** v998: 开关关闭时隐藏(并折叠占位)标签栏，开启时恢复。 */
+    private static void applyTagBarVisibility(boolean enabled) {
+        if (sTagBarView == null) return;
+        try {
+            sTagBarView.setVisibility(enabled ? View.VISIBLE : View.GONE);
+            ViewGroup.LayoutParams lp = sTagBarView.getLayoutParams();
+            if (lp != null) {
+                lp.height = enabled ? dp(52, sTagBarView.getContext()) : 0;
+                sTagBarView.setLayoutParams(lp);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    /** v998: 分组标签栏开关变化时立即生效。 */
+    public static void onEnabledChanged() {
+        if (isTagBarEnabled()) {
+            injectHeaderToConversationList();
+        } else {
+            applyTagBarVisibility(false);
+            try {
+                sSelectedLabelId = -1;
+                ConversationFilter.clearFilter();
+            } catch (Throwable ignored) {}
+        }
+    }
+
     private static void injectHeaderToConversationList() {
         logBoth("injectHeader start");
         try {
+            // v998: 关闭分组标签栏后, 聊天列表顶部不再显示分组栏
+            if (!isTagBarEnabled()) {
+                applyTagBarVisibility(false);
+                return;
+            }
+            applyTagBarVisibility(true);
             View convList = sConvListView;
             // 缓存引用可能因 Activity 重建（如切换暗色模式）而失效，重新从 DecorView 定位
             boolean stale = convList == null || !convList.isAttachedToWindow();
@@ -431,9 +472,9 @@ public class ChatGroupUiInjector {
         sTagContainer.removeAllViews();
         sChipTvById.clear();
         sTagContainer.addView(makeChip(ctx, "\u5168\u90E8", -1, curSelection == -1));
-        // 内置虚拟标签固定顺序：好友、群聊、服务
-        sTagContainer.addView(makeChip(ctx, ChatGroupHook.LABEL_NAME_FRIEND, ChatGroupHook.LABEL_ID_FRIEND, curSelection == ChatGroupHook.LABEL_ID_FRIEND));
+        // v998: 默认分组按钮固定顺序：全部、群聊、好友、服务
         sTagContainer.addView(makeChip(ctx, ChatGroupHook.LABEL_NAME_GROUP, ChatGroupHook.LABEL_ID_GROUP, curSelection == ChatGroupHook.LABEL_ID_GROUP));
+        sTagContainer.addView(makeChip(ctx, ChatGroupHook.LABEL_NAME_FRIEND, ChatGroupHook.LABEL_ID_FRIEND, curSelection == ChatGroupHook.LABEL_ID_FRIEND));
         sTagContainer.addView(makeChip(ctx, ChatGroupHook.LABEL_NAME_SERVICE, ChatGroupHook.LABEL_ID_SERVICE, curSelection == ChatGroupHook.LABEL_ID_SERVICE));
         List<LabelInfo> labels = sLabels;
         if (labels != null && !labels.isEmpty()) {
@@ -458,8 +499,7 @@ public class ChatGroupUiInjector {
                 sTagContainer.addView(makeChip(ctx, l.labelName, l.labelId, curSelection == l.labelId));
             }
         }
-        sTagContainer.addView(spacer(ctx));
-        sTagContainer.addView(makeAddBtn(ctx));
+        // v998: 移除标签栏右侧"＋"新增按钮，仅保留分组筛选按钮
         centerChips(ctx);
     }
 
@@ -636,7 +676,7 @@ public class ChatGroupUiInjector {
         fl.setClickable(true);
         fl.setFocusable(true);
         fl.setOnClickListener(chipClick);
-        if (id > 0) tv.setOnLongClickListener(v -> { showLabelManage(ctx, id, text, fl); return true; });
+        // v998: 移除标签长按"管理/删除"入口，仅保留分组筛选
         return fl;
     }
 

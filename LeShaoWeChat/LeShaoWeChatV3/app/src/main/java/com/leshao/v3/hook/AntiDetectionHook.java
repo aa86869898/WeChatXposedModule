@@ -179,7 +179,19 @@ public class AntiDetectionHook {
                     try {
                                         StackTraceElement[] stack = (StackTraceElement[]) param.getResult();
                                         if (stack == null) return;
-                    
+                                        // v1024: getStackTrace 是高频调用, 先扫描是否含 Xposed 帧,
+                                        // 命中才重建数组 —— 避免每次调用都分配 ArrayList(扫描期/网络
+                                        // 栈追踪高频调用时开销显著)。
+                                        boolean hasXp = false;
+                                        for (StackTraceElement e : stack) {
+                                            String cls = e.getClassName();
+                                            if (cls != null && (cls.contains(XP_PREFIX + "." + XP_SUFFIX)
+                                                    || cls.contains("XposedBridge"))) {
+                                                hasXp = true;
+                                                break;
+                                            }
+                                        }
+                                        if (!hasXp) return;
                                         java.util.List<StackTraceElement> filtered = new java.util.ArrayList<>();
                                         for (StackTraceElement e : stack) {
                                             String cls = e.getClassName();
@@ -188,9 +200,7 @@ public class AntiDetectionHook {
                                                 filtered.add(e);
                                             }
                                         }
-                                        if (filtered.size() != stack.length) {
-                                            param.setResult(filtered.toArray(new StackTraceElement[0]));
-                                        }
+                                        param.setResult(filtered.toArray(new StackTraceElement[0]));
                     } catch (Throwable e) {
                         de.robv.android.xposed.XposedBridge.log("LeShaoV3 cb err: " + e);
                     }

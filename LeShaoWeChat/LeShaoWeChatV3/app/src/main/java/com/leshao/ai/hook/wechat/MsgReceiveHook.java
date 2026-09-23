@@ -4,6 +4,7 @@ import android.util.Log;
 
 import com.leshao.ai.hook.HookEntry;
 import com.leshao.ai.hook.dexkit.DexKitAdapter;
+import com.leshao.v3.LogWriter;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -112,8 +113,17 @@ public final class MsgReceiveHook {
             return;
         }
 
+        LogWriter.log(TAG, "收到文本 talker=" + talker + " svrId=" + svrId
+                + " content='" + trunc(content) + "'");
         TriggerEngine.dispatch(talker, content, msg, svrId == null ? 0L : svrId,
                 createTime == null ? 0L : createTime);
+    }
+
+    /** 日志用截断。 */
+    private static String trunc(String s) {
+        if (s == null) return "";
+        String one = s.replace('\n', ' ').trim();
+        return one.length() > 60 ? one.substring(0, 60) + "..." : one;
     }
 
     // ---------- 字段读取（兼容 int/long 装箱差异） ----------

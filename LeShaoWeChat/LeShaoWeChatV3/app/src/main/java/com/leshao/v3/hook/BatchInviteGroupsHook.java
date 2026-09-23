@@ -23,7 +23,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 批量邀请进群: 单聊窗口右上角三点菜单新增「批量邀请进群」,
+ * 批量邀请进群: 双入口 —— 单聊窗口右上角 ⋮ 三点菜单「批量邀请进群」,
+ * 以及聊天输入框上方「更多」菜单(直接传入当前聊天对象 friend),
  * 将当前聊天好友邀请进"我加入且 TA 不在"的多个微信群。
  *
  * 严格参照 《微信好友批量邀请进群_完整分析及Java实现.md》:
@@ -65,11 +66,13 @@ public class BatchInviteGroupsHook {
     public static void setEnabled(boolean enabled) { sEnabled = enabled; }
 
     public static void hook(ClassLoader cl) {
-        if (!sEnabled) return;
         sCL = cl;
         ModuleConfig config = ModuleConfig.load(ContextManager.getPrefs());
-        if (config == null || !config.batchInviteGroupsEnabled) return;
-        hookChatMenu(cl);
+        sEnabled = config != null && config.batchInviteGroupsEnabled;
+        LogWriter.log(TAG, "hook: enabled=" + sEnabled);
+        if (sEnabled) {
+            hookChatMenu(cl);
+        }
     }
 
     private static void hookChatMenu(ClassLoader cl) {
@@ -233,11 +236,49 @@ public class BatchInviteGroupsHook {
         return null;
     }
 
+    /**
+     * v1007: 入口改为聊天输入框上方「更多」菜单调用。
+     * 直接使用当前聊天对象(friend), 不再依赖原生右上角 ⋮ 菜单。
+     */
+    public static void startInvite(String friend) {
+        LogWriter.log(TAG, "startInvite friend=" + friend + " proc=" + procName()
+                + " enabled=" + sEnabled);
+        if (!sEnabled) {
+            showToastAsync("批量邀请进群未启用");
+            return;
+        }
+        if (friend == null || friend.isEmpty()) {
+            showToastAsync("无法获取当前聊天对象");
+            return;
+        }
+        final String f = friend;
+        new Thread(() -> doBatchInvite(f), "InviteGroups").start();
+    }
+
+    /** 当前进程名(诊断用: 判断是否在微信主进程) */
+    private static String procName() {
+        try {
+            Object n = XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("android.app.ActivityThread", null),
+                    "currentProcessName");
+            if (n instanceof String) return (String) n;
+        } catch (Throwable ignored) {}
+        return "?";
+    }
+
     /* ================= 批量邀请核心 ================= */
 
     private static void doBatchInvite(final String friend) {
         try {
             showToastAsync("正在查询群列表...");
+            try {
+                boolean bound = com.leshao.ai.hook.wechat.StorageHub.get().ensureBound();
+                LogWriter.log(TAG, "doBatchInvite: StorageHub bound=" + bound
+                        + " rcontactStorage=" + (com.leshao.ai.hook.wechat.StorageHub.get()
+                        .rcontactStorage() == null ? "null" : "ok"));
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "doBatchInvite: StorageHub 绑定异常: " + t);
+            }
             List<Room> mine = getMyChatrooms();
             long t0 = System.currentTimeMillis();
             Set<String> common = getCommonChatrooms(friend);
@@ -246,12 +287,21 @@ public class BatchInviteGroupsHook {
             List<Room> invitable = filterInvitable(mine, common, friend);
             LogWriter.log(TAG, "invitable=" + invitable.size());
             if (invitable.isEmpty()) {
-                showToastAsync("没有可邀请的群(好友已在全部群中)");
+                if (mine.isEmpty()) {
+                    LogWriter.log(TAG, "doBatchInvite: 群列表为空, 存储链可能未就绪");
+                    showToastAsync("群列表读取失败(存储未就绪), 请稍后重试");
+                } else {
+                    showToastAsync("没有可邀请的群(好友已在全部群中)");
+                }
                 return;
             }
             showGroupPickDialog(friend, invitable);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "doBatchInvite err: " + t.getMessage());
+            LogWriter.log(TAG, "doBatchInvite err: " + t);
+            StringBuilder sb = new StringBuilder("stack:");
+            StackTraceElement[] st = t.getStackTrace();
+            for (int i = 0; i < st.length && i < 8; i++) sb.append("\n  at ").append(st[i]);
+            LogWriter.log(TAG, sb.toString());
             showToastAsync("批量邀请出错: " + t.getClass().getSimpleName());
         }
     }
@@ -347,15 +397,69 @@ public class BatchInviteGroupsHook {
         @Override public String toString() { return name + "|" + username; }
     }
 
-    /** ① 我的群列表: j1.v(tn3.c4) -> cj() -> j4, r() 游标 */
+    /** ① 我的群列表。v1013: 优先内核无关来源(会话列表适配器/联系人仓库)，最后回退存储链。 */
     private static List<Room> getMyChatrooms() throws Throwable {
         List<Room> out = new ArrayList<>();
-        Object c4 = XposedHelpers.callStaticMethod(
-                XposedHelpers.findClass(WxCls.J1, sCL), "v",
-                XposedHelpers.findClass(WxCls.TN3_C4, sCL));
-        Object h2 = XposedHelpers.findClass(WxCls.H2_IMPL, sCL).cast(c4);
-        Object contactStorage = XposedHelpers.callMethod(h2, "cj");
-        Cursor cur = (Cursor) XposedHelpers.callMethod(contactStorage, "r");
+
+        // 来源1: 会话列表适配器(内核无关, 实机已证明可枚举群；sAdapter 常驻)
+        try {
+            List<String> usernames = ConversationFilter.getUsernamesForBuiltInLabel(
+                    ChatGroupHook.LABEL_ID_GROUP);
+            if (usernames != null && !usernames.isEmpty()) {
+                // 若联系人仓库已加载, 用其展示名美化; 否则退回 username
+                java.util.Map<String, String> nameMap = new java.util.HashMap<>();
+                try {
+                    List<com.leshao.v3.model.ContactCard> repo =
+                            com.leshao.v3.ContactRepository.getGroups();
+                    if (repo != null) {
+                        for (com.leshao.v3.model.ContactCard c : repo) {
+                            if (c != null && c.username != null) {
+                                String dn = c.displayName();
+                                nameMap.put(c.username, dn != null && !dn.isEmpty() ? dn : c.username);
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {}
+                for (String u : usernames) {
+                    if (u == null || !u.endsWith("@chatroom")) continue;
+                    Room r = new Room();
+                    r.username = u;
+                    String dn = nameMap.get(u);
+                    r.name = dn != null ? dn : u;
+                    out.add(r);
+                }
+                if (!out.isEmpty()) {
+                    LogWriter.log(TAG, "getMyChatrooms: via ConversationFilter -> " + out.size());
+                    return out;
+                }
+            }
+            LogWriter.log(TAG, "getMyChatrooms: ConversationFilter 无可用群数据");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getMyChatrooms CF err: " + t.getMessage());
+        }
+
+        // 来源2: 联系人仓库(rcontact DB, 需已加载)
+        try {
+            List<com.leshao.v3.model.ContactCard> gs = com.leshao.v3.ContactRepository.getGroups();
+            if (gs != null && !gs.isEmpty()) {
+                for (com.leshao.v3.model.ContactCard c : gs) {
+                    if (c == null || c.username == null || !c.username.endsWith("@chatroom")) continue;
+                    Room r = new Room();
+                    r.username = c.username;
+                    r.name = c.displayName();
+                    out.add(r);
+                }
+                if (!out.isEmpty()) {
+                    LogWriter.log(TAG, "getMyChatrooms: via ContactRepository -> " + out.size());
+                    return out;
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getMyChatrooms Repo err: " + t.getMessage());
+        }
+
+        // 来源3: 存储链(依赖内核, 当前环境可能不可用)
+        Cursor cur = getMyChatroomsCursor();
         if (cur == null) {
             LogWriter.log(TAG, "getMyChatrooms: cursor null");
             return out;
@@ -378,7 +482,63 @@ public class BatchInviteGroupsHook {
         } finally {
             try { cur.close(); } catch (Throwable ignored) {}
         }
+        LogWriter.log(TAG, "getMyChatrooms: " + out.size() + " rooms");
         return out;
+    }
+
+    /** RContactStorage(j4).r() 游标。首选 StorageHub, 兜底 j1.v(tn3.c4)->cj()。 */
+    private static Cursor getMyChatroomsCursor() {
+        // 首选: AI 存储链 b41.h9.d() -> b41.e.r() -> j4
+        try {
+            boolean bound = com.leshao.ai.hook.wechat.StorageHub.get().ensureBound();
+            Object storage = com.leshao.ai.hook.wechat.StorageHub.get().rcontactStorage();
+            LogWriter.log(TAG, "getMyChatrooms: StorageHub bound=" + bound
+                    + " rcontactStorage=" + (storage == null ? "null"
+                    : storage.getClass().getName()));
+            if (storage != null) {
+                Cursor cur = (Cursor) XposedHelpers.callMethod(storage, "r");
+                if (cur != null) {
+                    LogWriter.log(TAG, "getMyChatrooms: via StorageHub");
+                    return cur;
+                }
+                LogWriter.log(TAG, "getMyChatrooms: StorageHub.r() 返回 null");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getMyChatrooms StorageHub err: " + t.getMessage());
+        }
+        // 兜底 A: 直接按类名 b41.h9.d().b() -> .r()
+        try {
+            Class<?> h9 = XposedHelpers.findClass("b41.h9", sCL);
+            Object hub = XposedHelpers.callStaticMethod(h9, "d");
+            Object acc = hub != null ? XposedHelpers.callMethod(hub, "b")
+                    : XposedHelpers.callStaticMethod(h9, "b");
+            if (acc != null) {
+                Object rcs = XposedHelpers.callMethod(acc, "r");
+                if (rcs != null) {
+                    Cursor cur = (Cursor) XposedHelpers.callMethod(rcs, "r");
+                    if (cur != null) {
+                        LogWriter.log(TAG, "getMyChatrooms: via b41.h9 direct");
+                        return cur;
+                    }
+                }
+            }
+            LogWriter.log(TAG, "getMyChatrooms: b41.h9 直连未取到游标");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getMyChatrooms h9 direct err: " + t.getMessage());
+        }
+        // 兜底 B: j1.v(tn3.c4) -> h2.cj() -> j4
+        try {
+            Object c4 = XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass(WxCls.J1, sCL), "v",
+                    XposedHelpers.findClass(WxCls.TN3_C4, sCL));
+            Object h2 = XposedHelpers.findClass(WxCls.H2_IMPL, sCL).cast(c4);
+            Object contactStorage = XposedHelpers.callMethod(h2, "cj");
+            LogWriter.log(TAG, "getMyChatrooms: via j1.v fallback");
+            return (Cursor) XposedHelpers.callMethod(contactStorage, "r");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getMyChatrooms j1.v fallback err: " + t.getMessage());
+            return null;
+        }
     }
 
     /** ② 共同群: fts.e0.xj(2, u73.u) 动态回调 t73.x.n4 -> 解析 u73.v.e */

@@ -43,6 +43,8 @@ public final class ChatVoiceSwitchHook {
     private static final String CHAT_FOOTER = "com.tencent.mm.pluginsdk.ui.chat.ChatFooter";
     private static final String CHAT_UI_LAYOUT = "com.tencent.mm.pluginsdk.ui.chat.ChattingUILayout";
     private static final String BASE_FRAGMENT = "com.tencent.mm.ui.chatting.BaseChattingUIFragment";
+    // v1002: 按钮行的 view tag, 用于幂等判定(微信复用 ChatFooter/重建视图树后据此补注入)
+    private static final String ROW_TAG = "LESHAO_INPUT_ROW_V1";
 
     // 糖果霓虹渐变（粉 → 霓虹粉 → 紫 → 青）
     private static final int[] NEON_GRADIENT = new int[]{
@@ -53,6 +55,11 @@ public final class ChatVoiceSwitchHook {
 
     // 防重复注入：以 footer View 实例为 key（文档做法），Activity 重建后新 footer 是新对象
     private static final WeakHashMap<View, Boolean> sInjected = new WeakHashMap<>();
+    // v1017: 诊断去重（同一 footer/Activity 只打印一次，避免 reconcile 轮询刷屏）
+    private static final WeakHashMap<View, Boolean> sLogged = new WeakHashMap<>();
+    private static final java.util.HashSet<String> sNoFooterLogged = new java.util.HashSet<>();
+    // v1017: 运行时解析到的 ChatFooter 类，用于子类匹配
+    private static volatile Class<?> sFooterClass;
 
     private ChatVoiceSwitchHook() {
     }
@@ -63,6 +70,9 @@ public final class ChatVoiceSwitchHook {
             LogWriter.log(TAG, "init: using Tinker ClassLoader");
         }
         final ClassLoader effectiveCL = tkCL != null ? tkCL : loader;
+        Class<?> fc = findClassIfExists(CHAT_FOOTER, effectiveCL);
+        if (fc == null) fc = findClassIfExists(CHAT_FOOTER, loader);
+        if (fc != null) sFooterClass = fc;
         hookChatFooter(effectiveCL, 0);
         hookFragmentResume(effectiveCL);
     }
@@ -71,26 +81,28 @@ public final class ChatVoiceSwitchHook {
 
     private static void hookChatFooter(final ClassLoader loader, final int attempt) {
         try {
-            Class<?> footerClazz = findClassIfExists(CHAT_FOOTER, loader);
+            Class<?> footerClazz = sFooterClass != null ? sFooterClass : findClassIfExists(CHAT_FOOTER, loader);
             if (footerClazz == null) {
                 retryHook(loader, attempt);
                 return;
             }
-            Class<?> clazzToHook = footerClazz;
-            // 优先 Hook 三参构造器 (Context, AttributeSet, int)，它是唯一真实构造器；
-            // 若三参不存在则遍历全部构造器覆盖所有创建路径。
-            try {
-                Constructor<?> c = clazzToHook.getDeclaredConstructor(
-                        Context.class, android.util.AttributeSet.class, int.class);
-                XposedBridge.hookMethod(c, footerHook());
-                LogWriter.log(TAG, "方案A: ChatFooter 三参构造器 Hook 已挂载");
+            sFooterClass = footerClazz;
+            // v1017: Hook 全部构造器（含子类会调用的任意 super 构造器），
+            // 不再只挂三参构造器后提前返回——否则子类若走其它 super 构造器则永不触发。
+            int hooked = 0;
+            for (Constructor<?> c : footerClazz.getDeclaredConstructors()) {
+                try {
+                    XposedBridge.hookMethod(c, footerHook());
+                    hooked++;
+                } catch (Throwable ignored) {
+                }
+            }
+            if (hooked == 0) {
+                retryHook(loader, attempt);
                 return;
-            } catch (Throwable ignored) {
             }
-            for (Constructor<?> c : clazzToHook.getDeclaredConstructors()) {
-                XposedBridge.hookMethod(c, footerHook());
-            }
-            LogWriter.log(TAG, "方案A: ChatFooter 全部构造器 Hook 已挂载");
+            LogWriter.log(TAG, "方案A: ChatFooter 构造器 Hook 已挂载 count=" + hooked
+                    + " class=" + footerClazz.getName());
         } catch (Throwable t) {
             LogWriter.log(TAG, "方案A hook 异常: " + t);
             retryHook(loader, attempt);
@@ -242,7 +254,8 @@ public final class ChatVoiceSwitchHook {
     }
 
     private static View findFooter(View view) {
-        if (CHAT_FOOTER.equals(view.getClass().getName())) return view;
+        if (view == null) return null;
+        if (isFooter(view)) return view;
         if (view instanceof ViewGroup) {
             ViewGroup vg = (ViewGroup) view;
             for (int i = 0; i < vg.getChildCount(); i++) {
@@ -253,22 +266,59 @@ public final class ChatVoiceSwitchHook {
         return null;
     }
 
+    /** v1017: 兼容 ChatFooter 子类（isInstance 匹配）与混淆后包名（名称后缀匹配） */
+    private static boolean isFooter(View view) {
+        Class<?> fc = sFooterClass;
+        if (fc != null && fc.isInstance(view)) return true;
+        String n = view.getClass().getName();
+        return CHAT_FOOTER.equals(n) || n.endsWith(".chat.ChatFooter");
+    }
+
+    private static void logOnce(View footer, String msg) {
+        synchronized (sLogged) {
+            if (sLogged.put(footer, Boolean.TRUE) == null) {
+                LogWriter.log(TAG, msg);
+            }
+        }
+    }
+
     // ==================== 注入核心 ====================
 
     private static void safeInject(View footer) {
         if (footer == null) return;
-        synchronized (sInjected) {
-            if (sInjected.containsKey(footer)) return;
-            sInjected.put(footer, Boolean.TRUE);
+        // v1002: 以"父容器里是否已有本模块按钮行(tag)"为幂等判据, 而非仅凭 footer 实例。
+        // 微信会复用 ChatFooter/重建视图树, 旧实现只记 footer 实例, 行一旦被移除就再也不补注入。
+        ViewGroup parent = footer.getParent() instanceof ViewGroup
+                ? (ViewGroup) footer.getParent() : null;
+        if (parent == null) {
+            scheduleRetryInject(footer);
+            return;
+        }
+        if (parent.findViewWithTag(ROW_TAG) != null) {
+            synchronized (sInjected) { sInjected.put(footer, Boolean.TRUE); }
+            return;
         }
 
         Context ctx = footer.getContext();
-        if (ctx == null) return;
+        if (ctx == null) {
+            logOnce(footer, "跳过注入: footer.getContext() 为 null");
+            return;
+        }
         Activity act = getActivityFromContext(ctx);
-        if (act == null || !isChatPage(act)) return;
+        if (act == null) {
+            logOnce(footer, "跳过注入: 无法从 Context 取得 Activity ctx=" + ctx.getClass().getName());
+            return;
+        }
+        if (!isChatPage(act)) {
+            logOnce(footer, "跳过注入: 非聊天页面 act=" + act.getClass().getName());
+            return;
+        }
 
         if (com.leshao.v3.UnifiedPrefs.get(ctx, "wm_prefs")
-                .getBoolean("input_buttons", true) == false) return;
+                .getBoolean("input_buttons", true) == false) {
+            logOnce(footer, "跳过注入: wm_prefs.input_buttons=false");
+            return;
+        }
 
         // 确保注入目标不是弹窗中的输入栏
         try {
@@ -277,45 +327,35 @@ public final class ChatVoiceSwitchHook {
                 String rootCls = root.getClass().getName();
                 if (rootCls.contains("Popup") || rootCls.contains("Dialog")
                     || rootCls.contains("popup") || rootCls.contains("dialog")) {
+                    logOnce(footer, "跳过注入: 根视图疑似弹窗 " + rootCls);
                     return;
                 }
             }
         } catch (Throwable ignored) {}
 
-        ViewGroup parent = (ViewGroup) footer.getParent();
-        if (parent == null) {
-            scheduleRetryInject(footer);
+        int idx = parent.indexOfChild(footer);
+        if (idx < 0) {
+            logOnce(footer, "跳过注入: footer 不在父容器索引中 parent=" + parent.getClass().getName());
             return;
         }
 
         View row = createButtonRow(ctx);
-        boolean ok;
-        // 父容器是垂直 LinearLayout（ChattingUILayout）：插到 footer 前面 == 输入框上方
-        if (parent instanceof LinearLayout
-                && ((LinearLayout) parent).getOrientation() == LinearLayout.VERTICAL) {
-            int idx = parent.indexOfChild(footer);
-            row.setLayoutParams(new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        row.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        boolean ok = true;
+        try {
             parent.addView(row, idx);
-            ok = true;
-        } else {
-            // 万一父容器不是垂直 LinearLayout：插到 footer 之前，随 footer 布局
-            int idx = parent.indexOfChild(footer);
-            if (idx < 0) {
-                ok = false;
-            } else {
-                row.setLayoutParams(new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                parent.addView(row, idx);
-                ok = true;
-            }
+        } catch (Throwable t) {
+            ok = false;
+            LogWriter.log(TAG, "注入异常: " + t);
         }
-        if (ok) {
+        if (ok && parent.findViewWithTag(ROW_TAG) != null) {
+            synchronized (sInjected) { sInjected.put(footer, Boolean.TRUE); }
             LogWriter.log(TAG, "注入成功! 父容器=" + parent.getClass().getName()
                     + " idx=" + parent.indexOfChild(row));
         } else {
             sInjected.remove(footer);
-            LogWriter.log(TAG, "注入失败: 找不到合适的父容器");
+            LogWriter.log(TAG, "注入失败: addView 未生效 parent=" + parent.getClass().getName());
         }
     }
 
@@ -379,19 +419,6 @@ public final class ChatVoiceSwitchHook {
         schedBtn.setLayoutParams(lpSched);
         row.addView(schedBtn);
 
-        // 助手：文字蓝色 + 细边框背景，点击打开功能面板
-        TextView masterBtn = createBlueButton(ctx, "助手", IconLoader.IC_SCHEDULE_SEND, new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openMasterPanel(ctx, v);
-            }
-        });
-        LinearLayout.LayoutParams lpMaster = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lpMaster.setMargins(0, 0, (int) (6 * density), 0);
-        masterBtn.setLayoutParams(lpMaster);
-        row.addView(masterBtn);
-
         // 语音：文字蓝色 + 细边框背景，点击打开音频选择面板
         TextView mp3Btn = createBlueButton(ctx, "语音", IconLoader.IC_SCHEDULE_SEND, new View.OnClickListener() {
             @Override
@@ -404,9 +431,22 @@ public final class ChatVoiceSwitchHook {
                 }
             }
         });
-        mp3Btn.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams lpVoice = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lpVoice.setMargins(0, 0, (int) (6 * density), 0);
+        mp3Btn.setLayoutParams(lpVoice);
         row.addView(mp3Btn);
+
+        // 更多：文字蓝色 + 细边框背景，点击打开功能面板(原「助手」)
+        TextView masterBtn = createBlueButton(ctx, "更多", IconLoader.IC_SCHEDULE_SEND, new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openMasterPanel(ctx, v);
+            }
+        });
+        masterBtn.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        row.addView(masterBtn);
 
         android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(ctx);
         scroll.setHorizontalScrollBarEnabled(false);
@@ -418,7 +458,32 @@ public final class ChatVoiceSwitchHook {
         scroll.addView(row, new android.widget.FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER_HORIZONTAL));
+        // v1002: 打 tag 供幂等判定(见 safeInject)
+        scroll.setTag(ROW_TAG);
         return scroll;
+    }
+
+    /** v1002: 供 WmEntry reconciler 调用 —— 微信复用 ChatFooter/漏掉生命周期 hook 时补注入。
+     *  以 Activity decorView 为根扫描 ChatFooter, 命中即走 safeInject(tag 幂等)。 */
+    public static void ensureInjected(Activity act) {
+        if (act == null || act.isFinishing()) return;
+        try {
+            View decor = act.getWindow() != null ? act.getWindow().peekDecorView() : null;
+            if (decor == null) return;
+            View footer = findFooter(decor);
+            if (footer != null) {
+                safeInject(footer);
+            } else {
+                String key = act.getClass().getName();
+                synchronized (sNoFooterLogged) {
+                    if (sNoFooterLogged.add(key)) {
+                        LogWriter.log(TAG, "ensureInjected: 未在视图树中找到 ChatFooter act=" + key);
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "ensureInjected err: " + t.getMessage());
+        }
     }
 
     private static int dp(int dpi, Context ctx) {

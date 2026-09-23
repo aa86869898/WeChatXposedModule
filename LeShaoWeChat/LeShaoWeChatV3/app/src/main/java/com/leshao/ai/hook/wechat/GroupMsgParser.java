@@ -105,6 +105,17 @@ public final class GroupMsgParser {
      * @param botName 机器人名（用于兜底匹配）
      */
     public static boolean isAtMe(Object msgInfo, String meWxid, String body, String botName) {
+        return isAtMe(msgInfo, meWxid, body, botName, null);
+    }
+
+    /**
+     * v985: 追加自身昵称兜底。机器人以本人微信号发言, 群里 @本人 时正文是
+     * {@code @本人昵称}, 仅比对 botName(默认"小乐")会漏判, 故同时比对 selfNick。
+     *
+     * @param selfNick 自己微信昵称(可为 null)
+     */
+    public static boolean isAtMe(Object msgInfo, String meWxid, String body, String botName,
+                                 String selfNick) {
         // 1) msgsource.atuserlist 精确判定
         if (meWxid != null && !meWxid.isEmpty()) {
             String src = getMsgSource(msgInfo);
@@ -122,9 +133,12 @@ public final class GroupMsgParser {
                 }
             }
         }
-        // 2) 兜底：正文含 @机器人名 / @所有人 / @all
+        // 2) 兜底：正文含 @机器人名 / @自己昵称 / @所有人 / @all
         if (body != null && !body.isEmpty()) {
             if (botName != null && !botName.isEmpty() && body.contains("@" + botName)) {
+                return true;
+            }
+            if (selfNick != null && !selfNick.isEmpty() && body.contains("@" + selfNick)) {
                 return true;
             }
             if (body.contains("@所有人") || body.contains("@all") || body.contains("@All")) {

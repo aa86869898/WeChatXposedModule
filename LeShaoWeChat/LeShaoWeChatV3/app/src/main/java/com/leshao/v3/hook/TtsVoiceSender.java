@@ -127,6 +127,20 @@ public class TtsVoiceSender {
     private static TextToSpeech sTts;
     private static ClassLoader sClassLoader;
     private static volatile boolean sReady;
+
+    /**
+     * v1028: 语音/内核 API 必须走微信运行时真实 ClassLoader(Tinker DelegateLastClassLoader)。
+     * 若用 lpparam.classLoader(base.apk 的 PathClassLoader), 会加载到内核类的平行副本,
+     * 其静态内核未初始化 -> b96.b "Kernel not initialized by MMApplication!"。
+     * 仅替换类加载目标, 不改动任何音频编码参数(v985 原样保留)。
+     */
+    private static ClassLoader voiceCl() {
+        try {
+            ClassLoader real = com.leshao.v3.db.DatabaseProvider.getRealClassLoader();
+            if (real != null) return real;
+        } catch (Throwable ignored) {}
+        return sClassLoader;
+    }
     private static String sAccPath;
     private static String sMyWxId;
     private static String sVoiceGClass;
@@ -270,7 +284,7 @@ public class TtsVoiceSender {
             for (String kernelName : kernelCandidates) {
                 try {
                     String path = (String) XposedHelpers.callStaticMethod(
-                            XposedHelpers.findClass(kernelName, sClassLoader), "getAccPath");
+                            XposedHelpers.findClass(kernelName, voiceCl()), "getAccPath");
                     if (path != null && !path.isEmpty()) {
                         sAccPath = path;
                         return path;
@@ -284,7 +298,7 @@ public class TtsVoiceSender {
             Context ctx = ContextManager.getAppContext();
             long uin = getDefaultUin(ctx);
             if (uin > 0) {
-                String hash = VersionCompat.getDbHash(sClassLoader, (int) uin);
+                String hash = VersionCompat.getDbHash(voiceCl(), (int) uin);
                 String[] roots = buildAccRoots();
                 for (String root : roots) {
                     File dir = new File(root, hash);
@@ -1084,7 +1098,7 @@ public class TtsVoiceSender {
         }
 
         try {
-            Class<?> c8 = XposedHelpers.findClass("dm.c8", sClassLoader);
+            Class<?> c8 = XposedHelpers.findClass("dm.c8", voiceCl());
             return c8.getDeclaredMethod("setType", int.class);
         } catch (Throwable ignored) {}
 
@@ -2577,7 +2591,7 @@ public class TtsVoiceSender {
     /** 通过新版语音路径服务 (pv.p0.ej / wb0.b.Ej) 解析完整路径 */
     private static String resolveVoicePathViaService(String voice2Dir, String baseName) {
         try {
-            Class<?> pathCls = VersionCompat.findVoicePathServiceClass(sClassLoader);
+            Class<?> pathCls = VersionCompat.findVoicePathServiceClass(voiceCl());
             if (pathCls == null) return null;
             // 先试静态方法 (wb0.b.Ej(x, base, true) 形态)
             for (Method m : pathCls.getDeclaredMethods()) {
@@ -2754,7 +2768,7 @@ public class TtsVoiceSender {
                 return false;
             }
             if (sVoiceGClass == null || sVoiceGMethod == null || sVoiceTClass == null || sVoiceTMethod == null) {
-                discoverVoiceApi(sClassLoader);
+                discoverVoiceApi(voiceCl());
             }
             if (sVoiceGClass == null || sVoiceGMethod == null || sVoiceTClass == null || sVoiceTMethod == null) {
                 LogWriter.log(TAG, "SceneVoice: voice API not discovered");
@@ -2762,7 +2776,7 @@ public class TtsVoiceSender {
             }
 
             String newName = (String) XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass(sVoiceGClass, sClassLoader), sVoiceGMethod, talker, "amr_");
+                    XposedHelpers.findClass(sVoiceGClass, voiceCl()), sVoiceGMethod, talker, "amr_");
             LogWriter.log(TAG, "SceneVoice: newName=" + newName + " talker=" + talker);
             if (newName == null || newName.isEmpty()) return false;
 
@@ -2776,7 +2790,7 @@ public class TtsVoiceSender {
             LogWriter.log(TAG, "SceneVoice: copied to " + dstPath);
 
             boolean ok;
-            Class<?> vTClass = XposedHelpers.findClass(sVoiceTClass, sClassLoader);
+            Class<?> vTClass = XposedHelpers.findClass(sVoiceTClass, voiceCl());
             if (sVoiceTParamCount >= 5) {
                 ok = (Boolean) XposedHelpers.callStaticMethod(vTClass, sVoiceTMethod,
                         newName, durationMs, 0, null, null);
@@ -2789,11 +2803,11 @@ public class TtsVoiceSender {
             if (!ok) return false;
 
             // 语音转发_新.md §3: v61.d1.u 建消息后必须 v61.v0.dj().e() 踢 SceneVoiceService 上传队列
-            kickVoiceUploadQueue(sClassLoader);
+            kickVoiceUploadQueue(voiceCl());
 
             try {
                 // 3180: 刷新语音缓存使用 pv.p0 (VoiceLogicService) 上的实例方法
-                Class<?> player = VersionCompat.findVoicePlayerClass(sClassLoader);
+                Class<?> player = VersionCompat.findVoicePlayerClass(voiceCl());
                 if (player != null) {
                     boolean refreshed = false;
                     for (Method m : player.getDeclaredMethods()) {
@@ -2823,7 +2837,7 @@ public class TtsVoiceSender {
                 LogWriter.log(TAG, "SceneVoice: refresh err: " + t.getMessage());
             }
             try {
-                Class<?> y21p0 = VersionCompat.findVoicePlayerClass(sClassLoader);
+                Class<?> y21p0 = VersionCompat.findVoicePlayerClass(voiceCl());
                 if (y21p0 != null) {
                     Object q0 = XposedHelpers.callStaticMethod(y21p0, "kj");
                     if (q0 != null) {
@@ -3788,7 +3802,7 @@ public class TtsVoiceSender {
      */
     private static byte[] encodeSilkViaMediaRecorder(byte[] padPcm) {
         try {
-            Class<?> rec = XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", sClassLoader);
+            Class<?> rec = XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", voiceCl());
             long handle = (Long) XposedHelpers.callStaticMethod(rec,
                     "SilkEncInit", TARGET_SAMPLE_RATE, SILK_BITRATE, SILK_COMPLEXITY, 0L);
             LogWriter.log(TAG, "SILK(MediaRecorder) handle=" + handle);

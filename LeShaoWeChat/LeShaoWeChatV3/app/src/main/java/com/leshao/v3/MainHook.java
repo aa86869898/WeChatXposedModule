@@ -8,7 +8,6 @@ import android.content.pm.PackageInfo;
 import android.os.Process;
 
 import com.leshao.v3.LogWriter;
-import com.leshao.v3.hook.AntiRecallHook;
 import com.leshao.v3.hook.AutoForwardHook;
 import com.leshao.v3.hook.AntiDetectionHook;
 import com.leshao.v3.hook.AutoRemark;
@@ -24,7 +23,6 @@ import com.leshao.v3.hook.ChatUICustom;
 import com.leshao.v3.hook.ConvPrivacy;
 import com.leshao.v3.hook.DeleteDetect;
 import com.leshao.v3.hook.DexKitHelper;
-import com.leshao.v3.hook.FakeAddSource;
 import com.leshao.v3.hook.FriendRequestHook;
 import com.leshao.v3.hook.GroupMemberResolver;
 import com.leshao.v3.hook.GroupMemberTools;
@@ -76,11 +74,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v985";
+    public static final String MODULE_BUILD = "v1028";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 985;
+    public static final int MODULE_VERSION_CODE = 1028;
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -177,11 +175,17 @@ public class MainHook implements IXposedHookLoadPackage {
         final ClassLoader cl = lpparam.classLoader;
 
         installGlobalActivityHook(cl);
+        // v1015: 全局窗口返回栈（二级返回首页 / 三级返回上一层，覆盖所有 Dialog/PopupWindow）
+        safeRun("UiBackInstaller", () -> com.leshao.v3.ui.UiBackInstaller.install(cl));
 
         try {
             ContextManager.init(cl, lpparam.appInfo.sourceDir);
             captureModuleApkPath(lpparam);
             ContextManager.hookAttachBaseContext(lpparam);
+
+            // v1024: WCDB 逃密 —— 必须在微信打开 EnMicroMsg.db 之前 hook WCDB openDatabase,
+            // 捕获微信自开的 DB 实例与密钥(绕开 CsoLoader native 库未加载问题)。
+            safeRun("DatabaseProvider.initEarly", () -> com.leshao.v3.db.DatabaseProvider.initEarly(cl));
 
              safeRun("DexKitHelper.setVersionCode", () -> DexKitHelper.setVersionCode(wxVerCode));
              safeRun("DexKitHelper.setModuleVersion", () -> DexKitHelper.setModuleVersion(MODULE_VERSION_CODE));
@@ -238,6 +242,16 @@ public class MainHook implements IXposedHookLoadPackage {
                         LogWriter.log(TAG, "--- ContextManager.onReady 回调开始 ---");
                         rearmCrashHandler();
 
+                        // v1024: 监听 WCDB 捕获结果, DB 就绪后主动加载联系人(联系人选择器使用)
+                        try {
+                            com.leshao.v3.db.DatabaseProvider.setOnDbReadyListener((db, pwd) -> {
+                                LogWriter.log(TAG, "[MainHook] DB captured listener fired, loading contacts");
+                                ContactRepository.loadAsync(null);
+                            });
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "[MainHook] DatabaseProvider listener err: " + t.getMessage());
+                        }
+
                         safeRun("SignatureDump", () -> SignatureDump.dump(cl));
                         safeRun("TTSBroadcaster", () -> TTSBroadcaster.init(ctx));
                         safeRun("VoiceAutoPlay", () -> VoiceAutoPlay.hook(cl));
@@ -246,7 +260,7 @@ public class MainHook implements IXposedHookLoadPackage {
                                 .deleteExpired(System.currentTimeMillis() - 30L * 86400000L));
 
                         safeRun("AntiDetectionHook", () -> AntiDetectionHook.hook(cl));
-                        safeRun("AntiRecallHook", () -> HookManager.register("AntiRecallHook", AntiRecallHook::hook));
+                        // v998: 已移除"消息防撤回"(AntiRecallHook)
                         safeRun("ChatGroupHook", () -> HookManager.register("ChatGroupHook", () -> ChatGroupHook.hook(cl)));
                         safeRun("FriendRequestHook", () -> FriendRequestHook.hook(cl));
 
@@ -283,7 +297,7 @@ public class MainHook implements IXposedHookLoadPackage {
                             WanQunGroupHook.hookReceive(cl);
                         });
 
-                        safeRun("FakeAddSource", () -> FakeAddSource.hook(cl));
+                        // v998: 已移除"添加好友伪装来源"(FakeAddSource)
                         safeRun("BatchAddFriend", () -> BatchAddFriend.hook(cl));
 
                         // v980: 以下两个模块依赖 DexKit 联网解析, 原实现直接在主线程同步执行,
@@ -329,6 +343,8 @@ public class MainHook implements IXposedHookLoadPackage {
                         String cls = param.thisObject.getClass().getName();
                         if (cls.startsWith("com.tencent.mm.")) {
                             LogWriter.log("ActivityLife", "onCreate: " + cls);
+                            // v1025: onCreate 早于 onResume, 尽早反查真实 ClassLoader
+                            com.leshao.v3.db.DatabaseProvider.probeAndRehook(param.thisObject);
                         }
                     } catch (Throwable ignored) {}
                 }
@@ -340,6 +356,8 @@ public class MainHook implements IXposedHookLoadPackage {
                         String cls = param.thisObject.getClass().getName();
                         if (cls.startsWith("com.tencent.mm.")) {
                             LogWriter.log("ActivityLife", "onResume: " + cls);
+                            // v1025: 从微信 Activity 反查真实 ClassLoader 并重新 hook WCDB
+                            com.leshao.v3.db.DatabaseProvider.probeAndRehook(param.thisObject);
                         }
                     } catch (Throwable ignored) {}
                 }

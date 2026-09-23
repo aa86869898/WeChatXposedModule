@@ -37,6 +37,7 @@ import com.leshao.v3.db.VoiceHistoryDbHelper;
 import com.leshao.v3.hook.TtsVoiceSender;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
+import com.leshao.v3.ui.InsetsUtil;
 import com.leshao.v3.wm.utils.WmPrefs;
 
 import java.io.File;
@@ -167,23 +168,96 @@ public class ChatFooterLongPressMenu {
     private static void hookActivityResult(ClassLoader cl) {
         String[] targets = {"com.tencent.mm.ui.LauncherUI", "com.tencent.mm.ui.chatting.ChattingUI"};
         boolean anyHooked = false;
+        java.util.Set<Method> hookedMethods = new java.util.HashSet<>();
         for (String className : targets) {
             Class<?> c = findClassIfExists(className, cl);
             if (c == null) continue;
-            Method m = findMethodInHierarchy(c, "onActivityResult", int.class, int.class, Intent.class);
-            if (m == null) continue;
-            XposedBridge.hookMethod(m, new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam p) {
-                    try {
-                                        onActivityResultHook(p);
-                    } catch (Throwable e) {
-                        LogWriter.log("CFLPMenu", "cb err: " + e);
-                    }
+            // v1024: 仅 hook 第一个声明方法不可靠 —— 微信基类可能在中间层 override
+            // onActivityResult 且不调用 super, 导致 hook 的父类方法永不执行(v1023 实测
+            // startActivityForResult 发出后零回调)。改为 hook 继承链每一层的声明方法。
+            int layer = 0;
+            Class<?> cur = c;
+            while (cur != null && cur != Object.class) {
+                Method m = null;
+                try { m = cur.getDeclaredMethod("onActivityResult", int.class, int.class, Intent.class); }
+                catch (NoSuchMethodException ignored) {}
+                if (m != null && hookedMethods.add(m)) {
+                    final String layerCls = cur.getName();
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam p) {
+                            try {
+                                onActivityResultHook(p);
+                            } catch (Throwable e) {
+                                LogWriter.log("CFLPMenu", "cb err: " + e);
+                            }
+                        }
+                    });
+                    LogWriter.log(TAG, "onActivityResult hooked on " + c.getSimpleName()
+                            + " layer=" + layer + " decl=" + layerCls);
+                    anyHooked = true;
                 }
-            });
-            LogWriter.log(TAG, "onActivityResult hooked on " + c.getSimpleName());
-            anyHooked = true;
+                cur = cur.getSuperclass();
+                layer++;
+            }
+        }
+        // v1024 兜底: hook framework Activity.onActivityResult —— 任何微信 Activity 收到
+        // 结果都会沿继承链到达(除非某层 override 且不调 super, 此时上面逐层 hook 已覆盖)。
+        try {
+            Method base = Activity.class.getDeclaredMethod(
+                    "onActivityResult", int.class, int.class, Intent.class);
+            if (hookedMethods.add(base)) {
+                XposedBridge.hookMethod(base, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        try {
+                            int requestCode = (int) p.args[0];
+                            if (requestCode != REQ_PICK_MP3) return;
+                            onActivityResultHook(p);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "onActivityResult framework Activity base hooked");
+                anyHooked = true;
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "framework Activity base hook err: " + t.getMessage());
+        }
+        // v1024 最强兜底: hook framework Activity.dispatchActivityResult —— 系统分发结果的
+        // 入口, 早于微信任何 onActivityResult override, 即使微信某层 override 不调 super 也能捕获。
+        try {
+            for (Method dm : Activity.class.getDeclaredMethods()) {
+                if (!"dispatchActivityResult".equals(dm.getName())) continue;
+                Class<?>[] pts = dm.getParameterTypes();
+                int reqIdx = -1, resIdx = -1, dataIdx = -1;
+                for (int i = 0; i < pts.length; i++) {
+                    if (pts[i] == int.class && reqIdx < 0) reqIdx = i;
+                    else if (pts[i] == int.class && resIdx < 0) resIdx = i;
+                    else if (pts[i] == Intent.class) dataIdx = i;
+                }
+                if (reqIdx < 0 || resIdx < 0 || dataIdx < 0) continue;
+                if (!hookedMethods.add(dm)) continue;
+                final int ri = reqIdx, si = resIdx, di = dataIdx;
+                XposedBridge.hookMethod(dm, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        try {
+                            int requestCode = (int) p.args[ri];
+                            if (requestCode != REQ_PICK_MP3) return;
+                            int resultCode = (int) p.args[si];
+                            Intent data = (Intent) p.args[di];
+                            LogWriter.log(TAG, "dispatchActivityResult recv: req=" + requestCode
+                                    + " result=" + resultCode + " this="
+                                    + (p.thisObject != null ? p.thisObject.getClass().getSimpleName() : "null"));
+                            handleResult(requestCode, resultCode, data);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "dispatchActivityResult hooked (" + pts.length + " params)");
+                anyHooked = true;
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "dispatchActivityResult hook err: " + t.getMessage());
         }
         if (!anyHooked) {
             LogWriter.log(TAG, "onActivityResult NOT hooked on any target class");
@@ -195,6 +269,19 @@ public class ChatFooterLongPressMenu {
             int requestCode = (int) p.args[0];
             int resultCode = (int) p.args[1];
             Intent data = (Intent) p.args[2];
+            // v1023: 记录所有到达 onActivityResult 的请求, 用于诊断回调链路
+            LogWriter.log(TAG, "onActivityResult recv: req=" + requestCode
+                    + " result=" + resultCode + " data=" + (data != null ? data.getData() : "null")
+                    + " this=" + (p.thisObject != null ? p.thisObject.getClass().getSimpleName() : "null"));
+            handleResult(requestCode, resultCode, data);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "onActivityResult err: " + t.getMessage());
+        }
+    }
+
+    /** v1024: 统一结果处理入口(供 onActivityResult 与 dispatchActivityResult 两个捕获点复用) */
+    private static void handleResult(int requestCode, int resultCode, Intent data) {
+        try {
             if (requestCode != REQ_PICK_MP3 || resultCode != Activity.RESULT_OK || data == null) return;
 
             Uri uri = data.getData();
@@ -222,7 +309,7 @@ public class ChatFooterLongPressMenu {
                 Toast.makeText(ctx, "无法读取该文件，请重试", Toast.LENGTH_SHORT).show();
             }
         } catch (Throwable t) {
-            LogWriter.log(TAG, "onActivityResult err: " + t.getMessage());
+            LogWriter.log(TAG, "handleResult err: " + t.getMessage());
         }
     }
 
@@ -406,6 +493,9 @@ public class ChatFooterLongPressMenu {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.dialogBg(ctx));
         root.setPadding(p8, dp(ctx, 4), p8, p8);
+        InsetsUtil.padTop(root, InsetsUtil.topInset(ctx, anchor));
+        InsetsUtil.padBottom(root, InsetsUtil.bottomInset(ctx, anchor));
+        InsetsUtil.clipRounded(root);
 
         // 标题栏（横跨，居中）— v955 M3: 20sp onSurface 粗体
         TextView titleBar = new TextView(ctx);
@@ -419,6 +509,8 @@ public class ChatFooterLongPressMenu {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // 音频转语音 单面板（取消左侧分类/右侧面板方式）
+        // v1023: 面板重新打开时清空上次选择的音频文件(需重新选择)
+        sLastPickedPath = null;
         View audioPanel = createAudioToVoicePanel(ctx);
         root.addView(audioPanel);
 
@@ -828,8 +920,11 @@ public class ChatFooterLongPressMenu {
             });
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false);
             try {
+                LogWriter.log(TAG, "startActivityForResult from " + act.getClass().getName()
+                        + " req=" + REQ_PICK_MP3);
                 act.startActivityForResult(intent, REQ_PICK_MP3);
             } catch (Throwable t) {
+                LogWriter.log(TAG, "open picker FAILED: " + t);
                 Toast.makeText(ctx, "打开文件选择器失败", Toast.LENGTH_SHORT).show();
             }
         });
@@ -1227,7 +1322,7 @@ public class ChatFooterLongPressMenu {
         root.addView(gap2);
 
         // 试听滑块
-        final SeekBar seekBar = new SeekBar(ctx);
+        final SeekBar seekBar = com.leshao.v3.ui.widgets.M3Page.slider(ctx);
         seekBar.setMax(totalInt);
         seekBar.setProgress(0);
         root.addView(seekBar);
@@ -1237,31 +1332,17 @@ public class ChatFooterLongPressMenu {
         markRow.setOrientation(LinearLayout.HORIZONTAL);
         markRow.setPadding(0, p8, 0, 0);
 
-        final Button markStartBtn = new Button(ctx);
-        markStartBtn.setText("设为起点");
-        markStartBtn.setTextSize(11);
-        markStartBtn.setAllCaps(false);
-        markStartBtn.setTextColor(text2);
-        GradientDrawable msBg = new GradientDrawable();
-        msBg.setStroke((int) d, divider);
-        msBg.setCornerRadius((int)(4 * d));
-        markStartBtn.setBackground(msBg);
-        markStartBtn.setPadding(p8, p8, p8, p8);
+        final com.leshao.v3.ui.widgets.ModernButton markStartBtn =
+                new com.leshao.v3.ui.widgets.ModernButton(ctx, "设为起点",
+                        com.leshao.v3.ui.widgets.ModernButton.STYLE_GHOST);
         LinearLayout.LayoutParams msLp = new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         msLp.rightMargin = (int)(4 * d);
         markRow.addView(markStartBtn, msLp);
 
-        final Button markEndBtn = new Button(ctx);
-        markEndBtn.setText("设为终点");
-        markEndBtn.setTextSize(11);
-        markEndBtn.setAllCaps(false);
-        markEndBtn.setTextColor(text2);
-        GradientDrawable meBg = new GradientDrawable();
-        meBg.setStroke((int) d, divider);
-        meBg.setCornerRadius((int)(4 * d));
-        markEndBtn.setBackground(meBg);
-        markEndBtn.setPadding(p8, p8, p8, p8);
+        final com.leshao.v3.ui.widgets.ModernButton markEndBtn =
+                new com.leshao.v3.ui.widgets.ModernButton(ctx, "设为终点",
+                        com.leshao.v3.ui.widgets.ModernButton.STYLE_GHOST);
         LinearLayout.LayoutParams meLp = new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         meLp.leftMargin = (int)(4 * d);
@@ -1288,15 +1369,9 @@ public class ChatFooterLongPressMenu {
         root.addView(seekTime);
 
         // 播放/暂停按钮
-        final Button playBtn = new Button(ctx);
-        playBtn.setText("播放");
-        playBtn.setTextSize(12);
-        playBtn.setAllCaps(false);
-        playBtn.setTextColor(AppColors.WHITE_TEXT);
-        GradientDrawable playBg = new GradientDrawable();
-        playBg.setColor(accent);
-        playBg.setCornerRadius((int)(6 * d));
-        playBtn.setBackground(playBg);
+        final com.leshao.v3.ui.widgets.ModernButton playBtn =
+                new com.leshao.v3.ui.widgets.ModernButton(ctx, "播放",
+                        com.leshao.v3.ui.widgets.ModernButton.STYLE_PRIMARY);
         root.addView(playBtn);
 
         // MediaPlayer
@@ -1514,7 +1589,7 @@ public class ChatFooterLongPressMenu {
                 row.setGravity(Gravity.CENTER_VERTICAL);
 
                 // v966: 勾选区域(行首)
-                CheckBox cb = new CheckBox(ctx);
+                CheckBox cb = com.leshao.v3.ui.widgets.M3Page.checkBox(ctx);
                 cb.setChecked(sHistorySelected.contains(item.id));
                 cb.setOnCheckedChangeListener((b, checked) -> {
                     if (checked) sHistorySelected.add(item.id);
@@ -1814,6 +1889,7 @@ public class ChatFooterLongPressMenu {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
         root.setBackground(CandyUi.dialogBg(ctx));
+        InsetsUtil.clipRounded(root);
         root.setPadding((int)(24 * d), (int)(24 * d), (int)(24 * d), (int)(20 * d));
         root.setMinimumWidth((int)(260 * d));
 
@@ -1859,7 +1935,7 @@ public class ChatFooterLongPressMenu {
         try {
             android.view.Window win = dialog.getWindow();
             if (win != null) {
-                win.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(AppColors.card()));
+                win.setBackgroundDrawable(CandyUi.dialogBg(dialog.getContext()));
             }
         } catch (Throwable ignored) {}
         try {

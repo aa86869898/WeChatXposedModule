@@ -34,16 +34,13 @@ public class ContactGroupPageView {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
+        InsetsUtil.clipRounded(root);
         root.setPadding((int)(16 * d), (int)(16 * d), (int)(16 * d), (int)(16 * d));
 
         LinearLayout cardChat = makeCard(ctx, d);
-        boolean recallOn = prefs != null && prefs.getBoolean("ls_recall_enabled", false);
         boolean vfOn = prefs != null && prefs.getBoolean("ls_voice_forward", false);
 
-        cardChat.addView(switchRow(ctx, d, "消息防撤回", null, recallOn, (v, on) -> {
-            if (prefs != null) prefs.edit().putBoolean("ls_recall_enabled", on).apply();
-            AntiRecallHook.setEnabled(on);
-        }, null));
+        // v998: 移除"消息防撤回"功能入口
         cardChat.addView(switchRow(ctx, d, "语音消息转发", null, vfOn, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean("ls_voice_forward", on).apply();
             VoiceForwardHook.setEnabled(on);
@@ -70,6 +67,8 @@ public class ContactGroupPageView {
         LinearLayout cardGroup = makeCard(ctx, d);
         cardGroup.addView(switchRow(ctx, d, "聊天分组", null, chatGroupOn, (v, on) -> {
             if (prefs != null) prefs.edit().putBoolean("ls_chat_group_enabled", on).apply();
+            // v998: 开关变化后立即显示/隐藏聊天列表顶部的分组栏
+            ChatGroupUiInjector.onEnabledChanged();
         }, v -> SubPageActivity.open(act, "聊天分组管理", 14)));
         root.addView(cardGroup);
 
@@ -88,114 +87,11 @@ public class ContactGroupPageView {
 
         root.addView(candyDivider(ctx, d));
 
-        LinearLayout cardFakeSource = makeCard(ctx, d);
-        boolean fakeSourceOn = prefs != null && prefs.getBoolean("ls_fake_add_source_enabled", false);
-        int fakeScene = prefs != null ? prefs.getInt("ls_fake_add_source_scene", 10) : 10;
-
-        // 手动构建伪装来源行（需持有subtitle引用以便选中后即时更新）
-        LinearLayout rowFake = new LinearLayout(ctx);
-        rowFake.setOrientation(LinearLayout.HORIZONTAL);
-        rowFake.setGravity(Gravity.CENTER_VERTICAL);
-        rowFake.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        rowFake.setBackground(CandyUi.cardBg(ctx));
-
-        LinearLayout textCol = new LinearLayout(ctx);
-        textCol.setOrientation(LinearLayout.VERTICAL);
-        textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-        TextView tvTitle = new TextView(ctx);
-        tvTitle.setText("添加好友伪装来源"); tvTitle.setTextSize(15);
-        tvTitle.setTextColor(AppColors.text1()); tvTitle.setTypeface(null, Typeface.BOLD);
-        textCol.addView(tvTitle);
-        final TextView tvSub = new TextView(ctx);
-        String initLabel = com.leshao.v3.hook.FakeAddSource.sceneName(fakeScene);
-        tvSub.setText("伪装" + initLabel + "添加");
-        tvSub.setTextSize(12); tvSub.setTextColor(AppColors.text2());
-        tvSub.setPadding(0, (int)(3 * d), 0, 0);
-        textCol.addView(tvSub);
-        rowFake.addView(textCol);
-
-        // [选择] 按钮
-        TextView btn = new TextView(ctx);
-        btn.setText("[选择]"); btn.setTextSize(12); btn.setTextColor(AppColors.accent());
-        btn.setPadding((int)(6 * d), 0, (int)(6 * d), 0);
-        btn.setPaintFlags(btn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
-        btn.setOnClickListener(v -> {
-            LogWriter.log("ContactGroupView", "伪装来源: 打开类型选择弹窗");
-            int dlgTheme = AppColors.isDarkMode()
-                    ? android.R.style.Theme_DeviceDefault_Dialog_Alert
-                    : android.R.style.Theme_DeviceDefault_Light_Dialog_Alert;
-            java.util.Map<Integer, String> sceneMap = com.leshao.v3.hook.FakeAddSource.SCENE_MAP;
-            final Integer[] sceneKeys = sceneMap.keySet().toArray(new Integer[0]);
-            final String[] sceneLabels = sceneMap.values().toArray(new String[0]);
-            for (int i = 0; i < sceneLabels.length; i++) {
-                sceneLabels[i] = "伪装" + sceneLabels[i] + "添加";
-            }
-
-            AlertDialog dialog = new AlertDialog.Builder(ctx, dlgTheme).create();
-            LinearLayout dlgRoot = new LinearLayout(ctx);
-            dlgRoot.setOrientation(LinearLayout.VERTICAL);
-            dlgRoot.setPadding((int)(14*d), (int)(14*d), (int)(14*d), (int)(8*d));
-            dlgRoot.setBackground(CandyUi.cardBg(ctx));
-
-            TextView dlgTitle = new TextView(ctx);
-            dlgTitle.setText("选择伪装来源");
-            dlgTitle.setTextSize(16);
-            dlgTitle.setTextColor(AppColors.text1());
-            dlgTitle.setTypeface(null, Typeface.BOLD);
-            dlgTitle.setPadding(0, 0, 0, (int)(12*d));
-            dlgRoot.addView(dlgTitle);
-
-            ScrollView sv = new ScrollView(ctx);
-            LinearLayout listRoot = new LinearLayout(ctx);
-            listRoot.setOrientation(LinearLayout.VERTICAL);
-            for (int i = 0; i < sceneLabels.length; i++) {
-                final int idx = i;
-                TextView tv = new TextView(ctx);
-                tv.setText(sceneLabels[i]);
-                tv.setTextSize(14);
-                tv.setTextColor(AppColors.text1());
-                tv.setPadding((int)(8*d), (int)(10*d), (int)(8*d), (int)(10*d));
-                tv.setOnClickListener(v2 -> {
-                    int selected = sceneKeys[idx];
-                    String selName = com.leshao.v3.hook.FakeAddSource.sceneName(selected);
-                    if (prefs != null) prefs.edit().putInt("ls_fake_add_source_scene", selected).commit();
-                    LogWriter.log("ContactGroupView", "伪装来源: 选择类型 scene=" + selected
-                            + " (" + selName + ")");
-                    tvSub.setText("伪装" + selName + "添加");
-                    Toast.makeText(ctx, "伪装来源设为: 伪装" + selName + "添加", Toast.LENGTH_LONG).show();
-                    dialog.dismiss();
-                });
-                listRoot.addView(tv);
-            }
-            sv.addView(listRoot);
-            dlgRoot.addView(sv);
-
-            TextView cancel = new TextView(ctx);
-            cancel.setText("取消");
-            cancel.setTextSize(14);
-            cancel.setTextColor(AppColors.text2());
-            cancel.setGravity(Gravity.CENTER);
-            cancel.setPadding(0, (int)(12*d), 0, 0);
-            cancel.setOnClickListener(v2 -> dialog.dismiss());
-            dlgRoot.addView(cancel);
-
-            dialog.setView(dlgRoot);
-            dialog.show();
-        });
-        rowFake.addView(btn);
-
-        Switch swFake = CandyUi.newSwitch(ctx); swFake.setChecked(fakeSourceOn);
-        try { swFake.setThumbResource(android.R.drawable.btn_star_big_on); } catch (Throwable ignored) {}
-        swFake.setOnCheckedChangeListener((v, on) -> {
-            if (prefs != null) prefs.edit().putBoolean("ls_fake_add_source_enabled", on).apply();
-            LogWriter.log("ContactGroupView", "伪装来源开关: " + on);
-            Toast.makeText(ctx, "伪装来源已" + (on ? "开启" : "关闭")
-                    + "\n重启微信后生效", Toast.LENGTH_LONG).show();
-        });
-        rowFake.addView(swFake);
-
-        cardFakeSource.addView(rowFake);
-        root.addView(cardFakeSource);
+        // v998: 万群定时群发从"群管理助手"移植到本菜单, 点击进入独立页面
+        LinearLayout cardWanQun = makeCard(ctx, d);
+        cardWanQun.addView(M3Page.clickRow(ctx, "\uD83D\uDCE2", "乐少万群定时群发", "勾选多个群+定时发送",
+                () -> SubPageActivity.open(act, "乐少万群定时群发", 4)));
+        root.addView(cardWanQun);
 
         root.addView(candyDivider(ctx, d));
 
@@ -237,6 +133,7 @@ public class ContactGroupPageView {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding((int)(2 * d), (int)(2 * d), (int)(2 * d), (int)(2 * d));
         card.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(card);
         return card;
     }
 
@@ -248,6 +145,7 @@ public class ContactGroupPageView {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
         row.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(row);
 
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);

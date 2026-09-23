@@ -38,6 +38,8 @@ public class ConversationFilter {
     private static int sGetCountCall = 0;
     private static int sGetViewCall = 0;
     private static volatile boolean sJustAppliedFilter = false;
+    // 切换分类标签时直接回顶，避免用旧锚点 setSelectionFromTop 造成可见跳动
+    private static volatile boolean sResetToTop = false;
     // 锚定：首个可见会话的 username（跨过滤切换时 position 会错位，username 不会）+ 该行 top
     private static String sAnchorUsername;
     private static int sAnchorRawPos = -1;
@@ -420,6 +422,11 @@ public class ConversationFilter {
             androidx.recyclerview.widget.RecyclerView.LayoutManager lm = rv.getLayoutManager();
             if (lm == null) return;
 
+            if (sResetToTop) {
+                rv.scrollToPosition(0);
+                return;
+            }
+
             int target = -1;
             if (sAnchorUsername != null) {
                 target = findPositionByUsername(null, sAnchorUsername);
@@ -704,6 +711,7 @@ public class ConversationFilter {
         }
 
         sJustAppliedFilter = true;
+        sResetToTop = true;
         sFilterActive = true;
 
         // 数据层优先（文档核心）：已缓存全量且数据层 hook 生效时直接重建数据列表（新路径 I.r /
@@ -736,7 +744,10 @@ public class ConversationFilter {
 
         notifyAdapterChanged();
         restoreScrollLater();
-        new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> sJustAppliedFilter = false, 800);
+        new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            sJustAppliedFilter = false;
+            sResetToTop = false;
+        }, 800);
         LogWriter.log(TAG, "ON rule=" + sFilterRule + " filtered=" + sFilteredPositions.size() + " dataLayer=" + applied);
     }
 
@@ -875,6 +886,11 @@ public class ConversationFilter {
         }
         if (count <= 0) return;
 
+        if (sResetToTop) {
+            try { lv.setSelection(0); } catch (Throwable ignored) {}
+            return;
+        }
+
         int target = -1;
         if (sAnchorUsername != null) {
             int pos = findPositionByUsername(lv, sAnchorUsername);
@@ -943,6 +959,7 @@ public class ConversationFilter {
         sAllowedUsernames = Collections.emptySet();
         sFilteredPositions = Collections.emptyList();
         sJustAppliedFilter = true;
+        sResetToTop = true;
 
         // 数据层优先：恢复全量缓存，关闭数据层过滤；否则走 View 层兜底
         boolean useDataLayer = sDataLayerReady && sFullCache != null && !sFullCache.isEmpty();
@@ -958,7 +975,10 @@ public class ConversationFilter {
         }
         notifyAdapterChanged();
         restoreScrollLater();
-        new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> sJustAppliedFilter = false, 800);
+        new Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+            sJustAppliedFilter = false;
+            sResetToTop = false;
+        }, 800);
         LogWriter.log(TAG, "OFF dataLayer=" + restored);
     }
 
@@ -1062,23 +1082,25 @@ public class ConversationFilter {
             for (int i = 0; i < dataList.size(); i++) {
                 Object x = dataList.get(i);
                 if (x == null) continue;
-                char kind = kindOf(x);
+                // 优先用会话 username(d.i1) 精确分类（与数据层口径一致），
+                // 仅在取不到 username 时才退回反射扫描，避免把好友误判成群/服务。
+                String username = usernameOf(x);
+                char kind;
                 boolean match;
-                if ("group".equals(sFilterRule)) {
-                    match = kind == 'G';
-                } else if ("service".equals(sFilterRule)) {
-                    match = kind == 'S';
-                } else if ("friend".equals(sFilterRule)) {
-                    match = kind == 'F';
+                if (username != null) {
+                    match = matchesRule(username);
+                    kind = username.endsWith("@chatroom") || username.endsWith("@im.chatroom")
+                            || username.endsWith("@lbsroom") ? 'G'
+                         : (username.startsWith("gh_") || username.contains("officialaccounts")
+                            || username.equals("weixin")) ? 'S' : 'F';
                 } else {
-                    match = false;
+                    kind = kindOf(x);
+                    match = ruleMatchesKind(kind);
                 }
-                // kindOf 未识别到任何群/服务标识时按普通好友处理（排除 F 需另判空行/分隔符场景）
-                if ("friend".equals(sFilterRule) && kind == 'X') match = true;
                 if (match) {
                     positions.add(i);
                     if (dumpCount < 5) {
-                        LogWriter.log(TAG, " match[" + dumpCount + "]=" + idOf(x) + " kind=" + kind);
+                        LogWriter.log(TAG, " match[" + dumpCount + "]=" + (username != null ? username : idOf(x)) + " kind=" + kind);
                         dumpCount++;
                     }
                 }
@@ -1141,7 +1163,7 @@ public class ConversationFilter {
     }
 
     /* Returns all usernames matching a built-in label rule, or null if not built-in */
-    static List<String> getUsernamesForBuiltInLabel(int labelId) {
+    public static List<String> getUsernamesForBuiltInLabel(int labelId) {
         String rule;
         if (labelId == 10000) rule = "group";
         else if (labelId == 10001) rule = "friend";

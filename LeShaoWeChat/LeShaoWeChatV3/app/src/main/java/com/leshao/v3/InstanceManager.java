@@ -103,14 +103,17 @@ public final class InstanceManager {
     }
 
     /**
-     * 当前实例总开关。默认值对齐《微信模块隔离.md》规范: 主微信默认开启, 分身默认关闭。
+     * 当前实例总开关。
+     *
+     * <p>v998: 实例隔离入口已从主页隐藏, 默认值统一为「开启」(不再区分主微信/分身),
+     * 保证模块开箱即用; 系统克隆分身仍在入口被 {@link #isCloneApp()} 拦截。</p>
      */
     public static boolean isEnabled() {
-        if (sPrefs == null) return isPrimary();
+        if (sPrefs == null) return true;
         try {
-            return sPrefs.getBoolean(KEY_ENABLED, isPrimary());
+            return sPrefs.getBoolean(KEY_ENABLED, true);
         } catch (Throwable t) {
-            return isPrimary();
+            return true;
         }
     }
 

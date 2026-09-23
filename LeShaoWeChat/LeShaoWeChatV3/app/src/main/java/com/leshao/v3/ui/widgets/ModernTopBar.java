@@ -48,6 +48,8 @@ public class ModernTopBar extends LinearLayout {
         mTitle.setTextColor(AppColors.onSurface());
         mTitle.setSingleLine(true);
         mTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        // v998: 标题栏标题居中显示
+        mTitle.setGravity(Gravity.CENTER);
         LayoutParams titleLp = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
         titleLp.setMarginStart((int) (4 * d));
         addView(mTitle, titleLp);

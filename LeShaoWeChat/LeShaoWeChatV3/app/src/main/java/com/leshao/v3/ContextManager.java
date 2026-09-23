@@ -47,6 +47,13 @@ public class ContextManager {
                     // sAppContext 并被静态引用导致 Activity 泄漏
                     if (!(param.thisObject instanceof Application)) return;
                     sAppContext = (Context) param.thisObject;
+                    // v1025: 最早探针 —— Application 的 CL 即微信真实 CL, 须在微信打开
+                    // EnMicroMsg.db 之前 rehook WCDB(否则 open 事件捕获不到)
+                    try {
+                        com.leshao.v3.db.DatabaseProvider.probeAndRehook(param.thisObject);
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "DatabaseProvider.probeAndRehook FAILED: " + t.getMessage());
+                    }
                     // v962: 主/分身实例隔离管理器初始化(须早于一切业务 Hook, 见《微信模块隔离.md》)
                     try {
                         InstanceManager.init(sAppContext);

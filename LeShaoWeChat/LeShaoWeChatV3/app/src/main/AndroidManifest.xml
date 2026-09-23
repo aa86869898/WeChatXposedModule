@@ -32,10 +32,6 @@
             android:name="com.leshao.ai.ui.activity.SettingsActivity"
             android:exported="true"
             android:theme="@style/Theme.LeshaoAI" />
-        <activity
-            android:name="com.leshao.ai.ui.activity.WhitelistActivity"
-            android:exported="true"
-            android:theme="@style/Theme.LeshaoAI" />
 
         <provider
             android:name="com.leshao.ai.data.AiDataProvider"

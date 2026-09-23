@@ -27,7 +27,8 @@ public class ChatGroupPageView {
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(AppColors.bg());
+        root.setBackground(CandyUi.pageGradient());
+        InsetsUtil.clipRounded(root);
         root.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(16 * d));
 
         // Tab bar
@@ -40,6 +41,7 @@ public class ChatGroupPageView {
         tabBg.setColor(AppColors.card());
         tabBg.setCornerRadius((int)(8 * d));
         tabBar.setBackground(tabBg);
+        InsetsUtil.clipRounded(tabBar);
 
         String[] tabs = {"分组列表", "自动规则", "批量操作", "备份恢复"};
         final LinearLayout[] contentArea = {null};
@@ -477,7 +479,8 @@ public class ChatGroupPageView {
         LinearLayout dlgRoot = new LinearLayout(ctx);
         dlgRoot.setOrientation(LinearLayout.VERTICAL);
         dlgRoot.setPadding((int)(14*d), (int)(14*d), (int)(14*d), (int)(8*d));
-        dlgRoot.setBackgroundColor(AppColors.card());
+        dlgRoot.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(dlgRoot);
 
         TextView title = new TextView(ctx);
         title.setText("分组: " + label.labelName);
@@ -522,6 +525,7 @@ public class ChatGroupPageView {
         dlgRoot.addView(close);
 
         dialog.setView(dlgRoot);
+        InsetsUtil.transparentWindow(dialog);
         dialog.show();
     }
 
@@ -531,7 +535,8 @@ public class ChatGroupPageView {
         LinearLayout dlgRoot = new LinearLayout(ctx);
         dlgRoot.setOrientation(LinearLayout.VERTICAL);
         dlgRoot.setPadding((int)(14*d), (int)(14*d), (int)(14*d), (int)(8*d));
-        dlgRoot.setBackgroundColor(AppColors.card());
+        dlgRoot.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(dlgRoot);
 
         TextView title = new TextView(ctx);
         title.setText("添加自动分组规则");
@@ -596,6 +601,7 @@ public class ChatGroupPageView {
         btnRow.addView(confirm);
         dlgRoot.addView(btnRow);
         dialog.setView(dlgRoot);
+        InsetsUtil.transparentWindow(dialog);
         dialog.show();
     }
 
@@ -611,7 +617,8 @@ public class ChatGroupPageView {
         LinearLayout dlgRoot = new LinearLayout(ctx);
         dlgRoot.setOrientation(LinearLayout.VERTICAL);
         dlgRoot.setPadding((int)(14*d), (int)(14*d), (int)(14*d), (int)(8*d));
-        dlgRoot.setBackgroundColor(AppColors.card());
+        dlgRoot.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(dlgRoot);
 
         TextView title = new TextView(ctx); title.setText("合并标签"); title.setTextSize(16); title.setTextColor(AppColors.text1()); title.setTypeface(null, Typeface.BOLD); title.setPadding(0, 0, 0, (int)(4*d)); dlgRoot.addView(title);
         TextView desc = new TextView(ctx); desc.setText("将来源标签的联系人迁移到目标标签后删除来源"); desc.setTextSize(11); desc.setTextColor(AppColors.text2()); desc.setPadding(0, 0, 0, (int)(10*d)); dlgRoot.addView(desc);
@@ -634,6 +641,7 @@ public class ChatGroupPageView {
         btnRow.addView(confirm);
         dlgRoot.addView(btnRow);
         dialog.setView(dlgRoot);
+        InsetsUtil.transparentWindow(dialog);
         dialog.show();
     }
 
@@ -649,7 +657,8 @@ public class ChatGroupPageView {
         LinearLayout dlgRoot = new LinearLayout(ctx);
         dlgRoot.setOrientation(LinearLayout.VERTICAL);
         dlgRoot.setPadding((int)(14*d), (int)(14*d), (int)(14*d), (int)(8*d));
-        dlgRoot.setBackgroundColor(AppColors.card());
+        dlgRoot.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(dlgRoot);
 
         TextView title = new TextView(ctx); title.setText("清空标签联系人"); title.setTextSize(16); title.setTextColor(AppColors.text1()); title.setTypeface(null, Typeface.BOLD); title.setPadding(0,0,0,(int)(4*d)); dlgRoot.addView(title);
 
@@ -663,6 +672,7 @@ public class ChatGroupPageView {
         btnRow.addView(confirm);
         dlgRoot.addView(btnRow);
         dialog.setView(dlgRoot);
+        InsetsUtil.transparentWindow(dialog);
         dialog.show();
     }
 
@@ -673,7 +683,8 @@ public class ChatGroupPageView {
         LinearLayout dlgRoot = new LinearLayout(ctx);
         dlgRoot.setOrientation(LinearLayout.VERTICAL);
         dlgRoot.setPadding((int)(14*d), (int)(14*d), (int)(14*d), (int)(8*d));
-        dlgRoot.setBackgroundColor(AppColors.card());
+        dlgRoot.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(dlgRoot);
 
         TextView title = new TextView(ctx); title.setText("统计信息"); title.setTextSize(16); title.setTextColor(AppColors.text1()); title.setTypeface(null, Typeface.BOLD); title.setPadding(0,0,0,(int)(8*d)); dlgRoot.addView(title);
         for (Map.Entry<String, Object> e : stats.entrySet()) {
@@ -686,6 +697,7 @@ public class ChatGroupPageView {
         dlgRoot.addView(spacerV(ctx, d, 8));
         TextView close = new TextView(ctx); close.setText("关闭"); close.setTextSize(14); close.setTextColor(AppColors.text2()); close.setGravity(Gravity.CENTER); close.setPadding(0,(int)(8*d),0,0); close.setOnClickListener(v2->dialog.dismiss()); dlgRoot.addView(close);
         dialog.setView(dlgRoot);
+        InsetsUtil.transparentWindow(dialog);
         dialog.show();
     }
 
@@ -696,7 +708,8 @@ public class ChatGroupPageView {
         LinearLayout dlgRoot = new LinearLayout(ctx);
         dlgRoot.setOrientation(LinearLayout.VERTICAL);
         dlgRoot.setPadding((int)(14*d), (int)(14*d), (int)(14*d), (int)(8*d));
-        dlgRoot.setBackgroundColor(AppColors.card());
+        dlgRoot.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(dlgRoot);
 
         TextView dlgTitle = new TextView(ctx); dlgTitle.setText(title); dlgTitle.setTextSize(16); dlgTitle.setTextColor(AppColors.text1()); dlgTitle.setTypeface(null, Typeface.BOLD); dlgTitle.setPadding(0,0,0,(int)(10*d)); dlgRoot.addView(dlgTitle);
         dlgRoot.addView(et);
@@ -710,6 +723,7 @@ public class ChatGroupPageView {
         dlgRoot.addView(btnRow);
 
         dialog.setView(dlgRoot);
+        InsetsUtil.transparentWindow(dialog);
         dialog.show();
     }
 
@@ -719,7 +733,8 @@ public class ChatGroupPageView {
         LinearLayout dlgRoot = new LinearLayout(ctx);
         dlgRoot.setOrientation(LinearLayout.VERTICAL);
         dlgRoot.setPadding((int)(14*d), (int)(14*d), (int)(14*d), (int)(8*d));
-        dlgRoot.setBackgroundColor(AppColors.card());
+        dlgRoot.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(dlgRoot);
 
         TextView dlgTitle = new TextView(ctx); dlgTitle.setText(title); dlgTitle.setTextSize(16); dlgTitle.setTextColor(AppColors.text1()); dlgTitle.setTypeface(null, Typeface.BOLD); dlgTitle.setPadding(0,0,0,(int)(4*d)); dlgRoot.addView(dlgTitle);
         TextView msgTv = new TextView(ctx); msgTv.setText(msg); msgTv.setTextSize(13); msgTv.setTextColor(AppColors.text2()); msgTv.setPadding(0,0,0,(int)(10*d)); dlgRoot.addView(msgTv);
@@ -732,6 +747,7 @@ public class ChatGroupPageView {
         dlgRoot.addView(btnRow);
 
         dialog.setView(dlgRoot);
+        InsetsUtil.transparentWindow(dialog);
         dialog.show();
     }
 

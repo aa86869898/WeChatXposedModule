@@ -92,22 +92,9 @@ public class ChatRoomMuteHelper {
                 return result;
             }
 
-            String imei = VersionCompat.getImei(cl);
-            String baseDir = VersionCompat.getBaseDir(cl, ctx);
-            String dbHash = VersionCompat.getDbHash(cl, (int) uin);
-            String dbPath = baseDir + "MicroMsg/" + dbHash + "/EnMicroMsg.db";
-            String password = md5(imei + uin).substring(0, 7);
-
-            Class<?> dbCls = VersionCompat.findDbOpenerClass(cl);
-            if (dbCls == null) {
-                LogWriter.log(TAG, "getAllChatRooms: dbCls null");
-                return result;
-            }
-
-            db = VersionCompat.openDatabase(dbCls, dbPath, password);
-            if (db == null) {
-                db = VersionCompat.openDatabaseWcdb(cl, dbPath, password);
-            }
+            String baseDir = com.leshao.v3.hook.VersionCompat.getBaseDir(cl, ctx);
+            // v1016: 目录名候选化, 按磁盘实际存在选择
+            db = com.leshao.v3.hook.VersionCompat.openEnMicroDb(cl, baseDir, uin);
             if (db == null) {
                 LogWriter.log(TAG, "getAllChatRooms: db open FAILED");
                 return result;
@@ -405,16 +392,8 @@ public class ChatRoomMuteHelper {
             if (ctx == null) return false;
             long uin = getUin(ctx);
             if (uin <= 0) return false;
-            String imei = VersionCompat.getImei(cl);
-            String baseDir = VersionCompat.getBaseDir(cl, ctx);
-            String dbHash = VersionCompat.getDbHash(cl, (int) uin);
-            String dbPath = baseDir + "MicroMsg/" + dbHash + "/EnMicroMsg.db";
-            String password = md5(imei + uin).substring(0, 7);
-
-            Class<?> dbCls = VersionCompat.findDbOpenerClass(cl);
-            if (dbCls == null) return false;
-            db = VersionCompat.openDatabase(dbCls, dbPath, password);
-            if (db == null) db = VersionCompat.openDatabaseWcdb(cl, dbPath, password);
+            String baseDir = com.leshao.v3.hook.VersionCompat.getBaseDir(cl, ctx);
+            db = com.leshao.v3.hook.VersionCompat.openEnMicroDb(cl, baseDir, uin);
             if (db == null) return false;
 
             // WCDB execSQL 反射

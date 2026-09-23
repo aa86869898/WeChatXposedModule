@@ -57,7 +57,7 @@ public final class WeChatHook implements IXposedHookLoadPackage {
     private static final int MENU_RETRY_MAX = 10;
     private static final long MENU_RETRY_DELAY_MS = 1000L;
 
-    /** 当前前台 LauncherUI 实例(AI 助手弹窗挂载点; Xposed 常驻, 单例可接受) */
+    /** 当前前台 Activity(AI 助手弹窗挂载点; Xposed 常驻, 单例可接受) */
     private static volatile Activity sCurrentActivity;
 
     @Override
@@ -95,27 +95,31 @@ public final class WeChatHook implements IXposedHookLoadPackage {
         try {
             launcher = XposedHelpers.findClass(LAUNCHER_UI, cl);
         } catch (Throwable t) {
-            Log.w(TAG, "LauncherUI 未找到，退化为立即装配: " + t);
+            LogWriter.log(TAG, "LauncherUI 未找到，退化为立即装配: " + t);
         }
         try {
             if (launcher != null) {
-                XposedBridge.hookAllMethods(launcher, "onResume", new XC_MethodHook() {
+                // v1007: hookAllMethods(LauncherUI) 只命中 LauncherUI【自身声明】的方法,
+                // 而 LauncherUI 并未重写 onResume, 导致 installCore 永不执行、AIBotCore 未初始化。
+                // 改为 hook Activity.onResume 并按 LauncherUI 实例过滤(ChatGroupUiInjector 同款可靠方案)。
+                final Class<?> launcherCls = launcher;
+                XposedBridge.hookAllMethods(Activity.class, "onResume", new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
+                        if (!(param.thisObject instanceof Activity)) return;
                         // v960: 记录前台 Activity, AI 助手弹窗需要 Activity 级 Context
-                        if (param.thisObject instanceof Activity) {
-                            sCurrentActivity = (Activity) param.thisObject;
-                        }
+                        sCurrentActivity = (Activity) param.thisObject;
+                        if (!launcherCls.isInstance(param.thisObject)) return;
                         self.installCore(lpparam, appContext);
                     }
                 });
-                Log.i(TAG, "已挂 LauncherUI.onResume 等待微信就绪");
+                LogWriter.log(TAG, "已挂 Activity.onResume 等待微信就绪(过滤 " + LAUNCHER_UI + ")");
             } else {
-                Log.w(TAG, "LauncherUI 未找到，退化为立即装配");
+                LogWriter.log(TAG, "LauncherUI 未找到，退化为立即装配");
                 self.installCore(lpparam, appContext);
             }
         } catch (Throwable t) {
-            Log.w(TAG, "deferUntilReady 失败，退化为立即装配: " + t);
+            LogWriter.log(TAG, "deferUntilReady 失败，退化为立即装配: " + t);
             self.installCore(lpparam, appContext);
         }
 
@@ -140,6 +144,7 @@ public final class WeChatHook implements IXposedHookLoadPackage {
         if (!coreInstalled.compareAndSet(false, true)) {
             return;
         }
+        LogWriter.log(TAG, "installCore: enter");
         try {
             // 0) 先从模块进程同步配置/白名单（广播 payload 为主，Provider 兜底）
             try {
@@ -160,8 +165,11 @@ public final class WeChatHook implements IXposedHookLoadPackage {
                     : "/data/user/0/com.tencent.mm";
             try {
                 AIBotCore.ensureInit(hostDataDir);
+                LogWriter.log(TAG, "AIBotCore.ensureInit done, config="
+                        + (AIBotCore.config() == null ? "null" : "ok")
+                        + " hostDataDir=" + hostDataDir);
             } catch (Throwable t) {
-                Log.w(TAG, "AIBotCore 初始化失败: " + t);
+                LogWriter.log(TAG, "AIBotCore 初始化失败: " + t);
             }
 
             // 2) 存储访问链（b41.h9 → b41.e → f9/j4/q3）

@@ -239,18 +239,30 @@ public class WmChatHook {
         bg.setStroke(dp(1), dark ? 0xFF3A3A3E : 0xFFE5E5EA);
         box.setBackground(bg);
         box.setPadding(dp(4), dp(6), dp(4), dp(6));
-        if (sUser != null && (sUser.endsWith("@chatroom") || sUser.endsWith("@im.chatroom"))) {
-            box.addView(makeMoreRow(act, "乐少·万群管理", fgText, v -> { dismissAssistantMenu(); openWanQun(); }));
+        boolean isRoom = sUser != null
+                && (sUser.endsWith("@chatroom") || sUser.endsWith("@im.chatroom"));
+        // 原右上角 ⋮ 三点菜单功能迁移入口
+        box.addView(makeMoreRow(act, "AI 助手", fgText, v -> {
+            dismissAssistantMenu();
+            try {
+                com.leshao.ai.hook.wechat.AiAssistantPanel.show(act);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "AI 助手弹窗失败: " + t.getMessage());
+            }
+        }));
+        if (!isRoom) {
+            box.addView(makeMoreRow(act, "批量邀请进群", fgText, v -> {
+                dismissAssistantMenu();
+                com.leshao.v3.hook.BatchInviteGroupsHook.startInvite(sUser);
+            }));
         }
-        if (WmPrefs.isExportChat()) {
-            box.addView(makeMoreRow(act, "导出聊天记录 (TXT)", fgText, v -> { dismissAssistantMenu(); exportChat(); }));
-            box.addView(makeMoreRow(act, "导出聊天记录 (HTML)", fgText, v -> { dismissAssistantMenu(); exportChatHtml(); }));
+        if (isRoom) {
+            box.addView(makeMoreRow(act, "乐少·万群管理", fgText, v -> { dismissAssistantMenu(); openWanQun(); }));
         }
         box.addView(makeMoreRow(act, "自动转发", fgText, v -> {
             dismissAssistantMenu();
             com.leshao.v3.hook.AutoForwardHook.showConfigDialog(act);
         }));
-        box.addView(makeMoreRow(act, "更多功能", fgText, v -> { dismissAssistantMenu(); showPanel(); }));
         box.setClickable(true);
 
         android.util.DisplayMetrics dm = act.getResources().getDisplayMetrics();
@@ -302,10 +314,20 @@ public class WmChatHook {
     private static View makeMoreRow(Activity act, String text, int fg, View.OnClickListener click) {
         TextView tv = new TextView(act);
         tv.setText(text);
-        tv.setTextSize(15);
+        tv.setTextSize(14);
         tv.setTextColor(fg);
         tv.setGravity(Gravity.CENTER_VERTICAL);
-        tv.setPadding(dp(18), dp(13), dp(18), dp(13));
+        tv.setPadding(dp(16), 0, dp(16), 0);
+        tv.setMinHeight(dp(48));
+        tv.setTypeface(null, android.graphics.Typeface.NORMAL);
+        // M3 List Item：圆角状态层涟漪
+        GradientDrawable mask = new GradientDrawable();
+        mask.setColor(0xFFFFFFFF);
+        mask.setCornerRadius(dp(8));
+        tv.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(AppColors.stateLayerPressed()),
+                null, mask));
+        tv.setClickable(true);
         tv.setOnClickListener(click);
         return tv;
     }
@@ -598,14 +620,8 @@ public class WmChatHook {
             if (appCtx == null) return null;
             long uin = getWxUin(appCtx);
             if (uin <= 0) return null;
-            String imei = com.leshao.v3.hook.VersionCompat.getImei(sCL);
-            String password = md5(imei + uin).substring(0, 7);
             String base = com.leshao.v3.hook.VersionCompat.getBaseDir(sCL, appCtx);
-            String hash = com.leshao.v3.hook.VersionCompat.getDbHash(sCL, (int) uin);
-            String dbPath = base + "MicroMsg/" + hash + "/EnMicroMsg.db";
-            Class<?> dbOpener = com.leshao.v3.hook.VersionCompat.findDbOpenerClass(sCL);
-            if (dbOpener == null) return null;
-            return com.leshao.v3.hook.VersionCompat.openDatabase(dbOpener, dbPath, password);
+            return com.leshao.v3.hook.VersionCompat.openEnMicroDb(sCL, base, uin);
         } catch (Throwable t) {
             LogWriter.log(TAG, "openWxDb err: " + t.getClass().getSimpleName());
             return null;
@@ -816,14 +832,19 @@ public class WmChatHook {
         return flags == android.content.res.Configuration.UI_MODE_NIGHT_YES;
     }
 
-    private static int surface()    { return isDarkMode() ? 0xEE0D1117 : 0xE6FFFFFF; }
-    private static int glassCard()  { return isDarkMode() ? 0xCC1A1F2E : 0xBFFFFFFF; }
-    private static int glassBorder(){ return isDarkMode() ? 0x33FFFFFF : 0x33FFFFFF; }
-    private static int textPri()    { return isDarkMode() ? 0xFFF1F5F9 : 0xFF1F2937; }
-    private static int textSec()    { return isDarkMode() ? 0xFF94A3B8 : 0xFF6B7280; }
-    private static int textDim()    { return isDarkMode() ? 0xFF64748B : 0xFF9CA3AF; }
-    private static int inputBg()    { return isDarkMode() ? 0x990D1117 : 0x99F1F5F9; }
-    private static int dividerCol() { return isDarkMode() ? 0x20FFFFFF : 0x18000000; }
+    private static int withAlpha(int color, int alpha) {
+        return (color & 0x00FFFFFF) | ((alpha & 0xFF) << 24);
+    }
+
+    // v1017: 全部改为跟随模块配色（调色板 + 窗口背景/标题栏等覆盖），保证「背景色」全局适配
+    private static int surface()    { return withAlpha(AppColors.windowBg(), isDarkMode() ? 0xEE : 0xE6); }
+    private static int glassCard()  { return withAlpha(AppColors.surfaceContainerLow(), isDarkMode() ? 0xCC : 0xBF); }
+    private static int glassBorder(){ return withAlpha(AppColors.outlineVariant(), 0x55); }
+    private static int textPri()    { return AppColors.onSurface(); }
+    private static int textSec()    { return AppColors.onSurfaceVariant(); }
+    private static int textDim()    { return AppColors.outline(); }
+    private static int inputBg()    { return withAlpha(AppColors.surfaceContainerHighest(), 0x99); }
+    private static int dividerCol() { return withAlpha(AppColors.outlineVariant(), isDarkMode() ? 0x40 : 0x33); }
 
     // 霓虹糖果色（浅暗通用，饱和高明度）
     private static final int NEON_PINK   = 0xFFFF2D87;
@@ -2455,7 +2476,8 @@ public class WmChatHook {
             }
             ensureReceiverRegistered();
             recoverMassSendTask();
-            hookP06Bypass(sCL);
+            // v1025: 延迟安装 p06 bypass, 避开微信内核初始化窗口(详情见 hookP06BypassEarly)
+            hookP06BypassEarly(sCL);
             hookF9Debug();
             hookSendMsgMgrDebug();
             hookVideoSendDebug();
@@ -2717,14 +2739,21 @@ private static void executeMassSend(String type, String text, java.util.List<Str
     }
 
     public static boolean hookP06BypassEarly(ClassLoader cl) {
-        // Try immediate bypass (before DexKit scan)
-        boolean immediate = hookP06Bypass(cl);
-        if (immediate) return true;
-
-        // Register post-scan callback: retry after DexKit scan completes
+        // v1025: 不再立即安装 —— 微信启动早期调用 p06.b(内核访问器)时会先抛
+        // "Kernel not initialized by MMApplication!" 异常, 微信 catch 后初始化内核。
+        // 若此处吞掉异常返回 null, 微信拿到 null 当作成功, 内核引用永远为 null,
+        // 导致后续所有内核服务(语音发送 b96.b / 网络连接 1-7)报未初始化。
+        // 改为延迟安装: 跳过内核初始化窗口, 只拦截运行期的消息校验异常。
         DexKitHelper.addPostScanCallback(() -> {
-            LogWriter.log(TAG, "hookP06Bypass: retrying after DexKit scan");
-            hookP06Bypass(cl);
+            new Thread(() -> {
+                try {
+                    Thread.sleep(12000L);
+                } catch (Throwable ignored) {}
+                if (cl != null) {
+                    LogWriter.log(TAG, "hookP06Bypass: delayed install after kernel init");
+                    hookP06Bypass(cl);
+                }
+            }, "leshao-p06-delayed").start();
         });
         return false;
     }

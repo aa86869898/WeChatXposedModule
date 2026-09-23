@@ -123,42 +123,51 @@ public class VersionCompat {
         Throwable lastErr = null;
 
         // Priority 1: use DexKit method signature on ka5.f
-        if (DexKitHelper.isScanComplete()) {
-            String methodName = DexKitHelper.getDbOpenMethodName();
-            String[] paramTypes = DexKitHelper.getDbOpenMethodParamTypes();
-            if (methodName != null && paramTypes != null) {
-                try {
-                    Class<?>[] paramClasses = new Class<?>[paramTypes.length];
-                    for (int i = 0; i < paramTypes.length; i++) {
-                        paramClasses[i] = mapBasicType(paramTypes[i]);
-                    }
-                    Object[] args = new Object[paramTypes.length];
-                    args[0] = path;
-                    args[1] = password;
-                    for (int i = 2; i < paramTypes.length; i++) {
-                        if ("int".equals(paramTypes[i]) || "java.lang.Integer".equals(paramTypes[i])) {
-                            args[i] = 0;
-                        } else if ("boolean".equals(paramTypes[i]) || "java.lang.Boolean".equals(paramTypes[i])) {
-                            args[i] = false;
-                        } else {
-                            args[i] = null;
-                        }
-                    }
-                    try {
-                        tryInitCsoLoader(dbOpenerClass.getClassLoader());
-                        return dbOpenerClass.getDeclaredMethod(methodName, paramClasses)
-                            .invoke(null, args);
-                    } catch (Throwable e) {
-                        lastErr = e;
-                    }
-                } catch (Throwable e) {
-                    LogWriter.log(TAG, "openDatabase DexKit setup failed: " + e.getMessage());
+        boolean scanComplete = DexKitHelper.isScanComplete();
+        String p1Method = DexKitHelper.getDbOpenMethodName();
+        String[] p1Params = DexKitHelper.getDbOpenMethodParamTypes();
+        LogWriter.log(TAG, "openDatabase: scanComplete=" + scanComplete + " method=" + p1Method
+                + " params=" + (p1Params != null ? java.util.Arrays.toString(p1Params) : "null"));
+        if (scanComplete && p1Method != null && p1Params != null) {
+            try {
+                Class<?>[] paramClasses = new Class<?>[p1Params.length];
+                for (int i = 0; i < p1Params.length; i++) {
+                    paramClasses[i] = mapBasicType(p1Params[i]);
                 }
+                Object[] args = new Object[p1Params.length];
+                args[0] = path;
+                args[1] = password;
+                for (int i = 2; i < p1Params.length; i++) {
+                    if ("int".equals(p1Params[i]) || "java.lang.Integer".equals(p1Params[i])) {
+                        args[i] = 0;
+                    } else if ("boolean".equals(p1Params[i]) || "java.lang.Boolean".equals(p1Params[i])) {
+                        args[i] = false;
+                    } else {
+                        args[i] = null;
+                    }
+                }
+                try {
+                    tryInitCsoLoaderScheduled(dbOpenerClass.getClassLoader());
+                    Object db1 = dbOpenerClass.getDeclaredMethod(p1Method, paramClasses)
+                        .invoke(null, args);
+                    if (db1 == null) {
+                        LogWriter.log(TAG, "openDatabase P1 invoke returned null: " + dbOpenerClass.getName() + "." + p1Method);
+                    }
+                    return db1;
+                } catch (Throwable e) {
+                    lastErr = e;
+                    LogWriter.log(TAG, "openDatabase P1 failed: "
+                            + (e.getCause() != null ? e.getCause().getClass().getSimpleName() : e.getClass().getSimpleName())
+                            + " " + (e.getCause() != null ? e.getCause().getMessage() : e.getMessage())
+                            + " cause=" + (e.getCause() != null ? e.getCause().toString() : "none"));
+                }
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "openDatabase DexKit setup failed: " + e.getMessage());
             }
         }
 
         // Priority 2: try known signatures on ka5.f
-        tryInitCsoLoader(dbOpenerClass.getClassLoader());
+        tryInitCsoLoaderScheduled(dbOpenerClass.getClassLoader());
         for (int flags : new int[]{0, 1}) {
             for (boolean b : new boolean[]{true, false}) {
                 try {
@@ -166,6 +175,7 @@ public class VersionCompat {
                         .invoke(null, path, password, flags, b);
                 } catch (Throwable e) {
                     lastErr = e;
+                    LogWriter.log(TAG, "openDatabase P2 failed(s/" + flags + "/" + b + "): " + errDetail(e));
                 }
             }
             try {
@@ -173,6 +183,7 @@ public class VersionCompat {
                     .invoke(null, path, password, flags);
             } catch (Throwable e) {
                 lastErr = e;
+                LogWriter.log(TAG, "openDatabase P2 failed(r/" + flags + "): " + errDetail(e));
             }
         }
 
@@ -210,13 +221,17 @@ public class VersionCompat {
                     }
                 } catch (Throwable e) {
                     lastErr = e;
+                    LogWriter.log(TAG, "openDatabase P3 failed(WCDB." + m.getName() + "): " + errDetail(e));
                 }
             }
         } catch (Throwable e) {
-            LogWriter.log(TAG, "openDatabase WCDB class load failed: " + e.getMessage());
+            LogWriter.log(TAG, "openDatabase WCDB class load failed: " + errDetail(e));
         }
 
         boolean isNoClassDef = lastErr instanceof NoClassDefFoundError;
+        LogWriter.log(TAG, "openDatabase all failed for " + path + ": lastErr="
+                + (lastErr != null ? lastErr.getClass().getSimpleName() + " " + lastErr.getMessage() : "unknown")
+                + " isNoClassDef=" + isNoClassDef);
         if (!isNoClassDef) {
             LogWriter.log(TAG, "openDatabase FAILED for " + path + ": " + (lastErr != null ? lastErr.getClass().getSimpleName() + " " + lastErr.getMessage() : "unknown"));
         }
@@ -317,6 +332,17 @@ public class VersionCompat {
     public static ClassLoader findTinkerClassLoader(ClassLoader cl) {
         // Return cached result if available
         if (sCachedTinkerClassLoader != null) return sCachedTinkerClassLoader;
+
+        // v1025: 优先使用从微信运行时对象反查的真实 ClassLoader
+        ClassLoader real = sWechatRealClassLoader;
+        if (real != null) {
+            sCachedTinkerClassLoader = real;
+            sTinkerSearchDone = true;
+            LogWriter.log(TAG, "findTinkerClassLoader: using wechat real CL="
+                + real.getClass().getSimpleName());
+            return real;
+        }
+
         if (sTinkerSearchDone) return null;
 
         // 优先使用 ContextManager 缓存的 Tinker ClassLoader
@@ -413,8 +439,25 @@ public class VersionCompat {
 
     private static boolean sCsoLoaderTried = false;
     private static volatile boolean sCsoLoaderReady = false;
+    private static long sCsoLoaderLastTryAt = 0L;
+    private static final long CSO_LOADER_RETRY_MS = 3000L;
 
     public static boolean isCsoLoaderReady() { return sCsoLoaderReady; }
+
+    /**
+     * v1022: 允许重复尝试初始化 CsoLoader。
+     * v1021 曾用一次性标志 sCsoLoaderTried，第一次尝试时微信内核未就绪，
+     * 之后 openDatabase 每次都直接跳过初始化，导致 "Missing initialization" 永久失败。
+     * 现在每次 openDatabase 前都会重试（带 3s 节流），微信内核就绪后即可初始化成功。
+     */
+    private static boolean tryInitCsoLoaderScheduled(ClassLoader cl) {
+        long now = System.currentTimeMillis();
+        if (sCsoLoaderReady) return true;
+        if (now - sCsoLoaderLastTryAt < CSO_LOADER_RETRY_MS) return sCsoLoaderReady;
+        sCsoLoaderLastTryAt = now;
+        tryInitCsoLoader(cl);
+        return sCsoLoaderReady;
+    }
 
     private static String errDetail(Throwable e) {
         StringBuilder sb = new StringBuilder();
@@ -429,9 +472,39 @@ public class VersionCompat {
         return sb.toString();
     }
 
+    /** v1023: 过滤 Object 声明的方法(如 getClass/hashCode/toString), 避免被当作 CsoLoader 初始化入口 */
+    private static boolean isJunkMethod(java.lang.reflect.Method m) {
+        try {
+            Class<?> decl = m.getDeclaringClass();
+            if (decl == java.lang.Object.class) return true;
+        } catch (Throwable ignored) {}
+        String n = m.getName();
+        return "getClass".equals(n) || "hashCode".equals(n) || "toString".equals(n)
+                || "equals".equals(n) || "notify".equals(n) || "notifyAll".equals(n)
+                || "wait".equals(n) || "clone".equals(n) || "finalize".equals(n);
+    }
+
+    /** v1025: 从微信运行时对象反查出的真实 ClassLoader, 供 WCDB/CsoLoader 相关路径优先使用 */
+    private static volatile ClassLoader sWechatRealClassLoader = null;
+
+    public static void setWechatRealClassLoader(ClassLoader cl) {
+        if (cl != null) sWechatRealClassLoader = cl;
+    }
+
+    /** v1025: CsoLoader 反查入口(5s 限频), 由 DatabaseProvider.probeAndRehook 在真实 CL 上调用 */
+    private static volatile long sRealCsoLastTryAt = 0L;
+
+    public static void tryInitCsoLoaderReal(ClassLoader cl) {
+        if (sCsoLoaderReady) return;
+        long now = System.currentTimeMillis();
+        if (now - sRealCsoLastTryAt < 5000L) return;
+        sRealCsoLastTryAt = now;
+        tryInitCsoLoader(cl);
+    }
+
     private static void tryInitCsoLoader(ClassLoader cl) {
-        if (sCsoLoaderTried) return;
-        sCsoLoaderTried = true;
+        if (sCsoLoaderReady) return;
+        StringBuilder diag = new StringBuilder();
         try {
             ClassLoader tkCL = findTinkerClassLoader(cl);
             if (tkCL == null) tkCL = cl;
@@ -440,52 +513,70 @@ public class VersionCompat {
             if (csoLoaderClass == null) {
                 csoLoaderClass = "com.tencent.cso.CsoLoader";
             }
-            Class<?> cls = XposedHelpers.findClass(csoLoaderClass, tkCL);
+            Class<?> cls;
+            try {
+                cls = XposedHelpers.findClass(csoLoaderClass, tkCL);
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "tryInitCsoLoader: class not found " + csoLoaderClass
+                        + " via " + tkCL.getClass().getSimpleName() + " err=" + errDetail(e));
+                return;
+            }
 
             android.content.Context ctx = com.leshao.v3.ContextManager.getAppContext();
             String pkgName = ctx != null ? ctx.getPackageName() : "com.tencent.mm";
 
+            // 记录候选方法，供诊断
+            int tried = 0;
+
             for (java.lang.reflect.Method m : cls.getMethods()) {
+                if (isJunkMethod(m)) continue;
                 if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
                 if (m.getParameterTypes().length == 0) {
+                    tried++;
                     try {
                         m.invoke(null);
                         sCsoLoaderReady = true;
+                        LogWriter.log(TAG, "tryInitCsoLoader: OK via " + cls.getName() + "." + m.getName() + "()");
                         return;
-                    } catch (Throwable ignored) {}
+                    } catch (Throwable t) {
+                        diag.append("\n  zero-arg ").append(m.getName()).append("() -> ").append(errDetail(t));
+                    }
                 }
             }
 
             for (java.lang.reflect.Method m : cls.getMethods()) {
+                if (isJunkMethod(m)) continue;
                 if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
                 int pc = m.getParameterTypes().length;
                 if (pc == 0) continue;
+                tried++;
                 Object[] args = buildArgs(m.getParameterTypes(), ctx, cl, pkgName);
                 try {
                     m.invoke(null, args);
                     sCsoLoaderReady = true;
+                    LogWriter.log(TAG, "tryInitCsoLoader: OK via " + cls.getName() + "." + m.getName()
+                            + "(" + m.getParameterTypes().length + ")");
                     return;
-                } catch (Throwable ignored) {}
+                } catch (Throwable t) {
+                    diag.append("\n  static ").append(m.getName()).append("(").append(pc).append(") -> ").append(errDetail(t));
+                }
             }
 
             for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+                if (isJunkMethod(m)) continue;
                 if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
-                if (m.getParameterTypes().length == 0) {
-                    m.setAccessible(true);
-                    try {
-                        m.invoke(null);
-                        sCsoLoaderReady = true;
-                        return;
-                    } catch (Throwable ignored) {}
-                    continue;
-                }
                 m.setAccessible(true);
+                tried++;
                 Object[] args = buildArgs(m.getParameterTypes(), ctx, cl, pkgName);
                 try {
                     m.invoke(null, args);
                     sCsoLoaderReady = true;
+                    LogWriter.log(TAG, "tryInitCsoLoader: OK via declared " + cls.getName() + "." + m.getName()
+                            + "(" + m.getParameterTypes().length + ")");
                     return;
-                } catch (Throwable ignored) {}
+                } catch (Throwable t) {
+                    diag.append("\n  declared ").append(m.getName()).append("(").append(m.getParameterTypes().length).append(") -> ").append(errDetail(t));
+                }
             }
 
             Object instance = null;
@@ -496,7 +587,9 @@ public class VersionCompat {
                 try {
                     instance = ctor.newInstance(ctorArgs);
                     break;
-                } catch (Throwable ignored) {}
+                } catch (Throwable t) {
+                    diag.append("\n  ctor -> ").append(errDetail(t));
+                }
             }
             if (instance == null) {
                 try {
@@ -504,17 +597,39 @@ public class VersionCompat {
                     f.setAccessible(true);
                     Object unsafe = f.get(null);
                     instance = Class.forName("sun.misc.Unsafe").getMethod("allocateInstance", Class.class).invoke(unsafe, cls);
-                } catch (Throwable ignored) {}
+                } catch (Throwable t) {
+                    diag.append("\n  unsafe -> ").append(errDetail(t));
+                }
             }
 
             if (instance != null) {
+                // v1023: 优先尝试 DexKit 找到的 CsoLoader 初始化入口(如 com.tencent.cso.CsoLoader.c)
+                String dexMethod = DexKitHelper.getCsoLoaderMethod();
+                if (dexMethod != null && !dexMethod.isEmpty()) {
+                    tried++;
+                    try {
+                        java.lang.reflect.Method dm = cls.getDeclaredMethod(dexMethod);
+                        dm.setAccessible(true);
+                        if (dm.getParameterTypes().length == 0 && !isJunkMethod(dm)) {
+                            dm.invoke(instance);
+                            sCsoLoaderReady = true;
+                            LogWriter.log(TAG, "tryInitCsoLoader: OK via dex-method " + cls.getName() + "." + dexMethod + "()");
+                            return;
+                        }
+                    } catch (Throwable t) {
+                        diag.append("\n  dex-method ").append(dexMethod).append(" -> ").append(errDetail(t));
+                    }
+                }
+
                 for (java.lang.reflect.Method m : cls.getMethods()) {
+                    if (isJunkMethod(m)) continue;
                     if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
                     boolean hasCsoLoaderParam = false;
                     for (Class<?> pt : m.getParameterTypes()) {
                         if (pt == cls) { hasCsoLoaderParam = true; break; }
                     }
                     if (!hasCsoLoaderParam) continue;
+                    tried++;
                     Object[] args = buildArgs(m.getParameterTypes(), ctx, cl, pkgName);
                     for (int i = 0; i < args.length; i++) {
                         if (m.getParameterTypes()[i] == cls) args[i] = instance;
@@ -522,37 +637,54 @@ public class VersionCompat {
                     try {
                         m.invoke(null, args);
                         sCsoLoaderReady = true;
+                        LogWriter.log(TAG, "tryInitCsoLoader: OK via static(csoLoader) " + cls.getName() + "." + m.getName());
                         return;
-                    } catch (Throwable ignored) {}
+                    } catch (Throwable t) {
+                        diag.append("\n  static(cso) ").append(m.getName()).append(" -> ").append(errDetail(t));
+                    }
                 }
 
                 for (java.lang.reflect.Method m : cls.getMethods()) {
+                    if (isJunkMethod(m)) continue;
                     if (java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
                     if (m.getParameterTypes().length == 0) {
+                        tried++;
                         try {
                             m.invoke(instance);
                             sCsoLoaderReady = true;
+                            LogWriter.log(TAG, "tryInitCsoLoader: OK via instance " + cls.getName() + "." + m.getName() + "()");
                             return;
-                        } catch (Throwable ignored) {}
+                        } catch (Throwable t) {
+                            diag.append("\n  instance ").append(m.getName()).append("() -> ").append(errDetail(t));
+                        }
                     }
                 }
                 for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+                    if (isJunkMethod(m)) continue;
                     if (java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
                     if ("nativeInitialize".equals(m.getName())
                         || "preloadAllInternal".equals(m.getName())
                         || "init".equals(m.getName())
                         || "initialize".equals(m.getName())) {
                         m.setAccessible(true);
+                        tried++;
                         Object[] args = buildArgs(m.getParameterTypes(), ctx, cl, pkgName);
                         try {
                             m.invoke(instance, args);
                             sCsoLoaderReady = true;
+                            LogWriter.log(TAG, "tryInitCsoLoader: OK via named " + cls.getName() + "." + m.getName() + "()");
                             return;
-                        } catch (Throwable ignored) {}
+                        } catch (Throwable t) {
+                            diag.append("\n  named ").append(m.getName()).append(" -> ").append(errDetail(t));
+                        }
                     }
                 }
             }
-        } catch (Throwable ignored) {}
+            LogWriter.log(TAG, "tryInitCsoLoader: all " + tried + " attempts failed for " + cls.getName()
+                    + " ready=" + sCsoLoaderReady + " details:" + diag);
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "tryInitCsoLoader: outer err=" + errDetail(e));
+        }
     }
 
     private static Object[] buildArgs(Class<?>[] paramTypes,
@@ -631,12 +763,99 @@ public class VersionCompat {
         return fallback;
     }
 
+    /**
+     * v1016/v1018: 打开微信 EnMicroMsg.db。
+     * <p>
+     * v1018 改为「枚举 MicroMsg 下真实存在的账号目录 + 逐个密码候选爆破」：
+     * 不再依赖能解析设备号（Android 10+ 常读不到 IMEI），目录按最后修改时间倒序，
+     * 每个目录依次尝试 {@code 目录名前7位} / {@code md5(imei+uin)[:7]} / {@code md5("mm"+uin)[:7]} 等候选密码，
+     * 命中即返回。规避 v1016 固定密码算错导致 DB 全部打不开的问题。
+     */
+    public static Object openEnMicroDb(ClassLoader cl, String baseDir, long uin) {
+        if (baseDir == null || uin <= 0) {
+            LogWriter.log(TAG, "openEnMicroDb: baseDir/uin 无效 baseDir=" + baseDir + " uin=" + uin);
+            return null;
+        }
+        if (!baseDir.endsWith("/")) baseDir += "/";
+        Class<?> dbCls = findDbOpenerClass(cl);
+        if (dbCls == null) {
+            LogWriter.log(TAG, "openEnMicroDb: dbCls null");
+            return null;
+        }
+
+        // 1) 共用密码候选（按可能性排序）
+        java.util.LinkedHashSet<String> sharedPwds = new java.util.LinkedHashSet<>();
+        java.util.List<String> imeis = imeiCandidates(cl);
+        if (imeis.isEmpty()) imeis = java.util.Collections.singletonList("1234567890ABCDEF");
+        for (String imei : imeis) {
+            String full = md5(imei + uin);
+            if (full.length() >= 7) sharedPwds.add(full.substring(0, 7));
+        }
+        String legacy = md5("mm" + uin);
+        if (legacy.length() >= 7) sharedPwds.add(legacy.substring(0, 7));
+        String mm2 = md5(uin + "mm");
+        if (mm2.length() >= 7) sharedPwds.add(mm2.substring(0, 7));
+        String uinOnly = md5(String.valueOf(uin));
+        if (uinOnly.length() >= 7) sharedPwds.add(uinOnly.substring(0, 7));
+        sharedPwds.add("1234567890ABCDEF".substring(0, 7));
+
+        // 2) 枚举 MicroMsg 下真实存在的账号目录（有 EnMicroMsg.db 的）
+        java.util.LinkedHashMap<String, String> paths = new java.util.LinkedHashMap<>();
+        java.io.File[] dirs = new java.io.File(baseDir + "MicroMsg").listFiles();
+        if (dirs != null) {
+            java.util.Arrays.sort(dirs, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+            for (java.io.File dir : dirs) {
+                if (dir == null || !dir.isDirectory()) continue;
+                String name = dir.getName();
+                if (name.length() < 7) continue;
+                java.io.File dbf = new java.io.File(dir, "EnMicroMsg.db");
+                if (!dbf.exists()) continue;
+                paths.put(dbf.getAbsolutePath(), name.substring(0, 7));
+            }
+        }
+
+        if (paths.isEmpty()) {
+            LogWriter.log(TAG, "openEnMicroDb: MicroMsg 下未发现 EnMicroMsg.db");
+            return null;
+        }
+
+        for (java.util.Map.Entry<String, String> e : paths.entrySet()) {
+            String dbPath = e.getKey();
+            // 每目录密码候选: 目录名前7位优先, 再叠加共用候选
+            java.util.LinkedHashSet<String> pwds = new java.util.LinkedHashSet<>();
+            pwds.add(e.getValue());
+            pwds.addAll(sharedPwds);
+            for (String password : pwds) {
+                Object db = openDatabase(dbCls, dbPath, password);
+                if (db == null) db = openDatabaseWcdb(cl, dbPath, password);
+                if (db != null) {
+                    LogWriter.log(TAG, "openEnMicroDb: OK " + dbPath);
+                    return db;
+                }
+            }
+            LogWriter.log(TAG, "openEnMicroDb: open failed(密码均不匹配) " + dbPath);
+        }
+        LogWriter.log(TAG, "openEnMicroDb: FAILED all candidates (" + paths.size() + " dirs)");
+        return null;
+    }
+
     public static Class<?> findImeiClass(ClassLoader cl) {
         return findClassMulti(cl, "wo.w0", "wn.w0", "wp.w0",
             "wo.v0", "wo.x0", "vo.w0");
     }
 
     public static String getImei(ClassLoader cl) {
+        java.util.List<String> cands = imeiCandidates(cl);
+        if (!cands.isEmpty()) return cands.get(0);
+        return "1234567890ABCDEF";
+    }
+
+    /**
+     * v1016: 设备号候选列表(按优先级去重)。
+     * 微信内部设备号 → 系统 IMEI(模块运行在微信进程内, 微信已持有 READ_PHONE_STATE) → 旧版兜底值。
+     */
+    public static java.util.List<String> imeiCandidates(ClassLoader cl) {
+        java.util.List<String> out = new java.util.ArrayList<>();
         ClassLoader tkCL = findTinkerClassLoader(cl);
         ClassLoader useCL = tkCL != null ? tkCL : cl;
 
@@ -646,9 +865,12 @@ public class VersionCompat {
             if (imeiClass != null && imeiMethod != null) {
                 try {
                     Class<?> cls = XposedHelpers.findClass(imeiClass, useCL);
-                    String result = (String) cls.getDeclaredMethod(imeiMethod, boolean.class).invoke(null, true);
-                    LogWriter.log(TAG, "getImei (DexKit): " + imeiClass + "." + imeiMethod + " via " + useCL.getClass().getSimpleName());
-                    return result;
+                    String r = invokeImeiMethod(cls, imeiMethod);
+                    if (looksLikeDeviceId(r)) {
+                        LogWriter.log(TAG, "getImei (DexKit): " + imeiClass + "." + imeiMethod
+                                + " via " + useCL.getClass().getSimpleName());
+                        addImei(out, r);
+                    }
                 } catch (Throwable e) {
                     // DexKit path fails silently, fallback to wo.w0.g always succeeds
                 }
@@ -658,17 +880,99 @@ public class VersionCompat {
         if (imeiClass == null) imeiClass = findImeiClass(cl);
         if (imeiClass != null) {
             for (String m : new String[]{"g", "f", "h", "e"}) {
-                try {
-                    String result = (String) imeiClass.getDeclaredMethod(m, boolean.class).invoke(null, true);
+                String r = invokeImeiMethod(imeiClass, m);
+                if (looksLikeDeviceId(r)) {
                     LogWriter.log(TAG, "getImei: found via " + imeiClass.getName() + "." + m);
-                    return result;
+                    addImei(out, r);
+                    break;
                 }
-                catch (Throwable ignored) {}
             }
         }
-        LogWriter.log(TAG, "getImei fallback: 1234567890ABCDEF");
-        return "1234567890ABCDEF";
+        // v1016: 兜底直读系统 IMEI —— 模块运行在微信进程内, 微信已持有 READ_PHONE_STATE
+        String sysImei = systemImei();
+        if (sysImei != null) {
+            LogWriter.log(TAG, "getImei: via TelephonyManager");
+            addImei(out, sysImei);
+        }
+        if (out.isEmpty()) {
+            LogWriter.log(TAG, "getImei fallback: 1234567890ABCDEF");
+        }
+        addImei(out, "1234567890ABCDEF");
+        return out;
     }
+
+    private static void addImei(java.util.List<String> out, String v) {
+        if (v == null || v.isEmpty()) return;
+        if (!out.contains(v)) out.add(v);
+    }
+
+    /** 设备号形态校验: IMEI(13-16位数字) 或 32位hex 或 30-40位hex/连字符，且不含空白与控制符。 */
+    private static boolean looksLikeDeviceId(String s) {
+        if (s == null) return false;
+        String t = s.trim();
+        if (t.length() < 13 || t.length() > 40) return false;
+        if (t.matches("[0-9]{13,16}")) return true;
+        if (t.matches("[0-9a-fA-F]{32}")) return true;
+        if (t.matches("[0-9a-fA-F-]{30,40}")) return true;
+        return false;
+    }
+
+    /** 按方法签名宽容调用设备号方法: (boolean)/()/(Context)/(ClassLoader) 逐一尝试。 */
+    private static String invokeImeiMethod(Class<?> cls, String method) {
+        if (cls == null || method == null) return null;
+        android.content.Context ctx = com.leshao.v3.ContextManager.getAppContext();
+        for (Method m : cls.getDeclaredMethods()) {
+            if (!m.getName().equals(method)) continue;
+            int pc = m.getParameterCount();
+            if (m.getReturnType() != String.class) continue;
+            try {
+                Object r = null;
+                if (pc == 0) {
+                    r = m.invoke(null);
+                } else if (pc == 1 && m.getParameterTypes()[0] == boolean.class) {
+                    r = m.invoke(null, Boolean.TRUE);
+                } else if (pc == 1 && m.getParameterTypes()[0] == android.content.Context.class && ctx != null) {
+                    r = m.invoke(null, ctx);
+                } else if (pc == 1 && m.getParameterTypes()[0] == ClassLoader.class) {
+                    r = m.invoke(null, cls.getClassLoader());
+                } else {
+                    continue;
+                }
+                if (r instanceof String) {
+                    String s = (String) r;
+                    if (!s.isEmpty()) return s;
+                }
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    /** 直读系统 IMEI（运行于微信进程内时可用）。 */
+    private static String systemImei() {
+        try {
+            android.content.Context ctx = com.leshao.v3.ContextManager.getAppContext();
+            if (ctx == null) return null;
+            android.telephony.TelephonyManager tm =
+                    (android.telephony.TelephonyManager) ctx.getSystemService(android.content.Context.TELEPHONY_SERVICE);
+            if (tm == null) return null;
+            String id = null;
+            try { id = tm.getDeviceId(); } catch (Throwable ignored) {}
+            if (isEmpty(id) && android.os.Build.VERSION.SDK_INT >= 26) {
+                try { id = tm.getImei(0); } catch (Throwable ignored) {}
+            }
+            if (isEmpty(id) && android.os.Build.VERSION.SDK_INT >= 26) {
+                try { id = tm.getMeid(0); } catch (Throwable ignored) {}
+            }
+            return isEmpty(id) ? null : id;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static boolean isEmpty(String s) {
+        return s == null || s.trim().isEmpty();
+    }
+
 
     // ==================== Storage helpers ====================
 

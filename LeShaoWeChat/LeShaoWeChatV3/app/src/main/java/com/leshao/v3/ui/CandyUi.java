@@ -1,10 +1,12 @@
 package com.leshao.v3.ui;
 
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.graphics.drawable.StateListDrawable;
+import android.view.View;
 import android.widget.Switch;
 
 /**
@@ -52,7 +54,7 @@ public class CandyUi {
             GradientDrawable on = new GradientDrawable();
             on.setShape(GradientDrawable.RECTANGLE);
             on.setCornerRadius(trackR);
-            on.setColor(AppColors.primary());
+            on.setColor(AppColors.switchColor());
             on.setSize(w, h);
             track.addState(new int[]{android.R.attr.state_checked}, on);
             if (android.os.Build.VERSION.SDK_INT >= 16) sw.setTrackDrawable(track);
@@ -66,7 +68,7 @@ public class CandyUi {
             thumb.addState(new int[]{-android.R.attr.state_checked}, tOff);
             GradientDrawable tOn = new GradientDrawable();
             tOn.setShape(GradientDrawable.OVAL);
-            tOn.setColor(AppColors.onPrimary());
+            tOn.setColor(AppColors.onColor(AppColors.switchColor()));
             tOn.setSize(thumbOn, thumbOn);
             thumb.addState(new int[]{android.R.attr.state_checked}, tOn);
             if (android.os.Build.VERSION.SDK_INT >= 16) sw.setThumbDrawable(thumb);
@@ -78,12 +80,36 @@ public class CandyUi {
         return sw;
     }
 
-    /** 页面根背景：M3 surface（纯色，Material 3 不用渐变做大背景） */
+    /**
+     * 页面根背景：M3 surface 纯色 + 28dp 圆角浮层。
+     *
+     * <p>v987 统一透明化：全屏页面统一改为圆角浮层，圆角外区域由透明窗口露出宿主，
+     * 不再用直角实底填满整屏（避免在状态栏/安全区露出白色实底间隔）。</p>
+     */
     public static GradientDrawable pageGradient() {
         GradientDrawable gd = new GradientDrawable();
         gd.setShape(GradientDrawable.RECTANGLE);
-        gd.setColor(AppColors.surface());
+        float d = Resources.getSystem().getDisplayMetrics().density;
+        gd.setCornerRadius(AppColors.DIALOG_RADIUS_DP * d);
+        gd.setColor(AppColors.windowBg());
+        gd.setStroke(Math.max(1, (int) (1.0f * d + 0.5f)), AppColors.outlineVariant());
         return gd;
+    }
+
+    /**
+     * v998: 给浮层容器附加轻微阴影(硬件层 elevation)，与 {@link #pageGradient()} 的描边配合，
+     * 让居中浮层与宿主画面之间产生柔和层次。
+     */
+    public static void elevate(View v) {
+        if (v == null) return;
+        try {
+            float d = v.getResources().getDisplayMetrics().density;
+            v.setElevation(8f * d);
+            if (android.os.Build.VERSION.SDK_INT >= 21) {
+                v.setOutlineProvider(android.view.ViewOutlineProvider.BACKGROUND);
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     /** M3 filled 卡片：surfaceContainerLow 底 + 12dp 圆角 */

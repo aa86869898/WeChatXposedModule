@@ -255,6 +255,10 @@ public class WmEntry {
                                 }
                                 sPendingShow = () -> {
                                     WmChatHook.showTitleBtn(fAct, fCl, fUser);
+                                    // v1017: MMEditText attach 是进入聊天窗口的可靠信号，
+                                    // 直接补注入输入框上方按钮行（幂等），不再只依赖构造器 hook / 轮询。
+                                    try { com.leshao.v3.hook.ChatVoiceSwitchHook.ensureInjected(fAct); }
+                                    catch (Throwable ignored) {}
                                     sPendingShow = null;
                                 };
                                 sHandler.postDelayed(sPendingShow, 600);
@@ -340,6 +344,11 @@ public class WmEntry {
         boolean visible = isChattingFragmentVisible(act);
         if (visible && user != null && !user.isEmpty()) {
             WmChatHook.showTitleBtn(act, cl, user);
+            // v1002: 聊天页可见时补注入 输入框上方按钮行。
+            // 微信冷启动会复用/提前创建 ChatFooter, 一次性生命周期 hook 可能错过,
+            // 由该轮询兜底(tag/标记幂等, 不会重复注入)。
+            try { com.leshao.v3.hook.ChatVoiceSwitchHook.ensureInjected(act); }
+            catch (Throwable ignored) {}
         } else {
             WmChatHook.dismissTitleBtn();
         }
@@ -431,6 +440,9 @@ public class WmEntry {
         sPendingShow = () -> {
             sPendingShow = null;
             WmChatHook.showTitleBtn(fAct, fCl, fUser);
+            // v1017: 生命周期进入聊天页时补注入输入框上方按钮行（幂等）
+            try { com.leshao.v3.hook.ChatVoiceSwitchHook.ensureInjected(fAct); }
+            catch (Throwable ignored) {}
         };
         sHandler.postDelayed(sPendingShow, 600);
     }

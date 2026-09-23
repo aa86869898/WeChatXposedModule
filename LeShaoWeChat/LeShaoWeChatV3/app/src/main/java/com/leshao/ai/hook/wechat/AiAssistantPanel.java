@@ -6,17 +6,16 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.Editable;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.widget.ArrayAdapter;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ListView;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -26,15 +25,16 @@ import android.widget.TextView;
 import com.leshao.ai.api.model.ProviderType;
 import com.leshao.ai.config.AppConfig;
 import com.leshao.ai.config.ConversationConfig;
-import com.leshao.ai.util.Whitelist;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
+import com.leshao.v3.ui.InsetsUtil;
 import com.leshao.v3.ui.TTSPageView;
 import com.leshao.v3.wm.utils.WmPrefs;
 import com.leshao.v3.ui.widgets.ModernButton;
 import com.leshao.v3.ui.widgets.M3Page;
 import com.leshao.v3.ui.widgets.SectionHeader;
+import com.leshao.v3.ui.widgets.SegmentedControl;
 import com.leshao.v3.ui.widgets.SettingRow;
 
 import java.util.ArrayList;
@@ -60,6 +60,8 @@ public final class AiAssistantPanel {
     private static volatile PopupWindow sPopup;
     /** v985: 模板编辑草稿, 跨「选择音色」子页面保留未保存改动(新建模板时无正式名可持久化) */
     private static ConversationConfig.Entry sTemplateDraft;
+    /** v996: 「AI回复个性化配置」列表当前 tab(0=全部 1=群聊 2=联系人), 返回时保持。 */
+    private static volatile int sConvListTab = 0;
 
     private AiAssistantPanel() {
     }
@@ -96,6 +98,19 @@ public final class AiAssistantPanel {
      * @param heightPx 弹窗高度(像素), <=0 表示 WRAP_CONTENT
      */
     private static void showPopup(Activity activity, View root, int heightPx, String scene) {
+        showPopup(activity, root, heightPx, scene, null);
+    }
+
+    /**
+     * 以 PopupWindow 居中展示面板。构建/展示全链路 try-catch + LogWriter 日志,
+     * 任何阶段失败只记日志不抛泡到菜单点击(避免"点了没反应"且无迹可查)。
+     *
+     * @param heightPx 弹窗高度(像素), <=0 表示 WRAP_CONTENT
+     * @param backAction 系统返回键动作; null 时非主页面板返回 = 回 AI 助手首页,
+     *                   主页面板返回 = 仅关闭
+     */
+    private static void showPopup(Activity activity, View root, int heightPx, String scene,
+                                  final Runnable backAction) {
         try {
             LogWriter.log(TAG, "showPopup: scene=" + scene + " h=" + heightPx);
             View anchor = resolveAnchor(activity);
@@ -116,8 +131,8 @@ public final class AiAssistantPanel {
             // navigation_bar_height 取不到时回退 0, 导致弹窗居中后底部按钮落到屏幕/手势区
             // 之外被裁掉。现在内边距优先取根窗口 WindowInsets, 并有 48dp 兜底。
             int screenH = dm.heightPixels;
-            int insetTop = systemInsetTop(actx);
-            int insetBottom = systemInsetBottom(actx, anchor);
+            int insetTop = InsetsUtil.topInset(actx, anchor);
+            int insetBottom = InsetsUtil.bottomInset(actx, anchor);
             int availTop = Math.max(0, insetTop);
             int availBottom = screenH - Math.max(0, insetBottom);
             if (availBottom - availTop < dp(actx, 240)) {
@@ -181,6 +196,21 @@ public final class AiAssistantPanel {
                     y = Math.max(availTop, availBottom - panelH);
                 }
                 pw.showAtLocation(anchor, Gravity.TOP | Gravity.LEFT, x, y);
+                // v1015: 登记到全局返回栈；非主页面板的返回键 = 回到 AI 助手首页(上一层)
+                // v1019: 三级窗口(convedit/tplpick/tpledit)可通过 backAction 返回各自父级
+                final Runnable onBack;
+                if (backAction != null) {
+                    onBack = () -> {
+                        dismissCurrent();
+                        backAction.run();
+                    };
+                } else {
+                    onBack = "main".equals(scene) ? null : () -> {
+                        dismissCurrent();
+                        show(activity);
+                    };
+                }
+                com.leshao.v3.ui.UiBackStack.push(pw, pw::dismiss, onBack);
                 LogWriter.log(TAG, "showPopup OK: scene=" + scene + " panelH=" + panelH
                         + " availTop=" + availTop + " availBottom=" + availBottom
                         + " availH=" + availH + " y=" + y);
@@ -199,36 +229,14 @@ public final class AiAssistantPanel {
         return (int) (v * ctx.getResources().getDisplayMetrics().density + 0.5f);
     }
 
-    /** 状态栏高度(px), 取系统资源, 失败回退 24dp。 */
+    /** 状态栏高度(px) —— 统一走 InsetsUtil。 */
     private static int systemInsetTop(Context ctx) {
-        try {
-            int id = ctx.getResources().getIdentifier("status_bar_height", "dimen", "android");
-            if (id > 0) return ctx.getResources().getDimensionPixelSize(id);
-        } catch (Throwable ignored) {}
-        return dp(ctx, 24);
+        return InsetsUtil.statusBarHeight(ctx);
     }
 
-    /** 底部系统栏(导航栏/手势条)高度(px), 优先 WindowInsets, 取不到回退 48dp。 */
+    /** 底部系统栏(导航栏/手势条)高度(px) —— 统一走 InsetsUtil。 */
     private static int systemInsetBottom(Context ctx, View anchor) {
-        // 1) 根窗口 WindowInsets: 导航栏/手势条真实高度
-        try {
-            android.view.WindowInsets wi = anchor.getRootWindowInsets();
-            if (wi != null) {
-                int b = wi.getSystemWindowInsetBottom();
-                if (b <= 0) b = wi.getStableInsetBottom();
-                if (b > 0) return b;
-            }
-        } catch (Throwable ignored) {}
-        // 2) 系统资源
-        try {
-            int id = ctx.getResources().getIdentifier("navigation_bar_height", "dimen", "android");
-            if (id > 0) {
-                int h = ctx.getResources().getDimensionPixelSize(id);
-                if (h > 0) return h;
-            }
-        } catch (Throwable ignored) {}
-        // 3) 兜底: 手势/三键导航均至少预留 48dp
-        return dp(ctx, 48);
+        return InsetsUtil.bottomInset(ctx, anchor);
     }
 
     /** 把模型提供商面板的填写内容持久化(接口地址/密钥/模型/温度)。 */
@@ -239,6 +247,9 @@ public final class AiAssistantPanel {
             config.setBaseUrl(str(etBaseUrl).trim());
             config.setApiKey(com.leshao.ai.api.ApiUrl.normalizeKey(str(etApiKey)));
             config.setModel(str(etModel).trim());
+            // v1019: 记录已使用的模型到历史
+            String m = str(etModel).trim();
+            if (!m.isEmpty()) config.recordModel(m);
             if (seekTemp != null) {
                 config.setTemperature(seekTemp.getProgress() / TEMP_SCALE);
             }
@@ -250,12 +261,7 @@ public final class AiAssistantPanel {
     }
 
     private static TextView fieldLabel(Context ctx, String text) {
-        TextView tv = new TextView(ctx);
-        tv.setText(text);
-        tv.setTextSize(13);
-        tv.setTextColor(AppColors.textTertiary());
-        tv.setPadding(dp(ctx, 2), dp(ctx, 6), 0, dp(ctx, 2));
-        return tv;
+        return M3Page.fieldLabel(ctx, text);
     }
 
     private static LinearLayout newRoot(Context ctx) {
@@ -267,6 +273,7 @@ public final class AiAssistantPanel {
         // v974: 底部内边距 16 -> 18dp, 底部栏按钮距对话窗下沿再加 2dp
         // v978: 底部内边距 18 -> 21dp, 底部按钮下沿再多留 3dp(窗口整体高 3dp)
         root.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 12), dp(ctx, 21));
+        InsetsUtil.clipRounded(root);
         return root;
     }
 
@@ -293,13 +300,7 @@ public final class AiAssistantPanel {
     }
 
     private static TextView newTitle(Context ctx, String text) {
-        TextView title = new TextView(ctx);
-        title.setText(text);
-        title.setTextSize(18);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        title.setTextColor(AppColors.textPrimary());
-        title.setPadding(0, 0, 0, dp(ctx, 4));
-        return title;
+        return M3Page.title(ctx, text);
     }
 
     /** 内容超出上限才可滚动、否则按内容收缩的 ScrollView(v968: 消除底部栏上方大片空白) */
@@ -418,6 +419,30 @@ public final class AiAssistantPanel {
         } catch (Throwable t) {
             LogWriter.log(TAG, "AIBotCore.config err: " + t);
         }
+        if (cfg == null) {
+            // 自愈: installCore 因时序未执行时, 由面板兜底完成核心初始化
+            LogWriter.log(TAG, "show: config null, 尝试惰性初始化 AI 核心");
+            try {
+                AIBotCore.ensureInit(ctx);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "show: 惰性初始化 AIBotCore 失败: " + t);
+            }
+            try {
+                ConfigBridge.syncFromProvider(ctx);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "show: 配置同步失败: " + t);
+            }
+            try {
+                AIBotCore.reload();
+            } catch (Throwable ignored) {
+            }
+            try {
+                cfg = AIBotCore.config();
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "show: 重新读取 config 失败: " + t);
+            }
+            LogWriter.log(TAG, "show: 惰性初始化后 config=" + (cfg == null ? "null" : "ok"));
+        }
         final AppConfig config = cfg;
 
         LinearLayout root = newRoot(ctx);
@@ -425,12 +450,7 @@ public final class AiAssistantPanel {
 
         if (config == null) {
             LogWriter.log(TAG, "show: config null, 仅展示提示");
-            TextView tip = new TextView(ctx);
-            tip.setText("AI 核心尚未初始化,请稍后重试。");
-            tip.setTextSize(13);
-            tip.setTextColor(AppColors.textTertiary());
-            tip.setPadding(0, dp(ctx, 12), 0, dp(ctx, 16));
-            root.addView(tip);
+            root.addView(M3Page.note(ctx, "AI 核心尚未初始化, 请稍后重试。"));
         } else {
             LinearLayout list = new LinearLayout(ctx);
             newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.60f));
@@ -448,42 +468,16 @@ public final class AiAssistantPanel {
                         persist(ctx, config, c -> c.setTtsEnabled(checked), "语音消息发送已" + (checked ? "开启" : "关闭"));
                     }));
 
-            // ---- 2. 自动回复 ----
-            list.addView(newSection(ctx, "自动回复", "按会话类型控制触发范围"));
-            // v973: 群聊个性化配置 —— 行内开关控制群聊总开关; 点击整行进入「群聊个性化配置」
-            // 页面(列出全部群聊, 点群聊自定义人设/关键词等, 支持模板一键套用)。
-            SettingRow rowGroup = newRow(ctx, "👥", "群聊个性化配置",
-                    overrideSub(true) + " · 点整行进入配置");
-            rowGroup.switchOn(config.isAutoReplyInGroups(), (btn, checked) -> {
-                LogWriter.log(TAG, "click: 群聊个性化配置开关 -> " + checked);
-                persist(ctx, config, c -> c.setAutoReplyInGroups(checked), "群聊自动回复已" + (checked ? "开启" : "关闭"));
-            });
-            rowGroup.setOnClickListener(v -> {
-                LogWriter.log(TAG, "click: 进入群聊个性化配置");
+            // ---- 2. AI回复个性化配置 ----
+            // v996: 群聊/联系人二合一, 纯入口(无行内开关); 仅「已配置且启用」的会话触发 AI。
+            // 原「群聊/私聊自动回复」「仅被@时回复」全局开关已被会话级个性化配置取代。
+            list.addView(newSection(ctx, "AI回复个性化配置", "仅已配置且启用的会话触发 AI"));
+            list.addView(newRow(ctx, "🎯", "AI回复个性化配置",
+                    overrideSub() + " · 点整行进入配置").arrow(() -> {
+                LogWriter.log(TAG, "click: 进入AI回复个性化配置");
                 dismissCurrent();
-                showConversationList(activity, true);
-            });
-            list.addView(rowGroup);
-
-            // v973: 联系人个性化配置 —— 行内开关控制私聊总开关; 点击整行进入页面(列出全部联系人)。
-            SettingRow rowPrivate = newRow(ctx, "💬", "联系人个性化配置",
-                    overrideSub(false) + " · 点整行进入配置");
-            rowPrivate.switchOn(config.isAutoReplyInPrivate(), (btn, checked) -> {
-                LogWriter.log(TAG, "click: 联系人个性化配置开关 -> " + checked);
-                persist(ctx, config, c -> c.setAutoReplyInPrivate(checked), "私聊自动回复已" + (checked ? "开启" : "关闭"));
-            });
-            rowPrivate.setOnClickListener(v -> {
-                LogWriter.log(TAG, "click: 进入联系人个性化配置");
-                dismissCurrent();
-                showConversationList(activity, false);
-            });
-            list.addView(rowPrivate);
-
-            list.addView(newRow(ctx, "📣", "仅被@时自动回复", "群聊中只有被提到时才回复")
-                    .switchOn(config.isOnlyWhenMentioned(), (btn, checked) -> {
-                        LogWriter.log(TAG, "click: 仅被@时回复 -> " + checked);
-                        persist(ctx, config, c -> c.setOnlyWhenMentioned(checked), "已更新@回复规则");
-                    }));
+                showConversationList(activity);
+            }));
 
             // ---- 3. 模型与参数(点击进入配置) ----
             list.addView(newSection(ctx, "模型与参数", "服务商接入与核心参数"));
@@ -511,21 +505,18 @@ public final class AiAssistantPanel {
                     }));
         }
 
-        // ---- 底部栏: 左(白名单) 右(关闭) ----
-        ModernButton btnWhitelist = new ModernButton(ctx, "白名单", ModernButton.STYLE_GHOST);
-        btnWhitelist.onClick(() -> {
-            LogWriter.log(TAG, "click: 白名单");
-            dismissCurrent();
-            showWhitelist(activity);
-        });
-
+        // ---- 底部栏: 关闭 ----
         ModernButton btnClose = new ModernButton(ctx, "关闭", ModernButton.STYLE_PRIMARY);
         btnClose.onClick(() -> {
             LogWriter.log(TAG, "click: 关闭");
             dismissCurrent();
         });
 
-        root.addView(newBtnRow2(ctx, btnWhitelist, btnClose));
+        LinearLayout.LayoutParams lpClose = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lpClose.setMargins(0, dp(ctx, 16), 0, 0);
+        btnClose.setLayoutParams(lpClose);
+        root.addView(btnClose);
         // v968: WRAP_CONTENT 高度, 面板按内容收缩, 底部栏紧贴内容
         showPopup(activity, root, 0, "main");
     }
@@ -689,17 +680,82 @@ public final class AiAssistantPanel {
             }).start();
         });
 
-        // ---- 生成参数 ----
+        // ---- v1019: 历史已添加模型 ----
+        final LinearLayout histList = new LinearLayout(ctx);
+        histList.setOrientation(LinearLayout.VERTICAL);
+        list.addView(newSection(ctx, "历史已添加模型", "点击选中即设为默认模型, 右侧可编辑/删除"));
+        list.addView(histList);
+        final Runnable[] renderHistory = new Runnable[1];
+        renderHistory[0] = () -> {
+            histList.removeAllViews();
+            java.util.List<String> hist = config.getModelHistory();
+            if (hist == null || hist.isEmpty()) {
+                histList.addView(M3Page.note(ctx, "暂无历史记录"));
+                return;
+            }
+            for (String mid : hist) {
+                if (mid == null || mid.isEmpty()) continue;
+                final String modelId = mid;
+                final boolean isCur = modelId.equals(str(etModel).trim());
+                SettingRow row = newRow(ctx, isCur ? "✅" : "🧠", modelId,
+                        isCur ? "当前模型" : "点击设为默认");
+                row.setOnClickListener(v -> {
+                    etModel.setText(modelId);
+                    config.setModel(modelId);
+                    config.recordModel(modelId);
+                    config.save();
+                    renderHistory[0].run();
+                    toastQuiet(ctx, "已设为默认模型: " + modelId);
+                });
+                // 右侧编辑/删除
+                row.setOnLongClickListener(v -> {
+                    try {
+                        android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(ctx)
+                                .setTitle("历史模型")
+                                .setItems(new String[]{"填入模型名称", "从历史删除"}, (dd, which) -> {
+                                    if (which == 0) {
+                                        etModel.setText(modelId);
+                                        renderHistory[0].run();
+                                    } else {
+                                        config.removeModelHistory(modelId);
+                                        config.save();
+                                        renderHistory[0].run();
+                                        toastQuiet(ctx, "已从历史删除: " + modelId);
+                                    }
+                                })
+                                .setNegativeButton("取消", null)
+                                .create();
+                        dlg.setOnShowListener(d -> {
+                            dlg.getButton(android.app.AlertDialog.BUTTON_NEGATIVE)
+                                    .setTextColor(AppColors.primary());
+                        });
+                        dlg.show();
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "history menu err: " + t);
+                    }
+                    return true;
+                });
+                histList.addView(row);
+            }
+        };
+        renderHistory[0].run();
+        // 模型/接口/密钥变更后刷新历史高亮
+        etModel.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void afterTextChanged(Editable s) { renderHistory[0].run(); }
+        });
+
+        // ---- 生成参数(M3 卡片内嵌滑杆) ----
         list.addView(newSection(ctx, "生成参数", "温度越高回复越随机"));
-        final TextView tvTemp = new TextView(ctx);
-        tvTemp.setTextSize(14);
-        tvTemp.setTextColor(AppColors.textTertiary());
-        tvTemp.setPadding(0, dp(ctx, 4), 0, dp(ctx, 2));
-        list.addView(tvTemp);
-        final SeekBar seekTemp = new SeekBar(ctx);
+        LinearLayout tempCard = M3Page.card(ctx);
+        final TextView tvTemp = M3Page.note(ctx, "");
+        tempCard.addView(tvTemp);
+        final SeekBar seekTemp = M3Page.slider(ctx);
         seekTemp.setMax(200);
         tempRef[0] = seekTemp;
-        list.addView(seekTemp);
+        tempCard.addView(seekTemp);
+        list.addView(tempCard);
         int initProgress = Math.max(0, Math.min(200, (int) Math.round(config.getTemperature() * TEMP_SCALE)));
         seekTemp.setProgress(initProgress);
         updateTempLabel(tvTemp, seekTemp.getProgress());
@@ -844,12 +900,16 @@ public final class AiAssistantPanel {
 
     // ==================== 三级: 按会话独立配置 ====================
 
-    private static String overrideSub(boolean group) {
+    /** v996: 合并后的个性化配置概览(群 + 联系人)。 */
+    private static String overrideSub() {
         try {
             ConversationConfig cc = AIBotCore.conversationConfig();
-            int n = cc == null ? 0 : cc.keysByType(group).size();
-            return n == 0 ? "未配置, 全部沿用全局"
-                    : "已独立配置 " + n + " 个" + (group ? "群" : "联系人");
+            if (cc == null) return "未配置";
+            int g = cc.keysByType(true).size();
+            int f = cc.keysByType(false).size();
+            int n = g + f;
+            return n == 0 ? "未配置, 点进可为群聊/联系人单独启用"
+                    : "已配置 " + n + " 个会话(群 " + g + " · 人 " + f + ")";
         } catch (Throwable t) {
             return "未配置";
         }
@@ -877,10 +937,15 @@ public final class AiAssistantPanel {
     private static String entrySummary(ConversationConfig.Entry e) {
         if (e == null) return "继承全局";
         List<String> parts = new ArrayList<>();
+        if (e.enabled != null) parts.add(e.enabled ? "AI:已启用" : "AI:已停用");
         if (e.autoReply != null) parts.add(e.autoReply ? "自动回复:开" : "自动回复:关");
         if (e.onlyWhenMentioned != null) parts.add(e.onlyWhenMentioned ? "仅@" : "全部消息");
         if (e.ttsEnabled != null) parts.add(e.ttsEnabled ? "语音" : "文本");
         if (!TextUtils.isEmpty(e.systemPrompt)) parts.add("自定义人设");
+        if (!TextUtils.isEmpty(e.aiName)) parts.add("AI:" + e.aiName);
+        if (!TextUtils.isEmpty(e.aiIdentity)) parts.add("自定义身份");
+        if (e.memoryEnabled != null) parts.add(e.memoryEnabled ? "记忆:开" : "记忆:关");
+        if (e.memoryLimit != null) parts.add("记忆:" + e.memoryLimit + "条");
         if (!TextUtils.isEmpty(e.model)) parts.add("模型:" + e.model);
         return parts.isEmpty() ? "继承全局" : TextUtils.join(" · ", parts);
     }
@@ -893,6 +958,11 @@ public final class AiAssistantPanel {
                 (int) (AppColors.SWITCH_WIDTH_DP * d + 0.5f),
                 (int) (AppColors.SWITCH_HEIGHT_DP * d + 0.5f)));
         return sw;
+    }
+
+    /** v985: 与全局相同则返回 null(不落库, 继续跟随全局); 不同才作为显式覆盖固化。 */
+    private static Boolean explicitOrNull(boolean checked, boolean global) {
+        return checked == global ? null : Boolean.valueOf(checked);
     }
 
     private static void addSwitchRow(LinearLayout list, Context ctx, Switch sw,
@@ -934,15 +1004,14 @@ public final class AiAssistantPanel {
                                         final Runnable persist, final Runnable onBack) {
         if (activity == null || activity.isFinishing()) return;
         final Context ctx = activity;
+        // v985: 音色为异步拉取, 弹窗高度改为固定值, 避免拉取前按空内容测量导致列表被裁剪。
+        final int popupH = (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.62f);
         LinearLayout root = newRoot(ctx);
         root.addView(newTitle(ctx, "选择音色"));
         final LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.55f));
+        newScroll(root, list, Math.max(dp(ctx, 160), popupH - dp(ctx, 150)));
 
-        final TextView loading = new TextView(ctx);
-        loading.setText("正在加载配音魔方音色...");
-        loading.setTextSize(13);
-        loading.setTextColor(AppColors.textTertiary());
+        final TextView loading = M3Page.note(ctx, "正在加载配音魔方音色...");
         list.addView(loading);
 
         final java.util.LinkedHashSet<String> selected = new java.util.LinkedHashSet<>();
@@ -963,28 +1032,20 @@ public final class AiAssistantPanel {
                 if (activity.isFinishing()) return;
                 list.removeAllViews();
                 if (fi.isEmpty()) {
-                    TextView empty = new TextView(ctx);
-                    empty.setText("未获取到音色, 请先在「TTS 语音」页配置配音魔方 API Key");
-                    empty.setTextSize(13);
-                    empty.setTextColor(AppColors.textTertiary());
-                    list.addView(empty);
+                    list.addView(M3Page.empty(ctx, "🎵",
+                            "未获取到音色, 请先在「TTS 语音」页配置配音魔方 API Key"));
                     return;
                 }
                 for (TTSPageView.VoiceItem vi : fi) {
-                    CheckBox cb = new CheckBox(ctx);
                     String text = vi.displayName;
                     if (!TextUtils.isEmpty(vi.group)) text = vi.group + " · " + text;
-                    if (!TextUtils.isEmpty(vi.actor)) text = text + " (配音:" + vi.actor + ")";
-                    cb.setText(text);
-                    cb.setTextColor(AppColors.textPrimary());
-                    cb.setTextSize(14);
-                    cb.setChecked(selected.contains(vi.voiceId));
-                    cb.setPadding(0, dp(ctx, 4), 0, dp(ctx, 4));
-                    cb.setOnCheckedChangeListener((b, on) -> {
-                        if (on) selected.add(vi.voiceId);
-                        else selected.remove(vi.voiceId);
-                    });
-                    list.addView(cb);
+                    final String voiceId = vi.voiceId;
+                    list.addView(M3Page.checkRow(ctx, "🎵", text,
+                            TextUtils.isEmpty(vi.actor) ? null : ("配音: " + vi.actor),
+                            selected.contains(voiceId), on -> {
+                                if (on) selected.add(voiceId);
+                                else selected.remove(voiceId);
+                            }));
                 }
             });
         }).start();
@@ -992,143 +1053,178 @@ public final class AiAssistantPanel {
         ModernButton btnSave = new ModernButton(ctx, "保存", ModernButton.STYLE_PRIMARY);
         btnSave.onClick(() -> {
             entry.voices = new ArrayList<>(selected);
+            LogWriter.log(TAG, "click(音色): 保存 selected=" + entry.voices);
             if (persist != null) persist.run();
+            toastQuiet(ctx, "已选 " + entry.voices.size() + " 个音色");
             dismissCurrent();
             if (onBack != null) onBack.run();
         });
         ModernButton btnClear = new ModernButton(ctx, "清空", ModernButton.STYLE_GHOST);
         btnClear.onClick(() -> {
             entry.voices = new ArrayList<>();
+            LogWriter.log(TAG, "click(音色): 清空");
             if (persist != null) persist.run();
             dismissCurrent();
             if (onBack != null) onBack.run();
         });
         ModernButton btnClose = new ModernButton(ctx, "返回", ModernButton.STYLE_GHOST);
         btnClose.onClick(() -> {
+            LogWriter.log(TAG, "click(音色): 返回(未改动)");
             dismissCurrent();
             if (onBack != null) onBack.run();
         });
 
         root.addView(newBtnRow(ctx, btnSave, btnClear, btnClose));
-        showPopup(activity, root, 0, "voicepick");
+        showPopup(activity, root, popupH, "voicepick");
     }
 
-    private static void showConversationList(final Activity activity, final boolean isGroup) {
-        LogWriter.log(TAG, "showConversationList: enter group=" + isGroup);
+    private static void showConversationList(final Activity activity) {
+        LogWriter.log(TAG, "showConversationList: enter tab=" + sConvListTab);
         if (activity == null || activity.isFinishing()) return;
         final Context ctx = activity;
         if (AIBotCore.conversationConfig() == null) {
             toastQuiet(ctx, "AI 核心未初始化");
             return;
         }
-        // v973: 先加载模块通讯录(全部群聊/联系人), 再构建「个性化配置」列表
+        // v996: 先加载模块通讯录(全部群聊/联系人), 再构建合并后的「AI回复个性化配置」列表
+        // v1016: 目标采集移至后台线程, 避免会话/联系人查询(含大量反射)阻塞主线程导致点击卡死
         com.leshao.v3.ContactRepository.loadAsync(() -> {
             if (activity.isFinishing()) return;
-            activity.runOnUiThread(() -> buildConversationList(activity, isGroup));
+            final ConversationConfig cc = AIBotCore.conversationConfig();
+            if (cc == null) return;
+            new Thread(() -> {
+                final List<String[]> groupTargets = collectTargets(true, cc);
+                final List<String[]> friendTargets = collectTargets(false, cc);
+                final List<String[]> allTargets = new ArrayList<>();
+                allTargets.addAll(groupTargets);
+                allTargets.addAll(friendTargets);
+                sortTargets(allTargets, cc);
+                sortTargets(groupTargets, cc);
+                sortTargets(friendTargets, cc);
+                if (activity.isFinishing()) return;
+                activity.runOnUiThread(() -> buildConversationListUi(
+                        activity, cc, groupTargets, friendTargets, allTargets));
+            }, "leshao-ai-targets").start();
         });
     }
 
-    /** v973: 群聊/联系人个性化配置列表 —— 列出全部会话, 已配置的标注并置顶。 */
-    private static void buildConversationList(final Activity activity, final boolean isGroup) {
+    /**
+     * v996: 「AI回复个性化配置」—— 全部 / 群聊 / 联系人 三档 tab。
+     * 顶部 tab 切换类型, 下方搜索栏按名称过滤, 列表点击进入独立配置。
+     * 排序: 已配置(群/联系人)置顶, 其余按名称排序。
+     * v1016: 数据采集已在外层完成, 此处仅负责 UI 构建(主线程)。
+     */
+    private static void buildConversationListUi(final Activity activity, final ConversationConfig cc,
+                                                final List<String[]> groupTargets,
+                                                final List<String[]> friendTargets,
+                                                final List<String[]> allTargets) {
         if (activity == null || activity.isFinishing()) return;
         final Context ctx = activity;
-        final ConversationConfig cc = AIBotCore.conversationConfig();
-        if (cc == null) {
-            toastQuiet(ctx, "AI 核心未初始化");
-            return;
-        }
-
-        // 1) 通讯录全部群聊/联系人
-        List<String[]> targets = new ArrayList<>();
-        java.util.Set<String> seen = new java.util.HashSet<>();
-        try {
-            List<com.leshao.v3.model.ContactCard> cards = isGroup
-                    ? com.leshao.v3.ContactRepository.getGroups()
-                    : com.leshao.v3.ContactRepository.getFriends();
-            if (cards != null) {
-                for (com.leshao.v3.model.ContactCard c : cards) {
-                    if (c == null || TextUtils.isEmpty(c.username)) continue;
-                    if (!seen.add(c.username)) continue;
-                    String nm = c.displayName();
-                    targets.add(new String[]{c.username, TextUtils.isEmpty(nm) ? c.username : nm});
-                }
-            }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "buildConversationList contacts err: " + t);
-        }
-        // 2) 通讯录未就绪时回退到会话列表
-        if (targets.isEmpty()) {
-            try {
-                List<String[]> sessions = ConversationQuery.listSessions();
-                if (sessions != null) {
-                    for (String[] s : sessions) {
-                        if (s == null || s.length < 1 || s[0] == null) continue;
-                        if (ConversationConfig.isGroupTalker(s[0]) != isGroup) continue;
-                        if (!seen.add(s[0])) continue;
-                        String nm = (s.length > 1 && !TextUtils.isEmpty(s[1])) ? s[1] : label(s[0]);
-                        targets.add(new String[]{s[0], nm});
-                    }
-                }
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "buildConversationList sessions err: " + t);
-            }
-        }
-        // 3) 已配置但不在通讯录中的会话补全
-        final List<String> configured = cc.keysByType(isGroup);
-        final java.util.Set<String> cfgSet = new java.util.HashSet<>(configured);
-        for (String talker : configured) {
-            if (talker == null || !seen.add(talker)) continue;
-            targets.add(new String[]{talker, label(talker)});
-        }
-        // 4) 已配置置顶, 其余按名称排序
-        java.util.Collections.sort(targets, (a, b) -> {
-            boolean ca = cfgSet.contains(a[0]);
-            boolean cb = cfgSet.contains(b[0]);
-            if (ca != cb) return ca ? -1 : 1;
-            String na = (a.length > 1 && a[1] != null) ? a[1] : a[0];
-            String nb = (b.length > 1 && b[1] != null) ? b[1] : b[0];
-            return na.compareToIgnoreCase(nb);
-        });
 
         LinearLayout root = newRoot(ctx);
-        root.addView(newTitle(ctx, isGroup ? "群聊个性化配置" : "联系人个性化配置"));
+        root.addView(newTitle(ctx, "AI回复个性化配置"));
 
-        TextView tip = new TextView(ctx);
-        tip.setText((isGroup ? "点群聊" : "点联系人")
-                + "可自定义人设 / 关键词 / 模型等整套内容, 支持模板一键配置; ✅ 表示已配置。");
-        tip.setTextSize(12);
-        tip.setTextColor(AppColors.textTertiary());
-        tip.setPadding(0, dp(ctx, 4), 0, dp(ctx, 8));
-        root.addView(tip);
+        // 顶部 tab: 全部(默认) / 群聊 / 联系人
+        final int initial = (sConvListTab >= 0 && sConvListTab <= 2) ? sConvListTab : 0;
+        SegmentedControl seg = new SegmentedControl(ctx,
+                new String[]{"全部", "群聊", "联系人"}, initial);
+        LinearLayout.LayoutParams lpSeg = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lpSeg.setMargins(0, dp(ctx, 4), 0, 0);
+        seg.setLayoutParams(lpSeg);
+        root.addView(seg);
 
-        LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.62f));
+        // tab 下方搜索栏: 过滤群聊/联系人名称
+        final EditText etSearch = M3Page.input(ctx, "搜索群聊 / 联系人");
+        LinearLayout.LayoutParams lpSearch = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lpSearch.setMargins(0, dp(ctx, 10), 0, 0);
+        etSearch.setLayoutParams(lpSearch);
+        root.addView(etSearch);
 
-        int shown = 0;
-        for (String[] tgt : targets) {
-            final String talker = tgt[0];
-            String name = (tgt.length > 1 && !TextUtils.isEmpty(tgt[1])) ? tgt[1] : talker;
-            boolean isCfg = cfgSet.contains(talker);
-            String sub = isCfg ? ("已配置 · " + entrySummary(cc.get(talker))) : "未配置 · 点击可配置";
-            list.addView(newRow(ctx, isGroup ? "👥" : "👤",
-                    (isCfg ? "✅ " : "") + name, sub)
-                    .avatar(talker)
-                    .arrow(() -> {
-                        LogWriter.log(TAG, "click: 个性化配置 " + talker);
-                        dismissCurrent();
-                        showConvEdit(activity, talker, isGroup);
-                    }));
-            shown++;
-        }
-        if (shown == 0) {
-            TextView empty = new TextView(ctx);
-            empty.setText((isGroup ? "未读取到群聊" : "未读取到联系人")
-                    + ", 请确认已登录微信后重试。");
-            empty.setTextSize(13);
-            empty.setTextColor(AppColors.textTertiary());
-            empty.setPadding(dp(ctx, 4), dp(ctx, 12), 0, dp(ctx, 12));
-            list.addView(empty);
-        }
+        root.addView(M3Page.note(ctx,
+                "仅「已配置且启用」的会话才触发 AI; 未配置的会话一律不响应。"));
+
+        final LinearLayout body = new LinearLayout(ctx);
+        newScroll(root, body, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.58f));
+
+        final int[] curTab = {initial};
+        final String[] query = {""};
+
+        final Runnable render = () -> {
+            body.removeAllViews();
+            final int tab = curTab[0];
+            List<String[]> all;
+            if (tab == 1) {
+                all = groupTargets;
+            } else if (tab == 2) {
+                all = friendTargets;
+            } else {
+                all = allTargets;
+            }
+            String q = query[0] == null ? "" : query[0].trim().toLowerCase(Locale.ROOT);
+            int shown = 0;
+            for (String[] tgt : all) {
+                if (tgt == null || tgt.length < 1 || tgt[0] == null) continue;
+                final String talker = tgt[0];
+                String name = (tgt.length > 1 && !TextUtils.isEmpty(tgt[1])) ? tgt[1] : talker;
+                if (!q.isEmpty() && !name.toLowerCase(Locale.ROOT).contains(q)
+                        && !talker.toLowerCase(Locale.ROOT).contains(q)) {
+                    continue;
+                }
+                final boolean g = (tgt.length > 2) ? "1".equals(tgt[2])
+                        : ConversationConfig.isGroupTalker(talker);
+                ConversationConfig.Entry e = cc.get(talker);
+                boolean isCfg = e != null;
+                boolean active = isCfg && e.isActive();
+                String sub;
+                if (!isCfg) {
+                    sub = "未配置 · 点击启用 AI 服务";
+                } else if (active) {
+                    sub = "已启用 · " + entrySummary(e);
+                } else {
+                    sub = "已停用 · 点击进入可重新启用";
+                }
+                SettingRow row = newRow(ctx, g ? "👥" : "👤",
+                        (active ? "✅ " : (isCfg ? "⏸ " : "")) + name, sub)
+                        .avatar(talker)
+                        .arrow(() -> {
+                            LogWriter.log(TAG, "click: 个性化配置 " + talker);
+                            dismissCurrent();
+                            showConvEdit(activity, talker, g);
+                        });
+                body.addView(row);
+                shown++;
+            }
+            if (shown == 0) {
+                String kw = query[0] == null ? "" : query[0].trim();
+                String what = tab == 1 ? "群聊" : (tab == 2 ? "联系人" : "群聊或联系人");
+                if (!kw.isEmpty()) {
+                    body.addView(M3Page.empty(ctx, "🔍", "未找到匹配「" + kw + "」的" + what));
+                } else {
+                    body.addView(M3Page.empty(ctx, "👥",
+                            "未读取到" + what + ", 请确认已登录微信后重试。"));
+                }
+            }
+        };
+
+        seg.setOnSegmentChangedListener((idx, segLabel) -> {
+            curTab[0] = idx;
+            sConvListTab = idx;
+            LogWriter.log(TAG, "tab(个性化配置): " + segLabel);
+            render.run();
+        });
+        etSearch.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {
+            }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {
+            }
+            @Override public void afterTextChanged(Editable s) {
+                query[0] = s == null ? "" : s.toString();
+                render.run();
+            }
+        });
+        render.run();
 
         ModernButton btnClose = new ModernButton(ctx, "返回", ModernButton.STYLE_GHOST);
         LinearLayout.LayoutParams lpC = new LinearLayout.LayoutParams(
@@ -1143,6 +1239,90 @@ public final class AiAssistantPanel {
         root.addView(btnClose);
 
         showPopup(activity, root, 0, "convlist");
+    }
+
+    /**
+     * v1018: 「AI回复个性化配置」列表改为以「聊天会话列表」为唯一数据源，
+     * 与微信首页会话保持一致，不再枚举全部联系人与群聊（原 v1015/v1016 多源合并已移除）。
+     * 已配置但不在当前会话列表中的目标仍会补入，方便查看/关闭。
+     * 每项结构 {@code {talker, name, isGroup?"1":"0"}}。
+     */
+    private static List<String[]> collectTargets(final boolean isGroup, final ConversationConfig cc) {
+        List<String[]> targets = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        String grp = isGroup ? "1" : "0";
+        // v1026: 数据源与「TTS 白名单」对齐 —— 直接枚举模块通讯录(ContactRepository)的
+        // 全部群聊/联系人, 不再仅用微信首页会话列表(那样「联系人」tab 几乎为空)。
+        try {
+            List<com.leshao.v3.model.ContactCard> cards = isGroup
+                    ? com.leshao.v3.ContactRepository.getGroups()
+                    : com.leshao.v3.ContactRepository.getFriends();
+            if (cards != null) {
+                for (com.leshao.v3.model.ContactCard c : cards) {
+                    if (c == null || TextUtils.isEmpty(c.username)) continue;
+                    if (!seen.add(c.username)) continue;
+                    String name = c.displayName();
+                    targets.add(new String[]{c.username,
+                            TextUtils.isEmpty(name) ? c.username : name, grp});
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "collectTargets contacts err: " + t);
+        }
+        // 会话列表补充(可能含非好友/服务号等通讯录外的聊天目标)。
+        try {
+            List<String[]> sessions = ConversationQuery.listSessions();
+            if (sessions != null) {
+                for (String[] s : sessions) {
+                    if (s == null || s.length < 1 || s[0] == null) continue;
+                    if (ConversationConfig.isGroupTalker(s[0]) != isGroup) continue;
+                    if (!seen.add(s[0])) continue;
+                    String cand = (s.length > 1) ? s[1] : null;
+                    targets.add(new String[]{s[0], bestName(s[0], cand), grp});
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "collectTargets sessions err: " + t);
+        }
+        // 已配置但既不在通讯录也不在会话中的目标仍补入, 方便查看/关闭。
+        final List<String> configured = cc.keysByType(isGroup);
+        for (String talker : configured) {
+            if (talker == null || !seen.add(talker)) continue;
+            targets.add(new String[]{talker, bestName(talker, null), grp});
+        }
+        return targets;
+    }
+
+    /**
+     * v1018: 解析显示名 —— 依次尝试会话名 / 进程内联系人存储 / 模块通讯录(DB)，
+     * 均取不到时才回退 talker，避免列表只显示群聊 id/wxid。
+     */
+    private static String bestName(String talker, String candidate) {
+        if (!TextUtils.isEmpty(candidate) && !candidate.equals(talker)) return candidate;
+        String n = label(talker);
+        if (!TextUtils.isEmpty(n) && !n.equals(talker)) return n;
+        try {
+            com.leshao.v3.model.ContactCard c = com.leshao.v3.ContactRepository.findByUsername(talker);
+            if (c != null) {
+                String d = c.displayName();
+                if (!TextUtils.isEmpty(d)) return d;
+            }
+        } catch (Throwable ignored) {
+        }
+        return TextUtils.isEmpty(candidate) ? talker : candidate;
+    }
+
+    /** v996: 已配置(群/联系人)置顶, 其余按名称升序。 */
+    private static void sortTargets(final List<String[]> targets, final ConversationConfig cc) {
+        final java.util.Set<String> cfgSet = new java.util.HashSet<>(cc.keys());
+        java.util.Collections.sort(targets, (a, b) -> {
+            boolean ca = cfgSet.contains(a[0]);
+            boolean cb = cfgSet.contains(b[0]);
+            if (ca != cb) return ca ? -1 : 1;
+            String na = (a.length > 1 && a[1] != null) ? a[1] : a[0];
+            String nb = (b.length > 1 && b[1] != null) ? b[1] : b[0];
+            return na.compareToIgnoreCase(nb);
+        });
     }
 
     private static void showConvEdit(final Activity activity, final String talker,
@@ -1162,11 +1342,7 @@ public final class AiAssistantPanel {
 
         LinearLayout root = newRoot(ctx);
         root.addView(newTitle(ctx, label(talker)));
-        TextView idTv = new TextView(ctx);
-        idTv.setText(talker);
-        idTv.setTextSize(12);
-        idTv.setTextColor(AppColors.textTertiary());
-        root.addView(idTv);
+        root.addView(M3Page.note(ctx, talker));
 
         LinearLayout list = new LinearLayout(ctx);
         newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.55f));
@@ -1178,12 +1354,11 @@ public final class AiAssistantPanel {
                     showTemplatePicker(activity, talker, isGroup);
                 }));
 
-        list.addView(newSection(ctx, "独立开关", "保存后独立于全局"));
-        boolean effAuto = entry.autoReply != null ? entry.autoReply
-                : (isGroup ? cfg.isAutoReplyInGroups() : cfg.isAutoReplyInPrivate());
-        final Switch swAuto = makeSwitch(ctx, effAuto);
-        addSwitchRow(list, ctx, swAuto, "💬", "自动回复", "关闭则本会话不自动回复");
+        list.addView(newSection(ctx, "AI 服务", "仅已启用且已配置的会话触发 AI"));
+        final Switch swEnabled = makeSwitch(ctx, entry.isActive());
+        addSwitchRow(list, ctx, swEnabled, "🤖", "启用 AI 服务", "关闭后本会话完全不触发 AI");
 
+        list.addView(newSection(ctx, "独立开关", "保存后独立于全局"));
         Switch swOnly = null;
         if (isGroup) {
             boolean effOnly = entry.onlyWhenMentioned != null ? entry.onlyWhenMentioned : cfg.isOnlyWhenMentioned();
@@ -1199,16 +1374,35 @@ public final class AiAssistantPanel {
                 () -> { cc.put(talker, entry); cc.save(); },
                 () -> showConvEdit(activity, talker, isGroup));
 
-        list.addView(newSection(ctx, "人设与模型", "留空表示继承全局"));
+        list.addView(newSection(ctx, "身份与名称", "各会话独立的 AI 称呼与身份描述, 留空继承全局"));
+        final EditText etAiName = M3Page.input(ctx, "AI 名称 (留空 = 全局)");
+        etAiName.setSingleLine(true);
+        etAiName.setText(safe(entry.aiName));
+        list.addView(etAiName);
+        final EditText etAiIdentity = M3Page.input(ctx, "身份描述, 如: 你是我的私人助理 (可留空)");
+        etAiIdentity.setSingleLine(false);
+        etAiIdentity.setMinLines(2);
+        etAiIdentity.setGravity(Gravity.TOP);
+        etAiIdentity.setText(safe(entry.aiIdentity));
+        list.addView(etAiIdentity);
+
+        list.addView(newSection(ctx, "人设提示词", "留空表示继承全局"));
         final EditText etSys = M3Page.input(ctx, "人设提示词 (留空 = 全局)");
         etSys.setSingleLine(false);
         etSys.setMinLines(3);
         etSys.setGravity(Gravity.TOP);
         etSys.setText(safe(entry.systemPrompt));
         list.addView(etSys);
-        final EditText etModel = M3Page.input(ctx, "模型 (留空 = " + safe(cfg.getModel()) + ")");
-        etModel.setText(safe(entry.model));
-        list.addView(etModel);
+
+        // v1019: 会话级上下文记忆开关 + 条数
+        final Switch swMemory = makeSwitch(ctx,
+                entry.memoryEnabled != null ? entry.memoryEnabled.booleanValue() : true);
+        addSwitchRow(list, ctx, swMemory, "🧠", "上下文记忆", "关闭后本会话不携带历史记忆");
+        final EditText etMemoryLimit = M3Page.input(ctx, "记忆条数 (留空 = 全局 " + safe(String.valueOf(cfg.getMaxHistoryMessages() / 2)) + ")");
+        etMemoryLimit.setSingleLine(true);
+        etMemoryLimit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        etMemoryLimit.setText(entry.memoryLimit == null ? "" : String.valueOf(entry.memoryLimit));
+        list.addView(etMemoryLimit);
 
         final boolean groupFinal = isGroup;
         ModernButton btnSave = new ModernButton(ctx, "保存", ModernButton.STYLE_PRIMARY);
@@ -1216,15 +1410,41 @@ public final class AiAssistantPanel {
             LogWriter.log(TAG, "click(独立配置): 保存 " + talker);
             try {
                 ConversationConfig.Entry out = new ConversationConfig.Entry();
-                out.autoReply = swAuto.isChecked();
-                if (groupFinal && swOnlyF != null) out.onlyWhenMentioned = swOnlyF.isChecked();
-                out.ttsEnabled = swTts.isChecked();
+                // v996: enabled 是 AI 触发的会话级总闸, 始终显式落库。
+                // 原「自动回复」开关已被 enabled 取代, 不再落库。
+                out.enabled = Boolean.valueOf(swEnabled.isChecked());
+                // v985: 与全局相同的开关不落库(写 null), 继续跟随全局; 只有显式不同的才固化,
+                // 避免"打开配置时全局还是关 → 保存后永久固化 false"。
+                if (groupFinal && swOnlyF != null) {
+                    out.onlyWhenMentioned = explicitOrNull(swOnlyF.isChecked(), cfg.isOnlyWhenMentioned());
+                }
+                out.ttsEnabled = explicitOrNull(swTts.isChecked(), cfg.isTtsEnabled());
                 out.systemPrompt = str(etSys).trim();
-                out.model = str(etModel).trim();
+                out.aiName = str(etAiName).trim();
+                out.aiIdentity = str(etAiIdentity).trim();
+                // v1019: 会话级记忆开关/条数
+                out.memoryEnabled = swMemory.isChecked() ? Boolean.TRUE : Boolean.FALSE;
+                String ml = str(etMemoryLimit).trim();
+                if (ml.isEmpty()) {
+                    out.memoryLimit = null;
+                } else {
+                    try {
+                        int v = Integer.parseInt(ml);
+                        out.memoryLimit = v > 0 ? Integer.valueOf(v) : null;
+                    } catch (NumberFormatException nfe) {
+                        out.memoryLimit = null;
+                    }
+                }
                 out.voices = entry.voices == null ? null : new ArrayList<>(entry.voices);
-                out.randomVoice = entry.randomVoice != null && entry.randomVoice;
+                out.randomVoice = entry.randomVoice;
                 cc.put(talker, out);
                 cc.save();
+                LogWriter.log(TAG, "保存独立配置: enabled=" + out.enabled
+                        + " onlyWhenMentioned=" + out.onlyWhenMentioned
+                        + " tts=" + out.ttsEnabled + " voices=" + out.voices
+                        + " randomVoice=" + out.randomVoice
+                        + " aiName=" + out.aiName + " aiIdentity=" + out.aiIdentity
+                        + " memoryEnabled=" + out.memoryEnabled + " memoryLimit=" + out.memoryLimit);
                 reload();
                 toastQuiet(ctx, "已保存独立配置");
             } catch (Throwable t) {
@@ -1232,7 +1452,7 @@ public final class AiAssistantPanel {
                 toastQuiet(ctx, "保存失败");
             }
             dismissCurrent();
-            showConversationList(activity, groupFinal);
+            showConversationList(activity);
         });
 
         ModernButton btnDel = new ModernButton(ctx, "删除配置", ModernButton.STYLE_DANGER);
@@ -1247,17 +1467,18 @@ public final class AiAssistantPanel {
                 LogWriter.log(TAG, "conv del err: " + t);
             }
             dismissCurrent();
-            showConversationList(activity, groupFinal);
+            showConversationList(activity);
         });
 
         ModernButton btnClose = new ModernButton(ctx, "返回", ModernButton.STYLE_GHOST);
         btnClose.onClick(() -> {
             dismissCurrent();
-            showConversationList(activity, groupFinal);
+            showConversationList(activity);
         });
 
         root.addView(newBtnRow(ctx, btnSave, btnDel, btnClose));
-        showPopup(activity, root, 0, "convedit");
+        // v1019: 系统返回键 = 回会话配置列表(父级), 中间丢弃未保存草稿
+        showPopup(activity, root, 0, "convedit", () -> showConversationList(activity));
     }
 
     private static void showTemplatePicker(final Activity activity, final String talker,
@@ -1288,6 +1509,9 @@ public final class AiAssistantPanel {
                         LogWriter.log(TAG, "click(套用模板): " + tpl + " -> " + talker);
                         try {
                             cc.applyTemplate(talker, tpl);
+                            // v996: 套用模板即视为已配置该会话, 显式启用 AI。
+                            ConversationConfig.Entry applied = cc.get(talker);
+                            if (applied != null) applied.enabled = Boolean.TRUE;
                             cc.save();
                             reload();
                             toastQuiet(ctx, "已套用模板: " + tpl);
@@ -1304,7 +1528,8 @@ public final class AiAssistantPanel {
             showConvEdit(activity, talker, isGroup);
         });
         root.addView(btnClose);
-        showPopup(activity, root, 0, "tplpick");
+        // v1019: 系统返回键 = 回独立配置编辑页(父级)
+        showPopup(activity, root, 0, "tplpick", () -> showConvEdit(activity, talker, isGroup));
     }
 
     // ==================== 三级: 模板配置 ====================
@@ -1321,12 +1546,8 @@ public final class AiAssistantPanel {
 
         LinearLayout root = newRoot(ctx);
         root.addView(newTitle(ctx, "模板配置"));
-        TextView tip = new TextView(ctx);
-        tip.setText("模板保存一套「开关 + 人设 + 模型」预设, 可在任意群/联系人的独立配置中一键套用。");
-        tip.setTextSize(12);
-        tip.setTextColor(AppColors.textTertiary());
-        tip.setPadding(0, dp(ctx, 4), 0, dp(ctx, 8));
-        root.addView(tip);
+        root.addView(M3Page.note(ctx,
+                "模板保存一套「开关 + 人设 + 模型」预设, 可在任意群/联系人的独立配置中一键套用。"));
 
         ModernButton btnAdd = new ModernButton(ctx, "＋ 新建模板", ModernButton.STYLE_PRIMARY);
         LinearLayout.LayoutParams lpAdd = new LinearLayout.LayoutParams(
@@ -1343,12 +1564,7 @@ public final class AiAssistantPanel {
         newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.50f));
         List<String> names = cc.templateNames();
         if (names.isEmpty()) {
-            TextView empty = new TextView(ctx);
-            empty.setText("暂无模板, 点击上方「新建模板」创建。");
-            empty.setTextSize(13);
-            empty.setTextColor(AppColors.textTertiary());
-            empty.setPadding(dp(ctx, 4), dp(ctx, 12), 0, dp(ctx, 12));
-            list.addView(empty);
+            list.addView(M3Page.empty(ctx, "🧩", "暂无模板, 点击上方「新建模板」创建。"));
         } else {
             final String[] pendingDelete = {null};
             for (String name : names) {
@@ -1421,9 +1637,6 @@ public final class AiAssistantPanel {
         list.addView(etName);
 
         list.addView(newSection(ctx, "开关", "留空则套用后仍可单独调整"));
-        boolean effAuto = e.autoReply != null ? e.autoReply : cfg.isAutoReplyInGroups();
-        final Switch swAuto = makeSwitch(ctx, effAuto);
-        addSwitchRow(list, ctx, swAuto, "💬", "自动回复", "套用后本会话自动回复开关");
         boolean effOnly = e.onlyWhenMentioned != null ? e.onlyWhenMentioned : cfg.isOnlyWhenMentioned();
         final Switch swOnly = makeSwitch(ctx, effOnly);
         addSwitchRow(list, ctx, swOnly, "📣", "仅被@时回复", "群聊中仅被 @ / 唤醒词触发");
@@ -1435,16 +1648,35 @@ public final class AiAssistantPanel {
         addVoiceSection(list, ctx, activity, tplEntry, null,
                 () -> showTemplateEdit(activity, originalName));
 
-        list.addView(newSection(ctx, "人设与模型", "留空表示套用后继承全局"));
+        list.addView(newSection(ctx, "身份与名称", "套用后各会话独立生效, 留空继承全局"));
+        final EditText etAiName = M3Page.input(ctx, "AI 名称 (可留空)");
+        etAiName.setSingleLine(true);
+        etAiName.setText(safe(e.aiName));
+        list.addView(etAiName);
+        final EditText etAiIdentity = M3Page.input(ctx, "身份描述, 如: 你是我的私人助理 (可留空)");
+        etAiIdentity.setSingleLine(false);
+        etAiIdentity.setMinLines(2);
+        etAiIdentity.setGravity(Gravity.TOP);
+        etAiIdentity.setText(safe(e.aiIdentity));
+        list.addView(etAiIdentity);
+
+        list.addView(newSection(ctx, "人设提示词", "留空表示套用后继承全局"));
         final EditText etSys = M3Page.input(ctx, "人设提示词 (可留空)");
         etSys.setSingleLine(false);
         etSys.setMinLines(3);
         etSys.setGravity(Gravity.TOP);
         etSys.setText(safe(e.systemPrompt));
         list.addView(etSys);
-        final EditText etModel = M3Page.input(ctx, "模型 (可留空)");
-        etModel.setText(safe(e.model));
-        list.addView(etModel);
+
+        // v1019: 模板级上下文记忆开关 + 条数
+        final Switch swMemory = makeSwitch(ctx,
+                e.memoryEnabled != null ? e.memoryEnabled.booleanValue() : true);
+        addSwitchRow(list, ctx, swMemory, "🧠", "上下文记忆", "关闭后本会话不携带历史记忆");
+        final EditText etMemoryLimit = M3Page.input(ctx, "记忆条数 (留空 = 全局 " + safe(String.valueOf(cfg.getMaxHistoryMessages() / 2)) + ")");
+        etMemoryLimit.setSingleLine(true);
+        etMemoryLimit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        etMemoryLimit.setText(e.memoryLimit == null ? "" : String.valueOf(e.memoryLimit));
+        list.addView(etMemoryLimit);
 
         ModernButton btnSave = new ModernButton(ctx, "保存", ModernButton.STYLE_PRIMARY);
         btnSave.onClick(() -> {
@@ -1459,11 +1691,24 @@ public final class AiAssistantPanel {
                     cc.removeTemplate(originalName);
                 }
                 ConversationConfig.Entry out = new ConversationConfig.Entry();
-                out.autoReply = swAuto.isChecked();
                 out.onlyWhenMentioned = swOnly.isChecked();
                 out.ttsEnabled = swTts.isChecked();
                 out.systemPrompt = str(etSys).trim();
-                out.model = str(etModel).trim();
+                out.aiName = str(etAiName).trim();
+                out.aiIdentity = str(etAiIdentity).trim();
+                // v1019: 模板级记忆开关/条数
+                out.memoryEnabled = swMemory.isChecked() ? Boolean.TRUE : Boolean.FALSE;
+                String ml = str(etMemoryLimit).trim();
+                if (ml.isEmpty()) {
+                    out.memoryLimit = null;
+                } else {
+                    try {
+                        int v = Integer.parseInt(ml);
+                        out.memoryLimit = v > 0 ? Integer.valueOf(v) : null;
+                    } catch (NumberFormatException nfe) {
+                        out.memoryLimit = null;
+                    }
+                }
                 out.voices = tplEntry.voices == null ? null : new ArrayList<>(tplEntry.voices);
                 out.randomVoice = tplEntry.randomVoice != null && tplEntry.randomVoice;
                 cc.putTemplate(name, out);
@@ -1506,138 +1751,8 @@ public final class AiAssistantPanel {
         });
 
         root.addView(newBtnRow(ctx, btnSave, btnDel, btnClose));
-        showPopup(activity, root, 0, "tpledit");
-    }
-
-    // ==================== 二级: 白名单 ====================
-
-    private static void showWhitelist(final Activity activity) {
-        LogWriter.log(TAG, "showWhitelist: enter");
-        if (activity == null || activity.isFinishing()) {
-            LogWriter.log(TAG, "showWhitelist skipped: activity null/finishing");
-            return;
-        }
-        final Context ctx = activity;
-
-        final Whitelist wl;
-        try {
-            wl = AIBotCore.whitelist() != null ? AIBotCore.whitelist()
-                    : new Whitelist(ctx.getFilesDir().getParent());
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "whitelist err: " + t);
-            toastQuiet(ctx, "白名单加载失败");
-            return;
-        }
-        try {
-            wl.load();
-        } catch (Throwable ignored) {
-        }
-
-        final List<String> items = new ArrayList<>(wl.list());
-        // 两步删除确认 — 首次点击只标记, 再次点击同一条目才真删
-        final String[] pendingDelete = {null};
-
-        LinearLayout root = newRoot(ctx);
-        root.addView(newTitle(ctx, "白名单管理"));
-
-        TextView tip = new TextView(ctx);
-        tip.setText("名单非空时, 仅名单内会话自动回复; 名单外会话在被@时仍会回复。"
-                + "点「从通讯录选择」勾选, 点条目两次确认删除。");
-        tip.setTextSize(12);
-        tip.setTextColor(AppColors.textTertiary());
-        tip.setPadding(0, dp(ctx, 4), 0, dp(ctx, 8));
-        root.addView(tip);
-
-        // v973: 使用模块联系人选择器(多选)维护白名单
-        ModernButton btnPick = new ModernButton(ctx, "＋ 从通讯录选择", ModernButton.STYLE_PRIMARY);
-        LinearLayout.LayoutParams lpPick = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lpPick.setMargins(0, 0, 0, dp(ctx, 8));
-        btnPick.setLayoutParams(lpPick);
-        btnPick.onClick(() -> {
-            LogWriter.log(TAG, "click(白名单): 从通讯录选择");
-            dismissCurrent();
-            try {
-                com.leshao.v3.ui.ContactSelectorView.show(activity, false,
-                        com.leshao.v3.ui.ContactSelectorView.MODE_ALL,
-                        new ArrayList<>(wl.list()),
-                        selected -> {
-                            try {
-                                wl.clear();
-                                if (selected != null) {
-                                    for (com.leshao.v3.model.ContactCard c : selected) {
-                                        if (c != null && !TextUtils.isEmpty(c.username)) {
-                                            wl.add(c.username);
-                                        }
-                                    }
-                                }
-                                wl.save();
-                                toastQuiet(activity, "白名单已更新: " + wl.list().size() + " 个");
-                            } catch (Throwable t) {
-                                LogWriter.log(TAG, "whitelist pick save err: " + t);
-                                toastQuiet(activity, "保存失败");
-                            }
-                            showWhitelist(activity);
-                        });
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "whitelist pick err: " + t);
-                showWhitelist(activity);
-            }
-        });
-        root.addView(btnPick);
-
-        LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.60f));
-
-        if (items.isEmpty()) {
-            TextView empty = new TextView(ctx);
-            empty.setText("当前名单为空 → 全部会话均自动回复(不受白名单限制)。");
-            empty.setTextSize(13);
-            empty.setTextColor(AppColors.textTertiary());
-            empty.setPadding(dp(ctx, 4), dp(ctx, 12), 0, dp(ctx, 12));
-            list.addView(empty);
-        } else {
-            for (String id : items) {
-                final String target = id;
-                SettingRow row = newRow(ctx, "✅", label(target),
-                        target + (target.endsWith("@chatroom") ? "  (群)" : ""));
-                row.avatar(target);
-                row.setOnClickListener(v -> {
-                    if (!target.equals(pendingDelete[0])) {
-                        pendingDelete[0] = target;
-                        LogWriter.log(TAG, "click(白名单): 标记删除 " + target);
-                        toastQuiet(ctx, "再次点击确认删除 " + target);
-                        return;
-                    }
-                    LogWriter.log(TAG, "click(白名单): 确认删除 " + target);
-                    try {
-                        wl.remove(target);
-                        wl.save();
-                        toastQuiet(ctx, "已移除 " + target);
-                    } catch (Throwable t) {
-                        LogWriter.log(TAG, "wl remove err: " + t);
-                        toastQuiet(ctx, "删除失败");
-                    }
-                    dismissCurrent();
-                    showWhitelist(activity);
-                });
-                list.addView(row);
-            }
-        }
-
-        ModernButton btnClose = new ModernButton(ctx, "返回", ModernButton.STYLE_GHOST);
-        LinearLayout.LayoutParams lpC = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lpC.setMargins(0, dp(ctx, 12), 0, 0);
-        btnClose.setLayoutParams(lpC);
-        btnClose.onClick(() -> {
-            LogWriter.log(TAG, "click(白名单): 返回");
-            dismissCurrent();
-            show(activity);
-        });
-        root.addView(btnClose);
-
-        showPopup(activity, root, 0, "whitelist");
+        // v1019: 系统返回键 = 回模板列表(父级), 丢弃未保存草稿
+        showPopup(activity, root, 0, "tpledit", () -> showTemplateList(activity));
     }
 
     // ==================== 工具 ====================

@@ -86,6 +86,11 @@ public class AvatarHelper {
     private static String findAccountDir(Context ctx) {
         String dir;
 
+        // 数据库.md: 内核已解密句柄 qf5.k0.getPath() 给出 EnMicroMsg.db 路径,
+        // 其父目录即账号目录(含 avatar/), 最可靠且不依赖混淆方法名更名。
+        dir = tryDbPathDir();
+        if (dir != null && testDir(dir)) return dir;
+
         dir = tryMethodA();
         if (dir != null && testDir(dir)) return dir;
 
@@ -95,6 +100,38 @@ public class AvatarHelper {
         dir = tryFallback(ctx);
         if (dir != null && testDir(dir)) return dir;
 
+        return null;
+    }
+
+    /**
+     * 经内核链路取账号目录:
+     * gp0.j1.v(tn3.c4) -> h2.cj() -> ContactStorage(j4).d -> qf5.k0.getPath()
+     * getPath() 返回 .../MicroMsg/&lt;hash&gt;/EnMicroMsg.db, 父目录即账号目录。
+     */
+    private static String tryDbPathDir() {
+        try {
+            ClassLoader cl = getWeChatCL();
+            if (cl == null) return null;
+            Class<?> kernel = cl.loadClass("gp0.j1");
+            java.lang.reflect.Method v = kernel.getDeclaredMethod("v", Class.class);
+            v.setAccessible(true);
+            Object plugin = v.invoke(null, cl.loadClass("tn3.c4"));
+            if (plugin == null) return null;
+            Object storage = plugin.getClass().getMethod("cj").invoke(plugin);
+            if (storage == null) return null;
+            java.lang.reflect.Field dField = storage.getClass().getDeclaredField("d");
+            dField.setAccessible(true);
+            Object db = dField.get(storage);
+            if (db == null) return null;
+            Object path = db.getClass().getMethod("getPath").invoke(db);
+            if (!(path instanceof String) || ((String) path).isEmpty()) return null;
+            File dbFile = new File((String) path);
+            File dir = dbFile.getParentFile();
+            if (dir != null && dir.isDirectory()) {
+                LogWriter.log(TAG, "DbPath dir: " + dir.getAbsolutePath());
+                return dir.getAbsolutePath() + "/";
+            }
+        } catch (Throwable ignored) {}
         return null;
     }
 
@@ -435,20 +472,79 @@ private static String tryMethodB(Context ctx) {
      * 8.0.78: mj() 可能已更名，用 try/catch 兜底
      */
     public static String getAvatarUrl(String wxid, boolean big) {
+        if (wxid == null || wxid.isEmpty()) return null;
         try {
             ClassLoader cl = getWeChatCL();
             if (cl == null) return null;
             Class<?> d1 = XposedHelpers.findClass("com.tencent.mm.modelavatar.d1", cl);
-            Object s0 = XposedHelpers.callStaticMethod(d1, "mj");
-            if (s0 == null) return null;
-            Object r0 = XposedHelpers.callMethod(s0, "x0", wxid);
-            if (r0 == null) return null;
-            String url = (String) XposedHelpers.callMethod(r0, big ? "c" : "d");
-            return url;
+
+            // 1) 兼容旧版链路: d1.mj() -> s0.x0(username) -> c()/d()
+            try {
+                Object s0 = XposedHelpers.callStaticMethod(d1, "mj");
+                String u = resolveAvatarUrl(s0, wxid, big);
+                if (u != null) return u;
+            } catch (Throwable ignored) {}
+
+            // 2) 8.0.78 mj() 已更名: 枚举 d1 静态无参方法, 找到能产出 URL 的头像服务
+            for (java.lang.reflect.Method m : d1.getDeclaredMethods()) {
+                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                if (m.getParameterCount() != 0) continue;
+                Class<?> rt = m.getReturnType();
+                if (rt == null || rt.isPrimitive() || rt == String.class
+                        || rt == Void.class || rt == Class.class) continue;
+                Object svc;
+                try {
+                    m.setAccessible(true);
+                    svc = m.invoke(null);
+                } catch (Throwable t) {
+                    continue;
+                }
+                if (svc == null) continue;
+                String u = resolveAvatarUrl(svc, wxid, big);
+                if (u != null) return u;
+            }
         } catch (Throwable t) {
             LogWriter.log(TAG, "getAvatarUrl error: " + t.getMessage());
-            return null;
         }
+        return null;
+    }
+
+    /** 在头像服务对象上查找 (String)->URL持有对象 的方法，兼容 x0/f 等更名。 */
+    private static String resolveAvatarUrl(Object svc, String wxid, boolean big) {
+        if (svc == null) return null;
+        for (java.lang.reflect.Method m : svc.getClass().getDeclaredMethods()) {
+            if (java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+            if (m.getParameterCount() != 1 || m.getParameterTypes()[0] != String.class) continue;
+            Class<?> rt = m.getReturnType();
+            if (rt.isPrimitive() || rt == String.class || rt == Void.class) continue;
+            Object holder;
+            try {
+                m.setAccessible(true);
+                holder = m.invoke(svc, wxid);
+            } catch (Throwable t) {
+                continue;
+            }
+            if (holder == null) continue;
+            String u = callUrlGetter(holder, big);
+            if (u != null) return u;
+        }
+        return null;
+    }
+
+    /** 从头像 URL 持有对象取 c()/d()（大图/小图），兼容无参 getter 更名。 */
+    private static String callUrlGetter(Object holder, boolean big) {
+        String[] names = big ? new String[]{"c", "d", "a", "b", "e"}
+                             : new String[]{"d", "c", "a", "b", "e"};
+        for (String n : names) {
+            try {
+                java.lang.reflect.Method g = holder.getClass().getDeclaredMethod(n);
+                if (g.getParameterCount() != 0 || g.getReturnType() != String.class) continue;
+                g.setAccessible(true);
+                Object v = g.invoke(holder);
+                if (v instanceof String && !((String) v).isEmpty()) return (String) v;
+            } catch (Throwable ignored) {}
+        }
+        return null;
     }
 
     private static Bitmap loadFromExactPath(String path, String wxid, int target) {

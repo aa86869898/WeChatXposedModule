@@ -71,7 +71,8 @@ public class SettingRow extends LinearLayout {
         textCol.addView(mTitle);
 
         mSub = new TextView(ctx);
-        mSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        // v998: 说明小字再缩小 3dp
+        mSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
         mSub.setTextColor(AppColors.textTertiary());
         mSub.setSingleLine(true);
         mSub.setEllipsize(TextUtils.TruncateAt.END);

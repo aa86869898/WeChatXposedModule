@@ -32,10 +32,23 @@ public class ConversationConfig {
 
     /** 单条独立配置 / 模板数据。null 布尔与空字符串代表继承全局。 */
     public static class Entry {
+        /**
+         * v996: 本会话是否已启用 AI 服务。存在独立配置即代表「已配置」，
+         * 但只有 {@link #isActive()} 为 true 才会真正触发 AI（替代旧白名单）。
+         */
+        public Boolean enabled;
         public Boolean autoReply;
         public Boolean onlyWhenMentioned;
         public Boolean ttsEnabled;
         public String systemPrompt;
+        /** v1019: 本会话 AI 的身份描述(短), 注入 system 提示词。 */
+        public String aiIdentity;
+        /** v1019: 本会话 AI 的名称/昵称。 */
+        public String aiName;
+        /** v1019: 本会话是否启用上下文记忆(各会话独立)。null=继承全局启用。 */
+        public Boolean memoryEnabled;
+        /** v1019: 本会话上下文记忆条数(窗口)。null=继承全局。 */
+        public Integer memoryLimit;
         public String model;
         public Double temperature;
         /** v985: 本会话/模板可多选的配音魔方音色 voiceId 列表。 */
@@ -44,18 +57,36 @@ public class ConversationConfig {
         public Boolean randomVoice;
 
         public boolean isEmpty() {
-            return autoReply == null && onlyWhenMentioned == null && ttsEnabled == null
+            return enabled == null && autoReply == null && onlyWhenMentioned == null
+                    && ttsEnabled == null
                     && TextUtils.isEmpty(systemPrompt) && TextUtils.isEmpty(model)
+                    && TextUtils.isEmpty(aiIdentity) && TextUtils.isEmpty(aiName)
+                    && memoryEnabled == null && memoryLimit == null
                     && temperature == null
                     && (voices == null || voices.isEmpty()) && randomVoice == null;
         }
 
+        /**
+         * v996: 是否对 AI 触发生效。显式 {@link #enabled} 优先；兼容旧配置回退
+         * {@link #autoReply}；仅有其它独立设置时视为已启用。
+         */
+        public boolean isActive() {
+            if (enabled != null) return enabled.booleanValue();
+            if (autoReply != null) return autoReply.booleanValue();
+            return true;
+        }
+
         public Entry copy() {
             Entry e = new Entry();
+            e.enabled = enabled;
             e.autoReply = autoReply;
             e.onlyWhenMentioned = onlyWhenMentioned;
             e.ttsEnabled = ttsEnabled;
             e.systemPrompt = systemPrompt;
+            e.aiIdentity = aiIdentity;
+            e.aiName = aiName;
+            e.memoryEnabled = memoryEnabled;
+            e.memoryLimit = memoryLimit;
             e.model = model;
             e.temperature = temperature;
             e.voices = voices == null ? null : new ArrayList<>(voices);
@@ -65,10 +96,15 @@ public class ConversationConfig {
 
         JSONObject toJson() throws JSONException {
             JSONObject o = new JSONObject();
+            if (enabled != null) o.put("enabled", enabled.booleanValue());
             if (autoReply != null) o.put("autoReply", autoReply.booleanValue());
             if (onlyWhenMentioned != null) o.put("onlyWhenMentioned", onlyWhenMentioned.booleanValue());
             if (ttsEnabled != null) o.put("ttsEnabled", ttsEnabled.booleanValue());
             if (!TextUtils.isEmpty(systemPrompt)) o.put("systemPrompt", systemPrompt);
+            if (!TextUtils.isEmpty(aiIdentity)) o.put("aiIdentity", aiIdentity);
+            if (!TextUtils.isEmpty(aiName)) o.put("aiName", aiName);
+            if (memoryEnabled != null) o.put("memoryEnabled", memoryEnabled.booleanValue());
+            if (memoryLimit != null) o.put("memoryLimit", memoryLimit.intValue());
             if (!TextUtils.isEmpty(model)) o.put("model", model);
             if (temperature != null) o.put("temperature", temperature.doubleValue());
             if (voices != null && !voices.isEmpty()) {
@@ -85,12 +121,21 @@ public class ConversationConfig {
         static Entry fromJson(JSONObject o) {
             Entry e = new Entry();
             if (o == null) return e;
+            if (o.has("enabled") && !o.isNull("enabled")) e.enabled = o.optBoolean("enabled");
             if (o.has("autoReply") && !o.isNull("autoReply")) e.autoReply = o.optBoolean("autoReply");
             if (o.has("onlyWhenMentioned") && !o.isNull("onlyWhenMentioned")) {
                 e.onlyWhenMentioned = o.optBoolean("onlyWhenMentioned");
             }
             if (o.has("ttsEnabled") && !o.isNull("ttsEnabled")) e.ttsEnabled = o.optBoolean("ttsEnabled");
             e.systemPrompt = o.optString("systemPrompt", null);
+            e.aiIdentity = o.optString("aiIdentity", null);
+            e.aiName = o.optString("aiName", null);
+            if (o.has("memoryEnabled") && !o.isNull("memoryEnabled")) {
+                e.memoryEnabled = o.optBoolean("memoryEnabled");
+            }
+            if (o.has("memoryLimit") && !o.isNull("memoryLimit")) {
+                e.memoryLimit = o.optInt("memoryLimit");
+            }
             e.model = o.optString("model", null);
             if (o.has("temperature") && !o.isNull("temperature")) {
                 e.temperature = o.optDouble("temperature");

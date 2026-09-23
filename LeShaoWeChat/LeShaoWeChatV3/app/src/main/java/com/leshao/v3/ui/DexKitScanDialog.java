@@ -142,6 +142,7 @@ public class DexKitScanDialog {
         root.setPadding(dp(ctx, 24), dp(ctx, 24), dp(ctx, 24), dp(ctx, 20));
         // v955 M3: 28dp extra-large 圆角对话框
         root.setBackground(CandyUi.dialogBg(ctx));
+        InsetsUtil.clipRounded(root);
 
         // Title（M3 headline small）
         sTitleText = new TextView(ctx);
@@ -242,6 +243,7 @@ public class DexKitScanDialog {
                 .setView(root)
                 .create();
 
+        InsetsUtil.transparentWindow(dialog);
         return dialog;
     }
 

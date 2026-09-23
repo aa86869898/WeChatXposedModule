@@ -29,6 +29,9 @@ public class SubPageActivity {
     private static int sPageId;
     private static boolean sStandalone = false;
     private static final java.util.Stack<Integer> sNavStack = new java.util.Stack<>();
+    // v1017: 就地重建（refreshCurrent）时保留滚动位置，避免点击/选中后页面跳回顶部
+    private static android.widget.ScrollView sContentScroll;
+    private static int sPendingScrollY = -1;
 
     public static void open(Activity parentAct, String title, int pageId) {
         sStandalone = false;
@@ -60,6 +63,7 @@ public class SubPageActivity {
         sParentAct = parentAct;
         sTitle = title;
         sPageId = pageId;
+        sPendingScrollY = -1;
         show(parentAct, title, pageId);
     }
 
@@ -92,6 +96,7 @@ public class SubPageActivity {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
+        InsetsUtil.clipRounded(root);
 
         root.addView(MainActivity.makeTitleBar(ctx, title, true, () -> goBack(parentAct)));
 
@@ -103,11 +108,25 @@ public class SubPageActivity {
         sv.setLayoutParams(svLp);
         sv.addView(body);
         root.addView(sv);
+        sContentScroll = sv;
+
+        // v1017: 就地重建时恢复滚动位置（refreshCurrent 预设 sPendingScrollY）
+        final int restoreY = sPendingScrollY;
+        sPendingScrollY = -1;
+        if (restoreY > 0) {
+            sv.post(new Runnable() {
+                @Override
+                public void run() {
+                    try { sv.scrollTo(0, restoreY); } catch (Throwable ignored) {}
+                }
+            });
+        }
 
         AlertDialog.Builder b = new AlertDialog.Builder(ctx, AppColors.isDarkMode()
                 ? android.R.style.Theme_DeviceDefault_NoActionBar
                 : android.R.style.Theme_DeviceDefault_Light_NoActionBar);
-        b.setView(root);
+        // v998: 居中浮层窗口
+        b.setView(InsetsUtil.window(null, root, 0.92f, 0.86f));
         b.setCancelable(true);
         AlertDialog dlg = b.create();
         sSubDialog = dlg;
@@ -117,13 +136,15 @@ public class SubPageActivity {
             if (sSubDialog == dlg) sSubDialog = null;
         });
 
+        InsetsUtil.center(dlg, 0.92f, 0.86f);
         Window w = dlg.getWindow();
         if (w != null) {
-            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-            w.setBackgroundDrawable(new ColorDrawable(AppColors.bg()));
+            InsetsUtil.transparentWindow(w);
             w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         }
+        InsetsUtil.clearDialogShell(dlg);
         dlg.show();
+        InsetsUtil.clearDialogShell(dlg);
     }
 
     private static void goBack(Activity parentAct) {
@@ -135,6 +156,22 @@ public class SubPageActivity {
             MainActivity.open(parentAct);
         }
         sStandalone = false;
+    }
+
+    /** v1013: 用于配色等设置变更后，就地重建当前页（不改变导航栈） */
+    public static void refreshCurrent(Activity parentAct) {
+        if (sPageId == 0) return;
+        Activity act = parentAct != null ? parentAct : sParentAct;
+        if (act == null) return;
+        int pid = sPageId;
+        String title = sTitle;
+        // v1017: 记录当前滚动位置，重建后恢复（点击/选中不再跳回顶部）
+        sPendingScrollY = sContentScroll != null ? Math.max(0, sContentScroll.getScrollY()) : 0;
+        dismissSub();
+        sParentAct = act;
+        sTitle = title;
+        sPageId = pid;
+        show(act, title, pid);
     }
 
     private static void dismissSub() {

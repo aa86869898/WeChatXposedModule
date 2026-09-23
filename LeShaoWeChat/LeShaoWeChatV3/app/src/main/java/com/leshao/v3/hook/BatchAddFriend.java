@@ -1012,8 +1012,19 @@ private static void injectButton(final Activity act) {
             Window w = dialog.getWindow();
             if (w != null) {
                 w.setBackgroundDrawable(CandyUi.dialogBg(act));
+                w.setGravity(Gravity.CENTER);
                 w.setLayout(WindowManager.LayoutParams.WRAP_CONTENT,
                         WindowManager.LayoutParams.WRAP_CONTENT);
+            }
+        } catch (Throwable ignored) {}
+        try {
+            View content = dialog.findViewById(android.R.id.content);
+            if (content instanceof android.view.ViewGroup
+                    && ((android.view.ViewGroup) content).getChildCount() > 0) {
+                com.leshao.v3.ui.InsetsUtil.applyDialogInsets(dialog,
+                        ((android.view.ViewGroup) content).getChildAt(0));
+            } else if (content != null) {
+                com.leshao.v3.ui.InsetsUtil.applyDialogInsets(dialog, content);
             }
         } catch (Throwable ignored) {}
     }

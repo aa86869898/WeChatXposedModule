@@ -473,9 +473,7 @@ public class ConfigPanels {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14*d), (int)(10*d), (int)(14*d), (int)(10*d));
         row.setBackground(CandyUi.cardBg(act));
-        CheckBox cb = new CheckBox(act);
-        cb.setText(label);
-        cb.setTextSize(14);
+        CheckBox cb = com.leshao.v3.ui.widgets.M3Page.checkBox(act, label);
         cb.setTextColor(AppColors.text1());
         cb.setChecked(prefs.getBoolean("field_" + key, defVal));
         cb.setOnCheckedChangeListener((v, on) -> prefs.edit().putBoolean("field_" + key, on).apply());
@@ -507,11 +505,8 @@ public class ConfigPanels {
         tv.setPadding(0, dp(act, 8), 0, dp(act, 2));
         root.addView(tv);
 
-        Button btn = new Button(act);
-        btn.setText("从通讯录选择...");
-        btn.setTextSize(13);
-        btn.setPadding(dp(act, 10), dp(act, 6), dp(act, 10), dp(act, 6));
-        btn.setPaintFlags(btn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
+        com.leshao.v3.ui.widgets.ModernButton btn = new com.leshao.v3.ui.widgets.ModernButton(
+                act, "从通讯录选择...", com.leshao.v3.ui.widgets.ModernButton.STYLE_TEXT);
         btn.setOnClickListener(v -> showContactPicker(act, selected));
         root.addView(btn);
     }
@@ -589,9 +584,7 @@ public class ConfigPanels {
                 row.setGravity(Gravity.CENTER_VERTICAL);
                 row.setPadding(0, dp(act, 2), 0, dp(act, 2));
 
-                CheckBox cb = new CheckBox(act);
-                cb.setText(label + " (" + c.wxid + ")");
-                cb.setTextSize(13);
+                CheckBox cb = com.leshao.v3.ui.widgets.M3Page.checkBox(act, label + " (" + c.wxid + ")");
                 cb.setChecked(selected.contains(c.wxid));
                 cb.setOnCheckedChangeListener((v, on) -> {
                     if (on) selected.add(c.wxid); else selected.remove(c.wxid);
@@ -609,17 +602,18 @@ public class ConfigPanels {
 
         refresh.run();
 
-        new android.app.AlertDialog.Builder(act)
+        AlertDialog dlgPick = new android.app.AlertDialog.Builder(act)
                 .setTitle("选择联系人")
                 .setView(sv)
                 .setPositiveButton("确定", null)
-                .show();
+                .create();
+        dlgPick.show();
     }
 
     // ==================== 对话框与行组件工厂 ====================
 
     private static void showDialog(Activity act, String title, View content, Runnable onSave) {
-        new android.app.AlertDialog.Builder(act)
+        AlertDialog dlg = new android.app.AlertDialog.Builder(act)
                 .setTitle(title)
                 .setView(content)
                 .setPositiveButton("保存", (d, w) -> {
@@ -631,7 +625,8 @@ public class ConfigPanels {
                     }
                 })
                 .setNegativeButton("取消", null)
-                .show();
+                .create();
+        dlg.show();
     }
 
     private static EditText addColorRow(Activity act, LinearLayout root, String label, String value) {

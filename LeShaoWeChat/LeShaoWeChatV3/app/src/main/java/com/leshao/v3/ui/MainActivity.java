@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Typeface;
@@ -74,17 +75,19 @@ public class MainActivity {
                 : android.R.style.Theme_DeviceDefault_Light_NoActionBar;
     }
 
+    // v998: 移除主页"群管理助手"入口, 万群定时群发已移植至"联系人和群聊"菜单内
+    // v1018: 移除"M3模块配色"入口, 模块统一使用 M3 动态配色, 全局实时生效
     private static final String[] ITEM_NAMES = {
-        "联系人和群聊", "群管理助手", "聊天分组",
+        "联系人和群聊", "聊天分组",
         "TTS语音播报", "关于模块"
     };
     private static final int[] ITEM_ICONS = {
-        0x1F465, 0x1F6E1, 0x1F4CB,
+        0x1F465, 0x1F4CB,
         0x1F50A, 0x2139
     };
 
     private static final int[] PAGE_IDS = {
-        3, 4, 14, 8, 20
+        3, 14, 8, 20
     };
 
     private static final Map<Integer, String> PAGE_FEATURES = new HashMap<>();
@@ -210,9 +213,15 @@ public class MainActivity {
                 }
             }
 
+            // v1013: 昵称回退链 nickname -> alias -> wxid，避免主页显示空/微信号
             if (sUserNickname == null || sUserNickname.isEmpty()) {
-                sUserNickname = sUserWxid;
+                if (sUserAlias != null && !sUserAlias.isEmpty() && !isNumeric(sUserAlias)) {
+                    sUserNickname = sUserAlias;
+                } else {
+                    sUserNickname = sUserWxid;
+                }
             }
+            LogWriter.log(TAG, "resolved nick=" + sUserNickname + " wxid=" + sUserWxid);
 
             sAvatarPath = findAvatarPath(sUserWxid);
         } catch (Throwable e) {
@@ -334,21 +343,10 @@ public class MainActivity {
             cl = tkCL;
             LogWriter.log(TAG, "openDb: using Tinker ClassLoader");
         }
-        String imei = VersionCompat.getImei(cl);
         String baseDir = VersionCompat.getBaseDir(cl, ContextManager.getAppContext());
-        if (!baseDir.endsWith("/")) baseDir += "/";
-        String dbHash = VersionCompat.getDbHash(cl, (int) uin);
-        String dbPath = baseDir + "MicroMsg/" + dbHash + "/EnMicroMsg.db";
-        String password = md5(imei + uin).substring(0, 7);
-        LogWriter.log(TAG, "DB path=" + dbPath);
-
-        Class<?> dbCls = VersionCompat.findDbOpenerClass(cl);
-        if (dbCls == null) { LogWriter.log(TAG, "dbCls null"); return null; }
-        Object db = VersionCompat.openDatabase(dbCls, dbPath, password);
-        if (db == null) {
-            db = VersionCompat.openDatabaseWcdb(cl, dbPath, password);
-        }
-        return db;
+        LogWriter.log(TAG, "DB path=" + baseDir + "MicroMsg/<hash>/EnMicroMsg.db");
+        // v1016: 目录名候选化 + 按磁盘实际存在选择
+        return VersionCompat.openEnMicroDb(cl, baseDir, uin);
     }
 
     private static java.lang.reflect.Method findQueryMethod(Class<?> dbClass) {
@@ -434,18 +432,16 @@ public class MainActivity {
         root.addView(msgTv);
 
         AlertDialog.Builder b = new AlertDialog.Builder(ctx, dialogTheme());
-        b.setView(root);
+        b.setView(InsetsUtil.window(null, root, 0.86f, -1f));
         b.setCancelable(false);
         AlertDialog dlg = b.create();
+        InsetsUtil.center(dlg, 0.86f, -1f);
         Window w = dlg.getWindow();
-        if (w != null) {
-            w.setLayout(-1, -1);
-            w.setBackgroundDrawable(new ColorDrawable(AppColors.bg()));
-            w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-        }
+        if (w != null) w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         sActiveDialog = dlg;
         dlg.setOnDismissListener(ignored -> { if (sActiveDialog == dlg) sActiveDialog = null; });
         dlg.show();
+        InsetsUtil.center(dlg, 0.86f, -1f);
     }
 
     private static void showDisclaimer(Activity act) {
@@ -495,9 +491,7 @@ public class MainActivity {
 
         root.addView(candyDivider(ctx, d));
 
-        CheckBox checkBox = new CheckBox(ctx);
-        checkBox.setText("我已完整阅读并同意以上免责条款");
-        checkBox.setTextSize(13);
+        CheckBox checkBox = com.leshao.v3.ui.widgets.M3Page.checkBox(ctx, "我已完整阅读并同意以上免责条款");
         checkBox.setTextColor(AppColors.text1());
         checkBox.setPadding(0, 0, 0, dp(d, 2));
         root.addView(checkBox);
@@ -506,34 +500,18 @@ public class MainActivity {
         btnRow.setOrientation(LinearLayout.HORIZONTAL);
         btnRow.setGravity(Gravity.CENTER);
 
-        Button declineBtn = new Button(ctx);
-        declineBtn.setText("不同意");
-        declineBtn.setTextSize(14);
-        declineBtn.setTextColor(AppColors.text2());
-        declineBtn.setAllCaps(false);
-        GradientDrawable declineBg = new GradientDrawable();
-        declineBg.setCornerRadius(dp(d, 8));
-        declineBg.setColor(AppColors.card());
-        declineBtn.setBackground(declineBg);
-        declineBtn.setPadding(dp(d, 16), dp(d, 10), dp(d, 16), dp(d, 10));
-        declineBtn.setPaintFlags(declineBtn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
+        com.leshao.v3.ui.widgets.ModernButton declineBtn =
+                new com.leshao.v3.ui.widgets.ModernButton(ctx, "不同意",
+                        com.leshao.v3.ui.widgets.ModernButton.STYLE_GHOST);
         declineBtn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         btnRow.addView(declineBtn);
 
         btnRow.addView(spacerH(ctx, d, 10));
 
-        Button agreeBtn = new Button(ctx);
-        agreeBtn.setText("同意并继续 (30秒)");
-        agreeBtn.setTextSize(14);
-        agreeBtn.setTextColor(Color.WHITE);
-        agreeBtn.setAllCaps(false);
-        GradientDrawable btnBg = new GradientDrawable();
-        btnBg.setCornerRadius(dp(d, 8));
-        btnBg.setColor(AppColors.offColor());
-        agreeBtn.setBackground(btnBg);
-        agreeBtn.setPadding(dp(d, 16), dp(d, 10), dp(d, 16), dp(d, 10));
+        com.leshao.v3.ui.widgets.ModernButton agreeBtn =
+                new com.leshao.v3.ui.widgets.ModernButton(ctx, "同意并继续 (30秒)",
+                        com.leshao.v3.ui.widgets.ModernButton.STYLE_PRIMARY);
         agreeBtn.setEnabled(false);
-        agreeBtn.setPaintFlags(agreeBtn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
         agreeBtn.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         btnRow.addView(agreeBtn);
         root.addView(btnRow);
@@ -546,11 +524,6 @@ public class MainActivity {
                 if (remaining[0] <= 0) {
                     agreeBtn.setText("同意并继续");
                     agreeBtn.setEnabled(true);
-                    GradientDrawable activeBg = new GradientDrawable();
-                    activeBg.setCornerRadius(dp(d, 8));
-                    activeBg.setOrientation(GradientDrawable.Orientation.LEFT_RIGHT);
-                    activeBg.setColors(new int[]{AppColors.accent2(), AppColors.accent()});
-                    agreeBtn.setBackground(activeBg);
                     return;
                 }
                 agreeBtn.setText("同意并继续 (" + remaining[0] + "秒)");
@@ -582,19 +555,16 @@ public class MainActivity {
         });
 
         AlertDialog dl = new AlertDialog.Builder(ctx, dialogTheme())
-            .setView(root)
+            .setView(InsetsUtil.window(null, root, 0.9f, 0.82f))
             .setCancelable(false)
             .create();
         dlRef[0] = dl;
         sActiveDialog = dl;
         dl.setOnDismissListener(ignored -> { if (sActiveDialog == dl) sActiveDialog = null; });
         dl.show();
-
+        InsetsUtil.center(dl, 0.9f, 0.82f);
         Window w = dl.getWindow();
-        if (w != null) {
-            w.setLayout(-1, -1);
-            w.setBackgroundDrawable(new ColorDrawable(AppColors.bg()));
-        }
+        if (w != null) w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
     }
 
 
@@ -618,18 +588,23 @@ public class MainActivity {
         float d = act.getResources().getDisplayMetrics().density;
         Context ctx = act;
 
-        ScrollView sv = new ScrollView(ctx);
-        sv.setFillViewport(true);
-
+        // v998: 居中浮层窗口 —— 顶部标题栏固定, 正文滚动
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
+        InsetsUtil.clipRounded(root);
 
         root.addView(buildTopBar(ctx, d, act));
-        root.addView(buildUserCard(ctx, d, act));
+
+        ScrollView sv = new ScrollView(ctx);
+        sv.setFillViewport(true);
+        sv.setVerticalScrollBarEnabled(true);
+        LinearLayout body = new LinearLayout(ctx);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.addView(buildUserCard(ctx, d, act));
         View searchCard = buildSearchCard(ctx, d);
-        root.addView(searchCard);
-        root.addView(candyDivider(ctx, d));
+        body.addView(searchCard);
+        body.addView(candyDivider(ctx, d));
 
         LinearLayout card1 = buildCard(ctx, d);
         card1.addView(makeListRow(ctx, d, 0x2764, "爱心捐赠", AppColors.accent(), true, v -> showDonateDialog(act)));
@@ -638,23 +613,10 @@ public class MainActivity {
             dismissDialog();
             SubPageActivity.openFromMain(act, "个人中心", 99);
         }));
-        card1.addView(candyDivider(ctx, d));
-        // v962: 主微信/分身实例隔离开关(各实例独立, 关闭后本实例重启微信不再加载 Hook,
-        // 仍可经悬浮球菜单进入本面板重新开启)
-        boolean instEnabled = InstanceManager.isEnabled();
-        String instLabel = "实例隔离: " + InstanceManager.label()
-                + (instEnabled ? " (已开启)" : " (已关闭)");
-        card1.addView(makeListRow(ctx, d, 0x1F9E9, instLabel, 0, false, v -> {
-            boolean next = !InstanceManager.isEnabled();
-            InstanceManager.setEnabled(next);
-            Toast.makeText(ctx, next ? "本实例已开启, 重启微信生效" : "本实例已关闭, 重启微信生效",
-                    Toast.LENGTH_SHORT).show();
-            dismissDialog();
-            showMainPanel(act);
-        }));
-        root.addView(card1);
+        // v998: 实例隔离入口已隐藏(默认开启), 不再提供主页切换开关
+        body.addView(card1);
 
-        root.addView(candyDivider(ctx, d));
+        body.addView(candyDivider(ctx, d));
 
         LinearLayout card2 = buildCard(ctx, d);
         final HashMap<View, String> searchMap = new HashMap<>();
@@ -676,21 +638,22 @@ public class MainActivity {
             card2.addView(item);
         }
 
-        root.addView(card2);
+        body.addView(card2);
 
-        root.addView(candyDivider(ctx, d));
+        body.addView(candyDivider(ctx, d));
 
-        sv.addView(root);
+        sv.addView(body, new LinearLayout.LayoutParams(-1, -2));
+        root.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         AlertDialog.Builder b = new AlertDialog.Builder(ctx, dialogTheme());
-        b.setView(sv);
+        b.setView(InsetsUtil.window(null, root, 0.92f, 0.86f));
         b.setCancelable(true);
         AlertDialog dlg = b.create();
 
+        InsetsUtil.center(dlg, 0.92f, 0.86f);
         Window w = dlg.getWindow();
         if (w != null) {
-            w.setLayout(-1, -1);
-            w.setBackgroundDrawable(new ColorDrawable(AppColors.bg()));
+            InsetsUtil.transparentWindow(w);
             w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         }
 
@@ -700,7 +663,9 @@ public class MainActivity {
         EditText searchBox = (EditText) searchCard.findViewWithTag("search_box");
         setupSearch(searchBox, searchMap, card2);
 
+        InsetsUtil.clearDialogShell(dlg);
         dlg.show();
+        InsetsUtil.clearDialogShell(dlg);
     }
 
     // ===== User Card (v955 新增) =====
@@ -713,52 +678,55 @@ public class MainActivity {
         lp.setMargins(dp(d, 16), dp(d, 12), dp(d, 16), 0);
         card.setLayoutParams(lp);
         card.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(card);
         card.setPadding(dp(d, 16), dp(d, 14), dp(d, 16), dp(d, 14));
         card.setClickable(true);
         card.setFocusable(true);
 
-        // v955 M3: 头像 44dp 圆角容器(tertiaryContainer 占位底)
+        // v1013 M3: 头像 44dp 圆形容器；真实头像异步加载，加载前显示首字母占位
         final android.widget.ImageView avatar = new android.widget.ImageView(ctx);
         int avSize = dp(d, 44);
         GradientDrawable avBg = new GradientDrawable();
-        avBg.setShape(GradientDrawable.RECTANGLE);
-        avBg.setCornerRadius(dp(d, 22));
+        avBg.setShape(GradientDrawable.OVAL);
         avBg.setColor(AppColors.tertiaryContainer());
         avatar.setBackground(avBg);
+        avatar.setClipToOutline(true);
         avatar.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
         LinearLayout.LayoutParams avLp = new LinearLayout.LayoutParams(avSize, avSize);
         avLp.setMarginEnd(dp(d, 12));
         avatar.setLayoutParams(avLp);
         card.addView(avatar);
+
+        String nick = getUserNickname();
+        if (nick == null || nick.isEmpty()) nick = getUserWxid();
+        final String displayName = (nick != null && !nick.isEmpty()) ? nick : "微信";
+        final String wxid = getUserWxid();
         try {
-            String wxid = getUserWxid();
-            if (wxid != null && !wxid.isEmpty() && AvatarHelper.bindAvatar(avatar, wxid)) {
-                // 已绑定真实头像
+            if (wxid != null && !wxid.isEmpty()) {
+                Bitmap fallback = AvatarHelper.letterAvatar(displayName, avSize);
+                AvatarHelper.loadAvatarAsync(avatar, wxid, avSize, fallback);
             } else {
-                TextView ph = new TextView(ctx);
-                ph.setText("\uD83D\uDC64");
-                ph.setTextSize(20);
-                ph.setGravity(Gravity.CENTER);
-                card.addView(ph);
+                avatar.setImageBitmap(AvatarHelper.letterAvatar(displayName, avSize));
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {
+            try { avatar.setImageBitmap(AvatarHelper.letterAvatar(displayName, avSize)); } catch (Throwable ignored2) {}
+        }
 
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
         textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
 
-        String nick = getUserNickname();
         TextView nameTv = new TextView(ctx);
-        nameTv.setText(nick != null && !nick.isEmpty() ? nick : "微信用户");
+        nameTv.setText(displayName);
         nameTv.setTextSize(16);
         nameTv.setTypeface(null, Typeface.BOLD);
         nameTv.setTextColor(AppColors.text1());
         nameTv.setSingleLine(true);
         textCol.addView(nameTv);
 
+        // v1013: 去掉等级逻辑，仅显示 wxid
         TextView subTv = new TextView(ctx);
-        subTv.setText((getVipLevel() != null ? getVipLevel() : "") + " · "
-            + (getUserWxid() != null && !getUserWxid().isEmpty() ? getUserWxid() : "点击查看个人中心"));
+        subTv.setText((wxid != null && !wxid.isEmpty()) ? wxid : "点击查看个人中心");
         subTv.setTextSize(11);
         subTv.setTextColor(AppColors.textTertiary());
         subTv.setSingleLine(true);
@@ -796,6 +764,7 @@ public class MainActivity {
             dp(d, 28), dp(d, 28), dp(d, 28), dp(d, 28),
             0, 0, 0, 0});
         bar.setBackground(barBg);
+        InsetsUtil.clipRounded(bar);
 
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
@@ -811,7 +780,8 @@ public class MainActivity {
 
         TextView verTv = new TextView(ctx);
         verTv.setText("v" + ContextManager.getVersionName() + " · 微信功能增强模块");
-        verTv.setTextSize(11);
+        // v998: 说明小字再缩小 3dp
+        verTv.setTextSize(8);
         verTv.setTextColor(0xB3FFFFFF);
         verTv.setGravity(Gravity.CENTER);
         verTv.setPadding(0, dp(d, 3), 0, 0);
@@ -837,6 +807,7 @@ public class MainActivity {
         searchBg.setCornerRadius(dp(d, 28));
         searchBg.setColor(AppColors.surfaceContainerHigh());
         card.setBackground(searchBg);
+        InsetsUtil.clipRounded(card);
         card.setPadding(dp(d, 16), dp(d, 12), dp(d, 16), dp(d, 12));
 
         // v955: 放大镜图标
@@ -905,6 +876,7 @@ public class MainActivity {
         lp.setMargins(dp(d, 16), 0, dp(d, 16), 0);
         card.setLayoutParams(lp);
         card.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(card);
         return card;
     }
 
@@ -1042,7 +1014,9 @@ public class MainActivity {
             .setView(root)
             .setCancelable(true)
             .create();
+        InsetsUtil.clearDialogShell(dlg);
         dlg.show();
+        InsetsUtil.center(dlg);
     }
 
     private static View buildDonateButtons(Context ctx, float d, Activity act) {
@@ -1130,7 +1104,9 @@ public class MainActivity {
             .setView(root)
             .setCancelable(true)
             .create();
+        InsetsUtil.clearDialogShell(dlg);
         dlg.show();
+        InsetsUtil.center(dlg);
     }
 
     // ===== Public Static Utilities (used by other classes) =====
@@ -1165,17 +1141,20 @@ public class MainActivity {
         // v955 M3: 主色底 + 28dp 底部圆角
         GradientDrawable barBg = new GradientDrawable();
         barBg.setShape(GradientDrawable.RECTANGLE);
-        barBg.setColor(AppColors.primary());
+        final int barColor = AppColors.titleBar();
+        barBg.setColor(barColor);
         barBg.setCornerRadii(new float[]{
             dp(d, 28), dp(d, 28), dp(d, 28), dp(d, 28),
             0, 0, 0, 0});
         bar.setBackground(barBg);
+        InsetsUtil.clipRounded(bar);
+        final int barOn = AppColors.onColor(barColor);
 
         if (showBack) {
             TextView back = new TextView(ctx);
             back.setText("‹");
             back.setTextSize(26);
-            back.setTextColor(AppColors.onPrimary());
+            back.setTextColor(barOn);
             back.setPadding(0, 0, dp(d, 8), 0);
             back.setClickable(true);
             back.setOnClickListener(v -> { if (onBack != null) onBack.run(); });
@@ -1185,7 +1164,7 @@ public class MainActivity {
         TextView tv = new TextView(ctx);
         tv.setText(title);
         tv.setTextSize(20);
-        tv.setTextColor(AppColors.onPrimary());
+        tv.setTextColor(barOn);
         tv.setTypeface(null, Typeface.BOLD);
         tv.setGravity(Gravity.CENTER);
         tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));

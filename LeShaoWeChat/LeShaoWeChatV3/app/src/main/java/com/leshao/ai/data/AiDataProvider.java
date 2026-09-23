@@ -17,13 +17,12 @@ import java.nio.charset.StandardCharsets;
 /**
  * AI 数据跨进程交换层（ContentProvider）。
  * <p>
- * 背景：设置页/白名单页运行在<b>模块 app 进程</b>（数据落模块 files 目录），
+ * 背景：设置页运行在<b>模块 app 进程</b>（数据落模块 files 目录），
  * 而微信 hook 运行在<b>微信进程</b>（无法直接读模块私有目录）。
  * 本 Provider 以模块 files 目录的 JSON 文件为唯一数据源，向微信进程提供：
  * <ul>
  *   <li>{@code /config}    —— 配置 config.json（微信侧同步镜像后读取）</li>
- *   <li>{@code /whitelist} —— 白名单 whitelist.json</li>
- *   <li>{@code /sessions}  —— 会话列表（微信侧转储，白名单页导入用）</li>
+ *   <li>{@code /sessions}  —— 会话列表（微信侧转储，个性化配置页导入用）</li>
  * </ul>
  * 配置变更后设置页发送 {@link #ACTION_REFRESH_CONFIG} 广播（目标包 com.tencent.mm），
  * 微信侧 {@link com.leshao.ai.hook.wechat.ConfigBridge} 接收并重新同步。
@@ -45,7 +44,6 @@ public class AiDataProvider extends ContentProvider {
     public static final String ACTION_PUSH_SESSIONS = "com.leshao.ai.action.PUSH_SESSIONS";
 
     public static final String EXTRA_CONFIG = "config";
-    public static final String EXTRA_WHITELIST = "whitelist";
     public static final String EXTRA_SESSIONS = "sessions";
 
     /** 宿主（微信）包名。 */
@@ -57,7 +55,6 @@ public class AiDataProvider extends ContentProvider {
 
     private static final String DIR_NAME = "leshao_ai";
     private static final String FILE_CONFIG = "config.json";
-    private static final String FILE_WHITELIST = "whitelist.json";
     private static final String FILE_SESSIONS = "sessions.json";
 
     private static final String COL_JSON = "json";
@@ -124,9 +121,6 @@ public class AiDataProvider extends ContentProvider {
         if (path.endsWith("/config")) {
             return FILE_CONFIG;
         }
-        if (path.endsWith("/whitelist")) {
-            return FILE_WHITELIST;
-        }
         if (path.endsWith("/sessions")) {
             return FILE_SESSIONS;
         }
@@ -159,8 +153,8 @@ public class AiDataProvider extends ContentProvider {
     }
 
     /**
-     * 把当前配置/白名单推送给微信进程（显式携带 JSON，微信侧无需再读 Provider）。
-     * 供设置页保存、白名单页保存、以及微信侧拉取请求三种场景复用。
+     * 把当前配置推送给微信进程（显式携带 JSON，微信侧无需再读 Provider）。
+     * 供设置页保存、以及微信侧拉取请求两种场景复用。
      */
     public static void pushRefresh(Context context) {
         if (context == null) {
@@ -168,14 +162,10 @@ public class AiDataProvider extends ContentProvider {
         }
         try {
             String config = readLocal(context, FILE_CONFIG);
-            String whitelist = readLocal(context, FILE_WHITELIST);
             Intent out = new Intent(ACTION_REFRESH_CONFIG);
             out.setPackage(WECHAT_PACKAGE);
             if (config != null) {
                 out.putExtra(EXTRA_CONFIG, config);
-            }
-            if (whitelist != null) {
-                out.putExtra(EXTRA_WHITELIST, whitelist);
             }
             context.sendBroadcast(out);
         } catch (Throwable t) {

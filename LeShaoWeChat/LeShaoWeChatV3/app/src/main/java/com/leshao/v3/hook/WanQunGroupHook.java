@@ -13,6 +13,7 @@ import android.widget.TextView;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
+import com.leshao.v3.ui.widgets.ModernButton;
 import com.leshao.v3.wm.utils.WmPrefs;
 import com.leshao.v3.wm.utils.WmReflect;
 
@@ -460,8 +461,8 @@ public class WanQunGroupHook {
         btnRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
         btnRow.setPadding(0, dp(ctx, 16), 0, 0);
 
-        android.widget.Button saveBtn = makeActionBtn(ctx, "保存设置", AppColors.accent(), AppColors.WHITE_TEXT);
-        android.widget.Button cancelBtn = makeActionBtn(ctx, "取消", AppColors.card(), AppColors.text1());
+        ModernButton saveBtn = makeActionBtn(ctx, "保存设置", ModernButton.STYLE_PRIMARY);
+        ModernButton cancelBtn = makeActionBtn(ctx, "取消", ModernButton.STYLE_GHOST);
         android.widget.LinearLayout.LayoutParams bLp = new android.widget.LinearLayout.LayoutParams(0,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         saveBtn.setLayoutParams(bLp);
@@ -635,17 +636,8 @@ public class WanQunGroupHook {
         return row;
     }
 
-    private static android.widget.Button makeActionBtn(Context ctx, String text, int bg, int fg) {
-        android.widget.Button btn = new android.widget.Button(ctx);
-        btn.setText(text);
-        btn.setTextSize(15);
-        btn.setAllCaps(false);
-        btn.setTextColor(fg);
-        btn.setTypeface(null, android.graphics.Typeface.BOLD);
-        btn.setGravity(android.view.Gravity.CENTER);
-        btn.setBackground(rounded(ctx, bg, 12));
-        btn.setPadding(0, dp(ctx, 12), 0, dp(ctx, 12));
-        return btn;
+    private static ModernButton makeActionBtn(Context ctx, String text, int style) {
+        return new ModernButton(ctx, text, style);
     }
 
     private static String value(EditText et) { return et == null ? "" : (et.getText() == null ? "" : et.getText().toString()); }

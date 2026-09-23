@@ -180,9 +180,9 @@ public class CornerMenu {
                         try {
                             selfHealMainMenu();
                         } catch (Throwable ignored) {}
-                        sH.postDelayed(this, 2000);
+                        sH.postDelayed(this, 1200);
                     }
-                }, 2000);
+                }, 1200);
                 LogWriter.log(TAG, "self-heal poll started");
             }
         } catch (Throwable e) {
@@ -205,9 +205,29 @@ public class CornerMenu {
             }
             // v969: 不再用 sChatWindowActive 直接拦截, 交给 isInChatWindow 复核
             // (可自动纠正卡死在 true 的标志位, 修复三横菜单偶发不再出现)
-            if (isInChatWindow(act)) return;
+            if (isInChatWindow(act)) {
+                logBlockedHeal(act);
+                return;
+            }
             LogWriter.log(TAG, "self-heal: hamburger missing on main page, reinject");
             injectMain(act, 0);
+        } catch (Throwable ignored) {}
+    }
+
+    private static long sLastBlockedLogAt;
+
+    /** 诊断: 自愈被 isInChatWindow 拦截时, 记录判定依据(3s 节流), 便于定位"回主页后三横不再出现" */
+    private static void logBlockedHeal(Activity act) {
+        long now = System.currentTimeMillis();
+        if (now - sLastBlockedLogAt < 3000) return;
+        sLastBlockedLogAt = now;
+        try {
+            long since = sChatResumeAt > 0
+                    ? android.os.SystemClock.elapsedRealtime() - sChatResumeAt
+                    : -1;
+            LogWriter.log(TAG, "self-heal blocked: sChatWindowActive=" + sChatWindowActive
+                    + " sinceChatResumeMs=" + since
+                    + " fragVisible=" + chatFragmentVisible(act));
         } catch (Throwable ignored) {}
     }
 
@@ -283,12 +303,17 @@ public class CornerMenu {
             if (fragments == null) return false;
             for (Object f : fragments) {
                 if (!"com.tencent.mm.ui.chatting.ChattingUIFragment".equals(f.getClass().getName())) continue;
+                // v1002: 残留/已隐藏(回主页后仅 setHidden, 不 onPause)的聊天 fragment 其
+                // mView 仍有 windowToken 且 getGlobalVisibleRect 仍报大矩形, 会被误判为"铺满屏",
+                // 导致 isInChatWindow 永返 true, 三横菜单被 hideMainMenu 后不再恢复。
+                // 先按 fragment 真实状态(isHidden/isResumed)过滤, 再做矩形复核。
+                if (isFragmentHidden(f)) continue;
                 Object viewObj = null;
                 try { viewObj = XposedHelpers.getObjectField(f, "mView"); } catch (Throwable ignored) {}
                 if (!(viewObj instanceof View)) {
                     try { viewObj = XposedHelpers.callMethod(f, "getView"); } catch (Throwable ignored) {}
                 }
-                if (viewObj instanceof View && occupiesScreen((View) viewObj)) {
+                if (viewObj instanceof View && occupiesScreen((View) viewObj, act)) {
                     logChatVisible((View) viewObj);
                     return true;
                 }
@@ -297,13 +322,46 @@ public class CornerMenu {
         return false;
     }
 
-    /** 视图是否真正铺满屏幕(离屏/被父容器裁剪的 ViewPager 页返回 false)。 */
-    private static boolean occupiesScreen(View v) {
+    /** fragment 是否被隐藏(回主页后微信只 setHidden, 不 onPause)。 */
+    private static boolean isFragmentHidden(Object f) {
+        // isHidden 是 fragment 自身的 hidden 标志, 残留 fragment 在回主页后通常为 true
+        try {
+            Object h = XposedHelpers.callMethod(f, "isHidden");
+            if (h instanceof Boolean && (Boolean) h) return true;
+        } catch (Throwable ignored) {}
+        // isResumed 为 false 的 fragment 一定不在前台
+        try {
+            Object r = XposedHelpers.callMethod(f, "isResumed");
+            if (r instanceof Boolean && !(Boolean) r) return true;
+        } catch (Throwable ignored) {}
+        // v1003: ViewPager 场景下微信可能只 setUserVisibleHint(false), 显式 false 视为离屏
+        try {
+            Object v = XposedHelpers.callMethod(f, "getUserVisibleHint");
+            if (v instanceof Boolean && !(Boolean) v) return true;
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    /** 视图是否真正铺满屏幕(离屏/被父容器裁剪/隐藏的 fragment 视图返回 false)。 */
+    private static boolean occupiesScreen(View v, Activity act) {
         try {
             if (v.getVisibility() != View.VISIBLE) return false;
             if (v.getWindowToken() == null) return false;
+            // v1004: 残留/被父容器隐藏的聊天 fragment view 仍可能有 windowToken 且
+            // getGlobalVisibleRect 报大矩形, 但 isShown() 会沿祖先可见性返回 false。
+            // 与 WmEntry.isChattingFragmentVisible 同策略, 消除"回主页后仍判为在聊天"的误判。
+            if (!v.isShown()) return false;
             android.graphics.Rect r = new android.graphics.Rect();
             if (!v.getGlobalVisibleRect(r)) return false;
+            // v1002: 与宿主窗口可见区域求交, 排除大于屏幕的残留布局(rect 可能大于屏幕高度)
+            try {
+                View decor = act != null && act.getWindow() != null
+                        ? act.getWindow().peekDecorView() : null;
+                if (decor != null) {
+                    android.graphics.Rect d = new android.graphics.Rect();
+                    if (decor.getGlobalVisibleRect(d) && !r.intersect(d)) return false;
+                }
+            } catch (Throwable ignored) {}
             int sw = v.getResources().getDisplayMetrics().widthPixels;
             int sh = v.getResources().getDisplayMetrics().heightPixels;
             return r.width() >= sw * 2 / 5 && r.height() >= sh * 2 / 5;
@@ -364,6 +422,7 @@ public class CornerMenu {
                             if (thiz == null || !fragCls.isAssignableFrom(thiz.getClass())) return;
                             boolean hidden = (Boolean) param.args[0];
                             sChatWindowActive = !hidden;
+                            LogWriter.log(TAG, "chatFrag.onHiddenChanged hidden=" + hidden);
                             if (hidden) {
                                 restoreMainMenuFromFragment(thiz);
                             } else {
@@ -619,11 +678,21 @@ public class CornerMenu {
     }
 
     private static int statusBarHeight(Activity act) {
+        // v986: 优先取宿主窗口真实 WindowInsets(含刘海/挖孔), 回退 status_bar_height 资源
         try {
-            int id = act.getResources().getIdentifier("status_bar_height", "dimen", "android");
-            if (id > 0) return act.getResources().getDimensionPixelSize(id);
+            if (act != null && act.getWindow() != null) {
+                android.view.View decor = act.getWindow().peekDecorView();
+                if (decor != null && decor.isAttachedToWindow()) {
+                    androidx.core.view.WindowInsetsCompat wi =
+                            androidx.core.view.ViewCompat.getRootWindowInsets(decor);
+                    if (wi != null) {
+                        int t = wi.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top;
+                        if (t > 0) return t;
+                    }
+                }
+            }
         } catch (Throwable ignored) {}
-        return dp(act, 24);
+        return com.leshao.v3.ui.InsetsUtil.statusBarHeight(act);
     }
 
     /** 弹出快捷菜单 */

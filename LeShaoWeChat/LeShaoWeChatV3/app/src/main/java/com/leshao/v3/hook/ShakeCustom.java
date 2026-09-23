@@ -202,7 +202,7 @@ public class ShakeCustom {
     private static void showQuickMenu(android.app.Activity activity) {
         try {
             String[] items = {"截图", "回顶部", "设置"};
-            new android.app.AlertDialog.Builder(activity)
+            android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(activity)
                     .setTitle("摇一摇快捷操作")
                     .setItems(items, new android.content.DialogInterface.OnClickListener() {
                         @Override
@@ -218,7 +218,8 @@ public class ShakeCustom {
                         }
                     })
                     .setNegativeButton("取消", null)
-                    .show();
+                    .create();
+            dlg.show();
         } catch (Throwable t) {
             Logger.w("[Shake] 菜单失败: " + t.getMessage());
         }

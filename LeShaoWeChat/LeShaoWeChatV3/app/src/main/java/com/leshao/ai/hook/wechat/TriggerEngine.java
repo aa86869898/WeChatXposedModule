@@ -6,7 +6,7 @@ import android.util.Log;
 import com.leshao.ai.config.AppConfig;
 import com.leshao.ai.config.ConversationConfig;
 import com.leshao.ai.hook.HookEntry;
-import com.leshao.ai.util.Whitelist;
+import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.TtsVoiceSender;
 
 /**
@@ -14,10 +14,10 @@ import com.leshao.v3.hook.TtsVoiceSender;
  * <p>
  * 决策链（自上而下，任一不满足即静默返回）：
  * <ol>
- *   <li>总开关 / 群聊·私聊分开关</li>
+ *   <li>AI 总开关</li>
+ *   <li>会话级个性化配置：仅「已配置且启用」的群聊/联系人触发（v996 替代旧白名单与全局类型开关）</li>
  *   <li>群聊唤醒：@我（msgsource atuserlist，兜底 @机器人名/@所有人/@all）或关键词；
  *       {@code onlyWhenMentioned} 关时群聊全回</li>
- *   <li>白名单：名单非空时仅名单内会话响应（空名单 = 全回）</li>
  *   <li>分群记忆 + 知识库 top-k + 人设 → LLM（{@link AIBotCore#ask}）</li>
  *   <li>回复：零宽水印防循环 + 开 TTS 则合成语音消息发送, 关则 v51.r1 发文本</li>
  * </ol>
@@ -53,47 +53,53 @@ public final class TriggerEngine {
                                 long svrId, long cTime) {
         try {
             AppConfig c = AIBotCore.config();
-            if (c == null || !c.isEnabled()) {
+            if (c == null) {
+                LogWriter.log(TAG, "跳过: AppConfig 未初始化");
+                return;
+            }
+            if (!c.isEnabled()) {
+                LogWriter.log(TAG, "跳过: AI 总开关关闭");
                 return;
             }
 
-            // ① 群/私聊分开关 + 群内容拆分(会话级独立配置优先, 未设置则继承全局)
+            // ① 会话级个性化配置门控(v996): 仅「已配置且启用」的群聊/联系人触发 AI,
+            //    未配置的会话一律不触发任意 AI 功能(替代旧白名单与全局类型开关)。
             boolean isGroup = GroupMsgParser.isGroupTalker(talker);
             ConversationConfig cc = AIBotCore.conversationConfig();
             ConversationConfig.Entry ov = cc != null ? cc.get(talker) : null;
-            boolean autoReply = (ov != null && ov.autoReply != null)
-                    ? ov.autoReply.booleanValue()
-                    : (isGroup ? c.isAutoReplyInGroups() : c.isAutoReplyInPrivate());
-            if (!autoReply) {
+            if (ov == null || !ov.isActive()) {
+                LogWriter.log(TAG, "跳过: 未配置/未启用个性化配置 talker=" + talker
+                        + " group=" + isGroup + " 已配置=" + (ov != null));
                 return;
             }
+
             String[] sp = GroupMsgParser.splitGroupContent(rawContent, isGroup);
             final String sender = sp[0];
             String body = sp[1];
             if (body == null || body.trim().isEmpty()) {
+                LogWriter.log(TAG, "跳过: 正文为空 talker=" + talker);
                 return;
             }
 
-            // ② 群聊唤醒判定
+            // ③ 群聊唤醒判定
             boolean atMe = false;
             if (isGroup) {
-                atMe = GroupMsgParser.isAtMe(msgInfo, StorageHub.get().selfWxid(),
-                        body, c.getBotName());
+                String selfWxid = StorageHub.get().selfWxid();
+                String selfNick = null;
+                try {
+                    selfNick = StorageHub.get().selfNickname();
+                } catch (Throwable ignored) {
+                }
+                atMe = GroupMsgParser.isAtMe(msgInfo, selfWxid, body, c.getBotName(), selfNick);
                 boolean kwHit = GroupMsgParser.matchKeyword(body, c.getWakeKeywords());
-                // 文档 §16.5：群聊默认不响应未唤醒消息(仅@/关键词模式同理)
-                if (!atMe && !kwHit) {
+                // v985: 只有开启「仅被@时回复」才限制为 @/关键词; 关闭时群聊全回(文档 §16.5)。
+                boolean onlyMentioned = (ov != null && ov.onlyWhenMentioned != null)
+                        ? ov.onlyWhenMentioned.booleanValue() : c.isOnlyWhenMentioned();
+                if (onlyMentioned && !atMe && !kwHit) {
+                    LogWriter.log(TAG, "跳过: 群消息未唤醒(仅@模式) talker=" + talker
+                            + " atMe=false kwHit=false body='" + trunc(body) + "'");
                     return;
                 }
-            }
-
-            // ③ 白名单: 非空时仅名单内会话自动回复; 名单外会话不主动回复,
-            // 但群聊中被@时放行(可正常回复)。
-            Whitelist wl = AIBotCore.whitelist();
-            if (wl != null && !wl.isEmpty() && !wl.contains(talker)) {
-                if (!(isGroup && atMe)) {
-                    return;
-                }
-                Log.i(TAG, "白名单外会话被@, 放行: " + talker);
             }
 
             // ④⑤ 生成 + 回复
@@ -115,41 +121,52 @@ public final class TriggerEngine {
                 }
             }
             final String voiceFinal = voiceOverride;
-            Log.i(TAG, "触发 AI: talker=" + talker + " group=" + isGroup
-                    + " sender=" + sender + " len=" + body.length());
+            LogWriter.log(TAG, "触发 AI: talker=" + talker + " group=" + isGroup
+                    + " sender=" + sender + " len=" + body.length() + " atMe=" + atMe
+                    + " tts=" + tts + " voice=" + voiceOverride);
             AIBotCore.ask(talker, incoming, "", over, new AIBotCore.ResultCallback() {
                 @Override
                 public void onResult(String reply) {
                     if (reply == null || reply.isEmpty()) {
+                        LogWriter.log(TAG, "AI 空回复, 不发送 talker=" + talker);
                         return;
                     }
                     try {
                         if (tts) {
                             String cid = "ai-" + System.currentTimeMillis();
-                            Log.i(TAG, "AI 回复走语音消息 talker=" + talker + " cid=" + cid);
+                            LogWriter.log(TAG, "AI 回复走语音消息 talker=" + talker
+                                    + " cid=" + cid + " voice=" + voiceFinal);
                             // v985: 语音合成/发送失败或超时时自动回退发文本, 避免"AI 没回复"。
                             TtsVoiceSender.sendAiReplyAsVoice(talker, reply, cid, voiceFinal, () -> {
                                 try {
                                     WeChatMessenger.sendText(talker, SendGuard.mark(reply), cl);
                                 } catch (Throwable t2) {
-                                    Log.w(TAG, "AI 文本回退失败: " + t2);
+                                    LogWriter.log(TAG, "AI 文本回退失败: " + t2);
                                 }
                             });
                         } else {
+                            LogWriter.log(TAG, "AI 回复走文本 talker=" + talker);
                             WeChatMessenger.sendText(talker, SendGuard.mark(reply), cl);
                         }
                     } catch (Throwable t) {
-                        Log.w(TAG, "AI 回复发送失败: " + t);
+                        LogWriter.log(TAG, "AI 回复发送失败: " + t);
                         try {
                             WeChatMessenger.sendText(talker, SendGuard.mark(reply), cl);
                         } catch (Throwable t2) {
-                            Log.w(TAG, "AI 文本回退也失败: " + t2);
+                            LogWriter.log(TAG, "AI 文本回退也失败: " + t2);
                         }
                     }
                 }
             });
         } catch (Throwable t) {
-            Log.w(TAG, "dispatch 异常: " + t);
+            LogWriter.log(TAG, "dispatch 异常: " + t);
         }
+    }
+
+    /** 日志用截断, 避免超长正文刷屏。 */
+    private static String trunc(String s) {
+        if (s == null) return "";
+        String one = s.replace('\n', ' ').trim();
+        return one.length() > 60 ? one.substring(0, 60) + "..." : one;
     }
 }

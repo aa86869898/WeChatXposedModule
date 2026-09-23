@@ -41,6 +41,7 @@ public class BatchAddRecordPageView {
         tabBar.setOrientation(LinearLayout.HORIZONTAL);
         tabBar.setGravity(Gravity.CENTER);
         tabBar.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(tabBar);
         tabBar.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
         GradientDrawable tabBg = new GradientDrawable();
         tabBg.setColor(AppColors.card());
@@ -92,7 +93,7 @@ public class BatchAddRecordPageView {
         clearBtn.setTextColor(0xFFE53935);
         clearBtn.setPadding((int)(10 * d), (int)(6 * d), (int)(10 * d), (int)(6 * d));
         clearBtn.setOnClickListener(v -> {
-            new AlertDialog.Builder(ctx)
+            AlertDialog dlgClear = new AlertDialog.Builder(ctx)
                 .setTitle("清空记录")
                 .setMessage("确定要清空全部添加记录吗？此操作不可恢复。")
                 .setPositiveButton("清空", (dlg, w) -> {
@@ -101,7 +102,8 @@ public class BatchAddRecordPageView {
                     Toast.makeText(ctx, "记录已清空", Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("取消", null)
-                .show();
+                .create();
+            dlgClear.show();
         });
         actionRow.addView(clearBtn);
         root.addView(actionRow);
@@ -158,6 +160,7 @@ public class BatchAddRecordPageView {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding((int)(14 * d), (int)(10 * d), (int)(14 * d), (int)(10 * d));
         row.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(row);
 
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);

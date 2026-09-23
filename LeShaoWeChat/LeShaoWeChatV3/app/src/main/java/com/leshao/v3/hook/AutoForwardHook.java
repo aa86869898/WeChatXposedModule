@@ -344,6 +344,7 @@ public class AutoForwardHook {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(com.leshao.v3.ui.CandyUi.dialogBg(ctx));
         root.setPadding((int) (12 * d), (int) (12 * d), (int) (12 * d), (int) (12 * d));
+        com.leshao.v3.ui.InsetsUtil.clipRounded(root);
 
         ScrollView sv = new ScrollView(ctx);
         LinearLayout content = new LinearLayout(ctx);
@@ -512,6 +513,7 @@ public class AutoForwardHook {
                     Toast.LENGTH_SHORT).show();
             dlg.dismiss();
         });
+        com.leshao.v3.ui.InsetsUtil.transparentWindow(dlg);
         dlg.show();
     }
 

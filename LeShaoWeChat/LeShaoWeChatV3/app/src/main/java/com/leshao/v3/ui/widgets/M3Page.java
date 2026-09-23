@@ -1,6 +1,8 @@
 package com.leshao.v3.ui.widgets;
 
 import android.content.Context;
+import android.content.res.ColorStateList;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
@@ -10,11 +12,13 @@ import android.view.ViewGroup;
 import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
+import com.leshao.v3.ui.InsetsUtil;
 
 /**
  * M3 页面构建工具箱（v955）—— 全部页面深度重排的统一结构件：
@@ -37,11 +41,12 @@ public final class M3Page {
 
     // ==================== 页面骨架 ====================
 
-    /** 页面根：竖向 LinearLayout（surface 底 + 16dp 左右边距 + 底部留白） */
+    /** 页面根：外层透明壳 + 内部 surface 圆角浮层（内容全部挂在内层）。 */
     public static LinearLayout root(Context ctx) {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
+        InsetsUtil.clipRounded(root);
         int m = dp(ctx, 16);
         root.setPadding(m, dp(ctx, 12), m, dp(ctx, 24));
         return root;
@@ -51,7 +56,7 @@ public final class M3Page {
     public static ScrollView scroll(Context ctx, LinearLayout root) {
         ScrollView sv = new ScrollView(ctx);
         sv.setFillViewport(true);
-        sv.addView(root);
+        sv.addView(InsetsUtil.host(root));
         return sv;
     }
 
@@ -69,6 +74,7 @@ public final class M3Page {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(card);
         int p = dp(ctx, 4);
         card.setPadding(p, p, p, p);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
@@ -110,6 +116,60 @@ public final class M3Page {
     /** 尾部自定义控件行 */
     public static View tailRow(Context ctx, String icon, String title, String sub, View tail) {
         return new SettingRow(ctx, icon, title, sub).tail(tail);
+    }
+
+    /** 创建导航行并追加到卡片, 返回可更新副标题的行对象。 */
+    public static SettingRow appendClickRow(LinearLayout card, Context ctx, String icon,
+                                            String title, String sub, Runnable onClick) {
+        SettingRow row = new SettingRow(ctx, icon, title, sub);
+        if (onClick != null) {
+            row.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    try { onClick.run(); } catch (Throwable ignored) {}
+                }
+            });
+        }
+        if (card != null) card.addView(row);
+        return row;
+    }
+
+    /** 创建开关行并追加到卡片, 返回底层 Switch 以便读取状态。 */
+    public static Switch appendSwitchRow(LinearLayout card, Context ctx, String icon, String title,
+                                         String sub, boolean checked,
+                                         CompoundButton.OnCheckedChangeListener listener) {
+        final Switch sw = CandyUi.newSwitch(ctx);
+        sw.setChecked(checked);
+        if (listener != null) sw.setOnCheckedChangeListener(listener);
+        float d = density(ctx);
+        int w = (int) (AppColors.SWITCH_WIDTH_DP * d + 0.5f);
+        int h = (int) (AppColors.SWITCH_HEIGHT_DP * d + 0.5f);
+        SettingRow row = new SettingRow(ctx, icon, title, sub);
+        row.tail(sw);
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try { sw.toggle(); } catch (Throwable ignored) {}
+            }
+        });
+        if (card != null) card.addView(row);
+        return sw;
+    }
+
+    /** 底部等宽双按钮行。 */
+    public static View buttonRow(Context ctx, View left, View right) {
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams lpL = new LinearLayout.LayoutParams(0, -2, 1f);
+        lpL.setMargins(0, dp(ctx, 16), dp(ctx, 4), 0);
+        LinearLayout.LayoutParams lpR = new LinearLayout.LayoutParams(0, -2, 1f);
+        lpR.setMargins(dp(ctx, 4), dp(ctx, 16), 0, 0);
+        left.setLayoutParams(lpL);
+        right.setLayoutParams(lpR);
+        row.addView(left);
+        row.addView(right);
+        return row;
     }
 
     /** 纯信息行（标题 + 右侧值文字） */
@@ -218,6 +278,131 @@ public final class M3Page {
         View v = new View(ctx);
         v.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(ctx, dp)));
         return v;
+    }
+
+    // ==================== 文本排版（M3 type scale） ====================
+
+    /** 页面/弹窗标题（M3 title large · onSurface · 粗体） */
+    public static TextView title(Context ctx, String text) {
+        TextView tv = new TextView(ctx);
+        tv.setText(text);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        tv.setTypeface(Typeface.DEFAULT_BOLD);
+        tv.setTextColor(AppColors.onSurface());
+        tv.setGravity(Gravity.CENTER);
+        tv.setPadding(0, 0, 0, dp(ctx, 6));
+        return tv;
+    }
+
+    /** 字段标签（M3 label medium · onSurfaceVariant，置于输入框上方） */
+    public static TextView fieldLabel(Context ctx, String text) {
+        TextView tv = new TextView(ctx);
+        tv.setText(text);
+        // v998: 字段标签再缩小 3dp
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        tv.setTextColor(AppColors.onSurfaceVariant());
+        tv.setPadding(dp(ctx, 2), dp(ctx, 6), 0, dp(ctx, 2));
+        return tv;
+    }
+
+    /** 说明/提示段落（M3 body small · onSurfaceVariant） */
+    public static TextView note(Context ctx, String text) {
+        TextView tv = new TextView(ctx);
+        tv.setText(text);
+        // v998: 说明段落再缩小 3dp
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9);
+        tv.setTextColor(AppColors.onSurfaceVariant());
+        tv.setLineSpacing(dp(ctx, 2), 1.1f);
+        tv.setPadding(dp(ctx, 2), dp(ctx, 4), dp(ctx, 2), dp(ctx, 8));
+        return tv;
+    }
+
+    // ==================== 控件 ====================
+
+    /** M3 滑杆：primary 进度/滑块 + surfaceContainerHighest 轨道 */
+    public static SeekBar slider(Context ctx) {
+        SeekBar sb = new SeekBar(ctx);
+        try {
+            sb.setProgressTintList(ColorStateList.valueOf(AppColors.primary()));
+            sb.setThumbTintList(ColorStateList.valueOf(AppColors.primary()));
+            sb.setProgressBackgroundTintList(
+                    ColorStateList.valueOf(AppColors.surfaceContainerHighest()));
+            sb.setProgressTintMode(android.graphics.PorterDuff.Mode.SRC_IN);
+        } catch (Throwable ignored) {}
+        sb.setPadding(0, dp(ctx, 8), 0, dp(ctx, 8));
+        return sb;
+    }
+
+    /**
+     * 可勾选列表行（M3 list item）：图标 + 标题 + 副标题 + 尾部圆形勾选标记，
+     * 点击整行切换勾选态并回调。</p>
+     *
+     * @param checked  初始勾选态
+     * @param listener 勾选变化回调（可空）
+     */
+    public static SettingRow checkRow(Context ctx, String icon, String title, String sub,
+                                      boolean checked, final CheckListener listener) {
+        final SettingRow row = new SettingRow(ctx, icon, title, sub);
+        final TextView mark = new TextView(ctx);
+        final boolean[] state = {checked};
+        int size = dp(ctx, 24);
+        mark.setGravity(Gravity.CENTER);
+        mark.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        mark.setTypeface(Typeface.DEFAULT_BOLD);
+        mark.setLayoutParams(new LinearLayout.LayoutParams(size, size));
+        final Runnable refresh = new Runnable() {
+            @Override
+            public void run() {
+                GradientDrawable bg = new GradientDrawable();
+                bg.setShape(GradientDrawable.OVAL);
+                if (state[0]) {
+                    bg.setColor(AppColors.primary());
+                    mark.setText("✓");
+                    mark.setTextColor(AppColors.onPrimary());
+                } else {
+                    bg.setColor(0x00000000);
+                    bg.setStroke(dp(ctx, 2), AppColors.outline());
+                    mark.setText("");
+                }
+                mark.setBackground(bg);
+            }
+        };
+        refresh.run();
+        row.tail(mark);
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                state[0] = !state[0];
+                refresh.run();
+                if (listener != null) listener.onChanged(state[0]);
+            }
+        });
+        return row;
+    }
+
+    /** 勾选行回调（避免依赖 CompoundButton 的 buttonView 参数）。 */
+    public interface CheckListener {
+        void onChanged(boolean checked);
+    }
+
+    /**
+     * M3 风格复选框：primary 勾选色 + onSurface 文案，供弹窗/滚动列表内单独使用。
+     * 返回原生 CheckBox 以便沿用 setChecked/isChecked/setOnCheckedChangeListener。
+     */
+    public static android.widget.CheckBox checkBox(Context ctx, String text) {
+        android.widget.CheckBox cb = new android.widget.CheckBox(ctx);
+        if (text != null) cb.setText(text);
+        cb.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        cb.setTextColor(AppColors.onSurface());
+        try {
+            cb.setButtonTintList(ColorStateList.valueOf(AppColors.primary()));
+        } catch (Throwable ignored) {}
+        cb.setPadding(0, dp(ctx, 6), 0, dp(ctx, 6));
+        return cb;
+    }
+
+    public static android.widget.CheckBox checkBox(Context ctx) {
+        return checkBox(ctx, null);
     }
 
     /** 空状态 */

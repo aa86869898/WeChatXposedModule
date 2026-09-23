@@ -4,6 +4,8 @@ import android.content.Context;
 import android.database.Cursor;
 import android.content.SharedPreferences;
 
+import com.leshao.ai.hook.wechat.StorageHub;
+import com.leshao.v3.db.DatabaseProvider;
 import com.leshao.v3.hook.VersionCompat;
 import com.leshao.v3.model.ContactCard;
 import com.leshao.v3.model.ContactCard.Category;
@@ -12,6 +14,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import de.robv.android.xposed.XposedHelpers;
+
 public class ContactRepository {
 
     private static final String TAG = "ContactRepo";
@@ -19,6 +23,26 @@ public class ContactRepository {
     private static volatile List<ContactCard> sGroups;
     private static volatile List<ContactCard> sServiceAccounts;
     private static volatile boolean sLoading;
+    private static final Object sDbCapturedLock = new Object();
+    private static volatile boolean sDbCaptured;
+
+    /** v1025: 优先返回微信真实 ClassLoader(反查自微信运行时对象), 解决内核/存储类静态状态不共享问题 */
+    private static ClassLoader runtimeCl() {
+        ClassLoader real = DatabaseProvider.getRealClassLoader();
+        return real != null ? real : ContextManager.getClassLoader();
+    }
+
+    /** DatabaseProvider 捕获到微信自开 DB 时回调: 唤醒等待中的加载线程并触发重载 */
+    public static void onDatabaseCaptured() {
+        synchronized (sDbCapturedLock) {
+            sDbCaptured = true;
+            sDbCapturedLock.notifyAll();
+        }
+        // 若当前没有加载线程, 触发一次重载
+        if (!sLoading) {
+            loadAsync(null, true);
+        }
+    }
 
     public static List<ContactCard> getFriends() {
         return sFriends != null ? sFriends : Collections.<ContactCard>emptyList();
@@ -95,28 +119,94 @@ public class ContactRepository {
 
     private static void loadAll(Context ctx) {
         long t0 = System.currentTimeMillis();
+
         Object db = null;
+        boolean capturedDb = false;
         try {
-            ClassLoader cl = ContextManager.getClassLoader();
+            ClassLoader cl = runtimeCl();
             if (cl == null) { LogWriter.log(TAG, "cl null"); return; }
+
+            // v1026: 首选进程内已解密句柄(参考《数据库.md》), 内核就绪后毫秒级返回,
+            // 避免旧方案死等 DatabaseProvider 捕获 15s(实测从不捕获, 纯浪费)。
+            long ipDeadline = System.currentTimeMillis() + 5000L;
+            while (db == null && System.currentTimeMillis() < ipDeadline) {
+                db = inProcessContactDb();
+                if (db != null) { capturedDb = true; break; }
+                try { Thread.sleep(500L); } catch (InterruptedException ignored) {}
+            }
+            // 次选 DatabaseProvider 捕获的微信自开 DB(短等待, 不拖慢)。
+            if (db == null) {
+                long capDeadline = System.currentTimeMillis() + 1500L;
+                while (db == null && System.currentTimeMillis() < capDeadline) {
+                    db = DatabaseProvider.getDatabase();
+                    if (db != null) { capturedDb = true; break; }
+                    synchronized (sDbCapturedLock) {
+                        if (!sDbCaptured) {
+                            try { sDbCapturedLock.wait(300L); }
+                            catch (InterruptedException ignored) {}
+                        } else {
+                            db = DatabaseProvider.getDatabase();
+                            if (db != null) { capturedDb = true; break; }
+                        }
+                    }
+                }
+            }
+            if (db == null) {
+                LogWriter.log(TAG, "in-process/DatabaseProvider 均不可用, fallback to direct open");
+            } else {
+                LogWriter.log(TAG, "using in-process/captured DB: " + db.getClass().getName()
+                    + " in " + (System.currentTimeMillis() - t0) + "ms");
+            }
 
             long uin = getUin(ctx);
             if (uin <= 0) { LogWriter.log(TAG, "uin=0"); return; }
-
-            String imei = VersionCompat.getImei(cl);
             String baseDir = VersionCompat.getBaseDir(cl, ctx);
             if (!baseDir.endsWith("/")) baseDir += "/";
+
+            // v1020: 恢复 v980 直接 DB 打开路径（v980 实机验证有效: db opened in 29ms）。
+            // v1019 曾将 enumerateRContact 提到最前、DB 改由 openEnMicroDb 爆破，实机均失败，
+            // 现回退为「固定路径+固定密码 直接打开」首选，枚举与爆破降级为兜底。
+            //
+            // v1022: 根因=微信内核未就绪时 CsoLoader 未被初始化，kh5.f.w 直接抛
+            // "Missing initialization before executing, please invoke CsoLoader.initialize first"。
+            // v980 成功时内核已 init（j1.v OK）→ CsoLoader 已由微信初始化。
+            // 这里打开失败时轮询重试（最多 ~20s），等待微信完成内核/CsoLoader 初始化。
+            String imei = VersionCompat.getImei(cl);
             String dbHash = VersionCompat.getDbHash(cl, (int) uin);
             String dbPath = baseDir + "MicroMsg/" + dbHash + "/EnMicroMsg.db";
             String password = md5(imei + uin).substring(0, 7);
 
             LogWriter.log(TAG, "opening db: " + dbPath);
             Class<?> dbCls = VersionCompat.findDbOpenerClass(cl);
-            if (dbCls == null) { LogWriter.log(TAG, "dbCls null"); return; }
 
-            db = VersionCompat.openDatabase(dbCls, dbPath, password);
+            long openDeadline = System.currentTimeMillis() + 20000L;
+            int openAttempt = 0;
+            while (db == null && System.currentTimeMillis() < openDeadline) {
+                openAttempt++;
+                if (openAttempt > 1) {
+                    try { Thread.sleep(1500L); } catch (InterruptedException ignored) {}
+                }
+                if (dbCls != null) {
+                    db = VersionCompat.openDatabase(dbCls, dbPath, password);
+                    if (db == null) {
+                        db = VersionCompat.openDatabaseWcdb(cl, dbPath, password);
+                    }
+                }
+                if (db == null) {
+                    LogWriter.log(TAG, "db open attempt " + openAttempt
+                            + " failed (csoReady=" + VersionCompat.isCsoLoaderReady() + "), retrying");
+                }
+            }
             if (db == null) {
-                db = VersionCompat.openDatabaseWcdb(cl, dbPath, password);
+                // 兜底1: v1019 进程内 rcontact 枚举（不依赖 DB 打开）
+                if (enumerateRContact()) {
+                    LogWriter.log(TAG, "enumerateRContact ok: " + (sFriends.size() + sGroups.size()
+                            + sServiceAccounts.size()) + " rows in " + (System.currentTimeMillis() - t0) + "ms");
+                    return;
+                }
+                LogWriter.log(TAG, "enumerateRContact empty/failed, openEnMicroDb fallback");
+                // 兜底2: 目录名候选化 + 密码候选爆破
+                db = VersionCompat.openEnMicroDb(cl, baseDir, uin);
             }
             if (db == null) { LogWriter.log(TAG, "db open FAILED"); return; }
             LogWriter.log(TAG, "db opened in " + (System.currentTimeMillis() - t0) + "ms");
@@ -177,7 +267,8 @@ public class ContactRepository {
         } catch (Throwable t) {
             LogWriter.log(TAG, "loadAll err: " + t.getClass().getSimpleName() + " " + t.getMessage());
         } finally {
-            if (db != null) {
+            // v1024: 捕获的 DB 属于微信自身进程, 绝不能 close; 仅关闭模块自开的 DB
+            if (db != null && !capturedDb) {
                 try {
                     java.lang.reflect.Method close = db.getClass().getDeclaredMethod("c");
                     close.invoke(db);
@@ -186,13 +277,198 @@ public class ContactRepository {
         }
     }
 
-    private static java.lang.reflect.Method findQueryMethod(Class<?> dbClass) {
-        // 1) 优先精确匹配: 返回 Cursor, 恰好 2 个参数 (String, String[])
+    /**
+     * v1019: 进程内 rcontact 全量枚举（主数据源，不依赖 DB 打开）。
+     * <p>
+     * 数据链：优先 StorageHub.rcontactStorage()；失败则按 b41.h9.d().b().r() 直连；
+     * 再兜底 j1.v(tn3.c4)->h2.cj()。取到游标后按列名读取，分类与 DB SQL 对齐：
+     * @chatroom→群、gh_→服务号、type 过滤→好友。
+     *
+     * @return 是否有任一类别数据
+     */
+    private static boolean enumerateRContact() {
         try {
-            java.lang.reflect.Method m = dbClass.getDeclaredMethod("u", String.class, String[].class);
-            m.setAccessible(true);
-            return m;
-        } catch (NoSuchMethodException ignored) {}
+            Object storage = rcontactStorageInstance();
+            if (storage == null) {
+                LogWriter.log(TAG, "enumerateRContact: rcontactStorage null");
+                return false;
+            }
+            Cursor cursor = (Cursor) XposedHelpers.callMethod(storage, "r");
+            if (cursor == null) {
+                LogWriter.log(TAG, "enumerateRContact: cursor null");
+                return false;
+            }
+            List<ContactCard> friends = new ArrayList<>();
+            List<ContactCard> groups = new ArrayList<>();
+            List<ContactCard> service = new ArrayList<>();
+            try {
+                while (cursor.moveToNext()) {
+                    ContactCard card = readRowByNames(cursor);
+                    if (card == null || card.username == null || card.username.isEmpty()) continue;
+                    String u = card.username;
+                    if (u.endsWith("@chatroom")) {
+                        card.category = Category.GROUP;
+                        groups.add(card);
+                    } else if (u.startsWith("gh_")) {
+                        card.category = Category.OFFICIAL;
+                        service.add(card);
+                    } else {
+                        int t = card.type;
+                        if ((t & 1) == 0 || (t & 32) != 0 || (t & 8) != 0 || (t & 64) != 0) continue;
+                        card.category = Category.FRIEND;
+                        friends.add(card);
+                    }
+                }
+            } finally {
+                try { cursor.close(); } catch (Throwable ignored) {}
+            }
+            sFriends = friends;
+            sGroups = groups;
+            sServiceAccounts = service;
+            LogWriter.log(TAG, "enumerateRContact: friends=" + friends.size()
+                    + " groups=" + groups.size() + " service=" + service.size());
+            return !friends.isEmpty() || !groups.isEmpty() || !service.isEmpty();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "enumerateRContact err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return false;
+        }
+    }
+
+    /** 获取 rcontact 存储实例：StorageHub → b41.h9 直连 → j1.v(tn3.c4) 兜底。 */
+    private static Object rcontactStorageInstance() {
+        try {
+            StorageHub hub = StorageHub.get();
+            Object s = hub.rcontactStorage();
+            if (s != null) return s;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "rcontactStorageInstance(StorageHub) err: " + t.getMessage());
+        }
+        try {
+            ClassLoader cl = runtimeCl();
+            if (cl == null) return null;
+            Class<?> h9 = XposedHelpers.findClass("b41.h9", cl);
+            Object hub = XposedHelpers.callStaticMethod(h9, "d");
+            Object acc = hub != null ? XposedHelpers.callMethod(hub, "b")
+                    : XposedHelpers.callStaticMethod(h9, "b");
+            if (acc != null) {
+                Object rcs = XposedHelpers.callMethod(acc, "r");
+                if (rcs != null) return rcs;
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "rcontactStorageInstance(b41.h9) err: " + t.getMessage());
+        }
+        try {
+            ClassLoader cl = runtimeCl();
+            if (cl == null) return null;
+            Object c4 = XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("gp0.j1", cl), "v",
+                    XposedHelpers.findClass("tn3.c4", cl));
+            Object h2 = XposedHelpers.findClass("com.tencent.mm.plugin.messenger.foundation.h2", cl).cast(c4);
+            return XposedHelpers.callMethod(h2, "cj");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "rcontactStorageInstance(j1.v) err: " + t.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * v1026: 进程内联系人 DB 句柄(参考《数据库.md》)。
+     * 链路: gp0.j1.v(tn3.c4) → h2.cj() → ContactStorage(j4) → 字段 d = qf5.k0。
+     * qf5.k0 是微信进程内已解密的 WCDB 句柄, 无需 CsoLoader/密码/独立打开,
+     * 内核就绪后毫秒级可用(远快于等待 DatabaseProvider 捕获的 15s)。
+     */
+    private static Object inProcessContactDb() {
+        try {
+            ClassLoader cl = runtimeCl();
+            if (cl == null) return null;
+            Object c4 = XposedHelpers.callStaticMethod(
+                    XposedHelpers.findClass("gp0.j1", cl), "v",
+                    XposedHelpers.findClass("tn3.c4", cl));
+            if (c4 == null) return null;
+            Object j4 = XposedHelpers.callMethod(c4, "cj");
+            if (j4 == null) return null;
+            return readFieldInHierarchy(j4, "d");
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** 沿继承链查字段(兼容字段声明在父类)。 */
+    private static Object readFieldInHierarchy(Object obj, String name) {
+        for (Class<?> c = obj.getClass(); c != null; c = c.getSuperclass()) {
+            try {
+                java.lang.reflect.Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                return f.get(obj);
+            } catch (NoSuchFieldException ignored) {
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /** 按列名读取一条 rcontact 行（j4.r() 游标列序不保证与 DB SQL 一致，故按名索引）。 */
+    private static ContactCard readRowByNames(Cursor cursor) {
+        try {
+            ContactCard card = new ContactCard();
+            card.username = col(cursor, "username");
+            card.nickname = col(cursor, "nickname");
+            card.alias = col(cursor, "alias");
+            card.conRemark = col(cursor, "conRemark");
+            card.pyInitial = col(cursor, "pyInitial");
+            card.quanPin = col(cursor, "quanPin");
+            card.conRemarkPYFull = col(cursor, "conRemarkPYFull");
+            card.type = intCol(cursor, "type");
+            card.showHead = intCol(cursor, "showHead");
+            card.contactLabelIds = col(cursor, "contactLabelIds");
+            card.createTime = longCol(cursor, "createTime");
+            return card;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static String col(Cursor cursor, String name) {
+        try {
+            int i = cursor.getColumnIndex(name);
+            if (i < 0 || cursor.isNull(i)) return null;
+            return cursor.getString(i);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static int intCol(Cursor cursor, String name) {
+        try {
+            int i = cursor.getColumnIndex(name);
+            if (i < 0 || cursor.isNull(i)) return 0;
+            return cursor.getInt(i);
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    private static long longCol(Cursor cursor, String name) {
+        try {
+            int i = cursor.getColumnIndex(name);
+            if (i < 0 || cursor.isNull(i)) return 0L;
+            return cursor.getLong(i);
+        } catch (Throwable t) {
+            return 0L;
+        }
+    }
+
+    private static java.lang.reflect.Method findQueryMethod(Class<?> dbClass) {
+        // 1) 优先精确匹配: 恰好 2 个参数 (String, String[]) 的 rawQuery。
+        //    参考《数据库.md》: 进程内句柄 qf5.k0 的 rawQuery 名为 B; 自开 WCDB SQLiteDatabase 为 u。
+        for (String name : new String[]{"B", "u"}) {
+            try {
+                java.lang.reflect.Method m = dbClass.getDeclaredMethod(name, String.class, String[].class);
+                m.setAccessible(true);
+                return m;
+            } catch (NoSuchMethodException ignored) {}
+        }
         // 2) 尝试其他已知名称的 2 参 (String, String[]) 签名
         String[] knownNames = {"rawQuery", "v", "w", "x", "y", "z", "rowQuery"};
         for (String name : knownNames) {
@@ -449,25 +725,18 @@ public class ContactRepository {
         if (wxid == null || wxid.isEmpty()) return null;
         try {
             Context ctx = ContextManager.getAppContext();
-            ClassLoader cl = ContextManager.getClassLoader();
+            ClassLoader cl = runtimeCl();
             if (ctx == null || cl == null) return null;
 
             long uin = getUin(ctx);
             if (uin <= 0) return null;
 
-            String imei = VersionCompat.getImei(cl);
-            String baseDir = VersionCompat.getBaseDir(cl, ctx);
-            if (!baseDir.endsWith("/")) baseDir += "/";
-            String dbHash = VersionCompat.getDbHash(cl, (int) uin);
-            String dbPath = baseDir + "MicroMsg/" + dbHash + "/EnMicroMsg.db";
-            String password = md5(imei + uin).substring(0, 7);
-
-            Class<?> dbCls = VersionCompat.findDbOpenerClass(cl);
-            if (dbCls == null) return null;
-
-            Object db = VersionCompat.openDatabase(dbCls, dbPath, password);
+            // v1024: 优先使用捕获的微信自开 DB, 避免独立 openDatabase 触发 CsoLoader 未初始化
+            Object db = DatabaseProvider.getDatabase();
+            boolean capturedDb = db != null;
             if (db == null) {
-                db = VersionCompat.openDatabaseWcdb(cl, dbPath, password);
+                String baseDir = VersionCompat.getBaseDir(cl, ctx);
+                db = VersionCompat.openEnMicroDb(cl, baseDir, uin);
             }
             if (db == null) return null;
             Cursor cursor = null;
@@ -486,10 +755,12 @@ public class ContactRepository {
                 if (cursor != null) {
                     try { cursor.close(); } catch (Throwable ignored) {}
                 }
-                try {
-                    java.lang.reflect.Method close = db.getClass().getDeclaredMethod("c");
-                    close.invoke(db);
-                } catch (Throwable ignored) {}
+                if (!capturedDb) {
+                    try {
+                        java.lang.reflect.Method close = db.getClass().getDeclaredMethod("c");
+                        close.invoke(db);
+                    } catch (Throwable ignored) {}
+                }
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, "queryAnyContactName err: " + t.getClass().getSimpleName() + " " + t.getMessage());

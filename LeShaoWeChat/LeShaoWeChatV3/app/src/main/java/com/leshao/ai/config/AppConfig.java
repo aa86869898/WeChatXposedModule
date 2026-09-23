@@ -59,6 +59,9 @@ public class AppConfig {
     private boolean onlyWhenMentioned = false;
     /** 记忆保留的最大历史消息条数（环形上限）。 */
     private int maxHistoryMessages = 50;
+    /** v1019: 历史已添加模型记录(最近在前, 去重, 上限 MODEL_HISTORY_LIMIT)。 */
+    private java.util.List<String> modelHistory = new java.util.ArrayList<>();
+    public static final int MODEL_HISTORY_LIMIT = 20;
 
     /**
      * 使用默认路径构造配置对象。
@@ -139,6 +142,15 @@ public class AppConfig {
         autoReplyInPrivate = obj.optBoolean("autoReplyInPrivate", autoReplyInPrivate);
         onlyWhenMentioned = obj.optBoolean("onlyWhenMentioned", onlyWhenMentioned);
         maxHistoryMessages = obj.optInt("maxHistoryMessages", maxHistoryMessages);
+        modelHistory.clear();
+        JSONArray mh = obj.optJSONArray("modelHistory");
+        if (mh != null) {
+            for (int i = 0; i < mh.length(); i++) {
+                String m = mh.optString(i, null);
+                if (m != null && !m.trim().isEmpty()) modelHistory.add(m.trim());
+            }
+            trimModelHistory();
+        }
     }
 
     /** 将字段序列化为 JSON 对象。 */
@@ -159,6 +171,9 @@ public class AppConfig {
         obj.put("autoReplyInPrivate", autoReplyInPrivate);
         obj.put("onlyWhenMentioned", onlyWhenMentioned);
         obj.put("maxHistoryMessages", maxHistoryMessages);
+        JSONArray mh = new JSONArray();
+        for (String m : modelHistory) mh.put(m);
+        obj.put("modelHistory", mh);
         return obj;
     }
 
@@ -179,6 +194,7 @@ public class AppConfig {
         autoReplyInPrivate = false;
         onlyWhenMentioned = false;
         maxHistoryMessages = 50;
+        modelHistory.clear();
     }
 
     /** 判断是否是合法可用的配置（总开关打开且填了 baseUrl）。 */
@@ -241,6 +257,35 @@ public class AppConfig {
             maxHistoryMessages = 1;
         }
         this.maxHistoryMessages = maxHistoryMessages;
+    }
+
+    // ---------- v1019: 历史模型记录 ----------
+
+    /** 返回历史模型列表副本(最近在前)。 */
+    public synchronized java.util.List<String> getModelHistory() {
+        return new java.util.ArrayList<>(modelHistory);
+    }
+
+    /** 记录一个已使用/已选择的模型(去重, 最近在前, 自动裁剪上限)。 */
+    public synchronized void recordModel(String model) {
+        if (model == null) return;
+        String m = model.trim();
+        if (m.isEmpty()) return;
+        modelHistory.remove(m);
+        modelHistory.add(0, m);
+        trimModelHistory();
+    }
+
+    /** 从历史记录中删除指定模型。 */
+    public synchronized void removeModelHistory(String model) {
+        if (model == null) return;
+        modelHistory.remove(model);
+    }
+
+    private void trimModelHistory() {
+        while (modelHistory.size() > MODEL_HISTORY_LIMIT) {
+            modelHistory.remove(modelHistory.size() - 1);
+        }
     }
 
     public synchronized File getConfigFile() { return configFile; }

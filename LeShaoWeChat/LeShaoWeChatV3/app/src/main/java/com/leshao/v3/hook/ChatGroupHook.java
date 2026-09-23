@@ -62,6 +62,8 @@ public class ChatGroupHook {
     }
 
     private static int sRetryCount = 0;
+    // v1017: 内核未就绪属预期状态，只提示一次，避免每次重试刷屏
+    private static volatile boolean sKernelPendingLogged = false;
 
     private static void scheduleRetry(int delayMs) {
         sRetryCount++;
@@ -74,8 +76,8 @@ public class ChatGroupHook {
                     restoreShadowLabels();
                     new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { try { ChatGroupUiInjector.refreshTagData(); } catch (Throwable e) { LogWriter.log(TAG, "refreshTagData err: " + e); } });
                     ContactRepository.loadAsync(null);
-                } else if (sRetryCount < 6) {
-                    scheduleRetry(delayMs + 300);
+                } else if (sRetryCount < 30) {
+                    scheduleRetry(1500);
                 }
             }, "leshao-retry").start();
         }, delayMs);
@@ -171,17 +173,33 @@ public class ChatGroupHook {
             }
             if (imIface != null) {
                 for (String mn : new String[]{"v", "s"}) {
+                    // 先确认该方法真实存在，避免对不存在的 s(Class) 反复抛 NoSuchMethodError 刷屏
+                    try {
+                        findMethodInHierarchy(j1, mn, Class.class);
+                    } catch (Throwable notFound) {
+                        continue;
+                    }
                     try {
                         Object r = XposedHelpers.callStaticMethod(j1, mn, imIface);
                         if (r != null) {
                             svc = r;
+                            sKernelPendingLogged = false;
                             LogWriter.log(TAG, "initCoreServices: j1." + mn + "(" + imIface.getName()
                                     + ") OK class=" + r.getClass().getName());
                             break;
                         }
                     } catch (Throwable t) {
-                        LogWriter.log(TAG, "initCoreServices: j1." + mn + "(" + imIface.getName()
-                                + ") err: " + t);
+                        String msg = String.valueOf(t);
+                        if (msg.contains("Kernel not initialized")) {
+                            // 内核尚未初始化：预期现象，仅提示一次（后续靠重试/回调）
+                            if (!sKernelPendingLogged) {
+                                sKernelPendingLogged = true;
+                                LogWriter.log(TAG, "initCoreServices: 内核未就绪, 等待初始化后重试");
+                            }
+                        } else {
+                            LogWriter.log(TAG, "initCoreServices: j1." + mn + "(" + imIface.getName()
+                                    + ") err: " + t);
+                        }
                     }
                 }
             }
@@ -217,9 +235,13 @@ public class ChatGroupHook {
                 }
             }
             if (svc == null) {
-                LogWriter.log(TAG, "initCoreServices: j1.v/s 仍 null, imIface="
-                        + (imIface == null ? "null" : imIface.getName())
-                        + " dexKit=" + DexKitHelper.getContactStorageClass());
+                // v1027: 内核就绪前(约启动 35s)属预期未就绪, 降低刷屏; 重试窗口延长至覆盖内核就绪
+                if (sRetryCount <= 1 || sRetryCount % 5 == 0) {
+                    LogWriter.log(TAG, "initCoreServices: j1.v/s 仍 null, imIface="
+                            + (imIface == null ? "null" : imIface.getName())
+                            + " dexKit=" + DexKitHelper.getContactStorageClass()
+                            + " retry=" + sRetryCount);
+                }
                 return false;
             }
             sContactStorage = null;

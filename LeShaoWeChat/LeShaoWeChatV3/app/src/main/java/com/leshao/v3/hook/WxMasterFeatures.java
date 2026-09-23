@@ -8,6 +8,7 @@ import android.database.Cursor;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -47,64 +48,88 @@ public class WxMasterFeatures {
         }
     }
 
-    /** 定时群发对话框：内容 + 定时时间 → 发送 */
+    /** 定时群发对话框：内容 + 定时时间 → 发送（v1013 M3 主题） */
     private static void showScheduleDialog(final Activity act, final ClassLoader cl, final List<String> targets) {
-        final EditText input = new EditText(act);
-        input.setHint("输入要群发的消息内容");
-        input.setMinLines(2);
+        if (act == null) return;
+        try { com.leshao.v3.ui.AppColors.refresh(); } catch (Throwable ignored) {}
 
         final long[] triggerMs = {0};
-        final TextView timeLabel = new TextView(act);
-        timeLabel.setText("发送时间: 立即发送");
-        timeLabel.setTextSize(13);
-        timeLabel.setTextColor(AppColors.text2());
-        timeLabel.setPadding(0, dp(act, 8), 0, 0);
 
-        Button timeBtn = new Button(act);
-        timeBtn.setText("选择定时时间");
-        timeBtn.setTextSize(13);
-        timeBtn.setAllCaps(false);
-        timeBtn.setTextColor(AppColors.WHITE_TEXT);
-        android.graphics.drawable.GradientDrawable tbBg = new android.graphics.drawable.GradientDrawable();
-        tbBg.setColor(AppColors.accent());
-        tbBg.setCornerRadius(dp(act, 8));
-        timeBtn.setBackground(tbBg);
-        timeBtn.setOnClickListener(v -> showDateTimePicker(act, triggerMs, timeLabel));
+        android.widget.LinearLayout root = com.leshao.v3.ui.widgets.M3Page.root(act);
+        root.addView(com.leshao.v3.ui.widgets.M3Page.section(act, "乐少万群定时群发",
+                "将发送到 " + targets.size() + " 个群"));
 
-        LinearLayout ll = new LinearLayout(act);
-        ll.setOrientation(LinearLayout.VERTICAL);
-        ll.setPadding(dp(act, 20), 0, dp(act, 20), 0);
-        ll.addView(input);
-        ll.addView(timeLabel);
-        ll.addView(timeBtn);
+        android.widget.LinearLayout card = com.leshao.v3.ui.widgets.M3Page.card(act);
+        card.addView(com.leshao.v3.ui.widgets.M3Page.fieldLabel(act, "群发内容"));
+        final EditText input = com.leshao.v3.ui.widgets.M3Page.input(act, "输入要群发的消息内容");
+        input.setSingleLine(false);
+        input.setHorizontallyScrolling(false);
+        input.setMinLines(2);
+        input.setMaxLines(5);
+        card.addView(input);
+        card.addView(com.leshao.v3.ui.widgets.M3Page.spacer(act, 8));
 
-        new AlertDialog.Builder(act)
-            .setTitle("乐少万群定时群发 (" + targets.size() + "个群)")
-            .setView(ll)
-            .setPositiveButton("发送", (d, w) -> {
-                String msg = input.getText().toString().trim();
-                if (msg.isEmpty()) { toast(act, "消息不能为空"); return; }
-                if (triggerMs[0] > 0 && triggerMs[0] > System.currentTimeMillis()) {
-                    long delay = triggerMs[0] - System.currentTimeMillis();
-                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                        try { sendBroadcast(cl, targets, msg); }
-                        catch (Throwable t) { LogWriter.log(TAG, "定时群发失败: " + t.getMessage()); }
-                    }, delay);
-                    toast(act, "已定时, " + delay / 1000 + " 秒后发送到 " + targets.size() + " 个群");
-                } else {
-                    boolean ok = sendBroadcast(cl, targets, msg);
-                    toast(act, ok ? "已发送到 " + targets.size() + " 个群" : "发送失败");
-                }
-            })
-            .setNegativeButton("取消", null)
-            .show();
+        final TextView timeLabel = com.leshao.v3.ui.widgets.M3Page.note(act, "发送时间：立即发送");
+        card.addView(timeLabel);
+        card.addView(com.leshao.v3.ui.widgets.M3Page.spacer(act, 8));
+        card.addView(com.leshao.v3.ui.widgets.M3Page.ghostButton(act, "选择定时时间",
+                () -> showDateTimePicker(act, triggerMs, timeLabel)));
+        root.addView(card);
+
+        final Runnable doSend = () -> {
+            String msg = input.getText().toString().trim();
+            if (msg.isEmpty()) { toast(act, "消息不能为空"); return; }
+            if (triggerMs[0] > 0 && triggerMs[0] > System.currentTimeMillis()) {
+                long delay = triggerMs[0] - System.currentTimeMillis();
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    try { sendBroadcast(cl, targets, msg); }
+                    catch (Throwable t) { LogWriter.log(TAG, "定时群发失败: " + t.getMessage()); }
+                }, delay);
+                toast(act, "已定时, " + delay / 1000 + " 秒后发送到 " + targets.size() + " 个群");
+            } else {
+                boolean ok = sendBroadcast(cl, targets, msg);
+                toast(act, ok ? "已发送到 " + targets.size() + " 个群" : "发送失败");
+            }
+        };
+
+        AlertDialog.Builder b = new AlertDialog.Builder(act, m3Theme(act));
+        b.setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.92f, 0.7f));
+        b.setCancelable(true);
+        AlertDialog dlg = b.create();
+        com.leshao.v3.ui.InsetsUtil.center(dlg, 0.92f, 0.7f);
+        android.view.Window w = dlg.getWindow();
+        if (w != null) {
+            com.leshao.v3.ui.InsetsUtil.transparentWindow(w);
+            w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
+
+        View sendBtn = com.leshao.v3.ui.widgets.M3Page.button(act, "发送", () -> {
+            doSend.run();
+            dlg.dismiss();
+        });
+        View cancelBtn = com.leshao.v3.ui.widgets.M3Page.ghostButton(act, "取消", dlg::dismiss);
+        root.addView(com.leshao.v3.ui.widgets.M3Page.buttonRow(act, sendBtn, cancelBtn));
+
+        com.leshao.v3.ui.InsetsUtil.clearDialogShell(dlg);
+        dlg.show();
+        com.leshao.v3.ui.InsetsUtil.clearDialogShell(dlg);
+    }
+
+    private static int m3Theme(Activity act) {
+        try {
+            return com.leshao.v3.ui.AppColors.isDarkMode()
+                    ? android.R.style.Theme_DeviceDefault_NoActionBar
+                    : android.R.style.Theme_DeviceDefault_Light_NoActionBar;
+        } catch (Throwable ignored) {
+            return android.R.style.Theme_DeviceDefault_Light_NoActionBar;
+        }
     }
 
     private static void showDateTimePicker(final Activity act, final long[] result, final TextView label) {
         final java.util.Calendar cal = java.util.Calendar.getInstance();
-        new android.app.DatePickerDialog(act, (view, year, month, dayOfMonth) -> {
+        new android.app.DatePickerDialog(act, m3Theme(act), (view, year, month, dayOfMonth) -> {
             final int y = year, mo = month, d = dayOfMonth;
-            new android.app.TimePickerDialog(act, (tv, hour, minute) -> {
+            new android.app.TimePickerDialog(act, m3Theme(act), (tv, hour, minute) -> {
                 cal.set(y, mo, d, hour, minute, 0);
                 result[0] = cal.getTimeInMillis();
                 label.setText("发送时间: " + new java.text.SimpleDateFormat("MM-dd HH:mm")

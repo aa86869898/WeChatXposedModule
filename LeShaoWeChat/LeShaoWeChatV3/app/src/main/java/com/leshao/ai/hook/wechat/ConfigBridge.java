@@ -20,14 +20,14 @@ import java.nio.charset.StandardCharsets;
 /**
  * 配置桥（微信侧）。
  * <p>
- * 设置页/白名单页运行在模块 app 进程，配置需要同步到微信进程供
+ * 设置页运行在模块 app 进程，配置需要同步到微信进程供
  * {@link AIBotCore} 读取。由于 Android 11+ 的包可见性让微信进程<b>无法</b>
  * 解析模块 app 的 ContentProvider（日志表现为
  * {@code Failed to find provider info for com.leshao.v3.aiconfig}），
  * 本类改为以<b>显式广播 payload</b> 为主通道：
  * <ul>
  *   <li>{@link #applyFromIntent}：从 {@code ACTION_REFRESH_CONFIG} 广播 extras
- *       直接取出 config/whitelist JSON，镜像到微信进程的
+ *       直接取出 config JSON，镜像到微信进程的
  *       {@code <wechatData>/leshao_ai}（{@link AIBotCore} 读取路径）。</li>
  *   <li>{@link #requestConfig}：微信启动时主动请求模块 app 推送一次，
  *       解决「配置页保存时微信未运行」的冷启动旧数据问题。</li>
@@ -40,11 +40,9 @@ public final class ConfigBridge {
 
     private static final String AUTHORITY = AiDataProvider.AUTHORITY;
     private static final Uri CONFIG_URI = Uri.parse("content://" + AUTHORITY + "/config");
-    private static final Uri WHITELIST_URI = Uri.parse("content://" + AUTHORITY + "/whitelist");
 
     private static final String DIR_NAME = "leshao_ai";
     private static final String FILE_CONFIG = "config.json";
-    private static final String FILE_WHITELIST = "whitelist.json";
 
     private static volatile boolean receiverRegistered;
 
@@ -60,7 +58,7 @@ public final class ConfigBridge {
         return new File(context.getFilesDir().getParentFile(), DIR_NAME + "/" + name);
     }
 
-    /** 从刷新广播 payload 应用配置/白名单（主通道，无需 Provider）。 */
+    /** 从刷新广播 payload 应用配置（主通道，无需 Provider）。 */
     public static boolean applyFromIntent(Context context, Intent intent) {
         if (context == null || intent == null) {
             return false;
@@ -71,17 +69,13 @@ public final class ConfigBridge {
             if (config != null && !config.isEmpty()) {
                 ok |= writeFile(mirrorFile(context, FILE_CONFIG), config);
             }
-            String whitelist = intent.getStringExtra(AiDataProvider.EXTRA_WHITELIST);
-            if (whitelist != null && !whitelist.isEmpty()) {
-                ok |= writeFile(mirrorFile(context, FILE_WHITELIST), whitelist);
-            }
         } catch (Throwable t) {
             Log.w(TAG, "applyFromIntent 失败: " + t);
         }
         return ok;
     }
 
-    /** ContentProvider 兜底：可见性允许时拉取 config/whitelist 并镜像。 */
+    /** ContentProvider 兜底：可见性允许时拉取 config 并镜像。 */
     public static boolean syncFromProvider(Context context) {
         if (context == null) {
             return false;
@@ -95,10 +89,6 @@ public final class ConfigBridge {
             String config = readUri(cr, CONFIG_URI);
             if (config != null && !config.isEmpty()) {
                 ok |= writeFile(mirrorFile(context, FILE_CONFIG), config);
-            }
-            String whitelist = readUri(cr, WHITELIST_URI);
-            if (whitelist != null && !whitelist.isEmpty()) {
-                ok |= writeFile(mirrorFile(context, FILE_WHITELIST), whitelist);
             }
         } catch (Throwable t) {
             Log.w(TAG, "syncFromProvider 失败: " + t);

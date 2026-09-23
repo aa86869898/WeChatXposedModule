@@ -46,6 +46,18 @@ public class ContactPickerDialog {
     public static void show(Activity parentAct, String currentIds, int initialMode, OnContactsSelected callback) {
         if (parentAct == null || parentAct.isFinishing()) return;
 
+        // v1025: 先立即显示加载框(DB 捕获/联系人加载完成后替换内容), 选择器秒开
+        final android.app.AlertDialog[] loadingRef = new android.app.AlertDialog[1];
+        try {
+            android.app.AlertDialog loading = new android.app.AlertDialog.Builder(parentAct)
+                    .setTitle("LeShao")
+                    .setMessage("\u901a\u8baf\u5f55\u52a0\u8f7d\u4e2d\uff0c\u8bf7\u7a0d\u5019\u2026")
+                    .setCancelable(true)
+                    .create();
+            loading.show();
+            loadingRef[0] = loading;
+        } catch (Throwable ignored) {}
+
         ContactRepository.loadAsync(() -> {
             List<ContactCard> all;
             switch (initialMode) {
@@ -55,8 +67,12 @@ public class ContactPickerDialog {
             }
             if (all == null || all.isEmpty()) {
                 parentAct.runOnUiThread(() -> {
-                    android.widget.Toast.makeText(parentAct, "\u901a\u8baf\u5f55\u672a\u52a0\u8f7d",
-                            android.widget.Toast.LENGTH_LONG).show();
+                    if (loadingRef[0] != null) {
+                        loadingRef[0].setMessage("\u901a\u8baf\u5f55\u672a\u52a0\u8f7d\u5b8c\u6210\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5");
+                    } else {
+                        android.widget.Toast.makeText(parentAct, "\u901a\u8baf\u5f55\u672a\u52a0\u8f7d",
+                                android.widget.Toast.LENGTH_LONG).show();
+                    }
                 });
                 return;
             }
@@ -72,7 +88,12 @@ public class ContactPickerDialog {
                 }
             }
 
-            parentAct.runOnUiThread(() -> showDialog(parentAct, contacts, selected, initialMode, callback));
+            parentAct.runOnUiThread(() -> {
+                if (loadingRef[0] != null) {
+                    try { loadingRef[0].dismiss(); } catch (Throwable ignored) {}
+                }
+                showDialog(parentAct, contacts, selected, initialMode, callback);
+            });
         });
     }
 
@@ -88,6 +109,7 @@ public class ContactPickerDialog {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setMinimumHeight(dp(act, 520));
         root.setBackground(CandyUi.dialogBg(act));
+        InsetsUtil.clipRounded(root);
 
         final ModernTopBar topBar = new ModernTopBar(act, "\u9009\u62e9\u8054\u7cfb\u4eba", false, null);
         root.addView(topBar, new LinearLayout.LayoutParams(-1, -2));
@@ -278,6 +300,7 @@ public class ContactPickerDialog {
             confirm.setText("\u786e\u5b9a (" + selected.size() + ")");
         };
 
+        InsetsUtil.transparentWindow(dialog);
         dialog.show();
     }
 
