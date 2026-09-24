@@ -502,7 +502,50 @@ public final class StorageHub {
     /** NetSceneQueue（modelbase.r1），发送入队用。 */
     public Object netSceneQueue() {
         ensureBound();
+        if (netSceneQueue == null) {
+            upgradeToJ1Queue();
+        }
         return netSceneQueue;
+    }
+
+    /**
+     * v1044: 旧链(b41.h9)绑定成功但缺 NetSceneQueue 时, 内核就绪后尝试 j1 服务链补绑。
+     * 发送链路 v51.r0 入队强依赖 queue; 早期 installCore 时 j1 未 ready 会走旧链,
+     * 旧链拿不到 NetSceneQueue → 文字发送入队必然失败(「语音能发文字不发」)。
+     * 这里在每次取 queue 时兜底一次, 内核就绪即可升级。
+     */
+    private void upgradeToJ1Queue() {
+        synchronized (lock) {
+            if (netSceneQueue != null) {
+                return;
+            }
+            ClassLoader cl = HookEntry.appClassLoader;
+            if (cl == null) {
+                return;
+            }
+            try {
+                ClassLoader tk = com.leshao.v3.hook.VersionCompat.findTinkerClassLoader(cl);
+                if (tk != null && !tk.getClass().getName().contains("Leshao") && tk != cl) {
+                    cl = tk;
+                }
+            } catch (Throwable ignored) {
+            }
+            try {
+                Class<?> j1 = serviceLocatorClass(cl);
+                if (j1 == null) {
+                    return;
+                }
+                Object q = readNetSceneQueue(j1);
+                if (q != null) {
+                    netSceneQueue = q;
+                    LogWriter.log(TAG, "upgradeToJ1Queue OK: " + q.getClass().getName());
+                } else {
+                    LogWriter.log(TAG, "upgradeToJ1Queue: j1.q().b 仍不可用(内核未就绪?)");
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "upgradeToJ1Queue err: " + t);
+            }
+        }
     }
 
     public Object rcontactStorage() {

@@ -72,13 +72,17 @@ public final class WeChatMessenger {
     private static boolean sendViaMsgInfo(String talker, String content, ClassLoader cl) {
         try {
             ClassLoader tk = VersionCompat.findTinkerClassLoader(cl != null ? cl : HookEntry.appClassLoader);
+            LogWriter.log(TAG, "sendViaMsgInfo: tk=" + (tk == null ? "null" : tk.getClass().getName()));
             if (tk == null) {
                 LogWriter.log(TAG, "sendViaMsgInfo: Tinker CL 未就绪");
                 return false;
             }
             Class<?> e9 = XposedHelpers.findClass("com.tencent.mm.storage.e9", tk);
             Class<?> r0 = XposedHelpers.findClass("v51.r0", tk);
+            LogWriter.log(TAG, "sendViaMsgInfo: e9=" + e9.getName() + " r0=" + r0.getName()
+                    + " r0ctors=" + dumpCtors(r0));
             Object f9 = StorageHub.get().msgInfoStorage();
+            LogWriter.log(TAG, "sendViaMsgInfo: f9=" + (f9 == null ? "null" : f9.getClass().getName()));
             if (f9 == null) {
                 LogWriter.log(TAG, "sendViaMsgInfo: f9(MsgInfoStorage) 未绑定");
                 return false;
@@ -113,20 +117,35 @@ public final class WeChatMessenger {
             }
 
             // 3) v51.r0 发送 scene
-            Object scene = XposedHelpers.newInstance(r0, msgId, talker);
+            Object scene = null;
+            try {
+                scene = XposedHelpers.newInstance(r0, msgId, talker);
+                LogWriter.log(TAG, "sendViaMsgInfo: new r0 OK msgId=" + msgId
+                        + " scene=" + (scene == null ? "null" : scene.getClass().getName()));
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "sendViaMsgInfo: new v51.r0 失败: " + stackOf(t));
+                return false;
+            }
 
             // 4) NetSceneQueue = j1.q().b；queue.h(scene,0) 入队
             Object queue = StorageHub.get().netSceneQueue();
+            LogWriter.log(TAG, "sendViaMsgInfo: queue=" + (queue == null ? "null"
+                    : queue.getClass().getName() + " methods=" + dumpHMethods(queue)));
             if (queue == null) {
                 LogWriter.log(TAG, "sendViaMsgInfo: NetSceneQueue 未绑定, 已插库但未入队");
                 return false;
             }
-            XposedHelpers.callMethod(queue, "h", scene, 0);
-            Log.i(TAG, "sendViaMsgInfo: 入队发送 -> " + talker + " len=" + content.length()
+            try {
+                XposedHelpers.callMethod(queue, "h", scene, 0);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "sendViaMsgInfo: queue.h 入队失败: " + stackOf(t));
+                return false;
+            }
+            LogWriter.log(TAG, "sendViaMsgInfo: 入队发送 OK -> " + talker + " len=" + content.length()
                     + " msgId=" + msgId);
             return true;
         } catch (Throwable t) {
-            Log.w(TAG, "sendViaMsgInfo 失败: " + t);
+            LogWriter.log(TAG, "sendViaMsgInfo 失败: " + stackOf(t));
             return false;
         }
     }
@@ -139,18 +158,18 @@ public final class WeChatMessenger {
             Class<?> r1 = DexKitAdapter.findSendFactoryClass();
             Class<?> p1 = DexKitAdapter.findSendTypeEnumClass();
             if (r1 == null || p1 == null) {
-                Log.w(TAG, "发送失败: 发送类未定位 (r1=" + r1 + ", p1=" + p1 + ")");
+                LogWriter.log(TAG, "sendViaBuilder: 发送类未定位 (r1=" + r1 + ", p1=" + p1 + ")");
                 return false;
             }
             Object textType;
             try {
                 textType = XposedHelpers.getStaticObjectField(p1, FIELD_TYPE_TEXT);
             } catch (Throwable t) {
-                Log.w(TAG, "p1.d(TEXT) 读取失败: " + t);
+                LogWriter.log(TAG, "sendViaBuilder: p1.d(TEXT) 读取失败: " + stackOf(t));
                 return false;
             }
             if (textType == null) {
-                Log.w(TAG, "发送失败: p1.d(TEXT) 为 null");
+                LogWriter.log(TAG, "sendViaBuilder: p1.d(TEXT) 为 null");
                 return false;
             }
 
@@ -162,10 +181,10 @@ public final class WeChatMessenger {
             XposedHelpers.callMethod(req, "i", 1);       // scene/type
             XposedHelpers.callMethod(req, "b");          // 异步执行
 
-            Log.i(TAG, "sendViaBuilder: 已发起发送 -> " + talker + " len=" + content.length());
+            LogWriter.log(TAG, "sendViaBuilder: 已发起发送 -> " + talker + " len=" + content.length());
             return true;
         } catch (Throwable t) {
-            Log.w(TAG, "sendText 失败: " + t);
+            LogWriter.log(TAG, "sendViaBuilder 失败: " + stackOf(t));
             return false;
         }
     }
@@ -184,5 +203,79 @@ public final class WeChatMessenger {
             return sendText(talker, content, cl);
         }
         return sendText(talker, "@" + atDisplay + " " + content, cl);
+    }
+
+    // ---------- 诊断辅助 ----------
+
+    /** 类构造签名 dump，用于定位 r0 构造参数不匹配。 */
+    private static String dumpCtors(Class<?> c) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (java.lang.reflect.Constructor<?> ct : c.getDeclaredConstructors()) {
+                sb.append("\n  ").append(ct.getName()).append('(');
+                Class<?>[] pts = ct.getParameterTypes();
+                for (int i = 0; i < pts.length; i++) {
+                    if (i > 0) sb.append(',');
+                    sb.append(pts[i].getSimpleName());
+                }
+                sb.append(')');
+            }
+            return sb.toString().trim().isEmpty() ? "(无可见构造)" : sb.toString();
+        } catch (Throwable t) {
+            return "dumpCtors err: " + t;
+        }
+    }
+
+    /** 队列入队相关方法 dump（h/g/a/b 等短名），用于定位入队方法签名。 */
+    private static String dumpHMethods(Object queue) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (java.lang.reflect.Method m : queue.getClass().getDeclaredMethods()) {
+                if (m.getParameterCount() == 0) continue;
+                sb.append("\n  ").append(m.getName()).append('(');
+                Class<?>[] pts = m.getParameterTypes();
+                for (int i = 0; i < pts.length; i++) {
+                    if (i > 0) sb.append(',');
+                    sb.append(pts[i].getSimpleName());
+                }
+                sb.append(')');
+            }
+            return sb.toString().trim().isEmpty() ? "(无带参方法)" : sb.toString();
+        } catch (Throwable t) {
+            return "dumpHMethods err: " + t;
+        }
+    }
+
+    /** 异常完整栈(含 cause)，供 LogWriter 落盘。 */
+    private static String stackOf(Throwable t) {
+        try {
+            StringBuilder sb = new StringBuilder(String.valueOf(t));
+            StackTraceElement[] st = t.getStackTrace();
+            if (st != null) {
+                for (int i = 0; i < Math.min(st.length, 15); i++) {
+                    sb.append("\n  at ").append(st[i].getClassName()).append('.')
+                            .append(st[i].getMethodName()).append('(')
+                            .append(st[i].getFileName() == null ? "?" : st[i].getFileName())
+                            .append(':').append(st[i].getLineNumber()).append(')');
+                }
+            }
+            Throwable c = t.getCause();
+            while (c != null) {
+                sb.append("\nCaused by: ").append(c);
+                StackTraceElement[] cs = c.getStackTrace();
+                if (cs != null) {
+                    for (int i = 0; i < Math.min(cs.length, 10); i++) {
+                        sb.append("\n  at ").append(cs[i].getClassName()).append('.')
+                                .append(cs[i].getMethodName()).append('(')
+                                .append(cs[i].getFileName() == null ? "?" : cs[i].getFileName())
+                                .append(':').append(cs[i].getLineNumber()).append(')');
+                    }
+                }
+                c = c.getCause();
+            }
+            return sb.toString();
+        } catch (Throwable ignored) {
+            return String.valueOf(t);
+        }
     }
 }
