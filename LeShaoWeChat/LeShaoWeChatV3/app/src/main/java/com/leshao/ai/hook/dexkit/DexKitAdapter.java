@@ -291,8 +291,23 @@ public final class DexKitAdapter {
         if (className == null) {
             return null;
         }
+        // v1042: 优先用微信 Tinker 真实运行时 CL(DelegateLastClassLoader) 加载,
+        // 否则拿到的是 base.apk 平行副本, hook 挂上不生效/静态单例取不到。
+        ClassLoader cl = HookEntry.appClassLoader;
         try {
-            return XposedHelpers.findClass(className, HookEntry.appClassLoader);
+            ClassLoader tk = com.leshao.v3.hook.VersionCompat.findTinkerClassLoader(cl);
+            if (tk != null && !tk.getClass().getName().contains("Leshao")
+                    && tk != cl) {
+                cl = tk;
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            Class<?> c = XposedHelpers.findClass(className, cl);
+            if (cl != HookEntry.appClassLoader) {
+                Log.i(TAG, label + " 经真实 CL 加载: " + className);
+            }
+            return c;
         } catch (Throwable t) {
             Log.w(TAG, label + " findClass 失败: " + className + " -> " + t);
             return null;

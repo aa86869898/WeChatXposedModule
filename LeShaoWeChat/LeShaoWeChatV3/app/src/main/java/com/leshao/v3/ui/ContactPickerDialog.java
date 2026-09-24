@@ -353,6 +353,7 @@ public class ContactPickerDialog {
         row.addView(textCol, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
+        CandyUi.ripple(row, AppColors.SHAPE_MD_DP);
         row.setOnClickListener(v -> onToggle.run());
         return row;
     }

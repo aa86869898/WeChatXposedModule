@@ -330,6 +330,23 @@ public class VersionCompat {
     private static volatile boolean sTinkerSearchDone = false;
 
     public static ClassLoader findTinkerClassLoader(ClassLoader cl) {
+        // v1042: 微信经 Tinker 热修复时, 真实存储类(f9/e9 等)由 DelegateLastClassLoader 加载,
+        // 该 CL 比 base.apk 平行副本(PathClassLoader)更"真实"。此前 sCachedTinkerClassLoader
+        // 一旦缓存就永不刷新, 而早期 probe 通常先拿到 PathClassLoader 并缓存, 导致后续所有
+        // hook 都挂在平行副本类上(运行时调用不经过它) → hook 装上但零捕获。
+        // 修复: 若 sWechatRealClassLoader 已更新为更真实的 CL(DelegateLastClassLoader/Tinker),
+        // 优先使用并刷新缓存。
+        ClassLoader latestReal = sWechatRealClassLoader;
+        if (latestReal != null && isTinkerRuntimeLoader(latestReal)) {
+            if (sCachedTinkerClassLoader != latestReal) {
+                sCachedTinkerClassLoader = latestReal;
+                LogWriter.log(TAG, "findTinkerClassLoader: refresh to real CL="
+                    + latestReal.getClass().getSimpleName());
+            }
+            sTinkerSearchDone = true;
+            return latestReal;
+        }
+
         // Return cached result if available
         if (sCachedTinkerClassLoader != null) return sCachedTinkerClassLoader;
 
@@ -487,8 +504,29 @@ public class VersionCompat {
     /** v1025: 从微信运行时对象反查出的真实 ClassLoader, 供 WCDB/CsoLoader 相关路径优先使用 */
     private static volatile ClassLoader sWechatRealClassLoader = null;
 
+    /** v1042: 判定该 CL 是否为微信 Tinker 热修复的真实运行时加载器。
+     *  真实存储类在此类加载器下独立加载, base.apk 平行副本(PathClassLoader)不可用。 */
+    private static boolean isTinkerRuntimeLoader(ClassLoader cl) {
+        if (cl == null) return false;
+        String name = cl.getClass().getName();
+        return name.contains("DelegateLastClassLoader")
+            || name.contains("TinkerClassLoader")
+            || name.contains("Tinker");
+    }
+
     public static void setWechatRealClassLoader(ClassLoader cl) {
-        if (cl != null) sWechatRealClassLoader = cl;
+        if (cl == null) return;
+        sWechatRealClassLoader = cl;
+        // v1042: 探测到 Tinker 真实运行时 CL 时同步刷新缓存,
+        // 避免早期 PathClassLoader 平行副本被永久缓存导致 hook 挂错类。
+        if (isTinkerRuntimeLoader(cl)) {
+            if (sCachedTinkerClassLoader != cl) {
+                LogWriter.log(TAG, "setWechatRealClassLoader: refresh cache to "
+                    + cl.getClass().getSimpleName());
+            }
+            sCachedTinkerClassLoader = cl;
+            sTinkerSearchDone = true;
+        }
     }
 
     /** v1025: CsoLoader 反查入口(5s 限频), 由 DatabaseProvider.probeAndRehook 在真实 CL 上调用 */

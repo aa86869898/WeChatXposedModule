@@ -101,23 +101,32 @@ public class SubPageActivity {
         root.addView(MainActivity.makeTitleBar(ctx, title, true, () -> goBack(parentAct)));
 
         View body = createPageBody(ctx, parentAct, pageId);
-        android.widget.ScrollView sv = new android.widget.ScrollView(ctx);
-        sv.setFillViewport(true);
-        sv.setVerticalScrollBarEnabled(true);
+        // v1033: 页面自身已是 ScrollView 时不再外套一层，消除同向双层滚动(掉帧/不跟手)
+        View scroller;
+        if (body instanceof android.widget.ScrollView) {
+            scroller = body;
+        } else {
+            android.widget.ScrollView sv = new android.widget.ScrollView(ctx);
+            sv.setFillViewport(true);
+            sv.setVerticalScrollBarEnabled(true);
+            sv.addView(body);
+            scroller = sv;
+        }
         android.widget.LinearLayout.LayoutParams svLp = new LinearLayout.LayoutParams(-1, 0, 1.0f);
-        sv.setLayoutParams(svLp);
-        sv.addView(body);
-        root.addView(sv);
-        sContentScroll = sv;
+        scroller.setLayoutParams(svLp);
+        root.addView(scroller);
+        sContentScroll = (scroller instanceof android.widget.ScrollView)
+                ? (android.widget.ScrollView) scroller : null;
 
         // v1017: 就地重建时恢复滚动位置（refreshCurrent 预设 sPendingScrollY）
         final int restoreY = sPendingScrollY;
+        final android.widget.ScrollView targetScroll = sContentScroll;
         sPendingScrollY = -1;
-        if (restoreY > 0) {
-            sv.post(new Runnable() {
+        if (restoreY > 0 && targetScroll != null) {
+            targetScroll.post(new Runnable() {
                 @Override
                 public void run() {
-                    try { sv.scrollTo(0, restoreY); } catch (Throwable ignored) {}
+                    try { targetScroll.scrollTo(0, restoreY); } catch (Throwable ignored) {}
                 }
             });
         }

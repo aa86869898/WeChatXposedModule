@@ -468,7 +468,7 @@ public class MainActivity {
         LinearLayout bodyCol = new LinearLayout(ctx);
         bodyCol.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable bodyBg = new GradientDrawable();
-        bodyBg.setCornerRadius(dp(d, 8));
+        bodyBg.setCornerRadius(dp(d, AppColors.SHAPE_SM_DP));
         bodyBg.setColor(AppColors.card());
         bodyCol.setBackground(bodyBg);
         bodyCol.setPadding(dp(d, 12), dp(d, 10), dp(d, 12), dp(d, 10));
@@ -682,6 +682,7 @@ public class MainActivity {
         card.setPadding(dp(d, 16), dp(d, 14), dp(d, 16), dp(d, 14));
         card.setClickable(true);
         card.setFocusable(true);
+        applyRipple(card, d, AppColors.SHAPE_MD_DP);
 
         // v1013 M3: 头像 44dp 圆形容器；真实头像异步加载，加载前显示首字母占位
         final android.widget.ImageView avatar = new android.widget.ImageView(ctx);
@@ -804,7 +805,7 @@ public class MainActivity {
         // v955 M3 search bar: surfaceContainerHigh + 28dp 全圆角
         GradientDrawable searchBg = new GradientDrawable();
         searchBg.setShape(GradientDrawable.RECTANGLE);
-        searchBg.setCornerRadius(dp(d, 28));
+        searchBg.setCornerRadius(dp(d, AppColors.DIALOG_RADIUS_DP));
         searchBg.setColor(AppColors.surfaceContainerHigh());
         card.setBackground(searchBg);
         InsetsUtil.clipRounded(card);
@@ -899,7 +900,7 @@ public class MainActivity {
         int iconBox = dp(d, 40);
         GradientDrawable iconBg = new GradientDrawable();
         iconBg.setShape(GradientDrawable.RECTANGLE);
-        iconBg.setCornerRadius(dp(d, 12));
+        iconBg.setCornerRadius(dp(d, AppColors.SHAPE_MD_DP));
         iconBg.setColor(AppColors.secondaryContainer());
         iconWrap.setBackground(iconBg);
         LinearLayout.LayoutParams iconWrapLp = new LinearLayout.LayoutParams(iconBox, iconBox);
@@ -962,7 +963,7 @@ public class MainActivity {
         LinearLayout card1 = new LinearLayout(ctx);
         card1.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable card1Bg = new GradientDrawable();
-        card1Bg.setCornerRadius(dp(d, 8));
+        card1Bg.setCornerRadius(dp(d, AppColors.SHAPE_MD_DP));
         card1Bg.setColor(AppColors.card());
         card1.setBackground(card1Bg);
         card1.setPadding(dp(d, 12), dp(d, 10), dp(d, 12), dp(d, 10));
@@ -974,7 +975,7 @@ public class MainActivity {
         LinearLayout card2 = new LinearLayout(ctx);
         card2.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable card2Bg = new GradientDrawable();
-        card2Bg.setCornerRadius(dp(d, 8));
+        card2Bg.setCornerRadius(dp(d, AppColors.SHAPE_MD_DP));
         card2Bg.setColor(AppColors.card());
         card2.setBackground(card2Bg);
         card2.setPadding(dp(d, 16), dp(d, 14), dp(d, 16), dp(d, 14));
@@ -987,9 +988,10 @@ public class MainActivity {
         contactBtn.setGravity(Gravity.CENTER);
         contactBtn.setPadding(dp(d, 14), dp(d, 12), dp(d, 14), dp(d, 12));
         GradientDrawable cbBg = new GradientDrawable();
-        cbBg.setCornerRadius(dp(d, 8));
+        cbBg.setCornerRadius(dp(d, AppColors.SHAPE_MD_DP));
         cbBg.setColor(AppColors.accent());
         contactBtn.setBackground(cbBg);
+        applyRipple(contactBtn, d, AppColors.SHAPE_MD_DP);
         contactBtn.setOnClickListener(cv -> {
             try {
                 Intent intent = new Intent();
@@ -1041,13 +1043,14 @@ public class MainActivity {
         btn.setGravity(Gravity.CENTER);
         btn.setPadding(dp(d, 8), dp(d, 6), dp(d, 8), dp(d, 6));
         GradientDrawable btnBg = new GradientDrawable();
-        btnBg.setCornerRadius(dp(d, 6));
+        btnBg.setCornerRadius(dp(d, AppColors.SHAPE_SM_DP));
         btnBg.setColor(AppColors.bg());
         btn.setBackground(btnBg);
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0, -2, 1.0f);
         btn.setLayoutParams(btnLp);
         btn.setClickable(true);
         btn.setOnClickListener(v -> showDonateImage(ctx, d, act, resName, label));
+        applyRipple(btn, d, AppColors.SHAPE_SM_DP);
 
         android.graphics.drawable.Drawable thumb = loadModuleDrawable(ctx, resName);
         if (thumb != null) {
@@ -1158,6 +1161,7 @@ public class MainActivity {
             back.setPadding(0, 0, dp(d, 8), 0);
             back.setClickable(true);
             back.setOnClickListener(v -> { if (onBack != null) onBack.run(); });
+            applyRipple(back, d, AppColors.SHAPE_FULL_DP);
             bar.addView(back);
         }
 
@@ -1203,6 +1207,19 @@ public class MainActivity {
         View v = new View(ctx);
         v.setLayoutParams(new LinearLayout.LayoutParams(dp(d, dp), 0));
         return v;
+    }
+
+    /** v1033 M3: 为已有圆角底的可点击容器挂全圆角涟漪边界 */
+    private static void applyRipple(View v, float d, float radiusDp) {
+        try {
+            GradientDrawable mask = new GradientDrawable();
+            mask.setShape(GradientDrawable.RECTANGLE);
+            mask.setCornerRadius(radiusDp * d);
+            mask.setColor(0xFFFFFFFF);
+            v.setForeground(new android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(AppColors.stateLayerPressed()),
+                    null, mask));
+        } catch (Throwable ignored) {}
     }
 
     private static View candyDivider(Context ctx, float d) {

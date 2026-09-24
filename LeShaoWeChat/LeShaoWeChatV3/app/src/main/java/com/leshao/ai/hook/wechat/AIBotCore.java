@@ -56,8 +56,15 @@ public final class AIBotCore {
             conversationConfig.load();
             memory = new ChatMemory(hostDataDir, DEFAULT_MAX_MEMORY);
             knowledge = new KnowledgeBase(hostDataDir);
-            Log.i(TAG, "AIBotCore 初始化完成: enabled=" + config.isEnabled());
-            LogWriter.log(TAG, "AIBotCore 初始化完成: enabled=" + config.isEnabled());
+            int convCount = 0;
+            try {
+                convCount = conversationConfig.keys().size();
+            } catch (Throwable ignored) {
+            }
+            Log.i(TAG, "AIBotCore 初始化完成: enabled=" + config.isEnabled()
+                    + " convConfig条目=" + convCount);
+            LogWriter.log(TAG, "AIBotCore 初始化完成: enabled=" + config.isEnabled()
+                    + " convConfig条目=" + convCount);
         } catch (Throwable t) {
             Log.w(TAG, "AIBotCore 初始化异常: " + t, t);
             LogWriter.log(TAG, "AIBotCore 初始化异常: " + t);
@@ -144,6 +151,8 @@ public final class AIBotCore {
             callback.onResult("配置未初始化");
             return;
         }
+        LogWriter.log(TAG, "ask: chatId=" + chatId
+                + " incomingLen=" + (incoming == null ? -1 : incoming.length()));
         executor.execute(new Runnable() {
             @Override
             public void run() {

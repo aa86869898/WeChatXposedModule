@@ -1,5 +1,6 @@
 package com.leshao.ai.hook.wechat;
 
+import android.content.Context;
 import android.os.SystemClock;
 import android.util.Log;
 
@@ -47,10 +48,20 @@ public final class StorageHub {
     private volatile boolean bound;
     private volatile String cachedSelfWxid;
 
+    /** 微信 Application Context（selfWxid 的 SharedPreferences 兜底用）。 */
+    private static volatile Context appContext;
+
     /** 绑定失败后的冷却截止时间(uptimeMs)；0 表示无冷却。
      *  内核未就绪时绑定会持续失败，若每次调用都重跑 DexKit 定位会卡死调用线程(尤其主线程)。 */
     private volatile long bindRetryAfterMs = 0L;
     private static final long BIND_FAIL_COOLDOWN_MS = 10000L;
+
+    /** 注入微信 Application Context（selfWxid 的 SharedPreferences 兜底用）。 */
+    public static void setAppContext(Context ctx) {
+        if (ctx != null) {
+            appContext = ctx.getApplicationContext();
+        }
+    }
 
     private StorageHub() {
     }
@@ -129,6 +140,19 @@ public final class StorageHub {
             LogWriter.log(TAG, "appClassLoader 未就绪，跳过绑定");
             return;
         }
+        // v1042: 微信经 Tinker 热修复时, 真实存储类(b41.e/b41.h9/f9/j4/q3)由
+        // DelegateLastClassLoader 加载, HookEntry.appClassLoader 只是 base.apk 平行副本,
+        // 其上取得的 hub/acc 静态单例与运行时完全隔离 → 绑定必然失败。
+        // 改用 VersionCompat.findTinkerClassLoader 解析真实运行时 CL。
+        try {
+            ClassLoader tk = com.leshao.v3.hook.VersionCompat.findTinkerClassLoader(cl);
+            if (tk != null && !tk.getClass().getName().contains("Leshao")
+                    && tk != cl) {
+                LogWriter.log(TAG, "bindInternal: 使用 Tinker 真实 CL " + tk.getClass().getSimpleName());
+                cl = tk;
+            }
+        } catch (Throwable ignored) {
+        }
         Class<?> hubClass = DexKitAdapter.findCoreHubClass();
         Class<?> accClass = DexKitAdapter.findAccountStorageClass();
         Class<?> msgClass = DexKitAdapter.findMsgInfoStorageClass();
@@ -165,39 +189,21 @@ public final class StorageHub {
             return;
         }
 
-        // 3) acc.v() → MsgInfoStorage(f9)，独立绑定：失败不再阻断 r()/q()
-        try {
-            msgInfoStorage = callNoArgTyped(acc, "v", msgClass);
-        } catch (Throwable t) {
-            Log.w(TAG, "acc.v() 异常: " + t);
-        }
+        // 3) acc → MsgInfoStorage(f9)。混淆方法名("v")跨版本会变, 优先已知名, 失败按返回类型兜底扫描。
+        msgInfoStorage = firstGetter(acc, msgClass, "v");
         if (msgInfoStorage == null) {
-            LogWriter.log(TAG, "bindInternal: acc.v() 失败 (acc=" + cn(acc.getClass()) + ")，继续尝试 r/q");
+            LogWriter.log(TAG, "bindInternal: MsgInfoStorage 获取失败 (acc=" + cn(acc.getClass()) + ")");
+            dumpAccMethods(acc, msgClass);
         }
 
-        // 4) acc.r() → RContactStorage(j4)，独立绑定
-        try {
-            rcontactStorage = callNoArgTyped(acc, "r", rcontactClass);
-        } catch (Throwable t) {
-            Log.w(TAG, "acc.r() 异常: " + t);
-        }
+        // 4) acc → RContactStorage(j4)。同上, 方法名("r")不保证, 按类型扫描。
+        rcontactStorage = firstGetter(acc, rcontactClass, "r");
         if (rcontactStorage == null) {
-            try {
-                rcontactStorage = callNoArgTyped(acc, "r", null);
-            } catch (Throwable t) {
-                Log.w(TAG, "acc.r() 二次尝试异常: " + t);
-            }
-        }
-        if (rcontactStorage == null) {
-            LogWriter.log(TAG, "bindInternal: acc.r() 失败 (acc=" + cn(acc.getClass()) + ")");
+            LogWriter.log(TAG, "bindInternal: RContactStorage 获取失败 (acc=" + cn(acc.getClass()) + ")");
         }
 
-        // 5) acc.q() → ConfigStorage(q3)，无类型校验，独立绑定
-        try {
-            configStorage = callNoArg(acc, "q");
-        } catch (Throwable t) {
-            Log.w(TAG, "acc.q() 异常: " + t);
-        }
+        // 5) acc → ConfigStorage(q3)(尽力而为; 失败时 selfWxid 走 SharedPreferences 兜底)
+        configStorage = callNoArg(acc, "q");
         LogWriter.log(TAG, "bindInternal: msg=" + (msgInfoStorage != null)
                 + " rcontact=" + (rcontactStorage != null)
                 + " config=" + (configStorage != null));
@@ -207,29 +213,57 @@ public final class StorageHub {
         return c == null ? "null" : c.getName();
     }
 
-    /** 自己 wxid（ConfigStorage key 2）。取不到返回 null。 */
+    /** 诊断 dump：列出 acc 上 0/1 参数方法的签名，用于定位真实 getter 方法名或类型。 */
+    private static void dumpAccMethods(Object acc, Class<?> expect) {
+        try {
+            StringBuilder sb = new StringBuilder("acc 方法签名(")
+                    .append(acc.getClass().getName()).append(") 目标=").append(cn(expect)).append(":");
+            for (Method m : acc.getClass().getDeclaredMethods()) {
+                if (m.getParameterCount() > 1) {
+                    continue;
+                }
+                sb.append("\n  ").append(m.getName()).append('(')
+                        .append(m.getParameterCount()).append(")->")
+                        .append(m.getReturnType() == null ? "void" : m.getReturnType().getName())
+                        .append(" final=").append(Modifier.isFinal(m.getModifiers()));
+                if (sb.length() > 8000) {
+                    break;
+                }
+            }
+            LogWriter.log(TAG, sb.toString());
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** 自己 wxid（ConfigStorage key 2；存储链不可用时走 SharedPreferences 兜底）。取不到返回 null。 */
     public String selfWxid() {
         if (cachedSelfWxid != null) {
             return cachedSelfWxid;
         }
-        if (!ensureBound()) {
-            return null;
-        }
-        try {
-            Object v = XposedHelpers.callMethod(configStorage, "v", 2, "");
-            if (v instanceof String && !((String) v).isEmpty()) {
-                cachedSelfWxid = (String) v;
-                return cachedSelfWxid;
+        if (ensureBound() && configStorage != null) {
+            try {
+                Object v = XposedHelpers.callMethod(configStorage, "v", 2, "");
+                if (v instanceof String && !((String) v).isEmpty()) {
+                    cachedSelfWxid = (String) v;
+                    return cachedSelfWxid;
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "selfWxid 失败: " + t);
             }
-        } catch (Throwable t) {
-            Log.w(TAG, "selfWxid 失败: " + t);
+        }
+        // 兜底: 存储链不可用/取不到时, 从微信 SharedPreferences 读登录 wxid
+        String p = readWxidFromPrefs();
+        if (p != null && !p.isEmpty()) {
+            cachedSelfWxid = p;
+            LogWriter.log(TAG, "selfWxid 兜底(prefs)=" + p);
+            return p;
         }
         return null;
     }
 
     /** 自己昵称（ConfigStorage key 4）。 */
     public String selfNickname() {
-        if (!ensureBound()) {
+        if (!ensureBound() || configStorage == null) {
             return null;
         }
         try {
@@ -305,7 +339,7 @@ public final class StorageHub {
         if (cls == null) {
             return null;
         }
-        for (Method m : cls.getMethods()) {
+        for (Method m : allMethods(cls)) {
             if (!m.getName().equals(name) || m.getParameterCount() != 0) {
                 continue;
             }
@@ -326,7 +360,7 @@ public final class StorageHub {
     /** 调用对象的无参方法，优先返回类型匹配 expect 的重载。 */
     private static Object callNoArgTyped(Object obj, String name, Class<?> expect) {
         Object fallback = null;
-        for (Method m : obj.getClass().getMethods()) {
+        for (Method m : allMethods(obj.getClass())) {
             if (!m.getName().equals(name) || m.getParameterCount() != 0) {
                 continue;
             }
@@ -347,8 +381,143 @@ public final class StorageHub {
         return fallback;
     }
 
+    /**
+     * 枚举类的全部方法（含非 public）。
+     * 微信 R8 混淆会把内部 getter(如 b41.e 的 v/r/q、b41.h9 的 d/b) 降为 package-private/private,
+     * Class.getMethods() 只返回 public 会全部漏掉, 故需遍历 getDeclaredMethods() 并沿父类链向上合并。
+     */
+    private static java.util.List<Method> allMethods(Class<?> cls) {
+        java.util.LinkedHashSet<Method> set = new java.util.LinkedHashSet<>();
+        Class<?> c = cls;
+        while (c != null && c != Object.class) {
+            for (Method m : c.getDeclaredMethods()) {
+                try {
+                    m.setAccessible(true);
+                } catch (Throwable ignored) {
+                }
+                set.add(m);
+            }
+            c = c.getSuperclass();
+        }
+        for (Method m : cls.getMethods()) {
+            set.add(m);
+        }
+        return new java.util.ArrayList<>(set);
+    }
+
     /** 调用对象的无参方法，返回第一个非 null 结果。 */
     private static Object callNoArg(Object obj, String name) {
         return callNoArgTyped(obj, name, null);
+    }
+
+    /**
+     * 从 AccountStorage 取指定类型存储实例。
+     * 微信混淆器会跨版本重命名方法(如 b41.e 的 v/r/q), 故先按已知名快取,
+     * 失败后按【返回类型 / 实例类型】扫描全部无参方法兜底, 彻底摆脱对方法名的依赖。
+     * <p>
+     * 3180 实测(v1035 dump): b41.e.v() 返回类型是<b>接口 vn3.m0</b>(MsgInfoStorage 接口,
+     * 实现类=com.tencent.mm.storage.f9), 而非 f9 实体类本身——因此返回类型匹配必须同时接受
+     * 「接口」与「实现类」两种形态(审计 WeChat_f9_Bb_ReceivePath_Audit.md §1/§2)。
+     *
+     * @param obj            AccountStorage 实例
+     * @param expect         目标存储类型(MsgInfoStorage f9 / RContactStorage d8 接口)
+     * @param preferredName  该版本已知的方法名(可空)
+     */
+    private static Object firstGetter(Object obj, Class<?> expect, String preferredName) {
+        if (obj == null || expect == null) {
+            return null;
+        }
+        // 快路径: 已知方法名
+        Object v = callNoArgTyped(obj, preferredName, expect);
+        if (v != null) {
+            return v;
+        }
+        // 兜底: 遍历所有无参方法, 返回类型与 expect 相关且实际实例匹配即命中
+        for (Method m : allMethods(obj.getClass())) {
+            if (m.getParameterCount() != 0) {
+                continue;
+            }
+            Class<?> rt = m.getReturnType();
+            // 双向匹配: rt 是接口时 expect 实现它; expect 是接口时 rt 实现它; 或同为超/子类
+            if (!isReturnCompatible(rt, expect)) {
+                continue;
+            }
+            try {
+                Object ret = m.invoke(obj);
+                if (ret != null && expect.isInstance(ret)) {
+                    LogWriter.log(TAG, "firstGetter 命中 " + obj.getClass().getName()
+                            + "." + m.getName() + "() -> " + m.getReturnType().getName());
+                    return ret;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
+    }
+
+    /** 返回类型与目标存储类型的兼容性: 接口↔实现类 / 超类↔子类 双向匹配。 */
+    private static boolean isReturnCompatible(Class<?> rt, Class<?> expect) {
+        if (rt == null || expect == null) {
+            return false;
+        }
+        // 直接双向 isAssignableFrom 覆盖: 同类型 / 子类→父类 / 接口→实现
+        if (rt.isAssignableFrom(expect) || expect.isAssignableFrom(rt)) {
+            return true;
+        }
+        // rt 为接口: 期望实现类实现该接口则兼容(如 vn3.m0 接口 vs f9 实现)
+        if (rt.isInterface()) {
+            Class<?> exp = expect;
+            while (exp != null) {
+                if (rt.isAssignableFrom(exp)) {
+                    return true;
+                }
+                exp = exp.getSuperclass();
+            }
+            for (Class<?> iface : expect.getInterfaces()) {
+                if (rt.isAssignableFrom(iface)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** 兜底: 从微信 SharedPreferences 读登录 wxid(不依赖存储链/方法名, 与 TtsVoiceSender 同款)。 */
+    private String readWxidFromPrefs() {
+        Context ctx = appContext;
+        if (ctx == null) {
+            return null;
+        }
+        String[] prefNames = {
+                "system_config_prefs", "com.tencent.mm_preferences",
+                "notify_sync_pref", "auth_info_key_prefs",
+                "app_brand_global_sp", "exdevice_pref",
+        };
+        String[] keyNames = {
+                "login_weixin_username", "login_user_name", "last_login_username",
+                "auth_uin", "username", "uin", "_auth_uin",
+        };
+        for (String pn : prefNames) {
+            try {
+                java.util.Map<String, ?> all = ctx.getSharedPreferences(pn, 0).getAll();
+                for (String key : keyNames) {
+                    Object v = all.get(key);
+                    if (v != null && v.toString().startsWith("wxid_")) {
+                        return v.toString();
+                    }
+                }
+                for (java.util.Map.Entry<String, ?> e : all.entrySet()) {
+                    Object v = e.getValue();
+                    if (v != null) {
+                        String val = v.toString();
+                        if (val.startsWith("wxid_") && !val.contains("@")) {
+                            return val;
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
     }
 }

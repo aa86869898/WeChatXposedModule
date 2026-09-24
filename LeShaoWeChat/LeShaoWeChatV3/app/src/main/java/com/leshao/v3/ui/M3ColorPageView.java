@@ -198,6 +198,7 @@ public class M3ColorPageView {
         // v1017: 不可聚焦，避免点击后被 ScrollView 自动滚动定位（页面跳动）
         row.setFocusable(false);
         row.setFocusableInTouchMode(false);
+        CandyUi.ripple(row, AppColors.SHAPE_MD_DP);
         return row;
     }
 

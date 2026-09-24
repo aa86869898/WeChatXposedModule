@@ -53,12 +53,47 @@ public final class MsgReceiveHook {
 
     private static void installInternal(XC_LoadPackage.LoadPackageParam lpparam) {
         ClassLoader cl = lpparam.classLoader;
+        // v1042: 微信经 Tinker 热修复时 f9/e9 由 DelegateLastClassLoader 真实加载,
+        // lpparam.classLoader 只是 base.apk 平行副本 → hookAllMethods 挂到平行副本类上
+        // 运行时消息入库不经过它 → 零捕获。改用 Tinker 真实 CL 定位。
+        try {
+            ClassLoader tk = com.leshao.v3.hook.VersionCompat.findTinkerClassLoader(cl);
+            if (tk != null && !tk.getClass().getName().contains("Leshao")
+                    && tk != cl) {
+                LogWriter.log(TAG, "使用 Tinker 真实 CL " + tk.getClass().getSimpleName()
+                        + " 定位 f9");
+                cl = tk;
+            }
+        } catch (Throwable ignored) {
+        }
         Class<?> f9 = DexKitAdapter.findMsgInfoStorageClass();
         if (f9 == null) {
             Log.w(TAG, "f9(MsgInfoStorage) 未定位，接收链路不可用");
             return;
         }
+        // v1042: DexKitAdapter 类对象可能仍来自 hook appClassLoader 平行副本,
+        // 若当前已切换到 Tinker CL, 按类名重新在真实 CL 上解析 f9/e9。BreedingClone 类
+        // 名不混淆, 直接按全名重新加载即是真实类对象。
+        try {
+            if (cl != lpparam.classLoader) {
+                Class<?> realF9 = XposedHelpers.findClass(f9.getName(), cl);
+                if (realF9 != null) {
+                    LogWriter.log(TAG, "f9 重新在真实 CL 加载: " + realF9.getName());
+                    f9 = realF9;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
         Class<?> e9 = DexKitAdapter.findMsgInfoClass();
+        try {
+            if (e9 != null && cl != lpparam.classLoader) {
+                Class<?> realE9 = XposedHelpers.findClass(e9.getName(), cl);
+                if (realE9 != null) {
+                    e9 = realE9;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
 
         XC_MethodHook callback = new XC_MethodHook() {
             @Override
@@ -73,11 +108,11 @@ public final class MsgReceiveHook {
 
         if (e9 != null) {
             XposedBridge.hookAllMethods(f9, "Bb", callback);
-            Log.i(TAG, "已 hook " + f9.getName() + ".Bb");
+            LogWriter.log(TAG, "已 hook " + f9.getName() + ".Bb (e9=" + e9.getName() + ")");
         } else {
             // e9 未定位时退化为按方法名 hook（Bb 单重载，args[0] 即 MsgInfo）
             XposedBridge.hookAllMethods(f9, "Bb", callback);
-            Log.i(TAG, "已 hook " + f9.getName() + ".Bb (e9 未定位，按名 hook)");
+            LogWriter.log(TAG, "已 hook " + f9.getName() + ".Bb (e9 未定位，按名 hook)");
         }
     }
 

@@ -49,7 +49,7 @@ public class SettingRow extends LinearLayout {
         int iconSize = (int) (40 * d);
         GradientDrawable iconBg = new GradientDrawable();
         iconBg.setShape(GradientDrawable.RECTANGLE);
-        iconBg.setCornerRadius(12 * d);
+        iconBg.setCornerRadius(AppColors.SHAPE_MD_DP * d);
         iconBg.setColor(AppColors.secondaryContainer());
         mIcon.setBackground(iconBg);
         LayoutParams iconLp = new LayoutParams(iconSize, iconSize);

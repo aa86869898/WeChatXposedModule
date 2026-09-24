@@ -30,6 +30,7 @@ public class ModernTopBar extends LinearLayout {
         mBack.setGravity(Gravity.CENTER);
         mBack.setPadding((int) (6 * d), 0, (int) (6 * d), 0);
         mBack.setClickable(true);
+        applyRipple(mBack, AppColors.SHAPE_FULL_DP);
         if (showBack) {
             mBack.setOnClickListener(v -> {
                 if (onBack != null) {
@@ -69,6 +70,7 @@ public class ModernTopBar extends LinearLayout {
             a.setTextColor(AppColors.primary());
             a.setPadding((int) (10 * d), (int) (6 * d), (int) (10 * d), (int) (6 * d));
             a.setClickable(true);
+            applyRipple(a, AppColors.SHAPE_FULL_DP);
             a.setOnClickListener(v -> {
                 if (onClick != null) {
                     try { onClick.run(); } catch (Throwable ignored) {}
@@ -80,4 +82,18 @@ public class ModernTopBar extends LinearLayout {
     }
 
     public void setTitle(String t) { mTitle.setText(t); }
+
+    /** v1033 M3: 给透明底的文字按钮挂全圆角涟漪边界 */
+    private static void applyRipple(TextView v, float radiusDp) {
+        try {
+            float d = v.getResources().getDisplayMetrics().density;
+            android.graphics.drawable.GradientDrawable mask = new android.graphics.drawable.GradientDrawable();
+            mask.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
+            mask.setCornerRadius(radiusDp * d);
+            mask.setColor(0xFFFFFFFF);
+            v.setForeground(new android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(AppColors.stateLayerPressed()),
+                    null, mask));
+        } catch (Throwable ignored) {}
+    }
 }

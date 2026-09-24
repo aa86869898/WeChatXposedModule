@@ -30,7 +30,8 @@ public class BatchAddRecordPageView {
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding((int)(12 * d), (int)(12 * d), (int)(12 * d), (int)(16 * d));
+        root.setPadding((int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_MD_DP * d),
+                (int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_XL_DP * d));
 
         final LinearLayout listArea = new LinearLayout(ctx);
         listArea.setOrientation(LinearLayout.VERTICAL);
@@ -45,7 +46,7 @@ public class BatchAddRecordPageView {
         tabBar.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
         GradientDrawable tabBg = new GradientDrawable();
         tabBg.setColor(AppColors.card());
-        tabBg.setCornerRadius((int)(8 * d));
+        tabBg.setCornerRadius((int)(AppColors.SHAPE_SM_DP * d));
         tabBar.setBackground(tabBg);
 
         String[] tabs = {"全部", "成功", "失败"};
@@ -58,6 +59,7 @@ public class BatchAddRecordPageView {
             tab.setGravity(Gravity.CENTER);
             tab.setPadding((int)(8 * d), (int)(8 * d), (int)(8 * d), (int)(8 * d));
             tab.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+            CandyUi.ripple(tab, AppColors.SHAPE_SM_DP);
             tab.setOnClickListener(v -> {
                 currentTab[0] = idx;
                 for (int j = 0; j < tabBar.getChildCount(); j++) {
@@ -92,6 +94,7 @@ public class BatchAddRecordPageView {
         clearBtn.setTextSize(12);
         clearBtn.setTextColor(0xFFE53935);
         clearBtn.setPadding((int)(10 * d), (int)(6 * d), (int)(10 * d), (int)(6 * d));
+        CandyUi.ripple(clearBtn, AppColors.SHAPE_FULL_DP);
         clearBtn.setOnClickListener(v -> {
             AlertDialog dlgClear = new AlertDialog.Builder(ctx)
                 .setTitle("清空记录")
@@ -199,7 +202,7 @@ public class BatchAddRecordPageView {
         badge.setPadding((int)(10 * d), (int)(4 * d), (int)(10 * d), (int)(4 * d));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(r.success ? 0xFF10B981 : 0xFFE53935);
-        bg.setCornerRadius((int)(10 * d));
+        bg.setCornerRadius((int)(AppColors.SHAPE_MD_DP * d));
         badge.setBackground(bg);
         row.addView(badge);
 

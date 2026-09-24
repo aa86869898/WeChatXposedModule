@@ -81,6 +81,14 @@ public class WanQunGroupHook {
     /* ================= 消息 Hook（f9.Bb after） ================= */
     public static void hookReceive(ClassLoader cl) {
         try {
+            // v1042: 切换真实 Tinker CL, 否则 f9 是 base.apk 平行副本运行时零捕获
+            try {
+                ClassLoader tk = VersionCompat.findTinkerClassLoader(cl);
+                if (tk != null && !tk.getClass().getName().contains("Leshao") && tk != cl) {
+                    cl = tk;
+                }
+            } catch (Throwable ignored) {
+            }
             Class<?> f9 = VersionCompat.findMsgStorageClass(cl);
             if (f9 == null) { LogWriter.log(TAG, "f9 未找到，无法监听群消息"); return; }
             int hooked = 0;

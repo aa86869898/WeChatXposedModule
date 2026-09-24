@@ -64,7 +64,7 @@ public class ToastHelper {
 
             GradientDrawable bg = new GradientDrawable();
             bg.setShape(GradientDrawable.RECTANGLE);
-            bg.setCornerRadius(4 * d);
+            bg.setCornerRadius(AppColors.SHAPE_XS_DP * d);
             // M3 snackbar：inverseSurface 底 + inverseOnSurface 字
             bg.setColor(accent == 0 ? AppColors.inverseSurface() : accent);
             card.setBackground(bg);

@@ -72,7 +72,7 @@ public final class ColorPickerDialog {
             cur[0] = c;
             GradientDrawable gd = new GradientDrawable();
             gd.setShape(GradientDrawable.RECTANGLE);
-            gd.setCornerRadius(dp * 14);
+            gd.setCornerRadius(dp * AppColors.SHAPE_LG_DP);
             gd.setColor(c);
             gd.setStroke(dp, AppColors.outlineVariant());
             preview.setBackground(gd);

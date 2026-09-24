@@ -74,11 +74,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v1028";
+    public static final String MODULE_BUILD = "v1042";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 1028;
+    public static final int MODULE_VERSION_CODE = 1042;
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -136,21 +136,12 @@ public class MainHook implements IXposedHookLoadPackage {
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
         if (!WX_PKG.equals(lpparam.packageName)) return;
 
-        // v965: 系统应用克隆分身(App-Clone)拦截 —— 必须位于 LogWriter.init() 之前,
-        // 保证克隆分身进程对模块完全零执行、零日志、零文件写入。
-        // 判定走系统 API 动态识别 Profile Group(见 InstanceManager.isCloneApp), 不写死任何 userId 数字;
-        // LSPosed MultiApp 等独立虚拟用户不属于克隆分组, 不受本拦截影响, 其启停由 LSPosed 作用域控制。
-        if (InstanceManager.isCloneApp()) {
-            XposedBridge.log("[LeShaoV3] " + MODULE_BUILD
-                    + " 系统克隆分身进程, 拦截模块加载, 不执行任何代码");
-            return;
-        }
+        // v1038: 移除 v965 系统克隆分身(App-Clone)拦截 —— 按用户指示直接废掉克隆分身隔离功能,
+        // 所有微信进程(含子进程/分身)均允许模块执行, 交由主进程/多进程判定与 LSPosed 作用域控制。
 
-        // v966: LogWriter.init() 移至主进程判定之后 —— 原先在过滤前调用, 微信全部
-        // 子进程(push/support 等)也会写日志, 造成同秒多条重复 "=== STARTUP ===" 记录
-        boolean isMain = WX_PKG.equals(lpparam.processName);
-        if (!isMain) return;
-
+        // v1038: 放开主进程限定 —— 原 isMain 判定会跳过 :push 等子进程, 导致后台推送经子进程
+        // 入库时 hook 完全不生效。现改为所有微信进程均执行模块(含接收 hook + 日志),
+        // 以覆盖 push 进程接收入库的场景。
         LogWriter.init();
 
         if (sMainInitialized) return;

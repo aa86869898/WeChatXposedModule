@@ -61,7 +61,7 @@ public class ModernButton extends LinearLayout {
                 break;
             case STYLE_TEXT:
             default:
-                setBackgroundColor(0x00000000);
+                setBackground(CandyUi.buttonTextBg(getContext()));
                 mLabel.setTextColor(AppColors.primary());
                 break;
         }

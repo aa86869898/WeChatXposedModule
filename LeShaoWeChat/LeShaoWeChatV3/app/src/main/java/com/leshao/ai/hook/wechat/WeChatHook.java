@@ -72,19 +72,19 @@ public final class WeChatHook implements IXposedHookLoadPackage {
      * 由 {@link HookEntry} 或 MainHook 调用，装配全部 hook。
      */
     public static void install(XC_LoadPackage.LoadPackageParam lpparam) {
-        // v965: 系统克隆分身(App-Clone)拦截 —— 与 MainHook.handleLoadPackage 一致的防护,
-        // 防止其它调用路径绕开主入口; 判定走系统 API 动态识别 Profile Group, 不写死 userId 数字,
-        // LSPosed MultiApp 等独立虚拟用户不受影响, 由 LSPosed 作用域控制。
-        if (com.leshao.v3.InstanceManager.isCloneApp()) {
-            Log.w(TAG, "系统克隆分身进程, WeChatHook 拦截, 不执行任何模块代码");
-            return;
-        }
+        // v1038: 移除 v965 系统克隆分身(App-Clone)拦截 —— 与 MainHook 一致, 克隆分身隔离功能已废掉,
+        // 所有微信进程均允许模块执行, 实例启停由 LSPosed 作用域控制。
         final ClassLoader cl = lpparam.classLoader;
 
         // TTS 等需要的微信 Application Context
         final Context appContext = getAppContext(cl);
         try {
             TriggerEngine.setAppContext(appContext);
+        } catch (Throwable ignored) {
+        }
+        // v1034: selfWxid 的 SharedPreferences 兜底需要 Context
+        try {
+            StorageHub.setAppContext(appContext);
         } catch (Throwable ignored) {
         }
 
@@ -102,14 +102,16 @@ public final class WeChatHook implements IXposedHookLoadPackage {
                 // v1007: hookAllMethods(LauncherUI) 只命中 LauncherUI【自身声明】的方法,
                 // 而 LauncherUI 并未重写 onResume, 导致 installCore 永不执行、AIBotCore 未初始化。
                 // 改为 hook Activity.onResume 并按 LauncherUI 实例过滤(ChatGroupUiInjector 同款可靠方案)。
-                final Class<?> launcherCls = launcher;
+                // v1034: 判定改用类名字符串。微信经 Tinker 热修复(TinkerPatch/多 ClassLoader),
+                // findClass 得到的 LauncherUI Class 对象与运行期实例可能来自不同 ClassLoader,
+                // isInstance 恒为 false → installCore 永不执行 → 接收链路缺失(AI 不回复)。
                 XposedBridge.hookAllMethods(Activity.class, "onResume", new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         if (!(param.thisObject instanceof Activity)) return;
                         // v960: 记录前台 Activity, AI 助手弹窗需要 Activity 级 Context
                         sCurrentActivity = (Activity) param.thisObject;
-                        if (!launcherCls.isInstance(param.thisObject)) return;
+                        if (!LAUNCHER_UI.equals(param.thisObject.getClass().getName())) return;
                         self.installCore(lpparam, appContext);
                     }
                 });
@@ -128,6 +130,23 @@ public final class WeChatHook implements IXposedHookLoadPackage {
             installMenu(lpparam);
         } catch (Throwable t) {
             Log.w(TAG, "菜单注入失败: " + t);
+        }
+
+        // v1034: 兜底 —— Activity.onResume 判定若因 ClassLoader/时机未命中,
+        // 接收链路(MsgReceiveHook)将永远缺失, 表现为「AI 不回复任何消息」。
+        // 这里延迟在后台线程强制执行一次 installCore(由 CAS 保证只执行一次);
+        // 此时菜单注入已完成, DexKit 已就绪, 存储类可正常解析。
+        try {
+            Thread coreFallback = new Thread(() -> {
+                try {
+                    Thread.sleep(3000L);
+                } catch (InterruptedException ignored) {
+                }
+                self.installCore(lpparam, appContext);
+            }, "leshao-ai-core-fallback");
+            coreFallback.setDaemon(true);
+            coreFallback.start();
+        } catch (Throwable ignored) {
         }
 
         // 配置刷新广播（设置页保存后实时同步）

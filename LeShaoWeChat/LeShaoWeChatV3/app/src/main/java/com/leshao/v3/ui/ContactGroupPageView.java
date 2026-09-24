@@ -35,7 +35,8 @@ public class ContactGroupPageView {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
         InsetsUtil.clipRounded(root);
-        root.setPadding((int)(16 * d), (int)(16 * d), (int)(16 * d), (int)(16 * d));
+        root.setPadding((int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_MD_DP * d),
+                (int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_XL_DP * d));
 
         LinearLayout cardChat = makeCard(ctx, d);
         boolean vfOn = prefs != null && prefs.getBoolean("ls_voice_forward", false);
@@ -171,6 +172,7 @@ public class ContactGroupPageView {
             btn.setText("[设置]"); btn.setTextSize(12); btn.setTextColor(AppColors.accent());
             btn.setPadding((int)(6 * d), 0, (int)(6 * d), 0);
             btn.setPaintFlags(btn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
+            CandyUi.ripple(btn, AppColors.SHAPE_FULL_DP);
             btn.setOnClickListener(configListener);
             row.addView(btn);
         }

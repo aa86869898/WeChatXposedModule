@@ -21,6 +21,8 @@ public class LogWriter {
     private static final LinkedBlockingQueue<String> sQueue = new LinkedBlockingQueue<>(2000);
     private static volatile boolean sWriterRunning = false;
 
+    private static final long HEARTBEAT_INTERVAL_MS = 20 * 1000;
+
     public static void init() {
         if (ready) return;
         try {
@@ -37,12 +39,37 @@ public class LogWriter {
 
             ready = true;
             startWriterThread();
+            startHeartbeat();
 
             log("LogWriter", "=== STARTUP === logFile=" + logFile.getAbsolutePath());
             XposedBridge.log("LeShaoV3: [LogWriter] init DONE, ready=true");
         } catch (Throwable t) {
             XposedBridge.log("LeShaoV3: [LogWriter] init CRASH: " + t.getClass().getName() + ": " + t.getMessage());
         }
+    }
+
+    /** 心跳日志: 每 20s 写一行, 用于肉眼区分「进程冻结/日志断流」与「正常无消息」。 */
+    private static void startHeartbeat() {
+        Thread t = new Thread(() -> {
+            int cnt = 0;
+            while (sWriterRunning) {
+                try {
+                    Thread.sleep(HEARTBEAT_INTERVAL_MS);
+                } catch (InterruptedException e) {
+                    break;
+                }
+                try {
+                    long free = logFile == null ? -1 : logFile.getFreeSpace();
+                    cnt++;
+                    logSync("LogWriter", "心跳 alive cnt=" + cnt
+                        + " queue=" + sQueue.size()
+                        + " free=" + (free < 0 ? "na" : (free / 1024) + "KB"));
+                } catch (Throwable ignored) {
+                }
+            }
+        }, "leshao-heartbeat");
+        t.setDaemon(true);
+        t.start();
     }
 
     private static void startWriterThread() {

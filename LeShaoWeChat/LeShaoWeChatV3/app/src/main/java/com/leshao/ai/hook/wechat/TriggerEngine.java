@@ -52,6 +52,9 @@ public final class TriggerEngine {
     public static void dispatch(String talker, String rawContent, Object msgInfo,
                                 long svrId, long cTime) {
         try {
+            LogWriter.log(TAG, "dispatch: talker=" + talker
+                    + " len=" + (rawContent == null ? -1 : rawContent.length())
+                    + " svrId=" + svrId);
             AppConfig c = AIBotCore.config();
             if (c == null) {
                 LogWriter.log(TAG, "跳过: AppConfig 未初始化");

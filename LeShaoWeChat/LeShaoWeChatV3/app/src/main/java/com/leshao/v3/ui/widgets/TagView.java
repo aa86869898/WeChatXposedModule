@@ -48,7 +48,7 @@ public class TagView extends TextView {
         try {
             android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
             gd.setShape(android.graphics.drawable.GradientDrawable.RECTANGLE);
-            gd.setCornerRadius(5 * getResources().getDisplayMetrics().density);
+            gd.setCornerRadius(AppColors.SHAPE_XS_DP * getResources().getDisplayMetrics().density);
             gd.setColor(bg);
             gd.setStroke((int) (0.5f * getResources().getDisplayMetrics().density), color);
             setBackground(gd);

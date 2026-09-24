@@ -169,8 +169,8 @@ public class CandyUi {
         return roundedRect(AppColors.surfaceContainerHigh(), dp(ctx, AppColors.DIALOG_RADIUS_DP));
     }
 
-    /** M3 filled button：primary 底 + 20dp 全圆角 + 按压 primaryContainer 态 */
-    public static StateListDrawable buttonBg(Context ctx) {
+    /** M3 filled button：primary 底 + 20dp 全圆角 + 状态层涟漪 */
+    public static Drawable buttonBg(Context ctx) {
         StateListDrawable sd = new StateListDrawable();
         GradientDrawable pressed = new GradientDrawable();
         pressed.setShape(GradientDrawable.RECTANGLE);
@@ -182,11 +182,11 @@ public class CandyUi {
         normal.setColor(AppColors.primary());
         sd.addState(new int[]{android.R.attr.state_pressed}, pressed);
         sd.addState(new int[]{}, normal);
-        return sd;
+        return rippleWrap(ctx, sd, AppColors.stateLayerOnPrimary());
     }
 
-    /** M3 outlined button：透明底 + outline 描边 + 全圆角 */
-    public static StateListDrawable buttonGhostBg(Context ctx) {
+    /** M3 outlined button：透明底 + outline 描边 + 全圆角 + 状态层涟漪 */
+    public static Drawable buttonGhostBg(Context ctx) {
         StateListDrawable sd = new StateListDrawable();
         GradientDrawable pressed = new GradientDrawable();
         pressed.setShape(GradientDrawable.RECTANGLE);
@@ -199,11 +199,11 @@ public class CandyUi {
         normal.setStroke(dp(ctx, 1), AppColors.outline());
         sd.addState(new int[]{android.R.attr.state_pressed}, pressed);
         sd.addState(new int[]{}, normal);
-        return sd;
+        return rippleWrap(ctx, sd, AppColors.stateLayerPressed());
     }
 
-    /** M3 filled tonal button（危险）：error 底 + 全圆角 */
-    public static StateListDrawable buttonDangerBg(Context ctx) {
+    /** M3 filled tonal button（危险）：error 底 + 全圆角 + 状态层涟漪 */
+    public static Drawable buttonDangerBg(Context ctx) {
         StateListDrawable sd = new StateListDrawable();
         GradientDrawable pressed = new GradientDrawable();
         pressed.setShape(GradientDrawable.RECTANGLE);
@@ -215,7 +215,44 @@ public class CandyUi {
         normal.setColor(AppColors.error());
         sd.addState(new int[]{android.R.attr.state_pressed}, pressed);
         sd.addState(new int[]{}, normal);
-        return sd;
+        return rippleWrap(ctx, sd, 0x1FFFFFFF);
+    }
+
+    /** M3 text button：透明底 + 全圆角涟漪 */
+    public static Drawable buttonTextBg(Context ctx) {
+        GradientDrawable normal = new GradientDrawable();
+        normal.setShape(GradientDrawable.RECTANGLE);
+        normal.setCornerRadius(dp(ctx, AppColors.SHAPE_FULL_DP));
+        normal.setColor(0x00000000);
+        return rippleWrap(ctx, normal, AppColors.stateLayerPressed());
+    }
+
+    /** 为任意已 setClickable 的 View 附加 M3 状态层涟漪 foreground（全圆角边界）。 */
+    public static void ripple(View v, float radiusDp) {
+        if (v == null) return;
+        try {
+            float d = v.getResources().getDisplayMetrics().density;
+            GradientDrawable mask = new GradientDrawable();
+            mask.setShape(GradientDrawable.RECTANGLE);
+            mask.setCornerRadius(radiusDp * d);
+            mask.setColor(0xFFFFFFFF);
+            v.setForeground(new RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(AppColors.stateLayerPressed()), null, mask));
+        } catch (Throwable ignored) {}
+    }
+
+    /** 将 StateListDrawable 包成 M3 涟漪(显式全圆角遮罩, 保证透明底按钮也有边界涟漪) */
+    private static Drawable rippleWrap(Context ctx, Drawable content, int rippleColor) {
+        try {
+            GradientDrawable mask = new GradientDrawable();
+            mask.setShape(GradientDrawable.RECTANGLE);
+            mask.setCornerRadius(dp(ctx, AppColors.SHAPE_FULL_DP));
+            mask.setColor(0xFFFFFFFF);
+            return new RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(rippleColor), content, mask);
+        } catch (Throwable t) {
+            return content;
+        }
     }
 
     /** M3 行按压状态层：12% onSurface 涟漪 + 12dp 圆角裁剪 */

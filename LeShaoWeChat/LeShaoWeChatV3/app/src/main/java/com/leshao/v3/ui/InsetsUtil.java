@@ -87,6 +87,31 @@ public final class InsetsUtil {
         return navigationBarHeight(ctx);
     }
 
+    /**
+     * 浮层窗口的顶部安全边距(px)：状态栏高度 + 12dp 呼吸位。
+     */
+    public static int topSafePad(Context ctx) {
+        return statusBarHeight(ctx) + dp(ctx, 12);
+    }
+
+    /**
+     * 浮层窗口的底部安全边距(px)：导航栏/手势条高度 + 12dp 呼吸位。
+     * 手势机型导航栏薄、三键机型导航栏厚，均保证浮层控件不被系统栏遮挡，
+     * 同时避免旧实现四边固定大留白造成的底部大片无效空白。
+     */
+    public static int bottomSafePad(Context ctx) {
+        return navigationBarHeight(ctx) + dp(ctx, 12);
+    }
+
+    /**
+     * @deprecated 用 {@link #topSafePad(Context)} / {@link #bottomSafePad(Context)} 分别处理，
+     * 避免三键机型把导航栏高度重复加到顶部。
+     */
+    @Deprecated
+    public static int vSafePad(Context ctx) {
+        return Math.max(statusBarHeight(ctx), navigationBarHeight(ctx)) + dp(ctx, 12);
+    }
+
     /** 给已有视图追加顶部内边距（保留原内边距）。 */
     public static void padTop(View v, int extraPx) {
         if (v == null || extraPx <= 0) return;
@@ -274,12 +299,38 @@ public final class InsetsUtil {
         FrameLayout.LayoutParams outerLp = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
         outer.setLayoutParams(outerLp);
-        int pad = dp(ctx, 12);
-        outer.setPadding(pad, pad, pad, pad);
+        int padH = dp(ctx, 12);
+        int padT = topSafePad(ctx);
+        int padB = bottomSafePad(ctx);
+        outer.setPadding(padH, padT, padH, padB);
+        // v1033: 挂载后按真实 WindowInsets 精修上下安全边距——手势机型底部不再保留三键导航栏的固定大留白，
+        // 三键机型也不会被导航栏遮挡。
+        final int basePadH = padH;
+        final int breath = dp(ctx, 12);
+        ViewCompat.setOnApplyWindowInsetsListener(outer,
+                new androidx.core.view.OnApplyWindowInsetsListener() {
+                    @Override
+                    public WindowInsetsCompat onApplyWindowInsets(View v, WindowInsetsCompat wi) {
+                        int t = 0, b = 0;
+                        try {
+                            t = wi.getInsets(WindowInsetsCompat.Type.statusBars()).top;
+                            b = wi.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
+                        } catch (Throwable ignored) {
+                        }
+                        if (t <= 0) t = statusBarHeight(v.getContext());
+                        v.setPadding(basePadH, t + breath, basePadH, b + breath);
+                        return wi;
+                    }
+                });
 
         DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
         int w = wRatio > 0 ? (int) (dm.widthPixels * wRatio) : FrameLayout.LayoutParams.WRAP_CONTENT;
-        int h = hRatio > 0 ? (int) (dm.heightPixels * hRatio) : FrameLayout.LayoutParams.WRAP_CONTENT;
+        int h = FrameLayout.LayoutParams.WRAP_CONTENT;
+        if (hRatio > 0) {
+            int want = (int) (dm.heightPixels * hRatio);
+            int avail = Math.max(0, dm.heightPixels - padT - padB);
+            h = Math.min(want, avail);
+        }
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, h);
         lp.gravity = Gravity.CENTER;
         CandyUi.elevate(sheet);
@@ -302,14 +353,20 @@ public final class InsetsUtil {
         try { win = d.getWindow(); } catch (Throwable ignored) {}
         if (win == null) return;
         Context ctx = d.getContext();
-        int pad = dp(ctx, 12);
+        int padH = dp(ctx, 12);
+        int padT = topSafePad(ctx);
+        int padB = bottomSafePad(ctx);
         try { win.setGravity(Gravity.CENTER); } catch (Throwable ignored) {}
         try {
             DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-            int w = wRatio > 0 ? (int) (dm.widthPixels * wRatio) + 2 * pad
+            int w = wRatio > 0 ? (int) (dm.widthPixels * wRatio) + 2 * padH
                     : ViewGroup.LayoutParams.WRAP_CONTENT;
-            int h = hRatio > 0 ? (int) (dm.heightPixels * hRatio) + 2 * pad
-                    : ViewGroup.LayoutParams.WRAP_CONTENT;
+            int h = ViewGroup.LayoutParams.WRAP_CONTENT;
+            if (hRatio > 0) {
+                int want = (int) (dm.heightPixels * hRatio);
+                int avail = Math.max(0, dm.heightPixels - padT - padB);
+                h = Math.min(want, avail) + padT + padB;
+            }
             win.setLayout(w, h);
         } catch (Throwable ignored) {}
         clearDialogShell(d);

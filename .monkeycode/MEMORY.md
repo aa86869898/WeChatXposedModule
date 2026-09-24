@@ -57,8 +57,42 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 每次编译前，同步递增 `app/build.gradle.kts` 中 `versionCode`/`versionName`、`MainHook.MODULE_BUILD`(如 "v936")与 `MainHook.MODULE_VERSION_CODE`(整数，与 DexKit 扫描缓存失效键相同)
   - release 构建命令：`cd /workspace/LeShaoWeChat/LeShaoWeChatV3 && ./gradlew :app:assembleRelease --offline -x lint`（R8 会改写 XposedHelpers，varargs findAndHookMethod 不可用，须用 findClass+getDeclaredMethod+hookMethod 模式）
   - release 产物：`app/build/outputs/apk/release/LeShaoWeChat-v{versionCode}.apk`；签名已配置在 build.gradle.kts signingConfigs(release.keystore)
-  - 分发：复制 APK 到 `/workspace/LeShaoWeChat/LeShaoWeChatV3/`（8899 服务根目录）与 `download/` 两个位置，同步更新两个 `index.html`（根目录 + download/）后方可访问
-  - 当前下载服务：`python3 -m http.server 8899 --bind 0.0.0.0`，根目录 `/workspace/LeShaoWeChat/LeShaoWeChatV3/`；预览地址 `http://localhost:8899/index.html`，APK 下载 `http://localhost:8899/LeShaoWeChat-v{versionCode}.apk`
+  - 分发：复制 APK 到 `/tmp/opencode/download/` 并更新 `download/index.html`（置顶新版本入口）后方可提供下载；历史下载页亦同步维护
+  - 当前下载服务：`python3 -m http.server 8085 --bind 0.0.0.0`，根目录 `/tmp/opencode/download/`；外网直链 `https://8085-796f33fc01a6a82b.monkeycode-ai.online/LeShaoV3-v{versionCode}-release.apk`
+
+### AI 反编译审计结论（f9.Bb 接收链路实锤）
+- Date: 2026-09-24
+- Context: 用户反编译微信 APK 产出 WeChat_f9_Bb_ReceivePath_Audit.md，二次审查确认接收链路
+- Category: 排错调试
+- Instructions:
+  - 接收实锤链路: a2.b(MessageSyncExtension.dkAddMsg, 纯接收) → b41.k.k(BaseMsgExtension.k) → b41.aa.y(e9) → f9.yb(e9) → f9.Bb(e9,false)；消息已存在改走 f9.bd(svrId,e9) 去重更新不调 Bb
+  - f9.Bb 布尔参数语义实锤: false=普通 INSERT(接收/本地业务创建)，true=INSERT OR REPLACE(发送/重发)；仅凭 boolean 无法完全区分接收与业务创建，须同时过滤 field_isSend==0 和 field_type==1
+  - f9 类仅有 6 个直接 Bb 调用点(4 类+内部 yb)，方法: Bb(e9,Z)J / yb(e9)J(接收业务统一入口) / Db/Hb(备份恢复) / Qc(J,e9,Z)I(带svrId) / Ic(J,e9)I(改状态) / bd(J,e9)V(去重更新) / O3(String,J)e9(查已存在)
+  - 3180 存储链实锤: b41.e.v() 返回接口 vn3.m0(MsgInfoStorage 接口，实现=com.tencent.mm.storage.f9)、.q()→q3(ConfigStorage)、.r()→com.tencent.mm.storage.d8(RContactStorage 接口)；firstGetter 必须兼容"接口返回类型"(isReturnCompatible 双向匹配)
+  - 服务定位: gp0.j1=MMKernel, j1.v(tn3.c4.class)→c4(存储门面; lj()=f9 消息存储, cj()=会话, ej()=联系人)
+  - 修正: al5.g=MicroMsg.FilePreviewHelper(文件预览, 非消息总线); v3 MessageHook 的 x9 b/j 两路 hook 是白 hook; 09-23 的 #1~#8 全部来自 f9.Bb
+  - 全文对照见 /workspace/WeChat_f9_Bb_ReceivePath_Audit_CORRECTIONS.md
+
+### v1042 认证的 Tinker ClassLoader 根因（hook 上零捕获/存储链失败）
+- Date: 2026-09-24
+- Context: Agent 排查"f9.Bb hook 装上但零捕获 + StorageHub 绑定失败"时，从 leshao_v3_log.txt 三行时序定位到根因
+- Category: 排错调试
+- Instructions:
+  - 微信 8.0.78(3180) 经 Tinker 热修复时, 存储/内核类(f9/e9/b41.h9/b41.e)真实加载在 `DelegateLastClassLoader`(tinker patch dex) 下, base.apk 的 `PathClassLoader` 只是平行副本
+  - 判定方法(日志): `probeAndRehook: wechat instance CL=PathClassLoader` 出现早于 `CL=DelegateLastClassLoader[patch-*/...]` → 缓存被平行副本污染; `findTinkerClassLoader` 134 行缓存短路 + SDK 不刷新 = 根因
+  - 修复: `VersionCompat.setWechatRealClassLoader` 探测到 Tinker CL 时同步刷新 `sCachedTinkerClassLoader`; `findTinkerClassLoader` 先查 `sWechatRealClassLoader` 是否已更新为 Tinker CL; DexKitAdapter.toClass 及全部 f9 hook(StorageHub/MsgReceiveHook/MessageHook/TtsVoiceSender/WanQunGroup) 统一经真实 CL 再 hook/bind
+  - 教训: hook 类对象必须与运行时类对象同一 ClassLoader(用 `DexKit 类名 + 真实 CL 重新 findClass`), 否则 hook 装上零捕获且不报错
+  - 该洞察也解释 v1034 注释"isInstance 恒为 false" 与 v1025 引入 findWechatRealClassLoader 的真正原因
+
+### AI 助手不回复排查链路
+- Date: 2026-09-24
+- Context: Agent 排查"AI 助手私聊/群聊不回复"时发现，v1033/v1034 日志分析确认接收链路从未装配
+- Category: 排错调试
+- Instructions:
+  - 按日志 TAG 顺序排查: `LeshaoAI.DexKit`(桥就绪) → `模块构建版本`(确认新包生效) → `installCore: enter`(LauncherUI 装配触发, 3180 下 must 用类名字符串判定不能用 isInstance, Tinker 多 ClassLoader 导致 isInstance 恒 false) → `已 hook f9.Bb`(收消息 hook 装上) → `LeshaoAI.Recv 收到文本` → `LeshaoAI.Trigger dispatch` → `LeshaoAI.Core ask` → 回复日志
+  - 若日志窗口内连 `过滤: 非纯文本/自己发出` 都没有, 说明微信侧本就没收到消息, 无法判定接收链路, 需让用户实际收发消息后再导出日志
+  - f9.Bb 是消息 insert 总闸门(群/私聊/系统/自己发的都走), 3180 版本号下的 f9.MsgInfoStorage 由 AI DexKitAdapter 定位, 定位失败会在 v1035 起自动重试
+  - 存储链绑定失败(StorageHub bindInternal 全 false)不影响私聊回复; 群聊 @ 判定靠 selfWxid(有 SharedPreferences 兜底), 仅联系人显示名依赖存储链
 
 ### 代码提交时机（用户确认后才提交）
 - Date: 2026-08-14

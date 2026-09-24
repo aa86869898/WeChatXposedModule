@@ -78,7 +78,9 @@ public class TTSPageView {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
-        root.setPadding((int)(8 * d), (int)(16 * d), (int)(8 * d), (int)(16 * d));
+        InsetsUtil.clipRounded(root);
+        root.setPadding((int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_MD_DP * d),
+                (int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_XL_DP * d));
 
         // ★ TTS 引擎选择 + 配音魔方入口 (置顶)
         root.addView(buildTtsEngineCard(ctx, parentAct, d, prefs));
@@ -346,6 +348,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         save.setTextSize(12);
         save.setTextColor(AppColors.accent());
         save.setPadding((int)(8 * d), (int)(4 * d), 0, (int)(4 * d));
+        CandyUi.ripple(save, AppColors.SHAPE_FULL_DP);
         save.setOnClickListener(v -> {
             String s = etStart.getText().toString().trim();
             String e = etEnd.getText().toString().trim();
@@ -381,7 +384,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
 
         row.addView(labelRow);
 
-        SeekBar seekBar = new SeekBar(ctx);
+        SeekBar seekBar = M3Page.slider(ctx);
         seekBar.setMax(max - min);
         seekBar.setProgress(Math.max(0, current - min));
         seekBar.setPadding(0, (int)(4 * d), 0, 0);
@@ -452,6 +455,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
 
         row.addView(textCol);
 
+        CandyUi.ripple(row, AppColors.SHAPE_MD_DP);
         row.setOnClickListener(v -> {
             ContactPickerDialog.show(parentAct, current, mode, (selected, display) -> {
                 cntTv.setText("已选 " + selected.size() + " 个");
@@ -563,7 +567,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
 
         row.addView(header);
 
-        SeekBar sb = new SeekBar(ctx);
+        SeekBar sb = M3Page.slider(ctx);
         sb.setMax(20); // 0.5x ~ 2.5x, step 0.1
         sb.setProgress(Math.round((currentRate - 0.5f) * 10));
         sb.setPadding(0, (int)(8 * d), 0, 0);
@@ -643,6 +647,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         radioRow.addView(btnSys, btnSysLp);
         card.addView(radioRow);
 
+        CandyUi.ripple(btnCube, AppColors.SHAPE_SM_DP);
         btnCube.setOnClickListener(v -> {
             WmPrefs.set("tts_cube", true);
             android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
@@ -658,6 +663,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
             btnSys.setTextColor(AppColors.text1());
             Toast.makeText(parentAct, "已切换为配音魔方TTS", Toast.LENGTH_SHORT).show();
         });
+        CandyUi.ripple(btnSys, AppColors.SHAPE_SM_DP);
         btnSys.setOnClickListener(v -> {
             WmPrefs.set("tts_cube", false);
             android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
@@ -691,6 +697,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         cfgLp.setMargins((int)(14 * d), (int)(8 * d), (int)(14 * d), (int)(12 * d));
         card.addView(cfgBtn, cfgLp);
 
+        CandyUi.ripple(cfgBtn, AppColors.SHAPE_SM_DP);
         cfgBtn.setOnClickListener(v -> showTtsCubeDialog(ctx, parentAct, d));
 
         return card;
@@ -847,6 +854,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
             }
         } catch (Throwable ignored) {}
 
+        CandyUi.ripple(keyBtn, AppColors.SHAPE_FULL_DP);
         keyBtn.setOnClickListener(v -> {
             String newKey = WmPrefs.getStr("tts_cube_key", "");
             if (newKey.isEmpty()) {
@@ -858,9 +866,12 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         });
 
         closeBtn.setOnClickListener(v -> dialog.dismiss());
+        CandyUi.ripple(closeBtn, AppColors.SHAPE_SM_DP);
         saveBtn.setOnClickListener(v -> dialog.dismiss());
+        CandyUi.ripple(saveBtn, AppColors.SHAPE_SM_DP);
 
         // 加载配音魔方音色库
+        CandyUi.ripple(tabCube, AppColors.SHAPE_FULL_DP);
         tabCube.setOnClickListener(v -> {
             String k = WmPrefs.getStr("tts_cube_key", "");
             if (k.isEmpty()) {
@@ -1144,6 +1155,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         listenBtn.getPaint().setFlags(Paint.UNDERLINE_TEXT_FLAG);
         vRow.addView(listenBtn);
 
+        CandyUi.ripple(listenBtn, AppColors.SHAPE_FULL_DP);
         listenBtn.setOnClickListener(v3 -> {
             new Thread(() -> {
                 String result = ttsPreviewVoice(key, vi.voiceId, "欢迎使用配音魔方");
@@ -1167,6 +1179,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
             }).start();
         });
 
+        CandyUi.ripple(selBtn, AppColors.SHAPE_FULL_DP);
         selBtn.setOnClickListener(v3 -> {
             WmPrefs.setStr("tts_cube_voice", vi.voiceId);
             Toast.makeText(parentAct, "已选择默认音色: " + displayName, Toast.LENGTH_SHORT).show();

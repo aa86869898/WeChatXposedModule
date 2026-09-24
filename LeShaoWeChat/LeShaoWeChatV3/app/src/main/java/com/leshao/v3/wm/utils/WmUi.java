@@ -37,7 +37,7 @@ public final class WmUi {
         panel.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(C_CARD);
-        bg.setCornerRadius(dp(act, 16));
+        bg.setCornerRadius(dp(act, AppColors.SHAPE_LG_DP));
         bg.setStroke(dp(act, 1), C_BORDER);
         panel.setBackground(bg);
         panel.setElevation(dp(act, 14));
@@ -91,7 +91,7 @@ public final class WmUi {
 
         GradientDrawable gd = new GradientDrawable();
         gd.setColor(AppColors.surfaceContainerHigh());
-        gd.setCornerRadius(dp(act, 12));
+        gd.setCornerRadius(dp(act, AppColors.SHAPE_MD_DP));
         btn.setBackground(gd);
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -110,7 +110,7 @@ public final class WmUi {
         btn.setTextColor(AppColors.onPrimary());
         GradientDrawable gd = new GradientDrawable();
         gd.setColor(C_ACCENT);
-        gd.setCornerRadius(dp(act, 20));
+        gd.setCornerRadius(dp(act, AppColors.SHAPE_FULL_DP));
         btn.setBackground(gd);
         btn.setGravity(Gravity.CENTER);
         return btn;

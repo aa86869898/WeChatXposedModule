@@ -187,16 +187,19 @@ public class ContactSelectorView {
             title.setText("\u5df2\u9009 " + selected.size() + " \u4eba");
         };
 
+        CandyUi.ripple(tabAll, AppColors.SHAPE_FULL_DP);
         tabAll.setOnClickListener(v -> {
             currentTab[0] = 0;
             updateTabs(act, tabAll, tabFriend, tabGroup, 0);
             refreshHolder[0].run();
         });
+        CandyUi.ripple(tabFriend, AppColors.SHAPE_FULL_DP);
         tabFriend.setOnClickListener(v -> {
             currentTab[0] = 1;
             updateTabs(act, tabAll, tabFriend, tabGroup, 1);
             refreshHolder[0].run();
         });
+        CandyUi.ripple(tabGroup, AppColors.SHAPE_FULL_DP);
         tabGroup.setOnClickListener(v -> {
             currentTab[0] = 2;
             updateTabs(act, tabAll, tabFriend, tabGroup, 2);
@@ -249,11 +252,13 @@ public class ContactSelectorView {
                 .setCancelable(true)
                 .create();
 
+        CandyUi.ripple(cancel, AppColors.SHAPE_FULL_DP);
         cancel.setOnClickListener(v -> {
             dialog.dismiss();
             if (callback != null) callback.onSelected(Collections.<ContactCard>emptyList());
         });
 
+        CandyUi.ripple(confirm, AppColors.SHAPE_FULL_DP);
         confirm.setOnClickListener(v -> {
             if (callback != null) {
                 callback.onSelected(new ArrayList<>(selected));
@@ -261,6 +266,7 @@ public class ContactSelectorView {
             dialog.dismiss();
         });
 
+        CandyUi.ripple(toggleAll, AppColors.SHAPE_FULL_DP);
         toggleAll.setOnClickListener(v -> {
             List<ContactCard> visible = new ArrayList<>();
             String f = search.getText().toString().toLowerCase().trim();
@@ -369,6 +375,7 @@ public class ContactSelectorView {
         row.addView(textCol, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
+        CandyUi.ripple(row, AppColors.SHAPE_MD_DP);
         row.setOnClickListener(v -> onToggle.run());
         return row;
     }

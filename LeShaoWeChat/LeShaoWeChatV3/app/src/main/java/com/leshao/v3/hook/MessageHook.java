@@ -55,6 +55,7 @@ public class MessageHook {
      */
     private static void hookMsgStorageInsert(ClassLoader cl) {
         try {
+            cl = resolveRealCl(cl);
             Class<?> f9 = VersionCompat.findMsgStorageClass(cl);
             if (f9 == null) {
                 LogWriter.log(TAG, "insertMsgInfo: f9 storage class not found");
@@ -87,6 +88,20 @@ public class MessageHook {
         }
     }
 
+    // v1042: 微信经 Tinker 热修复时真实类由 DelegateLastClassLoader 加载, lpparam.classLoader
+    // 只是 base.apk 平行副本。切换到真实 CL 才能 hook 到运行时实际调用的 f9/e9 类。
+    private static ClassLoader resolveRealCl(ClassLoader cl) {
+        try {
+            ClassLoader tk = VersionCompat.findTinkerClassLoader(cl);
+            if (tk != null && !tk.getClass().getName().contains("Leshao") && tk != cl) {
+                LogWriter.log(TAG, "使用 Tinker 真实 CL " + tk.getClass().getSimpleName());
+                return tk;
+            }
+        } catch (Throwable ignored) {
+        }
+        return cl;
+    }
+
     /** f9.Bb 入口: 播报逻辑复用 onX9Message, 靠 msgId/svrId 去重避免与 x9 分发重复 */
     static void onInsertMsgInfo(Object e9) {
         try {
@@ -102,6 +117,7 @@ public class MessageHook {
      */
     private static void hookSensitiveBlock(ClassLoader cl) {
         try {
+            cl = resolveRealCl(cl);
             Class<?> f9 = VersionCompat.findMsgStorageClass(cl);
             if (f9 == null) {
                 LogWriter.log(TAG, "sensitive block: f9 storage class not found");

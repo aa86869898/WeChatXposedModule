@@ -29,7 +29,8 @@ public class ChatGroupPageView {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
         InsetsUtil.clipRounded(root);
-        root.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(16 * d));
+        root.setPadding((int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_MD_DP * d),
+                (int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_XL_DP * d));
 
         // Tab bar
         LinearLayout tabBar = new LinearLayout(ctx);
@@ -39,7 +40,7 @@ public class ChatGroupPageView {
         tabBar.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
         GradientDrawable tabBg = new GradientDrawable();
         tabBg.setColor(AppColors.card());
-        tabBg.setCornerRadius((int)(8 * d));
+        tabBg.setCornerRadius((int)(AppColors.SHAPE_SM_DP * d));
         tabBar.setBackground(tabBg);
         InsetsUtil.clipRounded(tabBar);
 
@@ -57,6 +58,7 @@ public class ChatGroupPageView {
             tab.setGravity(Gravity.CENTER);
             tab.setPadding((int)(8 * d), (int)(6 * d), (int)(8 * d), (int)(6 * d));
             tab.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+            CandyUi.ripple(tab, AppColors.SHAPE_SM_DP);
             tab.setOnClickListener(v -> {
                 for (int j = 0; j < tabBar.getChildCount(); j++) {
                     TextView child = (TextView) tabBar.getChildAt(j);
@@ -133,6 +135,7 @@ public class ChatGroupPageView {
         createBtn.setTextSize(12); createBtn.setTextColor(AppColors.accent());
         createBtn.setTypeface(null, Typeface.BOLD);
         createBtn.setPadding((int)(10*d), 0, 0, 0);
+        CandyUi.ripple(createBtn, AppColors.SHAPE_FULL_DP);
         createBtn.setOnClickListener(v -> showCreateLabelDialog(ctx, parentAct, d, () -> refreshLabelList(ctx, parentAct, d, content)));
         actionRow.addView(createBtn);
 
@@ -140,6 +143,7 @@ public class ChatGroupPageView {
         refreshBtn.setText("刷新");
         refreshBtn.setTextSize(11); refreshBtn.setTextColor(AppColors.text2());
         refreshBtn.setPadding((int)(8*d), 0, 0, 0);
+        CandyUi.ripple(refreshBtn, AppColors.SHAPE_FULL_DP);
         refreshBtn.setOnClickListener(v -> {
             ChatGroupHook.refreshCache();
             Toast.makeText(parentAct, "已刷新", Toast.LENGTH_SHORT).show();
@@ -208,6 +212,7 @@ public class ChatGroupPageView {
         editBtn.setText("编辑"); editBtn.setTextSize(11);
         editBtn.setTextColor(AppColors.accent());
         editBtn.setPadding((int)(6*d), (int)(6*d), (int)(6*d), (int)(6*d));
+        CandyUi.ripple(editBtn, AppColors.SHAPE_FULL_DP);
         editBtn.setOnClickListener(v -> showRenameLabelDialog(ctx, parentAct, d, String.valueOf(label.labelId), label.labelName, refresh));
         row.addView(editBtn);
 
@@ -215,6 +220,7 @@ public class ChatGroupPageView {
         delBtn.setText("删除"); delBtn.setTextSize(11);
         delBtn.setTextColor(AppColors.error());
         delBtn.setPadding((int)(6*d), (int)(6*d), (int)(6*d), (int)(6*d));
+        CandyUi.ripple(delBtn, AppColors.SHAPE_FULL_DP);
         delBtn.setOnClickListener(v -> showDeleteLabelDialog(ctx, parentAct, d, String.valueOf(label.labelId), label.labelName, refresh));
         if (label.labelId != ChatGroupHook.LABEL_ID_GROUP && label.labelId != ChatGroupHook.LABEL_ID_FRIEND && label.labelId != ChatGroupHook.LABEL_ID_SERVICE) {
             row.addView(delBtn);
@@ -285,6 +291,7 @@ public class ChatGroupPageView {
                 rToggle.setText(r.enabled ? "禁用" : "启用");
                 rToggle.setTextSize(10); rToggle.setTextColor(AppColors.accent());
                 rToggle.setPadding(0, (int)(2*d), (int)(12*d), 0);
+                CandyUi.ripple(rToggle, AppColors.SHAPE_FULL_DP);
                 final AutoRule fr = r;
                 rToggle.setOnClickListener(v -> {
                     AutoGroupEngine.setRuleEnabled(fr.ruleId, !fr.enabled);
@@ -296,6 +303,7 @@ public class ChatGroupPageView {
                 rDel.setText("删除");
                 rDel.setTextSize(10); rDel.setTextColor(0xFFE53935);
                 rDel.setPadding(0, (int)(2*d), 0, 0);
+                CandyUi.ripple(rDel, AppColors.SHAPE_FULL_DP);
                 rDel.setOnClickListener(v -> {
                     AutoGroupEngine.removeRule(fr.ruleId);
                     buildAutoRules(ctx, parentAct, d, content);
@@ -314,6 +322,7 @@ public class ChatGroupPageView {
         addRuleBtn.setTextSize(12); addRuleBtn.setTextColor(AppColors.accent());
         addRuleBtn.setTypeface(null, Typeface.BOLD);
         addRuleBtn.setPadding(0, (int)(8*d), 0, 0);
+        CandyUi.ripple(addRuleBtn, AppColors.SHAPE_FULL_DP);
         addRuleBtn.setOnClickListener(v -> showAddRuleDialog(ctx, parentAct, d, content));
         card.addView(addRuleBtn);
 
@@ -353,6 +362,7 @@ public class ChatGroupPageView {
             btn.setText(op);
             btn.setTextSize(13); btn.setTextColor(AppColors.accent());
             btn.setPadding(0, (int)(8*d), 0, (int)(8*d));
+            CandyUi.ripple(btn, AppColors.SHAPE_MD_DP);
             btn.setOnClickListener(v -> {
                 if (op.equals("合并两个标签")) showMergeDialog(ctx, parentAct, d);
                 else if (op.equals("清空标签联系人")) showClearLabelDialog(ctx, parentAct, d);
@@ -380,6 +390,7 @@ public class ChatGroupPageView {
         exportBtn.setText("导出备份到JSON");
         exportBtn.setTextSize(13); exportBtn.setTextColor(AppColors.accent());
         exportBtn.setPadding(0, (int)(8*d), 0, (int)(4*d));
+        CandyUi.ripple(exportBtn, AppColors.SHAPE_FULL_DP);
         exportBtn.setOnClickListener(v -> {
             String path = LabelBackup.exportToJson(ctx);
             if (path != null) Toast.makeText(parentAct, "已导出: " + path, Toast.LENGTH_LONG).show();
@@ -416,6 +427,7 @@ public class ChatGroupPageView {
                 imp.setText("恢复");
                 imp.setTextSize(11); imp.setTextColor(AppColors.accent());
                 imp.setPadding((int)(8*d), 0, (int)(4*d), 0);
+                CandyUi.ripple(imp, AppColors.SHAPE_FULL_DP);
                 imp.setOnClickListener(v2 -> {
                     int cnt = LabelBackup.importFromJson(f.getAbsolutePath(), true);
                     Toast.makeText(parentAct, "已恢复 " + cnt + " 个标签", Toast.LENGTH_SHORT).show();
@@ -426,6 +438,7 @@ public class ChatGroupPageView {
                 del.setText("删除");
                 del.setTextSize(11); del.setTextColor(AppColors.error());
                 del.setPadding((int)(4*d), 0, 0, 0);
+                CandyUi.ripple(del, AppColors.SHAPE_FULL_DP);
                 del.setOnClickListener(v2 -> {
                     LabelBackup.deleteBackup(f.getAbsolutePath());
                     buildBackupRestore(ctx, parentAct, d, content);
@@ -521,6 +534,7 @@ public class ChatGroupPageView {
         close.setTextSize(14); close.setTextColor(AppColors.text2());
         close.setGravity(Gravity.CENTER);
         close.setPadding(0, (int)(12*d), 0, 0);
+        CandyUi.ripple(close, AppColors.SHAPE_FULL_DP);
         close.setOnClickListener(v2 -> dialog.dismiss());
         dlgRoot.addView(close);
 
@@ -577,8 +591,9 @@ public class ChatGroupPageView {
         LinearLayout btnRow = new LinearLayout(ctx);
         btnRow.setOrientation(LinearLayout.HORIZONTAL);
         btnRow.setGravity(Gravity.CENTER);
-        TextView cancel = new TextView(ctx); cancel.setText("取消"); cancel.setTextSize(14); cancel.setTextColor(AppColors.text2()); cancel.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d)); cancel.setOnClickListener(v2->dialog.dismiss()); btnRow.addView(cancel);
+        TextView cancel = new TextView(ctx); cancel.setText("取消"); cancel.setTextSize(14); cancel.setTextColor(AppColors.text2()); cancel.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d)); CandyUi.ripple(cancel, AppColors.SHAPE_FULL_DP); cancel.setOnClickListener(v2->dialog.dismiss()); btnRow.addView(cancel);
         TextView confirm = new TextView(ctx); confirm.setText("确认"); confirm.setTextSize(14); confirm.setTextColor(AppColors.accent()); confirm.setTypeface(null, Typeface.BOLD); confirm.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d));
+        CandyUi.ripple(confirm, AppColors.SHAPE_FULL_DP);
         confirm.setOnClickListener(v2 -> {
             String rn = ruleNameEt.getText().toString().trim();
             String mv = matchValueEt.getText().toString().trim();
@@ -629,8 +644,9 @@ public class ChatGroupPageView {
         dlgRoot.addView(spacerV(ctx, d, 10));
 
         LinearLayout btnRow = new LinearLayout(ctx); btnRow.setOrientation(LinearLayout.HORIZONTAL); btnRow.setGravity(Gravity.CENTER);
-        TextView cancel = new TextView(ctx); cancel.setText("取消"); cancel.setTextSize(14); cancel.setTextColor(AppColors.text2()); cancel.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d)); cancel.setOnClickListener(v2->dialog.dismiss()); btnRow.addView(cancel);
+        TextView cancel = new TextView(ctx); cancel.setText("取消"); cancel.setTextSize(14); cancel.setTextColor(AppColors.text2()); cancel.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d)); CandyUi.ripple(cancel, AppColors.SHAPE_FULL_DP); cancel.setOnClickListener(v2->dialog.dismiss()); btnRow.addView(cancel);
         TextView confirm = new TextView(ctx); confirm.setText("合并"); confirm.setTextSize(14); confirm.setTextColor(AppColors.accent()); confirm.setTypeface(null, Typeface.BOLD); confirm.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d));
+        CandyUi.ripple(confirm, AppColors.SHAPE_FULL_DP);
         confirm.setOnClickListener(v2 -> {
             int src = labelIds[srcSp.getSelectedItemPosition()];
             int dst = labelIds[dstSp.getSelectedItemPosition()];
@@ -666,8 +682,9 @@ public class ChatGroupPageView {
         dlgRoot.addView(spacerV(ctx, d, 10));
 
         LinearLayout btnRow = new LinearLayout(ctx); btnRow.setOrientation(LinearLayout.HORIZONTAL); btnRow.setGravity(Gravity.CENTER);
-        TextView cancel = new TextView(ctx); cancel.setText("取消"); cancel.setTextSize(14); cancel.setTextColor(AppColors.text2()); cancel.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d)); cancel.setOnClickListener(v2->dialog.dismiss()); btnRow.addView(cancel);
+        TextView cancel = new TextView(ctx); cancel.setText("取消"); cancel.setTextSize(14); cancel.setTextColor(AppColors.text2()); cancel.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d)); CandyUi.ripple(cancel, AppColors.SHAPE_FULL_DP); cancel.setOnClickListener(v2->dialog.dismiss()); btnRow.addView(cancel);
         TextView confirm = new TextView(ctx); confirm.setText("清空"); confirm.setTextSize(14); confirm.setTextColor(0xFFE53935); confirm.setTypeface(null, Typeface.BOLD); confirm.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d));
+        CandyUi.ripple(confirm, AppColors.SHAPE_FULL_DP);
         confirm.setOnClickListener(v2 -> { int n = BatchOperator.clearLabelContacts(ids[sp.getSelectedItemPosition()]); Toast.makeText(parentAct, "已清空 " + n + " 个联系人", Toast.LENGTH_SHORT).show(); dialog.dismiss(); });
         btnRow.addView(confirm);
         dlgRoot.addView(btnRow);
@@ -695,7 +712,7 @@ public class ChatGroupPageView {
             dlgRoot.addView(tv);
         }
         dlgRoot.addView(spacerV(ctx, d, 8));
-        TextView close = new TextView(ctx); close.setText("关闭"); close.setTextSize(14); close.setTextColor(AppColors.text2()); close.setGravity(Gravity.CENTER); close.setPadding(0,(int)(8*d),0,0); close.setOnClickListener(v2->dialog.dismiss()); dlgRoot.addView(close);
+        TextView close = new TextView(ctx); close.setText("关闭"); close.setTextSize(14); close.setTextColor(AppColors.text2()); close.setGravity(Gravity.CENTER); close.setPadding(0,(int)(8*d),0,0); CandyUi.ripple(close, AppColors.SHAPE_FULL_DP); close.setOnClickListener(v2->dialog.dismiss()); dlgRoot.addView(close);
         dialog.setView(dlgRoot);
         InsetsUtil.transparentWindow(dialog);
         dialog.show();
@@ -716,8 +733,9 @@ public class ChatGroupPageView {
         dlgRoot.addView(spacerV(ctx, d, 10));
 
         LinearLayout btnRow = new LinearLayout(ctx); btnRow.setOrientation(LinearLayout.HORIZONTAL); btnRow.setGravity(Gravity.CENTER);
-        TextView cancel = new TextView(ctx); cancel.setText("取消"); cancel.setTextSize(14); cancel.setTextColor(AppColors.text2()); cancel.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d)); cancel.setOnClickListener(v2->dialog.dismiss()); btnRow.addView(cancel);
+        TextView cancel = new TextView(ctx); cancel.setText("取消"); cancel.setTextSize(14); cancel.setTextColor(AppColors.text2()); cancel.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d)); CandyUi.ripple(cancel, AppColors.SHAPE_FULL_DP); cancel.setOnClickListener(v2->dialog.dismiss()); btnRow.addView(cancel);
         TextView confirm = new TextView(ctx); confirm.setText("确认"); confirm.setTextSize(14); confirm.setTextColor(AppColors.accent()); confirm.setTypeface(null, Typeface.BOLD); confirm.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d));
+        CandyUi.ripple(confirm, AppColors.SHAPE_FULL_DP);
         confirm.setOnClickListener(v2 -> { if (onConfirm.getAsBoolean()) { dialog.dismiss(); if (onDone != null) onDone.run(); } });
         btnRow.addView(confirm);
         dlgRoot.addView(btnRow);
@@ -740,8 +758,9 @@ public class ChatGroupPageView {
         TextView msgTv = new TextView(ctx); msgTv.setText(msg); msgTv.setTextSize(13); msgTv.setTextColor(AppColors.text2()); msgTv.setPadding(0,0,0,(int)(10*d)); dlgRoot.addView(msgTv);
 
         LinearLayout btnRow = new LinearLayout(ctx); btnRow.setOrientation(LinearLayout.HORIZONTAL); btnRow.setGravity(Gravity.CENTER);
-        TextView cancel = new TextView(ctx); cancel.setText("取消"); cancel.setTextSize(14); cancel.setTextColor(AppColors.text2()); cancel.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d)); cancel.setOnClickListener(v2->dialog.dismiss()); btnRow.addView(cancel);
+        TextView cancel = new TextView(ctx); cancel.setText("取消"); cancel.setTextSize(14); cancel.setTextColor(AppColors.text2()); cancel.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d)); CandyUi.ripple(cancel, AppColors.SHAPE_FULL_DP); cancel.setOnClickListener(v2->dialog.dismiss()); btnRow.addView(cancel);
         TextView confirm = new TextView(ctx); confirm.setText(btnText); confirm.setTextSize(14); confirm.setTextColor(btnColor); confirm.setTypeface(null, Typeface.BOLD); confirm.setPadding((int)(20*d),(int)(8*d),(int)(20*d),(int)(8*d));
+        CandyUi.ripple(confirm, AppColors.SHAPE_FULL_DP);
         confirm.setOnClickListener(v2 -> { onConfirm.run(); dialog.dismiss(); });
         btnRow.addView(confirm);
         dlgRoot.addView(btnRow);
@@ -757,7 +776,7 @@ public class ChatGroupPageView {
         et.setPadding((int)(12*d), (int)(10*d), (int)(12*d), (int)(10*d));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(AppColors.inputBg());
-        bg.setCornerRadius((int)(6*d));
+        bg.setCornerRadius((int)(AppColors.SHAPE_SM_DP*d));
         bg.setStroke((int)(1.5f*d), AppColors.candyPink());
         et.setBackground(bg);
         return et;

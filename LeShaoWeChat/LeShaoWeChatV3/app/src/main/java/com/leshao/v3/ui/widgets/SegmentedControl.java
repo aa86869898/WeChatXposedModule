@@ -51,6 +51,16 @@ public class SegmentedControl extends LinearLayout {
             seg.setSingleLine(true);
             seg.setClickable(true);
             seg.setFocusable(true);
+            // v1033 M3: 未选中段为透明底, 用 foreground 涟漪保证按压反馈
+            try {
+                GradientDrawable mask = new GradientDrawable();
+                mask.setShape(GradientDrawable.RECTANGLE);
+                mask.setCornerRadius(dp(ctx, AppColors.SHAPE_FULL_DP));
+                mask.setColor(0xFFFFFFFF);
+                seg.setForeground(new android.graphics.drawable.RippleDrawable(
+                        android.content.res.ColorStateList.valueOf(AppColors.stateLayerPressed()),
+                        null, mask));
+            } catch (Throwable ignored) {}
             LayoutParams lp = new LayoutParams(0, (int) (36 * d), 1f);
             seg.setLayoutParams(lp);
             seg.setOnClickListener(v -> select(idx, true));

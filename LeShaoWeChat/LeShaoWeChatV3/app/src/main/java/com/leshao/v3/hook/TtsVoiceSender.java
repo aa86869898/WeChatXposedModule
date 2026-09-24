@@ -1651,6 +1651,13 @@ public class TtsVoiceSender {
 
     private static void hookF9I9(ClassLoader cl) {
         try {
+            try {
+                ClassLoader tk = VersionCompat.findTinkerClassLoader(cl);
+                if (tk != null && !tk.getClass().getName().contains("Leshao") && tk != cl) {
+                    cl = tk;
+                }
+            } catch (Throwable ignored) {
+            }
             final Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
             final Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
             if (e9Class == null) {
@@ -1738,6 +1745,15 @@ public class TtsVoiceSender {
      */
     private static void hookF9Bb(ClassLoader cl) {
         try {
+            // v1042: 切换真实 Tinker CL, 否则 hook 挂在 base.apk 平行副本上运行时零捕获
+            try {
+                ClassLoader tk = VersionCompat.findTinkerClassLoader(cl);
+                if (tk != null && !tk.getClass().getName().contains("Leshao") && tk != cl) {
+                    LogWriter.log(TAG, "hookF9Bb: 使用 Tinker 真实 CL " + tk.getClass().getSimpleName());
+                    cl = tk;
+                }
+            } catch (Throwable ignored) {
+            }
             final Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
             final Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
             if (e9Class == null) {
