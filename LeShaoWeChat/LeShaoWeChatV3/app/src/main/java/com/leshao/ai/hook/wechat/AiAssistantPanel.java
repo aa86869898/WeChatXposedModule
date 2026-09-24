@@ -840,7 +840,7 @@ public final class AiAssistantPanel {
 
         // ---- 记忆 ----
         list.addView(newSection(ctx, "上下文记忆", "带入对话的历史消息条数"));
-        final EditText etMemory = M3Page.input(ctx, "记忆条数, 如 50");
+        final EditText etMemory = M3Page.input(ctx, "记忆条数, 如 100");
         etMemory.setText(String.valueOf(config.getMaxHistoryMessages()));
         list.addView(etMemory);
 
@@ -1398,7 +1398,7 @@ public final class AiAssistantPanel {
         final Switch swMemory = makeSwitch(ctx,
                 entry.memoryEnabled != null ? entry.memoryEnabled.booleanValue() : true);
         addSwitchRow(list, ctx, swMemory, "🧠", "上下文记忆", "关闭后本会话不携带历史记忆");
-        final EditText etMemoryLimit = M3Page.input(ctx, "记忆条数 (留空 = 全局 " + safe(String.valueOf(cfg.getMaxHistoryMessages() / 2)) + ")");
+        final EditText etMemoryLimit = M3Page.input(ctx, "记忆条数 (留空 = 全局 " + safe(String.valueOf(cfg.getMaxHistoryMessages())) + ")");
         etMemoryLimit.setSingleLine(true);
         etMemoryLimit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         etMemoryLimit.setText(entry.memoryLimit == null ? "" : String.valueOf(entry.memoryLimit));
@@ -1672,7 +1672,7 @@ public final class AiAssistantPanel {
         final Switch swMemory = makeSwitch(ctx,
                 e.memoryEnabled != null ? e.memoryEnabled.booleanValue() : true);
         addSwitchRow(list, ctx, swMemory, "🧠", "上下文记忆", "关闭后本会话不携带历史记忆");
-        final EditText etMemoryLimit = M3Page.input(ctx, "记忆条数 (留空 = 全局 " + safe(String.valueOf(cfg.getMaxHistoryMessages() / 2)) + ")");
+        final EditText etMemoryLimit = M3Page.input(ctx, "记忆条数 (留空 = 全局 " + safe(String.valueOf(cfg.getMaxHistoryMessages())) + ")");
         etMemoryLimit.setSingleLine(true);
         etMemoryLimit.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         etMemoryLimit.setText(e.memoryLimit == null ? "" : String.valueOf(e.memoryLimit));

@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import de.robv.android.xposed.XposedHelpers;
+
 /**
  * AI 机器人业务中枢。
  * <p>
@@ -33,7 +35,7 @@ public final class AIBotCore {
 
     private static final String TAG = "LeshaoAI.Core";
     private static final Object LOCK = new Object();
-    private static final int DEFAULT_MAX_MEMORY = 40;
+    private static final int DEFAULT_MAX_MEMORY = 100;
 
     private static volatile AppConfig config;
     private static volatile ConversationConfig conversationConfig;
@@ -224,7 +226,8 @@ public final class AIBotCore {
                     if (override != null && override.memoryLimit != null && override.memoryLimit.intValue() > 0) {
                         n = override.memoryLimit.intValue();
                     } else {
-                        n = Math.max(4, c.getMaxHistoryMessages() / 2);
+                        // v1043: 不再 /2 折算, 直接取配置(默认 100, 无上限约束由 UI 引导)
+                        n = Math.max(4, c.getMaxHistoryMessages());
                     }
                     List<com.leshao.ai.memory.ChatMessage> recent =
                             memory.getRecent(chatId, n);
@@ -243,6 +246,11 @@ public final class AIBotCore {
         messages.add(new ChatMessage("system", systemFinal, 0));
         if (hist.length() > 0) {
             messages.add(new ChatMessage("system", "历史对话：\n" + hist, 0));
+        }
+        // v1043: 注入当前会话近 100 条真实聊天记录(f9 存储, 文档链)作为上下文
+        String recentChatLog = loadRecentChatLog(chatId, 100);
+        if (recentChatLog.length() > 0) {
+            messages.add(new ChatMessage("system", "该会话最近的聊天记录：\n" + recentChatLog, 0));
         }
         messages.add(new ChatMessage("user", incoming, 0));
 
@@ -288,6 +296,67 @@ public final class AIBotCore {
             return ProviderType.ANTHROPIC;
         }
         return ProviderType.OPENAI_CHAT;
+    }
+
+    /**
+     * 读取当前会话近 N 条真实聊天记录（f9 查询，文档《存储和聊天记录和链路.md》）：
+     * <pre>
+     *   f9.H2(talker, createTimeBefore, limit)  →  createTime < before Desc Limit N
+     *   e9 getter: N0()=talker, j()=content, getType(), z0()=isSend,
+     *              F0()=svrId, getCreateTime()
+     * </pre>
+     * 自读自发的消息不注入（防内容重复），仅取用户消息(他人/自己)与 AI 回复的历史文本。
+     * 取不到（存储未绑定）时返回空字符串，绝不阻塞主链路。
+     */
+    private static String loadRecentChatLog(String talker, int limit) {
+        StringBuilder sb = new StringBuilder();
+        try {
+            com.leshao.ai.hook.wechat.StorageHub hub = com.leshao.ai.hook.wechat.StorageHub.get();
+            if (!hub.ensureBound()) {
+                return "";
+            }
+            Object f9 = hub.msgInfoStorage();
+            if (f9 == null) {
+                return "";
+            }
+            long before = System.currentTimeMillis() + 60 * 1000L;
+            List<Object> list = hub.history(talker, before, limit);
+            if (list == null || list.isEmpty()) {
+                return "";
+            }
+            int shown = 0;
+            for (int i = list.size() - 1; i >= 0; i--) {
+                try {
+                    Object e9 = list.get(i);
+                    if (e9 == null) {
+                        continue;
+                    }
+                    Integer type = (Integer) XposedHelpers.callMethod(e9, "getType");
+                    if (type == null || type.intValue() != 1) {
+                        continue; // 仅文本
+                    }
+                    Integer isSend = (Integer) XposedHelpers.callMethod(e9, "z0");
+                    String content = (String) XposedHelpers.callMethod(e9, "j");
+                    if (content == null || content.trim().isEmpty()) {
+                        continue;
+                    }
+                    String role = (isSend != null && isSend.intValue() == 1) ? "我: " : "对方: ";
+                    sb.append(role).append(content.trim()).append('\n');
+                    shown++;
+                } catch (Throwable ignored) {
+                }
+                if (shown >= limit) {
+                    break;
+                }
+            }
+            if (shown > 0) {
+                LogWriter.log(TAG, "loadRecentChatLog: talker=" + talker
+                        + " 注入 " + shown + " 条真实聊天记录");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "loadRecentChatLog err: " + t);
+        }
+        return sb.toString();
     }
 
     /** 结果回调（工作线程）。 */

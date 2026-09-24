@@ -7,6 +7,7 @@ import android.util.Log;
 import com.leshao.ai.hook.HookEntry;
 import com.leshao.ai.hook.dexkit.DexKitAdapter;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.hook.DexKitHelper;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -44,6 +45,8 @@ public final class StorageHub {
     private volatile Object rcontactStorage;
     /** ConfigStorage 实例（q3）。 */
     private volatile Object configStorage;
+    /** NetSceneQueue（gp0.y.b = modelbase.r1），发送入队用。 */
+    private volatile Object netSceneQueue;
 
     private volatile boolean bound;
     private volatile String cachedSelfWxid;
@@ -153,6 +156,17 @@ public final class StorageHub {
             }
         } catch (Throwable ignored) {
         }
+
+        // v1043 主链: j1.v(tn3.c4) 服务定位 (文档实证, Tinker 下稳定)
+        //   ((c4) j1.v(c4.class)).lj() → f9 MsgInfoStorage
+        //   c4.cj()/ij()              → j4 RContactStorage
+        //   j1.q() 实例 .b           → gp0.y.b = modelbase.r1 NetSceneQueue
+        if (bindViaServiceLocator(cl)) {
+            return;
+        }
+        LogWriter.log(TAG, "bindInternal: j1 服务链未命中, 回退 b41.h9 旧链");
+
+        // v1042 兜底链: b41.h9.d() → b41.e → v/r/q
         Class<?> hubClass = DexKitAdapter.findCoreHubClass();
         Class<?> accClass = DexKitAdapter.findAccountStorageClass();
         Class<?> msgClass = DexKitAdapter.findMsgInfoStorageClass();
@@ -207,6 +221,168 @@ public final class StorageHub {
         LogWriter.log(TAG, "bindInternal: msg=" + (msgInfoStorage != null)
                 + " rcontact=" + (rcontactStorage != null)
                 + " config=" + (configStorage != null));
+    }
+
+    /**
+     * v1043 主链：经 j1 服务定位器绑定存储（文档实证，Tinker 下稳定）。
+     * <pre>
+     *   j1.v(tn3.c4)  → h2 服务实例（com.tencent.mm.plugin.messenger.foundation.h2）
+     *     ├─ .lj()    → f9  MsgInfoStorage
+     *     ├─ .cj()/.ij() → j4 RContactStorage
+     *     └─ j1.q().b → gp0.y.b = modelbase.r1 NetSceneQueue
+     * </pre>
+     *
+     * @return 任一存储绑定成功
+     */
+    private boolean bindViaServiceLocator(ClassLoader cl) {
+        try {
+            Class<?> j1 = serviceLocatorClass(cl);
+            if (j1 == null) {
+                LogWriter.log(TAG, "bindViaServiceLocator: j1 未定位");
+                return false;
+            }
+            Class<?> c4 = null;
+            for (String cn : new String[]{"tn3.c4", "sh3.c4"}) {
+                try {
+                    c4 = XposedHelpers.findClass(cn, cl);
+                    break;
+                } catch (Throwable ignored) {
+                }
+            }
+            if (c4 == null) {
+                LogWriter.log(TAG, "bindViaServiceLocator: IM 接口(tn3.c4) 未定位");
+                return false;
+            }
+            Object svc = null;
+            for (String mn : new String[]{"v", "s"}) {
+                try {
+                    svc = XposedHelpers.callStaticMethod(j1, mn, c4);
+                    if (svc != null) {
+                        LogWriter.log(TAG, "bindViaServiceLocator: j1." + mn + "(" + c4.getName()
+                                + ") OK class=" + svc.getClass().getName());
+                        break;
+                    }
+                } catch (Throwable t) {
+                    String m = String.valueOf(t);
+                    if (m.contains("Kernel not initialized")) {
+                        LogWriter.log(TAG, "bindViaServiceLocator: 内核未就绪, 等重试");
+                    }
+                }
+            }
+            if (svc == null) {
+                LogWriter.log(TAG, "bindViaServiceLocator: 服务实例仍 null");
+                return false;
+            }
+
+            // ① MsgInfoStorage = svc.lj()
+            Class<?> f9 = findMsgInfoStorageClass(cl);
+            msgInfoStorage = getterByPrefs(svc, f9, new String[]{"lj", "j2", "j3"});
+            if (msgInfoStorage == null) {
+                msgInfoStorage = firstGetter(svc, f9, "lj");
+            }
+            // ② RContactStorage = svc.cj()/ij()
+            Class<?> j4 = findRContactStorageClass(cl);
+            rcontactStorage = getterByPrefs(svc, j4, new String[]{"cj", "ij"});
+            if (rcontactStorage == null) {
+                rcontactStorage = firstGetter(svc, j4, "cj");
+            }
+            // ③ NetSceneQueue = j1.q() 实例 .b
+            netSceneQueue = readNetSceneQueue(j1);
+            LogWriter.log(TAG, "bindViaServiceLocator: msg=" + (msgInfoStorage != null)
+                    + " rcontact=" + (rcontactStorage != null)
+                    + " queue=" + (netSceneQueue != null));
+            return msgInfoStorage != null || rcontactStorage != null;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "bindViaServiceLocator err: " + t);
+            return false;
+        }
+    }
+
+    /** 定位 j1 服务定位类：优先 DexKit 扫描结果, 兜底类名 gp0.j1。 */
+    private static Class<?> serviceLocatorClass(ClassLoader cl) {
+        String dk = DexKitHelper.getJ1ServiceClass();
+        if (dk != null && !dk.isEmpty()) {
+            try {
+                return XposedHelpers.findClass(dk, cl);
+            } catch (Throwable ignored) {
+            }
+        }
+        for (String cn : new String[]{"gp0.j1", "gp0.j1.j"}) {
+            try {
+                return XposedHelpers.findClass(cn, cl);
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
+    }
+
+    /** 定位 f9 MsgInfoStorage 类：DexKit 优先, 兜底类名。 */
+    private static Class<?> findMsgInfoStorageClass(ClassLoader cl) {
+        Class<?> c = DexKitAdapter.findMsgInfoStorageClass();
+        if (c != null) {
+            return c;
+        }
+        try {
+            return XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    /** 定位 j4 RContactStorage 类：DexKit 优先, 兜底类名。 */
+    private static Class<?> findRContactStorageClass(ClassLoader cl) {
+        Class<?> c = DexKitAdapter.findRContactStorageClass();
+        if (c != null) {
+            return c;
+        }
+        for (String cn : new String[]{"com.tencent.mm.storage.j4", "com.tencent.mm.storage.d8"}) {
+            try {
+                return XposedHelpers.findClass(cn, cl);
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
+    }
+
+    /** 按候选方法名快取，返回类型需与 expect 兼容。 */
+    private static Object getterByPrefs(Object obj, Class<?> expect, String[] prefs) {
+        if (obj == null) {
+            return null;
+        }
+        for (String n : prefs) {
+            Object v = callNoArgTyped(obj, n, expect);
+            if (v != null) {
+                LogWriter.log(TAG, "getterByPrefs 命中 " + obj.getClass().getName()
+                        + "." + n + "() -> " + v.getClass().getName());
+                return v;
+            }
+        }
+        return null;
+    }
+
+    /** j1.q() → gp0.y 实例 → 字段 b = NetSceneQueue(modelbase.r1)。 */
+    private static Object readNetSceneQueue(Class<?> j1) {
+        for (Method m : allMethods(j1)) {
+            if (!m.getName().equals("q") || m.getParameterCount() != 0
+                    || !Modifier.isStatic(m.getModifiers())) {
+                continue;
+            }
+            try {
+                Object y = m.invoke(null);
+                if (y != null) {
+                    try {
+                        Object q = XposedHelpers.getObjectField(y, "b");
+                        if (q != null) {
+                            LogWriter.log(TAG, "readNetSceneQueue OK: " + q.getClass().getName());
+                            return q;
+                        }
+                    } catch (Throwable ignored) {
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
     }
 
     private static String cn(Class<?> c) {
@@ -321,6 +497,12 @@ public final class StorageHub {
     public Object msgInfoStorage() {
         ensureBound();
         return msgInfoStorage;
+    }
+
+    /** NetSceneQueue（modelbase.r1），发送入队用。 */
+    public Object netSceneQueue() {
+        ensureBound();
+        return netSceneQueue;
     }
 
     public Object rcontactStorage() {

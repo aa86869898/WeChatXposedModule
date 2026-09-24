@@ -2,30 +2,38 @@ package com.leshao.ai.hook.wechat;
 
 import android.util.Log;
 
+import com.leshao.ai.hook.HookEntry;
 import com.leshao.ai.hook.dexkit.DexKitAdapter;
+import com.leshao.v3.LogWriter;
+import com.leshao.v3.hook.VersionCompat;
+
+import java.lang.reflect.Method;
 
 import de.robv.android.xposed.XposedHelpers;
 
 /**
- * 微信文本消息发送器（文档 §5 线路二）。
+ * 微信文本消息发送器（文档《存储和聊天记录和链路.md》发送链）。
  * <p>
- * 唯一发送通道为 {@code v51.r1}（SendMsgCgiFactory.Builder）：
+ * v1043 标准发送链（文档实证）：
  * <pre>
- *   r1 req = new r1();
- *   req.l = p1.d;      // ★ 必须：消息类型枚举 TEXT，否则 b()/c() 空转
- *   req.h(talker);     // 目标会话
- *   req.e(content);    // 正文
- *   req.i(1);          // scene/type
- *   req.b();           // 异步执行（内部协程）
+ *   e9 msg = new e9();
+ *   msg.u1(talker);            // 目标会话
+ *   msg.b1(content);           // 文本内容
+ *   msg.setType(1);            // 文本类型
+ *   msg.e1(now);               // createTime
+ *   msg.k1(1);                 // ★ isSend = 1（doScene 组包发送硬条件）
+ *   msg.t1(1);                 // status = 1（发送中）
+ *   msg.r3("");                // msgSource
+ *   f9 lj = ((c4) j1.v(c4.class)).lj();
+ *   long msgId = lj.Bb(msg, true);        // 本地插入(REPLACE)
+ *   v51.r0 scene = new v51.r0(msgId, talker);
+ *   r1 queue = j1.q().b;                  // NetSceneQueue = gp0.y.b
+ *   queue.h(scene, 0);                    // 入队触发 CGI newsendmsg(522)
  * </pre>
- * 类名由 {@link DexKitAdapter} 按字符串锚点动态定位（{@code MicroMsg.SendMsgCgiFactory}
- * + {@code executeByPPC() called with: content size = }），跨版本自适应。
+ * 语音能发文字不能的排查（文档 §五）：文字必须 k1(1)(isSend=1)、type=1、content 走 b1()，
+ * 且必须 new v51.r0(msgId, talker) + queue.h(scene,0) 真正入队——只 Bb 入库微信不会自动发送。
  * <p>
- * 群聊 @：v51.p1 枚举无 VOICE 同理亦无 @ 语义，k7 附加参数字段版本差异大，
- * 按文档 §5.4 兜底方案在正文前直接写 {@code @显示名}。
- * <p>
- * b() 为协程异步执行，返回即表示「已发起」；最终落库会经过 f9.Bb，
- * 由 {@link MsgReceiveHook} 观察水印验证闭环。
+ * 保留 v51.r1 (SendMsgCgiFactory.Builder) 作为回退：若 v51.r0 链路类未定位则退回 Builder。
  */
 public final class WeChatMessenger {
 
@@ -42,13 +50,91 @@ public final class WeChatMessenger {
      *
      * @param talker  会话 id（群/联系人）
      * @param content 正文（调用方负责已打防循环水印）
-     * @param cl      微信 classLoader（仅为兼容旧签名，实际用 HookEntry.appClassLoader）
+     * @param cl      微信 classLoader（用于解析 Tinker 真实 CL）
      * @return 是否成功发起发送
      */
     public static boolean sendText(String talker, String content, ClassLoader cl) {
         if (talker == null || talker.isEmpty() || content == null || content.isEmpty()) {
             return false;
         }
+        // 优先 v1043 标准链：e9 构造 → f9.Bb(true) → v51.r0 → queue.h 入队
+        if (sendViaMsgInfo(talker, content, cl)) {
+            return true;
+        }
+        LogWriter.log(TAG, "sendText: v51.r0 链路失败, 回退 v51.r1 Builder");
+        return sendViaBuilder(talker, content);
+    }
+
+    /**
+     * 标准链：构造 e9(isSend=1,type=1) → f9.Bb(msg,true) → new v51.r0(msgId,talker) → queue.h(scene,0)。
+     * 发送前 lj.N3(talker,msgId) 自检读表，避免 resend 读表失败静默掉。
+     */
+    private static boolean sendViaMsgInfo(String talker, String content, ClassLoader cl) {
+        try {
+            ClassLoader tk = VersionCompat.findTinkerClassLoader(cl != null ? cl : HookEntry.appClassLoader);
+            if (tk == null) {
+                LogWriter.log(TAG, "sendViaMsgInfo: Tinker CL 未就绪");
+                return false;
+            }
+            Class<?> e9 = XposedHelpers.findClass("com.tencent.mm.storage.e9", tk);
+            Class<?> r0 = XposedHelpers.findClass("v51.r0", tk);
+            Object f9 = StorageHub.get().msgInfoStorage();
+            if (f9 == null) {
+                LogWriter.log(TAG, "sendViaMsgInfo: f9(MsgInfoStorage) 未绑定");
+                return false;
+            }
+
+            // 1) 构造 e9
+            Object msg = XposedHelpers.newInstance(e9);
+            XposedHelpers.callMethod(msg, "u1", talker);
+            XposedHelpers.callMethod(msg, "b1", content);
+            XposedHelpers.callMethod(msg, "setType", 1);
+            XposedHelpers.callMethod(msg, "e1", System.currentTimeMillis());
+            XposedHelpers.callMethod(msg, "k1", 1);   // isSend = 1
+            XposedHelpers.callMethod(msg, "t1", 1);   // status = 1
+            XposedHelpers.callMethod(msg, "r3", "");  // msgSource
+
+            // 2) 本地插入(REPLACE)
+            long msgId;
+            try {
+                Object ret = XposedHelpers.callMethod(f9, "Bb", msg, true);
+                msgId = ((Number) ret).longValue();
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "sendViaMsgInfo: Bb 失败: " + t.getMessage());
+                return false;
+            }
+            // 自检：resend 读表失败会静默(doScene=-2)，发送前确认能读回
+            Object back = XposedHelpers.callMethod(f9, "N3", talker, msgId);
+            if (back == null) {
+                LogWriter.log(TAG, "sendViaMsgInfo: N3 自检读回 null (msgId=" + msgId + "), 表名可能不符");
+            } else {
+                LogWriter.log(TAG, "sendViaMsgInfo: Bb OK msgId=" + msgId
+                        + " 回读=" + back.getClass().getName());
+            }
+
+            // 3) v51.r0 发送 scene
+            Object scene = XposedHelpers.newInstance(r0, msgId, talker);
+
+            // 4) NetSceneQueue = j1.q().b；queue.h(scene,0) 入队
+            Object queue = StorageHub.get().netSceneQueue();
+            if (queue == null) {
+                LogWriter.log(TAG, "sendViaMsgInfo: NetSceneQueue 未绑定, 已插库但未入队");
+                return false;
+            }
+            XposedHelpers.callMethod(queue, "h", scene, 0);
+            Log.i(TAG, "sendViaMsgInfo: 入队发送 -> " + talker + " len=" + content.length()
+                    + " msgId=" + msgId);
+            return true;
+        } catch (Throwable t) {
+            Log.w(TAG, "sendViaMsgInfo 失败: " + t);
+            return false;
+        }
+    }
+
+    /**
+     * 回退链：v51.r1 (SendMsgCgiFactory.Builder)。类名由 DexKitAdapter 动态定位。
+     */
+    private static boolean sendViaBuilder(String talker, String content) {
         try {
             Class<?> r1 = DexKitAdapter.findSendFactoryClass();
             Class<?> p1 = DexKitAdapter.findSendTypeEnumClass();
@@ -76,7 +162,7 @@ public final class WeChatMessenger {
             XposedHelpers.callMethod(req, "i", 1);       // scene/type
             XposedHelpers.callMethod(req, "b");          // 异步执行
 
-            Log.i(TAG, "已发起发送 -> " + talker + " len=" + content.length());
+            Log.i(TAG, "sendViaBuilder: 已发起发送 -> " + talker + " len=" + content.length());
             return true;
         } catch (Throwable t) {
             Log.w(TAG, "sendText 失败: " + t);

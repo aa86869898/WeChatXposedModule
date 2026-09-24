@@ -58,7 +58,7 @@ public class AppConfig {
     /** 是否仅在 @机器人/提到机器名 时回复。 */
     private boolean onlyWhenMentioned = false;
     /** 记忆保留的最大历史消息条数（环形上限）。 */
-    private int maxHistoryMessages = 50;
+    private int maxHistoryMessages = 100;
     /** v1019: 历史已添加模型记录(最近在前, 去重, 上限 MODEL_HISTORY_LIMIT)。 */
     private java.util.List<String> modelHistory = new java.util.ArrayList<>();
     public static final int MODEL_HISTORY_LIMIT = 20;
@@ -193,7 +193,7 @@ public class AppConfig {
         autoReplyInGroups = false;
         autoReplyInPrivate = false;
         onlyWhenMentioned = false;
-        maxHistoryMessages = 50;
+        maxHistoryMessages = 100;
         modelHistory.clear();
     }
 
