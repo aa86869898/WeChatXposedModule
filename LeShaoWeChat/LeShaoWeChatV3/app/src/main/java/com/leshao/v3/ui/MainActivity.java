@@ -687,9 +687,9 @@ public class MainActivity {
         // v1013 M3: 头像 44dp 圆形容器；真实头像异步加载，加载前显示首字母占位
         final android.widget.ImageView avatar = new android.widget.ImageView(ctx);
         int avSize = dp(d, 44);
-        GradientDrawable avBg = new GradientDrawable();
-        avBg.setShape(GradientDrawable.OVAL);
-        avBg.setColor(AppColors.tertiaryContainer());
+        FlowingGradientDrawable avBg = new FlowingGradientDrawable(
+                AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+        avBg.setCornerRadius(avSize / 2f);
         avatar.setBackground(avBg);
         avatar.setClipToOutline(true);
         avatar.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
@@ -757,14 +757,8 @@ public class MainActivity {
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(d, 16), dp(d, 12), dp(d, 16), dp(d, 12));
-        // v955 M3: 主色 hero 顶栏 + 28dp 底部圆角(M3 extra-large shape)
-        GradientDrawable barBg = new GradientDrawable();
-        barBg.setShape(GradientDrawable.RECTANGLE);
-        barBg.setColor(AppColors.primary());
-        barBg.setCornerRadii(new float[]{
-            dp(d, 28), dp(d, 28), dp(d, 28), dp(d, 28),
-            0, 0, 0, 0});
-        bar.setBackground(barBg);
+        // v1067 葡萄气泡: hero 顶栏流光渐变 + 28dp 底部圆角(M3 extra-large shape)
+        bar.setBackground(CandyUi.topBarGradientBg(ctx));
         InsetsUtil.clipRounded(bar);
 
         LinearLayout textCol = new LinearLayout(ctx);
@@ -898,11 +892,7 @@ public class MainActivity {
         LinearLayout iconWrap = new LinearLayout(ctx);
         iconWrap.setGravity(Gravity.CENTER);
         int iconBox = dp(d, 40);
-        GradientDrawable iconBg = new GradientDrawable();
-        iconBg.setShape(GradientDrawable.RECTANGLE);
-        iconBg.setCornerRadius(dp(d, AppColors.SHAPE_MD_DP));
-        iconBg.setColor(AppColors.secondaryContainer());
-        iconWrap.setBackground(iconBg);
+        iconWrap.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_MD_DP));
         LinearLayout.LayoutParams iconWrapLp = new LinearLayout.LayoutParams(iconBox, iconBox);
         iconWrapLp.setMarginEnd(dp(d, 12));
         iconWrap.setLayoutParams(iconWrapLp);
@@ -987,10 +977,7 @@ public class MainActivity {
         contactBtn.setTypeface(null, Typeface.BOLD);
         contactBtn.setGravity(Gravity.CENTER);
         contactBtn.setPadding(dp(d, 14), dp(d, 12), dp(d, 14), dp(d, 12));
-        GradientDrawable cbBg = new GradientDrawable();
-        cbBg.setCornerRadius(dp(d, AppColors.SHAPE_MD_DP));
-        cbBg.setColor(AppColors.accent());
-        contactBtn.setBackground(cbBg);
+        contactBtn.setBackground(CandyUi.gradientBgStatic(ctx, AppColors.SHAPE_MD_DP));
         applyRipple(contactBtn, d, AppColors.SHAPE_MD_DP);
         contactBtn.setOnClickListener(cv -> {
             try {
@@ -1141,17 +1128,10 @@ public class MainActivity {
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(d, 12), dp(d, 8), dp(d, 12), dp(d, 8));
-        // v955 M3: 主色底 + 28dp 底部圆角
-        GradientDrawable barBg = new GradientDrawable();
-        barBg.setShape(GradientDrawable.RECTANGLE);
-        final int barColor = AppColors.titleBar();
-        barBg.setColor(barColor);
-        barBg.setCornerRadii(new float[]{
-            dp(d, 28), dp(d, 28), dp(d, 28), dp(d, 28),
-            0, 0, 0, 0});
-        bar.setBackground(barBg);
+        // v1067 葡萄气泡: 子页顶栏流光渐变 + 28dp 底部圆角
+        bar.setBackground(CandyUi.topBarGradientBg(ctx));
         InsetsUtil.clipRounded(bar);
-        final int barOn = AppColors.onColor(barColor);
+        final int barOn = AppColors.onGradient();
 
         if (showBack) {
             TextView back = new TextView(ctx);

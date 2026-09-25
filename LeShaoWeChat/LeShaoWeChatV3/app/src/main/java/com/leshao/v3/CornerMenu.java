@@ -244,12 +244,17 @@ public class CornerMenu {
 
         sBitmapLight = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(sBitmapLight);
-        paint.setColor(0xFF006C4C); // M3 primary（浅色）
+        // v1067 葡萄气泡：角标三横线走流光渐变（紫→淡紫→粉）
+        paint.setShader(new android.graphics.LinearGradient(0f, 0f, size, size,
+                new int[]{0xFF8B5CF6, 0xFFD8B4FE, 0xFFFFAFCC}, null,
+                android.graphics.Shader.TileMode.CLAMP));
         drawLines(canvas, paint);
 
         sBitmapDark = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         canvas = new Canvas(sBitmapDark);
-        paint.setColor(0xFF6CDBAC); // M3 primary（暗色）
+        paint.setShader(new android.graphics.LinearGradient(0f, 0f, size, size,
+                new int[]{0xFF9F7BFF, 0xFFDCC3FF, 0xFFFFB8D4}, null,
+                android.graphics.Shader.TileMode.CLAMP));
         drawLines(canvas, paint);
     }
 

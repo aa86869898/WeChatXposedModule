@@ -47,11 +47,12 @@ public class SettingRow extends LinearLayout {
         mIcon.setText(icon != null ? icon : "•");
         mIcon.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         mIcon.setGravity(Gravity.CENTER);
+        mIcon.setTextColor(AppColors.onGradient());
         int iconSize = (int) (36 * d);
-        GradientDrawable iconBg = new GradientDrawable();
-        iconBg.setShape(GradientDrawable.RECTANGLE);
+        // v1067 葡萄气泡：图标底改为流光渐变，提升整体主题一致性
+        com.leshao.v3.ui.FlowingGradientDrawable iconBg = new com.leshao.v3.ui.FlowingGradientDrawable(
+                AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
         iconBg.setCornerRadius(AppColors.SHAPE_MD_DP * d);
-        iconBg.setColor(AppColors.secondaryContainer());
         mIcon.setBackground(iconBg);
         LayoutParams iconLp = new LayoutParams(iconSize, iconSize);
         iconLp.setMarginEnd((int) (12 * d));

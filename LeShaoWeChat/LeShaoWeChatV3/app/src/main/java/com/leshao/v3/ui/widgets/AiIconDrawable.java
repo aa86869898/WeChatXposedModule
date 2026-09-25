@@ -31,17 +31,18 @@ public class AiIconDrawable extends Drawable {
     public static final int G_LAYERS = 8;
     public static final int G_SLIDERS = 9;
 
+    // v1067 葡萄气泡：图标色板统一到葡萄/粉/薰衣草家族
     private static final int[] PALETTE = {
-            0xFF7C4DFF, // spark 总开关
-            0xFF2196F3, // cloud 服务商
-            0xFF00897B, // chip 模型/核心
-            0xFFFF7043, // user 人设/会话
-            0xFFF9A825, // bell 唤醒/@
-            0xFFEC407A, // voice 语音
-            0xFF00ACC1, // eq 音色
-            0xFF43A047, // db 记忆
-            0xFFFB8C00, // layers 模板
-            0xFF5C6BC0, // sliders 独立配置
+            0xFF8B5CF6, // spark 总开关
+            0xFF9F7BFF, // cloud 服务商
+            0xFFC026D3, // chip 模型/核心
+            0xFFB56BF0, // user 人设/会话
+            0xFF9333EA, // bell 唤醒/@
+            0xFFDB2777, // voice 语音
+            0xFFD946EF, // eq 音色
+            0xFF7C3AED, // db 记忆
+            0xFFFF8FC7, // layers 模板
+            0xFFA78BFA, // sliders 独立配置
     };
 
     private final int mGlyph;

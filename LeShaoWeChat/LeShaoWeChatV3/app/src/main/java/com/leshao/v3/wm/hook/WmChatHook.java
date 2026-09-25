@@ -111,8 +111,12 @@ public class WmChatHook {
         sInjected = true;
     }
 
-    public static void dismissTitleBtn() {
-        hidePanel();
+    /** v1079: 当前聊天窗口会话 id(聊天窗口打开时由 WmEntry 注入), 供 TTS 等发送入口解析 talker。 */
+    public static String currentUser() {
+        return sUser;
+    }
+
+    public static void dismissTitleBtn() {        hidePanel();
         dismissAssistantMenu();
         sAct = null;
         sInjected = false;
@@ -360,9 +364,9 @@ public class WmChatHook {
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
             fos.write(("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>" + escHtml(sUser)
                 + "</title><style>body{font-family:sans-serif;max-width:800px;margin:auto;padding:10px}"
-                + ".me{color:#07C160;text-align:right}.other{color:#333}.time{font-size:10px;color:#999}"
+                + ".me{color:#8B5CF6;text-align:right}.other{color:#333}.time{font-size:10px;color:#999}"
                 + ".bubble{display:inline-block;max-width:70%;padding:8px 12px;border-radius:8px;margin:2px 0}"
-                + ".me .bubble{background:#95EC69}.other .bubble{background:#fff;border:1px solid #eee}"
+                + ".me .bubble{background:#E9D5FF}.other .bubble{background:#fff;border:1px solid #eee}"
                 + "</style></head><body><h2>" + escHtml(sUser) + "</h2><hr>\n").getBytes("UTF-8"));
             int cnt = 0;
             while (c.moveToNext()) {
@@ -816,20 +820,21 @@ public class WmChatHook {
     private static int inputBg()    { return withAlpha(AppColors.surfaceContainerHighest(), 0x99); }
     private static int dividerCol() { return withAlpha(AppColors.outlineVariant(), isDarkMode() ? 0x40 : 0x33); }
 
-    // 霓虹糖果色（浅暗通用，饱和高明度）
-    private static final int NEON_PINK   = 0xFFFF2D87;
-    private static final int NEON_BLUE   = 0xFF3B82F6;
+    // 霓虹糖果色（浅暗通用）· 葡萄气泡家族；仅红保留给危险/失败语义
+    private static final int NEON_PINK   = 0xFFFF6FB0;
+    private static final int NEON_BLUE   = 0xFF7C3AED;
     private static final int NEON_PURPLE = 0xFF8B5CF6;
-    private static final int NEON_CYAN   = 0xFF06B6D4;
-    private static final int NEON_GREEN  = 0xFF10B981;
-    private static final int NEON_ORANGE = 0xFFF59E0B;
+    private static final int NEON_CYAN   = 0xFF9F7BFF;
+    private static final int NEON_GREEN  = 0xFF8B5CF6;
+    private static final int NEON_ORANGE = 0xFFD946EF;
     private static final int NEON_RED    = 0xFFEF4444;
-    private static final int NEON_MINT   = 0xFF34D399;
-    private static final int NEON_LAVENDER = 0xFFA78BFA;
+    private static final int NEON_MINT   = 0xFFA78BFA;
+    private static final int NEON_LAVENDER = 0xFFD8B4FE;
 
+    // v1067 葡萄气泡：霓虹调色板收拢到葡萄/粉/薰衣草家族，保持全局一致
     private static final int[] NEON_PALETTE = {
-        NEON_PINK, NEON_BLUE, NEON_PURPLE, NEON_CYAN,
-        NEON_GREEN, NEON_ORANGE, NEON_MINT
+        NEON_PURPLE, NEON_LAVENDER, NEON_PINK, NEON_PURPLE,
+        NEON_PINK, NEON_LAVENDER, NEON_PURPLE
     };
 
     private static int neonColor(int idx) { return NEON_PALETTE[idx % NEON_PALETTE.length]; }
@@ -885,10 +890,8 @@ public class WmChatHook {
         btn.setAllCaps(false);
         btn.setTypeface(null, android.graphics.Typeface.BOLD);
         btn.setTextColor(0xFFFFFFFF);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(color);
-        bg.setCornerRadius(dp(14));
-        btn.setBackground(bg);
+        // v1067 葡萄气泡：填充按钮走流光渐变
+        btn.setBackground(CandyUi.gradientBg(sAct, 14));
         btn.setElevation(dp(3));
         btn.setPadding(dp(24), 0, dp(24), 0);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -949,20 +952,22 @@ public class WmChatHook {
             dot.setTextSize(13);
             dot.setGravity(Gravity.CENTER);
             dot.setTypeface(null, android.graphics.Typeface.BOLD);
-            GradientDrawable dotBg = new GradientDrawable();
-            if (i < current) {
-                dotBg.setColor(NEON_GREEN);
-                dot.setTextColor(0xFFFFFFFF);
-            } else if (i == current) {
-                dotBg.setColor(neonColor(i));
+            if (i <= current) {
+                com.leshao.v3.ui.FlowingGradientDrawable dotBg =
+                        new com.leshao.v3.ui.FlowingGradientDrawable(
+                                AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+                dotBg.setCornerRadius(size);
+                dotBg.setPhaseOffset(i * 0.2f);
+                dot.setBackground(dotBg);
                 dot.setTextColor(0xFFFFFFFF);
             } else {
+                GradientDrawable dotBg = new GradientDrawable();
                 dotBg.setColor(0x00000000);
                 dotBg.setStroke(dp(2), glassBorder());
+                dotBg.setCornerRadius(size);
+                dot.setBackground(dotBg);
                 dot.setTextColor(textDim());
             }
-            dotBg.setCornerRadius(size);
-            dot.setBackground(dotBg);
             dot.setElevation(i == current ? dp(4) : 0);
             LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(size, size);
             stepRow.addView(dot, dlp);
@@ -981,7 +986,7 @@ public class WmChatHook {
             // 连接线
             if (i < 2) {
                 View line = new View(sAct);
-                line.setBackgroundColor(i < current ? NEON_GREEN : dividerCol());
+                line.setBackgroundColor(i < current ? NEON_PURPLE : dividerCol());
                 LinearLayout.LayoutParams lilp = new LinearLayout.LayoutParams(dp(24), dp(2));
                 lilp.setMargins(dp(6), 0, dp(6), 0);
                 stepRow.addView(line, lilp);
@@ -2234,7 +2239,7 @@ public class WmChatHook {
                     String stText;
                     switch (status) {
                         case "completed":
-                            stColor = NEON_GREEN; stText = "已完成"; break;
+                            stColor = NEON_PURPLE; stText = "已完成"; break;
                         case "running":
                             stColor = NEON_ORANGE; stText = "执行中"; break;
                         case "cancelled":
@@ -2275,7 +2280,7 @@ public class WmChatHook {
                         TextView resTv = new TextView(sAct);
                         resTv.setText("成功 " + success + " / 失败 " + fail);
                         resTv.setTextSize(11);
-                        resTv.setTextColor(fail > 0 ? NEON_RED : NEON_GREEN);
+                        resTv.setTextColor(fail > 0 ? NEON_RED : NEON_PURPLE);
                         midRow.addView(resTv);
                     }
                     card.addView(midRow);
@@ -2584,7 +2589,9 @@ private static void executeMassSend(String type, String text, java.util.List<Str
             for (String target : targets) {
                 try {
                     if (!text.isEmpty()) {
-                        WmReflect.sendTextMsg(sCL, text, target);
+                        if (!WmReflect.sendTextMsg(sCL, text, target)) {
+                            throw new RuntimeException("sendTextMsg 未命中微信发送接口(可能版本不兼容)");
+                        }
                     }
 
                     switch (type) {

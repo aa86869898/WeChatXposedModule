@@ -201,7 +201,7 @@ public class BatchAddRecordPageView {
         badge.setGravity(Gravity.CENTER);
         badge.setPadding((int)(10 * d), (int)(4 * d), (int)(10 * d), (int)(4 * d));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(r.success ? 0xFF10B981 : 0xFFE53935);
+        bg.setColor(r.success ? AppColors.primary() : AppColors.error());
         bg.setCornerRadius((int)(AppColors.SHAPE_MD_DP * d));
         badge.setBackground(bg);
         row.addView(badge);

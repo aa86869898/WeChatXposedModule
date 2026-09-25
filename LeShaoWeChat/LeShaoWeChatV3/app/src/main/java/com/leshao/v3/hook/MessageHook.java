@@ -413,6 +413,13 @@ public class MessageHook {
                                                                             + " return=" + returnType.getName());
                                                                     sConsumedTtsOriginal.set(Boolean.TRUE);
                                                                     p.setResult(defaultReturnValue(returnType));
+                                                                    return;
+                                                                }
+                                                                if (TtsVoiceSender.handleOutgoingX9(p.args[0])) {
+                                                                    LogWriter.log(TAG, "consume outgoing #tts/mode x9." + m.getName()
+                                                                            + " return=" + returnType.getName());
+                                                                    sConsumedTtsOriginal.set(Boolean.TRUE);
+                                                                    p.setResult(defaultReturnValue(returnType));
                                                                 }
                                 } catch (Throwable e) {
                                     LogWriter.log("MessageHook", "cb err: " + e);
@@ -538,6 +545,9 @@ public class MessageHook {
                         }
                     });
                 }
+            } else {
+                // 发出消息: 优先由 before 拦截(不发送/不入库), 此处为 x9 后置兜底
+                try { TtsVoiceSender.handleOutgoingX9(e9); } catch (Throwable ignored) {}
             }
 
         } catch (Throwable t) {

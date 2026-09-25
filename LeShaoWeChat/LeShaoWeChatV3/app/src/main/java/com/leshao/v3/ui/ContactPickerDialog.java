@@ -365,7 +365,8 @@ public class ContactPickerDialog {
 
         if (checked) {
             Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
-            fill.setColor(AppColors.primary());
+            fill.setShader(new android.graphics.LinearGradient(0, 0, size, size,
+                    AppColors.gradientColors(), null, android.graphics.Shader.TileMode.CLAMP));
             canvas.drawCircle(size / 2f, size / 2f, size / 2f - 1, fill);
 
             Paint check = new Paint(Paint.ANTI_ALIAS_FLAG);

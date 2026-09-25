@@ -394,9 +394,9 @@ public final class ChatVoiceSwitchHook {
 
         // B 套「同色系浅底描边」配色：音色 / 群发 / 语音 / AI助手 / 转发
         int gap = (int) (6 * density);
-        addButton(row, makeFooterButton(ctx, "音色", 0xFFEC407A, v -> openTtsPage(ctx)), gap);
-        addButton(row, makeFooterButton(ctx, "群发", 0xFF5C6BC0, v -> openMassSend(ctx)), gap);
-        addButton(row, makeFooterButton(ctx, "语音", 0xFF00ACC1, v -> {
+        addButton(row, makeFooterButton(ctx, "音色", 0xFFC026D3, v -> openTtsPage(ctx)), gap);
+        addButton(row, makeFooterButton(ctx, "群发", 0xFF8B5CF6, v -> openMassSend(ctx)), gap);
+        addButton(row, makeFooterButton(ctx, "语音", 0xFF9333EA, v -> {
             // v960: 面板展示异常(BadTokenException 等)必须兜底, 否则点击即闪退
             try {
                 com.leshao.v3.ChatFooterLongPressMenu.showPanelStatic(v);
@@ -405,9 +405,9 @@ public final class ChatVoiceSwitchHook {
             }
         }), gap);
         // AI助手：原「更多」菜单中的 AI 助手功能直达
-        addButton(row, makeFooterButton(ctx, "AI助手", 0xFF7C4DFF, v -> openAiAssistant(ctx)), gap);
+        addButton(row, makeFooterButton(ctx, "AI助手", 0xFF7C3AED, v -> openAiAssistant(ctx)), gap);
         // 转发：原「更多」菜单中的自动转发功能直达
-        addButton(row, makeFooterButton(ctx, "转发", 0xFFFB8C00, v -> openAutoForward(ctx)), 0);
+        addButton(row, makeFooterButton(ctx, "转发", 0xFFDB2777, v -> openAutoForward(ctx)), 0);
 
         android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(ctx);
         scroll.setHorizontalScrollBarEnabled(false);
@@ -473,9 +473,9 @@ public final class ChatVoiceSwitchHook {
         int borderColor = dark ? mix(color, 0xFF1B1F24, 0.55f) : mix(color, 0xFFFFFFFF, 0.45f);
         int textColor = dark ? mix(color, 0xFFFFFFFF, 0.78f) : color;
 
-        GradientDrawable bg = new GradientDrawable();
-        bg.setShape(GradientDrawable.RECTANGLE);
-        bg.setColor(bgColor);
+        // v1067 葡萄气泡：同色系浅底也加入流光，整体动起来
+        com.leshao.v3.ui.FlowingGradientDrawable bg = new com.leshao.v3.ui.FlowingGradientDrawable(
+                bgColor, borderColor, bgColor);
         bg.setCornerRadius(dp(18, ctx));
         bg.setStroke(dp(1, ctx), borderColor);
         btn.setBackground(bg);

@@ -68,6 +68,140 @@ public class ChatFooterLongPressMenu {
     private static ClassLoader sClassLoader;
     private static volatile String sCurrentTalker;
     private static Object sLastChatFooter;
+
+    /** v1073: 当前聊天会话 talker 缓存(供 TTS 发送入口兜底拦截使用)。 */
+    public static String currentTalker() {
+        return sCurrentTalker;
+    }
+
+    /**
+     * v1079: 从任意微信对象(SendTextComponent / 组件宿主 / Activity)解析当前会话 talker。
+     * 逐层扫描字段图, 命中合法会话字符串即返回并写入缓存, 供 om.A0 等文字发送入口使用。
+     */
+    public static String resolveTalkerFrom(Object root) {
+        String cached = sCurrentTalker;
+        if (isValidTalker(cached)) return cached;
+        String t = null;
+        if (root instanceof String) {
+            t = (String) root;
+        } else {
+            if (root instanceof Activity) {
+                t = resolveTalkerFromActivity((Activity) root);
+            }
+            if (!isValidTalker(t)) t = scanTalkerFieldGraph(root);
+            if (!isValidTalker(t)) t = getTalkerFromObject(root);
+        }
+        if (!isValidTalker(t)) t = findGlobalTalker();
+        if (isValidTalker(t)) {
+            sCurrentTalker = t;
+            LogWriter.log(TAG, "resolveTalkerFrom: " + t
+                    + " (root=" + (root == null ? "null" : root.getClass().getSimpleName()) + ")");
+            return t;
+        }
+        LogWriter.log(TAG, "resolveTalkerFrom 未命中 root="
+                + (root == null ? "null" : root.getClass().getName()));
+        return null;
+    }
+
+    /**
+     * v1080: 全局兜底解析(调用方无 root 或字段图扫描失败时)。
+     * 依次尝试: ChatFooter.d(权威) → WmChatHook 当前打开的会话 → 前台 Activity。
+     */
+    private static String findGlobalTalker() {
+        if (sLastChatFooter != null) {
+            try {
+                Field f = findField(sLastChatFooter.getClass(), "d");
+                if (f != null) {
+                    f.setAccessible(true);
+                    Object v = f.get(sLastChatFooter);
+                    if (v instanceof String && isValidTalker((String) v)) {
+                        LogWriter.log(TAG, "findGlobalTalker: ChatFooter.d=" + v);
+                        return (String) v;
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        try {
+            String u = com.leshao.v3.wm.hook.WmChatHook.currentUser();
+            if (isValidTalker(u)) {
+                LogWriter.log(TAG, "findGlobalTalker: WmChatHook=" + u);
+                return u;
+            }
+        } catch (Throwable ignored) {}
+        try {
+            Activity act = MainHook.currentActivity();
+            if (act != null) {
+                String t = resolveTalkerFromActivity(act);
+                if (isValidTalker(t)) {
+                    LogWriter.log(TAG, "findGlobalTalker: activity=" + t);
+                    return t;
+                }
+                t = getTalkerFromObject(act);
+                if (isValidTalker(t)) {
+                    LogWriter.log(TAG, "findGlobalTalker: activity field=" + t);
+                    return t;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private static String scanTalkerFieldGraph(Object root) {
+        if (root == null) return null;
+        java.util.IdentityHashMap<Object, Boolean> visited = new java.util.IdentityHashMap<>();
+        java.util.ArrayDeque<Object> queue = new java.util.ArrayDeque<>();
+        java.util.ArrayDeque<Integer> depths = new java.util.ArrayDeque<>();
+        queue.add(root);
+        depths.add(0);
+        visited.put(root, Boolean.TRUE);
+        int nodes = 0;
+        while (!queue.isEmpty() && nodes++ < 400) {
+            Object cur = queue.poll();
+            int depth = depths.poll();
+            if (cur == null) continue;
+            String name = cur.getClass().getName();
+            if (cur instanceof String) continue;
+            // 会话/昵称 getter
+            for (String mn : new String[]{"getTalkerUserName", "getTalker", "getUserName",
+                    "getChatRoomName", "getChatroomName"}) {
+                try {
+                    Object v = XposedHelpers.callMethod(cur, mn);
+                    if (v instanceof String && isValidTalker((String) v)) return (String) v;
+                } catch (Throwable ignored) {}
+            }
+            if (cur instanceof Activity) {
+                String t = resolveTalkerFromActivity((Activity) cur);
+                if (isValidTalker(t)) return t;
+            }
+            if (depth >= 5) continue;
+            Class<?> c = cur.getClass();
+            while (c != null && c != Object.class) {
+                for (Field f : c.getDeclaredFields()) {
+                    if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                    String ft = f.getType().getName();
+                    if (f.getType().isPrimitive()) continue;
+                    if (ft.startsWith("java.") || ft.startsWith("android.graphics")
+                            || ft.startsWith("android.view") || ft.startsWith("android.widget")
+                            || ft.startsWith("android.os")) continue;
+                    try {
+                        f.setAccessible(true);
+                        Object v = f.get(cur);
+                        if (v == null) continue;
+                        if (v instanceof String) {
+                            if (isValidTalker((String) v)) return (String) v;
+                        } else if (v.getClass().getName().startsWith("com.tencent.mm")
+                                && !visited.containsKey(v)) {
+                            visited.put(v, Boolean.TRUE);
+                            queue.add(v);
+                            depths.add(depth + 1);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+                c = c.getSuperclass();
+            }
+        }
+        return null;
+    }
     private static TextView sTargetPathText;
     private static String sLastPickedPath;
     private static ViewTreeObserver.OnGlobalLayoutListener sLayoutListener;
@@ -714,10 +848,7 @@ public class ChatFooterLongPressMenu {
         browseBtn.setTextColor(AppColors.textOnPrimary());
         browseBtn.setGravity(Gravity.CENTER);
         browseBtn.        setPadding(dp(ctx, 4), p8, dp(ctx, 4), p8);
-        GradientDrawable browseBg = new GradientDrawable();
-        browseBg.setColor(AppColors.primary());
-        browseBg.setCornerRadius(dp(ctx, 20));
-        browseBtn.setBackground(browseBg);
+        browseBtn.setBackground(CandyUi.gradientBg(ctx, 20));
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         btnLp.leftMargin = p8;
@@ -883,10 +1014,7 @@ public class ChatFooterLongPressMenu {
         convertBtn.setTypeface(null, android.graphics.Typeface.BOLD);
         convertBtn.setGravity(Gravity.CENTER);
         convertBtn.setPadding(dp(ctx, 16), dp(ctx, 12), dp(ctx, 16), dp(ctx, 12));
-        GradientDrawable cvtBg = new GradientDrawable();
-        cvtBg.setColor(AppColors.primary());
-        cvtBg.setCornerRadius(dp(ctx, 20));
-        convertBtn.setBackground(cvtBg);
+        convertBtn.setBackground(CandyUi.gradientBg(ctx, 20));
         // v966: 按钮文字右侧加发送图标
         try {
             android.graphics.drawable.Drawable sendIc = new android.graphics.drawable.BitmapDrawable(
@@ -1747,10 +1875,7 @@ public class ChatFooterLongPressMenu {
             barSendBtn.setTextColor(AppColors.textOnPrimary());
             barSendBtn.setGravity(Gravity.CENTER);
             barSendBtn.setPadding(p8, p10, p8, p10);
-            GradientDrawable sendBg = new GradientDrawable();
-            sendBg.setColor(AppColors.primary());
-            sendBg.setCornerRadius(dp(ctx, 20));
-            barSendBtn.setBackground(sendBg);
+            barSendBtn.setBackground(CandyUi.gradientBg(ctx, 20));
             barSendBtn.setOnClickListener(sv -> {
                 stopPanelPlayback();
                 if (sHistorySelected.isEmpty()) {

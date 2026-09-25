@@ -46,6 +46,8 @@ public class AutoForwardHook {
     private static final String PREF_SOURCES = "ls_autofw_sources";
     private static final String PREF_TARGETS = "ls_autofw_targets";
     private static final String PREF_TYPES = "ls_autofw_types";
+    private static final String PREF_RECORDS = "ls_autofw_records";
+    private static final int RECORD_MAX = 200;
 
     private static volatile boolean sEnabled = false;
     private static volatile Set<String> sSources = ConcurrentHashMap.newKeySet();
@@ -176,6 +178,7 @@ public class AutoForwardHook {
             LogWriter.log(TAG, "fwd trigger: type=" + type + " talker=" + talker
                 + " content=" + trunc(content, 30));
             forwardAll(type, talker, content, e9);
+            addRecord(talker, type, content);
         } catch (Throwable t) {
             LogWriter.log(TAG, "onMsgInsert err: " + t.getMessage());
         }
@@ -326,6 +329,158 @@ public class AutoForwardHook {
         LogWriter.log(TAG, "sendXmlAsAppMsg: q3.G not found");
     }
 
+    // ==================== 自动转发记录 ====================
+
+    private static void addRecord(String talker, int type, String content) {
+        try {
+            SharedPreferences prefs = ContextManager.getPrefs();
+            if (prefs == null) return;
+            org.json.JSONObject o = new org.json.JSONObject();
+            o.put("t", talker == null ? "" : talker);
+            o.put("n", contactName(talker));
+            o.put("c", describeContent(type, content));
+            o.put("ts", System.currentTimeMillis());
+            org.json.JSONArray arr = new org.json.JSONArray(prefs.getString(PREF_RECORDS, "[]"));
+            org.json.JSONArray out = new org.json.JSONArray();
+            out.put(o);
+            for (int i = 0; i < arr.length() && i < RECORD_MAX - 1; i++) out.put(arr.getJSONObject(i));
+            prefs.edit().putString(PREF_RECORDS, out.toString()).apply();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "addRecord err: " + t.getMessage());
+        }
+    }
+
+    private static String contactName(String wxid) {
+        if (wxid == null || wxid.isEmpty()) return "";
+        try {
+            for (com.leshao.v3.model.ContactCard c : com.leshao.v3.ContactRepository.getAll()) {
+                if (c != null && wxid.equals(c.username)) return c.displayName();
+            }
+        } catch (Throwable ignored) {}
+        return wxid;
+    }
+
+    private static String describeContent(int type, String content) {
+        switch (type) {
+            case 1: case 11: case 21: case 31: case 36:
+                return content == null ? "" : content;
+            case 3: return "[图片]";
+            case 34: case 228: return "[语音]";
+            case 43: return "[视频]";
+            case 47: return "[表情]";
+            case 42: return "[名片]";
+            case 48: return "[位置]";
+            case 6: return "[文件]";
+            default:
+                if ((type & 0xffff) == 49) return "[链接/卡片]";
+                return "[消息]";
+        }
+    }
+
+    private static String formatTime(long ts) {
+        try {
+            return new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.CHINA)
+                    .format(new java.util.Date(ts));
+        } catch (Throwable t) {
+            return "";
+        }
+    }
+
+    private static void showRecordsDialog(Context ctx) {
+        try {
+            SharedPreferences prefs = ContextManager.getPrefs();
+            org.json.JSONArray arr = new org.json.JSONArray(
+                    prefs == null ? "[]" : prefs.getString(PREF_RECORDS, "[]"));
+            LinearLayout root = com.leshao.v3.ui.widgets.M3Page.root(ctx);
+            root.addView(com.leshao.v3.ui.widgets.M3Page.section(ctx, "自动转发记录",
+                    "共 " + arr.length() + " 条"));
+            ScrollView sv = new ScrollView(ctx);
+            LinearLayout list = new LinearLayout(ctx);
+            list.setOrientation(LinearLayout.VERTICAL);
+            final float d = ctx.getResources().getDisplayMetrics().density;
+            if (arr.length() == 0) {
+                TextView empty = new TextView(ctx);
+                empty.setText("暂无转发记录");
+                empty.setGravity(Gravity.CENTER);
+                empty.setPadding(0, (int) (24 * d), 0, 0);
+                empty.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
+                list.addView(empty);
+            }
+            for (int i = 0; i < arr.length(); i++) {
+                try {
+                    org.json.JSONObject o = arr.getJSONObject(i);
+                    list.addView(buildRecordRow(ctx, d, o.optString("t"),
+                            o.optString("n"), o.optString("c"), o.optLong("ts")));
+                } catch (Throwable ignored) {}
+            }
+            sv.addView(list);
+            root.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+            final android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(ctx,
+                    com.leshao.v3.ui.AppColors.isDarkMode()
+                            ? android.R.style.Theme_DeviceDefault_Dialog_Alert
+                            : android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
+                    .setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.94f, 0.8f))
+                    .setCancelable(true)
+                    .create();
+            com.leshao.v3.ui.InsetsUtil.center(dlg, 0.94f, 0.8f);
+            dlg.show();
+        } catch (Throwable t) {
+            Toast.makeText(ctx, "打开记录失败: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private static View buildRecordRow(Context ctx, float d, String talker, String name,
+                                       String content, long ts) {
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, (int) (8 * d), 0, (int) (8 * d));
+
+        int sz = (int) (40 * d);
+        android.widget.ImageView iv = new android.widget.ImageView(ctx);
+        iv.setLayoutParams(new LinearLayout.LayoutParams(sz, sz));
+        boolean bound = false;
+        try { bound = com.leshao.v3.ui.AvatarHelper.bindAvatar(iv, talker); } catch (Throwable ignored) {}
+        if (!bound) {
+            try {
+                String letter = (name != null && !name.isEmpty()) ? name.substring(0, 1) : "?";
+                iv.setImageBitmap(com.leshao.v3.ui.AvatarHelper.letterAvatar(letter, sz));
+            } catch (Throwable ignored) {}
+        }
+        row.addView(iv);
+
+        LinearLayout col = new LinearLayout(ctx);
+        col.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, -2, 1f);
+        clp.setMargins((int) (10 * d), 0, 0, 0);
+        col.setLayoutParams(clp);
+
+        TextView tvName = new TextView(ctx);
+        tvName.setText(name == null || name.isEmpty() ? talker : name);
+        tvName.setTextSize(14);
+        tvName.setTextColor(com.leshao.v3.ui.AppColors.onSurface());
+        tvName.setSingleLine(true);
+        tvName.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        col.addView(tvName);
+
+        TextView tvContent = new TextView(ctx);
+        tvContent.setText(content == null ? "" : content);
+        tvContent.setTextSize(13);
+        tvContent.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
+        tvContent.setMaxLines(2);
+        tvContent.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        col.addView(tvContent);
+
+        TextView tvTime = new TextView(ctx);
+        tvTime.setText(formatTime(ts));
+        tvTime.setTextSize(11);
+        tvTime.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
+        col.addView(tvTime);
+
+        row.addView(col);
+        return row;
+    }
+
     // ==================== 配置 UI 弹窗（v955 M3 重排 + 联系人选择器 + 类型多选按钮） ====================
 
     /** 可转发的消息类型（WeChat msgType）: 值 → 显示名 */
@@ -361,48 +516,37 @@ public class AutoForwardHook {
         content.addView(cardMain);
 
         // ===== 来源（联系人选择器） =====
-        content.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "转发来源", "留空 = 所有会话"));
         LinearLayout cardSrc = com.leshao.v3.ui.widgets.M3Page.card(ctx);
         final String[] srcHolder = {prefs.getString(PREF_SOURCES, "")};
         final TextView srcVal = new TextView(ctx);
-        srcVal.setText(srcHolder[0].isEmpty() ? "全部会话" : srcHolder[0]);
+        srcVal.setText(srcHolder[0].isEmpty() ? "全部会话" : displayList(srcHolder[0]));
         srcVal.setTextSize(13);
         srcVal.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
         srcVal.setSingleLine(true);
         srcVal.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        cardSrc.addView(com.leshao.v3.ui.widgets.M3Page.tailRow(ctx, "📥", "选择来源会话",
-                "仅转发这些会话的消息", srcVal));
-        cardSrc.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
-        cardSrc.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "📥", "从通讯录选择来源",
-                "打开联系人选择器多选", () -> {
+        cardSrc.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "📥", "选择转发来源",
+                "打开联系人选择器多选(可切好友/群聊)", () -> {
             if (act == null) { Toast.makeText(ctx, "当前上下文不支持选择器", Toast.LENGTH_SHORT).show(); return; }
             com.leshao.v3.ui.ContactPickerDialog.show(act, srcHolder[0],
                     com.leshao.v3.ui.ContactPickerDialog.MODE_FRIEND,
                     (wxids, display) -> {
                         srcHolder[0] = wxids == null || wxids.isEmpty() ? ""
                                 : android.text.TextUtils.join(",", wxids);
-                        srcVal.setText(srcHolder[0].isEmpty() ? "全部会话" : display);
+                        srcVal.setText(srcHolder[0].isEmpty() ? "全部会话" : displayList(srcHolder[0]));
                     });
         }));
-        cardSrc.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
-        cardSrc.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "🧹", "清空来源", "恢复为全部会话",
-                () -> { srcHolder[0] = ""; srcVal.setText("全部会话"); }));
         content.addView(cardSrc);
 
         // ===== 目标（联系人选择器, 群聊优先） =====
-        content.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "转发目标", "必填, 消息将转发到这些会话"));
         LinearLayout cardTgt = com.leshao.v3.ui.widgets.M3Page.card(ctx);
         final String[] tgtHolder = {prefs.getString(PREF_TARGETS, "")};
         final TextView tgtVal = new TextView(ctx);
-        tgtVal.setText(tgtHolder[0].isEmpty() ? "未设置" : tgtHolder[0]);
+        tgtVal.setText(tgtHolder[0].isEmpty() ? "未设置" : displayList(tgtHolder[0]));
         tgtVal.setTextSize(13);
         tgtVal.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
         tgtVal.setSingleLine(true);
         tgtVal.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        cardTgt.addView(com.leshao.v3.ui.widgets.M3Page.tailRow(ctx, "📤", "已选目标",
-                "消息转发目的地", tgtVal));
-        cardTgt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
-        cardTgt.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "📤", "从通讯录选择目标",
+        cardTgt.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "📤", "选择转发目标",
                 "打开联系人选择器多选(可切好友/群聊)", () -> {
             if (act == null) { Toast.makeText(ctx, "当前上下文不支持选择器", Toast.LENGTH_SHORT).show(); return; }
             com.leshao.v3.ui.ContactPickerDialog.show(act, tgtHolder[0],
@@ -410,13 +554,14 @@ public class AutoForwardHook {
                     (wxids, display) -> {
                         tgtHolder[0] = wxids == null || wxids.isEmpty() ? ""
                                 : android.text.TextUtils.join(",", wxids);
-                        tgtVal.setText(tgtHolder[0].isEmpty() ? "未设置" : display);
+                        tgtVal.setText(tgtHolder[0].isEmpty() ? "未设置" : displayList(tgtHolder[0]));
                     });
         }));
+        cardTgt.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "📝", "自动转发记录",
+                "查看转发历史(头像/昵称/内容/时间)", () -> showRecordsDialog(ctx)));
         content.addView(cardTgt);
 
-        // ===== 类型（多选按钮组） =====
-        content.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "转发类型", "默认 文本+图片+链接; 全不选=默认"));
+        // ===== 类型（多选按钮组, 仅保留按钮） =====
         LinearLayout cardType = com.leshao.v3.ui.widgets.M3Page.card(ctx);
         final java.util.Set<Integer> typeSel = new java.util.LinkedHashSet<>();
         String savedTypes = prefs.getString(PREF_TYPES, "");
@@ -427,11 +572,7 @@ public class AutoForwardHook {
         } else {
             typeSel.add(1); typeSel.add(3); typeSel.add(49);
         }
-        final TextView typeSummary = new TextView(ctx);
-        typeSummary.setTextSize(13);
-        typeSummary.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
-        typeSummary.setPadding((int) (16 * d), (int) (10 * d), (int) (16 * d), (int) (4 * d));
-        cardType.addView(typeSummary);
+        cardType.setPadding((int) (8 * d), (int) (8 * d), (int) (8 * d), (int) (8 * d));
 
         // 多选按钮流式网格(每行3个)
         LinearLayout typeGrid = new LinearLayout(ctx);
@@ -458,12 +599,12 @@ public class AutoForwardHook {
             tb.setLayoutParams(tlp);
             tb.setOnClickListener(v -> {
                 if (typeSel.contains(code)) typeSel.remove(code); else typeSel.add(code);
-                refreshTypeButtons(typeBtns, FW_TYPE_CODES, typeSel, typeSummary);
+                refreshTypeButtons(typeBtns, FW_TYPE_CODES, typeSel, null);
             });
             typeBtns.add(tb);
             ((LinearLayout) typeGrid.getChildAt(typeGrid.getChildCount() - 1)).addView(tb);
         }
-        refreshTypeButtons(typeBtns, FW_TYPE_CODES, typeSel, typeSummary);
+        refreshTypeButtons(typeBtns, FW_TYPE_CODES, typeSel, null);
         cardType.addView(typeGrid);
         content.addView(cardType);
 
@@ -492,7 +633,7 @@ public class AutoForwardHook {
                 ? android.R.style.Theme_DeviceDefault_Dialog_Alert
                 : android.R.style.Theme_DeviceDefault_Light_Dialog_Alert;
         final android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(ctx, theme)
-                .setView(root)
+                .setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.92f, 0.8f))
                 .setCancelable(true)
                 .create();
         btnCancel.onClick(() -> dlg.dismiss());
@@ -513,7 +654,7 @@ public class AutoForwardHook {
                     Toast.LENGTH_SHORT).show();
             dlg.dismiss();
         });
-        com.leshao.v3.ui.InsetsUtil.transparentWindow(dlg);
+        com.leshao.v3.ui.InsetsUtil.center(dlg, 0.92f, 0.8f);
         dlg.show();
     }
 
@@ -541,6 +682,68 @@ public class AutoForwardHook {
                 summary.setText(sb.toString());
             }
         }
+    }
+
+    /** 解析逗号分隔 wxid 列表为可读昵称串 */
+    private static String displayList(String csv) {
+        List<String> ids = split(csv);
+        if (ids.isEmpty()) return "";
+        java.util.Map<String, String> names = contactNames();
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < ids.size(); i++) {
+            if (i > 0) sb.append("、");
+            String n = names.get(ids.get(i));
+            sb.append(n != null ? n : ids.get(i));
+            if (i == 4 && ids.size() > 6) {
+                sb.append("…等").append(ids.size()).append("个");
+                break;
+            }
+        }
+        return sb.toString();
+    }
+
+    private static java.util.Map<String, String> contactNames() {
+        java.util.Map<String, String> names = new java.util.HashMap<>();
+        try {
+            for (com.leshao.v3.model.ContactCard c : com.leshao.v3.ContactRepository.getAll()) {
+                if (c != null && c.username != null) names.put(c.username, c.displayName());
+            }
+        } catch (Throwable ignored) {}
+        return names;
+    }
+
+    /** 已选名单查看弹窗（只读展示, 支持清空） */
+    private static void showSelectedListDialog(Context ctx, String title, String csv, Runnable onClear) {
+        List<String> ids = split(csv);
+        if (ids.isEmpty()) {
+            Toast.makeText(ctx, "暂无已选名单", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        LinearLayout root = com.leshao.v3.ui.widgets.M3Page.root(ctx);
+        root.addView(com.leshao.v3.ui.widgets.M3Page.section(ctx, title, "共 " + ids.size() + " 项"));
+        java.util.Map<String, String> names = contactNames();
+        LinearLayout card = com.leshao.v3.ui.widgets.M3Page.card(ctx);
+        for (String id : ids) {
+            String n = names.get(id);
+            card.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "•",
+                    n != null ? n : id, id, () -> {}));
+            card.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+        }
+        root.addView(card);
+
+        int theme = com.leshao.v3.ui.AppColors.isDarkMode()
+                ? android.R.style.Theme_DeviceDefault_Dialog_Alert
+                : android.R.style.Theme_DeviceDefault_Light_Dialog_Alert;
+        final android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(ctx, theme)
+                .setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.92f, 0.7f))
+                .setCancelable(true)
+                .create();
+        View clearBtn = com.leshao.v3.ui.widgets.M3Page.ghostButton(ctx, "清空名单",
+                () -> { if (onClear != null) onClear.run(); dlg.dismiss(); });
+        View closeBtn = com.leshao.v3.ui.widgets.M3Page.button(ctx, "关闭", dlg::dismiss);
+        root.addView(com.leshao.v3.ui.widgets.M3Page.buttonRow(ctx, closeBtn, clearBtn));
+        com.leshao.v3.ui.InsetsUtil.transparentWindow(dlg);
+        dlg.show();
     }
 
     private static class TextViewTitle extends android.widget.TextView {

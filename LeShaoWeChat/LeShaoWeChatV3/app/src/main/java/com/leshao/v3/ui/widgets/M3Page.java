@@ -19,6 +19,7 @@ import android.widget.Switch;
 
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
+import com.leshao.v3.ui.FlowingGradientDrawable;
 import com.leshao.v3.ui.InsetsUtil;
 
 /**
@@ -349,15 +350,59 @@ public final class M3Page {
 
     // ==================== 控件 ====================
 
-    /** M3 滑杆：primary 进度/滑块 + surfaceContainerHighest 轨道（framework SeekBar，避免 appcompat 属性碰撞）。 */
+    /**
+     * M3 滑杆：葡萄气泡流光渐变进度 + 渐变圆球滑块 + surfaceContainerHighest 轨道
+     * （framework SeekBar，避免 appcompat 属性碰撞）。
+     *
+     * <p>v1067：进度轨改为「静态轨道(View 背景) + ClipDrawable(流光渐变)」组合，
+     * 既保留 SeekBar 原生拖动/无障碍能力，又获得流光效果；构建失败时回退到纯色 tint。</p>
+     */
     public static SeekBar slider(Context ctx) {
         SeekBar sb = new SeekBar(ctx);
+        int h = dp(ctx, 8);
         try {
-            sb.setProgressTintList(ColorStateList.valueOf(AppColors.primary()));
-            sb.setThumbTintList(ColorStateList.valueOf(AppColors.primary()));
-            sb.setProgressBackgroundTintList(
-                    ColorStateList.valueOf(AppColors.surfaceContainerHighest()));
-        } catch (Throwable ignored) {}
+            if (android.os.Build.VERSION.SDK_INT >= 21) {
+                sb.setProgressTintList(null);
+                sb.setThumbTintList(null);
+                sb.setProgressBackgroundTintList(null);
+            }
+            GradientDrawable track = new GradientDrawable();
+            track.setShape(GradientDrawable.RECTANGLE);
+            track.setCornerRadius(h / 2f);
+            track.setColor(AppColors.surfaceContainerHighest());
+
+            FlowingGradientDrawable fill = new FlowingGradientDrawable(
+                    AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+            fill.setCornerRadius(h / 2f);
+            fill.setSize(0, h);
+            fill.setPhaseOffset(0.15f);
+
+            android.graphics.drawable.ClipDrawable clip =
+                    new android.graphics.drawable.ClipDrawable(
+                            fill, Gravity.START, android.graphics.drawable.ClipDrawable.HORIZONTAL);
+            clip.setLevel(5000);
+
+            int thumbSize = dp(ctx, 20);
+            FlowingGradientDrawable thumb = new FlowingGradientDrawable(
+                    AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+            thumb.setCornerRadius(thumbSize / 2f);
+            thumb.setSize(thumbSize, thumbSize);
+            thumb.setPhaseOffset(0.5f);
+
+            sb.setBackground(track);
+            sb.setProgressDrawable(clip);
+            sb.setThumb(thumb);
+            sb.setThumbOffset(0);
+            sb.setSplitTrack(false);
+            sb.setMinimumHeight(dp(ctx, 20));
+        } catch (Throwable t) {
+            try {
+                sb.setProgressTintList(ColorStateList.valueOf(AppColors.primary()));
+                sb.setThumbTintList(ColorStateList.valueOf(AppColors.primary()));
+                sb.setProgressBackgroundTintList(
+                        ColorStateList.valueOf(AppColors.surfaceContainerHighest()));
+            } catch (Throwable ignored) {}
+        }
         sb.setPadding(0, dp(ctx, 8), 0, dp(ctx, 8));
         return sb;
     }
@@ -382,18 +427,22 @@ public final class M3Page {
         final Runnable refresh = new Runnable() {
             @Override
             public void run() {
-                GradientDrawable bg = new GradientDrawable();
-                bg.setShape(GradientDrawable.OVAL);
                 if (state[0]) {
-                    bg.setColor(AppColors.primary());
+                    FlowingGradientDrawable fg = new FlowingGradientDrawable(
+                            AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+                    fg.setCornerRadius(size / 2f);
+                    fg.setPhaseOffset(0.25f);
+                    mark.setBackground(fg);
                     mark.setText("✓");
-                    mark.setTextColor(AppColors.onPrimary());
+                    mark.setTextColor(AppColors.onGradient());
                 } else {
+                    GradientDrawable bg = new GradientDrawable();
+                    bg.setShape(GradientDrawable.OVAL);
                     bg.setColor(0x00000000);
                     bg.setStroke(dp(ctx, 2), AppColors.outline());
+                    mark.setBackground(bg);
                     mark.setText("");
                 }
-                mark.setBackground(bg);
             }
         };
         refresh.run();

@@ -72,11 +72,22 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v1066";
+    public static final String MODULE_BUILD = "v1080";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 1066;
+    public static final int MODULE_VERSION_CODE = 1080;
+
+    /** v1079: 当前前台 Activity(onResume 记录/onPause 清除), 供 talker 解析等复用。 */
+    private static volatile java.lang.ref.WeakReference<Activity> sResumedActivity;
+
+    public static Activity currentActivity() {
+        java.lang.ref.WeakReference<Activity> ref = sResumedActivity;
+        return ref == null ? null : ref.get();
+    }
+
+    /** 模块编译时间(构建时由 gradle 注入, 缺省回退到本次进程启动时间)。 */
+    public static final String MODULE_BUILD_TIME = BuildConfig.BUILD_TIME;
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -343,6 +354,7 @@ public class MainHook implements IXposedHookLoadPackage {
                         String cls = param.thisObject.getClass().getName();
                         if (cls.startsWith("com.tencent.mm.")) {
                             LogWriter.log("ActivityLife", "onResume: " + cls);
+                            sResumedActivity = new java.lang.ref.WeakReference<>((Activity) param.thisObject);
                             // v1025: 从微信 Activity 反查真实 ClassLoader 并重新 hook WCDB
                             com.leshao.v3.db.DatabaseProvider.probeAndRehook(param.thisObject);
                         }
@@ -356,6 +368,8 @@ public class MainHook implements IXposedHookLoadPackage {
                         String cls = param.thisObject.getClass().getName();
                         if (cls.startsWith("com.tencent.mm.")) {
                             LogWriter.log("ActivityLife", "onPause: " + cls);
+                            java.lang.ref.WeakReference<Activity> ref = sResumedActivity;
+                            if (ref != null && ref.get() == param.thisObject) sResumedActivity = null;
                         }
                     } catch (Throwable ignored) {}
                 }

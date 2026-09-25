@@ -261,12 +261,13 @@ public class DexKitScanDialog {
         private final Paint mProgressPaint;
         private final Paint mGlowPaint;
         private final RectF mRect;
+        // v1067 葡萄气泡：扫描进度条走品牌流光渐变
         private final int[] mColors = {
-                AppColors.primary(),
-                AppColors.primaryDark(),
-                AppColors.primary(),
-                AppColors.primaryDark(),
-                AppColors.primary(),
+                AppColors.gradientStart(),
+                AppColors.gradientMid(),
+                AppColors.gradientEnd(),
+                AppColors.gradientMid(),
+                AppColors.gradientStart(),
         };
 
         public NeonProgressBar(Context context) {
@@ -280,7 +281,7 @@ public class DexKitScanDialog {
 
             mGlowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
             mGlowPaint.setStyle(Paint.Style.FILL);
-            mGlowPaint.setColor((AppColors.primary() & 0x00FFFFFF) | 0x66000000);
+            mGlowPaint.setColor((AppColors.gradientStart() & 0x00FFFFFF) | 0x66000000);
 
             mRect = new RectF();
         }

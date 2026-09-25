@@ -15,7 +15,7 @@ import com.leshao.v3.ui.AppColors;
 /** 卡片式 Toast（成功/失败/普通），自动消失，主线程安全 */
 public class ToastHelper {
 
-    private static final int COLOR_SUCCESS = 0xFF07C160;
+    private static final int COLOR_SUCCESS = 0xFF8B5CF6;
     private static final int COLOR_ERROR = 0xFFFA5151;
 
     private ToastHelper() {}

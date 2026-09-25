@@ -655,10 +655,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         CandyUi.ripple(btnCube, AppColors.SHAPE_SM_DP);
         btnCube.setOnClickListener(v -> {
             WmPrefs.set("tts_cube", true);
-            android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
-            gd.setColor(AppColors.accent());
-            gd.setCornerRadius((int)(6 * d));
-            btnCube.setBackground(gd);
+            btnCube.setBackground(CandyUi.gradientBg(ctx, 6));
             btnCube.setTextColor(AppColors.WHITE_TEXT);
             android.graphics.drawable.GradientDrawable gd2 = new android.graphics.drawable.GradientDrawable();
             gd2.setColor(AppColors.card());
@@ -671,10 +668,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         CandyUi.ripple(btnSys, AppColors.SHAPE_SM_DP);
         btnSys.setOnClickListener(v -> {
             WmPrefs.set("tts_cube", false);
-            android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
-            gd.setColor(AppColors.accent());
-            gd.setCornerRadius((int)(6 * d));
-            btnSys.setBackground(gd);
+            btnSys.setBackground(CandyUi.gradientBg(ctx, 6));
             btnSys.setTextColor(AppColors.WHITE_TEXT);
             android.graphics.drawable.GradientDrawable gd2 = new android.graphics.drawable.GradientDrawable();
             gd2.setColor(AppColors.card());
@@ -692,10 +686,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         cfgBtn.setAllCaps(false);
         cfgBtn.setTextColor(AppColors.WHITE_TEXT);
         cfgBtn.setGravity(Gravity.CENTER);
-        android.graphics.drawable.GradientDrawable cfgBg = new android.graphics.drawable.GradientDrawable();
-        cfgBg.setColor(AppColors.accent());
-        cfgBg.setCornerRadius((int)(8 * d));
-        cfgBtn.setBackground(cfgBg);
+        cfgBtn.setBackground(CandyUi.gradientBg(ctx, 8));
         cfgBtn.setPadding(0, (int)(12 * d), 0, (int)(12 * d));
         LinearLayout.LayoutParams cfgLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -772,10 +763,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         tabCube.setTextSize(13);
         tabCube.setGravity(android.view.Gravity.CENTER);
         tabCube.setPadding((int)(12 * d), (int)(8 * d), (int)(12 * d), (int)(8 * d));
-        final android.graphics.drawable.GradientDrawable tabCubeBg = new android.graphics.drawable.GradientDrawable();
-        tabCubeBg.setColor(AppColors.accent());
-        tabCubeBg.setCornerRadius((int)(16 * d));
-        tabCube.setBackground(tabCubeBg);
+        tabCube.setBackground(CandyUi.gradientBg(ctx, 16));
         tabCube.setTextColor(AppColors.WHITE_TEXT);
         LinearLayout.LayoutParams tabL2 = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
@@ -815,10 +803,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         saveBtn.setTextSize(14);
         saveBtn.setAllCaps(false);
         saveBtn.setTextColor(AppColors.WHITE_TEXT);
-        android.graphics.drawable.GradientDrawable saveBg = new android.graphics.drawable.GradientDrawable();
-        saveBg.setColor(AppColors.accent());
-        saveBg.setCornerRadius((int)(8 * d));
-        saveBtn.setBackground(saveBg);
+        saveBtn.setBackground(CandyUi.gradientBg(ctx, 8));
         saveBtn.setPadding(0, (int)(10 * d), 0, (int)(10 * d));
         LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);

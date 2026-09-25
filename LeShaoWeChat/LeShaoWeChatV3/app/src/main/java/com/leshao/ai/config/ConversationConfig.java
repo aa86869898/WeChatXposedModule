@@ -55,6 +55,10 @@ public class ConversationConfig {
         public List<String> voices;
         /** v985: 多音色随机回复开关: 开=每条随机取 voices 中一个; 关=用第一个/全局。 */
         public Boolean randomVoice;
+        /** v1073: 文本回复时是否使用(文本式)引用原消息。 */
+        public Boolean quoteReply;
+        /** v1073: 群聊回复时是否自动 @ 提问人(仅群聊)。 */
+        public Boolean autoAt;
 
         public boolean isEmpty() {
             return enabled == null && autoReply == null && onlyWhenMentioned == null
@@ -63,7 +67,8 @@ public class ConversationConfig {
                     && TextUtils.isEmpty(aiIdentity) && TextUtils.isEmpty(aiName)
                     && memoryEnabled == null && memoryLimit == null
                     && temperature == null
-                    && (voices == null || voices.isEmpty()) && randomVoice == null;
+                    && (voices == null || voices.isEmpty()) && randomVoice == null
+                    && quoteReply == null && autoAt == null;
         }
 
         /**
@@ -91,6 +96,8 @@ public class ConversationConfig {
             e.temperature = temperature;
             e.voices = voices == null ? null : new ArrayList<>(voices);
             e.randomVoice = randomVoice;
+            e.quoteReply = quoteReply;
+            e.autoAt = autoAt;
             return e;
         }
 
@@ -115,6 +122,8 @@ public class ConversationConfig {
                 o.put("voices", arr);
             }
             if (randomVoice != null) o.put("randomVoice", randomVoice.booleanValue());
+            if (quoteReply != null) o.put("quoteReply", quoteReply.booleanValue());
+            if (autoAt != null) o.put("autoAt", autoAt.booleanValue());
             return o;
         }
 
@@ -151,6 +160,12 @@ public class ConversationConfig {
             }
             if (o.has("randomVoice") && !o.isNull("randomVoice")) {
                 e.randomVoice = o.optBoolean("randomVoice");
+            }
+            if (o.has("quoteReply") && !o.isNull("quoteReply")) {
+                e.quoteReply = o.optBoolean("quoteReply");
+            }
+            if (o.has("autoAt") && !o.isNull("autoAt")) {
+                e.autoAt = o.optBoolean("autoAt");
             }
             return e;
         }

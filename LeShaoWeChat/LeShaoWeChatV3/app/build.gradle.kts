@@ -1,6 +1,11 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+
 plugins {
     id("com.android.application")
 }
+
+val moduleBuildTime: String = SimpleDateFormat("yyyy-MM-dd HH:mm").format(Date())
 
 android {
     namespace = "com.leshao.v3"
@@ -11,8 +16,13 @@ android {
         applicationId = "com.leshao.v3"
         minSdk = 24
         targetSdk = 36
-            versionCode = 1066
-            versionName = "3.15.15-v1066"
+        versionCode = 1080
+        versionName = "3.15.20-v1080"
+        buildConfigField("String", "BUILD_TIME", "\"$moduleBuildTime\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {

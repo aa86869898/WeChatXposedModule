@@ -788,7 +788,7 @@ private static String tryMethodB(Context ctx) {
         Canvas canvas = new Canvas(bm);
         Paint bg = new Paint();
         bg.setAntiAlias(true);
-        bg.setColor(0xFF8A8F8B);
+        bg.setColor(AppColors.primary());
         canvas.drawRoundRect(0, 0, size, size, size / 2f, size / 2f, bg);
         Paint txt = new Paint();
         txt.setAntiAlias(true);

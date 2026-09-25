@@ -147,9 +147,12 @@ public class WmReflect {
     }
 
     // ===== 消息 =====
-    public static void sendTextMsg(ClassLoader cl, String content, String toUser) {
+    public static boolean sendTextMsg(ClassLoader cl, String content, String toUser) {
         Object m = getSendMsgMgr(cl);
-        if (m == null) return;
+        if (m == null) {
+            LogWriter.log(TAG, "sendTextMsg FAILED: sendMsgMgr null");
+            return false;
+        }
         // 8.0.78(3180): 文本走 qs5.v5 新框架 mj/nj/oj/pj(toUser,content,type,flag);
         // 旧 qj(content,toUser) 为相册名片, 不再用于文本。
         String[] textMethods = {"oj", "nj", "mj", "pj"};
@@ -159,7 +162,7 @@ public class WmReflect {
                 // 尝试 (String,String,int,int) 签名
                 XposedHelpers.callMethod(m, mn, toUser, content, 1, 0);
                 LogWriter.log(TAG, "sendTextMsg ok via " + mn + "(toUser,content,1,0)");
-                return;
+                return true;
             } catch (Throwable t1) {
                 lastErr = t1;
             }
@@ -167,14 +170,14 @@ public class WmReflect {
                 // 尝试 (String,String,int,int,int) 等变体
                 XposedHelpers.callMethod(m, mn, toUser, content, 1, 0, 0);
                 LogWriter.log(TAG, "sendTextMsg ok via " + mn + "(toUser,content,1,0,0)");
-                return;
+                return true;
             } catch (Throwable ignored) {}
         }
         try {
             // 多目标文本 hj(atStr, usersCsv, extra) 单目标亦可
             XposedHelpers.callMethod(m, "hj", (Object) null, toUser, (Object) null);
             LogWriter.log(TAG, "sendTextMsg ok via hj(null,toUser,null)");
-            return;
+            return true;
         } catch (Throwable t2) {
             lastErr = t2;
         }
@@ -182,11 +185,12 @@ public class WmReflect {
             // 多目标 gj(str1,str2,str3,Z)
             XposedHelpers.callMethod(m, "gj", (Object) null, toUser, (Object) null, true);
             LogWriter.log(TAG, "sendTextMsg ok via gj(null,toUser,null,true)");
-            return;
+            return true;
         } catch (Throwable t3) {
             lastErr = t3;
         }
         LogWriter.log("WmReflect", "sendTextMsg FAILED: " + (lastErr != null ? lastErr.getMessage() : "no method"));
+        return false;
     }
 
     public static void broadcastRooms(ClassLoader cl, List<String> rooms, String content) {

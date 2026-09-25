@@ -57,6 +57,10 @@ public class AppConfig {
     private boolean autoReplyInPrivate = false;
     /** 是否仅在 @机器人/提到机器名 时回复。 */
     private boolean onlyWhenMentioned = false;
+    /** v1073: 文本回复时是否使用(文本式)引用原消息。默认关。 */
+    private boolean quoteReply = false;
+    /** v1073: 群聊回复时是否自动 @ 提问人。默认关。 */
+    private boolean autoAt = false;
     /** 记忆保留的最大历史消息条数（环形上限）。 */
     private int maxHistoryMessages = 100;
     /** v1019: 历史已添加模型记录(最近在前, 去重, 上限 MODEL_HISTORY_LIMIT)。 */
@@ -141,6 +145,8 @@ public class AppConfig {
         autoReplyInGroups = obj.optBoolean("autoReplyInGroups", autoReplyInGroups);
         autoReplyInPrivate = obj.optBoolean("autoReplyInPrivate", autoReplyInPrivate);
         onlyWhenMentioned = obj.optBoolean("onlyWhenMentioned", onlyWhenMentioned);
+        quoteReply = obj.optBoolean("quoteReply", quoteReply);
+        autoAt = obj.optBoolean("autoAt", autoAt);
         maxHistoryMessages = obj.optInt("maxHistoryMessages", maxHistoryMessages);
         modelHistory.clear();
         JSONArray mh = obj.optJSONArray("modelHistory");
@@ -170,6 +176,8 @@ public class AppConfig {
         obj.put("autoReplyInGroups", autoReplyInGroups);
         obj.put("autoReplyInPrivate", autoReplyInPrivate);
         obj.put("onlyWhenMentioned", onlyWhenMentioned);
+        obj.put("quoteReply", quoteReply);
+        obj.put("autoAt", autoAt);
         obj.put("maxHistoryMessages", maxHistoryMessages);
         JSONArray mh = new JSONArray();
         for (String m : modelHistory) mh.put(m);
@@ -199,6 +207,8 @@ systemPrompt = "你是日常聊天助手，根据对话上下文自动识别情�
         autoReplyInGroups = false;
         autoReplyInPrivate = false;
         onlyWhenMentioned = false;
+        quoteReply = false;
+        autoAt = false;
         maxHistoryMessages = 100;
         modelHistory.clear();
     }
@@ -256,6 +266,12 @@ systemPrompt = "你是日常聊天助手，根据对话上下文自动识别情�
 
     public synchronized boolean isOnlyWhenMentioned() { return onlyWhenMentioned; }
     public synchronized void setOnlyWhenMentioned(boolean onlyWhenMentioned) { this.onlyWhenMentioned = onlyWhenMentioned; }
+
+    public synchronized boolean isQuoteReply() { return quoteReply; }
+    public synchronized void setQuoteReply(boolean quoteReply) { this.quoteReply = quoteReply; }
+
+    public synchronized boolean isAutoAt() { return autoAt; }
+    public synchronized void setAutoAt(boolean autoAt) { this.autoAt = autoAt; }
 
     public synchronized int getMaxHistoryMessages() { return maxHistoryMessages; }
     public synchronized void setMaxHistoryMessages(int maxHistoryMessages) {

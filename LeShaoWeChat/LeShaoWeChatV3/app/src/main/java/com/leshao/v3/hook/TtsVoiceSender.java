@@ -9,6 +9,7 @@ import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 
 import com.leshao.v3.ContextManager;
+import com.leshao.v3.ChatFooterLongPressMenu;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.db.VoiceHistoryDbHelper;
 import com.leshao.v3.wm.utils.WmPrefs;
@@ -174,6 +175,260 @@ public class TtsVoiceSender {
         }
     };
 
+    // ===== TTS 模式（按会话持久化）: 在当前聊天发 "#tts" 开启/再发关闭,
+    //       开启后直接发送文字会自动合成语音, 无需前缀 =====
+    private static final String PREF_TTS_MODE_CONVS = "ls_tts_mode_convs";
+    private static volatile Set<String> sTtsModeConvs;
+
+    private static Set<String> ttsModeSet() {
+        Set<String> set = sTtsModeConvs;
+        if (set == null) {
+            synchronized (TtsVoiceSender.class) {
+                set = sTtsModeConvs;
+                if (set == null) {
+                    set = ConcurrentHashMap.newKeySet();
+                    try {
+                        android.content.SharedPreferences p = ContextManager.getPrefs();
+                        if (p != null) {
+                            Set<String> saved = p.getStringSet(PREF_TTS_MODE_CONVS, null);
+                            if (saved != null) set.addAll(saved);
+                        }
+                    } catch (Throwable ignored) {}
+                    sTtsModeConvs = set;
+                }
+            }
+        }
+        return set;
+    }
+
+    /** 该会话是否处于 TTS 模式 */
+    public static boolean isTtsMode(String talker) {
+        if (talker == null || talker.isEmpty()) return false;
+        return ttsModeSet().contains(talker);
+    }
+
+    /** 切换该会话 TTS 模式, 返回切换后是否开启 */
+    public static boolean toggleTtsMode(String talker) {
+        if (talker == null || talker.isEmpty()) return false;
+        Set<String> set = ttsModeSet();
+        boolean on;
+        if (set.contains(talker)) { set.remove(talker); on = false; }
+        else { set.add(talker); on = true; }
+        try {
+            android.content.SharedPreferences p = ContextManager.getPrefs();
+            if (p != null) p.edit().putStringSet(PREF_TTS_MODE_CONVS, new HashSet<>(set)).apply();
+        } catch (Throwable ignored) {}
+        LogWriter.log(TAG, "TTS mode " + (on ? "ON" : "OFF") + " talker=" + talker);
+        return on;
+    }
+
+    private static void showTtsModeToast(String talker, boolean on) {
+        try {
+            final android.content.Context ctx = ContextManager.getAppContext();
+            if (ctx == null) return;
+            final String tip = on ? "已开启本会话语音模式，直接发文字即转语音"
+                    : "已关闭本会话语音模式";
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(
+                    () -> android.widget.Toast.makeText(ctx, tip, android.widget.Toast.LENGTH_SHORT).show());
+        } catch (Throwable ignored) {}
+    }
+
+    private static volatile long sLastToggleAt;
+    private static volatile String sLastToggleTalker;
+    private static final Map<String, Long> sRecentModeSends = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** TTS 模式直发文字的跨链路去重(ChatFooter.F 与 f9.Bb 会在同一毫秒级窗口内双命中) */
+    private static boolean markRecentModeSend(String talker, String text) {
+        long now = System.currentTimeMillis();
+        String key = (talker == null ? "" : talker) + "|" + text;
+        Long last = sRecentModeSends.get(key);
+        if (last != null && now - last < 1500) return true;
+        sRecentModeSends.put(key, now);
+        if (sRecentModeSends.size() > 64) sRecentModeSends.clear();
+        return false;
+    }
+
+    /** 处理 "#tts" 切换指令; ChatFooter.F 与 f9.Bb 双链路会同时命中, 做短窗口去重避免来回翻转 */
+    private static synchronized void handleTtsToggleCommand(String talker, String source) {
+        long now = System.currentTimeMillis();
+        boolean same = (sLastToggleTalker == null || talker == null)
+                || sLastToggleTalker.equals(talker);
+        if (now - sLastToggleAt < 1500 && same) {
+            LogWriter.log(TAG, source + " duplicate #tts toggle suppressed");
+            return;
+        }
+        sLastToggleAt = now;
+        sLastToggleTalker = talker;
+        boolean on = toggleTtsMode(talker);
+        showTtsModeToast(talker, on);
+    }
+
+    /** 彻底阻止该消息入库(清空内容 + 覆盖返回), 从源头消除空消息残留 */
+    private static void blockCurrentInsert(XC_MethodHook.MethodHookParam p, Object msg) {
+        if (msg != null) {
+            try { XposedHelpers.setObjectField(msg, "field_content", ""); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(msg, "j1", ""); } catch (Throwable ignored) {}
+            synchronized (sSuppressedMessages) {
+                sSuppressedMessages.add(System.identityHashCode(msg));
+            }
+            try { markBlockedOriginal(msg); } catch (Throwable ignored) {}
+        }
+        try { p.setResult(defaultReturnValue(methodReturnType(p))); } catch (Throwable ignored) {}
+    }
+
+    /** 是否为普通文本消息(type=1 且非 xml 富文本), 用于 TTS 模式自动转语音的判定 */
+    private static boolean isPlainTextMsg(Object msg, String content) {
+        int t;
+        try {
+            t = getMsgType(msg);
+        } catch (Throwable ignored) {
+            t = -1;
+        }
+        // type 尚未写入(-1)时按文本候选处理, 由内容形态二次判定
+        if (t != 1 && t != -1) return false;
+        if (content == null || content.trim().isEmpty()) return false;
+        return !content.trim().startsWith("<");
+    }
+
+    /**
+     * x9 分发链路的发出消息处理(8.0.78 真正命中的发送路径, 由 MessageHook 调用).
+     * 返回 true 表示该消息应被拦截(不发送/不入库)。
+     */
+    public static boolean handleOutgoingX9(Object msg) {
+        try {
+            if (msg == null) return false;
+            if (getMsgIsSend(msg) != 1) return false;
+            String content = getMsgContent(msg);
+            String talker = getTalker(msg);
+            String cid = getClientMsgId(msg);
+            String trimmed = content == null ? "" : content.trim();
+
+            if ("#tts".equalsIgnoreCase(trimmed)) {
+                handleTtsToggleCommand(talker, "x9");
+                return true;
+            }
+            if (content != null && content.startsWith(TTS_PREFIX)) {
+                String text = content.substring(TTS_PREFIX.length()).trim();
+                if (text.isEmpty()) return true;
+                if (markRecentText(text, System.currentTimeMillis())) return true;
+                startAsyncTts(talker, cid, text, "x9");
+                return true;
+            }
+            if (isTtsMode(talker) && isPlainTextMsg(msg, content)) {
+                if (markRecentModeSend(talker, trimmed)) return true;
+                LogWriter.log(TAG, "x9 TTS-mode text -> voice talker=" + talker + " text='" + truncStr(trimmed, 40) + "'");
+                startAsyncTts(talker, cid, trimmed, "x9-mode");
+                return true;
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "handleOutgoingX9 err: " + t);
+        }
+        return false;
+    }
+
+    // ===== TTS 模式: 输入框文字显示粉色 =====
+    private static final int TTS_MODE_TEXT_COLOR = 0xFFFF5FA2;
+    private static final java.util.Map<android.widget.EditText, Boolean> sComposerWatchers =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+    private static final java.util.Map<android.widget.EditText, Integer> sComposerOrigColor =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
+    private static void hookComposerColor(ClassLoader cl) {
+        try {
+            try {
+                ClassLoader tk = VersionCompat.findTinkerClassLoader(cl);
+                if (tk != null && !tk.getClass().getName().contains("Leshao") && tk != cl) {
+                    cl = tk;
+                }
+            } catch (Throwable ignored) {
+            }
+            Class<?> footer = XposedHelpers.findClass(
+                    "com.tencent.mm.pluginsdk.ui.chat.ChatFooter", cl);
+            XposedBridge.hookAllConstructors(footer, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!(param.thisObject instanceof android.view.View)) return;
+                        final android.view.View root = (android.view.View) param.thisObject;
+                        final Object footerObj = param.thisObject;
+                        root.post(() -> attachComposerWatcher(root, footerObj));
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "TTS mode composer color hook installed");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "TTS mode composer color hook FAIL: " + t.getMessage());
+        }
+    }
+
+    private static void attachComposerWatcher(final android.view.View root, final Object footerObj) {
+        try {
+            final android.widget.EditText et = findEditText(root);
+            if (et == null) return;
+            if (Boolean.TRUE.equals(sComposerWatchers.get(et))) return;
+            sComposerWatchers.put(et, Boolean.TRUE);
+            et.addTextChangedListener(new android.text.TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+                @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
+                @Override public void afterTextChanged(android.text.Editable s) {
+                    applyComposerColor(et, footerObj);
+                }
+            });
+            applyComposerColor(et, footerObj);
+        } catch (Throwable ignored) {}
+    }
+
+    private static void applyComposerColor(final android.widget.EditText et, final Object footerObj) {
+        try {
+            String talker = null;
+            try {
+                Object t = XposedHelpers.callMethod(footerObj, "getTalkerUserName");
+                if (t instanceof String) talker = (String) t;
+            } catch (Throwable ignored) {}
+            boolean on = isTtsMode(talker);
+            Integer orig = sComposerOrigColor.get(et);
+            if (orig == null) {
+                orig = et.getCurrentTextColor();
+                sComposerOrigColor.put(et, orig);
+            }
+            int want = on ? TTS_MODE_TEXT_COLOR : orig;
+            if (et.getCurrentTextColor() != want) et.setTextColor(want);
+        } catch (Throwable ignored) {}
+    }
+
+    /** 清空 ChatFooter 输入框(拦截发送后避免残留文本) */
+    private static void clearComposer(Object footer) {
+        try {
+            if (!(footer instanceof android.view.View)) return;
+            android.widget.EditText et = findEditText((android.view.View) footer);
+            if (et != null) et.setText("");
+        } catch (Throwable ignored) {}
+    }
+
+    /** 从 ChatFooter 视图树读取输入框当前文本(发送瞬间 msg content 为空时的兜底) */
+    private static String readComposerText(Object footer) {
+        try {
+            if (!(footer instanceof android.view.View)) return null;
+            android.widget.EditText et = findEditText((android.view.View) footer);
+            if (et == null) return null;
+            CharSequence cs = et.getText();
+            return cs == null ? null : cs.toString();
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static android.widget.EditText findEditText(android.view.View v) {        if (v instanceof android.widget.EditText) return (android.widget.EditText) v;
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                android.widget.EditText e = findEditText(g.getChildAt(i));
+                if (e != null) return e;
+            }
+        }
+        return null;
+    }
+
     private static class VoiceFileInfo {
         final String path;
         final String clientMsgId;
@@ -205,6 +460,7 @@ public class TtsVoiceSender {
         DexKitHelper.addPostScanCallback(() -> hookE9D1(cl));
         hookSetTypeGuard(cl);
         hookChatFooterSend(cl);
+        hookComposerColor(cl);
         hookChattingUiSend(cl);
         hookE9Trace(cl);
         hookE9AllTrace(cl);
@@ -217,6 +473,10 @@ public class TtsVoiceSender {
         hookAdapterKJ(cl);
         hookF9I9(cl);
         hookF9Bb(cl);
+        hookF9RaForTts(cl);
+        // v1073: TTS 兜底 —— 直接拦截 UI 发送入口 om.A0(content, atType, atMap),
+        // 覆盖 f9.Bb / x9 / f9.Ra 均未命中的机型(文档《音频转语音_新》发送链)。
+        DexKitHelper.addPostScanCallback(() -> hookOmA0(cl));
         // 自动发现微信内部类（功能所需）
         autoDiscoverClasses(cl, "com.tencent.mm.ui.chatting.ChattingUIFragment");
         autoDiscoverClasses(cl, "com.tencent.mm.ui.chatting.view.MMChattingListView");
@@ -984,8 +1244,72 @@ public class TtsVoiceSender {
         sLastTtsTalker = getTalker(msg);
     }
 
+    /**
+     * 统一拦截"用户从输入框发出"的文本（ChatFooter.d/V0、om.A0 共用）。
+     * 命中 #tts 指令 / #tts 前缀 / TTS 模式直发文本时触发语音并阻止原文本发出。
+     *
+     * @return true 表示已拦截, 调用方需 setResult 阻止原方法
+     */
+    private static boolean interceptOutgoingInput(String talker, String content, String source) {
+        if (content == null) return false;
+        String trimmed = content.trim();
+        if (trimmed.isEmpty()) return false;
+        if ("#tts".equalsIgnoreCase(trimmed)) {
+            handleTtsToggleCommand(talker, source);
+            LogWriter.log(TAG, source + " #tts toggle talker=" + talker);
+            return true;
+        }
+        if (content.startsWith(TTS_PREFIX)) {
+            String text = content.substring(TTS_PREFIX.length()).trim();
+            if (text.isEmpty()) return true;
+            if (markRecentText(text, System.currentTimeMillis())) return true;
+            LogWriter.log(TAG, source + " #tts-prefix -> voice talker=" + talker
+                    + " text='" + truncStr(text, 40) + "'");
+            startAsyncTts(talker, "ci-" + System.currentTimeMillis(), text, source);
+            return true;
+        }
+        if (isTtsMode(talker) && !trimmed.startsWith("<")) {
+            if (markRecentModeSend(talker, trimmed)) return true;
+            LogWriter.log(TAG, source + " TTS-mode text -> voice talker=" + talker
+                    + " text='" + truncStr(trimmed, 40) + "'");
+            startAsyncTts(talker, "ci-" + System.currentTimeMillis(), trimmed, source);
+            return true;
+        }
+        return false;
+    }
+
+    private static String firstStringArg(Object[] args) {
+        if (args == null) return null;
+        for (Object a : args) {
+            if (a instanceof String) return (String) a;
+        }
+        return null;
+    }
+
+    private static String footerTalker(Object footer) {
+        if (footer != null) {
+            try {
+                Object t = XposedHelpers.callMethod(footer, "getTalkerUserName");
+                if (t instanceof String && !((String) t).isEmpty()) return (String) t;
+            } catch (Throwable ignored) {
+            }
+        }
+        return ChatFooterLongPressMenu.currentTalker();
+    }
+
     private static void hookChatFooterSend(ClassLoader cl) {
         try {
+            // v1078: 必须切到 Tinker 真实 CL, 否则 hook 挂在 base.apk 平行副本的
+            // ChatFooter 上, 运行时零命中(实测 d/V0 从不触发, 文字直接发出)。
+            try {
+                ClassLoader tk = VersionCompat.findTinkerClassLoader(cl);
+                if (tk != null && !tk.getClass().getName().contains("Leshao") && tk != cl) {
+                    LogWriter.log(TAG, "hookChatFooterSend: 使用 Tinker 真实 CL "
+                            + tk.getClass().getSimpleName());
+                    cl = tk;
+                }
+            } catch (Throwable ignored) {
+            }
             Class<?> chatFooter = XposedHelpers.findClass("com.tencent.mm.pluginsdk.ui.chat.ChatFooter", cl);
             XposedBridge.hookAllMethods(chatFooter, "F", new XC_MethodHook() {
                 @Override
@@ -1002,19 +1326,66 @@ public class TtsVoiceSender {
                         }
                         Object msg = param.args[0];
                         String content = getMsgContent(msg);
+                        // 回退: 发送瞬间 msg 的 content 可能尚未写入, 直接从输入框读取
+                        if (content == null || content.trim().isEmpty()) {
+                            String et = readComposerText(param.thisObject);
+                            if (et != null && !et.trim().isEmpty()) content = et;
+                        }
+                        String talker = getTalker(msg);
+                        // 回退: 从当前 ChatFooter 取会话 id
+                        if (talker == null || talker.isEmpty()) {
+                            try {
+                                Object t = XposedHelpers.callMethod(param.thisObject, "getTalkerUserName");
+                                if (t instanceof String) talker = (String) t;
+                            } catch (Throwable ignored) {}
+                        }
+                        String trimmed = content == null ? "" : content.trim();
+                        LogWriter.log(TAG, "ChatFooter.F: content='" + truncStr(trimmed, 40)
+                                + "' talker=" + talker);
+                        // (1) 纯指令 "#tts": 切换当前会话 TTS 模式, 拦截该消息
+                        if ("#tts".equalsIgnoreCase(trimmed)) {
+                            handleTtsToggleCommand(talker, "ChatFooter.F");
+                            LogWriter.log(TAG, "ChatFooter.F #tts toggle talker=" + talker);
+                            clearComposer(param.thisObject);
+                            setResultBoolean(param, true);
+                            return;
+                        }
                         if (content != null && content.startsWith(TTS_PREFIX)) {
                             String text = content.substring(TTS_PREFIX.length()).trim();
-                            if (text.isEmpty()) return;
+                            if (text.isEmpty()) { setResultBoolean(param, true); return; }
                             if (markRecentText(text, System.currentTimeMillis())) {
                                 LogWriter.log(TAG, "ChatFooter.F consumed duplicate #tts: " + text);
                                 setResultBoolean(param, true);
                                 return;
                             }
-                            String talker = getTalker(msg);
                             String clientMsgId = getClientMsgId(msg);
                             LogWriter.log(TAG, "ChatFooter.F #tts hit -> async SceneVoice cid="
                                     + clientMsgId + " talker=" + talker + " text='" + truncStr(text, 40) + "'");
                             startAsyncTts(talker, clientMsgId, text, "ChatFooter.F");
+                            clearComposer(param.thisObject);
+                            setResultBoolean(param, true);
+                            return;
+                        }
+                        // (2) TTS 模式下直接发送文字: 自动合成为语音, 拦截原文本
+                        if (isTtsMode(talker) && isPlainTextMsg(msg, content)) {
+                            if (markRecentModeSend(talker, trimmed)) {
+                                LogWriter.log(TAG, "ChatFooter.F consumed duplicate TTS-mode text");
+                                clearComposer(param.thisObject);
+                                setResultBoolean(param, true);
+                                return;
+                            }
+                            String clientMsgId = getClientMsgId(msg);
+                            LogWriter.log(TAG, "ChatFooter.F TTS-mode auto -> talker=" + talker
+                                    + " text='" + truncStr(trimmed, 40) + "'");
+                            final String fTalker = talker;
+                            final String fText = trimmed;
+                            startAsyncTts(talker, clientMsgId, trimmed, "ChatFooter.F-mode", () -> {
+                                try {
+                                    com.leshao.v3.wm.utils.WmReflect.sendTextMsg(sClassLoader, fText, fTalker);
+                                    LogWriter.log(TAG, "TTS-mode fallback sent as text: " + fTalker);
+                                } catch (Throwable ignored) {}
+                            });
+                            clearComposer(param.thisObject);
                             setResultBoolean(param, true);
                             return;
                         }
@@ -1043,6 +1414,59 @@ public class TtsVoiceSender {
                 }
             });
             LogWriter.log(TAG, "Hook ChatFooter.F consume OK");
+
+            // v1076: 直接在"文本发送入口"拦截。F 在真机不是文本发送方法,
+            // 用户输入的文字会经 ChatFooter.d → V0 → om.A0 发出, 原文本在
+            // 这些 before 钩子命中前就入库了, 故必须在前两处拦截。
+            XC_MethodHook inputCb = new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        String content = firstStringArg(param.args);
+                        if (content == null) return;
+                        String trimmed = content.trim();
+                        boolean cmd = trimmed.equalsIgnoreCase("#tts") || content.startsWith(TTS_PREFIX);
+                        if (!cmd && (trimmed.isEmpty() || trimmed.startsWith("<"))) return;
+                        Object footer = param.thisObject;
+                        String talker = footerTalker(footer);
+                        if (talker == null || talker.isEmpty()) {
+                            talker = ChatFooterLongPressMenu.resolveTalkerFrom(footer);
+                        }
+                        if (cmd) {
+                            LogWriter.log(TAG, "ChatFooter input: content='"
+                                    + truncStr(trimmed, 40) + "' talker=" + talker);
+                        }
+                        if (interceptOutgoingInput(talker, content, "ChatFooter")) {
+                            setResultBoolean(param, true);
+                        }
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "ChatFooter input cb err: " + t.getMessage());
+                    }
+                }
+            };
+            int dv = 0;
+            java.util.Set<String> seenSig = new java.util.HashSet<>();
+            Class<?> hc = chatFooter;
+            while (hc != null && hc != Object.class) {
+                for (java.lang.reflect.Method m : hc.getDeclaredMethods()) {
+                    String n = m.getName();
+                    if (!"d".equals(n) && !"V0".equals(n)) continue;
+                    Class<?>[] pts = m.getParameterTypes();
+                    boolean hasString = false;
+                    for (Class<?> p : pts) { if (p == String.class) { hasString = true; break; } }
+                    if (!hasString) continue;
+                    StringBuilder sig = new StringBuilder(n).append('(');
+                    for (Class<?> p : pts) sig.append(p.getName()).append(',');
+                    if (!seenSig.add(sig.toString())) continue;
+                    try {
+                        XposedBridge.hookMethod(m, inputCb);
+                        dv++;
+                    } catch (Throwable ignored) {
+                    }
+                }
+                hc = hc.getSuperclass();
+            }
+            LogWriter.log(TAG, "Hook ChatFooter.d/V0 input intercept OK count=" + dv);
         } catch (Throwable t) {
             LogWriter.log(TAG, "Hook ChatFooter.F consume FAIL: " + t.getMessage());
         }
@@ -1777,24 +2201,42 @@ public class TtsVoiceSender {
                             int isSend = getMsgIsSend(msg);
                             if (isSend != 1) return;
                             String content = getMsgContent(msg);
-                            if (content == null || !content.startsWith(TTS_PREFIX)) return;
-                            String text = content.substring(TTS_PREFIX.length()).trim();
-                            if (text.isEmpty()) return;
-                            if (markRecentText(text, System.currentTimeMillis())) {
-                                LogWriter.log(TAG, "f9.Bb duplicate #tts suppressed: " + text);
+                            String trimmed = content == null ? "" : content.trim();
+                            String talker = getTalker(msg);
+                            // 纯指令 "#tts": 切换本会话 TTS 模式, 并阻止入库(避免空消息残留)
+                            if ("#tts".equalsIgnoreCase(trimmed)) {
+                                handleTtsToggleCommand(talker, "f9.Bb");
+                                blockCurrentInsert(p, msg);
                                 return;
                             }
-                            String talker = getTalker(msg);
+                            String text;
+                            if (content != null && content.startsWith(TTS_PREFIX)) {
+                                text = content.substring(TTS_PREFIX.length()).trim();
+                                if (text.isEmpty()) { blockCurrentInsert(p, msg); return; }
+                                if (markRecentText(text, System.currentTimeMillis())) {
+                                    LogWriter.log(TAG, "f9.Bb duplicate #tts suppressed: " + text);
+                                    blockCurrentInsert(p, msg);
+                                    return;
+                                }
+                            } else if (isTtsMode(talker) && isPlainTextMsg(msg, content)) {
+                                // TTS 模式下直发文字: 自动转语音
+                                if (markRecentModeSend(talker, trimmed)) {
+                                    LogWriter.log(TAG, "f9.Bb duplicate TTS-mode text suppressed");
+                                    blockCurrentInsert(p, msg);
+                                    return;
+                                }
+                                text = trimmed;
+                                LogWriter.log(TAG, "f9.Bb TTS-mode auto talker=" + talker
+                                        + " text='" + truncStr(text, 40) + "'");
+                            } else {
+                                return;
+                            }
                             String clientMsgId = getClientMsgId(msg);
                             markBlockedOriginal(msg);
                             markRecentTtsCommand(msg);
-                            // 抑制原文本消息: 清空 content 字段使其以空文本入库(不可见),
-                            // 但不改动 f9.Bb 参数(args[0] 是消息对象, 非字符串)
-                            try { XposedHelpers.setObjectField(msg, "field_content", ""); } catch (Throwable ignored) {}
-                            try { XposedHelpers.callMethod(msg, "j1", ""); } catch (Throwable ignored) {}
-                            synchronized (sSuppressedMessages) {
-                                sSuppressedMessages.add(System.identityHashCode(msg));
-                            }
+                            // 彻底阻止原文本入库: 旧实现仅清空 content 后仍入库,
+                            // 在适配器移除 hook 失效的机型上会残留一条空消息。
+                            blockCurrentInsert(p, msg);
                             if (clientMsgId != null) {
                                 synchronized (sSceneSentIds) { sSceneSentIds.add(clientMsgId); }
                             }
@@ -1815,8 +2257,124 @@ public class TtsVoiceSender {
         }
     }
 
-    private static Object findMarkedMessageIn(Object item, Class<?> e9Class) {
-        return findMarkedMessageIn(item, e9Class, 0);
+    /**
+     * f9.Ra(long msgId, e9 msg) 是真正的消息入库层(与"敏感词入库拦截"同款入口,
+     * 也是模块 GroupFeatures 主动发文本时调用的入库 API)。在此拦截自己发出的
+     * #tts / TTS 模式文本, 阻止其入库为文本消息, 改发语音。
+     */
+    private static void hookF9RaForTts(ClassLoader cl) {
+        try {
+            try {
+                ClassLoader tk = VersionCompat.findTinkerClassLoader(cl);
+                if (tk != null && !tk.getClass().getName().contains("Leshao") && tk != cl) {
+                    cl = tk;
+                }
+            } catch (Throwable ignored) {}
+            Class<?> f9 = VersionCompat.findMsgStorageClass(cl);
+            if (f9 == null) {
+                LogWriter.log(TAG, "f9.Ra TTS: f9 class not found");
+                return;
+            }
+            final Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
+            XC_MethodHook cb = new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam p) {
+                    try {
+                        if (e9Class == null || p.args == null) return;
+                        Object msg = null;
+                        for (Object a : p.args) {
+                            if (e9Class.isInstance(a)) { msg = a; break; }
+                        }
+                        if (msg == null) return;
+                        if (getMsgIsSend(msg) != 1) return;
+                        if (handleOutgoingX9(msg)) {
+                            LogWriter.log(TAG, "f9.Ra/yb BLOCK outgoing #tts/mode msg="
+                                    + System.identityHashCode(msg));
+                            p.setResult(defaultReturnValue(methodReturnType(p)));
+                        }
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "f9.Ra TTS cb err: " + e.getMessage());
+                    }
+                }
+            };
+            XposedBridge.hookAllMethods(f9, "Ra", cb);
+            XposedBridge.hookAllMethods(f9, "yb", cb);
+            LogWriter.log(TAG, "f9.Ra/yb TTS block hooks installed");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "f9.Ra TTS FAIL: " + t.getMessage());
+        }
+    }
+
+    /**
+     * v1073 兜底：hook UI 发送入口 {@code om.A0(String content, int atType, Map atMap)}
+     * （DexKit 锚点字符串 {@code MicroMsg.ChattingUI.SendTextComponent}）。
+     * 覆盖 f9.Bb / x9 / f9.Ra 均未命中的机型：命中 #tts / TTS 模式文本时阻止原文本发出并转语音。
+     * 当前会话 talker 取 {@link ChatFooterLongPressMenu#currentTalker()} 缓存。
+     */
+    private static void hookOmA0(ClassLoader cl) {
+        try {
+            try {
+                ClassLoader tk = VersionCompat.findTinkerClassLoader(cl);
+                if (tk != null && !tk.getClass().getName().contains("Leshao") && tk != cl) {
+                    cl = tk;
+                }
+            } catch (Throwable ignored) {
+            }
+            final ClassLoader fcl = cl;
+            java.util.List<String> names = new java.util.ArrayList<>(
+                    DexKitHelper.findClassesByString(
+                            fcl, "MicroMsg.ChattingUI.SendTextComponent"));
+            if (!names.contains("com.tencent.mm.ui.chatting.component.om")) {
+                names.add("com.tencent.mm.ui.chatting.component.om");
+            }
+            int installed = 0;
+            for (String cn : names) {
+                try {
+                    Class<?> c = XposedHelpers.findClass(cn, fcl);
+                    for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
+                        Class<?>[] pts = m.getParameterTypes();
+                        if (pts.length < 2 || pts[0] != String.class) continue;
+                        // 发送签名: (String content, int atType, Map/HashMap atMap);
+                        // 兼容 A0 及混淆后可能改名的方法, 用形态匹配而非方法名。
+                        boolean mapTail = false;
+                        for (int i = 1; i < pts.length; i++) {
+                            if (java.util.Map.class.isAssignableFrom(pts[i])) { mapTail = true; break; }
+                        }
+                        if (!mapTail && !m.getName().equals("A0")) continue;
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
+                            @Override
+                            protected void beforeHookedMethod(MethodHookParam p) {
+                                try {
+                                    if (p.args == null || p.args.length < 1
+                                            || !(p.args[0] instanceof String)) return;
+                                    String content = (String) p.args[0];
+                                    String talker = ChatFooterLongPressMenu.currentTalker();
+                                    if (talker == null || talker.isEmpty()) {
+                                        talker = ChatFooterLongPressMenu.resolveTalkerFrom(p.thisObject);
+                                    }
+                                    if (interceptOutgoingInput(talker, content, "om.A0")) {
+                                        LogWriter.log(TAG, "om.A0 BLOCK outgoing, talker=" + talker
+                                                + " text='" + truncStr(content.trim(), 40) + "'");
+                                        p.setResult(defaultReturnValue(methodReturnType(p)));
+                                    }
+                                } catch (Throwable e) {
+                                    LogWriter.log(TAG, "om.A0 cb err: " + e.getMessage());
+                                }
+                            }
+                        });
+                        installed++;
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+            LogWriter.log(TAG, "om.A0 TTS fallback hooks installed=" + installed
+                    + " candidates=" + names.size());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "om.A0 TTS FAIL: " + t.getMessage());
+        }
+    }
+
+    private static Object findMarkedMessageIn(Object item, Class<?> e9Class) {        return findMarkedMessageIn(item, e9Class, 0);
     }
 
     private static Object findMarkedMessageIn(Object item, Class<?> e9Class, int depth) {

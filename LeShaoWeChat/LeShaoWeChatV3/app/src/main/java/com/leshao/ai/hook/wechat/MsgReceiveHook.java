@@ -99,22 +99,51 @@ public final class MsgReceiveHook {
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
                 try {
-                    onMessageInserted(param.args[0]);
+                    if (param.args != null && param.args.length > 0) {
+                        onMessageInserted(param.args[0]);
+                    }
                 } catch (Throwable t) {
                     Log.w(TAG, "afterHookedMethod 异常: " + t);
                 }
             }
         };
 
-        if (e9 != null) {
+        // v1075: 微信不同版本收消息入库走 Bb/Db/Hb/yb 不同方法, 只挂 Bb 会漏收
+        // (自动转发链早已同时挂这 4 个)。这里全部挂上, 由 svrId/对象去重防重复触发。
+        int hooked = 0;
+        for (java.lang.reflect.Method m : f9.getDeclaredMethods()) {
+            String mn = m.getName();
+            if (!"Bb".equals(mn) && !"Db".equals(mn) && !"Hb".equals(mn) && !"yb".equals(mn)) {
+                continue;
+            }
+            Class<?>[] pts = m.getParameterTypes();
+            if (pts.length < 1 || pts[0] == null) {
+                continue;
+            }
+            String p0 = pts[0].getName();
+            if (!p0.endsWith(".e9") && !p0.contains("MsgInfo")) {
+                continue;
+            }
+            XposedBridge.hookMethod(m, callback);
+            hooked++;
+        }
+        if (hooked == 0) {
+            // 兜底: 按名挂 Bb
             XposedBridge.hookAllMethods(f9, "Bb", callback);
-            LogWriter.log(TAG, "已 hook " + f9.getName() + ".Bb (e9=" + e9.getName() + ")");
+            LogWriter.log(TAG, "已 hook " + f9.getName() + ".Bb (兜底 e9="
+                    + (e9 == null ? "?" : e9.getName()) + ")");
         } else {
-            // e9 未定位时退化为按方法名 hook（Bb 单重载，args[0] 即 MsgInfo）
-            XposedBridge.hookAllMethods(f9, "Bb", callback);
-            LogWriter.log(TAG, "已 hook " + f9.getName() + ".Bb (e9 未定位，按名 hook)");
+            LogWriter.log(TAG, "已 hook " + f9.getName()
+                    + " insert 方法 " + hooked + " 个 (Bb/Db/Hb/yb, e9="
+                    + (e9 == null ? "?" : e9.getName()) + ")");
         }
     }
+
+    /** svrId 去重, 防止同一消息经多个入库方法重复触发。 */
+    private static final java.util.Set<Long> seenSvrIds = java.util.Collections.newSetFromMap(
+            new java.util.concurrent.ConcurrentHashMap<Long, Boolean>());
+    private static final java.util.Set<Integer> seenIdentity = java.util.Collections.newSetFromMap(
+            new java.util.concurrent.ConcurrentHashMap<Integer, Boolean>());
 
     /** 处理一条落库消息。 */
     private static void onMessageInserted(Object msg) {
@@ -122,13 +151,28 @@ public final class MsgReceiveHook {
             return;
         }
         // 字段名取数（文档 §19：实体字段名与 SQLite 列名绑定，永不被混淆）
-        String talker = readString(msg, "field_talker");
-        String content = readString(msg, "field_content");
-        Integer type = readInt(msg, "field_type");
-        Integer isSend = readInt(msg, "field_isSend");
-        Long svrId = readLong(msg, "field_msgSvrId");
+        String talker = callStr(msg, "N0");
+        if (talker == null || talker.isEmpty()) {
+            talker = readString(msg, "field_talker");
+        }
+        String content = readContent(msg);
+        Integer type = callInt(msg, "getType");
+        if (type == null) {
+            type = readInt(msg, "field_type");
+        }
+        Integer isSend = callInt(msg, "z0");
+        if (isSend == null) {
+            isSend = readInt(msg, "field_isSend");
+        }
+        Long svrId = callLong(msg, "F0");
+        if (svrId == null || svrId == 0L) {
+            svrId = readLong(msg, "field_msgSvrId");
+        }
         Long createTime = readLong(msg, "field_createTime");
-        String fromUser = readString(msg, "field_fromUsername");
+        String fromUser = callStr(msg, "s0");
+        if (fromUser == null || fromUser.isEmpty()) {
+            fromUser = readString(msg, "field_fromUsername");
+        }
 
         // ① 防循环：机器人自己所发（零宽水印）
         if (SendGuard.isBotSent(content)) {
@@ -147,11 +191,70 @@ public final class MsgReceiveHook {
         if (talker == null || talker.isEmpty()) {
             return;
         }
+        // ⑤ 去重: svrId 优先, 无 svrId 时用对象身份
+        if (svrId != null && svrId != 0L) {
+            if (!seenSvrIds.add(svrId)) {
+                return;
+            }
+            if (seenSvrIds.size() > 500) {
+                seenSvrIds.clear();
+            }
+        } else {
+            int id = System.identityHashCode(msg);
+            if (!seenIdentity.add(id)) {
+                return;
+            }
+            if (seenIdentity.size() > 500) {
+                seenIdentity.clear();
+            }
+        }
 
         LogWriter.log(TAG, "收到文本 talker=" + talker + " svrId=" + svrId
                 + " content='" + trunc(content) + "'");
         TriggerEngine.dispatch(talker, content, msg, svrId == null ? 0L : svrId,
                 createTime == null ? 0L : createTime);
+    }
+
+    /** 取 content: 访问器优先, 字段兜底。 */
+    private static String readContent(Object msg) {
+        for (String mn : new String[]{"I0", "j", "N1"}) {
+            String v = callStr(msg, mn);
+            if (v != null) {
+                return v;
+            }
+        }
+        return readString(msg, "field_content");
+    }
+
+    private static String callStr(Object obj, String name) {
+        try {
+            Object v = XposedHelpers.callMethod(obj, name);
+            return v == null ? null : v.toString();
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static Integer callInt(Object obj, String name) {
+        try {
+            Object v = XposedHelpers.callMethod(obj, name);
+            if (v instanceof Number) {
+                return ((Number) v).intValue();
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static Long callLong(Object obj, String name) {
+        try {
+            Object v = XposedHelpers.callMethod(obj, name);
+            if (v instanceof Number) {
+                return ((Number) v).longValue();
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
     }
 
     /** 日志用截断。 */

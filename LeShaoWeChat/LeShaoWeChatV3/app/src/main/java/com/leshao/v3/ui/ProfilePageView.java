@@ -49,9 +49,9 @@ public class ProfilePageView {
         alp.setMarginEnd(dpInt(ctx, 16));
         avatar.setLayoutParams(alp);
         avatar.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        GradientDrawable avatarBg = new GradientDrawable();
+        com.leshao.v3.ui.FlowingGradientDrawable avatarBg = new com.leshao.v3.ui.FlowingGradientDrawable(
+                AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
         avatarBg.setCornerRadius(avatarSize / 2f);
-        avatarBg.setColor(AppColors.tertiaryContainer());
         avatar.setBackground(avatarBg);
 
         // 优先使用 AvatarHelper 多路径加载（内部含微信缓存/本地文件/CDN 兜底）

@@ -90,6 +90,58 @@ public class DexKitHelper {
 
     public static boolean isScanComplete() { synchronized (DexKitHelper.class) { return sScanComplete; } }
 
+    private static volatile boolean sReloading = false;
+
+    public static boolean isReloading() { return sReloading; }
+
+    /**
+     * v1079: 「关于模块」手动重新加载 DexKit。
+     * 用于微信卡顿/异常导致首次 DexKit 扫描未完成或未加载时，手动重新初始化并扫描。
+     */
+    public static void forceReload() {
+        if (sReloading) {
+            LogWriter.log(TAG, "forceReload: 已有重新加载任务进行中");
+            return;
+        }
+        sReloading = true;
+        sExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                DexKitCacheBridge.RecyclableBridge bridge = null;
+                try {
+                    android.content.Context ctx = com.leshao.v3.ContextManager.getAppContext();
+                    if (!(ctx instanceof Application)) {
+                        LogWriter.log(TAG, "forceReload: app context 不可用");
+                        return;
+                    }
+                    Application app = (Application) ctx;
+                    synchronized (DexKitHelper.class) {
+                        sScanComplete = false;
+                    }
+                    loadDexKitLibrary(app);
+                    if (!sLibraryLoaded.get()) {
+                        LogWriter.log(TAG, "forceReload: DexKit 库加载失败");
+                        return;
+                    }
+                    initDexKitCache(app);
+                    bridge = createBridge(app.getClassLoader());
+                    if (bridge == null) {
+                        LogWriter.log(TAG, "forceReload: bridge 创建失败");
+                        return;
+                    }
+                    LogWriter.log(TAG, "forceReload: 开始重新扫描 DexKit");
+                    scanWechatTargets(bridge);
+                    LogWriter.log(TAG, "forceReload: 重新扫描完成, complete=" + sScanComplete);
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "forceReload err: " + t.getMessage());
+                } finally {
+                    if (bridge != null) try { bridge.close(); } catch (Throwable ignored) {}
+                    sReloading = false;
+                }
+            }
+        });
+    }
+
     public static void addPostScanCallback(Runnable callback) {
         synchronized (DexKitHelper.class) {
             if (sScanComplete) {

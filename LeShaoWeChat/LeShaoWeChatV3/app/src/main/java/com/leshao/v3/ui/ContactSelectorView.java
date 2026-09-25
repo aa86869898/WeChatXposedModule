@@ -388,7 +388,7 @@ public class ContactSelectorView {
         if (checked) {
             android.graphics.LinearGradient lg = new android.graphics.LinearGradient(
                     0, 0, size, size,
-                    new int[]{AppColors.ACCENT, 0xFF1976D2, 0xFF0D47A1},
+                    new int[]{AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd()},
                     new float[]{0f, 0.5f, 1f},
                     android.graphics.Shader.TileMode.CLAMP);
             Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);

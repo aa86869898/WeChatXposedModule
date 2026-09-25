@@ -526,19 +526,19 @@ public class ChatGroupUiInjector {
         try {
             boolean dark = isDarkMode(ctx);
             if (sel) {
-                GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                    new int[]{0xFFFF6B8A, 0xFFA855F7, 0xFF38BDF8});
-                bg.setCornerRadius(dp(20, ctx));
+                com.leshao.v3.ui.FlowingGradientDrawable bg = new com.leshao.v3.ui.FlowingGradientDrawable(
+                    AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+                bg.setCornerRadii(new float[]{dp(20, ctx), dp(20, ctx), dp(20, ctx), dp(20, ctx)});
                 bg.setStroke(dp(1, ctx), 0xB3FFFFFF);
                 tv.setBackground(bg);
                 tv.setTextColor(Color.WHITE);
                 tv.setShadowLayer(dp(4, ctx), 0, 0, 0x40A855F7);
             } else {
                 GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                    dark ? new int[]{0x26FF6B8A, 0x26A855F7, 0x2638BDF8}
-                         : new int[]{0x1AFF6B8A, 0x1AA855F7, 0x1A38BDF8});
+                    dark ? new int[]{0x26C9A9FF, 0x26A855F7, 0x26FF6FB0}
+                         : new int[]{0x1AC9A9FF, 0x1AA855F7, 0x1AFF6FB0});
                 bg.setCornerRadius(dp(20, ctx));
-                bg.setStroke(dp(1, ctx), dark ? Color.parseColor("#C084FC") : Color.parseColor("#A855F7"));
+                bg.setStroke(dp(1, ctx), dark ? Color.parseColor("#C9A9FF") : Color.parseColor("#8B5CF6"));
                 tv.setBackground(bg);
                 tv.setTextColor(dark ? Color.parseColor("#C8C8CE") : Color.parseColor("#555555"));
             }
@@ -709,15 +709,14 @@ public class ChatGroupUiInjector {
         TextView tv = new TextView(ctx);
         tv.setText("\uFF0B"); tv.setTextSize(15);
         boolean dark = isDarkMode(ctx);
-        tv.setTextColor(dark ? Color.parseColor("#C084FC") : Color.parseColor("#A855F7"));
+        tv.setTextColor(dark ? Color.parseColor("#C9A9FF") : Color.parseColor("#8B5CF6"));
         tv.setPadding(dp(10, ctx), dp(7, ctx), dp(10, ctx), dp(7, ctx));
         tv.setGravity(Gravity.CENTER); tv.setTypeface(null, Typeface.BOLD);
         tv.setMinWidth(dp(39, ctx));
-        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            dark ? new int[]{0x33FF6B8A, 0x33A855F7, 0x3338BDF8}
-                 : new int[]{0x26FF6B8A, 0x26A855F7, 0x2638BDF8});
-        bg.setCornerRadius(dp(16, ctx));
-        bg.setStroke(dp(1, ctx), dark ? Color.parseColor("#C084FC") : Color.parseColor("#A855F7"));
+        com.leshao.v3.ui.FlowingGradientDrawable bg = new com.leshao.v3.ui.FlowingGradientDrawable(
+            0xFFC9A9FF, 0xFFA855F7, dark ? 0xFFFFB8D4 : 0xFFFF6FB0);
+        bg.setCornerRadii(new float[]{dp(16, ctx), dp(16, ctx), dp(16, ctx), dp(16, ctx)});
+        bg.setStroke(dp(1, ctx), dark ? Color.parseColor("#C9A9FF") : Color.parseColor("#8B5CF6"));
         tv.setBackground(bg);
         FrameLayout.LayoutParams tvLp = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -2166,7 +2165,7 @@ public class ChatGroupUiInjector {
     }
 
     private static GradientDrawable makeAvatarBg(String u, int size) {
-        int[] candy = {0xFFFF6B8A, 0xFFA855F7, 0xFF38BDF8, 0xFFF59E0B, 0xFF10B981, 0xFF6366F1};
+        int[] candy = {0xFF8B5CF6, 0xFFA78BFA, 0xFFFFAFCC, 0xFFD8B4FE, 0xFF9F7BFF, 0xFFC026D3};
         int idx = Math.abs(u == null ? 0 : u.hashCode()) % candy.length;
         GradientDrawable gd = new GradientDrawable();
         gd.setColor(candy[idx]);
@@ -2379,7 +2378,7 @@ public class ChatGroupUiInjector {
     private static int themeTitle() { return isDarkMode(getCurrentActivityContext()) ? 0xFFE4E4E8 : 0xFF1D1D1F; }
     private static int themeBody()   { return isDarkMode(getCurrentActivityContext()) ? 0xFFB0B0B8 : 0xFF565659; }
     private static int themeNote()   { return isDarkMode(getCurrentActivityContext()) ? 0xFF707079 : 0xFF949499; }
-    private static int themeAccent() { return isDarkMode(getCurrentActivityContext()) ? 0xFFC084FC : 0xFFA855F7; }
+    private static int themeAccent() { return isDarkMode(getCurrentActivityContext()) ? 0xFFC9A9FF : 0xFF8B5CF6; }
     private static int themeBg()     { return isDarkMode(getCurrentActivityContext()) ? 0xFF2A2A2E : 0xFFFFFFFF; }
     private static int themeCard()   { return isDarkMode(getCurrentActivityContext()) ? 0xFF1E1E22 : 0xFFF5F5F5; }
 

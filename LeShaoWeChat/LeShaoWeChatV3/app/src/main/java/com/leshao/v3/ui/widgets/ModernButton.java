@@ -49,7 +49,7 @@ public class ModernButton extends LinearLayout {
         switch (style) {
             case STYLE_PRIMARY:
                 setBackground(CandyUi.buttonBg(getContext()));
-                mLabel.setTextColor(AppColors.textOnPrimary());
+                mLabel.setTextColor(AppColors.onGradient());
                 break;
             case STYLE_DANGER:
                 setBackground(CandyUi.buttonDangerBg(getContext()));

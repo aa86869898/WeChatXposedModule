@@ -54,22 +54,269 @@ public final class WeChatMessenger {
      * @return 是否成功发起发送
      */
     public static boolean sendText(String talker, String content, ClassLoader cl) {
+        return sendText(talker, content, null, cl);
+    }
+
+    /**
+     * 向指定会话发送文本消息（可带原生 @ msgsource）。
+     *
+     * @param talker 会话 id
+     * @param content 正文（调用方负责已打防循环水印）
+     * @param atWxid 需要 @ 的成员 wxid；为空则普通文本
+     * @param cl 微信 classLoader
+     */
+    public static boolean sendText(String talker, String content, String atWxid, ClassLoader cl) {
         if (talker == null || talker.isEmpty() || content == null || content.isEmpty()) {
             return false;
         }
+        String msgSource = atWxid == null || atWxid.isEmpty() ? "" : buildAtMsgSource(atWxid);
         // 优先 v1043 标准链：e9 构造 → f9.Bb(true) → v51.r0 → queue.h 入队
-        if (sendViaMsgInfo(talker, content, cl)) {
+        if (sendViaMsgInfo(talker, content, msgSource, cl)) {
             return true;
         }
         LogWriter.log(TAG, "sendText: v51.r0 链路失败, 回退 v51.r1 Builder");
         return sendViaBuilder(talker, content);
     }
 
+    /** 构造原生 @ 的 msgsource（文档 §5.4：atuserlist）。 */
+    public static String buildAtMsgSource(String atWxid) {
+        if (atWxid == null || atWxid.isEmpty()) return "";
+        return "<msgsource><atuserlist><![CDATA[" + atWxid + "]]></atuserlist></msgsource>";
+    }
+
+    /** @ 前缀：@群昵称 + AT_SEP(\\u2005)，高亮依赖群昵称与 content 完全一致。 */
+    public static String buildAtPrefix(String atDisplay) {
+        if (atDisplay == null || atDisplay.isEmpty()) return "";
+        return "@" + atDisplay + "\u2005";
+    }
+
+    /** 文本式引用块（文档 §三：引用原文可视化）。 */
+    public static String buildQuoteBlock(String quote) {
+        if (quote == null || quote.isEmpty()) return "";
+        String q = quote.length() > 80 ? quote.substring(0, 80) + "…" : quote;
+        return "「" + q + "」\n————\n";
+    }
+
+    /**
+     * 微信原生引用气泡发送（文档《艾特和引用方法》方案 B §四）。
+     * <p>
+     * 链路：构造 {@code MsgQuoteItem}（13 字段）→ {@code dx0.r}(i=57, x2=item)
+     * → {@code k0.I(r,"","",chatroom,"",null)} → 取 Pair.second(msgId)
+     * → 插 {@code yp3.b} 引用关系（不插气泡不显示）。
+     * <p>
+     * 任何一步类/字段不匹配即返回 false，由调用方回退文本式引用。
+     *
+     * @param quoted    被引用的原消息 e9（接收 hook 拿到的对象）
+     * @param chatroom  群 id
+     * @param atWxid    要 @ 的成员 wxid（可为空）
+     * @param content   回复文本（已含 {@code @昵称\u2005} 前缀）
+     * @param cl        微信 classLoader
+     * @return 原生引用发送成功返回 true
+     */
+    public static boolean sendQuoteAndAt(Object quoted, String chatroom, String atWxid,
+                                         String content, ClassLoader cl) {
+        if (quoted == null || chatroom == null || chatroom.isEmpty()) {
+            return false;
+        }
+        ClassLoader tk = cl;
+        try {
+            ClassLoader t = VersionCompat.findTinkerClassLoader(cl != null ? cl : HookEntry.appClassLoader);
+            if (t != null && !t.getClass().getName().contains("Leshao")) {
+                tk = t;
+            }
+        } catch (Throwable ignored) {
+        }
+        try {
+            Class<?> qCls = XposedHelpers.findClass("com.tencent.mm.plugin.msgquote.model.MsgQuoteItem", tk);
+            Class<?> k0 = XposedHelpers.findClass("com.tencent.mm.pluginsdk.model.app.k0", tk);
+            Class<?> c1 = XposedHelpers.findClass("ou5.c1", tk);
+            Class<?> xp3i = XposedHelpers.findClass("xp3.i", tk);
+            Class<?> rCls = XposedHelpers.findClass("dx0.r", tk);
+            LogWriter.log(TAG, "nativeQuote: MsgQuoteItem ctors=" + dumpCtors(qCls)
+                    + " r ctors=" + dumpCtors(rCls));
+
+            int qType = callInt(quoted, "getType");
+            long qSvr = callLong(quoted, "F0");
+            String qTalker = callStr(quoted, "N0");
+            String qFrom = callStaticStr(c1, "d", quoted);
+            String qName = callStaticStr(xp3i, "e", quoted, chatroom);
+            String qSrc = callStr(quoted, "G");
+            if (qSrc == null) qSrc = callStr(quoted, "E0");
+            String qContent = callStr(quoted, "N1");
+            if (qContent == null) qContent = callStr(quoted, "j");
+            long qCtime = callLong(quoted, "getCreateTime");
+            int qScene = 0;
+            try {
+                Object s = XposedHelpers.getObjectField(quoted, "A2");
+                if (s instanceof Number) qScene = ((Number) s).intValue();
+            } catch (Throwable ignored) {
+            }
+
+            java.util.HashMap<String, String> atMap = new java.util.HashMap<>();
+            if (atWxid != null && !atWxid.isEmpty()) {
+                atMap.put("atuserlist", "<![CDATA[" + atWxid + "]]>");
+            }
+
+            Object item = allocateInstance(qCls);
+            if (item == null) {
+                LogWriter.log(TAG, "nativeQuote: MsgQuoteItem 实例化失败");
+                return false;
+            }
+            XposedHelpers.setObjectField(item, "d", XposedHelpers.callStaticMethod(k0, "c", qType));
+            XposedHelpers.setObjectField(item, "e", qSvr);
+            XposedHelpers.setObjectField(item, "f", qTalker);
+            XposedHelpers.setObjectField(item, "g", qFrom);
+            XposedHelpers.setObjectField(item, "h", qName);
+            XposedHelpers.setObjectField(item, "i", qSrc);
+            XposedHelpers.setObjectField(item, "m", qContent == null ? "" : qContent);
+            XposedHelpers.setObjectField(item, "n",
+                    XposedHelpers.callStaticMethod(c1, "f", qSrc, atMap, Integer.valueOf(1)));
+            XposedHelpers.setObjectField(item, "o", Integer.valueOf(qScene));
+            XposedHelpers.setObjectField(item, "q", Long.valueOf(qCtime / 1000L));
+
+            Object r = allocateInstance(rCls);
+            if (r == null) {
+                LogWriter.log(TAG, "nativeQuote: dx0.r 实例化失败");
+                return false;
+            }
+            XposedHelpers.setObjectField(r, "f", content);
+            XposedHelpers.setObjectField(r, "i", Integer.valueOf(57));
+            XposedHelpers.setObjectField(r, "x2", item);
+
+            Object pair = invokeK0Send(k0, rCls, r, chatroom);
+            if (pair == null) {
+                LogWriter.log(TAG, "nativeQuote: k0.I 返回 null");
+                return false;
+            }
+            Object second = readPairSecond(pair);
+            if (!(second instanceof Number)) {
+                // k0.I 非 null 说明发送已被微信受理(实机引用消息已发出)。
+                // 读不到 msgId 时仅跳过 yp3 关系插入, 但必须返回 true —— 否则调用方
+                // 会再发一条文本回退, 导致"一条引用 + 一条未引用"的重复发送。
+                LogWriter.log(TAG, "nativeQuote: 已发出但 msgId 读取失败(pair="
+                        + pair.getClass().getName() + ", second=" + second
+                        + ") -> 跳过 yp3, 不回退");
+                return true;
+            }
+
+            // 插引用关系表（不做这步气泡不显示）
+            try {
+                Class<?> yb = XposedHelpers.findClass("yp3.b", tk);
+                Object rel = allocateInstance(yb);
+                if (rel == null) {
+                    throw new IllegalStateException("yp3.b 实例化失败");
+                }
+                XposedHelpers.setObjectField(rel, "field_msgId", second);
+                XposedHelpers.setObjectField(rel, "field_quotedMsgId",
+                        XposedHelpers.callMethod(quoted, "getMsgId"));
+                XposedHelpers.setObjectField(rel, "field_quotedMsgSvrId", Long.valueOf(qSvr));
+                XposedHelpers.setObjectField(rel, "field_quotedMsgTalker", qTalker);
+                Class<?> vp3e = XposedHelpers.findClass("vp3.e", tk);
+                Object ya = XposedHelpers.callStaticMethod(vp3e, "ej");
+                XposedHelpers.callMethod(ya, "x1", rel);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "nativeQuote: yp3 关系插入失败(气泡可能不显示): " + t);
+            }
+            LogWriter.log(TAG, "nativeQuote OK msgId=" + second + " -> " + chatroom);
+            return true;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "nativeQuote FAIL: " + t);
+            return false;
+        }
+    }
+
+    /** 调用 k0.I(r, "", "", chatroom, "", null)：按参数类型精确匹配重载。 */
+    private static Object invokeK0Send(Class<?> k0, Class<?> rCls, Object r, String chatroom) {
+        for (Method m : k0.getDeclaredMethods()) {
+            if (!m.getName().equals("I") || m.getParameterCount() != 6) {
+                continue;
+            }
+            Class<?>[] pts = m.getParameterTypes();
+            if (!pts[0].isAssignableFrom(rCls) && !pts[0].equals(rCls)) {
+                continue;
+            }
+            try {
+                m.setAccessible(true);
+                return m.invoke(null, r, "", "", chatroom, "", null);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "k0.I invoke err: " + t);
+            }
+        }
+        return null;
+    }
+
+    /** 兼容读取 k0.I 返回 Pair 的 msgId(Android Pair / Kotlin Pair / 自研 Pair 字段名不一)。 */
+    private static Object readPairSecond(Object pair) {
+        if (pair == null) return null;
+        String[] methods = {"getSecond", "component2"};
+        for (String mn : methods) {
+            try {
+                Object v = XposedHelpers.callMethod(pair, mn);
+                if (v != null) return v;
+            } catch (Throwable ignored) {
+            }
+        }
+        try {
+            Object v = XposedHelpers.getObjectField(pair, "second");
+            if (v != null) return v;
+        } catch (Throwable ignored) {
+        }
+        StringBuilder sb = new StringBuilder("pair fields=");
+        try {
+            for (java.lang.reflect.Field f : pair.getClass().getDeclaredFields()) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                f.setAccessible(true);
+                sb.append(f.getName()).append(':').append(f.get(pair)).append(' ');
+            }
+        } catch (Throwable ignored) {
+        }
+        LogWriter.log(TAG, "readPairSecond: " + sb);
+        return null;
+    }
+
+    private static String callStr(Object obj, String name) {
+        try {
+            Object v = XposedHelpers.callMethod(obj, name);
+            return v == null ? null : v.toString();
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static int callInt(Object obj, String name) {
+        try {
+            Object v = XposedHelpers.callMethod(obj, name);
+            if (v instanceof Number) return ((Number) v).intValue();
+        } catch (Throwable ignored) {
+        }
+        return 0;
+    }
+
+    private static long callLong(Object obj, String name) {
+        try {
+            Object v = XposedHelpers.callMethod(obj, name);
+            if (v instanceof Number) return ((Number) v).longValue();
+        } catch (Throwable ignored) {
+        }
+        return 0L;
+    }
+
+    private static String callStaticStr(Class<?> cls, String name, Object... args) {
+        try {
+            Object v = XposedHelpers.callStaticMethod(cls, name, args);
+            return v == null ? null : v.toString();
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+
+
     /**
      * 标准链：构造 e9(isSend=1,type=1) → f9.Bb(msg,true) → new v51.r0(msgId,talker) → queue.h(scene,0)。
      * 发送前 lj.N3(talker,msgId) 自检读表，避免 resend 读表失败静默掉。
      */
-    private static boolean sendViaMsgInfo(String talker, String content, ClassLoader cl) {
+    private static boolean sendViaMsgInfo(String talker, String content, String msgSource, ClassLoader cl) {
         try {
             ClassLoader tk = VersionCompat.findTinkerClassLoader(cl != null ? cl : HookEntry.appClassLoader);
             LogWriter.log(TAG, "sendViaMsgInfo: tk=" + (tk == null ? "null" : tk.getClass().getName()));
@@ -96,7 +343,7 @@ public final class WeChatMessenger {
             XposedHelpers.callMethod(msg, "e1", System.currentTimeMillis());
             XposedHelpers.callMethod(msg, "k1", 1);   // isSend = 1
             XposedHelpers.callMethod(msg, "t1", 1);   // status = 1
-            XposedHelpers.callMethod(msg, "r3", "");  // msgSource
+            XposedHelpers.callMethod(msg, "r3", msgSource == null ? "" : msgSource);  // msgSource(@ 需要)
 
             // 2) 本地插入(REPLACE)
             long msgId;
@@ -225,10 +472,56 @@ public final class WeChatMessenger {
         if (atDisplay == null || atDisplay.isEmpty()) {
             return sendText(talker, content, cl);
         }
-        return sendText(talker, "@" + atDisplay + " " + content, cl);
+        return sendText(talker, buildAtPrefix(atDisplay) + content, cl);
     }
 
     // ---------- 诊断辅助 ----------
+
+    /**
+     * 不带构造器实例化：MsgQuoteItem / dx0.r 等类只有带参构造，
+     * {@code XposedHelpers.newInstance} 会抛 NoSuchMethodError。
+     * 依次尝试无参构造 → sun.misc.Unsafe.allocateInstance → 任意构造默认值。
+     */
+    private static Object allocateInstance(Class<?> cls) {
+        try {
+            return XposedHelpers.newInstance(cls);
+        } catch (Throwable ignored) {
+        }
+        try {
+            Class<?> u = Class.forName("sun.misc.Unsafe");
+            java.lang.reflect.Field f = u.getDeclaredField("theUnsafe");
+            f.setAccessible(true);
+            Object unsafe = f.get(null);
+            return u.getMethod("allocateInstance", Class.class).invoke(unsafe, cls);
+        } catch (Throwable ignored) {
+        }
+        for (java.lang.reflect.Constructor<?> ct : cls.getDeclaredConstructors()) {
+            try {
+                ct.setAccessible(true);
+                Class<?>[] pts = ct.getParameterTypes();
+                Object[] args = new Object[pts.length];
+                for (int i = 0; i < pts.length; i++) {
+                    args[i] = defaultArg(pts[i]);
+                }
+                return ct.newInstance(args);
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static Object defaultArg(Class<?> t) {
+        if (!t.isPrimitive()) return null;
+        if (t == boolean.class) return Boolean.FALSE;
+        if (t == int.class) return 0;
+        if (t == long.class) return 0L;
+        if (t == short.class) return (short) 0;
+        if (t == byte.class) return (byte) 0;
+        if (t == char.class) return (char) 0;
+        if (t == float.class) return 0f;
+        if (t == double.class) return 0d;
+        return null;
+    }
 
     /** 类构造签名 dump，用于定位 r0 构造参数不匹配。 */
     private static String dumpCtors(Class<?> c) {

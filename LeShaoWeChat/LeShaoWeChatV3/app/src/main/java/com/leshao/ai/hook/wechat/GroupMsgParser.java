@@ -4,6 +4,8 @@ import android.util.Log;
 
 import java.lang.reflect.Field;
 
+import de.robv.android.xposed.XposedHelpers;
+
 /**
  * 群聊消息解析（文档 §7 线路四）。
  * <p>
@@ -23,9 +25,10 @@ public final class GroupMsgParser {
     private GroupMsgParser() {
     }
 
-    /** 群判定：talker 以 @chatroom 结尾。 */
+    /** 群判定：talker 以 @chatroom / @im.chatroom 结尾。 */
     public static boolean isGroupTalker(String talker) {
-        return talker != null && talker.endsWith("@chatroom");
+        return talker != null
+                && (talker.endsWith("@chatroom") || talker.endsWith("@im.chatroom"));
     }
 
     /**
@@ -68,28 +71,52 @@ public final class GroupMsgParser {
         if (msgInfo == null) {
             return null;
         }
-        String src = readStringField(msgInfo, "x2");
+        // v1073: msgsource 在 8.0.78 是 im.c8.G, 访问器 E0()(文档《艾特和引用方法》§二);
+        // 之前只读混淆字段 x2 是 dx0.r(MsgQuoteItem 容器)的字段, 取不到 → atMe 永远 false。
+        if (msgInfo instanceof String) {
+            String s = (String) msgInfo;
+            if (s.contains("<msgsource") || s.contains("atuserlist")) return s;
+        }
+        String src = readStringField(msgInfo, "field_msgSource");
         if (src != null && src.contains("msgsource")) {
             return src;
         }
-        src = readStringField(msgInfo, "field_msgSource");
+        src = readStringField(msgInfo, "G");
         if (src != null && src.contains("msgsource")) {
             return src;
+        }
+        src = readStringField(msgInfo, "x2");
+        if (src != null && src.contains("msgsource")) {
+            return src;
+        }
+        // 访问器优先(E0/G 文档实证)
+        for (String m : new String[]{"E0", "getMsgSource", "I0", "S0"}) {
+            try {
+                Object o = XposedHelpers.callMethod(msgInfo, m);
+                if (o instanceof String && ((String) o).contains("msgsource")) {
+                    return (String) o;
+                }
+            } catch (Throwable ignored) {
+            }
         }
         // 兜底：遍历所有 String 字段找 <msgsource
         try {
-            for (java.lang.reflect.Field f : msgInfo.getClass().getFields()) {
-                if (f.getType() != String.class) {
-                    continue;
-                }
-                try {
-                    f.setAccessible(true);
-                    Object o = f.get(msgInfo);
-                    if (o instanceof String && ((String) o).contains("<msgsource")) {
-                        return (String) o;
+            Class<?> c = msgInfo.getClass();
+            while (c != null && c != Object.class) {
+                for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                    if (f.getType() != String.class) {
+                        continue;
                     }
-                } catch (Throwable ignored) {
+                    try {
+                        f.setAccessible(true);
+                        Object o = f.get(msgInfo);
+                        if (o instanceof String && ((String) o).contains("<msgsource")) {
+                            return (String) o;
+                        }
+                    } catch (Throwable ignored) {
+                    }
                 }
+                c = c.getSuperclass();
             }
         } catch (Throwable ignored) {
         }
@@ -119,18 +146,8 @@ public final class GroupMsgParser {
         // 1) msgsource.atuserlist 精确判定
         if (meWxid != null && !meWxid.isEmpty()) {
             String src = getMsgSource(msgInfo);
-            if (src != null && src.contains(meWxid)) {
-                int a = src.indexOf("<atuserlist>");
-                if (a >= 0) {
-                    int b = src.indexOf("</atuserlist>", a);
-                    if (b > a) {
-                        for (String u : src.substring(a + 12, b).split(",")) {
-                            if (u.trim().equals(meWxid)) {
-                                return true;
-                            }
-                        }
-                    }
-                }
+            if (src != null && atListContains(src, meWxid)) {
+                return true;
             }
         }
         // 2) 兜底：正文含 @机器人名 / @自己昵称 / @所有人 / @all
@@ -142,6 +159,35 @@ public final class GroupMsgParser {
                 return true;
             }
             if (body.contains("@所有人") || body.contains("@all") || body.contains("@All")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * msgsource 的 atuserlist 是否包含 meWxid。
+     * <p>
+     * 实证格式：{@code <atuserlist><![CDATA[wxid_1,wxid_2]]></atuserlist>}
+     * （文档《艾特和引用方法》§五-2）。必须先剥 CDATA 再逐个比对，
+     * 否则 token 形如 {@code <![CDATA[wxid_xxx]]>} 恒不相等 → atMe 永远 false。
+     */
+    public static boolean atListContains(String msgsource, String meWxid) {
+        if (msgsource == null || meWxid == null || meWxid.isEmpty()) {
+            return false;
+        }
+        int a = msgsource.indexOf("<atuserlist>");
+        if (a < 0) {
+            return false;
+        }
+        int b = msgsource.indexOf("</atuserlist>", a);
+        if (b <= a) {
+            return false;
+        }
+        String inner = msgsource.substring(a + "<atuserlist>".length(), b);
+        inner = inner.replace("<![CDATA[", "").replace("]]>", "");
+        for (String u : inner.split(",")) {
+            if (u.trim().equals(meWxid)) {
                 return true;
             }
         }

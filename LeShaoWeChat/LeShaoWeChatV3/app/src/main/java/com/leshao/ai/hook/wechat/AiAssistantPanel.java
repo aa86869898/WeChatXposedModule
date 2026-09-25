@@ -1542,6 +1542,18 @@ public final class AiAssistantPanel {
         final Switch swTts = makeSwitch(ctx, effTts);
         addSwitchRow(list, ctx, swTts, AiIconDrawable.G_VOICE, "语音消息发送", "开=转语音发出; 关=发文本");
         final Switch swOnlyF = swOnly;
+        // v1073: 引用回复(群/私聊文本回复均可见)
+        boolean effQuote = entry.quoteReply != null ? entry.quoteReply : cfg.isQuoteReply();
+        final Switch swQuote = makeSwitch(ctx, effQuote);
+        addSwitchRow(list, ctx, swQuote, AiIconDrawable.G_LAYERS, "使用引用消息回复", "文本回复时附带引用原消息");
+        // v1073: 自动@对方(仅群聊配置可见)
+        Switch swAt = null;
+        if (isGroup) {
+            boolean effAt = entry.autoAt != null ? entry.autoAt : cfg.isAutoAt();
+            swAt = makeSwitch(ctx, effAt);
+            addSwitchRow(list, ctx, swAt, AiIconDrawable.G_BELL, "AI回复自动@对方", "群聊回复时自动 @ 提问人");
+        }
+        final Switch swAtF = swAt;
 
         addVoiceSection(list, ctx, activity, entry,
                 () -> { cc.put(talker, entry); cc.save(); },
@@ -1592,6 +1604,9 @@ public final class AiAssistantPanel {
                     out.onlyWhenMentioned = explicitOrNull(swOnlyF.isChecked(), cfg.isOnlyWhenMentioned());
                 }
                 out.ttsEnabled = explicitOrNull(swTts.isChecked(), cfg.isTtsEnabled());
+                out.quoteReply = Boolean.valueOf(swQuote.isChecked());
+                out.autoAt = (groupFinal && swAtF != null)
+                        ? Boolean.valueOf(swAtF.isChecked()) : null;
                 out.systemPrompt = str(etSys).trim();
                 out.aiName = str(etAiName).trim();
                 out.aiIdentity = str(etAiIdentity).trim();
@@ -1816,6 +1831,13 @@ public final class AiAssistantPanel {
         boolean effTts = e.ttsEnabled != null ? e.ttsEnabled : cfg.isTtsEnabled();
         final Switch swTts = makeSwitch(ctx, effTts);
         addSwitchRow(list, ctx, swTts, AiIconDrawable.G_VOICE, "语音消息发送", "开=转语音发出; 关=发文本");
+        // v1073: 引用回复 / 自动@对方(模板通用, 套用到群聊时自动@生效)
+        final Switch swQuote = makeSwitch(ctx,
+                e.quoteReply != null ? e.quoteReply.booleanValue() : cfg.isQuoteReply());
+        addSwitchRow(list, ctx, swQuote, AiIconDrawable.G_LAYERS, "使用引用消息回复", "文本回复时附带引用原消息");
+        final Switch swAt = makeSwitch(ctx,
+                e.autoAt != null ? e.autoAt.booleanValue() : cfg.isAutoAt());
+        addSwitchRow(list, ctx, swAt, AiIconDrawable.G_BELL, "AI回复自动@对方", "群聊回复时自动 @ 提问人");
         final ConversationConfig.Entry tplEntry = e;
 
         addVoiceSection(list, ctx, activity, tplEntry, null,
@@ -1866,6 +1888,8 @@ public final class AiAssistantPanel {
                 ConversationConfig.Entry out = new ConversationConfig.Entry();
                 out.onlyWhenMentioned = swOnly.isChecked();
                 out.ttsEnabled = swTts.isChecked();
+                out.quoteReply = Boolean.valueOf(swQuote.isChecked());
+                out.autoAt = Boolean.valueOf(swAt.isChecked());
                 out.systemPrompt = str(etSys).trim();
                 out.aiName = str(etAiName).trim();
                 out.aiIdentity = str(etAiIdentity).trim();
