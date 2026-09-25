@@ -7,9 +7,9 @@ import android.os.Looper;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.Switch;
 import android.widget.TextView;
 
+import android.widget.Switch;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
@@ -589,6 +589,7 @@ public class WanQunGroupHook {
         et.setHint(label);
         et.setBackground(rounded(ctx, AppColors.inputBg(), 8));
         et.setPadding(dp(ctx, 10), dp(ctx, 6), dp(ctx, 10), dp(ctx, 6));
+        com.leshao.v3.ui.widgets.M3Page.enableVerticalScroll(et);
         return et;
     }
 

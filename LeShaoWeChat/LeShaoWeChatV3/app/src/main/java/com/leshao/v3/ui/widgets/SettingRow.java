@@ -11,9 +11,9 @@ import android.view.View;
 import android.widget.CompoundButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.Switch;
 import android.widget.TextView;
 
+import android.widget.Switch;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
 
@@ -104,7 +104,10 @@ public class SettingRow extends LinearLayout {
             setOnClickListener(v -> {
                 try { sw.toggle(); } catch (Throwable ignored) {}
             });
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            com.leshao.v3.LogWriter.log("SettingRow",
+                    "switchOn err: " + android.util.Log.getStackTraceString(t));
+        }
         return this;
     }
 
@@ -117,7 +120,12 @@ public class SettingRow extends LinearLayout {
             arrow.setTextColor(AppColors.arrow());
             mTail.addView(arrow);
             if (onClick != null) setOnClickListener(v -> {
-                try { onClick.run(); } catch (Throwable ignored) {}
+                try {
+                    onClick.run();
+                } catch (Throwable t) {
+                    com.leshao.v3.LogWriter.log("SettingRow",
+                            "arrow onClick err: " + android.util.Log.getStackTraceString(t));
+                }
             });
         } catch (Throwable ignored) {}
         return this;

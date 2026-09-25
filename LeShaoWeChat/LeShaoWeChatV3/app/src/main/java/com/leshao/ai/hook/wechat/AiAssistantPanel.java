@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
@@ -13,15 +14,17 @@ import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
-import android.widget.SeekBar;
-import android.widget.Switch;
 import android.widget.TextView;
 
+import android.widget.SeekBar;
+import android.widget.Switch;
+import android.window.OnBackInvokedDispatcher;
 import com.leshao.ai.api.model.ProviderType;
 import com.leshao.ai.config.AppConfig;
 import com.leshao.ai.config.ConversationConfig;
@@ -58,6 +61,12 @@ public final class AiAssistantPanel {
     private static final double TEMP_SCALE = 100.0 / 2.0;
     /** 当前打开的弹窗, 用于面板间切换时先关旧窗 */
     private static volatile PopupWindow sPopup;
+    /** v1059: 当前弹窗的尺寸约束, 供内容异步加载完成后重新「收紧」窗口高度 */
+    private static int sPopupPanelW;
+    private static int sPopupMaxH;
+    private static int sPopupX;
+    private static int sPopupAvailTop;
+    private static int sPopupAvailBottom;
     /** v985: 模板编辑草稿, 跨「选择音色」子页面保留未保存改动(新建模板时无正式名可持久化) */
     private static ConversationConfig.Entry sTemplateDraft;
     /** v996: 「AI回复个性化配置」列表当前 tab(0=全部 1=群聊 2=联系人), 返回时保持。 */
@@ -124,7 +133,8 @@ public final class AiAssistantPanel {
 
             android.util.DisplayMetrics dm = anchor.getResources().getDisplayMetrics();
             android.content.Context actx = anchor.getContext();
-            int panelW = (int) (dm.widthPixels * 0.94f);
+            // v1047: 弹窗最大宽度占屏 92%
+            int panelW = (int) (dm.widthPixels * 0.92f);
 
             // v985: 可用显示区改为以「物理屏 - 真实系统栏内边距」为准。此前依赖
             // getWindowVisibleDisplayFrame, 在 ColorOS 上会返回比物理屏更大的 frame, 且
@@ -149,8 +159,12 @@ public final class AiAssistantPanel {
             boolean wrap = heightPx <= 0;
             int panelH;
             try {
-                root.measure(View.MeasureSpec.makeMeasureSpec(panelW, View.MeasureSpec.EXACTLY),
-                        View.MeasureSpec.makeMeasureSpec(maxPanelH, View.MeasureSpec.AT_MOST));
+                // v1059: 先按自然高度(UNSPECIFIED)测量, 才能发现内容是否超过可用高度。
+                // 若用 AT_MOST 测量, 测量值会被直接截断为 maxPanelH, 溢出量恒为 0,
+                // 下方「压缩滚动区」的逻辑永不触发, 结果内容溢出窗口、底部按钮被裁掉。
+                final int unboundSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+                final int widthSpec = View.MeasureSpec.makeMeasureSpec(panelW, View.MeasureSpec.EXACTLY);
+                root.measure(widthSpec, unboundSpec);
                 int measured = root.getMeasuredHeight();
                 if (measured > maxPanelH) {
                     CappedScrollView sv = findCappedScroll(root);
@@ -159,10 +173,14 @@ public final class AiAssistantPanel {
                         int newCap = Math.max(dp(actx, 100),
                                 (cur > 0 ? cur : maxPanelH) - (measured - maxPanelH));
                         sv.setMaxHeight(newCap);
-                        root.measure(View.MeasureSpec.makeMeasureSpec(panelW, View.MeasureSpec.EXACTLY),
-                                View.MeasureSpec.makeMeasureSpec(maxPanelH, View.MeasureSpec.AT_MOST));
+                        root.measure(widthSpec, unboundSpec);
                         measured = root.getMeasuredHeight();
                     }
+                }
+                if (measured > maxPanelH) {
+                    // 兜底: 滚动区仍不足以吸收, 或本就无可压缩滚动区(如外层 ScrollView),
+                    // 以 maxPanelH 作为确定高度, 由外层滚动区保证内容可达。
+                    measured = maxPanelH;
                 }
                 if (!wrap) {
                     panelH = Math.min(heightPx, maxPanelH);
@@ -188,6 +206,11 @@ public final class AiAssistantPanel {
             pw.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
             sPopup = pw;
+            sPopupPanelW = panelW;
+            sPopupMaxH = maxPanelH;
+            sPopupX = Math.max(0, (dm.widthPixels - panelW) / 2);
+            sPopupAvailTop = availTop;
+            sPopupAvailBottom = availBottom;
             try {
                 int x = Math.max(0, (dm.widthPixels - panelW) / 2);
                 int y = availTop + Math.max(0, (availH - panelH) / 2);
@@ -211,6 +234,7 @@ public final class AiAssistantPanel {
                     };
                 }
                 com.leshao.v3.ui.UiBackStack.push(pw, pw::dismiss, onBack);
+                registerOnBackCallback(root, onBack, scene);
                 LogWriter.log(TAG, "showPopup OK: scene=" + scene + " panelH=" + panelH
                         + " availTop=" + availTop + " availBottom=" + availBottom
                         + " availH=" + availH + " y=" + y);
@@ -222,6 +246,84 @@ public final class AiAssistantPanel {
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, "showPopup err: scene=" + scene + " err=" + t);
+        }
+    }
+
+    /**
+     * v1057: Android 13+ 预测性返回会走 {@link OnBackInvokedDispatcher}，不再经过
+     * {@code PopupDecorView.dispatchKeyEvent}，使 {@link com.leshao.v3.ui.UiBackInstaller}
+     * 的返回键 hook 失效（返回键直接关窗、不回到上一层）。此处为面板补登记
+     * OnBackInvokedCallback，与 {@link com.leshao.v3.ui.UiBackStack} 语义一致：
+     * 有 onBack 时先关当前窗再打开父级，无 onBack（首页）时仅关闭。
+     */
+    private static void registerOnBackCallback(View root, final Runnable onBack, final String scene) {
+        if (Build.VERSION.SDK_INT < 33) return;
+        try {
+            View top = root;
+            ViewParent parent = top.getParent();
+            while (parent instanceof View) {
+                top = (View) parent;
+                parent = top.getParent();
+            }
+            OnBackInvokedDispatcher dispatcher = top.findOnBackInvokedDispatcher();
+            if (dispatcher == null) {
+                LogWriter.log(TAG, "registerOnBackCallback: dispatcher null, scene=" + scene);
+                return;
+            }
+            dispatcher.registerOnBackInvokedCallback(
+                    OnBackInvokedDispatcher.PRIORITY_DEFAULT, () -> {
+                        LogWriter.log(TAG, "onBackInvoked: scene=" + scene);
+                        if (onBack != null) {
+                            try {
+                                onBack.run();
+                            } catch (Throwable ignored) {
+                            }
+                        } else {
+                            dismissCurrent();
+                        }
+                    });
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "registerOnBackCallback 失败: scene=" + scene + " err=" + t);
+        }
+    }
+
+    /**
+     * v1059: 内容异步加载完成后重新收紧弹窗高度(如配音魔方音色列表)。窗口高度按内容自然高度
+     * 收缩(上限不变), 并重新居中, 避免列表很短时窗口底部留下大片空白。
+     */
+    private static void relayoutPopup() {
+        final PopupWindow pw = sPopup;
+        if (pw == null || !pw.isShowing()) return;
+        try {
+            final View content = pw.getContentView();
+            final Context ctx = content != null ? content.getContext() : null;
+            if (content == null || ctx == null || sPopupPanelW <= 0) return;
+            final int maxH = sPopupMaxH > 0 ? sPopupMaxH : pw.getHeight();
+            final int widthSpec = View.MeasureSpec.makeMeasureSpec(sPopupPanelW, View.MeasureSpec.EXACTLY);
+            final int unboundSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+            content.measure(widthSpec, unboundSpec);
+            int measured = content.getMeasuredHeight();
+            if (measured > maxH) {
+                CappedScrollView sv = findCappedScroll(content);
+                if (sv != null) {
+                    int cur = sv.getMaxHeight();
+                    int newCap = Math.max(dp(ctx, 100),
+                            (cur > 0 ? cur : maxH) - (measured - maxH));
+                    sv.setMaxHeight(newCap);
+                    content.measure(widthSpec, unboundSpec);
+                    measured = content.getMeasuredHeight();
+                }
+            }
+            if (measured > maxH) measured = maxH;
+            int slack = measured < maxH ? dp(ctx, 2) : 0;
+            int h = Math.min(Math.max(dp(ctx, 120), measured + slack), maxH);
+            int availH = Math.max(dp(ctx, 120), sPopupAvailBottom - sPopupAvailTop);
+            int y = sPopupAvailTop + Math.max(0, (availH - h) / 2);
+            if (y + h > sPopupAvailBottom) y = Math.max(sPopupAvailTop, sPopupAvailBottom - h);
+            pw.update(sPopupX, y, sPopupPanelW, h);
+            LogWriter.log(TAG, "relayoutPopup: h=" + h + " y=" + y);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "relayoutPopup err: " + t);
         }
     }
 
@@ -303,9 +405,10 @@ public final class AiAssistantPanel {
         return M3Page.title(ctx, text);
     }
 
-    /** 内容超出上限才可滚动、否则按内容收缩的 ScrollView(v968: 消除底部栏上方大片空白) */
+    /** 内容超出上限才可滚动、否则按内容收缩的 ScrollView(v1047: 支持 min/max 硬性高度约束)。 */
     private static final class CappedScrollView extends ScrollView {
         private int mMaxHeight;
+        private int mMinHeight;
 
         CappedScrollView(Context c) {
             super(c);
@@ -317,6 +420,10 @@ public final class AiAssistantPanel {
 
         int getMaxHeight() {
             return mMaxHeight;
+        }
+
+        void setMinHeight2(int h) {
+            mMinHeight = h;
         }
 
         @Override
@@ -332,13 +439,28 @@ public final class AiAssistantPanel {
                 heightSpec = MeasureSpec.makeMeasureSpec(cap, MeasureSpec.AT_MOST);
             }
             super.onMeasure(widthSpec, heightSpec);
+            // 硬性高度下限: 内容再少也不能缩到 min 以下(避免滚动容器塌陷, 结合上方 AT_MOST 上限
+            // 实现 Compose heightIn(min, max) 语义: 高度恒落在 [min, max], 超出 max 仅在内部滚动).
+            if (mMinHeight > 0) {
+                int measured = getMeasuredHeight();
+                if (measured < mMinHeight) {
+                    setMeasuredDimension(getMeasuredWidth(), mMinHeight);
+                }
+            }
         }
     }
 
-    /** 可滚动内容区: 高度按内容收缩, 上限 maxHeightPx(超出才滚动) */
+    /** 弹窗可滚动内容区: 高度按内容收缩, 上限 maxHeightPx(超出才滚动) */
     private static ScrollView newScroll(LinearLayout root, LinearLayout list, int maxHeightPx) {
+        return newScroll(root, list, maxHeightPx, 0);
+    }
+
+    /** 弹窗可滚动内容区: 高度按内容收缩, 硬性落在 [minHeightPx, maxHeightPx], 超出 max 仅内部滚动。 */
+    private static ScrollView newScroll(LinearLayout root, LinearLayout list,
+                                        int maxHeightPx, int minHeightPx) {
         CappedScrollView scroll = new CappedScrollView(root.getContext());
         scroll.setMaxHeight(maxHeightPx);
+        if (minHeightPx > 0) scroll.setMinHeight2(minHeightPx);
         scroll.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         scroll.setOverScrollMode(ScrollView.OVER_SCROLL_NEVER);
@@ -758,15 +880,17 @@ public final class AiAssistantPanel {
         list.addView(tempCard);
         int initProgress = Math.max(0, Math.min(200, (int) Math.round(config.getTemperature() * TEMP_SCALE)));
         seekTemp.setProgress(initProgress);
-        updateTempLabel(tvTemp, seekTemp.getProgress());
+        updateTempLabel(tvTemp, initProgress);
         seekTemp.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 updateTempLabel(tvTemp, progress);
             }
+
             @Override
             public void onStartTrackingTouch(SeekBar seekBar) {
             }
+
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
             }
@@ -816,33 +940,45 @@ public final class AiAssistantPanel {
         }
 
         LinearLayout root = newRoot(ctx);
-        root.addView(newTitle(ctx, "AI 核心参数"));
-        LinearLayout list = new LinearLayout(ctx);
-        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.60f));
 
-        // ---- 身份 ----
-        list.addView(newSection(ctx, "身份", "AI 对外展示的名字与唤醒词"));
+        // ---- 1. 头部区域(固定, 不参与滚动): 标题 + 身份 + 唤醒词 ----
+        LinearLayout header = new LinearLayout(ctx);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.addView(newTitle(ctx, "AI 核心参数"));
+        header.addView(newSection(ctx, "身份", "AI 对外展示的名字与唤醒词"));
         final EditText etBotName = M3Page.input(ctx, "AI 昵称, 如 小乐");
         etBotName.setText(safe(config.getBotName()));
-        list.addView(etBotName);
+        header.addView(etBotName);
         final EditText etWakeKeyword = M3Page.input(ctx, "唤醒词(多个用逗号分隔)");
         etWakeKeyword.setText(safe(config.getWakeKeyword()));
-        list.addView(etWakeKeyword);
+        header.addView(etWakeKeyword);
+        root.addView(header, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // ---- 人设 ----
-        list.addView(newSection(ctx, "人设提示词", "System Prompt, 决定 AI 的语气与身份"));
+        // ---- 2. 中间可滚动内容块(仅人设提示词): 高度按内容收缩, 上限 280dp ----
+        // v1059: 去掉 120dp 硬性下限, 提示词较短时滚动区按内容收缩, 不再在上下留出大片空白;
+        // 内容超出 280dp 时仅在容器内部滚动。
+        LinearLayout body = new LinearLayout(ctx);
+        newScroll(root, body, dp(ctx, 280));
+
+        // v1048: 人设大文本放置于封顶滚动容器内. setMaxLines 让 EditText 高度按行自适应到底, 超过最大
+        // 行数只在文本内部滚动, 不用 setMaxHeight 固定像素——后者在长文本时会残留大片空白显示区.
+        body.addView(newSection(ctx, "人设提示词", "System Prompt, 决定 AI 的语气与身份"));
         final EditText etSystemPrompt = M3Page.input(ctx, "人设提示词");
         etSystemPrompt.setSingleLine(false);
         etSystemPrompt.setMinLines(4);
+        etSystemPrompt.setMaxLines(8);
         etSystemPrompt.setGravity(Gravity.TOP);
+        M3Page.enableVerticalScroll(etSystemPrompt);
         etSystemPrompt.setText(safe(config.getSystemPrompt()));
-        list.addView(etSystemPrompt);
+        body.addView(etSystemPrompt);
 
-        // ---- 记忆 ----
-        list.addView(newSection(ctx, "上下文记忆", "带入对话的历史消息条数"));
+        // ---- 3. 上下文记忆(固定, 滚动容器外): 提示词区域 → 记忆输入框 → 按钮 ----
+        root.addView(newSection(ctx, "上下文记忆", "带入对话的历史消息条数"));
         final EditText etMemory = M3Page.input(ctx, "记忆条数, 如 100");
         etMemory.setText(String.valueOf(config.getMaxHistoryMessages()));
-        list.addView(etMemory);
+        root.addView(etMemory, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // ---- 底部按钮 ----
         ModernButton btnSave = new ModernButton(ctx, "保存", ModernButton.STYLE_PRIMARY);
@@ -895,7 +1031,16 @@ public final class AiAssistantPanel {
         });
 
         root.addView(newBtnRow(ctx, btnSave, btnReset, btnClose));
-        showPopup(activity, root, 0, "core");
+
+        // v1049: 外层套一个可垂直滚动的 ScrollView 作为弹窗内容, 避免「头部+人设区+记忆+按钮」总高
+        // 超过弹窗可用高度时把底部按钮挤出窗口、又无法上下滑动找回. 现在内容超高时整窗可滚动,
+        // 底部按钮始终能通过滚到末尾看到.
+        ScrollView outerScroll = new ScrollView(ctx);
+        outerScroll.setFillViewport(false);
+        outerScroll.setOverScrollMode(ScrollView.OVER_SCROLL_NEVER);
+        outerScroll.addView(root, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        showPopup(activity, outerScroll, 0, "core");
     }
 
     // ==================== 三级: 按会话独立配置 ====================
@@ -1034,6 +1179,7 @@ public final class AiAssistantPanel {
                 if (fi.isEmpty()) {
                     list.addView(M3Page.empty(ctx, "🎵",
                             "未获取到音色, 请先在「TTS 语音」页配置配音魔方 API Key"));
+                    relayoutPopup();
                     return;
                 }
                 for (TTSPageView.VoiceItem vi : fi) {
@@ -1047,6 +1193,7 @@ public final class AiAssistantPanel {
                                 else selected.remove(voiceId);
                             }));
                 }
+                relayoutPopup();
             });
         }).start();
 
@@ -1190,8 +1337,16 @@ public final class AiAssistantPanel {
                         .avatar(talker)
                         .arrow(() -> {
                             LogWriter.log(TAG, "click: 个性化配置 " + talker);
-                            dismissCurrent();
-                            showConvEdit(activity, talker, g);
+                            // v1055: 先构建新弹窗(showPopup 内部再关旧窗), 任一环节异常都记录并回退到列表,
+                            // 避免旧的 dismissCurrent 先关列表 + 后续异常被静默吞掉 = 面板全关回到聊天页。
+                            try {
+                                showConvEdit(activity, talker, g);
+                            } catch (Throwable t) {
+                                LogWriter.log(TAG, "打开独立配置失败: "
+                                        + android.util.Log.getStackTraceString(t));
+                                toastQuiet(activity, "打开配置失败");
+                                showConversationList(activity);
+                            }
                         });
                 body.addView(row);
                 shown++;

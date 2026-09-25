@@ -66,6 +66,7 @@ public class WxMasterFeatures {
         input.setHorizontallyScrolling(false);
         input.setMinLines(2);
         input.setMaxLines(5);
+        com.leshao.v3.ui.widgets.M3Page.enableVerticalScroll(input);
         card.addView(input);
         card.addView(com.leshao.v3.ui.widgets.M3Page.spacer(act, 8));
 

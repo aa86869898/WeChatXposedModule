@@ -14,6 +14,7 @@ import android.view.ViewGroup;
 import android.widget.*;
 import android.widget.LinearLayout;
 
+import android.widget.Switch;
 import com.leshao.v3.hook.*;
 import com.leshao.v3.model.Contact;
 import com.leshao.v3.model.ContactCard;

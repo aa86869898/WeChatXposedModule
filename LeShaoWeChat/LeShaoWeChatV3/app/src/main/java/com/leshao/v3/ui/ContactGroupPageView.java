@@ -12,9 +12,9 @@ import android.view.View;
 import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.Switch;
 import android.widget.TextView;
 
+import android.widget.Switch;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.*;
@@ -178,7 +178,6 @@ public class ContactGroupPageView {
         }
 
             Switch sw = CandyUi.newSwitch(ctx); sw.setChecked(checked);
-        try { sw.setThumbResource(android.R.drawable.btn_star_big_on); } catch (Throwable ignored) {}
         sw.setOnCheckedChangeListener(listener);
         row.addView(sw);
         return row;

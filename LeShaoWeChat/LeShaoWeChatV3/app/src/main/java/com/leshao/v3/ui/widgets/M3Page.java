@@ -12,9 +12,10 @@ import android.view.ViewGroup;
 import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.TextView;
+
 import android.widget.SeekBar;
 import android.widget.Switch;
-import android.widget.TextView;
 
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
@@ -134,7 +135,7 @@ public final class M3Page {
         return row;
     }
 
-    /** 创建开关行并追加到卡片, 返回底层 Switch 以便读取状态。 */
+    /** 创建开关行并追加到卡片, 返回底层 framework Switch 以便读取状态。 */
     public static Switch appendSwitchRow(LinearLayout card, Context ctx, String icon, String title,
                                          String sub, boolean checked,
                                          CompoundButton.OnCheckedChangeListener listener) {
@@ -234,6 +235,35 @@ public final class M3Page {
     }
 
     /**
+     * v1055: 让受 maxLines 限制的多行输入框在文本超出时可在框内上下滚动。
+     *
+     * <p>可编辑 EditText 默认走 ArrowKeyMovementMethod, 只处理光标/按键, 不响应拖拽滚动;
+     * 因此仅设置 maxLines 时, 长文本超出可视行数后无法上下滚动查看。此处显式切换为
+     * ScrollingMovementMethod, 并在触摸期间阻止外层 ScrollView 拦截手势, 保证框内滚动生效。</p>
+     */
+    public static void enableVerticalScroll(final android.widget.EditText et) {
+        if (et == null) return;
+        et.setVerticalScrollBarEnabled(true);
+        et.setScrollBarStyle(android.view.View.SCROLLBARS_INSIDE_INSET);
+        et.setMovementMethod(android.text.method.ScrollingMovementMethod.getInstance());
+        et.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, android.view.MotionEvent event) {
+                try {
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                    int action = event.getActionMasked();
+                    if (action == android.view.MotionEvent.ACTION_UP
+                            || action == android.view.MotionEvent.ACTION_CANCEL) {
+                        v.getParent().requestDisallowInterceptTouchEvent(false);
+                    }
+                } catch (Throwable ignored) {
+                }
+                return false;
+            }
+        });
+    }
+
+    /**
      * 为单行输入框附加「自动剔除首尾空白」能力。
      *
      * <p>从网页/聊天窗口复制密钥或接口地址时, 首尾常带空格、换行、不可换行空格(U+00A0)、
@@ -319,7 +349,7 @@ public final class M3Page {
 
     // ==================== 控件 ====================
 
-    /** M3 滑杆：primary 进度/滑块 + surfaceContainerHighest 轨道 */
+    /** M3 滑杆：primary 进度/滑块 + surfaceContainerHighest 轨道（framework SeekBar，避免 appcompat 属性碰撞）。 */
     public static SeekBar slider(Context ctx) {
         SeekBar sb = new SeekBar(ctx);
         try {
@@ -327,7 +357,6 @@ public final class M3Page {
             sb.setThumbTintList(ColorStateList.valueOf(AppColors.primary()));
             sb.setProgressBackgroundTintList(
                     ColorStateList.valueOf(AppColors.surfaceContainerHighest()));
-            sb.setProgressTintMode(android.graphics.PorterDuff.Mode.SRC_IN);
         } catch (Throwable ignored) {}
         sb.setPadding(0, dp(ctx, 8), 0, dp(ctx, 8));
         return sb;

@@ -10,6 +10,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.*;
 
+import android.widget.Switch;
 import com.leshao.v3.hook.*;
 import com.leshao.v3.hook.model.AutoRule;
 import com.leshao.v3.hook.model.LabelInfo;

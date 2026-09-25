@@ -2778,6 +2778,13 @@ public class TtsVoiceSender {
 
     public static boolean sendViaSceneVoice(String talker, String voiceFile, int durationMs) {
         try {
+            // v1059: 微信语音消息时长上限 60 秒, 超过会被拒绝/发不出去。60 秒以内按真实时长发送;
+            // 超过 60 秒的一律按「误报 60 秒」上报时长, 保证语音能正常发出。
+            if (durationMs > 60000) {
+                LogWriter.log(TAG, "SceneVoice: durationMs=" + durationMs
+                        + "ms 超过 60s, 误报时长为 60000ms");
+                durationMs = 60000;
+            }
             LogWriter.log(TAG, "SceneVoice: start voiceFile=" + voiceFile + " talker=" + talker + " durationMs=" + durationMs);
             if (talker == null || talker.isEmpty()) {
                 LogWriter.log(TAG, "SceneVoice: talker null");

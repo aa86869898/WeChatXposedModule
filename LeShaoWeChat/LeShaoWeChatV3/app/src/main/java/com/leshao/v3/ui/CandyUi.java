@@ -23,7 +23,14 @@ public class CandyUi {
         return (int) (v * ctx.getResources().getDisplayMetrics().density + 0.5f);
     }
 
-    /** M3 Switch：轨道 52×32dp 圆角16，未选中 thumb 18dp(outline)，选中 thumb 24dp(onPrimary) */
+    /**
+     * M3 开关：轨道 52×32dp（开=深蓝/关=灰），thumb 外圈圆环包裹本体。
+     *
+     * <p>v1056 关键修复：改用 framework {@link android.widget.Switch}。此前用
+     * {@code SwitchMaterial}（appcompat）时，其构造会读取 appcompat 属性 ID，而模块资源未注入
+     * 宿主(微信)资源表，属性 ID 与宿主资源碰撞 → 解析到 {@code res/raw/chatfrom_voice_playing_f3.svg}
+     * 并抛 {@code Resources$NotFoundException}，导致所有开关创建失败、个性化配置面板整体构建中断。</p>
+     */
     @SuppressWarnings("deprecation")
     public static Switch newSwitch(Context ctx) {
         Switch sw = new Switch(ctx);
@@ -40,8 +47,12 @@ public class CandyUi {
         sw.setTextOn("");
         sw.setShowText(false);
         try {
+            // 自绘 track/thumb 精确保留原配色与尺寸；清空框架 tint 避免覆盖自定义绘制(API 21+)。
+            if (android.os.Build.VERSION.SDK_INT >= 21) {
+                sw.setTrackTintList(null);
+                sw.setThumbTintList(null);
+            }
             // v967 关键修复: 自定义 track/thumb 为 GradientDrawable 时无 intrinsic size,
-            // Switch 测量不到尺寸 → 开关整体不可见(人声增强/AI助手等所有 SettingRow 开关丢失)。
             // 必须对每个 drawable 调用 setSize() 显式提供 intrinsic 尺寸。
             StateListDrawable track = new StateListDrawable();
             GradientDrawable off = new GradientDrawable();
@@ -57,23 +68,24 @@ public class CandyUi {
             on.setColor(AppColors.switchColor());
             on.setSize(w, h);
             track.addState(new int[]{android.R.attr.state_checked}, on);
-            if (android.os.Build.VERSION.SDK_INT >= 16) sw.setTrackDrawable(track);
+            sw.setTrackDrawable(track);
 
-            // thumb：关=18dp outline 圆点 / 开=24dp onPrimary 圆点
+            // thumb 外圈圆环：关=空心圆环；开=白色本体 + 圆环。
             StateListDrawable thumb = new StateListDrawable();
             GradientDrawable tOff = new GradientDrawable();
             tOff.setShape(GradientDrawable.OVAL);
-            tOff.setColor(AppColors.outline());
+            tOff.setColor(0x00000000);
+            tOff.setStroke(dp(ctx, 2), AppColors.outline());
             tOff.setSize(thumbOff, thumbOff);
             thumb.addState(new int[]{-android.R.attr.state_checked}, tOff);
             GradientDrawable tOn = new GradientDrawable();
             tOn.setShape(GradientDrawable.OVAL);
             tOn.setColor(AppColors.onColor(AppColors.switchColor()));
+            tOn.setStroke(dp(ctx, 2), AppColors.outline());
             tOn.setSize(thumbOn, thumbOn);
             thumb.addState(new int[]{android.R.attr.state_checked}, tOn);
-            if (android.os.Build.VERSION.SDK_INT >= 16) sw.setThumbDrawable(thumb);
-            // v968 关键修复: 清除 Switch 默认背景(其自带 padding 会把 52dp 轨道撑宽导致
-            // 开关显示变形/thumb 行程错位), 并显式固定最小宽度与 thumb 行程为整轨。
+            sw.setThumbDrawable(thumb);
+
             sw.setBackground(null);
             sw.setSwitchMinWidth(w);
         } catch (Throwable ignored) {}

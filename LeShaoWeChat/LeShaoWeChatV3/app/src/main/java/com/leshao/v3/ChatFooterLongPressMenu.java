@@ -27,11 +27,11 @@ import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
-import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.app.AlertDialog;
 
+import android.widget.SeekBar;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.db.VoiceHistoryDbHelper;
 import com.leshao.v3.hook.TtsVoiceSender;
@@ -1323,7 +1323,8 @@ public class ChatFooterLongPressMenu {
 
         // 试听滑块
         final SeekBar seekBar = com.leshao.v3.ui.widgets.M3Page.slider(ctx);
-        seekBar.setMax(totalInt);
+        final int seekMax = Math.max(1, totalInt);
+        seekBar.setMax(seekMax);
         seekBar.setProgress(0);
         root.addView(seekBar);
 
@@ -1384,7 +1385,7 @@ public class ChatFooterLongPressMenu {
                 if (playerHolder[0] != null && isPlaying[0]) {
                     try {
                         int pos = playerHolder[0].getCurrentPosition() / 1000;
-                        seekBar.setProgress(pos);
+                        seekBar.setProgress(Math.max(0, Math.min(seekMax, pos)));
                         seekTime.setText(formatSec(pos) + " / " + formatSec(totalSecs));
                         h.postDelayed(this, 200);
                     } catch (Throwable ignored) {}
@@ -1393,7 +1394,7 @@ public class ChatFooterLongPressMenu {
         };
 
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
+            @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
                 if (fromUser) {
                     seekTime.setText(formatSec(progress) + " / " + formatSec(totalSecs));
                     try {
@@ -1403,8 +1404,12 @@ public class ChatFooterLongPressMenu {
                     } catch (Throwable ignored) {}
                 }
             }
-            public void onStartTrackingTouch(SeekBar sb) {}
-            public void onStopTrackingTouch(SeekBar sb) {}
+
+            @Override public void onStartTrackingTouch(SeekBar sb) {
+            }
+
+            @Override public void onStopTrackingTouch(SeekBar sb) {
+            }
         });
 
         playBtn.setOnClickListener(pv -> {

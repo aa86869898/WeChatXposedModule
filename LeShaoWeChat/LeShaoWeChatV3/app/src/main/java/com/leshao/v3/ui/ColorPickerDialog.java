@@ -10,9 +10,9 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.LinearLayout;
-import android.widget.SeekBar;
 import android.widget.TextView;
 
+import android.widget.SeekBar;
 import com.leshao.v3.ui.widgets.M3Page;
 import com.leshao.v3.ui.widgets.ModernButton;
 
@@ -105,8 +105,10 @@ public final class ColorPickerDialog {
                     if (idx == 0) hsv[0] = progress; else hsv[idx] = progress / 100f;
                     refresh.run();
                 }
+
                 @Override public void onStartTrackingTouch(SeekBar seekBar) {
                 }
+
                 @Override public void onStopTrackingTouch(SeekBar seekBar) {
                 }
             });

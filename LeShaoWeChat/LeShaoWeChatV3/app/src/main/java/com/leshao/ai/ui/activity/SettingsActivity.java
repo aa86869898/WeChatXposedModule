@@ -9,11 +9,11 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.SeekBar;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import android.widget.SeekBar;
+import android.widget.Switch;
 import com.leshao.ai.api.model.ProviderType;
 import com.leshao.ai.config.AppConfig;
 import com.leshao.v3.ui.AppColors;
@@ -143,7 +143,11 @@ public class SettingsActivity extends Activity {
         editSystemPrompt = M3Page.input(this, "决定 AI 的语气与身份");
         editSystemPrompt.setSingleLine(false);
         editSystemPrompt.setMinLines(4);
+        // v1046: 长内容多行输入时限定最大高度, 在框内内部滚动, 避免无限撑高把底部按钮顶出可视区
+        editSystemPrompt.setMaxLines(6);
+        editSystemPrompt.setHorizontallyScrolling(false);
         editSystemPrompt.setGravity(android.view.Gravity.TOP);
+        M3Page.enableVerticalScroll(editSystemPrompt);
         cardPersona.addView(editSystemPrompt);
         root.addView(cardPersona);
 

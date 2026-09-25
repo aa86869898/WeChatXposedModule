@@ -18,11 +18,11 @@ import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.SeekBar;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import android.widget.SeekBar;
+import android.widget.Switch;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.service.TTSBroadcaster;
 import com.leshao.v3.wm.utils.WmPrefs;
@@ -385,8 +385,9 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         row.addView(labelRow);
 
         SeekBar seekBar = M3Page.slider(ctx);
-        seekBar.setMax(max - min);
-        seekBar.setProgress(Math.max(0, current - min));
+        int span = Math.max(1, max - min);
+        seekBar.setMax(span);
+        seekBar.setProgress(Math.max(0, Math.min(span, current - min)));
         seekBar.setPadding(0, (int)(4 * d), 0, 0);
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
@@ -394,8 +395,12 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
                 valueTv.setText(String.valueOf(val));
                 if (fromUser && cb != null) cb.onChange(val);
             }
-            @Override public void onStartTrackingTouch(SeekBar sb) {}
-            @Override public void onStopTrackingTouch(SeekBar sb) {}
+
+            @Override public void onStartTrackingTouch(SeekBar sb) {
+            }
+
+            @Override public void onStopTrackingTouch(SeekBar sb) {
+            }
         });
 
         LinearLayout range = new LinearLayout(ctx);
@@ -503,9 +508,6 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         row.addView(textCol);
         Switch sw = CandyUi.newSwitch(ctx);
         sw.setChecked(checked);
-        try {
-            sw.setThumbResource(android.R.drawable.btn_star_big_on);
-        } catch (Throwable ignored) {}
         sw.setOnCheckedChangeListener(listener);
         row.addView(sw);
         return row;
@@ -569,14 +571,17 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
 
         SeekBar sb = M3Page.slider(ctx);
         sb.setMax(20); // 0.5x ~ 2.5x, step 0.1
-        sb.setProgress(Math.round((currentRate - 0.5f) * 10));
+        sb.setProgress(Math.max(0, Math.min(20, Math.round((currentRate - 0.5f) * 10))));
         sb.setPadding(0, (int)(8 * d), 0, 0);
         sb.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 float rate = 0.5f + progress * 0.1f;
                 valueTv.setText(String.format("%.1fx", rate));
             }
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
             @Override public void onStopTrackingTouch(SeekBar seekBar) {
                 float rate = 0.5f + seekBar.getProgress() * 0.1f;
                 if (cb != null) cb.onChange(rate);

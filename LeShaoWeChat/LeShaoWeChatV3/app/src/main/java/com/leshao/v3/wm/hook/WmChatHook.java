@@ -36,9 +36,9 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.NumberPicker;
 import android.widget.ScrollView;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.Switch;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.DexKitHelper;
 import com.leshao.v3.hook.TtsVoiceSender;
@@ -226,23 +226,17 @@ public class WmChatHook {
     public static void showAssistantMenu(Activity act, View anchor) {
         if (act == null || act.isFinishing() || anchor == null) return;
         sAct = act;
-        boolean dark = (act.getResources().getConfiguration().uiMode
-                & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
-                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
-        int bgCard = dark ? 0xFF2A2A2E : 0xFFFFFFFF;
-        int fgText = dark ? 0xFFE4E4E8 : 0xFF1D1D1F;
+        // v1059: 接入模块 M3 令牌(dialogBg + 28dp extra-large 圆角), 与 AI 助手弹窗/语音面板统一风格
         LinearLayout box = new LinearLayout(act);
         box.setOrientation(LinearLayout.VERTICAL);
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(bgCard);
-        bg.setCornerRadius(dp(12));
-        bg.setStroke(dp(1), dark ? 0xFF3A3A3E : 0xFFE5E5EA);
-        box.setBackground(bg);
-        box.setPadding(dp(4), dp(6), dp(4), dp(6));
+        box.setBackground(CandyUi.dialogBg(act));
+        com.leshao.v3.ui.InsetsUtil.clipRounded(box);
+        box.setPadding(dp(8), dp(8), dp(8), dp(8));
         boolean isRoom = sUser != null
                 && (sUser.endsWith("@chatroom") || sUser.endsWith("@im.chatroom"));
+        box.addView(com.leshao.v3.ui.widgets.M3Page.title(act, "更多功能"));
         // 原右上角 ⋮ 三点菜单功能迁移入口
-        box.addView(makeMoreRow(act, "AI 助手", fgText, v -> {
+        box.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(act, "🤖", "AI 助手", "智能回复 / 语音发送", () -> {
             dismissAssistantMenu();
             try {
                 com.leshao.ai.hook.wechat.AiAssistantPanel.show(act);
@@ -251,22 +245,25 @@ public class WmChatHook {
             }
         }));
         if (!isRoom) {
-            box.addView(makeMoreRow(act, "批量邀请进群", fgText, v -> {
+            box.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(act, "➕", "批量邀请进群", "勾选联系人批量拉群", () -> {
                 dismissAssistantMenu();
                 com.leshao.v3.hook.BatchInviteGroupsHook.startInvite(sUser);
             }));
         }
         if (isRoom) {
-            box.addView(makeMoreRow(act, "乐少·万群管理", fgText, v -> { dismissAssistantMenu(); openWanQun(); }));
+            box.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(act, "👥", "乐少·万群管理", "本群管理设置", () -> {
+                dismissAssistantMenu();
+                openWanQun();
+            }));
         }
-        box.addView(makeMoreRow(act, "自动转发", fgText, v -> {
+        box.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(act, "🔁", "自动转发", "配置自动转发规则", () -> {
             dismissAssistantMenu();
             com.leshao.v3.hook.AutoForwardHook.showConfigDialog(act);
         }));
         box.setClickable(true);
 
         android.util.DisplayMetrics dm = act.getResources().getDisplayMetrics();
-        int menuW = dp(220);
+        int menuW = dp(260);
         box.measure(View.MeasureSpec.makeMeasureSpec(menuW, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         int menuH = box.getMeasuredHeight();
@@ -309,27 +306,6 @@ public class WmChatHook {
         } catch (Throwable t) {
             LogWriter.log(TAG, "openWanQun err: " + t.getMessage());
         }
-    }
-
-    private static View makeMoreRow(Activity act, String text, int fg, View.OnClickListener click) {
-        TextView tv = new TextView(act);
-        tv.setText(text);
-        tv.setTextSize(14);
-        tv.setTextColor(fg);
-        tv.setGravity(Gravity.CENTER_VERTICAL);
-        tv.setPadding(dp(16), 0, dp(16), 0);
-        tv.setMinHeight(dp(48));
-        tv.setTypeface(null, android.graphics.Typeface.NORMAL);
-        // M3 List Item：圆角状态层涟漪
-        GradientDrawable mask = new GradientDrawable();
-        mask.setColor(0xFFFFFFFF);
-        mask.setCornerRadius(dp(8));
-        tv.setBackground(new android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(AppColors.stateLayerPressed()),
-                null, mask));
-        tv.setClickable(true);
-        tv.setOnClickListener(click);
-        return tv;
     }
 
     private static int statusBarHeight(Activity act) {
@@ -1295,6 +1271,7 @@ public class WmChatHook {
             et.setHintTextColor(textDim());
             et.setBackground(makeGlassInputBg());
             et.setTag("editText");
+            com.leshao.v3.ui.widgets.M3Page.enableVerticalScroll(et);
             et.setOnFocusChangeListener((v, hasFocus) -> {
                 if (!hasFocus) sWizardText = et.getText().toString().trim();
             });
