@@ -3,6 +3,7 @@ package com.leshao.v3.ui.widgets;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
@@ -36,7 +37,7 @@ public class SettingRow extends LinearLayout {
         setGravity(Gravity.CENTER_VERTICAL);
         int h = (int) (AppColors.ROW_HEIGHT_DP * d);
         setMinimumHeight(h);
-        setPadding((int) (16 * d), (int) (10 * d), (int) (16 * d), (int) (10 * d));
+        setPadding((int) (14 * d), (int) (8 * d), (int) (14 * d), (int) (8 * d));
         setClickable(true);
         setFocusable(true);
         try { setBackground(CandyUi.rowPressBg(ctx)); } catch (Throwable ignored) {}
@@ -46,14 +47,14 @@ public class SettingRow extends LinearLayout {
         mIcon.setText(icon != null ? icon : "•");
         mIcon.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         mIcon.setGravity(Gravity.CENTER);
-        int iconSize = (int) (40 * d);
+        int iconSize = (int) (36 * d);
         GradientDrawable iconBg = new GradientDrawable();
         iconBg.setShape(GradientDrawable.RECTANGLE);
         iconBg.setCornerRadius(AppColors.SHAPE_MD_DP * d);
         iconBg.setColor(AppColors.secondaryContainer());
         mIcon.setBackground(iconBg);
         LayoutParams iconLp = new LayoutParams(iconSize, iconSize);
-        iconLp.setMarginEnd((int) (16 * d));
+        iconLp.setMarginEnd((int) (12 * d));
         addView(mIcon, iconLp);
 
         LinearLayout textCol = new LinearLayout(ctx);
@@ -86,6 +87,36 @@ public class SettingRow extends LinearLayout {
         mTail.setOrientation(HORIZONTAL);
         mTail.setGravity(Gravity.CENTER_VERTICAL);
         addView(mTail, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+    }
+
+    /** 用自绘 Drawable 作为图标(彩色圆底样式)，替换默认 emoji 图标位。 */
+    public static SettingRow withIconDrawable(Context ctx, Drawable icon, String title, String sub) {
+        SettingRow row = new SettingRow(ctx, "", title, sub);
+        row.applyDrawableIcon(icon);
+        return row;
+    }
+
+    private void applyDrawableIcon(Drawable icon) {
+        try {
+            if (icon == null) return;
+            float den = getResources().getDisplayMetrics().density;
+            int size = (int) (36 * den + 0.5f);
+            int end = (int) (12 * den + 0.5f);
+            LayoutParams old = (LayoutParams) mIcon.getLayoutParams();
+            if (old != null) end = old.getMarginEnd();
+            ImageView iv = new ImageView(getContext());
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            iv.setImageDrawable(icon);
+            LayoutParams lp = new LayoutParams(size, size);
+            lp.setMarginEnd(end);
+            int idx = indexOfChild(mIcon);
+            if (idx >= 0) {
+                removeView(mIcon);
+                addView(iv, idx, lp);
+            } else {
+                addView(iv, 0, lp);
+            }
+        } catch (Throwable ignored) {}
     }
 
     /** 尾部开关；checked 初始态，listener 可空 */
@@ -142,7 +173,7 @@ public class SettingRow extends LinearLayout {
         try {
             if (TextUtils.isEmpty(username)) return this;
             float d = getResources().getDisplayMetrics().density;
-            int size = (int) (40 * d);
+            int size = (int) (36 * d);
             ImageView iv = new ImageView(getContext());
             iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
             Bitmap fallback = com.leshao.v3.ui.AvatarHelper.letterAvatar(
@@ -151,7 +182,7 @@ public class SettingRow extends LinearLayout {
             LayoutParams lp = (LayoutParams) mIcon.getLayoutParams();
             if (lp == null) {
                 lp = new LayoutParams(size, size);
-                lp.setMarginEnd((int) (16 * d));
+                lp.setMarginEnd((int) (12 * d));
             }
             int idx = indexOfChild(mIcon);
             if (idx >= 0) {

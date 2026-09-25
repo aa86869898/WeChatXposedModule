@@ -98,6 +98,11 @@ public final class TriggerEngine {
                 // v985: 只有开启「仅被@时回复」才限制为 @/关键词; 关闭时群聊全回(文档 §16.5)。
                 boolean onlyMentioned = (ov != null && ov.onlyWhenMentioned != null)
                         ? ov.onlyWhenMentioned.booleanValue() : c.isOnlyWhenMentioned();
+                LogWriter.log(TAG, "群判定: atMe=" + atMe + " kwHit=" + kwHit
+                        + " onlyMentioned=" + onlyMentioned
+                        + " selfWxid=" + selfWxid + " selfNick=" + selfNick
+                        + " botName=" + c.getBotName()
+                        + " msgSrc=" + trunc(GroupMsgParser.getMsgSource(msgInfo)));
                 if (onlyMentioned && !atMe && !kwHit) {
                     LogWriter.log(TAG, "跳过: 群消息未唤醒(仅@模式) talker=" + talker
                             + " atMe=false kwHit=false body='" + trunc(body) + "'");

@@ -750,13 +750,13 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         titleBar.addView(titleTv, ttlp);
 
         Button keyBtn = new Button(ctx);
-        keyBtn.setText("\u2699\uFE0F");
-        keyBtn.setTextSize(18);
-        keyBtn.setAllCaps(false);
-        keyBtn.setTextColor(AppColors.accent());
-        keyBtn.setBackgroundColor(android.graphics.Color.TRANSPARENT);
-        keyBtn.setPadding((int)(4 * d), (int)(2 * d), (int)(4 * d), (int)(2 * d));
-        titleBar.addView(keyBtn);
+        keyBtn.setText("");
+        keyBtn.setMinimumWidth(0);
+        keyBtn.setMinimumHeight(0);
+        keyBtn.setPadding(0, 0, 0, 0);
+        keyBtn.setBackground(new TuneIconDrawable(AppColors.accent()));
+        int hexSize = (int)(36 * d);
+        titleBar.addView(keyBtn, new LinearLayout.LayoutParams(hexSize, hexSize));
 
         outerLayout.addView(titleBar);
         outerLayout.addView(candyDivider(ctx, d));
@@ -860,15 +860,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         } catch (Throwable ignored) {}
 
         CandyUi.ripple(keyBtn, AppColors.SHAPE_FULL_DP);
-        keyBtn.setOnClickListener(v -> {
-            String newKey = WmPrefs.getStr("tts_cube_key", "");
-            if (newKey.isEmpty()) {
-                showKeyInputPopup(ctx, parentAct, d, keyBtn, voiceList, statusTv);
-                return;
-            }
-            // 已有 Key：直接加载音色
-            loadVoices(ctx, parentAct, d, voiceList, statusTv, newKey);
-        });
+        keyBtn.setOnClickListener(v -> showKeyInputPopup(ctx, parentAct, d, keyBtn, voiceList, statusTv));
 
         closeBtn.setOnClickListener(v -> dialog.dismiss());
         CandyUi.ripple(closeBtn, AppColors.SHAPE_SM_DP);
@@ -881,7 +873,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
             String k = WmPrefs.getStr("tts_cube_key", "");
             if (k.isEmpty()) {
                 TextView hintTv = new TextView(ctx);
-                hintTv.setText("点击右上角齿轮设置 Key 后加载音色");
+                hintTv.setText("点击右上角六角图标设置 Key 后加载音色");
                 hintTv.setTextSize(13);
                 hintTv.setTextColor(AppColors.text2());
                 hintTv.setPadding((int)(12 * d), (int)(12 * d), (int)(12 * d), 0);
@@ -892,10 +884,10 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
             }
         });
 
-        // 自动加载：已有 Key 时直接加载音色，无需点击齿轮
+        // 自动加载：已有 Key 时直接加载音色，无需点击六角图标
         if (savedKey.isEmpty()) {
             TextView hintTv = new TextView(ctx);
-            hintTv.setText("点击右上角齿轮设置 Key 后加载音色");
+            hintTv.setText("点击右上角六角图标设置 Key 后加载音色");
             hintTv.setTextSize(13);
             hintTv.setTextColor(AppColors.text2());
             hintTv.setPadding((int)(12 * d), (int)(12 * d), (int)(12 * d), 0);
@@ -1445,5 +1437,65 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
 
     private static View candyDivider(Context ctx, float d) {
         return M3Page.divider(ctx);
+    }
+
+    /** 设置图标: Material 3「推子/滑块」(tune) 空心描边样式, 逻辑坐标系 24x24。 */
+    private static final class TuneIconDrawable extends android.graphics.drawable.Drawable {
+        private final android.graphics.Paint paint;
+        private final android.graphics.Path path = new android.graphics.Path();
+
+        TuneIconDrawable(int color) {
+            paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            paint.setStyle(android.graphics.Paint.Style.STROKE);
+            paint.setColor(color);
+            paint.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+            paint.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+        }
+
+        @Override
+        public void draw(android.graphics.Canvas canvas) {
+            android.graphics.Rect b = getBounds();
+            float size = Math.min(b.width(), b.height());
+            float strokeW = Math.max(1.5f, size * 0.09f);
+            paint.setStrokeWidth(strokeW);
+            float u = (size - strokeW * 2f) / 24f;
+            float ox = b.exactCenterX() - 12f * u;
+            float oy = b.exactCenterY() - 12f * u;
+            path.reset();
+
+            // 三行推子(逻辑 y = 7 / 12 / 17), 圆环滑块
+            float[] ys = {7f, 12f, 17f};
+            float[] knobX = {16f, 11f, 13f};
+            float[] leftEnd = {13f, 8f, 10f};
+            float[] rightStart = {-1f, 15f, 17f};
+            float knobR = 2.2f;
+            for (int i = 0; i < 3; i++) {
+                float y = oy + ys[i] * u;
+                path.moveTo(ox + 4f * u, y);
+                path.lineTo(ox + leftEnd[i] * u, y);
+                path.addCircle(ox + knobX[i] * u, y, knobR * u,
+                        android.graphics.Path.Direction.CW);
+                if (rightStart[i] > 0) {
+                    path.moveTo(ox + rightStart[i] * u, y);
+                    path.lineTo(ox + 20f * u, y);
+                }
+            }
+            canvas.drawPath(path, paint);
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            paint.setAlpha(alpha);
+        }
+
+        @Override
+        public void setColorFilter(android.graphics.ColorFilter cf) {
+            paint.setColorFilter(cf);
+        }
+
+        @Override
+        public int getOpacity() {
+            return android.graphics.PixelFormat.TRANSLUCENT;
+        }
     }
 }

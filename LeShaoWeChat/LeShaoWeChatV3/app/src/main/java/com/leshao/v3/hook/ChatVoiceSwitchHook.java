@@ -16,7 +16,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
-import com.leshao.v3.IconLoader;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.TTSPageView;
 import com.leshao.v3.ui.AppColors;
@@ -393,60 +392,22 @@ public final class ChatVoiceSwitchHook {
         row.setPadding(0, (int) (5 * density),
                 0, (int) (5 * density));
 
-        // 音色：文字蓝色 + 音色列表图标（带边框背景）
-        TextView btn = createBlueButton(ctx, "音色", IconLoader.IC_VOICE_LIST, new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openTtsPage(ctx);
+        // B 套「同色系浅底描边」配色：音色 / 群发 / 语音 / AI助手 / 转发
+        int gap = (int) (6 * density);
+        addButton(row, makeFooterButton(ctx, "音色", 0xFFEC407A, v -> openTtsPage(ctx)), gap);
+        addButton(row, makeFooterButton(ctx, "群发", 0xFF5C6BC0, v -> openMassSend(ctx)), gap);
+        addButton(row, makeFooterButton(ctx, "语音", 0xFF00ACC1, v -> {
+            // v960: 面板展示异常(BadTokenException 等)必须兜底, 否则点击即闪退
+            try {
+                com.leshao.v3.ChatFooterLongPressMenu.showPanelStatic(v);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "voice btn click err: " + t);
             }
-        });
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(0, 0, (int) (6 * density), 0);
-        btn.setLayoutParams(lp);
-        row.addView(btn);
-
-        // 群发：文字蓝色 + 定时群发图标（细边框背景），点击进入乐少万群定时群发
-        TextView schedBtn = createBlueButton(ctx, "群发", IconLoader.IC_SCHEDULE_SEND, new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openMassSend(ctx);
-            }
-        });
-        LinearLayout.LayoutParams lpSched = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lpSched.setMargins(0, 0, (int) (6 * density), 0);
-        schedBtn.setLayoutParams(lpSched);
-        row.addView(schedBtn);
-
-        // 语音：文字蓝色 + 细边框背景，点击打开音频选择面板
-        TextView mp3Btn = createBlueButton(ctx, "语音", IconLoader.IC_SCHEDULE_SEND, new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                // v960: 面板展示异常(BadTokenException 等)必须兜底, 否则点击即闪退
-                try {
-                    com.leshao.v3.ChatFooterLongPressMenu.showPanelStatic(v);
-                } catch (Throwable t) {
-                    com.leshao.v3.LogWriter.log("ChatVoiceSwitchHook", "voice btn click err: " + t);
-                }
-            }
-        });
-        LinearLayout.LayoutParams lpVoice = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lpVoice.setMargins(0, 0, (int) (6 * density), 0);
-        mp3Btn.setLayoutParams(lpVoice);
-        row.addView(mp3Btn);
-
-        // 更多：文字蓝色 + 细边框背景，点击打开功能面板(原「助手」)
-        TextView masterBtn = createBlueButton(ctx, "更多", IconLoader.IC_SCHEDULE_SEND, new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openMasterPanel(ctx, v);
-            }
-        });
-        masterBtn.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        row.addView(masterBtn);
+        }), gap);
+        // AI助手：原「更多」菜单中的 AI 助手功能直达
+        addButton(row, makeFooterButton(ctx, "AI助手", 0xFF7C4DFF, v -> openAiAssistant(ctx)), gap);
+        // 转发：原「更多」菜单中的自动转发功能直达
+        addButton(row, makeFooterButton(ctx, "转发", 0xFFFB8C00, v -> openAutoForward(ctx)), 0);
 
         android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(ctx);
         scroll.setHorizontalScrollBarEnabled(false);
@@ -495,31 +456,55 @@ public final class ChatVoiceSwitchHook {
             & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
     }
 
-    /** 纯文字按钮：样式/配色与聊天分组标签按钮（未选中态）一致，字符间加空格间距，边框内居中 */
-    private static TextView createBlueButton(final Context ctx, String text,
-                                             final int iconId, View.OnClickListener listener) {
+    /** B 套「同色系浅底描边」按钮：浅底 + 同色文字 + 同色细边框，紧凑间距。 */
+    private static TextView makeFooterButton(final Context ctx, String text, int color,
+                                             View.OnClickListener listener) {
         TextView btn = new TextView(ctx);
-        // 每个文字之间隔一个空格：如 "音色" -> "音 色"
-        btn.setText(text.replaceAll("(?<=.)(?=.)", " "));
-        btn.setTextSize(15);
+        btn.setText(text);
+        btn.setTextSize(13);
         btn.setGravity(Gravity.CENTER);
         btn.setSingleLine(true);
-        btn.setMinWidth(dp(50, ctx));
+        btn.setMinWidth(dp(40, ctx));
+        // 收紧字间距(替代原先逐字插空格的写法)
+        btn.setLetterSpacing(0.06f);
 
-        // 与聊天分组标签按钮未选中配色一致（浅色/暗色）
         boolean dark = isDarkMode(ctx);
-        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            dark ? new int[]{0x26FF6B8A, 0x26A855F7, 0x2638BDF8}
-                 : new int[]{0x1AFF6B8A, 0x1AA855F7, 0x1A38BDF8});
-        bg.setCornerRadius(dp(20, ctx));
-        bg.setStroke(dp(1, ctx), AppColors.primary());
-        btn.setBackground(bg);
-        btn.setTextColor(AppColors.onSurface());
+        int bgColor = dark ? mix(color, 0xFF1B1F24, 0.26f) : mix(color, 0xFFFFFFFF, 0.14f);
+        int borderColor = dark ? mix(color, 0xFF1B1F24, 0.55f) : mix(color, 0xFFFFFFFF, 0.45f);
+        int textColor = dark ? mix(color, 0xFFFFFFFF, 0.78f) : color;
 
-        // 左右平均分配：对称内边距 + 水平居中
-        btn.setPadding(dp(15, ctx), dp(7, ctx), dp(15, ctx), dp(7, ctx));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setShape(GradientDrawable.RECTANGLE);
+        bg.setColor(bgColor);
+        bg.setCornerRadius(dp(18, ctx));
+        bg.setStroke(dp(1, ctx), borderColor);
+        btn.setBackground(bg);
+        btn.setTextColor(textColor);
+        btn.setPadding(dp(12, ctx), dp(5, ctx), dp(12, ctx), dp(5, ctx));
         btn.setOnClickListener(listener);
         return btn;
+    }
+
+    private static void addButton(LinearLayout row, TextView btn, int marginEndPx) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        if (marginEndPx > 0) lp.setMargins(0, 0, marginEndPx, 0);
+        btn.setLayoutParams(lp);
+        row.addView(btn);
+    }
+
+    /** 将 fg 按 fgRatio 混入 bg, 模拟 color-mix(in srgb, fg fgRatio%, bg)。 */
+    private static int mix(int fg, int bg, float fgRatio) {
+        int fr = (fg >> 16) & 0xFF;
+        int fg2 = (fg >> 8) & 0xFF;
+        int fb = fg & 0xFF;
+        int br = (bg >> 16) & 0xFF;
+        int bg2 = (bg >> 8) & 0xFF;
+        int bb = bg & 0xFF;
+        int r = Math.round(fr * fgRatio + br * (1 - fgRatio));
+        int g = Math.round(fg2 * fgRatio + bg2 * (1 - fgRatio));
+        int b = Math.round(fb * fgRatio + bb * (1 - fgRatio));
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 
     /** 群发：打开乐少万群定时群发（完整版群发向导） */
@@ -552,12 +537,31 @@ public final class ChatVoiceSwitchHook {
         }
     }
 
-    private static void openMasterPanel(Context ctx, View anchor) {
+    /** AI助手：直达 AI 助手弹窗(原「更多」菜单内入口)。 */
+    private static void openAiAssistant(Context ctx) {
         try {
             Activity act = getActivityFromContext(ctx);
-            com.leshao.v3.wm.hook.WmChatHook.showAssistantMenu(act, anchor);
+            if (act == null) {
+                LogWriter.log(TAG, "AI助手: 无法获取 Activity");
+                return;
+            }
+            com.leshao.ai.hook.wechat.AiAssistantPanel.show(act);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "打开助手菜单失败: " + t.getMessage());
+            LogWriter.log(TAG, "打开AI助手失败: " + t.getMessage());
+        }
+    }
+
+    /** 转发：直达自动转发配置(原「更多」菜单内入口)。 */
+    private static void openAutoForward(Context ctx) {
+        try {
+            Activity act = getActivityFromContext(ctx);
+            if (act == null) {
+                LogWriter.log(TAG, "转发: 无法获取 Activity");
+                return;
+            }
+            com.leshao.v3.hook.AutoForwardHook.showConfigDialog(act);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "打开自动转发失败: " + t.getMessage());
         }
     }
 

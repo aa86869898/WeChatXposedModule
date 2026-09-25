@@ -244,12 +244,6 @@ public class WmChatHook {
                 LogWriter.log(TAG, "AI 助手弹窗失败: " + t.getMessage());
             }
         }));
-        if (!isRoom) {
-            box.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(act, "➕", "批量邀请进群", "勾选联系人批量拉群", () -> {
-                dismissAssistantMenu();
-                com.leshao.v3.hook.BatchInviteGroupsHook.startInvite(sUser);
-            }));
-        }
         if (isRoom) {
             box.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(act, "👥", "乐少·万群管理", "本群管理设置", () -> {
                 dismissAssistantMenu();

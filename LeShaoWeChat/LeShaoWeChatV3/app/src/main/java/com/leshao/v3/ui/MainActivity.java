@@ -405,7 +405,7 @@ public class MainActivity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
         root.setBackground(CandyUi.pageGradient());
-        root.setPadding(dp(d, 24), dp(d, 24), dp(d, 24), dp(d, 24));
+        root.setPadding(dp(d, 18), dp(d, 16), dp(d, 18), dp(d, 16));
 
         TextView iconTv = new TextView(ctx);
         iconTv.setText("\uD83D\uDD12");
@@ -555,14 +555,14 @@ public class MainActivity {
         });
 
         AlertDialog dl = new AlertDialog.Builder(ctx, dialogTheme())
-            .setView(InsetsUtil.window(null, root, 0.9f, 0.82f))
+            .setView(InsetsUtil.window(null, root, 0.9f, 0.88f))
             .setCancelable(false)
             .create();
         dlRef[0] = dl;
         sActiveDialog = dl;
         dl.setOnDismissListener(ignored -> { if (sActiveDialog == dl) sActiveDialog = null; });
         dl.show();
-        InsetsUtil.center(dl, 0.9f, 0.82f);
+        InsetsUtil.center(dl, 0.9f, 0.88f);
         Window w = dl.getWindow();
         if (w != null) w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
     }
@@ -646,11 +646,11 @@ public class MainActivity {
         root.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         AlertDialog.Builder b = new AlertDialog.Builder(ctx, dialogTheme());
-        b.setView(InsetsUtil.window(null, root, 0.92f, 0.86f));
+        b.setView(InsetsUtil.window(null, root, 0.92f, 0.90f));
         b.setCancelable(true);
         AlertDialog dlg = b.create();
 
-        InsetsUtil.center(dlg, 0.92f, 0.86f);
+        InsetsUtil.center(dlg, 0.92f, 0.90f);
         Window w = dlg.getWindow();
         if (w != null) {
             InsetsUtil.transparentWindow(w);
@@ -756,7 +756,7 @@ public class MainActivity {
         LinearLayout bar = new LinearLayout(ctx);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(d, 20), dp(d, 18), dp(d, 20), dp(d, 18));
+        bar.setPadding(dp(d, 16), dp(d, 12), dp(d, 16), dp(d, 12));
         // v955 M3: 主色 hero 顶栏 + 28dp 底部圆角(M3 extra-large shape)
         GradientDrawable barBg = new GradientDrawable();
         barBg.setShape(GradientDrawable.RECTANGLE);
@@ -809,7 +809,7 @@ public class MainActivity {
         searchBg.setColor(AppColors.surfaceContainerHigh());
         card.setBackground(searchBg);
         InsetsUtil.clipRounded(card);
-        card.setPadding(dp(d, 16), dp(d, 12), dp(d, 16), dp(d, 12));
+        card.setPadding(dp(d, 14), dp(d, 9), dp(d, 14), dp(d, 9));
 
         // v955: 放大镜图标
         TextView searchIcon = new TextView(ctx);
@@ -889,7 +889,7 @@ public class MainActivity {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(d, 16), dp(d, 13), dp(d, 16), dp(d, 13));
+        row.setPadding(dp(d, 14), dp(d, 9), dp(d, 14), dp(d, 9));
         row.setBackground(CandyUi.rowPressBg(ctx));
         row.setOnClickListener(onClick);
         row.setClickable(true);
@@ -949,7 +949,7 @@ public class MainActivity {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
-        root.setPadding(dp(d, 20), dp(d, 20), dp(d, 20), dp(d, 16));
+        root.setPadding(dp(d, 16), dp(d, 14), dp(d, 16), dp(d, 12));
 
         TextView titleTv = new TextView(ctx);
         titleTv.setText("爱心捐赠");
@@ -957,7 +957,7 @@ public class MainActivity {
         titleTv.setTextColor(AppColors.accent());
         titleTv.setTypeface(null, Typeface.BOLD);
         titleTv.setGravity(Gravity.CENTER);
-        titleTv.setPadding(0, 0, 0, dp(d, 16));
+        titleTv.setPadding(0, 0, 0, dp(d, 10));
         root.addView(titleTv);
 
         LinearLayout card1 = new LinearLayout(ctx);
@@ -1079,7 +1079,7 @@ public class MainActivity {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
-        root.setPadding(dp(d, 20), dp(d, 20), dp(d, 20), dp(d, 16));
+        root.setPadding(dp(d, 16), dp(d, 14), dp(d, 16), dp(d, 12));
         root.setGravity(Gravity.CENTER);
 
         TextView tv = new TextView(ctx);
@@ -1088,7 +1088,7 @@ public class MainActivity {
         tv.setTextColor(AppColors.accent());
         tv.setTypeface(null, Typeface.BOLD);
         tv.setGravity(Gravity.CENTER);
-        tv.setPadding(0, 0, 0, dp(d, 14));
+        tv.setPadding(0, 0, 0, dp(d, 10));
         root.addView(tv);
 
         android.graphics.drawable.Drawable full = loadModuleDrawable(ctx, resName);
@@ -1140,7 +1140,7 @@ public class MainActivity {
         LinearLayout bar = new LinearLayout(ctx);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(d, 12), dp(d, 14), dp(d, 12), dp(d, 14));
+        bar.setPadding(dp(d, 12), dp(d, 8), dp(d, 12), dp(d, 8));
         // v955 M3: 主色底 + 28dp 底部圆角
         GradientDrawable barBg = new GradientDrawable();
         barBg.setShape(GradientDrawable.RECTANGLE);
@@ -1156,9 +1156,9 @@ public class MainActivity {
         if (showBack) {
             TextView back = new TextView(ctx);
             back.setText("‹");
-            back.setTextSize(26);
+            back.setTextSize(22);
             back.setTextColor(barOn);
-            back.setPadding(0, 0, dp(d, 8), 0);
+            back.setPadding(0, 0, dp(d, 6), 0);
             back.setClickable(true);
             back.setOnClickListener(v -> { if (onBack != null) onBack.run(); });
             applyRipple(back, d, AppColors.SHAPE_FULL_DP);
@@ -1167,7 +1167,7 @@ public class MainActivity {
 
         TextView tv = new TextView(ctx);
         tv.setText(title);
-        tv.setTextSize(20);
+        tv.setTextSize(18);
         tv.setTextColor(barOn);
         tv.setTypeface(null, Typeface.BOLD);
         tv.setGravity(Gravity.CENTER);

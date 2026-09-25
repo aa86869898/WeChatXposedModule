@@ -48,8 +48,8 @@ public final class M3Page {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
         InsetsUtil.clipRounded(root);
-        int m = dp(ctx, 16);
-        root.setPadding(m, dp(ctx, 12), m, dp(ctx, 24));
+        int m = dp(ctx, 14);
+        root.setPadding(m, dp(ctx, 8), m, dp(ctx, 12));
         return root;
     }
 
@@ -79,7 +79,7 @@ public final class M3Page {
         int p = dp(ctx, 4);
         card.setPadding(p, p, p, p);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 0, 0, dp(ctx, 8));
+        lp.setMargins(0, 0, 0, dp(ctx, 4));
         card.setLayoutParams(lp);
         return card;
     }
@@ -316,11 +316,11 @@ public final class M3Page {
     public static TextView title(Context ctx, String text) {
         TextView tv = new TextView(ctx);
         tv.setText(text);
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         tv.setTypeface(Typeface.DEFAULT_BOLD);
         tv.setTextColor(AppColors.onSurface());
         tv.setGravity(Gravity.CENTER);
-        tv.setPadding(0, 0, 0, dp(ctx, 6));
+        tv.setPadding(0, 0, 0, dp(ctx, 2));
         return tv;
     }
 

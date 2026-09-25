@@ -427,12 +427,37 @@ public final class StorageHub {
                 Log.w(TAG, "selfWxid 失败: " + t);
             }
         }
-        // 兜底: 存储链不可用/取不到时, 从微信 SharedPreferences 读登录 wxid
+        // 兜底1: b41.y1.u() = 当前登录用户 wxid（文档 §数据库 key2; 与 v3 BatchAddFriend 同款,
+        // 不依赖存储链绑定, 群聊 @ 判定必需）。
+        String y = readSelfWxidFromAccountUtil();
+        if (y != null && !y.isEmpty()) {
+            cachedSelfWxid = y;
+            LogWriter.log(TAG, "selfWxid 兜底(y1.u)=" + y);
+            return y;
+        }
+        // 兜底2: 存储链不可用/取不到时, 从微信 SharedPreferences 读登录 wxid
         String p = readWxidFromPrefs();
         if (p != null && !p.isEmpty()) {
             cachedSelfWxid = p;
             LogWriter.log(TAG, "selfWxid 兜底(prefs)=" + p);
             return p;
+        }
+        return null;
+    }
+
+    /** 兜底: b41.y1.u() = 当前登录用户 wxid(不依赖存储链, 与 v3 BatchAddFriend 同款)。 */
+    private String readSelfWxidFromAccountUtil() {
+        try {
+            ClassLoader cl = HookEntry.appClassLoader;
+            if (cl == null) {
+                return null;
+            }
+            Class<?> c = XposedHelpers.findClass("b41.y1", cl);
+            Object v = XposedHelpers.callStaticMethod(c, "u");
+            if (v instanceof String && !((String) v).isEmpty()) {
+                return (String) v;
+            }
+        } catch (Throwable ignored) {
         }
         return null;
     }

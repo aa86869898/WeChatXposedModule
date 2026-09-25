@@ -135,7 +135,7 @@ public class SubPageActivity {
                 ? android.R.style.Theme_DeviceDefault_NoActionBar
                 : android.R.style.Theme_DeviceDefault_Light_NoActionBar);
         // v998: 居中浮层窗口
-        b.setView(InsetsUtil.window(null, root, 0.92f, 0.86f));
+        b.setView(InsetsUtil.window(null, root, 0.92f, 0.90f));
         b.setCancelable(true);
         AlertDialog dlg = b.create();
         sSubDialog = dlg;
@@ -145,7 +145,7 @@ public class SubPageActivity {
             if (sSubDialog == dlg) sSubDialog = null;
         });
 
-        InsetsUtil.center(dlg, 0.92f, 0.86f);
+        InsetsUtil.center(dlg, 0.92f, 0.90f);
         Window w = dlg.getWindow();
         if (w != null) {
             InsetsUtil.transparentWindow(w);

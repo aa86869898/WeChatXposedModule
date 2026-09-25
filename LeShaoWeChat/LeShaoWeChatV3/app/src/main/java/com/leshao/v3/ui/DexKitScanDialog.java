@@ -139,7 +139,7 @@ public class DexKitScanDialog {
     private static AlertDialog buildDialog(Context ctx) {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(ctx, 24), dp(ctx, 24), dp(ctx, 24), dp(ctx, 20));
+        root.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 16), dp(ctx, 14));
         // v955 M3: 28dp extra-large 圆角对话框
         root.setBackground(CandyUi.dialogBg(ctx));
         InsetsUtil.clipRounded(root);

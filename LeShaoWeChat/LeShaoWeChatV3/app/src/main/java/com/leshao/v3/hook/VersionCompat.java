@@ -96,7 +96,18 @@ public class VersionCompat {
 
     // ==================== Database ====================
 
+    /**
+     * 安全开关: 彻底关闭对微信 EnMicroMsg.db 的独立裸开(openDatabase/openDatabaseWcdb/openEnMicroDb)
+     * 及硬编码 opener 类猜测, 杜绝因错误密码/错误标志反复触碰导致微信检测到数据损坏。
+     * 数据访问完全交由 DatabaseProvider (运行时捕获微信自身句柄) 或 StorageHub (微信存储 API)。
+     */
+    public static final boolean ENABLE_RAW_DB_OPEN = false;
+
     public static Class<?> findDbOpenerClass(ClassLoader cl) {
+        if (!ENABLE_RAW_DB_OPEN) {
+            LogWriter.log(TAG, "findDbOpenerClass: RAW_DB_OPEN disabled for safety");
+            return null;
+        }
         // Priority 1: use DexKit scan result
         if (DexKitHelper.isScanComplete()) {
             String clsName = DexKitHelper.getDbOpenerClass();
@@ -110,16 +121,16 @@ public class VersionCompat {
                 }
             }
         }
-        Class<?> result = findClassMulti(cl, "ka5.f", "ka5.e", "ka4.f", "ka6.f", "ka5.g");
-        if (result == null) {
-            LogWriter.log(TAG, "findDbOpenerClass: ALL candidates NOT found");
-        } else {
-            LogWriter.log(TAG, "findDbOpenerClass: found " + result.getName());
-        }
-        return result;
+        // 硬编码候选类已关闭(防止混淆类名漂移产生冲突)
+        LogWriter.log(TAG, "findDbOpenerClass: hardcoded candidates disabled");
+        return null;
     }
 
     public static Object openDatabase(Class<?> dbOpenerClass, String path, String password) {
+        if (!ENABLE_RAW_DB_OPEN) {
+            LogWriter.log(TAG, "openDatabase: disabled for safety (path=" + path + ")");
+            return null;
+        }
         Throwable lastErr = null;
 
         // Priority 1: use DexKit method signature on ka5.f
@@ -239,6 +250,10 @@ public class VersionCompat {
     }
 
     public static Object openDatabaseWcdb(ClassLoader cl, String path, String password) {
+        if (!ENABLE_RAW_DB_OPEN) {
+            LogWriter.log(TAG, "openDatabaseWcdb: disabled for safety (path=" + path + ")");
+            return null;
+        }
         ClassLoader wcdbCL = findTinkerClassLoader(cl);
         if (wcdbCL == null) wcdbCL = cl;
         LogWriter.log(TAG, "openDatabaseWcdb: using CL=" + wcdbCL.getClass().getSimpleName()
@@ -810,6 +825,10 @@ public class VersionCompat {
      * 命中即返回。规避 v1016 固定密码算错导致 DB 全部打不开的问题。
      */
     public static Object openEnMicroDb(ClassLoader cl, String baseDir, long uin) {
+        if (!ENABLE_RAW_DB_OPEN) {
+            LogWriter.log(TAG, "openEnMicroDb: disabled for safety (uin=" + uin + ")");
+            return null;
+        }
         if (baseDir == null || uin <= 0) {
             LogWriter.log(TAG, "openEnMicroDb: baseDir/uin 无效 baseDir=" + baseDir + " uin=" + uin);
             return null;

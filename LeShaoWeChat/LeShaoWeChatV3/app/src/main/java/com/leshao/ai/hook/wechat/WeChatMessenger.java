@@ -117,14 +117,37 @@ public final class WeChatMessenger {
             }
 
             // 3) v51.r0 发送 scene
+            // v1045: 文档旧签名 new v51.r0(msgId, talker) 在本版本不存在(NoSuchMethodError)。
+            // 实测构造: () / (long,int,String) [resend] / (String,String,int,int,long|Object,String) [新消息]。
+            // 优先 resend 构造 (long,int,String) 读已插入 msgId, int 传文本类型 1(type=1);
+            // 失败回落新消息构造 (talker, content, 1, 0, 0L/Object, "") 由内部建消息+B发。
             Object scene = null;
+            Throwable r0Err = null;
+            // 3a) resend: (long, int, String)
             try {
-                scene = XposedHelpers.newInstance(r0, msgId, talker);
-                LogWriter.log(TAG, "sendViaMsgInfo: new r0 OK msgId=" + msgId
+                scene = XposedHelpers.newInstance(r0, msgId, 1, talker);
+                LogWriter.log(TAG, "sendViaMsgInfo: new r0 resend (long,1," + talker.length() + ") msgId=" + msgId
                         + " scene=" + (scene == null ? "null" : scene.getClass().getName()));
             } catch (Throwable t) {
-                LogWriter.log(TAG, "sendViaMsgInfo: new v51.r0 失败: " + stackOf(t));
-                return false;
+                r0Err = t;
+            }
+            // 3b) 新消息构造: (String,String,int,int,Object,String) / (String,String,int,int,long,String)
+            if (scene == null) {
+                try {
+                    scene = XposedHelpers.newInstance(r0, talker, content, 1, 0, 0L, "");
+                    LogWriter.log(TAG, "sendViaMsgInfo: new r0 newmsg(long) OK scene="
+                            + (scene == null ? "null" : scene.getClass().getName()));
+                } catch (Throwable t1) {
+                    try {
+                        scene = XposedHelpers.newInstance(r0, talker, content, 1, 0, 0, "");
+                    } catch (Throwable t2) {
+                        LogWriter.log(TAG, "sendViaMsgInfo: new v51.r0 全部构造失败: " + stackOf(t2));
+                        if (r0Err != null) {
+                            LogWriter.log(TAG, "sendViaMsgInfo: resend 构造异常: " + stackOf(r0Err));
+                        }
+                        return false;
+                    }
+                }
             }
 
             // 4) NetSceneQueue = j1.q().b；queue.h(scene,0) 入队

@@ -217,7 +217,7 @@ public class ContactSelectorView {
         // Bottom bar: toggle + buttons
         LinearLayout bottomBar = new LinearLayout(act);
         bottomBar.setOrientation(LinearLayout.VERTICAL);
-        bottomBar.setPadding(p16, p8, p16, p16);
+        bottomBar.setPadding(p16, p8, p16, p8);
 
         LinearLayout btns = new LinearLayout(act);
         btns.setOrientation(LinearLayout.HORIZONTAL);

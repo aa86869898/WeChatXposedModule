@@ -565,8 +565,8 @@ public class AppColors {
     public static final int SPACE_LG_DP = 16;
     public static final int SPACE_XL_DP = 24;
 
-    public static final int TOP_BAR_HEIGHT_DP = 64;   // M3 top app bar
-    public static final int ROW_HEIGHT_DP = 56;       // M3 list item (one line)
+    public static final int TOP_BAR_HEIGHT_DP = 52;   // M3 top app bar
+    public static final int ROW_HEIGHT_DP = 50;       // M3 list item (one line)
     public static final int BUTTON_HEIGHT_DP = 40;    // M3 button
 
     // ==================== M3 字阶（sp） ====================

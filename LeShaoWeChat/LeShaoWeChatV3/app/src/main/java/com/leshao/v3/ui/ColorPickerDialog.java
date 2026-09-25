@@ -37,7 +37,7 @@ public final class ColorPickerDialog {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.dialogBg(ctx));
         InsetsUtil.clipRounded(root);
-        root.setPadding(dp * 20, dp * 16, dp * 20, dp * 8);
+        root.setPadding(dp * 16, dp * 12, dp * 16, dp * 6);
 
         if (title != null && !title.isEmpty()) {
             TextView tv = new TextView(ctx);

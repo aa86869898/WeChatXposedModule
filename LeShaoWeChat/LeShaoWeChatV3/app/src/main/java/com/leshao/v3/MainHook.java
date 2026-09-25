@@ -11,8 +11,6 @@ import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.AutoForwardHook;
 import com.leshao.v3.hook.AntiDetectionHook;
 import com.leshao.v3.hook.AutoRemark;
-import com.leshao.v3.hook.BatchAddFriend;
-import com.leshao.v3.hook.BatchInviteGroupsHook;
 import com.leshao.v3.hook.BatchMessage;
 import com.leshao.v3.hook.CallFeatures;
 import com.leshao.v3.hook.ChatFooterEnhance;
@@ -74,11 +72,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v1059";
+    public static final String MODULE_BUILD = "v1066";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 1059;
+    public static final int MODULE_VERSION_CODE = 1066;
 
     private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
@@ -280,7 +278,6 @@ public class MainHook implements IXposedHookLoadPackage {
                         safeRun("HideContactFields", () -> HookManager.register("HideContactFields", () -> HideContactFields.hook(cl)));
                         safeRun("ConvPrivacy", () -> HookManager.register("ConvPrivacy", () -> ConvPrivacy.hook(cl)));
 
-                        safeRun("BatchInviteGroups", () -> HookManager.register("BatchInviteGroups", () -> BatchInviteGroupsHook.hook(cl)));
                         safeRun("WmEntry", () -> WmEntry.injectAll(cl));
 
                         safeRun("WanQunGroupHook", () -> {
@@ -289,7 +286,6 @@ public class MainHook implements IXposedHookLoadPackage {
                         });
 
                         // v998: 已移除"添加好友伪装来源"(FakeAddSource)
-                        safeRun("BatchAddFriend", () -> BatchAddFriend.hook(cl));
 
                         // v980: 以下两个模块依赖 DexKit 联网解析, 原实现直接在主线程同步执行,
                         // 实测 GroupMemberTools 阻塞主线程 916ms、LeshaoAI 294ms, 是启动卡顿主因。

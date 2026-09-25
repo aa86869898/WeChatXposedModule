@@ -75,19 +75,6 @@ public class ContactGroupPageView {
 
         root.addView(candyDivider(ctx, d));
 
-        // 群聊批量加好友卡片（模块内仅总开关，其余配置在群聊详情页按钮弹窗内）
-        LinearLayout cardBatch = makeCard(ctx, d);
-        boolean batchOn = prefs != null && prefs.getBoolean("ls_batch_add_enabled", false);
-        cardBatch.addView(switchRow(ctx, d, "群聊批量加好友", "群聊详情页右上角[批量加友]菜单内配置", batchOn, (v, on) -> {
-            if (prefs != null) prefs.edit().putBoolean("ls_batch_add_enabled", on).apply();
-            BatchAddFriend.setEnabled(on);
-            Toast.makeText(ctx, "批量加好友已" + (on ? "开启" : "关闭")
-                    + "\n重启微信后生效", Toast.LENGTH_LONG).show();
-        }, null));
-        root.addView(cardBatch);
-
-        root.addView(candyDivider(ctx, d));
-
         // v998: 万群定时群发从"群管理助手"移植到本菜单, 点击进入独立页面
         LinearLayout cardWanQun = makeCard(ctx, d);
         cardWanQun.addView(M3Page.clickRow(ctx, "\uD83D\uDCE2", "乐少万群定时群发", "勾选多个群+定时发送",

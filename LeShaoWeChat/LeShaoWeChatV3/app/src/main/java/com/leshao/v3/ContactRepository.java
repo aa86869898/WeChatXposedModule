@@ -176,26 +176,30 @@ public class ContactRepository {
             String dbPath = baseDir + "MicroMsg/" + dbHash + "/EnMicroMsg.db";
             String password = md5(imei + uin).substring(0, 7);
 
-            LogWriter.log(TAG, "opening db: " + dbPath);
-            Class<?> dbCls = VersionCompat.findDbOpenerClass(cl);
+            if (VersionCompat.ENABLE_RAW_DB_OPEN) {
+                LogWriter.log(TAG, "opening db: " + dbPath);
+                Class<?> dbCls = VersionCompat.findDbOpenerClass(cl);
 
-            long openDeadline = System.currentTimeMillis() + 20000L;
-            int openAttempt = 0;
-            while (db == null && System.currentTimeMillis() < openDeadline) {
-                openAttempt++;
-                if (openAttempt > 1) {
-                    try { Thread.sleep(1500L); } catch (InterruptedException ignored) {}
-                }
-                if (dbCls != null) {
-                    db = VersionCompat.openDatabase(dbCls, dbPath, password);
+                long openDeadline = System.currentTimeMillis() + 20000L;
+                int openAttempt = 0;
+                while (db == null && System.currentTimeMillis() < openDeadline) {
+                    openAttempt++;
+                    if (openAttempt > 1) {
+                        try { Thread.sleep(1500L); } catch (InterruptedException ignored) {}
+                    }
+                    if (dbCls != null) {
+                        db = VersionCompat.openDatabase(dbCls, dbPath, password);
+                        if (db == null) {
+                            db = VersionCompat.openDatabaseWcdb(cl, dbPath, password);
+                        }
+                    }
                     if (db == null) {
-                        db = VersionCompat.openDatabaseWcdb(cl, dbPath, password);
+                        LogWriter.log(TAG, "db open attempt " + openAttempt
+                                + " failed (csoReady=" + VersionCompat.isCsoLoaderReady() + "), retrying");
                     }
                 }
-                if (db == null) {
-                    LogWriter.log(TAG, "db open attempt " + openAttempt
-                            + " failed (csoReady=" + VersionCompat.isCsoLoaderReady() + "), retrying");
-                }
+            } else {
+                LogWriter.log(TAG, "RAW_DB_OPEN disabled for safety, skipping direct open");
             }
             if (db == null) {
                 // 兜底1: v1019 进程内 rcontact 枚举（不依赖 DB 打开）
@@ -204,9 +208,13 @@ public class ContactRepository {
                             + sServiceAccounts.size()) + " rows in " + (System.currentTimeMillis() - t0) + "ms");
                     return;
                 }
-                LogWriter.log(TAG, "enumerateRContact empty/failed, openEnMicroDb fallback");
-                // 兜底2: 目录名候选化 + 密码候选爆破
-                db = VersionCompat.openEnMicroDb(cl, baseDir, uin);
+                if (VersionCompat.ENABLE_RAW_DB_OPEN) {
+                    LogWriter.log(TAG, "enumerateRContact empty/failed, openEnMicroDb fallback");
+                    // 兜底2: 目录名候选化 + 密码候选爆破
+                    db = VersionCompat.openEnMicroDb(cl, baseDir, uin);
+                } else {
+                    LogWriter.log(TAG, "enumerateRContact empty/failed, openEnMicroDb fallback disabled for safety");
+                }
             }
             if (db == null) { LogWriter.log(TAG, "db open FAILED"); return; }
             LogWriter.log(TAG, "db opened in " + (System.currentTimeMillis() - t0) + "ms");

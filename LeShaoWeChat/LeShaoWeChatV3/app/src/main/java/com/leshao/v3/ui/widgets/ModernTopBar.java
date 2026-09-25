@@ -25,7 +25,7 @@ public class ModernTopBar extends LinearLayout {
 
         mBack = new TextView(ctx);
         mBack.setText("‹");
-        mBack.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
+        mBack.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
         mBack.setTextColor(AppColors.primary());
         mBack.setGravity(Gravity.CENTER);
         mBack.setPadding((int) (6 * d), 0, (int) (6 * d), 0);
@@ -44,7 +44,7 @@ public class ModernTopBar extends LinearLayout {
 
         mTitle = new TextView(ctx);
         mTitle.setText(title);
-        mTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        mTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19);
         mTitle.setTypeface(Typeface.DEFAULT);
         mTitle.setTextColor(AppColors.onSurface());
         mTitle.setSingleLine(true);
