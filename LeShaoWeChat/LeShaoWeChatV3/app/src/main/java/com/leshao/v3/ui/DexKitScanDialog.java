@@ -1,6 +1,5 @@
 package com.leshao.v3.ui;
 
-import android.animation.ValueAnimator;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.graphics.Canvas;
@@ -19,8 +18,6 @@ import android.view.WindowManager;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-import com.leshao.v3.ui.widgets.ModernButton;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -35,7 +32,6 @@ public class DexKitScanDialog {
     private static volatile LinearLayout sStepContainer;
     private static volatile TextView sTitleText;
     private static volatile TextView sPercentText;
-    private static volatile ModernButton sCloseButton;
     private static volatile NeonProgressBar sProgressBar;
     private static volatile boolean sDismissed = false;
     private static volatile boolean sScanFinished = false;
@@ -122,12 +118,32 @@ public class DexKitScanDialog {
         });
     }
 
-    /** 扫描完成: 显示关闭按钮, 允许用户关闭弹窗 */
+    /** 扫描完成: 直接补到 100% 并自动关闭弹窗(无需手动关闭)。 */
     public static void onScanComplete() {
         sScanFinished = true;
         MAIN.post(() -> {
             try {
-                if (sCloseButton != null) sCloseButton.setVisibility(View.VISIBLE);
+                if (sProgressBar != null) sProgressBar.setProgress(100);
+                if (sPercentText != null) sPercentText.setText("100%");
+                for (StepEntry step : sSteps) {
+                    step.done = true;
+                    if (step.checkMark != null) {
+                        step.checkMark.setText("✓");
+                        step.checkMark.setTextColor(AppColors.primary());
+                    }
+                }
+                MAIN.postDelayed(DexKitScanDialog::hideDialog, 700L);
+            } catch (Throwable ignored) {}
+        });
+    }
+
+    /** 关闭弹窗但不清空可用状态(自动关闭用, 不锁定后续再次展示)。 */
+    private static void hideDialog() {
+        sScanFinished = false;
+        MAIN.post(() -> {
+            try {
+                if (sDialog != null && sDialog.isShowing()) sDialog.dismiss();
+                sDialog = null;
             } catch (Throwable ignored) {}
         });
     }
@@ -168,14 +184,17 @@ public class DexKitScanDialog {
         sProgressBar.setLayoutParams(lp);
         root.addView(sProgressBar);
 
-        // 百分比文字（v955 新增）
+        // 百分比文字（居中显示，跟随进度条平滑值刷新）
         sPercentText = new TextView(ctx);
         sPercentText.setText("0%");
-        sPercentText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
+        sPercentText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 26);
         sPercentText.setTextColor(AppColors.primary());
-        sPercentText.setGravity(Gravity.END);
-        sPercentText.setPadding(0, 0, 0, dp(ctx, 12));
+        sPercentText.setGravity(Gravity.CENTER);
+        sPercentText.setPadding(0, dp(ctx, 4), 0, dp(ctx, 12));
         root.addView(sPercentText);
+        sProgressBar.setProgressListener(p -> {
+            if (sPercentText != null) sPercentText.setText(p + "%");
+        });
 
         // Step container (vertical list)
         sStepContainer = new LinearLayout(ctx);
@@ -228,17 +247,6 @@ public class DexKitScanDialog {
             sStepContainer.addView(row);
         }
 
-        // Close button（M3 outlined button，扫描完成后显示）
-        ModernButton closeBtn = new ModernButton(ctx, "关闭", ModernButton.STYLE_GHOST);
-        closeBtn.onClick(() -> dismiss());
-        closeBtn.setVisibility(View.GONE);
-        sCloseButton = closeBtn;
-        LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        closeLp.setMargins(0, dp(ctx, 16), 0, 0);
-        closeBtn.setLayoutParams(closeLp);
-        root.addView(closeBtn);
-
         AlertDialog dialog = new AlertDialog.Builder(ctx)
                 .setView(root)
                 .create();
@@ -252,11 +260,17 @@ public class DexKitScanDialog {
                 TypedValue.COMPLEX_UNIT_DIP, v, ctx.getResources().getDisplayMetrics());
     }
 
-    /** M3 主色进度条：surfaceContainerHighest 轨道 + primary 渐变进度 + 主色光晕 */
+    /** M3 主色进度条：surfaceContainerHighest 轨道 + 流光渐变进度 + 主色光晕；
+     *  显示值由每帧缓动追随目标值，跳变式上报也能丝滑过渡。 */
     private static class NeonProgressBar extends View {
-        private int mProgress = 0;
-        private int mDisplayProgress = 0;
-        private ValueAnimator mAnimator;
+        interface ProgressListener {
+            void onDisplay(int percent);
+        }
+
+        private float mProgress = 0f;
+        private float mDisplayProgress = 0f;
+        private ProgressListener mListener;
+        private boolean mRunning;
         private final Paint mBgPaint;
         private final Paint mProgressPaint;
         private final Paint mGlowPaint;
@@ -287,26 +301,60 @@ public class DexKitScanDialog {
         }
 
         public void setProgress(int progress) {
-            progress = Math.max(0, Math.min(100, progress));
-            if (progress == mProgress) return;
-            mProgress = progress;
+            mProgress = Math.max(0f, Math.min(100f, progress));
+            startLoop();
+        }
 
-            if (mAnimator != null) mAnimator.cancel();
-            mAnimator = ValueAnimator.ofInt(mDisplayProgress, progress);
-            mAnimator.setDuration(400);
-            mAnimator.addUpdateListener(animation -> {
-                mDisplayProgress = (int) animation.getAnimatedValue();
-                updateGradient();
+        void setProgressListener(ProgressListener listener) {
+            mListener = listener;
+        }
+
+        private final Runnable mTick = new Runnable() {
+            @Override
+            public void run() {
+                if (!mRunning) return;
+                float diff = mProgress - mDisplayProgress;
+                if (Math.abs(diff) < 0.2f) {
+                    mDisplayProgress = mProgress;
+                } else {
+                    mDisplayProgress += diff * 0.14f;
+                }
+                if (mListener != null) {
+                    mListener.onDisplay(Math.round(mDisplayProgress));
+                }
                 invalidate();
-            });
-            mAnimator.start();
+                postOnAnimation(this);
+            }
+        };
+
+        private void startLoop() {
+            removeCallbacks(mTick);
+            mRunning = true;
+            postOnAnimation(mTick);
+        }
+
+        private void stopLoop() {
+            mRunning = false;
+            removeCallbacks(mTick);
+        }
+
+        @Override
+        protected void onAttachedToWindow() {
+            super.onAttachedToWindow();
+            startLoop();
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            stopLoop();
+            super.onDetachedFromWindow();
         }
 
         private void updateGradient() {
             float width = getWidth();
             if (width <= 0) return;
             float progressWidth = width * mDisplayProgress / 100f;
-            float offset = width * (System.currentTimeMillis() % 2000) / 2000f;
+            float offset = width * (android.os.SystemClock.uptimeMillis() % 2000) / 2000f;
 
             LinearGradient gradient = new LinearGradient(
                     -offset, 0, progressWidth + offset, 0,

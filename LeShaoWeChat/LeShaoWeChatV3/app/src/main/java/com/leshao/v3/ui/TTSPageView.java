@@ -907,49 +907,45 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
 
     private static void showKeyInputPopup(Context ctx, Activity parentAct, float d, Button keyBtn,
                                           LinearLayout voiceList, TextView statusTv) {
-        LinearLayout popup = new LinearLayout(ctx);
-        popup.setOrientation(LinearLayout.VERTICAL);
-        popup.setBackground(CandyUi.cardBg(ctx));
-        popup.setPadding((int)(16 * d), (int)(12 * d), (int)(16 * d), (int)(12 * d));
+        LinearLayout root = M3Page.root(ctx);
+        root.addView(M3Page.section(ctx, "设置 API Key", "配置配音魔方接口密钥"));
 
-        TextView popTitle = new TextView(ctx);
-        popTitle.setText("设置 API Key");
-        popTitle.setTextSize(14);
-        popTitle.setTextColor(AppColors.TEXT_TITLE);
-        popTitle.setTypeface(null, android.graphics.Typeface.BOLD);
-        popTitle.setPadding(0, 0, 0, (int)(8 * d));
-        popup.addView(popTitle);
+        LinearLayout card = M3Page.card(ctx);
+        card.addView(M3Page.fieldLabel(ctx, "API Key"));
+        final EditText keyEt = M3Page.input(ctx, "输入 API Key");
+        keyEt.setText(WmPrefs.getStr("tts_cube_key", ""));
+        M3Page.trimEdgesOnInput(keyEt);
+        card.addView(keyEt);
+        root.addView(card);
 
-        EditText keyEt = new EditText(ctx);
-        String currentKey = WmPrefs.getStr("tts_cube_key", "");
-        keyEt.setText(currentKey);
-        keyEt.setHint("输入 API Key");
-        keyEt.setSingleLine(true);
-        keyEt.setTextSize(13);
-        keyEt.setPadding((int)(8 * d), (int)(8 * d), (int)(8 * d), (int)(8 * d));
-        android.graphics.drawable.GradientDrawable etBg = new android.graphics.drawable.GradientDrawable();
-        etBg.setColor(AppColors.inputBg());
-        etBg.setCornerRadius((int)(6 * d));
-        etBg.setStroke((int)(1 * d), AppColors.DIVIDER);
-        keyEt.setBackground(etBg);
-        popup.addView(keyEt);
+        AlertDialog.Builder b = new AlertDialog.Builder(parentAct);
+        b.setView(InsetsUtil.window(null, root, 0.9f, 0.5f));
+        b.setCancelable(true);
+        AlertDialog dlg = b.create();
+        InsetsUtil.center(dlg, 0.9f, 0.5f);
+        android.view.Window w = dlg.getWindow();
+        if (w != null) {
+            InsetsUtil.transparentWindow(w);
+            w.clearFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        }
 
-        new AlertDialog.Builder(parentAct)
-                .setView(popup)
-                .setPositiveButton("保存", (d2, w2) -> {
-                    String key = keyEt.getText().toString().trim();
-                    if (key.isEmpty()) {
-                        Toast.makeText(parentAct, "请输入Key", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    WmPrefs.setStr("tts_cube_key", key);
-                    Toast.makeText(parentAct, "Key已保存", Toast.LENGTH_SHORT).show();
-                    loadVoices(ctx, parentAct, d, voiceList, statusTv, key);
-                })
-                .setNegativeButton("取消", null)
-                .show();
+        View saveBtn = M3Page.button(ctx, "保存", () -> {
+            String key = keyEt.getText().toString().trim();
+            if (key.isEmpty()) {
+                Toast.makeText(parentAct, "请输入Key", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            WmPrefs.setStr("tts_cube_key", key);
+            Toast.makeText(parentAct, "Key已保存", Toast.LENGTH_SHORT).show();
+            loadVoices(ctx, parentAct, d, voiceList, statusTv, key);
+            dlg.dismiss();
+        });
+        View cancelBtn = M3Page.ghostButton(ctx, "取消", dlg::dismiss);
+        root.addView(M3Page.buttonRow(ctx, saveBtn, cancelBtn));
 
-
+        InsetsUtil.clearDialogShell(dlg);
+        dlg.show();
+        InsetsUtil.clearDialogShell(dlg);
     }
 
     // ===== 音色列表UI构建 =====

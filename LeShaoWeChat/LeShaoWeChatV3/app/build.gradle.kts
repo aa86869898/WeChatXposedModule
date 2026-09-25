@@ -1,11 +1,14 @@
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.TimeZone
 
 plugins {
     id("com.android.application")
 }
 
-val moduleBuildTime: String = SimpleDateFormat("yyyy-MM-dd HH:mm").format(Date())
+val moduleBuildTime: String = SimpleDateFormat("yyyy-MM-dd HH:mm").apply {
+    timeZone = TimeZone.getTimeZone("Asia/Shanghai")
+}.format(Date())
 
 android {
     namespace = "com.leshao.v3"
@@ -16,8 +19,8 @@ android {
         applicationId = "com.leshao.v3"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1080
-        versionName = "3.15.20-v1080"
+        versionCode = 1084
+        versionName = "3.15.24-v1084"
         buildConfigField("String", "BUILD_TIME", "\"$moduleBuildTime\"")
     }
 

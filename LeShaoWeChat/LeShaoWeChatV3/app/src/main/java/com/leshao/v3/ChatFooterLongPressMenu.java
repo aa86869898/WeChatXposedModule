@@ -38,6 +38,7 @@ import com.leshao.v3.hook.TtsVoiceSender;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
 import com.leshao.v3.ui.InsetsUtil;
+import com.leshao.v3.ui.widgets.EqBarsView;
 import com.leshao.v3.wm.utils.WmPrefs;
 
 import java.io.File;
@@ -217,6 +218,7 @@ public class ChatFooterLongPressMenu {
     // v966: 处理选项播放图标
     private static MediaPlayer sPanelPlayer;
     private static ImageView sPanelPlayBtn;
+    private static EqBarsView sPanelEq;
     private static String sPanelPlayingPath;
     private static ImageView sHistPlayBtn;
     // v966: 历史记录勾选状态
@@ -667,6 +669,7 @@ public class ChatFooterLongPressMenu {
                 // v966: 面板关闭时停止试播并释放播放器
                 stopPanelPlayback();
                 sPanelPlayBtn = null;
+                sPanelEq = null;
                 removeLayoutListener();
             });
         } catch (Throwable t) {
@@ -756,6 +759,39 @@ public class ChatFooterLongPressMenu {
         return bmp;
     }
 
+    /**
+     * v1081 A2 流光渐变填充按钮：空闲=三色流光渐变底 + 白色图标(播放)；
+     * 播放=透明底 + 2px 主色描边 + 主色图标(暂停)。
+     */
+    private static void applyPlayButtonState(ImageView btn, boolean playing) {
+        if (btn == null) return;
+        Context ctx = btn.getContext();
+        if (playing) {
+            GradientDrawable bg = new GradientDrawable();
+            bg.setShape(GradientDrawable.RECTANGLE);
+            bg.setColor(0x00000000);
+            bg.setStroke(dp(ctx, 2), AppColors.primary());
+            bg.setCornerRadius(dp(ctx, 20));
+            btn.setBackground(bg);
+            btn.setImageBitmap(makeGlyphIcon(ctx, GLYPH_PAUSE, 20, AppColors.primary()));
+        } else {
+            btn.setBackground(CandyUi.gradientBg(ctx, 20));
+            btn.setImageBitmap(makeGlyphIcon(ctx, GLYPH_PLAY, 20, AppColors.textOnPrimary()));
+        }
+    }
+
+    /** v1081 C3 柱状频谱：播放时显示并按音频频谱驱动，停止/关闭时隐藏。 */
+    private static void setPanelEqPlaying(boolean playing, MediaPlayer mp) {
+        if (sPanelEq == null) return;
+        if (playing && sPanelEq.isAttachedToWindow()) {
+            sPanelEq.setVisibility(View.VISIBLE);
+            sPanelEq.start(mp);
+        } else {
+            sPanelEq.stop();
+            sPanelEq.setVisibility(View.GONE);
+        }
+    }
+
     /** v966: 开始播放指定音频(自动停止现有播放); 返回是否成功 */
     private static boolean startPanelPlayback(Context ctx, String path) {
         stopPanelPlayback();
@@ -767,9 +803,8 @@ public class ChatFooterLongPressMenu {
             mp.start();
             sPanelPlayer = mp;
             sPanelPlayingPath = path;
-            if (sPanelPlayBtn != null) {
-                sPanelPlayBtn.setImageBitmap(makeGlyphIcon(ctx, GLYPH_PAUSE, 20, AppColors.accent()));
-            }
+            applyPlayButtonState(sPanelPlayBtn, true);
+            setPanelEqPlaying(true, mp);
             return true;
         } catch (Throwable t) {
             stopPanelPlayback();
@@ -795,10 +830,8 @@ public class ChatFooterLongPressMenu {
             sPanelPlayer = null;
         }
         sPanelPlayingPath = null;
-        if (sPanelPlayBtn != null) {
-            sPanelPlayBtn.setImageBitmap(makeGlyphIcon(
-                    sPanelPlayBtn.getContext(), GLYPH_PLAY, 20, AppColors.accent()));
-        }
+        applyPlayButtonState(sPanelPlayBtn, false);
+        setPanelEqPlaying(false, null);
         if (sHistPlayBtn != null) {
             sHistPlayBtn.setImageBitmap(makeGlyphIcon(
                     sHistPlayBtn.getContext(), GLYPH_PLAY, 18, AppColors.accent()));
@@ -894,16 +927,11 @@ public class ChatFooterLongPressMenu {
         cutLp.rightMargin = p6;
         btnRow.addView(cutBtn, cutLp);
 
-        // v966: 播放图标(位于音频切割与历史记录之间, 点击试播当前选中音频, 再点暂停)
+        // v1081: A2 流光渐变填充播放按钮(空闲=三色流光渐变底+白图标; 播放=透明底+主色描边+主色图标)
         final ImageView playIcon = new ImageView(ctx);
-        playIcon.setImageBitmap(makeGlyphIcon(ctx, GLYPH_PLAY, 20, AppColors.accent()));
         playIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        playIcon.setPadding(dp(ctx, 8), p6, dp(ctx, 8), p6);
-        GradientDrawable playBg = new GradientDrawable();
-        playBg.setColor(AppColors.surfaceContainerHigh());
-        playBg.setStroke(dp(ctx, 1), AppColors.outlineVariant());
-        playBg.setCornerRadius(dp(ctx, 20));
-        playIcon.setBackground(playBg);
+        playIcon.setPadding(dp(ctx, 10), p6, dp(ctx, 10), p6);
+        applyPlayButtonState(playIcon, false);
         LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, dp(ctx, 32));
         playLp.leftMargin = p6;
@@ -935,6 +963,15 @@ public class ChatFooterLongPressMenu {
         histLp.leftMargin = p6;
         btnRow.addView(historyBtn, histLp);
         cardOpt.addView(btnRow);
+
+        // v1081: C3 柱状频谱播放动画(全宽, 播放时显示)
+        EqBarsView eqBars = new EqBarsView(ctx);
+        eqBars.setVisibility(View.GONE);
+        LinearLayout.LayoutParams eqLp = new LinearLayout.LayoutParams(-1, dp(ctx, 60));
+        eqLp.setMargins(p12, p6, p12, p6);
+        cardOpt.addView(eqBars, eqLp);
+        sPanelEq = eqBars;
+
         cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
 
         // v968: 误报语音时长(0-60 秒, 默认 1 秒) —— 发出的语音气泡所显示时长

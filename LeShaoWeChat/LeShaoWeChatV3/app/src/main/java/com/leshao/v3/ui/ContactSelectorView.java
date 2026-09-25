@@ -100,12 +100,14 @@ public class ContactSelectorView {
         LinearLayout root = new LinearLayout(act);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setMinimumHeight(dp(act, 520));
+        root.setBackground(CandyUi.dialogBg(act));
 
         // Title
         TextView title = new TextView(act);
         title.setText("\u9009\u62e9\u8054\u7cfb\u4eba");
-        title.setTextSize(16);
-        title.setTextColor(AppColors.TEXT_TITLE);
+        title.setTextSize(17);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setTextColor(AppColors.onSurface());
         title.setPadding(p16, p16, p16, p12);
         title.setGravity(Gravity.CENTER);
         root.addView(title);
@@ -138,11 +140,11 @@ public class ContactSelectorView {
         // Search
         EditText search = new EditText(act);
         search.setHint("\u641c\u7d22...");
-        search.setHintTextColor(AppColors.TEXT_NOTE);
+        search.setHintTextColor(AppColors.onSurfaceVariant());
         search.setTextSize(14);
-        search.setTextColor(AppColors.TEXT_BODY);
+        search.setTextColor(AppColors.onSurface());
         search.setPadding(p16, p10(act), p16, p10(act));
-        search.setBackground(roundBg(act, AppColors.INPUT_BG, dp(act, 20)));
+        search.setBackground(CandyUi.inputBg(act));
         search.setSingleLine(true);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -179,7 +181,7 @@ public class ContactSelectorView {
                 TextView empty = new TextView(act);
                 empty.setText("\u65e0\u5339\u914d\u8054\u7cfb\u4eba");
                 empty.setTextSize(14);
-                empty.setTextColor(AppColors.TEXT_NOTE);
+                empty.setTextColor(AppColors.onSurfaceVariant());
                 empty.setGravity(Gravity.CENTER);
                 empty.setPadding(0, dp(act, 40), 0, 0);
                 listRoot.addView(empty);
@@ -228,16 +230,9 @@ public class ContactSelectorView {
         btnLp.leftMargin = p4;
         btnLp.rightMargin = p4;
 
-        int btnRadius = dp(act, 20);
-        TextView cancel = dialogBtn(act, "\u53d6\u6d88", AppColors.TEXT_NOTE, AppColors.DIVIDER, btnRadius);
-        TextView toggleAll = new TextView(act);
-        toggleAll.setTextSize(13);
-        toggleAll.setTextColor(AppColors.WHITE_TEXT);
-        toggleAll.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
-        toggleAll.setBackground(roundBg(act, AppColors.ACCENT, btnRadius));
-        toggleAll.setGravity(Gravity.CENTER);
-        toggleAll.setPaintFlags(toggleAll.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
-        TextView confirm = dialogBtn(act, "\u786e\u5b9a", AppColors.WHITE_TEXT, AppColors.ACCENT, btnRadius);
+        TextView cancel = outlinedBtn(act, "\u53d6\u6d88", AppColors.onSurfaceVariant());
+        TextView toggleAll = outlinedBtn(act, "\u5168\u9009", AppColors.primary());
+        TextView confirm = filledBtn(act, "\u786e\u5b9a");
 
         btns.addView(cancel, btnLp);
         btns.addView(space(act, p16));
@@ -247,11 +242,11 @@ public class ContactSelectorView {
         bottomBar.addView(btns);
         root.addView(bottomBar);
 
+        // M3 对话框外壳：透明窗口 + 根布局自身圆角底
         AlertDialog dialog = new AlertDialog.Builder(act)
                 .setView(root)
                 .setCancelable(true)
                 .create();
-
         CandyUi.ripple(cancel, AppColors.SHAPE_FULL_DP);
         cancel.setOnClickListener(v -> {
             dialog.dismiss();
@@ -307,28 +302,51 @@ public class ContactSelectorView {
         };
 
         dialog.show();
+        try {
+            android.view.Window w = dialog.getWindow();
+            if (w != null) {
+                w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0x00000000));
+                android.util.DisplayMetrics dm = act.getResources().getDisplayMetrics();
+                w.setLayout((int) (dm.widthPixels * 0.92f),
+                        android.view.WindowManager.LayoutParams.WRAP_CONTENT);
+            }
+        } catch (Throwable ignored) {}
     }
 
     private static void updateTabs(Activity act, TextView t0, TextView t1, TextView t2, int idx) {
+        applyPill(t0, act, idx == 0);
+        applyPill(t1, act, idx == 1);
+        applyPill(t2, act, idx == 2);
+    }
+
+    /** M3 filter chip：选中=流光渐变底/白字，未选中=surfaceContainerLow+outline 描边。 */
+    private static void applyPill(TextView tv, Activity act, boolean selected) {
         int radius = dp(act, 20);
-        t0.setTextColor(idx == 0 ? AppColors.WHITE_TEXT : AppColors.TEXT_BODY);
-        t0.setBackground(roundBg(act, idx == 0 ? AppColors.ACCENT : AppColors.DIVIDER, radius));
-        t1.setTextColor(idx == 1 ? AppColors.WHITE_TEXT : AppColors.TEXT_BODY);
-        t1.setBackground(roundBg(act, idx == 1 ? AppColors.ACCENT : AppColors.DIVIDER, radius));
-        t2.setTextColor(idx == 2 ? AppColors.WHITE_TEXT : AppColors.TEXT_BODY);
-        t2.setBackground(roundBg(act, idx == 2 ? AppColors.ACCENT : AppColors.DIVIDER, radius));
+        if (selected) {
+            FlowingGradientDrawable fg = new FlowingGradientDrawable(
+                    AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+            fg.setCornerRadius(radius);
+            fg.setPhaseOffset(0.2f);
+            tv.setBackground(fg);
+            tv.setTextColor(AppColors.onGradient());
+        } else {
+            GradientDrawable gd = new GradientDrawable();
+            gd.setShape(GradientDrawable.RECTANGLE);
+            gd.setCornerRadius(radius);
+            gd.setColor(AppColors.surfaceContainerLow());
+            gd.setStroke(dp(act, 1), AppColors.outline());
+            tv.setBackground(gd);
+            tv.setTextColor(AppColors.onSurfaceVariant());
+        }
     }
 
     private static TextView buildTab(Activity act, String text, boolean selected) {
-        int radius = dp(act, 20);
         TextView tv = new TextView(act);
         tv.setText(text);
         tv.setTextSize(13);
-        tv.setTextColor(selected ? AppColors.WHITE_TEXT : AppColors.TEXT_BODY);
         tv.setGravity(Gravity.CENTER);
         tv.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
-        tv.setBackground(roundBg(act, selected ? AppColors.ACCENT : AppColors.DIVIDER, radius));
-        tv.setPaintFlags(tv.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
+        applyPill(tv, act, selected);
         return tv;
     }
 
@@ -369,7 +387,7 @@ public class ContactSelectorView {
         TextView name = new TextView(act);
         name.setText(c.displayName());
         name.setTextSize(14);
-        name.setTextColor(AppColors.TEXT_TITLE);
+        name.setTextColor(AppColors.onSurface());
         textCol.addView(name);
 
         row.addView(textCol, new LinearLayout.LayoutParams(0,
@@ -409,7 +427,7 @@ public class ContactSelectorView {
         } else {
             Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
             stroke.setStyle(Paint.Style.STROKE);
-            stroke.setColor(AppColors.DIVIDER);
+            stroke.setColor(AppColors.outline());
             stroke.setStrokeWidth(dp(act, 2));
             canvas.drawCircle(size / 2f, size / 2f, size / 2f - 1, stroke);
         }
@@ -426,15 +444,36 @@ public class ContactSelectorView {
         return false;
     }
 
-    private static TextView dialogBtn(Activity act, String text, int textColor, int bgColor, int radius) {
+    /** M3 filled button：流光渐变底 + 白色文字。 */
+    private static TextView filledBtn(Activity act, String text) {
         TextView btn = new TextView(act);
         btn.setText(text);
         btn.setTextSize(14);
-        btn.setTextColor(textColor);
         btn.setGravity(Gravity.CENTER);
         btn.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
-        btn.setBackground(roundBg(act, bgColor, radius));
-        btn.setPaintFlags(btn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
+        FlowingGradientDrawable fg = new FlowingGradientDrawable(
+                AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+        fg.setCornerRadius(dp(act, AppColors.SHAPE_FULL_DP));
+        fg.setPhaseOffset(0.5f);
+        btn.setBackground(fg);
+        btn.setTextColor(AppColors.onGradient());
+        return btn;
+    }
+
+    /** M3 outlined button：透明底 + outline 描边 + 指定文字色。 */
+    private static TextView outlinedBtn(Activity act, String text, int textColor) {
+        TextView btn = new TextView(act);
+        btn.setText(text);
+        btn.setTextSize(14);
+        btn.setGravity(Gravity.CENTER);
+        btn.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
+        GradientDrawable gd = new GradientDrawable();
+        gd.setShape(GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(dp(act, AppColors.SHAPE_FULL_DP));
+        gd.setColor(0x00000000);
+        gd.setStroke(dp(act, 1), AppColors.outline());
+        btn.setBackground(gd);
+        btn.setTextColor(textColor);
         return btn;
     }
 
@@ -442,13 +481,6 @@ public class ContactSelectorView {
         View v = new View(act);
         v.setLayoutParams(new ViewGroup.LayoutParams(w, 1));
         return v;
-    }
-
-    private static GradientDrawable roundBg(Activity act, int color, int radius) {
-        GradientDrawable gd = new GradientDrawable();
-        gd.setColor(color);
-        gd.setCornerRadius(radius);
-        return gd;
     }
 
     private static int dp(Activity act, float px) { return (int) (px * act.getResources().getDisplayMetrics().density + 0.5f); }
