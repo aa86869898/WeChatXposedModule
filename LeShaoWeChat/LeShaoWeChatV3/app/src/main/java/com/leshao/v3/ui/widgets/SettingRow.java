@@ -198,6 +198,12 @@ public class SettingRow extends LinearLayout {
 
     public SettingRow setSub(String s) { mSub.setText(s); return this; }
 
+    /** v1085: 副标题自定义颜色(已配置名单用绿色) */
+    public SettingRow subColor(int color) {
+        if (mSub != null) mSub.setTextColor(color);
+        return this;
+    }
+
     public SettingRow titleBold(boolean bold) {
         mTitle.setTypeface(bold ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
         return this;

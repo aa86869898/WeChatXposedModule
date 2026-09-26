@@ -13,9 +13,14 @@ import org.luckypray.dexkit.query.enums.StringMatchType;
 import org.luckypray.dexkit.query.matchers.ClassMatcher;
 import org.luckypray.dexkit.query.matchers.MethodMatcher;
 import org.luckypray.dexkit.result.ClassData;
+import org.luckypray.dexkit.result.FieldData;
 import org.luckypray.dexkit.result.MethodData;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -60,6 +65,8 @@ public class DexKitHelper {
     private static final String KEY_CONV_LIST_ADAPTER = "conv_list_adapter";
     private static final String KEY_MENU_G4_IMPLS = "menu_g4_impls";
     private static final String KEY_CONV_LP_IMPLS = "conv_lp_impls";
+    /** v1094: 标题栏(ActionBarCustomArea) helper 类名, 供三横菜单标题栏注入使用 */
+    private static final String KEY_ACTION_BAR_CLASS = "action_bar_custom_area";
 
     private static final AtomicBoolean sLibraryLoaded = new AtomicBoolean(false);
     private static volatile boolean sScanComplete = false;
@@ -189,6 +196,8 @@ public class DexKitHelper {
     private static volatile String sConvListListAdapterClass;
     private static volatile List<String> sConvLongPressImpls = new java.util.ArrayList<>();
     private static volatile List<String> sMenuG4Impls = new java.util.ArrayList<>();
+    /** v1094: 标题栏(ActionBarCustomArea) helper 类名 */
+    private static volatile String sActionBarCustomAreaClass;
 
     private static volatile int sVersionCode = 0;
     private static volatile int sModuleVersion = 0;
@@ -502,6 +511,7 @@ public class DexKitHelper {
             sAvatarHelperClass = kv.decodeString(KEY_AVATAR_HELPER, null);
             sLabelStorageClass = kv.decodeString(KEY_LABEL_STORAGE, null);
             sConvListListAdapterClass = kv.decodeString(KEY_CONV_LIST_ADAPTER, null);
+            sActionBarCustomAreaClass = kv.decodeString(KEY_ACTION_BAR_CLASS, null);
 
             String lpImpls = kv.decodeString(KEY_CONV_LP_IMPLS, null);
             if (lpImpls != null && !lpImpls.isEmpty()) {
@@ -601,6 +611,7 @@ public class DexKitHelper {
             if (sAvatarHelperClass != null) kv.encode(KEY_AVATAR_HELPER, sAvatarHelperClass);
             if (sLabelStorageClass != null) kv.encode(KEY_LABEL_STORAGE, sLabelStorageClass);
             if (sConvListListAdapterClass != null) kv.encode(KEY_CONV_LIST_ADAPTER, sConvListListAdapterClass);
+            if (sActionBarCustomAreaClass != null) kv.encode(KEY_ACTION_BAR_CLASS, sActionBarCustomAreaClass);
 
             if (!sConvLongPressImpls.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
@@ -673,6 +684,8 @@ public class DexKitHelper {
                  reportProgress(95, "扫描: " + scanSteps[15], "查找菜单实现类");
                 findV955Targets(b);
                 reportProgress(97, "扫描: v955 3180 适配目标", "撤回监听/标签提供者/拼音/服务定位/媒体路径");
+                findActionBarCustomArea(b);
+                reportProgress(98, "扫描: 标题栏 helper", "定位 ActionBarCustomArea(三横菜单标题栏注入)");
              }
         });
 
@@ -959,6 +972,122 @@ public class DexKitHelper {
         List<String> copy = new java.util.ArrayList<>();
         for (String s : sMenuG4Impls) copy.add(s);
         return copy;
+    }
+
+    /** v1094: 标题栏(ActionBarCustomArea) helper 类名; 供 CornerMenu 标题栏注入使用 */
+    public static String getActionBarCustomAreaClass() {
+        return sActionBarCustomAreaClass;
+    }
+
+    /**
+     * v1095: 严格按《左上角按钮注入.md》定位标题栏 helper(原 com.tencent.mm.ui.j, 混淆名会变)。
+     * 文档规则:
+     *   A) findClassUsingStrings("MicroMsg.ActionBarCustomArea")
+     *   B) 结构: 类内含 <init>(android.view.View), 且 View 字段 >= 10 且含 WeImageView 字段
+     *   语义校验(文档 line 1322-1324): 必须存在 g(CharSequence) 设标题 与 c(OnClickListener) 设返回键
+     * 只有通过语义校验(或严格结构筛选)的类才会被采用, 以避免误命中列表项等类。
+     */
+    private static void findActionBarCustomArea(DexKitBridge bridge) {
+        try {
+            final java.util.LinkedHashSet<String> cands = new java.util.LinkedHashSet<>();
+            // A) 类级字符串锚点(文档首选)
+            try {
+                for (ClassData c : bridge.findClass(FindClass.create().matcher(
+                        ClassMatcher.create().usingStrings("MicroMsg.ActionBarCustomArea")))) {
+                    if (c.getName() != null) cands.add(c.getName());
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "findActionBarCustomArea [A] err: " + t.getMessage());
+            }
+            // A2) 方法级字符串锚点(更宽)
+            try {
+                for (MethodData m : bridge.findMethod(FindMethod.create().matcher(
+                        MethodMatcher.create().usingStrings("MicroMsg.ActionBarCustomArea")))) {
+                    if (m.getClassName() != null) cands.add(m.getClassName());
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "findActionBarCustomArea [A2] err: " + t.getMessage());
+            }
+            // B) 结构锚点: com.tencent.mm.ui 下所有含 <init>(View) 的类(标题栏 helper 在此包, 限制范围避免遍历过多类)
+            try {
+                for (MethodData m : bridge.findMethod(FindMethod.create().matcher(
+                        MethodMatcher.create().name("<init>").paramCount(1)
+                                .paramTypes("android.view.View")))) {
+                    String cn = m.getClassName();
+                    if (cn != null && cn.startsWith("com.tencent.mm.ui")) cands.add(cn);
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "findActionBarCustomArea [B] err: " + t.getMessage());
+            }
+            LogWriter.log(TAG, "findActionBarCustomArea: " + cands.size() + " candidates (A/A2/B)");
+
+            String primary = null; int primaryScore = -1;
+            String fallback = null; int fallbackScore = -1;
+            for (String cn : cands) {
+                ClassData cd = null;
+                try { cd = bridge.getClassData(cn); } catch (Throwable ignored) {}
+                if (cd == null) continue;
+
+                boolean hasViewCtor = false, hasG = false, hasC = false;
+                int viewFields = 0; boolean hasWe = false;
+                try {
+                    for (MethodData m : cd.getMethods()) {
+                        if (("<init>".equals(m.getName()) || m.isConstructor())
+                                && m.getParamCount() == 1) {
+                            java.util.List<String> pt = m.getParamTypeNames();
+                            if (pt != null && pt.size() == 1
+                                    && "android.view.View".equals(pt.get(0))) hasViewCtor = true;
+                        }
+                        java.util.List<String> pt = m.getParamTypeNames();
+                        if (pt != null && pt.size() == 1) {
+                            if ("g".equals(m.getName())
+                                    && "java.lang.CharSequence".equals(pt.get(0))) hasG = true;
+                            if ("c".equals(m.getName())
+                                    && "android.view.View$OnClickListener".equals(pt.get(0))) hasC = true;
+                        }
+                    }
+                    for (FieldData f : cd.getFields()) {
+                        String tn = f.getTypeName();
+                        if (tn == null) continue;
+                        if ("android.view.View".equals(tn) || "android.view.ViewGroup".equals(tn)
+                                || "android.widget.TextView".equals(tn)
+                                || "android.widget.ImageView".equals(tn)
+                                || tn.endsWith("WeImageView")) viewFields++;
+                        if (tn.endsWith("WeImageView")) hasWe = true;
+                    }
+                } catch (Throwable ignored) {}
+
+                boolean semanticOk = hasViewCtor && hasG && hasC;
+                boolean structureOk = hasViewCtor && hasWe && viewFields >= 10
+                        && cn != null && cn.startsWith("com.tencent.mm.ui")
+                        && !cn.startsWith("com.tencent.mm.plugin");
+                LogWriter.log(TAG, "  cand " + cn + " viewCtor=" + hasViewCtor + " g=" + hasG
+                        + " c=" + hasC + " we=" + hasWe + " viewFields=" + viewFields
+                        + " semantic=" + semanticOk + " structure=" + structureOk);
+
+                if (semanticOk) {
+                    int score = viewFields + (hasWe ? 5 : 0);
+                    if (score > primaryScore) { primaryScore = score; primary = cn; }
+                } else if (structureOk) {
+                    int score = viewFields + (hasWe ? 5 : 0);
+                    if (score > fallbackScore) { fallbackScore = score; fallback = cn; }
+                }
+            }
+
+            if (primary != null) {
+                sActionBarCustomAreaClass = primary;
+                LogWriter.log(TAG, "findActionBarCustomArea: PRIMARY " + primary
+                        + " (score=" + primaryScore + ")");
+            } else if (fallback != null) {
+                sActionBarCustomAreaClass = fallback;
+                LogWriter.log(TAG, "findActionBarCustomArea: FALLBACK " + fallback
+                        + " (score=" + fallbackScore + ")");
+            } else {
+                LogWriter.log(TAG, "findActionBarCustomArea: NOT found");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "findActionBarCustomArea err: " + t.getMessage());
+        }
     }
 
     private static void findVoiceApi(DexKitBridge bridge) {

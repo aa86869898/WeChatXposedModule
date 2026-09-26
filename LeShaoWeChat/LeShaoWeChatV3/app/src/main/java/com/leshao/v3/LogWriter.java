@@ -120,11 +120,17 @@ public class LogWriter {
         }
     }
 
+    // v1088: 默认不再把每条日志同步镜像到 logcat(XposedBridge.log 会同步写 logd,
+    // 高频日志是主线程卡顿来源之一)。文件日志仍异步写入, 诊断不受影响。
+    private static final boolean MIRROR_TO_LOGCAT = false;
+
     public static void log(String tag, String msg) {
         String ts = new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(new Date());
         String thread = Thread.currentThread().getName();
         String line = ts + " [" + thread + "] " + tag + ": " + msg;
-        try { XposedBridge.log("LeShaoV3: " + tag + ": " + msg); } catch (Throwable ignored) {}
+        if (MIRROR_TO_LOGCAT) {
+            try { XposedBridge.log("LeShaoV3: " + tag + ": " + msg); } catch (Throwable ignored) {}
+        }
         writeLine(line);
     }
 

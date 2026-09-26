@@ -3334,14 +3334,33 @@ public class TtsVoiceSender {
         }
     }
 
+    /** 误报语音时长(毫秒); 返回 -1 表示已关闭误报 */
+    public static int resolveFakeDurationMs() {
+        try {
+            if (!WmPrefs.get("ls_tts_false_dur_on", true)) return -1;
+            int sec = WmPrefs.getInt("ls_tts_false_dur_sec", 60);
+            if (sec <= 0) sec = 60;
+            if (sec > 3600) sec = 3600;
+            return sec * 1000;
+        } catch (Throwable t) {
+            return 60000;
+        }
+    }
+
     public static boolean sendViaSceneVoice(String talker, String voiceFile, int durationMs) {
         try {
             // v1059: 微信语音消息时长上限 60 秒, 超过会被拒绝/发不出去。60 秒以内按真实时长发送;
-            // 超过 60 秒的一律按「误报 60 秒」上报时长, 保证语音能正常发出。
+            // v1085: 超过 60 秒时按「误报语音时长」上报, 默认误报 60 秒, 用户可在 TTS 页面自定义秒数。
             if (durationMs > 60000) {
-                LogWriter.log(TAG, "SceneVoice: durationMs=" + durationMs
-                        + "ms 超过 60s, 误报时长为 60000ms");
-                durationMs = 60000;
+                int fakeMs = resolveFakeDurationMs();
+                if (fakeMs > 0) {
+                    LogWriter.log(TAG, "SceneVoice: durationMs=" + durationMs
+                            + "ms 超过 60s, 误报时长为 " + fakeMs + "ms");
+                    durationMs = fakeMs;
+                } else {
+                    LogWriter.log(TAG, "SceneVoice: durationMs=" + durationMs
+                            + "ms 超过 60s, 误报时长已关闭, 按真实时长上报");
+                }
             }
             LogWriter.log(TAG, "SceneVoice: start voiceFile=" + voiceFile + " talker=" + talker + " durationMs=" + durationMs);
             if (talker == null || talker.isEmpty()) {

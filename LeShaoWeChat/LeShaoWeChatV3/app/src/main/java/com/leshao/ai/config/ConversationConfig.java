@@ -59,6 +59,14 @@ public class ConversationConfig {
         public Boolean quoteReply;
         /** v1073: 群聊回复时是否自动 @ 提问人(仅群聊)。 */
         public Boolean autoAt;
+        /** v1085: 本会话关键词自动回复开关(null=继承全局)。 */
+        public Boolean keywordReplyEnabled;
+        /** v1085: 本会话关键词问答规则(为空时用全局规则)。 */
+        public List<com.leshao.v3.model.KeywordRule> keywordReplyRules;
+        /** v1085: 关键词回复是否自动 @ 提问人(仅群聊)。 */
+        public Boolean keywordAutoAt;
+        /** v1085: 关键词回复是否引用原消息。 */
+        public Boolean keywordQuote;
 
         public boolean isEmpty() {
             return enabled == null && autoReply == null && onlyWhenMentioned == null
@@ -68,7 +76,10 @@ public class ConversationConfig {
                     && memoryEnabled == null && memoryLimit == null
                     && temperature == null
                     && (voices == null || voices.isEmpty()) && randomVoice == null
-                    && quoteReply == null && autoAt == null;
+                    && quoteReply == null && autoAt == null
+                    && keywordReplyEnabled == null
+                    && (keywordReplyRules == null || keywordReplyRules.isEmpty())
+                    && keywordAutoAt == null && keywordQuote == null;
         }
 
         /**
@@ -98,6 +109,11 @@ public class ConversationConfig {
             e.randomVoice = randomVoice;
             e.quoteReply = quoteReply;
             e.autoAt = autoAt;
+            e.keywordReplyEnabled = keywordReplyEnabled;
+            e.keywordReplyRules = keywordReplyRules == null
+                    ? null : new ArrayList<>(keywordReplyRules);
+            e.keywordAutoAt = keywordAutoAt;
+            e.keywordQuote = keywordQuote;
             return e;
         }
 
@@ -124,6 +140,15 @@ public class ConversationConfig {
             if (randomVoice != null) o.put("randomVoice", randomVoice.booleanValue());
             if (quoteReply != null) o.put("quoteReply", quoteReply.booleanValue());
             if (autoAt != null) o.put("autoAt", autoAt.booleanValue());
+            if (keywordReplyEnabled != null) {
+                o.put("keywordReplyEnabled", keywordReplyEnabled.booleanValue());
+            }
+            if (keywordReplyRules != null && !keywordReplyRules.isEmpty()) {
+                o.put("keywordReplyRules",
+                        com.leshao.v3.model.KeywordRule.listToJson(keywordReplyRules));
+            }
+            if (keywordAutoAt != null) o.put("keywordAutoAt", keywordAutoAt.booleanValue());
+            if (keywordQuote != null) o.put("keywordQuote", keywordQuote.booleanValue());
             return o;
         }
 
@@ -166,6 +191,18 @@ public class ConversationConfig {
             }
             if (o.has("autoAt") && !o.isNull("autoAt")) {
                 e.autoAt = o.optBoolean("autoAt");
+            }
+            if (o.has("keywordReplyEnabled") && !o.isNull("keywordReplyEnabled")) {
+                e.keywordReplyEnabled = o.optBoolean("keywordReplyEnabled");
+            }
+            List<com.leshao.v3.model.KeywordRule> kr = com.leshao.v3.model.KeywordRule
+                    .listFromJson(o.optJSONArray("keywordReplyRules"));
+            if (!kr.isEmpty()) e.keywordReplyRules = kr;
+            if (o.has("keywordAutoAt") && !o.isNull("keywordAutoAt")) {
+                e.keywordAutoAt = o.optBoolean("keywordAutoAt");
+            }
+            if (o.has("keywordQuote") && !o.isNull("keywordQuote")) {
+                e.keywordQuote = o.optBoolean("keywordQuote");
             }
             return e;
         }

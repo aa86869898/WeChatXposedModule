@@ -57,6 +57,16 @@ public final class WeChatHook implements IXposedHookLoadPackage {
     public static void install(XC_LoadPackage.LoadPackageParam lpparam) {
         // v1038: 移除 v965 系统克隆分身(App-Clone)拦截 —— 与 MainHook 一致, 克隆分身隔离功能已废掉,
         // 所有微信进程均允许模块执行, 实例启停由 LSPosed 作用域控制。
+        //
+        // v1099: AI 助手仅在主进程装配。子进程(:push/:appbrand*)没有微信内核,
+        // StorageHub 依赖的 j1.v(tn3.c4) 会抛 "Kernel not initialized" → 绑定必然失败,
+        // 既产生误导性「存储链绑定失败」日志, 又因无法发送/无存储而让接收 hook 静默失败、
+        // 甚至与主进程重复处理同一条消息。AI 回复发送本来就只能由主进程完成。
+        final String procName = lpparam != null ? lpparam.processName : null;
+        if (procName != null && procName.contains(":")) {
+            LogWriter.log(TAG, "非主进程(" + procName + "), 跳过 LeshaoAI 装配");
+            return;
+        }
         final ClassLoader cl = lpparam.classLoader;
 
         // TTS 等需要的微信 Application Context
@@ -94,6 +104,17 @@ public final class WeChatHook implements IXposedHookLoadPackage {
                         if (!(param.thisObject instanceof Activity)) return;
                         if (!LAUNCHER_UI.equals(param.thisObject.getClass().getName())) return;
                         self.installCore(lpparam, appContext);
+                        // v1099: 冷启动首次绑定时内核可能尚未就绪, 导致存储链绑定失败且不再重试
+                        // (resetBindingCooldown 此前无调用者)。主界面每次 onResume 时补一次重绑,
+                        // 内核就绪后即可自愈。已绑定则 ensureBound 立即返回, 无额外开销。
+                        try {
+                            StorageHub hub = StorageHub.get();
+                            if (!hub.isBound()) {
+                                hub.resetBindingCooldown();
+                                hub.ensureBound();
+                            }
+                        } catch (Throwable ignored) {
+                        }
                     }
                 });
                 LogWriter.log(TAG, "已挂 Activity.onResume 等待微信就绪(过滤 " + LAUNCHER_UI + ")");

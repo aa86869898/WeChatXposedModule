@@ -136,6 +136,19 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
                 voiceEnhance, (v, on) -> WmPrefs.set("voice_enhance", on)));
         root.addView(cardVoiceMode);
 
+        // v1085: 文字转语音误报语音时长 — 超过 60 秒的语音按指定秒数误报, 保证语音能发出
+        boolean falseDurOn = WmPrefs.get("ls_tts_false_dur_on", true);
+        int falseDurSec = WmPrefs.getInt("ls_tts_false_dur_sec", 60);
+        LinearLayout cardFalseDur = makeCard(ctx, d);
+        cardFalseDur.addView(switchRow(ctx, d, "文字转语音误报语音时长",
+                "开启后超过 60 秒的语音按下方秒数误报时长(默认 60 秒); 关闭则按真实时长上报",
+                falseDurOn, (v, on) -> WmPrefs.set("ls_tts_false_dur_on", on)));
+        cardFalseDur.addView(itemDivider(ctx, d));
+        cardFalseDur.addView(numberInputRow(ctx, d, "误报时长", "超过 60 秒时上报的语音秒数",
+                String.valueOf(falseDurSec), "秒", sec -> WmPrefs.setInt("ls_tts_false_dur_sec",
+                        sec <= 0 ? 60 : Math.min(sec, 3600))));
+        root.addView(cardFalseDur);
+
         root.addView(candyDivider(ctx, d));
         root.addView(sectionLabel(ctx, d, "\u81ea\u52a8\u64ad\u62a5\u7c7b\u578b"));
 
@@ -513,6 +526,74 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         return row;
     }
 
+    private static LinearLayout numberInputRow(Context ctx, float d, String title, String desc,
+                                               String initial, String suffix,
+                                               java.util.function.IntConsumer onValue) {
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
+        row.setBackgroundColor(AppColors.whiteCard());
+
+        LinearLayout textCol = new LinearLayout(ctx);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+        TextView tv = new TextView(ctx);
+        tv.setText(title);
+        tv.setTextSize(15);
+        tv.setTextColor(AppColors.text1());
+        tv.setTypeface(null, Typeface.BOLD);
+        textCol.addView(tv);
+        if (desc != null && !desc.isEmpty()) {
+            TextView dv = new TextView(ctx);
+            dv.setText(desc);
+            dv.setTextSize(12);
+            dv.setTextColor(AppColors.text2());
+            dv.setPadding(0, (int)(3 * d), 0, 0);
+            textCol.addView(dv);
+        }
+        row.addView(textCol);
+
+        LinearLayout inputCol = new LinearLayout(ctx);
+        inputCol.setOrientation(LinearLayout.HORIZONTAL);
+        inputCol.setGravity(Gravity.CENTER_VERTICAL);
+        EditText et = new EditText(ctx);
+        et.setInputType(InputType.TYPE_CLASS_NUMBER);
+        et.setText(initial);
+        et.setTextSize(15);
+        et.setGravity(Gravity.CENTER);
+        et.setSingleLine(true);
+        et.setTextColor(AppColors.text1());
+        GradientDrawable etBg = new GradientDrawable();
+        etBg.setColor(AppColors.inputBg());
+        etBg.setCornerRadius(8 * d);
+        et.setBackground(etBg);
+        LinearLayout.LayoutParams etLp = new LinearLayout.LayoutParams((int)(64 * d), (int)(38 * d));
+        inputCol.addView(et, etLp);
+        if (suffix != null && !suffix.isEmpty()) {
+            TextView sfx = new TextView(ctx);
+            sfx.setText(suffix);
+            sfx.setTextSize(14);
+            sfx.setTextColor(AppColors.text2());
+            sfx.setPadding((int)(6 * d), 0, 0, 0);
+            inputCol.addView(sfx);
+        }
+        row.addView(inputCol);
+
+        et.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+            @Override public void afterTextChanged(android.text.Editable s) {
+                String str = s == null ? "" : s.toString().trim();
+                if (str.isEmpty()) return;
+                try {
+                    onValue.accept(Integer.parseInt(str));
+                } catch (Throwable ignored) {}
+            }
+        });
+        return row;
+    }
+
     private static View itemDivider(Context ctx, float d) {
         View v = new View(ctx);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 1);
@@ -696,7 +777,49 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         CandyUi.ripple(cfgBtn, AppColors.SHAPE_SM_DP);
         cfgBtn.setOnClickListener(v -> showTtsCubeDialog(ctx, parentAct, d));
 
+        // v1086: 配音魔方接口配置下方 —— 「一键开启所有功能」总开关
+        card.addView(itemDivider(ctx, d));
+        card.addView(switchRow(ctx, d, "一键开启所有功能",
+                "一键开启/关闭全部 TTS 转语音与自动播报功能开关",
+                isAllFeaturesOn(prefs), (v, on) -> {
+                    setAllFeatures(prefs, on);
+                    try { SubPageActivity.refreshCurrent(parentAct); } catch (Throwable ignored) {}
+                }));
+
         return card;
+    }
+
+    /** v1086: 汇总功能开关(不含时段/白名单等限制项) */
+    private static final String[] ALL_FEATURE_ANNOUNCE_KEYS = new String[]{
+            KEY_TTS_COMMAND,
+            KEY_ANNOUNCE_TEXT, KEY_ANNOUNCE_IMAGE, KEY_ANNOUNCE_VIDEO, KEY_ANNOUNCE_LOCATION,
+            KEY_ANNOUNCE_CARD, KEY_ANNOUNCE_FILE, KEY_ANNOUNCE_STICKER, KEY_ANNOUNCE_CALL,
+            KEY_ANNOUNCE_QUOTE, KEY_ANNOUNCE_MINIPROGRAM, KEY_ANNOUNCE_VIDEOCHANNEL,
+            KEY_ANNOUNCE_CHATHISTORY, KEY_ANNOUNCE_NICKNAME, KEY_ANNOUNCE_GROUP,
+            KEY_ANNOUNCE_PAT, KEY_ANNOUNCE_AT, KEY_TEXT_TRUNCATE
+    };
+
+    /** v1086: 所有功能开关是否全部开启 */
+    private static boolean isAllFeaturesOn(SharedPreferences prefs) {
+        if (prefs == null) return false;
+        for (String k : ALL_FEATURE_ANNOUNCE_KEYS) {
+            if (!prefs.getBoolean(k, false)) return false;
+        }
+        return WmPrefs.get("auto_voice", false)
+                && WmPrefs.get("voice_enhance", false)
+                && WmPrefs.get("ls_tts_false_dur_on", false);
+    }
+
+    /** v1086: 一键设置全部功能开关 */
+    private static void setAllFeatures(SharedPreferences prefs, boolean on) {
+        if (prefs != null) {
+            SharedPreferences.Editor e = prefs.edit();
+            for (String k : ALL_FEATURE_ANNOUNCE_KEYS) e.putBoolean(k, on);
+            e.apply();
+        }
+        WmPrefs.set("auto_voice", on);
+        WmPrefs.set("voice_enhance", on);
+        WmPrefs.set("ls_tts_false_dur_on", on);
     }
 
     // ===== 配音魔方接口配置对话框 (peiyinmofang.com) =====

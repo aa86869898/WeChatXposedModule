@@ -63,6 +63,11 @@ public class AppConfig {
     private boolean autoAt = false;
     /** 记忆保留的最大历史消息条数（环形上限）。 */
     private int maxHistoryMessages = 100;
+    /** v1085: 关键词自动回复总开关。命中关键词时直接回配置问答, 不送大模型。 */
+    private boolean keywordReplyEnabled = false;
+    /** v1085: 全局关键词问答规则(会话未单独配置时使用)。 */
+    private java.util.List<com.leshao.v3.model.KeywordRule> keywordReplyRules
+            = new java.util.ArrayList<>();
     /** v1019: 历史已添加模型记录(最近在前, 去重, 上限 MODEL_HISTORY_LIMIT)。 */
     private java.util.List<String> modelHistory = new java.util.ArrayList<>();
     public static final int MODEL_HISTORY_LIMIT = 20;
@@ -148,6 +153,9 @@ public class AppConfig {
         quoteReply = obj.optBoolean("quoteReply", quoteReply);
         autoAt = obj.optBoolean("autoAt", autoAt);
         maxHistoryMessages = obj.optInt("maxHistoryMessages", maxHistoryMessages);
+        keywordReplyEnabled = obj.optBoolean("keywordReplyEnabled", keywordReplyEnabled);
+        keywordReplyRules = com.leshao.v3.model.KeywordRule
+                .listFromJson(obj.optJSONArray("keywordReplyRules"));
         modelHistory.clear();
         JSONArray mh = obj.optJSONArray("modelHistory");
         if (mh != null) {
@@ -179,6 +187,9 @@ public class AppConfig {
         obj.put("quoteReply", quoteReply);
         obj.put("autoAt", autoAt);
         obj.put("maxHistoryMessages", maxHistoryMessages);
+        obj.put("keywordReplyEnabled", keywordReplyEnabled);
+        obj.put("keywordReplyRules",
+                com.leshao.v3.model.KeywordRule.listToJson(keywordReplyRules));
         JSONArray mh = new JSONArray();
         for (String m : modelHistory) mh.put(m);
         obj.put("modelHistory", mh);
@@ -210,6 +221,8 @@ systemPrompt = "你是日常聊天助手，根据对话上下文自动识别情�
         quoteReply = false;
         autoAt = false;
         maxHistoryMessages = 100;
+        keywordReplyEnabled = false;
+        keywordReplyRules.clear();
         modelHistory.clear();
     }
 
@@ -281,8 +294,23 @@ systemPrompt = "你是日常聊天助手，根据对话上下文自动识别情�
         this.maxHistoryMessages = maxHistoryMessages;
     }
 
-    // ---------- v1019: 历史模型记录 ----------
+    // ---------- v1085: 关键词自动回复 ----------
 
+    public synchronized boolean isKeywordReplyEnabled() { return keywordReplyEnabled; }
+    public synchronized void setKeywordReplyEnabled(boolean v) { this.keywordReplyEnabled = v; }
+
+    /** 返回全局关键词规则副本。 */
+    public synchronized java.util.List<com.leshao.v3.model.KeywordRule> getKeywordReplyRules() {
+        return new java.util.ArrayList<>(keywordReplyRules);
+    }
+
+    public synchronized void setKeywordReplyRules(
+            java.util.List<com.leshao.v3.model.KeywordRule> rules) {
+        keywordReplyRules = rules == null
+                ? new java.util.ArrayList<>() : new java.util.ArrayList<>(rules);
+    }
+
+    // ---------- v1019: 历史模型记录 ----------
     /** 返回历史模型列表副本(最近在前)。 */
     public synchronized java.util.List<String> getModelHistory() {
         return new java.util.ArrayList<>(modelHistory);

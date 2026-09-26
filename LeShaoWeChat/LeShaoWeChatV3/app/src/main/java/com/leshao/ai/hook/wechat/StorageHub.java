@@ -288,14 +288,91 @@ public final class StorageHub {
             }
             // ③ NetSceneQueue = j1.q() 实例 .b
             netSceneQueue = readNetSceneQueue(j1);
+            // ④ ConfigStorage(q3) = selfWxid/selfNickname 取数源。
+            //    旧链(acc.q())才有, 服务定位链此前漏绑 → configStorage 恒为 false。
+            if (configStorage == null) {
+                configStorage = readConfigStorage(svc, cl);
+            }
             LogWriter.log(TAG, "bindViaServiceLocator: msg=" + (msgInfoStorage != null)
                     + " rcontact=" + (rcontactStorage != null)
-                    + " queue=" + (netSceneQueue != null));
+                    + " queue=" + (netSceneQueue != null)
+                    + " config=" + (configStorage != null));
             return msgInfoStorage != null || rcontactStorage != null;
         } catch (Throwable t) {
             LogWriter.log(TAG, "bindViaServiceLocator err: " + t);
             return false;
         }
+    }
+
+    /**
+     * v1099 补绑 ConfigStorage(q3)：selfWxid(key2)/selfNickname(key4) 的取数源。
+     * 优先取服务实例直接暴露的 ConfigStorage, 否则经 AccountStorage(b41.e).q() 兜底。
+     * 失败返回 null, 由 selfWxid 的 y1.u / SharedPreferences 兜底接管。
+     */
+    private static Object readConfigStorage(Object svc, ClassLoader cl) {
+        Class<?> q3 = resolveOn(cl, null, "com.tencent.mm.storage.q3");
+        // a) 服务实例直接暴露 ConfigStorage
+        if (q3 != null && svc != null) {
+            Object c = firstGetter(svc, q3, null);
+            if (c != null) {
+                LogWriter.log(TAG, "readConfigStorage: 命中 " + svc.getClass().getName());
+                return c;
+            }
+        }
+        // b) 经 AccountStorage(b41.e).q()
+        Class<?> accCls = resolveOn(cl, null, "b41.e");
+        if (accCls == null) {
+            accCls = resolveOn(cl, DexKitAdapter.findAccountStorageClass(), null);
+        }
+        Object acc = (accCls != null && svc != null) ? firstGetter(svc, accCls, null) : null;
+        if (acc == null) {
+            Class<?> hubCls = resolveOn(cl, null, "b41.h9");
+            if (hubCls == null) {
+                hubCls = resolveOn(cl, DexKitAdapter.findCoreHubClass(), null);
+            }
+            if (hubCls != null) {
+                Object hub = callStaticNoArg(hubCls, "d", hubCls);
+                if (hub == null) {
+                    hub = callStaticNoArg(hubCls, "d", null);
+                }
+                if (hub != null) {
+                    acc = callNoArgTyped(hub, "b", accCls);
+                }
+                if (acc == null) {
+                    acc = callStaticNoArg(hubCls, "b", accCls);
+                }
+            }
+        }
+        if (acc != null) {
+            Object c = (q3 != null) ? firstGetter(acc, q3, "q") : null;
+            if (c == null) {
+                c = callNoArg(acc, "q");
+            }
+            if (c != null) {
+                LogWriter.log(TAG, "readConfigStorage: 经 AccountStorage 命中 "
+                        + c.getClass().getName());
+            }
+            return c;
+        }
+        return null;
+    }
+
+    /** 将类名按目标 CL 重新解析(规避 Tinker 双 CL 下的 Class 对象不匹配), 失败回退原 Class。 */
+    private static Class<?> resolveOn(ClassLoader cl, Class<?> cls, String fallbackName) {
+        if (cls != null && cl != null) {
+            try {
+                return XposedHelpers.findClass(cls.getName(), cl);
+            } catch (Throwable ignored) {
+            }
+            return cls;
+        }
+        if (fallbackName != null && cl != null) {
+            try {
+                return XposedHelpers.findClass(fallbackName, cl);
+            } catch (Throwable ignored) {
+            }
+        }
+        return cls;
     }
 
     /** 定位 j1 服务定位类：优先 DexKit 扫描结果, 兜底类名 gp0.j1。 */

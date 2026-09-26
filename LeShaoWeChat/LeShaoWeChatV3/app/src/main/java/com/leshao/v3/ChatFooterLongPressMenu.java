@@ -1116,9 +1116,10 @@ public class ChatFooterLongPressMenu {
                 Toast.makeText(ctx, "请先选择MP3文件", Toast.LENGTH_SHORT).show();
                 return;
             }
-            String cachedTalker = sCurrentTalker;
-            String talker = (cachedTalker != null && !cachedTalker.isEmpty())
-                    ? cachedTalker : getTalker(ctx);
+            // v1086: 必须优先实时解析"当前打开的聊天对象", 不能先取 sCurrentTalker 缓存。
+            // 缓存会被 om.A0 出站文本/万群转发等入口改写, 若刚好指向别的群,
+            // 音频转语音的 voiceinfo 记录 talker 就会错绑到其它群(用户反馈"偶尔发到其他群")。
+            String talker = getTalker(ctx);
             if (talker == null || talker.isEmpty()) {
                 Toast.makeText(ctx, "无法获取当前聊天对象", Toast.LENGTH_SHORT).show();
                 return;
@@ -1653,8 +1654,8 @@ public class ChatFooterLongPressMenu {
                 sCutEndSec = 0;
                 final float fBegin = begin;
                 final float fEnd = end;
-                final String fTalker = (sCurrentTalker != null && !sCurrentTalker.isEmpty())
-                        ? sCurrentTalker : getTalker(ctx);
+                // v1086: 同 convert 按钮, 实时解析当前聊天对象, 避免缓存错绑其它群
+                final String fTalker = getTalker(ctx);
                 if (fTalker == null || fTalker.isEmpty()) {
                     Toast.makeText(ctx, "无法获取当前聊天对象", Toast.LENGTH_SHORT).show();
                     return;

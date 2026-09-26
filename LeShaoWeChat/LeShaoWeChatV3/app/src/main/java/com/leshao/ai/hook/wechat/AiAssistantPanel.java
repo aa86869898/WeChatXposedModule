@@ -29,6 +29,7 @@ import com.leshao.ai.api.model.ProviderType;
 import com.leshao.ai.config.AppConfig;
 import com.leshao.ai.config.ConversationConfig;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.model.KeywordRule;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
 import com.leshao.v3.ui.InsetsUtil;
@@ -599,6 +600,20 @@ public final class AiAssistantPanel {
                         LogWriter.log(TAG, "click: 语音消息发送 -> " + checked);
                         persist(ctx, config, c -> c.setTtsEnabled(checked), "语音消息发送已" + (checked ? "开启" : "关闭"));
                     }));
+            // v1085: 关键词自动回复 (全局开关 + 规则编辑入口)
+            list.addView(newRow(ctx, AiIconDrawable.G_BELL, "关键词自动回复",
+                    "命中关键词直接回配置问答, 不送大模型")
+                    .switchOn(config.isKeywordReplyEnabled(), (btn, checked) -> {
+                        LogWriter.log(TAG, "click: 关键词自动回复 -> " + checked);
+                        persist(ctx, config, c -> c.setKeywordReplyEnabled(checked),
+                                "关键词自动回复已" + (checked ? "开启" : "关闭"));
+                    }));
+            list.addView(newRow(ctx, AiIconDrawable.G_SLIDERS, "关键词问答规则", keywordRulesSub())
+                    .arrow(() -> {
+                        LogWriter.log(TAG, "click: 关键词问答规则");
+                        dismissCurrent();
+                        showKeywordRules(activity);
+                    }));
 
             // ---- 2. AI回复个性化配置 ----
             // v996: 群聊/联系人二合一, 纯入口(无行内开关); 仅「已配置且启用」的会话触发 AI。
@@ -651,6 +666,106 @@ public final class AiAssistantPanel {
         root.addView(btnClose);
         // v968: WRAP_CONTENT 高度, 面板按内容收缩, 底部栏紧贴内容
         showPopup(activity, root, 0, "main");
+    }
+
+    // ==================== 二级: 关键词问答规则(全局) ====================
+
+    private static void showKeywordRules(final Activity activity) {
+        LogWriter.log(TAG, "showKeywordRules: enter");
+        if (activity == null || activity.isFinishing()) return;
+        final Context ctx = activity;
+        final AppConfig cfg = AIBotCore.config();
+        if (cfg == null) {
+            toastQuiet(ctx, "AI 核心未初始化");
+            return;
+        }
+
+        LinearLayout root = newRoot(ctx);
+        root.addView(newTitle(ctx, "关键词问答规则"));
+
+        LinearLayout list = new LinearLayout(ctx);
+        newScroll(root, list, (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.55f));
+
+        list.addView(newSection(ctx, "规则列表", "命中关键词直接回复, 不送大模型"));
+        final EditText etRules = M3Page.input(ctx, "每行一条: 关键词=回复内容");
+        etRules.setSingleLine(false);
+        etRules.setMinLines(6);
+        etRules.setGravity(Gravity.TOP);
+        etRules.setText(rulesToText(cfg.getKeywordReplyRules()));
+        list.addView(etRules);
+        list.addView(M3Page.note(ctx,
+                "格式: 每行一条 「关键词=回复」。例如: 你好=你好呀, 在的。\n命中包含关键词的消息即自动回复。"));
+
+        ModernButton btnSave = new ModernButton(ctx, "保存", ModernButton.STYLE_PRIMARY);
+        btnSave.onClick(() -> {
+            LogWriter.log(TAG, "click(kw rules): 保存");
+            try {
+                List<KeywordRule> parsed = parseKeywordRules(str(etRules));
+                cfg.setKeywordReplyRules(parsed);
+                boolean ok = cfg.save();
+                reload();
+                toastQuiet(ctx, ok ? ("已保存 " + parsed.size() + " 条规则") : "保存失败");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "kw rules save err: " + t);
+                toastQuiet(ctx, "保存失败");
+            }
+            dismissCurrent();
+            show(activity);
+        });
+        ModernButton btnClose = new ModernButton(ctx, "返回", ModernButton.STYLE_GHOST);
+        btnClose.onClick(() -> {
+            dismissCurrent();
+            show(activity);
+        });
+        root.addView(newBtnRow2(ctx, btnSave, btnClose));
+        showPopup(activity, root, 0, "kwrules", () -> show(activity));
+    }
+
+    /** v1085: 文本 → 关键词规则列表(每行 关键词=回复)。 */
+    private static List<KeywordRule> parseKeywordRules(String text) {
+        List<KeywordRule> out = new ArrayList<>();
+        if (text == null) return out;
+        for (String raw : text.split("\\r?\\n")) {
+            String line = raw == null ? "" : raw.trim();
+            if (line.isEmpty()) continue;
+            int idx = firstKeywordSep(line);
+            if (idx <= 0) continue;
+            String kw = line.substring(0, idx).trim();
+            String rep = line.substring(idx + keywordSepLen(line, idx)).trim();
+            if (kw.isEmpty()) continue;
+            out.add(new KeywordRule(kw, rep, false));
+        }
+        return out;
+    }
+
+    /** v1085: 关键词规则列表 → 文本。 */
+    private static String rulesToText(List<KeywordRule> rules) {
+        if (rules == null || rules.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (KeywordRule r : rules) {
+            if (r == null || TextUtils.isEmpty(r.keyword)) continue;
+            if (sb.length() > 0) sb.append('\n');
+            sb.append(r.keyword).append('=').append(r.reply == null ? "" : r.reply);
+        }
+        return sb.toString();
+    }
+
+    private static final String[] KEYWORD_SEPS = {"=>", "＝", "=", "|", "：", ":"};
+
+    private static int firstKeywordSep(String line) {
+        int best = -1;
+        for (String s : KEYWORD_SEPS) {
+            int i = line.indexOf(s);
+            if (i > 0 && (best < 0 || i < best)) best = i;
+        }
+        return best;
+    }
+
+    private static int keywordSepLen(String line, int idx) {
+        for (String s : KEYWORD_SEPS) {
+            if (line.startsWith(s, idx)) return s.length();
+        }
+        return 1;
     }
 
     // ==================== 二级: 模型提供商 ====================
@@ -1070,6 +1185,16 @@ public final class AiAssistantPanel {
         }
     }
 
+    private static String keywordRulesSub() {
+        try {
+            AppConfig cfg = AIBotCore.config();
+            int n = cfg == null ? 0 : cfg.getKeywordReplyRules().size();
+            return n == 0 ? "每行一条: 关键词=回复 (未配置)" : "已有 " + n + " 条规则, 点击编辑";
+        } catch (Throwable t) {
+            return "每行一条: 关键词=回复";
+        }
+    }
+
     private static String templateSub() {
         try {
             ConversationConfig cc = AIBotCore.conversationConfig();
@@ -1102,6 +1227,10 @@ public final class AiAssistantPanel {
         if (e.memoryEnabled != null) parts.add(e.memoryEnabled ? "记忆:开" : "记忆:关");
         if (e.memoryLimit != null) parts.add("记忆:" + e.memoryLimit + "条");
         if (!TextUtils.isEmpty(e.model)) parts.add("模型:" + e.model);
+        if (e.keywordReplyEnabled != null) parts.add(e.keywordReplyEnabled ? "关键词:开" : "关键词:关");
+        if (e.keywordReplyRules != null && !e.keywordReplyRules.isEmpty()) {
+            parts.add("关键词:" + e.keywordReplyRules.size() + "条");
+        }
         return parts.isEmpty() ? "继承全局" : TextUtils.join(" · ", parts);
     }
 
@@ -1351,7 +1480,7 @@ public final class AiAssistantPanel {
                     sub = "已停用 · 点击进入可重新启用";
                 }
                 SettingRow row = newRow(ctx, g ? "👥" : "👤",
-                        (active ? "✅ " : (isCfg ? "⏸ " : "")) + name, sub)
+                        name, sub)
                         .avatar(talker)
                         .arrow(() -> {
                             LogWriter.log(TAG, "click: 个性化配置 " + talker);
@@ -1366,6 +1495,7 @@ public final class AiAssistantPanel {
                                 showConversationList(activity);
                             }
                         });
+                if (isCfg) row.subColor(0xFF22C55E);
                 body.addView(row);
                 shown++;
             }
@@ -1555,6 +1685,35 @@ public final class AiAssistantPanel {
         }
         final Switch swAtF = swAt;
 
+        // v1085: 关键词自动回复(会话级) — 命中即回配置问答, 不送大模型
+        list.addView(newSection(ctx, "关键词自动回复", "命中关键词直接回配置问答, 不送大模型"));
+        final Switch swKwOn = makeSwitch(ctx,
+                entry.keywordReplyEnabled != null ? entry.keywordReplyEnabled : cfg.isKeywordReplyEnabled());
+        addSwitchRow(list, ctx, swKwOn, AiIconDrawable.G_BELL, "启用关键词自动回复",
+                "关闭后本会话关键词不拦截, 按 AI 规则处理");
+        Switch swKwAt = null;
+        if (isGroup) {
+            boolean effKwAt = entry.keywordAutoAt != null ? entry.keywordAutoAt : cfg.isAutoAt();
+            swKwAt = makeSwitch(ctx, effKwAt);
+            addSwitchRow(list, ctx, swKwAt, AiIconDrawable.G_BELL, "关键词回复自动@对方",
+                    "群聊命中关键词时自动 @ 提问人");
+        }
+        boolean effKwQuote = entry.keywordQuote != null ? entry.keywordQuote : cfg.isQuoteReply();
+        final Switch swKwQuote = makeSwitch(ctx, effKwQuote);
+        addSwitchRow(list, ctx, swKwQuote, AiIconDrawable.G_LAYERS, "关键词回复引用消息",
+                "命中关键词时附带引用原消息");
+        final Switch swKwAtF = swKwAt;
+        List<KeywordRule> initKwRules = (entry.keywordReplyRules != null && !entry.keywordReplyRules.isEmpty())
+                ? entry.keywordReplyRules : cfg.getKeywordReplyRules();
+        final EditText etKwRules = M3Page.input(ctx, "每行一条: 关键词=回复内容 (留空 = 用全局规则)");
+        etKwRules.setSingleLine(false);
+        etKwRules.setMinLines(3);
+        etKwRules.setGravity(Gravity.TOP);
+        etKwRules.setText(rulesToText(initKwRules));
+        list.addView(etKwRules);
+        list.addView(M3Page.note(ctx,
+                "格式: 每行一条 「关键词=回复」。命中包含关键词的消息即自动回复; 留空则沿用全局规则。"));
+
         addVoiceSection(list, ctx, activity, entry,
                 () -> { cc.put(talker, entry); cc.save(); },
                 () -> showConvEdit(activity, talker, isGroup));
@@ -1625,6 +1784,13 @@ public final class AiAssistantPanel {
                 }
                 out.voices = entry.voices == null ? null : new ArrayList<>(entry.voices);
                 out.randomVoice = entry.randomVoice;
+                // v1085: 关键词自动回复(会话级)
+                out.keywordReplyEnabled = explicitOrNull(swKwOn.isChecked(), cfg.isKeywordReplyEnabled());
+                List<KeywordRule> kwParsed = parseKeywordRules(str(etKwRules));
+                out.keywordReplyRules = kwParsed.isEmpty() ? null : kwParsed;
+                out.keywordAutoAt = (groupFinal && swKwAtF != null)
+                        ? Boolean.valueOf(swKwAtF.isChecked()) : null;
+                out.keywordQuote = Boolean.valueOf(swKwQuote.isChecked());
                 cc.put(talker, out);
                 cc.save();
                 LogWriter.log(TAG, "保存独立配置: enabled=" + out.enabled

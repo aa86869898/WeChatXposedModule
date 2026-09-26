@@ -5,9 +5,13 @@
  * 依赖: 仅 de.robv.android.xposed (无第三方)
  * 兼容: Java 7+ / API 19+
  *
-     * v982: 按钮直接注入微信主页 decorView(子 View), 不再走 WindowManager 悬浮窗。
-     * 聊天中隐藏(GONE), 回主页恢复; 仅主页显示, 避免遮挡微信右上角菜单。
-     * ============================================================
+ * v1093: 主方案改为“标题栏(customView)注入”, 参照《左上角按钮注入.md》：
+ *   hook 微信标题栏 customView 构造器 com.tencent.mm.ui.j#<init>(View)
+ *   (DexKit 锚点字符串 "MicroMsg.ActionBarCustomArea"), 仅对主页 LauncherUI/HomeUI
+ *   把三横按钮插到标题栏最左侧(index 0)。按钮随标题栏存在, 进入聊天(ChattingUI,
+ *   独立 Activity)/图片视频查看器等页面时标题栏是另一套 customView, 自然不显示,
+ *   彻底解决“非主页仍显示”。DexKit 解析失败时退回 v1092 的 decorView 注入兜底。
+ * ============================================================
  */
 package com.leshao.v3;
 
@@ -36,6 +40,7 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
 
@@ -50,6 +55,11 @@ import de.robv.android.xposed.XposedHelpers;
 public class CornerMenu {
     private static final String TAG = "CornerMenu";
     private static final String HAMBURGER_TAG = "LESHAO_HAM_V2";
+    // v1095(文档 line 26/55/108): 标题栏布局 0x7f0e0068 内的关键资源 ID
+    /** j.a 返回键容器(View) */
+    private static final int ID_BACK_CONTAINER = 0x7f0a0158;
+    /** j.d 主标题 TextView */
+    private static final int ID_TITLE = 0x7f0a6b16;
     private static final int MAX_RETRY = 10;
     private static final long RETRY_DELAY_MS = 200;
     private static Runnable sRecheckRunnable;
@@ -61,6 +71,8 @@ public class CornerMenu {
     private static View sMainIcon;
     private static ViewGroup sMainContainer;
     private static Activity sHomeAct;
+    /** 当前处于 RESUMED 的 Activity(所有页面都记录), 用于确保三横只在主页前台时显示。 */
+    private static volatile Activity sTopResumedActivity;
     private static final Handler sH = new Handler(Looper.getMainLooper());
 
     // 聊天窗口精确标志位: 由 ChattingUIFragment(基类)onHiddenChanged/onResume/onPause 驱动,
@@ -68,6 +80,20 @@ public class CornerMenu {
     private static volatile boolean sChatWindowActive;
     /** 聊天 fragment 最近一次 onResume 时间(elapsedRealtime), 防残留 fragment 误判 */
     private static volatile long sChatResumeAt;
+
+    // ── v1093 标题栏(customView)注入 ──
+    /** 标题栏注入 hook 是否已安装 */
+    private static volatile boolean sTitleBarHooked;
+    /** 标题栏注入是否已真正生效(至少成功注入过一次); 生效后才停用 decorView 兜底 */
+    private static volatile boolean sTitleBarActive;
+    /** 已解析到的标题栏类名(仅用于日志) */
+    private static volatile String sTitleBarClass;
+    /** 防止多个线程重复解析/hook 标题栏类 */
+    private static final java.util.concurrent.atomic.AtomicBoolean sTitleBarInstalling =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+    /** 标题栏解析失败重试次数上限 */
+    private static final java.util.concurrent.atomic.AtomicInteger sTitleBarAttempts =
+            new java.util.concurrent.atomic.AtomicInteger(0);
 
     private static int dp(Context ctx, float dp) {
         return (int) (dp * ctx.getResources().getDisplayMetrics().density + 0.5f);
@@ -89,6 +115,40 @@ public class CornerMenu {
             createBitmaps();
             LogWriter.log(TAG, "hook: bitmaps created");
 
+            // ── v1093 主方案：标题栏(customView)注入 ──
+            // 参照《左上角按钮注入.md》：hook 微信标题栏 customView 构造器
+            // com.tencent.mm.ui.j#<init>(View)(DexKit 锚点 "MicroMsg.ActionBarCustomArea"),
+            // 仅对主页 LauncherUI/HomeUI 注入, 按钮随标题栏存在/消失, 天然只出现在主页。
+            scheduleTitleBarHook();
+
+            // ── 兜底方案(v1092)：DecorKit 解析失败时退回 decorView 注入 + 生命周期可见性 ──
+            // 仅当 sTitleBarHooked == false 时这些回调才会真正生效(见 hideMainMenu/injectMain 守卫)。
+            // 仅当「LauncherUI/HomeUI 处于前台且持有窗口焦点、且不在聊天」时显示三横菜单。
+            // 任何其它 Activity 恢复/获得焦点(聊天 ChattingUI、图片/视频查看器、设置页等)
+            // 一律立即隐藏。Activity 生命周期比 fragment 方法 hook 更可靠, 保证
+            // “只在微信主页显示, 其它页面不显示”, 且进入/返回都是即时的。
+            XposedBridge.hookAllMethods(Activity.class, "onResume",
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!(param.thisObject instanceof Activity)) return;
+                            Activity act = (Activity) param.thisObject;
+                            sTopResumedActivity = act;
+                            String clsName = act.getClass().getName();
+                            if (isHomeActivity(clsName)) {
+                                sHomeAct = act;
+                                // 延迟至窗口树就绪后再刷新(避免过早注入 BadToken)
+                                scheduleRefresh(act, 120);
+                            } else if (sMainIcon != null) {
+                                LogWriter.log(TAG, "onResume(non-home=" + clsName + ") -> hide hamburger");
+                                hideMainMenu();
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            LogWriter.log(TAG, "hook: Activity.onResume hooked");
+
             XposedBridge.hookAllMethods(Activity.class, "onWindowFocusChanged",
                 new XC_MethodHook() {
                     @Override
@@ -98,68 +158,38 @@ public class CornerMenu {
                         boolean focused = (boolean) param.args[0];
                         String clsName = activity.getClass().getName();
                         try {
-                            if (focused && ("com.tencent.mm.ui.LauncherUI".equals(clsName)
-                                    || "com.tencent.mm.ui.HomeUI".equals(clsName))) {
+                            if (isHomeActivity(clsName)) {
                                 sHomeAct = (Activity) activity;
-                                // 8.0.49+: 聊天窗口是 LauncherUI 内的 ChattingUIFragment，
-                                // 必须排除，否则聊天界面也注入三横菜单
-                                if (isInChatWindow((Activity) activity)) {
-                                    LogWriter.log(TAG, "skip inject: chat window active");
+                                if (focused) {
+                                    refreshVisibility((Activity) activity);
+                                } else {
+                                    // 主页面失焦(被查看器/弹窗/其它页面覆盖) -> 立即隐藏
                                     hideMainMenu();
-                                    // 可能误判: fragment view 状态延迟同步, 延迟复核一次
-                                    scheduleRecheckInject((Activity) activity);
-                                    return;
                                 }
-                                LogWriter.log(TAG, "Activity.onWindowFocusChanged -> main page focused");
-                                injectMain((Activity) activity, 0);
+                            } else if (focused) {
+                                // 非主页 Activity 获得焦点 -> 立即隐藏
+                                hideMainMenu();
                             }
                         } catch (Throwable e) {
                             LogWriter.log(TAG, "Activity.onWindowFocusChanged cb err: " + e);
                         }
                     }
                 });
-            // 兜底注入路径: 主页 onResume (onWindowFocusChanged 在焦点不变/悬浮窗被系统移除
-            // 等场景不触发, 三横菜单会"偶尔消失")。延迟至窗口就绪后再注入。
-            XposedBridge.hookAllMethods(Activity.class, "onResume",
+            LogWriter.log(TAG, "hook: Activity.onWindowFocusChanged hooked");
+
+            XposedBridge.hookAllMethods(Activity.class, "onPause",
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         try {
                             if (!(param.thisObject instanceof Activity)) return;
                             Activity act = (Activity) param.thisObject;
-                            String clsName = act.getClass().getName();
-                            if (!"com.tencent.mm.ui.LauncherUI".equals(clsName)
-                                    && !"com.tencent.mm.ui.HomeUI".equals(clsName)) return;
-                            sHomeAct = act;
-                            // 延迟至窗口树就绪, 避免 BadToken; 若已有效注入则跳过
-                            final Activity fAct = act;
-                            sH.postDelayed(() -> {
-                                try {
-                                    if (fAct == null || fAct.isFinishing()) return;
-                                    if (hasActiveMenu()) {
-                                        // v985: 已存在但可能被后加的子视图盖住, 重新置顶保持可见
-                                        bringMenuToFront();
-                                        return;
-                                    }
-                                    // v969: 交由 isInChatWindow 复核(可纠正卡死的标志位)
-                                    if (isInChatWindow(fAct)) return;
-                                    LogWriter.log(TAG, "onResume 兜底注入 hamburger");
-                                    injectMain(fAct, 0);
-                                } catch (Throwable ignored) {}
-                            }, 150);
-                        } catch (Throwable ignored) {}
-                    }
-                });
-            LogWriter.log(TAG, "hook: Activity.onWindowFocusChanged hooked");
-            XposedBridge.hookAllMethods(Activity.class, "onPause",
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        try {
-                            sChatWindowActive = false;
-                            if (sMainIcon != null) {
-                                LogWriter.log(TAG, "Activity.onPause -> hide hamburger");
-                                hideMainMenu();
+                            if (isHomeActivity(act.getClass().getName())) {
+                                sChatWindowActive = false;
+                                if (sMainIcon != null) {
+                                    LogWriter.log(TAG, "Activity.onPause(main) -> hide hamburger");
+                                    hideMainMenu();
+                                }
                             }
                         } catch (Throwable ignored) {}
                     }
@@ -171,18 +201,18 @@ public class CornerMenu {
             hookChatFragmentVisibility(cl);
             LogWriter.log(TAG, "hook: ChattingUIFragment.onHiddenChanged hooked");
 
-            // 自愈轮询: 主页停留期间按钮可能被微信重建 decorView 时移除, 而聚焦事件不再触发。
-            // 低频率检查弥补"偶尔消失", 无副作用(主页且无有效菜单时补注入)。
+            // 自愈/校正轮询: 主页停留期间按钮可能被微信重建 decorView 时移除(补注入);
+            // 聊天 fragment 可见性 hook 万一漏触发, 也由此兜底隐藏(仅 1.5s 一次, 开销低)。
             if (!sSelfHealStarted) {
                 sSelfHealStarted = true;
                 sH.postDelayed(new Runnable() {
                     @Override public void run() {
                         try {
-                            selfHealMainMenu();
+                            refreshVisibility(sHomeAct);
                         } catch (Throwable ignored) {}
-                        sH.postDelayed(this, 1200);
+                        sH.postDelayed(this, 1500);
                     }
-                }, 1200);
+                }, 1500);
                 LogWriter.log(TAG, "self-heal poll started");
             }
         } catch (Throwable e) {
@@ -191,43 +221,50 @@ public class CornerMenu {
         }
     }
 
-    /** 自愈: 若当前处于主页且三横菜单缺失, 补注入 */
-    private static void selfHealMainMenu() {
-        try {
-            Activity act = sHomeAct;
-            if (act == null || act.isFinishing()) return;
-            String clsName = act.getClass().getName();
-            if (!"com.tencent.mm.ui.LauncherUI".equals(clsName)
-                    && !"com.tencent.mm.ui.HomeUI".equals(clsName)) return;
-            if (hasActiveMenu()) {
-                bringMenuToFront();
-                return;
-            }
-            // v969: 不再用 sChatWindowActive 直接拦截, 交给 isInChatWindow 复核
-            // (可自动纠正卡死在 true 的标志位, 修复三横菜单偶发不再出现)
-            if (isInChatWindow(act)) {
-                logBlockedHeal(act);
-                return;
-            }
-            LogWriter.log(TAG, "self-heal: hamburger missing on main page, reinject");
-            injectMain(act, 0);
-        } catch (Throwable ignored) {}
+    /** 是否为微信主页面 Activity。 */
+    private static boolean isHomeActivity(String clsName) {
+        return "com.tencent.mm.ui.LauncherUI".equals(clsName)
+                || "com.tencent.mm.ui.HomeUI".equals(clsName);
     }
 
-    private static long sLastBlockedLogAt;
+    private static Runnable sRefreshRunnable;
 
-    /** 诊断: 自愈被 isInChatWindow 拦截时, 记录判定依据(3s 节流), 便于定位"回主页后三横不再出现" */
-    private static void logBlockedHeal(Activity act) {
-        long now = System.currentTimeMillis();
-        if (now - sLastBlockedLogAt < 3000) return;
-        sLastBlockedLogAt = now;
+    /** 延迟刷新可见性(合并多次请求, 仅保留最后一次)。 */
+    private static void scheduleRefresh(final Activity act, long delayMs) {
+        sH.removeCallbacks(sRefreshRunnable);
+        sRefreshRunnable = () -> {
+            sRefreshRunnable = null;
+            refreshVisibility(act);
+        };
+        sH.postDelayed(sRefreshRunnable, delayMs);
+    }
+
+    /** 统一可见性刷新: 仅「主页 + 持有窗口焦点 + 不在聊天」时显示, 其余一律隐藏。 */
+    private static void refreshVisibility(Activity act) {
+        if (sTitleBarHooked) {
+            if (sTitleBarActive) {
+                keepTitleBarAlive();
+                return;
+            }
+            // 标题栏尚未生效(标题栏构造早于 hook 安装): 先尝试精确注入到 ActionBar customView
+            tryInjectTitleBar(act);
+            if (sTitleBarActive) return;
+            // 精确注入未成功: 继续走下方 legacy 兜底,
+            // 保证 decorView 兜底按钮也遵守"仅主页显示", 不再越窗到聊天/查看器
+        }
         try {
-            long since = sChatResumeAt > 0
-                    ? android.os.SystemClock.elapsedRealtime() - sChatResumeAt
-                    : -1;
-            LogWriter.log(TAG, "self-heal blocked: sChatWindowActive=" + sChatWindowActive
-                    + " sinceChatResumeMs=" + since
-                    + " fragVisible=" + chatFragmentVisible(act));
+            if (act == null || act.isFinishing()) return;
+            if (!isHomeActivity(act.getClass().getName())) return;
+            if (act != sTopResumedActivity) { hideMainMenu(); return; }
+            if (!act.hasWindowFocus()) { hideMainMenu(); return; }
+            if (isInChatWindow(act)) {
+                LogWriter.log(TAG, "refreshVisibility: chat active -> hide");
+                hideMainMenu();
+                // fragment view 状态可能延迟同步, 稍后复核一次
+                scheduleRecheckInject(act);
+                return;
+            }
+            injectMain(act, 0);
         } catch (Throwable ignored) {}
     }
 
@@ -291,7 +328,41 @@ public class CornerMenu {
                 && android.os.SystemClock.elapsedRealtime() - sChatResumeAt < 3000) {
             return true;
         }
+        // v1098: 兜底信号。聊天页与主页同属 LauncherUI, 部分机型 ChattingUIFragment
+        // 生命周期回调缺失(见 v1097 日志), 仅靠标志位会漏判 → decorView 兜底按钮越窗残留。
+        // 聊天输入框 MMEditText 只在聊天窗口 attach+可见, 用其存在性作为可靠判据。
+        if (hasAttachedChatEditText(act)) return true;
         return chatFragmentVisible(act);
+    }
+
+    /** 扫描 activity 视图树, 判断聊天输入框 MMEditText 是否已 attach 且可见。 */
+    private static boolean hasAttachedChatEditText(Activity act) {
+        try {
+            if (act.getWindow() == null) return false;
+            View decor = act.getWindow().peekDecorView();
+            if (decor == null) return false;
+            return scanChatEditText(decor);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static boolean scanChatEditText(View v) {
+        if (v == null) return false;
+        if ("com.tencent.mm.ui.widget.MMEditText".equals(v.getClass().getName())
+                && v.getVisibility() == View.VISIBLE
+                && v.isShown()
+                && v.getWindowToken() != null
+                && v.getWidth() > 0 && v.getHeight() > 0) {
+            return true;
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                if (scanChatEditText(g.getChildAt(i))) return true;
+            }
+        }
+        return false;
     }
 
     /** fragment 实际可见性扫描(仅统计真正铺满屏幕的聊天 fragment)。
@@ -427,6 +498,7 @@ public class CornerMenu {
                             if (thiz == null || !fragCls.isAssignableFrom(thiz.getClass())) return;
                             boolean hidden = (Boolean) param.args[0];
                             sChatWindowActive = !hidden;
+                            if (hidden) sChatResumeAt = 0;
                             LogWriter.log(TAG, "chatFrag.onHiddenChanged hidden=" + hidden);
                             if (hidden) {
                                 restoreMainMenuFromFragment(thiz);
@@ -468,6 +540,7 @@ public class CornerMenu {
                             Object thiz = param.thisObject;
                             if (thiz == null || !fragCls.isAssignableFrom(thiz.getClass())) return;
                             sChatWindowActive = false;
+                            sChatResumeAt = 0;
                             restoreMainMenuFromFragment(thiz);
                         } catch (Throwable e) {
                             LogWriter.log(TAG, "chat onPause cb err: " + e);
@@ -573,9 +646,12 @@ public class CornerMenu {
      *  v982 弃用 WindowManager 悬浮窗, 彻底规避 BadToken / 被系统移除等不稳定问题。
      *  若微信重建 decorView, parent 失效, 此处会重新注入。 */
     private static void injectMain(final Activity act, final int attempt) {
+        if (sTitleBarActive) return; // v1093: 标题栏已生效, 停用 decorView 注入
         try {
             if (act == null || act.isFinishing()) return;
             if (!isEnabled(act)) return;
+            // v1091: 仅在主页真正持有窗口焦点时注入/恢复, 避免在查看器等覆盖窗口上透出按钮
+            if (!act.hasWindowFocus()) return;
             Window win = act.getWindow();
             View decorV = win != null ? win.getDecorView() : null;
             if (!(decorV instanceof ViewGroup)) {
@@ -668,18 +744,10 @@ public class CornerMenu {
 
     /** 仅隐藏（保留已注入的 View, 回主页时直接恢复, 避免反复增删导致闪烁/丢失） */
     private static void hideMainMenu() {
+        if (sTitleBarActive) return; // v1093: 标题栏已生效, 按钮随标题栏存在, 不主动隐藏
         if (sMainIcon != null) {
             try { sMainIcon.setVisibility(View.GONE); } catch (Throwable ignored) {}
         }
-    }
-
-    /** 把已注入的三横菜单重新置顶(防止被微信后加的子视图覆盖而"消失") */
-    private static void bringMenuToFront() {
-        try {
-            if (sMainIcon == null) return;
-            android.view.ViewParent p = sMainIcon.getParent();
-            if (p instanceof ViewGroup) ((ViewGroup) p).bringChildToFront(sMainIcon);
-        } catch (Throwable ignored) {}
     }
 
     private static int statusBarHeight(Activity act) {
@@ -700,7 +768,399 @@ public class CornerMenu {
         return com.leshao.v3.ui.InsetsUtil.statusBarHeight(act);
     }
 
-    /** 弹出快捷菜单 */
+    // ================================================================
+    // v1093 标题栏(customView)注入 —— 参照《左上角按钮注入.md》
+    // ================================================================
+
+    /** 在 DexKit 扫描完成后, 于后台线程解析并 hook 标题栏 customView 构造器。 */
+    private static void scheduleTitleBarHook() {
+        try {
+            com.leshao.v3.hook.DexKitHelper.addPostScanCallback(CornerMenu::launchTitleBarHook);
+            // 双保险: 扫描回调若因缓存路径已过(或异常)未触发, 稍后再试一次
+            sH.postDelayed(CornerMenu::launchTitleBarHook, 4000);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "scheduleTitleBarHook err: " + t.getMessage());
+        }
+    }
+
+    private static void launchTitleBarHook() {
+        if (sTitleBarHooked) return;
+        if (!sTitleBarInstalling.compareAndSet(false, true)) return;
+        new Thread(() -> {
+            boolean ok = false;
+            try {
+                ok = installTitleBarHook(sClassLoader);
+            } finally {
+                sTitleBarInstalling.set(false);
+            }
+            if (!ok && sTitleBarAttempts.getAndIncrement() < 3) {
+                sH.postDelayed(CornerMenu::launchTitleBarHook, 6000);
+            }
+        }, "CornerMenuTitleBar").start();
+    }
+
+    /**
+     * 解析 com.tencent.mm.ui.j (ActionBarCustomArea) 并 hook 其 {@code <init>(View)}。
+     * 该构造器同时被主页 BaseConversationUI.e7() 与聊天页 HeaderComponent 调用,
+     * 故在回调里按 Activity 过滤, 仅主页 LauncherUI/HomeUI 注入。
+     *
+     * @return 是否成功安装 hook
+     */
+    private static boolean installTitleBarHook(ClassLoader cl) {
+        if (sTitleBarHooked) return true;
+        if (cl == null) return false;
+        try {
+            java.util.List<String> cands = new java.util.ArrayList<>();
+            // 1) 首选: DexKit 主扫描已结构定位并缓存(MicroMsg.ActionBarCustomArea)
+            try {
+                String cached = com.leshao.v3.hook.DexKitHelper.getActionBarCustomAreaClass();
+                if (cached != null && !cached.isEmpty()) cands.add(cached);
+            } catch (Throwable ignored) {}
+            // 2) 兜底: 字符串锚点反查
+            if (cands.isEmpty()) {
+                try {
+                    cands.addAll(DexKitHelper_findClassesByString(cl, "MicroMsg.ActionBarCustomArea"));
+                } catch (Throwable ignored) {}
+            }
+            for (String cn : cands) {
+                Class<?> c;
+                java.lang.reflect.Constructor<?> ctor = null;
+                try {
+                    c = XposedHelpers.findClass(cn, cl);
+                    for (Class<?> pt : new Class<?>[]{View.class, ViewGroup.class}) {
+                        try {
+                            ctor = c.getDeclaredConstructor(pt);
+                            break;
+                        } catch (NoSuchMethodException ignored) {}
+                    }
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "titlebar candidate load failed " + cn + ": " + t);
+                    continue;
+                }
+                if (ctor == null) {
+                    LogWriter.log(TAG, "titlebar candidate no (View) ctor: " + cn);
+                    continue;
+                }
+                try {
+                    ctor.setAccessible(true);
+                    XposedBridge.hookMethod(ctor, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            try {
+                                if (param.args == null) return;
+                                for (Object a : param.args) {
+                                    if (a instanceof View) {
+                                        onTitleBarCreated((View) a);
+                                        return;
+                                    }
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+                    sTitleBarClass = cn;
+                    sTitleBarHooked = true;
+                    LogWriter.log(TAG, "titlebar hook installed: " + cn
+                            + "#<init>(" + ctor.getParameterTypes()[0].getSimpleName() + ")");
+                    return true;
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "titlebar candidate hook failed " + cn + ": " + t);
+                }
+            }
+            LogWriter.log(TAG, "titlebar class NOT resolved (candidates=" + cands.size() + ")");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installTitleBarHook err: " + t);
+        }
+        return false;
+    }
+
+    /** findClassesByString 包一层, 便于失败重试时统一异常处理。 */
+    private static java.util.List<String> DexKitHelper_findClassesByString(ClassLoader cl, String keyword) {
+        return com.leshao.v3.hook.DexKitHelper.findClassesByString(cl, keyword);
+    }
+
+    /** 标题栏 customView 构造完成: 延后一帧(已 attach)再判定作用域并注入。 */
+    private static void onTitleBarCreated(final View v) {
+        if (!(v instanceof ViewGroup)) return;
+        v.post(() -> {
+            try {
+                Activity act = activityOf(v.getContext());
+                if (act == null) return;
+                String cn = act.getClass().getName();
+                LogWriter.log(TAG, "onTitleBarCreated: act=" + cn + " home=" + isHomeActivity(cn)
+                        + " root=" + v.getClass().getSimpleName() + " childCount="
+                        + ((ViewGroup) v).getChildCount());
+                if (!isHomeActivity(cn)) {
+                    // 聊天 ChattingUI / 图片视频查看器等非主页: 不注入
+                    return;
+                }
+                injectTitleBar((ViewGroup) v, act);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "onTitleBarCreated err: " + t.getMessage());
+            }
+        });
+    }
+
+    /** 把三横按钮插入标题栏 customView 的最左侧(index 0, 返回键之前)。 */
+    private static void injectTitleBar(final ViewGroup root, final Activity act) {
+        try {
+            if (!isEnabled(act)) return;
+            // 已挂在同一标题栏: 恢复可见即可(幂等)
+            if (sMainIcon != null && sMainIcon.getParent() == root) {
+                if (sMainIcon.getVisibility() != View.VISIBLE) {
+                    sMainIcon.setVisibility(View.VISIBLE);
+                }
+                sTitleBarActive = true;
+                return;
+            }
+            for (int i = 0; i < root.getChildCount(); i++) {
+                View c = root.getChildAt(i);
+                if (c != null && HAMBURGER_TAG.equals(c.getTag())) {
+                    sMainIcon = c;
+                    sMainContainer = root;
+                    sTitleBarActive = true;
+                    return;
+                }
+            }
+
+            Context ctx = root.getContext();
+            int iconW = dp(ctx, 40);
+            int iconH = ViewGroup.LayoutParams.MATCH_PARENT;
+
+            ImageView icon = new ImageView(ctx);
+            icon.setTag(HAMBURGER_TAG);
+            icon.setImageBitmap(darkMode(ctx) ? sBitmapDark : sBitmapLight);
+            icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            icon.setClickable(true);
+            icon.setFocusable(true);
+            icon.setContentDescription("乐少助手");
+            // M3: 圆角容器底(surfaceContainerLowest + 主色描边)
+            try {
+                int r = dp(ctx, 10);
+                GradientDrawable iconBg = new GradientDrawable();
+                iconBg.setShape(GradientDrawable.RECTANGLE);
+                iconBg.setCornerRadius(r);
+                iconBg.setColor(AppColors.surfaceContainerLowest());
+                iconBg.setStroke(dp(ctx, 1), AppColors.primary());
+                icon.setBackground(iconBg);
+                int pad = dp(ctx, 7);
+                icon.setPadding(pad, pad, pad, pad);
+            } catch (Throwable ignored) {}
+            icon.setOnClickListener(v -> showMenu(v.getContext(), act));
+
+            ViewGroup.LayoutParams lp = buildTitleBarParams(root, ctx, iconW, iconH);
+            // 移除可能残留的旧按钮(如 decorView 兜底注入的那一个)
+            if (sMainIcon != null) {
+                try {
+                    android.view.ViewParent op = sMainIcon.getParent();
+                    if (op instanceof ViewGroup && op != root) {
+                        ((ViewGroup) op).removeView(sMainIcon);
+                    }
+                } catch (Throwable ignored) {}
+                sMainIcon = null;
+            }
+            boolean linear = root instanceof LinearLayout;
+            // LinearLayout: 插 index 0(返回键之前); 其它(RelativeLayout/FrameLayout): 追加到最后并置于最上层,
+            // 位置由 LayoutParams 规则决定, 避免被兄弟控件在滚动/重排时覆盖。
+            int addIndex = linear ? 0 : root.getChildCount();
+            root.addView(icon, addIndex, lp);
+            if (!linear) {
+                try { icon.bringToFront(); } catch (Throwable ignored) {}
+            }
+            sMainIcon = icon;
+            sMainContainer = root;
+            sTitleBarActive = true;
+            StringBuilder kids = new StringBuilder();
+            for (int i = 0; i < root.getChildCount(); i++) {
+                View c = root.getChildAt(i);
+                if (i > 0) kids.append(',');
+                kids.append(c == null ? "null" : c.getClass().getSimpleName());
+            }
+            LogWriter.log(TAG, "injectTitleBar: added hamburger host="
+                    + root.getClass().getName() + " childCount=" + root.getChildCount()
+                    + " kids=[" + kids + "]");
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "injectTitleBar FAILED - " + e.getClass().getSimpleName()
+                    + ": " + e.getMessage());
+        }
+    }
+
+    /** 按标题栏根容器类型生成正确的 LayoutParams, 保证按钮定位正确且不被兄弟控件覆盖。 */
+    private static ViewGroup.LayoutParams buildTitleBarParams(
+            ViewGroup root, Context ctx, int width, int height) {
+        View ref = root.getChildCount() > 0 ? root.getChildAt(0) : null;
+        ViewGroup.LayoutParams src = ref != null ? ref.getLayoutParams() : null;
+        int h = height;
+        if (src != null && src.height > 0) h = src.height;
+        if (root instanceof LinearLayout) {
+            LinearLayout.LayoutParams l = (src instanceof LinearLayout.LayoutParams)
+                    ? new LinearLayout.LayoutParams((LinearLayout.LayoutParams) src)
+                    : new LinearLayout.LayoutParams(width, h);
+            l.width = width;
+            l.height = h;
+            l.weight = 0f;
+            l.gravity = Gravity.CENTER_VERTICAL;
+            try {
+                l.setMarginStart(dp(ctx, 4));
+                l.setMarginEnd(dp(ctx, 2));
+            } catch (Throwable ignored) {}
+            return l;
+        }
+        if (root instanceof android.widget.RelativeLayout) {
+            android.widget.RelativeLayout.LayoutParams l =
+                    new android.widget.RelativeLayout.LayoutParams(width, h);
+            l.addRule(android.widget.RelativeLayout.ALIGN_PARENT_LEFT);
+            l.addRule(android.widget.RelativeLayout.CENTER_VERTICAL);
+            l.leftMargin = dp(ctx, 4);
+            return l;
+        }
+        if (root instanceof android.widget.FrameLayout) {
+            android.widget.FrameLayout.LayoutParams l =
+                    new android.widget.FrameLayout.LayoutParams(width, h);
+            l.gravity = Gravity.LEFT | Gravity.CENTER_VERTICAL;
+            l.leftMargin = dp(ctx, 4);
+            return l;
+        }
+        return new ViewGroup.LayoutParams(width, h);
+    }
+
+    /** 标题栏已生效时, 周期性校正: 若按钮被移除则重新注入, 否则确保可见且在最上层。 */
+    private static void keepTitleBarAlive() {
+        if (!sTitleBarActive) return;
+        try {
+            if (sMainIcon == null || sMainIcon.getParent() == null) {
+                sTitleBarActive = false;
+                sMainIcon = null;
+                tryInjectTitleBar(sHomeAct);
+                return;
+            }
+            if (sMainIcon.getVisibility() != View.VISIBLE) {
+                sMainIcon.setVisibility(View.VISIBLE);
+                LogWriter.log(TAG, "keepTitleBarAlive: re-shown");
+            }
+            if (sMainContainer != null && sMainIcon.getParent() == sMainContainer
+                    && !(sMainContainer instanceof LinearLayout)) {
+                int idx = sMainContainer.indexOfChild(sMainIcon);
+                if (idx != sMainContainer.getChildCount() - 1) {
+                    sMainIcon.bringToFront();
+                    LogWriter.log(TAG, "keepTitleBarAlive: bringToFront (was idx=" + idx + ")");
+                }
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    /** 从 Context 逐层剥离 ContextWrapper 取宿主 Activity。 */
+    private static Activity activityOf(Context c) {
+        Context cur = c;
+        int guard = 0;
+        while (cur instanceof android.content.ContextWrapper && guard++ < 12) {
+            if (cur instanceof Activity) return (Activity) cur;
+            Context base = ((android.content.ContextWrapper) cur).getBaseContext();
+            if (base == null) return null;
+            cur = base;
+        }
+        return null;
+    }
+
+    /**
+     * v1098: 主页标题栏早于 hook 安装时的精确注入。
+     * 策略 A(文档 line 99 Level 2): getSupportActionBar()/getActionBar() -> getCustomView()。
+     * 策略 B: 在 decorView 中定位 androidx ActionBarContainer(类名后缀), 仅在该容器内按
+     *         文档资源 ID 找返回键容器/标题, 取其父容器注入——绝不触碰会话列表。
+     * 两者都只作用于主页 Activity, 因此天然不会出现在聊天窗口/图片视频查看器。
+     */
+    private static void tryInjectTitleBar(final Activity act) {
+        try {
+            if (act == null || act.isFinishing()) return;
+            if (!isHomeActivity(act.getClass().getName())) return;
+            if (!act.hasWindowFocus()) return;
+            if (act.getWindow() == null) return;
+            View decor = act.getWindow().peekDecorView();
+            if (decor == null) return;
+
+            // ── 策略 A: ActionBar.getCustomView() ──
+            Object ab = null;
+            try {
+                java.lang.reflect.Method m = act.getClass().getMethod("getSupportActionBar");
+                m.setAccessible(true);
+                ab = m.invoke(act);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "tryInject[A] getSupportActionBar err: " + t.getMessage());
+            }
+            if (ab == null) {
+                try { ab = act.getActionBar(); } catch (Throwable ignored) {}
+            }
+            if (ab != null) {
+                Object cv = null;
+                try {
+                    java.lang.reflect.Method m = ab.getClass().getMethod("getCustomView");
+                    m.setAccessible(true);
+                    cv = m.invoke(ab);
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "tryInject[A] getCustomView err: " + t.getMessage());
+                }
+                if (cv instanceof ViewGroup) {
+                    ViewGroup bar = (ViewGroup) cv;
+                    LogWriter.log(TAG, "tryInject[A] customView=" + bar.getClass().getName()
+                            + " childCount=" + bar.getChildCount()
+                            + " hasTitle=" + (bar.findViewById(ID_TITLE) != null)
+                            + " hasBack=" + (bar.findViewById(ID_BACK_CONTAINER) != null));
+                    injectTitleBar(bar, act);
+                    if (sTitleBarActive) return;
+                } else {
+                    LogWriter.log(TAG, "tryInject[A] customView null (ab="
+                            + ab.getClass().getName() + ")");
+                }
+            } else {
+                LogWriter.log(TAG, "tryInject[A] actionBar null");
+            }
+
+            // ── 策略 B: 限定在 ActionBarContainer 内按资源 ID 定位 ──
+            ViewGroup container = findActionBarContainer(decor);
+            if (container == null) {
+                LogWriter.log(TAG, "tryInject[B] ActionBarContainer not found");
+                return;
+            }
+            View back = container.findViewById(ID_BACK_CONTAINER);
+            if (back != null && back.getParent() instanceof ViewGroup) {
+                LogWriter.log(TAG, "tryInject[B] back.parent="
+                        + back.getParent().getClass().getName());
+                injectTitleBar((ViewGroup) back.getParent(), act);
+                if (sTitleBarActive) return;
+            }
+            View title = container.findViewById(ID_TITLE);
+            if (title != null) {
+                View cur = title;
+                int guard = 0;
+                while (cur.getParent() instanceof ViewGroup
+                        && cur.getParent() != container && guard++ < 6) {
+                    cur = (View) cur.getParent();
+                }
+                if (cur.getParent() == container && cur instanceof ViewGroup) {
+                    LogWriter.log(TAG, "tryInject[B] title-root=" + cur.getClass().getName());
+                    injectTitleBar((ViewGroup) cur, act);
+                    return;
+                }
+            }
+            LogWriter.log(TAG, "tryInject[B] container=" + container.getClass().getName()
+                    + " no title/back id found");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "tryInjectTitleBar err: " + t.getMessage());
+        }
+    }
+
+    /** 在 decorView 中查找 androidx ActionBarContainer(类名以 ActionBarContainer 结尾)。 */
+    private static ViewGroup findActionBarContainer(View root) {
+        if (!(root instanceof ViewGroup)) return null;
+        ViewGroup g = (ViewGroup) root;
+        String n = g.getClass().getName();
+        if (n.endsWith("ActionBarContainer") || n.endsWith("ActionBarView")) return g;
+        for (int i = 0; i < g.getChildCount(); i++) {
+            ViewGroup r = findActionBarContainer(g.getChildAt(i));
+            if (r != null) return r;
+        }
+        return null;
+    }
+
     private static void showMenu(Context ctx, Activity act) {
         try {
             java.util.List<String> items = new java.util.ArrayList<>();

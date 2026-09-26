@@ -8,6 +8,9 @@ import com.leshao.ai.config.ConversationConfig;
 import com.leshao.ai.hook.HookEntry;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.TtsVoiceSender;
+import com.leshao.v3.model.KeywordRule;
+
+import java.util.List;
 
 /**
  * AI 触发决策引擎（文档 §16.5，14 项功能的决策核心）。
@@ -82,6 +85,15 @@ public final class TriggerEngine {
             if (body == null || body.trim().isEmpty()) {
                 LogWriter.log(TAG, "跳过: 正文为空 talker=" + talker);
                 return;
+            }
+
+            // ②.5 v1085: 关键词自动回复 —— 命中即直接回配置问答, 不送大模型。
+            try {
+                if (handleKeywordReply(talker, isGroup, sender, body, msgInfo, ov, c)) {
+                    return;
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "关键词自动回复异常, 继续走 AI: " + t);
             }
 
             // ③ 群聊唤醒判定
@@ -211,6 +223,69 @@ public final class TriggerEngine {
         } catch (Throwable t) {
             LogWriter.log(TAG, "dispatch 异常: " + t);
         }
+    }
+
+    /** v1085: 关键词自动回复：命中配置关键词时直接发送问答回复, 不送大模型。 */
+    private static boolean handleKeywordReply(String talker, boolean isGroup, String sender,
+                                              String body, Object msgInfo,
+                                              ConversationConfig.Entry ov, AppConfig c) {
+        boolean enabled = (ov != null && ov.keywordReplyEnabled != null)
+                ? ov.keywordReplyEnabled.booleanValue() : c.isKeywordReplyEnabled();
+        if (!enabled) return false;
+        List<KeywordRule> rules = (ov != null && ov.keywordReplyRules != null
+                && !ov.keywordReplyRules.isEmpty())
+                ? ov.keywordReplyRules : c.getKeywordReplyRules();
+        if (rules == null || rules.isEmpty()) return false;
+        KeywordRule hit = null;
+        for (KeywordRule r : rules) {
+            if (r != null && r.matches(body)) { hit = r; break; }
+        }
+        if (hit == null) return false;
+
+        String reply = hit.reply == null ? "" : hit.reply.trim();
+        LogWriter.log(TAG, "关键词命中: talker=" + talker + " kw=" + hit.keyword
+                + " replyLen=" + reply.length());
+        if (reply.isEmpty()) return true; // 命中即拦截, 不送大模型
+
+        boolean kwAt = isGroup && ((ov != null && ov.keywordAutoAt != null)
+                ? ov.keywordAutoAt.booleanValue() : c.isAutoAt());
+        boolean kwQuote = (ov != null && ov.keywordQuote != null)
+                ? ov.keywordQuote.booleanValue() : c.isQuoteReply();
+        String marked = SendGuard.mark(reply);
+        String atPrefix = "";
+        String atWxid = "";
+        if (kwAt && sender != null && !sender.isEmpty()) {
+            try {
+                String nick = GroupMemberNames.displayName(talker, sender);
+                atPrefix = WeChatMessenger.buildAtPrefix(nick);
+                atWxid = sender;
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "关键词回复取群昵称失败: " + t);
+            }
+        }
+        String textContent = atPrefix
+                + (kwQuote ? WeChatMessenger.buildQuoteBlock(body) : "") + marked;
+        ClassLoader cl = HookEntry.appClassLoader;
+        LogWriter.log(TAG, "关键词自动回复发送: talker=" + talker
+                + " at=" + atWxid + " quote=" + kwQuote);
+        try {
+            boolean nativeQuoted = false;
+            if (kwQuote && isGroup && msgInfo != null) {
+                nativeQuoted = WeChatMessenger.sendQuoteAndAt(
+                        msgInfo, talker, atWxid, atPrefix + marked, cl);
+            }
+            if (!nativeQuoted) {
+                WeChatMessenger.sendText(talker, textContent, atWxid, cl);
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "关键词回复发送失败: " + t);
+            try {
+                WeChatMessenger.sendText(talker, textContent, atWxid, cl);
+            } catch (Throwable t2) {
+                LogWriter.log(TAG, "关键词回复文本回退失败: " + t2);
+            }
+        }
+        return true;
     }
 
     /** 日志用截断, 避免超长正文刷屏。 */

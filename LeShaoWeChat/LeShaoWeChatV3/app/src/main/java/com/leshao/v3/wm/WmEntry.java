@@ -29,6 +29,9 @@ public class WmEntry {
     private static Runnable sPendingShow;
     private static volatile Activity sResumedActivity;
     private static boolean sReconcileStarted;
+    // v1088: reconciler 边沿触发缓存, 状态未变化时跳过重复的反射/查询开销
+    private static volatile boolean sLastChatVisible;
+    private static volatile String sLastChatUser = "";
 
     public static void injectAll(ClassLoader cl) {
         WmPrefs.init();
@@ -80,8 +83,26 @@ public class WmEntry {
                 }
             });
 
-            // ChattingUI 自身的 onCreate/onResume（子类重写版本，二次进入时 MMEditText 复用不重新 attach，
-            // 必须由这些生命周期兜底触发聊天入口重显）
+            // v1089: 用一定会触发的 onWindowFocusChanged 维护前台 Activity。
+            // (部分微信版本 Activity.onResume 子类未回调 super, onResume 钩子不触发, 会导致
+            //  reconciler 因 sResumedActivity 为空而不工作)
+            try {
+                XposedBridge.hookAllMethods(Activity.class, "onWindowFocusChanged",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam p) {
+                            try {
+                                if (p.thisObject instanceof Activity && (boolean) p.args[0]) {
+                                    sResumedActivity = (Activity) p.thisObject;
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+                LogWriter.log(TAG, "\u2713 foreground activity (onWindowFocusChanged)");
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "onWindowFocusChanged hook err: " + e.getMessage());
+            }
+
             try {
                 XposedBridge.hookAllMethods(chatClass, "onCreate", new XC_MethodHook() {
                     @Override
@@ -321,9 +342,11 @@ public class WmEntry {
                 final ClassLoader fCl = cl;
                 sHandler.postDelayed(new Runnable() {
                     @Override public void run() {
-                        if (sResumedActivity == null) return;
-                        try { reconcileChatEntry(fCl); } catch (Throwable ignored) {}
-                        sHandler.postDelayed(this, 400);
+                        try {
+                            if (sResumedActivity != null) reconcileChatEntry(fCl);
+                        } catch (Throwable ignored) {}
+                        // v1089: 即使 sResumedActivity 暂未就绪也继续轮询, 避免首 tick 直接退出
+                        sHandler.postDelayed(this, 1200);
                     }
                 }, 400);
                 LogWriter.log(TAG, "✓ chat window (reconcile poll started)");
@@ -342,14 +365,24 @@ public class WmEntry {
                 && !"com.tencent.mm.ui.chatting.ChattingUI".equals(clsName)) return;
         String user = findChatUserFromActivity(act);
         boolean visible = isChattingFragmentVisible(act);
+        // v1091: 三横菜单改回 decorView 直接注入, 由 CornerMenu 自身的聊天 fragment
+        // 生命周期即时同步(进入即隐藏/返回即出现), 不再由本 1.2s 轮询驱动, 避免延迟。
+        // v1088: 边沿触发 —— 仅在可见性/会话变化时更新标题按钮(showTitleBtn 幂等, 但避免每 tick 重复设置)
+        boolean changed = (visible != sLastChatVisible) || (visible && user != null
+                && !user.equals(sLastChatUser));
+        sLastChatVisible = visible;
         if (visible && user != null && !user.isEmpty()) {
-            WmChatHook.showTitleBtn(act, cl, user);
+            if (changed) {
+                sLastChatUser = user;
+                WmChatHook.showTitleBtn(act, cl, user);
+            }
             // v1002: 聊天页可见时补注入 输入框上方按钮行。
             // 微信冷启动会复用/提前创建 ChatFooter, 一次性生命周期 hook 可能错过,
-            // 由该轮询兜底(tag/标记幂等, 不会重复注入)。
+            // 由该轮询兜底(tag/标记幂等, 不会重复注入; 内部已缓存 footer, 开销极小)。
             try { com.leshao.v3.hook.ChatVoiceSwitchHook.ensureInjected(act); }
             catch (Throwable ignored) {}
         } else {
+            sLastChatUser = "";
             WmChatHook.dismissTitleBtn();
         }
     }

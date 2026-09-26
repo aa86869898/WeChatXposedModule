@@ -59,6 +59,8 @@ public final class ChatVoiceSwitchHook {
     private static final java.util.HashSet<String> sNoFooterLogged = new java.util.HashSet<>();
     // v1017: 运行时解析到的 ChatFooter 类，用于子类匹配
     private static volatile Class<?> sFooterClass;
+    // v1088: 缓存最近一次找到的 ChatFooter, 让 WmEntry 每 tick 的 ensureInjected 免于全树扫描
+    private static volatile java.lang.ref.WeakReference<View> sCachedFooter;
 
     private ChatVoiceSwitchHook() {
     }
@@ -293,7 +295,7 @@ public final class ChatVoiceSwitchHook {
             scheduleRetryInject(footer);
             return;
         }
-        if (parent.findViewWithTag(ROW_TAG) != null) {
+        if (footer.findViewWithTag(ROW_TAG) != null || parent.findViewWithTag(ROW_TAG) != null) {
             synchronized (sInjected) { sInjected.put(footer, Boolean.TRUE); }
             return;
         }
@@ -339,23 +341,78 @@ public final class ChatVoiceSwitchHook {
         }
 
         View row = createButtonRow(ctx);
-        row.setLayoutParams(new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         boolean ok = true;
+        // v1087: 3180 实测 footer 的父容器是自定义 ChattingScrollLayout(消息/输入浮层),
+        // 直接把按钮行插成它的兄弟节点不会被其自定义 onLayout 计入占位 → 遮挡最底部消息;
+        // 用容器包裹 footer 又会破坏"footer 必须是父容器直接子节点"的管理 → 二次进入输入框消失。
+        // 恢复旧版(v428)锚定输入框的方案: 从 footer 内的 EditText 向上找到最近的
+        // "垂直 LinearLayout"(且仍在 footer 内), 在其子节点(输入行)之前插入,
+        // 使 footer 高度随内容自然增长, 消息列表底部留白同步增长 → 不遮挡消息。
+        String targetDesc;
         try {
-            parent.addView(row, idx);
+            View edit = findFirstEditText(footer);
+            ViewGroup host = null;
+            int hostIdx = -1;
+            if (edit != null) {
+                View child = edit;
+                android.view.ViewParent p = edit.getParent();
+                while (p instanceof ViewGroup && p != footer) {
+                    ViewGroup vg = (ViewGroup) p;
+                    if (vg instanceof LinearLayout
+                            && ((LinearLayout) vg).getOrientation() == LinearLayout.VERTICAL) {
+                        host = vg;
+                        hostIdx = vg.indexOfChild(child);
+                        break;
+                    }
+                    child = (View) vg;
+                    p = vg.getParent();
+                }
+            }
+            if (host != null && hostIdx >= 0) {
+                row.setLayoutParams(new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                host.addView(row, hostIdx);
+                targetDesc = "footer内垂直容器=" + host.getClass().getName() + " idx=" + hostIdx;
+            } else if (footer instanceof ViewGroup) {
+                row.setLayoutParams(new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                ((ViewGroup) footer).addView(row, 0);
+                targetDesc = "footer根=" + footer.getClass().getName() + " idx=0 edit="
+                        + (edit == null ? "null" : edit.getClass().getName());
+            } else {
+                row.setLayoutParams(new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                parent.addView(row, idx);
+                targetDesc = "兄弟节点 父容器=" + parent.getClass().getName() + " idx=" + idx;
+            }
         } catch (Throwable t) {
             ok = false;
+            targetDesc = "异常 " + t;
             LogWriter.log(TAG, "注入异常: " + t);
         }
-        if (ok && parent.findViewWithTag(ROW_TAG) != null) {
+        if (ok && (footer.findViewWithTag(ROW_TAG) != null
+                || parent.findViewWithTag(ROW_TAG) != null)) {
             synchronized (sInjected) { sInjected.put(footer, Boolean.TRUE); }
-            LogWriter.log(TAG, "注入成功! 父容器=" + parent.getClass().getName()
-                    + " idx=" + parent.indexOfChild(row));
+            LogWriter.log(TAG, "注入成功! " + targetDesc);
         } else {
             sInjected.remove(footer);
-            LogWriter.log(TAG, "注入失败: addView 未生效 parent=" + parent.getClass().getName());
+            LogWriter.log(TAG, "注入失败: addView 未生效 footer=" + footer.getClass().getName()
+                    + " parent=" + parent.getClass().getName() + " " + targetDesc);
         }
+    }
+
+    /** v1087: 在 footer 子树中查找第一个 EditText(用于锚定输入行容器)。 */
+    private static View findFirstEditText(View root) {
+        if (root == null) return null;
+        if (root instanceof EditText) return root;
+        if (root instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) root;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                View found = findFirstEditText(vg.getChildAt(i));
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     private static void scheduleRetryInject(final View footer) {
@@ -429,9 +486,22 @@ public final class ChatVoiceSwitchHook {
     public static void ensureInjected(Activity act) {
         if (act == null || act.isFinishing()) return;
         try {
+            // v1088: 优先用缓存的 footer。已挂在视图树且已注入时直接返回, 避免每 tick 全树扫描
+            // (reconcile 轮询之前每 tick 都做一次 findFooter 递归, 是主页/聊天页卡顿来源之一)。
+            View footer = null;
+            java.lang.ref.WeakReference<View> cf = sCachedFooter;
+            if (cf != null) footer = cf.get();
+            if (footer != null && footer.isAttachedToWindow()
+                    && footer.findViewWithTag(ROW_TAG) != null) {
+                return;
+            }
             View decor = act.getWindow() != null ? act.getWindow().peekDecorView() : null;
             if (decor == null) return;
-            View footer = findFooter(decor);
+            if (footer == null || !footer.isAttachedToWindow()) {
+                footer = findFooter(decor);
+                sCachedFooter = footer != null
+                        ? new java.lang.ref.WeakReference<>(footer) : null;
+            }
             if (footer != null) {
                 safeInject(footer);
             } else {
