@@ -47,6 +47,9 @@ public final class RedPacketHook {
     private static final String K_WHITELIST = "ls_redpacket_whitelist";
 
     private static final String ANCHOR_CGI = "/cgi-bin/mmpay-bin/receivewxhb";
+    private static final String ANCHOR_CGI_OPEN = "/cgi-bin/mmpay-bin/openwxhb";
+    private static final String C_LUCKY_UTIL = "com.tencent.mm.plugin.luckymoney.model.o5";
+    private static final String C_CFG_LOGIC = "b41.y1";
     private static final String ANCHOR_APPMSG_HB = "wxpay://c2cbizmessagehandler/hongbao/receivehongbao";
     private static final String ANCHOR_APPMSG_BIZ = "weixin://openNativeUrl/weixinHB/startreceivebizhbrequest";
     private static final String ANCHOR_APPMSG = "MicroMsg.AppMessage";
@@ -85,6 +88,14 @@ public final class RedPacketHook {
     private static Method sDoScene;
     private static Class<?> sCallbackItf;
     private static Class<?> sDispatcherCls;
+    // 第二步 openwxhb：h6 构造器与响应解析（文档 §2.3/§2.4）
+    private static Constructor<?> sOpenCtor;
+    private static Class<?> sRecvCls;
+    private static Class<?> sOpenCls;
+    private static Method sHeadImgMethod;
+    private static Method sNickMethod;
+    // sendId → sessionUsername（群=聊天厅 id / 私聊=对方 wxid），发送 n6 时登记，第二步复用
+    private static final Map<String, String> sSendIdSession = new ConcurrentHashMap<>();
     // AppMessage 解析入口：dx0.r.v(String) → dx0.r，nativeUrl 为返回对象字段（文档 §2.2）。
     private static volatile Class<?> sAppMsgCls;
     private static volatile Method sAppMsgParse;
@@ -173,8 +184,11 @@ public final class RedPacketHook {
     private static void install(ClassLoader cl) {
         try {
             resolveScene(cl);
+            resolveOpenScene(cl);
             hookAppMsgParse(cl);
             hookTalkerMapping(cl);
+            hookRecvEnd(cl);
+            hookOpenEnd(cl);
             LogWriter.log(TAG, "hooked");
         } catch (Throwable e) {
             LogWriter.log(TAG, "hook err: " + e);
@@ -207,6 +221,7 @@ public final class RedPacketHook {
                 if (doScene == null) continue;
                 sSceneCtor = hit;
                 sDoScene = doScene;
+                sRecvCls = c;
                 Class<?>[] p = doScene.getParameterTypes();
                 sDispatcherCls = p[0];
                 sCallbackItf = p[1];
@@ -230,6 +245,214 @@ public final class RedPacketHook {
             cur = cur.getSuperclass();
         }
         return null;
+    }
+
+    /** 定位第二步 h6（NetSceneOpenLuckyMoney，openwxhb）：10 参构造器 + 自身类。 */
+    private static void resolveOpenScene(ClassLoader cl) {
+        List<String> cands = HookUtil.classCandidates(cl, ANCHOR_CGI_OPEN, "NetSceneOpenLuckyMoney request");
+        if (cands.isEmpty()) {
+            LogWriter.log(TAG, "h6 未定位，第二步不可用");
+            return;
+        }
+        for (String sceneCls : cands) {
+            for (Class<?> c : HookUtil.loadClasses(cl, sceneCls)) {
+                for (Constructor<?> ctor : c.getDeclaredConstructors()) {
+                    Class<?>[] p = ctor.getParameterTypes();
+                    if (p.length == 10
+                            && HookUtil.isInt(p[0]) && HookUtil.isInt(p[1])
+                            && p[2] == String.class && p[3] == String.class
+                            && p[4] == String.class && p[5] == String.class
+                            && p[6] == String.class && p[7] == String.class
+                            && p[8] == String.class && p[9] == String.class) {
+                        ctor.setAccessible(true);
+                        sOpenCtor = ctor;
+                        sOpenCls = c;
+                        LogWriter.log(TAG, "h6 resolved cls=" + c.getName());
+                        resolveHeadNick(cl);
+                        return;
+                    }
+                }
+            }
+        }
+        LogWriter.log(TAG, "h6 构造签名未匹配 candidates=" + cands);
+    }
+
+    /** 定位 o5.l()（自己头像 headImg）与 b41.y1.m()（自己昵称），供 openwxhb 请求体使用。 */
+    private static void resolveHeadNick(ClassLoader cl) {
+        try {
+            Class<?> o5 = XposedHelpers.findClass(C_LUCKY_UTIL, cl);
+            for (Method m : o5.getDeclaredMethods()) {
+                if ("l".equals(m.getName()) && m.getParameterTypes().length == 0
+                        && m.getReturnType() == String.class) {
+                    m.setAccessible(true);
+                    sHeadImgMethod = m;
+                    break;
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "o5.l 未定位: " + t);
+        }
+        try {
+            Class<?> y1 = XposedHelpers.findClass(C_CFG_LOGIC, cl);
+            for (Method m : y1.getDeclaredMethods()) {
+                if ("m".equals(m.getName()) && m.getParameterTypes().length == 0
+                        && m.getReturnType() == String.class) {
+                    m.setAccessible(true);
+                    sNickMethod = m;
+                    break;
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "b41.y1.m 未定位: " + t);
+        }
+    }
+
+    /** H3：n6.onGYNetEnd(int,String,JSONObject) → 解析 timingIdentifier 并发第二步。 */
+    private static void hookRecvEnd(ClassLoader cl) {
+        if (sRecvCls == null) return;
+        try {
+            XposedBridge.hookAllMethods(sRecvCls, "onGYNetEnd", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (param.args == null || param.args.length != 3) return;
+                        onRecvEnd(param.thisObject);
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "recvEnd after err: " + t);
+                    }
+                }
+            });
+            LogWriter.log(TAG, "hooked n6.onGYNetEnd cls=" + sRecvCls.getName());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookRecvEnd err: " + t);
+        }
+    }
+
+    /** H4：h6.onGYNetEnd(int,String,JSONObject) → 读取金额。 */
+    private static void hookOpenEnd(ClassLoader cl) {
+        if (sOpenCls == null) return;
+        try {
+            XposedBridge.hookAllMethods(sOpenCls, "onGYNetEnd", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (param.args == null || param.args.length != 3) return;
+                        onOpenEnd(param.thisObject);
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "openEnd after err: " + t);
+                    }
+                }
+            });
+            LogWriter.log(TAG, "hooked h6.onGYNetEnd cls=" + sOpenCls.getName());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookOpenEnd err: " + t);
+        }
+    }
+
+    /** n6 响应：拿 timingIdentifier 等字段，构造 h6（openwxhb）并丢回网络队列。 */
+    private static void onRecvEnd(Object scene) {
+        if (scene == null) return;
+        String sendId = strField(scene, "m");
+        if (sendId == null || !sHandled.contains(sendId)) return;
+        String nurl = strField(scene, "n");
+        int msgType = intField(scene, "h", 1);
+        int channel = intField(scene, "i", 1);
+        String timing = strField(scene, "P");
+        int hbStatus = intField(scene, "s", 0);
+        int recvStat = intField(scene, "t", 0);
+        String statusMess = strField(scene, "u");
+        String session = sSendIdSession.get(sendId);
+        LogWriter.log(TAG, "n6 resp sendId=" + sendId + " hbStatus=" + hbStatus
+                + " recv=" + recvStat + " timingLen=" + (timing == null ? 0 : timing.length()));
+
+        if (recvStat == 2 || hbStatus == 4 || hbStatus == 5) {
+            LogWriter.log(TAG, "红包不可领 sendId=" + sendId + " hbStatus=" + hbStatus
+                    + " recv=" + recvStat + " " + statusMess);
+            return;
+        }
+        if (timing == null || timing.isEmpty()) {
+            LogWriter.log(TAG, "timingIdentifier 为空，放弃第二步 sendId=" + sendId);
+            return;
+        }
+        if (sOpenCtor == null) {
+            LogWriter.log(TAG, "h6 构造器未解析，无法第二步 sendId=" + sendId);
+            return;
+        }
+        String headImg = callStaticStr(sHeadImgMethod);
+        String nick = callStaticStr(sNickMethod);
+        try {
+            Object open = sOpenCtor.newInstance(msgType, channel, sendId,
+                    nurl == null ? "" : nurl,
+                    headImg == null ? "" : headImg,
+                    nick == null ? "" : nick,
+                    session == null ? "" : session,
+                    "v1.0", timing, "");
+            Object queue = StorageHub.get().netSceneQueue();
+            if (queue == null) {
+                LogWriter.log(TAG, "NetSceneQueue 不可用，openwxhb 发送失败 sendId=" + sendId);
+                return;
+            }
+            XposedHelpers.callMethod(queue, "h", open, 0);
+            LogWriter.log(TAG, "openwxhb sent sendId=" + sendId + " session=" + session);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "openwxhb 发送失败 sendId=" + sendId + " err=" + t);
+        }
+    }
+
+    /** h6 响应：读取 e1 模型金额（q 字段，单位分）。 */
+    private static void onOpenEnd(Object scene) {
+        if (scene == null) return;
+        String sendId = strField(scene, "m");
+        if (sendId == null || !sHandled.contains(sendId)) return;
+        Object e1 = XposedHelpers.getObjectField(scene, "h");
+        if (e1 == null) return;
+        long amountFen = getLong(e1, "q");
+        String nick = strField(e1, "i");
+        String user = strField(e1, "Q");
+        String statusMess = strField(e1, "f");
+        int recvStatus = intField(e1, "A", 0);
+        long recNum = getLong(e1, "r");
+        long totalNum = getLong(e1, "t");
+        LogWriter.log(TAG, "红包到账 sendId=" + sendId + " amount=" + amountFen + "分"
+                + " nick=" + nick + " user=" + user + " recv=" + recvStatus
+                + " " + recNum + "/" + totalNum + " msg=" + statusMess);
+    }
+
+    // ---------------- 反射工具（第二步用） ----------------
+
+    private static String strField(Object o, String name) {
+        try {
+            Object v = XposedHelpers.getObjectField(o, name);
+            return v == null ? null : v.toString();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    private static int intField(Object o, String name, int def) {
+        try {
+            return XposedHelpers.getIntField(o, name);
+        } catch (Throwable t) {
+            return def;
+        }
+    }
+
+    private static long getLong(Object o, String name) {
+        try {
+            return XposedHelpers.getLongField(o, name);
+        } catch (Throwable t) {
+            return 0L;
+        }
+    }
+
+    private static String callStaticStr(Method m) {
+        if (m == null) return null;
+        try {
+            Object v = m.invoke(null);
+            return v == null ? null : v.toString();
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     private static void hookAppMsgParse(ClassLoader cl) {
@@ -511,6 +734,9 @@ public final class RedPacketHook {
         if (sSceneCtor == null) {
             LogWriter.log(TAG, "scene ctor 未解析，放弃");
             return;
+        }
+        if (talker != null && !talker.isEmpty()) {
+            sSendIdSession.put(sendId, talker);
         }
         Object scene = sSceneCtor.newInstance(1, channelId, sendId, nativeUrl, 1, "v1.0",
                 talker == null ? "" : talker);
