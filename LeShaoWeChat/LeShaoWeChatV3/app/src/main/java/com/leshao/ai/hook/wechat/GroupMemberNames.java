@@ -9,7 +9,7 @@ import de.robv.android.xposed.XposedHelpers;
 /**
  * 群成员群昵称解析（文档《艾特和引用方法》§四）。
  * <p>
- * 实证链路（与已稳定的 {@code GroupMemberTools.getRoomInfo} 一致）：
+ * 实证链路：
  * <pre>
  *   j1 = gp0.j1;  svc = j1.v(q02.f)
  *   a3 = svc.a()                 // ChatroomMembersStorage(com.tencent.mm.storage.a3)

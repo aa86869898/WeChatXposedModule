@@ -1,0 +1,257 @@
+Message: java.lang.IllegalStateException: waitingTime
+  
+  📋 Per-process queues:
+    258d8ad 31299:com.coloros.sceneservice/u0a134 not runnable because INFINITE_DEFER
+      state:FRZ
+      runningOomAdjusted:true
+      e:1 d:1 f:1 fd:1 o:0 a:0 p:0 pd:0 int:0 rt:53 ins:0 m:0 csi:0 adcsi:0 ccu:0 ccn:119
+      -7m46s877ms BroadcastRecord{4d50ef0 android.intent.action.BATTERY_CHANGED/u-1}
+          DEFERRED URGENT for registered e689c99
+    
+    136731a 28208:com.oplus.camera/u0a213 not runnable because INFINITE_DEFER
+      state:FRZ
+      e:5 d:5 f:5 fd:5 o:0 a:0 p:0 pd:0 int:0 rt:0 ins:0 m:0 csi:0 adcsi:0 ccu:71 ccn:0
+      -13m51s60ms BroadcastRecord{470a806 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered 5239090
+      -13m51s57ms BroadcastRecord{1cd8ec7 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered 5239090
+      -2m23s764ms BroadcastRecord{ddf351d android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered 5239090
+      -2m10s159ms BroadcastRecord{fcb68b3 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered 5239090
+      -2m10s157ms BroadcastRecord{f44e70 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered 5239090
+    
+    702a89c 24791:com.heytap.browser/u0a232 not runnable because DEFER_BY_OPLUS SUB_REASON: FROZEN 
+      state:FRZ
+      runningOomAdjusted:true
+      e:38 d:37 f:19 fd:19 o:0 a:0 p:0 pd:0 int:0 rt:66 ins:0 m:0 csi:0 adcsi:0 ccu:0 ccn:223
+      -52m33s113ms BroadcastRecord{274a6b0 android.intent.action.CLOSE_SYSTEM_DIALOGS/u-1}
+          DEFERRED URGENT for registered f639bed
+      -52m1s259ms BroadcastRecord{d7afdda android.intent.action.SCREEN_ON/u-1}
+          DEFERRED URGENT for registered 8f9df40
+      -13m51s60ms BroadcastRecord{470a806 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered 8b06bc1
+      -13m51s60ms BroadcastRecord{470a806 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered d6ca9ee
+      -13m51s60ms BroadcastRecord{470a806 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered cef5603
+      -13m51s57ms BroadcastRecord{1cd8ec7 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered 8b06bc1
+      -13m51s57ms BroadcastRecord{1cd8ec7 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered d6ca9ee
+      -13m51s57ms BroadcastRecord{1cd8ec7 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered cef5603
+      -7m46s877ms BroadcastRecord{4d50ef0 android.intent.action.BATTERY_CHANGED/u-1}
+          DEFERRED URGENT for registered 51c8004
+      -2m23s764ms BroadcastRecord{ddf351d android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered 8b06bc1
+      -2m23s764ms BroadcastRecord{ddf351d android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered d6ca9ee
+      -2m23s764ms BroadcastRecord{ddf351d android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered cef5603
+      -2m23s505ms BroadcastRecord{4204a29 android.intent.action.CLOSE_SYSTEM_DIALOGS/u-1}
+          DEFERRED URGENT for registered f639bed
+      -2m10s159ms BroadcastRecord{fcb68b3 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered 8b06bc1
+      -2m10s159ms BroadcastRecord{fcb68b3 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered d6ca9ee
+      -2m10s159ms BroadcastRecord{fcb68b3 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered cef5603
+      -2m10s157ms BroadcastRecord{f44e70 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered 8b06bc1
+      -2m10s157ms BroadcastRecord{f44e70 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered d6ca9ee
+      -2m10s157ms BroadcastRecord{f44e70 android.media.VOLUME_CHANGED_ACTION/u-1}
+          DEFERRED URGENT for registered cef5603
+      -2h50m30s542ms BroadcastRecord{6ab076d android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered 186b867
+      -2h50m30s542ms BroadcastRecord{6ab076d android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered 4687f80
+      -2h50m30s542ms BroadcastRecord{6ab076d android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c05539
+      -2h50m30s542ms BroadcastRecord{6ab076d android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered e67d738
+      -2h50m30s418ms BroadcastRecord{f8ca05b android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered 186b867
+      -2h50m30s418ms BroadcastRecord{f8ca05b android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered 4687f80
+      -2h50m30s418ms BroadcastRecord{f8ca05b android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered 6841ca4
+      -2h50m30s418ms BroadcastRecord{f8ca05b android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered c05539
+      -2h50m30s418ms BroadcastRecord{f8ca05b android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered e67d738
+      -2h50m30s418ms BroadcastRecord{f8ca05b android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered 14bfb8a
+      -2h50m30s286ms BroadcastRecord{740f15f android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered 186b867
+      -2h50m30s286ms BroadcastRecord{740f15f android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered c05539
+      -2h50m30s286ms BroadcastRecord{740f15f android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered e67d738
+      -2h50m30s286ms BroadcastRecord{740f15f android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered 14bfb8a
+      -2h13m31s777ms BroadcastRecord{8dc0f04 android.intent.action.ACTION_POWER_DISCONNECTED/u-1}
+          DEFERRED for registered bef49ce
+      -2h13m31s777ms BroadcastRecord{8dc0f04 android.intent.action.ACTION_POWER_DISCONNECTED/u-1}
+          DEFERRED for registered 45df4eb
+      -51m59s720ms BroadcastRecord{535a20c android.intent.action.USER_PRESENT/u0}
+          DEFERRED for registered 1fbcdc7
+      -51m59s720ms BroadcastRecord{535a20c android.intent.action.USER_PRESENT/u0}
+          DEFERRED for registered 8f9df40
+      -10m17s774ms BroadcastRecord{3567f24 com.oplus.framework.network.drs.action.EVENT_RULES_UPDATED/u0}
+          DEFERRED for registered c97adbc
+    
+    1f08dc3 14607:com.nearme.instant.platform/u0a241 not runnable because DEFER_BY_OPLUS SUB_REASON: FROZEN 
+      state:FRZ
+      runningOomAdjusted:true
+      e:1 d:1 f:0 fd:0 o:0 a:0 p:0 pd:0 int:0 rt:0 ins:0 m:0 csi:0 adcsi:0 ccu:0 ccn:4
+      -2h13m31s777ms BroadcastRecord{8dc0f04 android.intent.action.ACTION_POWER_DISCONNECTED/u-1}
+          DEFERRED for registered 3a0047f
+    
+    c661a2d 17841:com.heytap.pictorial/u0a264 not runnable because INFINITE_DEFER
+      state:FRZ
+      runningOomAdjusted:true
+      e:42 d:42 f:1 fd:1 o:0 a:0 p:0 pd:0 int:0 rt:64 ins:0 m:0 csi:0 adcsi:0 ccu:1 ccn:1
+      -52m1s259ms BroadcastRecord{d7afdda android.intent.action.SCREEN_ON/u-1}
+          DEFERRED URGENT for registered 42a3ca3
+      -8h8m10s463ms BroadcastRecord{9df73f android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c8cc491
+      -8h8m10s450ms BroadcastRecord{bd8181e android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered c8cc491
+      -8h8m10s430ms BroadcastRecord{78f98ff android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered c8cc491
+      -7h49m47s267ms BroadcastRecord{a4e4eb8 android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered c8cc491
+      -7h43m49s815ms BroadcastRecord{ab68e23 android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c8cc491
+      -7h43m49s790ms BroadcastRecord{cee1f76 android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered c8cc491
+      -7h43m49s754ms BroadcastRecord{da1e239 android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered c8cc491
+      -7h36m44s544ms BroadcastRecord{68a604a android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c8cc491
+      -7h36m44s526ms BroadcastRecord{dfee73 android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered c8cc491
+      -7h36m44s478ms BroadcastRecord{bbcf558 android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered c8cc491
+      -7h35m13s169ms BroadcastRecord{36c0456 android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c8cc491
+      -7h15m43s652ms BroadcastRecord{5464491 android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c8cc491
+      -7h15m43s636ms BroadcastRecord{f0c8836 android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered c8cc491
+      -7h15m43s597ms BroadcastRecord{45cb545 android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered c8cc491
+      -6h27m15s562ms BroadcastRecord{cf7b3d9 android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c8cc491
+      -6h27m15s535ms BroadcastRecord{aa4381a android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered c8cc491
+      -6h27m15s470ms BroadcastRecord{f6c05a3 android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered c8cc491
+      -5h4m27s709ms BroadcastRecord{63f577e android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c8cc491
+      -2h52m3s912ms BroadcastRecord{e0fafc7 android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c8cc491
+      -2h52m3s854ms BroadcastRecord{138f8f0 android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered c8cc491
+      -2h52m3s770ms BroadcastRecord{cc0b8d3 android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m36s292ms BroadcastRecord{4275eb7 android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m36s164ms BroadcastRecord{cfac90d android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m35s978ms BroadcastRecord{3457970 android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m33s464ms BroadcastRecord{19ab0df android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m33s454ms BroadcastRecord{4e05592 android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m33s411ms BroadcastRecord{a1f0253 android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m32s408ms BroadcastRecord{73dcf2 android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m32s390ms BroadcastRecord{586ead1 android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m32s322ms BroadcastRecord{7594e79 android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m19s235ms BroadcastRecord{a639fff android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m19s209ms BroadcastRecord{eaba9 android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m19s83ms BroadcastRecord{2dadcb3 android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m11s709ms BroadcastRecord{ce15f2 android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m11s676ms BroadcastRecord{4b8d60b android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered c8cc491
+      -2h51m11s643ms BroadcastRecord{b6cace8 android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered c8cc491
+      -2h50m30s542ms BroadcastRecord{6ab076d android.intent.action.PACKAGE_REMOVED/u0}
+          DEFERRED for registered c8cc491
+      -2h50m30s418ms BroadcastRecord{f8ca05b android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered c8cc491
+      -2h50m30s286ms BroadcastRecord{740f15f android.intent.action.PACKAGE_REPLACED/u0}
+          DEFERRED for registered c8cc491
+      -2h31m40s538ms BroadcastRecord{2828331 android.intent.action.ACTION_POWER_CONNECTED/u-1}
+          DEFERRED for registered e2d3cd0
+      -51m59s720ms BroadcastRecord{535a20c android.intent.action.USER_PRESENT/u0}
+          DEFERRED for registered e2d3cd0
+    
+    75a7a23 3748:com.qihoo.contents/u0a358 not runnable because DEFER_BY_OPLUS SUB_REASON: FROZEN 
+      state:FRZ
+      e:14 d:14 f:13 fd:13 o:0 a:0 p:0 pd:0 int:0 rt:91 ins:0 m:0 csi:0 adcsi:0 ccu:1 ccn:10
+      -52m33s113ms BroadcastRecord{274a6b0 android.intent.action.CLOSE_SYSTEM_DIALOGS/u-1}
+          DEFERRED URGENT for registered 514607f
+      -52m1s259ms BroadcastRecord{d7afdda android.intent.action.SCREEN_ON/u-1}
+          DEFERRED URGENT for registered efb98c5
+      -52m1s259ms BroadcastRecord{d7afdda android.intent.action.SCREEN_ON/u-1}
+          DEFERRED URGENT for registered dea8f9c
+      -52m1s259ms BroadcastRecord{d7afdda android.intent.action.SCREEN_ON/u-1}
+          DEFERRED URGENT for registered 4e57a15
+      -52m1s259ms BroadcastRecord{d7afdda android.intent.action.SCREEN_ON/u-1}
+          DEFERRED URGENT for registered 7763a0a
+      -52m1s259ms BroadcastRecord{d7afdda android.intent.action.SCREEN_ON/u-1}
+          DEFERRED URGENT for registered 904adc3
+      -52m1s259ms BroadcastRecord{d7afdda android.intent.action.SCREEN_ON/u-1}
+          DEFERRED URGENT for registered a852115
+      -52m1s259ms BroadcastRecord{d7afdda android.intent.action.SCREEN_ON/u-1}
+          DEFERRED URGENT for registered d59d764
+      -52m1s259ms BroadcastRecord{d7afdda android.intent.action.SCREEN_ON/u-1}
+          DEFERRED URGENT for registered 42e4e8b
+      -2m23s505ms BroadcastRecord{4204a29 android.intent.action.CLOSE_SYSTEM_DIALOGS/u-1}
+          DEFERRED URGENT for registered 514607f
+      -3s984ms BroadcastRecord{960b3f1 android.intent.action.TIME_TICK/u-1}
+          DEFERRED URGENT for registered 904adc3
+      -3s984ms BroadcastRecord{960b3f1 android.intent.action.TIME_TICK/u-1}
+          DEFERRED URGENT for registered d8ae193
+      -3s984ms BroadcastRecord{960b3f1 android.intent.action.TIME_TICK/u-1}
+          DEFERRED URGENT for registered 74ec426
+      -2h13m31s777ms BroadcastRecord{8dc0f04 android.intent.action.ACTION_POWER_DISCONNECTED/u-1}
+          DEFERRED for registered 143af9a
+    
+    e2f8e45 21053:com.eg.android.AlipayGphone/u0a374 not runnable because DEFER_BY_OPLUS SUB_REASON: FROZEN 
+      runningOomAdjusted:true
+      e:1 d:1 f:1 fd:1 o:0 a:0 p:0 pd:0 int:0 rt:326 ins:0 m:0 csi:0 adcsi:0 ccu:4 ccn:46
+      -2m23s505ms BroadcastRecord{4204a29 android.intent.action.CLOSE_SYSTEM_DIALOGS/u-1}
+          DEFERRED URGENT for registered c88f3d
+    
+  
+  🧍 Runnable:
+    (none)
+  
+  🏃 Running:
+    　 (none)
+    　 (none)
+    　 (none)
+    　 (none)
+    　 (none)
+    　 (none)
+  
+  Broadcasts with ignored delivery group policies:
+    {}
+  
+  Foreground UIDs:
+    {10649=true}
+  

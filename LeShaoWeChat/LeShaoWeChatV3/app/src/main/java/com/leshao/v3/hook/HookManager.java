@@ -6,6 +6,7 @@ import de.robv.android.xposed.XposedBridge;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.List;
 import java.util.ArrayList;
@@ -19,7 +20,8 @@ public class HookManager {
     private static final List<String> hookLog = new CopyOnWriteArrayList<>();
     private static final AtomicInteger successCount = new AtomicInteger(0);
     private static final AtomicInteger failCount = new AtomicInteger(0);
-    private static boolean activated = false;
+    // v1131: activated 由多线程读写, 用 AtomicBoolean 保证可见性
+    private static final AtomicBoolean activated = new AtomicBoolean(false);
 
     private static final class NamedTask {
         final String name;
@@ -33,8 +35,8 @@ public class HookManager {
 
     public static void register(String name, Runnable task) {
         NamedTask namedTask = new NamedTask(name, task);
-        LogWriter.log(TAG, "REGISTERED " + name + " activated=" + activated);
-        if (activated) { runTask(namedTask, 1, 1); }
+        LogWriter.log(TAG, "REGISTERED " + name + " activated=" + activated.get());
+        if (activated.get()) { runTask(namedTask, 1, 1); }
         else { pendingTasks.add(namedTask); }
     }
 
@@ -45,22 +47,30 @@ public class HookManager {
     public static int pendingCount() { return pendingTasks.size(); }
 
     public static void activateAll() {
-        activated = true;
+        activated.set(true);
         int total = pendingTasks.size();
         LogWriter.log(TAG, "activateAll: " + total + " pending tasks (async)");
         List<NamedTask> tasks = new ArrayList<>(pendingTasks);
         pendingTasks.clear();
-        new Thread(() -> {
+        Thread t = new Thread(() -> {
             int idx = 0;
             int ok = 0;
             int fail = 0;
             for (NamedTask task : tasks) {
-                if (runTask(task, idx + 1, total)) ok++;
-                else fail++;
+                if (runTask(task, idx + 1, total)) {
+                    ok++;
+                    successCount.incrementAndGet();
+                } else {
+                    fail++;
+                    failCount.incrementAndGet();
+                }
                 idx++;
             }
             LogWriter.log(TAG, "activateAll DONE: " + ok + " OK, " + fail + " FAIL");
-        }, "leshao-hook-activate").start();
+        }, "leshao-hook-activate");
+        // v1131: 守护线程, 避免常驻线程阻止进程退出
+        t.setDaemon(true);
+        t.start();
     }
 
     private static boolean runTask(NamedTask namedTask, int index, int total) {
@@ -83,21 +93,24 @@ public class HookManager {
         try {
             java.lang.reflect.Method method;
             if (paramTypes.length == 0) {
-                var unhook = XposedBridge.hookAllMethods(clazz, methodName, callback);
-                trackedHooks.put(key, unhook instanceof java.util.Set
-                        ? ((java.util.Set<XC_MethodHook.Unhook>)unhook).iterator().next() : null);
+                // v1131: 修正不安全强转 —— hookAllMethods 直接返回 Set<Unhook>
+                java.util.Set<XC_MethodHook.Unhook> unhooks =
+                        XposedBridge.hookAllMethods(clazz, methodName, callback);
+                XC_MethodHook.Unhook first = (unhooks == null || unhooks.isEmpty())
+                        ? null : unhooks.iterator().next();
+                trackedHooks.put(key, first);
             } else {
                 method = clazz.getDeclaredMethod(methodName, (Class<?>[]) paramTypes);
                 method.setAccessible(true);
-                var unhook = XposedBridge.hookMethod(method, callback);
+                XC_MethodHook.Unhook unhook = XposedBridge.hookMethod(method, callback);
                 trackedHooks.put(key, unhook);
             }
             successCount.incrementAndGet();
-            log("✅ " + key + " → " + clazz.getSimpleName() + "." + methodName);
+            log("OK " + key + " -> " + clazz.getSimpleName() + "." + methodName);
             return true;
         } catch (Throwable t) {
             failCount.incrementAndGet();
-            log("❌ " + key + " → " + t.getMessage());
+            log("FAIL " + key + " -> " + t.getMessage());
             return false;
         }
     }
@@ -106,7 +119,7 @@ public class HookManager {
         XC_MethodHook.Unhook unhook = trackedHooks.remove(key);
         if (unhook != null) {
             unhook.unhook();
-            log("🔴 已注销: " + key);
+            log("已注销: " + key);
         }
     }
 
@@ -115,11 +128,12 @@ public class HookManager {
             try { e.getValue().unhook(); } catch (Throwable ignored) {}
         }
         trackedHooks.clear();
-        log("🔴 全部Hook已注销");
+        log("全部Hook已注销");
     }
 
     public static String getStats() {
-        return "Hook统计: 成功=" + successCount + " 失败=" + failCount + " 活跃=" + trackedHooks.size();
+        return "Hook统计: 成功=" + successCount.get() + " 失败=" + failCount.get()
+                + " 活跃=" + trackedHooks.size();
     }
 
     private static void log(String msg) {

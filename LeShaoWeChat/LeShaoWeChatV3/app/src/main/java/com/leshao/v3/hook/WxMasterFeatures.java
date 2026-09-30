@@ -4,8 +4,6 @@ import de.robv.android.xposed.XposedHelpers;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.database.Cursor;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
@@ -31,6 +29,11 @@ public class WxMasterFeatures {
 
     private static ClassLoader sWxCl;
 
+    // 静态 Handler + 可取消 token: 避免定时任务持有 Activity, 并在取消/关闭时真正移除回调
+    private static final Handler sTimerHandler = new Handler(Looper.getMainLooper());
+    private static final Object sTimerLock = new Object();
+    private static Runnable sPendingSend;
+
     /** 乐少万群定时群发：模块联系人选择器勾选群 + 内容 + 定时 → 发送 */
     public static void batchSend(Activity act, ClassLoader cl) {
         if (act == null) return;
@@ -43,8 +46,20 @@ public class WxMasterFeatures {
                         showScheduleDialog(act, cl, targets);
                     });
         } catch (Throwable t) {
-            List<String> targets = getAllChatRooms(cl);
-            showScheduleDialog(act, cl, targets);
+            // 禁止全量群发降级: 选择器异常时提示失败并中止, 避免误发到全部群聊
+            LogWriter.log(TAG, "batchSend 选择器异常, 中止(不降级全量): " + t.getMessage());
+            toast(act, "打开群选择失败，已中止");
+        }
+    }
+
+    /** 取消尚未触发的定时群发任务。 */
+    private static void cancelPendingSend() {
+        synchronized (sTimerLock) {
+            if (sPendingSend != null) {
+                sTimerHandler.removeCallbacks(sPendingSend);
+                sPendingSend = null;
+                LogWriter.log(TAG, "定时群发已取消");
+            }
         }
     }
 
@@ -82,10 +97,15 @@ public class WxMasterFeatures {
             if (msg.isEmpty()) { toast(act, "消息不能为空"); return; }
             if (triggerMs[0] > 0 && triggerMs[0] > System.currentTimeMillis()) {
                 long delay = triggerMs[0] - System.currentTimeMillis();
-                new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                    try { sendBroadcast(cl, targets, msg); }
-                    catch (Throwable t) { LogWriter.log(TAG, "定时群发失败: " + t.getMessage()); }
-                }, delay);
+                cancelPendingSend();
+                synchronized (sTimerLock) {
+                    sPendingSend = () -> {
+                        synchronized (sTimerLock) { sPendingSend = null; }
+                        try { sendBroadcast(cl, targets, msg); }
+                        catch (Throwable t) { LogWriter.log(TAG, "定时群发失败: " + t.getMessage()); }
+                    };
+                    sTimerHandler.postDelayed(sPendingSend, delay);
+                }
                 toast(act, "已定时, " + delay / 1000 + " 秒后发送到 " + targets.size() + " 个群");
             } else {
                 boolean ok = sendBroadcast(cl, targets, msg);
@@ -108,8 +128,14 @@ public class WxMasterFeatures {
             doSend.run();
             dlg.dismiss();
         });
-        View cancelBtn = com.leshao.v3.ui.widgets.M3Page.ghostButton(act, "取消", dlg::dismiss);
+        View cancelBtn = com.leshao.v3.ui.widgets.M3Page.ghostButton(act, "取消", () -> {
+            cancelPendingSend();
+            dlg.dismiss();
+        });
         root.addView(com.leshao.v3.ui.widgets.M3Page.buttonRow(act, sendBtn, cancelBtn));
+
+        // 对话框关闭(含点外部/返回)时取消未触发的定时任务, 防止悬挂
+        dlg.setOnDismissListener(d -> cancelPendingSend());
 
         com.leshao.v3.ui.InsetsUtil.clearDialogShell(dlg);
         dlg.show();
@@ -190,39 +216,6 @@ public class WxMasterFeatures {
             LogWriter.log(TAG, "sendViaMultiTarget err: " + t.getMessage());
             return false;
         }
-    }
-
-    /** 获取所有群聊列表：e01.d9.b().q() → storage.D() cursor */
-    private static List<String> getAllChatRooms(ClassLoader cl) {
-        if (sWxCl != null) cl = sWxCl;
-        List<String> rooms = new ArrayList<>();
-        Cursor c = null;
-        try {
-            Class<?> d9 = XposedHelpers.findClass("e01.d9", cl);
-            Object b = XposedHelpers.callStaticMethod(d9, "b");
-            if (b == null) return rooms;
-            Object storage = XposedHelpers.callMethod(b, "q");
-            if (storage == null) return rooms;
-            c = (Cursor) XposedHelpers.callMethod(storage, "D");
-            if (c == null) return rooms;
-            while (c.moveToNext()) {
-                int idx = c.getColumnIndex("username");
-                if (idx < 0) break;
-                String u = c.getString(idx);
-                if (u != null && (u.endsWith("@chatroom") || u.endsWith("@im.chatroom"))) {
-                    rooms.add(u);
-                }
-            }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "getAllChatRooms err: " + t.getMessage());
-        } finally {
-            try { if (c != null) c.close(); } catch (Throwable ignored) {}
-        }
-        return rooms;
-    }
-
-    private static int dp(Activity act, int d) {
-        return act == null ? d : (int) (d * act.getResources().getDisplayMetrics().density);
     }
 
     private static void toast(Activity act, String msg) {

@@ -173,17 +173,6 @@ public class WmChatHook {
         if (WmPrefs.isExportChat()) btns.addView(WmUi.makeBtn(sAct, "📤 导出聊天", WmChatHook::exportChat));
         if (WmPrefs.isAutoVoice()) btns.addView(makeToggleRow("🔊 语音自动播放", "auto_voice"));
 
-        if (isGroup) {
-            try {
-                com.leshao.v3.wm.hook.WmGroupHook.bind(sAct, sCL, sUser);
-                btns.addView(WmUi.makeDivider(sAct));
-                btns.addView(WmUi.makeHeader(sAct, "🛡 群管理", com.leshao.v3.wm.hook.WmGroupHook.makeRoomSubtitle()));
-                com.leshao.v3.wm.hook.WmGroupHook.appendGroupButtons(btns);
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "WmChatHook group panel err: " + t.getMessage());
-            }
-        }
-
         sv.addView(btns);
         panel.addView(sv, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));

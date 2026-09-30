@@ -43,10 +43,16 @@ public class TtsEngine {
         mWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "leshao:tts");
 
         mTts = new TextToSpeech(ctx, status -> {
+            // v986: 部分引擎会在构造函数返回前同步回调, 此时 mTts 尚未完成赋值, 直接使用会 NPE。
+            TextToSpeech engine = mTts;
+            if (engine == null) {
+                LogWriter.log(TAG, "TTS onInit 回调时 mTts 尚未赋值, 跳过本次初始化");
+                return;
+            }
             if (status == TextToSpeech.SUCCESS) {
-                mTts.setLanguage(Locale.CHINESE);
-                mTts.setSpeechRate(mSpeechRate);
-                mTts.setPitch(1.0f);
+                engine.setLanguage(Locale.CHINESE);
+                engine.setSpeechRate(mSpeechRate);
+                engine.setPitch(1.0f);
                 mReady = true;
                 LogWriter.log(TAG, "TTS init OK rate=" + mSpeechRate);
                 flushQueue();
@@ -148,7 +154,11 @@ public class TtsEngine {
     }
 
     public void stop() {
-        if (mTts != null) mTts.stop();
+        // v986: stop 后必须复位播放态, 否则 hasPendingSpeak() 可能因 mSpeaking 残留而长期为 true,
+        // 导致 VoiceAutoPlay 侧长时间等待。
+        mSpeaking = false;
+        mPaused = false;
+        try { if (mTts != null) mTts.stop(); } catch (Throwable ignored) {}
         mQueue.clear();
         releaseWakeLock();
     }

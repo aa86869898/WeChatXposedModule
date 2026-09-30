@@ -19,6 +19,11 @@ public class AppColors {
 
     private static volatile boolean sDarkMode;
 
+    // v1140: 主题实时跟随 —— 深色模式变化时通知已打开界面重建
+    private static final java.util.List<Runnable> sThemeListeners =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+    private static volatile boolean sWatcherInstalled = false;
+
     // ==================== M3 多配色方案（v1015：12 套 + 自定义 + 动态取色） ====================
     public static final int PALETTE_GREEN  = 0;
     public static final int PALETTE_BLUE   = 1;
@@ -355,7 +360,45 @@ public class AppColors {
         try {
             boolean prev = sDarkMode;
             sDarkMode = detectDarkMode();
-            if (prev != sDarkMode) recomputePalette();
+            if (prev != sDarkMode) {
+                recomputePalette();
+                notifyThemeChanged();
+            }
+        } catch (Throwable ignored) {}
+        ensureWatcher();
+    }
+
+    /** v1140: 注册主题变化监听（深色模式切换时回调），用于已打开界面就地重建。 */
+    public static void addThemeListener(Runnable r) {
+        if (r == null || sThemeListeners.contains(r)) return;
+        sThemeListeners.add(r);
+    }
+
+    public static void removeThemeListener(Runnable r) {
+        if (r != null) sThemeListeners.remove(r);
+    }
+
+    private static void notifyThemeChanged() {
+        for (Runnable r : sThemeListeners) {
+            try { r.run(); } catch (Throwable ignored) {}
+        }
+    }
+
+    /** v1140: 一次性注册系统配置回调，系统深色模式切换时立即重算配色。 */
+    private static void ensureWatcher() {
+        if (sWatcherInstalled) return;
+        Context ctx = com.leshao.v3.ContextManager.getAppContext();
+        if (ctx == null) return;
+        try {
+            ctx.registerComponentCallbacks(new android.content.ComponentCallbacks() {
+                @Override
+                public void onConfigurationChanged(Configuration newConfig) {
+                    try { refresh(); } catch (Throwable ignored) {}
+                }
+                @Override
+                public void onLowMemory() {}
+            });
+            sWatcherInstalled = true;
         } catch (Throwable ignored) {}
     }
 

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeShao · APK 图标样式预览</title>
+<style>
+  :root{
+    --primary:#8B5CF6;
+    --primary3:#FFAFCC;
+    --surface:#FBF9FF;
+    --onSurface:#2A2340;
+    --onSurfaceVariant:#6F6389;
+    --scLowest:#FFFFFF;
+    --scHigh:#ECE3FB;
+    --outlineVariant:#DCCFF2;
+    --dSurface:#150F1E;
+    --dScLowest:#100A18;
+    --dScHigh:#2A2040;
+    --dOutlineVariant:#3B2F55;
+    --dOnSurfaceVariant:#B6A6D1;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--surface);color:var(--onSurface);line-height:1.5;padding:28px 16px 64px;
+  }
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:22px;font-weight:700}
+  .sub{color:var(--onSurfaceVariant);font-size:13px;margin-top:6px}
+  .note{margin-top:16px;padding:12px 14px;border:1px solid var(--outlineVariant);border-radius:14px;background:var(--scHigh);font-size:13px;color:var(--onSurfaceVariant)}
+  h2{font-size:16px;font-weight:700;margin:34px 0 14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
+  .card{border:1px solid var(--outlineVariant);border-radius:18px;background:var(--scLowest);padding:16px;text-align:center;box-shadow:0 1px 2px rgba(42,35,64,.05)}
+  .tiles{display:flex;align-items:center;justify-content:center;gap:12px}
+  /* squircle 自适应图标 */
+  .sq{width:84px;height:84px;border-radius:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(90,60,160,.28)}
+  .sq svg{width:52px;height:52px;display:block}
+  /* 圆形裁切预览 */
+  .ci{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .ci svg{width:36px;height:36px;display:block}
+  .nm{margin-top:12px;font-size:14px;font-weight:600}
+  .ds{margin-top:3px;font-size:12px;color:var(--onSurfaceVariant);min-height:32px}
+  .tagrow{margin-top:8px}
+  .tag{display:inline-block;font-size:11px;color:var(--onSurfaceVariant);border:1px solid var(--outlineVariant);border-radius:999px;padding:2px 9px;background:var(--scHigh)}
+  /* 背景方案 */
+  .bg-grape{background:linear-gradient(140deg,#7C4DFF 0%,#8B5CF6 45%,#C78BFF 100%)}
+  .bg-sunset{background:linear-gradient(140deg,#8B5CF6 0%,#B984FF 50%,#FFAFCC 100%)}
+  .bg-deep{background:linear-gradient(150deg,#3B1D6E 0%,#6D3BC7 60%,#A66BFF 100%)}
+  .bg-mint{background:linear-gradient(140deg,#6D5DF6 0%,#8B5CF6 55%,#7ED0FF 100%)}
+  .bg-glass{background:linear-gradient(140deg,#EDE3FF 0%,#F7F0FF 55%,#FFE3F0 100%)}
+  .bg-glass .glyph-white{color:#6D3BC7}
+  /* home grid */
+  .home{
+    border:1px solid var(--outlineVariant);border-radius:22px;overflow:hidden;max-width:560px;
+  }
+  .hometop{height:24px;background:var(--scHigh)}
+  .homebody{background:linear-gradient(160deg,#E9DFFF 0%,#F6EEFF 50%,#FFE6F2 100%);padding:26px 20px}
+  .homegrid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px 12px}
+  .app{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .app .sq{width:60px;height:60px;border-radius:16px;box-shadow:0 3px 9px rgba(90,60,160,.25)}
+  .app .sq svg{width:36px;height:36px}
+  .app .lb{font-size:11px;color:#3A2E55;font-weight:600}
+  .foot{margin-top:28px;font-size:13px;color:var(--onSurfaceVariant)}
+  .chip{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;border:1px solid var(--outlineVariant);background:var(--scHigh);margin:0 6px 6px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>LeShao · APK 图标 10 套样式</h1>
+  <div class="sub">桌面启动图标（launcher icon）候选。已锁定左上角菜单为「02 四宫格」，01 号图标即为与菜单呼应的成套方案。</div>
+  <div class="note">
+    每个方案都按两个尺寸渲染：左侧为自适应图标（squircle，Android 标准安全区），右侧为圆形裁切（验证主体不溢出）。底部有桌面网格整体效果。选定后我出 PNG 全套 mipmap（mdpi~xxxhdpi）+ 自适应图标 XML。
+  </div>
+
+  <h2>十套方案</h2>
+  <div class="grid">
+
+    <!-- 01 四宫格 -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-grape"><svg viewBox="0 0 24 24"><g fill="#fff"><rect x="4" y="4" width="6.6" height="6.6" rx="2"/><rect x="13.4" y="4" width="6.6" height="6.6" rx="2"/><rect x="4" y="13.4" width="6.6" height="6.6" rx="2"/><rect x="13.4" y="13.4" width="6.6" height="6.6" rx="2"/></g></svg></div>
+        <div class="ci bg-grape"><svg viewBox="0 0 24 24"><g fill="#fff"><rect x="4" y="4" width="6.6" height="6.6" rx="2"/><rect x="13.4" y="4" width="6.6" height="6.6" rx="2"/><rect x="4" y="13.4" width="6.6" height="6.6" rx="2"/><rect x="13.4" y="13.4" width="6.6" height="6.6" rx="2"/></g></svg></div>
+      </div>
+      <div class="nm">01 四宫格</div>
+      <div class="ds">与左上角菜单同款图形，品牌成套、辨识度高</div>
+      <div class="tagrow"><span class="tag">推荐 · 成套</span></div>
+    </div>
+
+    <!-- 02 乐字 -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-sunset"><svg viewBox="0 0 24 24"><text x="12" y="17.6" text-anchor="middle" font-size="17" font-weight="800" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif" fill="#fff">乐</text></svg></div>
+        <div class="ci bg-sunset"><svg viewBox="0 0 24 24"><text x="12" y="17.6" text-anchor="middle" font-size="17" font-weight="800" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif" fill="#fff">乐</text></svg></div>
+      </div>
+      <div class="nm">02 乐字</div>
+      <div class="ds">品牌直给，紫色渐变上的白色「乐」，最直白</div>
+      <div class="tagrow"><span class="tag">品牌</span></div>
+    </div>
+
+    <!-- 03 葡萄串 -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-deep"><svg viewBox="0 0 24 24"><g fill="#fff"><circle cx="12" cy="7.4" r="3"/><circle cx="8.2" cy="12.6" r="3"/><circle cx="15.8" cy="12.6" r="3"/><circle cx="12" cy="17.8" r="3"/></g></svg></div>
+        <div class="ci bg-deep"><svg viewBox="0 0 24 24"><g fill="#fff"><circle cx="12" cy="7.4" r="3"/><circle cx="8.2" cy="12.6" r="3"/><circle cx="15.8" cy="12.6" r="3"/><circle cx="12" cy="17.8" r="3"/></g></svg></div>
+      </div>
+      <div class="nm">03 葡萄串</div>
+      <div class="ds">四颗圆珠组成葡萄，呼应「葡萄气泡」主题色</div>
+      <div class="tagrow"><span class="tag">主题感</span></div>
+    </div>
+
+    <!-- 04 双气泡 -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-mint"><svg viewBox="0 0 24 24"><g fill="#fff"><path d="M4 6.4A2.6 2.6 0 0 1 6.6 3.8h7A2.6 2.6 0 0 1 16.2 6.4v3.4a2.6 2.6 0 0 1-2.6 2.6H8.6L5.4 15v-2.6h-.8A2.6 2.6 0 0 1 4 6.4z"/><path d="M17.4 10.6h.6A2.6 2.6 0 0 1 20.6 13.2v3.4a2.6 2.6 0 0 1-2.6 2.6h-.6V21l-3.2-2.6h-3.6a2.6 2.6 0 0 1-2.6-2.6v-.4h1.2z" opacity=".82"/></g></svg></div>
+        <div class="ci bg-mint"><svg viewBox="0 0 24 24"><g fill="#fff"><path d="M4 6.4A2.6 2.6 0 0 1 6.6 3.8h7A2.6 2.6 0 0 1 16.2 6.4v3.4a2.6 2.6 0 0 1-2.6 2.6H8.6L5.4 15v-2.6h-.8A2.6 2.6 0 0 1 4 6.4z"/><path d="M17.4 10.6h.6A2.6 2.6 0 0 1 20.6 13.2v3.4a2.6 2.6 0 0 1-2.6 2.6h-.6V21l-3.2-2.6h-3.6a2.6 2.6 0 0 1-2.6-2.6v-.4h1.2z" opacity=".82"/></g></svg></div>
+      </div>
+      <div class="nm">04 双气泡</div>
+      <div class="ds">两个对话气泡，一眼看出是微信增强工具</div>
+      <div class="tagrow"><span class="tag">语义清晰</span></div>
+    </div>
+
+    <!-- 05 拼图块 -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-grape"><svg viewBox="0 0 24 24"><path fill="#fff" d="M10.2 4.2a1.8 1.8 0 0 1 3.6 0v.9h2.4a1.5 1.5 0 0 1 1.5 1.5v2.4h.9a1.8 1.8 0 0 1 0 3.6h-.9v2.6a1.5 1.5 0 0 1-1.5 1.5h-2.6v-.9a1.8 1.8 0 0 0-3.6 0v.9H7.5A1.5 1.5 0 0 1 6 15.2v-2.6h-.9a1.8 1.8 0 0 1 0-3.6H6V6.6a1.5 1.5 0 0 1 1.5-1.5h2.7z"/></svg></div>
+        <div class="ci bg-grape"><svg viewBox="0 0 24 24"><path fill="#fff" d="M10.2 4.2a1.8 1.8 0 0 1 3.6 0v.9h2.4a1.5 1.5 0 0 1 1.5 1.5v2.4h.9a1.8 1.8 0 0 1 0 3.6h-.9v2.6a1.5 1.5 0 0 1-1.5 1.5h-2.6v-.9a1.8 1.8 0 0 0-3.6 0v.9H7.5A1.5 1.5 0 0 1 6 15.2v-2.6h-.9a1.8 1.8 0 0 1 0-3.6H6V6.6a1.5 1.5 0 0 1 1.5-1.5h2.7z"/></svg></div>
+      </div>
+      <div class="nm">05 拼图块</div>
+      <div class="ds">模块/插件的经典隐喻（Xposed 增强）</div>
+      <div class="tagrow"><span class="tag">插件感</span></div>
+    </div>
+
+    <!-- 06 闪电 -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-sunset"><svg viewBox="0 0 24 24"><path fill="#fff" d="M13.4 2.6 6.2 13h4.7l-.8 8.4 7.5-10.5h-4.9l.7-8.3z"/></svg></div>
+        <div class="ci bg-sunset"><svg viewBox="0 0 24 24"><path fill="#fff" d="M13.4 2.6 6.2 13h4.7l-.8 8.4 7.5-10.5h-4.9l.7-8.3z"/></svg></div>
+      </div>
+      <div class="nm">06 闪电</div>
+      <div class="ds">快捷、省事，强调一键自动化</div>
+      <div class="tagrow"><span class="tag">速度感</span></div>
+    </div>
+
+    <!-- 07 星芒 -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-deep"><svg viewBox="0 0 24 24"><g fill="#fff"><path d="M10 2.6c.5 3.3 1.7 4.5 5 5-3.3.5-4.5 1.7-5 5-.5-3.3-1.7-4.5-5-5 3.3-.5 4.5-1.7 5-5z"/><path d="M16.8 12.6c.3 2 1.1 2.8 3.1 3.1-2 .3-2.8 1.1-3.1 3.1-.3-2-1.1-2.8-3.1-3.1 2-.3 2.8-1.1 3.1-3.1z"/></g></svg></div>
+        <div class="ci bg-deep"><svg viewBox="0 0 24 24"><g fill="#fff"><path d="M10 2.6c.5 3.3 1.7 4.5 5 5-3.3.5-4.5 1.7-5 5-.5-3.3-1.7-4.5-5-5 3.3-.5 4.5-1.7 5-5z"/><path d="M16.8 12.6c.3 2 1.1 2.8 3.1 3.1-2 .3-2.8 1.1-3.1 3.1-.3-2-1.1-2.8-3.1-3.1 2-.3 2.8-1.1 3.1-3.1z"/></g></svg></div>
+      </div>
+      <div class="nm">07 星芒</div>
+      <div class="ds">AI 助手气质，简洁有余味</div>
+      <div class="tagrow"><span class="tag">AI 感</span></div>
+    </div>
+
+    <!-- 08 爪印 -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-mint"><svg viewBox="0 0 24 24"><g fill="#fff"><ellipse cx="12" cy="15.6" rx="5.2" ry="4.2"/><circle cx="6.2" cy="10.2" r="2.3"/><circle cx="10.1" cy="7.4" r="2.3"/><circle cx="14.4" cy="7.6" r="2.3"/><circle cx="18" cy="10.8" r="2.2"/></g></svg></div>
+        <div class="ci bg-mint"><svg viewBox="0 0 24 24"><g fill="#fff"><ellipse cx="12" cy="15.6" rx="5.2" ry="4.2"/><circle cx="6.2" cy="10.2" r="2.3"/><circle cx="10.1" cy="7.4" r="2.3"/><circle cx="14.4" cy="7.6" r="2.3"/><circle cx="18" cy="10.8" r="2.2"/></g></svg></div>
+      </div>
+      <div class="nm">08 爪印</div>
+      <div class="ds">轻松可爱，弱化工具感、更亲民</div>
+      <div class="tagrow"><span class="tag">亲和</span></div>
+    </div>
+
+    <!-- 09 盾勾 -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-grape"><svg viewBox="0 0 24 24"><path fill="#fff" d="M12 2.8 20 6v6.1c0 4.4-3 8-8 9.1-5-1.1-8-4.7-8-9.1V6l8-3.2z"/><path fill="none" stroke="#7C4DFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M8.4 12.1 11 14.7l4.8-5.2"/></svg></div>
+        <div class="ci bg-grape"><svg viewBox="0 0 24 24"><path fill="#fff" d="M12 2.8 20 6v6.1c0 4.4-3 8-8 9.1-5-1.1-8-4.7-8-9.1V6l8-3.2z"/><path fill="none" stroke="#7C4DFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M8.4 12.1 11 14.7l4.8-5.2"/></svg></div>
+      </div>
+      <div class="nm">09 盾勾</div>
+      <div class="ds">防护/稳定语义，突出安全可靠</div>
+      <div class="tagrow"><span class="tag">稳</span></div>
+    </div>
+
+    <!-- 10 光环轨道 -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-glass"><svg viewBox="0 0 24 24"><g fill="none" stroke="#6D3BC7" stroke-width="2"><circle cx="12" cy="12" r="4"/><ellipse cx="12" cy="12" rx="9.4" ry="4.2" transform="rotate(-28 12 12)"/></g><circle cx="12" cy="12" r="1.9" fill="#8B5CF6"/><circle cx="20" cy="8.4" r="1.9" fill="#FFAFCC"/></svg></div>
+        <div class="ci bg-glass"><svg viewBox="0 0 24 24"><g fill="none" stroke="#6D3BC7" stroke-width="2"><circle cx="12" cy="12" r="4"/><ellipse cx="12" cy="12" rx="9.4" ry="4.2" transform="rotate(-28 12 12)"/></g><circle cx="12" cy="12" r="1.9" fill="#8B5CF6"/><circle cx="20" cy="8.4" r="1.9" fill="#FFAFCC"/></svg></div>
+      </div>
+      <div class="nm">10 光环轨道</div>
+      <div class="ds">星球轨道，科技/生态感，浅底更透气</div>
+      <div class="tagrow"><span class="tag">科技</span></div>
+    </div>
+
+  </div>
+
+  <h2>桌面整体效果</h2>
+  <div class="home">
+    <div class="hometop"></div>
+    <div class="homebody">
+      <div class="homegrid">
+        <div class="app"><div class="sq bg-grape"><svg viewBox="0 0 24 24"><g fill="#fff"><rect x="4" y="4" width="6.6" height="6.6" rx="2"/><rect x="13.4" y="4" width="6.6" height="6.6" rx="2"/><rect x="4" y="13.4" width="6.6" height="6.6" rx="2"/><rect x="13.4" y="13.4" width="6.6" height="6.6" rx="2"/></g></svg></div><div class="lb">01</div></div>
+        <div class="app"><div class="sq bg-sunset"><svg viewBox="0 0 24 24"><text x="12" y="17.6" text-anchor="middle" font-size="17" font-weight="800" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif" fill="#fff">乐</text></svg></div><div class="lb">02</div></div>
+        <div class="app"><div class="sq bg-deep"><svg viewBox="0 0 24 24"><g fill="#fff"><circle cx="12" cy="7.4" r="3"/><circle cx="8.2" cy="12.6" r="3"/><circle cx="15.8" cy="12.6" r="3"/><circle cx="12" cy="17.8" r="3"/></g></svg></div><div class="lb">03</div></div>
+        <div class="app"><div class="sq bg-mint"><svg viewBox="0 0 24 24"><g fill="#fff"><path d="M4 6.4A2.6 2.6 0 0 1 6.6 3.8h7A2.6 2.6 0 0 1 16.2 6.4v3.4a2.6 2.6 0 0 1-2.6 2.6H8.6L5.4 15v-2.6h-.8A2.6 2.6 0 0 1 4 6.4z"/><path d="M17.4 10.6h.6A2.6 2.6 0 0 1 20.6 13.2v3.4a2.6 2.6 0 0 1-2.6 2.6h-.6V21l-3.2-2.6h-3.6a2.6 2.6 0 0 1-2.6-2.6v-.4h1.2z" opacity=".82"/></g></svg></div><div class="lb">04</div></div>
+        <div class="app"><div class="sq bg-grape"><svg viewBox="0 0 24 24"><path fill="#fff" d="M10.2 4.2a1.8 1.8 0 0 1 3.6 0v.9h2.4a1.5 1.5 0 0 1 1.5 1.5v2.4h.9a1.8 1.8 0 0 1 0 3.6h-.9v2.6a1.5 1.5 0 0 1-1.5 1.5h-2.6v-.9a1.8 1.8 0 0 0-3.6 0v.9H7.5A1.5 1.5 0 0 1 6 15.2v-2.6h-.9a1.8 1.8 0 0 1 0-3.6H6V6.6a1.5 1.5 0 0 1 1.5-1.5h2.7z"/></svg></div><div class="lb">05</div></div>
+        <div class="app"><div class="sq bg-sunset"><svg viewBox="0 0 24 24"><path fill="#fff" d="M13.4 2.6 6.2 13h4.7l-.8 8.4 7.5-10.5h-4.9l.7-8.3z"/></svg></div><div class="lb">06</div></div>
+        <div class="app"><div class="sq bg-deep"><svg viewBox="0 0 24 24"><g fill="#fff"><path d="M10 2.6c.5 3.3 1.7 4.5 5 5-3.3.5-4.5 1.7-5 5-.5-3.3-1.7-4.5-5-5 3.3-.5 4.5-1.7 5-5z"/><path d="M16.8 12.6c.3 2 1.1 2.8 3.1 3.1-2 .3-2.8 1.1-3.1 3.1-.3-2-1.1-2.8-3.1-3.1 2-.3 2.8-1.1 3.1-3.1z"/></g></svg></div><div class="lb">07</div></div>
+        <div class="app"><div class="sq bg-mint"><svg viewBox="0 0 24 24"><g fill="#fff"><ellipse cx="12" cy="15.6" rx="5.2" ry="4.2"/><circle cx="6.2" cy="10.2" r="2.3"/><circle cx="10.1" cy="7.4" r="2.3"/><circle cx="14.4" cy="7.6" r="2.3"/><circle cx="18" cy="10.8" r="2.2"/></g></svg></div><div class="lb">08</div></div>
+        <div class="app"><div class="sq bg-grape"><svg viewBox="0 0 24 24"><path fill="#fff" d="M12 2.8 20 6v6.1c0 4.4-3 8-8 9.1-5-1.1-8-4.7-8-9.1V6l8-3.2z"/><path fill="none" stroke="#7C4DFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M8.4 12.1 11 14.7l4.8-5.2"/></svg></div><div class="lb">09</div></div>
+        <div class="app"><div class="sq bg-glass"><svg viewBox="0 0 24 24"><g fill="none" stroke="#6D3BC7" stroke-width="2"><circle cx="12" cy="12" r="4"/><ellipse cx="12" cy="12" rx="9.4" ry="4.2" transform="rotate(-28 12 12)"/></g><circle cx="12" cy="12" r="1.9" fill="#8B5CF6"/><circle cx="20" cy="8.4" r="1.9" fill="#FFAFCC"/></svg></div><div class="lb">10</div></div>
+        <div class="app"><div class="sq bg-grape" style="opacity:.35"></div><div class="lb">…</div></div>
+        <div class="app"><div class="sq bg-mint" style="opacity:.35"></div><div class="lb">…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div>说明：01 号与已锁定的左上角菜单「02 四宫格」为同一图形，品牌最统一；若想区分「桌面图标」与「菜单图标」，可选 03 葡萄串 / 07 星芒 / 10 光环轨道。</div>
+    <div style="margin-top:10px">
+      <span class="chip">自适应图标 squircle</span>
+      <span class="chip">安全区 66/108</span>
+      <span class="chip">葡萄气泡色</span>
+      <span class="chip">输出 mipmap 全套</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

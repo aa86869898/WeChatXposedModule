@@ -309,6 +309,7 @@ public class ContactSelectorView {
                 android.util.DisplayMetrics dm = act.getResources().getDisplayMetrics();
                 w.setLayout((int) (dm.widthPixels * 0.92f),
                         android.view.WindowManager.LayoutParams.WRAP_CONTENT);
+                WindowLayer.track(w);
             }
         } catch (Throwable ignored) {}
     }

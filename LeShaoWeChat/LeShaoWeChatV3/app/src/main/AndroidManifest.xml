@@ -11,7 +11,7 @@
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
-        android:label="LeShao"
+        android:label="乐少助手"
         android:supportsRtl="true"
         android:networkSecurityConfig="@xml/network_security_config">
 
@@ -28,19 +28,25 @@
             android:name="xposedscope"
             android:value="com.tencent.mm" />
 
+        <!-- 设置页仅允许模块自身进程启动，禁止外部 App 任意拉起。 -->
         <activity
             android:name="com.leshao.ai.ui.activity.SettingsActivity"
-            android:exported="true"
+            android:exported="false"
             android:theme="@style/Theme.LeshaoAI" />
 
+        <!-- 必须 exported=true 供宿主微信(com.tencent.mm)跨应用访问；
+             改由 AiDataProvider#isCallerTrusted 按调用方 UID 白名单鉴权，
+             关闭 URI 授权以缩小攻击面。 -->
         <provider
             android:name="com.leshao.ai.data.AiDataProvider"
             android:authorities="com.leshao.v3.aiconfig"
             android:exported="true"
-            android:grantUriPermissions="true" />
+            android:grantUriPermissions="false" />
 
         <!-- 微信侧（模块 hook 进程）通过显式广播请求配置 / 回传会话，
-             因 Android 11+ 包可见性无法让微信反向解析本 app 的 ContentProvider。 -->
+             因 Android 11+ 包可见性无法让微信反向解析本 app 的 ContentProvider。
+             必须 exported=true 供宿主微信跨应用投递；
+             改由 BridgeReceiver#isCallerTrusted 按发送方 UID 白名单鉴权。 -->
         <receiver
             android:name="com.leshao.ai.data.BridgeReceiver"
             android:exported="true">

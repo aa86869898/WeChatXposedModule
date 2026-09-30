@@ -10,10 +10,13 @@ import com.leshao.v3.model.KeywordRule;
 import com.leshao.v3.model.ModuleConfig;
 import com.leshao.v3.service.TTSBroadcaster;
 
-import java.util.HashSet;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -25,7 +28,19 @@ public class MessageHook {
     private static int sCount = 0;
     private static Handler sMainHandler;
     private static ClassLoader sClassLoader;
-    private static final Set<Long> sSeenMsgIds = ConcurrentHashMap.newKeySet();
+    // 插入序去重集合: LinkedHashMap 保证迭代顺序=插入顺序, removeEldestEntry 淘汰最旧,
+    // 修复此前 ConcurrentHashMap 无序却按迭代顺序淘汰的问题。
+    private static final Set<Long> sSeenMsgIds =
+            Collections.newSetFromMap(new LinkedHashMap<Long, Boolean>() {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<Long, Boolean> eldest) {
+                    return size() > 400;
+                }
+            });
+    // 关键词回复/DB 入库等反射发送放后台, 避免阻塞主线程回调。
+    private static final ExecutorService sBgExecutor = Executors.newSingleThreadExecutor();
+    // 调试开关: IEvent.e(SendMsgSuccessEvent) 仅打印日志, 默认关闭以减少无谓 hook。
+    private static final boolean DEBUG_I_EVENT_BUS = false;
     private static final ThreadLocal<Boolean> sConsumedTtsOriginal = new ThreadLocal<>();
 
     public static void hook(ClassLoader cl) {
@@ -39,7 +54,7 @@ public class MessageHook {
         com.leshao.v3.hook.DexKitHelper.addPostScanCallback(() -> {
             hookMsgStorageInsert(cl);
             hookX9Dispatch(cl);
-            hookIEventBus(cl);
+            if (DEBUG_I_EVENT_BUS) hookIEventBus(cl);
             LogWriter.log(TAG, "MessageHook post-scan init done");
         });
         hookSensitiveBlock(cl);
@@ -497,17 +512,11 @@ public class MessageHook {
                 + " voice=" + isVoice + " tts=" + isTts
                 + " content=" + trunc(content, 200));
 
-            // 去重: 同一个 msgId 只处理一次
+            // 去重: 同一个 msgId 只处理一次(容量淘汰由 LinkedHashMap.removeEldestEntry 按插入序完成)
             synchronized (sSeenMsgIds) {
                 if (msgId != 0 && !sSeenMsgIds.add(msgId)) {
                     android.util.Log.e(TAG, "!!! SKIP duplicate msgId=" + msgId);
                     return;
-                }
-                // 防止内存膨胀: 超过 400 条时移除最旧条目，而非整体清空
-                // （整体清空会导致同一消息的多重 hook 回调再次触发重复播报）
-                if (sSeenMsgIds.size() > 400) {
-                    Long oldest = sSeenMsgIds.iterator().next();
-                    sSeenMsgIds.remove(oldest);
                 }
             }
 
@@ -516,9 +525,10 @@ public class MessageHook {
                 final int fType = type;
                 final String fTalker = talker;
                 final String fContent = content;
+                final Object fMsg = e9;
                 sMainHandler.post(() -> {
                     try {
-                        boolean blocked = processKeywordAndSensitive(fType, fTalker, fContent);
+                        boolean blocked = processKeywordAndSensitive(fType, fTalker, fContent, fMsg);
                         if (!blocked) {
                             TTSBroadcaster.handleMessageRaw(fType, fTalker, fContent);
                         }
@@ -557,11 +567,30 @@ public class MessageHook {
 
     // ====== 关键词回复 + 敏感词过滤 (接收消息) ======
 
-    private static boolean processKeywordAndSensitive(int type, String talker, String content) {
+    private static boolean processKeywordAndSensitive(int type, String talker, String content, Object quotedMsg) {
         if (content == null || content.isEmpty()) return false;
         if (content.startsWith("#tts")) return false;
+
+        // 点歌指令(支持别名, 仅白名单会话生效): 命中后由 DianGeService 接管并后台完成。
+        // 必须放在 ModuleConfig 判空之前 —— 点歌只依赖 OnlineMusicPrefs, 与 ModuleConfig 无关;
+        // 否则 cfg 未就绪时会先 return false, 消息被 AI 侧过滤后彻底静默吞掉(v1085 群点歌偶发不触发)。
+        boolean dianGeHandled = false;
+        try {
+            dianGeHandled = com.leshao.v3.music.DianGeService.maybeHandle(sClassLoader, talker, content, quotedMsg);
+            if (dianGeHandled) {
+                LogWriter.log(TAG, "[DianGe] 已接管点歌 talker=" + trunc(talker, 20));
+            } else if (com.leshao.v3.music.DianGeService.looksLikeCommand(talker, content)) {
+                LogWriter.log(TAG, "[DianGe] 指令未执行(未启用/非白名单/冷却) talker=" + trunc(talker, 20));
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "[DianGe] err: " + e.getMessage());
+        }
+
         ModuleConfig cfg = ModuleConfig.load(ContextManager.getPrefs());
-        if (cfg == null) return false;
+        if (cfg == null) {
+            LogWriter.log(TAG, "[Config] ModuleConfig 未就绪, 跳过敏感词/关键词回复");
+            return false;
+        }
 
         boolean blocked = false;
         if (cfg.sensitiveFilterEnabled && !cfg.sensitiveWords.isEmpty()) {
@@ -574,15 +603,30 @@ public class MessageHook {
             }
         }
 
-        if (cfg.keywordReplyEnabled && !cfg.keywordRules.isEmpty()) {
-            for (KeywordRule r : cfg.keywordRules) {
+        // 点歌已接管时不再走关键词回复, 避免同一消息二次回复
+        if (dianGeHandled) return blocked;
+
+        if (cfg.keywordReplyEnabled && !cfg.keywordRules.isEmpty()) {            for (KeywordRule r : cfg.keywordRules) {
                 if (r == null || r.keyword == null || r.reply == null) continue;
                 boolean match = r.fuzzyMatch
                         ? content.contains(r.keyword)
                         : content.equals(r.keyword);
                 if (match) {
                     LogWriter.log(TAG, "[KwReply] 命中=" + r.keyword + " -> " + r.reply);
-                    GroupFeatures.sendTextMessage(sClassLoader, talker, r.reply);
+                    // 反射发送+DB 入库较重, 切后台线程执行, 避免阻塞主线程回调
+                    final String replyTalker = talker;
+                    final String replyText = r.reply;
+                    try {
+                        sBgExecutor.execute(() -> {
+                            try {
+                                GroupFeatures.sendTextMessage(sClassLoader, replyTalker, replyText);
+                            } catch (Throwable e) {
+                                LogWriter.log(TAG, "[KwReply] send err: " + e.getMessage());
+                            }
+                        });
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "[KwReply] schedule err: " + e.getMessage());
+                    }
                     break;
                 }
             }

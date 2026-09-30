@@ -211,6 +211,22 @@ public final class MsgReceiveHook {
 
         LogWriter.log(TAG, "收到文本 talker=" + talker + " svrId=" + svrId
                 + " content='" + trunc(content) + "'");
+
+        // v1104: 点歌指令在 AI 接收边界统一拦截 —— 命中即由点歌服务接管, 绝不送入 AI。
+        // 点歌只依赖 OnlineMusicPrefs, 与 AI 个性化配置无关; 私聊/群聊都经此 insert 总闸门。
+        // 非白名单的点歌指令同样过滤(丢弃), 避免被 AI 当作普通聊天回复。
+        try {
+            if (com.leshao.v3.music.DianGeService.isEnabledCommand(talker, content)) {
+                boolean handled = com.leshao.v3.music.DianGeService.maybeHandle(
+                        HookEntry.appClassLoader, talker, content, msg);
+                LogWriter.log(TAG, "点歌指令拦截" + (handled ? "(已接管)" : "(未接管:非白名单/冷却)")
+                        + ", 不送 AI talker=" + talker);
+                return;
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "点歌指令拦截异常, 继续走 AI: " + t);
+        }
+
         TriggerEngine.dispatch(talker, content, msg, svrId == null ? 0L : svrId,
                 createTime == null ? 0L : createTime);
     }

@@ -609,7 +609,16 @@ public class AutoForwardHook {
         content.addView(cardType);
 
         sv.addView(content);
-        LinearLayout.LayoutParams svLp = new LinearLayout.LayoutParams(-1, 0, 1f);
+
+        // v1143: 高度自适应内容并收紧窗口(仅内容过长时才滚动), 去掉窗口下方大片空白
+        int sheetW = (int) (ctx.getResources().getDisplayMetrics().widthPixels * 0.92f);
+        int maxContentH = (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.72f);
+        int innerW = Math.max(1, sheetW - (int) (24 * d) - (int) (8 * d));
+        content.measure(
+                android.view.View.MeasureSpec.makeMeasureSpec(innerW, android.view.View.MeasureSpec.AT_MOST),
+                android.view.View.MeasureSpec.makeMeasureSpec(maxContentH, android.view.View.MeasureSpec.AT_MOST));
+        int contentH = Math.min(content.getMeasuredHeight(), maxContentH);
+        LinearLayout.LayoutParams svLp = new LinearLayout.LayoutParams(-1, contentH);
         sv.setLayoutParams(svLp);
         root.addView(sv);
 
@@ -633,7 +642,7 @@ public class AutoForwardHook {
                 ? android.R.style.Theme_DeviceDefault_Dialog_Alert
                 : android.R.style.Theme_DeviceDefault_Light_Dialog_Alert;
         final android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(ctx, theme)
-                .setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.92f, 0.8f))
+                .setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.92f, -1f))
                 .setCancelable(true)
                 .create();
         btnCancel.onClick(() -> dlg.dismiss());
@@ -654,8 +663,9 @@ public class AutoForwardHook {
                     Toast.LENGTH_SHORT).show();
             dlg.dismiss();
         });
-        com.leshao.v3.ui.InsetsUtil.center(dlg, 0.92f, 0.8f);
+        com.leshao.v3.ui.InsetsUtil.center(dlg, 0.92f, -1f);
         dlg.show();
+        com.leshao.v3.ui.WindowLayer.track(dlg.getWindow());
     }
 
     /** 刷新类型多选按钮态 + 摘要文字 */
@@ -744,6 +754,7 @@ public class AutoForwardHook {
         root.addView(com.leshao.v3.ui.widgets.M3Page.buttonRow(ctx, closeBtn, clearBtn));
         com.leshao.v3.ui.InsetsUtil.transparentWindow(dlg);
         dlg.show();
+        com.leshao.v3.ui.WindowLayer.track(dlg.getWindow());
     }
 
     private static class TextViewTitle extends android.widget.TextView {

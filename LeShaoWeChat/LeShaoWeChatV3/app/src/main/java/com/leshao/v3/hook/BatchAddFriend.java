@@ -1015,6 +1015,7 @@ private static void injectButton(final Activity act) {
                 w.setGravity(Gravity.CENTER);
                 w.setLayout(WindowManager.LayoutParams.WRAP_CONTENT,
                         WindowManager.LayoutParams.WRAP_CONTENT);
+                com.leshao.v3.ui.WindowLayer.track(w);
             }
         } catch (Throwable ignored) {}
         try {

@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>音频转语音 · 多柱分离球弹跳动画（20 套）</title>
+<style>
+  :root{
+    --bg:#0f0a17; --surface:#1b1428; --primary:#C9A9FF; --on-primary:#2A1550;
+    --g1:#8B5CF6; --g2:#A78BFA; --g3:#D946EF; --g4:#FF6FB0;
+    --on-surface:#EDE7F6; --on-var:#B8AECE;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 20% -10%,#2a1b45 0%,var(--bg) 55%);
+       color:var(--on-surface);font-family:-apple-system,"Segoe UI","PingFang SC",sans-serif;padding:28px 18px 80px}
+  h1{font-size:22px;margin:0 0 6px}
+  .sub{color:var(--on-var);font-size:13px;line-height:1.7;margin-bottom:18px}
+  .sticky{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(15,10,23,.82);
+          border:1px solid #2e2246;border-radius:14px;padding:12px 16px;margin-bottom:22px}
+  .sticky b{color:var(--primary)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px}
+  .card{background:linear-gradient(180deg,#1c1430,#16101f);border:1px solid #2e2246;border-radius:18px;
+        overflow:hidden;transition:.2s;position:relative}
+  .card.picked{border-color:var(--primary);box-shadow:0 0 0 2px rgba(201,169,255,.35),0 12px 30px rgba(139,92,246,.25)}
+  .demo{padding:20px 16px;display:flex;align-items:center;justify-content:center}
+  .frame{width:100%;max-width:320px;background:var(--surface);border-radius:20px;padding:14px 14px 12px;
+         box-shadow:0 16px 36px rgba(0,0,0,.45),inset 0 0 0 1px #35264f}
+  .ftitle{text-align:center;font-size:14px;font-weight:800;letter-spacing:.2px;
+      background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3),var(--g4),var(--g2),var(--g1));
+      background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+      animation:flow 2.6s linear infinite}
+  .fdur{text-align:center;font-size:11.5px;font-weight:700;color:var(--on-surface);margin:5px 0 8px}
+  canvas.anim{width:100%;height:60px;display:block;border-radius:12px;background:#150e22}
+  .frow{display:flex;gap:8px;margin-top:10px}
+  .fb{flex:1;text-align:center;font-size:11.5px;font-weight:700;color:var(--on-primary);
+      padding:8px 0;border-radius:999px;
+      background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3),var(--g4),var(--g2),var(--g1));
+      background-size:200% 100%;animation:flow 3.2s linear infinite}
+  @keyframes flow{to{background-position:-200% 0}}
+  .foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-top:1px solid #2a1f42}
+  .name{font-size:13px;font-weight:600}
+  .desc{font-size:11px;color:var(--on-var);margin-top:2px;line-height:1.5}
+  .pick{border:1px solid var(--primary);color:var(--primary);background:transparent;border-radius:999px;
+        padding:6px 14px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .card.picked .pick{background:var(--primary);color:var(--on-primary);font-weight:700}
+</style>
+</head>
+<body>
+  <h1>音频转语音 · 多柱分离球弹跳动画（20 套）</h1>
+  <div class="sub">
+    统一形态：<b>左→右 22 根柱（与现有频谱模块 BAR_COUNT=22 一致）</b>，柱体向上生长，柱顶上方一颗<b>分离</b>的球被弹起、受重力回落。<br>
+    球体为径向渐变、每颗按位置取不同色相。各套在柱样式、球形状、弹跳物理与附加效果上做区分。<br>
+    播放态动画用于「音频转码成功·试听转码效果」窗与音频转语音面板，尺寸 = 全宽 × 60dp。点右下角「选择」锁定编号发我即可。
+  </div>
+
+  <div class="sticky">已选：<b id="pickedText">尚未选择</b></div>
+
+  <div class="grid" id="grid"></div>
+
+<script>
+  const TAU=Math.PI*2,N=22;
+
+  // 柱高比例 base(0..1) + 球弹跳 bounce(0..1，抛物线抛起-落回)
+  function fb(t,i,speed,pspeed){
+    speed=speed||1.6;pspeed=pspeed||1.15;
+    const ph=.42;
+    const base=.35+.65*Math.abs(Math.sin(t*speed+i*ph));
+    const f=((t*pspeed+i*ph)%1+1)%1;
+    const bounce=4*f*(1-f);
+    return {base:base,bounce:bounce};
+  }
+  function hue(i,n,t,off){return ((i/n*300+t*50+(off||0))%360+360)%360;}
+  function col(i,n,t,l,s){return 'hsl('+hue(i,n,t)+','+(s||80)+'%,'+(l||60)+'%)';}
+  function rr(ctx,x,y,w,h,r){
+    r=Math.max(0,Math.min(r,Math.min(w,h)/2));
+    if(w<=0||h<=0)return;
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+  }
+  function ballGrad(ctx,x,y,r,i,n,t){
+    const hu=hue(i,n,t);
+    const g=ctx.createRadialGradient(x-r*.35,y-r*.35,Math.max(.5,r*.12),x,y,r);
+    g.addColorStop(0,'hsl('+hu+',98%,84%)');
+    g.addColorStop(.55,'hsl('+hu+',88%,62%)');
+    g.addColorStop(1,'hsl('+((hu+45)%360)+',82%,46%)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,TAU);ctx.fill();
+  }
+  function hash(i){return ((Math.sin(i*127.1)*43758.5453)%1+1)%1;}
+  function polyPath(ctx,x,y,r,sides,rot){
+    ctx.beginPath();
+    for(let k=0;k<sides;k++){
+      const a=rot+k/sides*TAU-Math.PI/2;
+      const px=x+Math.cos(a)*r,py=y+Math.sin(a)*r;
+      k?ctx.lineTo(px,py):ctx.moveTo(px,py);
+    }
+    ctx.closePath();
+  }
+  function starPath(ctx,x,y,R,r,pts,rot){
+    ctx.beginPath();
+    for(let k=0;k<pts*2;k++){
+      const a=rot+k*Math.PI/pts-Math.PI/2,rr2=k%2?r:R;
+      const px=x+Math.cos(a)*rr2,py=y+Math.sin(a)*rr2;
+      k?ctx.lineTo(px,py):ctx.moveTo(px,py);
+    }
+    ctx.closePath();
+  }
+
+  const CM=h=>h-34; // 柱最大高度
+
+  // 1 基础弹跳：胶囊柱 + 渐变球
+  function a1(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.6,4.5),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap);
+      ctx.fillStyle=col(i,N,t,58,82);rr(ctx,x,h-colH,bw,colH,bw/2);ctx.fill();
+      ballGrad(ctx,x+bw/2,h-colH-sep-r-e.bounce*bh,r,i,N,t);
+    }
+  }
+  // 2 彩虹柱淡底：柱为同色淡版，球更亮
+  function a2(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.62,4.6),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap);
+      ctx.fillStyle='hsla('+hue(i,N,t)+',80%,60%,.35)';
+      rr(ctx,x,h-colH,bw,colH,bw/2);ctx.fill();
+      ballGrad(ctx,x+bw/2,h-colH-sep-r-e.bounce*bh,r,i,N,t);
+    }
+  }
+  // 3 拖尾弹跳
+  function a3(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.55,4.2),sep=4,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap)+bw/2;
+      ctx.fillStyle=col(i,N,t,58,82);rr(ctx,x-bw/2,h-colH,bw,colH,bw/2);ctx.fill();
+      const y=h-colH-sep-r-e.bounce*bh;
+      for(let k=3;k>=0;k--){
+        ctx.globalAlpha=(1-k/4)*.45;ctx.fillStyle=col(i,N,t,60,80);
+        ctx.beginPath();ctx.arc(x,y+k*2.2,Math.max(.6,r-k*.5),0,TAU);ctx.fill();
+      }
+      ctx.globalAlpha=1;ballGrad(ctx,x,y,r,i,N,t);
+    }
+  }
+  // 4 上下双色柱
+  function a4(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.6,4.5),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap),hy=h-colH/2,hu=hue(i,N,t);
+      ctx.fillStyle='hsl('+hu+',85%,55%)';ctx.fillRect(x,hy,bw,colH/2);
+      ctx.fillStyle='hsl('+((hu+60)%360)+',85%,68%)';ctx.fillRect(x,h-colH,bw,colH/2);
+      ballGrad(ctx,x+bw/2,h-colH-sep-r-e.bounce*bh,r,i,N,t);
+    }
+  }
+  // 5 细柱大球
+  function a5(ctx,w,h,t){
+    const gap=4,bw=Math.max(2,(w-gap*(N-1))/N),r=5.2,sep=5,bh=10,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap)+bw/2;
+      ctx.fillStyle=col(i,N,t,60,85);rr(ctx,x-bw/2,h-colH,bw,colH,bw/2);ctx.fill();
+      ballGrad(ctx,x,h-colH-sep-r-e.bounce*bh,r,i,N,t);
+    }
+  }
+  // 6 方球旋转
+  function a6(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.48,3.8),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap)+bw/2;
+      ctx.fillStyle=col(i,N,t,58,82);rr(ctx,x-bw/2,h-colH,bw,colH,bw/2);ctx.fill();
+      const y=h-colH-sep-r-e.bounce*bh;
+      ctx.save();ctx.translate(x,y);ctx.rotate(t*2.4+i*.5);
+      ctx.fillStyle=col(i,N,t,62,85);ctx.fillRect(-r,-r,r*2,r*2);
+      ctx.fillStyle='rgba(255,255,255,.4)';ctx.fillRect(-r,-r,r*.7,r*.7);
+      ctx.restore();
+    }
+  }
+  // 7 菱球发光
+  function a7(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.55,4.2),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap)+bw/2;
+      ctx.fillStyle=col(i,N,t,58,82);rr(ctx,x-bw/2,h-colH,bw,colH,bw/2);ctx.fill();
+      const y=h-colH-sep-r-e.bounce*bh;
+      ctx.save();ctx.translate(x,y);
+      ctx.shadowColor=col(i,N,t,60,80);ctx.shadowBlur=8;
+      ctx.fillStyle=col(i,N,t,64,90);
+      ctx.beginPath();ctx.moveTo(0,-r);ctx.lineTo(r,0);ctx.lineTo(0,r);ctx.lineTo(-r,0);ctx.closePath();ctx.fill();
+      ctx.restore();
+    }
+  }
+  // 8 星形球
+  function a8(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,R=Math.min(bw*.6,4.6),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap)+bw/2;
+      ctx.fillStyle=col(i,N,t,58,82);rr(ctx,x-bw/2,h-colH,bw,colH,bw/2);ctx.fill();
+      const y=h-colH-sep-R-e.bounce*bh;
+      ctx.fillStyle=col(i,N,t,64,90);starPath(ctx,x,y,R,R*.45,5,t*2+i);ctx.fill();
+    }
+  }
+  // 9 圆环球
+  function a9(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.55,4.0),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap)+bw/2;
+      ctx.fillStyle=col(i,N,t,58,82);rr(ctx,x-bw/2,h-colH,bw,colH,bw/2);ctx.fill();
+      const y=h-colH-sep-r-e.bounce*bh;
+      ctx.strokeStyle=col(i,N,t,68,94);ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(x,y,r*1.05,0,TAU);ctx.stroke();
+    }
+  }
+  // 10 六边形球
+  function a10(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.58,4.4),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap)+bw/2;
+      ctx.fillStyle=col(i,N,t,58,82);rr(ctx,x-bw/2,h-colH,bw,colH,bw/2);ctx.fill();
+      const y=h-colH-sep-r-e.bounce*bh;
+      ctx.fillStyle=col(i,N,t,64,90);polyPath(ctx,x,y,r,6,t*1.5);ctx.fill();
+    }
+  }
+  // 11 分段柱
+  function a11(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.6,4.4),sep=5,bh=9,cm=CM(h),segs=3;
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap),segH=colH/segs,hu=hue(i,N,t);
+      for(let k=0;k<segs;k++){
+        ctx.fillStyle='hsl('+hu+',82%,'+(46+k*12)+'%)';
+        rr(ctx,x,h-(k+1)*segH+(k?1.5:0),bw,segH-(k?1.5:0),2);ctx.fill();
+      }
+      ballGrad(ctx,x+bw/2,h-colH-sep-r-e.bounce*bh,r,i,N,t);
+    }
+  }
+  // 12 3D 透视柱
+  function a12(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.5,3.6),sep=5,bh=9,cm=CM(h),depth=bw*.4;
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap),yTop=h-colH,hu=hue(i,N,t);
+      ctx.fillStyle='hsl('+hu+',70%,50%)';ctx.fillRect(x,yTop,bw,colH);
+      ctx.fillStyle='hsl('+hu+',85%,66%)';
+      ctx.beginPath();ctx.moveTo(x,yTop);ctx.lineTo(x+depth*.5,yTop-depth*.5);
+      ctx.lineTo(x+bw+depth*.5,yTop-depth*.5);ctx.lineTo(x+bw,yTop);ctx.closePath();ctx.fill();
+      ballGrad(ctx,x+bw/2+depth*.25,yTop-depth*.5-sep-r-e.bounce*bh,r,i,N,t);
+    }
+  }
+  // 13 虚线柱
+  function a13(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.6,4.4),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap)+bw/2;
+      ctx.fillStyle=col(i,N,t,62,88);
+      for(let yy=h-4;yy>h-colH;yy-=6){rr(ctx,x-bw/2,yy-3,bw,3.5,bw/2);ctx.fill();}
+      ballGrad(ctx,x,h-colH-sep-r-e.bounce*bh,r,i,N,t);
+    }
+  }
+  // 14 渐变柱
+  function a14(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.6,4.5),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap),yTop=h-colH,hu=hue(i,N,t);
+      const g=ctx.createLinearGradient(0,h,0,yTop);
+      g.addColorStop(0,'hsl('+hu+',85%,48%)');
+      g.addColorStop(1,'hsl('+((hu+70)%360)+',90%,72%)');
+      ctx.fillStyle=g;rr(ctx,x,yTop,bw,colH,bw/2);ctx.fill();
+      ballGrad(ctx,x+bw/2,yTop-sep-r-e.bounce*bh,r,i,N,t);
+    }
+  }
+  // 15 描边空心柱
+  function a15(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.6,4.4),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap),yTop=h-colH;
+      ctx.strokeStyle=col(i,N,t,68,92);ctx.lineWidth=1.6;
+      rr(ctx,x+1,yTop,bw-2,colH,bw/2);ctx.stroke();
+      ballGrad(ctx,x+bw/2,yTop-sep-r-e.bounce*bh,r,i,N,t);
+    }
+  }
+  // 16 落地阴影
+  function a16(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.6,4.5),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap),cx=x+bw/2,yTop=h-colH,hu=hue(i,N,t);
+      const g=ctx.createLinearGradient(0,h,0,yTop);
+      g.addColorStop(0,'hsl('+hu+',80%,52%)');
+      g.addColorStop(1,'hsl('+((hu+60)%360)+',85%,70%)');
+      ctx.fillStyle=g;rr(ctx,x,yTop,bw,colH,bw/2);ctx.fill();
+      const y=yTop-sep-r-e.bounce*bh,k=Math.max(.25,1-e.bounce*.75);
+      ctx.fillStyle='rgba(0,0,0,.35)';
+      ctx.beginPath();ctx.ellipse(cx,yTop+1,r*1.4*k,r*.5*k,0,0,TAU);ctx.fill();
+      ballGrad(ctx,cx,y,r,i,N,t);
+    }
+  }
+  // 17 冲击波
+  function a17(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.55,4.2),sep=5,bh=10,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap),cx=x+bw/2;
+      ctx.fillStyle=col(i,N,t,58,82);rr(ctx,x,h-colH,bw,colH,bw/2);ctx.fill();
+      const y=h-colH-sep-r-e.bounce*bh,rip=e.bounce;
+      if(rip>.12){
+        ctx.globalAlpha=(1-rip)*.7;ctx.strokeStyle=col(i,N,t,72,94);ctx.lineWidth=1.2;
+        ctx.beginPath();ctx.arc(cx,y,r+rip*11,0,TAU);ctx.stroke();ctx.globalAlpha=1;
+      }
+      ballGrad(ctx,cx,y,r,i,N,t);
+    }
+  }
+  // 18 横向摆动
+  function a18(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.55,4.2),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap),cx=x+bw/2;
+      ctx.fillStyle=col(i,N,t,58,82);rr(ctx,x,h-colH,bw,colH,bw/2);ctx.fill();
+      const sway=Math.sin(t*3+i*.5)*2.6,y=h-colH-sep-r-e.bounce*bh;
+      ballGrad(ctx,cx+sway,y,r,i,N,t);
+    }
+  }
+  // 19 星尘尾迹
+  function a19(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.55,4.2),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap),cx=x+bw/2;
+      ctx.fillStyle=col(i,N,t,58,82);rr(ctx,x,h-colH,bw,colH,bw/2);ctx.fill();
+      const y=h-colH-sep-r-e.bounce*bh;
+      for(let k=0;k<5;k++){
+        const a=hash(i*9+k)*TAU,rr2=r+2+hash(i*7+k*3)*8;
+        ctx.globalAlpha=.5*(1-e.bounce*.5);ctx.fillStyle=col(i,N,t,70,92);
+        ctx.beginPath();ctx.arc(cx+Math.cos(a)*rr2,y+Math.sin(a)*rr2*.8,1.1,0,TAU);ctx.fill();
+      }
+      ctx.globalAlpha=1;ballGrad(ctx,cx,y,r,i,N,t);
+    }
+  }
+  // 20 能量柱
+  function a20(ctx,w,h,t){
+    const gap=2,bw=(w-gap*(N-1))/N,r=Math.min(bw*.58,4.4),sep=5,bh=9,cm=CM(h);
+    for(let i=0;i<N;i++){
+      const e=fb(t,i),colH=cm*e.base+6,x=i*(bw+gap),cx=x+bw/2,yTop=h-colH,hu=hue(i,N,t);
+      const lit=.4+.6*e.base;
+      ctx.fillStyle='hsl('+hu+','+Math.round(60+30*lit)+'%,'+Math.round(34+36*lit)+'%)';
+      rr(ctx,x,yTop,bw,colH,bw/2);ctx.fill();
+      const y=yTop-sep-r-e.bounce*bh;
+      const gg=ctx.createRadialGradient(cx,y,0,cx,y,r*2.4);
+      gg.addColorStop(0,'hsla('+hu+',100%,75%,.8)');
+      gg.addColorStop(1,'hsla('+hu+',100%,60%,0)');
+      ctx.fillStyle=gg;ctx.beginPath();ctx.arc(cx,y,r*2.4,0,TAU);ctx.fill();
+      ctx.fillStyle='hsl('+hu+',100%,82%)';ctx.beginPath();ctx.arc(cx,y,r*.75,0,TAU);ctx.fill();
+    }
+  }
+
+  const STYLES=[
+    {id:1, name:'基础弹跳', desc:'胶囊柱 + 径向渐变球，球被顶起后受重力落回（母题基准）', draw:a1},
+    {id:2, name:'彩虹淡柱', desc:'柱为同色淡版、球更亮，整体彩虹色相横向铺开', draw:a2},
+    {id:3, name:'拖尾弹跳', desc:'球升降带 4 段残影拖尾，弹跳更有速度感', draw:a3},
+    {id:4, name:'双色柱', desc:'柱体上下双色分界，球跳时色彩对比强', draw:a4},
+    {id:5, name:'细柱大球', desc:'细条柱 + 大球，球成为绝对视觉焦点', draw:a5},
+    {id:6, name:'方球自转', desc:'方形球随弹跳同步旋转，机械律动', draw:a6},
+    {id:7, name:'菱球发光', desc:'菱形球带同色外发光，锐利醒目', draw:a7},
+    {id:8, name:'星形球', desc:'五角星随弹跳旋转，活泼点题', draw:a8},
+    {id:9, name:'圆环球', desc:'空心圆环球上下跳，轻盈透气', draw:a9},
+    {id:10, name:'六边形球', desc:'六边形球缓慢自转，几何科技感', draw:a10},
+    {id:11, name:'分段柱', desc:'柱体分 3 段由暗到亮，逐段升高', draw:a11},
+    {id:12, name:'3D 透视柱', desc:'柱有顶面高光，球带透视偏移，立体阵列', draw:a12},
+    {id:13, name:'虚线柱', desc:'柱为竖排短横虚线段，轻盈像素感', draw:a13},
+    {id:14, name:'渐变柱', desc:'柱体由深到浅垂直渐变，球色衔接柱顶', draw:a14},
+    {id:15, name:'描边空心柱', desc:'柱为描边空心胶囊，极简通透', draw:a15},
+    {id:16, name:'落地阴影', desc:'球离柱顶越高投影越小越淡，弹出空间感', draw:a16},
+    {id:17, name:'冲击波', desc:'球抵最高点时向外扩散圆环冲击波', draw:a17},
+    {id:18, name:'横向摆动', desc:'弹跳同时球左右轻摆，飘浮感', draw:a18},
+    {id:19, name:'星尘尾迹', desc:'球弹跳时周围散落星尘粒子', draw:a19},
+    {id:20, name:'能量柱', desc:'柱亮度随高度增强，球带径向光晕，能量满格', draw:a20}
+  ];
+
+  const grid=document.getElementById('grid');
+  const canvases=[];
+  let picked=null;
+
+  STYLES.forEach(s=>{
+    const card=document.createElement('div');
+    card.className='card';card.dataset.id=s.id;
+    card.innerHTML=
+      '<div class="demo"><div class="frame">'+
+        '<div class="ftitle">音频转码成功·试听转码效果</div>'+
+        '<div class="fdur">音频转码总时长 0分12秒</div>'+
+        '<canvas class="anim"></canvas>'+
+        '<div class="frow"><span class="fb">转码音频试听</span><span class="fb">原声试听对比</span></div>'+
+      '</div></div>'+
+      '<div class="foot"><div><div class="name">'+s.id+' · '+s.name+'</div>'+
+        '<div class="desc">'+s.desc+'</div></div>'+
+        '<button class="pick">选择</button></div>';
+    grid.appendChild(card);
+    setup(card.querySelector('canvas'),s.draw);
+    card.querySelector('.pick').addEventListener('click',()=>{
+      if(picked===s.id){picked=null;card.classList.remove('picked');}
+      else{
+        picked=s.id;
+        document.querySelectorAll('.card').forEach(c=>c.classList.remove('picked'));
+        card.classList.add('picked');
+      }
+      const st=STYLES.find(x=>x.id===picked);
+      document.getElementById('pickedText').textContent=st?('第 '+st.id+' 套 · '+st.name):'尚未选择';
+    });
+  });
+
+  function setup(canvas,draw){
+    const dpr=Math.min(2,window.devicePixelRatio||1);
+    function resize(){
+      const w=canvas.clientWidth||280,h=canvas.clientHeight||60;
+      canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+      const ctx=canvas.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+      canvas._w=w;canvas._h=h;
+    }
+    resize();window.addEventListener('resize',resize);
+    canvases.push({canvas,draw});
+  }
+
+  const t0=performance.now();
+  function loop(now){
+    const t=(now-t0)/1000;
+    for(const c of canvases){
+      const ctx=c.canvas.getContext('2d');
+      ctx.clearRect(0,0,c.canvas._w,c.canvas._h);
+      try{c.draw(ctx,c.canvas._w,c.canvas._h,t);}catch(e){}
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>

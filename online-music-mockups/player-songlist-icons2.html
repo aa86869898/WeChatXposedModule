@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>歌曲行 + 底部栏 · 实心渐变图标 10 套</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  :root { --page1:#FBF9FF; --page2:#F1EAFE; --ink:#2A2340; --ink2:#6F6389; }
+  body.darkpage { --page1:#150F1E; --page2:#100A18; --ink:#F2ECFB; --ink2:#B6A6D1; }
+  body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--ink);
+    min-height: 100vh; padding: 26px 16px 90px; background: linear-gradient(180deg, var(--page1), var(--page2)) fixed; }
+  .head { max-width: 1520px; margin: 0 auto; }
+  .head h1 { font-size: 23px; }
+  .head h1 em { font-style: normal; background: linear-gradient(92deg, #8B5CF6, #D8B4FE, #FFAFCC); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .head p { font-size: 12.5px; color: var(--ink2); margin-top: 9px; line-height: 1.95; max-width: 1180px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 14px; background: rgba(255,255,255,.72);
+    border: 1px solid rgba(139,92,246,.16); border-radius: 16px; padding: 11px 14px; max-width: 1180px; box-shadow: 0 10px 24px rgba(96,66,160,.08); backdrop-filter: blur(8px); }
+  body.darkpage .bar { background: rgba(36,27,56,.82); border-color: rgba(159,123,255,.22); }
+  .bar button { border: none; cursor: pointer; font-weight: 800; font-size: 12.5px; color: #fff; background: linear-gradient(135deg, #8B5CF6, #FFAFCC); padding: 9px 16px; border-radius: 11px; }
+  .bar .tag { font-size: 12px; color: var(--ink2); font-weight: 700; }
+
+  .grid { max-width: 1520px; margin: 28px auto 0; display: flex; flex-direction: column; gap: 46px; }
+  .opt { display: flex; flex-direction: column; gap: 14px; }
+  .top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .label { font-size: 15px; font-weight: 900; }
+  .label b { font-size: 11px; color: #fff; background: linear-gradient(135deg, #8B5CF6, #FFAFCC); padding: 3px 9px; border-radius: 999px; margin-right: 9px; }
+  .spec { font-size: 12px; font-weight: 700; color: #8B5CF6; }
+  .desc { font-size: 12px; color: var(--ink2); line-height: 1.7; }
+  .wrap { display: flex; gap: 30px; flex-wrap: wrap; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .col > .t { font-size: 11px; font-weight: 800; color: var(--ink2); letter-spacing: .5px; }
+
+  .th-light { --bg:#FBF9FF; --bg2:#F1EAFE; --card:#FFFFFF; --t1:#2A2340; --t2:#6F6389; --t3:#9A8CB8; --line:#DCCFF2; --chip:#ECE3FB; --g1:#8B5CF6; --g2:#D8B4FE; --g3:#FFAFCC; }
+  .th-dark  { --bg:#150F1E; --bg2:#100A18; --card:#241B38; --t1:#F2ECFB; --t2:#B6A6D1; --t3:#8A79A8; --line:#3B2F55; --chip:#2A2040; --g1:#9F7BFF; --g2:#DCC3FF; --g3:#FFB8D4; }
+
+  .strip { border-radius: 18px; padding: 14px 10px 10px; display: flex; gap: 6px; width: 420px; background: transparent; }
+  .strip .cell { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .strip .cell .lb { font-size: 9.5px; color: var(--t3); font-weight: 700; }
+  .strip .cell svg { display: block; }
+
+  .phone { width: 390px; height: 844px; border-radius: 44px; overflow: hidden; position: relative; box-shadow: 0 22px 52px rgba(60,40,110,.24), 0 0 0 9px rgba(18,11,28,.86); }
+  .phone.dark { box-shadow: 0 22px 52px rgba(0,0,0,.6), 0 0 0 9px rgba(0,0,0,.9); }
+  .status { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font-size: 12.5px; font-weight: 800; color: var(--t1); }
+  .screen { position: absolute; inset: 44px 0 0 0; display: flex; flex-direction: column; padding: 0 20px; color: var(--t1); background: linear-gradient(180deg, var(--bg), var(--bg2)); }
+  .pback { font-size: 13px; font-weight: 800; color: #8B5CF6; padding-top: 6px; }
+  .ptitle { text-align: center; font-size: 18px; font-weight: 900; margin-top: 2px; }
+  .sec { font-size: 12px; font-weight: 900; color: var(--t2); margin: 16px 2px 2px; }
+  .rows { flex: 1; overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 10px 2px; border-bottom: 1px solid var(--line); }
+  .row .lead { width: 30px; display: grid; place-items: center; }
+  .row .meta { flex: 1; min-width: 0; }
+  .row .rt { font-weight: 800; font-size: 13.5px; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .ra { font-size: 11px; color: var(--t2); margin-top: 2px; }
+  .row.cur .rt { color: #8B5CF6; }
+  .row .act { display: flex; gap: 16px; align-items: center; }
+
+  .nav { display: flex; align-items: center; margin: 0 -20px; padding: 12px 8px 14px; background: transparent; border-top: 1px solid var(--line); }
+  .ni { flex: 1; appearance: none; border: 0; background: transparent; font: inherit; color: var(--t3); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 3px 0; }
+  .ni .nl { font-size: 10px; }
+  .ni.on .nl { font-weight: 800; color: #8B5CF6; }
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>歌曲行 + 底部栏 · <em>实心渐变图标 10 套</em></h1>
+  <p>抛弃细线描边，改为<b>实心渐变填充</b>的现代图标语言（模块葡萄气泡三色）。歌曲行布局统一为 <b>音乐图标 — 歌名 — 播放 — 下载 — 发送</b>；底部三按钮（首页 / 播放 / 我的）同步换成同一套新风格。</p>
+  <div class="bar">
+    <span class="tag">下方实景为「在线音乐」歌曲列表</span>
+    <button id="pageBtn">页面暗色</button>
+  </div>
+</div>
+<div class="grid" id="grid"></div>
+
+<script>
+(function () {
+  var PLAY='M8.6 5.7c0-1.02 1.13-1.62 1.96-1.03l8.2 6.3c.68.52.68 1.54 0 2.06l-8.2 6.3c-.83.59-1.96-.01-1.96-1.03z';
+  var HEART='M12 19.9C12 19.9 4.3 15.2 4.3 10a3.9 3.9 0 0 1 7.7-1.6A3.9 3.9 0 0 1 19.7 10c0 5.2-7.7 9.9-7.7 9.9Z';
+  var SEND='M2.6 20.5 21.4 12 2.6 3.5 2.55 10.1 16.2 12 2.55 13.9z';
+  var DLARROW='M12 3.4c.66 0 1.2.54 1.2 1.2v5.9h1.7c.72 0 1.08.87.57 1.38l-3 3a1.1 1.1 0 0 1-1.56 0l-3-3c-.5-.51-.15-1.38.57-1.38h1.72V4.6c0-.66.54-1.2 1.2-1.2z';
+  var NOTEHEAD='M8.4 17.5a2.7 2.7 0 1 0 5.4 0 2.7 2.7 0 1 0-5.4 0Z';
+  var NOTEBODY='M10.1 4.2h2.9v13.6h-2.9z';
+  var NOTEFLAG='M13 4.9c2.2-.7 4.9-1.7 6.3-2.4v4.3c-1.4.72-4.1 1.7-6.3 2.4z';
+  var HOME='M11.3 3.6a1.2 1.2 0 0 1 1.4 0l7.6 6.1c.5.4.2 1.3-.5 1.3h-1V19a1.4 1.4 0 0 1-1.4 1.4h-3.3v-5.1h-3.2v5.1H6.6A1.4 1.4 0 0 1 5.2 19v-7.9h-1c-.7 0-1-.9-.5-1.3z';
+  var USERHEAD='M12 4.3a4 4 0 1 1 0 8 4 4 0 0 1 0-8z';
+  var USERBODY='M12 14.4c4 0 7.3 1.9 7.3 5.1v.6H4.7v-.6c0-3.2 3.3-5.1 7.3-5.1z';
+  var DISC='M12 3.2a8.8 8.8 0 1 0 0 17.6 8.8 8.8 0 0 0 0-17.6Zm0 6.3a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z';
+  var MICBODY='M9.3 3.6h5.4v10.4a2.7 2.7 0 0 1-5.4 0z';
+  var MICARC='M6.6 11.1a1.1 1.1 0 0 1 2.2 0 3.2 3.2 0 0 0 6.4 0 1.1 1.1 0 0 1 2.2 0 5.4 5.4 0 0 1-4.3 5.3V18h1.9a1.1 1.1 0 0 1 0 2.2H8.8A1.1 1.1 0 0 1 8.8 18h1.9v-1.6A5.4 5.4 0 0 1 6.6 11.1z';
+
+  function wrap(inner, size) {
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">' + inner + '</svg>';
+  }
+  var uid = 0;
+  var DIRS = { h: [0, 12, 24, 12], v: [12, 0, 12, 24], '45': [0, 0, 24, 24], '135': [0, 24, 24, 0] };
+
+  function stopsOf(o) {
+    var a = o.g1, b = o.g3, m = o.g2;
+    if (o.tone === 'purple') return [['0', a], ['1', m]];
+    if (o.tone === 'trio') return [['0', a], ['.5', m], ['1', b]];
+    if (o.tone === 'reverse') return [['0', b], ['1', a]];
+    return [['0', a], ['1', b]];
+  }
+  function defsOf(o) {
+    var id = 'g' + (uid++), d = DIRS[o.dir] || DIRS['45'], stops = '';
+    stopsOf(o).forEach(function (s) { stops += '<stop offset="' + s[0] + '" stop-color="' + s[1] + '"/>'; });
+    return { id: id, col: 'url(#' + id + ')',
+      defs: '<defs><linearGradient id="' + id + '" x1="' + d[0] + '" y1="' + d[1] + '" x2="' + d[2] + '" y2="' + d[3] + '" gradientUnits="userSpaceOnUse">' + stops + '</linearGradient></defs>' };
+  }
+  // F=实心填充属性；K=描边(细)属性
+  function att(o, col) {
+    var F = 'fill="' + col + '"';
+    if (o.gloss) F += ' stroke="rgba(255,255,255,.55)" stroke-width="0.7" stroke-linejoin="round"';
+    else if (o.bold) F += ' stroke="' + col + '" stroke-width="1.6" stroke-linejoin="round"';
+    var sw = o.sw || 2.4;
+    var K = 'fill="none" stroke="' + col + '" stroke-width="' + sw + '" stroke-linecap="round" stroke-linejoin="round"';
+    return { F: F, K: K };
+  }
+  function inner(name, o, col) {
+    var A = att(o, col), F = A.F, K = A.K;
+    switch (name) {
+      case 'play': return '<path d="' + PLAY + '" ' + F + '/>';
+      case 'dl': return '<path d="' + DLARROW + '" ' + F + '/><rect x="5" y="17" width="14" height="2.7" rx="1.35" ' + F + '/>';
+      case 'send': return '<path d="' + SEND + '" ' + F + '/>';
+      case 'fav': return '<path d="' + HEART + '" ' + F + '/>';
+      case 'more': return '<circle cx="6" cy="12" r="2" ' + F + '/><circle cx="12" cy="12" r="2" ' + F + '/><circle cx="18" cy="12" r="2" ' + F + '/>';
+      case 'note': return '<path d="' + NOTEHEAD + '" ' + F + '/><rect x="10.1" y="4.2" width="2.9" height="13.6" rx="1.45" ' + F + '/><path d="' + NOTEFLAG + '" ' + F + '/>';
+      case 'eq': return '<rect x="5.4" y="9.6" width="2.6" height="8.4" rx="1.3" ' + F + '/><rect x="10.7" y="5.4" width="2.6" height="12.6" rx="1.3" ' + F + '/><rect x="16" y="8.2" width="2.6" height="9.8" rx="1.3" ' + F + '/>';
+      case 'search': return '<circle cx="10.8" cy="10.8" r="6.1" ' + K + '/><path d="M15.4 15.4 20 20" ' + K + '/>';
+      case 'album': return '<path d="' + DISC + '" fill="' + col + '" fill-rule="evenodd"/>';
+      case 'disc': return '<path d="' + DISC + '" fill="' + col + '" fill-rule="evenodd"/>';
+      case 'mic': return '<path d="' + MICBODY + '" ' + F + '/><path d="' + MICARC + '" ' + F + '/>';
+      case 'playlist': return '<rect x="3.4" y="5.4" width="11" height="2.2" rx="1.1" ' + F + '/><rect x="3.4" y="9.9" width="8.6" height="2.2" rx="1.1" ' + F + '/><rect x="3.4" y="14.4" width="5.6" height="2.2" rx="1.1" ' + F + '/><circle cx="17.4" cy="16.6" r="2.4" ' + F + '/><rect x="18.9" y="8.4" width="2" height="8.2" rx="1" ' + F + '/>';
+      case 'import': return '<path d="M4.6 12.4h3.3l1.3 2.2h5.6l1.3-2.2h3.3v5.9a2.1 2.1 0 0 1-2.1 2.1H6.7a2.1 2.1 0 0 1-2.1-2.1z" ' + F + '/><path d="' + DLARROW + '" ' + F + '/>';
+      case 'home': return '<path d="' + HOME + '" ' + F + '/>';
+      case 'user': return '<path d="' + USERHEAD + '" ' + F + '/><path d="' + USERBODY + '" ' + F + '/>';
+    }
+    return '';
+  }
+  function icon(name, size, o) {
+    var d = defsOf(o), core = inner(name, o, d.col), g = core;
+    if (o.duo) g = '<g transform="translate(1.4,1.4)" opacity=".22">' + inner(name, o, d.col) + '</g>' + g;
+    if (o.shadow) g = '<g style="filter:drop-shadow(0 3px 4px rgba(96,64,168,.34))">' + g + '</g>';
+    if (o.glow) g = '<g style="filter:drop-shadow(0 0 5px ' + o.g3 + 'aa)">' + g + '</g>';
+    return wrap(d.defs + g, size);
+  }
+  function muted(name, o) {
+    var mo = { sw: 2.4, gloss: false, bold: false };
+    return wrap(inner(name, mo, 'var(--t3)'), 23);
+  }
+
+  var STRIP1 = [['note','音乐'],['play','播放'],['dl','下载'],['send','发送'],['more','更多']];
+  var STRIP2 = [['home','首页'],['disc','播放'],['user','我的'],['fav','收藏'],['search','搜索']];
+  var SONGS = [['夜曲', '周杰伦 · 十一月的萧邦', true], ['稻香', '周杰伦 · 魔杰座', false],
+    ['晴天', '周杰伦 · 叶惠美', false], ['七里香', '周杰伦 · 七里香', false],
+    ['告白气球', '周杰伦 · 周杰伦的床边故事', false], ['明明就', '周杰伦 · 十二新作', false]];
+
+  var SETS = [
+    { n:'01', name:'实心渐变', p:['#8B5CF6','#D8B4FE','#FFAFCC','#9F7BFF','#DCC3FF','#FFB8D4'], tone:'flow', dir:'45',
+      spec:'实心填充 · 紫→粉 45°', desc:'最干净的实心渐变，紫到粉斜向过渡，现代、有体积感，替代细线描边。' },
+    { n:'02', name:'实心渐变 · 纵向', p:['#8B5CF6','#D8B4FE','#FFAFCC','#9F7BFF','#DCC3FF','#FFB8D4'], tone:'flow', dir:'v',
+      spec:'实心填充 · 纵向 紫→粉', desc:'上紫下粉，与顶栏渐变方向一致，整屏更统一。' },
+    { n:'03', name:'实心渐变 · 三色', p:['#8B5CF6','#D8B4FE','#FFAFCC','#9F7BFF','#DCC3FF','#FFB8D4'], tone:'trio', dir:'45',
+      spec:'实心填充 · 三色流光', desc:'完整三色（紫/淡紫/粉），最贴近模块 FlowingGradient 原色。' },
+    { n:'04', name:'实心渐变 · 柔紫', p:['#8B5CF6','#D8B4FE','#FFAFCC','#9F7BFF','#DCC3FF','#FFB8D4'], tone:'purple', dir:'45',
+      spec:'实心填充 · 紫→淡紫', desc:'收窄到紫→淡紫，最贴主色，克制不张扬，和开关/标题栏同色系。' },
+    { n:'05', name:'玻璃边实心', p:['#8B5CF6','#D8B4FE','#FFAFCC','#9F7BFF','#DCC3FF','#FFB8D4'], tone:'flow', dir:'45', gloss:true,
+      spec:'实心填充 + 柔和白边', desc:'实心上加一道极细高光边，像玻璃糖果，立体又通透。' },
+    { n:'06', name:'实心柔投影', p:['#8B5CF6','#D8B4FE','#FFAFCC','#9F7BFF','#DCC3FF','#FFB8D4'], tone:'flow', dir:'45', shadow:true,
+      spec:'实心填充 + 柔和投影', desc:'图标下方带一层柔投影，浮起感明显，层次更现代。' },
+    { n:'07', name:'霓虹辉光', p:['#8B5CF6','#D8B4FE','#FFAFCC','#9F7BFF','#DCC3FF','#FFB8D4'], tone:'flow', dir:'45', glow:true,
+      spec:'实心填充 + 粉紫辉光', desc:'实心外一圈粉紫辉光，暗色下尤其出彩，潮感强。' },
+    { n:'08', name:'实心叠影', p:['#8B5CF6','#D8B4FE','#FFAFCC','#9F7BFF','#DCC3FF','#FFB8D4'], tone:'flow', dir:'45', duo:true,
+      spec:'实心填充 + 低透明叠影', desc:'错位叠一层淡影，轻微立体未来感，颜色仍统一在模块紫粉内。' },
+    { n:'09', name:'厚实填充', p:['#8B5CF6','#D8B4FE','#FFAFCC','#9F7BFF','#DCC3FF','#FFB8D4'], tone:'flow', dir:'45', bold:true,
+      spec:'实心填充 + 同色厚边', desc:'实心外加同色厚边，图标更饱满圆润、更有分量，列表识别度高。' },
+    { n:'10', name:'玻璃+投影', p:['#8B5CF6','#D8B4FE','#FFAFCC','#9F7BFF','#DCC3FF','#FFB8D4'], tone:'trio', dir:'45', gloss:true, shadow:true,
+      spec:'实心填充 · 三色 + 白边 + 投影', desc:'三色流光叠加玻璃高光与柔投影，最精致的一套，适合作为默认。' }
+  ];
+
+  function optsFor(o, dark) {
+    var p = o.p;
+    return { g1: dark ? p[3] : p[0], g2: dark ? p[4] : p[1], g3: dark ? p[5] : p[2],
+      tone: o.tone, dir: o.dir, gloss: o.gloss, bold: o.bold, duo: o.duo, shadow: o.shadow, glow: o.glow, sw: 2.4 };
+  }
+  function rows(o, dark) {
+    var O = optsFor(o, dark), s = '<div class="rows">';
+    SONGS.forEach(function (sg) {
+      var lead = sg[2] ? icon('eq', 26, O) : icon('note', 26, O);
+      s += '<div class="row' + (sg[2] ? ' cur' : '') + '"><div class="lead">' + lead + '</div>'
+        + '<div class="meta"><div class="rt">' + sg[0] + '</div><div class="ra">' + sg[1] + '</div></div>'
+        + '<div class="act">' + icon('play', 22, O) + icon('dl', 21, O) + icon('send', 21, O) + '</div></div>';
+    });
+    return s + '</div>';
+  }
+  function nav(o, dark) {
+    var O = optsFor(o, dark), s = '<div class="nav">';
+    [['home', '首页', false], ['disc', '播放', true], ['user', '我的', false]].forEach(function (n) {
+      var svg = n[2] ? icon(n[0], 25, O) : muted(n[0], o);
+      s += '<button class="ni' + (n[2] ? ' on' : '') + '">' + svg + '<span class="nl">' + n[1] + '</span></button>';
+    });
+    return s + '</div>';
+  }
+  function phone(themeCls, o, dark) {
+    return '<div class="phone ' + themeCls + '">'
+      + '<div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>'
+      + '<div class="screen"><div class="pback">&#8592; 返回</div><div class="ptitle">在线音乐</div>'
+      + '<div class="sec">搜索结果 · 歌曲</div>' + rows(o, dark) + nav(o, dark) + '</div></div>';
+  }
+  function strip(themeCls, names, o, dark) {
+    var O = optsFor(o, dark), s = '<div class="strip ' + themeCls + '">';
+    names.forEach(function (f) { s += '<div class="cell">' + icon(f[0], 40, O) + '<div class="lb">' + f[1] + '</div></div>'; });
+    return s + '</div>';
+  }
+
+  var grid = document.getElementById('grid');
+  SETS.forEach(function (o) {
+    var box = document.createElement('div'); box.className = 'opt';
+    box.innerHTML = '<div class="top"><div class="label"><b>' + o.n + '</b>' + o.name + '</div><div class="spec">' + o.spec + '</div></div><div class="desc">' + o.desc + '</div>'
+      + '<div class="wrap"><div class="col"><div class="t">歌曲行图标 · 浅色</div>' + strip('th-light', STRIP1, o, false) + '</div>'
+      + '<div class="col"><div class="t">歌曲行图标 · 暗色</div>' + strip('th-dark', STRIP1, o, true) + '</div></div>'
+      + '<div class="wrap"><div class="col"><div class="t">底部三按钮 + 其他 · 浅色</div>' + strip('th-light', STRIP2, o, false) + '</div>'
+      + '<div class="col"><div class="t">底部三按钮 + 其他 · 暗色</div>' + strip('th-dark', STRIP2, o, true) + '</div></div>'
+      + '<div class="wrap"><div class="col"><div class="t">实景 · 浅色</div>' + phone('th-light', o, false) + '</div>'
+      + '<div class="col"><div class="t">实景 · 暗色</div>' + phone('th-dark', o, true) + '</div></div>';
+    grid.appendChild(box);
+  });
+
+  document.getElementById('pageBtn').onclick = function () { document.body.classList.toggle('darkpage'); this.textContent = document.body.classList.contains('darkpage') ? '页面浅色' : '页面暗色'; };
+})();
+</script>
+</body>
+</html>

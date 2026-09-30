@@ -1,0 +1,56 @@
+SystemUptimeMs: 30012235
+Process: com.tencent.wework
+PID: 13128
+UID: 99910357
+Frozen: false
+Flags: 0x30d83e44
+Package: com.tencent.wework v81206 (5.0.11)
+PID: 13128
+Foreground: Yes
+Process-Runtime: 2570
+Build: OnePlus/PLR110/OP6117L1:16/BP2A.250605.015/B.c4db98_17de607_17d624d:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+Process name is com.tencent.wework, uid is 99910357, not key_process
+keyProcess: 0
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'OnePlus/PLR110/OP6117L1:16/BP2A.250605.015/B.c4db98_17de607_17d624d:user/release-keys'
+Revision: '0'
+ABI: 'arm64'
+Timestamp: 2026-09-20 09:04:02.089899468+0800
+Process uptime: 3s
+Cmdline: com.tencent.wework
+pid: 13128, tid: 14045, name: SoundDecoder_1  >>> com.tencent.wework <<<
+uid: 99910357
+tagged_addr_ctrl: 0000000000000001 (PR_TAGGED_ADDR_ENABLE)
+pac_enabled_keys: 000000000000000f (PR_PAC_APIAKEY, PR_PAC_APIBKEY, PR_PAC_APDAKEY, PR_PAC_APDBKEY)
+signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0000000000000b00
+Cause: null pointer dereference
+    x0  00000075955ae100  x1  00000075d1df0c20  x2  0000000000000034  x3  0000000000000004
+    x4  00000000000000f0  x5  00004000a800a800  x6  6873606d5e606863  x7  7f7f7f7f7f7f7f7f
+    x8  0000000000000030  x9  f9852b38b8b27f9d  x10 000000000000001a  x11 0000000000000000
+    x12 65766974616e5f61  x13 30733a706f72705f  x14 0000000000000010  x15 0000007571404970
+    x16 00000077bcd61828  x17 00000077bccf516c  x18 000000756fd20000  x19 00000075d1df0db8
+    x20 0000000000000034  x21 00000075d1df0c20  x22 00000075955ae100  x23 0000000000000034
+    x24 00000075d1df0e00  x25 00000075d1df0c20  x26 00000075d1df0db0  x27 000000757147a800
+    x28 00000075d1df0fe0  x29 00000075d1df0ba0
+    lr  00000077bcf7ec80  sp  00000075d1df0ba0  pc  00000077bcfc3068  pst 0000000080001000
+16 total frames
+backtrace:
+      #00 pc 0000000000212068  /system/lib64/libstagefright.so (BuildId: e6f319c0353506d045e509cdf507ddeb)
+      #01 pc 00000000001cdc7c  /system/lib64/libstagefright.so (void std::__1::vector<int, std::__1::allocator<int>>::__assign_with_size[abi:nn200000]<int const*, int const*>(int const*, int const*, long)+208) (BuildId: e6f319c0353506d045e509cdf507ddeb)
+      #02 pc 00000000001cd9a0  /system/lib64/libstagefright.so (android::VideoRenderQualityTracker::Configuration::Configuration()+164) (BuildId: e6f319c0353506d045e509cdf507ddeb)
+      #03 pc 00000000001cbb4c  /system/lib64/libstagefright.so (android::VideoRenderQualityTracker::Configuration::getFromServerConfigurableFlags(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> (*)(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)) (.cfi)+108) (BuildId: e6f319c0353506d045e509cdf507ddeb)
+      #04 pc 00000000001502f8  /system/lib64/libstagefright.so (android::MediaCodec::MediaCodec(android::sp<android::ALooper> const&, int, unsigned int, std::__1::function<android::sp<android::CodecBase> (android::AString const&, char const*)>, std::__1::function<int (android::AString const&, android::sp<android::MediaCodecInfo>*)>)+864) (BuildId: e6f319c0353506d045e509cdf507ddeb)
+      #05 pc 000000000014ba7c  /system/lib64/libstagefright.so (android::MediaCodec::CreateByType(android::sp<android::ALooper> const&, android::AString const&, bool, int*, int, unsigned int, android::sp<android::AMessage>) (.cfi)+456) (BuildId: e6f319c0353506d045e509cdf507ddeb)
+      #06 pc 000000000014b818  /system/lib64/libstagefright.so (android::MediaCodec::CreateByType(android::sp<android::ALooper> const&, android::AString const&, bool, int*, int, unsigned int) (.cfi)+208) (BuildId: e6f319c0353506d045e509cdf507ddeb)
+      #07 pc 0000000000020d34  /system/lib64/libmediandk.so (createAMediaCodec(char const*, bool, bool, int, unsigned int)+472) (BuildId: e56270b03f535d79784942e0fb2ed98a)
+      #08 pc 000000000000c040  /system/lib64/libsoundpool.so (android::soundpool::Sound::doLoad()+428) (BuildId: 80fbbdc0c8bc5cacc01604b1d4520803)
+      #09 pc 000000000000cd40  /system/lib64/libsoundpool.so (android::soundpool::SoundDecoder::run(int)+364) (BuildId: 80fbbdc0c8bc5cacc01604b1d4520803)
+      #10 pc 000000000000de18  /system/lib64/libsoundpool.so (std::__1::__function::__func<android::soundpool::ThreadPool::launch(std::__1::function<void (int)>)::'lambda'(), std::__1::allocator<android::soundpool::ThreadPool::launch(std::__1::function<void (int)>)::'lambda'()>, void ()>::operator()()+68) (BuildId: 80fbbdc0c8bc5cacc01604b1d4520803)
+      #11 pc 000000000000de90  /system/lib64/libsoundpool.so (android::soundpool::JavaThread::staticFunction(void*)+36) (BuildId: 80fbbdc0c8bc5cacc01604b1d4520803)
+      #12 pc 000000000013a770  /system/lib64/libandroid_runtime.so (android::AndroidRuntime::javaThreadShell(void*)+148) (BuildId: d7479ed4e5e4857d601e2aed0d566cc8)
+      #13 pc 0000000000019bd0  /system/lib64/libutils.so (libutil_thread_trampoline(void*) (.__uniq.226528677032898775202282855395389835431)+24) (BuildId: cd6fe1a2f106f83ac0868f825dfc8390)
+      #14 pc 0000000000099fec  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+184) (BuildId: 28057735687b475a45ee7ab9afcb5eb7)
+      #15 pc 000000000008c808  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+68) (BuildId: 28057735687b475a45ee7ab9afcb5eb7)

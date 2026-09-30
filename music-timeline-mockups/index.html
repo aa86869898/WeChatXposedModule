@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>时间线剪辑样式 · 模块渐变配色</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1200px 600px at 20% -10%, #2a1b45 0%, rgba(42,27,69,0) 60%),
+      radial-gradient(1000px 700px at 110% 20%, #3a1f3f 0%, rgba(58,31,63,0) 55%),
+      linear-gradient(180deg, #100b1a 0%, #150f1e 100%);
+    background-attachment: fixed;
+    color: #ece7f7;
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    padding: 26px 16px 70px;
+  }
+  .head { max-width: 1000px; margin: 0 auto 24px; }
+  .head h1 { font-size: 22px; margin: 0 0 10px; }
+  .head h1 .g { background: linear-gradient(90deg,#9F7BFF,#DCC3FF,#FFB8D4); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .head p { color: #b6abd0; font-size: 13px; line-height: 1.75; margin: 0; }
+  .head .hint { color: #DCC3FF; }
+  .grid { display: flex; flex-wrap: wrap; gap: 26px; justify-content: center; max-width: 1360px; margin: 0 auto; }
+  .phone {
+    width: 390px; height: 844px; border-radius: 40px; overflow: hidden;
+    position: relative; display: flex; flex-direction: column;
+    box-shadow: 0 26px 70px rgba(0,0,0,.6), 0 0 60px rgba(139,92,246,.22), 0 0 0 10px #191223, 0 0 0 11px #2d2340;
+  }
+  .statusbar { height: 34px; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; font-size: 12px; }
+  .appbar { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 6px 18px 10px; }
+  .appbar .back { font-size: 24px; line-height: 1; opacity: .85; }
+  .appbar .title { font-size: 16px; font-weight: 700; }
+  .appbar .save { margin-left: auto; font-size: 13px; font-weight: 700; }
+  .appbar .badge { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 999px; color: #fff; }
+  .stage { flex: 1 1 auto; display: flex; flex-direction: column; padding: 0 14px; overflow: hidden; }
+  .stage-label { font-size: 11px; opacity: .62; margin: 6px 2px; letter-spacing: .3px; }
+  .canvas-wrap { position: relative; width: 100%; border-radius: 16px; overflow: hidden; }
+  canvas { display: block; width: 100%; touch-action: none; }
+  .meta-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; }
+  .meta-row .cur { font-variant-numeric: tabular-nums; opacity: .9; }
+  .meta-row .tot { opacity: .5; }
+  .play { margin-left: auto; border: none; border-radius: 999px; padding: 9px 18px; font-weight: 700; font-size: 13px; cursor: pointer; color: #fff; }
+  .kbd { font-size: 11px; opacity: .55; margin-top: 8px; line-height: 1.7; }
+  .foot { flex: 0 0 auto; padding: 14px 18px; font-size: 11px; opacity: .55; }
+  .homebar { flex: 0 0 auto; height: 22px; display: flex; justify-content: center; align-items: center; }
+  .homebar i { width: 128px; height: 5px; border-radius: 3px; background: currentColor; opacity: .3; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>时间线剪辑区 · 6 套样式 <span class="g">模块渐变配色</span></h1>
+    <p>
+      全部使用模块「葡萄气泡 · 流光渐变」色板（<span class="hint">#8B5CF6 → #D8B4FE → #FFAFCC</span>，暗色用 #9F7BFF → #DCC3FF → #FFB8D4），
+      波形、选区、手柄、播放头均为渐变，取消纯色。波形高低真实跟随音频音量，可播放、可拖动剪辑手柄、可点波形定位。
+    </p>
+  </div>
+  <div class="grid" id="grid"></div>
+
+<script>
+/* ============================================================
+   模块色板（葡萄气泡 · 流光渐变 M3）
+   ============================================================ */
+const C = {
+  primary: "#8B5CF6", primaryDark: "#7C3AED", onPrimary: "#FFFFFF",
+  primaryContainer: "#EADDFF", onPrimaryContainer: "#21005D",
+  secondary: "#7C6BA8", secondaryContainer: "#E8DEF8",
+  tertiary: "#D5497E",
+  surface: "#FBF9FF", surfaceLow: "#F3EEFF", onSurface: "#2A2340",
+  onSurfaceVariant: "#6F6389", outlineVariant: "#DCCFF2",
+  grad: ["#8B5CF6", "#D8B4FE", "#FFAFCC"],
+  darkBase: "#150F1E", darkGrad: ["#9F7BFF", "#DCC3FF", "#FFB8D4"],
+  darkSurface: "#241533", darkOn: "#EDE7FF", darkVariant: "#A896C9"
+};
+
+function lg(c, x0, x1, cols) {
+  const g = c.createLinearGradient(x0, 0, x1, 0);
+  const n = cols.length - 1;
+  cols.forEach((col, i) => g.addColorStop(n ? i / n : 0, col));
+  return g;
+}
+function lgv(c, y0, y1, cols) {
+  const g = c.createLinearGradient(0, y0, 0, y1);
+  const n = cols.length - 1;
+  cols.forEach((col, i) => g.addColorStop(n ? i / n : 0, col));
+  return g;
+}
+function rgba(hex, a) {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+}
+function roundRect(c, x, y, w, h, r) {
+  r = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+/* ============================================================
+   合成音频 → 真实波形峰值
+   ============================================================ */
+let audioCtx = null, audioBuffer = null, duration = 0, peaks = null;
+
+function initAudio() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  audioCtx = new AC();
+  const sr = audioCtx.sampleRate;
+  const segs = [
+    [1.0, 0.90, 440], [0.6, 0.10, 220], [1.2, 0.68, 330], [0.4, 1.00, 523],
+    [0.9, 0.28, 294], [1.0, 0.85, 392], [0.5, 0.03, 0],   [1.3, 0.60, 349],
+    [0.8, 1.00, 494], [1.0, 0.24, 262], [1.3, 0.75, 440], [1.0, 0.48, 220]
+  ];
+  duration = segs.reduce((a, s) => a + s[0], 0);
+  const len = Math.floor(duration * sr);
+  audioBuffer = audioCtx.createBuffer(1, len, sr);
+  const d = audioBuffer.getChannelData(0);
+  let i = 0;
+  for (const [lenS, amp, f] of segs) {
+    const n = Math.floor(lenS * sr);
+    for (let k = 0; k < n && i < len; k++, i++) {
+      const t = k / sr;
+      const env = Math.min(1, t / 0.02) * Math.min(1, (lenS - t) / 0.08);
+      let v = 0;
+      if (f > 0) {
+        v = Math.sin(2 * Math.PI * f * t) * 0.7
+          + Math.sin(2 * Math.PI * 2 * f * t) * 0.2
+          + Math.sin(2 * Math.PI * 3 * f * t) * 0.1;
+        v *= 1 + 0.02 * Math.sin(2 * Math.PI * 5 * t);
+        v *= 0.85 + 0.15 * Math.sin(2 * Math.PI * 6 * t);
+      }
+      const click = t < 0.04 ? Math.sin(2 * Math.PI * 2000 * t) * Math.exp(-t * 40) : 0;
+      d[i] = (v * amp + click * 0.35) * env * 0.9;
+    }
+  }
+  let mx = 0;
+  for (let j = 0; j < len; j++) mx = Math.max(mx, Math.abs(d[j]));
+  if (mx > 0) for (let j = 0; j < len; j++) d[j] /= mx;
+
+  const N = 1600;
+  peaks = new Float32Array(N);
+  const bucket = Math.max(1, Math.floor(len / N));
+  for (let c = 0; c < N; c++) {
+    let m = 0; const s = c * bucket, e = Math.min(len, s + bucket);
+    for (let j = s; j < e; j++) { const a = Math.abs(d[j]); if (a > m) m = a; }
+    peaks[c] = m;
+  }
+}
+
+function pk(peaks, f) {
+  const n = peaks.length;
+  let i = Math.floor(f * n);
+  if (i < 0) i = 0; if (i >= n) i = n - 1;
+  return peaks[i];
+}
+function fmt(sec) {
+  sec = Math.max(0, sec);
+  return Math.floor(sec / 60) + ":" + String(Math.floor(sec % 60)).padStart(2, "0");
+}
+function fmt1(sec) {
+  sec = Math.max(0, sec);
+  return Math.floor(sec / 60) + ":" + String(Math.floor(sec % 60)).padStart(2, "0") + "." + Math.floor((sec % 1) * 10);
+}
+function fit(canvas, h) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || canvas.parentElement.clientWidth || 362;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  canvas.style.height = h + "px";
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+
+/* ============================================================
+   播放
+   ============================================================ */
+let source = null, playing = false, active = null, ctxT0 = 0, sPosMs = 0, ePosMs = 0;
+
+function stopAll() {
+  if (source) { try { source.onended = null; source.stop(); } catch (e) {} source = null; }
+  playing = false; active = null;
+}
+function toggle(style) {
+  if (playing && active === style) { stopAll(); style.setButton(); draw(style); return; }
+  stopAll();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  const st = style.st;
+  const t0 = st.start * duration, t1 = st.end * duration;
+  if (t1 - t0 < 0.05) return;
+  source = audioCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(audioCtx.destination);
+  ctxT0 = audioCtx.currentTime;
+  sPosMs = t0; ePosMs = t1;
+  source.start(0, t0, t1 - t0);
+  playing = true; active = style; st.pos = st.start;
+  source.onended = () => {
+    if (active === style) { playing = false; active = null; st.pos = st.end; style.setButton(); draw(style); }
+  };
+  style.setButton();
+  requestAnimationFrame(tick);
+}
+function tick() {
+  if (!playing || !active) return;
+  const st = active.st;
+  const p = sPosMs + (audioCtx.currentTime - ctxT0);
+  st.pos = Math.max(st.start, Math.min(st.end, p / duration));
+  draw(active);
+  requestAnimationFrame(tick);
+}
+function draw(style) {
+  if (!style.ctx) return;
+  style.drawRaw(style.ctx, style.W, style.st.h, style.st);
+}
+
+/* 波形绘制：两遍（全幅暗渐变 + 选区内亮渐变），可圆角柱或方柱 */
+function wavePass(c, x0, x1, cx, hh, cols, fillStyle, rounded, ratio) {
+  const W = x1 - x0, cw = W / cols;
+  c.fillStyle = fillStyle;
+  for (let i = 0; i < cols; i++) {
+    const f = i / cols, x = x0 + f * W, a = pk(peaks, f);
+    const bh = Math.max(rounded ? 3 : 1.5, a * hh * (rounded ? 0.9 : 0.92));
+    if (rounded) {
+      roundRect(c, x - cw * 0.32, cx - bh / 2, cw * 0.64, bh, Math.min(cw * 0.32, bh / 2));
+      c.fill();
+    } else {
+      c.fillRect(x, cx - bh / 2, Math.max(1, cw * ratio), bh);
+    }
+  }
+}
+function waveTwoPass(c, sx, ex, w, cx, hh, cols, dimCols, brightCols, rounded, ratio) {
+  c.save(); c.globalAlpha = 0.30;
+  wavePass(c, 0, w, cx, hh, cols, lg(c, 0, w, dimCols), rounded, ratio);
+  c.restore();
+  c.save();
+  c.beginPath(); c.rect(sx, 0, Math.max(0, ex - sx), c.st.h); c.clip();
+  wavePass(c, 0, w, cx, hh, cols, lg(c, 0, w, brightCols), rounded, ratio);
+  c.restore();
+}
+function gradHandle(c, x, y, w, h, cols, vertical) {
+  c.fillStyle = vertical ? lgv(c, y, y + h, cols) : lg(c, x, x + w, cols);
+  roundRect(c, x, y, w, h, Math.min(w, h) / 2);
+  c.fill();
+}
+
+/* ============================================================
+   六套样式（渐变配色）
+   ============================================================ */
+const STYLES = [];
+const LIGHT = C.grad, DARK = C.darkGrad;
+
+/* 1. 经典波形（类 Audacity 布局） */
+STYLES.push({
+  key: "classic", name: "流光经典", tag: "经典波形 · 渐变填充",
+  desc: "浅紫面板 + 渐变填充波形 + 虚线选区，传统音频编辑器布局。",
+  shell: { bg: "linear-gradient(180deg,#FFFFFF 0%,#F1E7FF 100%)", bar: "rgba(255,255,255,0)", fg: C.onSurface, accent: C.primary },
+  st: { start: 0.06, end: 0.94, pos: 0.06, h: 210 },
+  draw(c, w, H, st) {
+    c.fillStyle = lgv(c, 0, H, ["#FBF7FF", "#EDE2FF"]); c.fillRect(0, 0, w, H);
+    c.fillStyle = lgv(c, 20, H - 20, ["#FFFFFF", "#F6F0FF"]); roundRect(c, 0, 20, w, H - 40, 10); c.fill();
+    // 刻度
+    c.fillStyle = C.onSurfaceVariant; c.font = "10px ui-monospace, monospace"; c.textAlign = "left";
+    for (let s = 0; s <= duration; s += 2) { const x = s / duration * w; c.fillRect(x, 16, 1, 4); c.fillText(fmt(s), x + 3, 12); }
+    const cx = H / 2 + 4, hh = H - 70;
+    const sx = st.start * w, ex = st.end * w;
+    // 选区渐变底
+    c.fillStyle = lg(c, sx, ex, [rgba(C.primary, .16), rgba(C.grad[2], .18)]); c.fillRect(sx, 24, ex - sx, H - 50);
+    waveTwoPass(c, sx, ex, w, cx, hh, Math.min(peaks.length, Math.round(w / 1.5)),
+      ["#C9B6F0", "#DCC3FF", "#F3C9DE"], LIGHT, false, 0.72);
+    c.strokeStyle = rgba(C.onSurface, .14); c.lineWidth = 1;
+    c.beginPath(); c.moveTo(0, cx); c.lineTo(w, cx); c.stroke();
+    // 选区虚线 + 渐变手柄
+    c.save(); c.setLineDash([5, 4]); c.strokeStyle = lg(c, sx, ex, [C.primary, C.grad[2]]); c.lineWidth = 1.6;
+    c.beginPath(); c.moveTo(sx, 24); c.lineTo(sx, H - 26); c.moveTo(ex, 24); c.lineTo(ex, H - 26); c.stroke(); c.restore();
+    gradHandle(c, sx - 4, 24, 8, 11, LIGHT, false);
+    gradHandle(c, ex - 4, 24, 8, 11, LIGHT, false);
+    gradHandle(c, sx - 4, H - 37, 8, 11, LIGHT, false);
+    gradHandle(c, ex - 4, H - 37, 8, 11, LIGHT, false);
+    if (st.pos >= st.start && st.pos <= st.end) {
+      const px = st.pos * w; c.strokeStyle = lg(c, px - 40, px + 40, DARK); c.lineWidth = 1.8;
+      c.beginPath(); c.moveTo(px, 24); c.lineTo(px, H - 26); c.stroke();
+    }
+    c.fillStyle = rgba(C.onSurface, .10); c.fillRect(0, H - 20, w, 20);
+    c.fillStyle = C.primary; c.font = "10px ui-monospace, monospace";
+    c.textAlign = "left"; c.fillText("起点 " + fmt1(st.start * duration), 6, H - 7);
+    c.textAlign = "right"; c.fillText("终点 " + fmt1(st.end * duration), w - 6, H - 7);
+  }
+});
+
+/* 2. 深色专业（类 Audition 布局） */
+STYLES.push({
+  key: "darkpro", name: "流光暗夜", tag: "深色专业 · 渐变波形线",
+  desc: "暗紫黑底 + 暗色渐变量化波形 + 竖网格，冷峻专业。",
+  shell: { bg: "linear-gradient(180deg,#150F1E 0%,#241533 100%)", bar: "#150F1E", fg: C.darkOn, accent: "#DCC3FF" },
+  st: { start: 0.08, end: 0.92, pos: 0.08, h: 200 },
+  draw(c, w, H, st) {
+    c.fillStyle = lgv(c, 0, H, ["#170F22", "#221233"]); c.fillRect(0, 0, w, H);
+    c.strokeStyle = "rgba(255,255,255,.05)";
+    for (let s = 0; s <= duration; s += 1) { const x = s / duration * w; c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke(); }
+    c.strokeStyle = "rgba(220,195,255,.10)";
+    for (let s = 0; s <= duration; s += 4) { const x = s / duration * w; c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke(); }
+    const cx = H / 2 + 4, sx = st.start * w, ex = st.end * w;
+    c.fillStyle = "rgba(8,4,14,.55)"; c.fillRect(0, 0, sx, H); c.fillRect(ex, 0, w - ex, H);
+    const cols = Math.min(peaks.length, Math.round(w / 1.5));
+    const strokeWave = (grad, alpha) => {
+      c.save(); c.globalAlpha = alpha; c.beginPath();
+      for (let i = 0; i <= cols; i++) { const f = i / cols, x = f * w, bh = Math.max(1, pk(peaks, f) * H * 0.42); c.moveTo(x, cx - bh); c.lineTo(x, cx + bh); }
+      c.strokeStyle = grad; c.lineWidth = 1; c.stroke(); c.restore();
+    };
+    strokeWave(lg(c, 0, w, [rgba(C.darkGrad[0], .75), rgba(C.darkGrad[1], .75), rgba(C.darkGrad[2], .75)]), 0.5);
+    c.save(); c.beginPath(); c.rect(sx, 0, ex - sx, H); c.clip();
+    strokeWave(lg(c, 0, w, DARK), 1);
+    c.globalAlpha = 0.14; c.beginPath(); c.moveTo(0, cx);
+    for (let i = 0; i <= cols; i++) { const f = i / cols, x = f * w, bh = Math.max(1, pk(peaks, f) * H * 0.42); c.lineTo(x, cx - bh); }
+    for (let i = cols; i >= 0; i--) { const f = i / cols, x = f * w, bh = Math.max(1, pk(peaks, f) * H * 0.42); c.lineTo(x, cx + bh); }
+    c.closePath(); c.fillStyle = lg(c, 0, w, DARK); c.fill(); c.restore();
+    c.strokeStyle = lg(c, sx, ex, DARK); c.lineWidth = 1.6;
+    c.beginPath(); c.moveTo(sx, 4); c.lineTo(sx, H - 4); c.moveTo(ex, 4); c.lineTo(ex, H - 4); c.stroke();
+    c.fillStyle = lgv(c, 4, 16, DARK);
+    c.beginPath(); c.moveTo(sx, 4); c.lineTo(sx - 7, 14); c.lineTo(sx + 7, 14); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(ex, 4); c.lineTo(ex - 7, 14); c.lineTo(ex + 7, 14); c.closePath(); c.fill();
+    if (st.pos >= st.start && st.pos <= st.end) {
+      const px = st.pos * w; c.strokeStyle = C.grad[2]; c.lineWidth = 1.6;
+      c.beginPath(); c.moveTo(px, 0); c.lineTo(px, H); c.stroke();
+    }
+    c.fillStyle = C.darkVariant; c.font = "10px ui-monospace, monospace";
+    c.textAlign = "left"; c.fillText(fmt1(st.start * duration), 6, 14);
+    c.textAlign = "right"; c.fillText(fmt1(st.end * duration), w - 6, 14);
+  }
+});
+
+/* 3. 明亮卡片（类 GarageBand 布局） */
+STYLES.push({
+  key: "card", name: "流光卡片", tag: "明亮卡片 · 渐变波形",
+  desc: "白色圆角卡 + 紫粉渐变圆角波形 + 渐变圆点手柄，清新柔和。",
+  shell: { bg: "linear-gradient(180deg,#FFFFFF 0%,#F4ECFF 100%)", bar: "#FFFFFF", fg: C.onSurface, accent: C.primary },
+  st: { start: 0.05, end: 0.95, pos: 0.05, h: 190 },
+  draw(c, w, H, st) {
+    c.fillStyle = lgv(c, 0, H, ["#FBF9FF", "#EFE6FF"]); c.fillRect(0, 0, w, H);
+    const pad = 12, y = 12, hh = H - 24, cx = y + hh / 2;
+    c.save(); c.shadowColor = rgba(C.primary, .22); c.shadowBlur = 16; c.shadowOffsetY = 4;
+    c.fillStyle = "#fff"; roundRect(c, pad, y, w - pad * 2, hh, 16); c.fill(); c.restore();
+    const sx = pad + st.start * (w - pad * 2), ex = pad + st.end * (w - pad * 2);
+    c.fillStyle = lg(c, sx, ex, [rgba(C.primary, .12), rgba(C.grad[2], .14)]);
+    roundRect(c, sx, y, ex - sx, hh, 12); c.fill();
+    const cols = Math.min(peaks.length, Math.round((w - pad * 2) / 2.2));
+    waveTwoPass(c, sx, ex, w - 0, cx, hh, cols,
+      ["#D8C6F5", "#EADDFF", "#FAD6E8"], LIGHT, true, 0.7);
+    [[sx, true], [ex, false]].forEach(([x]) => {
+      c.save(); c.shadowColor = rgba(C.grad[2], .5); c.shadowBlur = 8;
+      gradHandle(c, x - 9, cx - 9, 18, 18, LIGHT, true); c.restore();
+      c.fillStyle = "#fff"; c.beginPath(); c.arc(x, cx, 3.6, 0, Math.PI * 2); c.fill();
+    });
+    if (st.pos >= st.start && st.pos <= st.end) {
+      const px = pad + st.pos * (w - pad * 2); c.strokeStyle = C.tertiary; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(px, y); c.lineTo(px, y + hh); c.stroke();
+    }
+    c.fillStyle = C.onSurfaceVariant; c.font = "10px ui-monospace, monospace";
+    c.textAlign = "left"; c.fillText(fmt1(st.start * duration), pad, H - 4);
+    c.textAlign = "right"; c.fillText(fmt1(st.end * duration), w - pad, H - 4);
+  }
+});
+
+/* 4. 深色 Playlist（类 FL Studio 布局） */
+STYLES.push({
+  key: "playlist", name: "流光音轨", tag: "深色 Playlist · 渐变条",
+  desc: "深紫底 + 渐变标题栏 + 渐变波形 + 渐变把手，DAW 音轨感。",
+  shell: { bg: "linear-gradient(180deg,#171021 0%,#241436 100%)", bar: "#120C1C", fg: C.darkOn, accent: "#D8B4FE" },
+  st: { start: 0.07, end: 0.93, pos: 0.07, h: 200 },
+  draw(c, w, H, st) {
+    const top = 22, hh = H - top - 20, cx = top + hh / 2;
+    c.fillStyle = lgv(c, 0, H, ["#171021", "#241436"]); c.fillRect(0, 0, w, H);
+    c.strokeStyle = "rgba(216,180,254,.06)";
+    for (let s = 0; s <= duration; s += 1) { const x = s / duration * w; c.beginPath(); c.moveTo(x, top); c.lineTo(x, top + hh); c.stroke(); }
+    c.strokeStyle = "rgba(216,180,254,.14)";
+    for (let s = 0; s <= duration; s += 4) { const x = s / duration * w; c.beginPath(); c.moveTo(x, top); c.lineTo(x, top + hh); c.stroke(); }
+    c.fillStyle = lgv(c, 0, top, ["#2a1a3d", "#1d1230"]); c.fillRect(0, 0, w, top);
+    c.fillStyle = lg(c, 0, w, DARK); c.fillRect(0, 0, w, 3);
+    c.fillStyle = lg(c, 0, w, DARK); c.font = "bold 10px ui-sans-serif, sans-serif"; c.textAlign = "left";
+    c.fillText("AUDIO_CLIP_01", 8, 15);
+    const sx = st.start * w, ex = st.end * w;
+    waveTwoPass(c, sx, ex, w, cx, hh, Math.min(peaks.length, Math.round(w / 1.4)),
+      ["#6a54a0", "#8d7bc0", "#c08fae"], DARK, false, 0.68);
+    c.fillStyle = "rgba(10,5,18,.5)"; c.fillRect(0, top, sx, hh); c.fillRect(ex, top, w - ex, hh);
+    c.strokeStyle = lg(c, sx, ex, DARK); c.lineWidth = 1.6;
+    c.beginPath(); c.moveTo(sx, top); c.lineTo(sx, top + hh); c.moveTo(ex, top); c.lineTo(ex, top + hh); c.stroke();
+    gradHandle(c, sx - 3.5, top, 7, hh, DARK, true);
+    gradHandle(c, ex - 3.5, top, 7, hh, DARK, true);
+    if (st.pos >= st.start && st.pos <= st.end) {
+      const px = st.pos * w; c.strokeStyle = C.grad[2]; c.lineWidth = 1.6;
+      c.beginPath(); c.moveTo(px, top); c.lineTo(px, top + hh); c.stroke();
+    }
+    c.fillStyle = C.darkVariant; c.font = "10px ui-monospace, monospace";
+    c.textAlign = "left"; c.fillText(fmt(st.start * duration), 6, H - 4);
+    c.textAlign = "right"; c.fillText(fmt(st.end * duration), w - 6, H - 4);
+  }
+});
+
+/* 5. 双层波形（类 Logic Pro 布局） */
+STYLES.push({
+  key: "studio", name: "流光录音棚", tag: "双层波形 · 渐变灰紫",
+  desc: "灰紫底 + 渐变双层(峰值+RMS)波形 + 细网格，录音棚质感。",
+  shell: { bg: "linear-gradient(180deg,#221C2E 0%,#2E2640 100%)", bar: "#1B1626", fg: "#E7E1F5", accent: "#C4B5FD" },
+  st: { start: 0.06, end: 0.94, pos: 0.06, h: 200 },
+  draw(c, w, H, st) {
+    const top = 20, hh = H - top - 18, cx = top + hh / 2;
+    c.fillStyle = lgv(c, 0, H, ["#241E31", "#2E2640"]); c.fillRect(0, 0, w, H);
+    c.fillStyle = lgv(c, 0, top, ["#211B2C", "#1B1626"]); c.fillRect(0, 0, w, top);
+    c.fillStyle = C.darkVariant; c.font = "9px ui-monospace, monospace";
+    for (let s = 0; s <= duration; s += 2) { const x = s / duration * w; c.fillRect(x, top - 4, 1, 4); c.textAlign = "left"; c.fillText(fmt(s), x + 3, 10); }
+    c.strokeStyle = "rgba(196,181,253,.06)";
+    for (let s = 0; s <= duration; s += 0.5) { const x = s / duration * w; c.beginPath(); c.moveTo(x, top); c.lineTo(x, top + hh); c.stroke(); }
+    const sx = st.start * w, ex = st.end * w;
+    const cols = Math.min(peaks.length, Math.round(w / 1.6));
+    const layer = (k, alpha) => {
+      c.save(); c.globalAlpha = alpha;
+      for (let i = 0; i < cols; i++) {
+        const f = i / cols, x = f * w, a = pk(peaks, f), bh = Math.max(1, a * hh * k);
+        c.fillStyle = lg(c, 0, w, DARK);
+        c.fillRect(x, cx - bh / 2, Math.max(1, (w / cols) * 0.7), bh);
+      }
+      c.restore();
+    };
+    layer(0.94, 0.24); layer(0.52, 0.95);
+    c.save(); c.beginPath(); c.rect(sx, top, ex - sx, hh); c.clip(); layer(0.94, 0.55); layer(0.52, 1); c.restore();
+    c.fillStyle = "rgba(10,6,18,.35)"; c.fillRect(0, top, sx, hh); c.fillRect(ex, top, w - ex, hh);
+    c.strokeStyle = lg(c, sx, ex, DARK); c.lineWidth = 1.4;
+    c.beginPath(); c.moveTo(sx, top); c.lineTo(sx, top + hh); c.moveTo(ex, top); c.lineTo(ex, top + hh); c.stroke();
+    gradHandle(c, sx - 2.5, top, 5, hh, DARK, true);
+    gradHandle(c, ex - 2.5, top, 5, hh, DARK, true);
+    if (st.pos >= st.start && st.pos <= st.end) {
+      const px = st.pos * w; c.strokeStyle = C.darkGrad[2]; c.lineWidth = 1.5;
+      c.beginPath(); c.moveTo(px, top); c.lineTo(px, top + hh); c.stroke();
+    }
+  }
+});
+
+/* 6. 移动端圆角柱（类剪映 布局） */
+STYLES.push({
+  key: "mobile", name: "流光移动端", tag: "移动端 · 渐变振幅柱",
+  desc: "白色片段卡 + 随振幅在渐变上取色的粗圆角柱 + 渐变剪辑手柄，最贴近手机 App。",
+  shell: { bg: "linear-gradient(180deg,#FFFFFF 0%,#F3EBFF 100%)", bar: "#FFFFFF", fg: C.onSurface, accent: C.primary },
+  st: { start: 0.05, end: 0.95, pos: 0.05, h: 180 },
+  draw(c, w, H, st) {
+    const pad = 14, y = 16, hh = H - 34, cx = y + hh / 2;
+    c.fillStyle = lgv(c, 0, H, ["#FBF9FF", "#F1E9FF"]); c.fillRect(0, 0, w, H);
+    c.save(); c.shadowColor = rgba(C.primary, .18); c.shadowBlur = 16; c.shadowOffsetY = 4;
+    c.fillStyle = "#fff"; roundRect(c, pad, y, w - pad * 2, hh, 14); c.fill(); c.restore();
+    c.fillStyle = "#C4BAD8"; c.font = "8px ui-monospace, monospace"; c.textAlign = "center";
+    for (let s = 0; s <= duration; s += 2) {
+      const x = pad + s / duration * (w - pad * 2);
+      c.fillRect(x, y + 6, 1, 3); c.fillText(fmt(s), x, y + 16);
+    }
+    const sx = pad + st.start * (w - pad * 2), ex = pad + st.end * (w - pad * 2);
+    const bandTop = y + 22, bandH = hh - 34;
+    c.fillStyle = lg(c, sx, ex, [rgba(C.primary, .10), rgba(C.grad[2], .14)]);
+    c.fillRect(sx, y + 18, ex - sx, bandH + 12);
+    c.fillStyle = "rgba(251,249,255,.72)"; c.fillRect(pad, y + 18, sx - pad, bandH + 12); c.fillRect(ex, y + 18, w - pad - ex, bandH + 12);
+    const cols = Math.min(peaks.length, Math.round((w - pad * 2) / 4));
+    const cw = (w - pad * 2) / cols;
+    const gGrad = lg(c, pad, w - pad, LIGHT);
+    for (let i = 0; i < cols; i++) {
+      const f = i / cols, x = pad + f * (w - pad * 2), a = pk(peaks, f);
+      const bh = Math.max(3, a * bandH * 0.92);
+      c.fillStyle = gGrad;
+      c.save(); c.globalAlpha = 0.55 + 0.45 * a;
+      roundRect(c, x - cw * 0.32, cx - bh / 2, cw * 0.64, bh, cw * 0.32); c.fill(); c.restore();
+    }
+    gradHandle(c, sx - 3, y + 18, 12, bandH + 12, LIGHT, true);
+    gradHandle(c, ex - 9, y + 18, 12, bandH + 12, LIGHT, true);
+    c.fillStyle = "rgba(255,255,255,.85)";
+    c.fillRect(sx + 1, y + 26, 2, bandH - 4); c.fillRect(ex - 3, y + 26, 2, bandH - 4);
+    if (st.pos >= st.start && st.pos <= st.end) {
+      const px = pad + st.pos * (w - pad * 2); c.strokeStyle = C.tertiary; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(px, y + 18); c.lineTo(px, y + 18 + bandH + 12); c.stroke();
+    }
+    c.fillStyle = C.onSurfaceVariant; c.font = "10px ui-monospace, monospace";
+    c.textAlign = "left"; c.fillText(fmt1(st.start * duration), pad, H - 4);
+    c.textAlign = "right"; c.fillText(fmt1(st.end * duration), w - pad, H - 4);
+  }
+});
+
+/* ============================================================
+   DOM + 交互
+   ============================================================ */
+function makePhone(style, idx) {
+  const phone = document.createElement("div");
+  phone.className = "phone";
+  phone.style.background = style.shell.bg;
+  phone.style.color = style.shell.fg;
+  const gradBtn = "linear-gradient(90deg,#8B5CF6,#D8B4FE,#FFAFCC)";
+  phone.innerHTML =
+    '<div class="statusbar" style="background:' + style.shell.bar + '"><span>9:41</span><span>●●●</span></div>' +
+    '<div class="appbar"><span class="back">‹</span><span class="title">时间线剪辑</span>' +
+      '<span class="badge" style="background:' + gradBtn + '">#' + (idx + 1) + ' ' + style.name + '</span>' +
+      '<span class="save" style="color:' + style.shell.accent + '">完成</span></div>' +
+    '<div class="stage">' +
+      '<div class="stage-label">' + style.tag + '</div>' +
+      '<div class="canvas-wrap"><canvas></canvas></div>' +
+      '<div class="meta-row"><span class="cur">0:00.0</span><span class="tot">/ ' + fmt(duration) + '</span>' +
+        '<button class="play" style="background:' + gradBtn + '">▶ 播放</button></div>' +
+      '<div class="kbd">' + style.desc + '<br>拖动左右手柄改起点/终点 · 点击波形中间定位播放头</div>' +
+    '</div>' +
+    '<div class="foot">样式 ' + (idx + 1) + ' / 6 · ' + style.name + '</div>' +
+    '<div class="homebar"><i></i></div>';
+
+  const canvas = phone.querySelector("canvas");
+  const playBtn = phone.querySelector(".play");
+  const cur = phone.querySelector(".cur");
+  style.setButton = () => { playBtn.textContent = (active === style) ? "❚❚ 暂停" : "▶ 播放"; };
+  style.tickUI = () => { cur.textContent = fmt1(style.st.pos * duration); style.setButton(); };
+
+  function redrawResize() {
+    style.W = canvas.clientWidth || canvas.parentElement.clientWidth || 362;
+    style.ctx = fit(canvas, style.st.h);
+    draw(style);
+  }
+  requestAnimationFrame(redrawResize);
+  window.addEventListener("resize", redrawResize);
+
+  let mode = null;
+  const localX = (e) => {
+    const r = canvas.getBoundingClientRect();
+    return Math.max(0, Math.min(style.W, e.clientX - r.left));
+  };
+  canvas.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); canvas.setPointerCapture(e.pointerId);
+    const x = localX(e), xs = style.st.start * style.W, xe = style.st.end * style.W;
+    if (Math.abs(x - xs) <= 18) mode = "L";
+    else if (Math.abs(x - xe) <= 18) mode = "R";
+    else mode = "pos";
+    move(x);
+  });
+  canvas.addEventListener("pointermove", (e) => { if (mode) { e.preventDefault(); move(localX(e)); } });
+  const endDrag = () => {
+    if (mode === "pos" && playing && active === style) seekTo(style);
+    mode = null;
+  };
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
+
+  function move(x) {
+    const f = x / style.W;
+    if (mode === "L") style.st.start = Math.max(0, Math.min(style.st.end - 0.05, f));
+    else if (mode === "R") style.st.end = Math.min(1, Math.max(style.st.start + 0.05, f));
+    else style.st.pos = Math.max(style.st.start, Math.min(style.st.end, f));
+    draw(style);
+  }
+
+  playBtn.addEventListener("click", () => toggle(style));
+  return phone;
+}
+
+function seekTo(style) { stopAll(); toggle(style); }
+
+setInterval(() => STYLES.forEach((s) => s.tickUI && s.tickUI()), 100);
+
+initAudio();
+STYLES.forEach((s) => { s.drawRaw = s.draw; });
+const grid = document.getElementById("grid");
+STYLES.forEach((s, i) => grid.appendChild(makePhone(s, i)));
+</script>
+</body>
+</html>

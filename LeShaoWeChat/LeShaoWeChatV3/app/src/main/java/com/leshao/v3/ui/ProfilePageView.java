@@ -14,7 +14,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
-import com.leshao.v3.service.ActivationManager;
 import com.leshao.v3.ui.widgets.M3Page;
 import com.leshao.v3.ui.widgets.ModernButton;
 
@@ -135,16 +134,6 @@ public class ProfilePageView {
         }
 
         root.addView(infoCard);
-
-        // 管理员配置入口 (仅管理员可见)
-        String currentWxid = MainActivity.getUserWxid();
-        if (currentWxid != null && ActivationManager.isAdmin(currentWxid)) {
-            root.addView(M3Page.section(ctx, "管理员工具"));
-            LinearLayout adminCard = M3Page.card(ctx);
-            adminCard.addView(M3Page.clickRow(ctx, "🛡", "模块黑名单管理", "管理模块功能黑名单用户",
-                    () -> SubPageActivity.open(parentAct, "管理员工具", 98)));
-            root.addView(adminCard);
-        }
 
         return M3Page.scroll(ctx, root);
     }

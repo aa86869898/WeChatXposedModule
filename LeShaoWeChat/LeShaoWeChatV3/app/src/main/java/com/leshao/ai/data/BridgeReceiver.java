@@ -3,6 +3,9 @@ package com.leshao.ai.data;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Binder;
+import android.os.Build;
+import android.os.Process;
 import android.util.Log;
 
 /**
@@ -33,6 +36,11 @@ public class BridgeReceiver extends BroadcastReceiver {
         if (action == null) {
             return;
         }
+        if (!isCallerTrusted(context)) {
+            Log.w(TAG, "忽略非白名单来源广播 action=" + action
+                    + " uid=" + Binder.getCallingUid());
+            return;
+        }
         try {
             if (AiDataProvider.ACTION_REQUEST_CONFIG.equals(action)) {
                 AiDataProvider.pushRefresh(context);
@@ -45,5 +53,24 @@ public class BridgeReceiver extends BroadcastReceiver {
         } catch (Throwable t) {
             Log.w(TAG, "onReceive 失败: " + t);
         }
+    }
+
+    /**
+     * 校验广播发送方是否受信任（宿主微信 / 模块自身 / 本进程）。
+     *
+     * <p>API 34+ 使用 {@link BroadcastReceiver#getSentFromUid()} 获取真实发送方 UID；
+     * 低版本系统无法从普通广播中解析发送方，退化为 {@link Binder#getCallingUid()}。
+     */
+    private boolean isCallerTrusted(Context context) {
+        int uid;
+        if (Build.VERSION.SDK_INT >= 34) {
+            uid = getSentFromUid();
+            if (uid == Process.INVALID_UID) {
+                uid = Binder.getCallingUid();
+            }
+        } else {
+            uid = Binder.getCallingUid();
+        }
+        return AiDataProvider.isTrustedUid(context, uid);
     }
 }

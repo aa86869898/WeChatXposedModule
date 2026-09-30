@@ -1,5 +1,6 @@
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Properties
 import java.util.TimeZone
 
 plugins {
@@ -10,6 +11,24 @@ val moduleBuildTime: String = SimpleDateFormat("yyyy-MM-dd HH:mm").apply {
     timeZone = TimeZone.getTimeZone("Asia/Shanghai")
 }.format(Date())
 
+// 签名口令从 local.properties 或同名环境变量读取，源码内不再保留明文。
+// local.properties 已被根 .gitignore 忽略，可用键：
+//   LESHAO_STORE_PASSWORD / LESHAO_KEY_PASSWORD / LESHAO_KEY_ALIAS
+val signingProps: Properties = Properties().apply {
+    val localFile = rootProject.file("local.properties")
+    if (localFile.exists()) {
+        localFile.inputStream().use { load(it) }
+    }
+}
+
+fun signingSecret(name: String): String =
+    System.getenv(name)
+        ?: signingProps.getProperty(name)
+        ?: error("缺少签名口令属性 $name：请写入 local.properties 或设置同名环境变量")
+
+fun signingValue(name: String, fallback: String): String =
+    System.getenv(name) ?: signingProps.getProperty(name) ?: fallback
+
 android {
     namespace = "com.leshao.v3"
     compileSdk = 36
@@ -19,8 +38,8 @@ android {
         applicationId = "com.leshao.v3"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1100
-        versionName = "3.15.40-v1100"
+        versionCode = 30065
+        versionName = "3.0.65"
         buildConfigField("String", "BUILD_TIME", "\"$moduleBuildTime\"")
     }
 
@@ -31,9 +50,9 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file("release.keystore")
-            storePassword = "leshao2024"
-            keyAlias = "leshao"
-            keyPassword = "leshao2024"
+            storePassword = signingSecret("LESHAO_STORE_PASSWORD")
+            keyAlias = signingValue("LESHAO_KEY_ALIAS", "leshao")
+            keyPassword = signingSecret("LESHAO_KEY_PASSWORD")
             enableV1Signing = true
             enableV2Signing = true
             enableV3Signing = true

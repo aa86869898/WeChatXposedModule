@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>乐少 · 圆形样式选型（浅色/暗色）</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#0b0712;color:#EDE7F6;font-family:-apple-system,"Segoe UI","PingFang SC",sans-serif;padding:24px 16px 90px}
+  h1{font-size:21px;margin:0 0 6px}
+  .sub{color:#a99fc4;font-size:13px;line-height:1.7;margin-bottom:16px}
+  .sticky{position:sticky;top:0;z-index:30;background:rgba(11,7,18,.86);backdrop-filter:blur(10px);
+    border:1px solid #2e2246;border-radius:14px;padding:12px 16px;margin-bottom:20px;font-size:13px}
+  .sticky b{color:#C9A9FF}
+  h2{font-size:16px;margin:30px 0 14px;display:flex;gap:10px;align-items:center}
+  h2:before{content:"";width:6px;height:18px;border-radius:3px;background:linear-gradient(180deg,#8B5CF6,#D946EF)}
+  .row{background:linear-gradient(180deg,#181026,#120c1b);border:1px solid #2c2045;border-radius:18px;
+    padding:14px;margin-bottom:16px;transition:.2s}
+  .row.picked{border-color:#C9A9FF;box-shadow:0 0 0 2px rgba(201,169,255,.3),0 14px 34px rgba(139,92,246,.22)}
+  .rowhead{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+  .rowhead .name{font-size:14px;font-weight:700}
+  .rowhead .desc{font-size:11.5px;color:#a99fc4;margin-top:2px;line-height:1.5}
+  .pick{border:1px solid #C9A9FF;color:#C9A9FF;background:transparent;border-radius:999px;padding:6px 16px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .row.picked .pick{background:#C9A9FF;color:#2A1550;font-weight:700}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:520px){.pair{grid-template-columns:1fr}}
+  .panel{border-radius:16px;min-height:200px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+  .panel.light{background:#eef0f7;color:#2a2340;
+    --surface:#ffffff;--text:#2a2340;--muted:#7b7392;--track:#e1ddee;--primary:#7C3AED;--primary2:#C026D3;
+    --g1:#8B5CF6;--g2:#D946EF;--g3:#FF6FB0;--g4:#A78BFA;--soft:#f3ecff}
+  .panel.dark{background:#15101f;color:#EDE7F6;
+    --surface:#221a34;--text:#EDE7F6;--muted:#a99fc4;--track:#372a54;--primary:#C9A9FF;--primary2:#F0ABFC;
+    --g1:#8B5CF6;--g2:#A78BFA;--g3:#D946EF;--g4:#FF6FB0;--soft:#2a1f42}
+  .tag{position:absolute;left:10px;top:8px;font-size:10px;letter-spacing:.05em;color:var(--muted);text-transform:uppercase}
+  .progroot{position:relative;display:grid;place-items:center;width:150px;height:150px}
+  .num{position:absolute;font-weight:800;color:var(--primary);font-size:20px}
+  .num.pill{top:auto;bottom:6px;font-size:13px;background:var(--soft);padding:2px 10px;border-radius:999px}
+  .head{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#fff;
+    box-shadow:0 0 10px var(--primary),0 0 0 3px var(--primary);z-index:3;transition:left .1s linear,top .1s linear}
+  /* svg ring */
+  .rsvg{width:120px;height:120px;display:block}
+  .rsvg .trk{fill:none;stroke:var(--track);stroke-width:9}
+  .rsvg .prg{fill:none;stroke:var(--primary);stroke-width:9;stroke-linecap:round;stroke-dasharray:326.73;
+    stroke-dashoffset:calc(326.73 - 326.73 * var(--p,0) / 100);transform:rotate(-90deg);transform-origin:60px 60px;transition:stroke-dashoffset .12s linear}
+  .rsvg.grad .prg{stroke:url(#gradRing)}
+  .rsvg.thin .trk,.rsvg.thin .prg{stroke-width:5}
+  .rsvg.thick .trk,.rsvg.thick .prg{stroke-width:14}
+  /* L3 double ring */
+  .pulse{position:absolute;inset:14px;border:2px solid var(--primary);border-radius:50%;opacity:.5;animation:pl 1.8s ease-out infinite}
+  @keyframes pl{0%{transform:scale(.85);opacity:.55}100%{transform:scale(1.12);opacity:0}}
+  /* L4 ticks */
+  .ticks{position:absolute;inset:0}
+  .ticks i{position:absolute;left:50%;top:50%;width:3px;height:10px;margin:-5px 0 0 -1.5px;background:var(--track);border-radius:2px;transform-origin:center 60px}
+  .ticks i.on{background:var(--primary)}
+  /* L5 dots orbit */
+  .orbit i{position:absolute;left:50%;top:50%;width:8px;height:8px;margin:-4px;border-radius:50%;background:var(--track);transition:.2s}
+  .orbit i.on{background:var(--primary);box-shadow:0 0 10px var(--primary)}
+  /* L6 gear spinner */
+  .gear{width:44px;height:44px;color:var(--primary);animation:spin 2.4s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* L7/V7 liquid */
+  .liquid{width:118px;height:118px;border-radius:50%;background:var(--soft);border:6px solid var(--track);position:relative;overflow:hidden}
+  .liquid .water{position:absolute;left:-25%;right:-25%;bottom:0;height:0;background:linear-gradient(180deg,var(--g1),var(--g2));animation:slosh 3s ease-in-out infinite}
+  .liquid .wave{position:absolute;left:-50%;width:200%;height:16px;top:-10px;border-radius:45%;background:var(--surface);opacity:.35}
+  @keyframes slosh{0%,100%{border-radius:40% 45% 42% 48%}50%{border-radius:48% 40% 47% 42%}}
+  .liquid .lv{position:absolute;inset:0;display:grid;place-items:center;font-weight:800;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.35);z-index:3}
+  /* L8 glow */
+  .glowwrap{position:relative;filter:drop-shadow(0 0 8px var(--primary))}
+  .glowwrap:after{content:"";position:absolute;inset:-14px;border-radius:50%;box-shadow:0 0 34px 6px var(--primary);opacity:.28;animation:gp 2s ease-in-out infinite}
+  @keyframes gp{50%{opacity:.5}}
+  /* L9 dashed outer */
+  .dashouter{position:absolute;inset:6px;border:3px dashed var(--primary);border-radius:50%;opacity:.6;animation:spin 6s linear infinite}
+  /* L10 bevel */
+  .bevel .trk{stroke:var(--track)}
+  .bevel .prg{filter:drop-shadow(0 1px 1px rgba(0,0,0,.25))}
+  /* V1 radial bars */
+  .bars i{position:absolute;left:50%;top:50%;width:4px;height:14px;margin:-7px -2px;border-radius:2px;background:var(--track);transform-origin:center 62px;transition:.12s}
+  .bars i.on{background:linear-gradient(180deg,var(--g3),var(--g1))}
+  /* V2 vinyl */
+  .vinyl{width:122px;height:122px;border-radius:50%;background:radial-gradient(circle at 50% 50%,#3b3448 0 26%,#221d2e 27% 60%,#15111d 61%);position:relative;display:grid;place-items:center;box-shadow:inset 0 0 0 6px var(--track)}
+  .vinyl .label{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--g1),var(--g3));display:grid;place-items:center;color:#fff;font-size:12px;font-weight:800;animation:spin 2.4s linear infinite}
+  .vinyl .arc{position:absolute;inset:0;border-radius:50%;background:conic-gradient(var(--primary) var(--deg,0deg),transparent 0);
+    -webkit-mask:radial-gradient(circle,transparent 0 46%,#000 47%);mask:radial-gradient(circle,transparent 0 46%,#000 47%)}
+  /* V4 spectrum */
+  .spec i{position:absolute;left:50%;top:50%;width:3px;margin-left:-1.5px;border-radius:2px;background:var(--track);transform-origin:center 60px;transition:.1s}
+  .spec i.on{background:linear-gradient(180deg,var(--g4),var(--g1))}
+  /* V8 ripple */
+  .ripple i{position:absolute;inset:0;border:2px solid var(--primary);border-radius:50%;opacity:0;animation:rp 2.4s ease-out infinite}
+  .ripple i:nth-child(2){animation-delay:.8s}.ripple i:nth-child(3){animation-delay:1.6s}
+  @keyframes rp{0%{transform:scale(.6);opacity:.5}100%{transform:scale(1.05);opacity:0}}
+  /* V9 arc segments (conic) */
+  .arcseg{position:absolute;inset:0;border-radius:50%;
+    -webkit-mask:repeating-conic-gradient(from -90deg,#000 0 26deg,transparent 26deg 30deg),
+                 radial-gradient(circle,transparent 0 44%,#000 45%);
+    -webkit-mask-composite:source-in;mask-composite:intersect;
+    background:conic-gradient(from -90deg,var(--primary) var(--deg,0deg),var(--track) 0)}
+  /* generic center icon */
+  .ic{width:46px;height:46px;color:var(--primary)}
+  .bounce{animation:bnc 1.1s ease-in-out infinite}
+  @keyframes bnc{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+  .badge{position:absolute;left:10px;top:8px;font-size:10px;color:var(--muted)}
+</style>
+</head>
+<body>
+<h1>乐少 · 圆形样式选型（浅色 / 暗色）</h1>
+<div class="sub">
+  每组样式同时给出「浅色模式（左）」与「暗色模式（右）」两个预览，均为动态。<br>
+  组一：DexKit 加载窗口 · 圆形风格 ×10；组二：音频转语音「转换中」· 圆形进度 ×10。<br>
+  点「选择」锁定，或把编号发我（如「L3 + V6」）。
+</div>
+<div class="sticky">已选：<b id="pickedText">尚未选择</b></div>
+
+<svg width="0" height="0" style="position:absolute"><defs>
+  <linearGradient id="gradRing" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#8B5CF6"/><stop offset=".5" stop-color="#D946EF"/><stop offset="1" stop-color="#FF6FB0"/>
+  </linearGradient>
+</defs></svg>
+
+<h2>组一 · DexKit 加载窗口（圆形）</h2>
+<div id="loadRows"></div>
+
+<h2>组二 · 音频转语音 转换进度（圆形）</h2>
+<div id="convRows"></div>
+
+<script>
+const GEAR = '<svg class="ic gear" viewBox="0 0 24 24" fill="currentColor"><path d="M19.4 13c.04-.32.06-.66.06-1s-.02-.68-.07-1l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.73-1l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.62.25-1.2.59-1.73 1l-2.39-.96a.5.5 0 0 0-.6.22L2.3 8.78a.5.5 0 0 0 .12.64L4.45 11c-.05.32-.07.66-.07 1s.02.68.07 1l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.4.3.6.22l2.39-.96c.53.41 1.11.75 1.73 1l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.62-.25 1.2-.59 1.73-1l2.39.96c.2.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64L19.4 13zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg>';
+const NOTE = '<svg class="ic bounce" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>';
+const WAVEIC = '<svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9h2v6H3V9zm4-3h2v12H7V6zm4-3h2v18h-2V3zm4 3h2v12h-2V6zm4 3h2v6h-2V9z"/></svg>';
+
+function ring(cls, center){
+  const numCls = center ? 'num pill' : 'num';
+  return '<div class="progroot"><svg class="rsvg '+cls+'" viewBox="0 0 120 120">'
+    + '<circle class="trk" cx="60" cy="60" r="52"/><circle class="prg" cx="60" cy="60" r="52"/></svg>'
+    + '<div class="'+numCls+'"></div>'+(center||'')+'</div>';
+}
+function numOnly(){return '<div class="progroot"><div class="num" style="font-size:30px"></div></div>';}
+
+const load = [
+ {id:'L1',name:'单色圆环',desc:'经典单色描边圆环，中心大字百分比，最通用',tpl:()=>ring('')},
+ {id:'L2',name:'渐变圆环',desc:'品牌多色渐变描边，视觉更活跃',tpl:()=>ring('grad')},
+ {id:'L3',name:'同心脉冲环',desc:'主进度环外再叠一圈脉冲光环',tpl:()=>'<div class="progroot"><div class="pulse"></div>'+ring('')+'</div>'},
+ {id:'L4',name:'刻度环',desc:'48 格刻度按进度点亮，仪表盘感',tpl:()=>'<div class="progroot"><div class="ticks" data-build="ticks48"></div><div class="num"></div></div>'},
+ {id:'L5',name:'圆点轨道',desc:'24 颗圆点环绕，已过点高亮发光',tpl:()=>'<div class="progroot"><div class="orbit" data-build="dots24"></div><div class="num"></div></div>'},
+ {id:'L6',name:'齿轮中环',desc:'环中心旋转齿轮，科技/处理中语义',tpl:()=>ring('',GEAR)},
+ {id:'L7',name:'水位填充',desc:'液面上升填充圆，中心反白百分比',tpl:()=>'<div class="progroot"><div class="liquid"><div class="water"></div><div class="wave"></div><div class="lv"></div></div></div>'},
+ {id:'L8',name:'光晕弧环',desc:'细弧 + 柔和外发光呼吸，轻量高级',tpl:()=>'<div class="progroot"><div class="glowwrap">'+ring('thin')+'</div></div>'},
+ {id:'L9',name:'虚线外旋环',desc:'外圈虚线旋转 + 内圈实心进度',tpl:()=>'<div class="progroot"><div class="dashouter"></div>'+ring('')+'</div>'},
+ {id:'L10',name:'立体厚环',desc:'加粗圆环带立体投影，厚重存在感',tpl:()=>ring('thick bevel')},
+];
+
+const conv = [
+ {id:'V1',name:'径向声波',desc:'40 根径向声波条随进/音量跳动',tpl:()=>'<div class="progroot"><div class="bars" data-build="bars36"></div><div class="num"></div></div>'},
+ {id:'V2',name:'黑胶唱片',desc:'唱片外缘进度弧 + 中心旋转标签',tpl:()=>'<div class="progroot"><div class="vinyl"><div class="arc"></div><div class="label">0%</div></div></div>'},
+ {id:'V3',name:'环绕音符',desc:'进度环 + 中心跳动音符，音频语义强',tpl:()=>ring('grad',NOTE)},
+ {id:'V4',name:'环形频谱',desc:'一圈频谱柱高低起伏，已过部分点亮',tpl:()=>'<div class="progroot"><div class="spec" data-build="spec40"></div><div class="num"></div></div>'},
+ {id:'V5',name:'双色进度环',desc:'主色 + 次色双弧过渡，层次分明',tpl:()=>'<div class="progroot"><svg class="rsvg grad thick" viewBox="0 0 120 120"><circle class="trk" cx="60" cy="60" r="52"/><circle class="prg" cx="60" cy="60" r="52"/></svg><div class="num"></div></div>'},
+ {id:'V6',name:'圆点末端环',desc:'渐变环末端带发光圆点指示头',tpl:()=>'<div class="progroot"><svg class="rsvg grad" viewBox="0 0 120 120"><circle class="trk" cx="60" cy="60" r="52"/><circle class="prg" cx="60" cy="60" r="52"/></svg><div class="head"></div><div class="num"></div></div>'},
+ {id:'V7',name:'液态波动圆',desc:'液态水位 + 晃动液面，生动',tpl:()=>'<div class="progroot"><div class="liquid"><div class="water"></div><div class="wave"></div><div class="lv"></div></div></div>'},
+ {id:'V8',name:'同心涟漪',desc:'中心数字 + 向外扩散的同心涟漪',tpl:()=>'<div class="progroot"><div class="ripple"><i></i><i></i><i></i></div>'+numOnly()+'</div>'},
+ {id:'V9',name:'分段圆弧',desc:'圆周分成 12 段逐段填充，段落感强',tpl:()=>'<div class="progroot"><div class="arcseg"></div><div class="num"></div></div>'},
+ {id:'V10',name:'渐变光弧',desc:'发光渐变弧 + 中心音频图标，最醒目',tpl:()=>'<div class="progroot"><div class="glowwrap">'+ring('grad',WAVEIC)+'</div></div>'},
+];
+
+function rowHTML(group, d){
+  return '<div class="row" data-group="'+group+'" data-id="'+d.id+'">'
+   +'<div class="rowhead"><div><div class="name">'+d.id+' · '+d.name+'</div><div class="desc">'+d.desc+'</div></div>'
+   +'<button class="pick">选择</button></div>'
+   +'<div class="pair">'
+   +'<div class="panel light"><span class="tag">浅色模式</span>'+d.tpl()+'</div>'
+   +'<div class="panel dark"><span class="tag">暗色模式</span>'+d.tpl()+'</div>'
+   +'</div></div>';
+}
+function render(container, group, list){
+  container.innerHTML = list.map(d=>rowHTML(group,d)).join('');
+}
+render(document.getElementById('loadRows'),'load',load);
+render(document.getElementById('convRows'),'conv',conv);
+
+// ---- build repetitive elements ----
+document.querySelectorAll('[data-build="ticks48"]').forEach(el=>{
+  let h=''; for(let i=0;i<48;i++) h+='<i data-i="'+i+'" data-n="48" style="transform:rotate('+(i*7.5)+'deg) translateY(-56px)"></i>';
+  el.innerHTML=h;
+});
+document.querySelectorAll('[data-build="dots24"]').forEach(el=>{
+  let h=''; for(let i=0;i<24;i++){const a=i/24*Math.PI*2;const x=Math.sin(a)*56;const y=-Math.cos(a)*56;
+    h+='<i data-i="'+i+'" data-n="24" style="left:calc(50% + '+x.toFixed(1)+'px);top:calc(50% + '+y.toFixed(1)+'px)"></i>';}
+  el.innerHTML=h;
+});
+document.querySelectorAll('[data-build="bars36"]').forEach(el=>{
+  let h=''; for(let i=0;i<36;i++) h+='<i data-i="'+i+'" data-n="36" style="transform:rotate('+(i*10)+'deg) translateY(-58px)"></i>';
+  el.innerHTML=h;
+});
+document.querySelectorAll('[data-build="spec40"]').forEach(el=>{
+  let h=''; for(let i=0;i<40;i++) h+='<i data-i="'+i+'" data-n="40" style="transform:rotate('+(i*9)+'deg) translateY(-56px)"></i>';
+  el.innerHTML=h;
+});
+
+// ---- animation driver ----
+const roots = [...document.querySelectorAll('.progroot')];
+roots.forEach((root,i)=>{
+  let p = (i*7)%100;
+  const water = root.querySelector('.water');
+  const lv = root.querySelector('.lv');
+  const num = root.querySelector('.num');
+  const vinylLabel = root.querySelector('.label');
+  const arc = root.querySelector('.arc');
+  const arcsegEl = root.querySelector('.arcseg');
+  const head = root.querySelector('.head');
+  const fills = [...root.querySelectorAll('[data-i]')];
+  setInterval(()=>{
+    p += 1.2; if(p>100) p=0;
+    root.style.setProperty('--deg',(p*3.6).toFixed(1)+'deg');
+    root.style.setProperty('--p',p.toFixed(1));
+    if(num) num.textContent=Math.round(p)+'%';
+    if(vinylLabel) vinylLabel.textContent=Math.round(p)+'%';
+    if(lv) lv.textContent=Math.round(p)+'%';
+    if(water) water.style.height=p+'%';
+    if(head){
+      const a=(p/100)*2*Math.PI - Math.PI/2;
+      head.style.left='calc(50% + '+(Math.cos(a)*52).toFixed(1)+'px)';
+      head.style.top='calc(50% + '+(Math.sin(a)*52).toFixed(1)+'px)';
+    }
+    fills.forEach(el=>{
+      const i=+el.dataset.i, n=+el.dataset.n;
+      const on = (i/n)*100 <= p;
+      el.classList.toggle('on',on);
+      if(el.parentElement.classList.contains('bars')||el.parentElement.classList.contains('spec')){
+        if(on) el.style.height=(10+Math.random()*22)+'px';
+      }
+    });
+  },50);
+});
+
+// ---- pick logic ----
+const picks={load:null,conv:null};
+const names={load:{},conv:{}};
+load.forEach(d=>names.load[d.id]=d.id+' '+d.name);
+conv.forEach(d=>names.conv[d.id]=d.id+' '+d.name);
+document.querySelectorAll('.row').forEach(row=>{
+  row.querySelector('.pick').addEventListener('click',()=>{
+    const g=row.dataset.group,id=row.dataset.id;
+    if(picks[g]===id){picks[g]=null;row.classList.remove('picked');}
+    else{picks[g]=id;document.querySelectorAll('.row[data-group="'+g+'"]').forEach(r=>r.classList.remove('picked'));row.classList.add('picked');}
+    const parts=[];
+    if(picks.load) parts.push('加载-'+names.load[picks.load]);
+    if(picks.conv) parts.push('转换-'+names.conv[picks.conv]);
+    document.getElementById('pickedText').textContent = parts.length?parts.join('  |  '):'尚未选择';
+  });
+});
+</script>
+</body>
+</html>

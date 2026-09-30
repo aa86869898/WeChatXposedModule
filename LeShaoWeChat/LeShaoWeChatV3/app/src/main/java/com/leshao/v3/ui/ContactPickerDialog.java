@@ -302,6 +302,7 @@ public class ContactPickerDialog {
 
         InsetsUtil.transparentWindow(dialog);
         dialog.show();
+        WindowLayer.track(dialog.getWindow());
     }
 
     private static ContactCard findCard(List<ContactCard> items, String wxid) {

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>乐少 · 第1版风格续作 第9轮（无玻璃·条内元素）</title>
+<style>
+  :root{
+    --bg:#0f0a17; --surface:#1b1428; --sc-low:#241a38; --sc-high:#33244f;
+    --primary:#C9A9FF; --primary-deep:#9F7BFF; --on-primary:#2A1550;
+    --g1:#8B5CF6; --g2:#A78BFA; --g3:#D946EF; --g4:#FF6FB0;
+    --on-surface:#EDE7F6; --on-var:#B8AECE; --outline:#5b4d78;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 20% -10%,#2a1b45 0%,var(--bg) 55%);
+       color:var(--on-surface);font-family:-apple-system,"Segoe UI","PingFang SC",sans-serif;padding:28px 18px 80px}
+  h1{font-size:22px;margin:0 0 6px}
+  .sub{color:var(--on-var);font-size:13px;line-height:1.7;margin-bottom:18px}
+  .sticky{position:sticky;top:0;z-index:20;background:rgba(15,10,23,.92);border:1px solid #2e2246;border-radius:14px;padding:12px 16px;margin-bottom:22px}
+  .sticky b{color:var(--primary)}
+  h2{font-size:16px;margin:34px 0 14px;display:flex;align-items:center;gap:10px}
+  h2:before{content:"";width:6px;height:18px;border-radius:3px;background:linear-gradient(180deg,var(--g1),var(--g3))}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px}
+  .card{background:linear-gradient(180deg,#1c1430,#16101f);border:1px solid #2e2246;border-radius:18px;overflow:hidden;transition:.2s;position:relative}
+  .card.picked{border-color:var(--primary);box-shadow:0 0 0 2px rgba(201,169,255,.35),0 12px 30px rgba(139,92,246,.25)}
+  .card .demo{padding:24px 18px;min-height:238px;display:flex;align-items:center;justify-content:center;
+      background:radial-gradient(300px 160px at 50% 0%,rgba(139,92,246,.14),transparent 70%)}
+  .card .foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-top:1px solid #2a1f42}
+  .card .name{font-size:13px;font-weight:600}
+  .card .desc{font-size:11px;color:var(--on-var);margin-top:2px;line-height:1.5}
+  .pick{border:1px solid var(--primary);color:var(--primary);background:transparent;border-radius:999px;padding:6px 14px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .card.picked .pick{background:var(--primary);color:var(--on-primary);font-weight:700}
+  .phone,.cwrap{width:100%;max-width:300px;border-radius:24px;padding:20px 16px;background:var(--surface);
+      box-shadow:0 18px 40px rgba(0,0,0,.5),inset 0 0 0 1px #2e2246}
+  .stack{display:flex;flex-direction:column;gap:12px;align-items:center;text-align:center}
+  @keyframes flowmove{to{background-position:-200% 0}}
+  @keyframes patx{from{background-position:0 0}to{background-position:24px 0}}
+  @keyframes stripeMove{to{background-position:17px 0}}
+  @keyframes twinkle{50%{opacity:.3}}
+  @keyframes bubble{from{background-position:0 8px}to{background-position:0 -14px}}
+  @keyframes sheenpat{from{background-position:-70px 0}to{background-position:calc(100% + 70px) 0}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* ---- progress bar ---- */
+  .pbar{width:100%;height:16px;border-radius:999px;background:var(--sc-high);position:relative;overflow:hidden;
+        box-shadow:inset 0 1px 3px rgba(0,0,0,.45)}
+  .pbar.thick{height:22px}
+  .pbar.slim{height:10px}
+  .pbar>i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:inherit;overflow:hidden;
+        background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3),var(--g4),var(--g3),var(--g2),var(--g1));
+        background-size:200% 100%;animation:flowmove 1.8s linear infinite;box-shadow:0 0 14px rgba(217,70,239,.55)}
+  .fillpat{position:absolute;inset:0;border-radius:inherit;pointer-events:none}
+  .pat-dots{background-image:radial-gradient(rgba(255,255,255,.85) 1.5px,transparent 1.6px);background-size:12px 12px;animation:patx .9s linear infinite;opacity:.85}
+  .pat-stripe{background-image:repeating-linear-gradient(45deg,rgba(255,255,255,.3) 0 6px,transparent 6px 12px);animation:stripeMove .8s linear infinite}
+  .pat-chevron{background-image:repeating-linear-gradient(60deg,rgba(255,255,255,.5) 0 2px,transparent 2px 11px),repeating-linear-gradient(-60deg,rgba(255,255,255,.5) 0 2px,transparent 2px 11px);animation:patx 1.1s linear infinite}
+  .pat-sparkle{background-image:radial-gradient(rgba(255,255,255,.95) 1.3px,transparent 1.4px),radial-gradient(rgba(255,255,255,.6) 1px,transparent 1.1px);background-size:18px 18px,26px 26px;background-position:0 0,6px 9px;animation:twinkle 1.4s ease-in-out infinite}
+  .pat-bubbles{background-image:radial-gradient(circle at 5px 5px,rgba(255,255,255,.55) 2px,transparent 2.6px);background-size:20px 20px;animation:bubble 1.6s linear infinite}
+  .pat-dash{background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.65) 0 8px,transparent 8px 16px);animation:patx .7s linear infinite}
+  .pat-grid{background-image:radial-gradient(rgba(255,255,255,.6) 1px,transparent 1.1px);background-size:8px 8px;animation:patx .6s linear infinite}
+  .pat-wave{background-image:radial-gradient(7px 7px at 7px 100%,rgba(255,255,255,.45) 42%,transparent 46%);background-size:14px 11px;animation:patx 1s linear infinite}
+  .pat-sheen{background:linear-gradient(90deg,transparent,rgba(255,255,255,.95),transparent);background-size:70px 100%;background-repeat:no-repeat;animation:sheenpat 1.2s linear infinite}
+  .pat-confetti{background-image:radial-gradient(rgba(255,255,255,.9) 1.5px,transparent 1.6px),radial-gradient(rgba(255,240,170,.9) 1.3px,transparent 1.4px),radial-gradient(rgba(170,225,255,.9) 1.3px,transparent 1.4px);background-size:16px 16px,22px 22px,28px 28px;background-position:0 0,5px 9px,11px 4px;animation:patx 1.2s linear infinite}
+  .segbar{display:flex;gap:5px;width:100%}
+  .segbar i{flex:1;height:16px;border-radius:6px;background:var(--sc-high);position:relative;overflow:hidden;transition:.25s;box-shadow:inset 0 1px 3px rgba(0,0,0,.45)}
+  .segbar i.on{background:linear-gradient(90deg,var(--g1),var(--g3));background-size:200% 100%;animation:flowmove 1.8s linear infinite;box-shadow:0 0 12px rgba(139,92,246,.55)}
+  .segbar i.on:after{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.8) 1.3px,transparent 1.4px);background-size:12px 12px;animation:patx .9s linear infinite;opacity:.8}
+  /* percentage BELOW the bar */
+  .below{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.01em;
+        background:linear-gradient(90deg,var(--g2),var(--g4),var(--g2));background-size:200% 100%;
+        -webkit-background-clip:text;background-clip:text;color:transparent;animation:flowmove 2s linear infinite}
+  .below.sm{font-size:18px}
+  .below.lg{font-size:34px}
+  /* content */
+  .t1{font-size:15px;font-weight:700;color:var(--on-surface)}
+  .t2{font-size:11px;color:var(--on-var);line-height:1.5}
+  .icircle{width:50px;height:50px;border-radius:50%;display:grid;place-items:center;font-size:22px;color:#fff;
+        background:linear-gradient(135deg,var(--g1),var(--g3));box-shadow:0 10px 24px rgba(139,92,246,.45)}
+  .stream{font-family:ui-monospace,Menlo,monospace;font-size:18px;letter-spacing:.16em;color:var(--primary);font-variant-numeric:tabular-nums}
+  .wave{display:flex;align-items:flex-end;justify-content:center;gap:3px;height:38px}
+  .wave i{width:4px;background:var(--sc-high);border-radius:3px;height:26%;transition:.13s}
+  .wave i.on{background:linear-gradient(180deg,var(--g4),var(--g1))}
+  .eta{width:100%;display:flex;justify-content:space-between;font-size:11px;color:var(--on-var)}
+  /* circular (no glass) */
+  .gring{--s:126px;width:var(--s);height:var(--s);border-radius:50%;position:relative;margin:0 auto;
+        background:conic-gradient(from -90deg,var(--primary) var(--deg,0deg),var(--sc-high) 0deg);box-shadow:0 0 30px rgba(139,92,246,.3)}
+  .gring:before{content:"";position:absolute;inset:-6px;border-radius:50%;
+        background:conic-gradient(from 0deg,rgba(255,255,255,0),rgba(255,255,255,.85),rgba(255,255,255,0) 38%);
+        -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 9px),#000 calc(100% - 8px));
+        mask:radial-gradient(farthest-side,transparent calc(100% - 9px),#000 calc(100% - 8px));
+        animation:spin 2.2s linear infinite;opacity:.85}
+  .gring .hole{position:absolute;inset:11px;border-radius:50%;display:grid;place-items:center;background:var(--surface);
+        box-shadow:inset 0 0 18px rgba(0,0,0,.5),inset 0 0 0 1px #2e2246}
+  .gring .pval{font-size:28px;font-weight:800;color:var(--primary);font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+  <h1>乐少 WeChat 模块 · 第9轮（无玻璃 · 进度条内嵌元素 · 百分比在条下）</h1>
+  <div class="sub">
+    已去掉全部玻璃效果；进度条填充内部加入装饰元素（圆点/斜纹/人字/星点/气泡/虚线/点阵/波浪/高光/彩点）；<br>
+    百分比统一放在进度条下方。第 1 组 DexKit 加载窗（Q1–Q10）；第 2 组 音频转语音（S1–S10）。点「选择」或回编号。
+  </div>
+  <div class="sticky">已选：<b id="pickedText">尚未选择</b></div>
+
+  <h2>一、DexKit 加载窗口（Q1–Q10）</h2>
+  <div class="grid" id="loadGrid"></div>
+  <h2>二、音频转语音「转换中」（S1–S10）</h2>
+  <div class="grid" id="convGrid"></div>
+
+<script>
+const bar=(size,pat)=>{const cls='pbar'+(size==='thick'?' thick':size==='slim'?' slim':'');
+  return '<div class="'+cls+'"><i class="jbar"><span class="fillpat '+pat+'"></span></i></div>';};
+const below=(sz)=>'<div class="below '+(sz||'')+' jpct">0%</div>';
+const waves=(n)=>'<div class="wave jwave">'+Array.from({length:n},()=>'<i></i>').join('')+'</div>';
+const segBar=(n)=>'<div class="segbar jsegs">'+'<i></i>'.repeat(n)+'</div>';
+const gring=()=>'<div class="gring jring"><div class="hole"><span class="pval jpct">0%</span></div></div>';
+
+const load=[
+ {id:'Q1',name:'流光条 · 流动圆点',desc:'粗流光条，填充内圆点向右流动；百分比在条下，标题说明居中',
+  html:()=>bar('thick','pat-dots')+below('lg')+'<div class="t1">乐少V3 功能扫描</div><div class="t2">动态适配微信混淆类名</div>'},
+ {id:'Q2',name:'流光条 · 斜纹',desc:'填充内斜纹滚动，工业感；百分比在条下',
+  html:()=>bar('normal','pat-stripe')+below()+'<div class="t1">乐少V3 功能扫描</div>'},
+ {id:'Q3',name:'流光条 · 人字纹',desc:'填充内人字/箭头纹横向流动，方向感强；百分比在条下',
+  html:()=>bar('thick','pat-chevron')+below('lg')+'<div class="t2">正在扫描类名</div>'},
+ {id:'Q4',name:'流光条 · 星点闪烁',desc:'填充内星点闪烁，精致有细节；百分比在条下',
+  html:()=>bar('normal','pat-sparkle')+below()+'<div class="t1">乐少V3 功能扫描</div><div class="t2">动态适配微信混淆类名</div>'},
+ {id:'Q5',name:'流光条 · 气泡上升',desc:'填充内气泡向上升腾，轻盈；百分比在条下',
+  html:()=>bar('thick','pat-bubbles')+below('lg')+'<div class="t2">正在扫描资源</div>'},
+ {id:'Q6',name:'流光条 · 流动虚线',desc:'填充内虚线横向滚动，节奏明快；百分比在条下',
+  html:()=>bar('normal','pat-dash')+below()+'<div class="t1">功能扫描</div>'+waves(18)},
+ {id:'Q7',name:'流光条 · 点阵',desc:'填充内细点阵滚动，密集科技感；百分比在条下',
+  html:()=>bar('thick','pat-grid')+below('lg')+'<div class="t2">正在定位类名…</div>'},
+ {id:'Q8',name:'流光条 · 波浪纹',desc:'填充内波浪纹滚动，柔和；百分比在条下',
+  html:()=>bar('normal','pat-wave')+below()+'<div class="t1">乐少V3 功能扫描</div>'},
+ {id:'Q9',name:'流光条 · 高光带',desc:'填充内一条高光带来回扫过，高级克制；百分比在条下',
+  html:()=>bar('thick','pat-sheen')+below('lg')+'<div class="t1">正在扫描类名</div><div class="t2">动态适配微信混淆类名</div>'},
+ {id:'Q10',name:'分段流光条',desc:'分段块逐个点亮，块内带圆点；百分比在条下',
+  html:()=>segBar(12)+below('lg')+'<div class="t2">正在扫描资源</div>'},
+];
+
+const conv=[
+ {id:'S1',name:'流光条 · 流动圆点',desc:'粗流光条内圆点流动；下方百分比 + 音频转语音文案',
+  html:()=>bar('thick','pat-dots')+below('lg')+'<div class="t1">音频转语音 · 发送中</div><div class="t2">(2/5 段)</div>'},
+ {id:'S2',name:'流光条 · 斜纹',desc:'填充内斜纹滚动；百分比在条下',
+  html:()=>bar('normal','pat-stripe')+below()+'<div class="t1">音频转语音 · 合成中</div>'},
+ {id:'S3',name:'流光条 · 星点',desc:'填充内星点闪烁 + 居中音符图标；百分比在条下',
+  html:()=>bar('normal','pat-sparkle')+below()+'<div class="icircle">♪</div>'},
+ {id:'S4',name:'流光条 · 气泡 + 波形',desc:'填充内气泡上升 + 居中声波律动；百分比在条下',
+  html:()=>bar('thick','pat-bubbles')+below('lg')+waves(20)},
+ {id:'S5',name:'流光条 · 虚线 + 数字流',desc:'填充内虚线滚动 + 居中等宽数字；百分比在条下',
+  html:()=>bar('normal','pat-dash')+below()+'<div class="stream jstream">0000</div>'},
+ {id:'S6',name:'流光条 · 人字纹',desc:'填充内人字纹流动；百分比在条下',
+  html:()=>bar('thick','pat-chevron')+below('lg')+'<div class="t2">音频转语音 · 转码中</div>'},
+ {id:'S7',name:'流光条 · 高光 + 时间',desc:'填充内高光带 + 剩余时间估算；百分比在条下',
+  html:()=>bar('normal','pat-sheen')+below()+'<div class="eta"><span>预计剩余</span><span class="jeta">剩 0:08</span></div>'},
+ {id:'S8',name:'流光条 · 点阵',desc:'填充内细点阵滚动；百分比在条下',
+  html:()=>bar('thick','pat-grid')+below('lg')+'<div class="t1">音频转语音 · 处理中</div>'},
+ {id:'S9',name:'流光条 · 波浪纹',desc:'填充内波浪纹滚动 + 居中百分比；',
+  html:()=>bar('normal','pat-wave')+below()+gringNote()},
+ {id:'S10',name:'流光圆环（无玻璃）',desc:'圆形方案：中心百分比 + 下方音频转语音文案居中，无玻璃',
+  html:()=>gring()+'<div class="t1">音频转语音</div><div class="t2">正在合成，请稍候</div>'},
+];
+function gringNote(){return '<div class="t2">正在把音频转成语音…</div>';}
+
+function cardHTML(group,d){
+  return '<div class="card" data-group="'+group+'" data-id="'+d.id+'">'
+   +'<div class="demo">'+(group==='load'?'<div class="phone stack">'+d.html()+'</div>':'<div class="cwrap stack">'+d.html()+'</div>')+'</div>'
+   +'<div class="foot"><div><div class="name">'+d.id+' · '+d.name+'</div><div class="desc">'+d.desc+'</div></div>'
+   +'<button class="pick">选择</button></div></div>';
+}
+document.getElementById('loadGrid').innerHTML=load.map(d=>cardHTML('load',d)).join('');
+document.getElementById('convGrid').innerHTML=conv.map(d=>cardHTML('conv',d)).join('');
+
+/* ---------------- driver ---------------- */
+document.querySelectorAll('.card').forEach((card,ci)=>{
+  const pcts=[...card.querySelectorAll('.jpct')];
+  const bars=[...card.querySelectorAll('.jbar')];
+  const rings=[...card.querySelectorAll('.jring')];
+  const waveBox=card.querySelector('.jwave');
+  const waveNodes=waveBox?[...waveBox.children]:[];
+  const segBox=card.querySelector('.jsegs');
+  const segNodes=segBox?[...segBox.children]:[];
+  const streams=[...card.querySelectorAll('.jstream')];
+  const etas=[...card.querySelectorAll('.jeta')];
+  let p=(ci*13)%100;
+  setInterval(()=>{
+    p+=1.5; if(p>100)p=0;
+    const P=Math.round(p);
+    pcts.forEach(e=>e.textContent=P+'%');
+    bars.forEach(e=>e.style.width=p+'%');
+    rings.forEach(e=>e.style.setProperty('--deg',(p*3.6)+'deg'));
+    if(waveNodes.length){const c=waveNodes.length;waveNodes.forEach((el,i)=>{const on=(i/c)*100<=p;el.classList.toggle('on',on);el.style.height=on?(28+Math.random()*62)+'%':'26%';});}
+    if(segNodes.length){const filled=Math.max(1,Math.ceil(p/100*segNodes.length));segNodes.forEach((s,i)=>s.classList.toggle('on',i<filled));}
+    if(streams.length) streams.forEach(s=>s.textContent=String(Math.round(p*99.99)).padStart(4,'0'));
+    if(etas.length) etas.forEach(e=>{const rem=Math.max(0,Math.round((100-p)/100*8));e.textContent='剩 0:'+String(rem).padStart(2,'0');});
+  },60);
+});
+
+/* ---------------- pick ---------------- */
+const picks={load:null,conv:null};
+const NAME={load:{},conv:{}};
+load.forEach(d=>NAME.load[d.id]=d.id+' '+d.name);
+conv.forEach(d=>NAME.conv[d.id]=d.id+' '+d.name);
+document.querySelectorAll('.card').forEach(card=>{
+  card.querySelector('.pick').addEventListener('click',()=>{
+    const g=card.dataset.group,id=card.dataset.id;
+    if(picks[g]===id){picks[g]=null;card.classList.remove('picked');}
+    else{picks[g]=id;document.querySelectorAll('.card[data-group="'+g+'"]').forEach(c=>c.classList.remove('picked'));card.classList.add('picked');}
+    const parts=[];
+    if(picks.load)parts.push('加载窗-'+NAME.load[picks.load]);
+    if(picks.conv)parts.push('转换进度-'+NAME.conv[picks.conv]);
+    document.getElementById('pickedText').textContent=parts.length?parts.join('  |  '):'尚未选择';
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>乐少微信助手 · 葡萄气泡 · 流光渐变全局预览</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+    background:
+      radial-gradient(820px 460px at 8% -4%, #f1e7ff 0%, transparent 55%),
+      radial-gradient(820px 480px at 96% 2%, #ffe9f4 0%, transparent 55%),
+      #faf7ff;
+    color: #2b2340;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 64px;
+  }
+  header.top {
+    position: sticky; top: 0; z-index: 40;
+    background: rgba(255,255,255,0.82);
+    backdrop-filter: blur(18px);
+    border-bottom: 1px solid #f0eafc;
+    padding: 15px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  header.top h1 { font-size: 18px; font-weight: 800; }
+  header.top p { font-size: 12px; color: #8b7fa6; margin-top: 4px; }
+  .lock {
+    display: flex; align-items: center; gap: 10px; background: #fff; border-radius: 999px;
+    padding: 7px 14px 7px 8px; box-shadow: 0 3px 12px rgba(140,110,210,.18); font-size: 12px; font-weight: 700;
+  }
+  .lock .chip { width: 30px; height: 30px; border-radius: 10px; background: linear-gradient(120deg, #8B5CF6, #D8B4FE, #FFAFCC); }
+  .lock code { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #8b7fa6; font-weight: 600; }
+  .wrap { max-width: 1280px; margin: 26px auto 0; padding: 0 24px; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+  @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+
+  .screen-card { background: #fff; border-radius: 28px; padding: 18px; box-shadow: 0 16px 40px rgba(140,110,210,.14); border: 1px solid rgba(255,255,255,.9); }
+  .screen-card h2 { font-size: 15px; margin-bottom: 4px; }
+  .screen-card .hint { font-size: 12px; color: #8b7fa6; margin-bottom: 14px; }
+  .phones { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+  .phone-cap { text-align: center; font-size: 11px; font-weight: 800; color: #8b7fa6; margin-top: 8px; }
+
+  .scope.light {
+    --surface:#FBF9FF; --surface-low:#F4EEFF; --surface-high:#EAE0FB; --card:#FFFFFF;
+    --text:#2A2340; --sub:#7E7296; --outline:#E6DCF7; --track:#EDE5F9;
+    --shadow:0 10px 26px rgba(140,110,210,.18);
+  }
+  .scope.dark {
+    --surface:#150F1E; --surface-low:#1D1530; --surface-high:#2A2040; --card:#211932;
+    --text:#F2ECFB; --sub:#A99BC4; --outline:#3b2f55; --track:#332845;
+    --shadow:0 10px 26px rgba(0,0,0,.55);
+  }
+  .phone {
+    width: 248px; border-radius: 30px; padding: 12px; background: var(--surface); color: var(--text);
+    box-shadow: var(--shadow); display: flex; flex-direction: column; min-height: 470px;
+  }
+  .statusbar { display: flex; justify-content: space-between; font-size: 9px; color: var(--sub); padding: 2px 6px 8px; }
+  .statusbar .dots { display: flex; gap: 3px; align-items: center; }
+  .statusbar .dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--sub); }
+
+  .flow {
+    background-image: linear-gradient(90deg, #8B5CF6, #D8B4FE, #FFAFCC, #D8B4FE, #8B5CF6);
+    background-size: 300% 100%;
+    animation: flow 3.2s linear infinite;
+  }
+  @keyframes flow { to { background-position: 300% 0; } }
+
+  .hero { border-radius: 20px; padding: 14px; }
+  .hero .ht { font-size: 15px; font-weight: 900; color: #fff; }
+  .hero .hs { font-size: 10px; color: rgba(255,255,255,.88); margin-top: 3px; font-weight: 600; }
+  .hero .hchips { display: flex; gap: 6px; margin-top: 11px; }
+  .hero .hchips span { font-size: 9px; font-weight: 800; color: #fff; background: rgba(255,255,255,.24); padding: 4px 8px; border-radius: 999px; }
+
+  .topbar { display: flex; align-items: center; gap: 9px; padding: 4px 2px 10px; }
+  .topbar .back { width: 22px; height: 22px; border-radius: 8px; background: var(--surface-high); display: flex; align-items: center; justify-content: center; color: var(--sub); font-size: 13px; }
+  .topbar .tt { font-size: 13.5px; font-weight: 800; }
+  .topbar .ai { width: 24px; height: 24px; border-radius: 9px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 9px; font-weight: 900; }
+  .topbar .online { margin-left: auto; font-size: 9px; font-weight: 800; color: #22c55e; display: flex; align-items: center; gap: 4px; }
+  .topbar .online i { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+
+  .sec-title { font-size: 10.5px; font-weight: 800; color: var(--sub); margin: 12px 2px 7px; letter-spacing: .3px; }
+  .fhead { font-size: 11px; font-weight: 800; }
+  .fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .fcard { background: var(--card); border-radius: 16px; padding: 11px; box-shadow: 0 3px 10px rgba(120,90,200,.08); }
+  .ficon { width: 30px; height: 30px; border-radius: 10px; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 11px; font-weight: 900; }
+  .flabel { font-size: 11px; font-weight: 800; }
+  .fdesc { font-size: 9px; color: var(--sub); margin-top: 2px; }
+
+  .row { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--outline); }
+  .row:last-child { border-bottom: 0; }
+  .row .ric { width: 26px; height: 26px; border-radius: 9px; background: var(--surface-high); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; color: var(--sub); flex: none; }
+  .row .rtext { flex: 1; min-width: 0; }
+  .row .rtext b { font-size: 11.5px; display: block; }
+  .row .rtext span { font-size: 9px; color: var(--sub); }
+  .row .chev { color: var(--sub); font-size: 12px; }
+
+  .switch { width: 38px; height: 22px; border-radius: 999px; background: var(--outline); position: relative; flex: none; transition: background .2s; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: left .2s; }
+  .switch.on { background-image: linear-gradient(90deg,#8B5CF6,#D8B4FE,#FFAFCC,#D8B4FE,#8B5CF6); background-size: 300% 100%; animation: flow 3.2s linear infinite; }
+  .switch.on::after { left: 19px; }
+
+  .bar { height: 10px; border-radius: 999px; background: var(--track); position: relative; overflow: hidden; }
+  .bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; }
+  .bar.lg { height: 14px; }
+  .barline { display: flex; align-items: center; gap: 10px; }
+  .barline .pct { font-size: 10px; font-weight: 800; color: var(--sub); width: 34px; text-align: right; font-family: ui-monospace, Menlo, monospace; }
+
+  .slider { position: relative; height: 20px; }
+  .slider .st { position: absolute; left: 0; right: 0; top: 50%; height: 8px; margin-top: -4px; border-radius: 999px; background: var(--track); }
+  .slider .sf { position: absolute; left: 0; top: 50%; height: 8px; margin-top: -4px; border-radius: 999px; }
+  .slider .sh { position: absolute; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; background: #fff; border: 3px solid #A855F7; box-shadow: 0 0 0 4px rgba(168,85,247,.22), 0 2px 6px rgba(124,58,237,.3); }
+  .slider .snum { position: absolute; right: 0; top: -14px; font-size: 9px; font-weight: 800; color: var(--sub); font-family: ui-monospace, Menlo, monospace; }
+
+  .btn { border-radius: 999px; text-align: center; font-size: 11.5px; font-weight: 800; padding: 10px 14px; }
+  .btn.primary { color: #fff; box-shadow: 0 6px 16px rgba(139,92,246,.38); }
+  .btn.tonal { background: var(--surface-high); color: var(--text); }
+  .btn.ghost { box-shadow: inset 0 0 0 1.5px var(--outline); color: var(--text); }
+  .btnrow { display: flex; gap: 9px; }
+  .btnrow .btn { flex: 1; }
+
+  .chips { display: flex; gap: 7px; flex-wrap: wrap; }
+  .chip { font-size: 10px; font-weight: 800; padding: 6px 11px; border-radius: 999px; background: var(--surface-high); color: var(--text); }
+  .chip.active { color: #fff; }
+
+  .card { background: var(--card); border-radius: 18px; padding: 13px; box-shadow: 0 3px 12px rgba(120,90,200,.09); }
+
+  .input { display: flex; align-items: center; gap: 8px; background: var(--surface-high); border-radius: 999px; padding: 6px 6px 6px 14px; }
+  .input .ph { flex: 1; font-size: 10.5px; color: var(--sub); }
+  .input .send { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 3px 10px rgba(139,92,246,.4); }
+  .input .send svg { width: 12px; height: 12px; }
+
+  .chat { display: flex; flex-direction: column; gap: 9px; margin: 4px 0 12px; }
+  .bubble { max-width: 80%; padding: 9px 12px; border-radius: 16px; font-size: 11px; line-height: 1.55; }
+  .bubble.me { align-self: flex-end; color: #fff; border-bottom-right-radius: 5px; }
+  .bubble.ai { align-self: flex-start; background: var(--surface-high); color: var(--text); border-bottom-left-radius: 5px; }
+  .typing { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+  .typing .t { font-size: 9px; color: var(--sub); font-weight: 700; }
+
+  .nav { display: flex; justify-content: space-around; padding-top: 10px; margin-top: auto; border-top: 1px solid var(--outline); }
+  .nav .it { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 8.5px; font-weight: 700; color: var(--sub); }
+  .nav .it .d { width: 18px; height: 18px; border-radius: 7px; background: var(--surface-high); }
+  .nav .it.active { color: var(--text); }
+  .nav .it.active .d { box-shadow: 0 3px 9px rgba(139,92,246,.45); }
+
+  .bigcard { border-radius: 22px; padding: 16px; color: #fff; }
+  .bigcard .bt { font-size: 13px; font-weight: 900; }
+  .bigcard .bs { font-size: 10px; opacity: .9; margin-top: 3px; }
+  .wave { display: flex; align-items: flex-end; gap: 4px; height: 34px; margin: 12px 0 10px; }
+  .wave i { width: 5px; border-radius: 999px; background: rgba(255,255,255,.85); }
+  .stack { display: flex; flex-direction: column; gap: 11px; }
+  .srow .sl { font-size: 10px; font-weight: 700; color: var(--sub); margin-bottom: 9px; display: flex; justify-content: space-between; }
+  .foot { text-align: center; color: #8b7fa6; font-size: 13px; margin: 36px 0 0; line-height: 1.9; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>葡萄气泡 · 流光渐变 · 全局效果预览</h1>
+    <p>整页统一葡萄气泡调色板，进度条 / 滑块 / 按钮 / 开关 / 卡片全部走流光渐变。下面是各界面浅色与深色实样。</p>
+  </div>
+  <div class="lock">
+    <span class="chip"></span>
+    <span>锁定：葡萄气泡 + 流光渐变</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="grid" id="grid"></div>
+  <div class="foot">觉得没问题就直接说「开干」，我按这套样式落到模块全局。</div>
+</div>
+
+<script>
+const FLOW = "linear-gradient(90deg,#8B5CF6,#D8B4FE,#FFAFCC,#D8B4FE,#8B5CF6)";
+function fspan(w) { return '<i class="flow" style="width:' + w + '%"></i>'; }
+
+function screenMain() {
+  const feats = [
+    ["AI", "AI 自动回复", "智能接管私聊群聊"],
+    ["语", "语音发送", "文字转语音直发"],
+    ["群", "群发助手", "多类型批量群发"],
+    ["包", "自动抢红包", "秒抢并播报"]
+  ];
+  return `
+    <div class="statusbar"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+    <div class="hero flow">
+      <div class="ht">乐少助手</div>
+      <div class="hs">葡萄气泡 · 流光渐变主题</div>
+      <div class="hchips"><span>已激活</span><span>微信 8.0.76</span></div>
+    </div>
+    <div class="sec-title">常用功能</div>
+    <div class="fgrid">
+      ${feats.map(f => `
+        <div class="fcard">
+          <div class="ficon flow">${f[0]}</div>
+          <div class="flabel">${f[1]}</div>
+          <div class="fdesc">${f[2]}</div>
+        </div>`).join("")}
+    </div>
+    <div class="sec-title">快捷开关</div>
+    <div class="card" style="padding:4px 12px;">
+      <div class="row"><div class="ric">深</div><div class="rtext"><b>跟随微信深色</b><span>自动适配明暗</span></div><div class="switch on"></div></div>
+      <div class="row"><div class="ric">撤</div><div class="rtext"><b>消息防撤回</b><span>拦截撤回提示</span></div><div class="switch on"></div></div>
+      <div class="row"><div class="ric">词</div><div class="rtext"><b>关键词回复</b><span>命中即自动回</span></div><div class="chev">›</div></div>
+    </div>
+    <div class="nav">
+      <div class="it active"><div class="d flow"></div>首页</div>
+      <div class="it"><div class="d"></div>AI</div>
+      <div class="it"><div class="d"></div>语音</div>
+      <div class="it"><div class="d"></div>我的</div>
+    </div>`;
+}
+
+function screenSettings() {
+  return `
+    <div class="statusbar"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+    <div class="topbar"><div class="back">‹</div><div class="tt">设置</div></div>
+    <div class="sec-title">外观</div>
+    <div class="card" style="padding:4px 12px;">
+      <div class="row"><div class="ric">泡</div><div class="rtext"><b>葡萄气泡主题</b><span>当前全局配色</span></div><div class="switch on"></div></div>
+      <div class="row"><div class="ric">流</div><div class="rtext"><b>流光渐变</b><span>动效填充</span></div><div class="switch on"></div></div>
+    </div>
+    <div class="sec-title">进度</div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">
+        <span style="font-size:11px;font-weight:800;">数据库扫描</span>
+        <span class="pct" style="font-size:10px;color:var(--sub);font-weight:800;">68%</span>
+      </div>
+      <div class="bar lg">${fspan(68)}</div>
+    </div>
+    <div class="sec-title">滑块</div>
+    <div class="card stack">
+      <div class="srow">
+        <div class="sl"><span>语速</span><span>1.2x</span></div>
+        <div class="slider"><div class="st"></div><div class="sf flow" style="width:62%"></div><div class="sh flow-x" style="left:62%"></div></div>
+      </div>
+      <div class="srow">
+        <div class="sl"><span>音量</span><span>80%</span></div>
+        <div class="slider"><div class="st"></div><div class="sf flow" style="width:80%"></div><div class="sh" style="left:80%"></div></div>
+      </div>
+    </div>
+    <div class="btn primary flow" style="margin-top:12px;">保存设置</div>`;
+}
+
+function screenAI() {
+  return `
+    <div class="statusbar"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+    <div class="topbar"><div class="ai flow">AI</div><div class="tt">AI 助手</div><div class="online"><i></i>在线</div></div>
+    <div class="chat">
+      <div class="bubble me flow">帮我回复一下老板，说方案今天下午发。</div>
+      <div class="bubble ai">好的，已按你的语气生成：<br>「收到，方案我下午发您，请留意。」</div>
+    </div>
+    <div class="card" style="padding:11px 12px;">
+      <div class="typing"><div class="t">正在生成下一条…</div></div>
+      <div class="bar" style="margin-top:9px;">${fspan(45)}</div>
+    </div>
+    <div class="sec-title">语气</div>
+    <div class="chips">
+      <div class="chip active flow">温柔</div>
+      <div class="chip">幽默</div>
+      <div class="chip">正式</div>
+      <div class="chip">简短</div>
+    </div>
+    <div class="input" style="margin-top:auto;">
+      <div class="ph">输入消息…</div>
+      <div class="send flow"><svg viewBox="0 0 24 24" fill="#fff"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg></div>
+    </div>`;
+}
+
+function screenVoice() {
+  return `
+    <div class="statusbar"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+    <div class="topbar"><div class="back">‹</div><div class="tt">语音发送</div></div>
+    <div class="bigcard flow">
+      <div class="bt">正在生成语音</div>
+      <div class="bs">音色：苏 · 情感：自然</div>
+      <div class="wave">
+        ${[10, 22, 16, 30, 24, 34, 18, 28, 14, 26, 20, 12].map(h => `<i style="height:${h}px;"></i>`).join("")}
+      </div>
+      <div class="bar" style="background:rgba(255,255,255,.28);">${fspan(42)}</div>
+    </div>
+    <div class="sec-title">参数</div>
+    <div class="card stack">
+      <div class="srow">
+        <div class="sl"><span>语速</span><span>1.1x</span></div>
+        <div class="slider"><div class="st"></div><div class="sf flow" style="width:55%"></div><div class="sh" style="left:55%"></div></div>
+      </div>
+      <div class="srow">
+        <div class="sl"><span>音调</span><span>默认</span></div>
+        <div class="slider"><div class="st"></div><div class="sf flow" style="width:48%"></div><div class="sh" style="left:48%"></div></div>
+      </div>
+      <div class="srow">
+        <div class="sl"><span>音量</span><span>90%</span></div>
+        <div class="slider"><div class="st"></div><div class="sf flow" style="width:90%"></div><div class="sh" style="left:90%"></div></div>
+      </div>
+    </div>
+    <div class="btnrow" style="margin-top:12px;">
+      <div class="btn tonal">试听</div>
+      <div class="btn primary flow">发送</div>
+    </div>`;
+}
+
+const SCREENS = [
+  ["主界面", "功能入口、快捷开关、底部导航", screenMain],
+  ["设置页", "外观开关、进度条、参数滑块", screenSettings],
+  ["AI 助手", "对话气泡、生成进度、快捷语气", screenAI],
+  ["语音发送", "生成进行中、波形、三档滑块", screenVoice]
+];
+
+document.getElementById("grid").innerHTML = SCREENS.map(([name, hint, fn]) => `
+  <div class="screen-card">
+    <h2>${name}</h2>
+    <div class="hint">${hint}</div>
+    <div class="phones">
+      <div><div class="phone scope light">${fn()}</div><div class="phone-cap">浅色模式</div></div>
+      <div><div class="phone scope dark">${fn()}</div><div class="phone-cap">深色模式</div></div>
+    </div>
+  </div>`).join("");
+</script>
+</body>
+</html>

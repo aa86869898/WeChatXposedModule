@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>乐少 · 加载/转语音 形状风格选型</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#0b0712;color:#EDE7F6;font-family:-apple-system,"Segoe UI","PingFang SC",sans-serif;padding:22px 16px 90px}
+  h1{font-size:20px;margin:0 0 6px}
+  .sub{color:#a99fc4;font-size:13px;line-height:1.7;margin-bottom:14px}
+  .sticky{position:sticky;top:0;z-index:30;background:rgba(11,7,18,.86);backdrop-filter:blur(10px);border:1px solid #2e2246;
+    border-radius:14px;padding:11px 15px;margin-bottom:18px;font-size:13px}
+  .sticky b{color:#C9A9FF}
+  h2{font-size:15px;margin:26px 0 12px;display:flex;gap:9px;align-items:center}
+  h2:before{content:"";width:6px;height:17px;border-radius:3px;background:linear-gradient(180deg,#8B5CF6,#D946EF)}
+  .row{background:linear-gradient(180deg,#181026,#120c1b);border:1px solid #2c2045;border-radius:18px;padding:14px;margin-bottom:15px;transition:.2s}
+  .row.picked{border-color:#C9A9FF;box-shadow:0 0 0 2px rgba(201,169,255,.3),0 14px 34px rgba(139,92,246,.22)}
+  .rowhead{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+  .rowhead .name{font-size:14px;font-weight:700}
+  .rowhead .desc{font-size:11.5px;color:#a99fc4;margin-top:2px;line-height:1.5}
+  .pick{border:1px solid #C9A9FF;color:#C9A9FF;background:transparent;border-radius:999px;padding:6px 16px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .row.picked .pick{background:#C9A9FF;color:#2A1550;font-weight:700}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:540px){.pair{grid-template-columns:1fr}}
+  .panel{border-radius:16px;min-height:190px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;padding:14px}
+  .panel.light{background:#eef0f7;color:#2a2340;--surface:#fff;--text:#2a2340;--muted:#7b7392;--track:#e2ddef;--primary:#7C3AED;
+    --primary2:#C026D3;--g1:#8B5CF6;--g2:#D946EF;--g3:#FF6FB0;--g4:#A78BFA;--soft:#f3ecff;--shadow:0 6px 18px rgba(80,50,160,.14)}
+  .panel.dark{background:#15101f;color:#EDE7F6;--surface:#221a34;--text:#EDE7F6;--muted:#a99fc4;--track:#372a54;--primary:#C9A9FF;
+    --primary2:#F0ABFC;--g1:#8B5CF6;--g2:#A78BFA;--g3:#D946EF;--g4:#FF6FB0;--soft:#2a1f42;--shadow:0 10px 26px rgba(0,0,0,.5)}
+  .tag{position:absolute;left:10px;top:8px;font-size:10px;letter-spacing:.05em;color:var(--muted)}
+  .stage{width:100%;max-width:250px;display:flex;flex-direction:column;gap:9px;align-items:center;justify-content:center;
+    color:var(--text)}
+  .num{font-weight:800;color:var(--primary);font-size:18px;font-variant-numeric:tabular-nums}
+  .grad{background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3),var(--g4))}
+  .flow{background-size:220% 100%;animation:flow 1.5s linear infinite}
+  @keyframes flow{to{background-position:-220% 0}}
+  /* D1 */
+  .topbar{width:100%;height:8px;border-radius:999px;background:var(--track);overflow:hidden}
+  .topbar>.fill{display:block;height:100%;width:0;border-radius:999px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  .chip{font-size:11px;padding:4px 10px;border-radius:999px;background:var(--soft);color:var(--muted);transition:.25s}
+  .chip.on{background:var(--primary);color:#fff}
+  /* D2 blocks */
+  .blocks{display:flex;gap:4px;width:100%}
+  .blocks i{flex:1;height:26px;border-radius:5px;background:var(--track);transition:.2s}
+  .blocks i.on{background:linear-gradient(180deg,var(--g2),var(--g1));box-shadow:0 0 10px rgba(139,92,246,.5)}
+  .blocks i.now{animation:bp .7s ease-in-out infinite}
+  @keyframes bp{50%{transform:scaleY(1.25)}}
+  /* D3 area */
+  .svgs{width:100%;height:110px;display:block;border-radius:12px;background:var(--soft)}
+  .scanline{stroke:var(--primary);stroke-width:2;stroke-dasharray:3 3}
+  /* D4 pill spotlight */
+  .pill{width:100%;height:30px;border-radius:999px;background:var(--track);position:relative;overflow:hidden}
+  .pill>.fill{position:absolute;inset:0 auto 0 0;width:0;border-radius:999px}
+  .pill>.sweep{position:absolute;top:0;bottom:0;width:44px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);
+    animation:sw 1.6s linear infinite}
+  @keyframes sw{from{left:-44px}to{left:100%}}
+  .pill>.plabel{position:absolute;inset:0;display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--text);z-index:2}
+  /* D5 led */
+  .led{display:grid;gap:4px}
+  .led i{width:9px;height:9px;border-radius:3px;background:var(--track);transition:.15s}
+  .led i.on{background:var(--primary);box-shadow:0 0 8px var(--primary)}
+  /* D6 stack */
+  .stack{position:relative;width:100%;height:120px}
+  .sc{position:absolute;left:0;right:0;border-radius:14px;background:var(--surface);box-shadow:var(--shadow);padding:12px;transition:.4s}
+  .sc.b1{top:26px;transform:scale(.9);opacity:.5}
+  .sc.b2{top:13px;transform:scale(.95);opacity:.75}
+  .sc.main{top:0}
+  .sc.main .ttl{font-size:12px;color:var(--muted);margin-bottom:8px}
+  .sc.main .bar{height:8px;border-radius:999px;background:var(--track);overflow:hidden}
+  .sc.main .bar i{display:block;height:100%;width:0;border-radius:999px}
+  /* D7 accordion */
+  .acc{display:flex;align-items:flex-end;gap:6px;height:100px}
+  .acc i{width:14px;border-radius:6px 6px 3px 3px;background:var(--track);transition:.3s}
+  .acc i.on{background:linear-gradient(180deg,var(--g3),var(--g1))}
+  /* D8 thermometer */
+  .thermo{display:flex;gap:12px;align-items:flex-end}
+  .thermo .tube{width:16px;height:110px;border-radius:999px;background:var(--soft);border:2px solid var(--track);position:relative;overflow:hidden}
+  .thermo .tube i{position:absolute;left:0;right:0;bottom:0;height:0;background:linear-gradient(0deg,var(--g1),var(--g3));border-radius:999px}
+  .thermo .bulb{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--g1),var(--g3));margin-bottom:-8px;box-shadow:0 0 14px rgba(217,70,239,.5)}
+  .thermo .scale{display:flex;flex-direction:column;justify-content:space-between;height:110px;font-size:10px;color:var(--muted)}
+  /* D9 stepper */
+  .stepper{position:relative;width:100%;height:52px}
+  .stepline{position:absolute;left:6%;right:6%;top:14px;height:3px;background:var(--track);border-radius:3px}
+  .stepline i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--primary);border-radius:3px}
+  .stepper .node{position:absolute;top:9px;width:13px;height:13px;border-radius:50%;background:var(--surface);border:2px solid var(--track);transform:translateX(-50%)}
+  .stepper .node.on{border-color:var(--primary);background:var(--primary)}
+  .stepper .lbl{position:absolute;top:30px;transform:translateX(-50%);font-size:9.5px;color:var(--muted);white-space:nowrap}
+  /* D10 ruler */
+  .ruler{width:100%;position:relative;height:46px}
+  .ruler .rail{position:absolute;left:0;right:0;top:20px;height:8px;border-radius:4px;background:var(--track);overflow:hidden}
+  .ruler .rail i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .ruler .mark{position:absolute;top:8px;transform:translateX(-50%);color:var(--primary);font-size:14px;line-height:1}
+  /* A1 eq */
+  .eq{display:flex;gap:3px;align-items:flex-end;height:86px;width:100%}
+  .eq i{flex:1;background:var(--track);border-radius:3px;height:20%;transition:height .12s}
+  .eq i.on{background:linear-gradient(180deg,var(--g4),var(--g1))}
+  /* A2 cassette */
+  .cass{width:200px;height:110px;border-radius:14px;background:var(--surface);border:2px solid var(--track);box-shadow:var(--shadow);position:relative}
+  .cass .reel{position:absolute;top:20px;width:38px;height:38px;border-radius:50%;border:6px solid var(--primary);border-top-color:transparent;animation:spin 1.1s linear infinite}
+  .cass .reel.l{left:26px}.cass .reel.r{right:26px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .cass .win{position:absolute;left:20px;right:20px;top:58px;height:26px;border-radius:8px;background:var(--soft)}
+  .cass .cbar{position:absolute;left:20px;right:20px;bottom:8px;height:6px;border-radius:999px;background:var(--track);overflow:hidden}
+  .cass .cbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .cass .pct{position:absolute;left:0;right:0;top:64px;text-align:center;font-size:12px;font-weight:800;color:var(--primary)}
+  /* A3 slider */
+  .sldr{width:100%;position:relative;height:36px}
+  .sldr .tr{position:absolute;left:0;right:0;top:15px;height:6px;border-radius:999px;background:var(--track)}
+  .sldr .tr i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .sldr .knob{position:absolute;top:6px;width:24px;height:24px;border-radius:50%;background:var(--surface);border:3px solid var(--primary);
+    box-shadow:0 3px 10px rgba(0,0,0,.25);transform:translateX(-50%)}
+  /* A4 waveform playhead */
+  .wf{position:relative;width:100%;height:90px;display:flex;align-items:center}
+  .wf .wfi{position:absolute;top:50%;width:2px;border-radius:2px;background:var(--track);transform:translateY(-50%)}
+  .wf .wfi.on{background:linear-gradient(180deg,var(--g1),var(--g3))}
+  .wf .ph{position:absolute;top:0;bottom:0;width:2px;background:var(--primary);box-shadow:0 0 10px var(--primary)}
+  /* A5 neon */
+  .neonbar{width:100%;height:18px;border-radius:999px;background:var(--soft);position:relative;overflow:hidden;
+    box-shadow:inset 0 0 12px rgba(0,0,0,.35)}
+  .neonbar i{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,#6d28d9,#c084fc,#f0abfc);
+    box-shadow:0 0 18px var(--primary2)}
+  .neonbar .glow{position:absolute;top:0;bottom:0;width:50px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);animation:sw 1.3s linear infinite}
+  /* A6 chase */
+  .chase{display:flex;gap:6px;align-items:center;width:100%}
+  .chase i{flex:1;height:10px;border-radius:999px;background:var(--track);transition:.2s}
+  .chase i.on{background:linear-gradient(90deg,var(--g2),var(--g4))}
+  /* A7 line chart */
+  .chart{width:100%;height:96px;border-radius:12px;background:var(--soft);display:block}
+  /* A8 ripple */
+  .ripplebar{width:100%;height:16px;border-radius:999px;background:var(--track);position:relative;overflow:hidden}
+  .ripplebar i{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,var(--g1),var(--g3));border-radius:999px}
+  .ripplebar .rp{position:absolute;top:50%;width:16px;height:16px;border-radius:50%;border:2px solid var(--primary);
+    transform:translate(-50%,-50%);animation:rp 1.4s ease-out infinite}
+  @keyframes rp{0%{opacity:.9;transform:translate(-50%,-50%) scale(.4)}100%{opacity:0;transform:translate(-50%,-50%) scale(2.4)}}
+  /* A9 stairs */
+  .stairs{display:flex;align-items:flex-end;gap:5px;height:100px}
+  .stairs i{width:20px;border-radius:6px 6px 2px 2px;background:var(--track);transition:.25s}
+  .stairs i.on{background:linear-gradient(180deg,var(--g2),var(--g1))}
+  /* A10 particles */
+  .pbar{width:100%;height:22px;position:relative}
+  .pbar .rail{position:absolute;left:0;right:0;top:9px;height:4px;border-radius:3px;background:var(--track)}
+  .pbar .done{position:absolute;left:0;top:9px;height:4px;width:0;border-radius:3px;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .pbar .pt{position:absolute;top:5px;width:12px;height:12px;border-radius:50%;background:var(--primary);box-shadow:0 0 10px var(--primary)}
+</style>
+</head>
+<body>
+<h1>乐少 · 非固定形状风格选型（浅色 / 暗色）</h1>
+<div class="sub">
+  每组样式同时给出「浅色模式（左）」与「暗色模式（右）」，均动态。形状覆盖条形/方块/波形/磁带/阶梯/粒子等。<br>
+  组一：DexKit 加载窗口 ×10；组二：音频转语音「转换中」×10。点「选择」或回编号（如「D4 + A7」）。
+</div>
+<div class="sticky">已选：<b id="pickedText">尚未选择</b></div>
+
+<h2>组一 · DexKit 加载窗口（形状）</h2>
+<div id="loadRows"></div>
+<h2>组二 · 音频转语音 转换进度（形状）</h2>
+<div id="convRows"></div>
+
+<script>
+let UID=0; const uid=()=>'u'+(UID++);
+const stage=(inner)=>'<div class="stage" >'+inner+'</div>';
+
+/* ---------- DexKit designs ---------- */
+const load=[
+ {id:'D1',name:'顶部流光条 + 步骤 chips',desc:'顶部细进度条流光，下方步骤胶囊逐个点亮',
+  tpl:()=>stage('<div class="topbar"><i class="fill grad flow"></i></div><div class="num"></div>'
+    +'<div class="chips">'+['引擎','资源','类名','Hook'].map((t,i)=>'<span class="chip" data-i="'+i+'" data-n="4">'+t+'</span>').join('')+'</div>')},
+ {id:'D2',name:'方块电平',desc:'10 格方块逐格填充，当前格脉动',
+  tpl:()=>stage('<div class="num"></div><div class="blocks">'+Array.from({length:10},(_,i)=>'<i data-i="'+i+'" data-n="10"></i>').join('')+'</div>')},
+ {id:'D3',name:'波形面积条',desc:'SVG 波形面积被扫描线逐渐揭开',
+  tpl:()=>{const id=uid();let area='M0,92 ';for(let x=0;x<=250;x+=6){const y=92-24*Math.sin(x/33)-13*Math.sin(x/12+1);area+='L'+x+','+y.toFixed(1)+' ';}area+='L250,110 L0,110 Z';
+    return stage('<svg class="svgs" viewBox="0 0 250 110" preserveAspectRatio="none">'
+    +'<defs><clipPath id="c'+id+'"><rect class="cliprect" x="0" y="0" width="0" height="110"/></clipPath>'
+    +'<linearGradient id="g'+id+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--g3)"/><stop offset="1" stop-color="var(--g1)"/></linearGradient></defs>'
+    +'<path d="'+area+'" fill="url(#g'+id+')" clip-path="url(#c'+id+')" opacity=".9"/>'
+    +'<line class="scanline" x1="0" y1="0" x2="0" y2="110"/></svg><div class="num"></div>')}},
+ {id:'D4',name:'胶囊聚光',desc:'胶囊底槽 + 填充 + 来回扫光，文字居中',
+  tpl:()=>stage('<div class="pill"><i class="fill grad"></i><span class="sweep"></span><span class="plabel">加载中 0%</span></div>')},
+ {id:'D5',name:'点阵 LED',desc:'两行 LED 点阵按进度点亮发光',
+  tpl:()=>{let h='';for(let i=0;i<32;i++)h+='<i data-i="'+i+'" data-n="32"></i>';return stage('<div class="num"></div><div class="led" style="grid-template-columns:repeat(16,9px)">'+h+'</div>')}},
+ {id:'D6',name:'卡片堆叠',desc:'多层卡片堆叠，主卡内进度条推进，完成卡下沉',
+  tpl:()=>stage('<div class="stack"><div class="sc b1"></div><div class="sc b2"></div><div class="sc main"><div class="ttl">正在扫描</div><div class="bar"><i class="grad fill"></i></div><div class="num" style="margin-top:8px">0%</div></div></div>')},
+ {id:'D7',name:'手风琴立柱',desc:'高低立柱逐根填充，像声压柱',
+  tpl:()=>{let h='';for(let i=0;i<7;i++)h+='<i data-i="'+i+'" data-n="7" style="height:'+(30+i*10)+'px"></i>';return stage('<div class="acc">'+h+'</div><div class="num"></div>')}},
+ {id:'D8',name:'温度计',desc:'竖向水银柱上升 + 侧边刻度',
+  tpl:()=>stage('<div class="thermo"><div class="tube"><i></i></div><div class="bulb"></div><div class="scale"><span>100</span><span>50</span><span>0</span></div></div><div class="num"></div>')},
+ {id:'D9',name:'步进导航',desc:'横向连接线 + 移动光点 + 节点命名',
+  tpl:()=>{const names=['引擎','资源','类名','Hook'];let n='';names.forEach((t,i)=>{const x=6+ i*(88/ (names.length-1));n+='<div class="node" data-i="'+i+'" data-n="4" style="left:'+x+'%"></div><div class="lbl" style="left:'+x+'%">'+t+'</div>';});
+    return stage('<div class="stepper"><div class="stepline"><i class="fill"></i></div>'+n+'</div><div class="num"></div>')}},
+ {id:'D10',name:'刻度尺',desc:'横向刻度轨道 + 三角指示器随进度移动',
+  tpl:()=>stage('<div class="ruler"><div class="rail"><i class="fill"></i></div><div class="mark">▼</div></div><div class="num"></div>')},
+];
+
+/* ---------- Audio -> voice designs ---------- */
+const conv=[
+ {id:'A1',name:'均衡器竖条',desc:'左到右波动的均衡器，逐条点亮',
+  tpl:()=>stage('<div class="eq">'+Array.from({length:14},(_,i)=>'<i data-i="'+i+'" data-n="14"></i>').join('')+'</div><div class="num"></div>')},
+ {id:'A2',name:'磁带',desc:'双轮旋转录音带 + 底部进度',
+  tpl:()=>stage('<div class="cass"><div class="reel l"></div><div class="reel r"></div><div class="win"></div><div class="pct">0%</div><div class="cbar"><i class="fill"></i></div></div>')},
+ {id:'A3',name:'滑块',desc:'滑动轨道 + 跟随光球，简洁直接',
+  tpl:()=>stage('<div class="sldr"><div class="tr"><i class="fill"></i></div><div class="knob"></div></div><div class="num"></div>')},
+ {id:'A4',name:'音轨波形',desc:'镜像波形 + 播放头推进，未播部分置灰',
+  tpl:()=>stage('<div class="wf">'+Array.from({length:40},(_,i)=>'<i class="wfi" data-i="'+i+'" data-n="40"></i>').join('')+'<div class="ph"></div></div><div class="num"></div>')},
+ {id:'A5',name:'霓虹脉冲条',desc:'霓虹填充 + 内扫高光 + 外发光呼吸',
+  tpl:()=>stage('<div class="neonbar"><i class="fill"></i><span class="glow"></span></div><div class="num"></div>')},
+ {id:'A6',name:'追逐灯带',desc:'一排灯珠追逐点亮，数量随进度增长',
+  tpl:()=>stage('<div class="chase">'+Array.from({length:12},(_,i)=>'<i data-i="'+i+'" data-n="12"></i>').join('')+'</div><div class="num"></div>')},
+ {id:'A7',name:'折线趋势图',desc:'折线随进度从左到右绘制并带光点',
+  tpl:()=>{const id=uid();let pts='';for(let x=0;x<=240;x+=20){const y=84-58*(x/240)-8*Math.sin(x/30);pts+=x+','+y.toFixed(1)+' ';}
+    return stage('<svg class="chart" viewBox="0 0 240 96" preserveAspectRatio="none">'
+    +'<defs><clipPath id="c'+id+'"><rect class="cliprect" x="0" y="0" width="0" height="96"/></clipPath></defs>'
+    +'<polyline class="poly" points="'+pts+'" fill="none" stroke="url(#ln'+id+')" stroke-width="3" clip-path="url(#c'+id+')" stroke-linejoin="round"/>'
+    +'<defs><linearGradient id="ln'+id+'" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--g1)"/><stop offset="1" stop-color="var(--g3)"/></linearGradient></defs>'
+    +'</svg><div class="num"></div>')}},
+ {id:'A8',name:'水平涟漪',desc:'进度头不断发出扩散涟漪',
+  tpl:()=>stage('<div class="ripplebar"><i class="fill"></i><span class="rp"></span></div><div class="num"></div>')},
+ {id:'A9',name:'阶梯增长',desc:'阶梯柱逐级长高，台阶感强',
+  tpl:()=>stage('<div class="stairs">'+Array.from({length:8},(_,i)=>'<i data-i="'+i+'" data-n="8" style="height:'+(20+i*10)+'px"></i>').join('')+'</div><div class="num"></div>')},
+ {id:'A10',name:'粒子汇聚',desc:'光点沿轨道右行并累积填充',
+  tpl:()=>stage('<div class="pbar"><div class="rail"></div><div class="done"></div><div class="pt"></div></div><div class="num"></div>')},
+];
+
+function rowHTML(group,d){
+  return '<div class="row" data-group="'+group+'" data-id="'+d.id+'">'
+   +'<div class="rowhead"><div><div class="name">'+d.id+' · '+d.name+'</div><div class="desc">'+d.desc+'</div></div><button class="pick">选择</button></div>'
+   +'<div class="pair"><div class="panel light"><span class="tag">浅色</span>'+d.tpl()+'</div>'
+   +'<div class="panel dark"><span class="tag">暗色</span>'+d.tpl()+'</div></div></div>';
+}
+document.getElementById('loadRows').innerHTML=load.map(d=>rowHTML('load',d)).join('');
+document.getElementById('convRows').innerHTML=conv.map(d=>rowHTML('conv',d)).join('');
+
+/* ---------- animation driver ---------- */
+const roots=[...document.querySelectorAll('.stage')];
+roots.forEach((root,idx)=>{
+  let p=(idx*9)%100;
+  const eq=[...root.querySelectorAll('.eq i')];
+  setInterval(()=>{
+    p=p+1.1; if(p>100)p=0;
+    const P=Math.round(p);
+    root.querySelectorAll('.num').forEach(n=>n.textContent=P+'%');
+    root.querySelectorAll('.plabel').forEach(n=>n.textContent='加载中 '+P+'%');
+    root.querySelectorAll('.pct').forEach(n=>n.textContent=P+'%');
+    root.querySelectorAll('.fill,.done').forEach(f=>f.style.width=p+'%');
+    root.querySelectorAll('.cliprect').forEach(c=>c.setAttribute('width',(p/100* (c.ownerSVGElement?c.ownerSVGElement.viewBox.baseVal.width:250)).toFixed(1)));
+    root.querySelectorAll('.scanline').forEach(l=>{const w=l.ownerSVGElement.viewBox.baseVal.width;const x=(p/100*w).toFixed(1);l.setAttribute('x1',x);l.setAttribute('x2',x);});
+    // generic on/off
+    root.querySelectorAll('[data-i]').forEach(el=>{
+      const i=+el.dataset.i,n=+el.dataset.n,on=(i/n)*100<=p;
+      el.classList.toggle('on',on);
+      el.classList.toggle('now', on && (i/n)*100 > p-10 && !el.classList.contains('wfi'));
+    });
+    // D7 accordion heights
+    if(root.querySelector('.acc')) root.querySelectorAll('.acc i').forEach((el,i,arr)=>{el.style.height=(30+i*10+ (el.classList.contains('on')?8:0))+'px';});
+    // A1 eq animated heights
+    if(eq.length) eq.forEach((el,i)=>{ el.style.height=el.classList.contains('on')?(25+Math.random()*65)+'%':'18%'; });
+    // D8 thermo
+    root.querySelectorAll('.tube i').forEach(f=>f.style.height=p+'%');
+    // D9 node fill line + active node
+    root.querySelectorAll('.stepline i').forEach(f=>f.style.width=p+'%');
+    // D10 mark
+    root.querySelectorAll('.mark').forEach(m=>m.style.left=p+'%');
+    // A3 knob
+    root.querySelectorAll('.knob').forEach(k=>{k.style.left=Math.max(0,Math.min(100,p))+'%';});
+    // A4 playhead + bars
+    root.querySelectorAll('.ph').forEach(ph=>ph.style.left=p+'%');
+    // A10 particle + fill
+    root.querySelectorAll('.pt').forEach(pt=>{pt.style.left=Math.max(0,Math.min(97,p))+'%';});
+    // A7 clip
+    root.querySelectorAll('.chart .cliprect').forEach(c=>c.setAttribute('width',(p/100*240).toFixed(1)));
+  },50);
+});
+
+/* ---------- pick ---------- */
+const picks={load:null,conv:null};
+const names={load:{},conv:{}};load.forEach(d=>names.load[d.id]=d.id+' '+d.name);conv.forEach(d=>names.conv[d.id]=d.id+' '+d.name);
+document.querySelectorAll('.row').forEach(row=>{
+  row.querySelector('.pick').addEventListener('click',()=>{
+    const g=row.dataset.group,id=row.dataset.id;
+    if(picks[g]===id){picks[g]=null;row.classList.remove('picked');}
+    else{picks[g]=id;document.querySelectorAll('.row[data-group="'+g+'"]').forEach(r=>r.classList.remove('picked'));row.classList.add('picked');}
+    const parts=[];if(picks.load)parts.push('加载-'+names.load[picks.load]);if(picks.conv)parts.push('转换-'+names.conv[picks.conv]);
+    document.getElementById('pickedText').textContent=parts.length?parts.join('  |  '):'尚未选择';
+  });
+});
+</script>
+</body>
+</html>

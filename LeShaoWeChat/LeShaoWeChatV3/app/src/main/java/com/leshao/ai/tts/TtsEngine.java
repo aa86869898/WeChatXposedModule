@@ -55,7 +55,14 @@ public final class TtsEngine implements TextToSpeech.OnInitListener {
     @Override
     public void onInit(int status) {
         if (status == TextToSpeech.SUCCESS) {
-            int result = tts.setLanguage(Locale.CHINESE);
+            // v986: 部分引擎会在构造函数内同步回调 onInit, 此时 tts 字段尚未完成赋值,
+            // 直接调用会 NPE。这里做空值防护, 真正的回调(异步)会再次进入本方法。
+            TextToSpeech engine = tts;
+            if (engine == null) {
+                Log.w(TAG, "onInit 时 tts 尚未赋值，跳过本次初始化");
+                return;
+            }
+            int result = engine.setLanguage(Locale.CHINESE);
             if (result == TextToSpeech.LANG_MISSING_DATA
                     || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 Log.w(TAG, "中文语音包缺失，可能无法朗读");

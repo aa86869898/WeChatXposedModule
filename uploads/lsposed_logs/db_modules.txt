@@ -1,0 +1,102 @@
+>>>>> Dumping cursor [module_pkg_name, apk_path]
+0 {
+   module_pkg_name=com.tsng.hidemyapplist
+   apk_path=/data/app/~~Ke-uMiC0D4SlC2Y656euzQ==/com.tsng.hidemyapplist-AkJluhfooyjjl8hH0ojouA==/base.apk
+}
+1 {
+   module_pkg_name=me.yun.fkwechat
+   apk_path=/data/app/~~DaR6l3piyiMskUJGF-x-gw==/me.yun.fkwechat-kYQxSYY7wQmmCEfSBCZdkQ==/base.apk
+}
+2 {
+   module_pkg_name=com.cxapk.viphelper
+   apk_path=/data/app/~~dSW0LgXkAPTho7kM0TfJ0A==/com.cxapk.viphelper-_Q5iClP46QNG0nHAIh3vgg==/base.apk
+}
+3 {
+   module_pkg_name=com.wechat.wechatai
+   apk_path=/data/app/~~6KFaJq23e7zuMl4laQ5AKA==/com.wechat.wechatai-1-hTspOF3EM88sTu1aYpYg==/base.apk
+}
+4 {
+   module_pkg_name=com.wengui.hook
+   apk_path=/data/app/~~1bVMvkkCv3oIT31V6FBzqQ==/com.wengui.hook-GOlJsWdcvkpAdiiRRairPA==/base.apk
+}
+5 {
+   module_pkg_name=com.lu.wxmask272
+   apk_path=/data/app/~~kjxSCJ0rnLH4uzyNIzfi3Q==/com.lu.wxmask272-8qphsNrVCtvY2vy29GDvzg==/base.apk
+}
+6 {
+   module_pkg_name=wx.repair.tool
+   apk_path=/data/app/~~LwbiT25XtNy6C6o7Awpshw==/wx.repair.tool-s9YSeqUg5iGhwjubsTrp4A==/base.apk
+}
+7 {
+   module_pkg_name=Hook.JiuWu.Xp
+   apk_path=/data/app/~~VnMRwsIp2qstVzfWJQARkA==/Hook.JiuWu.Xp-WhupeiPhV5DlizOZwtv-Vw==/base.apk
+}
+8 {
+   module_pkg_name=me.neko.fckvip
+   apk_path=/data/app/~~zR-GkwaTgz2uO8EvfiqoGQ==/me.neko.fckvip-hQ0qyZY2vNw8fn1J6BVX6Q==/base.apk
+}
+9 {
+   module_pkg_name=io.github.nkr00711.xviphook
+   apk_path=/data/app/~~piRLQYizx-z9E2Qd_9HAtg==/io.github.nkr00711.xviphook-O_apL7779TCXZK-Laxv-YQ==/base.apk
+}
+10 {
+   module_pkg_name=com.window.hook
+   apk_path=/data/app/~~5DhKqHgFEf0QF6ZK2bmlIg==/com.window.hook-duEqrgegIl5cdiOEJuSJFg==/base.apk
+}
+11 {
+   module_pkg_name=com.test.opluslyrics.box
+   apk_path=/data/app/~~lvltk8TeKD8FfI-67KCHTg==/com.test.opluslyrics.box-ZLBgPsXjdYuBWK0DYbFcBA==/base.apk
+}
+12 {
+   module_pkg_name=com.ss.android.ugc.aweme.yyds
+   apk_path=/data/app/~~E0ws9RotFr8uSw8n670myw==/com.ss.android.ugc.aweme.yyds-tJi2dMmwJlM7MBR2PJc4Og==/base.apk
+}
+13 {
+   module_pkg_name=dev.ujhhgtg.wekit
+   apk_path=/data/app/~~vnva_VoEyxTMQS3weyUCfQ==/dev.ujhhgtg.wekit-rbvdPr0RD0Rmun0MEelvEg==/base.apk
+}
+14 {
+   module_pkg_name=com.leshao.wechat
+   apk_path=/data/app/~~e42t555GM-mGY7t_53Y_Kw==/com.leshao.wechat-g_WzlkpK4FCYTA_ZCd1pvA==/base.apk
+}
+15 {
+   module_pkg_name=h.Hchat
+   apk_path=/data/app/~~WMGRo9lupyUEpt3sFJCrJg==/h.Hchat-f0FWvFYdWVuCT7YEPy6jag==/base.apk
+}
+16 {
+   module_pkg_name=have.fun
+   apk_path=/data/app/~~E-MyVrdqMM-ZC4fFd-f1kw==/have.fun-1aBEZ2gt0FT4hwMLvsSywA==/base.apk
+}
+17 {
+   module_pkg_name=com.xposed.douyinhelper
+   apk_path=/data/app/~~QLwPHzyi6QKt9Tot9QB3Ag==/com.xposed.douyinhelper-gbN-6tCo-bSD0UtkKj-zuw==/base.apk
+}
+18 {
+   module_pkg_name=me.dartcv.nuke
+   apk_path=/data/app/~~rflNNxe2_xACGfbguls5FQ==/me.dartcv.nuke-a5Eiw3Oufh6Fh7ufmtkVLA==/base.apk
+}
+19 {
+   module_pkg_name=com.dsmod.probe
+   apk_path=/data/app/~~SycS1UQUl_P5bb0AC-LSJQ==/com.dsmod.probe-Xd2f9LmOfj9gETKgSMGJlw==/base.apk
+}
+20 {
+   module_pkg_name=com.lemon.mtmcphook
+   apk_path=/data/app/~~t1Lz7pmCs3_C3gSureDr1w==/com.lemon.mtmcphook-IardM2lPvGLIC2Efw-pAnw==/base.apk
+}
+21 {
+   module_pkg_name=me.yun.lspilot
+   apk_path=/data/app/~~rfg6RfQ47ww9aEfPAyXjwA==/me.yun.lspilot-u6G4n-s30exRdUE4n_zmzw==/base.apk
+}
+22 {
+   module_pkg_name=com.junge.algorithmAidePro
+   apk_path=/data/app/~~xUuXhKwPx3oLUGvNvlC5kw==/com.junge.algorithmAidePro-FdcJxetlJPRl9A-CkH-8Vw==/base.apk
+}
+23 {
+   module_pkg_name=io.github.tehcneko.sslunpinning
+   apk_path=/data/app/~~nyJLFJWPbYFOsWtsLzqA3A==/io.github.tehcneko.sslunpinning-hxZEi_TTfrljAxVIgTkSdw==/base.apk
+}
+24 {
+   module_pkg_name=com.leshao.v3
+   apk_path=/data/app/~~F01wWan4lHrWX02DIFZsUw==/com.leshao.v3--lVvb4aMRwa47PAUrON0rg==/base.apk
+}
+<<<<<

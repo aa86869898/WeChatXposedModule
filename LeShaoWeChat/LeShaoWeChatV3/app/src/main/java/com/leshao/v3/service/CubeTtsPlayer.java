@@ -65,12 +65,15 @@ public class CubeTtsPlayer {
     }
 
     private void processQueue() {
-        if (mPlaying) return;
-        String text = mQueue.poll();
-        if (text == null) return;
-
-        mPlaying = true;
-        mSpeakSeq++;
+        // v986: 原子地判定/置位 mPlaying 并取队首, 避免 speak() 与 worker 收尾并发时双重起播。
+        final String text;
+        synchronized (this) {
+            if (mPlaying) return;
+            text = mQueue.poll();
+            if (text == null) return;
+            mPlaying = true;
+            mSpeakSeq++;
+        }
         acquireWakeLock();
 
         new Thread(() -> {
@@ -83,8 +86,10 @@ public class CubeTtsPlayer {
             } catch (Throwable t) {
                 LogWriter.log(TAG, "process err: " + t.getMessage());
             } finally {
-                mPlaying = false;
-                mDoneSeq++;
+                synchronized (this) {
+                    mPlaying = false;
+                    mDoneSeq++;
+                }
                 releaseWakeLock();
                 if (!mPaused) processQueue();
             }
@@ -99,6 +104,8 @@ public class CubeTtsPlayer {
                 LogWriter.log(TAG, "synthesize: key or voice empty, fallback to system TTS");
                 return null;
             }
+            // v986: 密钥脱敏, 禁止打印完整 Key(参考 AppConfig 掩码策略)。
+            LogWriter.log(TAG, "synthesize: key=" + maskKey(apiKey) + " voice=" + voiceId);
 
             URL url = new URL(API_URL);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -130,27 +137,23 @@ public class CubeTtsPlayer {
                 }
 
                 InputStream is = null;
-                StringBuilder sb = new StringBuilder();
+                // v986: 先整体读字节再一次性 UTF-8 解码, 避免按 4KB 分块打断多字节字符。
+                java.io.ByteArrayOutputStream rbaos = new java.io.ByteArrayOutputStream();
                 try {
                 is = conn.getInputStream();
                 byte[] buf = new byte[4096];
                 int n;
-                while ((n = is.read(buf)) > 0) sb.append(new String(buf, 0, n, "UTF-8"));
+                while ((n = is.read(buf)) > 0) rbaos.write(buf, 0, n);
                 } finally {
                     if (is != null) { try { is.close(); } catch (Throwable ignored) {} }
                 }
 
-                String resp = sb.toString();
-                int audioIdx = resp.indexOf("\"audio\":\"");
-                if (audioIdx < 0) {
+                String resp = new String(rbaos.toByteArray(), "UTF-8");
+                String audioUrl = parseAudioUrl(resp);
+                if (audioUrl == null || audioUrl.isEmpty()) {
                     LogWriter.log(TAG, "synthesize: no audio field");
                     return null;
                 }
-                int audioStart = audioIdx + 9;
-                int audioEnd = resp.indexOf("\"", audioStart);
-                if (audioEnd < 0) return null;
-
-                String audioUrl = resp.substring(audioStart, audioEnd).replace("\\/", "/");
 
                 URL audioURL = new URL(audioUrl);
                 HttpURLConnection aConn = (HttpURLConnection) audioURL.openConnection();
@@ -188,17 +191,56 @@ public class CubeTtsPlayer {
         }
     }
 
+    /** v986: 解析合成响应中的音频 URL, 优先 JSON, 回退字符串定位。 */
+    private static String parseAudioUrl(String resp) {
+        if (resp == null || resp.isEmpty()) return null;
+        try {
+            org.json.JSONObject jo = new org.json.JSONObject(resp);
+            org.json.JSONObject data = jo.optJSONObject("data");
+            String audio = (data != null) ? data.optString("audio", "") : "";
+            if (audio == null || audio.isEmpty()) audio = jo.optString("audio", "");
+            if (audio != null && !audio.isEmpty()) return audio.replace("\\/", "/");
+        } catch (Throwable ignored) {}
+        try {
+            int audioIdx = resp.indexOf("\"audio\":\"");
+            if (audioIdx < 0) return null;
+            int audioStart = audioIdx + 9;
+            int audioEnd = resp.indexOf("\"", audioStart);
+            if (audioEnd < 0) return null;
+            return resp.substring(audioStart, audioEnd).replace("\\/", "/");
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /** v986: 日志密钥脱敏, 只保留首尾各 2 位。 */
+    private static String maskKey(String key) {
+        if (key == null || key.isEmpty()) return "<empty>";
+        int n = key.length();
+        if (n <= 4) return "****";
+        return key.substring(0, 2) + "****" + key.substring(n - 2);
+    }
+
     private void playWavSync(File wav) {
         MediaPlayer mp = new MediaPlayer();
         try {
             mp.setDataSource(wav.getAbsolutePath());
             mp.prepare();
             mp.setOnCompletionListener(m -> {
-                synchronized (mp) { mp.notify(); }
+                synchronized (mp) { mp.notifyAll(); }
+            });
+            // v986: 出错时也要唤醒等待线程, 否则异常路径会挂满 duration+5000ms。
+            mp.setOnErrorListener((m, what, extra) -> {
+                LogWriter.log(TAG, "play err callback what=" + what);
+                synchronized (m) { m.notifyAll(); }
+                return true;
             });
             mp.start();
+            int dur = 0;
+            try { dur = mp.getDuration(); } catch (Throwable ignored) {}
+            if (dur <= 0) dur = 15000;
             synchronized (mp) {
-                try { mp.wait(mp.getDuration() + 5000); } catch (InterruptedException ignored) {}
+                try { mp.wait(dur + 5000); } catch (InterruptedException ignored) {}
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, "play err: " + t.getMessage());

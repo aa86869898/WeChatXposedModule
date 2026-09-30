@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>乐少 · 加载/转换 样式选型</title>
+<style>
+  :root{
+    --bg:#0f0a17; --surface:#1b1428; --sc-low:#241a38; --sc-high:#2d2145;
+    --primary:#C9A9FF; --primary-deep:#9F7BFF; --on-primary:#2A1550;
+    --g1:#8B5CF6; --g2:#A78BFA; --g3:#D946EF; --g4:#FF6FB0;
+    --on-surface:#EDE7F6; --on-var:#B8AECE; --outline:#5b4d78;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 20% -10%,#2a1b45 0%,var(--bg) 55%);
+       color:var(--on-surface);font-family:-apple-system,"Segoe UI","PingFang SC",sans-serif;padding:28px 18px 80px}
+  h1{font-size:22px;margin:0 0 6px}
+  .sub{color:var(--on-var);font-size:13px;line-height:1.7;margin-bottom:18px}
+  .sticky{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(15,10,23,.82);
+          border:1px solid #2e2246;border-radius:14px;padding:12px 16px;margin-bottom:22px}
+  .sticky b{color:var(--primary)}
+  .pill{display:inline-block;background:#33245a;color:#e9ddff;border-radius:999px;padding:4px 12px;margin:4px 6px 0 0;font-size:12px}
+  h2{font-size:16px;margin:34px 0 14px;display:flex;align-items:center;gap:10px}
+  h2:before{content:"";width:6px;height:18px;border-radius:3px;background:linear-gradient(180deg,var(--g1),var(--g3))}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px}
+  .card{background:linear-gradient(180deg,#1c1430,#16101f);border:1px solid #2e2246;border-radius:18px;
+        overflow:hidden;transition:.2s;position:relative}
+  .card.picked{border-color:var(--primary);box-shadow:0 0 0 2px rgba(201,169,255,.35),0 12px 30px rgba(139,92,246,.25)}
+  .card .demo{padding:22px 18px;min-height:210px;display:flex;align-items:center;justify-content:center}
+  .card .foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-top:1px solid #2a1f42}
+  .card .name{font-size:13px;font-weight:600}
+  .card .desc{font-size:11px;color:var(--on-var);margin-top:2px;line-height:1.5}
+  .pick{border:1px solid var(--primary);color:var(--primary);background:transparent;border-radius:999px;
+        padding:6px 14px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .card.picked .pick{background:var(--primary);color:var(--on-primary);font-weight:700}
+  .phone{width:100%;max-width:300px;background:var(--surface);border-radius:22px;padding:16px 14px;
+         box-shadow:0 18px 40px rgba(0,0,0,.45),inset 0 0 0 1px #35264f}
+  .bar{position:relative;height:10px;border-radius:999px;background:var(--sc-high);overflow:hidden}
+  .bar>i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;
+         background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3),var(--g4))}
+  @keyframes run{0%{width:3%}60%{width:78%}100%{width:100%}}
+  .pct{text-align:center;color:var(--primary);font-weight:800}
+  .step{display:flex;align-items:center;gap:10px;padding:7px 4px;font-size:12.5px;color:var(--on-var)}
+  .step .mk{width:20px;height:20px;border-radius:50%;border:2px solid var(--outline);display:grid;place-items:center;
+            font-size:11px;color:transparent;flex:none;transition:.3s}
+  .step.done{color:var(--on-surface)}
+  .step.done .mk{background:linear-gradient(135deg,var(--g1),var(--g3));border-color:transparent;color:#fff}
+  /* B ring */
+  .ring{width:118px;height:118px;border-radius:50%;
+        background:conic-gradient(var(--primary) var(--deg,0deg),#33244f 0deg);position:relative;display:grid;place-items:center;
+        transition:--deg .3s}
+  .ring:after{content:"";position:absolute;inset:9px;border-radius:50%;background:var(--surface);
+        box-shadow:inset 0 0 18px rgba(139,92,246,.35)}
+  .ring span{position:relative;z-index:1;font-size:26px;font-weight:800;color:var(--primary)}
+  .dots{display:flex;gap:10px;justify-content:center;margin-top:14px}
+  .dot{width:12px;height:12px;border-radius:50%;background:#33244f;transition:.3s}
+  .dot.on{background:var(--primary);box-shadow:0 0 12px var(--primary);transform:scale(1.25)}
+  .dot.dn{background:linear-gradient(135deg,var(--g1),var(--g3))}
+  /* C cards */
+  .scard{border-radius:12px;background:var(--sc-low);padding:10px 12px;margin-bottom:8px;font-size:12px;
+         display:flex;align-items:center;gap:10px;border:1px solid transparent;transition:.3s}
+  .scard.active{border-color:var(--primary);box-shadow:0 0 18px rgba(159,123,255,.35);animation:breathe 1.6s ease-in-out infinite}
+  .scard.done{opacity:.62}
+  @keyframes breathe{50%{box-shadow:0 0 26px rgba(159,123,255,.6)}}
+  .mini{height:4px;border-radius:999px;background:#33244f;flex:1;overflow:hidden}
+  .mini>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--g1),var(--g3));transition:width .3s}
+  /* D tiles */
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .tile{aspect-ratio:1;border-radius:12px;background:var(--sc-low);display:grid;place-items:center;font-size:11px;
+        color:var(--on-var);border:1px solid #2f2450;position:relative;overflow:hidden}
+  .tile.run:before{content:"";position:absolute;width:150%;height:150%;
+        background:conic-gradient(transparent 0 70%,rgba(217,70,239,.75));animation:spin 1.1s linear infinite}
+  .tile.run:after{content:"";position:absolute;inset:2px;border-radius:10px;background:var(--surface)}
+  .tile.run b{position:relative;z-index:2}
+  .tile.done{background:linear-gradient(135deg,var(--g1),var(--g3));color:#fff;border-color:transparent}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* E timeline */
+  .tl{position:relative;padding-left:22px}
+  .tl:before{content:"";position:absolute;left:7px;top:6px;bottom:6px;width:2px;background:#33244f}
+  .tlnode{position:relative;margin-bottom:12px;font-size:12.5px;color:var(--on-var)}
+  .tlnode:before{content:"";position:absolute;left:-22px;top:2px;width:16px;height:16px;border-radius:50%;
+        background:var(--surface);border:2px solid var(--outline);transition:.3s}
+  .tlnode.on:before{background:var(--primary);border-color:var(--primary);box-shadow:0 0 0 5px rgba(201,169,255,.18);animation:pulse 1.4s infinite}
+  .tlnode.dn:before{background:linear-gradient(135deg,var(--g1),var(--g3));border-color:transparent}
+  .tlnode.dn{color:var(--on-surface)}
+  @keyframes pulse{50%{box-shadow:0 0 0 9px rgba(201,169,255,.05)}}
+  /* F minimal */
+  .minimal .numbig{font-size:52px;font-weight:800;text-align:center;
+        background:linear-gradient(90deg,var(--g1),var(--g3));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hairline{height:3px;border-radius:3px;background:#2c2046;overflow:hidden;margin:14px 0 12px}
+  .hairline>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .mstep{font-size:11.5px;color:var(--on-var);display:flex;justify-content:space-between;padding:3px 0;transition:.3s}
+  .mstep.dn{color:var(--primary)}
+  /* conversion bars */
+  .cbarwrap{width:100%;max-width:300px;background:var(--surface);border-radius:22px;padding:20px 16px;
+            box-shadow:0 18px 40px rgba(0,0,0,.45),inset 0 0 0 1px #35264f}
+  .cbarwrap .ttl{font-size:12px;color:var(--on-var);text-align:center;margin-bottom:14px}
+  /* 1 capsule */
+  .capsule{height:16px;border-radius:999px;background:var(--sc-high);position:relative;overflow:hidden}
+  .capsule>i{position:absolute;inset:0 auto 0 0;width:0;border-radius:999px;
+        background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3),var(--g4),var(--g2),var(--g1));
+        background-size:200% 100%;animation:flow 1.6s linear infinite}
+  @keyframes flow{to{background-position:-200% 0}}
+  .caphead{position:absolute;top:-4px;bottom:-4px;width:16px;border-radius:50%;background:#fff;opacity:.85;
+        filter:blur(2px);transition:left .3s}
+  /* 2 waveform */
+  .wave{display:flex;align-items:flex-end;gap:3px;height:46px}
+  .wave>i{flex:1;background:#33244f;border-radius:2px;height:30%;transition:.25s}
+  .wave>i.on{background:linear-gradient(180deg,var(--g4),var(--g1))}
+  /* 3 ring eq */
+  .eqwrap{display:flex;align-items:center;justify-content:center;gap:16px}
+  .eqring{width:96px;height:96px;border-radius:50%;background:conic-gradient(var(--g3) var(--deg,0deg),#33244f 0);
+          display:grid;place-items:center;position:relative}
+  .eqring:after{content:"";position:absolute;inset:8px;border-radius:50%;background:var(--surface)}
+  .eqbars{position:relative;z-index:1;display:flex;gap:3px;align-items:flex-end;height:34px}
+  .eqbars>i{width:4px;background:var(--primary);border-radius:2px;animation:eq 1s ease-in-out infinite}
+  .eqbars>i:nth-child(2){animation-delay:.2s}.eqbars>i:nth-child(3){animation-delay:.35s}.eqbars>i:nth-child(4){animation-delay:.5s}
+  @keyframes eq{0%,100%{height:20%}50%{height:100%}}
+  /* 4 segments */
+  .segs{display:flex;gap:6px}
+  .segs>i{flex:1;height:14px;border-radius:5px;background:var(--sc-high);transition:.25s}
+  .segs>i.on{background:linear-gradient(180deg,var(--g2),var(--g1))}
+  /* 5 neon scanner */
+  .neon{height:14px;border-radius:999px;background:#241a38;position:relative;overflow:hidden;box-shadow:inset 0 0 10px rgba(0,0,0,.5)}
+  .neon>i{position:absolute;top:0;bottom:0;width:0;background:linear-gradient(90deg,#6d28d9,#c084fc,#f0abfc);
+        box-shadow:0 0 16px #d946ef}
+  .neon .scan{position:absolute;top:0;bottom:0;width:60px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);
+        animation:scan 1.4s linear infinite}
+  @keyframes scan{from{left:-60px}to{left:100%}}
+  .cnum{text-align:center;color:var(--primary);font-weight:800;font-size:22px;margin-top:12px}
+</style>
+</head>
+<body>
+  <h1>乐少 WeChat 模块 · 加载 / 转换 样式选型</h1>
+  <div class="sub">
+    第 1 组：DexKit 动态加载窗口（6 款，含布局 + 进度条 + 加载成功项显示风格）。<br>
+    第 2 组：音频转语音「转换中」动态进度条（5 套）。<br>
+    点每张卡片右下角「选择」，选好后把编号发我即可锁定，我在下一版一起实现并测试。
+  </div>
+
+  <div class="sticky" id="summary">已选：<b id="pickedText">尚未选择</b></div>
+
+  <h2>一、DexKit 加载窗口（6 款）</h2>
+  <div class="grid">
+
+    <!-- A -->
+    <div class="card" data-group="load" data-id="A">
+      <div class="demo">
+        <div class="phone">
+          <div style="font-size:15px;font-weight:700;color:var(--on-surface)">乐少V3 功能扫描</div>
+          <div style="font-size:11px;color:var(--on-var);margin:2px 0 12px">动态适配微信混淆类名</div>
+          <div class="bar"><i class="animbar"></i></div>
+          <div class="pct pctnum" style="font-size:24px;padding:8px 0 4px">0%</div>
+          <div class="steps"></div>
+        </div>
+      </div>
+      <div class="foot">
+        <div><div class="name">A · 渐变扫描卡（现行增强）</div>
+          <div class="desc">M3 圆角卡 + 流光渐变条 + 居中大字百分比 + ○/✓ 步骤列表</div></div>
+        <button class="pick">选择</button>
+      </div>
+    </div>
+
+    <!-- B -->
+    <div class="card" data-group="load" data-id="B">
+      <div class="demo">
+        <div class="phone" style="text-align:center">
+          <div style="font-size:13px;color:var(--on-var);margin-bottom:12px">正在扫描类名</div>
+          <div style="display:flex;justify-content:center"><div class="ring" id="ringB"><span>0%</span></div></div>
+          <div class="dots" id="dotsB"><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+          <div style="font-size:11.5px;color:var(--on-var);margin-top:12px" id="labelB">初始化引擎</div>
+        </div>
+      </div>
+      <div class="foot">
+        <div><div class="name">B · 环形雷达</div>
+          <div class="desc">中心发光圆环进度 + 环内百分比 + 底部步骤圆点（激活放大/完成填色）</div></div>
+        <button class="pick">选择</button>
+      </div>
+    </div>
+
+    <!-- C -->
+    <div class="card" data-group="load" data-id="C">
+      <div class="demo">
+        <div class="phone">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--on-var);margin-bottom:8px">
+            <span>功能扫描</span><span class="pctnum" style="color:var(--primary)">0%</span></div>
+          <div class="bar" style="height:5px;margin-bottom:12px"><i class="animbar"></i></div>
+          <div class="scards"></div>
+        </div>
+      </div>
+      <div class="foot">
+        <div><div class="name">C · 步骤流卡</div>
+          <div class="desc">每步一张小卡：处理中呼吸高亮 + 内嵌迷你进度；完成后卡面淡化并显示 ✓</div></div>
+        <button class="pick">选择</button>
+      </div>
+    </div>
+
+    <!-- D -->
+    <div class="card" data-group="load" data-id="D">
+      <div class="demo">
+        <div class="phone">
+          <div style="font-size:12px;color:var(--on-var);margin-bottom:8px">功能扫描 <span class="pctnum" style="color:var(--primary)">0%</span></div>
+          <div class="bar" style="height:4px;margin-bottom:12px"><i class="animbar"></i></div>
+          <div class="tiles"></div>
+        </div>
+      </div>
+      <div class="foot">
+        <div><div class="name">D · 网格瓦片</div>
+          <div class="desc">功能六宫格：处理中瓦片转圈描边，完成瓦片填充品牌渐变 + ✓；顶部贯穿细进度</div></div>
+        <button class="pick">选择</button>
+      </div>
+    </div>
+
+    <!-- E -->
+    <div class="card" data-group="load" data-id="E">
+      <div class="demo">
+        <div class="phone">
+          <div style="font-size:12px;color:var(--on-var);margin-bottom:10px">功能扫描 <span class="pctnum" style="color:var(--primary)">0%</span></div>
+          <div class="tl"></div>
+          <div class="bar" style="height:4px;margin-top:10px"><i class="animbar"></i></div>
+        </div>
+      </div>
+      <div class="foot">
+        <div><div class="name">E · 时间轴</div>
+          <div class="desc">左侧竖轴节点：当前节点脉冲光环，完成节点渐变填充；底部总进度条</div></div>
+        <button class="pick">选择</button>
+      </div>
+    </div>
+
+    <!-- F -->
+    <div class="card" data-group="load" data-id="F">
+      <div class="demo">
+        <div class="phone minimal">
+          <div class="numbig pctnum">0%</div>
+          <div class="hairline"><i class="animhair"></i></div>
+          <div class="msteps"></div>
+        </div>
+      </div>
+      <div class="foot">
+        <div><div class="name">F · 极简脉冲</div>
+          <div class="desc">超大渐变数字 + 一条细线进度 + 右侧内联步骤文字；完成行整体转主色 ✓</div></div>
+        <button class="pick">选择</button>
+      </div>
+    </div>
+
+  </div>
+
+  <h2>二、音频转语音「转换中」进度条（5 套）</h2>
+  <div class="grid">
+
+    <!-- 1 -->
+    <div class="card" data-group="convert" data-id="1">
+      <div class="demo">
+        <div class="cbarwrap">
+          <div class="ttl">音频转语音 · 发送中 (2/5段)</div>
+          <div class="capsule"><i class="capfill"></i><span class="caphead"></span></div>
+          <div class="cnum cnum1">40%</div>
+        </div>
+      </div>
+      <div class="foot">
+        <div><div class="name">1 · 流光胶囊</div>
+          <div class="desc">圆角胶囊，品牌多色渐变持续流动 + 亮光头部；右上百分比</div></div>
+        <button class="pick">选择</button>
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="card" data-group="convert" data-id="2">
+      <div class="demo">
+        <div class="cbarwrap">
+          <div class="ttl">音频转语音 · 转码中</div>
+          <div class="wave" id="wave"></div>
+          <div class="cnum cnum2">0%</div>
+        </div>
+      </div>
+      <div class="foot">
+        <div><div class="name">2 · 声波律动</div>
+          <div class="desc">条形声波从左到右点亮，已点亮条随音量跳动，形象表达“声音正在被处理”</div></div>
+        <button class="pick">选择</button>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="card" data-group="convert" data-id="3">
+      <div class="demo">
+        <div class="cbarwrap" style="display:flex;flex-direction:column;align-items:center">
+          <div class="ttl" style="align-self:stretch">音频转语音 · 合成中</div>
+          <div class="eqwrap">
+            <div class="eqring" id="eqring"><div class="eqbars"><i></i><i></i><i></i><i></i></div></div>
+            <div class="cnum cnum3" style="margin:0;font-size:26px">0%</div>
+          </div>
+        </div>
+      </div>
+      <div class="foot">
+        <div><div class="name">3 · 环形均衡器</div>
+          <div class="desc">外圈环形进度 + 中心跳动均衡器条，科技感强，突出“音频”属性</div></div>
+        <button class="pick">选择</button>
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="card" data-group="convert" data-id="4">
+      <div class="demo">
+        <div class="cbarwrap">
+          <div class="ttl">音频转语音 · 发送中 (2/5段)</div>
+          <div class="segs" id="segs"></div>
+          <div class="cnum cnum4">2 / 5 段</div>
+        </div>
+      </div>
+      <div class="foot">
+        <div><div class="name">4 · 分段格子</div>
+          <div class="desc">按“段”分格逐格点亮，与真实发送段数一一对应，进度最直观</div></div>
+        <button class="pick">选择</button>
+      </div>
+    </div>
+
+    <!-- 5 -->
+    <div class="card" data-group="convert" data-id="5">
+      <div class="demo">
+        <div class="cbarwrap">
+          <div class="ttl">音频转语音 · 处理中</div>
+          <div class="neon"><i class="neonfill"></i><span class="scan"></span></div>
+          <div class="cnum cnum5">0%</div>
+        </div>
+      </div>
+      <div class="foot">
+        <div><div class="name">5 · 霓虹扫描</div>
+          <div class="desc">暗轨道 + 霓虹填充 + 左右扫描高光；不确定态扫动，确定态从左推进</div></div>
+        <button class="pick">选择</button>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+  // ---------- generic step animation for load styles A/C/D/E/F ----------
+  function animateSteps(container, cls, total){
+    let i=0;
+    function tick(){
+      const children = container.children;
+      for(let k=0;k<children.length;k++){
+        const el=children[k];
+        el.classList.remove('on','active','run');
+        if(k<i) el.classList.add('dn','done');
+        else if(k===i) el.classList.add('on','active','run');
+      }
+      i=(i+1)%(total+2);
+    }
+    tick(); setInterval(tick, 700);
+  }
+  function fillText(root, cls, start, end){
+    const el=root.querySelector(cls); if(!el) return;
+    let v=start;
+    setInterval(()=>{ v+=3; if(v>end)v=start; el.textContent=Math.round(v)+'%';
+      const bar=root.querySelector('.animbar'); if(bar) bar.style.width=Math.min(v,end)+'%';
+      const hair=root.querySelector('.animhair'); if(hair) hair.style.width=Math.min(v,end)+'%';
+    },60);
+  }
+
+  // A
+  (function(){
+    const card=document.querySelector('.card[data-id="A"]'); const box=card.querySelector('.steps');
+    ['初始化引擎','扫描资源','定位类名','绑定 Hook'].forEach(t=>{
+      box.insertAdjacentHTML('beforeend','<div class="step"><div class="mk">✓</div>'+t+'</div>');
+    });
+    animateSteps(box,'step',box.children.length);
+    fillText(card,'.pctnum',0,100);
+  })();
+  // C
+  (function(){
+    const card=document.querySelector('.card[data-id="C"]'); const box=card.querySelector('.scards');
+    ['读取 dex','解析方法','匹配模板','注册回调','完成'].forEach(t=>{
+      box.insertAdjacentHTML('beforeend','<div class="scard"><span>'+t+'</span><div class="mini"><i></i></div><span class="mk" style="color:inherit">✓</span></div>');
+    });
+    animateSteps(box,'scard',box.children.length);
+    fillText(card,'.pctnum',0,100);
+  })();
+  // D
+  (function(){
+    const card=document.querySelector('.card[data-id="D"]'); const box=card.querySelector('.tiles');
+    ['dex','方法','模板','回调','缓存','完成'].forEach((t,i,arr)=>{
+      box.insertAdjacentHTML('beforeend','<div class="tile"><b>'+t+'</b></div>');
+    });
+    animateSteps(box,'tile',box.children.length);
+    fillText(card,'.pctnum',0,100);
+  })();
+  // E
+  (function(){
+    const card=document.querySelector('.card[data-id="E"]'); const box=card.querySelector('.tl');
+    ['初始化引擎','扫描资源','定位类名','绑定 Hook'].forEach(t=>{
+      box.insertAdjacentHTML('beforeend','<div class="tlnode">'+t+'</div>');
+    });
+    animateSteps(box,'tlnode',box.children.length);
+    fillText(card,'.pctnum',0,100);
+  })();
+  // F
+  (function(){
+    const card=document.querySelector('.card[data-id="F"]'); const box=card.querySelector('.msteps');
+    ['初始化引擎','扫描资源','定位类名','绑定 Hook'].forEach(t=>{
+      box.insertAdjacentHTML('beforeend','<div class="mstep"><span>'+t+'</span><span>✓</span></div>');
+    });
+    animateSteps(box,'mstep',box.children.length);
+    fillText(card,'.pctnum',0,100);
+  })();
+
+  // B ring
+  (function(){
+    const ring=document.getElementById('ringB'); const span=ring.querySelector('span');
+    const dots=document.getElementById('dotsB').children; const label=document.getElementById('labelB');
+    const names=['初始化引擎','扫描资源','定位类名','绑定 Hook','加载完成'];
+    let p=0;
+    setInterval(()=>{
+      p+=2; if(p>100)p=0;
+      const deg=p*3.6;
+      ring.style.setProperty('--deg',deg+'deg');
+      span.textContent=Math.round(p)+'%';
+      const idx=Math.min(Math.floor(p/100*names.length), names.length-1);
+      label.textContent=names[idx];
+      for(let i=0;i<dots.length;i++){ dots[i].classList.toggle('on',i===idx); dots[i].classList.toggle('dn',i<idx); }
+    },55);
+  })();
+
+  // ---- convert 1 capsule ----
+  (function(){
+    const card=document.querySelector('.card[data-id="1"]');
+    const f=card.querySelector('.capfill'); const h=card.querySelector('.caphead'); const n=card.querySelector('.cnum1');
+    let p=0; setInterval(()=>{ p+=2; if(p>100)p=0; f.style.width=p+'%'; h.style.left='calc('+p+'% - 8px)'; n.textContent=Math.round(p)+'%'; },60);
+  })();
+  // ---- convert 2 wave ----
+  (function(){
+    const card=document.querySelector('.card[data-id="2"]'); const w=document.getElementById('wave');
+    const N=32; for(let i=0;i<N;i++) w.insertAdjacentHTML('beforeend','<i></i>');
+    const cells=w.children; let p=0;
+    setInterval(()=>{ p=(p+1)%(N+6); for(let i=0;i<N;i++){ const on=i<=Math.min(p,N-1); cells[i].classList.toggle('on',on); cells[i].style.height=on?(30+Math.random()*60)+'%':'28%'; } },140);
+    const n=card.querySelector('.cnum2'); let q=0; setInterval(()=>{q+=2;if(q>100)q=0;n.textContent=Math.round(q)+'%';},70);
+  })();
+  // ---- convert 3 ring eq ----
+  (function(){
+    const card=document.querySelector('.card[data-id="3"]'); const r=document.getElementById('eqring'); const n=card.querySelector('.cnum3');
+    let p=0; setInterval(()=>{ p+=2; if(p>100)p=0; r.style.setProperty('--deg',(p*3.6)+'deg'); n.textContent=Math.round(p)+'%'; },60);
+  })();
+  // ---- convert 4 segments ----
+  (function(){
+    const card=document.querySelector('.card[data-id="4"]'); const s=document.getElementById('segs');
+    const N=5; for(let i=0;i<N;i++) s.insertAdjacentHTML('beforeend','<i></i>');
+    const seg=s.children; const n=card.querySelector('.cnum4'); let p=0;
+    setInterval(()=>{ p=(p+1)%(N+2); const filled=Math.min(p,N); for(let i=0;i<N;i++) seg[i].classList.toggle('on',i<filled); n.textContent=filled+' / '+N+' 段'; },700);
+  })();
+  // ---- convert 5 neon ----
+  (function(){
+    const card=document.querySelector('.card[data-id="5"]'); const f=card.querySelector('.neonfill'); const n=card.querySelector('.cnum5');
+    let p=0; setInterval(()=>{ p+=2; if(p>100)p=0; f.style.width=p+'%'; n.textContent=Math.round(p)+'%'; },60);
+  })();
+
+  // ---------- pick logic ----------
+  const picks={load:null,convert:null};
+  const NAMES={load:{A:'A 渐变扫描卡',B:'B 环形雷达',C:'C 步骤流卡',D:'D 网格瓦片',E:'E 时间轴',F:'F 极简脉冲'},
+               convert:{1:'1 流光胶囊',2:'2 声波律动',3:'3 环形均衡器',4:'4 分段格子',5:'5 霓虹扫描'}};
+  document.querySelectorAll('.card').forEach(card=>{
+    card.querySelector('.pick').addEventListener('click',()=>{
+      const g=card.dataset.group, id=card.dataset.id;
+      if(picks[g]===id){ picks[g]=null; card.classList.remove('picked'); }
+      else{ picks[g]=id; document.querySelectorAll('.card[data-group="'+g+'"]').forEach(c=>c.classList.remove('picked')); card.classList.add('picked'); }
+      const parts=[];
+      if(picks.load) parts.push('加载窗-' + NAMES.load[picks.load]);
+      if(picks.convert) parts.push('转换进度-' + NAMES.convert[picks.convert]);
+      document.getElementById('pickedText').textContent = parts.length? parts.join('  |  ') : '尚未选择';
+    });
+  });
+</script>
+</body>
+</html>

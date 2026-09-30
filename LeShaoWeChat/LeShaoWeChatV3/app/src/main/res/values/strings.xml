@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- 应用 / 模块名 -->
-    <string name="app_name">乐小AI</string>
+    <string name="app_name">乐少助手</string>
 
     <!-- 设置页 -->
-    <string name="settings_title">乐小AI 设置</string>
+    <string name="settings_title">乐少助手 设置</string>
     <string name="settings_saved_toast">设置已保存</string>
     <string name="settings_save_failed_toast">设置保存失败，请检查存储权限</string>
     <string name="settings_whitelist_empty_toast">白名单为空，AI 将不会在 @时被触发</string>

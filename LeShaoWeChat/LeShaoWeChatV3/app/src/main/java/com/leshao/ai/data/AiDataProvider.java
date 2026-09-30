@@ -4,9 +4,12 @@ import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.net.Uri;
+import android.os.Binder;
+import android.os.Process;
 import android.util.Log;
 
 import java.io.File;
@@ -67,6 +70,10 @@ public class AiDataProvider extends ContentProvider {
     @Override
     public Cursor query(Uri uri, String[] projection, String selection,
                         String[] selectionArgs, String sortOrder) {
+        if (!isCallerTrusted()) {
+            Log.w(TAG, "query 拒绝非白名单调用方 uid=" + Binder.getCallingUid());
+            return null;
+        }
         String path = uri.getPath();
         String file = fileForPath(path);
         if (file == null) {
@@ -83,6 +90,10 @@ public class AiDataProvider extends ContentProvider {
 
     @Override
     public Uri insert(Uri uri, ContentValues values) {
+        if (!isCallerTrusted()) {
+            Log.w(TAG, "insert 拒绝非白名单调用方 uid=" + Binder.getCallingUid());
+            return null;
+        }
         String path = uri.getPath();
         String file = fileForPath(path);
         if (file == null || values == null) {
@@ -101,17 +112,62 @@ public class AiDataProvider extends ContentProvider {
 
     @Override
     public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
+        if (!isCallerTrusted()) {
+            Log.w(TAG, "update 拒绝非白名单调用方 uid=" + Binder.getCallingUid());
+            return 0;
+        }
         return insert(uri, values) != null ? 1 : 0;
     }
 
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
+        if (!isCallerTrusted()) {
+            Log.w(TAG, "delete 拒绝非白名单调用方 uid=" + Binder.getCallingUid());
+            return 0;
+        }
         return 0;
     }
 
     @Override
     public String getType(Uri uri) {
         return "text/plain";
+    }
+
+    /** 当前 IPC 调用方是否为受信任进程（宿主微信 / 模块自身 / 同进程）。 */
+    private boolean isCallerTrusted() {
+        return isTrustedUid(getContext(), Binder.getCallingUid());
+    }
+
+    /**
+     * 校验 UID 是否属于白名单包（宿主微信 {@link #WECHAT_PACKAGE} 或模块
+     * {@link #MODULE_PACKAGE}）或本进程。
+     *
+     * <p>用于 ContentProvider 与桥接广播的调用方鉴权，避免任意 App 读取含明文
+     * apiKey 的 config.json，或注入伪造的会话/配置数据。
+     */
+    public static boolean isTrustedUid(Context context, int uid) {
+        if (context == null) {
+            return false;
+        }
+        if (uid == Process.myUid()) {
+            return true;
+        }
+        try {
+            PackageManager pm = context.getPackageManager();
+            String[] packages = pm.getPackagesForUid(uid);
+            if (packages != null) {
+                for (String pkg : packages) {
+                    if (WECHAT_PACKAGE.equals(pkg) || MODULE_PACKAGE.equals(pkg)) {
+                        return true;
+                    }
+                }
+            }
+            String name = pm.getNameForUid(uid);
+            return WECHAT_PACKAGE.equals(name) || MODULE_PACKAGE.equals(name);
+        } catch (Throwable t) {
+            Log.w(TAG, "isTrustedUid 失败: " + t);
+            return false;
+        }
     }
 
     private static String fileForPath(String path) {

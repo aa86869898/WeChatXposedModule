@@ -39,14 +39,30 @@ public class ContactGroupPageView {
                 (int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_XL_DP * d));
 
         LinearLayout cardChat = makeCard(ctx, d);
-        boolean vfOn = prefs != null && prefs.getBoolean("ls_voice_forward", false);
+        boolean vfOn = HookConfig.isEnabled("voice_forward");
 
         // v998: 移除"消息防撤回"功能入口
         cardChat.addView(switchRow(ctx, d, "语音消息转发", null, vfOn, (v, on) -> {
-            if (prefs != null) prefs.edit().putBoolean("ls_voice_forward", on).apply();
+            if (prefs != null) prefs.edit().putBoolean("voice_forward", on).apply();
             VoiceForwardHook.setEnabled(on);
         }, null));
         root.addView(cardChat);
+
+        root.addView(candyDivider(ctx, d));
+
+        // v1146: 消息防撤回（严格实现文档《WeChat_AntiRevoke_Reverse.md》H1/H3 方案）
+        boolean antiRevokeOn = prefs != null && prefs.getBoolean(AntiRecallHook.K_MASTER, true);
+        LinearLayout cardAntiRevoke = makeCard(ctx, d);
+        cardAntiRevoke.addView(switchRow(ctx, d, "消息防撤回",
+                "拦截服务端撤回改写，原消息继续显示（保留微信原生提示）", antiRevokeOn,
+                (v, on) -> {
+                    if (prefs != null) prefs.edit().putBoolean(AntiRecallHook.K_MASTER, on).apply();
+                    AntiRecallHook.setEnabled(on);
+                    Toast.makeText(ctx, "消息防撤回已" + (on ? "开启" : "关闭")
+                            + "（重启微信后完全生效）", Toast.LENGTH_SHORT).show();
+                },
+                v -> AntiRecallHook.showConfigDialog(act)));
+        root.addView(cardAntiRevoke);
 
         root.addView(candyDivider(ctx, d));
 
@@ -86,7 +102,6 @@ public class ContactGroupPageView {
         LinearLayout cardEntry = makeCard(ctx, d);
         boolean cornerMenuOn = com.leshao.v3.wm.utils.WmPrefs.isCornerMenu();
         boolean longPressMenuOn = com.leshao.v3.wm.utils.WmPrefs.isLongPressMenu();
-        boolean inputButtonsOn = com.leshao.v3.wm.utils.WmPrefs.isInputButtons();
 
         cardEntry.addView(switchRow(ctx, d, "微信左上角菜单", null, cornerMenuOn, (v, on) -> {
             com.leshao.v3.wm.utils.WmPrefs.set("corner_menu", on);
@@ -94,10 +109,49 @@ public class ContactGroupPageView {
         cardEntry.addView(switchRow(ctx, d, "聊天窗口长按菜单", null, longPressMenuOn, (v, on) -> {
             com.leshao.v3.wm.utils.WmPrefs.set("long_press_menu", on);
         }, null));
-        cardEntry.addView(switchRow(ctx, d, "输入框功能按钮", null, inputButtonsOn, (v, on) -> {
-            com.leshao.v3.wm.utils.WmPrefs.set("input_buttons", on);
-        }, null));
         root.addView(cardEntry);
+
+        root.addView(candyDivider(ctx, d));
+
+        // v1110: 消息长按菜单净化入口
+        LinearLayout cardMsgMenu = makeCard(ctx, d);
+        cardMsgMenu.addView(M3Page.clickRow(ctx, "\uD83E\uDDF9", "去你妈的消息长按菜单",
+                "勾选要移除的微信原生按钮",
+                () -> SubPageActivity.open(act, "去你妈的消息长按菜单", 21)));
+        root.addView(cardMsgMenu);
+
+        root.addView(candyDivider(ctx, d));
+
+        // 新增（文档实现）：消息伪装 / 自动抢红包 / 输入框快捷按钮 / 数据库直读
+        LinearLayout cardNew = makeCard(ctx, d);
+        cardNew.addView(switchRow(ctx, d, "消息伪装",
+                "文本伪装成系统消息 / 名片 / 链接卡片", MsgForgeHook.isEnabled(),
+                (v, on) -> {
+                    MsgForgeHook.setEnabled(on);
+                    Toast.makeText(ctx, "消息伪装已" + (on ? "开启" : "关闭"), Toast.LENGTH_SHORT).show();
+                },
+                v -> SubPageActivity.open(act, "消息伪装", 23)));
+        cardNew.addView(M3Page.divider(ctx));
+        cardNew.addView(switchRow(ctx, d, "自动抢红包",
+                "纯后台自动领取群红包", RedPacketHook.isEnabled(),
+                (v, on) -> {
+                    RedPacketHook.setEnabled(on);
+                    Toast.makeText(ctx, "自动抢红包已" + (on ? "开启" : "关闭"), Toast.LENGTH_SHORT).show();
+                },
+                v -> SubPageActivity.open(act, "自动抢红包", 24)));
+        cardNew.addView(M3Page.divider(ctx));
+        cardNew.addView(switchRow(ctx, d, "输入框快捷按钮",
+                "聊天输入框上方常驻一排按钮", ChatFooterBarHook.isEnabled(),
+                (v, on) -> {
+                    ChatFooterBarHook.setEnabled(on);
+                    Toast.makeText(ctx, "输入框快捷按钮已" + (on ? "开启" : "关闭"), Toast.LENGTH_SHORT).show();
+                },
+                v -> SubPageActivity.open(act, "输入框快捷按钮", 26)));
+        cardNew.addView(M3Page.divider(ctx));
+        cardNew.addView(M3Page.clickRow(ctx, "\uD83D\uDDC4", "数据库直读",
+                "直接只读查询微信主库（联系人/群/消息）",
+                () -> SubPageActivity.open(act, "数据库直读", 25)));
+        root.addView(cardNew);
 
         return root;
     }

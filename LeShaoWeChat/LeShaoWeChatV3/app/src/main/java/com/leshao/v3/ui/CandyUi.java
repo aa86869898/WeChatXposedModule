@@ -202,11 +202,6 @@ public class CandyUi {
         return gd;
     }
 
-    /** M3 对话框：surfaceContainerHigh 底 + 28dp extra-large 圆角 */
-    public static GradientDrawable dialogBg(Context ctx) {
-        return roundedRect(AppColors.surfaceContainerHigh(), dp(ctx, AppColors.DIALOG_RADIUS_DP));
-    }
-
     /** M3 filled button：流光渐变底 + 全圆角 + 状态层涟漪（v1067 葡萄气泡） */
     public static Drawable buttonBg(Context ctx) {
         StateListDrawable sd = new StateListDrawable();
@@ -309,6 +304,49 @@ public class CandyUi {
             gd.setColor(AppColors.stateLayerPressed());
             return gd;
         }
+    }
+
+    /** v1142: 按当前浮层层级自动区分底色的对话框背景（叠加时更易分辨）。 */
+    public static GradientDrawable dialogBg(Context ctx) {
+        return dialogBg(ctx, WindowLayer.depth());
+    }
+
+    /**
+     * M3 对话框：底色随层级变化 + （第 2 层起）1dp 描边。
+     * <ul>
+     *   <li>第 1 层：surfaceContainerHigh（保持原有观感）</li>
+     *   <li>第 2 层：surfaceContainerHighest</li>
+     *   <li>第 3 层起：向 primaryContainer 逐层混色（上限 24%），越上层越突出</li>
+     * </ul>
+     */
+    public static GradientDrawable dialogBg(Context ctx, int layer) {
+        int color;
+        if (layer <= 0) {
+            color = AppColors.surfaceContainerHigh();
+        } else if (layer == 1) {
+            color = AppColors.surfaceContainerHighest();
+        } else {
+            float t = Math.min(0.06f * layer, 0.24f);
+            color = blend(AppColors.surfaceContainerHighest(), AppColors.primaryContainer(), t);
+        }
+        GradientDrawable gd = roundedRect(color, dp(ctx, AppColors.DIALOG_RADIUS_DP));
+        if (layer > 0) {
+            gd.setStroke(dp(ctx, 1), AppColors.outlineVariant());
+        }
+        return gd;
+    }
+
+    /** v1142: 两色线性混色（0=全 c1，1=全 c2）。 */
+    public static int blend(int c1, int c2, float t) {
+        if (t < 0f) t = 0f;
+        if (t > 1f) t = 1f;
+        int a1 = (c1 >>> 24) & 0xFF, r1 = (c1 >> 16) & 0xFF, g1 = (c1 >> 8) & 0xFF, b1 = c1 & 0xFF;
+        int a2 = (c2 >>> 24) & 0xFF, r2 = (c2 >> 16) & 0xFF, g2 = (c2 >> 8) & 0xFF, b2 = c2 & 0xFF;
+        int a = (int) (a1 + (a2 - a1) * t);
+        int r = (int) (r1 + (r2 - r1) * t);
+        int g = (int) (g1 + (g2 - g1) * t);
+        int b = (int) (b1 + (b2 - b1) * t);
+        return (a << 24) | (r << 16) | (g << 8) | b;
     }
 
     private static GradientDrawable roundedRect(int color, int radius) {

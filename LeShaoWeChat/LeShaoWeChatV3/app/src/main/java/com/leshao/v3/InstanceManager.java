@@ -26,10 +26,11 @@ import de.robv.android.xposed.XposedBridge;
  *   <li>严禁把实例配置写到模块自身包名下 —— 分身 user 可能无权访问模块目录</li>
  * </ol>
  *
- * <p>v965 决策: 系统克隆分身(ColorOS 应用分身 / AOSP App-Clone)进程在模块入口即被
- * {@link #isCloneApp()} 拦截, 完全不执行模块代码; 实例总开关默认值对齐《微信模块隔离.md》
- * 规范 —— 主微信默认开启, 分身默认关闭。LSPosed MultiApp 等独立虚拟用户不受入口拦截影响,
- * 其模块启停完全由 LSPosed 作用域(勾选【安装到用户 xxx】)控制。</p>
+ * <p>v965/v1038 现状: 系统克隆分身(ColorOS 应用分身 / AOSP App-Clone)的入口拦截已在 v1038 移除,
+ * 模块入口不再依据 {@link #isCloneApp()} 跳过任何进程 —— 该判定现仅用于日志探测/诊断, 不改变
+ * 模块加载行为, 亦不阻止模块在克隆分身中运行。实例总开关默认值为「开启」(见 {@link #isEnabled()},
+ * 与主微信/分身无关); LSPosed MultiApp 等独立虚拟用户的模块启停完全由 LSPosed 作用域
+ * (勾选【安装到用户 xxx】)控制。</p>
  */
 public final class InstanceManager {
 
@@ -46,6 +47,9 @@ public final class InstanceManager {
     private static volatile String sDataDir = "";
     private static volatile boolean sPrimary = false;
     private static volatile SharedPreferences sPrefs;
+    // v1131: 独立初始化标志。此前用 sUserId != -1 判断, 而 userId() 会提前经
+    // ensureUid() 置位 sUserId, 导致 init() 永久跳过、sPrefs/sDataDir 从未赋值。
+    private static volatile boolean sInited = false;
 
     private InstanceManager() {
     }
@@ -60,7 +64,8 @@ public final class InstanceManager {
             LogWriter.log(TAG, "init skipped: ctx null");
             return;
         }
-        if (sUserId != -1) return;
+        if (sInited) return;
+        sInited = true;
         try {
             sUserId = Process.myUid() / PER_USER_RANGE;
             sPrimary = (sUserId == 0);
@@ -105,8 +110,9 @@ public final class InstanceManager {
     /**
      * 当前实例总开关。
      *
-     * <p>v998: 实例隔离入口已从主页隐藏, 默认值统一为「开启」(不再区分主微信/分身),
-     * 保证模块开箱即用; 系统克隆分身仍在入口被 {@link #isCloneApp()} 拦截。</p>
+     * <p>v998/v1038: 实例隔离入口已从主页隐藏, 默认值统一为「开启」(不再区分主微信/分身),
+     * 保证模块开箱即用; v1038 已移除系统克隆分身的入口拦截, {@link #isCloneApp()} 仅作探测,
+     * 不再据此跳过模块加载。</p>
      */
     public static boolean isEnabled() {
         if (sPrefs == null) return true;
@@ -157,20 +163,23 @@ public final class InstanceManager {
         return isPrimary() ? "主微信(user0)" : ("系统分身(user" + userId() + ")");
     }
 
-    // ---------------- v965: 系统克隆分身(App-Clone)拦截 ----------------
+    // -------- v965 拦截 / v1038 起仅探测: 系统克隆分身(App-Clone)识别 --------
 
     /**
      * 判断当前进程是否为系统应用克隆分身(ColorOS 应用分身 / AOSP App-Clone)。
      *
+     * <p>v1038 起本方法仅作探测/诊断用途: 调用方不再据此拦截或跳过模块加载, 返回 true 也不代表
+     * 当前进程会被阻止运行模块代码。</p>
+     *
      * <p>判定原则(全部走系统 API 动态识别, 不写死任何 userId 数字):</p>
      * <ol>
-     *   <li>机主用户(userId=0)直接放行, 完整运行模块全部功能;</li>
+     *   <li>机主用户(userId=0)直接返回 false, 视为非克隆分身;</li>
      *   <li>优先 binder 直查 IUserManager.getProfileIds(自身): 系统克隆分身与机主用户
-     *       同属一个 Profile Group(组内同时包含机主用户与自身), 命中即拦截;</li>
+     *       同属一个 Profile Group(组内同时包含机主用户与自身), 命中返回 true;</li>
      *   <li>兜底经 ActivityThread.getSystemContext() 依次尝试 Context.isCloneApp()(API 34+)、
      *       UserManager.isCloneProfile()(API 31+), 以及 getUserProfiles() 组内包含自身判定;</li>
-     *   <li>所有系统 API 均不可用时放行 —— LSPosed MultiApp 等独立虚拟用户自成一组
-     *       (组内无机主用户), 天然不会被本判定拦截, 模块能否运行完全交给 LSPosed
+     *   <li>所有系统 API 均不可用时返回 false —— LSPosed MultiApp 等独立虚拟用户自成一组
+     *       (组内无机主用户), 天然不会被本判定命中, 模块能否运行完全交给 LSPosed
      *       作用域控制(须在 LSP 界面手动选择【安装到用户 xxx】才会注入)。</li>
      * </ol>
      *

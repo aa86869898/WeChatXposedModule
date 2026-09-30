@@ -1,0 +1,10 @@
+id=WorkSettingPro
+name=爱玩机工具箱（应用核心功能拓展）
+versionCode=1901
+author=小白杨
+version=19.02(极速稳定版)
+description=用于扩展爱玩机工具箱一些功能，旨在系统OTA并无需挂载解锁系统system即可达到修改系统目的，非MIUI设备不会刷入MIUI高级设置核心文件，内含adb与fastboot工具包，若出现设置错误卸载重装自动还原
+
+
+
+#☆☆☆☆☆☆☆☆☆☆☆☆备注1：3D Touch功能无法打开的的:请在/system/etc/device_features/.xml文件内加入代码:                                                                                        <bool name="support_force_touch">true</bool>                                                               

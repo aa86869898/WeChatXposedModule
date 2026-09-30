@@ -1,0 +1,38 @@
+>>>>> Dumping cursor [referer, referee]
+0 {
+   referer=system
+   referee=com.android.location.fused
+}
+1 {
+   referer=system
+   referee=com.oplus.athena
+}
+2 {
+   referer=system
+   referee=com.oplus.appplatform
+}
+3 {
+   referer=system
+   referee=com.android.providers.settings
+}
+4 {
+   referer=system
+   referee=com.android.server.telecom
+}
+5 {
+   referer=com.tsng.hidemyapplist
+   referee=com.google.android.gms
+}
+6 {
+   referer=com.android.systemui
+   referee=com.oplus.keyguard.clock.base
+}
+7 {
+   referer=com.android.systemui
+   referee=android
+}
+8 {
+   referer=com.android.systemui
+   referee=com.oplus.uiengine
+}
+<<<<<

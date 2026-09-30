@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>乐少 · 第1版风格续作 第8轮（进度条为主）</title>
+<style>
+  :root{
+    --bg:#0f0a17; --surface:#1b1428; --sc-low:#241a38; --sc-high:#2d2145;
+    --primary:#C9A9FF; --primary-deep:#9F7BFF; --on-primary:#2A1550;
+    --g1:#8B5CF6; --g2:#A78BFA; --g3:#D946EF; --g4:#FF6FB0;
+    --on-surface:#EDE7F6; --on-var:#B8AECE; --outline:#5b4d78;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 20% -10%,#2a1b45 0%,var(--bg) 55%);
+       color:var(--on-surface);font-family:-apple-system,"Segoe UI","PingFang SC",sans-serif;padding:28px 18px 80px}
+  h1{font-size:22px;margin:0 0 6px}
+  .sub{color:var(--on-var);font-size:13px;line-height:1.7;margin-bottom:18px}
+  .sticky{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(15,10,23,.82);
+          border:1px solid #2e2246;border-radius:14px;padding:12px 16px;margin-bottom:22px}
+  .sticky b{color:var(--primary)}
+  h2{font-size:16px;margin:34px 0 14px;display:flex;align-items:center;gap:10px}
+  h2:before{content:"";width:6px;height:18px;border-radius:3px;background:linear-gradient(180deg,var(--g1),var(--g3))}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px}
+  .card{background:linear-gradient(180deg,#1c1430,#16101f);border:1px solid #2e2246;border-radius:18px;overflow:hidden;transition:.2s;position:relative}
+  .card.picked{border-color:var(--primary);box-shadow:0 0 0 2px rgba(201,169,255,.35),0 12px 30px rgba(139,92,246,.25)}
+  .card .demo{padding:24px 18px;min-height:230px;display:flex;align-items:center;justify-content:center;
+      background:radial-gradient(300px 160px at 50% 0%,rgba(139,92,246,.16),transparent 70%)}
+  .card .foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-top:1px solid #2a1f42}
+  .card .name{font-size:13px;font-weight:600}
+  .card .desc{font-size:11px;color:var(--on-var);margin-top:2px;line-height:1.5}
+  .pick{border:1px solid var(--primary);color:var(--primary);background:transparent;border-radius:999px;padding:6px 14px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .card.picked .pick{background:var(--primary);color:var(--on-primary);font-weight:700}
+  .phone,.cwrap{width:100%;max-width:300px;border-radius:24px;padding:20px 16px;
+      background:linear-gradient(160deg,rgba(255,255,255,.09),rgba(255,255,255,.02)),var(--surface);
+      box-shadow:0 18px 40px rgba(0,0,0,.5),inset 0 0 0 1px rgba(255,255,255,.10);backdrop-filter:blur(10px)}
+  .stack{display:flex;flex-direction:column;gap:14px;align-items:center;text-align:center}
+  @keyframes flowmove{to{background-position:-200% 0}}
+  @keyframes sheenmove{from{left:-60px}to{left:100%}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes stripes{to{background-position:14px 0}}
+  @keyframes icob{50%{transform:scale(1.06)}}
+  /* ---- progress bar hero ---- */
+  .pbar{width:100%;height:14px;border-radius:999px;background:rgba(255,255,255,.10);position:relative;overflow:hidden;
+        border:1px solid rgba(255,255,255,.12);box-shadow:inset 0 1px 0 rgba(255,255,255,.10)}
+  .pbar.thick{height:20px}
+  .pbar.thin{height:8px}
+  .pbar>i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;
+        background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3),var(--g4),var(--g2),var(--g1));
+        background-size:200% 100%;animation:flowmove 1.8s linear infinite;box-shadow:0 0 14px rgba(217,70,239,.6)}
+  .pbar .head{position:absolute;top:50%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:#fff;
+        box-shadow:0 0 14px rgba(255,255,255,.95);z-index:3}
+  .pbar .intxt{position:absolute;inset:0;display:grid;place-items:center;font-size:11px;font-weight:800;color:#fff;z-index:2;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+  .pbar .sheen{position:absolute;top:0;bottom:0;width:60px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.85),transparent);animation:sheenmove 1.5s linear infinite;z-index:2}
+  .pbar.glass{background:linear-gradient(135deg,rgba(255,255,255,.16),rgba(255,255,255,.05));backdrop-filter:blur(10px);border-color:rgba(255,255,255,.22)}
+  .pbar.stripe>i{background-image:linear-gradient(45deg,rgba(255,255,255,.3) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.3) 50%,rgba(255,255,255,.3) 75%,transparent 75%);
+        background-size:14px 14px;background-color:var(--primary-deep);animation:stripes 1s linear infinite;box-shadow:0 0 14px rgba(159,123,255,.7)}
+  .segbar{display:flex;gap:5px;width:100%}
+  .segbar i{flex:1;height:14px;border-radius:6px;background:rgba(255,255,255,.08);position:relative;overflow:hidden;transition:.25s;border:1px solid rgba(255,255,255,.10)}
+  .segbar i.on{background:linear-gradient(90deg,var(--g1),var(--g3));background-size:200% 100%;animation:flowmove 1.8s linear infinite;
+        border-color:transparent;box-shadow:0 0 12px rgba(139,92,246,.55)}
+  .thinline{width:100%;height:5px;border-radius:999px;background:rgba(255,255,255,.10);position:relative;overflow:hidden}
+  .thinline>i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;
+        background:linear-gradient(90deg,var(--g1),var(--g3));background-size:200% 100%;animation:flowmove 1.8s linear infinite}
+  .ticks{width:100%;display:flex;justify-content:space-between;font-size:9px;color:var(--on-var);margin-top:7px}
+  /* content */
+  .t1{font-size:15px;font-weight:700;color:var(--on-surface)}
+  .t2{font-size:11px;color:var(--on-var);line-height:1.5}
+  .bigpct{font-size:38px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+        background:linear-gradient(90deg,var(--g2),var(--g4),var(--g2));background-size:200% 100%;
+        -webkit-background-clip:text;background-clip:text;color:transparent;animation:flowmove 2s linear infinite}
+  .icircle{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font-size:22px;color:#fff;
+        background:linear-gradient(135deg,var(--g1),var(--g3));box-shadow:0 10px 24px rgba(139,92,246,.45);animation:icob 1.6s ease-in-out infinite}
+  .stream{font-family:ui-monospace,Menlo,monospace;font-size:18px;letter-spacing:.16em;color:var(--primary);font-variant-numeric:tabular-nums}
+  .wave{display:flex;align-items:flex-end;justify-content:center;gap:3px;height:40px}
+  .wave i{width:4px;background:rgba(255,255,255,.12);border-radius:3px;height:26%;transition:.13s}
+  .wave i.on{background:linear-gradient(180deg,var(--g4),var(--g1))}
+  .eta{width:100%;display:flex;justify-content:space-between;font-size:11px;color:var(--on-var)}
+  /* circular */
+  .gring{--s:128px;width:var(--s);height:var(--s);border-radius:50%;position:relative;margin:0 auto;
+        background:conic-gradient(from -90deg,var(--primary) var(--deg,0deg),rgba(255,255,255,.07) 0deg);box-shadow:0 0 34px rgba(139,92,246,.35)}
+  .gring:before{content:"";position:absolute;inset:-7px;border-radius:50%;
+        background:conic-gradient(from 0deg,rgba(255,255,255,0),rgba(255,255,255,.9),rgba(255,255,255,0) 38%);
+        -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 10px),#000 calc(100% - 9px));
+        mask:radial-gradient(farthest-side,transparent calc(100% - 10px),#000 calc(100% - 9px));
+        animation:spin 2.2s linear infinite;opacity:.85;filter:blur(.5px)}
+  .gring .hole{position:absolute;inset:11px;border-radius:50%;display:grid;place-items:center;
+        background:linear-gradient(135deg,rgba(255,255,255,.16),rgba(255,255,255,.04));backdrop-filter:blur(12px);
+        border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 0 rgba(255,255,255,.28)}
+  .gring .pval{font-size:29px;font-weight:800;color:#fff;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+  <h1>乐少 WeChat 模块 · 第1版风格续作（第 8 轮 · 进度条为主角）</h1>
+  <div class="sub">
+    本轮把「横向流光进度条」做成主角：粗条 / 玻璃条 / 分段 / 斜纹 / 细条 / 光点拖尾 等，内容全部居中。<br>
+    圆形方案按规则中心放百分比。第 1 组 DexKit 加载窗（P1–P10）；第 2 组 音频转语音（R1–R10）。点「选择」或回编号。
+  </div>
+  <div class="sticky">已选：<b id="pickedText">尚未选择</b></div>
+
+  <h2>一、DexKit 加载窗口（P1–P10）</h2>
+  <div class="grid" id="loadGrid"></div>
+  <h2>二、音频转语音「转换中」（R1–R10）</h2>
+  <div class="grid" id="convGrid"></div>
+
+<script>
+const bar=(opt)=>{opt=opt||{};const cls='pbar'+(opt.thick?' thick':'')+(opt.thin?' thin':'')+(opt.glass?' glass':'')+(opt.stripe?' stripe':'');
+  let inner='<i class="jbar"></i>';
+  if(opt.sheen) inner+='<span class="sheen"></span>';
+  if(opt.head) inner+='<span class="head jhead"></span>';
+  if(opt.intxt) inner+='<span class="intxt jpct">0%</span>';
+  return '<div class="'+cls+'">'+inner+'</div>';};
+const thinBar=()=>'<div class="thinline"><i class="jbar"></i></div>';
+const segBar=(n)=>'<div class="segbar jsegs">'+'<i></i>'.repeat(n)+'</div>';
+const waves=(n)=>'<div class="wave jwave">'+Array.from({length:n},()=>'<i></i>').join('')+'</div>';
+const ticks=()=>'<div class="ticks"><span>0</span><span>25</span><span>50</span><span>75</span><span>100</span></div>';
+const gring=()=>'<div class="gring jring"><div class="hole"><span class="pval jpct">0%</span></div></div>';
+
+const load=[
+ {id:'P1',name:'流光粗条（内嵌%）',desc:'粗流光进度条，百分比内嵌条中居中，下方标题说明',
+  html:()=>bar({thick:true,intxt:true,sheen:true})+'<div class="t1">乐少V3 功能扫描</div><div class="t2">动态适配微信混淆类名</div>'},
+ {id:'P2',name:'流光条 + 光球',desc:'流光进度条头部一颗白色光球，下方居中大数字 + 说明',
+  html:()=>bar({head:true,sheen:true})+'<div class="bigpct jpct">0%</div><div class="t2">正在扫描类名</div>'},
+ {id:'P3',name:'玻璃条（内嵌%）',desc:'玻璃质感槽体 + 流光填充，百分比内嵌居中，高级通透',
+  html:()=>bar({glass:true,intxt:true})+'<div class="t1">乐少V3 功能扫描</div>'},
+ {id:'P4',name:'细条 + 大数字',desc:'极简细流光条置顶，居中超大流光数字，干净利落',
+  html:()=>thinBar()+'<div class="bigpct jpct" style="font-size:54px">0%</div><div class="t2">正在扫描资源，请稍候</div>'},
+ {id:'P5',name:'分段流光条',desc:'进度条按段分块，逐块点亮并流光，节奏清晰',
+  html:()=>segBar(12)+'<div class="bigpct jpct" style="font-size:28px">0%</div><div class="t2">正在定位类名…</div>'},
+ {id:'P6',name:'斜纹流光条',desc:'斜纹流动填充，工业/构建感强，动效明显',
+  html:()=>bar({stripe:true})+ '<div class="bigpct jpct" style="font-size:28px">0%</div><div class="t2">正在扫描资源</div>'},
+ {id:'P7',name:'带刻度条',desc:'流光条下带 0/25/50/75/100 刻度，进度位置更明确',
+  html:()=>bar({head:true})+ticks()+'<div class="bigpct jpct" style="font-size:26px">0%</div>'},
+ {id:'P8',name:'流光条 + 图标',desc:'流光条 + 居中功能图标 + 文案，业务感强',
+  html:()=>bar({intxt:true})+'<div class="icircle">◈</div><div class="t1">乐少V3 功能扫描</div>'},
+ {id:'P9',name:'双条叠加',desc:'底层流光条推进，上层高光扫过，层次丰富',
+  html:()=>bar({thick:true,sheen:true})+bar({thin:true})+'<div class="bigpct jpct" style="font-size:26px">0%</div>'},
+ {id:'P10',name:'流光圆环',desc:'圆形方案：中心玻璃孔内百分比 + 下方标题说明居中',
+  html:()=>gring()+'<div class="t1">乐少V3 功能扫描</div><div class="t2">动态适配微信混淆类名</div>'},
+];
+
+const conv=[
+ {id:'R1',name:'流光粗条（内嵌%）',desc:'粗流光条，百分比内嵌居中；下方音频转语音文案',
+  html:()=>bar({thick:true,intxt:true,sheen:true})+'<div class="t1">音频转语音 · 发送中</div><div class="t2">(2/5 段)</div>'},
+ {id:'R2',name:'流光条 + 光球',desc:'流光条 + 头部光球，下方居中大数字 + 状态',
+  html:()=>bar({head:true,sheen:true})+'<div class="bigpct jpct">0%</div><div class="t2">正在合成语音</div>'},
+ {id:'R3',name:'玻璃条（内嵌%）',desc:'玻璃条 + 流光填充 + 内嵌百分比，通透高级',
+  html:()=>bar({glass:true,intxt:true})+'<div class="t1">音频转语音 · 合成中</div>'},
+ {id:'R4',name:'分段流光条',desc:'分段点亮 + 内嵌百分比，与发送段数对应',
+  html:()=>segBar(10)+'<div class="bigpct jpct" style="font-size:28px">0%</div>'},
+ {id:'R5',name:'斜纹流光条',desc:'斜纹流动填充，转码/构建感，动效强',
+  html:()=>bar({stripe:true})+'<div class="bigpct jpct" style="font-size:28px">0%</div><div class="t2">正在转码</div>'},
+ {id:'R6',name:'细条 + 数字流',desc:'细流光条 + 居中等宽数字滚动，极客风',
+  html:()=>thinBar()+'<div class="stream jstream">0000</div><div class="t2">音频转语音 · 转码中</div>'},
+ {id:'R7',name:'流光条 + 音符',desc:'流光条 + 居中音符图标 + 文案，一眼看懂是语音',
+  html:()=>bar({intxt:true})+'<div class="icircle">♪</div><div class="t1">音频转语音 · 合成中</div>'},
+ {id:'R8',name:'流光条 + 波形',desc:'流光条 + 居中声波律动 + 百分比，音频属性明显',
+  html:()=>bar({sheen:true})+waves(22)+'<div class="bigpct jpct" style="font-size:26px">0%</div>'},
+ {id:'R9',name:'流光条 + 时间',desc:'流光条 + 居中百分比 + 剩余时间估算，信息完整',
+  html:()=>bar({head:true})+'<div class="bigpct jpct">0%</div><div class="eta"><span>预计剩余</span><span class="jeta">剩 0:08</span></div>'},
+ {id:'R10',name:'流光圆环',desc:'圆形方案：中心玻璃孔内百分比 + 下方音频转语音文案居中',
+  html:()=>gring()+'<div class="t1">音频转语音</div><div class="t2">正在合成，请稍候</div>'},
+];
+
+function cardHTML(group,d){
+  return '<div class="card" data-group="'+group+'" data-id="'+d.id+'">'
+   +'<div class="demo">'+(group==='load'?'<div class="phone stack">'+d.html()+'</div>':'<div class="cwrap stack">'+d.html()+'</div>')+'</div>'
+   +'<div class="foot"><div><div class="name">'+d.id+' · '+d.name+'</div><div class="desc">'+d.desc+'</div></div>'
+   +'<button class="pick">选择</button></div></div>';
+}
+document.getElementById('loadGrid').innerHTML=load.map(d=>cardHTML('load',d)).join('');
+document.getElementById('convGrid').innerHTML=conv.map(d=>cardHTML('conv',d)).join('');
+
+/* ---------------- driver ---------------- */
+document.querySelectorAll('.card').forEach((card,ci)=>{
+  const pcts=[...card.querySelectorAll('.jpct')];
+  const bars=[...card.querySelectorAll('.jbar')];
+  const heads=[...card.querySelectorAll('.jhead')];
+  const rings=[...card.querySelectorAll('.jring')];
+  const stepBox=card.querySelector('.jsteps');
+  const stepNodes=stepBox?[...stepBox.children]:[];
+  const waveBox=card.querySelector('.jwave');
+  const waveNodes=waveBox?[...waveBox.children]:[];
+  const segBox=card.querySelector('.jsegs');
+  const segNodes=segBox?[...segBox.children]:[];
+  const streams=[...card.querySelectorAll('.jstream')];
+  const etas=[...card.querySelectorAll('.jeta')];
+  let p=(ci*13)%100;
+  function idxOf(n){return Math.min(n-1,Math.max(0,Math.floor(p/100*n)));}
+  setInterval(()=>{
+    p+=1.5; if(p>100)p=0;
+    const P=Math.round(p);
+    pcts.forEach(e=>e.textContent=P+'%');
+    bars.forEach(e=>e.style.width=p+'%');
+    heads.forEach(h=>h.style.left=Math.max(2,Math.min(98,p))+'%');
+    rings.forEach(e=>e.style.setProperty('--deg',(p*3.6)+'deg'));
+    if(stepNodes.length){const idx=idxOf(stepNodes.length);stepNodes.forEach((n,k)=>{n.classList.toggle('dn',k<idx);n.classList.toggle('done',k<idx);n.classList.toggle('on',k===idx);n.classList.toggle('active',k===idx);n.classList.toggle('run',k===idx);});}
+    if(waveNodes.length){const c=waveNodes.length;waveNodes.forEach((el,i)=>{const on=(i/c)*100<=p;el.classList.toggle('on',on);el.style.height=on?(28+Math.random()*62)+'%':'26%';});}
+    if(segNodes.length){const filled=Math.max(1,Math.ceil(p/100*segNodes.length));segNodes.forEach((s,i)=>s.classList.toggle('on',i<filled));}
+    if(streams.length) streams.forEach(s=>s.textContent=String(Math.round(p*99.99)).padStart(4,'0'));
+    if(etas.length) etas.forEach(e=>{const rem=Math.max(0,Math.round((100-p)/100*8));e.textContent='剩 0:'+String(rem).padStart(2,'0');});
+  },60);
+});
+
+/* ---------------- pick ---------------- */
+const picks={load:null,conv:null};
+const NAME={load:{},conv:{}};
+load.forEach(d=>NAME.load[d.id]=d.id+' '+d.name);
+conv.forEach(d=>NAME.conv[d.id]=d.id+' '+d.name);
+document.querySelectorAll('.card').forEach(card=>{
+  card.querySelector('.pick').addEventListener('click',()=>{
+    const g=card.dataset.group,id=card.dataset.id;
+    if(picks[g]===id){picks[g]=null;card.classList.remove('picked');}
+    else{picks[g]=id;document.querySelectorAll('.card[data-group="'+g+'"]').forEach(c=>c.classList.remove('picked'));card.classList.add('picked');}
+    const parts=[];
+    if(picks.load)parts.push('加载窗-'+NAME.load[picks.load]);
+    if(picks.conv)parts.push('转换进度-'+NAME.conv[picks.conv]);
+    document.getElementById('pickedText').textContent=parts.length?parts.join('  |  '):'尚未选择';
+  });
+});
+</script>
+</body>
+</html>

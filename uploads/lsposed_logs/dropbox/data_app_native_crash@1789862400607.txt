@@ -1,0 +1,41 @@
+SystemUptimeMs: 26186770
+Process: com.coloros.alarmclock
+PID: 345
+UID: 10322
+Frozen: false
+Flags: 0x30c8be44
+Package: com.coloros.alarmclock v16019005 (16.19.5)
+PID: 345
+Foreground: Yes
+Process-Runtime: 900589
+Build: OnePlus/PLR110/OP6117L1:16/BP2A.250605.015/B.c4db98_17de607_17d624d:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+Process name is com.coloros.alarmclock, uid is 10322, not key_process
+keyProcess: 0
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'OnePlus/PLR110/OP6117L1:16/BP2A.250605.015/B.c4db98_17de607_17d624d:user/release-keys'
+Revision: '0'
+ABI: 'arm64'
+Timestamp: 2026-09-20 08:00:00.376694063+0800
+Process uptime: 21214s
+Cmdline: com.coloros.alarmclock
+pid: 345, tid: 30425, name: pool-25-thread-  >>> com.coloros.alarmclock <<<
+uid: 10322
+tagged_addr_ctrl: 0000000000000001 (PR_TAGGED_ADDR_ENABLE)
+pac_enabled_keys: 000000000000000f (PR_PAC_APIAKEY, PR_PAC_APIBKEY, PR_PAC_APDAKEY, PR_PAC_APDBKEY)
+signal 11 (SIGSEGV), code 2 (SEGV_ACCERR), fault addr 0x00000078a5d2ba80
+Cause: trying to execute non-executable memory.
+    x0  0000000000000002  x1  00000077eb1fa610  x2  00000077eb1fa618  x3  0000000000000001
+    x4  0000000000000068  x5  0000000000000001  x6  0000000000000048  x7  0000000000000000
+    x8  00000078a5cd27d0  x9  00000078a5cd26b8  x10 00000078a5cd2660  x11 b4000077ff1bd7a8
+    x12 0000000000000001  x13 00000000000000c6  x14 0000000000000000  x15 0000000000000000
+    x16 00000078a5cdec30  x17 0000007895b673c8  x18 00000077e9c54000  x19 b4000077ff173a00
+    x20 0000000000000000  x21 00000077eb1fa690  x22 00000078a5cce390  x23 00000077eb1fb840
+    x24 00000077eb1fb840  x25 00000000a9ac8540  x26 00000000024e58b8  x27 000000000000001c
+    x28 00000077eb1fa8a4  x29 00000077eb1fa630
+    lr  00000078a5ccc234  sp  00000077eb1fa610  pc  00000078a5d2ba80  pst 0000000020001000
+1 total frames
+backtrace:
+      #00 pc 0000000000018a80  /dev/__properties__/u:object_r:vendor_system_prop:s0

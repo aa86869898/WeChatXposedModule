@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>乐少 · 加载/转语音 第4轮选型</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#0b0712;color:#EDE7F6;font-family:-apple-system,"Segoe UI","PingFang SC",sans-serif;padding:22px 16px 90px}
+  h1{font-size:20px;margin:0 0 6px}
+  .sub{color:#a99fc4;font-size:13px;line-height:1.7;margin-bottom:14px}
+  .sticky{position:sticky;top:0;z-index:30;background:rgba(11,7,18,.86);backdrop-filter:blur(10px);border:1px solid #2e2246;
+    border-radius:14px;padding:11px 15px;margin-bottom:18px;font-size:13px}
+  .sticky b{color:#C9A9FF}
+  h2{font-size:15px;margin:26px 0 12px;display:flex;gap:9px;align-items:center}
+  h2:before{content:"";width:6px;height:17px;border-radius:3px;background:linear-gradient(180deg,#8B5CF6,#D946EF)}
+  .row{background:linear-gradient(180deg,#181026,#120c1b);border:1px solid #2c2045;border-radius:18px;padding:14px;margin-bottom:15px;transition:.2s}
+  .row.picked{border-color:#C9A9FF;box-shadow:0 0 0 2px rgba(201,169,255,.3),0 14px 34px rgba(139,92,246,.22)}
+  .rowhead{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+  .rowhead .name{font-size:14px;font-weight:700}
+  .rowhead .desc{font-size:11.5px;color:#a99fc4;margin-top:2px;line-height:1.5}
+  .pick{border:1px solid #C9A9FF;color:#C9A9FF;background:transparent;border-radius:999px;padding:6px 16px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .row.picked .pick{background:#C9A9FF;color:#2A1550;font-weight:700}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:540px){.pair{grid-template-columns:1fr}}
+  .panel{border-radius:16px;min-height:200px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;padding:14px}
+  .panel.light{background:#eef0f7;color:#2a2340;--surface:#fff;--text:#2a2340;--muted:#7b7392;--track:#e2ddef;--primary:#7C3AED;
+    --primary2:#C026D3;--g1:#8B5CF6;--g2:#D946EF;--g3:#FF6FB0;--g4:#A78BFA;--soft:#f3ecff;--shadow:0 6px 18px rgba(80,50,160,.14)}
+  .panel.dark{background:#15101f;color:#EDE7F6;--surface:#221a34;--text:#EDE7F6;--muted:#a99fc4;--track:#372a54;--primary:#C9A9FF;
+    --primary2:#F0ABFC;--g1:#8B5CF6;--g2:#A78BFA;--g3:#D946EF;--g4:#FF6FB0;--soft:#2a1f42;--shadow:0 10px 26px rgba(0,0,0,.5)}
+  .tag{position:absolute;left:10px;top:8px;font-size:10px;letter-spacing:.05em;color:var(--muted)}
+  .stage{width:100%;max-width:250px;display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;color:var(--text)}
+  .num{font-weight:800;color:var(--primary);font-size:17px;font-variant-numeric:tabular-nums}
+  .scan-sweep{position:absolute;top:0;bottom:0;width:60px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);animation:scansweep 1.5s linear infinite}
+  @keyframes scansweep{from{left:-60px}to{left:100%}}
+
+  /* ---------- LOAD N1–N10 ---------- */
+  .n1{width:100%;display:flex;flex-direction:column;gap:11px;align-items:center}
+  .n1num{font-size:30px;font-weight:800;color:var(--primary);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .n1track{width:100%;height:4px;border-radius:999px;background:var(--track);position:relative}
+  .n1track>i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3));box-shadow:0 0 12px rgba(217,70,239,.6)}
+  .n2{display:flex;gap:5px;width:100%}
+  .n2 i{flex:1;height:11px;border-radius:999px;background:var(--track);transition:.25s}
+  .n2 i.on{background:linear-gradient(90deg,var(--g2),var(--g1))}
+  .n2 i.done{background:linear-gradient(90deg,var(--g1),var(--g3));box-shadow:0 0 10px rgba(139,92,246,.55)}
+  .n3{width:100%;display:flex;flex-direction:column;gap:9px}
+  .n3 .sk{display:flex;gap:10px;align-items:center;background:var(--surface);border-radius:12px;padding:9px;box-shadow:var(--shadow)}
+  .n3 .sk-av{width:30px;height:30px;border-radius:50%;background:var(--track);position:relative;overflow:hidden;flex:none}
+  .n3 .sk-lines{flex:1;display:flex;flex-direction:column;gap:7px}
+  .n3 .sk-l{height:8px;border-radius:999px;background:var(--track);position:relative;overflow:hidden}
+  .n3 .sk-l.l2{width:60%}
+  .n3 .sh{position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);animation:shimmer 1.4s linear infinite}
+  @keyframes shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+  .n3bar{width:100%;height:4px;border-radius:999px;background:var(--track);overflow:hidden}
+  .n3bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .n4{width:100%;height:86px;border-radius:12px;background:var(--soft);display:block}
+  .n5{position:relative;width:100%;height:14px;border-radius:999px;background:var(--track);overflow:hidden}
+  .n5 i{position:absolute;top:0;bottom:0;width:0}
+  .n5 .l{left:0;border-radius:999px 0 0 999px;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .n5 .r{right:0;border-radius:0 999px 999px 0;background:linear-gradient(270deg,var(--g1),var(--g3))}
+  .n6{width:100%;display:flex;flex-direction:column;gap:14px;align-items:center}
+  .n6track{width:100%;height:6px;border-radius:999px;background:var(--track);position:relative}
+  .n6track>i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .n6dot{position:absolute;top:50%;width:20px;height:20px;border-radius:50%;background:var(--primary);transform:translate(-50%,-50%);
+    box-shadow:0 0 0 6px rgba(139,92,246,.18),0 0 16px var(--primary);animation:dotpulse 1.2s ease-in-out infinite}
+  @keyframes dotpulse{50%{box-shadow:0 0 0 11px rgba(139,92,246,.07),0 0 22px var(--primary)}}
+  .n7{position:relative;width:100%;height:16px;border-radius:999px;background:var(--soft);overflow:hidden}
+  .n7>i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .n8{display:grid;grid-template-columns:repeat(10,1fr);gap:5px;width:100%;max-width:230px}
+  .n8 i{aspect-ratio:1;border-radius:4px;background:var(--track);transition:.2s}
+  .n8 i.on{background:linear-gradient(135deg,var(--g2),var(--g1));box-shadow:0 0 8px rgba(139,92,246,.5)}
+  .n9{width:100%;display:flex;flex-direction:column;gap:9px}
+  .n9bar{height:5px;border-radius:999px;background:var(--track);overflow:hidden}
+  .n9bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .n9label{font-size:12px;color:var(--muted);text-align:center;min-height:16px;transition:opacity .25s}
+  .n10{position:relative;width:100%;height:40px;border-radius:999px;background:var(--track);overflow:hidden;display:grid;place-items:center}
+  .n10>i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3))}
+  .n10 .sheen{position:absolute;top:0;bottom:0;width:70px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);animation:scansweep 1.8s linear infinite}
+  .n10 b{position:relative;z-index:2;font-size:14px}
+
+  /* ---------- CONVERT T1–T10 ---------- */
+  .t1{display:flex;gap:3px;align-items:center;justify-content:center;height:84px;width:100%}
+  .t1 i{width:4px;height:12%;border-radius:3px;background:var(--track);transition:height .13s}
+  .t1 i.on{background:linear-gradient(180deg,var(--g3),var(--g1))}
+  .t2{position:relative;width:100%;height:84px;display:flex;align-items:flex-end;gap:3px;padding:0 2px}
+  .t2 i{flex:1;height:18%;border-radius:3px 3px 0 0;background:var(--track);transition:height .13s}
+  .t2 i.on{background:linear-gradient(180deg,var(--g4),var(--g1))}
+  .t2 .tscan{position:absolute;top:0;bottom:0;width:2px;left:0;background:var(--primary);box-shadow:0 0 10px var(--primary)}
+  .t3{display:flex;align-items:center;gap:10px;width:100%}
+  .t3 svg{flex:1;height:54px;min-width:0}
+  .t3 .arrow{color:var(--muted);font-size:14px}
+  .t3 .bubble{flex:none;width:60px;height:40px;border-radius:14px 14px 14px 4px;background:var(--soft);color:var(--muted);
+    display:grid;place-items:center;font-size:12px;opacity:.35;transition:opacity .3s,color .3s}
+  .t3 .bubble.on{opacity:1;color:var(--primary);font-weight:700}
+  .t4{position:relative;width:100%;height:20px;border-radius:999px;background:var(--soft);overflow:hidden}
+  .t4>i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .t4 .haze{position:absolute;inset:0;box-shadow:inset 0 0 18px var(--primary2);opacity:.35;animation:haze 1.6s ease-in-out infinite}
+  @keyframes haze{50%{opacity:.9}}
+  .t5{width:100%;display:flex;flex-direction:column;gap:9px}
+  .t5 .roww{display:flex;gap:3px;align-items:center;height:34px}
+  .t5 .roww.audio i{flex:1;height:30%;border-radius:2px;background:var(--track);transition:height .13s}
+  .t5 .roww.audio i.on{background:linear-gradient(180deg,var(--g3),var(--g1))}
+  .t5 .roww.text i{flex:1;height:22%;border-radius:999px;background:var(--track);transition:.2s}
+  .t5 .roww.text i.on{background:linear-gradient(90deg,var(--g2),var(--g4));height:34%}
+  .t6{width:100%;display:flex;flex-direction:column;gap:10px;align-items:center}
+  .t6stream{font-family:ui-monospace,Menlo,monospace;font-size:18px;letter-spacing:.14em;color:var(--primary);font-variant-numeric:tabular-nums}
+  .t6bar{width:100%;height:4px;border-radius:999px;background:var(--track);overflow:hidden}
+  .t6bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .t7{width:100%;height:92px;border-radius:12px;background:var(--soft);display:block}
+  .t8{width:100%;display:flex;flex-direction:column;gap:0}
+  .t8 .t8main{display:flex;align-items:flex-end;gap:3px;height:62px}
+  .t8 .t8ref{display:flex;align-items:flex-start;gap:3px;height:26px;transform:scaleY(-1);opacity:.22}
+  .t8 i{flex:1;border-radius:3px;background:var(--track);transition:height .13s}
+  .t8 .t8main i{height:20%}
+  .t8 .t8ref i{height:20%}
+  .t8 i.on{background:linear-gradient(180deg,var(--g2),var(--g1))}
+  .t9{width:100%;display:flex;flex-direction:column;gap:12px;align-items:center}
+  .t9row{width:100%;display:flex;align-items:center;gap:12px}
+  .t9ico{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font-size:18px;color:#fff;flex:none;
+    background:linear-gradient(135deg,var(--g1),var(--g3));box-shadow:0 6px 16px rgba(139,92,246,.4);animation:icop 1.2s ease-in-out infinite}
+  @keyframes icop{50%{transform:scale(1.08)}}
+  .t9bar{flex:1;height:6px;border-radius:999px;background:var(--track);overflow:hidden}
+  .t9bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .t10{position:relative;width:100%;height:22px}
+  .t10 .rail{position:absolute;left:0;right:0;top:10px;height:3px;border-radius:3px;background:var(--track)}
+  .t10 .done{position:absolute;left:0;top:10px;height:3px;width:0;border-radius:3px;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .t10 .dot{position:absolute;top:50%;width:15px;height:15px;border-radius:50%;background:var(--primary);transform:translate(-50%,-50%);box-shadow:0 0 12px var(--primary)}
+  .t10 .echo{position:absolute;top:50%;width:15px;height:15px;border-radius:50%;border:2px solid var(--primary);transform:translate(-50%,-50%);opacity:.45}
+</style>
+</head>
+<body>
+<h1>乐少 · 第 4 轮风格选型（浅色 / 暗色）</h1>
+<div class="sub">
+  每款同时展示「浅色（左）」与「暗色（右）」，均为动态。点「选择」或直接回编号（如「N4 + T7」）。<br>
+  组一：DexKit 加载窗口 ×10（N1–N10）；组二：音频转语音「转换中」×10（T1–T10）。
+</div>
+<div class="sticky">已选：<b id="pickedText">尚未选择</b></div>
+
+<h2>组一 · DexKit 加载窗口（N1–N10）</h2>
+<div id="loadRows"></div>
+<h2>组二 · 音频转语音 转换进度（T1–T10）</h2>
+<div id="convRows"></div>
+
+<script>
+let UID=0; const uid=()=>'u'+(UID++);
+const stage=(inner)=>'<div class="stage">'+inner+'</div>';
+
+/* ---------- DexKit load ---------- */
+const load=[
+ {id:'N1',name:'细线大数字',desc:'极简细进度线 + 大号百分比数字，勾跟随发光',
+  tpl:()=>stage('<div class="n1"><div class="n1num num">0%</div><div class="n1track"><i class="fill"></i></div></div>')},
+ {id:'N2',name:'分段对勾',desc:'10 段胶囊逐段点亮，完成段变实色并带光',
+  tpl:()=>stage('<div class="n2">'+Array.from({length:10},(_,i)=>'<i data-i="'+i+'" data-n="10"></i>').join('')+'</div><div class="num"></div>')},
+ {id:'N3',name:'骨架屏',desc:'卡片占位扫光 + 底部细进度，最像真实加载',
+  tpl:()=>stage('<div class="n3">'
+   +'<div class="sk"><span class="sk-av"><span class="sh" style="animation-delay:0s"></span></span><div class="sk-lines"><span class="sk-l"><span class="sh" style="animation-delay:.1s"></span></span><span class="sk-l l2"><span class="sh" style="animation-delay:.2s"></span></span></div></div>'
+   +'<div class="sk"><span class="sk-av"><span class="sh" style="animation-delay:.3s"></span></span><div class="sk-lines"><span class="sk-l"><span class="sh" style="animation-delay:.15s"></span></span><span class="sk-l l2"><span class="sh" style="animation-delay:.25s"></span></span></div></div>'
+   +'<div class="n3bar"><i class="fill"></i></div><div class="num"></div></div>')},
+ {id:'N4',name:'波浪填充',desc:'SVG 波面被进度从左到右揭开，柔和自然',
+  tpl:()=>{const id=uid();let d='M0,68 ';for(let x=0;x<=250;x+=5){const y=68-17*Math.sin(x/26)-7*Math.sin(x/9+1);d+='L'+x+','+y.toFixed(1)+' ';}d+='L250,88 L0,88 Z';
+   return stage('<svg class="n4" viewBox="0 0 250 88" preserveAspectRatio="none">'
+   +'<defs><clipPath id="c'+id+'"><rect class="cliprect" x="0" y="0" width="0" height="88"/></clipPath>'
+   +'<linearGradient id="g'+id+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--g3)"/><stop offset="1" stop-color="var(--g1)"/></linearGradient></defs>'
+   +'<path d="'+d+'" fill="url(#g'+id+')" clip-path="url(#c'+id+')"/></svg><div class="num"></div>')}},
+ {id:'N5',name:'双向对撞',desc:'两段渐变从两端向中间生长，汇合即完成',
+  tpl:()=>stage('<div class="n5"><i class="l fill"></i><i class="r fill"></i></div><div class="num"></div>')},
+ {id:'N6',name:'端点光球',desc:'细进度线上一个发光球随进度滑动，简洁有质感',
+  tpl:()=>stage('<div class="n6"><div class="n6track"><i class="fill"></i><span class="n6dot"></span></div><div class="num"></div></div>')},
+ {id:'N7',name:'扫描光带',desc:'填充推进同时一条高光带周期扫过，科技感',
+  tpl:()=>stage('<div class="n7"><i class="fill"></i><span class="scan-sweep"></span></div><div class="num"></div>')},
+ {id:'N8',name:'点阵消融',desc:'10×2 点阵逐格点亮，像声压表推进',
+  tpl:()=>stage('<div class="num"></div><div class="n8">'+Array.from({length:20},(_,i)=>'<i data-i="'+i+'" data-n="20"></i>').join('')+'</div>')},
+ {id:'N9',name:'阶段文字',desc:'进度条 + 阶段文案（引擎/资源/类名/Hook）淡入切换',
+  tpl:()=>stage('<div class="n9"><div class="n9bar"><i class="fill"></i></div><div class="n9label">准备中…</div><div class="num"></div></div>')},
+ {id:'N10',name:'液态胶囊',desc:'胶囊内液态填充 + 流动高光，百分比居中',
+  tpl:()=>stage('<div class="n10"><i class="fill"></i><span class="sheen"></span><b class="num">0%</b></div>')},
+];
+
+/* ---------- audio -> voice convert ---------- */
+const conv=[
+ {id:'T1',name:'中心声波',desc:'中心对称声波随进度律动，未达部分置灰',
+  tpl:()=>stage('<div class="t1">'+Array.from({length:22},(_,i)=>'<i data-i="'+i+'" data-n="22"></i>').join('')+'</div><div class="num"></div>')},
+ {id:'T2',name:'频谱扫描',desc:'频谱柱随进度点亮，一条扫描线横向推进',
+  tpl:()=>stage('<div class="t2">'+Array.from({length:18},(_,i)=>'<i data-i="'+i+'" data-n="18"></i>').join('')+'<span class="tscan"></span></div><div class="num"></div>')},
+ {id:'T3',name:'波转文字',desc:'波形逐渐填充，右侧语音气泡被点亮，语义直观',
+  tpl:()=>{const id=uid();let sp='';for(let x=0;x<=180;x+=4){const y=27-13*Math.sin(x/12)-6*Math.sin(x/5+1);sp+='L'+x+','+y.toFixed(1)+' ';}
+   return stage('<div class="t3"><svg viewBox="0 0 180 54" preserveAspectRatio="none">'
+   +'<defs><clipPath id="c'+id+'"><rect class="cliprect" x="0" y="0" width="0" height="54"/></clipPath>'
+   +'<linearGradient id="l'+id+'" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--g1)"/><stop offset="1" stop-color="var(--g3)"/></linearGradient></defs>'
+   +'<path d="M0,27 '+sp+'" fill="none" stroke="url(#l'+id+')" stroke-width="3" stroke-linejoin="round" clip-path="url(#c'+id+')"/></svg>'
+   +'<span class="arrow">→</span><div class="bubble">语音</div></div><div class="num"></div>')}},
+ {id:'T4',name:'呼吸光晕',desc:'内发光呼吸 + 进度填充，沉稳高级',
+  tpl:()=>stage('<div class="t4"><i class="fill"></i><span class="haze"></span></div><div class="num"></div>')},
+ {id:'T5',name:'双轨汇聚',desc:'上轨声波、下轨文字条，同步向进度推进',
+  tpl:()=>stage('<div class="t5"><div class="roww audio">'+Array.from({length:16},(_,i)=>'<i data-i="'+i+'" data-n="16"></i>').join('')+'</div>'
+   +'<div class="roww text">'+Array.from({length:16},(_,i)=>'<i data-i="'+i+'" data-n="16"></i>').join('')+'</div></div><div class="num"></div>')},
+ {id:'T6',name:'数字流',desc:'等宽数字滚动跳动 + 极简进度条，极客风',
+  tpl:()=>stage('<div class="t6"><div class="t6stream">0000</div><div class="t6bar"><i class="fill"></i></div></div>')},
+ {id:'T7',name:'折线面积',desc:'折线随进度向右绘制，下方渐变面积填充',
+  tpl:()=>{const id=uid();let ln='';let area='M0,92 ';for(let x=0;x<=240;x+=16){const y=80-56*(x/240)-9*Math.sin(x/28);ln+=x+','+y.toFixed(1)+' ';area+='L'+x+','+y.toFixed(1)+' ';}area+='L240,92 Z';
+   return stage('<svg class="t7" viewBox="0 0 240 92" preserveAspectRatio="none">'
+   +'<defs><clipPath id="c'+id+'"><rect class="cliprect" x="0" y="0" width="0" height="92"/></clipPath>'
+   +'<linearGradient id="a'+id+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--g3)" stop-opacity=".55"/><stop offset="1" stop-color="var(--g1)" stop-opacity="0"/></linearGradient>'
+   +'</defs><path d="'+area+'" fill="url(#a'+id+')" clip-path="url(#c'+id+')"/>'
+   +'<polyline points="'+ln+'" fill="none" stroke="var(--primary)" stroke-width="3" stroke-linejoin="round" clip-path="url(#c'+id+')"/></svg><div class="num"></div>')}},
+ {id:'T8',name:'声压倒影',desc:'频谱柱 + 下方镜像倒影，音乐感强',
+  tpl:()=>{const bars=Array.from({length:18},(_,i)=>'<i data-i="'+i+'" data-n="18"></i>').join('');
+   return stage('<div class="t8"><div class="t8main">'+bars+'</div><div class="t8ref">'+bars+'</div></div><div class="num"></div>')}},
+ {id:'T9',name:'音频图标',desc:'音符图标脉冲 + 进度条，最贴近业务语义',
+  tpl:()=>stage('<div class="t9"><div class="t9row"><span class="t9ico">♪</span><div class="t9bar"><i class="fill"></i></div></div><div class="num"></div></div>')},
+ {id:'T10',name:'光点拖尾',desc:'主光点前行并带一圈回声拖尾，轻盈',
+  tpl:()=>stage('<div class="t10"><div class="rail"></div><div class="done"></div><span class="echo"></span><span class="dot"></span></div><div class="num"></div>')},
+];
+
+function rowHTML(group,d){
+  return '<div class="row" data-group="'+group+'" data-id="'+d.id+'">'
+   +'<div class="rowhead"><div><div class="name">'+d.id+' · '+d.name+'</div><div class="desc">'+d.desc+'</div></div><button class="pick">选择</button></div>'
+   +'<div class="pair"><div class="panel light"><span class="tag">浅色</span>'+d.tpl()+'</div>'
+   +'<div class="panel dark"><span class="tag">暗色</span>'+d.tpl()+'</div></div></div>';
+}
+document.getElementById('loadRows').innerHTML=load.map(d=>rowHTML('load',d)).join('');
+document.getElementById('convRows').innerHTML=conv.map(d=>rowHTML('conv',d)).join('');
+
+/* ---------- animation driver ---------- */
+const stages=['引擎','资源','类名','Hook'];
+const roots=[...document.querySelectorAll('.stage')];
+roots.forEach((root,idx)=>{
+  let p=(idx*9)%100;
+  setInterval(()=>{
+    p=p+0.9; if(p>100)p=0;
+    const P=Math.round(p);
+    root.querySelectorAll('.num').forEach(n=>n.textContent=P+'%');
+    root.querySelectorAll('.n1num').forEach(n=>n.textContent=P+'%');
+    root.querySelectorAll('.fill,.done').forEach(f=>f.style.width=p+'%');
+    // svg clip
+    root.querySelectorAll('.cliprect').forEach(c=>{const w=c.ownerSVGElement?c.ownerSVGElement.viewBox.baseVal.width:250;c.setAttribute('width',(p/100*w).toFixed(1));});
+    // generic on/off
+    root.querySelectorAll('[data-i]').forEach(el=>{
+      const i=+el.dataset.i,n=+el.dataset.n,on=(i/n)*100<=p;
+      el.classList.toggle('on',on);
+      if(el.parentElement&&el.parentElement.classList.contains('n2')) el.classList.toggle('done',((i+1)/n)*100<=p);
+    });
+    // N5 two halves
+    const n5=root.querySelector('.n5'); if(n5){n5.querySelectorAll('i').forEach(i=>i.style.width=(p/2)+'%');}
+    // N6 dot
+    root.querySelectorAll('.n6dot').forEach(d=>d.style.left=Math.max(0,Math.min(100,p))+'%');
+    // T1/T2/T8 heights
+    root.querySelectorAll('.t1 i').forEach(el=>{el.style.height=el.classList.contains('on')?(20+Math.random()*70)+'%':'12%';});
+    root.querySelectorAll('.t2 i,.t8 i').forEach(el=>{el.style.height=el.classList.contains('on')?(24+Math.random()*70)+'%':'18%';});
+    root.querySelectorAll('.t5 .audio i').forEach(el=>{el.style.height=el.classList.contains('on')?(25+Math.random()*65)+'%':'24%';});
+    // T2 scan line
+    root.querySelectorAll('.tscan').forEach(t=>t.style.left=p+'%');
+    // T3 bubble
+    root.querySelectorAll('.t3 .bubble').forEach(b=>b.classList.toggle('on',p>55));
+    // T6 stream
+    root.querySelectorAll('.t6stream').forEach(s=>{let v=Math.round(p*99.99);s.textContent=String(v).padStart(4,'0');});
+    // T10 trailing dot
+    root.querySelectorAll('.t10 .dot').forEach(d=>d.style.left=Math.max(0,Math.min(100,p))+'%');
+    root.querySelectorAll('.t10 .echo').forEach(e=>e.style.left=Math.max(0,Math.min(100,p-5))+'%');
+    // N9 stage label
+    root.querySelectorAll('.n9label').forEach(l=>{l.textContent=stages[Math.min(3,Math.floor(P/25))]||'引擎';});
+  },50);
+});
+
+/* ---------- pick ---------- */
+const picks={load:null,conv:null};
+const names={load:{},conv:{}};load.forEach(d=>names.load[d.id]=d.id+' '+d.name);conv.forEach(d=>names.conv[d.id]=d.id+' '+d.name);
+document.querySelectorAll('.row').forEach(row=>{
+  row.querySelector('.pick').addEventListener('click',()=>{
+    const g=row.dataset.group,id=row.dataset.id;
+    if(picks[g]===id){picks[g]=null;row.classList.remove('picked');}
+    else{picks[g]=id;document.querySelectorAll('.row[data-group="'+g+'"]').forEach(r=>r.classList.remove('picked'));row.classList.add('picked');}
+    const parts=[];if(picks.load)parts.push('加载-'+names.load[picks.load]);if(picks.conv)parts.push('转换-'+names.conv[picks.conv]);
+    document.getElementById('pickedText').textContent=parts.length?parts.join('  |  '):'尚未选择';
+  });
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+id=Shamiko_Service
+name=Shamiko_Service补全
+version=TG电报频道:@Whitelist520
+versionCode=20251212
+author=阿灵
+description=补全Zygisk-Next更新合并版后并未整合Shamiko的prop隐藏命令

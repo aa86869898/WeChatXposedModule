@@ -1,0 +1,7 @@
+id=zygisksu
+name=Zygisk Next
+version=1.4.0 (768-37ee2d5-release)
+versionCode=768
+author=5ec1cff, Nullptr
+description=[✅zygote, ✅zygote_ocomp, Root: ✅KernelSU (40796), UM, AM, ZL] Standalone implementation of Zygisk.
+updateJson=https://api.nullptr.icu/android/zygisk-next/static/update.json

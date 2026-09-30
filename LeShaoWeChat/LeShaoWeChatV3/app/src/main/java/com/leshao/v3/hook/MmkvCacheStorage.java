@@ -30,6 +30,8 @@ public class MmkvCacheStorage implements DexKitCacheBridge.Cache {
     @Override
     public void putString(String key, String value) {
         mmkv.encode(key, value);
+        // v955(问题11): 多进程模式下写后 sync, 确保刷新到文件供其它进程读取
+        mmkv.sync();
     }
 
     @Override
@@ -44,6 +46,7 @@ public class MmkvCacheStorage implements DexKitCacheBridge.Cache {
     public void putStringList(String key, List<String> value) {
         if (value == null || value.isEmpty()) {
             mmkv.encode(key, "");
+            mmkv.sync();
             return;
         }
         StringBuilder sb = new StringBuilder();
@@ -52,11 +55,14 @@ public class MmkvCacheStorage implements DexKitCacheBridge.Cache {
             sb.append(value.get(i));
         }
         mmkv.encode(key, sb.toString());
+        // v955(问题11): 写后 sync
+        mmkv.sync();
     }
 
     @Override
     public void remove(String key) {
         mmkv.removeValueForKey(key);
+        mmkv.sync();
     }
 
     @Override
@@ -67,5 +73,7 @@ public class MmkvCacheStorage implements DexKitCacheBridge.Cache {
     @Override
     public void clearAll() {
         mmkv.clearAll();
+        // v955(问题11): 清空后 sync, 避免其它进程仍读到旧缓存
+        mmkv.sync();
     }
 }

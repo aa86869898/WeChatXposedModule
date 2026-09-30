@@ -7,7 +7,6 @@ import com.leshao.v3.LogWriter;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -37,8 +36,13 @@ public class DatabaseProvider {
     private static volatile Object sDatabase;
     private static volatile byte[] sPassword;
     private static volatile OnDbReadyListener sDbReadyListener;
-    /** 已完成 hook 的 WCDB Class 对象集合(按 Class 去重, 允许对多 ClassLoader 版本重复 hook) */
-    private static final Set<Class<?>> sHookedClasses = new HashSet<>();
+    /**
+     * 已完成 hook 的 WCDB Class 对象集合(按 Class 去重, 允许对多 ClassLoader 版本重复 hook)。
+     * v955(问题9): 改为并发集合 —— initEarly/init 在锁外 add, probeAndRehook/probeClassLoader
+     * 在锁内 add, 原 HashSet 存在并发写竞态/丢更新。
+     */
+    private static final Set<Class<?>> sHookedClasses =
+        Collections.newSetFromMap(new ConcurrentHashMap<Class<?>, Boolean>());
     private static final AtomicBoolean sProbeDone = new AtomicBoolean(false);
     private static volatile String sRealClassLoaderDesc = null;
     /** 微信真实 ClassLoader */
@@ -140,9 +144,12 @@ public class DatabaseProvider {
             } catch (Throwable ignored) {}
 
             // CsoLoader 反查: 真实 CL 上的 CsoLoader 可能已由微信初始化(JNI 已注册)
-            try {
-                com.leshao.v3.hook.VersionCompat.tryInitCsoLoaderReal(realCl);
-            } catch (Throwable ignored) {}
+            // v955(问题5): 裸开总开关关闭时不再触碰 CsoLoader 反射初始化
+            if (com.leshao.v3.hook.VersionCompat.ENABLE_RAW_DB_OPEN) {
+                try {
+                    com.leshao.v3.hook.VersionCompat.tryInitCsoLoaderReal(realCl);
+                } catch (Throwable ignored) {}
+            }
         }
     }
 
@@ -218,8 +225,9 @@ public class DatabaseProvider {
 
         // 策略B: DexFile 枚举
         if (apkPath != null) {
+            DexFile df = null;
             try {
-                DexFile df = new DexFile(apkPath);
+                df = new DexFile(apkPath);
                 java.util.Enumeration<String> entries = df.entries();
                 while (entries.hasMoreElements()) {
                     String cn = entries.nextElement();
@@ -227,19 +235,24 @@ public class DatabaseProvider {
                         try {
                             Class<?> wcdbClass = df.loadClass(cn, cl);
                             LogWriter.log(TAG, "STRATEGY B OK: loaded " + cn);
-                            df.close();
                             return wcdbClass;
                         } catch (Throwable ignored) {}
                     }
                 }
-                df.close();
             } catch (Throwable e) {
                 LogWriter.log(TAG, "STRATEGY B FAILED: " + e.getMessage());
+            } finally {
+                // v955(问题12): 任何路径/异常下都关闭 DexFile, 避免 fd 泄漏
+                if (df != null) {
+                    try { df.close(); } catch (Throwable ignored) {}
+                }
             }
         }
 
-        LogWriter.log(TAG, "loadWcdbClass FAILED for "
-            + cl.getClass().getSimpleName() + ": cannot find WCDB SQLiteDatabase");
+        // v1134: 3180 上 WCDB 由独立 ClassLoader/dex 加载, 直接 loadClass 常失败 —— 这是预期行为,
+        // 真正的 DB 捕获走 ctor / openDatabase hook(见 DB captured via ctor 日志), 不属于故障。
+        LogWriter.log(TAG, "loadWcdbClass: WCDB SQLiteDatabase not directly loadable for "
+            + cl.getClass().getSimpleName() + " (expected on 3180; captured via ctor/openDatabase)");
         return null;
     }
 

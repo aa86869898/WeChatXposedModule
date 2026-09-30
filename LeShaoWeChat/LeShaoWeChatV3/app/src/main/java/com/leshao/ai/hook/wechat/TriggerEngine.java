@@ -58,6 +58,7 @@ public final class TriggerEngine {
             LogWriter.log(TAG, "dispatch: talker=" + talker
                     + " len=" + (rawContent == null ? -1 : rawContent.length())
                     + " svrId=" + svrId);
+
             AppConfig c = AIBotCore.config();
             if (c == null) {
                 LogWriter.log(TAG, "跳过: AppConfig 未初始化");
@@ -85,6 +86,18 @@ public final class TriggerEngine {
             if (body == null || body.trim().isEmpty()) {
                 LogWriter.log(TAG, "跳过: 正文为空 talker=" + talker);
                 return;
+            }
+
+            // ②.4 点歌指令过滤: 命中模块点歌指令时交给点歌服务处理, 不送大模型,
+            //     避免点歌消息被 AI 助手当作普通聊天重复处理。
+            //     (主拦截在 MsgReceiveHook 接收边界, 此处为 Trigger 直调场景的防御性兜底)
+            try {
+                if (com.leshao.v3.music.DianGeService.isSongRequest(talker, body)) {
+                    LogWriter.log(TAG, "跳过 AI: 命中点歌指令 talker=" + talker);
+                    return;
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "点歌过滤判定异常, 继续走 AI: " + t);
             }
 
             // ②.5 v1085: 关键词自动回复 —— 命中即直接回配置问答, 不送大模型。

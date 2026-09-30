@@ -20,6 +20,8 @@ public class ChatGroupHook {
     private static final String TAG = "ChatGroupHook";
 
     private static volatile Object sLabelStorage;
+    /** v955(问题6): 标签实体类(provider 返回的 g4 等价物), 由运行时对象反查, 避免硬编码 com.tencent.mm.storage.g4 */
+    private static volatile Class<?> sLabelEntityClass;
     private static volatile Object sContactStorage;
     private static volatile ClassLoader sClassLoader;
     private static volatile Class<?> sJ1Class;
@@ -48,7 +50,6 @@ public class ChatGroupHook {
         // Phase 2: Defer functionality initialization until DexKit scan completes
         DexKitHelper.addPostScanCallback(() -> {
             ensureInit();
-            startSubSystems();
             if (isReady()) {
                 restoreShadowLabels();
                 new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { try { ChatGroupUiInjector.refreshTagData(); } catch (Throwable e) { LogWriter.log(TAG, "refreshTagData err: " + e); } });
@@ -61,23 +62,46 @@ public class ChatGroupHook {
         LogWriter.log(TAG, "ChatGroupHook 初始化完成 (功能等DexKit扫描后启用)");
     }
 
-    private static int sRetryCount = 0;
+    // v1130: 重试改为单链 + 硬上限。旧实现下 post-scan 回调会多次触发, 每条都起一条独立重试链,
+    // 且 sRetryCount 多线程竞争使 30 上限失效; 分身内标签存储始终缺失(永不 isReady), 导致数百次反复初始化。
+    private static final java.util.concurrent.atomic.AtomicInteger sRetryCount = new java.util.concurrent.atomic.AtomicInteger(0);
+    private static final java.util.concurrent.atomic.AtomicBoolean sRetryChainActive = new java.util.concurrent.atomic.AtomicBoolean(false);
+    private static volatile boolean sRetryGaveUp = false;
+    private static final int MAX_RETRY = 20;
     // v1017: 内核未就绪属预期状态，只提示一次，避免每次重试刷屏
     private static volatile boolean sKernelPendingLogged = false;
 
+    private static void onReady() {
+        sRetryCount.set(0);
+        sRetryChainActive.set(false);
+        restoreShadowLabels();
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { try { ChatGroupUiInjector.refreshTagData(); } catch (Throwable e) { LogWriter.log(TAG, "refreshTagData err: " + e); } });
+        ContactRepository.loadAsync(null);
+    }
+
     private static void scheduleRetry(int delayMs) {
-        sRetryCount++;
+        // 单链守卫: post-scan 回调可能多次触发, 仅允许一条重试链
+        if (sRetryGaveUp || !sRetryChainActive.compareAndSet(false, true)) return;
+        retryStep(delayMs);
+    }
+
+    private static void retryStep(int delayMs) {
+        final int attempt = sRetryCount.incrementAndGet();
+        if (attempt > MAX_RETRY) {
+            sRetryGaveUp = true;
+            sRetryChainActive.set(false);
+            LogWriter.log(TAG, "标签存储重试达上限 " + MAX_RETRY + ", 停止 (label="
+                    + (sLabelStorage != null) + " contact=" + (sContactStorage != null) + ")");
+            return;
+        }
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             new Thread(() -> {
                 try { Thread.sleep(100); } catch (Throwable ignored) {}
                 ensureInit();
                 if (isReady()) {
-                    sRetryCount = 0;
-                    restoreShadowLabels();
-                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> { try { ChatGroupUiInjector.refreshTagData(); } catch (Throwable e) { LogWriter.log(TAG, "refreshTagData err: " + e); } });
-                    ContactRepository.loadAsync(null);
-                } else if (sRetryCount < 30) {
-                    scheduleRetry(1500);
+                    onReady();
+                } else {
+                    retryStep(1500);
                 }
             }, "leshao-retry").start();
         }, delayMs);
@@ -102,6 +126,7 @@ public class ChatGroupHook {
                     Object r = XposedHelpers.callStaticMethod(cls, DexKitHelper.getLabelStorageProviderMethod());
                     if (r != null) {
                         sLabelStorage = r;
+                        sLabelEntityClass = r.getClass();
                         LogWriter.log(TAG, "initCoreServices: label storage via DexKit=" + dkLabelProvider);
                     }
                 } catch (Throwable ignored) {}
@@ -114,6 +139,7 @@ public class ChatGroupHook {
                         Object r = XposedHelpers.callStaticMethod(cls, "hj");
                         if (r != null && "com.tencent.mm.storage.g4".equals(r.getClass().getName())) {
                             sLabelStorage = r;
+                            sLabelEntityClass = r.getClass();
                             break;
                         }
                     } catch (Throwable ignored) {}
@@ -236,11 +262,12 @@ public class ChatGroupHook {
             }
             if (svc == null) {
                 // v1027: 内核就绪前(约启动 35s)属预期未就绪, 降低刷屏; 重试窗口延长至覆盖内核就绪
-                if (sRetryCount <= 1 || sRetryCount % 5 == 0) {
+                int retry = sRetryCount.get();
+                if (retry <= 1 || retry % 5 == 0) {
                     LogWriter.log(TAG, "initCoreServices: j1.v/s 仍 null, imIface="
                             + (imIface == null ? "null" : imIface.getName())
                             + " dexKit=" + DexKitHelper.getContactStorageClass()
-                            + " retry=" + sRetryCount);
+                            + " retry=" + retry);
                 }
                 return false;
             }
@@ -273,9 +300,17 @@ public class ChatGroupHook {
                 try {
                     Class<?> fallback = XposedHelpers.findClass("x93.r", cl);
                     sLabelStorage = XposedHelpers.callStaticMethod(fallback, "hj");
+                    if (sLabelStorage != null) sLabelEntityClass = sLabelStorage.getClass();
                 } catch (Throwable ignored) {}
             }
-            LogWriter.log(TAG, "核心服务初始化完成 label=" + (sLabelStorage != null) + " contact=" + (sContactStorage != null));
+            if (sLabelStorage != null && sContactStorage != null) {
+                LogWriter.log(TAG, "核心服务初始化完成 label=true contact=true");
+            } else {
+                // 分身读 MMKV 缓存缺少标签 provider, label 恒为 null; 打真实状态而非误报"完成"
+                LogWriter.log(TAG, "核心服务部分就绪 label=" + (sLabelStorage != null)
+                        + " contact=" + (sContactStorage != null)
+                        + " retry=" + sRetryCount.get());
+            }
             return sLabelStorage != null && sContactStorage != null;
         } catch (Throwable e) {
             LogWriter.log(TAG, "initCoreServices: " + e.toString());
@@ -299,7 +334,10 @@ public class ChatGroupHook {
         if (sHooksInstalled) return;
         sHooksInstalled = true;
         try {
-            Class<?> g4 = XposedHelpers.findClass("com.tencent.mm.storage.g4", sClassLoader);
+            // v955(问题6): 优先运行时反查的标签实体类, 仅在缺失时回退硬编码(旧版)
+            Class<?> g4 = sLabelEntityClass != null
+                    ? sLabelEntityClass
+                    : XposedHelpers.findClass("com.tencent.mm.storage.g4", sClassLoader);
 
             XposedBridge.hookAllMethods(g4, "insert", new XC_MethodHook() {
                 @Override
@@ -343,7 +381,11 @@ public class ChatGroupHook {
                     } catch (Throwable ignored) {}
                 }
             });
-            Class<?> j4 = XposedHelpers.findClass("com.tencent.mm.storage.j4", sClassLoader);
+            // v955(问题6): 联系人存储类优先取 DexKit 扫描结果, 回退硬编码
+            String dkJ4 = DexKitHelper.getContactStorageClass();
+            Class<?> j4 = XposedHelpers.findClass(
+                    (dkJ4 != null && !dkJ4.isEmpty()) ? dkJ4 : "com.tencent.mm.storage.j4",
+                    sClassLoader);
             XposedBridge.hookAllMethods(j4, "p0", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam p) {
@@ -371,16 +413,6 @@ public class ChatGroupHook {
         } catch (Throwable e) { LogWriter.log(TAG, "installHooks error: " + e.getMessage()); }
     }
 
-    private static void startSubSystems() {
-        if (GroupConfigManager.isAutoGroupEnabled()) {
-            AutoGroupEngine.start();
-            AutoGroupEngine.subscribeToEvents();
-        }
-        if (GroupConfigManager.isAutoBackupEnabled()) {
-            LabelBackup.scheduleAutoBackup(sWeChatContext);
-        }
-    }
-
     // ==================== 公开访问器 ====================
     public static Object getLabelStorage() {
         ensureInit();
@@ -398,7 +430,7 @@ public class ChatGroupHook {
     public static boolean isReady() { return sLabelStorage != null && sContactStorage != null; }
 
     private static synchronized void ensureInit() {
-        if (sInitDone) return;
+        if (sInitDone || sRetryGaveUp) return;
         if (initCoreServices()) {
             sInitDone = true;
         }

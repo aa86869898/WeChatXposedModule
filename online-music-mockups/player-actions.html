@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>播放器 · 下载/发送行 + 底部栏 · 全新 10 套</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --page1:#F6F2FF; --page2:#ECE4FA; --ink:#2A2340; --ink2:#6F6389;
+    --g0:#8B5CF6; --g1:#D8B4FE; --g2:#FFAFCC;
+  }
+  body.darkpage {
+    --page1:#100A18; --page2:#191026; --ink:#EDE7FB; --ink2:#B0A0D2;
+  }
+  body {
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--ink); min-height: 100vh; padding: 26px 16px 90px;
+    background: linear-gradient(180deg, var(--page1) 0%, var(--page2) 100%); background-attachment: fixed;
+  }
+  .head { max-width: 1520px; margin: 0 auto; }
+  .head h1 { font-size: 23px; }
+  .head h1 em { font-style: normal; background: linear-gradient(92deg, var(--g0), var(--g1), var(--g2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .head p { font-size: 12.5px; color: var(--ink2); margin-top: 9px; line-height: 1.95; max-width: 1180px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 14px; background: rgba(255,255,255,.7); border: 1px solid rgba(139,92,246,.18); border-radius: 16px; padding: 11px 14px; max-width: 1180px; box-shadow: 0 10px 24px rgba(96,66,160,.10); backdrop-filter: blur(8px); }
+  body.darkpage .bar { background: rgba(30,22,51,.8); border-color: rgba(159,123,255,.24); }
+  .bar button { border: none; cursor: pointer; font-weight: 800; font-size: 12.5px; color: #fff; background: linear-gradient(135deg, var(--g0), var(--g1)); padding: 9px 16px; border-radius: 11px; }
+  .bar .tag { font-size: 12px; color: var(--ink2); font-weight: 700; }
+
+  .grid { max-width: 1520px; margin: 28px auto 0; display: flex; flex-direction: column; gap: 40px; }
+  .opt { display: flex; flex-direction: column; gap: 14px; }
+  .opt .top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .opt .label { font-size: 15px; font-weight: 900; }
+  .opt .label b { font-size: 11px; color: #fff; background: linear-gradient(135deg, var(--g0), var(--g2)); padding: 3px 9px; border-radius: 999px; margin-right: 9px; vertical-align: 1px; }
+  .opt .spec { font-size: 12px; color: var(--g0); font-weight: 700; }
+  .opt .desc { font-size: 12px; color: var(--ink2); line-height: 1.7; }
+  .pair { display: flex; gap: 26px; flex-wrap: wrap; }
+  .pair .col { display: flex; flex-direction: column; gap: 7px; align-items: center; }
+  .pair .col > span { font-size: 11px; font-weight: 800; color: var(--ink2); letter-spacing: .5px; }
+
+  /* ---------- 手机外壳 ---------- */
+  .phone { width: 390px; height: 844px; border-radius: 44px; overflow: hidden; position: relative;
+    box-shadow: 0 22px 52px rgba(60,40,110,.26), 0 0 0 9px rgba(20,12,32,.86); }
+  .phone.light {
+    --bg:#F7F4FF; --bg2:#ECE4FA; --card:#FFFFFF; --t1:#2A2340; --t2:#6F6389;
+    --line:#ECE4FA; --chip:#F1EAFC; --g0:#8B5CF6; --g1:#D8B4FE; --g2:#FFAFCC;
+    --ong:#FFFFFF; --shadow:0 14px 34px rgba(80,56,150,.16);
+  }
+  .phone.dark {
+    --bg:#120C1B; --bg2:#1A1226; --card:#1E1633; --t1:#EDE7FB; --t2:#B0A0D2;
+    --line:#2C2145; --chip:#241A3A; --g0:#9F7BFF; --g1:#DCC3FF; --g2:#FFB8D4;
+    --ong:#FFFFFF; --shadow:0 14px 34px rgba(0,0,0,.5);
+  }
+  .phone.dark { box-shadow: 0 22px 52px rgba(0,0,0,.6), 0 0 0 9px rgba(0,0,0,.9); }
+  .status { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font-size: 12.5px; font-weight: 800; color: var(--t1); }
+  .screen { position: absolute; inset: 44px 0 0 0; display: flex; flex-direction: column; padding: 0 20px; color: var(--t1);
+    background: linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%); }
+  .pgrow { flex: 1; min-height: 2px; }
+  .pback { font-size: 13px; font-weight: 800; color: var(--g0); padding: 6px 0 0; }
+  .ptitle { text-align: center; font-size: 21px; font-weight: 900; }
+  .partist { text-align: center; font-size: 12.5px; color: var(--t2); margin-top: 4px; }
+
+  .pdisc { width: 168px; height: 168px; margin: 0 auto; border-radius: 50%; position: relative;
+    background: radial-gradient(circle at 34% 30%, var(--g1), var(--g2) 42%, var(--g0) 78%);
+    box-shadow: 0 18px 40px rgba(120,80,200,.35), inset 0 0 0 12px rgba(255,255,255,.10); }
+  .pdisc::before { content: ""; position: absolute; inset: 0; border-radius: 50%;
+    background: conic-gradient(from 0deg, rgba(255,255,255,.0), rgba(255,255,255,.34), rgba(255,255,255,0) 40%, rgba(255,255,255,.18) 70%, rgba(255,255,255,0));
+    animation: spin 7s linear infinite; }
+  .pdisc span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 30px; color: #fff; opacity: .95; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .peq { display: flex; align-items: flex-end; justify-content: center; gap: 5px; height: 108px; }
+  .peq i { width: 7px; border-radius: 6px 6px 3px 3px; background: linear-gradient(180deg, var(--g1), var(--g0), var(--g2)); animation: bump 1.05s ease-in-out infinite; }
+  @keyframes bump { 0%,100% { transform: scaleY(.28); } 50% { transform: scaleY(1); } }
+  .ptrack { height: 5px; border-radius: 999px; background: var(--chip); overflow: hidden; }
+  .ptrack > i { display: block; height: 100%; width: 40%; border-radius: 999px; background: linear-gradient(90deg, var(--g0), var(--g1), var(--g2)); }
+  .ptimes { display: flex; justify-content: space-between; font-size: 11px; color: var(--t2); margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .ptransport { position: relative; display: flex; align-items: center; justify-content: center; gap: 26px; }
+  .ptransport .ti { font-size: 23px; color: var(--t1); }
+  .ptransport .torder { position: absolute; left: 0; top: 50%; transform: translateY(-50%); font-size: 17px; color: var(--g0); }
+  .ptransport .tplay { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 24px; color: #fff;
+    background: linear-gradient(135deg, var(--g0), var(--g1), var(--g2)); box-shadow: 0 12px 26px rgba(139,92,246,.42); }
+
+  /* ---------- 焦点组件：功能行 + 底栏 ---------- */
+  .frow { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .fbtn { appearance: none; border: 0; background: transparent; font: inherit; color: var(--t2); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 6px 4px; }
+  .fbtn .fi { font-size: 19px; line-height: 1; }
+  .fbtn .fl { font-size: 10px; }
+  .nav { display: flex; align-items: center; margin: 0 -20px; padding: 9px 8px 13px; background: transparent; }
+  .ni { flex: 1; appearance: none; border: 0; background: transparent; font: inherit; color: var(--t2); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0; position: relative; }
+  .ni .ni-i { font-size: 19px; line-height: 1; }
+  .ni .ni-l { font-size: 10px; }
+  .ni.on { color: var(--g0); font-weight: 800; }
+
+  .paused .pdisc::before, .paused .peq i { animation-play-state: paused; }
+
+  /* 01 悬浮胶囊 */
+  .s1 .frow { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 8px 8px; margin: 0 6px; box-shadow: var(--shadow); }
+  .s1 .fbtn .fi { color: var(--g0); }
+  .s1 .nav { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 24px; box-shadow: var(--shadow); padding: 8px 10px 11px; }
+  .s1 .ni.on { background: linear-gradient(135deg, var(--g0), var(--g1)); border-radius: 18px; color: #fff; }
+  .s1 .ni.on .ni-i, .s1 .ni.on .ni-l { color: #fff; }
+
+  /* 02 渐变主次 */
+  .s2 .frow { justify-content: center; gap: 12px; }
+  .s2 .fbtn { flex: 0 0 auto; }
+  .s2 .fbtn .fi { font-size: 21px; color: var(--t1); }
+  .s2 .fbtn:nth-child(2) { flex-direction: row; gap: 8px; padding: 12px 24px; border-radius: 999px; color: #fff;
+    background: linear-gradient(135deg, var(--g0), var(--g2)); box-shadow: 0 12px 26px rgba(139,92,246,.42); }
+  .s2 .fbtn:nth-child(2) .fi { font-size: 17px; color: #fff; }
+  .s2 .fbtn:nth-child(2) .fl { font-size: 13px; font-weight: 800; }
+  .s2 .fbtn:nth-child(3) { flex-direction: row; gap: 7px; padding: 11px 18px; border-radius: 999px; border: 1.6px solid var(--g0); color: var(--g0); }
+  .s2 .fbtn:nth-child(3) .fi { font-size: 16px; color: var(--g0); }
+  .s2 .nav { border-top: 1px solid var(--line); }
+  .s2 .ni.on { color: var(--g0); }
+  .s2 .ni.on::before { content: ""; position: absolute; top: -1px; left: 50%; transform: translateX(-50%); width: 26px; height: 3px; border-radius: 3px; background: linear-gradient(90deg, var(--g0), var(--g2)); }
+
+  /* 03 玻璃拟态 */
+  .s3 .frow { background: linear-gradient(135deg, rgba(255,255,255,.62), rgba(255,255,255,.28)); backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,.7); border-radius: 20px; padding: 9px 8px; margin: 0 6px; box-shadow: var(--shadow); }
+  .phone.dark.s3 .frow { background: linear-gradient(135deg, rgba(150,110,240,.26), rgba(70,45,120,.22)); border-color: rgba(190,160,255,.3); }
+  .s3 .fbtn .fi { color: var(--g0); }
+  .s3 .nav { background: var(--card); backdrop-filter: blur(16px); border-top: 1px solid var(--line); }
+  .s3 .ni.on { color: var(--g0); }
+  .s3 .ni.on .ni-i { filter: drop-shadow(0 0 12px rgba(139,92,246,.85)); }
+  .s3 .ni.on { background: linear-gradient(135deg, rgba(139,92,246,.16), rgba(255,175,204,.16)); border-radius: 16px; }
+
+  /* 04 圆底图标 + 中央凸起 */
+  .s4 .frow { justify-content: space-around; gap: 8px; }
+  .s4 .fbtn .fi { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--chip); color: var(--g0); font-size: 20px; }
+  .s4 .ni:nth-child(2) .ni-i { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; margin-top: -28px; font-size: 22px;
+    background: linear-gradient(135deg, var(--g0), var(--g1), var(--g2)); color: #fff; box-shadow: 0 14px 30px rgba(139,92,246,.48); border: 4px solid var(--bg); }
+  .s4 .ni:nth-child(2) { color: var(--g0); }
+  .s4 .nav { padding-top: 2px; }
+
+  /* 05 分段控件 */
+  .s5 .frow { background: var(--chip); border-radius: 16px; padding: 4px; gap: 3px; margin: 0 4px; }
+  .s5 .fbtn { flex: 1; flex-direction: row; gap: 6px; padding: 11px 4px; border-radius: 12px; }
+  .s5 .fbtn .fl { font-size: 11.5px; }
+  .s5 .fbtn:nth-child(2) { background: linear-gradient(135deg, var(--g0), var(--g1)); box-shadow: 0 8px 18px rgba(139,92,246,.36); }
+  .s5 .fbtn:nth-child(2) .fi, .s5 .fbtn:nth-child(2) .fl { color: #fff; font-weight: 800; }
+  .s5 .nav { background: var(--chip); border-radius: 16px; padding: 4px; margin: 0 4px; gap: 3px; }
+  .s5 .ni { flex: 1; flex-direction: row; justify-content: center; gap: 6px; padding: 11px 0; border-radius: 12px; }
+  .s5 .ni.on { background: linear-gradient(135deg, var(--g0), var(--g2)); color: #fff; box-shadow: 0 8px 18px rgba(139,92,246,.36); }
+
+  /* 06 极简线条 */
+  .s6 .frow { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 10px 0; }
+  .s6 .fbtn { flex: 1; position: relative; }
+  .s6 .fbtn:not(:last-child)::after { content: ""; position: absolute; right: 0; top: 14%; height: 72%; width: 1px; background: var(--line); }
+  .s6 .fbtn .fi { font-size: 20px; color: var(--t1); }
+  .s6 .nav { border-top: 1px solid var(--line); }
+  .s6 .ni.on { color: var(--g0); }
+  .s6 .ni.on::after { content: ""; position: absolute; bottom: -3px; left: 50%; transform: translateX(-50%); width: 16px; height: 2px; border-radius: 2px; background: var(--g0); }
+
+  /* 07 卡片分块 */
+  .s7 .frow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .s7 .fbtn { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 11px 0; }
+  .s7 .fbtn:nth-child(2) { border-color: var(--g0); }
+  .s7 .fbtn .fi { color: var(--g0); }
+  .s7 .nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0; padding: 0 8px 13px; }
+  .s7 .ni { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 9px 0; }
+  .s7 .ni.on { border-color: var(--g0); background: linear-gradient(135deg, rgba(139,92,246,.14), rgba(255,175,204,.12)); }
+
+  /* 08 霓虹发光 */
+  .s8 .frow { justify-content: space-around; gap: 8px; }
+  .s8 .fbtn .fi { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: var(--chip); color: var(--g0); font-size: 20px;
+    box-shadow: 0 0 0 1px rgba(139,92,246,.4), 0 0 16px rgba(139,92,246,.4); }
+  .s8 .fbtn .fl { color: var(--g0); }
+  .s8 .nav { border-top: 1px solid var(--line); }
+  .s8 .ni.on { color: var(--g0); }
+  .s8 .ni.on .ni-i { filter: drop-shadow(0 0 12px rgba(159,123,255,.95)); }
+  .s8 .ni.on .ni-l { text-shadow: 0 0 12px rgba(159,123,255,.9); }
+
+  /* 09 拟物浮凸 */
+  .s9 .frow { justify-content: space-between; gap: 10px; }
+  .s9 .fbtn .fi { width: 48px; height: 48px; border-radius: 16px; display: grid; place-items: center; background: var(--bg); color: var(--g0); font-size: 20px;
+    box-shadow: 6px 6px 12px rgba(120,90,190,.20), -6px -6px 12px rgba(255,255,255,.95); }
+  .phone.dark.s9 .fbtn .fi { box-shadow: 6px 6px 12px rgba(0,0,0,.55), -6px -6px 12px rgba(120,90,190,.16); }
+  .s9 .nav { background: var(--bg); box-shadow: 0 -6px 16px rgba(120,90,190,.14); }
+  .s9 .ni.on .ni-i { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--bg); color: var(--g0);
+    box-shadow: 5px 5px 10px rgba(120,90,190,.22), -5px -5px 10px rgba(255,255,255,.95); }
+  .phone.dark.s9 .ni.on .ni-i { box-shadow: 5px 5px 10px rgba(0,0,0,.55), -5px -5px 10px rgba(120,90,190,.18); }
+
+  /* 10 渐变丝带 */
+  .s10 .frow { background: linear-gradient(100deg, var(--g0), var(--g1), var(--g2)); border-radius: 999px; padding: 6px; gap: 3px; margin: 0 4px;
+    box-shadow: 0 12px 26px rgba(139,92,246,.38); }
+  .s10 .fbtn { flex: 1; }
+  .s10 .fbtn .fi, .s10 .fbtn .fl { color: #fff; }
+  .s10 .fbtn:nth-child(2) { background: rgba(255,255,255,.24); border-radius: 999px; }
+  .s10 .nav { background: var(--card); position: relative; }
+  .s10 .nav::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--g0), var(--g1), var(--g2)); }
+  .s10 .ni.on { color: var(--g0); }
+  .s10 .ni.on .ni-i { transform: translateY(-1px); filter: drop-shadow(0 0 10px rgba(139,92,246,.6)); }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>播放器底部 · <em>全新 10 套</em>（下载/发送行 + 最底栏）</h1>
+  <p>覆盖范围：①功能行「收藏 / 下载 / 发送 / 音质」；②页面最底部导航「首页 / 播放 / 我的」。每套均给出 <b>浅色 + 暗色</b> 双适配，同屏对比。上方其余内容（碟片 / 旋律柱 / 进度 / 传输控制）为真实上下文，非本次设计重点。</p>
+  <div class="bar">
+    <span class="tag">当前选中项：播放 / 下载为强调态示例</span>
+    <button id="animBtn">暂停动画</button>
+    <button id="pageBtn">页面暗色</button>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<script>
+(function () {
+  var STYLES = [
+    { n:'01', name:'悬浮胶囊', spec:'功能行＝悬浮圆角容器；底栏＝独立悬浮胶囊，选中项填充渐变药丸',
+      desc:'两组都从页面里“浮”起来，圆角大、投影柔。选中项整块渐变填充，视觉重心明确。' },
+    { n:'02', name:'渐变主次', spec:'下载＝实心渐变主按钮、发送＝描边次按钮、收藏/音质＝纯图标；底栏顶部渐变指示条',
+      desc:'突出“下载”这个高频动作，发送降一档描边，次要动作弱化。底栏用一条渐变短线标出选中项。' },
+    { n:'03', name:'玻璃拟态', spec:'功能行＝磨砂玻璃 + 高光描边；底栏＝磨砂 + 选中项柔光底',
+      desc:'半透明模糊质感，配合流光渐变底色，轻透高级。暗色下玻璃带冷紫色调。' },
+    { n:'04', name:'圆底图标', spec:'功能项＝圆形浅色底图标 + 文案；底栏中央「播放」凸起大圆按钮',
+      desc:'功能项统一圆底提升点击命中；底栏做“播放凸起”的 dock 造型，把主场景顶出来。' },
+    { n:'05', name:'分段控件', spec:'功能行＝分段条，下载段选中；底栏＝三段式，选中段渐变块',
+      desc:'两组都用 iOS 式分段控件，选中项是渐变滑块，切换感强、边界清晰。' },
+    { n:'06', name:'极简线条', spec:'功能行＝细分割线 + 线性图标；底栏＝顶部细线 + 选中项下划点',
+      desc:'几乎无底色，靠留白与一根细线分区。选中态只用小色点/短下划线，克制。' },
+    { n:'07', name:'卡片分块', spec:'功能行＝4 等分小卡片；底栏＝3 等分卡片，选中卡片渐变描边',
+      desc:'每项独立成卡片，网格化排列，信息分区最清楚，适合功能多的版本。' },
+    { n:'08', name:'霓虹发光', spec:'功能项＝方圆形图标 + 紫色描边发光；底栏选中项文字/图标带辉光',
+      desc:'偏夜间/潮流氛围，紫色光晕勾勒边界，暗色下效果最突出。' },
+    { n:'09', name:'拟物浮凸', spec:'功能项＝浮凸软按钮（外凸阴影）；底栏选中项凸起圆钮',
+      desc:'新拟物风，靠明暗双阴影做出“按下/凸起”的实体感，柔和耐看。' },
+    { n:'10', name:'渐变丝带', spec:'功能行＝整条渐变丝带，白图标；底栏顶部渐变细带 + 选中项发光',
+      desc:'一条流光色带横贯功能行，最能呼应“葡萄气泡 · 流光渐变”主视觉。' }
+  ];
+
+  function frow() {
+    return '<div class="frow">'
+      + '<button class="fbtn"><span class="fi">&#9825;</span><span class="fl">收藏</span></button>'
+      + '<button class="fbtn"><span class="fi">&#8595;</span><span class="fl">下载</span></button>'
+      + '<button class="fbtn"><span class="fi">&#10148;</span><span class="fl">发送</span></button>'
+      + '<button class="fbtn"><span class="fi">&#9678;</span><span class="fl">音质</span></button>'
+      + '</div>';
+  }
+  function nav() {
+    return '<div class="nav">'
+      + '<button class="ni"><span class="ni-i">&#127968;</span><span class="ni-l">首页</span></button>'
+      + '<button class="ni on"><span class="ni-i">&#127911;</span><span class="ni-l">播放</span></button>'
+      + '<button class="ni"><span class="ni-i">&#128100;</span><span class="ni-l">我的</span></button>'
+      + '</div>';
+  }
+  function eq(heights) {
+    var s = '<div class="peq">';
+    for (var i = 0; i < heights.length; i++) {
+      s += '<i style="height:' + heights[i] + 'px;animation-delay:' + (i * 0.09).toFixed(2) + 's"></i>';
+    }
+    return s + '</div>';
+  }
+  function phone(cls) {
+    return '<div class="phone ' + cls + '">'
+      + '<div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>'
+      + '<div class="screen">'
+      +   '<div class="pback">&#8592; 返回</div>'
+      +   '<div class="pgrow"></div>'
+      +   '<div class="pdisc"><span>&#9834;</span></div>'
+      +   '<div class="pgrow"></div>'
+      +   '<div class="ptitle">夜曲</div>'
+      +   '<div class="partist">周杰伦 · 十一月的萧邦</div>'
+      +   '<div class="pgrow"></div>'
+      +   eq([42, 78, 56, 96, 64, 88, 50, 72, 34, 60])
+      +   '<div class="pgrow"></div>'
+      +   '<div class="ptrack"><i></i></div>'
+      +   '<div class="ptimes"><span>01:24</span><span>03:51</span></div>'
+      +   '<div class="pgrow"></div>'
+      +   '<div class="ptransport">'
+      +     '<span class="torder">&#128257;</span>'
+      +     '<span class="ti">&#9198;</span><span class="tplay">&#9654;</span><span class="ti">&#9197;</span>'
+      +   '</div>'
+      +   '<div class="pgrow"></div>'
+      +   frow()
+      + '<div class="pgrow" style="flex:0 0 6px"></div>'
+      +   nav()
+      + '</div>'
+      + '</div>';
+  }
+
+  var grid = document.getElementById('grid');
+  STYLES.forEach(function (o) {
+    var s = 's' + (parseInt(o.n, 10));
+    var wrap = document.createElement('div'); wrap.className = 'opt';
+    wrap.innerHTML = '<div class="top">'
+      + '<div class="label"><b>' + o.n + '</b>' + o.name + '</div>'
+      + '<div class="spec">' + o.spec + '</div>'
+      + '</div><div class="desc">' + o.desc + '</div>';
+    var pair = document.createElement('div'); pair.className = 'pair';
+    pair.innerHTML = '<div class="col"><span>浅色</span>' + phone('light ' + s) + '</div>'
+      + '<div class="col"><span>暗色</span>' + phone('dark ' + s) + '</div>';
+    wrap.appendChild(pair);
+    grid.appendChild(wrap);
+  });
+
+  document.getElementById('animBtn').onclick = function () {
+    document.body.classList.toggle('paused');
+    this.textContent = document.body.classList.contains('paused') ? '播放动画' : '暂停动画';
+  };
+  document.getElementById('pageBtn').onclick = function () {
+    document.body.classList.toggle('darkpage');
+    this.textContent = document.body.classList.contains('darkpage') ? '页面浅色' : '页面暗色';
+  };
+})();
+</script>
+</body>
+</html>

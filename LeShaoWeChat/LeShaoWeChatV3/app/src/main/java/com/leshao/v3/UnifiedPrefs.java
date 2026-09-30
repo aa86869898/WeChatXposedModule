@@ -7,8 +7,8 @@ import android.content.SharedPreferences;
  * 主分身统一配置入口。
  *
  * 主微信与分身微信均返回各自的原生 SharedPreferences(读写自己的 /data/.../shared_prefs/)。
- * v965: 系统克隆分身进程已在模块入口被 InstanceManager.isCloneApp() 拦截,
- * 模块实际只会运行在机主用户与 LSPosed MultiApp 等放行身份中,
+ * v1038 起系统克隆分身不再在模块入口被拦截(旧 v965 的 InstanceManager.isCloneApp() 拦截已移除,
+ * 该判定现仅作探测), 因此模块可能运行于机主用户、系统克隆分身与 LSPosed MultiApp 等身份中,
  * 各身份读写各自的 prefs 目录, 天然互不干扰。
  */
 public class UnifiedPrefs {

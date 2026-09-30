@@ -148,46 +148,57 @@ public class WmReflect {
 
     // ===== 消息 =====
     public static boolean sendTextMsg(ClassLoader cl, String content, String toUser) {
+        return sendTextMsg(cl, content, toUser, 1, 0);
+    }
+
+    /**
+     * 带消息类型/flag 的文本发送，供消息伪装等需要伪造 type 的功能复用。
+     * 8.0.78(3180): 文本走 qs5.v5 新框架 mj/nj/oj/pj(toUser,content,type,flag)。
+     */
+    public static boolean sendTextMsg(ClassLoader cl, String content, String toUser, int type, int flag) {
         Object m = getSendMsgMgr(cl);
         if (m == null) {
             LogWriter.log(TAG, "sendTextMsg FAILED: sendMsgMgr null");
             return false;
         }
-        // 8.0.78(3180): 文本走 qs5.v5 新框架 mj/nj/oj/pj(toUser,content,type,flag);
         // 旧 qj(content,toUser) 为相册名片, 不再用于文本。
         String[] textMethods = {"oj", "nj", "mj", "pj"};
         Throwable lastErr = null;
         for (String mn : textMethods) {
             try {
                 // 尝试 (String,String,int,int) 签名
-                XposedHelpers.callMethod(m, mn, toUser, content, 1, 0);
-                LogWriter.log(TAG, "sendTextMsg ok via " + mn + "(toUser,content,1,0)");
+                XposedHelpers.callMethod(m, mn, toUser, content, type, flag);
+                LogWriter.log(TAG, "sendTextMsg ok via " + mn
+                        + "(toUser,content," + type + "," + flag + ")");
                 return true;
             } catch (Throwable t1) {
                 lastErr = t1;
             }
             try {
                 // 尝试 (String,String,int,int,int) 等变体
-                XposedHelpers.callMethod(m, mn, toUser, content, 1, 0, 0);
-                LogWriter.log(TAG, "sendTextMsg ok via " + mn + "(toUser,content,1,0,0)");
+                XposedHelpers.callMethod(m, mn, toUser, content, type, flag, 0);
+                LogWriter.log(TAG, "sendTextMsg ok via " + mn
+                        + "(toUser,content," + type + "," + flag + ",0)");
                 return true;
             } catch (Throwable ignored) {}
         }
-        try {
-            // 多目标文本 hj(atStr, usersCsv, extra) 单目标亦可
-            XposedHelpers.callMethod(m, "hj", (Object) null, toUser, (Object) null);
-            LogWriter.log(TAG, "sendTextMsg ok via hj(null,toUser,null)");
-            return true;
-        } catch (Throwable t2) {
-            lastErr = t2;
-        }
-        try {
-            // 多目标 gj(str1,str2,str3,Z)
-            XposedHelpers.callMethod(m, "gj", (Object) null, toUser, (Object) null, true);
-            LogWriter.log(TAG, "sendTextMsg ok via gj(null,toUser,null,true)");
-            return true;
-        } catch (Throwable t3) {
-            lastErr = t3;
+        if (type == 1) {
+            try {
+                // 多目标文本 hj(atStr, usersCsv, extra) 单目标亦可
+                XposedHelpers.callMethod(m, "hj", (Object) null, toUser, (Object) null);
+                LogWriter.log(TAG, "sendTextMsg ok via hj(null,toUser,null)");
+                return true;
+            } catch (Throwable t2) {
+                lastErr = t2;
+            }
+            try {
+                // 多目标 gj(str1,str2,str3,Z)
+                XposedHelpers.callMethod(m, "gj", (Object) null, toUser, (Object) null, true);
+                LogWriter.log(TAG, "sendTextMsg ok via gj(null,toUser,null,true)");
+                return true;
+            } catch (Throwable t3) {
+                lastErr = t3;
+            }
         }
         LogWriter.log("WmReflect", "sendTextMsg FAILED: " + (lastErr != null ? lastErr.getMessage() : "no method"));
         return false;

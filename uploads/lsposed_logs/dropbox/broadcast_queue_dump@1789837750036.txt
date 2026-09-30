@@ -1,0 +1,133 @@
+Message: java.lang.IllegalStateException: waitingTime
+  
+  📋 Per-process queues:
+    2721c46 18946:com.android.documentsui/u0a71 not runnable because INFINITE_DEFER
+      state:FRZ
+      e:4 d:4 f:0 fd:0 o:0 a:0 p:0 pd:0 int:0 rt:0 ins:0 m:0 csi:0 adcsi:0 ccu:0 ccn:0
+      -19m31s108ms BroadcastRecord{8e2175c android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered 70000bd
+      -19m30s968ms BroadcastRecord{3231225 android.intent.action.PACKAGE_CHANGED/u0}
+          DEFERRED for registered 70000bd
+      -1m7s110ms BroadcastRecord{d327d16 android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered 70000bd
+      -1m6s941ms BroadcastRecord{898c202 android.intent.action.PACKAGE_CHANGED/u0}
+          DEFERRED for registered 70000bd
+    
+    646e26 27450:com.coloros.codebook/u0a97 not runnable because DEFER_BY_OPLUS SUB_REASON: FROZEN 
+      state:FRZ
+      e:1 d:1 f:0 fd:0 o:0 a:0 p:0 pd:0 int:0 rt:0 ins:0 m:0 csi:0 adcsi:0 ccu:0 ccn:19
+      -1m7s110ms BroadcastRecord{d327d16 android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered 7871f25
+    
+    a7d85df 22133:com.oplus.themestore/u0a110 not runnable because INFINITE_DEFER
+      state:FRZ
+      e:1 d:1 f:0 fd:0 o:0 a:0 p:0 pd:0 int:0 rt:0 ins:0 m:0 csi:0 adcsi:0 ccu:0 ccn:1
+      -1m7s110ms BroadcastRecord{d327d16 android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered 33c79b6
+    
+    6641236 29050:com.heytap.market/u0a112 not runnable because DEFER_BY_OPLUS SUB_REASON: FROZEN 
+      state:FRZ
+      runningOomAdjusted:true
+      e:1 d:1 f:1 fd:1 o:0 a:0 p:0 pd:0 int:0 rt:0 ins:0 m:0 csi:0 adcsi:0 ccu:0 ccn:14
+      -52s773ms BroadcastRecord{5f103aa android.intent.action.BATTERY_CHANGED/u-1}
+          DEFERRED URGENT for registered 726a9f3
+    
+    3578e07 21333:com.heytap.mydevices/u0a119 not runnable because INFINITE_DEFER
+      state:FRZ
+      e:2 d:2 f:0 fd:0 o:0 a:0 p:0 pd:0 int:0 rt:0 ins:0 m:0 csi:0 adcsi:0 ccu:0 ccn:0
+      -19m31s108ms BroadcastRecord{8e2175c android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered 3a98710
+      -1m7s110ms BroadcastRecord{d327d16 android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered 3a98710
+    
+    57b24a4 24082:com.baidu.input_oppo/u0a215 not runnable because DEFER_BY_OPLUS SUB_REASON: FROZEN 
+      state:FRZ
+      runningOomAdjusted:true
+      e:2 d:2 f:0 fd:0 o:0 a:0 p:0 pd:0 int:0 rt:2 ins:0 m:0 csi:0 adcsi:0 ccu:0 ccn:0
+      -16m15s827ms BroadcastRecord{75b716 android.net.conn.CONNECTIVITY_CHANGE/u-1}
+          DEFERRED for registered 306283b
+      -7m45s445ms BroadcastRecord{f5d920f android.net.conn.CONNECTIVITY_CHANGE/u-1}
+          DEFERRED for registered 306283b
+    
+    ab3451a 21399:com.coloros.colordirectservice/u0a230 not runnable because DEFER_BY_OPLUS SUB_REASON: FROZEN 
+      state:FRZ
+      runningOomAdjusted:true
+      e:9 d:2 f:0 fd:0 o:0 a:0 p:0 pd:0 int:0 rt:0 ins:0 m:7 csi:0 adcsi:0 ccu:0 ccn:4
+      -16m15s827ms BroadcastRecord{75b716 android.net.conn.CONNECTIVITY_CHANGE/u-1}
+          DEFERRED for registered 6379e9d
+      -10m57s486ms BroadcastRecord{56884 com.oplus.screenshot.intent.PREVIEW/u0}
+          DEFERRED for manifest com.oplus.supertext.stylus.bussiness.listener.ScreenShotWindowReceiver
+      -10m21s181ms BroadcastRecord{5ca13c com.oplus.screenshot.intent.PREVIEW/u0}
+          DEFERRED for manifest com.oplus.supertext.stylus.bussiness.listener.ScreenShotWindowReceiver
+      -9m49s470ms BroadcastRecord{d19603d com.oplus.screenshot.intent.PREVIEW/u0}
+          DEFERRED for manifest com.oplus.supertext.stylus.bussiness.listener.ScreenShotWindowReceiver
+      -9m19s479ms BroadcastRecord{c0b6d46 com.oplus.screenshot.intent.PREVIEW/u0}
+          DEFERRED for manifest com.oplus.supertext.stylus.bussiness.listener.ScreenShotWindowReceiver
+      -7m49s684ms BroadcastRecord{bf2aa25 com.oplus.screenshot.intent.PREVIEW/u0}
+          DEFERRED for manifest com.oplus.supertext.stylus.bussiness.listener.ScreenShotWindowReceiver
+      -7m45s445ms BroadcastRecord{f5d920f android.net.conn.CONNECTIVITY_CHANGE/u-1}
+          DEFERRED for registered 6379e9d
+      -5m27s53ms BroadcastRecord{e8be097 com.oplus.screenshot.intent.PREVIEW/u0}
+          DEFERRED for manifest com.oplus.supertext.stylus.bussiness.listener.ScreenShotWindowReceiver
+      -33s253ms BroadcastRecord{f8c450c com.oplus.screenshot.intent.PREVIEW/u0}
+          DEFERRED for manifest com.oplus.supertext.stylus.bussiness.listener.ScreenShotWindowReceiver
+    
+    c772483 22373:com.heytap.tas/u0a270 not runnable because INFINITE_DEFER
+      state:FRZ
+      e:2 d:2 f:0 fd:0 o:0 a:0 p:0 pd:0 int:0 rt:0 ins:0 m:0 csi:0 adcsi:0 ccu:0 ccn:1
+      -16m15s827ms BroadcastRecord{75b716 android.net.conn.CONNECTIVITY_CHANGE/u-1}
+          DEFERRED for registered 685c028
+      -7m45s445ms BroadcastRecord{f5d920f android.net.conn.CONNECTIVITY_CHANGE/u-1}
+          DEFERRED for registered 685c028
+    
+    9f7cb34 29564:com.oplus.uxdesign/u0a307 not runnable because DEFER_BY_OPLUS SUB_REASON: FROZEN 
+      state:FRZ
+      e:1 d:1 f:0 fd:0 o:0 a:0 p:0 pd:0 int:0 rt:0 ins:0 m:0 csi:0 adcsi:0 ccu:0 ccn:0
+      -1m7s110ms BroadcastRecord{d327d16 android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered 26687de
+    
+    ca38d5d 14182:com.coloros.filemanager/u0a325 not runnable because DEFER_BY_OPLUS SUB_REASON: FROZEN 
+      state:FRZ
+      e:4 d:4 f:0 fd:0 o:0 a:0 p:0 pd:0 int:0 rt:0 ins:0 m:0 csi:0 adcsi:0 ccu:0 ccn:0
+      -19m31s108ms BroadcastRecord{8e2175c android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered 5afd756
+      -19m30s968ms BroadcastRecord{3231225 android.intent.action.PACKAGE_CHANGED/u0}
+          DEFERRED for registered 5afd756
+      -1m7s110ms BroadcastRecord{d327d16 android.intent.action.PACKAGE_ADDED/u0}
+          DEFERRED for registered 5afd756
+      -1m6s941ms BroadcastRecord{898c202 android.intent.action.PACKAGE_CHANGED/u0}
+          DEFERRED for registered 5afd756
+    
+    d5970f2 26117:com.coloros.note/u0a354 not runnable because DEFER_BY_OPLUS SUB_REASON: FROZEN 
+      state:FRZ
+      runningOomAdjusted:true
+      e:2 d:2 f:0 fd:0 o:0 a:0 p:0 pd:0 int:0 rt:1 ins:0 m:0 csi:0 adcsi:0 ccu:0 ccn:0
+      -16m15s827ms BroadcastRecord{75b716 android.net.conn.CONNECTIVITY_CHANGE/u-1}
+          DEFERRED for registered 481ae7c
+      -7m45s445ms BroadcastRecord{f5d920f android.net.conn.CONNECTIVITY_CHANGE/u-1}
+          DEFERRED for registered 481ae7c
+    
+    706a1cf 13805:com.taobao.taobao:channel/u0a371 not runnable because DEFER_BY_OPLUS SUB_REASON: FROZEN 
+      runningOomAdjusted:true
+      e:1 d:1 f:1 fd:1 o:0 a:0 p:0 pd:0 int:0 rt:1 ins:0 m:0 csi:0 adcsi:0 ccu:7 ccn:25
+      -6s624ms BroadcastRecord{4f86ce7 android.intent.action.CLOSE_SYSTEM_DIALOGS/u-1}
+          DEFERRED URGENT for registered 7c32364
+    
+  
+  🧍 Runnable:
+    (none)
+  
+  🏃 Running:
+    　 (none)
+    　 (none)
+    　 (none)
+    　 (none)
+    　 (none)
+    　 (none)
+  
+  Broadcasts with ignored delivery group policies:
+    {}
+  
+  Foreground UIDs:
+    {10358=true}
+  

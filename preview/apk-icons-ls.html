@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeShao · LS 手写字母图标样式</title>
+<style>
+  :root{
+    --surface:#FBF9FF;--onSurface:#2A2340;--onSurfaceVariant:#6F6389;
+    --scLowest:#FFFFFF;--scHigh:#ECE3FB;--outlineVariant:#DCCFF2;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--surface);color:var(--onSurface);line-height:1.5;padding:28px 16px 64px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:22px;font-weight:700}
+  .sub{color:var(--onSurfaceVariant);font-size:13px;margin-top:6px}
+  .note{margin-top:16px;padding:12px 14px;border:1px solid var(--outlineVariant);border-radius:14px;background:var(--scHigh);font-size:13px;color:var(--onSurfaceVariant)}
+  h2{font-size:16px;font-weight:700;margin:34px 0 14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
+  .card{border:1px solid var(--outlineVariant);border-radius:18px;background:var(--scLowest);padding:16px;text-align:center;box-shadow:0 1px 2px rgba(42,35,64,.05)}
+  .tiles{display:flex;align-items:center;justify-content:center;gap:12px}
+  .sq{width:84px;height:84px;border-radius:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(90,60,160,.28);color:#fff;position:relative;overflow:hidden}
+  .sq svg.main{width:52px;height:52px;display:block;position:relative;z-index:2}
+  .ci{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;color:#fff;position:relative}
+  .ci svg.main{width:36px;height:36px;display:block;position:relative;z-index:2}
+  .nm{margin-top:12px;font-size:14px;font-weight:600}
+  .ds{margin-top:3px;font-size:12px;color:var(--onSurfaceVariant);min-height:32px}
+  .tagrow{margin-top:8px}
+  .tag{display:inline-block;font-size:11px;color:var(--onSurfaceVariant);border:1px solid var(--outlineVariant);border-radius:999px;padding:2px 9px;background:var(--scHigh)}
+  .paper{color:#6D3BC7}
+  .bg-grape{background:linear-gradient(140deg,#7C4DFF 0%,#8B5CF6 45%,#C78BFF 100%)}
+  .bg-sunset{background:linear-gradient(140deg,#8B5CF6 0%,#B984FF 50%,#FFAFCC 100%)}
+  .bg-deep{background:linear-gradient(150deg,#3B1D6E 0%,#6D3BC7 60%,#A66BFF 100%)}
+  .bg-mint{background:linear-gradient(140deg,#6D5DF6 0%,#8B5CF6 55%,#7ED0FF 100%)}
+  .bg-ink{background:linear-gradient(150deg,#1B1030 0%,#3A1D75 60%,#7C4DFF 100%)}
+  .bg-paper{background:linear-gradient(150deg,#FFF8EF 0%,#FBEFE0 60%,#F5E2FF 100%)}
+  .bg-wechat{background:linear-gradient(140deg,#5B3FD1 0%,#7C4DFF 55%,#5EDB8E 100%)}
+  .home{border:1px solid var(--outlineVariant);border-radius:22px;overflow:hidden;max-width:560px}
+  .hometop{height:24px;background:var(--scHigh)}
+  .homebody{background:linear-gradient(160deg,#E9DFFF 0%,#F6EEFF 50%,#FFE6F2 100%);padding:26px 20px}
+  .homegrid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px 12px}
+  .app{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .app .sq{width:60px;height:60px;border-radius:16px;box-shadow:0 3px 9px rgba(90,60,160,.25)}
+  .app .sq svg.main{width:36px;height:36px}
+  .app .lb{font-size:11px;color:#3A2E55;font-weight:600}
+  .foot{margin-top:28px;font-size:13px;color:var(--onSurfaceVariant)}
+  .chip{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;border:1px solid var(--outlineVariant);background:var(--scHigh);margin:0 6px 6px 0}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- 手写连笔 LS 字母（stroke=currentColor，粗细/圆头模拟马克笔） -->
+    <g id="ls" fill="none" stroke="currentColor" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10.4 4.9c-1.2.7-2 1.6-2.4 2.6"/>
+      <path d="M7.6 6.2c-.8 1.4-1.2 3.6-1.2 6.4 0 3.2.3 5.8 1 7.2 1.6.5 3.4 0 4.7-1.2"/>
+      <path d="M18.6 8.2c-.8-1.7-2.9-2.1-3.9-.8-1 1.3 1.3 2 2.3 3.2 1.1 1.2.4 3.8-1.6 4.6-1.4.6-2.6.1-3.2-.7"/>
+      <path d="M12.4 17.2c1 .5 2.3.5 3.3.1"/>
+    </g>
+    <!-- 微信双气泡 -->
+    <g id="wechat">
+      <path d="M4.6 9.2a5.2 5.2 0 0 1 5.2-5.2h4.4a5.2 5.2 0 0 1 5.2 5.2v1.1a5.2 5.2 0 0 1-5.2 5.2h-2.4l-3 2.6v-2.6h-.6a5.2 5.2 0 0 1-5.2-5.2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      <circle cx="9.6" cy="9.9" r="1" fill="currentColor"/>
+      <circle cx="13.6" cy="9.9" r="1" fill="currentColor"/>
+    </g>
+    <!-- Xposed 拼图块 -->
+    <path id="puzzle" d="M8.6 3.2a1.9 1.9 0 0 1 3.8 0v.9h2.6a1.4 1.4 0 0 1 1.4 1.4v2.6h.9a1.9 1.9 0 0 1 0 3.8h-.9v2.9a1.4 1.4 0 0 1-1.4 1.4h-2.9v-.9a1.9 1.9 0 0 0-3.8 0v.9H5.4A1.4 1.4 0 0 1 4 15.2v-2.9h-.9a1.9 1.9 0 0 1 0-3.8H4V5.5a1.4 1.4 0 0 1 1.4-1.4h3.2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <h1>LeShao · 「LS」手写字母 + Xposed / 微信 元素</h1>
+  <div class="sub">10 套 APK 桌面图标方案。LS 为连笔手写体（马克笔圆头），叠加 Xposed（拼图/齿轮/节点）或微信（双气泡/绿尾）元素。</div>
+  <div class="note">每套给 squircle 自适应 + 圆形裁切两种尺寸；底部有桌面网格。选定后出全套 mipmap PNG + 自适应图标 XML。当前左上角菜单仍是锁定的「02 四宫格」，与桌面图标相互独立。</div>
+
+  <h2>十套方案</h2>
+  <div class="grid">
+
+    <!-- 01 LS + 微信双气泡（紫底） -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-grape">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:14%;opacity:.28;color:#fff"><use href="#wechat"/></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+        <div class="ci bg-grape">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:14%;opacity:.28;color:#fff"><use href="#wechat"/></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+      </div>
+      <div class="nm">01 LS + 双气泡</div>
+      <div class="ds">微信气泡做底纹，LS 手写压上，语义最直白</div>
+      <div class="tagrow"><span class="tag">推荐</span></div>
+    </div>
+
+    <!-- 02 LS + 拼图（Xposed） -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-deep">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:13%;opacity:.30;color:#fff"><use href="#puzzle"/></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+        <div class="ci bg-deep">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:13%;opacity:.30;color:#fff"><use href="#puzzle"/></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+      </div>
+      <div class="nm">02 LS + 拼图</div>
+      <div class="ds">Xposed 模块经典拼图，强化「增强插件」属性</div>
+      <div class="tagrow"><span class="tag">Xposed</span></div>
+    </div>
+
+    <!-- 03 LS + 齿轮环（Xposed） -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-sunset">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:8%;color:#fff;opacity:.5"><g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 2.2v2.4M12 19.4v2.4M2.2 12h2.4M19.4 12h2.4M5.1 5.1l1.7 1.7M17.2 17.2l1.7 1.7M18.9 5.1l-1.7 1.7M6.8 17.2l-1.7 1.7"/></g></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+        <div class="ci bg-sunset">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:8%;color:#fff;opacity:.5"><g fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 2.2v2.4M12 19.4v2.4M2.2 12h2.4M19.4 12h2.4M5.1 5.1l1.7 1.7M17.2 17.2l1.7 1.7M18.9 5.1l-1.7 1.7M6.8 17.2l-1.7 1.7"/></g></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+      </div>
+      <div class="nm">03 LS + 齿轮环</div>
+      <div class="ds">Xposed 齿轮环绕手写 LS，工业+文艺碰撞</div>
+      <div class="tagrow"><span class="tag">Xposed</span></div>
+    </div>
+
+    <!-- 04 LS + 微信绿尾 -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-mint">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:10%;color:#fff;opacity:.32"><use href="#wechat"/></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+          <svg viewBox="0 0 24 24" style="position:absolute;right:9%;bottom:9%;width:22px;height:22px"><path d="M4 6.4A2.6 2.6 0 0 1 6.6 3.8h6A2.6 2.6 0 0 1 15.2 6.4v2.8a2.6 2.6 0 0 1-2.6 2.6H7.4L4 14.4z" fill="#5EDB8E"/></svg>
+        </div>
+        <div class="ci bg-mint">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:10%;color:#fff;opacity:.32"><use href="#wechat"/></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+      </div>
+      <div class="nm">04 LS + 微信绿尾</div>
+      <div class="ds">右下角一粒微信绿气泡，紫色主体一点绿点睛</div>
+      <div class="tagrow"><span class="tag">微信元素</span></div>
+    </div>
+
+    <!-- 05 LS + 节点电路（Xposed 注入感） -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-ink">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:6%;color:#FFAFCC;opacity:.55"><g fill="none" stroke="currentColor" stroke-width="1.1"><path d="M3.4 12h3M17.6 12h3M12 3.4v3M12 17.6v3M6 6l2 2M18 6l-2 2M6 18l2-2M18 18l-2-2"/></g><g fill="#FFAFCC"><circle cx="3.4" cy="12" r="1"/><circle cx="20.6" cy="12" r="1"/><circle cx="12" cy="3.4" r="1"/><circle cx="12" cy="20.6" r="1"/><circle cx="6" cy="6" r="1"/><circle cx="18" cy="6" r="1"/><circle cx="6" cy="18" r="1"/><circle cx="18" cy="18" r="1"/></g></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+        <div class="ci bg-ink">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:6%;color:#FFAFCC;opacity:.55"><g fill="none" stroke="currentColor" stroke-width="1.1"><path d="M3.4 12h3M17.6 12h3M12 3.4v3M12 17.6v3M6 6l2 2M18 6l-2 2M6 18l2-2M18 18l-2-2"/></g><g fill="#FFAFCC"><circle cx="3.4" cy="12" r="1"/><circle cx="20.6" cy="12" r="1"/><circle cx="12" cy="3.4" r="1"/><circle cx="12" cy="20.6" r="1"/><circle cx="6" cy="6" r="1"/><circle cx="18" cy="6" r="1"/><circle cx="6" cy="18" r="1"/><circle cx="18" cy="18" r="1"/></g></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+      </div>
+      <div class="nm">05 LS + 节点电路</div>
+      <div class="ds">暗夜紫底 + 粉色注入节点，很「Hook/注入」</div>
+      <div class="tagrow"><span class="tag">Xposed 感</span></div>
+    </div>
+
+    <!-- 06 LS 手写 + 下划线波浪（纸感） -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-paper paper">
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+          <svg viewBox="0 0 24 24" style="position:absolute;left:22%;right:22%;bottom:16%;height:8px"><path d="M2 6c2.5-3 5 3 8 0s5.5-3 8 0" fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <div class="ci bg-paper paper">
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+      </div>
+      <div class="nm">06 LS 纸感手写</div>
+      <div class="ds">奶油纸底 + 紫色手写 LS + 波浪下划线，最「手写」</div>
+      <div class="tagrow"><span class="tag">手写感</span></div>
+    </div>
+
+    <!-- 07 LS + 星芒 -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-sunset">
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+          <svg viewBox="0 0 24 24" style="position:absolute;right:8%;top:8%;width:22px;height:22px"><g fill="#fff" opacity=".95"><path d="M12 2.4c.4 2.6 1.4 3.6 4 4-2.6.4-3.6 1.4-4 4-.4-2.6-1.4-3.6-4-4 2.6-.4 3.6-1.4 4-4z"/></g></svg>
+        </div>
+        <div class="ci bg-sunset">
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+          <svg viewBox="0 0 24 24" style="position:absolute;right:6%;top:6%;width:16px;height:16px"><g fill="#fff"><path d="M12 2.4c.4 2.6 1.4 3.6 4 4-2.6.4-3.6 1.4-4 4-.4-2.6-1.4-3.6-4-4 2.6-.4 3.6-1.4 4-4z"/></g></svg>
+        </div>
+      </div>
+      <div class="nm">07 LS + 星芒</div>
+      <div class="ds">右上角一点星芒，手写 LS 更灵动</div>
+      <div class="tagrow"><span class="tag">轻</span></div>
+    </div>
+
+    <!-- 08 LS + 盾（稳定） -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-grape">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:9%;color:#fff;opacity:.22"><path d="M12 2.6 20 5.8v6.3c0 4.5-3 8.2-8 9.3-5-1.1-8-4.8-8-9.3V5.8L12 2.6z" fill="currentColor"/></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+        <div class="ci bg-grape">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:9%;color:#fff;opacity:.22"><path d="M12 2.6 20 5.8v6.3c0 4.5-3 8.2-8 9.3-5-1.1-8-4.8-8-9.3V5.8L12 2.6z" fill="currentColor"/></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+      </div>
+      <div class="nm">08 LS + 盾</div>
+      <div class="ds">盾形底纹，LS 手写，突出稳定可靠</div>
+      <div class="tagrow"><span class="tag">稳</span></div>
+    </div>
+
+    <!-- 09 LS + 光环轨道 -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-deep">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:2%;color:#FFAFCC;opacity:.5"><ellipse cx="12" cy="12" rx="11" ry="4.6" transform="rotate(-28 12 12)" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="21" cy="8" r="1.6" fill="#FFAFCC"/></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+        <div class="ci bg-deep">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:2%;color:#FFAFCC;opacity:.5"><ellipse cx="12" cy="12" rx="11" ry="4.6" transform="rotate(-28 12 12)" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="21" cy="8" r="1.6" fill="#FFAFCC"/></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+      </div>
+      <div class="nm">09 LS + 光环轨道</div>
+      <div class="ds">轨道环衬托手写 LS，科技生态感</div>
+      <div class="tagrow"><span class="tag">科技</span></div>
+    </div>
+
+    <!-- 10 LS + 微信绿底（Xposed+微信融合） -->
+    <div class="card">
+      <div class="tiles">
+        <div class="sq bg-wechat">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:12%;color:#fff;opacity:.30"><use href="#wechat"/></svg>
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:12%;color:#fff;opacity:.22"><use href="#puzzle"/></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+        <div class="ci bg-wechat">
+          <svg viewBox="0 0 24 24" style="position:absolute;inset:12%;color:#fff;opacity:.30"><use href="#wechat"/></svg>
+          <svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg>
+        </div>
+      </div>
+      <div class="nm">10 LS 紫绿融合</div>
+      <div class="ds">紫→绿渐变，气泡+拼图双元素，Xposed×微信 合体</div>
+      <div class="tagrow"><span class="tag">融合</span></div>
+    </div>
+
+  </div>
+
+  <h2>桌面整体效果</h2>
+  <div class="home">
+    <div class="hometop"></div>
+    <div class="homebody">
+      <div class="homegrid">
+        <div class="app"><div class="sq bg-grape"><svg viewBox="0 0 24 24" style="position:absolute;inset:14%;opacity:.28;color:#fff"><use href="#wechat"/></svg><svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg></div><div class="lb">LS</div></div>
+        <div class="app"><div class="sq bg-deep"><svg viewBox="0 0 24 24" style="position:absolute;inset:13%;opacity:.30;color:#fff"><use href="#puzzle"/></svg><svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg></div><div class="lb">LS</div></div>
+        <div class="app"><div class="sq bg-sunset"><svg viewBox="0 0 24 24" style="position:absolute;inset:8%;color:#fff;opacity:.5"><g fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="12" r="9"/><path d="M12 2.2v2.4M12 19.4v2.4M2.2 12h2.4M19.4 12h2.4M5.1 5.1l1.7 1.7M17.2 17.2l1.7 1.7M18.9 5.1l-1.7 1.7M6.8 17.2l-1.7 1.7"/></g></svg><svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg></div><div class="lb">LS</div></div>
+        <div class="app"><div class="sq bg-ink"><svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg></div><div class="lb">LS</div></div>
+        <div class="app"><div class="sq bg-paper paper"><svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg></div><div class="lb">LS</div></div>
+        <div class="app"><div class="sq bg-mint"><svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg><svg viewBox="0 0 24 24" style="position:absolute;right:9%;bottom:9%;width:16px;height:16px"><path d="M4 6.4A2.6 2.6 0 0 1 6.6 3.8h6A2.6 2.6 0 0 1 15.2 6.4v2.8a2.6 2.6 0 0 1-2.6 2.6H7.4L4 14.4z" fill="#5EDB8E"/></svg></div><div class="lb">LS</div></div>
+        <div class="app"><div class="sq bg-wechat"><svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg></div><div class="lb">LS</div></div>
+        <div class="app"><div class="sq bg-grape"><svg viewBox="0 0 24 24" style="position:absolute;inset:9%;color:#fff;opacity:.22"><path d="M12 2.6 20 5.8v6.3c0 4.5-3 8.2-8 9.3-5-1.1-8-4.8-8-9.3V5.8L12 2.6z" fill="currentColor"/></svg><svg class="main" viewBox="0 0 24 24"><use href="#ls"/></svg></div><div class="lb">LS</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div>手写 LS 是同一套连笔笔形（马克笔圆头），换底纹/元素即成为不同方案，品牌一致性好。</div>
+    <div style="margin-top:10px">
+      <span class="chip">手写连笔 LS</span>
+      <span class="chip">Xposed 拼图/齿轮/节点</span>
+      <span class="chip">微信双气泡/绿尾</span>
+      <span class="chip">squircle 自适应</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

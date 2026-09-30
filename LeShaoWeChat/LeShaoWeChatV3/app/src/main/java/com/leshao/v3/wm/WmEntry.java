@@ -6,7 +6,6 @@ import android.os.Looper;
 import android.view.View;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.wm.hook.WmChatHook;
-import com.leshao.v3.wm.hook.WmGroupHook;
 import com.leshao.v3.wm.utils.WmPrefs;
 import com.leshao.v3.wm.utils.WmReflect;
 
@@ -38,8 +37,7 @@ public class WmEntry {
         WmChatHook.initOnAppStart(cl);
         try {
             injectChatWindow(cl);
-            injectGroupInfo(cl);
-            LogWriter.log(TAG, "inject all OK (⚡🛡🏠💬)");
+            LogWriter.log(TAG, "inject all OK (⚡💬)");
         } catch (Throwable t) {
             LogWriter.log(TAG, "inject err: " + t.getMessage());
         }
@@ -73,7 +71,6 @@ public class WmEntry {
                         if (clsName.equals("com.tencent.mm.ui.LauncherUI")) {
                             // 返回主页，关闭聊天窗口功能入口（MMEditText detach 不触发，微信只隐藏视图）
                             WmChatHook.dismissTitleBtn();
-                            WmGroupHook.dismissGroupBtn();
                         } else if (clsName.equals("com.tencent.mm.ui.chatting.ChattingUI")) {
                             handleChatResume(p.thisObject, cl);
                         }
@@ -166,7 +163,6 @@ public class WmEntry {
                             try {
                                 LogWriter.log(TAG, "ChattingUIFragment.O0() close");
                                 WmChatHook.dismissTitleBtn();
-                                WmGroupHook.dismissGroupBtn();
                             } catch (Throwable e) {
                                 LogWriter.log("WmEntry", "O0 err: " + e);
                             }
@@ -205,7 +201,6 @@ public class WmEntry {
                     protected void beforeHookedMethod(MethodHookParam p) {
                         LogWriter.log(TAG, "BaseChattingUIFragment.onPause()");
                         WmChatHook.dismissTitleBtn();
-                        WmGroupHook.dismissGroupBtn();
                     }
                 });
                 LogWriter.log(TAG, "\u2713 chat window (BaseChattingUIFragment lifecycle)");
@@ -224,7 +219,6 @@ public class WmEntry {
                             LogWriter.log(TAG, "ChattingUIFragment.onHiddenChanged hidden=" + hidden);
                             if (hidden) {
                                 WmChatHook.dismissTitleBtn();
-                                WmGroupHook.dismissGroupBtn();
                             } else {
                                 handleChatResume(p.thisObject, cl);
                             }
@@ -324,7 +318,6 @@ public class WmEntry {
                             if (!"com.tencent.mm.ui.widget.MMEditText".equals(v.getClass().getName())) return;
                             LogWriter.log(TAG, "chat closed via MMEditText detached");
                             WmChatHook.dismissTitleBtn();
-                            WmGroupHook.dismissGroupBtn();
                         } catch (Exception e) {
                             LogWriter.log(TAG, "MMEditText detach err: " + e.getMessage());
                         }
@@ -365,8 +358,6 @@ public class WmEntry {
                 && !"com.tencent.mm.ui.chatting.ChattingUI".equals(clsName)) return;
         String user = findChatUserFromActivity(act);
         boolean visible = isChattingFragmentVisible(act);
-        // v1091: 三横菜单改回 decorView 直接注入, 由 CornerMenu 自身的聊天 fragment
-        // 生命周期即时同步(进入即隐藏/返回即出现), 不再由本 1.2s 轮询驱动, 避免延迟。
         // v1088: 边沿触发 —— 仅在可见性/会话变化时更新标题按钮(showTitleBtn 幂等, 但避免每 tick 重复设置)
         boolean changed = (visible != sLastChatVisible) || (visible && user != null
                 && !user.equals(sLastChatUser));
@@ -505,37 +496,5 @@ public class WmEntry {
             LogWriter.log(TAG, "findChatUserFromActivity err: " + e.getMessage());
         }
         return null;
-    }
-
-    // ===== 群详情页入口 =====
-    // 用户要求: 聊天详情页不注入悬浮球。群管理功能已集成在聊天窗口面板的"乐少群管理"区域，
-    // 因此不再在 ChatroomInfoUI 注入 🛡 浮标，仅保留日志观测。
-    static void injectGroupInfo(ClassLoader cl) {
-        try {
-            XposedHelpers.findClass("com.tencent.mm.chatroom.ui.ChatroomInfoUI", cl);
-            XposedBridge.hookAllMethods(Activity.class, "onResume", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam p) {
-                    try {
-                        String clsName = p.thisObject.getClass().getName();
-                        if (!"com.tencent.mm.chatroom.ui.ChatroomInfoUI".equals(clsName)) return;
-                        Activity act = (Activity) p.thisObject;
-                        String room = null;
-                        try {
-                            room = act.getIntent().getStringExtra("Chatroom_Name");
-                        } catch (Exception ignored) {}
-                        if (room == null || room.isEmpty()) {
-                            room = WmReflect.getCurrentChatUser(act.getIntent());
-                        }
-                        LogWriter.log(TAG, "ChatroomInfoUI.onResume room=" + room + " (详情页浮标已移除)");
-                    } catch (Exception e) {
-                        LogWriter.log(TAG, "group info err: " + e.getMessage());
-                    }
-                }
-            });
-            LogWriter.log(TAG, "\u2713 群详情入口");
-        } catch (Exception e) {
-            LogWriter.log(TAG, "\u2717 群详情:" + e.getMessage());
-        }
     }
 }

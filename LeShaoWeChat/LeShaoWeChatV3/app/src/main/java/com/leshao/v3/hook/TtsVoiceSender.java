@@ -64,6 +64,8 @@ public class TtsVoiceSender {
     private static final long FAILURE_SUPPRESS_WINDOW_MS = 8000;
     /** v985: TTS 合成等待上限。原 30s 过长, 一旦引擎卡住会占满单线程池拖慢后续回复, 缩短到 12s。 */
     private static final long SYNTH_TIMEOUT_MS = 12000;
+    /** v986: 系统 TTS 单次合成的最大字符数, 超过则按标点分段合成后拼接, 避免长文本被截断。 */
+    private static final int TTS_MAX_CHARS = 300;
     private static final int SILK_BITRATE = 60000;          // 微信原生 SILK 高码率档(v930 为 50000, 升 60k 承载更多细节)
     private static final int SILK_COMPLEXITY = 5;           // 参照 8.0.78 v61.w.c 转码参数 new v61/c0(16000,16000,4), 升满复杂度
     private static volatile boolean sCrashHandlerInstalled;
@@ -77,52 +79,49 @@ public class TtsVoiceSender {
                 }
             });
 
+    /**
+     * v986: 崩溃上报统一委托团队2提供的公共契约 com.leshao.v3.MainHook.installCrashHandler()(幂等)。
+     * 本类不再自行 setDefaultUncaughtExceptionHandler —— 原先自注册的 handler 会与 MainHook 的
+     * handler 互相调用(prev 链互指), 形成无限递归环, 一旦发生未捕获异常直接栈溢出导致微信闪退。
+     *
+     * 契约方法名固定为 installCrashHandler() / logCrash(Throwable)。团队2 API 尚未公开时,
+     * 这里通过反射调用, 既可编译通过又能按契约桥接; installCrashHandler 缺失时回退到已有的
+     * 幂等 rearmCrashHandler()。本类绝不注册任何 UncaughtExceptionHandler。
+     */
     private static void installCrashReporter() {
         if (sCrashHandlerInstalled) return;
         sCrashHandlerInstalled = true;
-        final Thread.UncaughtExceptionHandler prev = Thread.getDefaultUncaughtExceptionHandler();
-        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
-            @Override
-            public void uncaughtException(Thread t, Throwable e) {
-                try {
-                    StringBuilder sb = new StringBuilder();
-                    sb.append("FATAL thread=").append(t.getName()).append(" process=").append(getProcessName())
-                            .append("\n").append(e.toString());
-                    StackTraceElement[] st = e.getStackTrace();
-                    if (st != null) {
-                        for (StackTraceElement el : st) {
-                            sb.append("\n  at ").append(el.getClassName()).append('.').append(el.getMethodName())
-                                    .append('(').append(el.getFileName() == null ? "?" : el.getFileName())
-                                    .append(':').append(el.getLineNumber()).append(')');
-                        }
-                    }
-                    Throwable c = e.getCause();
-                    while (c != null) {
-                        sb.append("\nCaused by: ").append(c.toString());
-                        StackTraceElement[] cst = c.getStackTrace();
-                        if (cst != null) {
-                            for (StackTraceElement el : cst) {
-                                sb.append("\n  at ").append(el.getClassName()).append('.').append(el.getMethodName())
-                                        .append('(').append(el.getFileName() == null ? "?" : el.getFileName())
-                                        .append(':').append(el.getLineNumber()).append(')');
-                            }
-                        }
-                        c = c.getCause();
-                    }
-                    LogWriter.log(TAG, sb.toString());
-                } catch (Throwable ignored) {}
-                if (prev != null && prev != this) {
-                    prev.uncaughtException(t, e);
-                }
-            }
-        });
+        if (!invokeMainHook("installCrashHandler")) {
+            invokeMainHook("rearmCrashHandler");
+        }
     }
 
-    private static String getProcessName() {
+    /** 反射调用 com.leshao.v3.MainHook 的崩溃契约方法(无参), 避免对尚未公开的 API 产生编译期硬依赖。 */
+    private static boolean invokeMainHook(String methodName) {
         try {
-            return ContextManager.getAppContext().getPackageName();
-        } catch (Throwable ignored) {}
-        return "?";
+            Method m = com.leshao.v3.MainHook.class.getDeclaredMethod(methodName);
+            m.setAccessible(true);
+            m.invoke(null);
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * v986: 崩溃日志统一走 MainHook.logCrash(Throwable) 契约(幂等/内部防递归)。
+     * 契约未就绪时回退本地日志, 异常一律不得逃逸。
+     */
+    private static void logCrash(Throwable t) {
+        if (t == null) return;
+        try {
+            Method m = com.leshao.v3.MainHook.class.getDeclaredMethod("logCrash", Throwable.class);
+            m.setAccessible(true);
+            m.invoke(null, t);
+        } catch (Throwable ignored) {
+            try { LogWriter.log(TAG, "crash: " + t.getClass().getSimpleName() + " " + t.getMessage()); }
+            catch (Throwable ignored2) {}
+        }
     }
 
     private static TextToSpeech sTts;
@@ -1081,6 +1080,7 @@ public class TtsVoiceSender {
                 }
             } catch (Throwable t) {
                 LogWriter.log(TAG, "async TTS crash: " + t.getClass().getSimpleName() + " " + t.getMessage());
+                logCrash(t);
                 notifyTtsFail(onFail, "crash " + t.getClass().getSimpleName());
             }
         });
@@ -1627,15 +1627,19 @@ public class TtsVoiceSender {
                 }
                 if (added > 0) LogWriter.log(TAG, "hookA21Oi: +DexKit siblings=" + added);
             }
+            String a21HintName = DexKitHelper.getA21MethodName();
             java.lang.reflect.Method target = null;
             String hitHint = null;
             for (Class<?> cls : searchClasses) {
                 for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
-                    if (!m.getName().equals("i")) continue;
-                    if (m.getParameterCount() < 1) continue;
+                    // v1134: 优先接受名称 "i", 其次接受 DexKit 命中的 a21 方法名(需 >=2 参, 与 hook 体一致)。
+                    boolean nameHit = m.getName().equals("i")
+                            || (a21HintName != null && a21HintName.equals(m.getName()));
+                    if (!nameHit) continue;
+                    if (m.getParameterCount() < 2) continue;
                     target = m;
                     a21o = cls;
-                    hitHint = "name=i class=" + cls.getName();
+                    hitHint = "name=" + m.getName() + " class=" + cls.getName();
                     break;
                 }
                 if (target != null) break;
@@ -1673,22 +1677,19 @@ public class TtsVoiceSender {
             }
             if (hitHint != null) LogWriter.log(TAG, "hookA21Oi: 命中 " + hitHint);
             if (target == null) {
-                StringBuilder dump = new StringBuilder("Hook a21.o.i: method not found, searched=")
-                        .append(searchClasses.size()).append(" classes:");
+                // v1134: 这是可选兜底 hook(主链路 f9.Bb 已生效), 缺失不应刷屏方法 dump。
+                StringBuilder names = new StringBuilder();
                 for (Class<?> cls : searchClasses) {
-                    dump.append("\n  class=").append(cls.getName());
                     for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
-                        dump.append("\n    ").append(m.getReturnType().getSimpleName()).append(' ')
-                            .append(m.getName()).append('(');
-                        Class<?>[] pts = m.getParameterTypes();
-                        for (int i = 0; i < pts.length; i++) {
-                            if (i > 0) dump.append(',');
-                            dump.append(pts[i].getSimpleName());
-                        }
-                        dump.append(')');
+                        if (names.length() > 160) break;
+                        if (names.length() > 0) names.append(',');
+                        names.append(m.getName()).append('/').append(m.getParameterCount());
                     }
                 }
-                LogWriter.log(TAG, dump.toString());
+                LogWriter.log(TAG, "hookA21Oi: optional fallback target not found (searched="
+                        + searchClasses.size() + " classes) a21="
+                        + (a21o == null ? "null" : a21o.getName())
+                        + " methods=[" + names + "]");
                 return;
             }
             {
@@ -2992,13 +2993,17 @@ public class TtsVoiceSender {
 
     private static String getHighQualityUrl(String songmid) {
         if (songmid == null || songmid.isEmpty()) return null;
+        HttpURLConnection conn = null;
+        OutputStream os = null;
+        InputStream is = null;
         try {
             String reqJson = "{\"req_0\":{\"module\":\"vkey.GetVkeyServer\",\"method\":\"CgiGetVkey\","
                     + "\"param\":{\"guid\":\"2000000049\",\"songmid\":[\"" + songmid + "\"],\"songtype\":[0,1],"
                     + "\"uin\":\"0\",\"loginflag\":1,\"platform\":\"20\"}},"
                     + "\"comm\":{\"uin\":0,\"format\":\"json\",\"ct\":24,\"cv\":0}}";
-            HttpURLConnection conn = (HttpURLConnection) new URL("https://u.y.qq.com/cgi-bin/musicu.fcg").openConnection();
+            conn = (HttpURLConnection) new URL("https://u.y.qq.com/cgi-bin/musicu.fcg").openConnection();
             conn.setRequestMethod("POST");
+            // v986: 连接/读取超时必须有上限, 防止网络卡死拖垮合成线程。
             conn.setConnectTimeout(10000);
             conn.setReadTimeout(10000);
             conn.setDoOutput(true);
@@ -3006,35 +3011,38 @@ public class TtsVoiceSender {
             conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36");
             conn.setRequestProperty("Referer", "https://y.qq.com/");
             conn.setRequestProperty("Origin", "https://y.qq.com");
-            OutputStream os = conn.getOutputStream();
+            os = conn.getOutputStream();
             os.write(reqJson.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             os.flush();
             os.close();
+            os = null;
             int code = conn.getResponseCode();
             if (code != 200) {
                 String errBody = "";
+                InputStream es = null;
                 try {
-                    InputStream es = conn.getErrorStream();
+                    es = conn.getErrorStream();
                     if (es != null) {
                         java.io.ByteArrayOutputStream ebaos = new java.io.ByteArrayOutputStream();
                         byte[] ebuf = new byte[2048];
                         int en;
                         while ((en = es.read(ebuf)) > 0) ebaos.write(ebuf, 0, en);
-                        es.close();
                         errBody = new String(ebaos.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
                     }
-                } catch (Throwable ignored) {}
+                } catch (Throwable ignored) {
+                } finally {
+                    try { if (es != null) es.close(); } catch (Throwable ignored) {}
+                }
                 LogWriter.log(TAG, "[高音质] HTTP " + code + " err=" + errBody);
-                conn.disconnect();
                 return null;
             }
-            InputStream is = conn.getInputStream();
+            is = conn.getInputStream();
             java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
             byte[] buf = new byte[4096];
             int n;
             while ((n = is.read(buf)) > 0) baos.write(buf, 0, n);
             is.close();
-            conn.disconnect();
+            is = null;
             String resp = new String(baos.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
             LogWriter.log(TAG, "[高音质] resp=" + resp);
             org.json.JSONObject root = new org.json.JSONObject(resp);
@@ -3049,6 +3057,7 @@ public class TtsVoiceSender {
                 if (p != null && !p.isEmpty()) { purl = p; break; }
             }
             if (purl == null || purl.isEmpty()) return null;
+            if (sip.length() == 0) return null;
             String base = sip.getString(0);
             String fullUrl = base + purl;
             LogWriter.log(TAG, "[高音质] songmid=" + songmid + " -> " + fullUrl);
@@ -3056,6 +3065,10 @@ public class TtsVoiceSender {
         } catch (Throwable t) {
             LogWriter.log(TAG, "[高音质] 获取失败: " + t.getClass().getSimpleName() + " " + t.getMessage());
             return null;
+        } finally {
+            try { if (os != null) os.close(); } catch (Throwable ignored) {}
+            try { if (is != null) is.close(); } catch (Throwable ignored) {}
+            if (conn != null) { try { conn.disconnect(); } catch (Throwable ignored) {} }
         }
     }
 
@@ -3380,6 +3393,28 @@ public class TtsVoiceSender {
             LogWriter.log(TAG, "SceneVoice: newName=" + newName + " talker=" + talker);
             if (newName == null || newName.isEmpty()) return false;
 
+            // v30009: 诊断"发送对象错发" —— 对比目标会话与当前实时会话, 并回读 voiceinfo 记录的目标字段。
+            try {
+                String live = ChatFooterLongPressMenu.resolveLiveTalker();
+                boolean mismatch = (live != null && !live.equals(talker));
+                LogWriter.log(TAG, "SceneVoice: targetTalker=" + talker + " liveTalker=" + live
+                        + (mismatch ? "  [MISMATCH live!=target]" : ""));
+            } catch (Throwable ignored) {}
+            try {
+                Object vi = XposedHelpers.callStaticMethod(
+                        XposedHelpers.findClass(sVoiceGClass, voiceCl()), "k", newName);
+                if (vi != null) {
+                    Object c = null, x = null;
+                    try { c = XposedHelpers.getObjectField(vi, "c"); } catch (Throwable ignored) {}
+                    try { x = XposedHelpers.getObjectField(vi, "x"); } catch (Throwable ignored) {}
+                    LogWriter.log(TAG, "SceneVoice: voiceinfo c(talker)=" + c + " x(msgTalker)=" + x);
+                } else {
+                    LogWriter.log(TAG, "SceneVoice: voiceinfo record not found for " + newName);
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "SceneVoice: read voiceinfo err " + t.getMessage());
+            }
+
             String voice2Dir = getVoice2Dir(voiceFile);
             LogWriter.log(TAG, "SceneVoice: voice2Dir=" + voice2Dir + " newName=" + newName);
             String dstPath = buildVoice2Path(voice2Dir, newName);
@@ -3405,19 +3440,25 @@ public class TtsVoiceSender {
             // 语音转发_新.md §3: v61.d1.u 建消息后必须 v61.v0.dj().e() 踢 SceneVoiceService 上传队列
             kickVoiceUploadQueue(voiceCl());
 
+            // v30001: 微信入库后自身会话列表刷新失败(3180 "refresh no-op"), 主动通知聊天页刷新消息列表
+            // 修复"语音显示已发送但界面无显示/未上屏"。
+            try {
+                ChatFooterLongPressMenu.refreshChattingList();
+            } catch (Throwable ignored) {}
+
             try {
                 // 3180: 刷新语音缓存使用 pv.p0 (VoiceLogicService) 上的实例方法
                 Class<?> player = VersionCompat.findVoicePlayerClass(voiceCl());
                 if (player != null) {
                     boolean refreshed = false;
-                    for (Method m : player.getDeclaredMethods()) {
+                    for (Method m : allMethods(player)) {
                         if (!Modifier.isStatic(m.getModifiers())) continue;
                         if (m.getParameterTypes().length == 0 && m.getReturnType() != void.class
                                 && m.getReturnType() != String.class) {
                             try {
                                 Object svc = XposedHelpers.callStaticMethod(player, m.getName());
                                 if (svc != null) {
-                                    for (Method m2 : svc.getClass().getDeclaredMethods()) {
+                                    for (Method m2 : allMethods(svc.getClass())) {
                                         if (m2.getName().equals("e") && m2.getParameterTypes().length == 0) {
                                             XposedHelpers.callMethod(svc, "e");
                                             refreshed = true;
@@ -3439,10 +3480,31 @@ public class TtsVoiceSender {
             try {
                 Class<?> y21p0 = VersionCompat.findVoicePlayerClass(voiceCl());
                 if (y21p0 != null) {
-                    Object q0 = XposedHelpers.callStaticMethod(y21p0, "kj");
-                    if (q0 != null) {
-                        XposedHelpers.callMethod(q0, "e");
-                        LogWriter.log(TAG, "SceneVoice: refresh OK (legacy)");
+                    boolean legacyOk = false;
+                    for (String getter : new String[]{"kj", "bj", "fj", "gj", "dj", "e"}) {
+                        Object svc;
+                        try { svc = XposedHelpers.callStaticMethod(y21p0, getter); }
+                        catch (Throwable ignored) { continue; }
+                        if (svc == null) continue;
+                        for (Method m2 : allMethods(svc.getClass())) {
+                            if (m2.getParameterTypes().length != 0) continue;
+                            String mn = m2.getName();
+                            if (mn.equals("e") || mn.equals("c") || mn.equals("b")
+                                    || mn.equals("f") || mn.equals("g")
+                                    || mn.equals("notifyDataSetChanged")) {
+                                try {
+                                    XposedHelpers.callMethod(svc, mn);
+                                    LogWriter.log(TAG, "SceneVoice: refresh OK (legacy "
+                                            + getter + "()." + mn + "())");
+                                    legacyOk = true;
+                                    break;
+                                } catch (Throwable ignored) {}
+                            }
+                        }
+                        if (legacyOk) break;
+                    }
+                    if (!legacyOk) {
+                        LogWriter.log(TAG, "SceneVoice: refresh no-op (legacy): pv.p0 no usable method");
                     }
                 }
             } catch (Throwable t) {
@@ -3453,6 +3515,20 @@ public class TtsVoiceSender {
             LogWriter.log(TAG, "SceneVoice err: " + t.getClass().getSimpleName() + " " + t.getMessage());
             return false;
         }
+    }
+
+    /** v1134: 收集类及其父类/接口的全部方法。混淆类常把 e()/c() 等刷新方法定义在父类,
+     *  旧实现用 getDeclaredMethods() 会漏掉继承方法, 导致发送后语音缓存刷新恒失败。 */
+    private static java.util.List<Method> allMethods(Class<?> cls) {
+        java.util.List<Method> out = new java.util.ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Method m : c.getDeclaredMethods()) {
+                String key = m.getName() + "#" + m.getParameterTypes().length;
+                if (seen.add(key)) out.add(m);
+            }
+        }
+        return out;
     }
 
     private static String getVoice2Dir(String voiceFile) {
@@ -3505,64 +3581,89 @@ public class TtsVoiceSender {
         void onProgress(int current, int total);
     }
 
-    public static boolean sendMp3Voice(String talker, String mp3Path) {
-        return sendMp3Voice(talker, mp3Path, 0, 1000, 0, 0, null);
-    }
-
-    public static boolean sendMp3Voice(String talker, String mp3Path, int splitSeconds, int fakeDurationMs) {
-        return sendMp3Voice(talker, mp3Path, splitSeconds, fakeDurationMs, 0, 0, null);
+    /** 预先解码 + 音效处理后的语音(可试听 / 可发送), 用于「试听/取消/发送」与「一键对比」流程 */
+    public static class PreparedVoice {
+        public final String mp3Path;
+        public final byte[] originalPcm;
+        public final byte[] processedPcm;
+        public final int durationMs;
+        public PreparedVoice(String mp3Path, byte[] originalPcm, byte[] processedPcm, int durationMs) {
+            this.mp3Path = mp3Path;
+            this.originalPcm = originalPcm;
+            this.processedPcm = processedPcm;
+            this.durationMs = durationMs;
+        }
     }
 
     /**
-     * 将本地 MP3 文件转为微信语音消息并发送 (支持音频裁剪)
-     * @param cutBeginSec 裁剪起始秒数, 0=不裁剪
-     * @param cutEndSec 裁剪结束秒数, 0=到末尾
+     * 解码 MP3 并按当前音效设置处理, 但不发送。供「转码完成后 试听/取消/发送」与「一键对比」使用。
+     * @return null 表示解码或裁剪失败
      */
-    public static boolean sendMp3Voice(String talker, String mp3Path, int splitSeconds, int fakeDurationMs,
-            float cutBeginSec, float cutEndSec, VoiceSendCallback callback) {
+    public static PreparedVoice prepareMp3Voice(String mp3Path, float cutBeginSec, float cutEndSec,
+            VoiceSendCallback decodeCb) {
         if (sClassLoader == null) {
-            LogWriter.log(TAG, "sendMp3Voice: sClassLoader null");
+            LogWriter.log(TAG, "prepareMp3Voice: sClassLoader null");
+            return null;
+        }
+        try {
+            LogWriter.log(TAG, "prepareMp3Voice start: " + mp3Path
+                    + " cut=" + cutBeginSec + "-" + cutEndSec);
+            byte[] raw = mp3ToPcm(new File(mp3Path), decodeCb);
+            if (raw == null || raw.length == 0) {
+                LogWriter.log(TAG, "prepareMp3Voice: MP3 解码失败");
+                return null;
+            }
+            byte[] original = applyCut(raw, cutBeginSec, cutEndSec);
+            if (original == null || original.length == 0) {
+                LogWriter.log(TAG, "prepareMp3Voice: 裁剪后为空");
+                return null;
+            }
+            byte[] processed = enhanceVoicePcm(original);
+            int durationMs = (int) ((original.length * 1000L)
+                    / (TARGET_SAMPLE_RATE * TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8));
+            LogWriter.log(TAG, "prepareMp3Voice: original " + original.length
+                    + "B processed " + (processed == null ? 0 : processed.length)
+                    + "B dur=" + durationMs + "ms");
+            return new PreparedVoice(mp3Path, original, processed, durationMs);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "prepareMp3Voice err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            logCrash(t);
+            return null;
+        }
+    }
+
+    /** 按秒裁剪 16bit LE PCM; 返回 null 表示区间非法 */
+    private static byte[] applyCut(byte[] pcm, float cutBeginSec, float cutEndSec) {
+        if (cutBeginSec <= 0 && cutEndSec <= 0) return pcm;
+        int bytesPerSec = TARGET_SAMPLE_RATE * TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8;
+        int cutStart = (int) (cutBeginSec * bytesPerSec);
+        if (cutStart % 2 != 0) cutStart++;
+        int cutEnd = (int) (cutEndSec * bytesPerSec);
+        if (cutEnd % 2 != 0) cutEnd++;
+        if (cutEnd <= 0 || cutEnd > pcm.length) cutEnd = pcm.length;
+        if (cutEnd % 2 != 0) cutEnd--;
+        if (cutStart >= cutEnd) {
+            LogWriter.log(TAG, "applyCut: invalid cut range");
+            return null;
+        }
+        int newLen = cutEnd - cutStart;
+        byte[] out = new byte[newLen];
+        System.arraycopy(pcm, cutStart, out, 0, newLen);
+        LogWriter.log(TAG, "applyCut: " + cutStart + "-" + cutEnd + " -> " + newLen + "B");
+        return out;
+    }
+
+    /** 发送已经 prepareMp3Voice 处理好的语音(编码 + 发送 + 记录历史) */
+    public static boolean sendPreparedVoice(String talker, PreparedVoice pv, int splitSeconds,
+            int fakeDurationMs, VoiceSendCallback callback) {
+        if (sClassLoader == null || pv == null || pv.processedPcm == null
+                || pv.processedPcm.length == 0) {
+            LogWriter.log(TAG, "sendPreparedVoice: invalid args");
             return false;
         }
         try {
-            LogWriter.log(TAG, "sendMp3Voice start: " + mp3Path
-                    + " split=" + splitSeconds + "s fakeMs=" + fakeDurationMs
-                    + " cut=" + cutBeginSec + "-" + cutEndSec);
-
-            final VoiceSendCallback decodePhaseCb = (callback != null) ? new VoiceSendCallback() {
-                @Override public void onProgress(int current, int total) {
-                    try { callback.onProgress(current, total); } catch (Throwable ignored) {}
-                }
-            } : null;
-            byte[] pcm = mp3ToPcm(new File(mp3Path), decodePhaseCb);
-            if (pcm == null || pcm.length == 0) {
-                LogWriter.log(TAG, "sendMp3Voice: MP3 解码失败");
-                return false;
-            }
-            pcm = enhanceVoicePcm(pcm);
-
+            byte[] pcm = pv.processedPcm;
             int bytesPerSec = TARGET_SAMPLE_RATE * TARGET_CHANNELS * TARGET_BITS_PER_SAMPLE / 8;
-
-            if (cutBeginSec > 0 || cutEndSec > 0) {
-                int cutStart = (int)(cutBeginSec * bytesPerSec);
-                if (cutStart % 2 != 0) cutStart++; // align to 16-bit
-                int cutEnd = (int)(cutEndSec * bytesPerSec);
-                if (cutEnd % 2 != 0) cutEnd++;
-                if (cutEnd <= 0 || cutEnd > pcm.length) cutEnd = pcm.length;
-                if (cutEnd % 2 != 0) cutEnd--;
-                if (cutStart >= cutEnd) {
-                    LogWriter.log(TAG, "sendMp3Voice: invalid cut range");
-                    return false;
-                }
-                int newLen = cutEnd - cutStart;
-                byte[] cutPcm = new byte[newLen];
-                System.arraycopy(pcm, cutStart, cutPcm, 0, newLen);
-                pcm = cutPcm;
-                LogWriter.log(TAG, "sendMp3Voice: cut pcm " + cutStart + "-" + cutEnd + " -> " + pcm.length + " bytes");
-            }
-
-            LogWriter.log(TAG, "sendMp3Voice: pcm " + pcm.length + " bytes");
-
             String voice2 = getVoice2Dir();
             boolean anySent = false;
 
@@ -3578,35 +3679,29 @@ public class TtsVoiceSender {
             } else {
                 int segmentBytes = splitSeconds * bytesPerSec;
                 int totalSegments = (pcm.length + segmentBytes - 1) / segmentBytes;
-
-                LogWriter.log(TAG, "sendMp3Voice: splitting into " + totalSegments
+                LogWriter.log(TAG, "sendPreparedVoice: splitting into " + totalSegments
                         + " segments, " + segmentBytes + " bytes/segment");
-
                 if (callback != null) callback.onProgress(0, totalSegments);
-
                 for (int seg = 0; seg < totalSegments; seg++) {
                     int off = seg * segmentBytes;
                     int len = Math.min(segmentBytes, pcm.length - off);
                     byte[] segPcm = new byte[len];
                     System.arraycopy(pcm, off, segPcm, 0, len);
-
                     byte[] padPcm = padPcmToFrame(segPcm);
                     byte[] amrData = encodeVoiceHighestQuality(padPcm);
                     if (amrData == null || amrData.length == 0) {
-                        LogWriter.log(TAG, "sendMp3Voice: segment " + (seg+1) + "/" + totalSegments + " encode fail");
+                        LogWriter.log(TAG, "sendPreparedVoice: segment " + (seg + 1) + "/"
+                                + totalSegments + " encode fail");
                         if (callback != null) callback.onProgress(seg + 1, totalSegments);
                         continue;
                     }
-
                     String tmpPath = voice2 + "/mp3_" + System.currentTimeMillis() + "_" + (seg + 1) + ".amr";
                     fileWrite(new File(tmpPath), amrData);
-
                     boolean sent = sendViaSceneVoice(talker, tmpPath, fakeDurationMs);
-                    LogWriter.log(TAG, "sendMp3Voice: segment " + (seg+1) + "/"
+                    LogWriter.log(TAG, "sendPreparedVoice: segment " + (seg + 1) + "/"
                             + totalSegments + " sent=" + sent);
                     if (sent) anySent = true;
                     if (callback != null) callback.onProgress(seg + 1, totalSegments);
-
                     if (sent && seg < totalSegments - 1) {
                         try { Thread.sleep(500); } catch (InterruptedException ignored) {}
                     }
@@ -3615,21 +3710,40 @@ public class TtsVoiceSender {
 
             if (anySent) {
                 try {
-                    File mp3File = new File(mp3Path);
+                    File mp3File = new File(pv.mp3Path);
                     String fileName = mp3File.getName();
-                    int durationMs = (int)((pcm.length * 1000L) / (TARGET_SAMPLE_RATE * TARGET_CHANNELS * 2));
                     android.content.Context ctx = ContextManager.getAppContext();
                     if (ctx != null) {
-                        VoiceHistoryDbHelper.getInstance(ctx).insert(mp3Path, fileName, talker, durationMs);
+                        VoiceHistoryDbHelper.getInstance(ctx).insert(pv.mp3Path, fileName, talker, pv.durationMs);
                     }
                 } catch (Throwable ignored) {}
             }
-
             return anySent;
         } catch (Throwable t) {
-            LogWriter.log(TAG, "sendMp3Voice err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            LogWriter.log(TAG, "sendPreparedVoice err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            logCrash(t);
             return false;
         }
+    }
+
+    public static boolean sendMp3Voice(String talker, String mp3Path) {
+        return sendMp3Voice(talker, mp3Path, 0, 1000, 0, 0, null);
+    }
+
+    public static boolean sendMp3Voice(String talker, String mp3Path, int splitSeconds, int fakeDurationMs) {
+        return sendMp3Voice(talker, mp3Path, splitSeconds, fakeDurationMs, 0, 0, null);
+    }
+
+    /**
+     * 将本地 MP3 文件转为微信语音消息并发送 (支持音频裁剪)
+     * @param cutBeginSec 裁剪起始秒数, 0=不裁剪
+     * @param cutEndSec 裁剪结束秒数, 0=到末尾
+     */
+    public static boolean sendMp3Voice(String talker, String mp3Path, int splitSeconds, int fakeDurationMs,
+            float cutBeginSec, float cutEndSec, VoiceSendCallback callback) {
+        PreparedVoice pv = prepareMp3Voice(mp3Path, cutBeginSec, cutEndSec, callback);
+        if (pv == null) return false;
+        return sendPreparedVoice(talker, pv, splitSeconds, fakeDurationMs, callback);
     }
 
     /**
@@ -3791,7 +3905,9 @@ public class TtsVoiceSender {
         } finally {
             try { extractor.release(); } catch (Throwable ignored) {}
             try { if (fos != null) fos.close(); } catch (Throwable ignored) {}
-            try { if (codec != null) { codec.stop(); codec.release(); } } catch (Throwable ignored) {}
+            // v986: stop 与 release 必须分开 try —— 原来同一条 try 里 stop 抛异常会导致 release 被跳过, 泄漏 codec。
+            try { if (codec != null) codec.stop(); } catch (Throwable ignored) {}
+            try { if (codec != null) codec.release(); } catch (Throwable ignored) {}
             try { if (tempPcmFile != null) tempPcmFile.delete(); } catch (Throwable ignored) {}
         }
     }
@@ -3813,40 +3929,456 @@ public class TtsVoiceSender {
         }
     }
 
-    private static byte[] resampleLanczos3(byte[] rawPcm, int srcRate, int channels, int dstRate) {
-        int srcSamples = rawPcm.length / 2 / channels;
-        int dstSamples = (int) ((long) srcSamples * dstRate / srcRate);
-        byte[] out = new byte[dstSamples * 2];
-        int lanczosWindow = 5; // 方案2: Lanczos-3 -> Lanczos-5, 更少混叠/更高保真
-        for (int i = 0; i < dstSamples; i++) {
-            double srcPos = (double) i * srcRate / dstRate;
-            int srcBase = (int) srcPos - lanczosWindow + 1;
-            double sum = 0, weightSum = 0;
-            for (int tap = -lanczosWindow + 1; tap <= lanczosWindow; tap++) {
-                int si = srcBase + tap;
-                if (si < 0) si = 0;
-                if (si >= srcSamples) si = srcSamples - 1;
-                double x = srcPos - si;
+    // ===== 流式转码: 解码 -> 重采样 -> SILK 编码, 三级流水线 =====
+    // 原链路为先整段解码(约8s)→整段重采样(约2s)→整段SILK编码(约8s), 串行约18s。
+    // 这里让解码线程产出 PCM 片段, 消费线程增量重采样并逐帧编码, 使解码与编码重叠,
+    // 总耗时约等于 max(解码, 编码) + 启动开销。输出与旧链路逐字节等价。
+
+    /** 流式转码结果: 语音数据 + 真实时长(ms)。 */
+    public static final class VoiceEncodeResult {
+        public final byte[] data;
+        public final int durationMs;
+        VoiceEncodeResult(byte[] data, int durationMs) {
+            this.data = data;
+            this.durationMs = durationMs;
+        }
+    }
+
+    private static final class PcmChunk {
+        final byte[] data;
+        final int len;
+        final Throwable err;
+        final boolean end;
+        PcmChunk(byte[] data, int len) {
+            this.data = data; this.len = len; this.err = null; this.end = false;
+        }
+        PcmChunk(Throwable err) {
+            this.data = null; this.len = 0; this.err = err; this.end = false;
+        }
+        PcmChunk(boolean end) {
+            this.data = null; this.len = 0; this.err = null; this.end = true;
+        }
+    }
+
+    /** 增量版 Lanczos-5 重采样(与 {@link #resampleLanczos3} 等价), 支持任意分块输入。 */
+    private static final class MonoStreamResampler {
+        private final int srcRate, dstRate, channels;
+        private final float[][] tab;
+        private final float[] inv;
+        private final int firstK = -(LANCZOS_W - 1);
+        private short[] win = new short[1 << 16];
+        private int winLen = 0;
+        private long winStart = 0;
+        private long pos = 0;
+        private long outIndex = 0;
+        private final byte[] pending = new byte[16];
+        private int pendingLen = 0;
+
+        MonoStreamResampler(int srcRate, int channels, int dstRate) {
+            this.srcRate = srcRate;
+            this.channels = channels;
+            this.dstRate = dstRate;
+            this.tab = buildLanczosTable();
+            this.inv = buildLanczosInvSum(tab);
+        }
+
+        private void appendFrame(byte[] b, int off) {
+            int acc = 0;
+            for (int ch = 0; ch < channels; ch++) {
+                int idx = off + ch * 2;
+                acc += (short) ((b[idx + 1] << 8) | (b[idx] & 0xFF));
+            }
+            if (winLen == win.length) {
+                short[] nw = new short[win.length * 2];
+                System.arraycopy(win, 0, nw, 0, winLen);
+                win = nw;
+            }
+            win[winLen++] = (short) (acc / channels);
+        }
+
+        long sourceFrames() {
+            return winStart + winLen;
+        }
+
+        long totalSamples() {
+            return outIndex;
+        }
+
+        /** 送入一段交错原始 PCM, 返回已就绪的 24k 单声道样本。 */
+        short[] feed(byte[] data, int len) {
+            int frameBytes = 2 * channels;
+            int p = 0;
+            if (pendingLen > 0) {
+                while (pendingLen < frameBytes && p < len) pending[pendingLen++] = data[p++];
+                if (pendingLen == frameBytes) { appendFrame(pending, 0); pendingLen = 0; }
+            }
+            int frames = (len - p) / frameBytes;
+            for (int k = 0; k < frames; k++) appendFrame(data, p + k * frameBytes);
+            p += frames * frameBytes;
+            int rem = len - p;
+            if (rem > 0) { System.arraycopy(data, p, pending, 0, rem); pendingLen = rem; }
+            return drain(false);
+        }
+
+        /** 输入结束: 产出余下全部输出样本(含末端限幅)。 */
+        short[] finish() {
+            return drain(true);
+        }
+
+        private short[] drain(boolean ended) {
+            long available = winStart + winLen;
+            long totalDst = ended ? (long) available * dstRate / srcRate : Long.MAX_VALUE;
+            long lastIndex = available - 1;
+            short[] out = new short[1024];
+            int n = 0;
+            while (outIndex < totalDst) {
+                long base = pos / dstRate;
+                long maxSi = base + firstK + (LANCZOS_TAPS - 1);
+                if (maxSi > lastIndex) break;
+                int rem = (int) (pos % dstRate);
+                int ph = (int) ((long) rem * RESAMPLE_PHASES / dstRate);
+                if (ph >= RESAMPLE_PHASES) ph = RESAMPLE_PHASES - 1;
+                float[] w = tab[ph];
+                long si0 = base + firstK;
+                double sum = 0;
+                for (int t = 0; t < LANCZOS_TAPS; t++) {
+                    long si = si0 + t;
+                    if (si < winStart) si = winStart;
+                    if (si > lastIndex) si = lastIndex;
+                    int mono = win[(int) (si - winStart)];
+                    sum += w[t] * mono;
+                }
+                int v = (int) (sum * inv[ph]);
+                if (v > 32767) v = 32767; else if (v < -32768) v = -32768;
+                if (n == out.length) {
+                    short[] no = new short[out.length * 2];
+                    System.arraycopy(out, 0, no, 0, n);
+                    out = no;
+                }
+                out[n++] = (short) v;
+                outIndex++;
+                pos += srcRate;
+            }
+            long keepFrom = pos / dstRate + firstK;
+            if (keepFrom > winStart) {
+                int drop = (int) Math.min(keepFrom - winStart, winLen);
+                System.arraycopy(win, drop, win, 0, winLen - drop);
+                winLen -= drop;
+                winStart += drop;
+            }
+            if (n == out.length) return out;
+            short[] r = new short[n];
+            System.arraycopy(out, 0, r, 0, n);
+            return r;
+        }
+    }
+
+    /** 增量 SILK 编码器: 逐样本累积 20ms 帧, 仅最后一帧标记 last(与整段编码一致)。 */
+    private static final class SilkStreamEncoder {
+        private final Class<?> rec;
+        private final long handle;
+        private final byte[] frameBuf = new byte[FRAME_PCM_BYTES];
+        private final byte[] readyFrame = new byte[FRAME_PCM_BYTES];
+        private int frameFill = 0;
+        private boolean hasReady = false;
+        private final java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        private final byte[] inFrame = new byte[FRAME_PCM_BYTES];
+        private final byte[] ob = new byte[FRAME_PCM_BYTES * 6];
+        private final short[] ol = new short[1];
+
+        SilkStreamEncoder(Class<?> rec, long handle) {
+            this.rec = rec;
+            this.handle = handle;
+        }
+
+        void feed(short[] samples, int n) {
+            for (int i = 0; i < n; i++) {
+                int v = samples[i];
+                if (v > 32000) v = 32000; else if (v < -32000) v = -32000;
+                frameBuf[frameFill++] = (byte) (v & 0xFF);
+                frameBuf[frameFill++] = (byte) ((v >> 8) & 0xFF);
+                if (frameFill == FRAME_PCM_BYTES) {
+                    if (hasReady) encodeFrame(readyFrame, false);
+                    System.arraycopy(frameBuf, 0, readyFrame, 0, FRAME_PCM_BYTES);
+                    hasReady = true;
+                    frameFill = 0;
+                }
+            }
+        }
+
+        private void encodeFrame(byte[] frame, boolean last) {
+            System.arraycopy(frame, 0, inFrame, 0, FRAME_PCM_BYTES);
+            java.util.Arrays.fill(ob, (byte) 0);
+            ol[0] = 0;
+            XposedHelpers.callStaticMethod(rec, "SilkDoEnc", inFrame, (short) FRAME_PCM_BYTES,
+                    ob, ol, last, handle);
+            int len = ol[0];
+            if (len > 0) baos.write(ob, 0, len);
+        }
+
+        byte[] finish() {
+            if (frameFill > 0) {
+                java.util.Arrays.fill(frameBuf, frameFill, FRAME_PCM_BYTES, (byte) 0);
+                if (hasReady) encodeFrame(readyFrame, false);
+                System.arraycopy(frameBuf, 0, readyFrame, 0, FRAME_PCM_BYTES);
+                hasReady = true;
+                frameFill = 0;
+            }
+            if (hasReady) {
+                encodeFrame(readyFrame, true);
+                hasReady = false;
+            }
+            try { XposedHelpers.callStaticMethod(rec, "SetVoiceSilkControl", 201, 1, handle); } catch (Throwable ignored) {}
+            try { XposedHelpers.callStaticMethod(rec, "SilkEncUnInit", handle); } catch (Throwable ignored) {}
+            byte[] body = baos.toByteArray();
+            if (body.length <= 0) return null;
+            if (silkHasV3Header(body)) return body;
+            return wrapSilkV3(body);
+        }
+    }
+
+    /**
+     * 把音频文件直接转成微信语音数据(SILK), 采用「解码 -> 重采样 -> 编码」三级流水线。
+     *
+     * <p>与 {@code decodeAudioToPcm + encodePcmToVoiceData} 输出等价, 但解码与编码重叠,
+     * 总耗时约等于 max(解码, 编码)。任一环节失败返回 null, 由调用方回退旧路径。</p>
+     */
+    public static VoiceEncodeResult decodeAudioToVoiceData(String path) {
+        if (path == null) return null;
+        File f = new File(path);
+        if (!f.exists()) return null;
+        MediaExtractor extractor = new MediaExtractor();
+        MediaCodec codec = null;
+        Thread producer = null;
+        final boolean[] running = {true};
+        final java.util.concurrent.ArrayBlockingQueue<PcmChunk> queue =
+                new java.util.concurrent.ArrayBlockingQueue<>(64);
+        try {
+            long handle = 0;
+            Class<?> rec = null;
+            try {
+                rec = XposedHelpers.findClass("com.tencent.mm.modelvoice.MediaRecorder", voiceCl());
+                handle = (Long) XposedHelpers.callStaticMethod(rec, "SilkEncInit",
+                        TARGET_SAMPLE_RATE, SILK_BITRATE, SILK_COMPLEXITY, 0L);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "流式转码: SILK 初始化失败 " + t.getMessage());
+                return null;
+            }
+            if (handle == 0) return null;
+
+            extractor.setDataSource(path);
+            int trackIndex = -1;
+            MediaFormat format = null;
+            for (int i = 0; i < extractor.getTrackCount(); i++) {
+                MediaFormat mf = extractor.getTrackFormat(i);
+                String mime = mf.getString(MediaFormat.KEY_MIME);
+                if (mime != null && mime.startsWith("audio/")) { trackIndex = i; format = mf; break; }
+            }
+            if (trackIndex < 0) return null;
+            extractor.selectTrack(trackIndex);
+            final int srcRate = format.containsKey(MediaFormat.KEY_SAMPLE_RATE)
+                    ? format.getInteger(MediaFormat.KEY_SAMPLE_RATE) : 44100;
+            final int channels = format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)
+                    ? format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) : 2;
+            final long totalDurationUs = format.containsKey(MediaFormat.KEY_DURATION)
+                    ? format.getLong(MediaFormat.KEY_DURATION) : 0;
+
+            codec = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME));
+            codec.configure(format, null, null, 0);
+            codec.start();
+
+            final MediaCodec c = codec;
+            producer = new Thread(() -> decodeLoop(c, extractor, queue, running), "dianGe-decode");
+            producer.setDaemon(true);
+            producer.start();
+            LogWriter.log(TAG, "流式转码开始: srcRate=" + srcRate + " ch=" + channels
+                    + " dur=" + (totalDurationUs / 1000000) + "s");
+
+            MonoStreamResampler res = new MonoStreamResampler(srcRate, channels, TARGET_SAMPLE_RATE);
+            SilkStreamEncoder enc = new SilkStreamEncoder(rec, handle);
+
+            long t0 = System.currentTimeMillis();
+            long lastLog = t0;
+            while (true) {
+                PcmChunk chunk = queue.take();
+                if (chunk.err != null) {
+                    LogWriter.log(TAG, "流式转码解码失败: " + chunk.err.getMessage());
+                    return null;
+                }
+                if (chunk.end) break;
+                short[] mono = res.feed(chunk.data, chunk.len);
+                enc.feed(mono, mono.length);
+                long now = System.currentTimeMillis();
+                if (now - lastLog > 2000) {
+                    lastLog = now;
+                    LogWriter.log(TAG, "流式进度: 源帧=" + res.sourceFrames() + " 输出样本=" + res.totalSamples());
+                }
+            }
+            short[] tail = res.finish();
+            enc.feed(tail, tail.length);
+            byte[] silk = enc.finish();
+            if (silk == null || silk.length <= 6) return null;
+
+            // 采样率修正保护: 实际源采样率与容器声明明显不符时, 交回旧路径(旧路径会自行修正)
+            long frames = res.sourceFrames();
+            if (totalDurationUs > 0 && frames > 0) {
+                int inferred = (int) (frames * 1000000L / totalDurationUs);
+                if (inferred > 4000 && Math.abs(inferred - srcRate) > srcRate / 10) {
+                    LogWriter.log(TAG, "流式转码: 采样率疑似不符 " + srcRate + "->" + inferred + ", 回退旧路径");
+                    return null;
+                }
+            }
+            long total = res.totalSamples();
+            int durationMs = (int) (total * 1000L / TARGET_SAMPLE_RATE);
+            LogWriter.log(TAG, "流式转码完成: 样本=" + total + " 时长=" + durationMs
+                    + "ms silk=" + silk.length + "B 耗时=" + (System.currentTimeMillis() - t0) + "ms");
+            return new VoiceEncodeResult(silk, durationMs);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "decodeAudioToVoiceData err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return null;
+        } finally {
+            running[0] = false;
+            queue.clear();
+            if (producer != null) {
+                try { producer.join(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            }
+        }
+    }
+
+    /** 解码线程: 把音频文件解成原始交错 PCM 片段投入队列; 结束/出错投递哨兵。 */
+    private static void decodeLoop(MediaCodec codec, MediaExtractor extractor,
+            final java.util.concurrent.BlockingQueue<PcmChunk> queue, final boolean[] running) {
+        MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+        boolean inputDone = false;
+        boolean outputDone = false;
+        try {
+            while (!outputDone) {
+                if (!running[0]) return;
+                if (!inputDone) {
+                    int inIndex = codec.dequeueInputBuffer(10000);
+                    if (inIndex >= 0) {
+                        ByteBuffer buffer = codec.getInputBuffer(inIndex);
+                        if (buffer != null) {
+                            buffer.clear();
+                            int sampleSize = extractor.readSampleData(buffer, 0);
+                            if (sampleSize < 0) {
+                                codec.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                                inputDone = true;
+                            } else {
+                                codec.queueInputBuffer(inIndex, 0, sampleSize, extractor.getSampleTime(), 0);
+                                extractor.advance();
+                            }
+                        }
+                    }
+                }
+                int outIndex = codec.dequeueOutputBuffer(info, 10000);
+                if (outIndex >= 0) {
+                    ByteBuffer buffer = codec.getOutputBuffer(outIndex);
+                    if (buffer != null && info.size > 0) {
+                        byte[] chunk = new byte[info.size];
+                        buffer.position(info.offset);
+                        buffer.get(chunk);
+                        if (!offer(queue, new PcmChunk(chunk, info.size), running)) return;
+                    }
+                    codec.releaseOutputBuffer(outIndex, false);
+                    if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) outputDone = true;
+                }
+            }
+            offer(queue, new PcmChunk(true), running);
+        } catch (Throwable t) {
+            offer(queue, new PcmChunk(t), running);
+        } finally {
+            try { codec.stop(); } catch (Throwable ignored) {}
+            try { codec.release(); } catch (Throwable ignored) {}
+            try { extractor.release(); } catch (Throwable ignored) {}
+        }
+    }
+
+    private static boolean offer(java.util.concurrent.BlockingQueue<PcmChunk> queue,
+            PcmChunk chunk, boolean[] running) {
+        while (running[0]) {
+            try {
+                if (queue.offer(chunk, 200, java.util.concurrent.TimeUnit.MILLISECONDS)) return true;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return false;
+    }
+
+    // ===== 预计算 polyphase Lanczos 核 =====
+    // 原实现对每个输出样点、每个抽头都现算 4 次 Math.sin, 44.1k->24k 一首 5 分钟歌约
+    // 2.8 亿次三角函数, 重采样长达 12s。抽头权重只取决于源位置的小数部分, 且小数部分
+    // 以 dstRate/gcd 为周期离散取值, 因此可预计算成相位表, 逐点只做查表加权, 结果等价。
+    private static final int RESAMPLE_PHASES = 1024;
+    private static final int LANCZOS_W = 5;
+    private static final int LANCZOS_TAPS = 2 * LANCZOS_W;
+
+    private static float[][] buildLanczosTable() {
+        float[][] tab = new float[RESAMPLE_PHASES][LANCZOS_TAPS];
+        for (int p = 0; p < RESAMPLE_PHASES; p++) {
+            double frac = (double) p / RESAMPLE_PHASES;
+            for (int t = 0; t < LANCZOS_TAPS; t++) {
+                int k = -(LANCZOS_W - 1) + t;
+                double x = frac - k;
                 double w;
                 if (x == 0) {
                     w = 1.0;
                 } else {
                     double piX = Math.PI * x;
-                    w = lanczosWindow * Math.sin(piX) * Math.sin(piX / lanczosWindow) / (piX * x);
+                    w = LANCZOS_W * Math.sin(piX) * Math.sin(piX / LANCZOS_W) / (piX * piX);
                 }
-                weightSum += w;
-                double sample = 0;
-                for (int ch = 0; ch < channels; ch++) {
-                    int idx = (si * channels + ch) * 2;
-                    short s = (short) ((rawPcm[idx + 1] << 8) | (rawPcm[idx] & 0xFF));
-                    sample += s;
-                }
-                sample /= channels;
-                sum += w * sample;
+                tab[p][t] = (float) w;
             }
-            short outSample = (short) Math.max(-32768, Math.min(32767, sum / weightSum));
-            out[i * 2] = (byte) (outSample & 0xFF);
-            out[i * 2 + 1] = (byte) ((outSample >> 8) & 0xFF);
+        }
+        return tab;
+    }
+
+    private static float[] buildLanczosInvSum(float[][] tab) {
+        float[] inv = new float[tab.length];
+        for (int p = 0; p < tab.length; p++) {
+            double s = 0;
+            for (int t = 0; t < tab[p].length; t++) s += tab[p][t];
+            inv[p] = s != 0 ? (float) (1.0 / s) : 0f;
+        }
+        return inv;
+    }
+
+    private static byte[] resampleLanczos3(byte[] rawPcm, int srcRate, int channels, int dstRate) {
+        int srcSamples = rawPcm.length / 2 / channels;
+        int dstSamples = (int) ((long) srcSamples * dstRate / srcRate);
+        byte[] out = new byte[dstSamples * 2];
+        float[][] tab = buildLanczosTable();
+        float[] inv = buildLanczosInvSum(tab);
+        final int firstK = -(LANCZOS_W - 1);
+        long pos = 0;
+        for (int i = 0; i < dstSamples; i++) {
+            int base = (int) (pos / dstRate);
+            int rem = (int) (pos % dstRate);
+            int p = (int) ((long) rem * RESAMPLE_PHASES / dstRate);
+            if (p >= RESAMPLE_PHASES) p = RESAMPLE_PHASES - 1;
+            float[] w = tab[p];
+            int si0 = base + firstK;
+            double sum = 0;
+            for (int t = 0; t < LANCZOS_TAPS; t++) {
+                int si = si0 + t;
+                if (si < 0) si = 0;
+                else if (si >= srcSamples) si = srcSamples - 1;
+                int bi = si * channels;
+                int acc = 0;
+                for (int ch = 0; ch < channels; ch++) {
+                    int idx = (bi + ch) * 2;
+                    acc += (short) ((rawPcm[idx + 1] << 8) | (rawPcm[idx] & 0xFF));
+                }
+                sum += w[t] * (acc / channels);
+            }
+            int v = (int) (sum * inv[p]);
+            if (v > 32767) v = 32767;
+            else if (v < -32768) v = -32768;
+            out[i * 2] = (byte) (v & 0xFF);
+            out[i * 2 + 1] = (byte) ((v >> 8) & 0xFF);
+            pos += srcRate;
         }
         LogWriter.log(TAG, "resample Lanczos-5: " + srcRate + "Hz/" + channels + "ch -> "
                 + dstRate + "Hz/mono, " + rawPcm.length + " -> " + out.length + " bytes");
@@ -3870,6 +4402,7 @@ public class TtsVoiceSender {
                 return null;
             }
 
+            LogWriter.log(TAG, "CubeTTS: key=" + maskKey(apiKey) + " voice=" + voiceId);
             String apiUrl = "https://peiyinmofang.com/api/open/v1/tts/simple-generate";
             URL url = new URL(apiUrl);
              HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -3896,25 +4429,18 @@ public class TtsVoiceSender {
 
              InputStream is = conn.getInputStream();
              try {
-             StringBuilder sb = new StringBuilder();
+             // v986: 先整体读取字节再一次性 UTF-8 解码, 避免按 4KB 分块 new String 切断多字节字符导致 URL 解析错乱。
+             java.io.ByteArrayOutputStream rbaos = new java.io.ByteArrayOutputStream();
              byte[] buf = new byte[4096];
              int n;
-             while ((n = is.read(buf)) > 0) sb.append(new String(buf, 0, n, "UTF-8"));
+             while ((n = is.read(buf)) > 0) rbaos.write(buf, 0, n);
 
-             String resp = sb.toString();
-             int audioIdx = resp.indexOf("\"audio\":\"");
-             if (audioIdx < 0) {
-                 LogWriter.log(TAG, "CubeTTS: no audio field in resp");
-                 return null;
-             }
-             int audioStart = audioIdx + 9;
-             int audioEnd = resp.indexOf("\"", audioStart);
-             if (audioEnd < 0) {
+             String resp = new String(rbaos.toByteArray(), "UTF-8");
+             String audioUrl = parseCubeAudioUrl(resp);
+             if (audioUrl == null || audioUrl.isEmpty()) {
                  LogWriter.log(TAG, "CubeTTS: audio URL parse fail");
                  return null;
              }
-             String audioUrl = resp.substring(audioStart, audioEnd)
-                     .replace("\\/", "/");
 
              URL audioURL = new URL(audioUrl);
              HttpURLConnection audioConn = (HttpURLConnection) audioURL.openConnection();
@@ -3982,6 +4508,36 @@ public class TtsVoiceSender {
         return sb.toString();
     }
 
+    /** v986: 解析配音魔方响应中的音频 URL, 优先 JSON 解析, 异常回退到字符串定位。 */
+    private static String parseCubeAudioUrl(String resp) {
+        if (resp == null || resp.isEmpty()) return null;
+        try {
+            org.json.JSONObject jo = new org.json.JSONObject(resp);
+            org.json.JSONObject data = jo.optJSONObject("data");
+            String audio = (data != null) ? data.optString("audio", "") : "";
+            if (audio == null || audio.isEmpty()) audio = jo.optString("audio", "");
+            if (audio != null && !audio.isEmpty()) return audio.replace("\\/", "/");
+        } catch (Throwable ignored) {}
+        try {
+            int audioIdx = resp.indexOf("\"audio\":\"");
+            if (audioIdx < 0) return null;
+            int audioStart = audioIdx + 9;
+            int audioEnd = resp.indexOf("\"", audioStart);
+            if (audioEnd < 0) return null;
+            return resp.substring(audioStart, audioEnd).replace("\\/", "/");
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /** v986: 日志中密钥脱敏(参考 AppConfig 掩码策略), 只保留首尾各 2 位, 绝不打印完整密钥。 */
+    static String maskKey(String key) {
+        if (key == null || key.isEmpty()) return "<empty>";
+        int n = key.length();
+        if (n <= 4) return "****";
+        return key.substring(0, 2) + "****" + key.substring(n - 2);
+    }
+
     // ========== TTS 合成 + Silk 编码 ==========
 
     private static Object[] doTTS(String text, String outAmrPath) {
@@ -3994,42 +4550,28 @@ public class TtsVoiceSender {
             File tmpDir = new File(sAccPath, "tts_temp/");
             tmpDir.mkdirs();
             long ts = System.currentTimeMillis();
-            File wavFile = new File(tmpDir, "tts_" + ts + ".wav");
             LogWriter.log(TAG, "doTTS start: text='" + truncStr(text, 40) + "' out=" + outAmrPath
                     + " thread=" + Thread.currentThread().getName());
 
-            CountDownLatch latch = new CountDownLatch(1);
-            boolean[] ok = {false};
-            sTts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                public void onStart(String id) { LogWriter.log(TAG, "TTS onStart id=" + id); }
-                public void onDone(String id) { ok[0] = true; LogWriter.log(TAG, "TTS onDone id=" + id); latch.countDown(); }
-                public void onError(String id) { LogWriter.log(TAG, "TTS onError id=" + id); latch.countDown(); }
-            });
-
-            LogWriter.log(TAG, "synth call synthesizeToFile...");
-            int r = sTts.synthesizeToFile(text, new android.os.Bundle(), wavFile, "tts-" + ts);
-            LogWriter.log(TAG, "synth ret=" + r + " (SUCCESS=" + TextToSpeech.SUCCESS + ")");
-            if (r != TextToSpeech.SUCCESS) {
-                LogWriter.log(TAG, "synthesizeToFile fail: " + r);
+            // v986: 长文本分段合成 —— 系统 TTS 对超长文本会截断或长时间不回调。
+            // 按标点边界切成 <= TTS_MAX_CHARS 的段, 逐段合成 PCM 后拼接, 再统一编码, 保证语义完整。
+            java.util.List<String> segments = splitTtsText(text, TTS_MAX_CHARS);
+            if (segments.isEmpty()) {
+                LogWriter.log(TAG, "doTTS: empty text");
                 return null;
             }
-
-            latch.await(SYNTH_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            LogWriter.log(TAG, "synth latch released ok=" + ok[0]);
-            if (!ok[0]) {
-                LogWriter.log(TAG, "synth timeout");
-                return null;
+            LogWriter.log(TAG, "doTTS segments=" + segments.size());
+            ByteArrayOutputStream pcmOut = new ByteArrayOutputStream();
+            for (int i = 0; i < segments.size(); i++) {
+                byte[] seg = synthesizeSegmentToPcm(segments.get(i), tmpDir, ts + "_" + i);
+                if (seg == null || seg.length == 0) {
+                    LogWriter.log(TAG, "doTTS segment " + (i + 1) + "/" + segments.size() + " fail");
+                    return null;
+                }
+                pcmOut.write(seg, 0, seg.length);
             }
-            LogWriter.log(TAG, "WAV file exists=" + wavFile.exists() + " len=" + wavFile.length());
-            if (wavFile.length() < 100) {
-                LogWriter.log(TAG, "WAV too small: " + wavFile.length());
-                return null;
-            }
-            LogWriter.log(TAG, "WAV: " + wavFile.length() + " bytes");
-
-            byte[] pcm = wavToPcm(wavFile);
-            wavFile.delete();
-            if (pcm == null || pcm.length == 0) {
+            byte[] pcm = pcmOut.toByteArray();
+            if (pcm.length == 0) {
                 LogWriter.log(TAG, "PCM extract fail");
                 return null;
             }
@@ -4054,6 +4596,78 @@ public class TtsVoiceSender {
             LogWriter.log(TAG, "doTTS err: " + e.getClass().getSimpleName() + " " + e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * v986: 合成单段文本为 PCM。每段独立临时 wav + 独立 latch, 任何失败返回 null,
+     * 异常不逃逸; finally 确保删除临时 wav 文件。
+     */
+    private static byte[] synthesizeSegmentToPcm(String text, File tmpDir, String tagSuffix) {
+        File wavFile = new File(tmpDir, "tts_" + tagSuffix + ".wav");
+        try {
+            final CountDownLatch latch = new CountDownLatch(1);
+            final boolean[] ok = {false};
+            sTts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                public void onStart(String id) { LogWriter.log(TAG, "TTS onStart id=" + id); }
+                public void onDone(String id) { ok[0] = true; LogWriter.log(TAG, "TTS onDone id=" + id); latch.countDown(); }
+                public void onError(String id) { LogWriter.log(TAG, "TTS onError id=" + id); latch.countDown(); }
+            });
+
+            int r = sTts.synthesizeToFile(text, new android.os.Bundle(), wavFile, "tts-" + tagSuffix);
+            LogWriter.log(TAG, "synth ret=" + r + " seg=" + tagSuffix);
+            if (r != TextToSpeech.SUCCESS) return null;
+
+            if (!latch.await(SYNTH_TIMEOUT_MS, TimeUnit.MILLISECONDS) || !ok[0]) {
+                LogWriter.log(TAG, "synth timeout/fail seg=" + tagSuffix);
+                return null;
+            }
+            if (wavFile.length() < 100) {
+                LogWriter.log(TAG, "WAV too small: " + wavFile.length());
+                return null;
+            }
+            byte[] pcm = wavToPcm(wavFile);
+            if (pcm == null || pcm.length == 0) {
+                LogWriter.log(TAG, "PCM extract fail seg=" + tagSuffix);
+                return null;
+            }
+            return pcm;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "synthSegment err: " + e.getClass().getSimpleName() + " " + e.getMessage());
+            return null;
+        } finally {
+            try { if (wavFile.exists()) wavFile.delete(); } catch (Throwable ignored) {}
+        }
+    }
+
+    /** v986: 按标点边界把长文本切分为 <= max 字符的片段, 尽量不拆断句子。 */
+    static java.util.List<String> splitTtsText(String text, int max) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        if (text == null) return out;
+        String t = text.trim();
+        if (t.isEmpty()) return out;
+        if (max <= 0) max = 1;
+        if (t.length() <= max) {
+            out.add(t);
+            return out;
+        }
+        final String punct = "。！？；!?;\n";
+        int start = 0;
+        int n = t.length();
+        while (start < n) {
+            int end = Math.min(start + max, n);
+            if (end < n) {
+                int cut = -1;
+                for (int i = end - 1; i > start; i--) {
+                    if (punct.indexOf(t.charAt(i)) >= 0) { cut = i + 1; break; }
+                }
+                if (cut > start) end = cut;
+            }
+            String seg = t.substring(start, end).trim();
+            if (!seg.isEmpty()) out.add(seg);
+            start = end;
+            while (start < n && Character.isWhitespace(t.charAt(start))) start++;
+        }
+        return out;
     }
 
     public static byte[] wavToPcm(File wavFile) {
@@ -4147,29 +4761,30 @@ public class TtsVoiceSender {
 
         int dstSamples = (int) ((long) srcSamples * dstRate / srcRate);
         byte[] out = new byte[dstSamples * 2];
-        int lanczosWindow = 5; // 方案2: Lanczos-3 -> Lanczos-5, 更少混叠/更高保真
+        float[][] tab = buildLanczosTable();
+        float[] inv = buildLanczosInvSum(tab);
+        final int firstK = -(LANCZOS_W - 1);
+        long pos = 0;
         for (int i = 0; i < dstSamples; i++) {
-            double srcPos = (double) i * srcRate / dstRate;
-            int srcBase = (int) srcPos - lanczosWindow + 1;
-            double sum = 0, weightSum = 0;
-            for (int tap = -lanczosWindow + 1; tap <= lanczosWindow; tap++) {
-                int si = srcBase + tap;
+            int base = (int) (pos / dstRate);
+            int rem = (int) (pos % dstRate);
+            int p = (int) ((long) rem * RESAMPLE_PHASES / dstRate);
+            if (p >= RESAMPLE_PHASES) p = RESAMPLE_PHASES - 1;
+            float[] w = tab[p];
+            int si0 = base + firstK;
+            double sum = 0;
+            for (int t = 0; t < LANCZOS_TAPS; t++) {
+                int si = si0 + t;
                 if (si < 0) si = 0;
-                if (si >= srcSamples) si = srcSamples - 1;
-                double x = srcPos - si;
-                double w;
-                if (x == 0) {
-                    w = 1.0;
-                } else {
-                    double piX = Math.PI * x;
-                    w = lanczosWindow * Math.sin(piX) * Math.sin(piX / lanczosWindow) / (piX * piX);
-                }
-                weightSum += w;
-                sum += w * mono[si];
+                else if (si >= srcSamples) si = srcSamples - 1;
+                sum += w[t] * mono[si];
             }
-            short outSample = (short) Math.max(-32768, Math.min(32767, sum / weightSum));
-            out[i * 2] = (byte) (outSample & 0xff);
-            out[i * 2 + 1] = (byte) ((outSample >> 8) & 0xff);
+            int v = (int) (sum * inv[p]);
+            if (v > 32767) v = 32767;
+            else if (v < -32768) v = -32768;
+            out[i * 2] = (byte) (v & 0xff);
+            out[i * 2 + 1] = (byte) ((v >> 8) & 0xff);
+            pos += srcRate;
         }
 
         LogWriter.log(TAG, "PCM resample (Lanczos-5): " + srcRate + "Hz/" + channels + "ch -> "
@@ -4219,156 +4834,323 @@ public class TtsVoiceSender {
 
     private static final String AMR_NB_MIME_ALT = "audio/amr";
 
+    /** 16bit LE PCM -> double 采样 */
+    private static double[] pcmToDoubles(byte[] pcm, int n) {
+        double[] samples = new double[n];
+        for (int i = 0; i < n; i++) {
+            int idx = i * 2;
+            int s = (pcm[idx] & 0xFF) | (pcm[idx + 1] << 8);
+            samples[i] = (short) s;
+        }
+        return samples;
+    }
+
     /**
-     * 还原音质(透明化处理): 16k->24k 采样后不再施加高通/EQ/压缩等音色改动,
-     * 仅做峰值归一化至 90% FS(只调音量防削波, 不改音色), 最大限度保留原曲保真度。
-     * SILK/AMR 编码共用此段。
+     * 统一音频处理链(样本域), 供「音频转语音」发送前调用:
+     *   1) 预设EQ: DJ低音增强(优先) / 人声增强 / 无
+     *   2) 均衡与音色: 去低频隆隆(HPF) + 噪声门 + 三段EQ + 高音清晰度 + 去齿音
+     *   3) 响度与动态: 自动增益(AGC) + 动态压缩 + LUFS 响度标准化
+     *   4) 收尾: 峰值归一化 + RMS 响度补益 + 软限幅
+     * 所有模块由 WmPrefs 开关控制, 默认关闭时行为等同 v1140 默认响度最大化。
      */
     private static byte[] enhanceVoicePcm(byte[] pcm) {
         if (pcm == null || pcm.length < 4) return pcm;
         try {
-            // 方案7: 双模式开关 — voice_enhance=true 走人声增强链(v928), false 走原音还原链(v929/默认)
-            if (WmPrefs.get("voice_enhance", false)) {
-                return enhanceVoicePcmTop(pcm);
-            }
-            final double fullScale = 32767.0;
+            final double fs = TARGET_SAMPLE_RATE;
             int n = pcm.length / 2;
-            double peak = 0;
-            for (int i = 0; i < n; i++) {
-                int idx = i * 2;
-                int s = (pcm[idx] & 0xFF) | (pcm[idx + 1] << 8);
-                double v = (short) s;
-                double m = Math.abs(v);
-                if (m > peak) peak = m;
+            double[] s = pcmToDoubles(pcm, n);
+            StringBuilder tag = new StringBuilder();
+
+            boolean voice = WmPrefs.get("voice_enhance", false);
+            if (WmPrefs.get("voice_bass_boost", false)) {
+                applyDjBass(s);
+                tag.append("dj-bass ");
+            } else if (voice) {
+                applyVoicePresetEq(s, fs);
+                tag.append("voice ");
             }
-            double normTarget = 0.90 * fullScale;
-            double gain = (peak > 0) ? normTarget / peak : 1.0;
-            if (gain > 12.0) gain = 12.0; // 增益上限, 防噪声放大
-            byte[] out = new byte[pcm.length];
-            for (int i = 0; i < n; i++) {
-                int idx = i * 2;
-                int s = (pcm[idx] & 0xFF) | (pcm[idx + 1] << 8);
-                double v = (short) s * gain;
-                if (v > 32767.0) v = 32767.0;
-                if (v < -32768.0) v = -32768.0;
-                int yi = (int) Math.round(v);
-                out[idx] = (byte) (yi & 0xFF);
-                out[idx + 1] = (byte) ((yi >> 8) & 0xFF);
-            }
-            LogWriter.log(TAG, "enhanceVoicePcm(restore): 透明化仅峰值归一化90%FS peak="
-                    + Math.round(peak) + " gain=" + ((int)(gain*1000)/1000.0) + " " + pcm.length + "B");
-            return out;
+
+            // ---- 均衡与音色 ----
+            if (WmPrefs.get("vproc_hpf", false)) { highPass(s, fs, 80.0, 0.707); tag.append("hpf "); }
+            if (WmPrefs.get("vproc_gate", false)) { noiseGate(s, fs); tag.append("gate "); }
+            int eqL = clampEqDb(WmPrefs.getInt("vproc_eq_low", 0));
+            int eqM = clampEqDb(WmPrefs.getInt("vproc_eq_mid", 0));
+            int eqH = clampEqDb(WmPrefs.getInt("vproc_eq_high", 0));
+            if (eqL != 0) { lowShelf(s, fs, 200.0, eqL); tag.append("eqL").append(eqL).append(' '); }
+            if (eqM != 0) { peakingEq(s, fs, 1000.0, 0.8, eqM); tag.append("eqM").append(eqM).append(' '); }
+            if (eqH != 0) { highShelf(s, fs, 4000.0, eqH); tag.append("eqH").append(eqH).append(' '); }
+            if (WmPrefs.get("vproc_clarity", false)) { clarityBoost(s, fs); tag.append("clarity "); }
+            if (WmPrefs.get("vproc_deesser", false)) { deEsser(s, fs); tag.append("deess "); }
+
+            // ---- 响度与动态 ----
+            if (WmPrefs.get("vproc_agc", false)) { agc(s, fs); tag.append("agc "); }
+            if (voice || WmPrefs.get("vproc_compress", false)) { compressor(s, fs, -18.0, 2.5, 2.0, 100.0); tag.append("comp "); }
+            if (WmPrefs.get("vproc_loudness_norm", false)) { lufsNormalize(s, fs, -16.0); tag.append("lufs "); }
+
+            if (tag.length() == 0) tag.append("loud ");
+            return maximizeLoudness(s, pcm, tag.toString().trim());
         } catch (Throwable t) {
             LogWriter.log(TAG, "enhanceVoicePcm err: " + t.getMessage());
             return pcm;
         }
     }
 
-    /** 人声增强链(v928): 高通120Hz + Peaking EQ 2.4k/1.2k + 压缩器(-18dB 2.5:1) + 峰值归一化88%FS */
-    private static byte[] enhanceVoicePcmTop(byte[] pcm) {
-        if (pcm == null || pcm.length < 4) return pcm;
-        try {
-            final double fs = TARGET_SAMPLE_RATE;
-            int n = pcm.length / 2;
-            double[] samples = new double[n];
-            for (int i = 0; i < n; i++) {
-                int idx = i * 2;
-                int s = (pcm[idx] & 0xFF) | (pcm[idx + 1] << 8);
-                samples[i] = (short) s;
-            }
+    private static int clampEqDb(int db) {
+        if (db > 12) return 12;
+        if (db < -12) return -12;
+        return db;
+    }
 
-            // --- 1. 二阶 Butterworth 高通 fc=120Hz (RBJ audio EQ cookbook) ---
-            double w0 = 2.0 * Math.PI * 120.0 / fs;
-            double alpha = Math.sin(w0) / Math.sqrt(2.0); // Q=1/sqrt(2)
-            double cosw = Math.cos(w0);
-            double b0 = (1.0 + cosw) / 2.0, b1 = -(1.0 + cosw), b2 = (1.0 + cosw) / 2.0;
-            double a0 = 1.0 + alpha, a1 = -2.0 * cosw, a2 = 1.0 - alpha;
-            double ib0 = b0 / a0, ib1 = b1 / a0, ib2 = b2 / a0, ia1 = a1 / a0, ia2 = a2 / a0;
-            double hpZ1 = 0, hpZ2 = 0;
-            for (int i = 0; i < n; i++) {
-                double x = samples[i];
-                double y = ib0 * x + hpZ1;
-                hpZ1 = ib1 * x - ia1 * y + hpZ2;
-                hpZ2 = ib2 * x - ia2 * y;
-                samples[i] = y;
-            }
+    /** 人声增强预设EQ: 高通120Hz + Peaking 2.4k/+3dB + Peaking 1.2k/+2dB */
+    private static void applyVoicePresetEq(double[] s, double fs) {
+        highPass(s, fs, 120.0, 0.707);
+        peakingEq(s, fs, 2400.0, 1.0, 3.0);
+        peakingEq(s, fs, 1200.0, 0.6, 2.0);
+    }
 
-            // --- 2. Peaking EQ +3dB Q=1.0 fc=2.4kHz (presence/齿音) ---
-            double[][] eqs = {
-                {2400.0, 1.0, 3.0},   // fc, Q, gainDb
-                {1200.0, 0.6, 2.0}    // 方案D: 300Hz-3kHz 人声主体抬升
-            };
-            for (double[] eq : eqs) {
-                double f0 = eq[0], q = eq[1], gDb = eq[2];
-                w0 = 2.0 * Math.PI * f0 / fs;
-                alpha = Math.sin(w0) / (2.0 * q);
-                cosw = Math.cos(w0);
-                double A = Math.pow(10.0, gDb / 40.0);
-                b0 = 1.0 + alpha * A; b1 = -2.0 * cosw; b2 = 1.0 - alpha * A;
-                a0 = 1.0 + alpha / A; a1 = -2.0 * cosw; a2 = 1.0 - alpha / A;
-                double e0 = b0 / a0, e1 = b1 / a0, e2 = b2 / a0, ea1 = a1 / a0, ea2 = a2 / a0;
-                double eqZ1 = 0, eqZ2 = 0;
-                for (int i = 0; i < n; i++) {
-                    double x = samples[i];
-                    double y = e0 * x + eqZ1;
-                    eqZ1 = e1 * x - ea1 * y + eqZ2;
-                    eqZ2 = e2 * x - ea2 * y;
-                    samples[i] = y;
-                }
-            }
+    /** 高音清晰度: 3kHz 存在感 +3dB + 9kHz 空气感 +3dB */
+    private static void clarityBoost(double[] s, double fs) {
+        peakingEq(s, fs, 3000.0, 0.8, 3.0);
+        highShelf(s, fs, 9000.0, 3.0);
+    }
 
-            // --- 4. 轻量压缩器 threshold=-18dBFS ratio=2.5:1 (方案C) ---
-            final double fullScale = 32767.0;
-            final double thresholdDb = -18.0;
-            final double ratio = 2.5;
-            final double attackSmp = 0.002 * fs;   // 2ms
-            final double releaseSmp = 0.100 * fs;  // 100ms
-            double envDb = -120.0;
-            double smoothGain = 1.0;
-            for (int i = 0; i < n; i++) {
-                double absX = Math.abs(samples[i]) / fullScale;
-                double instDb = (absX > 1e-9) ? 20.0 * Math.log10(absX) : -120.0;
-                if (instDb > envDb) {
-                    envDb += (instDb - envDb) / attackSmp;
-                } else {
-                    envDb += (instDb - envDb) / releaseSmp;
-                }
-                double target = 1.0;
-                double over = envDb - thresholdDb;
-                if (over > 0) {
-                    double compressedDb = thresholdDb + over / ratio;
-                    target = Math.pow(10.0, (compressedDb - envDb) / 20.0);
-                }
-                double k = (target < smoothGain) ? 1.0 / attackSmp : 1.0 / releaseSmp;
-                if (k > 1.0) k = 1.0;
-                smoothGain += (target - smoothGain) * k;
-                samples[i] *= smoothGain;
-            }
+    /** RBJ 二阶高通(Q 由调用方给定) */
+    private static void highPass(double[] x, double fs, double f0, double q) {
+        double w0 = 2.0 * Math.PI * f0 / fs;
+        double cosw = Math.cos(w0);
+        double alpha = Math.sin(w0) / (2.0 * q);
+        double b0 = (1.0 + cosw) / 2.0, b1 = -(1.0 + cosw), b2 = (1.0 + cosw) / 2.0;
+        double a0 = 1.0 + alpha, a1 = -2.0 * cosw, a2 = 1.0 - alpha;
+        biquadInPlace(x, b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0);
+    }
 
-            // --- 5. 峰值归一化至 88% FS ---
-            double peak = 0;
-            for (int i = 0; i < n; i++) {
-                double m = Math.abs(samples[i]);
-                if (m > peak) peak = m;
+    /** RBJ 高架滤波器(S=1): 提升 f0 以上频段 */
+    private static void highShelf(double[] x, double fs, double f0, double gainDb) {
+        double A = Math.pow(10.0, gainDb / 40.0);
+        double w0 = 2.0 * Math.PI * f0 / fs;
+        double cosw = Math.cos(w0), sinw = Math.sin(w0);
+        double alpha = sinw / 2.0 * Math.sqrt(2.0); // S=1
+        double sqrtA = Math.sqrt(A);
+        double b0 = A * ((A + 1) + (A - 1) * cosw + 2 * sqrtA * alpha);
+        double b1 = -2 * A * ((A - 1) + (A + 1) * cosw);
+        double b2 = A * ((A + 1) + (A - 1) * cosw - 2 * sqrtA * alpha);
+        double a0 = (A + 1) - (A - 1) * cosw + 2 * sqrtA * alpha;
+        double a1 = 2 * ((A - 1) - (A + 1) * cosw);
+        double a2 = (A + 1) - (A - 1) * cosw - 2 * sqrtA * alpha;
+        biquadInPlace(x, b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0);
+    }
+
+    /** 噪声门: 低于 -50dBFS 的静音段平滑压掉, 保留语音气声 */
+    private static void noiseGate(double[] x, double fs) {
+        final double thresh = 0.01;         // ≈ -40dBFS 峰值门限
+        final double attack = Math.exp(-1.0 / (0.002 * fs));
+        final double release = Math.exp(-1.0 / (0.080 * fs));
+        double env = 0, gain = 1.0;
+        for (int i = 0; i < x.length; i++) {
+            double a = Math.abs(x[i]);
+            env = a > env ? a : env * release;
+            double target = env < thresh ? 0.0 : 1.0;
+            double coeff = target > gain ? (1.0 - attack) : (1.0 - release);
+            gain += (target - gain) * coeff;
+            x[i] *= gain;
+        }
+    }
+
+    /** 自动增益(AGC): 50ms 块 RMS 慢速跟随至目标电平 */
+    private static void agc(double[] x, double fs) {
+        int win = (int) (0.05 * fs);
+        if (win < 1) win = 1;
+        final double targetRms = 0.12 * 32767.0;
+        double gainSm = 1.0;
+        for (int start = 0; start < x.length; start += win) {
+            int end = Math.min(start + win, x.length);
+            double ms = 0;
+            for (int i = start; i < end; i++) ms += x[i] * x[i];
+            double rms = Math.sqrt(ms / (end - start));
+            double desired = rms > 1.0 ? targetRms / rms : 1.0;
+            if (desired > 4.0) desired = 4.0;
+            if (desired < 0.25) desired = 0.25;
+            gainSm += (desired - gainSm) * 0.25;
+            for (int i = start; i < end; i++) x[i] *= gainSm;
+        }
+    }
+
+    /** 轻量压缩器: 阈值/比率/起止时间可调(样本域, 直接型包络跟随) */
+    private static void compressor(double[] x, double fs, double thresholdDb, double ratio,
+            double attackMs, double releaseMs) {
+        final double fullScale = 32767.0;
+        final double attackSmp = Math.max(1.0, attackMs * fs / 1000.0);
+        final double releaseSmp = Math.max(1.0, releaseMs * fs / 1000.0);
+        double envDb = -120.0, smoothGain = 1.0;
+        for (int i = 0; i < x.length; i++) {
+            double absX = Math.abs(x[i]) / fullScale;
+            double instDb = (absX > 1e-9) ? 20.0 * Math.log10(absX) : -120.0;
+            if (instDb > envDb) envDb += (instDb - envDb) / attackSmp;
+            else envDb += (instDb - envDb) / releaseSmp;
+            double target = 1.0;
+            double over = envDb - thresholdDb;
+            if (over > 0) {
+                double compressedDb = thresholdDb + over / ratio;
+                target = Math.pow(10.0, (compressedDb - envDb) / 20.0);
             }
-            double normTarget = 0.88 * 32767.0;
-            double gain = normTarget / peak;
-            if (gain > 12.0) gain = 12.0; // 增益上限, 防噪声放大
-            byte[] out = new byte[pcm.length];
-            for (int i = 0; i < n; i++) {
-                double y = samples[i] * gain;
-                if (y > 32767.0) y = 32767.0;
-                if (y < -32768.0) y = -32768.0;
-                int yi = (int) Math.round(y);
-                out[i * 2] = (byte) (yi & 0xFF);
-                out[i * 2 + 1] = (byte) ((yi >> 8) & 0xFF);
-            }
-            LogWriter.log(TAG, "enhanceVoicePcm(top): HPF120+EQ2400+EQ1200+comp(-18dB/2.5)+norm peak="
-                    + Math.round(peak) + " gain=" + ((int)(gain*1000)/1000.0) + " " + pcm.length + "B");
-            return out;
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "enhanceVoicePcm err: " + t.getMessage());
-            return pcm;
+            double k = (target < smoothGain) ? (1.0 / attackSmp) : (1.0 / releaseSmp);
+            if (k > 1.0) k = 1.0;
+            smoothGain += (target - smoothGain) * k;
+            x[i] *= smoothGain;
+        }
+    }
+
+    /**
+     * LUFS 响度标准化(简化 ITU-R BS.1770): K 加权后在 400ms/100ms 重叠块上
+     * 做绝对值(-70 LUFS)与相对值(-10 LU)门限, 计算积分响度并增益到 targetLufs。
+     * 响度在 K 加权副本上评估, 增益施加于原始信号(不改音色)。
+     */
+    private static void lufsNormalize(double[] x, double fs, double targetLufs) {
+        int n = x.length;
+        double[] kw = x.clone();
+        highShelf(kw, fs, 1681.0, 3.99);   // K 加权 stage1
+        highPass(kw, fs, 38.13, 0.5);      // K 加权 stage2
+        int block = (int) (0.4 * fs);
+        int step = (int) (0.1 * fs);
+        if (block < 1) block = 1;
+        if (step < 1) step = 1;
+        final double absThresh = Math.pow(10.0, (-70.0 + 0.691) / 10.0);
+        double sum = 0; int cAbs = 0;
+        java.util.List<Double> blocks = new java.util.ArrayList<>();
+        for (int i = 0; i + block <= n; i += step) {
+            double ms = 0;
+            for (int j = 0; j < block; j++) ms += kw[i + j] * kw[i + j];
+            ms /= block;
+            blocks.add(ms);
+            if (ms > absThresh) { sum += ms; cAbs++; }
+        }
+        if (cAbs == 0) { LogWriter.log(TAG, "LUFS normalize: 全静音, 跳过"); return; }
+        double relLufs = -0.691 + 10.0 * Math.log10(sum / cAbs);
+        final double relThresh = Math.pow(10.0, (relLufs - 10.0 + 0.691) / 10.0);
+        double sum2 = 0; int cRel = 0;
+        for (double ms : blocks) {
+            if (ms > absThresh && ms > relThresh) { sum2 += ms; cRel++; }
+        }
+        if (cRel == 0) return;
+        double integrated = -0.691 + 10.0 * Math.log10(sum2 / cRel);
+        double gainDb = targetLufs - integrated;
+        if (gainDb > 12.0) gainDb = 12.0;
+        if (gainDb < -12.0) gainDb = -12.0;
+        double g = Math.pow(10.0, gainDb / 20.0);
+        for (int i = 0; i < n; i++) x[i] *= g;
+        LogWriter.log(TAG, "LUFS normalize: integrated=" + ((int)(integrated*10)/10.0)
+                + " LUFS gainDb=" + ((int)(gainDb*10)/10.0));
+    }
+
+    /** 去齿音: 5kHz 以上动态削弱, 齿音过强时按包络衰减高频分量 */
+    private static void deEsser(double[] x, double fs) {
+        int n = x.length;
+        double[] hi = x.clone();
+        highPass(hi, fs, 5000.0, 0.707);
+        final double thresh = 0.06;  // 高频包络阈值
+        final double attack = Math.exp(-1.0 / (0.002 * fs));
+        final double release = Math.exp(-1.0 / (0.060 * fs));
+        double env = 0, gain = 1.0;
+        for (int i = 0; i < n; i++) {
+            double a = Math.abs(hi[i]);
+            env = a > env ? a : env * release;
+            double target = env > thresh ? (thresh / env) : 1.0;
+            double coeff = target < gain ? (1.0 - attack) : (1.0 - release);
+            gain += (target - gain) * coeff;
+            double reduce = 1.0 - gain; // 高频中被削减的比例
+            x[i] -= hi[i] * reduce;
+        }
+    }
+
+    /** 峰值归一化(95%FS) + RMS 响度补益(上限 +8dB) + 软限幅, 输出 16bit LE PCM */
+    private static byte[] maximizeLoudness(double[] samples, byte[] original, String tag) {
+        int n = samples.length;
+        final double fullScale = 32767.0;
+        double peak = 0, sumSq = 0;
+        for (int i = 0; i < n; i++) {
+            double v = samples[i];
+            double m = Math.abs(v);
+            if (m > peak) peak = m;
+            sumSq += v * v;
+        }
+        if (peak < 1.0) return original; // 近乎静音, 原样返回
+        // 1) 峰值归一化至 95% FS; 增益上限 64x(≈36dB), 使低电平音源也能拉满
+        double normTarget = 0.95 * fullScale;
+        double gain = normTarget / peak;
+        if (gain > 64.0) gain = 64.0;
+        // 2) 响度补偿 —— 基于 RMS 补益至 ≈ -13dBFS(上限 +8dB)
+        double rms = Math.sqrt(sumSq * gain * gain / n);
+        double targetRms = 0.22 * fullScale;
+        double makeup = (rms > 1.0) ? targetRms / rms : 1.0;
+        if (makeup > 2.5) makeup = 2.5;
+        if (makeup < 1.0) makeup = 1.0;
+        // 3) 软限幅(软膝压缩), 防削波同时保留峰值
+        double ceiling = 0.985 * fullScale;
+        double knee = ceiling * 0.8;
+        double range = ceiling - knee;
+        byte[] out = new byte[n * 2];
+        for (int i = 0; i < n; i++) {
+            double y = samples[i] * gain * makeup;
+            double ay = Math.abs(y);
+            if (ay > knee) ay = knee + range * ((ay - knee) / ((ay - knee) + range));
+            if (y < 0) y = -ay; else y = ay;
+            int yi = (int) Math.round(y);
+            if (yi > 32767) yi = 32767;
+            if (yi < -32768) yi = -32768;
+            out[i * 2] = (byte) (yi & 0xFF);
+            out[i * 2 + 1] = (byte) ((yi >> 8) & 0xFF);
+        }
+        LogWriter.log(TAG, "enhanceVoicePcm(" + tag + "): peak=" + Math.round(peak)
+                + " gain=" + ((int)(gain*100)/100.0)
+                + " rms=" + Math.round(rms) + " makeup=" + ((int)(makeup*100)/100.0)
+                + " " + n * 2 + "B");
+        return out;
+    }
+
+    /** DJ低音增强: 低架EQ fc=90Hz +10dB(低频澎湃下潜) + 峰值EQ fc=400Hz -3dB(削弱浑浊中低频) */
+    private static void applyDjBass(double[] samples) {
+        final double fs = TARGET_SAMPLE_RATE;
+        lowShelf(samples, fs, 90.0, 10.0);
+        peakingEq(samples, fs, 400.0, 0.9, -3.0);
+        LogWriter.log(TAG, "DJ bass: lowShelf 90Hz/+10dB + peak 400Hz/-3dB");
+    }
+
+    /** RBJ 低架滤波器(S=1): 提升 f0 以下频段 */
+    private static void lowShelf(double[] x, double fs, double f0, double gainDb) {
+        double A = Math.pow(10.0, gainDb / 40.0);
+        double w0 = 2.0 * Math.PI * f0 / fs;
+        double cosw = Math.cos(w0), sinw = Math.sin(w0);
+        double alpha = sinw / 2.0 * Math.sqrt(2.0); // S=1
+        double sqrtA = Math.sqrt(A);
+        double b0 = A * ((A + 1) - (A - 1) * cosw + 2 * sqrtA * alpha);
+        double b1 = 2 * A * ((A - 1) - (A + 1) * cosw);
+        double b2 = A * ((A + 1) - (A - 1) * cosw - 2 * sqrtA * alpha);
+        double a0 = (A + 1) + (A - 1) * cosw + 2 * sqrtA * alpha;
+        double a1 = -2 * ((A - 1) + (A + 1) * cosw);
+        double a2 = (A + 1) + (A - 1) * cosw - 2 * sqrtA * alpha;
+        biquadInPlace(x, b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0);
+    }
+
+    /** RBJ 峰值 EQ */
+    private static void peakingEq(double[] x, double fs, double f0, double q, double gainDb) {
+        double A = Math.pow(10.0, gainDb / 40.0);
+        double w0 = 2.0 * Math.PI * f0 / fs;
+        double alpha = Math.sin(w0) / (2.0 * q);
+        double cosw = Math.cos(w0);
+        double b0 = 1 + alpha * A, b1 = -2 * cosw, b2 = 1 - alpha * A;
+        double a0 = 1 + alpha / A, a1 = -2 * cosw, a2 = 1 - alpha / A;
+        biquadInPlace(x, b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0);
+    }
+
+    /** 直接型 I 二阶 IIR(原地处理) */
+    private static void biquadInPlace(double[] x, double b0, double b1, double b2, double a1, double a2) {
+        double z1 = 0, z2 = 0;
+        for (int i = 0; i < x.length; i++) {
+            double in = x[i];
+            double y = b0 * in + z1;
+            z1 = b1 * in - a1 * y + z2;
+            z2 = b2 * in - a2 * y;
+            x[i] = y;
         }
     }
 
@@ -4619,22 +5401,54 @@ public class TtsVoiceSender {
             codec.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             codec.start();
 
+            // v986: 输入缓冲校验 —— idx<0 或 buf 为 null 时必须直接失败, 不能对负下标 getInputBuffer。
             int idx = codec.dequeueInputBuffer(10000);
+            if (idx < 0) {
+                LogWriter.log(TAG, "encodePcmToAmrWb: no input buffer");
+                return null;
+            }
             ByteBuffer inBuf = codec.getInputBuffer(idx);
+            if (inBuf == null) {
+                LogWriter.log(TAG, "encodePcmToAmrWb: input buffer null");
+                return null;
+            }
             inBuf.clear();
-            inBuf.put(pcm);
-            codec.queueInputBuffer(idx, 0, pcm.length, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+            int feed = Math.min(pcm.length, inBuf.remaining());
+            inBuf.put(pcm, 0, feed);
+            boolean fullFeed = feed >= pcm.length;
+            codec.queueInputBuffer(idx, 0, feed, 0,
+                    fullFeed ? MediaCodec.BUFFER_FLAG_END_OF_STREAM : 0);
 
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-            while (true) {
+            long loopStart = System.currentTimeMillis();
+            int emptyTries = 0;
+            boolean sawEos = false;
+            // v986: while(true) 加迭代/时间/空转上限, 保证异常或编码器异常时也能退出并释放 codec。
+            while (!sawEos) {
+                if ((System.currentTimeMillis() - loopStart) > 30000) {
+                    LogWriter.log(TAG, "encodePcmToAmrWb: output drain timeout");
+                    break;
+                }
                 int outIdx = codec.dequeueOutputBuffer(info, 10000);
                 if (outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) continue;
+                if (outIdx == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                    if (fullFeed && ++emptyTries > 500) {
+                        LogWriter.log(TAG, "encodePcmToAmrWb: try-again limit reached");
+                        break;
+                    }
+                    continue;
+                }
                 if (outIdx < 0) break;
                 ByteBuffer outBuf = codec.getOutputBuffer(outIdx);
-                byte[] chunk = new byte[info.size];
-                outBuf.get(chunk);
-                baos.write(chunk);
+                if (outBuf != null && info.size > 0) {
+                    outBuf.position(info.offset);
+                    outBuf.limit(info.offset + info.size);
+                    byte[] chunk = new byte[info.size];
+                    outBuf.get(chunk);
+                    baos.write(chunk);
+                }
+                if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) sawEos = true;
                 codec.releaseOutputBuffer(outIdx, false);
             }
 
@@ -4767,5 +5581,219 @@ public class TtsVoiceSender {
 
     private static int parseIntSafe(String s, int def) {
         try { return Integer.parseInt(s); } catch (Throwable ignored) { return def; }
+    }
+
+    // ==================== v30007: 音频拼接 / 混合 引擎 ====================
+
+    /** 解码任意音频文件(mp3/m4a/aac/ogg/wav/flac 等) 为 24kHz mono 16bit PCM; wav 走 RIFF 解析, 其余走 MediaCodec。 */
+    public static byte[] decodeAudioToPcm(String path) {
+        return decodeAudioToPcm(path, null);
+    }
+
+    /**
+     * v30008: 带进度回调的解码入口, 并对系统媒体库"导出到缓存"尚未写完的竞态做重试。
+     * 系统文件选择器返回的往往是 /cache 临时文件, 刚回调时可能还未落盘完整,
+     * 原先一次性 setDataSource 会偶发 "Failed to instantiate extractor" 而直接判失败。
+     */
+    public static byte[] decodeAudioToPcm(String path, VoiceSendCallback cb) {
+        if (path == null) return null;
+        try {
+            File f = new File(path);
+            // 等待文件真正落盘(最多 5 次 * 300ms), 规避选择器回填与缓存写入的竞态
+            for (int i = 0; i < 5 && (!f.exists() || f.length() <= 0); i++) {
+                LogWriter.log(TAG, "decodeAudioToPcm: waiting file ready " + i + " " + path);
+                try { Thread.sleep(300); } catch (InterruptedException ignored) {}
+            }
+            if (!f.exists() || f.length() <= 0) {
+                LogWriter.log(TAG, "decodeAudioToPcm: file missing " + path);
+                return null;
+            }
+
+            String lower = path.toLowerCase(Locale.US);
+            if (lower.endsWith(".wav")) {
+                try {
+                    byte[] pcm = wavToPcm(f);
+                    if (pcm != null && pcm.length > 0) return pcm;
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "decodeAudioToPcm wav fallback: " + t.getMessage());
+                }
+            }
+
+            // MediaExtractor 实例化偶发失败(尤其中文名/缓存未落盘), 最多重试 3 次
+            Throwable last = null;
+            for (int attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    byte[] pcm = mp3ToPcm(f, attempt == 1 ? cb : null);
+                    if (pcm != null && pcm.length > 0) return pcm;
+                } catch (Throwable t) {
+                    last = t;
+                    LogWriter.log(TAG, "decodeAudioToPcm attempt " + attempt + " fail: "
+                            + t.getClass().getSimpleName() + " " + t.getMessage());
+                }
+                try { Thread.sleep(250L * attempt); } catch (InterruptedException ignored) {}
+            }
+            LogWriter.log(TAG, "decodeAudioToPcm: all attempts failed "
+                    + (last == null ? "" : last.getMessage()));
+            return null;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "decodeAudioToPcm err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return null;
+        }
+    }
+
+    /** 合成一段文字为 24kHz mono 16bit PCM(内部按标点分段后顺序拼接)。失败返回 null。 */
+    public static byte[] synthesizeTextToPcm(String text) {
+        if (text == null || text.trim().isEmpty()) return null;
+        if (!ensureTtsReady()) {
+            LogWriter.log(TAG, "synthesizeTextToPcm: TTS not ready");
+            return null;
+        }
+        try {
+            File tmpDir = new File(sAccPath, "tts_temp/");
+            tmpDir.mkdirs();
+            java.util.List<String> segs = splitTtsText(text.trim(), TTS_MAX_CHARS);
+            if (segs.isEmpty()) return null;
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            long ts = System.currentTimeMillis();
+            for (int i = 0; i < segs.size(); i++) {
+                byte[] seg = synthesizeSegmentToPcm(segs.get(i), tmpDir, ts + "_mix_" + i);
+                if (seg == null || seg.length == 0) {
+                    LogWriter.log(TAG, "synthesizeTextToPcm seg " + i + " fail");
+                    return null;
+                }
+                out.write(seg, 0, seg.length);
+            }
+            byte[] pcm = out.toByteArray();
+            LogWriter.log(TAG, "synthesizeTextToPcm: " + pcm.length + "B segs=" + segs.size());
+            return pcm.length > 0 ? pcm : null;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "synthesizeTextToPcm err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return null;
+        }
+    }
+
+    /** 顺序拼接多段 PCM(拼接模式)。 */
+    public static byte[] concatPcm(java.util.List<byte[]> segments) {
+        if (segments == null || segments.isEmpty()) return null;
+        int total = 0;
+        for (byte[] s : segments) if (s != null) total += s.length;
+        if (total <= 0) return null;
+        byte[] out = new byte[total];
+        int off = 0;
+        for (byte[] s : segments) {
+            if (s == null || s.length == 0) continue;
+            System.arraycopy(s, 0, out, off, s.length);
+            off += s.length;
+        }
+        return out;
+    }
+
+    /**
+     * 叠加混音(混合模式): 每段从 offsetSamples 处开始叠加, gain 为音量系数。
+     * 峰值超过 16bit 上限时整体归一化, 避免削波失真。
+     */
+    public static byte[] mixPcm(java.util.List<byte[]> clips, java.util.List<Integer> offsetSamples,
+            java.util.List<Float> gains, int totalSamples) {
+        if (clips == null || clips.isEmpty() || totalSamples <= 0) return null;
+        // 用 float 累加(内存占用为 double 的一半), 16bit 语音叠加精度足够
+        float[] acc = new float[totalSamples];
+        for (int k = 0; k < clips.size(); k++) {
+            byte[] pcm = clips.get(k);
+            if (pcm == null || pcm.length < 2) continue;
+            int offs = (offsetSamples != null && k < offsetSamples.size() && offsetSamples.get(k) != null)
+                    ? Math.max(0, offsetSamples.get(k)) : 0;
+            float g = (gains != null && k < gains.size() && gains.get(k) != null) ? gains.get(k) : 1f;
+            int samples = pcm.length / 2;
+            for (int i = 0; i < samples; i++) {
+                int idx = offs + i;
+                if (idx >= totalSamples) break;
+                int s = (short) ((pcm[i * 2] & 0xff) | (pcm[i * 2 + 1] << 8));
+                acc[idx] += s * g;
+            }
+        }
+        float peak = 0;
+        for (int i = 0; i < totalSamples; i++) { float a = Math.abs(acc[i]); if (a > peak) peak = a; }
+        double scale = (peak > 32767f) ? (32767d / peak) : 1d;
+        byte[] out = new byte[totalSamples * 2];
+        for (int i = 0; i < totalSamples; i++) {
+            int v = (int) Math.round(acc[i] * scale);
+            if (v > 32767) v = 32767; else if (v < -32768) v = -32768;
+            out[i * 2] = (byte) (v & 0xff);
+            out[i * 2 + 1] = (byte) ((v >> 8) & 0xff);
+        }
+        LogWriter.log(TAG, "mixPcm: tracks=" + clips.size() + " samples=" + totalSamples + " peak=" + (int) peak);
+        return out;
+    }
+
+    /** 按秒裁剪 PCM, 非法区间回退为整段。 */
+    public static byte[] cutPcm(byte[] pcm, float beginSec, float endSec) {
+        if (pcm == null || pcm.length == 0) return null;
+        if (beginSec <= 0 && endSec <= 0) return pcm;
+        byte[] r = applyCut(pcm, beginSec, endSec);
+        return (r == null || r.length == 0) ? pcm : r;
+    }
+
+    /** PCM -> 微信语音数据(SILK/AMR 高码率)。 */
+    public static byte[] encodePcmToVoiceData(byte[] pcm) {
+        if (pcm == null || pcm.length == 0) return null;
+        try {
+            byte[] pad = padPcmToFrame(pcm);
+            return encodeVoiceHighestQuality(pad);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "encodePcmToVoiceData err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return null;
+        }
+    }
+
+    /** 直接发送一段 PCM 为语音消息(不做历史记录)。 */
+    public static boolean sendRawPcmVoice(String talker, byte[] pcm, int fakeDurationMs,
+            VoiceSendCallback cb) {
+        if (sClassLoader == null || pcm == null || pcm.length == 0) {
+            LogWriter.log(TAG, "sendRawPcmVoice: invalid args");
+            return false;
+        }
+        try {
+            if (cb != null) cb.onProgress(0, 1);
+            byte[] voiceData = encodePcmToVoiceData(pcm);
+            if (voiceData == null || voiceData.length == 0) {
+                LogWriter.log(TAG, "sendRawPcmVoice: encode fail");
+                return false;
+            }
+            boolean sent = sendVoiceData(talker, voiceData, fakeDurationMs, null);
+            LogWriter.log(TAG, "sendRawPcmVoice sent=" + sent + " talker=" + talker + " pcm=" + pcm.length + "B");
+            if (cb != null) cb.onProgress(1, 1);
+            return sent;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "sendRawPcmVoice err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 直接发送已编码好的微信语音数据(SILK/AMR), 跳过编码步骤。
+     *
+     * <p>供点歌语音缓存复用: 同曲同档二次点歌可直接读取已编码数据发送, 省去下载/解码/
+     * 重采样/编码。</p>
+     */
+    public static boolean sendVoiceData(String talker, byte[] voiceData, int fakeDurationMs,
+            VoiceSendCallback cb) {
+        if (sClassLoader == null || voiceData == null || voiceData.length == 0) {
+            LogWriter.log(TAG, "sendVoiceData: invalid args");
+            return false;
+        }
+        try {
+            String voice2 = getVoice2Dir();
+            String tmpPath = voice2 + "/mix_" + System.currentTimeMillis() + ".amr";
+            fileWrite(new File(tmpPath), voiceData);
+            return sendViaSceneVoice(talker, tmpPath, fakeDurationMs);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "sendVoiceData err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return false;
+        }
+    }
+
+    /** 24kHz mono 16bit PCM 字节数 -> 毫秒(供 UI 显示)。 */
+    public static int pcmDurationMs(byte[] pcm) {
+        return pcm == null ? 0 : pcmBytesToDurationMs(pcm.length);
     }
 }

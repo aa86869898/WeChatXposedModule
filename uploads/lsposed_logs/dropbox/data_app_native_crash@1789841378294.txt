@@ -1,0 +1,71 @@
+SystemUptimeMs: 5164434
+Process: com.ss.android.ugc.aweme.lite
+PID: 1766
+UID: 10546
+Frozen: false
+Flags: 0x38983e44
+Package: com.ss.android.ugc.aweme.lite v400501 (40.5.0)
+PID: 1766
+Foreground: Yes
+Process-Runtime: 50579
+Build: OnePlus/PLR110/OP6117L1:16/BP2A.250605.015/B.c4db98_17de607_17d624d:user/release-keys
+Loading-Progress: 1.0
+Dropped-Count: 0
+
+Process name is com.ss.android.ugc.aweme.lite, uid is 10546, not key_process
+keyProcess: 0
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'OnePlus/PLR110/OP6117L1:16/BP2A.250605.015/B.c4db98_17de607_17d624d:user/release-keys'
+Revision: '0'
+ABI: 'arm64'
+Timestamp: 2026-09-20 02:09:37.730787707+0800
+Process uptime: 51s
+Cmdline: com.ss.android.ugc.aweme.lite
+pid: 1766, tid: 3875, name: Looper-V2  >>> com.ss.android.ugc.aweme.lite <<<
+uid: 10546
+tagged_addr_ctrl: 0000000000000001 (PR_TAGGED_ADDR_ENABLE)
+pac_enabled_keys: 000000000000000f (PR_PAC_APIAKEY, PR_PAC_APIBKEY, PR_PAC_APDAKEY, PR_PAC_APDBKEY)
+signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0000000000000b00
+Cause: null pointer dereference
+    x0  00000075c3fffac0  x1  000000761a440710  x2  0000000000000034  x3  0000000000000004
+    x4  0000000000000033  x5  00004000aaaaaaaa  x6  6873606d5e606863  x7  7f7f7f7f7f7f7f7f
+    x8  0000000000000030  x9  11c3d463f0518752  x10 0000000000000003  x11 0000000000000000
+    x12 0000000000000028  x13 0000000000000004  x14 ffffffffffffffff  x15 00000074b1e02c30
+    x16 00000077bcd61828  x17 00000077bccf516c  x18 00000074431bc000  x19 000000761a4408a8
+    x20 0000000000000034  x21 000000761a440710  x22 00000075c3fffac0  x23 0000000000000034
+    x24 000000761a4408f0  x25 000000761a440710  x26 000000761a4408a0  x27 0000000000000000
+    x28 000000761a442840  x29 000000761a440690
+    lr  00000077bcf7ec80  sp  000000761a440690  pc  00000077bcfc3068  pst 0000000080001000
+31 total frames
+backtrace:
+      #00 pc 0000000000212068  /system/lib64/libstagefright.so (BuildId: e6f319c0353506d045e509cdf507ddeb)
+      #01 pc 00000000001cdc7c  /system/lib64/libstagefright.so (void std::__1::vector<int, std::__1::allocator<int>>::__assign_with_size[abi:nn200000]<int const*, int const*>(int const*, int const*, long)+208) (BuildId: e6f319c0353506d045e509cdf507ddeb)
+      #02 pc 00000000001cd9a0  /system/lib64/libstagefright.so (android::VideoRenderQualityTracker::Configuration::Configuration()+164) (BuildId: e6f319c0353506d045e509cdf507ddeb)
+      #03 pc 00000000001cbb4c  /system/lib64/libstagefright.so (android::VideoRenderQualityTracker::Configuration::getFromServerConfigurableFlags(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> (*)(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)) (.cfi)+108) (BuildId: e6f319c0353506d045e509cdf507ddeb)
+      #04 pc 00000000001502f8  /system/lib64/libstagefright.so (android::MediaCodec::MediaCodec(android::sp<android::ALooper> const&, int, unsigned int, std::__1::function<android::sp<android::CodecBase> (android::AString const&, char const*)>, std::__1::function<int (android::AString const&, android::sp<android::MediaCodecInfo>*)>)+864) (BuildId: e6f319c0353506d045e509cdf507ddeb)
+      #05 pc 00000000001761c4  /system/lib64/libstagefright.so (android::MediaCodec::CreateByComponentName(android::sp<android::ALooper> const&, android::AString const&, int*, int, unsigned int) (.cfi)+212) (BuildId: e6f319c0353506d045e509cdf507ddeb)
+      #06 pc 000000000003baec  /system/lib64/libmedia_jni.so (android::JMediaCodec::JMediaCodec(_JNIEnv*, _jobject*, char const*, bool, bool, int, int)+584) (BuildId: a14473c103ac66421380e06eadbef46b)
+      #07 pc 0000000000049de0  /system/lib64/libmedia_jni.so (android_media_MediaCodec_native_setup(_JNIEnv*, _jobject*, _jstring*, unsigned char, unsigned char, int, int)+160) (BuildId: a14473c103ac66421380e06eadbef46b)
+      #08 pc 0000000000def96c  /system/framework/ocomp/arm64/boot-framework.oat (art_jni_trampoline+124) (BuildId: dcfcce9c9bf302dd7e7fd6b2875d9a6ea6ee9768)
+      #09 pc 0000000000901ba0  /system/framework/ocomp/arm64/boot-framework.oat (android.media.MediaCodec.<init>+1168) (BuildId: dcfcce9c9bf302dd7e7fd6b2875d9a6ea6ee9768)
+      #10 pc 000000000672b220  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/oat/arm64/base.odex (X.0ndf.LIZ+416)
+      #11 pc 0000000007ac6aac  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/oat/arm64/base.odex (com.ss.ttm.player.AJMediaCodec.com_ss_ttm_player_AJMediaCodec__createByCodecName$___twin___+1356)
+      #12 pc 0000000007ac7bf0  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/oat/arm64/base.odex (com.ss.ttm.player.AJMediaCodec.createByCodecName+64)
+      #13 pc 0000000000519f94  /apex/com.android.art/lib64/libart.so (art_quick_invoke_stub+612) (BuildId: 4eeca737efff25ab5f335fe57529e402)
+      #14 pc 0000000000517320  /apex/com.android.art/lib64/libart.so (art::JValue art::InvokeVirtualOrInterfaceWithVarArgs<art::ArtMethod*>(art::ScopedObjectAccessAlreadyRunnable const&, _jobject*, art::ArtMethod*, std::__va_list)+676) (BuildId: 4eeca737efff25ab5f335fe57529e402)
+      #15 pc 0000000000828568  /apex/com.android.art/lib64/libart.so (art::JNI<false>::CallIntMethodV(_JNIEnv*, _jobject*, _jmethodID*, std::__va_list)+204) (BuildId: 4eeca737efff25ab5f335fe57529e402)
+      #16 pc 00000000000da850  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/lib/arm64/libttmplayer.so (BuildId: 63bc49f3d4d86eaa815d7bc5303acc0f4aa7a322)
+      #17 pc 00000000001e5e8c  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/lib/arm64/libttmplayer.so (BuildId: 63bc49f3d4d86eaa815d7bc5303acc0f4aa7a322)
+      #18 pc 00000000001e3d4c  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/lib/arm64/libttmplayer.so (BuildId: 63bc49f3d4d86eaa815d7bc5303acc0f4aa7a322)
+      #19 pc 00000000001e2ac0  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/lib/arm64/libttmplayer.so (BuildId: 63bc49f3d4d86eaa815d7bc5303acc0f4aa7a322)
+      #20 pc 000000000022ee38  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/lib/arm64/libttmplayer.so (BuildId: 63bc49f3d4d86eaa815d7bc5303acc0f4aa7a322)
+      #21 pc 0000000000189e78  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/lib/arm64/libttmplayer.so (BuildId: 63bc49f3d4d86eaa815d7bc5303acc0f4aa7a322)
+      #22 pc 000000000016969c  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/lib/arm64/libttmplayer.so (BuildId: 63bc49f3d4d86eaa815d7bc5303acc0f4aa7a322)
+      #23 pc 000000000016e9dc  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/lib/arm64/libttmplayer.so (BuildId: 63bc49f3d4d86eaa815d7bc5303acc0f4aa7a322)
+      #24 pc 000000000016e454  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/lib/arm64/libttmplayer.so (BuildId: 63bc49f3d4d86eaa815d7bc5303acc0f4aa7a322)
+      #25 pc 00000000000afdcc  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/lib/arm64/libttmplayer.so (BuildId: 63bc49f3d4d86eaa815d7bc5303acc0f4aa7a322)
+      #26 pc 00000000000c70a0  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/lib/arm64/libttmplayer.so (BuildId: 63bc49f3d4d86eaa815d7bc5303acc0f4aa7a322)
+      #27 pc 00000000000c962c  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/lib/arm64/libttmplayer.so (BuildId: 63bc49f3d4d86eaa815d7bc5303acc0f4aa7a322)
+      #28 pc 00000000000c7758  /data/app/~~i_7ravLjgAst_I97NScGsQ==/com.ss.android.ugc.aweme.lite-GNMcHJvjwasw-hwWKB043A==/lib/arm64/libttmplayer.so (BuildId: 63bc49f3d4d86eaa815d7bc5303acc0f4aa7a322)
+      #29 pc 0000000000099fec  /apex/com.android.runtime/lib64/bionic/libc.so (__pthread_start(void*)+184) (BuildId: 28057735687b475a45ee7ab9afcb5eb7)
+      #30 pc 000000000008c808  /apex/com.android.runtime/lib64/bionic/libc.so (__start_thread+68) (BuildId: 28057735687b475a45ee7ab9afcb5eb7)

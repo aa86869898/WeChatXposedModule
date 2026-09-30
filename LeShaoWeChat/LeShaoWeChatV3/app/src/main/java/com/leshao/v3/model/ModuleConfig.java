@@ -13,9 +13,8 @@ public class ModuleConfig {
     public boolean masterSwitch = true;
 
     // TTS 引擎
-    public String ttsEngine = "system";
     public String peiyinApiKey = "", peiyinVoiceId = "";
-    public String wusoundApiKey = "", wusoundVoiceId = "", wusoundPromptId = "default";
+    public String wusoundVoiceId = "", wusoundPromptId = "default";
 
     // 播报类型
     public boolean announceText = true, announceImage = true, announceVideo = true;
@@ -27,7 +26,6 @@ public class ModuleConfig {
     public boolean announceMiniProgram = true;
     public boolean announceVideoChannel = true;
     public boolean announceChatHistory = true;
-    public boolean autoPlayVoice = true;
 
     public String customAnnounceFormat = "{sender}: {content}";
     public long announceIntervalMs = 0;
@@ -38,7 +36,6 @@ public class ModuleConfig {
     public Set<String> announceBlacklist = new HashSet<>();
     // 白名单严格模式: 白名单为空时不播报任何消息(默认开启)
     public boolean whitelistStrict = true;
-    public int announceTypeMask = 0;
 
     // 免打扰
     public boolean quietEnabled = false;
@@ -47,28 +44,8 @@ public class ModuleConfig {
     // 群管
     public boolean autoAcceptFriend = false;
     public String autoAcceptFriendMsg = "你好呀，很高兴认识你!";
-    public boolean groupInviteEnabled = false;
-    public String groupInviteKeyword = "加群";
-    public int groupInviteMaxMembers = 40;
-    public boolean leftGroupTipEnabled = false;
-    public String leftGroupTipMsg = "";
-    public boolean antiAdEnabled = false, autoKickEnabled = false;
-    public int kickThreshold = 3;
-    public Set<String> adKeywords = new HashSet<>();
-    public Set<String> kickKeywords = new HashSet<>();
     public Set<String> sensitiveWords = new HashSet<>();
     public boolean sensitiveFilterEnabled = false;
-    public int warnType = 0;
-    public String warnMsg = "请勿发送违规内容，警告！";
-    public int farewellType = 0;
-    public String farewellMsg = "已被移出群聊";
-    public boolean blacklistEnabled = true;
-    public Set<String> blacklistWxids = new HashSet<>();
-
-    // 欢迎
-    public boolean welcomeEnabled = false;
-    public String welcomeMsg = "欢迎加入群聊!";
-    public int welcomeType = 0;
 
     // 关键词回复
     public boolean keywordReplyEnabled = false;
@@ -77,23 +54,19 @@ public class ModuleConfig {
     // AI
     public boolean aiToolboxEnabled = false, imageGenEnabled = false, videoGenEnabled = false;
     public String arkApiKey = "";
-    public String arkImageModel = "doubao-seedream-4-5-251128";
     public String arkImageSize = "2K", arkImageFormat = "png";
-    public String arkVideoModel = "doubao-seedance-2-0-260128";
     public String arkVideoResolution = "720p";
     public int arkVideoDuration = 8;
-    public boolean voiceToTextEnabled = false;
 
     // DeepSeek
     public boolean deepseekEnabled = false;
     public boolean deepseekSmartReply = false, deepseekTranslate = false;
     public boolean deepseekSummary = false, deepseekAtReply = false;
-    public String deepseekApiKey = "", deepseekModel = "deepseek-chat";
+    public String deepseekModel = "deepseek-chat";
     public String deepseekPersona = "";
 
     // 安全
     public boolean antiRecall = false;
-    public boolean recallLogEnabled = false;
     public boolean antiDetection = true;          // 反Xposed/LSPosed检测
 
     // ============ WeChatPlus 增强功能 (24项) ============
@@ -104,7 +77,6 @@ public class ModuleConfig {
     public boolean batchMessageEnabled = true;
     public boolean autoRemarkEnabled = true;
     public boolean searchEnhanceEnabled = true;
-    public boolean notifyCustomEnabled = true;
     public boolean autoReplyEnabled = true;
 
     // 朋友圈
@@ -114,37 +86,22 @@ public class ModuleConfig {
     public boolean privacyFeaturesEnabled = true;
     public boolean loginMonitorEnabled = true;
     public boolean hideContactFieldsEnabled = true;
-    public boolean convPrivacyEnabled = true;
 
     // 联系人与群管
     public boolean deleteDetectEnabled = true;
-    public boolean contactExportEnabled = true;
 
     // 设置/其他
     public boolean stickyEnhanceEnabled = true;
     public boolean unreadBadgeEnabled = true;
     public boolean tabCustomEnabled = true;
     public boolean callFeaturesEnabled = true;
-    public boolean batchInviteGroupsEnabled = true;
     public boolean shakeCustomEnabled = true;
-
-    // 视频解析
-    public boolean videoParseEnabled = true;
 
     // 语音转发
     public boolean voiceForwardEnabled = true;
 
     // 禁止微信热更新(版本升级/Tinker热补丁)
     public boolean blockWechatUpdate = true;
-
-    // 群发
-    public Set<String> massSendTargetWxids = new HashSet<>();
-    public String massSendTextContent = "";
-    public long massSendInterval = 3000;
-
-    // 统计/投票
-    public boolean activityStatsEnabled = false, voteEnabled = false;
-    public List<String> groupManageList = new ArrayList<>();
 
     // 缓存目录
     public String cacheDir, mediaDir;
@@ -222,15 +179,41 @@ public class ModuleConfig {
 
     public static String getCurrentWxid() { return sCurrentWxid; }
 
+    /**
+     * 清理已移除功能遗留的配置键。
+     *
+     * <p>历史版本曾实现「会话消息预览隐私」(ConvPrivacy, 挂 notification.m0.a 改写通知内容为
+     * "[新消息]")、「通知增强」(NotifyCustom) 与「红包响铃/震动」(RedPacketAlert)。这些功能已
+     * 彻底移除, 其开关键若残留在存储中会误导排查, 故在加载配置时一次性清除。</p>
+     */
+    private static void purgeLegacyKeys(SharedPreferences prefs) {
+        String[] legacy = {
+            "ls_wp_convprivacy", "ls_wp_notify", "ls_wp_redalert",
+            "conv_privacy_level", "conv_hide_notification", "conv_hide_convlist",
+            "conv_privacy_list", "notify_priority_mode", "notify_avatar",
+            "notify_important_contacts", "quick_reply_phrases",
+            "rp_alert_vibrate", "rp_alert_ring",
+        };
+        try {
+            SharedPreferences.Editor e = null;
+            for (String k : legacy) {
+                if (prefs.contains(k)) {
+                    if (e == null) e = prefs.edit();
+                    e.remove(k);
+                }
+            }
+            if (e != null) e.apply();
+        } catch (Throwable ignored) {}
+    }
+
     public static ModuleConfig load(SharedPreferences prefs) {
         ModuleConfig cfg = new ModuleConfig();
         if (prefs == null) return cfg;
+        purgeLegacyKeys(prefs);
 
         cfg.masterSwitch = prefs.getBoolean("ls_master_switch", true);
-        cfg.ttsEngine = prefs.getString("ls_tts_engine", "system");
         cfg.peiyinApiKey = prefs.getString("ls_peiyin_apikey", "");
         cfg.peiyinVoiceId = prefs.getString("ls_peiyin_voiceid", "");
-        cfg.wusoundApiKey = prefs.getString("ls_wusound_apikey", "");
         cfg.wusoundVoiceId = prefs.getString("ls_wusound_voiceid", "");
         cfg.wusoundPromptId = prefs.getString("ls_wusound_promptid", "default");
 
@@ -249,7 +232,6 @@ public class ModuleConfig {
         cfg.announceMiniProgram = prefs.getBoolean("ls_announce_miniprogram", true);
         cfg.announceVideoChannel = prefs.getBoolean("ls_announce_videochannel", true);
         cfg.announceChatHistory = prefs.getBoolean("ls_announce_chathistory", true);
-        cfg.autoPlayVoice = true;
 
         cfg.announceIntervalMs = parseInt(prefs.getString("ls_announce_interval_ms", "0"), 0);
         cfg.textTruncateEnabled = prefs.getBoolean("ls_text_truncate", true);
@@ -261,17 +243,11 @@ public class ModuleConfig {
 
         cfg.autoAcceptFriend = prefs.getBoolean("ls_auto_accept_friend", false);
         cfg.autoAcceptFriendMsg = prefs.getString("ls_auto_accept_friend_msg", "你好呀，很高兴认识你!");
-        cfg.groupInviteEnabled = prefs.getBoolean("ls_group_invite_enabled", false);
-        cfg.groupInviteKeyword = prefs.getString("ls_group_invite_keyword", "加群");
-        cfg.leftGroupTipEnabled = prefs.getBoolean("ls_left_tip_enabled", false);
-        cfg.leftGroupTipMsg = prefs.getString("ls_left_tip_msg", "");
 
         cfg.aiToolboxEnabled = prefs.getBoolean("ls_aitoolbox_enabled", false);
         cfg.arkApiKey = prefs.getString("ls_ark_apikey", "");
-        cfg.arkImageModel = prefs.getString("ls_ark_img_model", "doubao-seedream-4-5-251128");
         cfg.arkImageSize = prefs.getString("ls_ark_img_size", "2K");
         cfg.arkImageFormat = prefs.getString("ls_ark_img_format", "png");
-        cfg.arkVideoModel = prefs.getString("ls_ark_vid_model", "doubao-seedance-2-0-260128");
         cfg.arkVideoDuration = parseInt(prefs.getString("ls_ark_vid_duration", "8"), 8);
         cfg.arkVideoResolution = prefs.getString("ls_ark_vid_resolution", "720p");
         cfg.imageGenEnabled = prefs.getBoolean("ls_img_gen_enabled", false);
@@ -282,11 +258,8 @@ public class ModuleConfig {
         cfg.deepseekTranslate = prefs.getBoolean("ls_ds_translate", false);
         cfg.deepseekSummary = prefs.getBoolean("ls_ds_summary", false);
         cfg.deepseekAtReply = prefs.getBoolean("ls_ds_at_reply", false);
-        cfg.deepseekApiKey = prefs.getString("ls_ds_apikey", "");
         cfg.deepseekModel = prefs.getString("ls_ds_model", "deepseek-chat");
         cfg.deepseekPersona = prefs.getString("ls_ds_persona", "");
-
-        cfg.recallLogEnabled = prefs.getBoolean("ls_recall_log", false);
 
         // WeChatPlus 增强功能
         cfg.typingIndicatorEnabled = prefs.getBoolean("ls_wp_typing", true);
@@ -295,20 +268,16 @@ public class ModuleConfig {
         cfg.batchMessageEnabled = prefs.getBoolean("ls_wp_batchmsg", true);
         cfg.autoRemarkEnabled = prefs.getBoolean("ls_wp_autoremark", true);
         cfg.searchEnhanceEnabled = prefs.getBoolean("ls_wp_search", true);
-        cfg.notifyCustomEnabled = prefs.getBoolean("ls_wp_notify", true);
         cfg.autoReplyEnabled = prefs.getBoolean("ls_wp_autoreply", true);
         cfg.snsFeaturesEnabled = prefs.getBoolean("ls_wp_sns", true);
         cfg.privacyFeaturesEnabled = prefs.getBoolean("ls_wp_privacy", true);
         cfg.loginMonitorEnabled = prefs.getBoolean("ls_wp_loginmon", true);
         cfg.hideContactFieldsEnabled = prefs.getBoolean("ls_wp_hidecontact", true);
-        cfg.convPrivacyEnabled = prefs.getBoolean("ls_wp_convprivacy", true);
         cfg.deleteDetectEnabled = prefs.getBoolean("ls_wp_deldetect", true);
-        cfg.contactExportEnabled = prefs.getBoolean("ls_wp_contactexp", true);
         cfg.stickyEnhanceEnabled = prefs.getBoolean("ls_wp_sticky", true);
         cfg.unreadBadgeEnabled = prefs.getBoolean("ls_wp_unread", true);
         cfg.tabCustomEnabled = prefs.getBoolean("ls_wp_tabcustom", true);
         cfg.callFeaturesEnabled = prefs.getBoolean("ls_wp_call", true);
-        cfg.batchInviteGroupsEnabled = prefs.getBoolean("ls_wp_batchinvitegroups", true);
         cfg.shakeCustomEnabled = prefs.getBoolean("ls_wp_shake", true);
         cfg.blockWechatUpdate = prefs.getBoolean("ls_wp_blockupdate", true);
 
@@ -319,9 +288,6 @@ public class ModuleConfig {
             for (int i = 0; i < swArr.length(); i++) cfg.sensitiveWords.add(swArr.getString(i));
         } catch (Exception e) {}
 
-        cfg.welcomeEnabled = prefs.getBoolean("ls_welcome_enabled", false);
-        cfg.welcomeMsg = prefs.getString("ls_welcome_msg", "欢迎加入群聊!");
-        cfg.welcomeType = parseInt(prefs.getString("ls_welcome_type", "0"), 0);
         cfg.keywordReplyEnabled = prefs.getBoolean("ls_kwreply_enabled", false);
         cfg.keywordReplyMap.clear();
         try {
@@ -336,48 +302,7 @@ public class ModuleConfig {
         } catch (Exception e) {}
         cfg.keywordRules.clear();
         cfg.keywordRules.addAll(KeywordRule.fromJson(prefs.getString("ls_kwreply_rules", "[]")));
-        cfg.antiAdEnabled = prefs.getBoolean("ls_antiad_enabled", false);
-        cfg.adKeywords.clear();
-        try {
-            JSONArray adArr = new JSONArray(prefs.getString("ls_ad_keywords", "[]"));
-            for (int i = 0; i < adArr.length(); i++) cfg.adKeywords.add(adArr.getString(i));
-        } catch (Exception e) {}
-        cfg.autoKickEnabled = prefs.getBoolean("ls_autokick_enabled", false);
-        cfg.kickThreshold = parseInt(prefs.getString("ls_kick_threshold", "3"), 3);
-        cfg.warnType = parseInt(prefs.getString("ls_warn_type", "0"), 0);
-        cfg.warnMsg = prefs.getString("ls_warn_msg", "请勿发送违规内容，警告！");
-        cfg.farewellType = parseInt(prefs.getString("ls_farewell_type", "0"), 0);
-        cfg.farewellMsg = prefs.getString("ls_farewell_msg", "已被移出群聊");
-        cfg.kickKeywords.clear();
-        try {
-            JSONArray kkArr = new JSONArray(prefs.getString("ls_kick_keywords", "[]"));
-            for (int i = 0; i < kkArr.length(); i++) cfg.kickKeywords.add(kkArr.getString(i));
-        } catch (Exception e) {}
-        cfg.blacklistEnabled = prefs.getBoolean("ls_blacklist_enabled", true);
-        cfg.blacklistWxids.clear();
-        try {
-            JSONArray blArr = new JSONArray(prefs.getString("ls_blacklist", "[]"));
-            for (int i = 0; i < blArr.length(); i++) {
-                JSONObject o = blArr.optJSONObject(i);
-                if (o != null) {
-                    String w = o.optString("wxid", "");
-                    if (!w.isEmpty()) cfg.blacklistWxids.add(w);
-                } else {
-                    String w = blArr.optString(i, "");
-                    if (!w.isEmpty()) cfg.blacklistWxids.add(w);
-                }
-            }
-        } catch (Exception e) {}
-        cfg.videoParseEnabled = prefs.getBoolean("ls_video_parse_enabled", true);
-        cfg.voiceToTextEnabled = prefs.getBoolean("ls_v2t_enabled", false);
         cfg.customAnnounceFormat = prefs.getString("ls_announce_fmt", "{sender}: {content}");
-        cfg.activityStatsEnabled = prefs.getBoolean("ls_activity_enabled", false);
-        cfg.voteEnabled = prefs.getBoolean("ls_vote_enabled", false);
-        cfg.groupManageList.clear();
-        try {
-            JSONArray gmArr = new JSONArray(prefs.getString("ls_group_manage_list", "[]"));
-            for (int i = 0; i < gmArr.length(); i++) cfg.groupManageList.add(gmArr.getString(i));
-        } catch (Exception e) {}
         cfg.antiRecall = prefs.getBoolean("ls_recall_enabled", false);
         cfg.antiDetection = prefs.getBoolean("ls_anti_detection", true);
 
@@ -407,10 +332,8 @@ public class ModuleConfig {
         if (prefs == null) return;
         SharedPreferences.Editor e = prefs.edit();
         e.putBoolean("ls_master_switch", masterSwitch);
-        e.putString("ls_tts_engine", ttsEngine);
         e.putString("ls_peiyin_apikey", peiyinApiKey);
         e.putString("ls_peiyin_voiceid", peiyinVoiceId);
-        e.putString("ls_wusound_apikey", wusoundApiKey);
         e.putString("ls_wusound_voiceid", wusoundVoiceId);
         e.putString("ls_wusound_promptid", wusoundPromptId);
         e.putBoolean("ls_announce_text", announceText);
@@ -437,16 +360,10 @@ public class ModuleConfig {
         e.putString("ls_quiet_end", quietEnd);
         e.putBoolean("ls_auto_accept_friend", autoAcceptFriend);
         e.putString("ls_auto_accept_friend_msg", autoAcceptFriendMsg);
-        e.putBoolean("ls_group_invite_enabled", groupInviteEnabled);
-        e.putString("ls_group_invite_keyword", groupInviteKeyword);
-        e.putBoolean("ls_left_tip_enabled", leftGroupTipEnabled);
-        e.putString("ls_left_tip_msg", leftGroupTipMsg);
         e.putBoolean("ls_aitoolbox_enabled", aiToolboxEnabled);
         e.putString("ls_ark_apikey", arkApiKey);
-        e.putString("ls_ark_img_model", arkImageModel);
         e.putString("ls_ark_img_size", arkImageSize);
         e.putString("ls_ark_img_format", arkImageFormat);
-        e.putString("ls_ark_vid_model", arkVideoModel);
         e.putString("ls_ark_vid_duration", String.valueOf(arkVideoDuration));
         e.putString("ls_ark_vid_resolution", arkVideoResolution);
         e.putBoolean("ls_img_gen_enabled", imageGenEnabled);
@@ -456,12 +373,10 @@ public class ModuleConfig {
         e.putBoolean("ls_ds_translate", deepseekTranslate);
         e.putBoolean("ls_ds_summary", deepseekSummary);
         e.putBoolean("ls_ds_at_reply", deepseekAtReply);
-        e.putString("ls_ds_apikey", deepseekApiKey);
         e.putString("ls_ds_model", deepseekModel);
         e.putString("ls_ds_persona", deepseekPersona);
         e.putBoolean("ls_recall_enabled", antiRecall);
         e.putBoolean("ls_anti_detection", antiDetection);
-        e.putBoolean("ls_recall_log", recallLogEnabled);
 
         // WeChatPlus 增强功能
         e.putBoolean("ls_wp_typing", typingIndicatorEnabled);
@@ -470,20 +385,16 @@ public class ModuleConfig {
         e.putBoolean("ls_wp_batchmsg", batchMessageEnabled);
         e.putBoolean("ls_wp_autoremark", autoRemarkEnabled);
         e.putBoolean("ls_wp_search", searchEnhanceEnabled);
-        e.putBoolean("ls_wp_notify", notifyCustomEnabled);
         e.putBoolean("ls_wp_autoreply", autoReplyEnabled);
         e.putBoolean("ls_wp_sns", snsFeaturesEnabled);
         e.putBoolean("ls_wp_privacy", privacyFeaturesEnabled);
         e.putBoolean("ls_wp_loginmon", loginMonitorEnabled);
         e.putBoolean("ls_wp_hidecontact", hideContactFieldsEnabled);
-        e.putBoolean("ls_wp_convprivacy", convPrivacyEnabled);
         e.putBoolean("ls_wp_deldetect", deleteDetectEnabled);
-        e.putBoolean("ls_wp_contactexp", contactExportEnabled);
         e.putBoolean("ls_wp_sticky", stickyEnhanceEnabled);
         e.putBoolean("ls_wp_unread", unreadBadgeEnabled);
         e.putBoolean("ls_wp_tabcustom", tabCustomEnabled);
         e.putBoolean("ls_wp_call", callFeaturesEnabled);
-        e.putBoolean("ls_wp_batchinvitegroups", batchInviteGroupsEnabled);
         e.putBoolean("ls_wp_shake", shakeCustomEnabled);
         e.putBoolean("ls_wp_blockupdate", blockWechatUpdate);
 
@@ -491,9 +402,6 @@ public class ModuleConfig {
         JSONArray swArr = new JSONArray();
         for (String w : sensitiveWords) swArr.put(w);
         e.putString("ls_sensitive_words", swArr.toString());
-        e.putBoolean("ls_welcome_enabled", welcomeEnabled);
-        e.putString("ls_welcome_msg", welcomeMsg);
-        e.putString("ls_welcome_type", String.valueOf(welcomeType));
         e.putBoolean("ls_kwreply_enabled", keywordReplyEnabled);
         JSONObject kwObj = new JSONObject();
         for (String kw : keywordReplyMap.keySet()) {
@@ -503,34 +411,6 @@ public class ModuleConfig {
         }
         e.putString("ls_kwreply_map", kwObj.toString());
         e.putString("ls_kwreply_rules", KeywordRule.toJson(keywordRules));
-        e.putBoolean("ls_antiad_enabled", antiAdEnabled);
-        JSONArray adArr = new JSONArray();
-        for (String a : adKeywords) adArr.put(a);
-        e.putString("ls_ad_keywords", adArr.toString());
-        e.putBoolean("ls_autokick_enabled", autoKickEnabled);
-        e.putString("ls_kick_threshold", String.valueOf(kickThreshold));
-        e.putString("ls_warn_type", String.valueOf(warnType));
-        e.putString("ls_warn_msg", warnMsg);
-        e.putString("ls_farewell_type", String.valueOf(farewellType));
-        e.putString("ls_farewell_msg", farewellMsg);
-        JSONArray kkArr = new JSONArray();
-        for (String k : kickKeywords) kkArr.put(k);
-        e.putString("ls_kick_keywords", kkArr.toString());
-        e.putBoolean("ls_blacklist_enabled", blacklistEnabled);
-        JSONArray blArr = new JSONArray();
-        for (String w : blacklistWxids) {
-            JSONObject o = new JSONObject();
-            try { o.put("wxid", w); } catch (Exception ex) {}
-            blArr.put(o);
-        }
-        e.putString("ls_blacklist", blArr.toString());
-        e.putBoolean("ls_video_parse_enabled", videoParseEnabled);
-        e.putBoolean("ls_v2t_enabled", voiceToTextEnabled);
-        e.putBoolean("ls_activity_enabled", activityStatsEnabled);
-        e.putBoolean("ls_vote_enabled", voteEnabled);
-        JSONArray gmArr = new JSONArray();
-        for (String g : groupManageList) gmArr.put(g);
-        e.putString("ls_group_manage_list", gmArr.toString());
 
         StringBuilder wlSb = new StringBuilder();
         for (String id : announceWhitelist) {

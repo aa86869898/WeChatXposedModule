@@ -125,7 +125,8 @@ public class ShadowLabelStore {
             if (sPrefs == null) return;
             JSONArray arr = new JSONArray();
             for (int id : order) arr.put(id);
-            sPrefs.edit().putString(KEY_LABEL_ORDER, arr.toString()).commit();
+            // v955(问题20): 用 apply() 异步落盘, 避免主线程同步 commit 阻塞
+            sPrefs.edit().putString(KEY_LABEL_ORDER, arr.toString()).apply();
         } catch (Throwable e) { LogWriter.log("ShadowStore", "saveOrder: " + e.getMessage()); }
     }
 
@@ -134,7 +135,8 @@ public class ShadowLabelStore {
             if (sPrefs == null) return;
             JSONArray arr = new JSONArray();
             for (ShadowLabel l : list) arr.put(l.toJson());
-            sPrefs.edit().putString(KEY_LABELS, arr.toString()).commit();
+            // v955(问题20): 用 apply() 异步落盘, 避免主线程同步 commit 阻塞
+            sPrefs.edit().putString(KEY_LABELS, arr.toString()).apply();
         } catch (Throwable e) { LogWriter.log("ShadowStore", "save error: " + e.getMessage()); }
     }
 }

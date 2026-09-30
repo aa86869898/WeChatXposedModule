@@ -40,6 +40,10 @@ public class EqBarsView extends View {
     private static final float MAG_FLOOR = 6f;
     private static final float SILENCE_FLOOR = 2f;
     private static final long FLOW_DURATION_MS = 3200L;
+    /** v30018: 柱组（旋律柱）默认占视图宽度 80%，居中，左右各留 10%。 */
+    private static final float SPAN_RATIO = 0.80f;
+    /** 当前柱组占宽比例，可按页面覆盖（如播放器页 90%）。 */
+    private float mSpanRatio = SPAN_RATIO;
 
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mRect = new RectF();
@@ -55,10 +59,18 @@ public class EqBarsView extends View {
     private ValueAnimator mAnim;
     private Visualizer mVisualizer;
     private boolean mUsingVisualizer;
+    private boolean mFallback = true;
     private float mRef = MAG_FLOOR;
     private long mLastFallbackMs;
     private long mLastFftMs;
     private long mLastJitterMs;
+
+    // v1139: 精确模式 —— 由播放线程直接推送 PCM, 本地 FFT 分析, 不依赖 Visualizer
+    private static final int PCM_FFT = 1024;
+    private final Object mPcmLock = new Object();
+    private final float[] mPcmRing = new float[PCM_FFT];
+    private int mPcmFill;
+    private int mPcmRate = 24000;
 
     // 流光渐变：单例 shader + 平移矩阵，逐帧改变相位形成横向流动
     private LinearGradient mGrad;
@@ -89,19 +101,41 @@ public class EqBarsView extends View {
 
     /** 开始播放态动画（无音频源时使用回退律动）。 */
     public void start() {
-        start(null);
+        startInternal(null, true);
     }
 
     /** 开始播放态动画，并尝试绑定播放器音频频谱。 */
     public void start(MediaPlayer player) {
+        startInternal(player, true);
+    }
+
+    /**
+     * v1139: 开始「精确跟随」动画 —— 不做随机回退，柱高完全由
+     * {@link #pushPcm(byte[], int, int)} 推送的 PCM 频谱驱动；无数据时保持静止。
+     */
+    public void startExact() {
+        startInternal(null, false);
+    }
+
+    private void startInternal(MediaPlayer player, boolean fallback) {
         if (mAnim != null && mAnim.isStarted()) return;
-        attachVisualizer(player);
+        detachVisualizer();
+        mFallback = fallback;
+        mUsingVisualizer = false;
+        if (fallback && player != null) {
+            attachVisualizer(player);
+        }
         mLastFallbackMs = 0L;
         mLastFftMs = 0L;
         mLastJitterMs = 0L;
         mRef = MAG_FLOOR;
         for (int i = 0; i < BAR_COUNT; i++) {
             mBandPeak[i] = MAG_FLOOR;
+            mTarget[i] = 0f;
+            mCurrent[i] = 0f;
+        }
+        synchronized (mPcmLock) {
+            mPcmFill = 0;
         }
         mAnim = ValueAnimator.ofFloat(0f, 1f);
         mAnim.setDuration(1000L);
@@ -135,14 +169,15 @@ public class EqBarsView extends View {
 
     private void onFrame() {
         long now = SystemClock.uptimeMillis();
-        if (now - mLastJitterMs >= 130L) {
+        boolean exact = !mFallback && !mUsingVisualizer;
+        if (!exact && now - mLastJitterMs >= 130L) {
             mLastJitterMs = now;
             for (int i = 0; i < BAR_COUNT; i++) {
                 mJitter[i] = 0.86f + mRandom.nextFloat() * 0.14f;
             }
         }
         if (!mUsingVisualizer) {
-            if (now - mLastFallbackMs >= FALLBACK_INTERVAL_MS) {
+            if (mFallback && now - mLastFallbackMs >= FALLBACK_INTERVAL_MS) {
                 mLastFallbackMs = now;
                 for (int i = 0; i < BAR_COUNT; i++) {
                     mTarget[i] = 0.12f + mRandom.nextFloat() * 0.78f;
@@ -156,7 +191,7 @@ public class EqBarsView extends View {
             }
         }
         for (int i = 0; i < BAR_COUNT; i++) {
-            float t = mTarget[i] * mJitter[i];
+            float t = mTarget[i] * (exact ? 1f : mJitter[i]);
             if (t > 1f) t = 1f;
             float cur = mCurrent[i];
             float k = t > cur ? mAttack[i] : mDecay[i];
@@ -228,7 +263,6 @@ public class EqBarsView extends View {
         int sr = samplingRate > 0 ? samplingRate : 44100;
 
         float[] mags = new float[BAR_COUNT];
-        float frameSum = 0f;
         for (int b = 0; b < BAR_COUNT; b++) {
             int ks = bandFreq(b, capture, sr, bins);
             int ke = Math.max(ks + 1, bandFreq(b + 1, capture, sr, bins));
@@ -240,10 +274,18 @@ public class EqBarsView extends View {
                 sum += (float) Math.sqrt(re * re + im * im);
                 n++;
             }
-            float mag = n > 0 ? sum / n : 0f;
-            mags[b] = mag;
-            frameSum += mag;
+            mags[b] = n > 0 ? sum / n : 0f;
         }
+        updateTargets(mags);
+    }
+
+    /**
+     * 把 22 个频段能量映射为柱目标高度：每柱独立峰值归一（快起慢落）+ 整体响度门限。
+     * Visualizer FFT 与本地 PCM FFT 共用此逻辑，保证两条链路观感一致。
+     */
+    private void updateTargets(float[] mags) {
+        float frameSum = 0f;
+        for (int i = 0; i < BAR_COUNT; i++) frameSum += mags[i];
         float frameMean = frameSum / BAR_COUNT;
 
         for (int i = 0; i < BAR_COUNT; i++) {
@@ -278,11 +320,105 @@ public class EqBarsView extends View {
     }
 
     private int bandFreq(int band, int capture, int samplingRate, int bins) {
+        return bandFreq(band, capture, samplingRate, bins, 16000.0);
+    }
+
+    private int bandFreq(int band, int capture, int samplingRate, int bins, double fMax) {
         double fMin = 60.0;
-        double fMax = 16000.0;
+        // 不超过 Nyquist 的 98%, 避免采样率受限时高频段全部挤到最后一个 bin
+        double nyq = samplingRate / 2.0 * 0.98;
+        if (fMax > nyq) fMax = nyq;
         double f = fMin * Math.pow(fMax / fMin, band / (double) BAR_COUNT);
         int k = (int) (f * capture / (double) samplingRate);
         return Math.max(1, Math.min(bins - 1, k));
+    }
+
+    /** v1139: 设置精确模式 PCM 采样率（默认 24kHz）。 */
+    public void setPcmSampleRate(int rate) {
+        if (rate > 0) mPcmRate = rate;
+    }
+
+    /** 设置柱组（旋律柱）占视图宽度的比例，取值 (0, 1]，默认 80%。 */
+    public void setSpanRatio(float ratio) {
+        if (ratio > 0f && ratio <= 1f) {
+            mSpanRatio = ratio;
+            invalidate();
+        }
+    }
+
+    /**
+     * v1139: 精确模式数据入口 —— 播放线程把 16bit LE mono PCM 块推入，
+     * 内部对最近 {@link #PCM_FFT} 个样本做 Hann 窗 FFT 并更新 22 柱目标高度，
+     * 从而让柱体精准跟随音乐的低/中/高频与节奏。由播放线程调用，内部加锁。
+     */
+    public void pushPcm(byte[] pcm, int offset, int len) {
+        if (pcm == null || len < 2) return;
+        if (mAnim == null || !mAnim.isStarted()) return;
+        synchronized (mPcmLock) {
+            int end = Math.min(pcm.length, offset + len);
+            for (int i = offset; i + 1 < end; i += 2) {
+                int lo = pcm[i] & 0xFF;
+                int hi = pcm[i + 1];
+                mPcmRing[mPcmFill] = (short) ((hi << 8) | lo);
+                mPcmFill = (mPcmFill + 1) % PCM_FFT;
+            }
+            analyzePcmLocked();
+        }
+    }
+
+    private void analyzePcmLocked() {
+        float[] re = new float[PCM_FFT];
+        float[] im = new float[PCM_FFT];
+        for (int i = 0; i < PCM_FFT; i++) {
+            float s = mPcmRing[(mPcmFill + i) % PCM_FFT] / 32768f;
+            re[i] = s * (float) (0.5 - 0.5 * Math.cos(2.0 * Math.PI * i / (PCM_FFT - 1)));
+        }
+        fft(re, im, PCM_FFT);
+        int bins = PCM_FFT / 2;
+        float[] mags = new float[BAR_COUNT];
+        for (int b = 0; b < BAR_COUNT; b++) {
+            int ks = bandFreq(b, PCM_FFT, mPcmRate, bins, 16000.0);
+            int ke = Math.max(ks + 1, bandFreq(b + 1, PCM_FFT, mPcmRate, bins, 16000.0));
+            float sum = 0f;
+            int n = 0;
+            for (int k = ks; k < ke && k < bins; k++) {
+                sum += (float) Math.sqrt(re[k] * re[k] + im[k] * im[k]);
+                n++;
+            }
+            mags[b] = n > 0 ? sum / n : 0f;
+        }
+        updateTargets(mags);
+    }
+
+    /** 原地 radix-2 复数 FFT（n 为 2 的幂）。 */
+    private static void fft(float[] re, float[] im, int n) {
+        for (int i = 1, j = 0; i < n; i++) {
+            int bit = n >> 1;
+            for (; (j & bit) != 0; bit >>= 1) j ^= bit;
+            j ^= bit;
+            if (i < j) {
+                float t = re[i]; re[i] = re[j]; re[j] = t;
+                t = im[i]; im[i] = im[j]; im[j] = t;
+            }
+        }
+        for (int len = 2; len <= n; len <<= 1) {
+            int half = len >> 1;
+            double ang = -2.0 * Math.PI / len;
+            float wr = (float) Math.cos(ang), wi = (float) Math.sin(ang);
+            for (int i = 0; i < n; i += len) {
+                float cwr = 1f, cwi = 0f;
+                for (int k = 0; k < half; k++) {
+                    float ur = re[i + k], ui = im[i + k];
+                    float vr = re[i + k + half] * cwr - im[i + k + half] * cwi;
+                    float vi = re[i + k + half] * cwi + im[i + k + half] * cwr;
+                    re[i + k] = ur + vr; im[i + k] = ui + vi;
+                    re[i + k + half] = ur - vr; im[i + k + half] = ui - vi;
+                    float nwr = cwr * wr - cwi * wi;
+                    cwi = cwr * wi + cwi * wr;
+                    cwr = nwr;
+                }
+            }
+        }
     }
 
     // ==================== 绘制 ====================
@@ -314,16 +450,19 @@ public class EqBarsView extends View {
 
         float d = getResources().getDisplayMetrics().density;
         float gap = 3f * d;
-        float barW = (w - gap * (BAR_COUNT - 1)) / BAR_COUNT;
+        // 旋律柱占视图宽度指定比例并居中
+        float span = w * mSpanRatio;
+        float spanLeft = (w - span) / 2f;
+        float barW = (span - gap * (BAR_COUNT - 1)) / BAR_COUNT;
         if (barW <= 0f) return;
         float radius = Math.min(barW, 4f * d);
 
         // 流光渐变：横向循环平移相位
         ensureGradient(w);
         if (mGrad != null) {
-            float span = Math.max(1f, w * 2f);
+            float flowSpan = Math.max(1f, w * 2f);
             float phase = (SystemClock.uptimeMillis() % FLOW_DURATION_MS) / (float) FLOW_DURATION_MS;
-            mGradMatrix.setTranslate(phase * span - span / 2f, 0f);
+            mGradMatrix.setTranslate(phase * flowSpan - flowSpan / 2f, 0f);
             mGrad.setLocalMatrix(mGradMatrix);
         }
 
@@ -332,7 +471,7 @@ public class EqBarsView extends View {
             if (v < 0f) v = 0f;
             else if (v > 1f) v = 1f;
             float bh = h * (0.06f + 0.94f * v);
-            float left = i * (barW + gap);
+            float left = spanLeft + i * (barW + gap);
             mRect.set(left, h - bh, left + barW, h);
             canvas.drawRoundRect(mRect, radius, radius, mPaint);
         }

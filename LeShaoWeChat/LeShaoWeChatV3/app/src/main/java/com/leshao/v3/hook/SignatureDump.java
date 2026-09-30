@@ -1,5 +1,6 @@
 package com.leshao.v3.hook;
 
+import com.leshao.v3.BuildConfig;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.PathUtil;
 
@@ -24,7 +25,8 @@ import java.lang.reflect.Modifier;
 public class SignatureDump {
 
     private static final String TAG = "SigDump";
-    public static volatile boolean ENABLED = true;
+    /** v1131: 仅 debug 构建默认开启, 生产 release 不再每次启动全量 dump。 */
+    public static volatile boolean ENABLED = BuildConfig.DEBUG;
 
     private static BufferedWriter sWriter;
 

@@ -2,10 +2,6 @@ package com.leshao.v3.hook;
 
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
-import android.widget.TextView;
-import java.io.File;
-import java.io.FileWriter;
-import java.text.SimpleDateFormat;
 
 /**
  * 发送工具类 — 仅保留文本消息发送能力。
@@ -13,19 +9,27 @@ import java.text.SimpleDateFormat;
  */
 public class GroupFeatures {
 
-    private static final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-    private static File logFile = new File("/sdcard/LeShaoV3Logs/group_changes.log");
-    private static final Object logLock = new Object();
-    private static Object sMsgStorage;
-
     public static void sendTextMessage(ClassLoader cl, String talker, String text) {
+        if (talker == null || talker.isEmpty() || text == null || text.isEmpty()) return;
         // 8.0.78(3180): 优先走 qs5.v5 新框架文本 (多类型群发2_新.md §3.1)
         try {
-            com.leshao.v3.wm.utils.WmReflect.sendTextMsg(cl, text, talker);
-            XposedBridge.log("[Group] 文本已通过 qs5.v5 发送: " + talker);
-            return;
+            if (com.leshao.v3.wm.utils.WmReflect.sendTextMsg(cl, text, talker)) {
+                XposedBridge.log("[Group] 文本已通过 qs5.v5 发送: " + talker);
+                return;
+            }
+            XposedBridge.log("[Group] qs5.v5 sendTextMsg 未成功(返回 false), 回退 WeChatMessenger");
         } catch (Throwable t) {
-            XposedBridge.log("[Group] qs5.v5 发送失败, 回退 e9 入库: " + t.getMessage());
+            XposedBridge.log("[Group] qs5.v5 发送异常, 回退 WeChatMessenger: " + t.getMessage());
+        }
+        // 回退: AI 模块标准发送链(e9 isSend=1 -> f9.Bb -> v51.r0 -> NetSceneQueue.h)
+        try {
+            if (com.leshao.ai.hook.wechat.WeChatMessenger.sendText(talker, text, cl)) {
+                XposedBridge.log("[Group] 文本已通过 WeChatMessenger 发送: " + talker);
+                return;
+            }
+            XposedBridge.log("[Group] WeChatMessenger 未成功, 回退 e9 入库");
+        } catch (Throwable t) {
+            XposedBridge.log("[Group] WeChatMessenger 异常, 回退 e9 入库: " + t.getMessage());
         }
         try {
             Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
@@ -49,23 +53,16 @@ public class GroupFeatures {
                 XposedHelpers.callMethod(msg, "setType", 1);
             } catch (Throwable ignored) {}
 
-            if (sMsgStorage != null) {
-                long msgId = System.currentTimeMillis();
-                XposedHelpers.callMethod(sMsgStorage, "Ra", msgId, msg);
-                XposedBridge.log("[Group] 消息已插入DB: " + text.substring(0, Math.min(20, text.length())));
-            } else {
-                // 兜底: f9.yb(e9) 入库
-                try {
-                    Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
-                    Object ctx = com.leshao.v3.ContextManager.getAppContext();
-                    Object y = XposedHelpers.callStaticMethod(f9, "yb", msg, 0);
-                    if (y != null) {
-                        XposedBridge.log("[Group] 消息已通过 f9.yb 入库");
-                    }
-                } catch (Throwable t3) {
-                    XposedBridge.log("[Group] f9.yb 失败, 回退 Footer: " + t3.getMessage());
-                    sendViaFooter(cl, talker, text);
+            // 兜底: f9.yb(e9) 入库
+            try {
+                Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
+                Object y = XposedHelpers.callStaticMethod(f9, "yb", msg, 0);
+                if (y != null) {
+                    XposedBridge.log("[Group] 消息已通过 f9.yb 入库");
                 }
+            } catch (Throwable t3) {
+                XposedBridge.log("[Group] f9.yb 失败, 回退 Footer: " + t3.getMessage());
+                sendViaFooter(cl, talker, text);
             }
         } catch (Throwable t) {
             XposedBridge.log("[Group] 发送失败: " + t.getMessage());

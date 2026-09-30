@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>播放器 · 功能行 + 传输行 · 换风格换图标 10 套</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  :root { --page1:#F6F2FF; --page2:#ECE4FA; --ink:#2A2340; --ink2:#6F6389; --g0:#8B5CF6; --g1:#D8B4FE; --g2:#FFAFCC; }
+  body.darkpage { --page1:#100A18; --page2:#191026; --ink:#EDE7FB; --ink2:#B0A0D2; }
+  body { font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--ink);
+    min-height: 100vh; padding: 26px 16px 90px; background: linear-gradient(180deg, var(--page1), var(--page2)) fixed; }
+  .head { max-width: 1520px; margin: 0 auto; }
+  .head h1 { font-size: 23px; }
+  .head h1 em { font-style: normal; background: linear-gradient(92deg, var(--g0), var(--g1), var(--g2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .head p { font-size: 12.5px; color: var(--ink2); margin-top: 9px; line-height: 1.95; max-width: 1180px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 14px; background: rgba(255,255,255,.72); border: 1px solid rgba(139,92,246,.18);
+    border-radius: 16px; padding: 11px 14px; max-width: 1180px; box-shadow: 0 10px 24px rgba(96,66,160,.1); backdrop-filter: blur(8px); }
+  body.darkpage .bar { background: rgba(30,22,51,.82); border-color: rgba(159,123,255,.24); }
+  .bar button { border: none; cursor: pointer; font-weight: 800; font-size: 12.5px; color: #fff; background: linear-gradient(135deg, var(--g0), var(--g1)); padding: 9px 16px; border-radius: 11px; }
+  .bar .tag { font-size: 12px; color: var(--ink2); font-weight: 700; }
+
+  .grid { max-width: 1520px; margin: 28px auto 0; display: flex; flex-direction: column; gap: 44px; }
+  .opt { display: flex; flex-direction: column; gap: 14px; }
+  .top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .label { font-size: 15px; font-weight: 900; }
+  .label b { font-size: 11px; color: #fff; background: linear-gradient(135deg, var(--g0), var(--g2)); padding: 3px 9px; border-radius: 999px; margin-right: 9px; }
+  .spec { font-size: 12px; color: var(--g0); font-weight: 700; }
+  .desc { font-size: 12px; color: var(--ink2); line-height: 1.7; }
+  .wrap { display: flex; gap: 30px; flex-wrap: wrap; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .col > .t { font-size: 11px; font-weight: 800; color: var(--ink2); letter-spacing: .5px; }
+
+  /* ---- 主题变量作用域：手机与图标条共用 ---- */
+  .th-light { --bg:#F7F4FF; --bg2:#ECE4FA; --card:#FFFFFF; --t1:#2A2340; --t2:#6F6389; --line:#ECE4FA; --chip:#F1EAFC;
+    --g0:#8B5CF6; --g1:#D8B4FE; --g2:#FFAFCC; --ong:#fff; --shadow:0 14px 34px rgba(80,56,150,.16); }
+  .th-dark { --bg:#120C1B; --bg2:#1A1226; --card:#1E1633; --t1:#EDE7FB; --t2:#B0A0D2; --line:#2C2145; --chip:#241A3A;
+    --g0:#9F7BFF; --g1:#DCC3FF; --g2:#FFB8D4; --ong:#fff; --shadow:0 14px 34px rgba(0,0,0,.5); }
+
+  /* ---- 图标条 ---- */
+  .strip { border-radius: 18px; padding: 12px 10px 9px; display: flex; gap: 4px; width: 390px;
+    background: linear-gradient(180deg, var(--bg), var(--bg2)); border: 1px solid var(--line); }
+  .strip .cell { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .strip .cell .lb { font-size: 9.5px; color: var(--t2); }
+  .strip .cell svg { display: block; }
+
+  /* ---- 手机 ---- */
+  .phone { width: 390px; height: 844px; border-radius: 44px; overflow: hidden; position: relative;
+    box-shadow: 0 22px 52px rgba(60,40,110,.26), 0 0 0 9px rgba(20,12,32,.86); }
+  .phone.dark { box-shadow: 0 22px 52px rgba(0,0,0,.6), 0 0 0 9px rgba(0,0,0,.9); }
+  .status { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font-size: 12.5px; font-weight: 800; color: var(--t1); }
+  .screen { position: absolute; inset: 44px 0 0 0; display: flex; flex-direction: column; padding: 0 20px; color: var(--t1);
+    background: linear-gradient(180deg, var(--bg), var(--bg2)); }
+  .pgrow { flex: 1; min-height: 2px; }
+  .pback { font-size: 13px; font-weight: 800; color: var(--g0); padding-top: 6px; }
+  .ptitle { text-align: center; font-size: 20px; font-weight: 900; }
+  .partist { text-align: center; font-size: 12.5px; color: var(--t2); margin-top: 4px; }
+  .pdisc { width: 158px; height: 158px; margin: 0 auto; border-radius: 50%; position: relative;
+    background: radial-gradient(circle at 34% 30%, var(--g1), var(--g2) 42%, var(--g0) 78%);
+    box-shadow: 0 18px 40px rgba(120,80,200,.35), inset 0 0 0 12px rgba(255,255,255,.1); }
+  .pdisc::before { content: ""; position: absolute; inset: 0; border-radius: 50%;
+    background: conic-gradient(from 0deg, rgba(255,255,255,0), rgba(255,255,255,.34), rgba(255,255,255,0) 40%, rgba(255,255,255,.18) 70%, rgba(255,255,255,0));
+    animation: spin 7s linear infinite; }
+  .pdisc span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 28px; color: #fff; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .peq { display: flex; align-items: flex-end; justify-content: center; gap: 5px; height: 96px; }
+  .peq i { width: 7px; border-radius: 6px 6px 3px 3px; background: linear-gradient(180deg, var(--g1), var(--g0), var(--g2)); animation: bump 1.05s ease-in-out infinite; }
+  @keyframes bump { 0%,100% { transform: scaleY(.28); } 50% { transform: scaleY(1); } }
+  .ptrack { height: 5px; border-radius: 999px; background: var(--chip); overflow: hidden; }
+  .ptrack > i { display: block; height: 100%; width: 40%; border-radius: 999px; background: linear-gradient(90deg, var(--g0), var(--g1), var(--g2)); }
+  .ptimes { display: flex; justify-content: space-between; font-size: 11px; color: var(--t2); margin-top: 6px; font-variant-numeric: tabular-nums; }
+
+  /* 功能行 + 传输行 通用 */
+  .frow { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .fbtn { appearance: none; border: 0; background: transparent; font: inherit; color: var(--t2); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 6px 4px; }
+  .fbtn .fl { font-size: 10px; }
+  .trow { display: flex; align-items: center; justify-content: center; gap: 30px; position: relative; }
+  .tico { appearance: none; border: 0; background: transparent; cursor: pointer; color: var(--t1); display: grid; place-items: center; padding: 4px; }
+  .torder { position: absolute; left: 0; }
+  .tplay { width: 64px; height: 64px; border: 0; cursor: pointer; display: grid; place-items: center; color: #fff;
+    background: linear-gradient(135deg, var(--g0), var(--g1), var(--g2)); box-shadow: 0 12px 26px rgba(139,92,246,.42); border-radius: 50%; }
+  .nav { display: flex; align-items: center; margin: 0 -20px; padding: 9px 8px 13px; }
+  .ni { flex: 1; appearance: none; border: 0; background: transparent; font: inherit; color: var(--t2); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0; position: relative; }
+  .ni .ni-i { font-size: 19px; line-height: 1; }
+  .ni .ni-l { font-size: 10px; }
+  .ni.on { color: var(--g0); font-weight: 800; }
+
+  /* ================= 10 套风格 ================= */
+  /* 01 线性描边 */
+  .s1 .frow { justify-content: space-around; }
+  .s1 .nav { border-top: 1px solid var(--line); }
+  /* 02 实心填充 */
+  .s2 .frow { justify-content: space-around; }
+  .s2 .tplay { border-radius: 22px; }
+  .s2 .nav { background: var(--card); }
+  /* 03 双色圆角 */
+  .s3 .frow { justify-content: space-around; }
+  .s3 .tplay { box-shadow: 0 0 0 6px color-mix(in srgb, var(--g1) 45%, transparent), 0 12px 26px rgba(139,92,246,.4); }
+  .s3 .nav { background: var(--chip); }
+  /* 04 方角几何 */
+  .s4 .frow { justify-content: space-around; }
+  .s4 .tplay { border-radius: 14px; }
+  .s4 .nav { background: var(--card); border-top: 2px solid var(--g0); }
+  /* 05 圆头粗线 */
+  .s5 .frow { justify-content: space-around; }
+  .s5 .tplay { width: 70px; height: 70px; }
+  .s5 .nav { background: var(--card); }
+  /* 06 极细科技 */
+  .s6 .frow { justify-content: space-around; }
+  .s6 .tplay { background: none; color: var(--g0); box-shadow: inset 0 0 0 2px var(--g0); }
+  .s6 .trow { gap: 26px; }
+  .s6 .nav { border-top: 1px solid var(--line); }
+  /* 07 渐变描边 */
+  .s7 .frow { justify-content: space-around; }
+  .s7 .tplay { box-shadow: 0 0 22px rgba(139,92,246,.55); }
+  .s7 .nav { background: var(--card); }
+  /* 08 描边+实心混搭 */
+  .s8 .frow { justify-content: space-around; }
+  .s8 .tplay { box-shadow: 0 0 0 2px var(--g2), 0 12px 26px rgba(255,175,204,.4); }
+  .s8 .nav { background: var(--card); }
+  /* 09 块面像素 */
+  .s9 .frow { justify-content: space-around; }
+  .s9 .tplay { border-radius: 10px; }
+  .s9 .nav { background: var(--card); }
+  /* 10 手绘感 */
+  .s10 .frow { justify-content: space-around; }
+  .s10 .tplay { box-shadow: 0 0 0 3px color-mix(in srgb, var(--g1) 60%, transparent); }
+  .s10 .nav { background: var(--card); border-top: 1px dashed var(--line); }
+
+  /* 功能行容器样式（与图标语言配套） */
+  .s3 .frow, .s7 .frow, .s8 .frow { background: var(--chip); border-radius: 20px; padding: 9px 6px; }
+  .s7 .frow { background: linear-gradient(100deg, color-mix(in srgb, var(--g0) 16%, transparent), color-mix(in srgb, var(--g2) 16%, transparent)); }
+  .s4 .frow { border: 1.5px solid var(--line); border-radius: 14px; padding: 9px 6px; }
+  .s9 .frow { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 9px 6px; }
+  .s10 .frow { border-bottom: 1.5px dashed var(--line); padding-bottom: 12px; }
+  .s2 .frow { background: var(--chip); border-radius: 16px; padding: 9px 6px; }
+  .s5 .frow { background: var(--card); border-radius: 18px; padding: 9px 6px; box-shadow: var(--shadow); }
+  .s6 .frow { border: 1px solid var(--line); border-radius: 16px; padding: 9px 6px; }
+
+  .paused .pdisc::before, .paused .peq i { animation-play-state: paused; }
+</style>
+</head>
+<body>
+<div class="head">
+  <h1>播放器 · <em>换风格换图标 10 套</em>（功能行 + 传输行）</h1>
+  <p>①功能行「收藏 / 下载 / 发送 / 音质」；②传输行「播放顺序 / 上一首 / 播放 / 下一首」。每套采用不同图标语言（描边粗细 / 实心 / 双色 / 方角 / 极细 / 渐变 / 混搭 / 块面 / 手绘）并配套不同的容器与播放键造型。每套给出放大图标条 + 手机实景，浅色 / 暗色双适配。</p>
+  <div class="bar">
+    <span class="tag">放大图标条可逐套比对图标造型</span>
+    <button id="animBtn">暂停动画</button>
+    <button id="pageBtn">页面暗色</button>
+  </div>
+</div>
+<div class="grid" id="grid"></div>
+
+<script>
+(function () {
+  /* ---------- 路径定义 ---------- */
+  var FAV='M12 20.5C12 20.5 3.6 15.5 3.6 9.8A4.3 4.3 0 0 1 12 7.5a4.3 4.3 0 0 1 8.4 2.3c0 5.7-8.4 10.7-8.4 10.7Z';
+  var FAV_BLOCK='M12 20.6 4 12.7 4 7.5 7.2 5.6 9.6 7.4 12 5.2 14.4 7.4 16.8 5.6 20 7.5 20 12.7Z';
+  var DL_A='M12 3v10.8', DL_H='M7.6 10 12 14.4 16.4 10', DL_T='M4.6 16.4v2.1A2.5 2.5 0 0 0 7.1 21h9.8a2.5 2.5 0 0 0 2.5-2.5v-2.1';
+  var DL_A2='M12 3v13.2', DL_H2='M6.8 11 12 16.2 17.2 11', DL_L='M5 21h14';
+  var PLANE='M3.4 11.6 20.6 3.5 13.6 20.6 11.2 13.1Z', PLANE2='M11.2 13.1 20.6 3.5';
+  var SA='M4 12h13.6', SH='M13 7.4 17.6 12 13 16.6';
+  var WAVE='M3.5 10v4M7.5 7v10M11.5 4v16M15.5 7v10M19.5 10v4';
+  var DIA='M12 3.4 20.6 12 12 20.6 3.4 12Z', SL='M4 8h16M4 16h16';
+  var RA='M4 10a5 5 0 0 1 5-5h8.6', RAH='M14.8 2.6 17.9 5.6 14.8 8.6', RB='M20 14a5 5 0 0 1-5 5H6.4', RBH='M9.2 21.4 6.1 18.4 9.2 15.4';
+  var CIRC='M12 4a8 8 0 1 1-7.1 4.4', CIRCH='M4.4 3.2v5h5';
+  var PC='M15.5 5 8.5 12l7 7', PB='M17 5v14', PT='M8.6 12 15.6 5v14z';
+  var PLT='M7.6 4.9 18.8 12 7.6 19.1z', PLR='M8 5.3c0-.95 1.05-1.5 1.8-.95l8.9 6.7c.6.45.6 1.35 0 1.8l-8.9 6.7c-.75.55-1.8 0-1.8-.95z';
+  var NC='M8.5 5l7 7-7 7', NB='M7 5v14', NT='M15.4 12 8.4 5v14z';
+
+  /* ---------- 图标渲染 ---------- */
+  function render(name, L, size) {
+    var col = 'var(--g0)', c1 = 'var(--g1)', c2 = 'var(--g2)', ong = 'var(--ong)';
+    var stroke = L.grad ? 'url(#lg)' : col;
+    var cap = L.cap || 'round';
+    function P(d) { return '<path d="' + d + '" fill="none" stroke="' + stroke + '" stroke-width="' + L.sw + '" stroke-linecap="' + cap + '" stroke-linejoin="' + cap + '"/>'; }
+    function F(d, c) { return '<path d="' + d + '" fill="' + (c || stroke) + '"/>'; }
+    function U(d) { return '<path d="' + d + '" fill="' + c1 + '" opacity=".42"/>'; }
+    function CB(x, y, r, c) { return '<circle cx="' + x + '" cy="' + y + '" r="' + r + '" fill="' + (c || stroke) + '"/>'; }
+    var o = '';
+    if (name === 'fav') {
+      var d = L.block ? FAV_BLOCK : FAV;
+      o = L.solid ? F(d) : (L.duo ? U(d) + P(d) : P(d));
+    } else if (name === 'dl') {
+      o = L.dlVar === 1 ? P(DL_A2) + P(DL_H2) + P(DL_L) : P(DL_A) + P(DL_H) + P(DL_T);
+    } else if (name === 'send') {
+      o = L.solid ? F(PLANE) + F(PLANE2) : (L.sendVar === 1 ? P(SA) + P(SH) : P(PLANE) + P(PLANE2));
+    } else if (name === 'quality') {
+      if (L.qVar === 0) o = P(WAVE);
+      else if (L.qVar === 2) o = P(SL) + CB(9, 8, 2.2) + CB(15, 16, 2.2);
+      else o = L.solid ? F(DIA) : (L.duo ? U(DIA) + P(DIA) : P(DIA));
+    } else if (name === 'order') {
+      o = L.orderVar === 1 ? P(CIRC) + P(CIRCH) : P(RA) + P(RAH) + P(RB) + P(RBH);
+    } else if (name === 'prev') {
+      o = L.prevVar === 1 ? P(PB) + F(PT) : P(PC);
+    } else if (name === 'next') {
+      o = L.prevVar === 1 ? P(NB) + F(NT) : P(NC);
+    } else if (name === 'play') {
+      o = L.playOutline ? P(L.playRound ? PLR : PLT) : F(L.playRound ? PLR : PLT, ong);
+    }
+    if (L.mixed) o += CB(18.7, 5.3, 2.2, c2);
+    if (L.frame) o = '<rect x="2.4" y="2.4" width="19.2" height="19.2" rx="6" fill="none" stroke="' + col + '" stroke-width=".9" opacity=".45"/>' + o;
+    var defs = L.grad ? '<defs><linearGradient id="lg" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">'
+      + '<stop offset="0" stop-color="var(--g0)"/><stop offset=".5" stop-color="var(--g1)"/><stop offset="1" stop-color="var(--g2)"/></linearGradient></defs>' : '';
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">' + defs + o + '</svg>';
+  }
+
+  var FNAMES = [['fav', '收藏'], ['dl', '下载'], ['send', '发送'], ['quality', '音质']];
+  var TNAMES = [['order', '顺序'], ['prev', '上一首'], ['play', '播放'], ['next', '下一首']];
+
+  /* ---------- 10 套 ---------- */
+  var SETS = [
+    { n:'01', name:'线性描边', spec:'1.7px 圆头细描边 · 纸飞机/心形/声波/循环箭头',
+      desc:'最基础的线性图标，圆头圆角，轻盈统一；播放键为空心三角内嵌渐变圆。',
+      L:{ sw:1.7, cap:'round', dlVar:1, sendVar:0, qVar:0, orderVar:0, prevVar:0, playOutline:false } },
+    { n:'02', name:'实心填充', spec:'实心块面图标 · 心形/纸飞机/菱形音质/三角加竖条',
+      desc:'粗细对比强，识别快、存在感高；进度控制用实心三角配竖条。',
+      L:{ sw:2.4, cap:'round', solid:true, prevVar:1, playRound:false } },
+    { n:'03', name:'双色圆角', spec:'浅紫底衬 + 主色描边 · 双层叠加',
+      desc:'每个图标有一层柔色“影子”，层次感强，偏可爱；播放键外圈柔光。',
+      L:{ sw:1.8, cap:'round', duo:true, qVar:1, orderVar:0, prevVar:0 } },
+    { n:'04', name:'方角几何', spec:'2px 平头直角 · 几何硬朗 · 推子式音质',
+      desc:'直角与直线构成，理性硬朗；音质换成推子（滑块），播放键改为圆角方形。',
+      L:{ sw:2, cap:'butt', qVar:2, sendVar:1, orderVar:1, prevVar:1 } },
+    { n:'05', name:'圆头粗线', spec:'2.9px 超粗圆线 · 亲和醒目',
+      desc:'加粗描边、圆头端点，视觉冲击强，适合手套/大屏；播放键加大。',
+      L:{ sw:2.9, cap:'round', qVar:2, prevVar:0 } },
+    { n:'06', name:'极细科技', spec:'1.05px 方头细线 + 细边框 · 精密仪表感',
+      desc:'图标整体收进细边框内，线条极细，冷峻科技；播放键为渐变描边空心圆。',
+      L:{ sw:1.05, cap:'square', frame:true, dlVar:1, sendVar:1, qVar:0, orderVar:0, prevVar:0, playOutline:true } },
+    { n:'07', name:'渐变描边', spec:'2.1px 渐变描边 · 紫粉流光走线',
+      desc:'描边本身带紫→粉渐变，呼应主视觉流光；音质用描边菱形，播放键带辉光。',
+      L:{ sw:2.1, cap:'round', grad:true, qVar:1, orderVar:0, prevVar:0, playOutline:false } },
+    { n:'08', name:'描边实心混搭', spec:'主体描边 + 粉色强调点/面',
+      desc:'主形描边、关键结构实心，再点一颗粉色高光，丰富不杂乱；播放键加粉色描边环。',
+      L:{ sw:1.9, cap:'round', mixed:true, qVar:1, orderVar:0, prevVar:0 } },
+    { n:'09', name:'块面像素', spec:'粗直角色块 · 心形/箭头/菱形/竖条块面化',
+      desc:'粗线条与实心块面组合，方正有力、辨识度极高；播放键为方形圆角块。',
+      L:{ sw:3, cap:'butt', solid:true, block:true, prevVar:1, playRound:false } },
+    { n:'10', name:'手绘感', spec:'1.9px 圆线 + 虚线分隔 · 随性手写',
+      desc:'圆润略带随性，功能行用虚线分隔，轻松亲切；播放键外圈柔色描边。',
+      L:{ sw:1.9, cap:'round', qVar:0, orderVar:0, prevVar:0 } }
+  ];
+
+  function frow(L) {
+    var s = '<div class="frow">';
+    FNAMES.forEach(function (f) {
+      s += '<button class="fbtn"><span>' + render(f[0], L, 22) + '</span><span class="fl">' + f[1] + '</span></button>';
+    });
+    return s + '</div>';
+  }
+  function trow(L) {
+    return '<div class="trow">'
+      + '<button class="tico torder">' + render('order', L, 20) + '</button>'
+      + '<button class="tico">' + render('prev', L, 25) + '</button>'
+      + '<button class="tplay">' + render('play', L, 26) + '</button>'
+      + '<button class="tico">' + render('next', L, 25) + '</button>'
+      + '</div>';
+  }
+  function eq(hs) {
+    var s = '<div class="peq">';
+    for (var i = 0; i < hs.length; i++) s += '<i style="height:' + hs[i] + 'px;animation-delay:' + (i * 0.09).toFixed(2) + 's"></i>';
+    return s + '</div>';
+  }
+  function nav() {
+    return '<div class="nav">'
+      + '<button class="ni"><span class="ni-i">&#127968;</span><span class="ni-l">首页</span></button>'
+      + '<button class="ni on"><span class="ni-i">&#127911;</span><span class="ni-l">播放</span></button>'
+      + '<button class="ni"><span class="ni-i">&#128100;</span><span class="ni-l">我的</span></button>'
+      + '</div>';
+  }
+  function phone(themeCls, sCls, L) {
+    return '<div class="phone ' + themeCls + ' ' + sCls + '">'
+      + '<div class="status"><span>9:41</span><span>&#9679;&#9679;&#9679;</span></div>'
+      + '<div class="screen">'
+      + '<div class="pback">&#8592; 返回</div>'
+      + '<div class="pgrow"></div>'
+      + '<div class="pdisc"><span>&#9834;</span></div>'
+      + '<div class="pgrow"></div>'
+      + '<div class="ptitle">夜曲</div><div class="partist">周杰伦 · 十一月的萧邦</div>'
+      + '<div class="pgrow"></div>'
+      + eq([40, 72, 54, 90, 60, 82, 48, 68, 34, 58])
+      + '<div class="pgrow"></div>'
+      + '<div class="ptrack"><i></i></div>'
+      + '<div class="ptimes"><span>01:24</span><span>03:51</span></div>'
+      + '<div class="pgrow"></div>'
+      + trow(L)
+      + '<div class="pgrow"></div>'
+      + frow(L)
+      + '<div class="pgrow" style="flex:0 0 6px"></div>'
+      + nav()
+      + '</div></div>';
+  }
+  function strip(themeCls, L) {
+    var s = '<div class="strip ' + themeCls + '">';
+    FNAMES.concat(TNAMES).forEach(function (f) {
+      s += '<div class="cell">' + render(f[0], L, 40) + '<div class="lb">' + f[1] + '</div></div>';
+    });
+    return s + '</div>';
+  }
+
+  var grid = document.getElementById('grid');
+  SETS.forEach(function (o) {
+    var sCls = 's' + parseInt(o.n, 10), L = o.L;
+    var wrap = document.createElement('div'); wrap.className = 'opt';
+    wrap.innerHTML = '<div class="top"><div class="label"><b>' + o.n + '</b>' + o.name + '</div><div class="spec">' + o.spec + '</div></div>'
+      + '<div class="desc">' + o.desc + '</div>'
+      + '<div class="wrap">'
+      +   '<div class="col"><div class="t">图标条 · 浅色</div>' + strip('th-light', L) + '</div>'
+      +   '<div class="col"><div class="t">图标条 · 暗色</div>' + strip('th-dark', L) + '</div>'
+      + '</div>'
+      + '<div class="wrap">'
+      +   '<div class="col"><div class="t">实景 · 浅色</div>' + phone('th-light', sCls, L) + '</div>'
+      +   '<div class="col"><div class="t">实景 · 暗色</div>' + phone('th-dark', sCls, L) + '</div>'
+      + '</div>';
+    grid.appendChild(wrap);
+  });
+
+  document.getElementById('animBtn').onclick = function () {
+    document.body.classList.toggle('paused');
+    this.textContent = document.body.classList.contains('paused') ? '播放动画' : '暂停动画';
+  };
+  document.getElementById('pageBtn').onclick = function () {
+    document.body.classList.toggle('darkpage');
+    this.textContent = document.body.classList.contains('darkpage') ? '页面浅色' : '页面暗色';
+  };
+})();
+</script>
+</body>
+</html>

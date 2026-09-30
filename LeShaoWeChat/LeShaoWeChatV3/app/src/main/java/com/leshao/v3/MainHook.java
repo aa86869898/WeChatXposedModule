@@ -10,38 +10,18 @@ import android.os.Process;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.AutoForwardHook;
 import com.leshao.v3.hook.AntiDetectionHook;
-import com.leshao.v3.hook.AutoRemark;
-import com.leshao.v3.hook.BatchMessage;
-import com.leshao.v3.hook.CallFeatures;
-import com.leshao.v3.hook.ChatFooterEnhance;
 import com.leshao.v3.hook.ChatGroupHook;
 import com.leshao.v3.hook.ChatGroupUiInjector;
 import com.leshao.v3.hook.ChatVoiceSwitchHook;
-import com.leshao.v3.hook.ChatUICustom;
-import com.leshao.v3.hook.ConvPrivacy;
-import com.leshao.v3.hook.DeleteDetect;
 import com.leshao.v3.hook.DexKitHelper;
-import com.leshao.v3.hook.FriendRequestHook;
-import com.leshao.v3.hook.GroupMemberResolver;
-import com.leshao.v3.hook.GroupMemberTools;
 import com.leshao.v3.wm.WmEntry;
 import com.leshao.v3.wm.hook.WmChatHook;
-import com.leshao.v3.hook.HideContactFields;
 import com.leshao.v3.hook.HookManager;
-import com.leshao.v3.hook.LoginMonitor;
 import com.leshao.v3.hook.MessageHook;
+import com.leshao.v3.hook.MessageMenuHook;
 import com.leshao.v3.hook.WanQunGroupHook;
-import com.leshao.v3.hook.NotifyCustom;
-import com.leshao.v3.hook.PrivacyFeatures;
-import com.leshao.v3.hook.SearchEnhance;
 import com.leshao.v3.hook.TtsVoiceSender;
-import com.leshao.v3.hook.ShakeCustom;
 import com.leshao.v3.hook.SignatureDump;
-import com.leshao.v3.hook.SnsFeatures;
-import com.leshao.v3.hook.StickyEnhance;
-import com.leshao.v3.hook.TabCustom;
-import com.leshao.v3.hook.TypingIndicator;
-import com.leshao.v3.hook.UnreadBadge;
 import com.leshao.v3.hook.VoiceForwardHook;
 import com.leshao.v3.hook.VoiceAutoPlay;
 import com.leshao.v3.hook.WeChatUpdateBlocker;
@@ -57,6 +37,8 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainHook implements IXposedHookLoadPackage {
 
@@ -65,18 +47,22 @@ public class MainHook implements IXposedHookLoadPackage {
     private static volatile boolean sMainInitialized = false;
     private static final List<String> sModuleResults =
             java.util.Collections.synchronizedList(new ArrayList<>());
-    private static volatile int sModuleTotal = 0;
-    private static volatile int sModuleOk = 0;
-    private static volatile int sModuleFail = 0;
+    // v1131: deferRun 在线程中自增, 用 AtomicInteger 保证可见性与原子性
+    private static final AtomicInteger sModuleTotal = new AtomicInteger(0);
+    private static final AtomicInteger sModuleOk = new AtomicInteger(0);
+    private static final AtomicInteger sModuleFail = new AtomicInteger(0);
     private static long sStartTime = 0;
+
+    /** v1131: 每个 Activity 生命周期都写文件日志噪声过大, 默认关闭(仅保留功能性 probe)。 */
+    private static final boolean ACTIVITY_LIFECYCLE_LOG = false;
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v1100";
+    public static final String MODULE_BUILD = "v3.0.65";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 1100;
+    public static final int MODULE_VERSION_CODE = 30065;
 
     /** v1079: 当前前台 Activity(onResume 记录/onPause 清除), 供 talker 解析等复用。 */
     private static volatile java.lang.ref.WeakReference<Activity> sResumedActivity;
@@ -89,11 +75,102 @@ public class MainHook implements IXposedHookLoadPackage {
     /** 模块编译时间(构建时由 gradle 注入, 缺省回退到本次进程启动时间)。 */
     public static final String MODULE_BUILD_TIME = BuildConfig.BUILD_TIME;
 
-    private static volatile Thread.UncaughtExceptionHandler sPrevCrashHandler = null;
+    /**
+     * v1131: 崩溃处理器统一收口。
+     *
+     * <p>历史问题: 本模块与其它模块(如 TtsVoiceSender)各自 setDefaultUncaughtExceptionHandler,
+     * 互相把对方 handler 记作 prev, 形成 A→B→A 环并丢失真正的系统 handler。现改为:</p>
+     * <ul>
+     *   <li>{@link #installCrashHandler()} 幂等: 只在链首安装一次本模块 handler;</li>
+     *   <li>{@link #rearmCrashHandler()} 沿 prev 链跳过所有由本模块安装的 handler,
+     *       最终委托到真正的系统 KillApplicationHandler;</li>
+     *   <li>运行时 AtomicBoolean 防重入, 保证每次崩溃只记一次日志且系统 handler 仍执行。</li>
+     * </ul>
+     */
+    private static volatile Thread.UncaughtExceptionHandler sNextCrashHandler = null;
+    private static volatile Thread.UncaughtExceptionHandler sSystemCrashHandler = null;
     private static volatile boolean sCrashHandlerInstalled = false;
+    private static final AtomicBoolean sCrashHandling = new AtomicBoolean(false);
 
-    private static void installCrashHandler() {
-        rearmCrashHandler();
+    /** 所有未捕获异常的统一记录入口, 供外部模块(TtsVoiceSender 等)调用。 */
+    public static void logCrash(Throwable throwable) {
+        if (throwable == null) return;
+        try {
+            java.io.StringWriter sw = new java.io.StringWriter();
+            java.io.PrintWriter pw = new java.io.PrintWriter(sw);
+            throwable.printStackTrace(pw);
+            pw.flush();
+            LogWriter.log("CRASH", "msg=" + throwable.getMessage());
+            LogWriter.logSync("CRASH", sw.toString());
+        } catch (Throwable ignored) {}
+    }
+
+    /** 幂等安装: 已在链首则直接返回; 否则重新挂载并链到真正的系统 handler。 */
+    public static synchronized void installCrashHandler() {
+        try {
+            Thread.UncaughtExceptionHandler cur = Thread.getDefaultUncaughtExceptionHandler();
+            if (cur == sCrashLogger) {
+                if (sNextCrashHandler == null) sNextCrashHandler = resolveCrashDelegate(cur);
+                return;
+            }
+            Thread.UncaughtExceptionHandler delegate = resolveCrashDelegate(cur);
+            if (isSystemCrashHandler(delegate)) sSystemCrashHandler = delegate;
+            if (delegate == null) delegate = sSystemCrashHandler;
+            if (delegate == sCrashLogger) return; // 禁止成环
+            sNextCrashHandler = delegate;
+            Thread.setDefaultUncaughtExceptionHandler(sCrashLogger);
+            if (!sCrashHandlerInstalled) {
+                sCrashHandlerInstalled = true;
+                LogWriter.log(TAG, "崩溃链已装 (next=" + (delegate == null ? "null" : delegate.getClass().getName()) + ")");
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    /** 微信/Bugly 可能覆盖默认 handler, onReady 后再装一次; 跳过本模块 handler, 链到系统 handler。 */
+    public static synchronized void rearmCrashHandler() {
+        try {
+            Thread.UncaughtExceptionHandler cur = Thread.getDefaultUncaughtExceptionHandler();
+            if (cur == sCrashLogger) return; // 已在链首, 幂等
+            Thread.UncaughtExceptionHandler delegate = resolveCrashDelegate(cur);
+            if (isSystemCrashHandler(delegate)) sSystemCrashHandler = delegate;
+            if (delegate == null) delegate = sSystemCrashHandler;
+            if (delegate == sCrashLogger) return; // 禁止成环
+            sNextCrashHandler = delegate;
+            Thread.setDefaultUncaughtExceptionHandler(sCrashLogger);
+        } catch (Throwable ignored) {}
+    }
+
+    /** 沿 prev 链跳过本模块安装的 handler, 返回下一个应委托的 handler。 */
+    private static Thread.UncaughtExceptionHandler resolveCrashDelegate(Thread.UncaughtExceptionHandler start) {
+        java.util.Set<Thread.UncaughtExceptionHandler> seen =
+                java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        Thread.UncaughtExceptionHandler cur = start;
+        while (cur != null) {
+            if (!seen.add(cur)) return sSystemCrashHandler; // 检测到环, 退回系统 handler
+            if (isOwnCrashHandler(cur)) { cur = sNextCrashHandler; continue; }
+            return cur;
+        }
+        return sSystemCrashHandler;
+    }
+
+    private static boolean isOwnCrashHandler(Thread.UncaughtExceptionHandler h) {
+        return h == sCrashLogger;
+    }
+
+    private static boolean isSystemCrashHandler(Thread.UncaughtExceptionHandler h) {
+        if (h == null) return false;
+        String n = h.getClass().getName();
+        return n.contains("KillApplicationHandler") || n.contains("RuntimeInit");
+    }
+
+    /** 委托系统 handler 终止进程; 链异常时兜底 killProcess。 */
+    private static void dispatchCrashToSystem(Thread thread, Throwable throwable) {
+        Thread.UncaughtExceptionHandler sys = sSystemCrashHandler;
+        if (sys != null && !isOwnCrashHandler(sys)) {
+            try { sys.uncaughtException(thread, throwable); return; } catch (Throwable ignored) {}
+        }
+        try { android.os.Process.killProcess(android.os.Process.myPid()); } catch (Throwable ignored) {}
+        try { System.exit(10); } catch (Throwable ignored) {}
     }
 
     /**
@@ -109,48 +186,39 @@ public class MainHook implements IXposedHookLoadPackage {
     }
 
     /** 微信/Bugly 可能在 Application 初始化时覆盖默认 handler，onReady 后再装一次并链到其已有 handler */
-    public static synchronized void rearmCrashHandler() {
-        try {
-            Thread.UncaughtExceptionHandler cur = Thread.getDefaultUncaughtExceptionHandler();
-            if (cur == (Thread.UncaughtExceptionHandler) sCrashLogger) return;
-            sPrevCrashHandler = cur;
-            Thread.setDefaultUncaughtExceptionHandler(sCrashLogger);
-            if (!sCrashHandlerInstalled) {
-                sCrashHandlerInstalled = true;
-                LogWriter.log(TAG, "崩溃链已装 (prev=" + (cur == null ? "null" : cur.getClass().getName()) + ")");
-            }
-        } catch (Throwable ignored) {}
-    }
-
     private static final Thread.UncaughtExceptionHandler sCrashLogger = (thread, throwable) -> {
-        try {
-            if (throwable == null) return;
-            java.io.StringWriter sw = new java.io.StringWriter();
-            java.io.PrintWriter pw = new java.io.PrintWriter(sw);
-            throwable.printStackTrace(pw);
-            pw.flush();
-            LogWriter.log("CRASH", "thread=" + thread.getName() + " msg=" + throwable.getMessage());
-            LogWriter.logSync("CRASH", sw.toString());
-        } catch (Throwable ignored) {}
-        Thread.UncaughtExceptionHandler prev = sPrevCrashHandler;
-        if (prev != null) {
-            try { prev.uncaughtException(thread, throwable); } catch (Throwable ignored) {}
-        } else {
-            try { android.os.Process.killProcess(android.os.Process.myPid()); } catch (Throwable ignored) {}
-            try { System.exit(10); } catch (Throwable ignored) {}
+        if (!sCrashHandling.compareAndSet(false, true)) {
+            // 重入: 链上出现环, 只保证系统 handler 执行, 不再重复记录
+            dispatchCrashToSystem(thread, throwable);
+            return;
         }
+        logCrash(throwable);
+        Thread.UncaughtExceptionHandler next = sNextCrashHandler;
+        if (next != null && !isOwnCrashHandler(next)) {
+            try { next.uncaughtException(thread, throwable); return; } catch (Throwable ignored) {}
+        }
+        dispatchCrashToSystem(thread, throwable);
     };
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
         if (!WX_PKG.equals(lpparam.packageName)) return;
 
-        // v1038: 移除 v965 系统克隆分身(App-Clone)拦截 —— 按用户指示直接废掉克隆分身隔离功能,
-        // 所有微信进程(含子进程/分身)均允许模块执行, 交由主进程/多进程判定与 LSPosed 作用域控制。
+        final String processName = lpparam.processName;
+        final boolean isMainProcess = WX_PKG.equals(processName);
+        final boolean isPushProcess = processName != null && processName.endsWith(":push");
 
-        // v1038: 放开主进程限定 —— 原 isMain 判定会跳过 :push 等子进程, 导致后台推送经子进程
-        // 入库时 hook 完全不生效。现改为所有微信进程均执行模块(含接收 hook + 日志),
-        // 以覆盖 push 进程接收入库的场景。
+        // v1131 进程门控: :appbrand0/1、:sandbox、:toolsmp 等子进程不需要模块功能,
+        // 直接 return 最稳(不写文件日志、不做 UI 注入/重扫描, 避免无谓开销与残留副作用)。
+        // :push 进程需保留消息接收入库(MessageHook/WanQunGroupHook.hookReceive), 走最小初始化。
+        // 主进程 com.tencent.mm 完整执行(分身 user 的 processName 同为 com.tencent.mm, 天然放行)。
+        if (!isMainProcess && !isPushProcess) {
+            try {
+                de.robv.android.xposed.XposedBridge.log("[LeShaoV3] skip sub-process: " + processName);
+            } catch (Throwable ignored) {}
+            return;
+        }
+
         LogWriter.init();
 
         if (sMainInitialized) return;
@@ -173,6 +241,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
         final int wxVerCode = wxVersion;
         final ClassLoader cl = lpparam.classLoader;
+
+        if (isPushProcess) {
+            hookPushProcess(lpparam, cl, wxVerCode);
+            return;
+        }
 
         installGlobalActivityHook(cl);
         // v1015: 全局窗口返回栈（二级返回首页 / 三级返回上一层，覆盖所有 Dialog/PopupWindow）
@@ -219,8 +292,7 @@ public class MainHook implements IXposedHookLoadPackage {
              });
             safeRun("MessageHook", () -> MessageHook.hook(cl));
             safeRun("TtsVoiceSender", () -> TtsVoiceSender.hook(cl));
-            safeRun("CornerMenu", () -> CornerMenu.hook(cl));
-            safeRun("ChatRoomMuteHelper", () -> ChatRoomMuteHelper.hook(cl));
+            safeRun("MessageMenuHook", () -> MessageMenuHook.hook(cl));
             safeRun("ChatFooterLongPressMenu", () -> ChatFooterLongPressMenu.hook(cl));
             safeRun("WmChatHook.p06Bypass", () -> WmChatHook.hookP06BypassEarly(cl));
             safeRun("ChatGroupUiInjector", () -> ChatGroupUiInjector.hook(cl));
@@ -260,34 +332,21 @@ public class MainHook implements IXposedHookLoadPackage {
                                 .deleteExpired(System.currentTimeMillis() - 30L * 86400000L));
 
                         safeRun("AntiDetectionHook", () -> AntiDetectionHook.hook(cl));
-                        // v998: 已移除"消息防撤回"(AntiRecallHook)
+                        // v1146: 消息防撤回（文档《WeChat_AntiRevoke_Reverse.md》H1/H3 方案）
+                        safeRun("AntiRecallHook", () -> HookManager.register("AntiRecallHook",
+                                () -> com.leshao.v3.hook.AntiRecallHook.hook(cl)));
                         safeRun("ChatGroupHook", () -> HookManager.register("ChatGroupHook", () -> ChatGroupHook.hook(cl)));
-                        safeRun("FriendRequestHook", () -> FriendRequestHook.hook(cl));
 
                         safeRun("VoiceForwardHook", () -> HookManager.register("VoiceForwardHook", VoiceForwardHook::hook));
                         safeRun("AutoForwardHook", () -> HookManager.register("AutoForwardHook", () -> AutoForwardHook.hook(cl)));
                         safeRun("WeChatUpdateBlocker", () -> HookManager.register("WeChatUpdateBlocker", () -> WeChatUpdateBlocker.hook(cl)));
-                        safeRun("TypingIndicator", () -> HookManager.register("TypingIndicator", () -> TypingIndicator.hook(cl)));
-                        safeRun("ChatFooterEnhance", () -> HookManager.register("ChatFooterEnhance", () -> ChatFooterEnhance.hook(cl)));
                         safeRun("ChatVoiceSwitchHook", () -> ChatVoiceSwitchHook.init(cl));
-                        safeRun("ChatUICustom", () -> HookManager.register("ChatUICustom", () -> ChatUICustom.hook(cl)));
-                        safeRun("BatchMessage", () -> HookManager.register("BatchMessage", () -> BatchMessage.hook(cl)));
-                        safeRun("AutoRemark", () -> HookManager.register("AutoRemark", () -> AutoRemark.hook(cl)));
-                        safeRun("SearchEnhance", () -> HookManager.register("SearchEnhance", () -> SearchEnhance.hook(cl)));
-                        safeRun("NotifyCustom", () -> HookManager.register("NotifyCustom", () -> NotifyCustom.hook(cl)));
-                        safeRun("UnreadBadge", () -> HookManager.register("UnreadBadge", () -> UnreadBadge.hook(cl)));
-                        safeRun("TabCustom", () -> HookManager.register("TabCustom", () -> TabCustom.hook(cl)));
-                        safeRun("ShakeCustom", () -> HookManager.register("ShakeCustom", () -> ShakeCustom.hook(cl)));
-                        safeRun("StickyEnhance", () -> HookManager.register("StickyEnhance", () -> StickyEnhance.hook(cl)));
-                        safeRun("DeleteDetect", () -> HookManager.register("DeleteDetect", () -> DeleteDetect.hook(cl)));
-                        safeRun("CallFeatures", () -> HookManager.register("CallFeatures", () -> CallFeatures.hook(cl)));
 
-                        safeRun("SnsFeatures", () -> HookManager.register("SnsFeatures", () -> SnsFeatures.hook(cl)));
-
-                        safeRun("PrivacyFeatures", () -> HookManager.register("PrivacyFeatures", () -> PrivacyFeatures.hook(cl)));
-                        safeRun("LoginMonitor", () -> HookManager.register("LoginMonitor", () -> LoginMonitor.hook(cl)));
-                        safeRun("HideContactFields", () -> HookManager.register("HideContactFields", () -> HideContactFields.hook(cl)));
-                        safeRun("ConvPrivacy", () -> HookManager.register("ConvPrivacy", () -> ConvPrivacy.hook(cl)));
+                        // 新增（严格按需求文档实现）
+                        safeRun("LeftTopEntryHook", () -> com.leshao.v3.hook.LeftTopEntryHook.hook(cl));
+                        safeRun("ChatFooterBarHook", () -> com.leshao.v3.hook.ChatFooterBarHook.hook(cl));
+                        safeRun("MsgForgeHook", () -> com.leshao.v3.hook.MsgForgeHook.hook(cl));
+                        safeRun("RedPacketHook", () -> com.leshao.v3.hook.RedPacketHook.hook(cl));
 
                         safeRun("WmEntry", () -> WmEntry.injectAll(cl));
 
@@ -298,19 +357,9 @@ public class MainHook implements IXposedHookLoadPackage {
 
                         // v998: 已移除"添加好友伪装来源"(FakeAddSource)
 
-                        // v980: 以下两个模块依赖 DexKit 联网解析, 原实现直接在主线程同步执行,
-                        // 实测 GroupMemberTools 阻塞主线程 916ms、LeshaoAI 294ms, 是启动卡顿主因。
-                        // 二者 hook 的目标(群资料页/聊天菜单)均在后段 UI 才加载, 改为后台线程延迟安装,
-                        // 既不丢 hook 时机, 又消除启动期主线程阻塞。
-                        deferRun("GroupMemberTools", () -> {
-                            try {
-                                GroupMemberTools.init(cl);
-                                GroupMemberTools.hook(cl);
-                            } catch (Throwable t) {
-                                LogWriter.log(TAG, "[MainHook] GroupMemberTools FAIL: " + t.getMessage());
-                            }
-                        });
-
+                        // v980: LeshaoAI 依赖 DexKit 联网解析, 原实现直接在主线程同步执行(阻塞 294ms),
+                        // 其 hook 目标(聊天菜单)在后段 UI 才加载, 改为后台线程延迟安装, 既不丢 hook 时机,
+                        // 又消除启动期主线程阻塞。
                         deferRun("LeshaoAI", () -> {
                             com.leshao.ai.hook.HookEntry.appClassLoader = cl;
                             com.leshao.ai.util.DexKitBridgeHolder.init(cl);
@@ -321,15 +370,57 @@ public class MainHook implements IXposedHookLoadPackage {
                         LogWriter.log(TAG, "[MainHook] FATAL in onReadyCallback: " + t.getClass().getSimpleName()
                             + " " + t.getMessage());
                     } finally {
+                        int hookTasksRegistered = HookManager.pendingCount();
                         try { HookManager.activateAll(); }
                         catch (Throwable t) { LogWriter.log(TAG, "[MainHook] activateAll FAIL: " + t.getMessage()); }
-                        printModuleSummary();
+                        printModuleSummary(hookTasksRegistered);
                     }
                 }
             });
         } catch (Throwable t) {
             LogWriter.log(TAG, "LeShaoV3: FATAL during init: " + t.getMessage());
         }
+    }
+
+    /**
+     * v1131: :push 进程最小初始化 —— 仅保留接收入库相关 Hook(MessageHook + 万群管理),
+     * 不做 UI 注入 / Activity 生命周期日志 / DexKitScanDialog 进度回调, 降低子进程开销。
+     */
+    private static void hookPushProcess(XC_LoadPackage.LoadPackageParam lpparam,
+                                        final ClassLoader cl, final int wxVerCode) {
+        LogWriter.log(TAG, "push 进程最小初始化开始 process=" + lpparam.processName);
+        try {
+            ContextManager.init(cl, lpparam.appInfo.sourceDir);
+            captureModuleApkPath(lpparam);
+            ContextManager.hookAttachBaseContext(lpparam);
+            safeRun("DexKitHelper.setVersionCode", () -> DexKitHelper.setVersionCode(wxVerCode));
+            safeRun("DexKitHelper.setModuleVersion", () -> DexKitHelper.setModuleVersion(MODULE_VERSION_CODE));
+            safeRun("DexKitHelper.hookApplication", () -> DexKitHelper.hookApplication(lpparam));
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "push init err: " + t.getMessage());
+        }
+        ContextManager.setOnReadyCallback(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (!InstanceManager.isEnabled()) {
+                        LogWriter.log(TAG, "push 实例开关关闭, 跳过接收 Hook");
+                        return;
+                    }
+                    safeRun("MessageHook(push)", () -> MessageHook.hook(cl));
+                    safeRun("WanQunGroupHook(push)", () -> {
+                        WanQunGroupHook.init(cl);
+                        WanQunGroupHook.hookReceive(cl);
+                    });
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "push onReady FATAL: " + t.getMessage());
+                } finally {
+                    int hookTasksRegistered = HookManager.pendingCount();
+                    try { HookManager.activateAll(); } catch (Throwable t) {}
+                    printModuleSummary(hookTasksRegistered);
+                }
+            }
+        });
     }
 
     private static void installGlobalActivityHook(ClassLoader cl) {
@@ -340,7 +431,7 @@ public class MainHook implements IXposedHookLoadPackage {
                     try {
                         String cls = param.thisObject.getClass().getName();
                         if (cls.startsWith("com.tencent.mm.")) {
-                            LogWriter.log("ActivityLife", "onCreate: " + cls);
+                            if (ACTIVITY_LIFECYCLE_LOG) LogWriter.log("ActivityLife", "onCreate: " + cls);
                             // v1025: onCreate 早于 onResume, 尽早反查真实 ClassLoader
                             com.leshao.v3.db.DatabaseProvider.probeAndRehook(param.thisObject);
                         }
@@ -353,8 +444,10 @@ public class MainHook implements IXposedHookLoadPackage {
                     try {
                         String cls = param.thisObject.getClass().getName();
                         if (cls.startsWith("com.tencent.mm.")) {
-                            LogWriter.log("ActivityLife", "onResume: " + cls);
+                            if (ACTIVITY_LIFECYCLE_LOG) LogWriter.log("ActivityLife", "onResume: " + cls);
                             sResumedActivity = new java.lang.ref.WeakReference<>((Activity) param.thisObject);
+                            // v1140: 微信切换深色模式会重建 Activity, onResume 时实时重算模块配色
+                            com.leshao.v3.ui.AppColors.refresh();
                             // v1025: 从微信 Activity 反查真实 ClassLoader 并重新 hook WCDB
                             com.leshao.v3.db.DatabaseProvider.probeAndRehook(param.thisObject);
                         }
@@ -367,7 +460,7 @@ public class MainHook implements IXposedHookLoadPackage {
                     try {
                         String cls = param.thisObject.getClass().getName();
                         if (cls.startsWith("com.tencent.mm.")) {
-                            LogWriter.log("ActivityLife", "onPause: " + cls);
+                            if (ACTIVITY_LIFECYCLE_LOG) LogWriter.log("ActivityLife", "onPause: " + cls);
                             java.lang.ref.WeakReference<Activity> ref = sResumedActivity;
                             if (ref != null && ref.get() == param.thisObject) sResumedActivity = null;
                         }
@@ -380,7 +473,7 @@ public class MainHook implements IXposedHookLoadPackage {
                     try {
                         String cls = param.thisObject.getClass().getName();
                         if (cls.startsWith("com.tencent.mm.")) {
-                            LogWriter.log("ActivityLife", "onDestroy: " + cls);
+                            if (ACTIVITY_LIFECYCLE_LOG) LogWriter.log("ActivityLife", "onDestroy: " + cls);
                         }
                     } catch (Throwable ignored) {}
                 }
@@ -391,10 +484,16 @@ public class MainHook implements IXposedHookLoadPackage {
         }
     }
 
-    private static void printModuleSummary() {
+    private static void printModuleSummary(int hookTasksRegistered) {
         long elapsed = System.currentTimeMillis() - sStartTime;
         LogWriter.log(TAG, "=== 模块加载汇总 ===");
-        LogWriter.log(TAG, "总模块数: " + sModuleTotal + "  成功: " + sModuleOk + "  失败: " + sModuleFail);
+        // v1131/本次修正: safeRun 只反映"调度"结果(register 仅入队, deferRun 异步);
+        // HookManager 的 activateAll 在子线程异步安装, 汇总时通常尚未完成, 故只报告已入队数,
+        // 真实安装结果以 HookManager 的 "activateAll DONE: X OK, Y FAIL" 日志为准, 避免虚高/虚报。
+        LogWriter.log(TAG, "调度: 总数=" + sModuleTotal.get()
+                + "  成功=" + sModuleOk.get() + "  失败=" + sModuleFail.get());
+        LogWriter.log(TAG, "HookManager 已注册(入队)=" + hookTasksRegistered
+                + "  (异步安装结果见 HookManager activateAll DONE 日志)");
         LogWriter.log(TAG, "加载耗时: " + elapsed + "ms");
         for (String r : sModuleResults) {
             LogWriter.log(TAG, r);
@@ -403,17 +502,17 @@ public class MainHook implements IXposedHookLoadPackage {
     }
 
     private static void safeRun(String name, Runnable task) {
-        sModuleTotal++;
+        sModuleTotal.incrementAndGet();
         long started = System.currentTimeMillis();
         LogWriter.log(TAG, "[Module] START " + name);
         try {
             task.run();
-            sModuleOk++;
+            sModuleOk.incrementAndGet();
             sModuleResults.add("  [OK] " + name);
             LogWriter.log(TAG, "[Module] OK " + name + " elapsed="
                     + (System.currentTimeMillis() - started) + "ms");
         } catch (Throwable t) {
-            sModuleFail++;
+            sModuleFail.incrementAndGet();
             String err = t.getClass().getSimpleName() + ": " + t.getMessage();
             sModuleResults.add("  [FAIL] " + name + " - " + err);
             LogWriter.log(TAG, "[Module] FAIL " + name + " elapsed="
@@ -427,18 +526,18 @@ public class MainHook implements IXposedHookLoadPackage {
      * 目标类均为后段 UI(getView/view 相关), 异步安装不丢时机。
      */
     private static void deferRun(String name, Runnable task) {
-        sModuleTotal++;
+        sModuleTotal.incrementAndGet();
         LogWriter.log(TAG, "[Module] DEFER " + name);
         Thread t = new Thread(() -> {
             long started = System.currentTimeMillis();
             try {
                 task.run();
-                sModuleOk++;
+                sModuleOk.incrementAndGet();
                 sModuleResults.add("  [OK] " + name + " (async)");
                 LogWriter.log(TAG, "[Module] OK " + name + " elapsed="
                         + (System.currentTimeMillis() - started) + "ms (async)");
             } catch (Throwable e) {
-                sModuleFail++;
+                sModuleFail.incrementAndGet();
                 String err = e.getClass().getSimpleName() + ": " + e.getMessage();
                 sModuleResults.add("  [FAIL] " + name + " - " + err);
                 LogWriter.log(TAG, "[Module] FAIL " + name + " elapsed="

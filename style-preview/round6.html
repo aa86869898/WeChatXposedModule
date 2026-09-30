@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>乐少 · 第1版风格续作 第6轮</title>
+<style>
+  :root{
+    --bg:#0f0a17; --surface:#1b1428; --sc-low:#241a38; --sc-high:#2d2145;
+    --primary:#C9A9FF; --primary-deep:#9F7BFF; --on-primary:#2A1550;
+    --g1:#8B5CF6; --g2:#A78BFA; --g3:#D946EF; --g4:#FF6FB0;
+    --on-surface:#EDE7F6; --on-var:#B8AECE; --outline:#5b4d78;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 20% -10%,#2a1b45 0%,var(--bg) 55%);
+       color:var(--on-surface);font-family:-apple-system,"Segoe UI","PingFang SC",sans-serif;padding:28px 18px 80px}
+  h1{font-size:22px;margin:0 0 6px}
+  .sub{color:var(--on-var);font-size:13px;line-height:1.7;margin-bottom:18px}
+  .sticky{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(15,10,23,.82);
+          border:1px solid #2e2246;border-radius:14px;padding:12px 16px;margin-bottom:22px}
+  .sticky b{color:var(--primary)}
+  h2{font-size:16px;margin:34px 0 14px;display:flex;align-items:center;gap:10px}
+  h2:before{content:"";width:6px;height:18px;border-radius:3px;background:linear-gradient(180deg,var(--g1),var(--g3))}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px}
+  .card{background:linear-gradient(180deg,#1c1430,#16101f);border:1px solid #2e2246;border-radius:18px;
+        overflow:hidden;transition:.2s;position:relative}
+  .card.picked{border-color:var(--primary);box-shadow:0 0 0 2px rgba(201,169,255,.35),0 12px 30px rgba(139,92,246,.25)}
+  .card .demo{padding:22px 18px;min-height:240px;display:flex;align-items:center;justify-content:center}
+  .card .foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-top:1px solid #2a1f42}
+  .card .name{font-size:13px;font-weight:600}
+  .card .desc{font-size:11px;color:var(--on-var);margin-top:2px;line-height:1.5}
+  .pick{border:1px solid var(--primary);color:var(--primary);background:transparent;border-radius:999px;
+        padding:6px 14px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .card.picked .pick{background:var(--primary);color:var(--on-primary);font-weight:700}
+  .phone{width:100%;max-width:300px;background:var(--surface);border-radius:22px;padding:16px 14px;
+         box-shadow:0 18px 40px rgba(0,0,0,.45),inset 0 0 0 1px #35264f}
+  .cwrap{width:100%;max-width:300px;background:var(--surface);border-radius:22px;padding:18px 16px;
+         box-shadow:0 18px 40px rgba(0,0,0,.45),inset 0 0 0 1px #35264f}
+  .btitle{font-size:15px;font-weight:700;color:var(--on-surface)}
+  .ctitle{font-size:12px;color:var(--on-var);text-align:center;margin-bottom:14px}
+  .bar{position:relative;height:10px;border-radius:999px;background:var(--sc-high);overflow:hidden}
+  .bar>i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;
+         background:linear-gradient(90deg,var(--g1),var(--g2),var(--g3),var(--g4))}
+  .bar.thin{height:5px}
+  .pct{text-align:center;color:var(--primary);font-weight:800}
+  .pct.pctnum{font-size:24px;padding:8px 0 4px}
+  .prow{display:flex;justify-content:space-between;font-size:12px;color:var(--on-var);margin-bottom:8px}
+  .step{display:flex;align-items:center;gap:10px;padding:7px 4px;font-size:12.5px;color:var(--on-var)}
+  .step .mk{width:20px;height:20px;border-radius:50%;border:2px solid var(--outline);display:grid;place-items:center;
+            font-size:11px;color:transparent;flex:none;transition:.3s}
+  .step.done{color:var(--on-surface)}
+  .step.done .mk{background:linear-gradient(135deg,var(--g1),var(--g3));border-color:transparent;color:#fff}
+  .step.on .mk{border-color:var(--primary);color:var(--primary);animation:pulse 1.4s infinite}
+  @keyframes pulse{50%{box-shadow:0 0 0 9px rgba(201,169,255,.05)}}
+  .mk{color:transparent}
+  .ring{width:118px;height:118px;border-radius:50%;
+        background:conic-gradient(var(--primary) var(--deg,0deg),#33244f 0deg);position:relative;display:grid;place-items:center}
+  .ring:after{content:"";position:absolute;inset:9px;border-radius:50%;background:var(--surface);box-shadow:inset 0 0 18px rgba(139,92,246,.35)}
+  .ring span{position:relative;z-index:1;font-size:26px;font-weight:800;color:var(--primary)}
+  .ring .ric{font-size:30px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .cnum{text-align:center;color:var(--primary);font-weight:800;font-size:20px;margin-top:12px}
+  /* K1 banner */
+  .banner{height:56px;border-radius:14px;background:linear-gradient(135deg,var(--g1),var(--g3));display:flex;align-items:center;gap:10px;
+    padding:0 14px;color:#fff;box-shadow:0 10px 24px rgba(139,92,246,.35);margin-bottom:14px}
+  .banner .ic{width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.22);display:grid;place-items:center;font-size:15px}
+  .banner .tt{font-size:14px;font-weight:700}
+  .banner .ss{font-size:10.5px;opacity:.85}
+  /* K2 dotgrid */
+  .dotgrid{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin:4px 0 12px}
+  .dotgrid i{width:14px;height:14px;border-radius:5px;background:var(--sc-high);transition:.25s}
+  .dotgrid i.on{background:var(--primary);box-shadow:0 0 10px var(--primary);transform:scale(1.15)}
+  .dotgrid i.dn{background:linear-gradient(135deg,var(--g1),var(--g3))}
+  /* K3 vertical */
+  .vprogwrap{display:flex;gap:16px;align-items:center;justify-content:center;margin:4px 0 10px}
+  .vprog{width:14px;height:112px;border-radius:999px;background:var(--sc-high);position:relative;overflow:hidden}
+  .vprog i{position:absolute;left:0;right:0;bottom:0;height:0;background:linear-gradient(0deg,var(--g1),var(--g3))}
+  .vpct{font-size:30px;font-weight:800;color:var(--primary);font-variant-numeric:tabular-nums}
+  /* K4 panel */
+  .panel{background:var(--sc-low);border-radius:16px;padding:16px;text-align:center;border:1px solid #33264f;margin-bottom:12px}
+  /* K5 tabs */
+  .tabs{display:flex;gap:6px;margin-bottom:12px}
+  .tab{flex:1;text-align:center;font-size:11.5px;padding:7px 0;border-radius:10px;background:var(--sc-low);color:var(--on-var);transition:.3s}
+  .tab.on{background:linear-gradient(135deg,var(--g1),var(--g3));color:#fff}
+  .tab.dn{color:var(--on-surface)}
+  /* K6 focus */
+  .focus{background:var(--sc-low);border-radius:12px;padding:11px 12px;margin-bottom:8px;transition:.3s;border:1px solid transparent}
+  .focus.on{border-color:var(--primary);box-shadow:0 0 18px rgba(159,123,255,.3);animation:breathe 1.6s ease-in-out infinite}
+  .focus.done{opacity:.6}
+  .focus .fh{display:flex;justify-content:space-between;font-size:12px}
+  .focus .fs{font-size:10.5px;color:var(--on-var);margin-top:4px}
+  @keyframes breathe{50%{box-shadow:0 0 26px rgba(159,123,255,.6)}}
+  /* K8 double ring */
+  .dblwrap{position:relative;width:132px;height:132px;margin:4px auto 8px}
+  .dblwrap .ring{position:absolute;inset:0;width:132px;height:132px}
+  .dblwrap .inner{position:absolute;inset:28px;border-radius:50%;border:3px dashed #4a3870;animation:spin 7s linear infinite}
+  /* K9 bubble */
+  .bubwrap{position:relative;width:100%;height:46px;margin:6px 0 8px}
+  .bubtrack{position:absolute;left:0;right:0;bottom:6px;height:8px;border-radius:999px;background:var(--sc-high)}
+  .bubtrack i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .bub{position:absolute;top:-2px;transform:translateX(-50%);background:var(--primary);color:var(--on-primary);font-size:11px;font-weight:800;
+    padding:3px 8px;border-radius:8px;transition:left .2s}
+  .bub:after{content:"";position:absolute;left:50%;bottom:-4px;margin-left:-4px;border:4px solid transparent;border-top-color:var(--primary)}
+  /* K10 stripe */
+  .stripe{height:16px;border-radius:999px;background:var(--sc-high);position:relative;overflow:hidden}
+  .stripe i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:999px;
+    background-color:var(--primary-deep);
+    background-image:linear-gradient(45deg,rgba(255,255,255,.25) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.25) 50%,rgba(255,255,255,.25) 75%,transparent 75%);
+    background-size:16px 16px;animation:stripe 1s linear infinite}
+  @keyframes stripe{to{background-position:16px 0}}
+  /* V1 runway */
+  .runway{display:flex;align-items:center;gap:8px;justify-content:center;height:46px}
+  .runway i{width:10px;height:10px;border-radius:50%;background:var(--sc-high);transition:.2s}
+  .runway i.on{background:var(--primary);box-shadow:0 0 10px var(--primary);transform:scale(1.2)}
+  .runway i.dn{background:linear-gradient(135deg,var(--g1),var(--g3))}
+  /* V2 collide */
+  .collide{position:relative;height:14px;border-radius:999px;background:var(--sc-high);overflow:hidden}
+  .collide i{position:absolute;top:0;bottom:0;width:0}
+  .collide .l{left:0;border-radius:999px 0 0 999px;background:linear-gradient(90deg,var(--g1),var(--g3))}
+  .collide .r{right:0;border-radius:0 999px 999px 0;background:linear-gradient(270deg,var(--g2),var(--g4))}
+  /* V3 segs numbered */
+  .segs{display:flex;gap:6px}
+  .segs>i{flex:1;height:20px;border-radius:6px;background:var(--sc-high);transition:.25s;display:grid;place-items:center;font-size:10px;color:var(--on-var);font-style:normal}
+  .segs>i.on{background:linear-gradient(180deg,var(--g2),var(--g1));color:#fff}
+  /* V5 vol */
+  .vol{display:flex;align-items:flex-end;justify-content:center;gap:5px;height:56px}
+  .vol i{width:8px;height:24%;border-radius:3px;background:var(--sc-high);transition:height .13s}
+  .vol i.on{background:linear-gradient(180deg,var(--g4),var(--g1))}
+  /* V7 pulse */
+  .pulse{display:flex;gap:12px;justify-content:center;height:46px;align-items:center}
+  .pulse i{width:12px;height:12px;border-radius:50%;background:var(--sc-high);transition:.2s}
+  .pulse i.on{background:var(--primary);box-shadow:0 0 12px var(--primary);animation:pd 1.2s ease-in-out infinite}
+  .pulse i.dn{background:linear-gradient(135deg,var(--g1),var(--g3))}
+  @keyframes pd{0%,100%{transform:scale(.8)}50%{transform:scale(1.25)}}
+  /* V8 film */
+  .film{display:flex;gap:4px;height:48px}
+  .film i{flex:1;border-radius:4px;background:var(--sc-high);transition:.2s}
+  .film i.on{background:linear-gradient(180deg,var(--g2),var(--g1))}
+  .film i.dn{background:linear-gradient(135deg,var(--g1),var(--g3))}
+  /* V9 type */
+  .type{font-size:13px;color:var(--on-var);min-height:20px;text-align:center;margin:2px 0 14px}
+  .type b{color:var(--primary)}
+  .eta{display:flex;justify-content:space-between;font-size:11px;color:var(--on-var);margin-top:10px}
+  .linearea{width:100%;height:84px;display:block;border-radius:12px;background:var(--sc-low)}
+</style>
+</head>
+<body>
+  <h1>乐少 WeChat 模块 · 第1版风格续作（第 6 轮）</h1>
+  <div class="sub">
+    同一套观感（完整深色对话框样机），本轮换了一批元素与样式。<br>
+    第 1 组：DexKit 加载窗口（K1–K10）；第 2 组：音频转语音「转换中」（V1–V10）。<br>
+    点卡片右下角「选择」，或直接把编号发我（如「K4 + V6」）。
+  </div>
+  <div class="sticky">已选：<b id="pickedText">尚未选择</b></div>
+
+  <h2>一、DexKit 加载窗口（K1–K10）</h2>
+  <div class="grid" id="loadGrid"></div>
+  <h2>二、音频转语音「转换中」（V1–V10）</h2>
+  <div class="grid" id="convGrid"></div>
+
+<script>
+const NAMES=['初始化引擎','扫描资源','定位类名','绑定 Hook','加载完成'];
+const CTYPE=['正在解析音频…','正在提取波形…','正在合成语音…','即将完成…'];
+const r=(a)=>a.map(t=>'<div class="step jstep"><div class="mk">✓</div>'+t+'</div>').join('');
+const dots5=()=>'<i class="dot"></i>'.repeat(5);
+const waves=(n)=>Array.from({length:n},()=>'<i></i>').join('');
+const nums=(n)=>Array.from({length:n},(_,i)=>'<i>'+(i+1)+'</i>').join('');
+
+const load=[
+ {id:'K1',name:'品牌横幅',desc:'顶部品牌渐变横幅（图标+标题）+ 居中百分比 + 步骤列表，抬头信息强',
+  html:()=>'<div class="banner"><span class="ic">◈</span><div><div class="tt">乐少V3 功能扫描</div><div class="ss">动态适配微信混淆类名</div></div></div>'
+    +'<div class="bar"><i class="jbar"></i></div><div class="pct pctnum jpct">0%</div><div class="jsteps">'+r(NAMES.slice(0,4))+'</div>'},
+ {id:'K2',name:'点阵步骤',desc:'20 格点阵逐格点亮填充，方形点阵节奏感强，配细进度',
+  html:()=>'<div class="prow"><span>功能扫描</span><span class="jpct" style="color:var(--primary)">0%</span></div>'
+    +'<div class="dotgrid jsteps">'+'<i></i>'.repeat(20)+'</div><div class="bar thin"><i class="jbar"></i></div>'},
+ {id:'K3',name:'竖向进度',desc:'竖向液柱向上填充 + 右侧大数字，方向和“加载”隐喻一致',
+  html:()=>'<div class="prow"><span>功能扫描</span></div><div class="vprogwrap"><div class="vprog"><i></i></div><div><div class="vpct jpct">0%</div></div></div>'
+    +'<div class="jsteps">'+r(NAMES.slice(0,3))+'</div>'},
+ {id:'K4',name:'中央面板',desc:'居中圆角面板内放大数字 + 粗进度，面板外步骤列表，聚焦当前任务',
+  html:()=>'<div class="panel"><div class="pctnum jpct" style="font-size:34px;color:var(--primary)">0%</div>'
+    +'<div class="bar" style="margin-top:12px"><i class="jbar"></i></div><div style="font-size:11px;color:var(--on-var);margin-top:8px">正在定位类名…</div></div>'
+    +'<div class="jsteps">'+r(NAMES.slice(0,3))+'</div>'},
+ {id:'K5',name:'标签页',desc:'顶部步骤做成标签页，当前页渐变高亮、已完成转亮色；底部总进度',
+  html:()=>'<div class="tabs jsteps">'+NAMES.slice(0,5).map(t=>'<span class="tab">'+t+'</span>').join('')+'</div>'
+    +'<div class="bar"><i class="jbar"></i></div><div class="pct pctnum jpct" style="font-size:20px;padding:10px 0 0">0%</div>'},
+ {id:'K6',name:'关注行',desc:'当前步骤放大高亮呼吸，其余行淡化，主次分明，适合多步骤',
+  html:()=>'<div class="prow"><span>功能扫描</span><span class="jpct" style="color:var(--primary)">0%</span></div>'
+    +'<div class="bar thin" style="margin-bottom:12px"><i class="jbar"></i></div><div class="jsteps">'
+    +NAMES.slice(0,4).map(t=>'<div class="focus"><div class="fh"><span>'+t+'</span><span class="mk">✓</span></div><div class="fs">处理中…</div></div>').join('')+'</div>'},
+ {id:'K7',name:'环形图标',desc:'圆环进度中央放功能图标（非数字），下方百分比 + 步骤',
+  html:()=>'<div style="text-align:center"><div class="ring jring"><span class="ric">⚙</span></div>'
+    +'<div class="cnum jpct" style="font-size:22px">0%</div></div><div class="jsteps">'+r(NAMES.slice(0,3))+'</div>'},
+ {id:'K8',name:'双环套叠',desc:'外环进度 + 内圈虚线旋转，层次更丰富，科技感',
+  html:()=>'<div style="text-align:center"><div class="dblwrap"><div class="ring jring"></div><div class="inner"></div></div>'
+    +'<div class="cnum jpct" style="font-size:22px">0%</div></div><div class="jsteps">'+r(NAMES.slice(0,3))+'</div>'},
+ {id:'K9',name:'气泡指示器',desc:'进度条上方百分比气泡随进度滑动，指示当前位置，直观',
+  html:()=>'<div class="prow"><span>功能扫描</span></div><div class="bubwrap"><span class="bub">0%</span><div class="bubtrack"><i class="jbar"></i></div></div>'
+    +'<div class="jsteps">'+r(NAMES.slice(0,3))+'</div>'},
+ {id:'K10',name:'斜纹条',desc:'进度条填充为斜纹流动纹理，工业/构建感，动效明显',
+  html:()=>'<div class="prow"><span>功能扫描</span><span class="jpct" style="color:var(--primary)">0%</span></div>'
+    +'<div class="stripe" style="margin:6px 0 14px"><i class="jbar"></i></div><div class="jsteps">'+r(NAMES.slice(0,3))+'</div>'},
+];
+
+const conv=[
+ {id:'V1',name:'圆点跑道',desc:'12 颗圆点从左到右依次点亮，轻量、现代，适合不确定时长',
+  html:()=>'<div class="ctitle">音频转语音 · 处理中</div><div class="runway jsegs">'+'<i></i>'.repeat(12)+'</div><div class="cnum jpct">0%</div>'},
+ {id:'V2',name:'双色对撞',desc:'两段渐变从两端向中间生长，汇合即完成，视觉张力强',
+  html:()=>'<div class="ctitle">音频转语音 · 合成中</div><div class="collide"><i class="l"></i><i class="r"></i></div><div class="cnum jpct">0%</div>'},
+ {id:'V3',name:'分段胶囊',desc:'按段分格并标注序号，逐格点亮，与真实发送段数对应',
+  html:()=>'<div class="ctitle">音频转语音 · 发送中</div><div class="segs jsegs">'+nums(6)+'</div><div class="cnum jpct jsegtext">1 / 6 段</div>'},
+ {id:'V4',name:'环形音符',desc:'圆环进度中央音符跳动，一眼看懂是语音合成',
+  html:()=>'<div class="ctitle">音频转语音 · 合成中</div><div style="display:flex;align-items:center;justify-content:center;gap:16px">'
+    +'<div class="ring jring" style="width:96px;height:96px"><span class="ric" style="font-size:34px">♪</span></div>'
+    +'<div class="cnum jpct" style="margin:0;font-size:26px">0%</div></div>'},
+ {id:'V5',name:'音量柱',desc:'竖条音量柱逐根点亮并跳动，像正在播放/录制',
+  html:()=>'<div class="ctitle">音频转语音 · 波形分析</div><div class="vol jwave">'+waves(16)+'</div><div class="cnum jpct">0%</div>'},
+ {id:'V6',name:'进度估算',desc:'进度条 + 剩余时间估算，安抚等待，信息最完整',
+  html:()=>'<div class="ctitle">音频转语音 · 转码中</div><div class="bar"><i class="jbar"></i></div><div class="cnum jpct">0%</div>'
+    +'<div class="eta"><span>预计剩余</span><span class="jeta">剩 0:08</span></div>'},
+ {id:'V7',name:'脉动点',desc:'5 颗圆点脉动并逐个点亮，简洁活泼，适合短任务',
+  html:()=>'<div class="ctitle">音频转语音 · 处理中</div><div class="pulse jsegs">'+'<i></i>'.repeat(5)+'</div><div class="cnum jpct">0%</div>'},
+ {id:'V8',name:'胶片格',desc:'长条切成胶片格逐格曝光，转码感强，节奏清晰',
+  html:()=>'<div class="ctitle">音频转语音 · 转码中</div><div class="film jsegs">'+'<i></i>'.repeat(10)+'</div><div class="cnum jpct">0%</div>'},
+ {id:'V9',name:'打字机',desc:'状态文字逐句切换 + 细进度条，叙事感强，不单调',
+  html:()=>'<div class="ctitle">音频转语音 · 合成中</div><div class="type jtype"><b>正在解析音频…</b></div><div class="bar thin"><i class="jbar"></i></div><div class="cnum jpct">0%</div>'},
+ {id:'V10',name:'波浪填充',desc:'SVG 波面随进度从左揭开，柔和自然，耐看不抢戏',
+  html:()=>{const id='w10';let d='M0,62 ';for(let x=0;x<=240;x+=5){const y=62-15*Math.sin(x/26)-6*Math.sin(x/9+1);d+='L'+x+','+y.toFixed(1)+' ';}d+='L240,80 L0,80 Z';
+    return '<div class="ctitle">音频转语音 · 合成中</div><svg class="linearea" viewBox="0 0 240 84" preserveAspectRatio="none">'
+    +'<defs><clipPath id="c'+id+'"><rect class="jclip" x="0" y="0" width="0" height="84"/></clipPath>'
+    +'<linearGradient id="g'+id+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--g3)"/><stop offset="1" stop-color="var(--g1)"/></linearGradient></defs>'
+    +'<path d="'+d+'" fill="url(#g'+id+')" clip-path="url(#c'+id+')"/></svg><div class="cnum jpct">0%</div>'}},
+];
+
+function cardHTML(group,d){
+  return '<div class="card" data-group="'+group+'" data-id="'+d.id+'">'
+   +'<div class="demo">'+(group==='load'?'<div class="phone">'+d.html()+'</div>':'<div class="cwrap">'+d.html()+'</div>')+'</div>'
+   +'<div class="foot"><div><div class="name">'+d.id+' · '+d.name+'</div><div class="desc">'+d.desc+'</div></div>'
+   +'<button class="pick">选择</button></div></div>';
+}
+document.getElementById('loadGrid').innerHTML=load.map(d=>cardHTML('load',d)).join('');
+document.getElementById('convGrid').innerHTML=conv.map(d=>cardHTML('conv',d)).join('');
+
+/* ---------------- driver ---------------- */
+const cards=[...document.querySelectorAll('.card')];
+cards.forEach((card,ci)=>{
+  const pcts=[...card.querySelectorAll('.jpct')];
+  const bars=[...card.querySelectorAll('.jbar')];
+  const rings=[...card.querySelectorAll('.jring')];
+  const clips=[...card.querySelectorAll('.jclip')];
+  const vprogs=[...card.querySelectorAll('.vprog i')];
+  const bubs=[...card.querySelectorAll('.bub')];
+  const collides=[...card.querySelectorAll('.collide i')];
+  const etas=[...card.querySelectorAll('.jeta')];
+  const types=[...card.querySelectorAll('.jtype')];
+  const stepBox=card.querySelector('.jsteps');
+  const stepNodes=stepBox?[...stepBox.children]:[];
+  const waveBox=card.querySelector('.jwave');
+  const waveNodes=waveBox?[...waveBox.children]:[];
+  const segBox=card.querySelector('.jsegs');
+  const segNodes=segBox?[...segBox.children]:[];
+  const segtext=[...card.querySelectorAll('.jsegtext')];
+  let p=(ci*13)%100;
+  function idxOf(n){return Math.min(n-1,Math.max(0,Math.floor(p/100*n)));}
+  setInterval(()=>{
+    p+=1.5; if(p>100)p=0;
+    const P=Math.round(p);
+    pcts.forEach(e=>e.textContent=P+'%');
+    bars.forEach(e=>e.style.width=p+'%');
+    rings.forEach(e=>e.style.setProperty('--deg',(p*3.6)+'deg'));
+    clips.forEach(c=>{const w=c.ownerSVGElement?c.ownerSVGElement.viewBox.baseVal.width:240;c.setAttribute('width',(p/100*w).toFixed(1));});
+    vprogs.forEach(e=>e.style.height=p+'%');
+    bubs.forEach(b=>{b.style.left=Math.max(7,Math.min(93,p))+'%';b.textContent=P+'%';});
+    collides.forEach(e=>e.style.width=(p/2)+'%');
+    etas.forEach(e=>{const rem=Math.max(0,Math.round((100-p)/100*8));e.textContent='剩 0:'+String(rem).padStart(2,'0');});
+    types.forEach(t=>{t.innerHTML='<b>'+CTYPE[Math.min(CTYPE.length-1,Math.floor(P/25))]+'</b>';});
+    if(stepNodes.length){
+      const idx=idxOf(stepNodes.length);
+      stepNodes.forEach((n,k)=>{n.classList.toggle('dn',k<idx);n.classList.toggle('done',k<idx);n.classList.toggle('on',k===idx);n.classList.toggle('active',k===idx);n.classList.toggle('run',k===idx);});
+    }
+    if(waveNodes.length){const c=waveNodes.length;waveNodes.forEach((el,i)=>{const on=(i/c)*100<=p;el.classList.toggle('on',on);el.classList.toggle('dn',on);el.style.height=on?(28+Math.random()*62)+'%':'24%';});}
+    if(segNodes.length){const filled=Math.max(1,Math.ceil(p/100*segNodes.length));segNodes.forEach((s,i)=>{s.classList.toggle('on',i<filled);s.classList.toggle('dn',i<filled);});if(segtext.length) segtext.forEach(t=>t.textContent=filled+' / '+segNodes.length+' 段');}
+  },60);
+});
+
+/* ---------------- pick ---------------- */
+const picks={load:null,conv:null};
+const NAME={load:{},conv:{}};
+load.forEach(d=>NAME.load[d.id]=d.id+' '+d.name);
+conv.forEach(d=>NAME.conv[d.id]=d.id+' '+d.name);
+document.querySelectorAll('.card').forEach(card=>{
+  card.querySelector('.pick').addEventListener('click',()=>{
+    const g=card.dataset.group,id=card.dataset.id;
+    if(picks[g]===id){picks[g]=null;card.classList.remove('picked');}
+    else{picks[g]=id;document.querySelectorAll('.card[data-group="'+g+'"]').forEach(c=>c.classList.remove('picked'));card.classList.add('picked');}
+    const parts=[];
+    if(picks.load)parts.push('加载窗-'+NAME.load[picks.load]);
+    if(picks.conv)parts.push('转换进度-'+NAME.conv[picks.conv]);
+    document.getElementById('pickedText').textContent=parts.length?parts.join('  |  '):'尚未选择';
+  });
+});
+</script>
+</body>
+</html>

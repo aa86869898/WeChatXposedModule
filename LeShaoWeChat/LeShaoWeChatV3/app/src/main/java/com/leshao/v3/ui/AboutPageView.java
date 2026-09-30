@@ -26,7 +26,7 @@ public class AboutPageView {
 
         root.addView(M3Page.section(ctx, "模块信息"));
         LinearLayout infoCard = M3Page.card(ctx);
-        infoCard.addView(M3Page.infoRow(ctx, "模块名称", "乐少微信助手 V3"));
+        infoCard.addView(M3Page.infoRow(ctx, "模块名称", "乐少助手"));
         infoCard.addView(M3Page.divider(ctx));
         infoCard.addView(M3Page.infoRow(ctx, "构建版本", MainHook.MODULE_BUILD));
         infoCard.addView(M3Page.divider(ctx));

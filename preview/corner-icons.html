@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>乐少 · 左上角菜单图标样式预览</title>
+<style>
+  :root{
+    --primary:#8B5CF6;
+    --primary2:#D8B4FE;
+    --primary3:#FFAFCC;
+    --surface:#FBF9FF;
+    --onSurface:#2A2340;
+    --onSurfaceVariant:#6F6389;
+    --scLowest:#FFFFFF;
+    --scHigh:#ECE3FB;
+    --outlineVariant:#DCCFF2;
+    --dSurface:#150F1E;
+    --dOnSurface:#F2ECFB;
+    --dScLowest:#100A18;
+    --dScHigh:#2A2040;
+    --dOutlineVariant:#3B2F55;
+    --dOnSurfaceVariant:#B6A6D1;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--surface);color:var(--onSurface);line-height:1.5;
+    padding:28px 16px 64px;
+  }
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:22px;font-weight:700;letter-spacing:.3px}
+  .sub{color:var(--onSurfaceVariant);font-size:13px;margin-top:6px}
+  .note{
+    margin-top:16px;padding:12px 14px;border:1px solid var(--outlineVariant);
+    border-radius:14px;background:var(--scHigh);font-size:13px;color:var(--onSurfaceVariant);
+  }
+  .grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+    gap:16px;margin-top:22px;
+  }
+  .card{
+    border:1px solid var(--outlineVariant);border-radius:18px;background:var(--scLowest);
+    overflow:hidden;box-shadow:0 1px 2px rgba(42,35,64,.05);
+  }
+  .card .head{display:flex;align-items:center;gap:10px;padding:12px 14px}
+  .idx{
+    width:26px;height:26px;border-radius:9px;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;
+    font-size:12px;font-weight:700;color:#fff;
+    background:linear-gradient(135deg,var(--primary),var(--primary3));
+  }
+  .name{font-size:14px;font-weight:600}
+  .desc{font-size:12px;color:var(--onSurfaceVariant);margin-top:1px}
+  .mock{
+    padding:10px 12px;display:flex;gap:10px;
+  }
+  .phone{
+    flex:1;border-radius:12px;overflow:hidden;border:1px solid var(--outlineVariant);
+  }
+  .phone.dark{border-color:var(--dOutlineVariant)}
+  .statusbar{height:22px}
+  .titlebar{
+    height:46px;display:flex;align-items:center;position:relative;padding:0 8px;
+  }
+  .phone.light .statusbar{background:#FFFFFF}
+  .phone.light .titlebar{background:#EDEDED}
+  .phone.dark .statusbar{background:#000}
+  .phone.dark .titlebar{background:#1C1C1E}
+  .tbtitle{
+    position:absolute;left:0;right:0;text-align:center;font-size:15px;font-weight:600;
+    pointer-events:none;
+  }
+  .phone.light .tbtitle{color:#191919}
+  .phone.dark .tbtitle{color:#EDEDED}
+  .icon36{
+    width:34px;height:38px;border-radius:10px;flex:0 0 auto;z-index:2;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .phone.light .icon36{background:#FFFFFF;border:1px solid var(--outlineVariant)}
+  .phone.dark .icon36{background:var(--dScLowest);border:1px solid var(--dOutlineVariant)}
+  .icon36 svg{width:24px;height:24px;display:block}
+  .grower{margin-left:auto;display:flex;align-items:center;gap:6px;z-index:2}
+  .tbdots{display:flex;flex-direction:column;gap:3px}
+  .tbdots i{width:4px;height:4px;border-radius:50%;display:block}
+  .phone.light .tbdots i{background:#191919}
+  .phone.dark .tbdots i{background:#EDEDED}
+  .big{
+    display:flex;align-items:center;gap:14px;padding:0 14px 14px;
+  }
+  .bigbox{
+    width:56px;height:56px;border-radius:16px;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--outlineVariant);background:var(--scLowest);
+  }
+  .bigbox svg{width:34px;height:34px}
+  .bigbox.dark{background:var(--dScLowest);border-color:var(--dOutlineVariant)}
+  .big small{font-size:11px;color:var(--onSurfaceVariant);display:block}
+  .foot{margin-top:28px;font-size:13px;color:var(--onSurfaceVariant)}
+  .chip{
+    display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;
+    border:1px solid var(--outlineVariant);background:var(--scHigh);margin:0 6px 6px 0;
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="0.5" stop-color="#D8B4FE"/>
+      <stop offset="1" stop-color="#FFAFCC"/>
+    </linearGradient>
+    <linearGradient id="gd" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9F7BFF"/>
+      <stop offset="0.5" stop-color="#DCC3FF"/>
+      <stop offset="1" stop-color="#FFB8D4"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <h1>左上角菜单图标 · 10 套样式</h1>
+  <div class="sub">替换原来的「≡ 三横」。渐变沿用葡萄气泡主题（紫 → 淡紫 → 粉），尺寸/描边/圆角容器与 APK 完全一致。</div>
+  <div class="note">
+    每种样式都按真实场景渲染两遍：浅色微信主页标题栏 + 深色微信主页标题栏。左侧小方块即为最终落在左上角的效果（36×44，含 1px 主色描边）。选好编号后我再改 APK（同时把位置由 状态栏+6dp 上移为 状态栏+5dp）。
+  </div>
+
+  <div class="grid">
+
+    <!-- 1 圆点三列 -->
+    <div class="card">
+      <div class="head"><div class="idx">01</div><div><div class="name">圆点三列</div><div class="desc">••• 三横的圆点版，最接近原意、最低调</div></div></div>
+      <div class="mock">
+        <div class="phone light">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="url(#g)"><circle cx="5" cy="12" r="2.1"/><circle cx="12" cy="12" r="2.1"/><circle cx="19" cy="12" r="2.1"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+        <div class="phone dark">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="url(#gd)"><circle cx="5" cy="12" r="2.1"/><circle cx="12" cy="12" r="2.1"/><circle cx="19" cy="12" r="2.1"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="big">
+        <div class="bigbox"><svg viewBox="0 0 24 24"><g fill="url(#g)"><circle cx="5" cy="12" r="2.1"/><circle cx="12" cy="12" r="2.1"/><circle cx="19" cy="12" r="2.1"/></g></svg></div>
+        <div class="bigbox dark"><svg viewBox="0 0 24 24"><g fill="url(#gd)"><circle cx="5" cy="12" r="2.1"/><circle cx="12" cy="12" r="2.1"/><circle cx="19" cy="12" r="2.1"/></g></svg></div>
+        <small>浅色 / 深色</small>
+      </div>
+    </div>
+
+    <!-- 2 网格 -->
+    <div class="card">
+      <div class="head"><div class="idx">02</div><div><div class="name">四宫格</div><div class="desc">2×2 圆角方块，功能入口感强</div></div></div>
+      <div class="mock">
+        <div class="phone light">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="url(#g)"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+        <div class="phone dark">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="url(#gd)"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="big">
+        <div class="bigbox"><svg viewBox="0 0 24 24"><g fill="url(#g)"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></g></svg></div>
+        <div class="bigbox dark"><svg viewBox="0 0 24 24"><g fill="url(#gd)"><rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/></g></svg></div>
+        <small>浅色 / 深色</small>
+      </div>
+    </div>
+
+    <!-- 3 齿轮 -->
+    <div class="card">
+      <div class="head"><div class="idx">03</div><div><div class="name">齿轮</div><div class="desc">最直白的「设置/功能」语义</div></div></div>
+      <div class="mock">
+        <div class="phone light">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#g)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.4 5.4l2.1 2.1M16.5 16.5l2.1 2.1M18.6 5.4l-2.1 2.1M7.5 16.5l-2.1 2.1"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+        <div class="phone dark">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#gd)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.4 5.4l2.1 2.1M16.5 16.5l2.1 2.1M18.6 5.4l-2.1 2.1M7.5 16.5l-2.1 2.1"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="big">
+        <div class="bigbox"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#g)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.4 5.4l2.1 2.1M16.5 16.5l2.1 2.1M18.6 5.4l-2.1 2.1M7.5 16.5l-2.1 2.1"/></g></svg></div>
+        <div class="bigbox dark"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#gd)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.6v3M12 18.4v3M2.6 12h3M18.4 12h3M5.4 5.4l2.1 2.1M16.5 16.5l2.1 2.1M18.6 5.4l-2.1 2.1M7.5 16.5l-2.1 2.1"/></g></svg></div>
+        <small>浅色 / 深色</small>
+      </div>
+    </div>
+
+    <!-- 4 星芒 -->
+    <div class="card">
+      <div class="head"><div class="idx">04</div><div><div class="name">星芒</div><div class="desc">四角星 + 小星，AI/助手气质</div></div></div>
+      <div class="mock">
+        <div class="phone light">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="url(#g)"><path d="M10 2.4c.5 3.4 1.8 4.7 5.2 5.2-3.4.5-4.7 1.8-5.2 5.2-.5-3.4-1.8-4.7-5.2-5.2 3.4-.5 4.7-1.8 5.2-5.2z"/><path d="M16.6 13c.3 2 1.1 2.8 3.1 3.1-2 .3-2.8 1.1-3.1 3.1-.3-2-1.1-2.8-3.1-3.1 2-.3 2.8-1.1 3.1-3.1z"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+        <div class="phone dark">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="url(#gd)"><path d="M10 2.4c.5 3.4 1.8 4.7 5.2 5.2-3.4.5-4.7 1.8-5.2 5.2-.5-3.4-1.8-4.7-5.2-5.2 3.4-.5 4.7-1.8 5.2-5.2z"/><path d="M16.6 13c.3 2 1.1 2.8 3.1 3.1-2 .3-2.8 1.1-3.1 3.1-.3-2-1.1-2.8-3.1-3.1 2-.3 2.8-1.1 3.1-3.1z"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="big">
+        <div class="bigbox"><svg viewBox="0 0 24 24"><g fill="url(#g)"><path d="M10 2.4c.5 3.4 1.8 4.7 5.2 5.2-3.4.5-4.7 1.8-5.2 5.2-.5-3.4-1.8-4.7-5.2-5.2 3.4-.5 4.7-1.8 5.2-5.2z"/><path d="M16.6 13c.3 2 1.1 2.8 3.1 3.1-2 .3-2.8 1.1-3.1 3.1-.3-2-1.1-2.8-3.1-3.1 2-.3 2.8-1.1 3.1-3.1z"/></g></svg></div>
+        <div class="bigbox dark"><svg viewBox="0 0 24 24"><g fill="url(#gd)"><path d="M10 2.4c.5 3.4 1.8 4.7 5.2 5.2-3.4.5-4.7 1.8-5.2 5.2-.5-3.4-1.8-4.7-5.2-5.2 3.4-.5 4.7-1.8 5.2-5.2z"/><path d="M16.6 13c.3 2 1.1 2.8 3.1 3.1-2 .3-2.8 1.1-3.1 3.1-.3-2-1.1-2.8-3.1-3.1 2-.3 2.8-1.1 3.1-3.1z"/></g></svg></div>
+        <small>浅色 / 深色</small>
+      </div>
+    </div>
+
+    <!-- 5 闪电 -->
+    <div class="card">
+      <div class="head"><div class="idx">05</div><div><div class="name">闪电</div><div class="desc">快捷/极速，强调「一键搞定」</div></div></div>
+      <div class="mock">
+        <div class="phone light">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><path d="M13.2 2.2 5.4 13.1h5.1l-.9 8.7 8-11.1h-5.2l.8-8.5z" fill="url(#g)"/></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+        <div class="phone dark">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><path d="M13.2 2.2 5.4 13.1h5.1l-.9 8.7 8-11.1h-5.2l.8-8.5z" fill="url(#gd)"/></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="big">
+        <div class="bigbox"><svg viewBox="0 0 24 24"><path d="M13.2 2.2 5.4 13.1h5.1l-.9 8.7 8-11.1h-5.2l.8-8.5z" fill="url(#g)"/></svg></div>
+        <div class="bigbox dark"><svg viewBox="0 0 24 24"><path d="M13.2 2.2 5.4 13.1h5.1l-.9 8.7 8-11.1h-5.2l.8-8.5z" fill="url(#gd)"/></svg></div>
+        <small>浅色 / 深色</small>
+      </div>
+    </div>
+
+    <!-- 6 葡萄花 -->
+    <div class="card">
+      <div class="head"><div class="idx">06</div><div><div class="name">葡萄花</div><div class="desc">六瓣气泡花，最贴合葡萄气泡主题</div></div></div>
+      <div class="mock">
+        <div class="phone light">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="url(#g)"><circle cx="12" cy="5.2" r="3.1"/><circle cx="18.1" cy="9.6" r="3.1"/><circle cx="18.1" cy="16.4" r="3.1"/><circle cx="12" cy="20.8" r="3.1"/><circle cx="5.9" cy="16.4" r="3.1"/><circle cx="5.9" cy="9.6" r="3.1"/><circle cx="12" cy="13" r="3.4" fill="#fff"/><circle cx="12" cy="13" r="1.9"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+        <div class="phone dark">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="url(#gd)"><circle cx="12" cy="5.2" r="3.1"/><circle cx="18.1" cy="9.6" r="3.1"/><circle cx="18.1" cy="16.4" r="3.1"/><circle cx="12" cy="20.8" r="3.1"/><circle cx="5.9" cy="16.4" r="3.1"/><circle cx="5.9" cy="9.6" r="3.1"/><circle cx="12" cy="13" r="3.4" fill="#100A18"/><circle cx="12" cy="13" r="1.9"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="big">
+        <div class="bigbox"><svg viewBox="0 0 24 24"><g fill="url(#g)"><circle cx="12" cy="5.2" r="3.1"/><circle cx="18.1" cy="9.6" r="3.1"/><circle cx="18.1" cy="16.4" r="3.1"/><circle cx="12" cy="20.8" r="3.1"/><circle cx="5.9" cy="16.4" r="3.1"/><circle cx="5.9" cy="9.6" r="3.1"/><circle cx="12" cy="13" r="3.4" fill="#fff"/><circle cx="12" cy="13" r="1.9"/></g></svg></div>
+        <div class="bigbox dark"><svg viewBox="0 0 24 24"><g fill="url(#gd)"><circle cx="12" cy="5.2" r="3.1"/><circle cx="18.1" cy="9.6" r="3.1"/><circle cx="18.1" cy="16.4" r="3.1"/><circle cx="12" cy="20.8" r="3.1"/><circle cx="5.9" cy="16.4" r="3.1"/><circle cx="5.9" cy="9.6" r="3.1"/><circle cx="12" cy="13" r="3.4" fill="#100A18"/><circle cx="12" cy="13" r="1.9"/></g></svg></div>
+        <small>浅色 / 深色</small>
+      </div>
+    </div>
+
+    <!-- 7 层叠卡 -->
+    <div class="card">
+      <div class="head"><div class="idx">07</div><div><div class="name">层叠卡</div><div class="desc">三张码放卡片，功能面板隐喻</div></div></div>
+      <div class="mock">
+        <div class="phone light">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#g)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="3.2" width="12.5" height="12.5" rx="2.6"/><path d="M8 20.8h10.6a2.6 2.6 0 0 0 2.6-2.6V7.6"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+        <div class="phone dark">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#gd)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="3.2" width="12.5" height="12.5" rx="2.6"/><path d="M8 20.8h10.6a2.6 2.6 0 0 0 2.6-2.6V7.6"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="big">
+        <div class="bigbox"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#g)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="3.2" width="12.5" height="12.5" rx="2.6"/><path d="M8 20.8h10.6a2.6 2.6 0 0 0 2.6-2.6V7.6"/></g></svg></div>
+        <div class="bigbox dark"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#gd)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="3.2" width="12.5" height="12.5" rx="2.6"/><path d="M8 20.8h10.6a2.6 2.6 0 0 0 2.6-2.6V7.6"/></g></svg></div>
+        <small>浅色 / 深色</small>
+      </div>
+    </div>
+
+    <!-- 8 波浪 -->
+    <div class="card">
+      <div class="head"><div class="idx">08</div><div><div class="name">波浪三线</div><div class="desc">三横的灵动版，节奏感强</div></div></div>
+      <div class="mock">
+        <div class="phone light">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#g)" stroke-width="2.2" stroke-linecap="round"><path d="M4 7.5c2-2 4 2 8 0 3-1.5 5-.5 8 0" transform="translate(-2 0)"/><path d="M4 12c2-2 4 2 8 0 3-1.5 5-.5 8 0" transform="translate(-2 0)"/><path d="M4 16.5c2-2 4 2 8 0 3-1.5 5-.5 8 0" transform="translate(-2 0)"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+        <div class="phone dark">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#gd)" stroke-width="2.2" stroke-linecap="round"><path d="M4 7.5c2-2 4 2 8 0 3-1.5 5-.5 8 0" transform="translate(-2 0)"/><path d="M4 12c2-2 4 2 8 0 3-1.5 5-.5 8 0" transform="translate(-2 0)"/><path d="M4 16.5c2-2 4 2 8 0 3-1.5 5-.5 8 0" transform="translate(-2 0)"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="big">
+        <div class="bigbox"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#g)" stroke-width="2.2" stroke-linecap="round"><path d="M4 7.5c2-2 4 2 8 0 3-1.5 5-.5 8 0" transform="translate(-2 0)"/><path d="M4 12c2-2 4 2 8 0 3-1.5 5-.5 8 0" transform="translate(-2 0)"/><path d="M4 16.5c2-2 4 2 8 0 3-1.5 5-.5 8 0" transform="translate(-2 0)"/></g></svg></div>
+        <div class="bigbox dark"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#gd)" stroke-width="2.2" stroke-linecap="round"><path d="M4 7.5c2-2 4 2 8 0 3-1.5 5-.5 8 0" transform="translate(-2 0)"/><path d="M4 12c2-2 4 2 8 0 3-1.5 5-.5 8 0" transform="translate(-2 0)"/><path d="M4 16.5c2-2 4 2 8 0 3-1.5 5-.5 8 0" transform="translate(-2 0)"/></g></svg></div>
+        <small>浅色 / 深色</small>
+      </div>
+    </div>
+
+    <!-- 9 加号 -->
+    <div class="card">
+      <div class="head"><div class="idx">09</div><div><div class="name">圆环加号</div><div class="desc">「更多/添加快捷功能」，辨识度高</div></div></div>
+      <div class="mock">
+        <div class="phone light">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#g)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 8.2v7.6M8.2 12h7.6"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+        <div class="phone dark">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#gd)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 8.2v7.6M8.2 12h7.6"/></g></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="big">
+        <div class="bigbox"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#g)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 8.2v7.6M8.2 12h7.6"/></g></svg></div>
+        <div class="bigbox dark"><svg viewBox="0 0 24 24"><g fill="none" stroke="url(#gd)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 8.2v7.6M8.2 12h7.6"/></g></svg></div>
+        <small>浅色 / 深色</small>
+      </div>
+    </div>
+
+    <!-- 10 乐字 -->
+    <div class="card">
+      <div class="head"><div class="idx">10</div><div><div class="name">乐字标识</div><div class="desc">品牌直给，一眼认出是乐少</div></div></div>
+      <div class="mock">
+        <div class="phone light">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><text x="12" y="17.4" text-anchor="middle" font-size="17" font-weight="800" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif" fill="url(#g)">乐</text></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+        <div class="phone dark">
+          <div class="statusbar"></div>
+          <div class="titlebar">
+            <div class="icon36"><svg viewBox="0 0 24 24"><text x="12" y="17.4" text-anchor="middle" font-size="17" font-weight="800" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif" fill="url(#gd)">乐</text></svg></div>
+            <div class="tbtitle">微信</div>
+            <div class="grower"><div class="tbdots"><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="big">
+        <div class="bigbox"><svg viewBox="0 0 24 24"><text x="12" y="17.4" text-anchor="middle" font-size="17" font-weight="800" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif" fill="url(#g)">乐</text></svg></div>
+        <div class="bigbox dark"><svg viewBox="0 0 24 24"><text x="12" y="17.4" text-anchor="middle" font-size="17" font-weight="800" font-family="-apple-system,'PingFang SC','Microsoft YaHei',sans-serif" fill="url(#gd)">乐</text></svg></div>
+        <small>浅色 / 深色</small>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="foot">
+    <div>备选可加：猫爪、火箭、音符、对话气泡、罗盘、六边形点阵。</div>
+    <div style="margin-top:10px">
+      <span class="chip">尺寸 36×44</span>
+      <span class="chip">描边 1px 主色</span>
+      <span class="chip">渐变 葡萄气泡</span>
+      <span class="chip">位置 状态栏+5dp</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

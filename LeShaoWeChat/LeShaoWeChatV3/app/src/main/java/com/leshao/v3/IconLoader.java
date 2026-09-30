@@ -54,7 +54,7 @@ public final class IconLoader {
     /**
      * 四级回退定位模块 APK 路径
      */
-    private static synchronized String moduleApkPath() {
+    public static synchronized String moduleApkPath() {
         if (sModuleApkPath != null) return sModuleApkPath;
 
         // 方法1: /proc/self/maps（不限制 .apk 后缀）

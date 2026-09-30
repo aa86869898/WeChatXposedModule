@@ -57,6 +57,26 @@ public class MainActivity {
     private static Dialog sActiveDialog;
     private static volatile long sLastOpenTime = 0;
 
+    // v1140: 深色模式实时跟随 —— 记录主页弹窗宿主，主题变化时就地重建
+    private static java.lang.ref.WeakReference<Activity> sMainPanelAct;
+    private static volatile boolean sMainPanelShowing = false;
+
+    static {
+        AppColors.addThemeListener(() -> {
+            if (!sMainPanelShowing) return;
+            java.lang.ref.WeakReference<Activity> ref = sMainPanelAct;
+            final Activity act = ref != null ? ref.get() : null;
+            if (act == null) return;
+            act.runOnUiThread(() -> {
+                try {
+                    if (sMainPanelShowing && sActiveDialog != null && sActiveDialog.isShowing()) {
+                        showMainPanel(act);
+                    }
+                } catch (Throwable ignored) {}
+            });
+        });
+    }
+
     private static volatile String sUserNickname;
     private static volatile String sUserAlias;
     private static volatile String sUserWxid;
@@ -79,15 +99,17 @@ public class MainActivity {
     // v1018: 移除"M3模块配色"入口, 模块统一使用 M3 动态配色, 全局实时生效
     private static final String[] ITEM_NAMES = {
         "联系人和群聊", "聊天分组",
-        "TTS语音播报", "关于模块"
+        "TTS语音播报", "在线音乐",
+        "关于模块"
     };
     private static final int[] ITEM_ICONS = {
         0x1F465, 0x1F4CB,
-        0x1F50A, 0x2139
+        0x1F50A, 0x1F3B5,
+        0x2139
     };
 
     private static final int[] PAGE_IDS = {
-        3, 14, 8, 20
+        3, 14, 8, 22, 20
     };
 
     private static final Map<Integer, String> PAGE_FEATURES = new HashMap<>();
@@ -95,6 +117,7 @@ public class MainActivity {
         PAGE_FEATURES.put(14, "聊天分组|标签分组|分组管理|标签管理|ChatGroup");
         PAGE_FEATURES.put(3, "通讯录导出|通讯录|联系人|防撤回|消息防撤回|语音转发|语音消息转发");
         PAGE_FEATURES.put(8, "语音播报|TTS播报|排版引擎|配音|API|Voice|间隔|熔断|消息类型|免打扰|安静时段|播报参数|音量|语速|音调|TTS|文字消息播报|语音消息播报|图片消息播报|播报发送人昵称|播报群聊消息|截断长文字");
+        PAGE_FEATURES.put(22, "在线音乐|音乐|点歌|歌曲搜索|专辑|歌手|歌单|排行榜|无损|试听|下载|酷我|Music|点歌白名单");
         PAGE_FEATURES.put(20, "关于模块|版本|模块版本|热更新|更新管控|禁止微信热更新|WeChatUpdateBlocker");
     }
 
@@ -437,10 +460,10 @@ public class MainActivity {
         AlertDialog dlg = b.create();
         InsetsUtil.center(dlg, 0.86f, -1f);
         Window w = dlg.getWindow();
-        if (w != null) w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         sActiveDialog = dlg;
         dlg.setOnDismissListener(ignored -> { if (sActiveDialog == dlg) sActiveDialog = null; });
         dlg.show();
+        if (w != null) WindowLayer.track(w);
         InsetsUtil.center(dlg, 0.86f, -1f);
     }
 
@@ -564,7 +587,7 @@ public class MainActivity {
         dl.show();
         InsetsUtil.center(dl, 0.9f, 0.88f);
         Window w = dl.getWindow();
-        if (w != null) w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        if (w != null) WindowLayer.track(w);
     }
 
 
@@ -584,6 +607,8 @@ public class MainActivity {
 
     private static void showMainPanel(Activity act) {
         dismissDialog();
+        sMainPanelAct = new java.lang.ref.WeakReference<>(act);
+        sMainPanelShowing = true;
 
         float d = act.getResources().getDisplayMetrics().density;
         Context ctx = act;
@@ -654,7 +679,6 @@ public class MainActivity {
         Window w = dlg.getWindow();
         if (w != null) {
             InsetsUtil.transparentWindow(w);
-            w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         }
 
         sActiveDialog = dlg;
@@ -666,6 +690,7 @@ public class MainActivity {
         InsetsUtil.clearDialogShell(dlg);
         dlg.show();
         InsetsUtil.clearDialogShell(dlg);
+        if (w != null) WindowLayer.track(w);
     }
 
     // ===== User Card (v955 新增) =====
@@ -1106,6 +1131,7 @@ public class MainActivity {
             try { sActiveDialog.dismiss(); } catch (Throwable ignored) {}
         }
         sActiveDialog = null;
+        sMainPanelShowing = false;
     }
 
     public static android.graphics.drawable.Drawable loadModuleDrawable(Context ctx, String name) {

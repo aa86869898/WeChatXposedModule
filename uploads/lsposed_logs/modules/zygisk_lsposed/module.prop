@@ -1,0 +1,8 @@
+id=zygisk_lsposed
+name=LSPosed
+version=v2.1.1 (7790)
+versionCode=7790
+author=LSPosed Developers
+description=Another enhanced implementation of Xposed Framework. Supports Android 9 ~ 17. Requires Zygisk enabled.
+updateJson=https://lsposed.zip/update.json
+actionIcon=launcher.png

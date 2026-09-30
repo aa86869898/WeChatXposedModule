@@ -11,7 +11,9 @@ public class PathUtil {
     public static File getLeshaoRootDir(Context wxContext) {
         int userId = getMyUserId();
         File baseDir;
-        if (userId == 0) {
+        if (userId <= 0) {
+            // v1131: userId 反射失败(-1)或主用户(0)时, 用进程自身 Context 的 filesDir
+            // (Context 路径本身已按 user 隔离, 避免拼出 /data/user/-1 非法路径)
             baseDir = wxContext.getFilesDir();
         } else {
             baseDir = wxContext.getCacheDir();
@@ -24,7 +26,8 @@ public class PathUtil {
     public static File getLeshaoRootDir() {
         int userId = getMyUserId();
         File baseDir;
-        if (userId == 0) {
+        if (userId <= 0) {
+            // v1131: -1 表示反射失败, 无 Context 时退化到 user0 路径(调用方 LogWriter 会在 -1 时跳过写入)
             baseDir = new File("/data/data/com.tencent.mm/files");
         } else {
             baseDir = new File("/data/user/" + userId + "/com.tencent.mm/cache");
@@ -59,7 +62,8 @@ public class PathUtil {
             Method m = cls.getMethod("myUserId");
             return (int) m.invoke(null);
         } catch (Exception e) {
-            return 0;
+            // v1131: 反射失败返回 -1(此前返回 0 会误导调用方写入 user0 目录)
+            return -1;
         }
     }
 }

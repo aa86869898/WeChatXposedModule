@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>在线音乐 · 悬浮球（模块配色 / 小尺寸 / 侧边缩回）</title>
+<style>
+  /* ===== 模块「葡萄气泡」配色令牌（取自 AppColors.java） ===== */
+  :root{
+    --primary:#8B5CF6; --onPrimary:#FFFFFF;
+    --primaryContainer:#EADDFF; --onPrimaryContainer:#21005D;
+    --tertiary:#D5497E;
+    --surface:#FBF9FF; --scLow:#F6F1FF; --scLowest:#FFFFFF; --scHighest:#E7DCF8;
+    --onSurface:#2A2340; --onSurfaceVariant:#6F6389;
+    --outline:#9A8CB8; --outlineVariant:#DCCFF2;
+    --gradStart:#8B5CF6; --gradMid:#D8B4FE; --gradEnd:#FFAFCC;
+    --chip:#F1EAFE;
+  }
+  body.dark{
+    --primary:#C9A9FF; --onPrimary:#2A1550;
+    --primaryContainer:#4A2A82; --onPrimaryContainer:#EADDFF;
+    --tertiary:#FFB0CE;
+    --surface:#150F1E; --scLow:#1D1530; --scLowest:#100A18; --scHighest:#332845;
+    --onSurface:#F2ECFB; --onSurfaceVariant:#B6A6D1;
+    --outline:#8A79A8; --outlineVariant:#3B2F55;
+    --gradStart:#9F7BFF; --gradMid:#DCC3FF; --gradEnd:#FFB8D4;
+    --chip:#241B38;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface);color:var(--onSurface);
+       font-family:-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+       padding:26px;transition:background .25s,color .25s}
+  h1{font-size:20px;margin:0 0 4px}
+  .lead{color:var(--onSurfaceVariant);font-size:13px;margin:0 0 18px;line-height:1.75;max-width:900px}
+  .lead b{color:var(--primary)}
+  .bar{display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin-bottom:20px;
+       background:var(--scLow);border:1px solid var(--outlineVariant);border-radius:16px;padding:12px 16px}
+  .bar .grp{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--onSurfaceVariant)}
+  .seg{display:flex;background:var(--chip);border-radius:10px;padding:3px;gap:2px}
+  .seg button{border:0;background:transparent;color:var(--onSurfaceVariant);font-size:12px;
+              padding:5px 11px;border-radius:8px;cursor:pointer;font-family:inherit}
+  .seg button.on{background:var(--primary);color:var(--onPrimary)}
+  .wrap{display:flex;gap:34px;flex-wrap:wrap;align-items:flex-start}
+  /* 手机模拟 */
+  .phone{position:relative;width:300px;height:520px;border-radius:26px;overflow:hidden;flex:0 0 auto;
+         background:linear-gradient(180deg,var(--scHigh,#E7DCF8) 0 46px,var(--outlineVariant) 46px 100%);
+         border:1px solid var(--outlineVariant);box-shadow:0 18px 40px -20px rgba(0,0,0,.5)}
+  .phone .topbar{height:46px;display:flex;align-items:center;gap:8px;padding:0 14px;
+                 color:var(--onSurface);font-size:12px;background:var(--scHighest)}
+  .phone .dot{width:8px;height:8px;border-radius:50%;background:var(--outline)}
+  .phone .lines{position:absolute;inset:58px 14px auto 14px;display:flex;flex-direction:column;gap:12px;opacity:.55}
+  .phone .bub{height:30px;border-radius:9px;background:var(--outlineVariant)}
+  .phone .bub.right{margin-left:40%;background:var(--primaryContainer)}
+  .hint{position:absolute;right:8px;bottom:6px;font-size:10px;color:var(--onSurfaceVariant);opacity:.7}
+
+  /* ===== 悬浮球本体 ===== */
+  .dock{position:absolute;top:50%;right:0;transform:translate(0,-50%);
+        display:flex;align-items:center;gap:0;z-index:5}
+  .dock .panel{display:flex;align-items:center;gap:2px;padding:5px 6px;margin-right:6px;
+               border-radius:40px;background:var(--scHighest);border:1px solid var(--outlineVariant);
+               box-shadow:0 10px 26px -10px rgba(0,0,0,.55);
+               opacity:0;transform:translateX(14px) scale(.8);transform-origin:right center;
+               pointer-events:none;transition:opacity .2s,transform .26s cubic-bezier(.34,1.56,.64,1)}
+  .dock.open .panel{opacity:1;transform:none;pointer-events:auto}
+  .pbtn{width:34px;height:34px;display:grid;place-items:center;border-radius:50%;cursor:pointer;color:var(--primary)}
+  .pbtn:hover{background:color-mix(in srgb,var(--primary) 14%,transparent)}
+  .pbtn.close{color:var(--tertiary)}
+  .ball{--size:39px;width:var(--size);height:var(--size);flex:0 0 auto;position:relative;
+        display:grid;place-items:center;cursor:pointer;color:#fff;
+        border-radius:50% 0 0 50%;
+        background:linear-gradient(135deg,var(--gradStart),var(--gradMid) 55%,var(--gradEnd));
+        box-shadow:-6px 8px 20px -6px color-mix(in srgb,var(--gradStart) 70%,transparent);
+        transform:translateX(52%);transition:transform .3s cubic-bezier(.34,1.4,.64,1)}
+  .dock.edge .ball{transform:translateX(52%)}       /* 缩回侧边：只露左半 */
+  .dock:not(.edge) .ball{transform:translateX(0)}   /* 拉出：完整显示 */
+  .ball svg{width:52%;height:52%;display:block}
+  .ball .pulse{position:absolute;inset:-4px;border-radius:50%;
+        border:1.5px solid color-mix(in srgb,var(--primary) 60%,transparent);
+        animation:pulse 2.2s ease-out infinite;pointer-events:none}
+  @keyframes pulse{0%{transform:scale(.9);opacity:.8}100%{transform:scale(1.5);opacity:0}}
+  .cap{position:absolute;right:12px;top:12px;font-size:10px;color:var(--onSurfaceVariant);
+       background:var(--scLowest);border:1px solid var(--outlineVariant);border-radius:8px;padding:2px 7px}
+
+  .side{flex:1 1 380px;min-width:320px}
+  .side h2{font-size:14px;margin:0 0 10px;color:var(--onSurface)}
+  .note{font-size:12.5px;color:var(--onSurfaceVariant);line-height:1.9;margin:0 0 18px}
+  .note code{background:var(--chip);padding:1px 6px;border-radius:6px;color:var(--primary)}
+  .icons{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px}
+  .ic{background:var(--scLow);border:1px solid var(--outlineVariant);border-radius:14px;padding:14px;
+      display:flex;flex-direction:column;align-items:center;gap:9px;cursor:pointer;transition:.18s}
+  .ic:hover{transform:translateY(-2px)}
+  .ic.on{border-color:var(--primary);box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 30%,transparent)}
+  .mini{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#fff;
+        background:linear-gradient(135deg,var(--gradStart),var(--gradMid) 55%,var(--gradEnd))}
+  .mini svg{width:18px;height:18px}
+  .ic .t{font-size:11.5px;color:var(--onSurface)}
+  .ic .s{font-size:10px;color:var(--onSurfaceVariant)}
+  .swatch{display:flex;gap:6px;margin-top:6px}
+  .swatch i{width:16px;height:16px;border-radius:5px;display:block;border:1px solid var(--outlineVariant)}
+</style>
+</head>
+<body>
+  <h1>在线音乐 · 悬浮球（重做）</h1>
+  <p class="lead">
+    已按反馈调整：<b>配色跟随模块「葡萄气泡」主题</b>（浅/暗自动适配）；<b>球体 32dp</b>；<b>声波图标缩小</b>（占球径约 52%）；
+    <b>可缩回侧边</b>——空闲时贴边只露半圆，点击拉出，再点展开「上一首 / 播放暂停 / 下一首 / ×」；
+    <b>5 秒无操作自动侧边休眠</b>（自动缩回只露半圆）。
+  </p>
+
+  <div class="bar">
+    <div class="grp">主题
+      <div class="seg" id="modeSeg">
+        <button data-m="light" class="on">浅色</button>
+        <button data-m="dark">暗色</button>
+      </div>
+    </div>
+    <div class="grp">球径
+      <div class="seg" id="sizeSeg">
+        <button data-s="32" class="on">32dp</button>
+        <button data-s="34">34dp</button>
+        <button data-s="36">36dp</button>
+      </div>
+    </div>
+    <div class="grp">状态
+      <div class="seg" id="stateSeg">
+        <button data-d="edge" class="on">缩回侧边</button>
+        <button data-d="out">拉出</button>
+        <button data-d="open">展开控制</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="phone">
+      <div class="topbar"><span class="dot"></span><span>微信 · 后台播放《起风了》</span></div>
+      <div class="lines">
+        <div class="bub"></div><div class="bub right"></div>
+        <div class="bub"></div><div class="bub right"></div>
+        <div class="bub"></div><div class="bub right"></div>
+        <div class="bub"></div>
+      </div>
+      <span class="cap" id="cap">40dp · 缩回侧边</span>
+      <div class="dock edge" id="dock">
+        <div class="panel">
+          <div class="pbtn" data-act="prev"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M7 6h2v12H7zM19 6v12l-9-6z" fill="currentColor"/></svg></div>
+          <div class="pbtn" data-act="pause"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M8 5h3v14H8zM13 5h3v14h-3z" fill="currentColor"/></svg></div>
+          <div class="pbtn" data-act="next"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M15 6h2v12h-2zM5 6l9 6-9 6z" fill="currentColor"/></svg></div>
+          <div class="pbtn close" data-act="close"><svg viewBox="0 0 24 24" width="16" height="16"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></div>
+        </div>
+        <div class="ball" id="ball">
+          <span class="pulse"></span>
+          <span id="ballIcon"></span>
+        </div>
+      </div>
+      <div class="hint">点击圆球：缩回 → 拉出 → 展开控制条</div>
+    </div>
+
+    <div class="side">
+      <h2>图标候选（点选即应用到左侧圆球）</h2>
+      <p class="note">
+        当前用的音符 <code>♪</code> 不合适，换成下列矢量图标。图标为单色白，随球面渐变自动可读；
+        <code>推荐 02 声波 / 01 耳机</code>——辨识度高、缩到半圆也认得出。
+      </p>
+      <div class="icons" id="icons"></div>
+
+      <h2 style="margin-top:22px">模块配色（葡萄气泡）</h2>
+      <p class="note">
+        主色 <code>#8B5CF6</code>（暗 <code>#C9A9FF</code>）；渐变 <code>#8B5CF6→#D8B4FE→#FFAFCC</code>；
+        控制条底 <code>surfaceContainerHighest</code>，图标 <code>primary</code>，关闭 <code>tertiary</code>。
+      </p>
+      <div class="swatch">
+        <i style="background:#8B5CF6" title="primary"></i>
+        <i style="background:#D8B4FE" title="gradientMid"></i>
+        <i style="background:#FFAFCC" title="gradientEnd"></i>
+        <i style="background:#D5497E" title="tertiary"></i>
+        <i style="background:#E7DCF8" title="surfaceContainerHighest"></i>
+        <i style="background:#2A2340" title="onSurface"></i>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const ICONS = {
+    eq:   {name:"01 声波音柱", tag:"推荐 · 辨识度高",
+           svg:'<svg viewBox="0 0 24 24"><rect x="3.5" y="9" width="3" height="6" rx="1.5" fill="currentColor"/><rect x="8.5" y="5.5" width="3" height="13" rx="1.5" fill="currentColor"/><rect x="13.5" y="7.5" width="3" height="9" rx="1.5" fill="currentColor"/><rect x="18.5" y="10" width="3" height="4" rx="1.5" fill="currentColor"/></svg>'},
+    hp:   {name:"02 耳机", tag:"推荐 · 通用",
+           svg:'<svg viewBox="0 0 24 24"><path d="M4.5 13.5v-1.5a7.5 7.5 0 0 1 15 0v1.5" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/><rect x="3" y="12.5" width="4" height="7" rx="2" fill="currentColor"/><rect x="17" y="12.5" width="4" height="7" rx="2" fill="currentColor"/></svg>'},
+    disc: {name:"03 唱片", tag:"极简圆环",
+           svg:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>'},
+    play: {name:"04 播放", tag:"最直白",
+           svg:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 8.5l6 3.5-6 3.5z" fill="currentColor"/></svg>'},
+    note: {name:"05 双音符", tag:"音乐语义",
+           svg:'<svg viewBox="0 0 24 24"><path d="M9.5 17.5V6.5l8-2v11" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="7.5" cy="17.5" r="2.5" fill="currentColor"/><circle cx="17.5" cy="15.5" r="2.5" fill="currentColor"/></svg>'},
+  };
+  let curIcon = "eq";
+
+  const dock = document.getElementById('dock');
+  const ballIcon = document.getElementById('ballIcon');
+  const cap = document.getElementById('cap');
+  let size = 32;
+  const PX_PER_DP = 39 / 32;   // 预览放大系数
+
+  function setState(d){
+    dock.classList.toggle('edge', d === 'edge');
+    dock.classList.toggle('open',  d === 'open');
+    document.querySelectorAll('#stateSeg button').forEach(b=>b.classList.toggle('on', b.dataset.d===d));
+    const label = d==='edge'?'缩回侧边':(d==='out'?'拉出·仅图标':'展开控制条');
+    cap.textContent = size + 'dp · ' + label;
+  }
+
+  document.getElementById('modeSeg').addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    document.body.classList.toggle('dark', b.dataset.m==='dark');
+    document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.toggle('on',x===b));
+  });
+  document.getElementById('sizeSeg').addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    size=+b.dataset.s;
+    document.getElementById('ball').style.setProperty('--size', (size*PX_PER_DP).toFixed(1)+'px');
+    document.querySelectorAll('#sizeSeg button').forEach(x=>x.classList.toggle('on',x===b));
+    const d=[...document.querySelectorAll('#stateSeg button')].find(x=>x.classList.contains('on'))?.dataset.d||'edge';
+    setState(d);
+  });
+  document.getElementById('stateSeg').addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return; setState(b.dataset.d);
+  });
+
+  // 点球循环：缩回 → 拉出 → 展开 → 缩回
+  document.getElementById('ball').addEventListener('click', ()=>{
+    if(dock.classList.contains('edge')) setState('out');
+    else if(!dock.classList.contains('open')) setState('open');
+    else setState('edge');
+  });
+  // 控制条动作
+  dock.addEventListener('click', e=>{
+    const b=e.target.closest('.pbtn'); if(!b) return;
+    if(b.dataset.act==='close') setState('edge');
+    if(b.dataset.act==='pause') b.innerHTML = b.innerHTML.includes('M8 5h3') ?
+        '<svg viewBox="0 0 24 24" width="17" height="17"><path d="M8 5l11 7-11 7z" fill="currentColor"/></svg>' :
+        '<svg viewBox="0 0 24 24" width="17" height="17"><path d="M8 5h3v14H8zM13 5h3v14h-3z" fill="currentColor"/></svg>';
+  });
+
+  // 图标网格
+  const grid=document.getElementById('icons');
+  Object.entries(ICONS).forEach(([k,v])=>{
+    const el=document.createElement('div');
+    el.className='ic'+(k===curIcon?' on':'');
+    el.innerHTML=`<div class="mini">${v.svg}</div><div class="t">${v.name}</div><div class="s">${v.tag}</div>`;
+    el.onclick=()=>{curIcon=k;ballIcon.innerHTML=v.svg;
+      document.querySelectorAll('.ic').forEach(x=>x.classList.remove('on'));el.classList.add('on');};
+    grid.appendChild(el);
+  });
+  ballIcon.innerHTML = ICONS[curIcon].svg;
+  setState('edge');
+</script>
+</body>
+</html>

@@ -19,81 +19,6 @@ public class VersionCompat {
         return null;
     }
 
-    // ==================== Storage ====================
-    // y3 → y3/y4 联系人对象
-
-    public static Class<?> findContactClass(ClassLoader cl) {
-        return findClassMulti(cl, "com.tencent.mm.storage.y3", "com.tencent.mm.storage.y4",
-            "com.tencent.mm.storage.a3", "com.tencent.mm.storage.z2");
-    }
-
-    public static String getContactUsername(Object contact) {
-        String result;
-        for (String m : new String[]{"d1", "d0", "getUsername", "c1", "getWxid"}) {
-            try { result = (String) XposedHelpers.callMethod(contact, m); return result; } catch (Throwable ignored) {}
-        }
-        return "";
-    }
-
-    public static String getContactNickname(Object contact) {
-        for (String m : new String[]{"M0", "M1", "L0", "getNickname", "N0"}) {
-            try { return (String) XposedHelpers.callMethod(contact, m); } catch (Throwable ignored) {}
-        }
-        return "";
-    }
-
-    public static String getContactRemark(Object contact) {
-        for (String m : new String[]{"w0", "w1", "v0", "getRemark", "u0"}) {
-            try { return (String) XposedHelpers.callMethod(contact, m); } catch (Throwable ignored) {}
-        }
-        return "";
-    }
-
-    public static int getContactAvatar(Object contact) {
-        for (String m : new String[]{"R0", "R1", "Q0", "getShowHead"}) {
-            try {
-                Object r = XposedHelpers.callMethod(contact, m);
-                if (r instanceof Integer) return (Integer) r;
-            } catch (Throwable ignored) {}
-        }
-        return 0;
-    }
-
-    // ==================== ModContact (np4) ====================
-
-    public static Class<?> findModContactClass(ClassLoader cl) {
-        return findClassMulti(cl, "a65.np4", "a59.np4", "a67.np4",
-            "a65.mp4", "a65.nq4", "a65.op4");
-    }
-
-    public static Class<?> findEw5Class(ClassLoader cl) {
-        return findClassMulti(cl, "a65.ew5", "a59.ew5", "a67.ew5",
-            "a65.ew6", "a65.dw5", "a65.fw5");
-    }
-
-    public static Class<?> findVClass(ClassLoader cl) {
-        return findClassMulti(cl, "com.tencent.mm.plugin.messenger.foundation.v",
-            "com.tencent.mm.plugin.messenger.foundation.t",
-            "com.tencent.mm.plugin.messenger.foundation.u");
-    }
-
-    public static String ew5ToString(Object ew5Obj, ClassLoader cl) {
-        try {
-            Class<?> j1Class = findClassMulti(cl, "a65.j1", "a59.j1", "a67.j1",
-                "a65.i1", "a65.k1", "a65.h1");
-            if (j1Class != null) {
-                Method m = j1Class.getDeclaredMethod("g", Object.class);
-                m.setAccessible(true);
-                return (String) m.invoke(null, ew5Obj);
-            }
-        } catch (Throwable ignored) {}
-        try {
-            Object result = XposedHelpers.callMethod(ew5Obj, "toString");
-            return result != null ? result.toString() : "";
-        } catch (Throwable ignored2) {}
-        return "";
-    }
-
     // ==================== Database ====================
 
     /**
@@ -343,6 +268,9 @@ public class VersionCompat {
 
     private static volatile ClassLoader sCachedTinkerClassLoader = null;
     private static volatile boolean sTinkerSearchDone = false;
+    /** v955(问题13): 上次搜索完成时间, 未命中时允许冷却后重试, 避免永久判定"无 Tinker"。 */
+    private static volatile long sTinkerSearchDoneAt = 0L;
+    private static final long TINKER_RETRY_MS = 10000L;
 
     public static ClassLoader findTinkerClassLoader(ClassLoader cl) {
         // v1042: 微信经 Tinker 热修复时, 真实存储类(f9/e9 等)由 DelegateLastClassLoader 加载,
@@ -359,23 +287,35 @@ public class VersionCompat {
                     + latestReal.getClass().getSimpleName());
             }
             sTinkerSearchDone = true;
+            sTinkerSearchDoneAt = System.currentTimeMillis();
             return latestReal;
         }
 
         // Return cached result if available
-        if (sCachedTinkerClassLoader != null) return sCachedTinkerClassLoader;
+        // v955(问题13): 缓存 CL 动态校验, 失效则丢弃并重新搜索
+        if (sCachedTinkerClassLoader != null) {
+            if (isValidWechatCl(sCachedTinkerClassLoader)) return sCachedTinkerClassLoader;
+            LogWriter.log(TAG, "findTinkerClassLoader: cached CL invalid, re-searching");
+            sCachedTinkerClassLoader = null;
+            sTinkerSearchDone = false;
+        }
 
         // v1025: 优先使用从微信运行时对象反查的真实 ClassLoader
         ClassLoader real = sWechatRealClassLoader;
-        if (real != null) {
+        if (real != null && isValidWechatCl(real)) {
             sCachedTinkerClassLoader = real;
             sTinkerSearchDone = true;
+            sTinkerSearchDoneAt = System.currentTimeMillis();
             LogWriter.log(TAG, "findTinkerClassLoader: using wechat real CL="
                 + real.getClass().getSimpleName());
             return real;
         }
 
-        if (sTinkerSearchDone) return null;
+        // v955(问题13): 未命中不再永久锁定, 冷却后可重新搜索
+        if (sTinkerSearchDone
+                && System.currentTimeMillis() - sTinkerSearchDoneAt < TINKER_RETRY_MS) {
+            return null;
+        }
 
         // 优先使用 ContextManager 缓存的 Tinker ClassLoader
         ClassLoader cached = com.leshao.v3.ContextManager.getTinkerClassLoader();
@@ -405,6 +345,7 @@ public class VersionCompat {
                     LogWriter.log(TAG, "findTinkerClassLoader: found " + name);
                     sCachedTinkerClassLoader = current;
                     sTinkerSearchDone = true;
+                    sTinkerSearchDoneAt = System.currentTimeMillis();
                     return current;
                 }
                 current = current.getParent();
@@ -428,6 +369,7 @@ public class VersionCompat {
                         LogWriter.log(TAG, "findTinkerClassLoader: found via main thread=" + name);
                         sCachedTinkerClassLoader = mainCL;
                         sTinkerSearchDone = true;
+                        sTinkerSearchDoneAt = System.currentTimeMillis();
                         return mainCL;
                     }
                     mainCL = mainCL.getParent();
@@ -436,7 +378,22 @@ public class VersionCompat {
         } catch (Throwable ignored) {}
 
         sTinkerSearchDone = true;
+        sTinkerSearchDoneAt = System.currentTimeMillis();
         return null;
+    }
+
+    /** v955(问题13): 校验 ClassLoader 是否可用(能加载微信核心类), 用于缓存动态失效。 */
+    private static boolean isValidWechatCl(ClassLoader c) {
+        if (c == null) return false;
+        try {
+            c.loadClass("com.tencent.mm.R");
+            return true;
+        } catch (Throwable ignored) {}
+        try {
+            c.loadClass("com.tencent.mm.storage.j4");
+            return true;
+        } catch (Throwable ignored) {}
+        return false;
     }
 
     private static String findNativeLibDir() {
@@ -556,15 +513,18 @@ public class VersionCompat {
     }
 
     private static void tryInitCsoLoader(ClassLoader cl) {
+        // v955(问题5): 关闭裸开时不做任何 CsoLoader 反射初始化, 避免触碰微信内核
+        if (!ENABLE_RAW_DB_OPEN) return;
         if (sCsoLoaderReady) return;
-        StringBuilder diag = new StringBuilder();
         try {
             ClassLoader tkCL = findTinkerClassLoader(cl);
             if (tkCL == null) tkCL = cl;
 
+            // v955: 仅使用 DexKit 精确命中的类, 不再回退硬编码 "com.tencent.cso.CsoLoader"
             String csoLoaderClass = DexKitHelper.getCsoLoaderClass();
-            if (csoLoaderClass == null) {
-                csoLoaderClass = "com.tencent.cso.CsoLoader";
+            if (csoLoaderClass == null || csoLoaderClass.isEmpty()) {
+                LogWriter.log(TAG, "tryInitCsoLoader: CsoLoader class unknown (DexKit), skip");
+                return;
             }
             Class<?> cls;
             try {
@@ -575,193 +535,68 @@ public class VersionCompat {
                 return;
             }
 
-            android.content.Context ctx = com.leshao.v3.ContextManager.getAppContext();
-            String pkgName = ctx != null ? ctx.getPackageName() : "com.tencent.mm";
-
-            // 记录候选方法，供诊断
-            int tried = 0;
-
-            for (java.lang.reflect.Method m : cls.getMethods()) {
-                if (isJunkMethod(m)) continue;
-                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
-                if (m.getParameterTypes().length == 0) {
-                    tried++;
-                    try {
-                        m.invoke(null);
-                        sCsoLoaderReady = true;
-                        LogWriter.log(TAG, "tryInitCsoLoader: OK via " + cls.getName() + "." + m.getName() + "()");
-                        return;
-                    } catch (Throwable t) {
-                        diag.append("\n  zero-arg ").append(m.getName()).append("() -> ").append(errDetail(t));
-                    }
-                }
+            // v955(问题5): 只调用 DexKit 精确入口; 禁止遍历所有方法/构造器/Unsafe 盲调
+            String entry = DexKitHelper.getCsoLoaderMethod();
+            if (entry == null || entry.isEmpty()) {
+                LogWriter.log(TAG, "tryInitCsoLoader: no DexKit entry method for " + cls.getName() + ", skip");
+                return;
             }
-
-            for (java.lang.reflect.Method m : cls.getMethods()) {
-                if (isJunkMethod(m)) continue;
-                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
-                int pc = m.getParameterTypes().length;
-                if (pc == 0) continue;
-                tried++;
-                Object[] args = buildArgs(m.getParameterTypes(), ctx, cl, pkgName);
-                try {
-                    m.invoke(null, args);
+            if (invokeCsoEntry(cls, entry)) {
+                sCsoLoaderReady = true;
+                LogWriter.log(TAG, "tryInitCsoLoader: OK via DexKit " + cls.getName() + "." + entry);
+                return;
+            }
+            for (String named : new String[]{"nativeInitialize", "preloadAllInternal", "init", "initialize"}) {
+                if (named.equals(entry)) continue;
+                if (invokeCsoEntry(cls, named)) {
                     sCsoLoaderReady = true;
-                    LogWriter.log(TAG, "tryInitCsoLoader: OK via " + cls.getName() + "." + m.getName()
-                            + "(" + m.getParameterTypes().length + ")");
+                    LogWriter.log(TAG, "tryInitCsoLoader: OK via named " + cls.getName() + "." + named);
                     return;
-                } catch (Throwable t) {
-                    diag.append("\n  static ").append(m.getName()).append("(").append(pc).append(") -> ").append(errDetail(t));
                 }
             }
-
-            for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
-                if (isJunkMethod(m)) continue;
-                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
-                m.setAccessible(true);
-                tried++;
-                Object[] args = buildArgs(m.getParameterTypes(), ctx, cl, pkgName);
-                try {
-                    m.invoke(null, args);
-                    sCsoLoaderReady = true;
-                    LogWriter.log(TAG, "tryInitCsoLoader: OK via declared " + cls.getName() + "." + m.getName()
-                            + "(" + m.getParameterTypes().length + ")");
-                    return;
-                } catch (Throwable t) {
-                    diag.append("\n  declared ").append(m.getName()).append("(").append(m.getParameterTypes().length).append(") -> ").append(errDetail(t));
-                }
-            }
-
-            Object instance = null;
-            java.lang.reflect.Constructor<?>[] ctors = cls.getDeclaredConstructors();
-            for (java.lang.reflect.Constructor<?> ctor : ctors) {
-                ctor.setAccessible(true);
-                Object[] ctorArgs = buildArgs(ctor.getParameterTypes(), ctx, cl, pkgName);
-                try {
-                    instance = ctor.newInstance(ctorArgs);
-                    break;
-                } catch (Throwable t) {
-                    diag.append("\n  ctor -> ").append(errDetail(t));
-                }
-            }
-            if (instance == null) {
-                try {
-                    java.lang.reflect.Field f = Class.forName("sun.misc.Unsafe").getDeclaredField("theUnsafe");
-                    f.setAccessible(true);
-                    Object unsafe = f.get(null);
-                    instance = Class.forName("sun.misc.Unsafe").getMethod("allocateInstance", Class.class).invoke(unsafe, cls);
-                } catch (Throwable t) {
-                    diag.append("\n  unsafe -> ").append(errDetail(t));
-                }
-            }
-
-            if (instance != null) {
-                // v1023: 优先尝试 DexKit 找到的 CsoLoader 初始化入口(如 com.tencent.cso.CsoLoader.c)
-                String dexMethod = DexKitHelper.getCsoLoaderMethod();
-                if (dexMethod != null && !dexMethod.isEmpty()) {
-                    tried++;
-                    try {
-                        java.lang.reflect.Method dm = cls.getDeclaredMethod(dexMethod);
-                        dm.setAccessible(true);
-                        if (dm.getParameterTypes().length == 0 && !isJunkMethod(dm)) {
-                            dm.invoke(instance);
-                            sCsoLoaderReady = true;
-                            LogWriter.log(TAG, "tryInitCsoLoader: OK via dex-method " + cls.getName() + "." + dexMethod + "()");
-                            return;
-                        }
-                    } catch (Throwable t) {
-                        diag.append("\n  dex-method ").append(dexMethod).append(" -> ").append(errDetail(t));
-                    }
-                }
-
-                for (java.lang.reflect.Method m : cls.getMethods()) {
-                    if (isJunkMethod(m)) continue;
-                    if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
-                    boolean hasCsoLoaderParam = false;
-                    for (Class<?> pt : m.getParameterTypes()) {
-                        if (pt == cls) { hasCsoLoaderParam = true; break; }
-                    }
-                    if (!hasCsoLoaderParam) continue;
-                    tried++;
-                    Object[] args = buildArgs(m.getParameterTypes(), ctx, cl, pkgName);
-                    for (int i = 0; i < args.length; i++) {
-                        if (m.getParameterTypes()[i] == cls) args[i] = instance;
-                    }
-                    try {
-                        m.invoke(null, args);
-                        sCsoLoaderReady = true;
-                        LogWriter.log(TAG, "tryInitCsoLoader: OK via static(csoLoader) " + cls.getName() + "." + m.getName());
-                        return;
-                    } catch (Throwable t) {
-                        diag.append("\n  static(cso) ").append(m.getName()).append(" -> ").append(errDetail(t));
-                    }
-                }
-
-                for (java.lang.reflect.Method m : cls.getMethods()) {
-                    if (isJunkMethod(m)) continue;
-                    if (java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
-                    if (m.getParameterTypes().length == 0) {
-                        tried++;
-                        try {
-                            m.invoke(instance);
-                            sCsoLoaderReady = true;
-                            LogWriter.log(TAG, "tryInitCsoLoader: OK via instance " + cls.getName() + "." + m.getName() + "()");
-                            return;
-                        } catch (Throwable t) {
-                            diag.append("\n  instance ").append(m.getName()).append("() -> ").append(errDetail(t));
-                        }
-                    }
-                }
-                for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
-                    if (isJunkMethod(m)) continue;
-                    if (java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
-                    if ("nativeInitialize".equals(m.getName())
-                        || "preloadAllInternal".equals(m.getName())
-                        || "init".equals(m.getName())
-                        || "initialize".equals(m.getName())) {
-                        m.setAccessible(true);
-                        tried++;
-                        Object[] args = buildArgs(m.getParameterTypes(), ctx, cl, pkgName);
-                        try {
-                            m.invoke(instance, args);
-                            sCsoLoaderReady = true;
-                            LogWriter.log(TAG, "tryInitCsoLoader: OK via named " + cls.getName() + "." + m.getName() + "()");
-                            return;
-                        } catch (Throwable t) {
-                            diag.append("\n  named ").append(m.getName()).append(" -> ").append(errDetail(t));
-                        }
-                    }
-                }
-            }
-            LogWriter.log(TAG, "tryInitCsoLoader: all " + tried + " attempts failed for " + cls.getName()
-                    + " ready=" + sCsoLoaderReady + " details:" + diag);
+            LogWriter.log(TAG, "tryInitCsoLoader: entry '" + entry + "' not invokable for " + cls.getName());
         } catch (Throwable e) {
             LogWriter.log(TAG, "tryInitCsoLoader: outer err=" + errDetail(e));
         }
     }
 
-    private static Object[] buildArgs(Class<?>[] paramTypes,
-            android.content.Context ctx, ClassLoader cl, String pkgName) {
-        Object[] args = new Object[paramTypes.length];
-        for (int i = 0; i < paramTypes.length; i++) {
-            Class<?> pt = paramTypes[i];
-            if (android.content.Context.class.isAssignableFrom(pt)) {
-                args[i] = ctx;
-            } else if (pt == java.lang.ClassLoader.class || pt == ClassLoader.class) {
-                args[i] = cl;
-            } else if (pt == String.class) {
-                args[i] = pkgName;
-            } else if (pt == boolean.class) {
-                args[i] = false;
-            } else if (pt == int.class) {
-                args[i] = 0;
-            } else if (pt == long.class) {
-                args[i] = 0L;
-            } else {
-                args[i] = null;
+    /**
+     * v955(问题5): 仅以「静态无参」或「实例无参」方式调用单个入口方法, 成功返回 true。
+     * 实例化只用无参构造器或 Unsafe.allocateInstance, 不做带参构造/全量方法盲调。
+     */
+    private static boolean invokeCsoEntry(Class<?> cls, String name) {
+        try {
+            java.lang.reflect.Method m = cls.getDeclaredMethod(name);
+            if (isJunkMethod(m) || m.getParameterTypes().length != 0) return false;
+            m.setAccessible(true);
+            if (java.lang.reflect.Modifier.isStatic(m.getModifiers())) {
+                m.invoke(null);
+                return true;
             }
+            Object instance = newCsoInstance(cls);
+            if (instance == null) return false;
+            m.invoke(instance);
+            return true;
+        } catch (Throwable ignored) {
+            return false;
         }
-        return args;
+    }
+
+    /** v955(问题5): 无参构造优先, 失败再 Unsafe 分配; 均失败返回 null。 */
+    private static Object newCsoInstance(Class<?> cls) {
+        try {
+            java.lang.reflect.Constructor<?> c = cls.getDeclaredConstructor();
+            c.setAccessible(true);
+            return c.newInstance();
+        } catch (Throwable ignored) {}
+        try {
+            java.lang.reflect.Field f = Class.forName("sun.misc.Unsafe").getDeclaredField("theUnsafe");
+            f.setAccessible(true);
+            Object unsafe = f.get(null);
+            return Class.forName("sun.misc.Unsafe").getMethod("allocateInstance", Class.class).invoke(unsafe, cls);
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     public static Class<?> findBaseDirClass(ClassLoader cl) {
@@ -811,9 +646,40 @@ public class VersionCompat {
                 } catch (Throwable ignored) {}
             }
         }
+        // v1134: 混淆改名导致哈希类找不到时, 直接从磁盘取真实账号目录名 (含 EnMicroMsg.db 的目录, 取最新)。
+        // 这比 md5("mm"+uin) 可靠 —— 后者几乎永远不是真实目录, 会让调用方定位到不存在的路径。
+        String diskHash = findAccountDirByDisk();
+        if (diskHash != null) {
+            LogWriter.log(TAG, "getDbHash from disk: " + diskHash);
+            return diskHash;
+        }
         String fallback = md5("mm" + uin);
         LogWriter.log(TAG, "getDbHash fallback: " + fallback);
         return fallback;
+    }
+
+    /** v1134: 当前进程用户目录下, 含 EnMicroMsg.db 的账号目录名 (取最新修改)。 */
+    private static String findAccountDirByDisk() {
+        try {
+            int currentUser = android.os.Process.myUid() / 100000;
+            java.io.File md = new java.io.File(
+                "/data/user/" + currentUser + "/com.tencent.mm/MicroMsg");
+            java.io.File[] dirs = md.listFiles();
+            if (dirs == null) return null;
+            java.io.File best = null;
+            long bestM = -1L;
+            for (java.io.File d : dirs) {
+                if (!d.isDirectory()) continue;
+                java.io.File db = new java.io.File(d, "EnMicroMsg.db");
+                if (db.exists() && db.lastModified() > bestM) {
+                    bestM = db.lastModified();
+                    best = d;
+                }
+            }
+            return best != null ? best.getName() : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     /**
@@ -1052,12 +918,6 @@ public class VersionCompat {
             "com.tencent.mm.ui.chatting.v2.ChattingUIFragment");
     }
 
-    public static Class<?> findContactStorageClass(ClassLoader cl) {
-        return findClassMulti(cl, "com.tencent.mm.storage.j4",
-            "com.tencent.mm.storage.k4", "com.tencent.mm.storage.i4",
-            "com.tencent.mm.storage.h4");
-    }
-
     // ==================== AntiRecall ====================
 
     public static Class<?> findAntiRecallClass(ClassLoader cl) {
@@ -1068,13 +928,6 @@ public class VersionCompat {
     public static Class<?> findAntiRecallProtoClass(ClassLoader cl) {
         return findClassMulti(cl, "e01.u", "e02.u", "e00.u", "e03.u",
             "e01.t", "e02.t", "e01.v", "e00.t");
-    }
-
-    // 群成员同步逻辑类: e01.v1.t(String room, ArrayList<String> members, String roomOwner)
-    // = syncAddChatroomMember, 入群欢迎的首选触发点(反编译确认)
-    public static Class<?> findChatroomMembersLogicClass(ClassLoader cl) {
-        return findClassMulti(cl, "e01.v1", "e02.v1", "e01.v2", "e00.v1",
-            "e01.w1", "e02.w1");
     }
 
     // ==================== VOIP 自动接听(反编译确认) ====================
@@ -1100,27 +953,6 @@ public class VersionCompat {
         return findClassMulti(cl, "com.tencent.mm.storage.f9",
             "com.tencent.mm.storage.g9", "com.tencent.mm.storage.e9",
             "com.tencent.mm.storage.f8");
-    }
-
-    public static Class<?> findNotifyClass(ClassLoader cl) {
-        return findClassMulti(cl, "com.tencent.mm.plugin.notification.c.c",
-            "com.tencent.mm.plugin.notification.c.d",
-            "com.tencent.mm.plugin.notification.c.b");
-    }
-
-    // ==================== MainSettings ====================
-
-    public static Class<?> findMainSettingsClass(ClassLoader cl) {
-        return findClassMulti(cl,
-            "com.tencent.mm.plugin.setting.ui.setting_new.MainSettingsUI",
-            "com.tencent.mm.plugin.setting.ui.setting.MainSettingsUI",
-            "com.tencent.mm.plugin.setting.ui.MainSettingsUI",
-            "com.tencent.mm.plugin.setting.ui.setting.SettingsUI",
-            "com.tencent.mm.plugin.setting.ui.setting.SettingUI",
-            "com.tencent.mm.ui.setting.SettingsUI",
-            "com.tencent.mm.plugin.setting.ui.setting_new.SettingsUI",
-            "com.tencent.mm.ui.tools.preference.MMPreference",
-            "com.tencent.mm.plugin.setting.ui.setting.SelfQRcodeUI");
     }
 
     // ==================== Storage/DB (short names) ====================
@@ -1166,18 +998,6 @@ public class VersionCompat {
             "nv1.t2", "nx1.t2");
     }
 
-    public static Class<?> findClassSafe(ClassLoader cl, String name) {
-        try {
-            return Class.forName(name, false, cl);
-        } catch (Throwable t) {
-            try {
-                return XposedHelpers.findClass(name, cl);
-            } catch (Throwable t2) {
-                return null;
-            }
-        }
-    }
-
     // ==================== Voice/Media ====================
 
     public static Class<?> findVoiceMsgClass(ClassLoader cl) {
@@ -1196,22 +1016,6 @@ public class VersionCompat {
             "y21.p0", "y22.p0", "y20.p0", "y23.p0", "y21.o0", "y21.q0");
     }
 
-    public static Class<?> findPlayThreadClass(ClassLoader cl) {
-        return findClassMulti(cl, "com.tencent.mm.sdk.platformtools.h1",
-            "com.tencent.mm.sdk.platformtools.h2",
-            "com.tencent.mm.sdk.platformtools.g1");
-    }
-
-    /** 查找语音发送逻辑类 (v61.d1 VoiceLogic)，提供 h(注册)/u(发送)/s(直接发) 静态方法 */
-    public static Class<?> findVoiceLogicClass(ClassLoader cl) {
-        String dexKit = com.leshao.v3.hook.DexKitHelper.getVoiceApiClass();
-        if (dexKit != null && !dexKit.isEmpty()) {
-            try { return XposedHelpers.findClass(dexKit, cl); } catch (Throwable ignored) {}
-        }
-        return findClassMulti(cl, "v61.d1", "v61.d2", "v61.d0", "v61.d3",
-            "v61.e1", "v61.e0", "v61.f1", "v61.d4");
-    }
-
     /** 查找语音路径服务类 (pv.p0 / wb0.b)，提供 ej/getAmrFullPath 静态或实例方法 */
     public static Class<?> findVoicePathServiceClass(ClassLoader cl) {
         return findClassMulti(cl, "pv.p0", "pv.p1", "pv.o0", "pv.o1",
@@ -1223,14 +1027,6 @@ public class VersionCompat {
     public static Class<?> findBd0SClass(ClassLoader cl) {
         return findClassMulti(cl, "bd0.s", "be0.s", "bc0.s", "bd1.s",
             "bd0.t", "bd0.r");
-    }
-
-    // ==================== UI/Theme ====================
-
-    public static Class<?> findGaClass(ClassLoader cl) {
-        return findClassMulti(cl, "com.tencent.mm.ui.ga",
-            "com.tencent.mm.ui.gb", "com.tencent.mm.ui.fa",
-            "com.tencent.mm.ui.ha");
     }
 
     public static Class<?> findAppClass(ClassLoader cl) {
@@ -1249,39 +1045,6 @@ public class VersionCompat {
     public static Class<?> findContextMenuClass(ClassLoader cl) {
         return findClassMulti(cl, "ly3.k3", "ly3.j3", "ly3.l3",
             "lx3.k3", "ly3.k4");
-    }
-
-    // ==================== Misc ====================
-
-    public static Class<?> findModelBaseClass(ClassLoader cl) {
-        return findClassMulti(cl, "com.tencent.mm.modelbase.b",
-            "com.tencent.mm.modelbase.c",
-            "com.tencent.mm.modelbase.a");
-    }
-
-    public static Class<?> findKkKClass(ClassLoader cl) {
-        return findClassMulti(cl, "kk.k", "kl.k", "kj.k",
-            "kk.l", "kk.j");
-    }
-
-    // ==================== Contact get signature ====================
-
-    public static String getContactSignature(Object contact) {
-        for (String extraMethod : new String[]{"z0", "y0", "A0", "z1"}) {
-            try {
-                Object extra = XposedHelpers.callMethod(contact, extraMethod);
-                if (extra != null) {
-                    for (String sigMethod : new String[]{"getSignature", "signature", "a0", "A0"}) {
-                        try {
-                            Object result = XposedHelpers.callMethod(extra, sigMethod);
-                            if (result instanceof String) return (String) result;
-                        } catch (Throwable ignored) {}
-                    }
-                    break;
-                }
-            } catch (Throwable ignored) {}
-        }
-        return "";
     }
 
     // ==================== Utility ====================

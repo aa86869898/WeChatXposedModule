@@ -1,0 +1,686 @@
+>>>>> Dumping cursor [pkg, apk_path, odex_path, odex_mtime]
+0 {
+   pkg=com.google.android.webview
+   apk_path=/product/app/WebViewGoogle64CN/WebViewGoogle64CN.apk
+   odex_path=/data/dalvik-cache/arm/product@app@WebViewGoogle64CN@WebViewGoogle64CN.apk@classes.dex
+   odex_mtime=1782408244173
+}
+1 {
+   pkg=com.tencent.mobileqq
+   apk_path=/data/app/~~5y6N5GPoxFbLG-0hbxhtLg==/com.tencent.mobileqq-Q1-nQzkoK1R4gbwQohrx4Q==/base.apk
+   odex_path=/data/app/~~5y6N5GPoxFbLG-0hbxhtLg==/com.tencent.mobileqq-Q1-nQzkoK1R4gbwQohrx4Q==/oat/arm64/base.odex
+   odex_mtime=1782408403881
+}
+2 {
+   pkg=me.yun.fkwechat
+   apk_path=/data/app/~~DaR6l3piyiMskUJGF-x-gw==/me.yun.fkwechat-kYQxSYY7wQmmCEfSBCZdkQ==/base.apk
+   odex_path=/data/app/~~DaR6l3piyiMskUJGF-x-gw==/me.yun.fkwechat-kYQxSYY7wQmmCEfSBCZdkQ==/oat/arm64/base.odex
+   odex_mtime=1782408658689
+}
+3 {
+   pkg=com.cainiao.wireless
+   apk_path=/data/app/~~xcZheQwpUfm6kNDYSEpBSA==/com.cainiao.wireless-QcdSEZpf27SWd_8rhofn5A==/base.apk
+   odex_path=/data/app/~~xcZheQwpUfm6kNDYSEpBSA==/com.cainiao.wireless-QcdSEZpf27SWd_8rhofn5A==/oat/arm64/base.odex
+   odex_mtime=1782623036506
+}
+4 {
+   pkg=com.android.server.telecom
+   apk_path=/system_ext/priv-app/Telecom/Telecom.apk
+   odex_path=/data/dalvik-cache/arm64/system_ext@priv-app@Telecom@Telecom.apk@classes.dex
+   odex_mtime=1782666495255
+}
+5 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~RtSPP6Jiioc8ih_pbMFE_g==/com.heytap.themestore-4IU1DPUeH3ttj3YvghQTog==/split_dynamicthemeipspace.apk
+   odex_path=/data/app/~~RtSPP6Jiioc8ih_pbMFE_g==/com.heytap.themestore-4IU1DPUeH3ttj3YvghQTog==/oat/arm64/split_dynamicthemeipspace.odex
+   odex_mtime=1782799626229
+}
+6 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~RtSPP6Jiioc8ih_pbMFE_g==/com.heytap.themestore-4IU1DPUeH3ttj3YvghQTog==/split_dynamicthemepet.apk
+   odex_path=/data/app/~~RtSPP6Jiioc8ih_pbMFE_g==/com.heytap.themestore-4IU1DPUeH3ttj3YvghQTog==/oat/arm64/split_dynamicthemepet.odex
+   odex_mtime=1782799627017
+}
+7 {
+   pkg=com.window.hook
+   apk_path=/data/app/~~5DhKqHgFEf0QF6ZK2bmlIg==/com.window.hook-duEqrgegIl5cdiOEJuSJFg==/base.apk
+   odex_path=/data/app/~~5DhKqHgFEf0QF6ZK2bmlIg==/com.window.hook-duEqrgegIl5cdiOEJuSJFg==/oat/arm64/base.odex
+   odex_mtime=1782841208024
+}
+8 {
+   pkg=me.neko.fckvip
+   apk_path=/data/app/~~zR-GkwaTgz2uO8EvfiqoGQ==/me.neko.fckvip-hQ0qyZY2vNw8fn1J6BVX6Q==/base.apk
+   odex_path=/data/app/~~zR-GkwaTgz2uO8EvfiqoGQ==/me.neko.fckvip-hQ0qyZY2vNw8fn1J6BVX6Q==/oat/arm64/base.odex
+   odex_mtime=1782841234340
+}
+9 {
+   pkg=com.cxapk.viphelper
+   apk_path=/data/app/~~z4Jg4w1sMWwaOcusOqo7yA==/com.cxapk.viphelper-tMZ6_0U3_3Onu7Ipb6Zeyw==/base.apk
+   odex_path=/data/app/~~z4Jg4w1sMWwaOcusOqo7yA==/com.cxapk.viphelper-tMZ6_0U3_3Onu7Ipb6Zeyw==/oat/arm64/base.odex
+   odex_mtime=1782841243440
+}
+10 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~RtSPP6Jiioc8ih_pbMFE_g==/com.heytap.themestore-4IU1DPUeH3ttj3YvghQTog==/base.apk
+   odex_path=/data/app/~~RtSPP6Jiioc8ih_pbMFE_g==/com.heytap.themestore-4IU1DPUeH3ttj3YvghQTog==/oat/arm64/base.odex
+   odex_mtime=1782928865334
+}
+11 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~RtSPP6Jiioc8ih_pbMFE_g==/com.heytap.themestore-4IU1DPUeH3ttj3YvghQTog==/split_dynamicthemecard.apk
+   odex_path=/data/app/~~RtSPP6Jiioc8ih_pbMFE_g==/com.heytap.themestore-4IU1DPUeH3ttj3YvghQTog==/oat/arm64/split_dynamicthemecard.odex
+   odex_mtime=1782928910946
+}
+12 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~RtSPP6Jiioc8ih_pbMFE_g==/com.heytap.themestore-4IU1DPUeH3ttj3YvghQTog==/split_dynamicthemedetail.apk
+   odex_path=/data/app/~~RtSPP6Jiioc8ih_pbMFE_g==/com.heytap.themestore-4IU1DPUeH3ttj3YvghQTog==/oat/arm64/split_dynamicthemedetail.odex
+   odex_mtime=1782928912046
+}
+13 {
+   pkg=com.tencent.mm
+   apk_path=/data/app/~~h8BI71e6iibNx2KXoiR8SA==/com.tencent.mm-bj_qfoOd5ARc06RtUEfZNg==/base.apk
+   odex_path=/data/app/~~h8BI71e6iibNx2KXoiR8SA==/com.tencent.mm-bj_qfoOd5ARc06RtUEfZNg==/oat/arm64/base.odex
+   odex_mtime=1783018530025
+}
+14 {
+   pkg=com.ss.android.ugc.aweme
+   apk_path=/data/app/~~U_iHVMdfsmT3pnUzb0qjMw==/com.ss.android.ugc.aweme-w9aER5qYInBWpCqGo-5_Ww==/base.apk
+   odex_path=/data/app/~~U_iHVMdfsmT3pnUzb0qjMw==/com.ss.android.ugc.aweme-w9aER5qYInBWpCqGo-5_Ww==/oat/arm64/base.odex
+   odex_mtime=1783359934964
+}
+15 {
+   pkg=dev.ujhhgtg.wekit
+   apk_path=/data/app/~~gAMz2mVlx3Lx_76hfXAh1g==/dev.ujhhgtg.wekit-W12UCNTJYScVQ7fD5I8x9Q==/base.apk
+   odex_path=/data/app/~~gAMz2mVlx3Lx_76hfXAh1g==/dev.ujhhgtg.wekit-W12UCNTJYScVQ7fD5I8x9Q==/oat/arm64/base.odex
+   odex_mtime=1783685694533
+}
+16 {
+   pkg=dev.ujhhgtg.wekit
+   apk_path=/data/app/~~n60_GoozomCy0cDj0LR8wA==/dev.ujhhgtg.wekit-a9DSLIay7W31hbs3lmYZ7Q==/base.apk
+   odex_path=/data/app/~~n60_GoozomCy0cDj0LR8wA==/dev.ujhhgtg.wekit-a9DSLIay7W31hbs3lmYZ7Q==/oat/arm64/base.odex
+   odex_mtime=1783708611916
+}
+17 {
+   pkg=dev.ujhhgtg.wekit
+   apk_path=/data/app/~~YaUN5JLI8qLj0aUtRfG5yw==/dev.ujhhgtg.wekit-Mg7nqM8DX9FIUj7ZH4uqXw==/base.apk
+   odex_path=/data/app/~~YaUN5JLI8qLj0aUtRfG5yw==/dev.ujhhgtg.wekit-Mg7nqM8DX9FIUj7ZH4uqXw==/oat/arm64/base.odex
+   odex_mtime=1783785071851
+}
+18 {
+   pkg=dev.ujhhgtg.wekit
+   apk_path=/data/app/~~A6tgmUN7Pf-_KhPzBCT0CQ==/dev.ujhhgtg.wekit-eV48qCTFKN7gwDC_36vR7w==/base.apk
+   odex_path=/data/app/~~A6tgmUN7Pf-_KhPzBCT0CQ==/dev.ujhhgtg.wekit-eV48qCTFKN7gwDC_36vR7w==/oat/arm64/base.odex
+   odex_mtime=1783994844784
+}
+19 {
+   pkg=dev.ujhhgtg.wekit
+   apk_path=/data/app/~~oGF4FPb7nDqd0JxbVZrqCQ==/dev.ujhhgtg.wekit-thXgIlX7y1zts6oj1aAXCw==/base.apk
+   odex_path=/data/app/~~oGF4FPb7nDqd0JxbVZrqCQ==/dev.ujhhgtg.wekit-thXgIlX7y1zts6oj1aAXCw==/oat/arm64/base.odex
+   odex_mtime=1784118521224
+}
+20 {
+   pkg=dev.ujhhgtg.wekit
+   apk_path=/data/app/~~z2Vx5rDfMcKO0sxXa5tZpw==/dev.ujhhgtg.wekit-kBDmKJRRyqvJKk-i0ncRtQ==/base.apk
+   odex_path=/data/app/~~z2Vx5rDfMcKO0sxXa5tZpw==/dev.ujhhgtg.wekit-kBDmKJRRyqvJKk-i0ncRtQ==/oat/arm64/base.odex
+   odex_mtime=1784120199688
+}
+21 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~Z7HA-WWEY1l1UJe4_t_AyA==/com.heytap.themestore-XRU46UmpyCOZoR1oOL9-pw==/split_dynamicthemecard.apk
+   odex_path=/data/app/~~Z7HA-WWEY1l1UJe4_t_AyA==/com.heytap.themestore-XRU46UmpyCOZoR1oOL9-pw==/oat/arm64/split_dynamicthemecard.odex
+   odex_mtime=1784346138823
+}
+22 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~Z7HA-WWEY1l1UJe4_t_AyA==/com.heytap.themestore-XRU46UmpyCOZoR1oOL9-pw==/split_dynamicthemeipspace.apk
+   odex_path=/data/app/~~Z7HA-WWEY1l1UJe4_t_AyA==/com.heytap.themestore-XRU46UmpyCOZoR1oOL9-pw==/oat/arm64/split_dynamicthemeipspace.odex
+   odex_mtime=1784346140327
+}
+23 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~Z7HA-WWEY1l1UJe4_t_AyA==/com.heytap.themestore-XRU46UmpyCOZoR1oOL9-pw==/split_dynamicthemepet.apk
+   odex_path=/data/app/~~Z7HA-WWEY1l1UJe4_t_AyA==/com.heytap.themestore-XRU46UmpyCOZoR1oOL9-pw==/oat/arm64/split_dynamicthemepet.odex
+   odex_mtime=1784346140943
+}
+24 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~Z7HA-WWEY1l1UJe4_t_AyA==/com.heytap.themestore-XRU46UmpyCOZoR1oOL9-pw==/base.apk
+   odex_path=/data/app/~~Z7HA-WWEY1l1UJe4_t_AyA==/com.heytap.themestore-XRU46UmpyCOZoR1oOL9-pw==/oat/arm64/base.odex
+   odex_mtime=1784658576750
+}
+25 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~Z7HA-WWEY1l1UJe4_t_AyA==/com.heytap.themestore-XRU46UmpyCOZoR1oOL9-pw==/split_dynamicthemedetail.apk
+   odex_path=/data/app/~~Z7HA-WWEY1l1UJe4_t_AyA==/com.heytap.themestore-XRU46UmpyCOZoR1oOL9-pw==/oat/arm64/split_dynamicthemedetail.odex
+   odex_mtime=1784658578002
+}
+26 {
+   pkg=dev.ujhhgtg.wekit
+   apk_path=/data/app/~~w_0-vAoktbyDd7Ea6YpBcA==/dev.ujhhgtg.wekit-JvMZKCWpNSHyheC3inOvag==/base.apk
+   odex_path=/data/app/~~w_0-vAoktbyDd7Ea6YpBcA==/dev.ujhhgtg.wekit-JvMZKCWpNSHyheC3inOvag==/oat/arm64/base.odex
+   odex_mtime=1784729051298
+}
+27 {
+   pkg=com.tencent.mm
+   apk_path=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/base.apk
+   odex_path=/data/app/~~i1MIx4bRShUwOsC_PxHAdQ==/com.tencent.mm-hSx9994IsKtln1Gg-6yU5Q==/oat/arm64/base.odex
+   odex_mtime=1784832764759
+}
+28 {
+   pkg=dev.ujhhgtg.wekit
+   apk_path=/data/app/~~bhhN3pGlH2ospJT4Wdz08A==/dev.ujhhgtg.wekit-EH4PncZRBav94mukeJ8Y1w==/base.apk
+   odex_path=/data/app/~~bhhN3pGlH2ospJT4Wdz08A==/dev.ujhhgtg.wekit-EH4PncZRBav94mukeJ8Y1w==/oat/arm64/base.odex
+   odex_mtime=1785118860502
+}
+29 {
+   pkg=dev.ujhhgtg.wekit
+   apk_path=/data/app/~~Fpb3UebgO0mkara3GhBOUg==/dev.ujhhgtg.wekit-0HC63OLsDVa9RaWaBDozUA==/base.apk
+   odex_path=/data/app/~~Fpb3UebgO0mkara3GhBOUg==/dev.ujhhgtg.wekit-0HC63OLsDVa9RaWaBDozUA==/oat/arm64/base.odex
+   odex_mtime=1785164440939
+}
+30 {
+   pkg=com.cainiao.wireless
+   apk_path=/data/app/~~TAulgF4rND81zGBOfmtKkg==/com.cainiao.wireless-8x8uKOK_wo5L5mTZXM7-ZQ==/base.apk
+   odex_path=/data/app/~~TAulgF4rND81zGBOfmtKkg==/com.cainiao.wireless-8x8uKOK_wo5L5mTZXM7-ZQ==/oat/arm64/base.odex
+   odex_mtime=1785176564493
+}
+31 {
+   pkg=com.cainiao.wireless
+   apk_path=/data/app/~~4AXHmBlihIhgcvSPWYEMHg==/com.cainiao.wireless-s32uWVvRJFEo5e32lUEHUw==/base.apk
+   odex_path=/data/app/~~4AXHmBlihIhgcvSPWYEMHg==/com.cainiao.wireless-s32uWVvRJFEo5e32lUEHUw==/oat/arm64/base.odex
+   odex_mtime=1785292793784
+}
+32 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~4agpWzqen79YsgSu1z_fWA==/com.heytap.themestore-TjOOMwmFEOJjTfYWXoOodw==/split_dynamicthemecard.apk
+   odex_path=/data/app/~~4agpWzqen79YsgSu1z_fWA==/com.heytap.themestore-TjOOMwmFEOJjTfYWXoOodw==/oat/arm64/split_dynamicthemecard.odex
+   odex_mtime=1785292832104
+}
+33 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~4agpWzqen79YsgSu1z_fWA==/com.heytap.themestore-TjOOMwmFEOJjTfYWXoOodw==/split_dynamicthemeipspace.apk
+   odex_path=/data/app/~~4agpWzqen79YsgSu1z_fWA==/com.heytap.themestore-TjOOMwmFEOJjTfYWXoOodw==/oat/arm64/split_dynamicthemeipspace.odex
+   odex_mtime=1785292833504
+}
+34 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~4agpWzqen79YsgSu1z_fWA==/com.heytap.themestore-TjOOMwmFEOJjTfYWXoOodw==/split_dynamicthemepet.apk
+   odex_path=/data/app/~~4agpWzqen79YsgSu1z_fWA==/com.heytap.themestore-TjOOMwmFEOJjTfYWXoOodw==/oat/arm64/split_dynamicthemepet.odex
+   odex_mtime=1785292834124
+}
+35 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~4agpWzqen79YsgSu1z_fWA==/com.heytap.themestore-TjOOMwmFEOJjTfYWXoOodw==/base.apk
+   odex_path=/data/app/~~4agpWzqen79YsgSu1z_fWA==/com.heytap.themestore-TjOOMwmFEOJjTfYWXoOodw==/oat/arm64/base.odex
+   odex_mtime=1785346715075
+}
+36 {
+   pkg=dev.ujhhgtg.wekit
+   apk_path=/data/app/~~h2_4zwVZj74pUuowX9oW9A==/dev.ujhhgtg.wekit-SZDgEtBM7FwTGVTB6iILHQ==/base.apk
+   odex_path=/data/app/~~h2_4zwVZj74pUuowX9oW9A==/dev.ujhhgtg.wekit-SZDgEtBM7FwTGVTB6iILHQ==/oat/arm64/base.odex
+   odex_mtime=1785389012321
+}
+37 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~4agpWzqen79YsgSu1z_fWA==/com.heytap.themestore-TjOOMwmFEOJjTfYWXoOodw==/split_dynamicthemedetail.apk
+   odex_path=/data/app/~~4agpWzqen79YsgSu1z_fWA==/com.heytap.themestore-TjOOMwmFEOJjTfYWXoOodw==/oat/arm64/split_dynamicthemedetail.odex
+   odex_mtime=1785432495810
+}
+38 {
+   pkg=com.oplus.appplatform
+   apk_path=/system_ext/priv-app/OplusAppPlatform/OplusAppPlatform.apk
+   odex_path=/data/dalvik-cache/arm64/system_ext@priv-app@OplusAppPlatform@OplusAppPlatform.apk@classes.dex
+   odex_mtime=1785788061367
+}
+39 {
+   pkg=com.tencent.mm
+   apk_path=/data/app/~~sRbqO142ysfLF7_2Gztamw==/com.tencent.mm-ntbRSP006LRymNrzOKa9WA==/base.apk
+   odex_path=/data/app/~~sRbqO142ysfLF7_2Gztamw==/com.tencent.mm-ntbRSP006LRymNrzOKa9WA==/oat/arm64/base.odex
+   odex_mtime=1785956525731
+}
+40 {
+   pkg=h.Hchat
+   apk_path=/data/app/~~WMGRo9lupyUEpt3sFJCrJg==/h.Hchat-f0FWvFYdWVuCT7YEPy6jag==/base.apk
+   odex_path=/data/app/~~WMGRo9lupyUEpt3sFJCrJg==/h.Hchat-f0FWvFYdWVuCT7YEPy6jag==/oat/arm64/base.odex
+   odex_mtime=1786283958323
+}
+41 {
+   pkg=com.cxapk.viphelper
+   apk_path=/data/app/~~dSW0LgXkAPTho7kM0TfJ0A==/com.cxapk.viphelper-_Q5iClP46QNG0nHAIh3vgg==/base.apk
+   odex_path=/data/app/~~dSW0LgXkAPTho7kM0TfJ0A==/com.cxapk.viphelper-_Q5iClP46QNG0nHAIh3vgg==/oat/arm64/base.odex
+   odex_mtime=1786296722457
+}
+42 {
+   pkg=dev.ujhhgtg.wekit
+   apk_path=/data/app/~~mZSllWdZq5QS5aBKe3t_Dg==/dev.ujhhgtg.wekit-xoaMZlCxgv9zq7jbafqXHw==/base.apk
+   odex_path=/data/app/~~mZSllWdZq5QS5aBKe3t_Dg==/dev.ujhhgtg.wekit-xoaMZlCxgv9zq7jbafqXHw==/oat/arm64/base.odex
+   odex_mtime=1786473487781
+}
+43 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~3xcgjL6SokPBjg3wIb78Zw==/com.heytap.themestore-lOhmZSv8CVuTW-ZVtVU7fQ==/base.apk
+   odex_path=/data/app/~~3xcgjL6SokPBjg3wIb78Zw==/com.heytap.themestore-lOhmZSv8CVuTW-ZVtVU7fQ==/oat/arm64/base.odex
+   odex_mtime=1787049696839
+}
+44 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~3xcgjL6SokPBjg3wIb78Zw==/com.heytap.themestore-lOhmZSv8CVuTW-ZVtVU7fQ==/split_dynamicthemecard.apk
+   odex_path=/data/app/~~3xcgjL6SokPBjg3wIb78Zw==/com.heytap.themestore-lOhmZSv8CVuTW-ZVtVU7fQ==/oat/arm64/split_dynamicthemecard.odex
+   odex_mtime=1787049697403
+}
+45 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~3xcgjL6SokPBjg3wIb78Zw==/com.heytap.themestore-lOhmZSv8CVuTW-ZVtVU7fQ==/split_dynamicthemedetail.apk
+   odex_path=/data/app/~~3xcgjL6SokPBjg3wIb78Zw==/com.heytap.themestore-lOhmZSv8CVuTW-ZVtVU7fQ==/oat/arm64/split_dynamicthemedetail.odex
+   odex_mtime=1787049697983
+}
+46 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~3xcgjL6SokPBjg3wIb78Zw==/com.heytap.themestore-lOhmZSv8CVuTW-ZVtVU7fQ==/split_dynamicthemeipspace.apk
+   odex_path=/data/app/~~3xcgjL6SokPBjg3wIb78Zw==/com.heytap.themestore-lOhmZSv8CVuTW-ZVtVU7fQ==/oat/arm64/split_dynamicthemeipspace.odex
+   odex_mtime=1787049698727
+}
+47 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~3xcgjL6SokPBjg3wIb78Zw==/com.heytap.themestore-lOhmZSv8CVuTW-ZVtVU7fQ==/split_dynamicthemepet.apk
+   odex_path=/data/app/~~3xcgjL6SokPBjg3wIb78Zw==/com.heytap.themestore-lOhmZSv8CVuTW-ZVtVU7fQ==/oat/arm64/split_dynamicthemepet.odex
+   odex_mtime=1787049699307
+}
+48 {
+   pkg=com.djuu.player
+   apk_path=/data/app/~~op18ilA0xu5H7xq9x43TRg==/com.djuu.player-nHw3Q859Cp2G5Z0NHAVKbw==/base.apk
+   odex_path=/data/app/~~op18ilA0xu5H7xq9x43TRg==/com.djuu.player-nHw3Q859Cp2G5Z0NHAVKbw==/oat/arm64/base.odex
+   odex_mtime=1787392300972
+}
+49 {
+   pkg=com.cainiao.wireless
+   apk_path=/data/app/~~ULoIJ9Aheab9TS_gr2Q1kw==/com.cainiao.wireless-MnCu0vlp68ZkcbGeqZxagw==/base.apk
+   odex_path=/data/app/~~ULoIJ9Aheab9TS_gr2Q1kw==/com.cainiao.wireless-MnCu0vlp68ZkcbGeqZxagw==/oat/arm64/base.odex
+   odex_mtime=1787508962586
+}
+50 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~3PQ_0UAK4TP5cy0zyb0yZg==/com.heytap.themestore-CyThXt7L-nqfwC-K4sfi1g==/split_dynamicthemecard.apk
+   odex_path=/data/app/~~3PQ_0UAK4TP5cy0zyb0yZg==/com.heytap.themestore-CyThXt7L-nqfwC-K4sfi1g==/oat/arm64/split_dynamicthemecard.odex
+   odex_mtime=1787667550799
+}
+51 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~3PQ_0UAK4TP5cy0zyb0yZg==/com.heytap.themestore-CyThXt7L-nqfwC-K4sfi1g==/split_dynamicthemeipspace.apk
+   odex_path=/data/app/~~3PQ_0UAK4TP5cy0zyb0yZg==/com.heytap.themestore-CyThXt7L-nqfwC-K4sfi1g==/oat/arm64/split_dynamicthemeipspace.odex
+   odex_mtime=1787667552103
+}
+52 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~3PQ_0UAK4TP5cy0zyb0yZg==/com.heytap.themestore-CyThXt7L-nqfwC-K4sfi1g==/split_dynamicthemepet.apk
+   odex_path=/data/app/~~3PQ_0UAK4TP5cy0zyb0yZg==/com.heytap.themestore-CyThXt7L-nqfwC-K4sfi1g==/oat/arm64/split_dynamicthemepet.odex
+   odex_mtime=1787667552655
+}
+53 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~3PQ_0UAK4TP5cy0zyb0yZg==/com.heytap.themestore-CyThXt7L-nqfwC-K4sfi1g==/base.apk
+   odex_path=/data/app/~~3PQ_0UAK4TP5cy0zyb0yZg==/com.heytap.themestore-CyThXt7L-nqfwC-K4sfi1g==/oat/arm64/base.odex
+   odex_mtime=1787682958848
+}
+54 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~3PQ_0UAK4TP5cy0zyb0yZg==/com.heytap.themestore-CyThXt7L-nqfwC-K4sfi1g==/split_dynamicthemedetail.apk
+   odex_path=/data/app/~~3PQ_0UAK4TP5cy0zyb0yZg==/com.heytap.themestore-CyThXt7L-nqfwC-K4sfi1g==/oat/arm64/split_dynamicthemedetail.odex
+   odex_mtime=1787682960036
+}
+55 {
+   pkg=com.ss.android.ugc.aweme
+   apk_path=/data/app/~~QgTdej9QlxGzaB39Cm4vlA==/com.ss.android.ugc.aweme-hiktup0BjwMBfqAqkQeOeg==/base.apk
+   odex_path=/data/app/~~QgTdej9QlxGzaB39Cm4vlA==/com.ss.android.ugc.aweme-hiktup0BjwMBfqAqkQeOeg==/oat/arm64/base.odex
+   odex_mtime=1787765921085
+}
+56 {
+   pkg=dev.ujhhgtg.wekit
+   apk_path=/data/app/~~NoETxfr4lVQUy9gmdqVckg==/dev.ujhhgtg.wekit-X3KrlYRXFjIc-iRiC6kLhw==/base.apk
+   odex_path=/data/app/~~NoETxfr4lVQUy9gmdqVckg==/dev.ujhhgtg.wekit-X3KrlYRXFjIc-iRiC6kLhw==/oat/arm64/base.odex
+   odex_mtime=1787896700864
+}
+57 {
+   pkg=com.cainiao.wireless
+   apk_path=/data/app/~~KCHaIJTxFQhPnV9UzYcVyw==/com.cainiao.wireless-iE_boVtI1bmz1keQyWGpEw==/base.apk
+   odex_path=/data/app/~~KCHaIJTxFQhPnV9UzYcVyw==/com.cainiao.wireless-iE_boVtI1bmz1keQyWGpEw==/oat/arm64/base.odex
+   odex_mtime=1787936042130
+}
+58 {
+   pkg=com.google.android.gms
+   apk_path=/product/priv-app/GmsCore/GmsCore.apk
+   odex_path=/data/dalvik-cache/arm/product@priv-app@GmsCore@GmsCore.apk@classes.dex
+   odex_mtime=1788132088498
+}
+59 {
+   pkg=com.coloros.colordirectservice
+   apk_path=/data/app/~~uFPdqOaY7cqVcqjo75IdPA==/com.coloros.colordirectservice-1_qEkPGmIL9wFxmMmi8Jkw==/base.apk
+   odex_path=/data/app/~~uFPdqOaY7cqVcqjo75IdPA==/com.coloros.colordirectservice-1_qEkPGmIL9wFxmMmi8Jkw==/oat/arm64/base.odex
+   odex_mtime=1788283619091
+}
+60 {
+   pkg=dev.ujhhgtg.wekit
+   apk_path=/data/app/~~bdzKMS_VmDp6r2eoANYLlw==/dev.ujhhgtg.wekit-PO1178nvtmHDd5uZVlcpqw==/base.apk
+   odex_path=/data/app/~~bdzKMS_VmDp6r2eoANYLlw==/dev.ujhhgtg.wekit-PO1178nvtmHDd5uZVlcpqw==/oat/arm64/base.odex
+   odex_mtime=1788449792268
+}
+61 {
+   pkg=com.oplus.uiengine
+   apk_path=/product/app/VariUIEngine/VariUIEngine.apk
+   odex_path=/data/dalvik-cache/arm64/product@app@VariUIEngine@VariUIEngine.apk@classes.dex
+   odex_mtime=1788456164131
+}
+62 {
+   pkg=com.oplus.keyguard.clock.base
+   apk_path=/system_ext/app/KeyguardClockBase/KeyguardClockBase.apk
+   odex_path=/data/dalvik-cache/arm64/system_ext@app@KeyguardClockBase@KeyguardClockBase.apk@classes.dex
+   odex_mtime=1788456211267
+}
+63 {
+   pkg=com.heytap.speechassist
+   apk_path=/data/app/~~0Wjw-0D-7v5y695x5uP8kg==/com.heytap.speechassist-58ESPUg_kplk9sI4rASQkQ==/base.apk
+   odex_path=/data/app/~~0Wjw-0D-7v5y695x5uP8kg==/com.heytap.speechassist-58ESPUg_kplk9sI4rASQkQ==/oat/arm64/base.odex
+   odex_mtime=1788456279115
+}
+64 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~kyuU6QPFUYQa8YWQLX9i9A==/com.heytap.themestore-JFPuIwBRc1zXfh-6FDUQxQ==/base.apk
+   odex_path=/data/app/~~kyuU6QPFUYQa8YWQLX9i9A==/com.heytap.themestore-JFPuIwBRc1zXfh-6FDUQxQ==/oat/arm64/base.odex
+   odex_mtime=1788535928542
+}
+65 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~kyuU6QPFUYQa8YWQLX9i9A==/com.heytap.themestore-JFPuIwBRc1zXfh-6FDUQxQ==/split_dynamicthemecard.apk
+   odex_path=/data/app/~~kyuU6QPFUYQa8YWQLX9i9A==/com.heytap.themestore-JFPuIwBRc1zXfh-6FDUQxQ==/oat/arm64/split_dynamicthemecard.odex
+   odex_mtime=1788535929070
+}
+66 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~kyuU6QPFUYQa8YWQLX9i9A==/com.heytap.themestore-JFPuIwBRc1zXfh-6FDUQxQ==/split_dynamicthemedetail.apk
+   odex_path=/data/app/~~kyuU6QPFUYQa8YWQLX9i9A==/com.heytap.themestore-JFPuIwBRc1zXfh-6FDUQxQ==/oat/arm64/split_dynamicthemedetail.odex
+   odex_mtime=1788535929638
+}
+67 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~kyuU6QPFUYQa8YWQLX9i9A==/com.heytap.themestore-JFPuIwBRc1zXfh-6FDUQxQ==/split_dynamicthemeipspace.apk
+   odex_path=/data/app/~~kyuU6QPFUYQa8YWQLX9i9A==/com.heytap.themestore-JFPuIwBRc1zXfh-6FDUQxQ==/oat/arm64/split_dynamicthemeipspace.odex
+   odex_mtime=1788535930346
+}
+68 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~kyuU6QPFUYQa8YWQLX9i9A==/com.heytap.themestore-JFPuIwBRc1zXfh-6FDUQxQ==/split_dynamicthemepet.apk
+   odex_path=/data/app/~~kyuU6QPFUYQa8YWQLX9i9A==/com.heytap.themestore-JFPuIwBRc1zXfh-6FDUQxQ==/oat/arm64/split_dynamicthemepet.odex
+   odex_mtime=1788535930894
+}
+69 {
+   pkg=com.tencent.mm
+   apk_path=/data/app/~~NRr4glSONaWsTTQGRNeqDw==/com.tencent.mm-AoFdTO2o2nwNBkzgqJfS7g==/base.apk
+   odex_path=/data/app/~~NRr4glSONaWsTTQGRNeqDw==/com.tencent.mm-AoFdTO2o2nwNBkzgqJfS7g==/oat/arm64/base.odex
+   odex_mtime=1788544145834
+}
+70 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~Gek-k1cZWzWR3V0E-2PeQQ==/com.heytap.themestore-ZkRyWyPVx8DeqnzIaHMf7A==/split_dynamicthemecard.apk
+   odex_path=/data/app/~~Gek-k1cZWzWR3V0E-2PeQQ==/com.heytap.themestore-ZkRyWyPVx8DeqnzIaHMf7A==/oat/arm64/split_dynamicthemecard.odex
+   odex_mtime=1788883932906
+}
+71 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~Gek-k1cZWzWR3V0E-2PeQQ==/com.heytap.themestore-ZkRyWyPVx8DeqnzIaHMf7A==/split_dynamicthemeipspace.apk
+   odex_path=/data/app/~~Gek-k1cZWzWR3V0E-2PeQQ==/com.heytap.themestore-ZkRyWyPVx8DeqnzIaHMf7A==/oat/arm64/split_dynamicthemeipspace.odex
+   odex_mtime=1788883934462
+}
+72 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~Gek-k1cZWzWR3V0E-2PeQQ==/com.heytap.themestore-ZkRyWyPVx8DeqnzIaHMf7A==/split_dynamicthemepet.apk
+   odex_path=/data/app/~~Gek-k1cZWzWR3V0E-2PeQQ==/com.heytap.themestore-ZkRyWyPVx8DeqnzIaHMf7A==/oat/arm64/split_dynamicthemepet.odex
+   odex_mtime=1788883935106
+}
+73 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~Gek-k1cZWzWR3V0E-2PeQQ==/com.heytap.themestore-ZkRyWyPVx8DeqnzIaHMf7A==/base.apk
+   odex_path=/data/app/~~Gek-k1cZWzWR3V0E-2PeQQ==/com.heytap.themestore-ZkRyWyPVx8DeqnzIaHMf7A==/oat/arm64/base.odex
+   odex_mtime=1788978062519
+}
+74 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~Gek-k1cZWzWR3V0E-2PeQQ==/com.heytap.themestore-ZkRyWyPVx8DeqnzIaHMf7A==/split_dynamicthemedetail.apk
+   odex_path=/data/app/~~Gek-k1cZWzWR3V0E-2PeQQ==/com.heytap.themestore-ZkRyWyPVx8DeqnzIaHMf7A==/oat/arm64/split_dynamicthemedetail.odex
+   odex_mtime=1789067567825
+}
+75 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~iXHFnMx-WED3sqf7w_1Ldg==/com.heytap.themestore-K7ETsVL05GiLZmGkcu-fUA==/split_dynamicthemecard.apk
+   odex_path=/data/app/~~iXHFnMx-WED3sqf7w_1Ldg==/com.heytap.themestore-K7ETsVL05GiLZmGkcu-fUA==/oat/arm64/split_dynamicthemecard.odex
+   odex_mtime=1789099009529
+}
+76 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~iXHFnMx-WED3sqf7w_1Ldg==/com.heytap.themestore-K7ETsVL05GiLZmGkcu-fUA==/split_dynamicthemeipspace.apk
+   odex_path=/data/app/~~iXHFnMx-WED3sqf7w_1Ldg==/com.heytap.themestore-K7ETsVL05GiLZmGkcu-fUA==/oat/arm64/split_dynamicthemeipspace.odex
+   odex_mtime=1789099011301
+}
+77 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~iXHFnMx-WED3sqf7w_1Ldg==/com.heytap.themestore-K7ETsVL05GiLZmGkcu-fUA==/split_dynamicthemepet.apk
+   odex_path=/data/app/~~iXHFnMx-WED3sqf7w_1Ldg==/com.heytap.themestore-K7ETsVL05GiLZmGkcu-fUA==/oat/arm64/split_dynamicthemepet.odex
+   odex_mtime=1789099012069
+}
+78 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~iXHFnMx-WED3sqf7w_1Ldg==/com.heytap.themestore-K7ETsVL05GiLZmGkcu-fUA==/base.apk
+   odex_path=/data/app/~~iXHFnMx-WED3sqf7w_1Ldg==/com.heytap.themestore-K7ETsVL05GiLZmGkcu-fUA==/oat/arm64/base.odex
+   odex_mtime=1789236010650
+}
+79 {
+   pkg=com.heytap.themestore
+   apk_path=/data/app/~~iXHFnMx-WED3sqf7w_1Ldg==/com.heytap.themestore-K7ETsVL05GiLZmGkcu-fUA==/split_dynamicthemedetail.apk
+   odex_path=/data/app/~~iXHFnMx-WED3sqf7w_1Ldg==/com.heytap.themestore-K7ETsVL05GiLZmGkcu-fUA==/oat/arm64/split_dynamicthemedetail.odex
+   odex_mtime=1789318623616
+}
+80 {
+   pkg=have.fun
+   apk_path=/data/app/~~pNlw3Me6jVIWb1z5mq2Vlg==/have.fun-LCAQDwErWhvWOJaPbS1_Sg==/base.apk
+   odex_path=/data/app/~~pNlw3Me6jVIWb1z5mq2Vlg==/have.fun-LCAQDwErWhvWOJaPbS1_Sg==/oat/arm64/base.odex
+   odex_mtime=1789457653150
+}
+81 {
+   pkg=com.autonavi.minimap
+   apk_path=/data/app/~~RVWadmIn-7grDuLBTdDwcg==/com.autonavi.minimap--MiYiL40BdqcCwXTLL5VPg==/base.apk
+   odex_path=/data/app/~~RVWadmIn-7grDuLBTdDwcg==/com.autonavi.minimap--MiYiL40BdqcCwXTLL5VPg==/oat/arm64/base.odex
+   odex_mtime=1789458718590
+}
+82 {
+   pkg=com.autonavi.minimap
+   apk_path=/data/app/~~WvDlz2_sI25MMp8PeIVONA==/com.autonavi.minimap-DfvTwdfSq70GaqIc4V1rqQ==/base.apk
+   odex_path=/data/app/~~WvDlz2_sI25MMp8PeIVONA==/com.autonavi.minimap-DfvTwdfSq70GaqIc4V1rqQ==/oat/arm64/base.odex
+   odex_mtime=1789464139440
+}
+83 {
+   pkg=have.fun
+   apk_path=/data/app/~~E-MyVrdqMM-ZC4fFd-f1kw==/have.fun-1aBEZ2gt0FT4hwMLvsSywA==/base.apk
+   odex_path=/data/app/~~E-MyVrdqMM-ZC4fFd-f1kw==/have.fun-1aBEZ2gt0FT4hwMLvsSywA==/oat/arm64/base.odex
+   odex_mtime=1789528598470
+}
+84 {
+   pkg=com.tencent.mobileqq
+   apk_path=/data/app/~~CI-w4lMwjTt0TrXrLCRgCw==/com.tencent.mobileqq-2S6_7T9APGvU5M34yPfONw==/base.apk
+   odex_path=/data/app/~~CI-w4lMwjTt0TrXrLCRgCw==/com.tencent.mobileqq-2S6_7T9APGvU5M34yPfONw==/oat/arm64/base.odex
+   odex_mtime=1789579699727
+}
+85 {
+   pkg=com.dsmod.probe
+   apk_path=/data/app/~~SycS1UQUl_P5bb0AC-LSJQ==/com.dsmod.probe-Xd2f9LmOfj9gETKgSMGJlw==/base.apk
+   odex_path=/data/app/~~SycS1UQUl_P5bb0AC-LSJQ==/com.dsmod.probe-Xd2f9LmOfj9gETKgSMGJlw==/oat/arm64/base.odex
+   odex_mtime=1789579730063
+}
+86 {
+   pkg=com.deepseek.chat
+   apk_path=/data/app/~~9EK1azYj33Mui0fjbPwBVg==/com.deepseek.chat-5ZYpR4ni9C96CuZGpaaIXQ==/base.apk
+   odex_path=/data/app/~~9EK1azYj33Mui0fjbPwBVg==/com.deepseek.chat-5ZYpR4ni9C96CuZGpaaIXQ==/oat/arm64/base.odex
+   odex_mtime=1789579805899
+}
+87 {
+   pkg=com.tencent.mm
+   apk_path=/data/app/~~_PyswHhMavybJ6sJEzK9oA==/com.tencent.mm-K031n4l09MpGpAsEBi3RdA==/base.apk
+   odex_path=/data/app/~~_PyswHhMavybJ6sJEzK9oA==/com.tencent.mm-K031n4l09MpGpAsEBi3RdA==/oat/arm64/base.odex
+   odex_mtime=1789668042601
+}
+88 {
+   pkg=com.oplus.athena
+   apk_path=/system_ext/app/Athena/Athena.apk
+   odex_path=/data/dalvik-cache/arm64/system_ext@app@Athena@Athena.apk@classes.dex
+   odex_mtime=1789756983450
+}
+89 {
+   pkg=com.ss.android.ugc.aweme
+   apk_path=/data/app/~~WEfiX-P9VldltgAl6zw0Qg==/com.ss.android.ugc.aweme-Pooh9-O3wF1ToXX3fty9RQ==/base.apk
+   odex_path=/data/app/~~WEfiX-P9VldltgAl6zw0Qg==/com.ss.android.ugc.aweme-Pooh9-O3wF1ToXX3fty9RQ==/oat/arm64/base.odex
+   odex_mtime=1789930403490
+}
+90 {
+   pkg=com.tencent.mm
+   apk_path=/data/app/~~v9c9eyj1z0BZnLudFlFQeQ==/com.tencent.mm-Uok5UcD2qA9CMIVq9DZPwg==/base.apk
+   odex_path=/data/app/~~v9c9eyj1z0BZnLudFlFQeQ==/com.tencent.mm-Uok5UcD2qA9CMIVq9DZPwg==/oat/arm64/base.odex
+   odex_mtime=1790018986751
+}
+91 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~vVsbnOImSsEaFe1Oi5nb4g==/com.leshao.v3-nVNGfVIOSE8jzkeBSQ-Rdw==/base.apk
+   odex_path=/data/app/~~vVsbnOImSsEaFe1Oi5nb4g==/com.leshao.v3-nVNGfVIOSE8jzkeBSQ-Rdw==/oat/arm64/base.odex
+   odex_mtime=1790019039627
+}
+92 {
+   pkg=com.tsng.hidemyapplist
+   apk_path=/data/app/~~Ke-uMiC0D4SlC2Y656euzQ==/com.tsng.hidemyapplist-AkJluhfooyjjl8hH0ojouA==/base.apk
+   odex_path=/data/app/~~Ke-uMiC0D4SlC2Y656euzQ==/com.tsng.hidemyapplist-AkJluhfooyjjl8hH0ojouA==/oat/arm64/base.odex
+   odex_mtime=1790019051819
+}
+93 {
+   pkg=com.larus.nova
+   apk_path=/data/app/~~MS-KfXOvx5qSuGkfLfjoUA==/com.larus.nova-Y7lC-xVsLq4pAyGd0XkMqg==/base.apk
+   odex_path=/data/app/~~MS-KfXOvx5qSuGkfLfjoUA==/com.larus.nova-Y7lC-xVsLq4pAyGd0XkMqg==/oat/arm64/base.odex
+   odex_mtime=1790019175363
+}
+94 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~XL7b2O3jh6LJV4DSM04bvg==/com.leshao.v3-_bQJUDDl7j-GdfW7Dl_vGQ==/base.apk
+   odex_path=/data/app/~~XL7b2O3jh6LJV4DSM04bvg==/com.leshao.v3-_bQJUDDl7j-GdfW7Dl_vGQ==/oat/arm64/base.odex
+   odex_mtime=1790047560231
+}
+95 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~7Kabia7ZK-vIEP5QoLbkGg==/com.leshao.v3-otnvf4m8xVFD2JgnpitWkw==/base.apk
+   odex_path=/data/app/~~7Kabia7ZK-vIEP5QoLbkGg==/com.leshao.v3-otnvf4m8xVFD2JgnpitWkw==/oat/arm64/base.odex
+   odex_mtime=1790053720139
+}
+96 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~_aI-Sf4Py_Q-zxbiQ51OeA==/com.leshao.v3-lBsZRdFGtnpF32p1xmardQ==/base.apk
+   odex_path=/data/app/~~_aI-Sf4Py_Q-zxbiQ51OeA==/com.leshao.v3-lBsZRdFGtnpF32p1xmardQ==/oat/arm64/base.odex
+   odex_mtime=1790058184379
+}
+97 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~YH3CSBNr_HYLu2ISu701bw==/com.leshao.v3-diNuDJehQuO53IXHEtVe7w==/base.apk
+   odex_path=/data/app/~~YH3CSBNr_HYLu2ISu701bw==/com.leshao.v3-diNuDJehQuO53IXHEtVe7w==/oat/arm64/base.odex
+   odex_mtime=1790063988578
+}
+98 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~OjrDnioq1DSj18TmmRratQ==/com.leshao.v3-Oo0n7dY4OKjRdM3RXkz1QA==/base.apk
+   odex_path=/data/app/~~OjrDnioq1DSj18TmmRratQ==/com.leshao.v3-Oo0n7dY4OKjRdM3RXkz1QA==/oat/arm64/base.odex
+   odex_mtime=1790076032524
+}
+99 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~lf6ByBemg4bfxrwYkv888A==/com.leshao.v3-0igA0b0idDONXECgK6pPeA==/base.apk
+   odex_path=/data/app/~~lf6ByBemg4bfxrwYkv888A==/com.leshao.v3-0igA0b0idDONXECgK6pPeA==/oat/arm64/base.odex
+   odex_mtime=1790078728872
+}
+100 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~VgNa0Q4kNzAsG_mELHyJDA==/com.leshao.v3-dKVCX1WhoMJiNjqHQXPZuw==/base.apk
+   odex_path=/data/app/~~VgNa0Q4kNzAsG_mELHyJDA==/com.leshao.v3-dKVCX1WhoMJiNjqHQXPZuw==/oat/arm64/base.odex
+   odex_mtime=1790080332465
+}
+101 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~huRdbKhgOBE5oMvwoEmQ4A==/com.leshao.v3-2gtdo3XZmgW2dA8ooSm_aA==/base.apk
+   odex_path=/data/app/~~huRdbKhgOBE5oMvwoEmQ4A==/com.leshao.v3-2gtdo3XZmgW2dA8ooSm_aA==/oat/arm64/base.odex
+   odex_mtime=1790081374525
+}
+102 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~YFVRnHtkjijmdqiA3qyU0Q==/com.leshao.v3-sR0QGCjwjk62ZBtxAVOq1Q==/base.apk
+   odex_path=/data/app/~~YFVRnHtkjijmdqiA3qyU0Q==/com.leshao.v3-sR0QGCjwjk62ZBtxAVOq1Q==/oat/arm64/base.odex
+   odex_mtime=1790083263429
+}
+103 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~sW38HaehEYJhvqf1nTDjbg==/com.leshao.v3-yqVvtKF_Ztmy1iZZ5x0TpA==/base.apk
+   odex_path=/data/app/~~sW38HaehEYJhvqf1nTDjbg==/com.leshao.v3-yqVvtKF_Ztmy1iZZ5x0TpA==/oat/arm64/base.odex
+   odex_mtime=1790084073121
+}
+104 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~dV73JZ_C9Ju6MmhG3bCRtA==/com.leshao.v3-JNUdVZ2cTcds0lcPqOpRgg==/base.apk
+   odex_path=/data/app/~~dV73JZ_C9Ju6MmhG3bCRtA==/com.leshao.v3-JNUdVZ2cTcds0lcPqOpRgg==/oat/arm64/base.odex
+   odex_mtime=1790085023421
+}
+105 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~DfV6UNoZPnQlHCCkGkqwJw==/com.leshao.v3-nfRgGSS2LA2didwF1blSPQ==/base.apk
+   odex_path=/data/app/~~DfV6UNoZPnQlHCCkGkqwJw==/com.leshao.v3-nfRgGSS2LA2didwF1blSPQ==/oat/arm64/base.odex
+   odex_mtime=1790085822834
+}
+106 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~-kaArxa_c8542P-NwjA7qw==/com.leshao.v3-5C29a0K0XLV8wSgvvoj2Cg==/base.apk
+   odex_path=/data/app/~~-kaArxa_c8542P-NwjA7qw==/com.leshao.v3-5C29a0K0XLV8wSgvvoj2Cg==/oat/arm64/base.odex
+   odex_mtime=1790087468138
+}
+107 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~5Z55EEmTxxgcG7PEu9aTkg==/com.leshao.v3-B3zidUn8dEOTPndziLr18Q==/base.apk
+   odex_path=/data/app/~~5Z55EEmTxxgcG7PEu9aTkg==/com.leshao.v3-B3zidUn8dEOTPndziLr18Q==/oat/arm64/base.odex
+   odex_mtime=1790088561150
+}
+108 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~Jel9OUSn_A9yjUYi801vDA==/com.leshao.v3-0lvxH4DFfXCzjaqOt_XF-g==/base.apk
+   odex_path=/data/app/~~Jel9OUSn_A9yjUYi801vDA==/com.leshao.v3-0lvxH4DFfXCzjaqOt_XF-g==/oat/arm64/base.odex
+   odex_mtime=1790089973866
+}
+109 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~eCSlN8VrMDbKEQGSXkBLzA==/com.leshao.v3-GsQ-gQq9DVmeIHj6MmbaVg==/base.apk
+   odex_path=/data/app/~~eCSlN8VrMDbKEQGSXkBLzA==/com.leshao.v3-GsQ-gQq9DVmeIHj6MmbaVg==/oat/arm64/base.odex
+   odex_mtime=1790090940074
+}
+110 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~kWHSAKYL0YQ6uD8FGPkwdg==/com.leshao.v3-N5HORSORn98-SmX-eltpwg==/base.apk
+   odex_path=/data/app/~~kWHSAKYL0YQ6uD8FGPkwdg==/com.leshao.v3-N5HORSORn98-SmX-eltpwg==/oat/arm64/base.odex
+   odex_mtime=1790091226299
+}
+111 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~1xb-rhEQ6OqLUggCwjQq_Q==/com.leshao.v3-wYE-zJ6RCLpsKBJxBLb6SA==/base.apk
+   odex_path=/data/app/~~1xb-rhEQ6OqLUggCwjQq_Q==/com.leshao.v3-wYE-zJ6RCLpsKBJxBLb6SA==/oat/arm64/base.odex
+   odex_mtime=1790091714081
+}
+112 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~ojvXt0yv-Phm2eKQj5rBfQ==/com.leshao.v3-7d8HQizaqZwaGO7tOOXOBw==/base.apk
+   odex_path=/data/app/~~ojvXt0yv-Phm2eKQj5rBfQ==/com.leshao.v3-7d8HQizaqZwaGO7tOOXOBw==/oat/arm64/base.odex
+   odex_mtime=1790091973637
+}
+113 {
+   pkg=com.leshao.v3
+   apk_path=/data/app/~~F01wWan4lHrWX02DIFZsUw==/com.leshao.v3--lVvb4aMRwa47PAUrON0rg==/base.apk
+   odex_path=/data/app/~~F01wWan4lHrWX02DIFZsUw==/com.leshao.v3--lVvb4aMRwa47PAUrON0rg==/oat/arm64/base.odex
+   odex_mtime=1790093656817
+}
+<<<<<

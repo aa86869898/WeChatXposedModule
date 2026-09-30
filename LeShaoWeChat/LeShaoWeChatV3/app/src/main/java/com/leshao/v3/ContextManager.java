@@ -85,12 +85,19 @@ public class ContextManager {
 
     public static String getApkPath() { return sApkPath; }
 
-    /** 设置模块自身 APK 路径（LSPosed 运行时会向 LoadPackageParam 注入 modulePath 字段） */
+    /**
+     * 记录模块自身 APK 路径（LSPosed 运行时会向 LoadPackageParam 注入 modulePath 字段）。
+     *
+     * <p>当前仅由 {@code MainHook.captureModuleApkPath} 写入并落日志, 供排查用; 模块 APK 路径的
+     * 实际消费方是 {@link IconLoader#moduleApkPath()}(DexKit 基线导出等), 不读取本字段。
+     * 保留本 setter/getter 以兼容既有调用点, 不代表已闭环的配置链路。</p>
+     */
     public static void setModuleApkPath(String moduleApkPath) {
         sModuleApkPath = moduleApkPath;
         if (moduleApkPath != null) LogWriter.log(TAG, "moduleApkPath=" + moduleApkPath);
     }
 
+    /** 返回最近一次 setModuleApkPath 记录的值; 当前全项目无读取方, 仅为排查/预留。 */
     public static String getModuleApkPath() { return sModuleApkPath; }
 
     public static Context getAppContext() { return sAppContext; }

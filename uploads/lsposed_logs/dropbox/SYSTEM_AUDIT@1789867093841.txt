@@ -1,0 +1,12 @@
+isPrevious: true
+Build: OnePlus/PLR110/OP6117L1:16/BP2A.250605.015/B.c4db98_17de607_17d624d:user/release-keys
+Hardware: canoe
+Revision: 0
+Bootloader: unknown
+Radio: null
+Kernel: Linux version 6.12.38-android16-5-g844001fb8721-ab14552068-4k (kleaf@build-host) (Android (14043575, +pgo, +bolt, +lto, +mlgo, based on r536225) clang version 19.0.1 (https://android.googlesource.com/toolchain/llvm-project b3a530ec6537146650e42be89f1089e9a3588460), LLD 19.0.1) #1 SMP PREEMPT Fri Dec  5 02:15:49 UTC 2025
+
+[29964.573970][T12521] audit: rate limit exceeded
+[30010.803284][T13876] audit: rate limit exceeded
+[30755.010514][T25605] audit: rate limit exceeded
+[30816.754033][T10344] audit: rate limit exceeded

@@ -61,6 +61,10 @@ public final class ChatVoiceSwitchHook {
     private static volatile Class<?> sFooterClass;
     // v1088: 缓存最近一次找到的 ChatFooter, 让 WmEntry 每 tick 的 ensureInjected 免于全树扫描
     private static volatile java.lang.ref.WeakReference<View> sCachedFooter;
+    // v1105: 记录已挂高度变化监听的 footer, 避免重复添加
+    private static final WeakHashMap<View, Boolean> sLayoutWatch = new WeakHashMap<>();
+    // v1106: 消息列表原始底部留白(用于幂等补足, 避免重复叠加)
+    private static final WeakHashMap<View, Integer> sOrigPadBottom = new WeakHashMap<>();
 
     private ChatVoiceSwitchHook() {
     }
@@ -121,7 +125,13 @@ public final class ChatVoiceSwitchHook {
                     footer.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
                         @Override
                         public void onViewAttachedToWindow(View v) {
-                            footer.post(new Runnable() {
+                            // v1101: 先同步注入一次, 让按钮行赶在 footer 首次 measure 之前就位。
+                            // 旧实现只用 footer.post(), 而 post 的 Runnable 要等当前 traversal
+                            // (含首次 measure/layout) 跑完才执行, 即微信第一次量 footer 时还没有按钮行。
+                            // 微信据此缓存了 footer 高度, 之后输入内容变长(多行)时按旧高度做键盘上移计算,
+                            // 表现为「打字内容过长时有时候不顶上去」。同步注入消除该时序问题, post 仅兜底。
+                            try { safeInject(v); } catch (Throwable ignored) {}
+                            v.post(new Runnable() {
                                 @Override
                                 public void run() {
                                     safeInject(footer);
@@ -283,122 +293,30 @@ public final class ChatVoiceSwitchHook {
         }
     }
 
+    // ==================== 旧按钮行清理 ====================
+
+    /** 移除历史版本已注入的旧按钮行（footer 子树或父容器中的 ROW_TAG 视图）。 */
+    private static void removeInputRow(View footer) {
+        try {
+            View row = footer.findViewWithTag(ROW_TAG);
+            if (row == null && footer.getParent() instanceof ViewGroup) {
+                row = ((ViewGroup) footer.getParent()).findViewWithTag(ROW_TAG);
+            }
+            if (row != null && row.getParent() instanceof ViewGroup) {
+                ((ViewGroup) row.getParent()).removeView(row);
+                LogWriter.log(TAG, "已隐藏输入框上方按钮行");
+            }
+            synchronized (sInjected) { sInjected.remove(footer); }
+        } catch (Throwable ignored) {}
+    }
+
     // ==================== 注入核心 ====================
 
     private static void safeInject(View footer) {
         if (footer == null) return;
-        // v1002: 以"父容器里是否已有本模块按钮行(tag)"为幂等判据, 而非仅凭 footer 实例。
-        // 微信会复用 ChatFooter/重建视图树, 旧实现只记 footer 实例, 行一旦被移除就再也不补注入。
-        ViewGroup parent = footer.getParent() instanceof ViewGroup
-                ? (ViewGroup) footer.getParent() : null;
-        if (parent == null) {
-            scheduleRetryInject(footer);
-            return;
-        }
-        if (footer.findViewWithTag(ROW_TAG) != null || parent.findViewWithTag(ROW_TAG) != null) {
-            synchronized (sInjected) { sInjected.put(footer, Boolean.TRUE); }
-            return;
-        }
-
-        Context ctx = footer.getContext();
-        if (ctx == null) {
-            logOnce(footer, "跳过注入: footer.getContext() 为 null");
-            return;
-        }
-        Activity act = getActivityFromContext(ctx);
-        if (act == null) {
-            logOnce(footer, "跳过注入: 无法从 Context 取得 Activity ctx=" + ctx.getClass().getName());
-            return;
-        }
-        if (!isChatPage(act)) {
-            logOnce(footer, "跳过注入: 非聊天页面 act=" + act.getClass().getName());
-            return;
-        }
-
-        if (com.leshao.v3.UnifiedPrefs.get(ctx, "wm_prefs")
-                .getBoolean("input_buttons", true) == false) {
-            logOnce(footer, "跳过注入: wm_prefs.input_buttons=false");
-            return;
-        }
-
-        // 确保注入目标不是弹窗中的输入栏
-        try {
-            View root = footer.getRootView();
-            if (root != null) {
-                String rootCls = root.getClass().getName();
-                if (rootCls.contains("Popup") || rootCls.contains("Dialog")
-                    || rootCls.contains("popup") || rootCls.contains("dialog")) {
-                    logOnce(footer, "跳过注入: 根视图疑似弹窗 " + rootCls);
-                    return;
-                }
-            }
-        } catch (Throwable ignored) {}
-
-        int idx = parent.indexOfChild(footer);
-        if (idx < 0) {
-            logOnce(footer, "跳过注入: footer 不在父容器索引中 parent=" + parent.getClass().getName());
-            return;
-        }
-
-        View row = createButtonRow(ctx);
-        boolean ok = true;
-        // v1087: 3180 实测 footer 的父容器是自定义 ChattingScrollLayout(消息/输入浮层),
-        // 直接把按钮行插成它的兄弟节点不会被其自定义 onLayout 计入占位 → 遮挡最底部消息;
-        // 用容器包裹 footer 又会破坏"footer 必须是父容器直接子节点"的管理 → 二次进入输入框消失。
-        // 恢复旧版(v428)锚定输入框的方案: 从 footer 内的 EditText 向上找到最近的
-        // "垂直 LinearLayout"(且仍在 footer 内), 在其子节点(输入行)之前插入,
-        // 使 footer 高度随内容自然增长, 消息列表底部留白同步增长 → 不遮挡消息。
-        String targetDesc;
-        try {
-            View edit = findFirstEditText(footer);
-            ViewGroup host = null;
-            int hostIdx = -1;
-            if (edit != null) {
-                View child = edit;
-                android.view.ViewParent p = edit.getParent();
-                while (p instanceof ViewGroup && p != footer) {
-                    ViewGroup vg = (ViewGroup) p;
-                    if (vg instanceof LinearLayout
-                            && ((LinearLayout) vg).getOrientation() == LinearLayout.VERTICAL) {
-                        host = vg;
-                        hostIdx = vg.indexOfChild(child);
-                        break;
-                    }
-                    child = (View) vg;
-                    p = vg.getParent();
-                }
-            }
-            if (host != null && hostIdx >= 0) {
-                row.setLayoutParams(new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                host.addView(row, hostIdx);
-                targetDesc = "footer内垂直容器=" + host.getClass().getName() + " idx=" + hostIdx;
-            } else if (footer instanceof ViewGroup) {
-                row.setLayoutParams(new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                ((ViewGroup) footer).addView(row, 0);
-                targetDesc = "footer根=" + footer.getClass().getName() + " idx=0 edit="
-                        + (edit == null ? "null" : edit.getClass().getName());
-            } else {
-                row.setLayoutParams(new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-                parent.addView(row, idx);
-                targetDesc = "兄弟节点 父容器=" + parent.getClass().getName() + " idx=" + idx;
-            }
-        } catch (Throwable t) {
-            ok = false;
-            targetDesc = "异常 " + t;
-            LogWriter.log(TAG, "注入异常: " + t);
-        }
-        if (ok && (footer.findViewWithTag(ROW_TAG) != null
-                || parent.findViewWithTag(ROW_TAG) != null)) {
-            synchronized (sInjected) { sInjected.put(footer, Boolean.TRUE); }
-            LogWriter.log(TAG, "注入成功! " + targetDesc);
-        } else {
-            sInjected.remove(footer);
-            LogWriter.log(TAG, "注入失败: addView 未生效 footer=" + footer.getClass().getName()
-                    + " parent=" + parent.getClass().getName() + " " + targetDesc);
-        }
+        // 旧版「输入框上方按钮排」已废弃：统一改用「输入框快捷按钮」(ChatFooterBarHook)
+        // 的按钮组。这里仅清理历史版本可能已注入的旧行，不再自行注入。
+        removeInputRow(footer);
     }
 
     /** v1087: 在 footer 子树中查找第一个 EditText(用于锚定输入行容器)。 */
@@ -438,21 +356,143 @@ public final class ChatVoiceSwitchHook {
         }, 800);
     }
 
+    /**
+     * v1105: 监听 footer 高度变化, 变化时逐级向上请求重排。
+     *
+     * <p>修复「按钮行注入后, 最底部聊天消息偶发被按钮行遮挡」: 微信在
+     * {@code ChattingScrollLayout} 中按 footer 高度计算消息区底部留白, footer 变高后
+     * 若该缓存未刷新, 消息仍会延伸到按钮行下方。这里在 footer 测高变化时主动触发重排,
+     * 让微信重新计算消息区底部留白。</p>
+     */
+    private static void ensureLayoutWatch(final View footer) {
+        if (footer == null) return;
+        synchronized (sLayoutWatch) {
+            if (sLayoutWatch.put(footer, Boolean.TRUE) != null) return;
+        }
+        footer.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if ((b - t) != (ob - ot)) {
+                scheduleRelayout(footer, footer.getParent() instanceof ViewGroup
+                        ? (ViewGroup) footer.getParent() : null);
+            }
+            // v1106: footer 高度变化(如键盘弹出)后, 微信可能重算消息区留白而漏掉按钮行,
+            // 这里补一次底部留白, 保证最新消息不被按钮行遮挡。
+            ensureMessageSpace(footer, footer.findViewWithTag(ROW_TAG));
+        });
+    }
+
+    /**
+     * v1106: 保证消息列表底部留白包含注入的按钮行高度。
+     *
+     * <p>实测微信在 footer 因注入行变高后并不会刷新消息列表的底部留白, 导致最新一条
+     * 聊天记录被按钮行遮挡。这里直接给消息列表设置 {@code paddingBottom = 原始留白 + 按钮行高度}
+     * (以首次记录的原始值为基准, 幂等不叠加), 从根上保证消息顶在按钮行上方。</p>
+     */
+    private static void ensureMessageSpace(final View footer, final View row) {
+        if (footer == null || row == null) return;
+        try {
+            if (Looper.myLooper() == Looper.getMainLooper()) applyMessageSpace(footer, row);
+            else new Handler(Looper.getMainLooper()).post(() -> applyMessageSpace(footer, row));
+        } catch (Throwable ignored) {}
+    }
+
+    private static void applyMessageSpace(View footer, View row) {
+        try {
+            int rowH = row.getHeight();
+            if (rowH <= 0) return;
+            View root = footer.getRootView();
+            if (root == null) return;
+            java.util.List<View> lists = new java.util.ArrayList<>();
+            collectScrollLists(root, footer, lists);
+            // 消息列表通常是页面内最高的可滚动列表; 排除 footer 子树(表情/更多面板等)
+            View target = null;
+            int best = -1;
+            for (View v : lists) {
+                int h = v.getHeight();
+                if (h > best) { best = h; target = v; }
+            }
+            if (target == null) return;
+            Integer orig = sOrigPadBottom.get(target);
+            if (orig == null) {
+                orig = target.getPaddingBottom();
+                sOrigPadBottom.put(target, orig);
+            }
+            int want = orig + rowH;
+            if (target.getPaddingBottom() != want) {
+                target.setPadding(target.getPaddingLeft(), target.getPaddingTop(),
+                        target.getPaddingRight(), want);
+                target.requestLayout();
+                logOnce(footer, "消息区底部留白补足 +" + rowH + "px (orig=" + orig + ")");
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static void collectScrollLists(View v, View footer, java.util.List<View> out) {
+        if (v == null) return;
+        if (v == footer) return; // 跳过 footer 子树
+        String cn = v.getClass().getName();
+        if (cn.contains("RecyclerView") || v instanceof android.widget.AbsListView) {
+            out.add(v);
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                collectScrollLists(g.getChildAt(i), footer, out);
+            }
+        }
+    }
+
+    /**
+     * v1105: 注入后延迟补一次重排。footer 首次测量可能仍带旧高度(按钮行尚未计入),
+     * 因此 post 到当前布局/measure 跑完后再触发一次, 确保消息区底部留白同步。
+     */
+    private static void scheduleRelayout(final View footer, final ViewGroup parent) {
+        if (footer == null) return;
+        final Runnable r = () -> forceRelayout(footer, parent);
+        footer.post(r);
+        footer.postDelayed(r, 250L);
+    }
+
+    /** 从 footer/父容器逐级向上请求重排(最多 8 层), 触发微信重新计算消息区底部留白。 */
+    private static void forceRelayout(View footer, ViewGroup parent) {
+        try {
+            footer.requestLayout();
+            View p = parent != null ? parent : (footer.getParent() instanceof View ? (View) footer.getParent() : null);
+            int guard = 0;
+            while (p != null && guard++ < 8) {
+                p.requestLayout();
+                android.view.ViewParent vp = p.getParent();
+                p = (vp instanceof View) ? (View) vp : null;
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    /** 注入后延迟补足消息区底部留白(footer 首次测量可能仍带旧高, 多次兜底)。 */
+    private static void scheduleMessageSpace(final View footer, final View row) {
+        if (footer == null || row == null) return;
+        final Runnable r = () -> applyMessageSpace(footer, row);
+        footer.post(r);
+        footer.postDelayed(r, 200L);
+        footer.postDelayed(r, 600L);
+    }
+
     // ==================== UI ====================
 
-    private static android.widget.HorizontalScrollView createButtonRow(Context ctx) {
+    /**
+     * 构建模块现有的一排功能按钮（音色/群发/语音/AI助手/转发）。
+     *
+     * <p>供「输入框快捷按钮」(ChatFooterBarHook) 复用同一按钮组；{@code noBackground=true}
+     * 时按钮不设背景（新版样式），{@code false} 时沿用本 Hook 的流光浅底描边样式。</p>
+     */
+    public static LinearLayout buildActionButtonRow(final Context ctx, boolean noBackground) {
         float density = ctx.getResources().getDisplayMetrics().density;
-
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, (int) (5 * density),
-                0, (int) (5 * density));
+        row.setGravity(Gravity.CENTER);
+        row.setPadding(0, (int) (5 * density), 0, (int) (5 * density));
 
-        // B 套「同色系浅底描边」配色：音色 / 群发 / 语音 / AI助手 / 转发
         int gap = (int) (6 * density);
-        addButton(row, makeFooterButton(ctx, "音色", 0xFFC026D3, v -> openTtsPage(ctx)), gap);
-        addButton(row, makeFooterButton(ctx, "群发", 0xFF8B5CF6, v -> openMassSend(ctx)), gap);
+        addButton(row, makeFooterButton(ctx, "音色", 0xFFC026D3, v -> openTtsPage(ctx), noBackground), gap);
+        addButton(row, makeFooterButton(ctx, "群发", 0xFF8B5CF6, v -> openMassSend(ctx), noBackground), gap);
         addButton(row, makeFooterButton(ctx, "语音", 0xFF9333EA, v -> {
             // v960: 面板展示异常(BadTokenException 等)必须兜底, 否则点击即闪退
             try {
@@ -460,58 +500,34 @@ public final class ChatVoiceSwitchHook {
             } catch (Throwable t) {
                 LogWriter.log(TAG, "voice btn click err: " + t);
             }
-        }), gap);
+        }, noBackground), gap);
         // AI助手：原「更多」菜单中的 AI 助手功能直达
-        addButton(row, makeFooterButton(ctx, "AI助手", 0xFF7C3AED, v -> openAiAssistant(ctx)), gap);
+        addButton(row, makeFooterButton(ctx, "AI助手", 0xFF7C3AED, v -> openAiAssistant(ctx), noBackground), gap);
         // 转发：原「更多」菜单中的自动转发功能直达
-        addButton(row, makeFooterButton(ctx, "转发", 0xFFDB2777, v -> openAutoForward(ctx)), 0);
-
-        android.widget.HorizontalScrollView scroll = new android.widget.HorizontalScrollView(ctx);
-        scroll.setHorizontalScrollBarEnabled(false);
-        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        scroll.setPadding(0, 0, 0, 0);
-        // 按钮整体水平居中显示：HScrollView 子 view 宽度强制为内容宽(UNSPECIFIED)，
-        // 用 FrameLayout.LayoutParams 的 gravity 让内容行在整行内居中
-        row.setGravity(Gravity.CENTER);
-        scroll.addView(row, new android.widget.FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER_HORIZONTAL));
-        // v1002: 打 tag 供幂等判定(见 safeInject)
-        scroll.setTag(ROW_TAG);
-        return scroll;
+        addButton(row, makeFooterButton(ctx, "转发", 0xFFDB2777, v -> openAutoForward(ctx), noBackground), 0);
+        return row;
     }
 
     /** v1002: 供 WmEntry reconciler 调用 —— 微信复用 ChatFooter/漏掉生命周期 hook 时补注入。
      *  以 Activity decorView 为根扫描 ChatFooter, 命中即走 safeInject(tag 幂等)。 */
     public static void ensureInjected(Activity act) {
         if (act == null || act.isFinishing()) return;
+        // 输入框上方按钮统一由「输入框快捷按钮」(ChatFooterBarHook) 注入；
+        // 此处仅复用同一条 reconcile 触发链，并兜底清理旧版遗留的按钮行。
+        try { ChatFooterBarHook.ensureInjected(act); } catch (Throwable ignored) {}
         try {
-            // v1088: 优先用缓存的 footer。已挂在视图树且已注入时直接返回, 避免每 tick 全树扫描
-            // (reconcile 轮询之前每 tick 都做一次 findFooter 递归, 是主页/聊天页卡顿来源之一)。
             View footer = null;
             java.lang.ref.WeakReference<View> cf = sCachedFooter;
             if (cf != null) footer = cf.get();
-            if (footer != null && footer.isAttachedToWindow()
-                    && footer.findViewWithTag(ROW_TAG) != null) {
-                return;
-            }
-            View decor = act.getWindow() != null ? act.getWindow().peekDecorView() : null;
-            if (decor == null) return;
             if (footer == null || !footer.isAttachedToWindow()) {
-                footer = findFooter(decor);
-                sCachedFooter = footer != null
-                        ? new java.lang.ref.WeakReference<>(footer) : null;
-            }
-            if (footer != null) {
-                safeInject(footer);
-            } else {
-                String key = act.getClass().getName();
-                synchronized (sNoFooterLogged) {
-                    if (sNoFooterLogged.add(key)) {
-                        LogWriter.log(TAG, "ensureInjected: 未在视图树中找到 ChatFooter act=" + key);
-                    }
+                View decor = act.getWindow() != null ? act.getWindow().peekDecorView() : null;
+                if (decor != null) {
+                    footer = findFooter(decor);
+                    sCachedFooter = footer != null
+                            ? new java.lang.ref.WeakReference<>(footer) : null;
                 }
             }
+            if (footer != null) removeInputRow(footer);
         } catch (Throwable t) {
             LogWriter.log(TAG, "ensureInjected err: " + t.getMessage());
         }
@@ -526,9 +542,10 @@ public final class ChatVoiceSwitchHook {
             & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
     }
 
-    /** B 套「同色系浅底描边」按钮：浅底 + 同色文字 + 同色细边框，紧凑间距。 */
+    /** B 套「同色系浅底描边」按钮：浅底 + 同色文字 + 同色细边框，紧凑间距。
+     *  {@code noBackground=true} 时不设背景，仅保留同色文字（新版无背景样式）。 */
     private static TextView makeFooterButton(final Context ctx, String text, int color,
-                                             View.OnClickListener listener) {
+                                             View.OnClickListener listener, boolean noBackground) {
         TextView btn = new TextView(ctx);
         btn.setText(text);
         btn.setTextSize(13);
@@ -539,18 +556,25 @@ public final class ChatVoiceSwitchHook {
         btn.setLetterSpacing(0.06f);
 
         boolean dark = isDarkMode(ctx);
-        int bgColor = dark ? mix(color, 0xFF1B1F24, 0.26f) : mix(color, 0xFFFFFFFF, 0.14f);
-        int borderColor = dark ? mix(color, 0xFF1B1F24, 0.55f) : mix(color, 0xFFFFFFFF, 0.45f);
-        int textColor = dark ? mix(color, 0xFFFFFFFF, 0.78f) : color;
+        if (noBackground) {
+            // 尺寸与旧版按钮保持一致：最小宽度 40dp、内边距 12/5dp、字号 13sp。
+            btn.setBackground(null);
+            btn.setTextColor(color);
+            btn.setPadding(dp(12, ctx), dp(5, ctx), dp(12, ctx), dp(5, ctx));
+        } else {
+            int bgColor = dark ? mix(color, 0xFF1B1F24, 0.26f) : mix(color, 0xFFFFFFFF, 0.14f);
+            int borderColor = dark ? mix(color, 0xFF1B1F24, 0.55f) : mix(color, 0xFFFFFFFF, 0.45f);
+            int textColor = dark ? mix(color, 0xFFFFFFFF, 0.78f) : color;
 
-        // v1067 葡萄气泡：同色系浅底也加入流光，整体动起来
-        com.leshao.v3.ui.FlowingGradientDrawable bg = new com.leshao.v3.ui.FlowingGradientDrawable(
-                bgColor, borderColor, bgColor);
-        bg.setCornerRadius(dp(18, ctx));
-        bg.setStroke(dp(1, ctx), borderColor);
-        btn.setBackground(bg);
-        btn.setTextColor(textColor);
-        btn.setPadding(dp(12, ctx), dp(5, ctx), dp(12, ctx), dp(5, ctx));
+            // v1067 葡萄气泡：同色系浅底也加入流光，整体动起来
+            com.leshao.v3.ui.FlowingGradientDrawable bg = new com.leshao.v3.ui.FlowingGradientDrawable(
+                    bgColor, borderColor, bgColor);
+            bg.setCornerRadius(dp(18, ctx));
+            bg.setStroke(dp(1, ctx), borderColor);
+            btn.setBackground(bg);
+            btn.setTextColor(textColor);
+            btn.setPadding(dp(12, ctx), dp(5, ctx), dp(12, ctx), dp(5, ctx));
+        }
         btn.setOnClickListener(listener);
         return btn;
     }

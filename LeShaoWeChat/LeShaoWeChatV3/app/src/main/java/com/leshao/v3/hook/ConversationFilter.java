@@ -31,7 +31,6 @@ public class ConversationFilter {
     private static volatile boolean sDataLayerReady = false;
     private static volatile boolean sUseDataLayer = false;
     private static volatile boolean sDataPathHooksInstalled = false;
-    private static final Handler sUnreadHandler = new Handler(android.os.Looper.getMainLooper());
     private static long sLastBadgeRefresh = 0;
     private static long sLastUnreadScan = 0;
     private static final long UNREAD_SCAN_INTERVAL = 2000;
@@ -382,26 +381,34 @@ public class ConversationFilter {
         return sAllowedUsernames != null && !sAllowedUsernames.isEmpty();
     }
 
+    /**
+     * 统一会话分类 —— 全模块唯一口径, 禁止各处自行拼接后缀判断。
+     * G=群聊(@chatroom / @im.chatroom / @lbsroom)
+     * S=服务号(gh_ / officialaccounts / weixin)
+     * F=普通好友
+     * X=系统/无法判定(filehelper / service_ / 空)
+     */
+    static char classifyUsername(String username) {
+        if (username == null || username.isEmpty()) return 'X';
+        if (username.endsWith("@chatroom")
+                || username.endsWith("@im.chatroom")
+                || username.endsWith("@lbsroom")) return 'G';
+        if (username.startsWith("gh_")
+                || username.contains("officialaccounts")
+                || username.equals("weixin")) return 'S';
+        if (username.equals("filehelper") || username.startsWith("service_")) return 'X';
+        return 'F';
+    }
+
     private static boolean matchesRule(String username) {
         if (sFilterRule == null || sFilterRule.isEmpty()) return true;
         if (sFilterRule.startsWith("label:")) {
             return sAllowedUsernames.contains(username);
         }
-        if ("group".equals(sFilterRule)) {
-            return username.endsWith("@chatroom") || username.endsWith("@im.chatroom")
-                    || username.endsWith("@lbsroom");
-        }
-        if ("service".equals(sFilterRule)) {
-            return username.startsWith("gh_") || username.contains("officialaccounts")
-                    || username.equals("weixin");
-        }
-        if ("friend".equals(sFilterRule)) {
-            return !(username.endsWith("@chatroom") || username.endsWith("@im.chatroom")
-                    || username.endsWith("@lbsroom"))
-                    && !username.startsWith("gh_") && !username.contains("officialaccounts")
-                    && !username.equals("weixin") && !username.equals("filehelper")
-                    && !username.startsWith("service_");
-        }
+        char kind = classifyUsername(username);
+        if ("group".equals(sFilterRule)) return kind == 'G';
+        if ("service".equals(sFilterRule)) return kind == 'S';
+        if ("friend".equals(sFilterRule)) return kind == 'F';
         return sAllowedUsernames.contains(username);
     }
 
@@ -429,10 +436,9 @@ public class ConversationFilter {
 
             int target = -1;
             if (sAnchorUsername != null) {
-                target = findPositionByUsername(null, sAnchorUsername);
-                if (target >= 0) {
-                    target -= headerCountOf(sAdapter);
-                }
+                // RecyclerView 无 AbsListView, 直接按 adapter 数据索引查(不含 header);
+                // 不能调用 findPositionByUsername(null,...) —— 旧实现内部 lv.getAdapter() 会 NPE。
+                target = findDataPositionByUsername(sAnchorUsername);
             }
             if (target < 0 && sAnchorRawPos >= 0) {
                 target = sAnchorRawPos;
@@ -631,12 +637,9 @@ public class ConversationFilter {
                         try { v = f.get(o); } catch (Throwable ignored) { continue; }
                         if (v instanceof String) {
                             String s = (String) v;
-                            if (s != null && s.endsWith("@chatroom") && !s.endsWith("@im.chatroom")) return 'G';
-                            if (s != null && (s.startsWith("gh_")
-                                    || s.equals("weixin")
-                                    || s.contains("officialaccounts"))) {
-                                if (fallback == 'X') fallback = 'S';
-                            }
+                            char k = classifyUsername(s);
+                            if (k == 'G') return 'G';
+                            if (k == 'S' && fallback == 'X') fallback = 'S';
                         } else if (v != null && !v.getClass().getName().startsWith("java.")
                                 && !v.getClass().getName().startsWith("android.") && depth < 3) {
                             char k = scanKind(v, seen, depth + 1);
@@ -674,8 +677,8 @@ public class ConversationFilter {
                         try { v = f.get(o); } catch (Throwable ignored) { continue; }
                         if (v instanceof String) {
                             String s = (String) v;
-                            if (s != null && s.endsWith("@chatroom") && !s.endsWith("@im.chatroom")) return s;
-                            if (s != null && s.startsWith("gh_")) return s;
+                            char k = classifyUsername(s);
+                            if (k == 'G' || k == 'S') return s;
                         } else if (v != null && !v.getClass().getName().startsWith("java.")
                                 && !v.getClass().getName().startsWith("android.") && depth < 3) {
                             String s = scanId(v, seen, depth + 1);
@@ -916,33 +919,40 @@ public class ConversationFilter {
     /** 在当前列表（含过滤映射）中查找会话标识对应的 raw position；找不到返回 -1
      *  过滤激活时返回 headerCount + 过滤索引；否则返回 headerCount + 底层索引 */
     private static int findPositionByUsername(AbsListView lv, String username) {
+        int dataIdx = findDataPositionByUsername(username);
+        if (dataIdx < 0) return -1;
+        int headerCount = 0;
+        try {
+            // lv 可能为 null(RecyclerView 分支), 此时退回 sAdapter 计算 header 数
+            Object adapter = lv != null ? lv.getAdapter() : sAdapter;
+            if (adapter != null) headerCount = headerCountOf(adapter);
+        } catch (Throwable ignored) {}
+        return headerCount + dataIdx;
+    }
+
+    /** 在当前(过滤后)列表数据中查找 username 对应的数据索引(不含 header)；找不到返回 -1。
+     *  与 lv 解耦, 供 ListView / RecyclerView 两条路径共用。 */
+    private static int findDataPositionByUsername(String username) {
         if (username == null) return -1;
         try {
-            Object adapter = lv.getAdapter();
-            if (adapter == null) return -1;
-            int headerCount = headerCountOf(adapter);
-            java.util.List<?> dataList = dataListOf();
             if (sFilterActive && sFilteredPositions != null) {
                 for (int i = 0; i < sFilteredPositions.size(); i++) {
                     Object item = itemAt(sFilteredPositions.get(i));
                     if (item == null) continue;
                     try {
                         Object u = idOf(item);
-                        if (u instanceof String && username.equals(u)) {
-                            return headerCount + i;
-                        }
+                        if (u instanceof String && username.equals(u)) return i;
                     } catch (Throwable ignored) {}
                 }
             } else {
+                java.util.List<?> dataList = dataListOf();
                 if (dataList == null) return -1;
                 for (int i = 0; i < dataList.size(); i++) {
                     Object item = dataList.get(i);
                     if (item == null) continue;
                     try {
                         Object u = idOf(item);
-                        if (u instanceof String && username.equals(u)) {
-                            return headerCount + i;
-                        }
+                        if (u instanceof String && username.equals(u)) return i;
                     } catch (Throwable ignored) {}
                 }
             }
@@ -1043,13 +1053,18 @@ public class ConversationFilter {
                 if (username == null) continue;
                 if (unread > 0) totalWithUnread++;
 
-                if (username.endsWith("@chatroom") && !username.endsWith("@im.chatroom")) {
-                    groupUnread = unread > 0 ? groupUnread + 1 : groupUnread;
-                } else if (username.startsWith("gh_") || username.contains("officialaccounts")
-                        || username.equals("weixin")) {
-                    serviceUnread = unread > 0 ? serviceUnread + 1 : serviceUnread;
-                } else if (!username.equals("filehelper") && !username.startsWith("service_")) {
-                    friendUnread = unread > 0 ? friendUnread + 1 : friendUnread;
+                switch (classifyUsername(username)) {
+                    case 'G':
+                        groupUnread = unread > 0 ? groupUnread + 1 : groupUnread;
+                        break;
+                    case 'S':
+                        serviceUnread = unread > 0 ? serviceUnread + 1 : serviceUnread;
+                        break;
+                    case 'F':
+                        friendUnread = unread > 0 ? friendUnread + 1 : friendUnread;
+                        break;
+                    default:
+                        break;
                 }
             }
             int oldGroup = sUnreadByLabel.containsKey(10000) ? sUnreadByLabel.get(10000) : -1;
@@ -1089,10 +1104,7 @@ public class ConversationFilter {
                 boolean match;
                 if (username != null) {
                     match = matchesRule(username);
-                    kind = username.endsWith("@chatroom") || username.endsWith("@im.chatroom")
-                            || username.endsWith("@lbsroom") ? 'G'
-                         : (username.startsWith("gh_") || username.contains("officialaccounts")
-                            || username.equals("weixin")) ? 'S' : 'F';
+                    kind = classifyUsername(username);
                 } else {
                     kind = kindOf(x);
                     match = ruleMatchesKind(kind);
@@ -1182,18 +1194,10 @@ public class ConversationFilter {
                 if (k4 == null) continue;
                 String username = (String) XposedHelpers.callMethod(k4, "i1");
                 if (username == null) continue;
-                boolean match;
-                if ("group".equals(rule)) {
-                    match = username.endsWith("@chatroom") && !username.endsWith("@im.chatroom");
-                } else if ("service".equals(rule)) {
-                    match = username.startsWith("gh_") || username.contains("officialaccounts")
-                          || username.equals("weixin");
-                } else {
-                    match = !username.endsWith("@chatroom") && !username.startsWith("gh_")
-                          && !username.contains("officialaccounts") && !username.startsWith("service_")
-                          && !username.equals("filehelper")
-                          && !username.equals("weixin");
-                }
+                char kind = classifyUsername(username);
+                boolean match = ("group".equals(rule) && kind == 'G')
+                        || ("service".equals(rule) && kind == 'S')
+                        || ("friend".equals(rule) && kind == 'F');
                 if (match) r.add(username);
             }
         } catch (Throwable e) { LogWriter.log(TAG, "getUsernamesBuiltIn: " + e.getMessage()); }

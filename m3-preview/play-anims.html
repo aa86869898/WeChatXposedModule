@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>播放时动态动画 · 10 套（纯 CSS）</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#FBF9FF;color:#2A2340;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+header{max-width:1120px;margin:0 auto;padding:24px 20px 6px}
+h1{font-size:21px;margin:0 0 6px}
+.sub{color:#6F6389;font-size:13px;line-height:1.7}.sub b{color:#8B5CF6}
+main{max-width:1120px;margin:0 auto;padding:14px 20px 80px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-top:16px}
+.card{background:#fff;border:1px solid #E7DCF8;border-radius:20px;padding:16px;box-shadow:0 2px 12px rgba(120,90,190,.1)}
+.hd{display:flex;align-items:center;gap:9px;margin-bottom:4px}
+.no{font-size:11px;font-weight:700;color:#fff;background:linear-gradient(135deg,#8B5CF6,#FFAFCC);border-radius:8px;padding:2px 8px}
+.name{font-size:14px;font-weight:700}
+.desc{font-size:12px;color:#6F6389;line-height:1.65;margin:4px 0 12px}
+.stage{position:relative;height:190px;border-radius:16px;overflow:hidden;background:radial-gradient(circle at 50% 45%,#241338,#120b1e 75%);display:flex;align-items:center;justify-content:center}
+.tag{position:absolute;left:12px;bottom:10px;font-size:10px;letter-spacing:1px;color:rgba(255,255,255,.5);font-weight:700;z-index:9}
+
+/* 通用 */
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{from{transform:scale(.35);opacity:.85}to{transform:scale(3.4);opacity:0}}
+@keyframes eq{0%,100%{height:12%}50%{height:92%}}
+@keyframes flow{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes rise{0%{transform:translateY(0) scale(.6);opacity:0}15%{opacity:.9}100%{transform:translateY(-170px) scale(1.1);opacity:0}}
+
+/* C1 环形声波脉冲 */
+.c1{position:relative;width:160px;height:160px;display:flex;align-items:center;justify-content:center}
+.c1 i{position:absolute;width:56px;height:56px;border-radius:50%;border:2px solid #D8B4FE;box-shadow:0 0 12px rgba(216,180,254,.5);animation:pulse 2.4s ease-out infinite}
+.c1 i:nth-child(1){animation-delay:0s}
+.c1 i:nth-child(2){animation-delay:.4s}
+.c1 i:nth-child(3){animation-delay:.8s}
+.c1 i:nth-child(4){animation-delay:1.2s}
+.c1 i:nth-child(5){animation-delay:1.6s}
+.c1 i:nth-child(6){animation-delay:2s}
+.c1::after{content:"";width:34px;height:34px;border-radius:50%;background:radial-gradient(circle,#8B5CF6,rgba(139,92,246,0));position:relative;z-index:2}
+
+/* C2 流动正弦波 */
+.c2{position:absolute;inset:0;overflow:hidden;display:flex;align-items:center}
+.c2 .wrap{position:absolute;left:0;top:0;width:100%;height:100%;display:flex;align-items:center;animation:amp 2.2s ease-in-out infinite}
+.c2 svg{width:200%;height:90px;flex:0 0 200%}
+.c2 svg.a{animation:flow 3s linear infinite}
+.c2 svg.b{animation:flow 4.5s linear infinite;opacity:.45;position:absolute;top:8px}
+@keyframes amp{0%,100%{transform:scaleY(.72)}50%{transform:scaleY(1.25)}}
+
+/* C3 柱状频谱 */
+.c3{display:flex;align-items:flex-end;gap:4px;width:88%;height:130px}
+.c3 i{flex:1;border-radius:3px 3px 0 0;background:linear-gradient(180deg,#FFAFCC,#D8B4FE 45%,#8B5CF6);animation:eq .9s ease-in-out infinite}
+.c3 i.d1{animation-delay:0s}.c3 i.d2{animation-delay:.12s}.c3 i.d3{animation-delay:.24s}.c3 i.d4{animation-delay:.36s}
+.c3 i.d5{animation-delay:.48s}.c3 i.d6{animation-delay:.6s}.c3 i.d7{animation-delay:.72s}.c3 i.d8{animation-delay:.84s}
+
+/* C4 声浪绸带 */
+.c4{position:absolute;inset:0;overflow:hidden}
+.c4 svg{position:absolute;left:0;width:220%;height:60px}
+.c4 svg:nth-child(1){top:26%;animation:flow 4s linear infinite;opacity:.95}
+.c4 svg:nth-child(2){top:44%;animation:flow 3s linear infinite reverse;opacity:.6}
+.c4 svg:nth-child(3){top:62%;animation:flow 5s linear infinite;opacity:.4}
+
+/* C5 粒子声浪 */
+.c5{position:absolute;inset:0;overflow:hidden}
+.c5 i{position:absolute;bottom:8px;width:6px;height:6px;border-radius:50%;background:#FFAFCC;box-shadow:0 0 8px #FFAFCC;animation:rise 3s ease-in infinite}
+
+/* C6 律动点阵 */
+.c6{width:100%;height:100%;opacity:.9;
+  background-image:
+    radial-gradient(circle,rgba(139,92,246,.95) 2.2px,transparent 2.8px),
+    radial-gradient(circle,rgba(216,180,254,.95) 2.2px,transparent 2.8px),
+    radial-gradient(circle,rgba(255,175,204,.95) 2.2px,transparent 2.8px);
+  background-size:28px 28px;
+  background-position:0 0,10px 10px,19px 19px;
+  animation:dots 2.8s linear infinite;
+}
+@keyframes dots{to{background-position:28px 28px,38px 38px,47px 47px}}
+
+/* C7 旋转声纹环 */
+.c7{position:relative;width:160px;height:160px;border-radius:50%;
+  background:repeating-conic-gradient(from 0deg,#8B5CF6 0deg 3deg,transparent 3deg 9deg);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(74% - 16px),#000 calc(74% - 15px) calc(74% + 1px),transparent calc(74% + 2px));
+  mask:radial-gradient(farthest-side,transparent calc(74% - 16px),#000 calc(74% - 15px) calc(74% + 1px),transparent calc(74% + 2px));
+  animation:spin 4s linear infinite,breathe2 1.6s ease-in-out infinite;
+}
+@keyframes breathe2{0%,100%{filter:drop-shadow(0 0 4px rgba(216,180,254,.5))}50%{filter:drop-shadow(0 0 16px rgba(216,180,254,.95))}}
+.c7::after{content:"";position:absolute;inset:52px;border-radius:50%;border:1px solid rgba(216,180,254,.25)}
+
+/* C8 流体熔岩灯 */
+.c8{width:120px;height:120px;background:radial-gradient(circle at 32% 30%,#FFAFCC,#8B5CF6 62%,#3a1f6e);
+  box-shadow:0 0 30px rgba(139,92,246,.6);animation:blob 6s ease-in-out infinite,spin 9s linear infinite}
+@keyframes blob{
+  0%,100%{border-radius:60% 40% 55% 45%/55% 60% 40% 45%}
+  25%{border-radius:40% 60% 35% 65%/60% 40% 60% 40%}
+  50%{border-radius:55% 45% 65% 35%/40% 55% 45% 60%}
+  75%{border-radius:45% 55% 40% 60%/65% 45% 55% 35%}}
+
+/* C9 声呐扫描 */
+.c9{position:relative;width:160px;height:160px}
+.c9 .sweep{position:absolute;inset:0;border-radius:50%;border:1px solid rgba(216,180,254,.22);
+  background:conic-gradient(from 0deg,rgba(139,92,246,0) 0deg,rgba(216,180,254,.6) 55deg,rgba(139,92,246,0) 95deg);
+  animation:spin 2s linear infinite}
+.c9 .g1,.c9 .g2{position:absolute;border-radius:50%;border:1px solid rgba(216,180,254,.16)}
+.c9 .g1{inset:26%}.c9 .g2{inset:12%}
+.c9 .rings i{position:absolute;left:50%;top:50%;width:30px;height:30px;margin:-15px;border-radius:50%;
+  border:1.5px solid rgba(139,92,246,.75);animation:sonar 2.4s ease-out infinite}
+.c9 .rings i:nth-child(1){animation-delay:0s}
+.c9 .rings i:nth-child(2){animation-delay:.6s}
+.c9 .rings i:nth-child(3){animation-delay:1.2s}
+.c9 .rings i:nth-child(4){animation-delay:1.8s}
+@keyframes sonar{from{transform:scale(.4);opacity:.75}to{transform:scale(2.7);opacity:0}}
+.c9::after{content:"";position:absolute;left:50%;top:50%;width:8px;height:8px;margin:-4px;border-radius:50%;background:#FFAFCC;box-shadow:0 0 12px #FFAFCC}
+
+/* C10 呼吸光晕 */
+.c10{position:relative;width:170px;height:170px;display:flex;align-items:center;justify-content:center}
+.c10 .glow{position:absolute;width:150px;height:150px;border-radius:50%;
+  background:radial-gradient(circle,rgba(216,180,254,.7),rgba(139,92,246,.22) 55%,transparent 74%);
+  animation:breath 2.2s ease-in-out infinite}
+@keyframes breath{0%,100%{transform:scale(.85);opacity:.75}50%{transform:scale(1.12);opacity:1}}
+.c10 .orbit{position:absolute;width:150px;height:150px;animation:spin 4s linear infinite}
+.c10 .orbit::before,.c10 .orbit::after{content:"";position:absolute;inset:24px;border-radius:50%;border:1px solid rgba(216,180,254,.25)}
+.c10 .orbit i{position:absolute;width:9px;height:9px;border-radius:50%}
+.c10 .orbit i:nth-child(1){top:-4px;left:50%;margin-left:-4.5px;background:#FFAFCC;box-shadow:0 0 12px #FFAFCC}
+.c10 .orbit i:nth-child(2){bottom:10px;right:10px;background:#D8B4FE;box-shadow:0 0 12px #D8B4FE}
+.c10 .orbit i:nth-child(3){top:34px;left:4px;background:#8B5CF6;box-shadow:0 0 12px #8B5CF6}
+</style>
+</head>
+<body>
+<header>
+  <h1>播放时动态动画 · 10 套（纯 CSS，无 JavaScript）</h1>
+  <div class="sub">配套已锁定的 <b>A2 流光渐变播放按钮</b>。全部为播放中的持续动态可视化，打开即动，不依赖脚本。</div>
+</header>
+<main>
+<div class="grid">
+
+  <div class="card"><div class="hd"><span class="no">C1</span><span class="name">环形声波脉冲</span></div>
+    <div class="desc">同心圆一圈圈向外扩散，像水波，声音扩散感最强。</div>
+    <div class="stage"><div class="c1"><i></i><i></i><i></i><i></i><i></i><i></i></div><span class="tag">PLAYING</span></div></div>
+
+  <div class="card"><div class="hd"><span class="no">C2</span><span class="name">流动正弦波</span></div>
+    <div class="desc">大波浪横向流动，波幅随节奏起伏，最直观的声音在走。</div>
+    <div class="stage"><div class="c2">
+      <div class="wrap">
+        <svg class="a" viewBox="0 0 800 90" preserveAspectRatio="none"><defs><linearGradient id="wg" x1="0" x2="1"><stop offset="0" stop-color="#8B5CF6"/><stop offset=".5" stop-color="#D8B4FE"/><stop offset="1" stop-color="#FFAFCC"/></linearGradient></defs><path d="M0 45 Q 50 0 100 45 T 200 45 T 300 45 T 400 45 T 500 45 T 600 45 T 700 45 T 800 45" fill="none" stroke="url(#wg)" stroke-width="3.2" stroke-linecap="round"/></svg>
+        <svg class="b" viewBox="0 0 800 90" preserveAspectRatio="none"><path d="M0 45 Q 50 90 100 45 T 200 45 T 300 45 T 400 45 T 500 45 T 600 45 T 700 45 T 800 45" fill="none" stroke="#FFAFCC" stroke-width="2"/></svg>
+      </div></div><span class="tag">PLAYING</span></div></div>
+
+  <div class="card"><div class="hd"><span class="no">C3</span><span class="name">柱状频谱</span></div>
+    <div class="desc">22 根渐变柱随节奏高低跳动，经典播放器 EQ 观感。</div>
+    <div class="stage"><div class="c3">
+      <i class="d1"></i><i class="d3"></i><i class="d5"></i><i class="d2"></i><i class="d7"></i><i class="d4"></i><i class="d8"></i><i class="d2"></i><i class="d6"></i><i class="d1"></i><i class="d5"></i><i class="d3"></i><i class="d8"></i><i class="d2"></i><i class="d6"></i><i class="d4"></i><i class="d7"></i><i class="d1"></i><i class="d5"></i><i class="d3"></i><i class="d6"></i><i class="d2"></i>
+    </div><span class="tag">PLAYING</span></div></div>
+
+  <div class="card"><div class="hd"><span class="no">C4</span><span class="name">声浪绸带</span></div>
+    <div class="desc">多层波浪错位叠加缓缓流动，像声波绸带飘动。</div>
+    <div class="stage"><div class="c4">
+      <svg viewBox="0 0 800 60" preserveAspectRatio="none"><path d="M0 30 Q 60 0 120 30 T 240 30 T 360 30 T 480 30 T 600 30 T 720 30 T 840 30" fill="none" stroke="#8B5CF6" stroke-width="3"/></svg>
+      <svg viewBox="0 0 800 60" preserveAspectRatio="none"><path d="M0 30 Q 60 60 120 30 T 240 30 T 360 30 T 480 30 T 600 30 T 720 30 T 840 30" fill="none" stroke="#D8B4FE" stroke-width="3"/></svg>
+      <svg viewBox="0 0 800 60" preserveAspectRatio="none"><path d="M0 30 Q 60 0 120 30 T 240 30 T 360 30 T 480 30 T 600 30 T 720 30 T 840 30" fill="none" stroke="#FFAFCC" stroke-width="3"/></svg>
+    </div><span class="tag">PLAYING</span></div></div>
+
+  <div class="card"><div class="hd"><span class="no">C5</span><span class="name">粒子声浪</span></div>
+    <div class="desc">细小光点从底部持续上浮、左右摇曳并渐隐，轻盈。</div>
+    <div class="stage"><div class="c5">
+      <i style="left:6%;animation-delay:.0s;animation-duration:3.0s"></i>
+      <i style="left:14%;animation-delay:.5s;animation-duration:3.4s"></i>
+      <i style="left:22%;animation-delay:1.0s;animation-duration:2.8s"></i>
+      <i style="left:31%;animation-delay:1.6s;animation-duration:3.6s"></i>
+      <i style="left:40%;animation-delay:.3s;animation-duration:3.1s"></i>
+      <i style="left:49%;animation-delay:2.0s;animation-duration:3.3s"></i>
+      <i style="left:57%;animation-delay:.8s;animation-duration:2.9s"></i>
+      <i style="left:65%;animation-delay:1.3s;animation-duration:3.5s"></i>
+      <i style="left:73%;animation-delay:.1s;animation-duration:3.2s"></i>
+      <i style="left:81%;animation-delay:1.9s;animation-duration:3.0s"></i>
+      <i style="left:89%;animation-delay:.6s;animation-duration:3.4s"></i>
+      <i style="left:95%;animation-delay:2.3s;animation-duration:2.7s"></i>
+    </div><span class="tag">PLAYING</span></div></div>
+
+  <div class="card"><div class="hd"><span class="no">C6</span><span class="name">律动点阵</span></div>
+    <div class="desc">点阵沿对角方向持续流动，规整又有节奏。</div>
+    <div class="stage"><div class="c6"></div><span class="tag">PLAYING</span></div></div>
+
+  <div class="card"><div class="hd"><span class="no">C7</span><span class="name">旋转声纹环</span></div>
+    <div class="desc">圆环上一圈声纹条持续旋转并呼吸发光，科技感。</div>
+    <div class="stage"><div class="c7"></div><span class="tag">PLAYING</span></div></div>
+
+  <div class="card"><div class="hd"><span class="no">C8</span><span class="name">流体熔岩灯</span></div>
+    <div class="desc">不规则渐变流体团缓慢形变与转动，柔和有机。</div>
+    <div class="stage"><div class="c8"></div><span class="tag">PLAYING</span></div></div>
+
+  <div class="card"><div class="hd"><span class="no">C9</span><span class="name">声呐扫描</span></div>
+    <div class="desc">雷达光束旋转扫描加扩散圆环，运行中氛围最强。</div>
+    <div class="stage"><div class="c9"><div class="g1"></div><div class="g2"></div><div class="sweep"></div><div class="rings"><i></i><i></i><i></i><i></i></div></div><span class="tag">PLAYING</span></div></div>
+
+  <div class="card"><div class="hd"><span class="no">C10</span><span class="name">呼吸光晕</span></div>
+    <div class="desc">中心光晕呼吸，三点光点沿轨道环绕，温柔不刺眼。</div>
+    <div class="stage"><div class="c10"><div class="glow"></div><div class="orbit"><i></i><i></i><i></i></div></div><span class="tag">PLAYING</span></div></div>
+
+</div>
+</main>
+</body>
+</html>

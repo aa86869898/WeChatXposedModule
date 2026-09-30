@@ -1,0 +1,117 @@
+>>>>> Dumping cursor [app_pkg_name, module_pkg_name, user_id]
+0 {
+   app_pkg_name=system
+   module_pkg_name=com.tsng.hidemyapplist
+   user_id=0
+}
+1 {
+   app_pkg_name=com.ss.android.ugc.aweme
+   module_pkg_name=com.ss.android.ugc.aweme.yyds
+   user_id=0
+}
+2 {
+   app_pkg_name=com.tencent.mm
+   module_pkg_name=me.yun.fkwechat
+   user_id=997
+}
+3 {
+   app_pkg_name=com.tencent.mm
+   module_pkg_name=me.yun.fkwechat
+   user_id=998
+}
+4 {
+   app_pkg_name=com.tencent.mm
+   module_pkg_name=me.yun.fkwechat
+   user_id=0
+}
+5 {
+   app_pkg_name=com.tencent.mm
+   module_pkg_name=com.leshao.wechat
+   user_id=0
+}
+6 {
+   app_pkg_name=com.tencent.mm
+   module_pkg_name=h.Hchat
+   user_id=999
+}
+7 {
+   app_pkg_name=com.heytap.themestore
+   module_pkg_name=me.neko.fckvip
+   user_id=0
+}
+8 {
+   app_pkg_name=com.tencent.mm
+   module_pkg_name=me.dartcv.nuke
+   user_id=0
+}
+9 {
+   app_pkg_name=com.tencent.mobileqq
+   module_pkg_name=have.fun
+   user_id=0
+}
+10 {
+   app_pkg_name=com.tencent.mm
+   module_pkg_name=have.fun
+   user_id=0
+}
+11 {
+   app_pkg_name=com.deepseek.chat
+   module_pkg_name=com.dsmod.probe
+   user_id=0
+}
+12 {
+   app_pkg_name=com.heytap.themestore
+   module_pkg_name=com.wengui.hook
+   user_id=0
+}
+13 {
+   app_pkg_name=com.larus.nova
+   module_pkg_name=com.wengui.hook
+   user_id=0
+}
+14 {
+   app_pkg_name=com.tencent.mm
+   module_pkg_name=dev.ujhhgtg.wekit
+   user_id=997
+}
+15 {
+   app_pkg_name=com.tencent.mm
+   module_pkg_name=dev.ujhhgtg.wekit
+   user_id=998
+}
+16 {
+   app_pkg_name=com.tencent.mm
+   module_pkg_name=dev.ujhhgtg.wekit
+   user_id=999
+}
+17 {
+   app_pkg_name=com.tencent.mm
+   module_pkg_name=dev.ujhhgtg.wekit
+   user_id=0
+}
+18 {
+   app_pkg_name=com.larus.nova
+   module_pkg_name=io.github.tehcneko.sslunpinning
+   user_id=0
+}
+19 {
+   app_pkg_name=com.tencent.mm
+   module_pkg_name=me.yun.lspilot
+   user_id=999
+}
+20 {
+   app_pkg_name=com.tencent.mm
+   module_pkg_name=me.yun.lspilot
+   user_id=0
+}
+21 {
+   app_pkg_name=system
+   module_pkg_name=com.junge.algorithmAidePro
+   user_id=0
+}
+22 {
+   app_pkg_name=com.tencent.mm
+   module_pkg_name=com.leshao.v3
+   user_id=0
+}
+<<<<<

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>在线音乐 · 播放器 10 套（纯旋律柱 · 无封面）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --bg1:#F9F6FF; --bg2:#EEE7FA; --card:#FFFFFF; --t1:#2A2340; --t2:#6F6389;
+    --line:#EFE8FB; --chip:#F1EAFC; --g0:#8B5CF6; --g1:#D8B4FE; --g2:#FFAFCC;
+  }
+  body.dark {
+    --bg1:#130D1C; --bg2:#1A1226; --card:#1D1530; --t1:#EDE7FB; --t2:#B0A0D2;
+    --line:#2C2145; --chip:#241A3A; --g0:#9F7BFF; --g1:#DCC3FF; --g2:#FFB8D4;
+  }
+  body {
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--t1); min-height: 100vh; padding: 26px 16px 80px;
+    background: linear-gradient(180deg, var(--bg1) 0%, var(--bg2) 100%); background-attachment: fixed;
+  }
+  body.dark { background: linear-gradient(180deg,#130D1C 0%,#1A1226 100%); }
+  .head { max-width: 1560px; margin: 0 auto; }
+  .head h1 { font-size: 23px; }
+  .head h1 em { font-style: normal; background: linear-gradient(92deg, var(--g0), var(--g1), var(--g2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .head p { font-size: 12.5px; color: var(--t2); margin-top: 9px; line-height: 1.9; max-width: 1100px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 11px 14px; max-width: 1100px; box-shadow: 0 10px 24px rgba(96,66,160,.08); }
+  .bar button { border: none; cursor: pointer; font-weight: 800; font-size: 12.5px; color: #fff; background: linear-gradient(135deg, var(--g0), var(--g1)); padding: 9px 16px; border-radius: 11px; }
+  .bar .g { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--t2); }
+  .bar .o { font-weight: 800; color: var(--g0); min-width: 26px; text-align: center; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 140px; accent-color: var(--g0); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(390px, 1fr)); gap: 30px; max-width: 1560px; margin: 26px auto 0; }
+  .opt { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .opt .label { font-size: 13px; font-weight: 800; text-align: center; }
+  .opt .label b { font-size: 10.5px; color: #fff; background: linear-gradient(135deg, var(--g0), var(--g2)); padding: 2px 7px; border-radius: 999px; margin-right: 7px; vertical-align: 1px; }
+  .opt .spec { font-size: 11px; font-weight: 700; color: var(--g0); }
+
+  .phone { width: 390px; height: 844px; border-radius: 44px; overflow: hidden; position: relative; background: var(--bg2); box-shadow: 0 26px 60px rgba(60,40,110,.28), 0 0 0 10px rgba(20,12,32,.85); }
+  body.dark .phone { box-shadow: 0 26px 60px rgba(0,0,0,.6), 0 0 0 10px rgba(0,0,0,.9); }
+  .status { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 26px; font-size: 12.5px; font-weight: 700; color: var(--t1); }
+  .screen { position: absolute; inset: 44px 0 0 0; display: flex; flex-direction: column; padding: 0 22px; }
+  .back { font-size: 13px; font-weight: 800; color: var(--g0); padding: 6px 0; }
+  .title { font-weight: 800; text-align: center; }
+  .sub { color: var(--t2); text-align: center; }
+  .bars { position: relative; width: 100%; }
+  .bars canvas { display: block; width: 100%; }
+  .times { display: flex; justify-content: space-between; font-size: 11px; color: var(--t2); font-variant-numeric: tabular-nums; }
+  .track { height: 5px; border-radius: 999px; background: var(--chip); overflow: hidden; }
+  .track > i { display: block; height: 100%; width: 42%; border-radius: 999px; background: linear-gradient(90deg, var(--g0), var(--g1), var(--g2)); }
+  .ctrl { display: flex; align-items: center; justify-content: center; gap: 28px; }
+  .ctrl .ic { font-size: 22px; color: var(--t1); }
+  .ctrl .play { width: 66px; height: 66px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 25px; color: #fff; background: linear-gradient(135deg, var(--g0), var(--g1), var(--g2)); box-shadow: 0 12px 26px rgba(139,92,246,.4); }
+  .acts { display: flex; justify-content: center; gap: 34px; font-size: 20px; color: var(--t2); }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>播放器 <em>10 套</em> · 纯旋律柱（无封面）</h1>
+  <p>已去掉封面方块 / 唱片圆盘等图形，只保留「旋律柱」作为视觉主体；每套的高度与宽度、柱数、对齐方式各不相同（标注见卡片）。全部跟节奏跳动，浅色 / 暗色可切换。</p>
+  <div class="bar">
+    <button id="playBtn">暂停</button>
+    <div class="g">节奏 BPM <input id="bpm" type="range" min="60" max="180" value="120"><span class="o" id="bpmO">120</span></div>
+    <button id="themeBtn">暗色</button>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<script>
+(function () {
+  var st = { play: true, t: 0, last: 0, bpm: 120, dark: false };
+  var dpr = Math.max(1, Math.min(3, devicePixelRatio || 1));
+
+  function cols() { return st.dark ? ['#9F7BFF', '#DCC3FF', '#FFB8D4'] : ['#8B5CF6', '#D8B4FE', '#FFAFCC']; }
+  function env(t) { var p = 60000 / st.bpm, f = (t % p) / p; return Math.pow(1 - f, 2.2); }
+  function spectrum(t, n) {
+    var e = env(t), a = new Float32Array(n);
+    for (var i = 0; i < n; i++) {
+      var base = 0.16 + 0.30 * Math.abs(Math.sin(i * 1.7 + t / 320));
+      var kick = e * (1 - i / n) * 0.98;
+      var noise = 0.13 * Math.abs(Math.sin(i * 3.13 + t / 90));
+      a[i] = Math.max(0, Math.min(1, base + kick + noise));
+    }
+    return a;
+  }
+  function rr(ctx, x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2)); if (r <= 0) { ctx.rect(x, y, w, h); return; }
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  function grad(ctx, x0, w, t) {
+    var c = cols(), p = (t / 3200) % 1, shift = 2 * w * p;
+    var g = ctx.createLinearGradient(x0 - shift, 0, x0 + 2 * w - shift, 0);
+    g.addColorStop(0, c[0]); g.addColorStop(0.33, c[1]); g.addColorStop(0.66, c[2]); g.addColorStop(1, c[0]);
+    return g;
+  }
+  // 通用旋律柱：cfg = { n, span, gap, mode, cap, glow }
+  function drawBars(ctx, W, H, t, cfg) {
+    var n = cfg.n, span = W * cfg.span, x0 = (W - span) / 2, gap = cfg.gap;
+    var bw = (span - gap * (n - 1)) / n;
+    if (bw <= 0) return;
+    var sp = spectrum(t, n);
+    if (cfg.glow) {
+      var c = cols();
+      var rg = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.6);
+      rg.addColorStop(0, c[1]); rg.addColorStop(0.5, c[2]); rg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalAlpha = 0.22; ctx.fillStyle = rg;
+      ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = grad(ctx, x0, span, t);
+    var cap = cfg.cap == null ? Math.min(bw, 4) : cfg.cap;
+    for (var i = 0; i < n; i++) {
+      var v = sp[i], x = x0 + (bw + gap) * i;
+      if (cfg.mode === 'mirror') {
+        var bh = 4 + v * H * 0.44, cy = H / 2;
+        rr(ctx, x, cy - bh, bw, bh, cap); ctx.fill();
+        rr(ctx, x, cy, bw, bh, cap); ctx.fill();
+      } else if (cfg.mode === 'center') {
+        var h2 = 6 + v * H * 0.84;
+        rr(ctx, x, (H - h2) / 2, bw, h2, cap); ctx.fill();
+      } else {
+        var h3 = 6 + v * H * 0.88, base = H - H * 0.02;
+        rr(ctx, x, base - h3, bw, h3, cap); ctx.fill();
+      }
+    }
+  }
+
+  var VIZ = [];
+  function mountViz(el, h, cfg) {
+    var cv = document.createElement('canvas'); el.appendChild(cv);
+    var it = { cv: cv, ctx: cv.getContext('2d'), h: h, cfg: cfg };
+    it.size = function () {
+      var w = el.clientWidth || 340;
+      cv.width = w * dpr; cv.height = h * dpr;
+      cv.style.height = h + 'px';
+      it.ctx.setTransform(dpr, 0, 0, dpr, 0, 0); it.w = w;
+    };
+    it.size(); VIZ.push(it); return it;
+  }
+
+  // 统一版式：返回(返回) → 标题/歌手 → 旋律柱 → 进度 → 控制 → 下载/发送
+  function frameLayout(barH, cfg, titleSize, order) {
+    return function (s) {
+      var w = document.createElement('div'); w.className = 'screen';
+      var top = '<div class="back">\u2190 返回</div>'
+        + '<div class="title" style="font-size:' + (titleSize || 21) + 'px;margin:12px 0 6px">夜曲</div>'
+        + '<div class="sub" style="font-size:12.5px">周杰伦 · 十一月的萧邦</div>';
+      var bot = '<div class="times" style="margin-top:6px"><span>01:24</span><span>03:51</span></div>'
+        + '<div class="track" style="margin:6px 0 16px"><i></i></div>'
+        + '<div class="ctrl"><span class="ic">\u23EE</span><span class="play">\u25B6</span><span class="ic">\u23ED</span></div>'
+        + '<div class="acts" style="margin-top:22px;padding-bottom:14px"><span>\u2B07</span><span>\u27A4</span></div>';
+      if (order === 'barsTop') {
+        w.innerHTML = top + '<div class="bars" data-viz style="margin:16px 0 auto"></div>' + bot;
+      } else {
+        w.innerHTML = top + '<div style="flex:1"></div><div class="bars" data-viz style="margin:18px 0 14px"></div>' + bot;
+      }
+      s.appendChild(w);
+      mountViz(w.querySelector('[data-viz]'), barH, cfg);
+    };
+  }
+
+  var OPTIONS = [
+    { spec: '高 180dp · 宽 80% · 22 柱', cfg: { n: 22, span: 0.80, gap: 3, mode: 'bottom' }, h: 180 },
+    { spec: '高 260dp · 宽 60% · 22 柱（高瘦）', cfg: { n: 22, span: 0.60, gap: 3, mode: 'bottom' }, h: 260 },
+    { spec: '高 120dp · 宽 100% · 28 柱（通栏矮柱）', cfg: { n: 28, span: 1.00, gap: 3, mode: 'bottom' }, h: 120 },
+    { spec: '高 200dp · 宽 90% · 32 柱（细密）', cfg: { n: 32, span: 0.90, gap: 2, mode: 'bottom' }, h: 200 },
+    { spec: '高 220dp · 宽 75% · 22 柱（底部对齐）', cfg: { n: 22, span: 0.75, gap: 3, mode: 'bottom' }, h: 220 },
+    { spec: '高 190dp · 宽 70% · 22 柱（垂直居中）', cfg: { n: 22, span: 0.70, gap: 3, mode: 'center' }, h: 190 },
+    { spec: '高 200dp · 宽 85% · 12 柱（粗圆头）', cfg: { n: 12, span: 0.85, gap: 7, mode: 'bottom', cap: 8 }, h: 200 },
+    { spec: '高 160dp · 宽 80% · 24 柱（上下镜像）', cfg: { n: 24, span: 0.80, gap: 3, mode: 'mirror' }, h: 160 },
+    { spec: '高 240dp · 宽 80% · 22 柱（带光晕）', cfg: { n: 22, span: 0.80, gap: 3, mode: 'bottom', glow: true }, h: 240 },
+    { spec: '高 180dp · 宽 95% · 40 柱（极细）', cfg: { n: 40, span: 0.95, gap: 2, mode: 'bottom', cap: 1 }, h: 180 }
+  ];
+
+  var grid = document.getElementById('grid');
+  OPTIONS.forEach(function (o, i) {
+    var wrap = document.createElement('div'); wrap.className = 'opt';
+    var label = document.createElement('div'); label.className = 'label';
+    label.innerHTML = '<b>' + (i < 9 ? '0' + (i + 1) : (i + 1)) + '</b>纯旋律柱';
+    var spec = document.createElement('div'); spec.className = 'spec'; spec.textContent = o.spec;
+    var phone = document.createElement('div'); phone.className = 'phone';
+    var status = document.createElement('div'); status.className = 'status';
+    status.innerHTML = '<span>9:41</span><span>\u25CF\u25CF\u25CF</span>';
+    phone.appendChild(status);
+    var order = (i === 4) ? 'barsTop' : 'mid';
+    frameLayout(o.h, o.cfg, i === 5 ? 23 : 21, order)(phone);
+    wrap.appendChild(label); wrap.appendChild(spec); wrap.appendChild(phone);
+    grid.appendChild(wrap);
+  });
+
+  function frame(ts) {
+    if (!st.last) st.last = ts;
+    var dt = Math.min(60, ts - st.last); st.last = ts;
+    if (st.play) st.t += dt;
+    VIZ.forEach(function (it) {
+      if (it.cv.clientWidth && it.w !== it.cv.clientWidth) it.size();
+      it.ctx.clearRect(0, 0, it.w, it.h);
+      drawBars(it.ctx, it.w, it.h, st.t, it.cfg);
+    });
+    requestAnimationFrame(frame);
+  }
+  addEventListener('resize', function () { VIZ.forEach(function (it) { it.size(); }); });
+
+  document.getElementById('playBtn').onclick = function () { st.play = !st.play; this.textContent = st.play ? '暂停' : '播放'; };
+  document.getElementById('themeBtn').onclick = function () { st.dark = !st.dark; document.body.classList.toggle('dark', st.dark); this.textContent = st.dark ? '浅色' : '暗色'; };
+  document.getElementById('bpm').oninput = function () { st.bpm = +this.value; document.getElementById('bpmO').textContent = this.value; };
+
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

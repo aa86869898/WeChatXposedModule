@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>音频转语音 · 播放动画 10 套 · 180dp · 跟节奏跳动</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: #2A2340; min-height: 100vh; padding: 30px 16px 90px;
+    background:
+      radial-gradient(900px 520px at 6% -6%, #EDE2FF 0%, rgba(237, 226, 255, 0) 62%),
+      radial-gradient(900px 620px at 106% 4%, #FFE1EE 0%, rgba(255, 225, 238, 0) 58%),
+      linear-gradient(180deg, #F9F6FF 0%, #EEE7FA 100%);
+    background-attachment: fixed;
+    transition: background .25s, color .25s;
+  }
+  body.dark {
+    color: #EDE7FB;
+    background:
+      radial-gradient(900px 520px at 6% -6%, #241540 0%, rgba(36,21,64,0) 62%),
+      radial-gradient(900px 620px at 106% 4%, #33132e 0%, rgba(51,19,46,0) 58%),
+      linear-gradient(180deg, #130D1C 0%, #1A1226 100%);
+  }
+  .g-head { max-width: 1500px; margin: 0 auto; }
+  .g-head h1 { font-size: 24px; letter-spacing: .2px; }
+  .g-head h1 em { font-style: normal; background: linear-gradient(92deg, #8B5CF6, #B98BF0, #FFAFCC); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .g-head p { font-size: 13px; color: #6F6389; line-height: 1.9; margin-top: 10px; max-width: 1080px; }
+  body.dark .g-head p { color: #B0A0D2; }
+  .g-head p b { color: #7C3AED; }
+  body.dark .g-head p b { color: #B98BF0; }
+
+  .bar-ctl {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px;
+    background: #fff; border: 1px solid #E4D9F6; border-radius: 16px; padding: 12px 14px;
+    box-shadow: 0 10px 22px rgba(96,66,160,.08); max-width: 1080px;
+  }
+  body.dark .bar-ctl { background: #211936; border-color: #2E2348; box-shadow: 0 12px 26px rgba(0,0,0,.4); }
+  .bar-ctl .grp { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #6F6389; }
+  body.dark .bar-ctl .grp { color: #B0A0D2; }
+  .bar-ctl button {
+    border: none; cursor: pointer; font-weight: 800; font-size: 12.5px; color: #fff;
+    background: linear-gradient(135deg, #8B5CF6, #B07BF2); padding: 9px 16px; border-radius: 11px;
+  }
+  body.dark .bar-ctl button { background: linear-gradient(135deg, #8B5CF6, #FF6FB0); }
+  .bar-ctl .out { font-variant-numeric: tabular-nums; font-weight: 800; color: #7C3AED; min-width: 26px; text-align: center; }
+  body.dark .bar-ctl .out { color: #B98BF0; }
+  input[type=range] { width: 150px; accent-color: #8B5CF6; }
+
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 26px; max-width: 1500px; margin: 26px auto 0;
+  }
+  .card {
+    background: #fff; border: 1px solid #EFE8FB; border-radius: 20px; padding: 16px;
+    box-shadow: 0 12px 26px rgba(96,66,160,.09); display: flex; flex-direction: column; align-items: center; gap: 12px;
+  }
+  body.dark .card { background: #1D1530; border-color: #2C2145; box-shadow: 0 14px 30px rgba(0,0,0,.45); }
+  .stage {
+    width: 180px; height: 180px; border-radius: 22px; position: relative; overflow: hidden;
+    background: radial-gradient(120% 120% at 30% 20%, #FBF9FF 0%, #F1EAFC 100%);
+    box-shadow: inset 0 0 0 1px #EFE8FB;
+  }
+  body.dark .stage { background: radial-gradient(120% 120% at 30% 20%, #241A3A 0%, #150F1E 100%); box-shadow: inset 0 0 0 1px #2C2145; }
+  .stage canvas { display: block; width: 180px; height: 180px; }
+  .card .meta { width: 100%; }
+  .card .t { font-size: 13.5px; font-weight: 800; }
+  .card .t b { font-size: 10.5px; color: #fff; background: linear-gradient(135deg, #8B5CF6, #FFAFCC); padding: 2px 7px; border-radius: 999px; margin-right: 7px; vertical-align: 1px; }
+  .card .d { font-size: 11px; color: #6F6389; line-height: 1.7; margin-top: 5px; }
+  body.dark .card .d { color: #B0A0D2; }
+  .foot { max-width: 1500px; margin: 30px auto 0; font-size: 11.5px; color: #6F6389; line-height: 1.9; }
+  body.dark .foot { color: #B0A0D2; }
+  .foot code { background: #fff; border: 1px solid #E4D9F6; border-radius: 6px; padding: 1px 6px; color: #7C3AED; }
+  body.dark .foot code { background: #211936; border-color: #2E2348; color: #B98BF0; }
+</style>
+</head>
+<body>
+
+<div class="g-head">
+  <h1>音频转语音 · 播放动画 <em>10 套 · 180dp</em></h1>
+  <p>用于「音频转语音」播放时的律动动画，尺寸统一 <b>180dp</b>。下方为实时预览：所有动画由节拍时钟驱动，<b>跟随音乐节奏跳动</b>（可在模块内接真实振幅 / FFT 频谱驱动）。切换浅色 / 暗色可查看两态适配。</p>
+
+  <div class="bar-ctl">
+    <button id="playBtn">暂停</button>
+    <div class="grp">节奏 BPM <input id="bpm" type="range" min="60" max="180" value="120"><span class="out" id="bpmOut">120</span></div>
+    <div class="grp">预览尺寸 <input id="size" type="range" min="180" max="360" step="60" value="180"><span class="out" id="sizeOut">180dp</span></div>
+    <button id="themeBtn">暗色</button>
+  </div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="foot">
+  实现建议：模块内用 <code>AudioRecord</code>/播放振幅或 FFT 取频谱，替换页面里的模拟节拍数据即可；动画容器固定 180dp，圆角随整体风格。
+</div>
+
+<script>
+(function () {
+  var COLORS_LIGHT = ['#8B5CF6', '#D8B4FE', '#FFAFCC'];
+  var COLORS_DARK  = ['#9F7BFF', '#DCC3FF', '#FFB8D4'];
+
+  var state = { playing: true, vtime: 0, last: 0, bpm: 120, size: 180, dark: false };
+  var dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+
+  function grad(ctx, w, h) {
+    var c = state.dark ? COLORS_DARK : COLORS_LIGHT;
+    var g = ctx.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, c[0]); g.addColorStop(0.5, c[1]); g.addColorStop(1, c[2]);
+    return g;
+  }
+  function rr(ctx, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function beatPeriod() { return 60000 / state.bpm; }
+  // 单个节拍的衰减包络：重音瞬间为 1，随后快速衰减
+  function env(t) {
+    var p = beatPeriod();
+    var f = (t % p) / p;
+    return Math.pow(1 - f, 2.2);
+  }
+  // 模拟频谱：低频受鼓点主导，高频带噪声律动
+  function spectrum(t, n) {
+    var e = env(t), out = new Float32Array(n);
+    for (var i = 0; i < n; i++) {
+      var base = 0.18 + 0.32 * Math.abs(Math.sin(i * 1.7 + t / 320));
+      var kick = e * (1 - i / n) * 0.95;
+      var noise = 0.14 * Math.abs(Math.sin(i * 3.13 + t / 90));
+      out[i] = Math.max(0, Math.min(1, base + kick + noise));
+    }
+    return out;
+  }
+
+  // ===================== 10 套动画 =====================
+  var V = [
+    { id: 1, name: '旋律柱', desc: '竖向旋律柱,鼓点整排弹起;整组柱宽占容器 80%(左右各留 10%)。',
+      draw: function (ctx, w, h, t) {
+        var n = 20, sp = spectrum(t, n);
+        var span = w * 0.80, x0 = (w - span) / 2, gap = span * 0.03;
+        var bw = (span - gap * (n - 1)) / n, base = h * 0.86;
+        ctx.fillStyle = grad(ctx, w, h);
+        for (var i = 0; i < n; i++) {
+          var bh = Math.max(6, sp[i] * h * 0.66);
+          rr(ctx, x0 + (bw + gap) * i, base - bh, bw, bh, bw * 0.45);
+          ctx.fill();
+        }
+      } },
+
+    { id: 2, name: '涟漪扩散', desc: '中心随鼓点向外扩散同心圆,每拍一圈,余纹渐隐。',
+      draw: function (ctx, w, h, t) {
+        var cx = w / 2, cy = h / 2, e = env(t), p = beatPeriod();
+        for (var k = 3; k >= 0; k--) {
+          var f = (((t / p) + k / 4) % 1);
+          var r = w * 0.09 + f * w * 0.40;
+          ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.lineWidth = 3; ctx.strokeStyle = grad(ctx, w, h);
+          ctx.globalAlpha = (1 - f) * 0.6; ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(cx, cy, w * 0.08 + e * w * 0.05, 0, Math.PI * 2);
+        ctx.fillStyle = grad(ctx, w, h); ctx.fill();
+      } },
+
+    { id: 3, name: '环形声波', desc: '频谱绕圈排布成放射柱,整圈随节奏一张一缩。',
+      draw: function (ctx, w, h, t) {
+        var n = 56, sp = spectrum(t, n), cx = w / 2, cy = h / 2;
+        var base = w * 0.20, e = env(t);
+        ctx.lineCap = 'round';
+        for (var i = 0; i < n; i++) {
+          var a = i / n * Math.PI * 2 - Math.PI / 2;
+          var len = w * 0.04 + sp[i] * w * 0.20 * (0.8 + e * 0.4);
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(a) * base, cy + Math.sin(a) * base);
+          ctx.lineTo(cx + Math.cos(a) * (base + len), cy + Math.sin(a) * (base + len));
+          ctx.lineWidth = 3; ctx.strokeStyle = grad(ctx, w, h); ctx.stroke();
+        }
+        ctx.beginPath(); ctx.arc(cx, cy, base * 0.55, 0, Math.PI * 2);
+        ctx.fillStyle = grad(ctx, w, h); ctx.fill();
+      } },
+
+    { id: 4, name: '心跳脉冲', desc: '核心球体随鼓点膨胀,外圈光晕同步呼吸,适合语音。',
+      draw: function (ctx, w, h, t) {
+        var e = env(t), cx = w / 2, cy = h / 2;
+        var r = w * 0.16 + e * w * 0.10;
+        var g = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, r * 2.2);
+        var c = state.dark ? COLORS_DARK : COLORS_LIGHT;
+        g.addColorStop(0, c[0]); g.addColorStop(0.4, c[2]); g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.arc(cx, cy, r * 2.2, 0, Math.PI * 2);
+        ctx.fillStyle = g; ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = grad(ctx, w, h); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx, cy, r + w * 0.05 + (1 - e) * w * 0.02, 0, Math.PI * 2);
+        ctx.lineWidth = 2.5; ctx.strokeStyle = grad(ctx, w, h); ctx.globalAlpha = 0.5; ctx.stroke();
+        ctx.globalAlpha = 1;
+      } },
+
+    { id: 5, name: '粒子迸发', desc: '每一拍从中心迸出粒子,向外飞散淡出,动感外放。',
+      init: function (s) { s.ps = []; s.lastBeat = -1; },
+      draw: function (ctx, w, h, t, dt, s) {
+        var cx = w / 2, cy = h / 2, p = beatPeriod();
+        var bi = Math.floor(t / p);
+        if (bi !== s.lastBeat) {
+          s.lastBeat = bi;
+          for (var k = 0; k < 10; k++) {
+            var a = Math.random() * Math.PI * 2, sp = w * (0.0012 + Math.random() * 0.0022);
+            s.ps.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, r: w * (0.012 + Math.random() * 0.02) });
+          }
+        }
+        ctx.fillStyle = grad(ctx, w, h);
+        for (var i = s.ps.length - 1; i >= 0; i--) {
+          var q = s.ps[i];
+          q.x += q.vx * dt; q.y += q.vy * dt; q.life -= dt / 900;
+          if (q.life <= 0) { s.ps.splice(i, 1); continue; }
+          ctx.globalAlpha = Math.max(0, q.life);
+          ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(cx, cy, w * 0.06 + env(t) * w * 0.04, 0, Math.PI * 2); ctx.fill();
+      } },
+
+    { id: 6, name: '液态变形', desc: '半径随频谱起伏的有机水球,柔和连续,治愈系。',
+      draw: function (ctx, w, h, t) {
+        var n = 72, sp = spectrum(t, n), cx = w / 2, cy = h / 2, e = env(t);
+        ctx.beginPath();
+        for (var i = 0; i <= n; i++) {
+          var idx = i % n;
+          var a = i / n * Math.PI * 2;
+          var rad = w * 0.22 * (0.82 + sp[idx] * 0.28 + e * 0.05);
+          var x = cx + Math.cos(a) * rad, y = cy + Math.sin(a) * rad;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = grad(ctx, w, h); ctx.fill();
+      } },
+
+    { id: 7, name: '均衡弧环', desc: '圆角弧段绕环,长度随频段变化,节拍整体扩张。',
+      draw: function (ctx, w, h, t) {
+        var n = 12, sp = spectrum(t, n), cx = w / 2, cy = h / 2, base = w * 0.20;
+        var seg = Math.PI * 2 / n, gap = seg * 0.28;
+        ctx.lineCap = 'round';
+        for (var i = 0; i < n; i++) {
+          var a0 = i * seg - Math.PI / 2 + gap / 2;
+          var a1 = (i + 1) * seg - Math.PI / 2 - gap / 2;
+          var r = base + sp[i] * w * 0.14;
+          ctx.beginPath(); ctx.arc(cx, cy, r, a0, a1);
+          ctx.lineWidth = 6; ctx.strokeStyle = grad(ctx, w, h); ctx.stroke();
+        }
+      } },
+
+    { id: 8, name: '频谱方格', desc: '整块方格矩阵随频段点亮,鼓点闪屏,像素律动。',
+      draw: function (ctx, w, h, t) {
+        var n = 8, sp = spectrum(t, n), e = env(t);
+        var pad = w * 0.12, cellW = (w - pad * 2) / n, gap = cellW * 0.18;
+        for (var y = 0; y < n; y++) {
+          for (var x = 0; x < n; x++) {
+            var v = sp[(x + y) % n] * (0.55 + 0.45 * Math.abs(Math.sin(x * 0.9 + y * 1.3 + t / 260)));
+            v = Math.max(0, Math.min(1, v + e * 0.25 * ((x + y) % 3 === 0 ? 1 : 0.3)));
+            var s = cellW - gap;
+            ctx.globalAlpha = 0.12 + v * 0.88;
+            ctx.fillStyle = grad(ctx, w, h);
+            rr(ctx, pad + x * cellW, pad + y * cellW, s, s, s * 0.28); ctx.fill();
+          }
+        }
+        ctx.globalAlpha = 1;
+      } },
+
+    { id: 9, name: '旋转频谱', desc: '放射柱缓慢旋转,长度随节奏伸缩,像律动的光轮。',
+      draw: function (ctx, w, h, t) {
+        var n = 48, sp = spectrum(t, n), cx = w / 2, cy = h / 2, e = env(t);
+        var rot = t / 2600, base = w * 0.10;
+        ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot); ctx.lineCap = 'round';
+        for (var i = 0; i < n; i++) {
+          var a = i / n * Math.PI * 2;
+          var len = w * 0.05 + sp[i] * w * 0.26 * (0.85 + e * 0.3);
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * base, Math.sin(a) * base);
+          ctx.lineTo(Math.cos(a) * (base + len), Math.sin(a) * (base + len));
+          ctx.lineWidth = 3; ctx.strokeStyle = grad(ctx, w, h); ctx.stroke();
+        }
+        ctx.restore();
+        ctx.beginPath(); ctx.arc(cx, cy, w * 0.07, 0, Math.PI * 2);
+        ctx.fillStyle = grad(ctx, w, h); ctx.fill();
+      } },
+
+    { id: 10, name: '波形流动', desc: '多条正弦波横向流动,振幅随节奏起伏,语音播报首选。',
+      draw: function (ctx, w, h, t) {
+        var e = env(t), cx = w / 2;
+        for (var k = 0; k < 3; k++) {
+          var amp = w * (0.03 + k * 0.012) + e * w * (0.07 + k * 0.02);
+          var phase = t / (420 + k * 90);
+          ctx.beginPath();
+          for (var x = 0; x <= w; x += 4) {
+            var y = cx + Math.sin(x / w * Math.PI * (2 + k) + phase) * amp * Math.sin(x / w * Math.PI);
+            if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+          ctx.lineWidth = 3; ctx.strokeStyle = grad(ctx, w, h);
+          ctx.globalAlpha = 1 - k * 0.28; ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      } }
+  ];
+
+  // ===================== 渲染 =====================
+  var grid = document.getElementById('grid');
+  var items = [];
+
+  V.forEach(function (v) {
+    var card = document.createElement('div');
+    card.className = 'card';
+    var stage = document.createElement('div');
+    stage.className = 'stage';
+    var cv = document.createElement('canvas');
+    stage.appendChild(cv);
+    card.appendChild(stage);
+    var meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = '<div class="t"><b>' + (v.id < 10 ? '0' + v.id : v.id) + '</b>' + v.name + '</div>'
+      + '<div class="d">' + v.desc + '</div>';
+    card.appendChild(meta);
+    grid.appendChild(card);
+
+    if (v.init) v.init(v);
+    items.push({ v: v, cv: cv, ctx: cv.getContext('2d') });
+  });
+
+  function setupCanvas(it) {
+    var s = state.size;
+    it.cv.width = s * dpr; it.cv.height = s * dpr;
+    it.cv.style.width = s + 'px'; it.cv.style.height = s + 'px';
+    it.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function setupAll() { items.forEach(setupCanvas); }
+
+  function frame(ts) {
+    if (!state.last) state.last = ts;
+    var dt = Math.min(60, ts - state.last);
+    state.last = ts;
+    if (state.playing) state.vtime += dt;
+    var t = state.vtime, s = state.size;
+    items.forEach(function (it) {
+      it.ctx.clearRect(0, 0, s, s);
+      try { it.v.draw(it.ctx, s, s, t, dt, it.v); } catch (e) {}
+    });
+    requestAnimationFrame(frame);
+  }
+
+  // ===================== 交互 =====================
+  document.getElementById('playBtn').addEventListener('click', function () {
+    state.playing = !state.playing; this.textContent = state.playing ? '暂停' : '播放';
+  });
+  document.getElementById('themeBtn').addEventListener('click', function () {
+    state.dark = !state.dark;
+    document.body.classList.toggle('dark', state.dark);
+    this.textContent = state.dark ? '浅色' : '暗色';
+  });
+  document.getElementById('bpm').addEventListener('input', function () {
+    state.bpm = +this.value; document.getElementById('bpmOut').textContent = this.value;
+  });
+  document.getElementById('size').addEventListener('input', function () {
+    state.size = +this.value; document.getElementById('sizeOut').textContent = this.value + 'dp';
+    setupAll();
+  });
+
+  setupAll();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

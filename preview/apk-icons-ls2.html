@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeShao · LS 10 种字形</title>
+<style>
+  :root{
+    --surface:#FBF9FF;--onSurface:#2A2340;--onSurfaceVariant:#6F6389;
+    --scLowest:#FFFFFF;--scHigh:#ECE3FB;--outlineVariant:#DCCFF2;--purple:#6D3BC7;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--surface);color:var(--onSurface);line-height:1.5;padding:28px 16px 64px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:22px;font-weight:700}
+  .sub{color:var(--onSurfaceVariant);font-size:13px;margin-top:6px}
+  .note{margin-top:16px;padding:12px 14px;border:1px solid var(--outlineVariant);border-radius:14px;background:var(--scHigh);font-size:13px;color:var(--onSurfaceVariant)}
+  h2{font-size:16px;font-weight:700;margin:34px 0 14px}
+  /* 字形大图 */
+  .shapes{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+  .shape{display:flex;align-items:center;gap:16px;border:1px solid var(--outlineVariant);border-radius:18px;background:var(--scLowest);padding:14px}
+  .shape .big{width:108px;height:108px;flex:0 0 auto;border-radius:16px;background:var(--scHigh);display:flex;align-items:center;justify-content:center;color:var(--purple)}
+  .shape .big svg{width:76px;height:76px}
+  .shape .meta{min-width:0}
+  .shape .no{font-size:12px;font-weight:700;color:#fff;background:var(--purple);border-radius:8px;display:inline-block;padding:1px 8px}
+  .shape .nm{font-size:15px;font-weight:700;margin-top:6px}
+  .shape .ds{font-size:12px;color:var(--onSurfaceVariant);margin-top:3px}
+  /* 图标 tiles */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
+  .card{border:1px solid var(--outlineVariant);border-radius:18px;background:var(--scLowest);padding:16px;text-align:center;box-shadow:0 1px 2px rgba(42,35,64,.05)}
+  .tiles{display:flex;align-items:center;justify-content:center;gap:12px}
+  .sq{width:84px;height:84px;border-radius:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(90,60,160,.28);color:#fff}
+  .sq svg{width:56px;height:56px;display:block}
+  .ci{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff}
+  .ci svg{width:38px;height:38px;display:block}
+  .nm2{margin-top:12px;font-size:13px;font-weight:600}
+  .paper{color:#6D3BC7}
+  .bg-grape{background:linear-gradient(140deg,#7C4DFF 0%,#8B5CF6 45%,#C78BFF 100%)}
+  .bg-sunset{background:linear-gradient(140deg,#8B5CF6 0%,#B984FF 50%,#FFAFCC 100%)}
+  .bg-deep{background:linear-gradient(150deg,#3B1D6E 0%,#6D3BC7 60%,#A66BFF 100%)}
+  .bg-mint{background:linear-gradient(140deg,#6D5DF6 0%,#8B5CF6 55%,#7ED0FF 100%)}
+  .bg-ink{background:linear-gradient(150deg,#1B1030 0%,#3A1D75 60%,#7C4DFF 100%)}
+  .bg-paper{background:linear-gradient(150deg,#FFF8EF 0%,#FBEFE0 60%,#F5E2FF 100%)}
+  .home{border:1px solid var(--outlineVariant);border-radius:22px;overflow:hidden;max-width:560px}
+  .hometop{height:24px;background:var(--scHigh)}
+  .homebody{background:linear-gradient(160deg,#E9DFFF 0%,#F6EEFF 50%,#FFE6F2 100%);padding:26px 20px}
+  .homegrid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px 12px}
+  .app{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .app .sq{width:60px;height:60px;border-radius:16px}
+  .app .sq svg{width:40px;height:40px}
+  .app .lb{font-size:11px;color:#3A2E55;font-weight:600}
+  .foot{margin-top:28px;font-size:13px;color:var(--onSurfaceVariant)}
+  .chip{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;border:1px solid var(--outlineVariant);background:var(--scHigh);margin:0 6px 6px 0}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <g id="f1" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7.2 5.2c-.6 2.8-.8 6.8-.6 10.8.2 2.4 1.6 2.8 3.4 1.6 1.6-1 1-2.6 2.4-4 1.4-1.4 4-1 4.8.6.8 1.6-.6 3.6-2.6 4-1.6.3-2.8-.4-3.2-1.4"/>
+    </g>
+    <g id="f2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7.8 5.6c-.5 3.4-.8 7.4-.6 11.4 2 .4 4.2-.1 6-1.4"/>
+      <path d="M18.4 8c-1-1.9-3.8-2.3-4.9-.6-1.1 1.7 1.8 2.5 2.8 4.1 1 1.6-.4 4.4-2.8 4.4-1.4 0-2.5-.9-2.9-2"/>
+    </g>
+    <g id="f3" fill="none" stroke="currentColor" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 5.4c-.4 3.6-.6 8.2-.4 12.2 2.6.5 5.2-.2 7-1.8"/>
+      <path d="M18.8 8.2c-1.1-2.1-4.4-2.5-5.6-.7-1.2 1.8 2 2.7 3 4.5 1 1.8-.6 4.9-3.3 4.9-1.7 0-3-1-3.5-2.2"/>
+    </g>
+    <g id="f4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6.8 5.6V17.6h6"/>
+      <path d="M18.4 6.8h-4.8l4.8 4.8h-4.8v5.6h4.8"/>
+    </g>
+    <g id="f5" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6.4 5c-.4 4-.6 8.6-.4 13 2.8.6 5.6-.2 7.8-2"/>
+      <path d="M17.6 7.6c-1-1.8-4.2-2-5.2-.2-1 1.8 2.4 2.6 3.2 4.4.8 1.8-1 4.8-3.6 4.6-1.6-.1-2.6-1.2-2.8-2.4"/>
+    </g>
+    <g id="f6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6.8 5.2c-.4 3.6-.6 8-.4 12.2 2.6.6 5.4-.2 7.6-1.8"/>
+      <path d="M18.6 8c-1-1.9-4-2.3-5.1-.5-1.1 1.8 1.9 2.6 2.9 4.2 1 1.6-.5 4.5-3 4.5-1.5 0-2.6-.9-3-2.1"/>
+      <path d="M5.4 19.6c3.4 1.4 7.8 1.4 13.2-.4"/>
+    </g>
+    <g id="f7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8.6 6.4c-1.8 1.4-.6 3.4.2 2.8.9-.7 1.2 3.8 1 8.4"/>
+      <path d="M18 9c-1-1.6-3.4-1.8-4.2-.2-.8 1.6 2 2.2 2.6 3.8.6 1.6-1 4-3.2 3.8-1.4-.1-2.4-1-2.6-2"/>
+    </g>
+    <g id="f8" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 5.5c0 3.9 0 8.1 0 12 2 0 4 0 6 0"/>
+      <path d="M18.6 7.6c-2.8-1.2-5.2.4-4.4 2.4.8 2 4 1.2 4 3.2s-2.6 2.6-5 1.8"/>
+    </g>
+    <g id="f9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6.6 5.4c-.4 3.6-.4 8 0 12.2 1.8.4 3.6-.2 5-1.4 1-.9.7-1.7 1.1-2.7.4-1 2.8-1.2 3.6.4.8 1.6-.6 3.8-2.6 4-1.4.1-2.4-.6-2.8-1.6"/>
+    </g>
+    <g id="f10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8.2 5.6 6.6 17.6h5.8"/>
+      <path d="M19 7.4c-2-1.6-4.4-.8-4.8 1.2-.4 2 3.4 2.4 3.2 4.6-.2 2.4-2.8 3.8-4.8 2.6"/>
+    </g>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <h1>LeShao · 「LS」10 种字形</h1>
+  <div class="sub">每一套都是不同写法的手绘字形（不是同一字形换底色）。全部为矢量路径，所见即最终 PNG 效果。</div>
+  <div class="note">先看下面的「字形大图」挑写法；下面图标区只是同字形放进 squircle 的实际效果。选定编号后我把该字形做成 APK 图标全套 mipmap，并配左上角菜单（锁定 02 四宫格、位置上移 1dp）一起出 v1118。</div>
+
+  <h2>字形大图（纯看字）</h2>
+  <div class="shapes">
+    <div class="shape"><div class="big"><svg viewBox="0 0 24 24"><use href="#f1"/></svg></div><div class="meta"><span class="no">01</span><div class="nm">圆润连笔</div><div class="ds">一笔到底的圆弧连写，最柔和</div></div></div>
+    <div class="shape"><div class="big"><svg viewBox="0 0 24 24"><use href="#f2"/></svg></div><div class="meta"><span class="no">02</span><div class="nm">细体优雅</div><div class="ds">细线、有粗细变化，S 收得干净</div></div></div>
+    <div class="shape"><div class="big"><svg viewBox="0 0 24 24"><use href="#f3"/></svg></div><div class="meta"><span class="no">03</span><div class="nm">粗马克</div><div class="ds">粗圆头马克笔，力量感强</div></div></div>
+    <div class="shape"><div class="big"><svg viewBox="0 0 24 24"><use href="#f4"/></svg></div><div class="meta"><span class="no">04</span><div class="nm">尖角几何</div><div class="ds">直线折角，S 用折线，硬朗</div></div></div>
+    <div class="shape"><div class="big"><svg viewBox="0 0 24 24"><use href="#f5"/></svg></div><div class="meta"><span class="no">05</span><div class="nm">叠压</div><div class="ds">大 L 与小 S 交叠，有层次</div></div></div>
+    <div class="shape"><div class="big"><svg viewBox="0 0 24 24"><use href="#f6"/></svg></div><div class="meta"><span class="no">06</span><div class="nm">花体卷须</div><div class="ds">底部一条长卷须，签名味</div></div></div>
+    <div class="shape"><div class="big"><svg viewBox="0 0 24 24"><use href="#f7"/></svg></div><div class="meta"><span class="no">07</span><div class="nm">小写圆点</div><div class="ds">小写 l 带圈 + 圆润 s，手账风</div></div></div>
+    <div class="shape"><div class="big"><svg viewBox="0 0 24 24"><use href="#f8"/></svg></div><div class="meta"><span class="no">08</span><div class="nm">方体手写</div><div class="ds">圆角方折、笔画均匀，稳</div></div></div>
+    <div class="shape"><div class="big"><svg viewBox="0 0 24 24"><use href="#f9"/></svg></div><div class="meta"><span class="no">09</span><div class="nm">一笔连写</div><div class="ds">L 与 S 不断笔，最流畅</div></div></div>
+    <div class="shape"><div class="big"><svg viewBox="0 0 24 24"><use href="#f10"/></svg></div><div class="meta"><span class="no">10</span><div class="nm">斜体直笔</div><div class="ds">右斜、直起笔，简洁现代</div></div></div>
+  </div>
+
+  <h2>放进图标的实际效果</h2>
+  <div class="grid">
+    <div class="card"><div class="tiles"><div class="sq bg-grape"><svg viewBox="0 0 24 24"><use href="#f1"/></svg></div><div class="ci bg-grape"><svg viewBox="0 0 24 24"><use href="#f1"/></svg></div></div><div class="nm2">01 圆润连笔</div></div>
+    <div class="card"><div class="tiles"><div class="sq bg-sunset"><svg viewBox="0 0 24 24"><use href="#f2"/></svg></div><div class="ci bg-sunset"><svg viewBox="0 0 24 24"><use href="#f2"/></svg></div></div><div class="nm2">02 细体优雅</div></div>
+    <div class="card"><div class="tiles"><div class="sq bg-deep"><svg viewBox="0 0 24 24"><use href="#f3"/></svg></div><div class="ci bg-deep"><svg viewBox="0 0 24 24"><use href="#f3"/></svg></div></div><div class="nm2">03 粗马克</div></div>
+    <div class="card"><div class="tiles"><div class="sq bg-mint"><svg viewBox="0 0 24 24"><use href="#f4"/></svg></div><div class="ci bg-mint"><svg viewBox="0 0 24 24"><use href="#f4"/></svg></div></div><div class="nm2">04 尖角几何</div></div>
+    <div class="card"><div class="tiles"><div class="sq bg-ink"><svg viewBox="0 0 24 24"><use href="#f5"/></svg></div><div class="ci bg-ink"><svg viewBox="0 0 24 24"><use href="#f5"/></svg></div></div><div class="nm2">05 叠压</div></div>
+    <div class="card"><div class="tiles"><div class="sq bg-paper paper"><svg viewBox="0 0 24 24"><use href="#f6"/></svg></div><div class="ci bg-paper paper"><svg viewBox="0 0 24 24"><use href="#f6"/></svg></div></div><div class="nm2">06 花体卷须</div></div>
+    <div class="card"><div class="tiles"><div class="sq bg-grape"><svg viewBox="0 0 24 24"><use href="#f7"/></svg></div><div class="ci bg-grape"><svg viewBox="0 0 24 24"><use href="#f7"/></svg></div></div><div class="nm2">07 小写圆点</div></div>
+    <div class="card"><div class="tiles"><div class="sq bg-sunset"><svg viewBox="0 0 24 24"><use href="#f8"/></svg></div><div class="ci bg-sunset"><svg viewBox="0 0 24 24"><use href="#f8"/></svg></div></div><div class="nm2">08 方体手写</div></div>
+    <div class="card"><div class="tiles"><div class="sq bg-deep"><svg viewBox="0 0 24 24"><use href="#f9"/></svg></div><div class="ci bg-deep"><svg viewBox="0 0 24 24"><use href="#f9"/></svg></div></div><div class="nm2">09 一笔连写</div></div>
+    <div class="card"><div class="tiles"><div class="sq bg-mint"><svg viewBox="0 0 24 24"><use href="#f10"/></svg></div><div class="ci bg-mint"><svg viewBox="0 0 24 24"><use href="#f10"/></svg></div></div><div class="nm2">10 斜体直笔</div></div>
+  </div>
+
+  <h2>桌面整体效果</h2>
+  <div class="home">
+    <div class="hometop"></div>
+    <div class="homebody">
+      <div class="homegrid">
+        <div class="app"><div class="sq bg-grape"><svg viewBox="0 0 24 24"><use href="#f1"/></svg></div><div class="lb">LS</div></div>
+        <div class="app"><div class="sq bg-sunset"><svg viewBox="0 0 24 24"><use href="#f2"/></svg></div><div class="lb">LS</div></div>
+        <div class="app"><div class="sq bg-deep"><svg viewBox="0 0 24 24"><use href="#f3"/></svg></div><div class="lb">LS</div></div>
+        <div class="app"><div class="sq bg-mint"><svg viewBox="0 0 24 24"><use href="#f4"/></svg></div><div class="lb">LS</div></div>
+        <div class="app"><div class="sq bg-ink"><svg viewBox="0 0 24 24"><use href="#f5"/></svg></div><div class="lb">LS</div></div>
+        <div class="app"><div class="sq bg-paper paper"><svg viewBox="0 0 24 24"><use href="#f6"/></svg></div><div class="lb">LS</div></div>
+        <div class="app"><div class="sq bg-grape"><svg viewBox="0 0 24 24"><use href="#f7"/></svg></div><div class="lb">LS</div></div>
+        <div class="app"><div class="sq bg-deep"><svg viewBox="0 0 24 24"><use href="#f9"/></svg></div><div class="lb">LS</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div>如果某套形状方向对但还不够顺眼，告诉我编号 + 想调哪（更圆/更细/更斜/加大间距/换大小写），我按那一条重画，不动其它。</div>
+    <div style="margin-top:10px">
+      <span class="chip">10 种独立字形</span>
+      <span class="chip">矢量路径</span>
+      <span class="chip">hand-drawn</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

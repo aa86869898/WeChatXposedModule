@@ -1,11 +1,14 @@
 package com.leshao.v3.service;
 
+import com.leshao.v3.LogWriter;
 import com.leshao.v3.model.ModuleConfig;
 
 import java.util.Calendar;
 import java.util.Set;
 
 public class FilterManager {
+
+    private static final String TAG = "FilterManager";
 
     public boolean shouldProcess(String talker, int msgType, String content, ModuleConfig cfg) {
         if (!cfg.masterSwitch) return false;
@@ -19,13 +22,17 @@ public class FilterManager {
             if (cfg.announceBlacklist.contains(talker)) return false;
         }
 
-        // 自动播报白名单: 白名单非空时, 仅白名单内的会话/好友播报
-        if (!cfg.announceWhitelist.isEmpty()) {
-            boolean inWl = cfg.announceWhitelist.contains(talker);
-            if (!inWl) return false;
+        // v1132: 严格白名单仅在「白名单非空」时生效; 白名单为空视为不限制,
+        // 避免升级后默认全静音(与 TTSPageView 状态提示一致)。
+        // - 白名单非空 + 严格模式: 仅放行白名单;
+        // - 白名单非空 + 非严格模式: 白名单优先, 其他会话仍放行;
+        // - 白名单为空: 不做限制, 全部按消息类型放行。
+        if (!cfg.announceWhitelist.isEmpty()
+                && cfg.whitelistStrict
+                && !cfg.announceWhitelist.contains(talker)) {
+            LogWriter.log(TAG, "whitelistStrict 拦截非白名单会话 talker=" + talker);
+            return false;
         }
-        // 白名单为空时 strict 模式无拦截对象, 全部放行(避免默认配置下 TTS 被静音)。
-        // 只有"配置了白名单且开启严格模式"才对非白名单会话拦截。
 
         switch (msgType) {
             case com.leshao.v3.model.WeChatMessage.TYPE_TEXT:

@@ -1,377 +1,581 @@
 package com.leshao.v3.hook;
 
+import android.app.Activity;
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.view.Gravity;
+import android.view.View;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.Switch;
+import android.widget.TextView;
+import android.widget.Toast;
+
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
-import com.leshao.v3.model.ModuleConfig;
-import com.leshao.v3.service.StatsCollector;
+
+import java.lang.reflect.Method;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
+/**
+ * 消息防撤回 —— 严格实现文档《WeChat_AntiRevoke_Reverse.md》。
+ *
+ * <p>原理：微信撤回 = 服务端指令 + 客户端本地把原消息改写成系统提示。
+ * 只要在「改写」入口 {@code b41.t.c}（doRevokeMsg）直接 return，原消息 type/content
+ * 不变，UI 自然继续渲染原消息，即防撤回。提示语保留服务端下发的 replacemsg，模块零文案。</p>
+ *
+ * <p>Hook 点（文档 10.2 / 13.1，全部走 DexKit 字符串锚点动态定位，不写死混淆名）：</p>
+ * <ul>
+ *   <li>H1 接收方撤回总入口 doRevokeMsg —— 必选，单聊+群聊主路径</li>
+ *   <li>H3 商务号/企业微信撤回 qy_revoke_msg —— 默认开</li>
+ *   <li>H2 群聊 getcrmsg 历史路径 —— 默认关（会整体跳过 seq 维护）</li>
+ *   <li>H4 自己撤回也失效 d1.J —— 默认关</li>
+ * </ul>
+ *
+ * <p>开关与配置入口均在「联系人和群聊」菜单内（见 ContactGroupPageView）。</p>
+ */
 public class AntiRecallHook {
 
     private static final String TAG = "AntiRecallHook";
+
+    // ── 配置键（对应文档 11.4 的 5 个开关）──
+    /** BLOCK_RECV_REVOKE：接收方撤回总开关。 */
+    public static final String K_MASTER = "anti_revoke";
+    /** BLOCK_BIZ_REVOKE：商务号撤回。 */
+    public static final String K_BIZ = "anti_revoke_biz";
+    /** BLOCK_SELF_REVOKE：自己撤回也失效。 */
+    public static final String K_SELF = "anti_revoke_self";
+    /** BLOCK_CHATROOM_PATH：群聊 getcrmsg 历史路径。 */
+    public static final String K_CHATROOM_HIST = "anti_revoke_chatroom_hist";
+    /** SHOW_REVOKE_HINT：拦截后在会话里插入一条原生提示行（保留原消息不变）。 */
+    public static final String K_HINT = "anti_revoke_hint";
+
+    // ── DexKit 锚点（文档 13.1，均为日志/XML 常量，跨版本相对稳定）──
+    private static final String A_H1_DOREVOKE = "doRevokeMsg xmlSrvMsgId=%d talker=%s isGet=%s";
+    private static final String A_H1_DOREVOKE2 =
+            "doRevokeMsg revokeFlag=%d msgId=%s talker=%s type=%d revokeMsgSvrId=%d";
+    private static final String A_H3_CLIMSGID = ".sysmsg.revoke_climsgid";
+    private static final String A_H3_BIZ_TAG = "MicroMsg.BizChatSysCmdMsgConsumerHandleRevokeMsg";
+    private static final String A_H2_GROUP = "summerbadcr updateConv chatRoomId";
+    private static final String A_H4_CGI = "/cgi-bin/micromsg-bin/revokemsg";
+
     private static volatile boolean sEnabled = true;
+    private static volatile boolean sBiz = true;
+    private static volatile boolean sSelf = false;
+    private static volatile boolean sChatroomHist = false;
+    private static volatile boolean sHint = true;
+    private static volatile boolean sHooked = false;
+    private static volatile ClassLoader sCl;
+    private static volatile Object sMsgStorage;
+    /** 提示行插入专用后台线程，避免阻塞微信撤回处理线程。 */
+    private static final java.util.concurrent.ExecutorService sExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor();
 
-    public static void setEnabled(boolean enabled) { sEnabled = enabled; }
+    private AntiRecallHook() {}
 
-    public static void hook() {
-        if (!ContextManager.isReady()) {
-            LogWriter.log(TAG, "hook ABORTED: ContextManager not ready");
-            return;
-        }
+    public static boolean isEnabled() { return sEnabled; }
 
-        // 从配置初始化开关：默认关闭时仅安装 hook 外壳，回调内按 sEnabled 判断，
-        // 设置页切换后立即生效，避免关闭后重启仍强制生效
-        try {
-            ModuleConfig cfg = ModuleConfig.load(ContextManager.getPrefs());
-            sEnabled = cfg != null && cfg.antiRecall;
-            LogWriter.log(TAG, "antiRecall enabled=" + sEnabled);
-        } catch (Throwable ignored) {}
-
-        ClassLoader cl = ContextManager.getClassLoader();
-
-        hookXmlRevoke(cl);
-        hookProtoRevoke(cl);
-        hookRecallRecorder(cl);
-        hookKotlinRevoke(cl);
-        hookF9Ta(cl);
-        LogWriter.log(TAG, "anti-recall hooks installed (5 paths)");
-    }
-
-    // ===== 路径1: XML 撤回阻断 — af5.a.run() =====
-
-    private static void hookXmlRevoke(ClassLoader cl) {
-        // 多版本类名尝试（按最常见排序）
-        for (String clsName : new String[]{
-            "af5.a",      // 实测 8.0.76 有效
-            "af6.a",      // 备选
-            "af4.a",      // 备选 8.0.49
-            "af6.c",      // 备选
-            "af5.c",      // 备选
-        }) {
-            try {
-                Class<?> c = XposedHelpers.findClass(clsName, cl);
-                XposedBridge.hookAllMethods(c, "run", new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        try {
-                            if (!sEnabled) return;
-                            param.setResult(null);
-                            LogWriter.log(TAG, "[XML] 阻止撤回成功: " + clsName);
-                        } catch (Throwable ignored) {}
-                    }
-                });
-                LogWriter.log(TAG, "[XML] Hooked: " + clsName + ".run()");
-                return;
-            } catch (XposedHelpers.ClassNotFoundError ignored) {
-            } catch (Throwable t) { LogWriter.log(TAG, "[XML] " + clsName + " err: " + t.getMessage()); }
-        }
-        LogWriter.log(TAG, "[XML] 未找到 af*.run() 类，请更新类名");
-    }
-
-    // ===== 路径2: 事件监听阻断 — 3180 撤回改事件驱动(RevokeMsgEvent) =====
-    // v955: 旧 e01.u.f() protobuf 阻断链在 3180 全部改名失效(e01.u/e02.u/e00.u/e01.t/e02.t 均不存在,
-    // dex 实证)。3180 撤回链路: 撤回推送 → RevokeMsgEvent(autogen.fm.ks 含 e9) →
-    // com.tencent.mm.ui.chatting.RevokeMsgListener.callback / chatroom.plugin.listener.n0.callback。
-    // 新路径: hook 这些监听器的 callback 阻断撤回 UI 处理 + 旧 protobuf 候选保留兜底。
-
-    private static void hookProtoRevoke(ClassLoader cl) {
-        // v955: 3180 撤回监听类全部经 DexKit 动态检索(特征字符串: 日志TAG),
-        // 严禁硬编码类名。扫描完成后经 addPostScanCallback 安装。
-        DexKitHelper.addPostScanCallback(() -> installRevokeListenerHooks(cl));
-        // 旧 protobuf 候选兜底(历史版本, 非 3180 路径)
-        for (String clsName : new String[]{
-            "e01.u",      // 8.0.76
-            "e02.u", "e00.u", "e01.t", "e02.t",
-        }) {
-            try {
-                Class<?> c = XposedHelpers.findClass(clsName, cl);
-                XposedBridge.hookAllMethods(c, "f", new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        try {
-                            if (!sEnabled) return;
-                            param.setResult(null);
-                            LogWriter.log(TAG, "[Proto] 阻止撤回成功: " + clsName);
-                        } catch (Throwable ignored) {}
-                    }
-                });
-                LogWriter.log(TAG, "[Proto] Hooked: " + clsName + ".f()");
-                return;
-            } catch (XposedHelpers.ClassNotFoundError ignored) {
-            } catch (Throwable t) { LogWriter.log(TAG, "[Proto] " + clsName + " err: " + t.getMessage()); }
-        }
-        LogWriter.log(TAG, "[Proto] 旧 protobuf 候选未命中(3180 已由事件路径接管)");
-    }
-
-    /** v955: DexKit 检索结果安装撤回监听 hook(特征字符串定位, 零硬编码) */
-    private static void installRevokeListenerHooks(ClassLoader cl) {
-        java.util.List<String> listeners = DexKitHelper.getRevokeListenerClasses();
-        LogWriter.log(TAG, "[事件] DexKit 撤回监听类: " + listeners);
-        for (String clsName : listeners) {
-            try {
-                Class<?> c = XposedHelpers.findClass(clsName, cl);
-                XposedBridge.hookAllMethods(c, "callback", new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        try {
-                            if (!sEnabled) return;
-                            // 记录撤回(事件对象在 args[0])
-                            boolean isRevokeEvent = false;
-                            try {
-                                Object evt = param.args != null && param.args.length > 0 ? param.args[0] : null;
-                                if (evt != null) {
-                                    java.lang.reflect.Field gf = null;
-                                    for (java.lang.reflect.Field f : evt.getClass().getFields()) {
-                                        if (f.getType().getName().equals("fm.ks")) { gf = f; break; }
-                                    }
-                                    if (gf != null) {
-                                        gf.setAccessible(true);
-                                        Object ks = gf.get(evt);
-                                        if (ks != null) {
-                                            isRevokeEvent = true;
-                                            Object msg = null;
-                                            for (java.lang.reflect.Field f : ks.getClass().getFields()) {
-                                                if (f.getType().getName().equals("com.tencent.mm.storage.e9")) {
-                                                    f.setAccessible(true);
-                                                    msg = f.get(ks);
-                                                    break;
-                                                }
-                                            }
-                                            if (msg != null) {
-                                                String talker = getField(msg, "field_talker", "talker", "getTalker");
-                                                String content = getField(msg, "field_content", "getContent");
-                                                if (content != null) {
-                                                    StatsCollector.recordRecall(talker, content);
-                                                    LogWriter.log(TAG, "[事件] 撤回已记录: " + talker);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            } catch (Throwable ignored) {}
-                            // v961: 仅对确认的撤回事件拦截; 非撤回 callback(误挂类)不得 setResult,
-                            // 否则会破坏微信无关功能(如红点上报/公告回调)
-                            if (isRevokeEvent) {
-                                param.setResult(null);
-                                LogWriter.log(TAG, "[事件] 阻止撤回处理: " + clsName);
-                            }
-                        } catch (Throwable ignored) {}
-                    }
-                });
-                LogWriter.log(TAG, "[事件] Hooked: " + clsName + ".callback()");
-            } catch (Throwable t) { LogWriter.log(TAG, "[事件] " + clsName + " err: " + t.getMessage()); }
-        }
-    }
-
-    // ===== 路径3: 撤回记录 — 3180 modelmulti.p/q 已失效, 改事件监听记录 =====
-    // v955: com.tencent.mm.modelmulti.p/q 在 3180 不存在(dex 实证)。
-    // 撤回记录改由路径2 的 RevokeMsgListener 事件 hook 内完成(StatsCollector.recordRecall),
-    // 此处保留旧类 hook 作历史版本兜底。
-
-    private static void hookRecallRecorder(ClassLoader cl) {
-        for (String className : new String[]{
-            "com.tencent.mm.modelmulti.p",
-            "com.tencent.mm.modelmulti.q",
-        }) {
-            try {
-                Class<?> c = cl.loadClass(className);
-                for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
-                    if (m.getParameterTypes().length >= 2) {
-                        XposedBridge.hookMethod(m, new XC_MethodHook() {
-                                @Override
-                                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                                    try {
-                                        if (!sEnabled) return;
-                                        try {
-                                            Object msgObj = findRecallMsg(param.args);
-                                            if (msgObj != null) {
-                                                String talker = getField(msgObj, "field_talker", "getTalker");
-                                                String content = getField(msgObj, "field_content", "getContent");
-                                                if (content != null) {
-                                                    StatsCollector.recordRecall(talker, content);
-                                                    LogWriter.log(TAG, "recall recorded: " + talker);
-                                                }
-                                                tryInsertSystemTip(msgObj, talker);
-                                            }
-                                        } catch (Throwable ignored) {}
-                                    } catch (Throwable ignored) {}
-                                }
-                            });
-                    }
-                }
-            } catch (Throwable ignored) {}
-        }
+    /** 从 prefs 读取四个开关（缺省值遵循文档 11.4）。 */
+    public static void updateConfig(SharedPreferences prefs) {
+        if (prefs == null) return;
+        sEnabled = prefs.getBoolean(K_MASTER, true);
+        sBiz = prefs.getBoolean(K_BIZ, true);
+        sSelf = prefs.getBoolean(K_SELF, false);
+        sChatroomHist = prefs.getBoolean(K_CHATROOM_HIST, false);
+        sHint = prefs.getBoolean(K_HINT, true);
     }
 
     /**
-     * 尝试在聊天中插入 "某某某撤回了一条消息" 的系统提示
+     * 主开关（兼容旧 API）。开启后若已拿到 ClassLoader 则尽力即时安装 hook；
+     * 关闭仅置位、不卸载（重启微信后生效）。
      */
-    private static void tryInsertSystemTip(Object recallMsg, String talkerWxid) {
-        try {
-            // 尝试拿到原消息的 talker（聊天对象）
-            String convTalker = getField(recallMsg, "field_talker", "talker", "getTalker");
-            if (convTalker == null) return;
+    public static void setEnabled(boolean enabled) {
+        sEnabled = enabled;
+        SharedPreferences prefs = ContextManager.getPrefs();
+        if (prefs != null) prefs.edit().putBoolean(K_MASTER, enabled).apply();
+        LogWriter.log(TAG, "setEnabled=" + enabled);
+        if (enabled) {
+            ClassLoader cl = sCl != null ? sCl : ContextManager.getClassLoader();
+            if (cl != null) tryInstall(cl);
+        }
+    }
 
-            // 取撤回者显示名（联系人数据源已清空，暂用 wxid；待重写）
-            String displayName = talkerWxid;
+    /** hook 入口：应在 DexKit 可用、onReady 阶段调用，由 MainHook 注册。 */
+    public static void hook(ClassLoader cl) {
+        sCl = cl;
+        updateConfig(ContextManager.getPrefs());
+        if (!sEnabled) {
+            LogWriter.log(TAG, "hook: master disabled, skip");
+            return;
+        }
+        tryInstall(cl);
+    }
 
-            String tipText = displayName + " 撤回了一条消息";
+    private static synchronized void tryInstall(ClassLoader cl) {
+        if (cl == null) return;
+        if (sHooked) return;
+        sHooked = true;
+        LogWriter.log(TAG, "install... enabled=" + sEnabled + " biz=" + sBiz
+                + " self=" + sSelf + " chatroomHist=" + sChatroomHist + " hint=" + sHint);
 
-            // 调用 WeChat 内部 API 插入系统消息:
-            // 方法1: com.tencent.mm.model.br.a(String convTalker, long time, cc msg)
-            // 方法2: com.tencent.mm.modelmulti.p.c(String convTalker, cc msg, boolean)
-            ClassLoader cl = ContextManager.getClassLoader();
-            try {
-                // 尝试通过 modelmulti 插入
-                Class<?> mmCls = cl.loadClass("com.tencent.mm.modelmulti.p");
-                if (mmCls != null) {
-                    // 找 insert 方法: 通常签名 (String, cc, boolean) 或 (String, cc)
-                    for (java.lang.reflect.Method mm : mmCls.getDeclaredMethods()) {
-                        Class<?>[] pts = mm.getParameterTypes();
-                        if (pts.length >= 2 && pts[0] == String.class) {
-                            // 创建一个简单的系统消息
-                            Class<?> msgCls = null;
-                            try { msgCls = cl.loadClass("com.tencent.mm.storage.cc"); }
-                            catch (Throwable e2) {
-                                try { msgCls = cl.loadClass("com.tencent.mm.storage.bv"); }
-                                catch (Throwable e3) {}
-                            }
-                            if (msgCls != null) {
-                                Object sysMsg = msgCls.newInstance();
-                                // setContent(tipText)
-                                trySetField(sysMsg, "field_content", tipText);
-                                trySetField(sysMsg, "field_type", 10000);
-                                trySetField(sysMsg, "field_isSend", 0);
-                                trySetField(sysMsg, "field_createTime", System.currentTimeMillis());
-                                trySetField(sysMsg, "field_talker", convTalker);
+        // H1 接收方撤回总入口（单聊 + 群聊主路径）★必选
+        hookReceivRevoke(cl);
+        // H3 商务号/企业微信撤回
+        if (sBiz) hookBizRevoke(cl);
+        // H2 群聊 getcrmsg 历史路径（默认关）
+        if (sChatroomHist) hookChatroomHistory(cl);
+        // H4 自己撤回也失效（默认关）
+        if (sSelf) hookSelfRevoke(cl);
 
-                                mm.invoke(null, convTalker, sysMsg, false);
-                                LogWriter.log(TAG, "system tip inserted: " + tipText);
-                                break;
-                            }
+        LogWriter.log(TAG, "install done");
+    }
+
+    // ==================== H1：接收方撤回总入口 ====================
+
+    private static void hookReceivRevoke(ClassLoader cl) {
+        hookByMethodString(cl,
+                new String[]{A_H1_DOREVOKE, A_H1_DOREVOKE2},
+                6, null, "H1", true, new BlockAction() {
+                    @Override public void onBlocked(XC_MethodHook.MethodHookParam param, ClassLoader loader) {
+                        if (!sHint) return;
+                        try {
+                            String talker = param.args != null && param.args.length > 0
+                                    ? String.valueOf(param.args[0]) : null;
+                            String replacemsg = param.args != null && param.args.length > 3
+                                    ? (String) param.args[3] : null;
+                            insertRevokeHint(loader, talker, replacemsg);
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "[H1] hint err: " + t);
                         }
                     }
+                });
+    }
+
+    /** 命中拦截后的附加动作（如插入提示行）；在 setResult 之前调用。 */
+    private interface BlockAction {
+        void onBlocked(XC_MethodHook.MethodHookParam param, ClassLoader cl);
+    }
+
+    // ==================== H3：商务号撤回 ====================
+
+    private static void hookBizRevoke(ClassLoader cl) {
+        if (hookByMethodString(cl, new String[]{A_H3_CLIMSGID}, 3, null, "H3", false)) return;
+        // 退路：按 TAG 字符串定位到类，再 hook 其 a(String, Map, p0)
+        String cls = firstClassByStrings(cl, A_H3_BIZ_TAG);
+        if (cls != null) hookExact(cl, cls, "a", 3, null, "H3", false);
+    }
+
+    // ==================== H2：群聊 getcrmsg 历史路径 ====================
+
+    private static void hookChatroomHistory(ClassLoader cl) {
+        hookByMethodString(cl, new String[]{A_H2_GROUP}, 0, null, "H2", false);
+    }
+
+    // ==================== H4：自己撤回也失效 ====================
+
+    private static void hookSelfRevoke(ClassLoader cl) {
+        String cls = firstClassByStrings(cl, A_H4_CGI);
+        if (cls == null) {
+            LogWriter.log(TAG, "[WARN] H4: class not resolved by '" + A_H4_CGI + "'");
+            return;
+        }
+        hookExact(cl, cls, "J", 4, null, "H4", false);
+    }
+
+    // ==================== 通用定位与安装 ====================
+
+    /**
+     * 用字符串锚点（DexKit）定位方法：遍历锚点，取首个参数个数匹配的方法签名并安装。
+     * 解析形如 {@code com.a.b.c(String,long,com.x.p0,...)} 的签名，得到类名与方法名。
+     */
+    private static boolean hookByMethodString(ClassLoader cl, String[] anchors, int paramCount,
+                                              Object blockResult, String tag, boolean logArgs) {
+        return hookByMethodString(cl, anchors, paramCount, blockResult, tag, logArgs, null);
+    }
+
+    private static boolean hookByMethodString(ClassLoader cl, String[] anchors, int paramCount,
+                                              Object blockResult, String tag, boolean logArgs,
+                                              BlockAction action) {
+        for (String anchor : anchors) {
+            try {
+                List<String> sigs = DexKitHelper.findMethodsByString(cl, null, anchor);
+                if (sigs == null || sigs.isEmpty()) continue;
+                for (String sig : sigs) {
+                    int p = sig.indexOf('(');
+                    if (p <= 0) continue;
+                    String decl = sig.substring(0, p);
+                    int dot = decl.lastIndexOf('.');
+                    if (dot <= 0) continue;
+                    String clsName = decl.substring(0, dot);
+                    String mName = decl.substring(dot + 1);
+                    String params = sig.substring(p + 1, sig.length() - 1);
+                    int pc = params.isEmpty() ? 0 : params.split(",").length;
+                    if (paramCount >= 0 && pc != paramCount) continue;
+                    if (hookExact(cl, clsName, mName, paramCount, blockResult, tag, logArgs, action)) {
+                        LogWriter.log(TAG, "[" + tag + "] resolved via '" + anchor + "'");
+                        return true;
+                    }
                 }
-            } catch (Throwable e) {
-                LogWriter.log(TAG, "insert system tip failed: " + e.getMessage());
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "[" + tag + "] anchor err: " + t);
+            }
+        }
+        LogWriter.log(TAG, "[WARN] " + tag + ": anchor not resolved");
+        return false;
+    }
+
+    /**
+     * 在指定类中按「方法名 + 参数个数」精确定位并 hook，入口 setResult 拦截。
+     *
+     * <p>关键：微信经 Tinker 热修复运行时，同名类会被加载出多份平行副本
+     * （base.apk 的 PathClassLoader 副本 vs patch-7eb9a009 的 DelegateLastClassLoader 副本），
+     * 运行时只调用其中一份。若只挂 base 副本则「装上但零捕获」。因此这里对
+     * 所有可解析到的 ClassLoader 逐一份获取并 hook 同名类，确保命中真实运行类。</p>
+     */
+    private static boolean hookExact(ClassLoader cl, String clsName, String methodName, int paramCount,
+                                     Object blockResult, String tag, boolean logArgs) {
+        return hookExact(cl, clsName, methodName, paramCount, blockResult, tag, logArgs, null);
+    }
+
+    private static boolean hookExact(ClassLoader cl, String clsName, String methodName, int paramCount,
+                                     Object blockResult, String tag, boolean logArgs, BlockAction action) {
+        boolean ok = false;
+        Set<Class<?>> seen = new HashSet<>();
+        for (ClassLoader loader : candidateLoaders(cl)) {
+            Class<?> c;
+            try {
+                c = loader.loadClass(clsName);
+            } catch (Throwable ignored) {
+                continue;
+            }
+            if (c == null || !seen.add(c)) continue;
+            ok |= installOn(c, methodName, paramCount, blockResult, tag, logArgs, loader, action);
+        }
+        if (!ok) {
+            LogWriter.log(TAG, "[WARN] " + tag + ": " + clsName + "." + methodName
+                    + "(" + paramCount + ") not found in any loader");
+        }
+        return ok;
+    }
+
+    /** 在单个 Class 上安装 hook（可能命中多个同名重载）。 */
+    private static boolean installOn(Class<?> c, String methodName, int paramCount,
+                                     Object blockResult, String tag, boolean logArgs,
+                                     ClassLoader loader, BlockAction action) {
+        boolean ok = false;
+        try {
+            for (Method m : c.getDeclaredMethods()) {
+                if (!m.getName().equals(methodName)) continue;
+                if (paramCount >= 0 && m.getParameterCount() != paramCount) continue;
+                m.setAccessible(true);
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam param) {
+                        try {
+                            if (logArgs && param.args != null && param.args.length >= 4) {
+                                LogWriter.log(TAG, "[" + tag + "] BLOCKED talker=" + param.args[0]
+                                        + " svrId=" + param.args[1]
+                                        + " replacemsg=" + param.args[3]);
+                            } else {
+                                LogWriter.log(TAG, "[" + tag + "] BLOCKED");
+                            }
+                        } catch (Throwable ignored) {}
+                        // 先拦截：保证任何后续附加动作都不会影响防撤回本身
+                        param.setResult(blockResult);
+                        // 再异步执行附加动作（插入提示行）。同步入库会占用撤回处理线程、
+                        // 可能与微信持有的消息存储锁相互等待，导致 before 钩子迟迟不返回。
+                        if (action != null) {
+                            final BlockAction act = action;
+                            final XC_MethodHook.MethodHookParam p = param;
+                            final ClassLoader ld = loader;
+                            sExecutor.execute(() -> {
+                                try {
+                                    // 让撤回复写流程先收尾，避免与其争抢消息存储锁
+                                    Thread.sleep(250L);
+                                    act.onBlocked(p, ld);
+                                } catch (InterruptedException ie) {
+                                    Thread.currentThread().interrupt();
+                                } catch (Throwable t) {
+                                    LogWriter.log(TAG, "block action err: " + t);
+                                }
+                            });
+                        }
+                    }
+                });
+                ok = true;
+                LogWriter.log(TAG, "[" + tag + "] hooked " + c.getName() + "."
+                        + m.getName() + "(" + m.getParameterCount() + ") via " + loaderName(loader));
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[" + tag + "] hook err: " + t);
+        }
+        return ok;
+    }
+
+    /**
+     * 候选 ClassLoader（去重，顺序即优先级）：
+     * 1) VersionCompat 反查到的微信真实 CL / Tinker DelegateLastClassLoader（运行时实际生效者）
+     * 2) ContextManager 缓存的 Tinker CL
+     * 3) 传入的 LPPosed cl（base.apk 平行副本）
+     * 4) 微信 AppContext 的 CL
+     */
+    private static Set<ClassLoader> candidateLoaders(ClassLoader cl) {
+        Set<ClassLoader> loaders = new LinkedHashSet<>();
+        try {
+            ClassLoader tk = VersionCompat.findTinkerClassLoader(cl);
+            if (tk != null) loaders.add(tk);
+        } catch (Throwable ignored) {}
+        try {
+            ClassLoader cm = ContextManager.getTinkerClassLoader();
+            if (cm != null) loaders.add(cm);
+        } catch (Throwable ignored) {}
+        if (cl != null) loaders.add(cl);
+        try {
+            ClassLoader app = ContextManager.getClassLoader();
+            if (app != null) loaders.add(app);
+        } catch (Throwable ignored) {}
+        return loaders;
+    }
+
+    private static String loaderName(ClassLoader l) {
+        return l == null ? "null" : l.getClass().getSimpleName();
+    }
+
+    /** 按字符串锚点定位首个候选类名（沿用 WeChatUpdateBlocker 的通用做法）。 */
+    private static String firstClassByStrings(ClassLoader cl, String... anchors) {
+        for (String kw : anchors) {
+            try {
+                List<String> cands = DexKitHelper.findClassesByString(cl, kw);
+                if (cands != null && !cands.isEmpty()) {
+                    LogWriter.log(TAG, "class hit: " + cands.get(0) + " via '" + kw + "'");
+                    return cands.get(0);
+                }
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    // ==================== 原生提示行插入 ====================
+
+    /**
+     * 由服务端 replacemsg 生成「撤回失败」提示文案：
+     * {@code "XXX撤回了一条消息"} → {@code "XXX消息撤回失败"}。
+     * 发送者名字取自 replacemsg 前缀（微信已算好的显示名），模块不硬编码人名。
+     */
+    private static String buildFailHint(String replacemsg) {
+        String s = replacemsg == null ? "" : replacemsg.trim();
+        if (s.isEmpty()) return "";
+        int i = s.lastIndexOf("撤回");
+        if (i > 0) {
+            String name = s.substring(0, i).trim();
+            if (!name.isEmpty()) return name + "消息撤回失败";
+        }
+        return "消息撤回失败";
+    }
+
+    /**
+     * 拦截撤回后，在会话里插入一条系统提示行（type=10000），文案为
+     * {@code "<发送者>消息撤回失败"}，同时保留被撤回的原消息不变 —— 即「失败提示 × 防撤回」并存。
+     */
+    private static void insertRevokeHint(ClassLoader cl, String talker, String replacemsg) {
+        if (talker == null || talker.isEmpty() || replacemsg == null || replacemsg.isEmpty()) return;
+        final String text = buildFailHint(replacemsg);
+        if (text.isEmpty()) return;
+        try {
+            Object f9 = getMsgStorage(cl);
+            if (f9 == null) {
+                LogWriter.log(TAG, "[H1] hint: MsgInfoStorage 不可用");
+                return;
+            }
+            Class<?> e9 = VersionCompat.findMsgInfoStorageClass(cl);
+            if (e9 == null) {
+                LogWriter.log(TAG, "[H1] hint: e9 类未定位");
+                return;
+            }
+            // 构造 e9（8.0.78 3180 实证 setter）
+            Object msg = XposedHelpers.newInstance(e9);
+            callSafe(msg, "u1", talker);                      // field_talker
+            callSafe(msg, "b1", text);                        // field_content
+            callSafe(msg, "setType", 10000);                  // 通用系统提示
+            callSafe(msg, "k1", 0);                           // isSend = 0
+            callSafe(msg, "e1", System.currentTimeMillis());  // createTime
+            callSafe(msg, "r1", "");                          // 清 msgSource
+            callSafe(msg, "r3", "");
+
+            // 1) 入库（false = INSERT），返回新 msgId
+            long id = 0L;
+            try {
+                Object ret = XposedHelpers.callMethod(f9, "Bb", msg, false);
+                if (ret instanceof Number) id = ((Number) ret).longValue();
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "[H1] hint Bb err: " + t);
+            }
+            if (id > 0) {
+                // 2) 通知 UI 刷新：Qc = 落库 + 通知
+                try {
+                    XposedHelpers.callMethod(f9, "Qc", id, msg, true);
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "[H1] hint Qc notify err: " + t);
+                }
+            } else {
+                // 3) Bb 未取到 id 时，尝试直接用 Qc 插入（带通知）
+                try {
+                    Object r = XposedHelpers.callMethod(f9, "Qc", 0L, msg, true);
+                    if (r instanceof Number) id = ((Number) r).longValue();
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "[H1] hint Qc insert err: " + t);
+                }
+            }
+            LogWriter.log(TAG, "[H1] hint inserted talker=" + talker + " id=" + id
+                    + " text=" + text);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[H1] hint fatal: " + t);
+        }
+    }
+
+    private static void callSafe(Object target, String method, Object... args) {
+        try {
+            XposedHelpers.callMethod(target, method, args);
+        } catch (Throwable ignored) {}
+    }
+
+    /** 获取 f9 MsgInfoStorage 实例：StorageHub 优先，失败回退 e01.d9.b().u()。 */
+    private static Object getMsgStorage(ClassLoader cl) {
+        if (sMsgStorage != null) return sMsgStorage;
+        try {
+            com.leshao.ai.hook.wechat.StorageHub hub = com.leshao.ai.hook.wechat.StorageHub.get();
+            if (hub != null) {
+                Object s = hub.msgInfoStorage();
+                if (s != null) {
+                    sMsgStorage = s;
+                    return s;
+                }
             }
         } catch (Throwable ignored) {}
-    }
-
-    private static void trySetField(Object obj, String fieldName, Object value) {
         try {
-            java.lang.reflect.Field f = obj.getClass().getDeclaredField(fieldName);
-            f.setAccessible(true);
-            f.set(obj, value);
-        } catch (Throwable ignored) {}
-    }
-
-    private static Object findRecallMsg(Object[] args) {
-        if (args == null) return null;
-        for (Object arg : args) {
-            if (arg == null) continue;
-            String cn = arg.getClass().getName();
-            if (cn.contains("Recall") || cn.contains("Revoke")) return arg;
-        }
-        return null;
-    }
-
-    private static String getField(Object obj, String... names) {
-        for (String n : names) {
-            try { Object v = obj.getClass().getDeclaredField(n).get(obj); return v != null ? v.toString() : null; }
-            catch (Throwable ignored) {}
-            try { Object v = obj.getClass().getMethod(n).invoke(obj); return v != null ? v.toString() : null; }
-            catch (Throwable ignored) {}
-        }
-        return null;
-    }
-
-    // ===== 路径5: 保险 — storage.f9.Ta 拦截撤回标记消息重新入库 =====
-    // 反编译确认: 撤回时会构造类型为 285222674(0x11002712, 保留原文) 或
-    // 268445456(0x10002710, 清空内容) 的提示消息, 经 f9.Ta(long, e9, boolean) 重新入库。
-    // 即使 e01.u.f 阻断漏网, 此处也可阻止撤回提示消息显示。
-    private static void hookF9Ta(ClassLoader cl) {
-        try {
-            Class<?> f9 = VersionCompat.findMsgStorageClass(cl);
-            if (f9 == null) return;
-            XposedBridge.hookAllMethods(f9, "Ta", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                    try {
-                        if (!sEnabled) return;
-                        Object msg = param.args.length > 1 ? param.args[1] : null;
-                        if (msg == null) return;
-                        int type = getMsgType(msg);
-                        if (type == 285222674 || type == 268445456) {
-                            // 撤回提示消息: 改写为普通文本「XXX 撤回了一条消息 [已拦截]」后放行入库,
-                            // 既保留可见的系统提示, 又标记拦截结果
-                            String tip = null;
-                            try {
-                                java.lang.reflect.Field f = msg.getClass().getDeclaredField("field_content");
-                                f.setAccessible(true);
-                                Object v = f.get(msg);
-                                if (v != null) tip = v.toString();
-                            } catch (Throwable ignored) {}
-                            try { trySetField(msg, "field_type", 1); } catch (Throwable ignored) {}
-                            try { trySetField(msg, "field_content",
-                                    (tip == null ? "对方撤回了一条消息" : tip) + " [已拦截]"); } catch (Throwable ignored) {}
-                            try {
-                                String talker = getField(msg, "field_talker", "talker", "getTalker");
-                                StatsCollector.recordRecall(talker, tip);
-                            } catch (Throwable ignored) {}
-                            LogWriter.log(TAG, "[Ta] 撤回提示改写为拦截提示: " + tip);
-                        }
-                    } catch (Throwable ignored) {}
-                }
-            });
-            LogWriter.log(TAG, "[Ta] Hooked: f9.Ta()");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "[Ta] f9.Ta hook err: " + t.getMessage());
-        }
-    }
-
-    private static int getMsgType(Object msg) {
-        try {
-            java.lang.reflect.Field f = msg.getClass().getDeclaredField("field_type");
-            f.setAccessible(true);
-            Object v = f.get(msg);
-            if (v instanceof Integer) return (Integer) v;
-            if (v instanceof Long) return (int) (long) (Long) v;
-        } catch (Throwable ignored) {}
-        try {
-            Object v = msg.getClass().getMethod("getType").invoke(msg);
-            if (v instanceof Integer) return (Integer) v;
-            if (v instanceof Long) return (int) (long) (Long) v;
-        } catch (Throwable ignored) {}
-        return 0;
-    }
-
-    // ===== 路径4: Kotlin协程撤回阻断 — bd0.s.invokeSuspend() ⭐新增 =====
-
-    private static void hookKotlinRevoke(ClassLoader cl) {
-        try {
-            Class<?> bd0s = VersionCompat.findBd0SClass(cl);
-            if (bd0s == null) return;
-            XposedBridge.hookAllMethods(bd0s, "invokeSuspend", new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                    try {
-                                        if (!sEnabled) return;
-                                        param.setResult(null);
-                                        LogWriter.log(TAG, "[协程] 阻止撤回成功: bd0.s.invokeSuspend()");
-                    } catch (Throwable e) {
-                        LogWriter.log("AntiRecallHook", "cb err: " + e);
+            Class<?> shortCls = VersionCompat.findMsgStorageShortClass(cl);
+            if (shortCls != null) {
+                Object service = XposedHelpers.callStaticMethod(shortCls, "b");
+                if (service != null) {
+                    Object s = XposedHelpers.callMethod(service, "u");
+                    if (s != null) {
+                        sMsgStorage = s;
+                        return s;
                     }
                 }
-            });
-            LogWriter.log(TAG, "[协程] Hooked: bd0.s.invokeSuspend()");
-        } catch (XposedHelpers.ClassNotFoundError ignored) {
-            LogWriter.log(TAG, "[协程] bd0.s 未找到 (可能版本不支持)");
+            }
         } catch (Throwable t) {
-            LogWriter.log(TAG, "[协程] bd0.s err: " + t.getMessage());
+            LogWriter.log(TAG, "getMsgStorage err: " + t);
         }
+        return null;
+    }
+
+    // ==================== 配置弹窗（入口在「联系人和群聊」菜单） ====================
+
+    public static void showConfigDialog(Context ctx) {
+        if (ctx == null) return;
+        SharedPreferences prefs = ContextManager.getPrefs();
+        if (prefs == null) {
+            Toast.makeText(ctx, "配置不可用", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        float d = ctx.getResources().getDisplayMetrics().density;
+
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackground(com.leshao.v3.ui.CandyUi.dialogBg(ctx));
+        root.setPadding((int) (12 * d), (int) (12 * d), (int) (12 * d), (int) (12 * d));
+        com.leshao.v3.ui.InsetsUtil.clipRounded(root);
+
+        ScrollView sv = new ScrollView(ctx);
+        LinearLayout content = new LinearLayout(ctx);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding((int) (4 * d), 0, (int) (4 * d), 0);
+
+        content.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "消息防撤回",
+                "拦截服务端撤回改写，原消息继续显示（保留微信原生提示）"));
+
+        LinearLayout card = com.leshao.v3.ui.widgets.M3Page.card(ctx);
+        card.addView(switchItem(ctx, "\uD83D\uDEE1", "接收方撤回（别人撤回我）",
+                "总开关：单聊 + 群聊主路径，必选", prefs.getBoolean(K_MASTER, true), K_MASTER, prefs));
+        card.addView(switchItem(ctx, "\uD83C\uDFE2", "商务号/企业微信撤回",
+                "qy_revoke_msg，默认开", prefs.getBoolean(K_BIZ, true), K_BIZ, prefs));
+        card.addView(switchItem(ctx, "\uD83D\uDCAC", "保留撤回失败提示",
+                "拦截后插入「对方消息撤回失败」提示行（原消息仍在）",
+                prefs.getBoolean(K_HINT, true), K_HINT, prefs));
+        card.addView(switchItem(ctx, "\u21A9", "自己撤回也失效",
+                "本地不再改写（服务端仍会撤）", prefs.getBoolean(K_SELF, false), K_SELF, prefs));
+        card.addView(switchItem(ctx, "\uD83D\uDDC2", "群聊历史防撤回",
+                "getcrmsg 历史路径，可能影响群 seq，默认关",
+                prefs.getBoolean(K_CHATROOM_HIST, false), K_CHATROOM_HIST, prefs));
+        content.addView(card);
+
+        TextView note = new TextView(ctx);
+        note.setText("说明：配置在微信启动时安装 Hook，修改后请重启微信以完全生效。");
+        note.setTextSize(12);
+        note.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
+        note.setPadding((int) (6 * d), (int) (10 * d), (int) (6 * d), (int) (4 * d));
+        content.addView(note);
+
+        sv.addView(content);
+
+        int sheetW = (int) (ctx.getResources().getDisplayMetrics().widthPixels * 0.92f);
+        int maxContentH = (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.72f);
+        int innerW = Math.max(1, sheetW - (int) (24 * d) - (int) (8 * d));
+        content.measure(
+                View.MeasureSpec.makeMeasureSpec(innerW, View.MeasureSpec.AT_MOST),
+                View.MeasureSpec.makeMeasureSpec(maxContentH, View.MeasureSpec.AT_MOST));
+        int contentH = Math.min(content.getMeasuredHeight(), maxContentH);
+        sv.setLayoutParams(new LinearLayout.LayoutParams(-1, contentH));
+        root.addView(sv);
+
+        LinearLayout btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setGravity(Gravity.CENTER);
+        btnRow.setPadding((int) (12 * d), (int) (8 * d), (int) (12 * d), (int) (4 * d));
+        com.leshao.v3.ui.widgets.ModernButton btnCancel =
+                new com.leshao.v3.ui.widgets.ModernButton(ctx, "取消",
+                        com.leshao.v3.ui.widgets.ModernButton.STYLE_GHOST);
+        com.leshao.v3.ui.widgets.ModernButton btnSave =
+                new com.leshao.v3.ui.widgets.ModernButton(ctx, "保存",
+                        com.leshao.v3.ui.widgets.ModernButton.STYLE_PRIMARY);
+        btnRow.addView(btnCancel);
+        View spacer = new View(ctx);
+        spacer.setLayoutParams(new LinearLayout.LayoutParams((int) (12 * d), 1));
+        btnRow.addView(spacer);
+        btnRow.addView(btnSave);
+        root.addView(btnRow);
+
+        int theme = com.leshao.v3.ui.AppColors.isDarkMode()
+                ? android.R.style.Theme_DeviceDefault_Dialog_Alert
+                : android.R.style.Theme_DeviceDefault_Light_Dialog_Alert;
+        final android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(ctx, theme)
+                .setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.92f, -1f))
+                .setCancelable(true)
+                .create();
+        btnCancel.onClick(() -> dlg.dismiss());
+        btnSave.onClick(() -> {
+            updateConfig(prefs);
+            Toast.makeText(ctx, "已保存，重启微信后完全生效", Toast.LENGTH_SHORT).show();
+            dlg.dismiss();
+        });
+        com.leshao.v3.ui.InsetsUtil.center(dlg, 0.92f, -1f);
+        dlg.show();
+        com.leshao.v3.ui.WindowLayer.track(dlg.getWindow());
+    }
+
+    /** 配置弹窗内的单行开关（即时写入 prefs）。 */
+    private static View switchItem(Context ctx, String icon, String title, String desc,
+                                   boolean checked, String key, SharedPreferences prefs) {
+        Switch sw = com.leshao.v3.ui.CandyUi.newSwitch(ctx);
+        sw.setChecked(checked);
+        sw.setOnCheckedChangeListener((v, on) -> prefs.edit().putBoolean(key, on).apply());
+        return com.leshao.v3.ui.widgets.M3Page.tailRow(ctx, icon, title, desc, sw);
     }
 }

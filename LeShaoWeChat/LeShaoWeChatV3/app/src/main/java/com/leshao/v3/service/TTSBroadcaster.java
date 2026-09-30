@@ -18,12 +18,17 @@ public class TTSBroadcaster {
 
     public static synchronized void init(Context ctx) {
         if (sEngine != null) return;
-        sEngine = new TtsEngine(ctx);
-        sCubePlayer = new CubeTtsPlayer(ctx);
-        sFilter = new FilterManager();
-        NicknameResolver.init();
-        sHandler = new MessageHandler(sEngine, sCubePlayer, sFilter, new NicknameResolver());
-        LogWriter.log(TAG, "TTS init done");
+        try {
+            sEngine = new TtsEngine(ctx);
+            sCubePlayer = new CubeTtsPlayer(ctx);
+            sFilter = new FilterManager();
+            NicknameResolver.init();
+            sHandler = new MessageHandler(sEngine, sCubePlayer, sFilter, new NicknameResolver());
+            LogWriter.log(TAG, "TTS init done");
+        } catch (Throwable t) {
+            // v986: 初始化失败不得向上抛出导致微信启动流程崩溃; 已创建的部分保留, 后续调用有 null 守卫。
+            LogWriter.log(TAG, "init err: " + t.getClass().getSimpleName() + " " + t.getMessage());
+        }
     }
 
     public static void process(WeChatMessage msg, ModuleConfig cfg) {
@@ -51,39 +56,43 @@ public class TTSBroadcaster {
     }
 
     public static boolean isSpeaking() {
-        if (sEngine != null && sEngine.isSpeaking()) return true;
-        if (sCubePlayer != null && sCubePlayer.isSpeaking()) return true;
+        try {
+            if (sEngine != null && sEngine.isSpeaking()) return true;
+            if (sCubePlayer != null && sCubePlayer.isSpeaking()) return true;
+        } catch (Throwable ignored) {}
         return false;
     }
 
     public static boolean hasPendingSpeak() {
-        if (sEngine != null && sEngine.hasPendingSpeak()) return true;
-        if (sCubePlayer != null && sCubePlayer.hasPendingSpeak()) return true;
+        try {
+            if (sEngine != null && sEngine.hasPendingSpeak()) return true;
+            if (sCubePlayer != null && sCubePlayer.hasPendingSpeak()) return true;
+        } catch (Throwable ignored) {}
         return false;
     }
 
     public static void setSpeechRate(float rate) {
-        if (sEngine != null) sEngine.setSpeechRate(rate);
+        try { if (sEngine != null) sEngine.setSpeechRate(rate); } catch (Throwable ignored) {}
     }
 
     public static void speakText(String text) {
-        if (sHandler != null) sHandler.speak(text);
+        try { if (sHandler != null) sHandler.speak(text); } catch (Throwable ignored) {}
     }
 
     public static void pause() {
-        if (sCubePlayer != null) sCubePlayer.pause();
-        if (sEngine != null) sEngine.pause();
+        try { if (sCubePlayer != null) sCubePlayer.pause(); } catch (Throwable ignored) {}
+        try { if (sEngine != null) sEngine.pause(); } catch (Throwable ignored) {}
     }
 
     public static void stopAll() {
-        if (sCubePlayer != null) sCubePlayer.stop();
-        if (sEngine != null) sEngine.stop();
+        try { if (sCubePlayer != null) sCubePlayer.stop(); } catch (Throwable ignored) {}
+        try { if (sEngine != null) sEngine.stop(); } catch (Throwable ignored) {}
     }
 
     public static void shutdown() {
-        if (sCubePlayer != null) sCubePlayer.shutdown();
+        try { if (sCubePlayer != null) sCubePlayer.shutdown(); } catch (Throwable ignored) {}
         sCubePlayer = null;
-        if (sEngine != null) sEngine.shutdown();
+        try { if (sEngine != null) sEngine.shutdown(); } catch (Throwable ignored) {}
         sEngine = null;
         sHandler = null;
     }

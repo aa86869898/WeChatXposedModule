@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>乐少微信助手 · 播放按钮与播放动画样式预览</title>
+<style>
+:root{
+  --g1:#8B5CF6; --g2:#D8B4FE; --g3:#FFAFCC;
+  --primary:#8B5CF6; --primary-dark:#7C3AED; --primary-container:#EADDFF;
+  --tertiary:#D5497E; --tertiary-container:#FFD9E6;
+  --on-surface:#2A2340; --on-surface-variant:#6F6389; --outline:#9A8CB8;
+  --outline-variant:#DCCFF2;
+  --sc-lowest:#FFFFFF; --sc-low:#F6F1FF; --sc:#F1EAFE; --sc-high:#ECE3FB; --sc-highest:#E7DCF8;
+  --page:#FBF9FF; --card:#FFFFFF;
+  --ripple:rgba(139,92,246,.14);
+  --shadow:0 2px 10px rgba(120,90,190,.12);
+}
+[data-theme="dark"]{
+  --primary:#C9A9FF; --primary-dark:#9F7BFF; --primary-container:#4A2A82;
+  --tertiary:#FFB0CE; --tertiary-container:#7A3A57;
+  --on-surface:#F2ECFB; --on-surface-variant:#B6A6D1; --outline:#8A79A8;
+  --outline-variant:#3B2F55;
+  --sc-lowest:#100A18; --sc-low:#1D1530; --sc:#241B38; --sc-high:#2A2040; --sc-highest:#332845;
+  --page:#150F1E; --card:#1D1530;
+  --ripple:rgba(201,169,255,.18);
+  --shadow:0 2px 12px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--on-surface);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;transition:background .25s,color .25s}
+header{padding:26px 20px 10px;max-width:1080px;margin:0 auto}
+h1{font-size:22px;margin:0 0 6px}
+.sub{color:var(--on-surface-variant);font-size:13px;line-height:1.7}
+.toolbar{position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);
+  background:color-mix(in srgb,var(--page) 82%,transparent);
+  border-bottom:1px solid var(--outline-variant);padding:10px 20px;
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pill{padding:7px 14px;border-radius:999px;border:1px solid var(--outline-variant);
+  background:var(--card);color:var(--on-surface);font-size:13px;cursor:pointer;transition:.15s}
+.pill:hover{border-color:var(--primary);color:var(--primary)}
+.pill.on{background:var(--primary);color:#fff;border-color:var(--primary)}
+main{max-width:1080px;margin:0 auto;padding:18px 20px 80px}
+h2{font-size:16px;margin:26px 0 12px;display:flex;align-items:center;gap:8px}
+h2 .dot{width:8px;height:8px;border-radius:50%;background:linear-gradient(135deg,var(--g1),var(--g3))}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--outline-variant);border-radius:20px;
+  padding:16px;box-shadow:var(--shadow);transition:transform .18s,border-color .18s}
+.card:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--primary) 45%,var(--outline-variant))}
+.card .hd{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
+.card .no{font-size:11px;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--g1),var(--g3));
+  border-radius:8px;padding:2px 7px;letter-spacing:.4px}
+.card .name{font-size:14px;font-weight:700}
+.card .desc{font-size:12px;color:var(--on-surface-variant);line-height:1.65;margin:6px 0 14px}
+.stage{position:relative;height:150px;border-radius:16px;overflow:hidden;
+  background:var(--sc-low);border:1px dashed var(--outline-variant);
+  display:flex;align-items:center;justify-content:center;gap:14px}
+.playrow{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:6px 0}
+
+/* ======= 通用按钮骨架 ======= */
+.pb{position:relative;width:44px;height:44px;border:none;background:transparent;padding:0;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;color:var(--primary);
+  transition:transform .15s,background .2s,box-shadow .2s;outline:none}
+.pb svg{width:18px;height:18px;position:relative;z-index:3}
+.pb .ic-pause{display:none}
+.pb.playing .ic-play{display:none}
+.pb.playing .ic-pause{display:block}
+
+/* 1 环形进度 */
+.pb1{width:52px;height:52px;border-radius:50%}
+.pb1 .ring{position:absolute;inset:0;border-radius:50%;
+  background:conic-gradient(var(--primary) calc(var(--p,0)*1%),var(--outline-variant) 0);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 4px),#000 calc(100% - 3px));
+  mask:radial-gradient(farthest-side,transparent calc(100% - 4px),#000 calc(100% - 3px));
+  transition:background .2s}
+.pb1 .core{width:40px;height:40px;border-radius:50%;background:var(--sc-high);
+  display:flex;align-items:center;justify-content:center}
+.pb1.playing .ring{background:conic-gradient(var(--tertiary) calc(var(--p,0)*1%),var(--outline-variant) 0)}
+
+/* 2 流光渐变 */
+.pb2{border-radius:999px;background:linear-gradient(135deg,var(--g1),var(--g2) 55%,var(--g3));color:#fff;
+  box-shadow:0 4px 14px rgba(139,92,246,.4)}
+.pb2.playing{background:transparent;box-shadow:inset 0 0 0 2px var(--primary);color:var(--primary)}
+
+/* 3 霓虹描边 */
+.pb3{border-radius:999px;box-shadow:inset 0 0 0 1.5px var(--primary),0 0 8px rgba(139,92,246,.45)}
+.pb3.playing{animation:breathe 1.4s ease-in-out infinite}
+@keyframes breathe{
+  0%,100%{box-shadow:inset 0 0 0 1.5px var(--primary),0 0 6px rgba(139,92,246,.3)}
+  50%{box-shadow:inset 0 0 0 1.5px var(--primary),0 0 20px rgba(139,92,246,.85)}}
+
+/* 4 玻璃气泡 */
+.pb4{border-radius:50%;background:rgba(139,92,246,.26);backdrop-filter:blur(7px);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.65)}
+.pb4.playing{background:rgba(139,92,246,.52)}
+
+/* 5 波形胶囊 */
+.pb5{width:64px;border-radius:999px;background:var(--sc-high);box-shadow:inset 0 0 0 1px var(--outline-variant);gap:3px}
+.pb5 .bar{width:3px;height:9px;border-radius:3px;background:var(--primary);transition:height .2s}
+.pb5.playing .bar{animation:eq .9s ease-in-out infinite}
+.pb5.playing .bar:nth-child(1){animation-delay:0s}
+.pb5.playing .bar:nth-child(2){animation-delay:.15s}
+.pb5.playing .bar:nth-child(3){animation-delay:.3s}
+.pb5.playing .bar:nth-child(4){animation-delay:.45s}
+.pb5.playing .bar:nth-child(5){animation-delay:.6s}
+@keyframes eq{0%,100%{height:7px}50%{height:22px}}
+
+/* 6 拟物双态 */
+.pb6{border-radius:50%;background:var(--sc-low);
+  box-shadow:3px 3px 7px rgba(120,100,170,.35),-3px -3px 7px rgba(255,255,255,.9)}
+[data-theme="dark"] .pb6{box-shadow:3px 3px 8px rgba(0,0,0,.55),-3px -3px 8px rgba(255,255,255,.05)}
+.pb6.playing{box-shadow:inset 3px 3px 8px rgba(120,100,170,.5),inset -3px -3px 8px rgba(255,255,255,.65)}
+[data-theme="dark"] .pb6.playing{box-shadow:inset 3px 3px 8px rgba(0,0,0,.6),inset -3px -3px 8px rgba(255,255,255,.06)}
+
+/* 7 磨砂磁贴 */
+.pb7{border-radius:13px;background:var(--sc-highest);color:var(--primary-dark);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7)}
+.pb7:active{transform:scale(.9)}
+
+/* 8 音符徽章 */
+.pb8{border-radius:50%;background:var(--primary-container);color:var(--primary-dark)}
+.pb8.playing svg{animation:sway 1s ease-in-out infinite}
+@keyframes sway{0%,100%{transform:rotate(-9deg)}50%{transform:rotate(9deg)}}
+
+/* 9 磁带轮 */
+.pb9{width:66px;height:46px;border-radius:13px;background:var(--tertiary-container);color:var(--tertiary)}
+.pb9 .reel{position:absolute;width:11px;height:11px;border-radius:50%;border:2px solid var(--tertiary);
+  top:50%;margin-top:-5.5px;opacity:.9}
+.pb9 .reel.l{left:9px}
+.pb9 .reel.r{right:9px}
+.pb9.playing .reel{animation:spin 1.1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* 10 极简幽灵 */
+.pb10{border-radius:50%}
+.pb10:active{background:var(--ripple)}
+.pb10 .glyph{transition:opacity .2s,transform .2s;display:flex}
+.pb10.playing .glyph{transform:scaleX(-1)}
+
+/* ======= 弹窗 / 播放动画 ======= */
+.stage.tall{height:190px}
+.trigger{padding:8px 18px;border-radius:999px;border:none;cursor:pointer;font-size:13px;font-weight:700;color:#fff;
+  background:linear-gradient(135deg,var(--g1),var(--g3));box-shadow:0 4px 14px rgba(139,92,246,.38)}
+.trigger:active{transform:scale(.96)}
+.pop{position:absolute;opacity:0;pointer-events:none;transition:opacity .25s}
+.pop.show{opacity:1;pointer-events:auto}
+
+/* B1 迷你播放条 */
+.mini{left:12px;right:12px;bottom:-80px;height:52px;border-radius:999px;background:var(--card);
+  box-shadow:0 8px 24px rgba(90,60,160,.28);display:flex;align-items:center;gap:10px;padding:0 14px;
+  transition:bottom .32s cubic-bezier(.34,1.4,.5,1),opacity .25s}
+.pop.show .mini{bottom:16px}
+.mini .wv{display:flex;align-items:flex-end;gap:2px;height:22px}
+.mini .wv i{width:3px;background:var(--primary);border-radius:2px;animation:eq2 .8s ease-in-out infinite}
+.mini .wv i:nth-child(2){animation-delay:.1s}.mini .wv i:nth-child(3){animation-delay:.2s}
+.mini .wv i:nth-child(4){animation-delay:.3s}.mini .wv i:nth-child(5){animation-delay:.4s}
+.mini .wv i:nth-child(6){animation-delay:.5s}
+@keyframes eq2{0%,100%{height:6px}50%{height:20px}}
+.mini .meta{flex:1;min-width:0}
+.mini .meta b{display:block;font-size:12px;font-weight:700}
+.mini .track{height:3px;border-radius:3px;background:var(--outline-variant);margin-top:6px;overflow:hidden}
+.mini .track i{display:block;height:100%;width:38%;background:linear-gradient(90deg,var(--g1),var(--g3))}
+.mini .mc{width:30px;height:30px;border-radius:50%;background:var(--primary);color:#fff;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+
+/* B2 中央唱片 */
+.vinyl{width:110px;height:110px;border-radius:50%;left:50%;top:50%;margin:-55px 0 0 -55px;
+  background:radial-gradient(circle at 50% 50%,var(--g1) 0 26%,var(--sc-highest) 27% 100%);
+  box-shadow:0 10px 30px rgba(90,60,160,.35),0 0 0 4px color-mix(in srgb,var(--g1) 30%,transparent)}
+.vinyl::after{content:"";position:absolute;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;
+  border-radius:50%;background:var(--page)}
+.vinyl.spin{animation:spin 2.4s linear infinite}
+.vinyl .pul{position:absolute;inset:-6px;border-radius:50%;border:2px solid var(--g1);opacity:.5;
+  animation:ripple 1.8s ease-out infinite}
+
+/* B3 声波涟漪 */
+.ripwrap{position:relative;width:130px;height:130px;left:50%;top:50%;margin:-65px 0 0 -65px;display:flex;align-items:center;justify-content:center}
+.ripwrap .cbtn{width:52px;height:52px;border-radius:50%;background:var(--primary);color:#fff;border:none;
+  display:flex;align-items:center;justify-content:center;z-index:2}
+.ripwrap span{position:absolute;width:52px;height:52px;border-radius:50%;border:2px solid var(--primary);
+  animation:ripple 1.6s ease-out infinite}
+.ripwrap span:nth-child(2){animation-delay:.5s}
+.ripwrap span:nth-child(3){animation-delay:1s}
+@keyframes ripple{0%{transform:scale(1);opacity:.7}100%{transform:scale(2.4);opacity:0}}
+
+/* B4 声呐扫描 */
+.sonar{width:130px;height:130px;border-radius:50%;left:50%;top:50%;margin:-65px 0 0 -65px;
+  background:conic-gradient(from 0deg,rgba(139,92,246,0) 0deg,rgba(139,92,246,.55) 60deg,rgba(139,92,246,0) 90deg);
+  border:1px solid var(--outline-variant);animation:spin 2s linear infinite}
+
+/* B5 全屏沉浸波形 */
+.wave{left:0;right:0;top:50%;height:80px;margin-top:-40px;display:flex;align-items:center;justify-content:center}
+.wave svg{width:100%;height:80px}
+.wave path{fill:none;stroke:var(--g1);stroke-width:2.5;stroke-linecap:round}
+.pop.show .wave path{stroke-dasharray:600;stroke-dashoffset:600;animation:draw 2.6s ease-in-out infinite}
+
+/* B6 气泡升腾 */
+.bubwrap{position:absolute;inset:0;overflow:hidden}
+.bubwrap i{position:absolute;bottom:-30px;border-radius:50%;
+  background:radial-gradient(circle at 32% 30%,rgba(255,255,255,.85),color-mix(in srgb,var(--g3) 55%,transparent));
+  animation:rise 3s ease-in infinite}
+@keyframes rise{0%{transform:translateY(0) scale(.7);opacity:0}20%{opacity:.9}100%{transform:translateY(-200px) scale(1.1);opacity:0}}
+
+/* B7 黑胶上浮卡片 */
+.fcard{width:180px;left:50%;top:50%;margin:-70px 0 0 -90px;padding:14px;border-radius:18px;background:var(--card);
+  box-shadow:0 16px 40px rgba(80,50,150,.35);transform:translateY(30px) scale(.85);
+  transition:transform .38s cubic-bezier(.2,1.25,.4,1),opacity .28s}
+.pop.show .fcard{transform:translateY(0) scale(1)}
+.fcard .cover{height:64px;border-radius:12px;background:linear-gradient(135deg,var(--g1),var(--g2),var(--g3));
+  display:flex;align-items:center;justify-content:center;color:#fff}
+.fcard .bar{height:4px;border-radius:4px;background:var(--outline-variant);margin-top:12px;overflow:hidden}
+.fcard .bar i{display:block;height:100%;width:52%;background:var(--g1)}
+
+/* B8 时长提示 */
+.timecap{left:50%;top:50%;transform:translate(-50%,-50%) scale(.8);padding:9px 16px;border-radius:999px;
+  background:var(--on-surface);color:var(--page);font-size:12px;font-weight:700;white-space:nowrap;
+  transition:transform .25s,opacity .25s}
+.pop.show .timecap{transform:translate(-50%,-50%) scale(1)}
+.timecap b{color:var(--g2)}
+
+/* B9 轨道粒子 */
+.orbit{width:130px;height:130px;left:50%;top:50%;margin:-65px 0 0 -65px;animation:spin 3.4s linear infinite}
+.orbit .ring1{position:absolute;inset:8px;border-radius:50%;border:1px dashed var(--outline)}
+.orbit .ring2{position:absolute;inset:26px;border-radius:50%;border:1px solid var(--outline-variant)}
+.orbit .core{position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px 0 0 -24px;border-radius:50%;
+  background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center}
+.orbit .pt{position:absolute;width:9px;height:9px;border-radius:50%;background:var(--g3)}
+.orbit .pt.a{top:-4px;left:50%;margin-left:-4px}
+.orbit .pt.b{bottom:14px;right:6px;background:var(--g2)}
+.orbit .pt.c{top:30px;left:2px;background:var(--g1)}
+
+/* B10 柱状频谱 */
+.spectrum{left:16px;right:16px;bottom:20px;height:80px;display:flex;align-items:flex-end;gap:5px}
+.spectrum i{flex:1;border-radius:4px 4px 0 0;background:linear-gradient(180deg,var(--g1),var(--g3));
+  animation:spec .7s ease-in-out infinite}
+@keyframes spec{0%,100%{height:14%}50%{height:92%}}
+
+.hint{font-size:11px;color:var(--outline);margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>播放按钮 & 播放动画样式预览</h1>
+  <div class="sub">乐少微信助手 V3 · 葡萄气泡主题令牌（#8B5CF6 / #D8B4FE / #FFAFCC）。点按钮可切换播放态，点“试看”触发对应弹窗动画。</div>
+</header>
+<div class="toolbar">
+  <button class="pill" id="themeBtn">切换深色模式</button>
+  <span class="hint" style="margin:0">A 区 10 套按钮 · B 区 10 套弹窗动画</span>
+</div>
+<main>
+  <h2><span class="dot"></span>A. 播放按钮 10 套</h2>
+  <div class="grid" id="btnGrid"></div>
+
+  <h2><span class="dot"></span>B. 点击播放的弹窗 / 动画 10 套</h2>
+  <div class="grid" id="popGrid"></div>
+</main>
+
+<script>
+const IC_PLAY = '<svg class="ic-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+const IC_PAUSE = '<svg class="ic-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+
+const buttons = [
+  {no:'A1',name:'环形进度环',desc:'40dp 正圆，外圈用当前播放占比画 arc；播放中环变粉色 tertiary。推荐。',
+   html:`<button class="pb pb1" data-anim="ring"><span class="ring"></span><span class="core">${IC_PLAY}${IC_PAUSE}</span></button>`},
+  {no:'A2',name:'流光渐变填充',desc:'三色渐变底 + 白色图标，播放态反色为透明底加渐变描边。推荐。',
+   html:`<button class="pb pb2">${IC_PLAY}${IC_PAUSE}</button>`},
+  {no:'A3',name:'霓虹描边',desc:'透明底 + 渐变描边 + 外发光，播放中描边做呼吸脉冲。',
+   html:`<button class="pb pb3">${IC_PLAY}${IC_PAUSE}</button>`},
+  {no:'A4',name:'玻璃气泡',desc:'半透明主色 + 毛玻璃 + 白色高光描边，按下透明度加深。',
+   html:`<button class="pb pb4">${IC_PLAY}${IC_PAUSE}</button>`},
+  {no:'A5',name:'波形胶囊',desc:'胶囊内 5 根竖条，播放中按相位上下跳动，暂停压成低位。',
+   html:`<button class="pb pb5"><i class="bar"></i><i class="bar"></i><i class="bar"></i><i class="bar"></i><i class="bar"></i></button>`},
+  {no:'A6',name:'拟物双态',desc:'外投影 + 内高光，播放中投影转内凹，立体感强。',
+   html:`<button class="pb pb6">${IC_PLAY}${IC_PAUSE}</button>`},
+  {no:'A7',name:'磨砂磁贴',desc:'12dp 圆角方磁贴 + 顶部高光，按住缩放到 0.92。',
+   html:`<button class="pb pb7">${IC_PLAY}${IC_PAUSE}</button>`},
+  {no:'A8',name:'音符徽章',desc:'主色容器圆底，播放中图标轻微左右摇摆。',
+   html:`<button class="pb pb8">${IC_PLAY}${IC_PAUSE}</button>`},
+  {no:'A9',name:'磁带轮',desc:'圆角磁带，左右两轮随播放旋转，粉色系。',
+   html:`<button class="pb pb9"><i class="reel l"></i><i class="reel r"></i>${IC_PLAY}${IC_PAUSE}</button>`},
+  {no:'A10',name:'极简幽灵',desc:'无背景只有图标，点击出圆形 ripple，播放态镜像翻转。',
+   html:`<button class="pb pb10">${IC_PLAY}${IC_PAUSE}</button>`},
+];
+
+const pops = [
+  {no:'B1',name:'底部迷你播放条',desc:'从底部滑入的胶囊：动态波形 + 标题 + 进度 + 控制。最不遮挡，推荐。',
+   stage:`<div class="pop"><div class="mini"><div class="wv"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="meta"><b>已选音频.mp3</b><div class="track"><i></i></div></div><button class="mc">${IC_PAUSE}</button></div></div>`},
+  {no:'B2',name:'中央悬浮唱片',desc:'圆形唱片自旋 + 外圈脉冲，点外部关闭。',
+   stage:`<div class="pop"><div class="vinyl spin"><span class="pul"></span></div></div>`},
+  {no:'B3',name:'声波涟漪',desc:'中心按钮 + 同心圆逐层扩散，暂停时涟漪冻结。',
+   stage:`<div class="pop"><div class="ripwrap"><span></span><span></span><span></span><button class="cbtn">${IC_PAUSE}</button></div></div>`},
+  {no:'B4',name:'声呐扫描',desc:'扇形光束旋转扫描，营造“正在播放”氛围。',
+   stage:`<div class="pop"><div class="sonar"></div></div>`},
+  {no:'B5',name:'全屏沉浸波形',desc:'居中大号平滑正弦波，相位水平流动，暂停冻结成直线。',
+   stage:`<div class="pop"><div class="wave"><svg viewBox="0 0 300 80" preserveAspectRatio="none"><path d="M0 40 C 30 5, 60 75, 90 40 S 150 5, 180 40 S 240 75, 270 40 S 330 5, 360 40"/></svg></div></div>`},
+  {no:'B6',name:'气泡升腾',desc:'半透明气泡从底部缓缓上升，粉系甜风格。',
+   stage:`<div class="pop"><div class="bubwrap"><i style="left:12%;width:16px;height:16px;animation-delay:0s"></i><i style="left:34%;width:24px;height:24px;animation-delay:.7s"></i><i style="left:58%;width:14px;height:14px;animation-delay:1.2s"></i><i style="left:78%;width:20px;height:20px;animation-delay:1.8s"></i></div></div>`},
+  {no:'B7',name:'黑胶上浮卡片',desc:'卡片从下方缩放上浮到中央并投影，含封面与进度。',
+   stage:`<div class="pop"><div class="fcard"><div class="cover">${IC_PLAY}</div><div class="bar"><i></i></div></div></div>`},
+  {no:'B8',name:'时长提示胶囊',desc:'不弹独立窗，仅淡入一个“播放中 00:12 / 00:45”小胶囊，成本最低。',
+   stage:`<div class="pop"><div class="timecap">播放中 <b>00:12</b> / 00:45</div></div>`},
+  {no:'B9',name:'轨道粒子盘',desc:'中央圆盘放控制，粒子沿轨道公转，播放转、暂停停。',
+   stage:`<div class="pop"><div class="orbit"><div class="ring1"></div><div class="ring2"></div><span class="pt a"></span><span class="pt b"></span><span class="pt c"></span><div class="core">${IC_PAUSE}</div></div></div>`},
+  {no:'B10',name:'流光音浪',desc:'全宽柱状频谱，用假数据驱动，配色走主题渐变。',
+   stage:`<div class="pop"><div class="spectrum">${Array.from({length:18},(_,i)=>`<i style="animation-delay:${(i*0.07).toFixed(2)}s;height:${20+((i*37)%70)}%"></i>`).join('')}</div></div>`},
+];
+
+const btnGrid = document.getElementById('btnGrid');
+buttons.forEach(b=>{
+  const card = document.createElement('div');
+  card.className='card';
+  card.innerHTML = `<div class="hd"><span class="no">${b.no}</span><span class="name">${b.name}</span></div>
+    <div class="desc">${b.desc}</div><div class="stage"><div class="playrow">${b.html}</div></div>`;
+  btnGrid.appendChild(card);
+});
+
+const popGrid = document.getElementById('popGrid');
+pops.forEach(b=>{
+  const card = document.createElement('div');
+  card.className='card';
+  card.innerHTML = `<div class="hd"><span class="no">${b.no}</span><span class="name">${b.name}</span></div>
+    <div class="desc">${b.desc}</div>
+    <div class="stage tall"><button class="trigger">试看</button>${b.stage}</div>`;
+  popGrid.appendChild(card);
+});
+
+document.querySelectorAll('.pb').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const on = btn.classList.toggle('playing');
+    if(btn.dataset.anim==='ring'){
+      if(on){
+        let p=parseFloat(btn.style.getPropertyValue('--p'))||0;
+        btn._t=setInterval(()=>{p=(p+0.8)%100;btn.style.setProperty('--p',p);},40);
+      }else{clearInterval(btn._t);btn.style.setProperty('--p',0);}
+    }
+  });
+});
+
+document.querySelectorAll('.trigger').forEach(tr=>{
+  tr.addEventListener('click',()=>{
+    const stage = tr.closest('.stage');
+    const pop = stage.querySelector('.pop');
+    if(pop._timer) clearTimeout(pop._timer);
+    pop.classList.add('show');
+    pop._timer = setTimeout(()=>pop.classList.remove('show'), 3600);
+  });
+});
+
+const themeBtn=document.getElementById('themeBtn');
+themeBtn.addEventListener('click',()=>{
+  const dark=document.documentElement.getAttribute('data-theme')==='dark';
+  document.documentElement.setAttribute('data-theme',dark?'light':'dark');
+  themeBtn.textContent=dark?'切换深色模式':'切换浅色模式';
+});
+</script>
+</body>
+</html>

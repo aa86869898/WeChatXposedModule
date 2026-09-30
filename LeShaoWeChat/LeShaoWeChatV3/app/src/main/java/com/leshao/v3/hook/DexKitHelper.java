@@ -1,8 +1,10 @@
 package com.leshao.v3.hook;
 
 import android.app.Application;
+import android.content.Context;
 
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.PathUtil;
 import com.tencent.mmkv.MMKV;
 
 import org.luckypray.dexkit.DexKitBridge;
@@ -45,8 +47,6 @@ public class DexKitHelper {
     private static final String KEY_IMEI_METHOD = "imei_method";
     private static final String KEY_CSO_LOADER = "cso_loader";
     private static final String KEY_CSO_LOADER_METHOD = "cso_loader_method";
-    private static final String KEY_J1_CALLER_CLASS = "j1_caller_class";
-    private static final String KEY_J1_CALLER_METHOD = "j1_caller_method";
     private static final String KEY_J1_SERVICE = "j1_service";
     private static final String KEY_CONTACT_STORAGE = "contact_storage";
     private static final String KEY_CHAT_OPEN_CLASS = "chat_open_class";
@@ -60,6 +60,7 @@ public class DexKitHelper {
     private static final String KEY_VOICE_API = "voice_api";
     private static final String KEY_E9_CLASS = "e9_class";
     private static final String KEY_A21_CLASS = "a21_class";
+    private static final String KEY_A21_METHOD = "a21_method";
     private static final String KEY_AVATAR_HELPER = "avatar_helper";
     private static final String KEY_LABEL_STORAGE = "label_storage";
     private static final String KEY_CONV_LIST_ADAPTER = "conv_list_adapter";
@@ -67,6 +68,25 @@ public class DexKitHelper {
     private static final String KEY_CONV_LP_IMPLS = "conv_lp_impls";
     /** v1094: 标题栏(ActionBarCustomArea) helper 类名, 供三横菜单标题栏注入使用 */
     private static final String KEY_ACTION_BAR_CLASS = "action_bar_custom_area";
+    /** v955: 3180 适配目标缓存键(此前从不落盘, 导致分身/热启动拿不到 label provider) */
+    private static final String KEY_LABEL_PROVIDER_CLASS = "label_provider_class";
+    private static final String KEY_LABEL_PROVIDER_METHOD = "label_provider_method";
+    private static final String KEY_REVOKE_LISTENERS = "revoke_listeners";
+    private static final String KEY_PINYIN_UTIL = "pinyin_util";
+    private static final String KEY_SERVICE_LOCATOR = "service_locator";
+    private static final String KEY_MEDIA_PATH_SERVICE = "media_path_service";
+    private static final String KEY_MEDIA_PATH_METHOD = "media_path_method";
+    private static final String KEY_CLIPBOARD_JSAPI = "clipboard_jsapi";
+    private static final String KEY_CHAT_MORE_SELECT = "chat_more_select";
+
+    /**
+     * v1101: 大厅基线。
+     * <p>「大厅」= 模块 APK 内置的扫描结果快照(assets/{@link #BASELINE_ASSET})。
+     * 模块 APK 是所有实例都能读的公共只读文件; 主微信与分身微信版本一致时解析表完全相同,
+     * 因此各实例运行时直接共享读取同一份, 不做复制。MMKV 仅保留运行时增量(补扫结果)。</p>
+     */
+    private static final String BASELINE_ASSET = "dexkit_baseline.json";
+    private static final String BASELINE_FILE = "dexkit_baseline.json";
 
     private static final AtomicBoolean sLibraryLoaded = new AtomicBoolean(false);
     private static volatile boolean sScanComplete = false;
@@ -102,6 +122,25 @@ public class DexKitHelper {
     public static boolean isReloading() { return sReloading; }
 
     /**
+     * 全局扫描串行锁: forceReload / 主扫描 / 精准补扫 / 缓存写回 共用,
+     * 避免并发写静态字段与 MMKV(问题10/16)。
+     */
+    private static final Object sScanLock = new Object();
+    /** 分身进程关键键补扫每进程仅尝试一次, 避免反复失败刷屏。 */
+    private static final AtomicBoolean sCloneRescanAttempted = new AtomicBoolean(false);
+    /**
+     * 完整扫描每进程仅调度一次: 防止主进程/分身分支或多次 attachBaseContext 重复触发全量扫描。
+     * 不复位(见 {@link #startFullScan} 注释)。
+     */
+    private static final AtomicBoolean sFullScanScheduled = new AtomicBoolean(false);
+
+    /** 统一置「扫描完成」标志(与读端同锁)后再 drain 回调, 消除回调排队竞态。 */
+    private static void markScanCompleteAndDrain() {
+        synchronized (DexKitHelper.class) { sScanComplete = true; }
+        runPostScanCallbacks();
+    }
+
+    /**
      * v1079: 「关于模块」手动重新加载 DexKit。
      * 用于微信卡顿/异常导致首次 DexKit 扫描未完成或未加载时，手动重新初始化并扫描。
      */
@@ -116,33 +155,37 @@ public class DexKitHelper {
             public void run() {
                 DexKitCacheBridge.RecyclableBridge bridge = null;
                 try {
-                    android.content.Context ctx = com.leshao.v3.ContextManager.getAppContext();
-                    if (!(ctx instanceof Application)) {
-                        LogWriter.log(TAG, "forceReload: app context 不可用");
-                        return;
+                    synchronized (sScanLock) {
+                        android.content.Context ctx = com.leshao.v3.ContextManager.getAppContext();
+                        if (!(ctx instanceof Application)) {
+                            LogWriter.log(TAG, "forceReload: app context 不可用");
+                            return;
+                        }
+                        Application app = (Application) ctx;
+                        synchronized (DexKitHelper.class) {
+                            sScanComplete = false;
+                        }
+                        loadDexKitLibrary(app);
+                        if (!sLibraryLoaded.get()) {
+                            LogWriter.log(TAG, "forceReload: DexKit 库加载失败");
+                            return;
+                        }
+                        initDexKitCache(app);
+                        bridge = createBridge(app.getClassLoader());
+                        if (bridge == null) {
+                            LogWriter.log(TAG, "forceReload: bridge 创建失败");
+                            return;
+                        }
+                        LogWriter.log(TAG, "forceReload: 开始重新扫描 DexKit");
+                        scanWechatTargets(bridge);
+                        LogWriter.log(TAG, "forceReload: 重新扫描完成, complete=" + sScanComplete);
                     }
-                    Application app = (Application) ctx;
-                    synchronized (DexKitHelper.class) {
-                        sScanComplete = false;
-                    }
-                    loadDexKitLibrary(app);
-                    if (!sLibraryLoaded.get()) {
-                        LogWriter.log(TAG, "forceReload: DexKit 库加载失败");
-                        return;
-                    }
-                    initDexKitCache(app);
-                    bridge = createBridge(app.getClassLoader());
-                    if (bridge == null) {
-                        LogWriter.log(TAG, "forceReload: bridge 创建失败");
-                        return;
-                    }
-                    LogWriter.log(TAG, "forceReload: 开始重新扫描 DexKit");
-                    scanWechatTargets(bridge);
-                    LogWriter.log(TAG, "forceReload: 重新扫描完成, complete=" + sScanComplete);
                 } catch (Throwable t) {
                     LogWriter.log(TAG, "forceReload err: " + t.getMessage());
                 } finally {
                     if (bridge != null) try { bridge.close(); } catch (Throwable ignored) {}
+                    // 失败时也要放行回调, 避免永久排队
+                    if (!sScanComplete) markScanCompleteAndDrain();
                     sReloading = false;
                 }
             }
@@ -160,11 +203,17 @@ public class DexKitHelper {
     }
 
     private static void runPostScanCallbacks() {
-        synchronized (DexKitHelper.class) {
-            for (Runnable cb : sPostScanCallbacks) {
+        // 循环 drain 直到列表为空: 回调执行期间可能又有新回调注册(问题3)
+        while (true) {
+            java.util.List<Runnable> pending;
+            synchronized (DexKitHelper.class) {
+                if (sPostScanCallbacks.isEmpty()) return;
+                pending = new java.util.ArrayList<>(sPostScanCallbacks);
+                sPostScanCallbacks.clear();
+            }
+            for (Runnable cb : pending) {
                 try { cb.run(); } catch (Throwable e) { LogWriter.log(TAG, "postScanCallback error: " + e.getMessage()); }
             }
-            sPostScanCallbacks.clear();
         }
     }
 
@@ -176,8 +225,6 @@ public class DexKitHelper {
     private static volatile String sImeiMethodName;
     private static volatile String sCsoLoaderClass;
     private static volatile String sCsoLoaderMethod;
-    private static volatile String sJ1CallerClass;
-    private static volatile String sJ1CallerMethod;
     private static volatile String sContactStorageClass;
     private static volatile String sChatOpenClass;
     private static volatile String sChatOpenMethod;
@@ -191,6 +238,7 @@ public class DexKitHelper {
     private static volatile String sVoiceApiClass;
     private static volatile String sE9ClassName;
     private static volatile String sA21ClassName;
+    private static volatile String sA21MethodName;
     private static volatile String sAvatarHelperClass;
     private static volatile String sLabelStorageClass;
     private static volatile String sConvListListAdapterClass;
@@ -215,6 +263,24 @@ public class DexKitHelper {
 
     private static DexKitCacheBridge.RecyclableBridge createBridge(ClassLoader cl) {
         try {
+            // v1101: 全局 cache 尚未 init 时自举, 否则 create 会报 "Wrapper must be init(cache) first"
+            if (!sCacheInitialized) {
+                android.content.Context ctx = sAppContextForCache;
+                if (ctx == null) {
+                    // v1118: 跨进程(如长按菜单在其他进程解析)时 sAppContextForCache 为空, 回退到 ContextManager
+                    try { ctx = com.leshao.v3.ContextManager.getAppContext(); } catch (Throwable ignored) {}
+                }
+                if (ctx instanceof Application) {
+                    loadDexKitLibrary((Application) ctx);
+                    initDexKitCache(ctx);
+                } else if (ctx != null) {
+                    initDexKitCache(ctx);
+                }
+                if (!sCacheInitialized) {
+                    LogWriter.log(TAG, "createBridge: cache 自举失败(无 app context), 放弃");
+                    return null;
+                }
+            }
             return DexKitCacheBridge.create(
                 "wechat_" + (sVersionCode > 0 ? sVersionCode : ""),
                 cl != null ? cl : DexKitHelper.class.getClassLoader());
@@ -453,8 +519,14 @@ public class DexKitHelper {
     }
 
     private static volatile boolean sCacheInitialized = false;
+    /** v1101: 供 createBridge 在全局 cache 尚未 init 时自举使用(跨进程各持一份)。 */
+    private static volatile android.content.Context sAppContextForCache = null;
+    /** v1101: 标题栏键补扫每进程仅尝试一次, 避免反复失败刷屏。 */
+    private static final AtomicBoolean sActionBarRescanAttempted = new AtomicBoolean(false);
 
     private static synchronized void initDexKitCache(android.content.Context appContext) {
+        if (appContext != null) sAppContextForCache = appContext.getApplicationContext() != null
+                ? appContext.getApplicationContext() : appContext;
         if (sCacheInitialized) return;
         try {
             MMKV.initialize(appContext);
@@ -493,8 +565,6 @@ public class DexKitHelper {
             sImeiMethodName = kv.decodeString(KEY_IMEI_METHOD, null);
             sCsoLoaderClass = kv.decodeString(KEY_CSO_LOADER, null);
             sCsoLoaderMethod = kv.decodeString(KEY_CSO_LOADER_METHOD, null);
-            sJ1CallerClass = kv.decodeString(KEY_J1_CALLER_CLASS, null);
-            sJ1CallerMethod = kv.decodeString(KEY_J1_CALLER_METHOD, null);
             sJ1ServiceClass = kv.decodeString(KEY_J1_SERVICE, null);
             sContactStorageClass = kv.decodeString(KEY_CONTACT_STORAGE, null);
             sChatOpenClass = kv.decodeString(KEY_CHAT_OPEN_CLASS, null);
@@ -508,10 +578,32 @@ public class DexKitHelper {
             sVoiceApiClass = kv.decodeString(KEY_VOICE_API, null);
             sE9ClassName = kv.decodeString(KEY_E9_CLASS, null);
             sA21ClassName = kv.decodeString(KEY_A21_CLASS, null);
+            sA21MethodName = kv.decodeString(KEY_A21_METHOD, null);
             sAvatarHelperClass = kv.decodeString(KEY_AVATAR_HELPER, null);
             sLabelStorageClass = kv.decodeString(KEY_LABEL_STORAGE, null);
             sConvListListAdapterClass = kv.decodeString(KEY_CONV_LIST_ADAPTER, null);
             sActionBarCustomAreaClass = kv.decodeString(KEY_ACTION_BAR_CLASS, null);
+
+            // v955: 3180 适配目标(此前缺失导致分身/热启动 label provider 恒 null)
+            sLabelStorageProviderClass = kv.decodeString(KEY_LABEL_PROVIDER_CLASS, null);
+            String lpMethod = kv.decodeString(KEY_LABEL_PROVIDER_METHOD, null);
+            if (lpMethod != null && !lpMethod.isEmpty()) sLabelStorageProviderMethod = lpMethod;
+            sPinyinUtilClass = kv.decodeString(KEY_PINYIN_UTIL, null);
+            sServiceLocatorClass = kv.decodeString(KEY_SERVICE_LOCATOR, null);
+            sMediaPathServiceClass = kv.decodeString(KEY_MEDIA_PATH_SERVICE, null);
+            String mpMethod = kv.decodeString(KEY_MEDIA_PATH_METHOD, null);
+            if (mpMethod != null && !mpMethod.isEmpty()) sMediaPathMethod = mpMethod;
+            sClipboardJsApiClass = kv.decodeString(KEY_CLIPBOARD_JSAPI, null);
+            String revoke = kv.decodeString(KEY_REVOKE_LISTENERS, null);
+            if (revoke != null && !revoke.isEmpty()) {
+                sRevokeListenerClasses = new java.util.ArrayList<>();
+                for (String s : revoke.split("\\|")) if (!s.isEmpty()) sRevokeListenerClasses.add(s);
+            }
+            String chatMore = kv.decodeString(KEY_CHAT_MORE_SELECT, null);
+            if (chatMore != null && !chatMore.isEmpty()) {
+                sChatMoreSelectClasses = new java.util.ArrayList<>();
+                for (String s : chatMore.split("\\|")) if (!s.isEmpty()) sChatMoreSelectClasses.add(s);
+            }
 
             String lpImpls = kv.decodeString(KEY_CONV_LP_IMPLS, null);
             if (lpImpls != null && !lpImpls.isEmpty()) {
@@ -524,22 +616,28 @@ public class DexKitHelper {
                 for (String s : menuImpls.split("\\|")) if (!s.isEmpty()) sMenuG4Impls.add(s);
             }
 
-            // 仅核心必选字段纳入完整性判定; convScroll/convLongPress/convMenu/a21/label/
-            // convAdapter/j1Caller 在当前版本可能扫描不到(可选),缺失时不再判缓存不完整,
-            // 否则每次启动都会清缓存重扫(见 leshao_v3_log: incomplete cached results)。
-            boolean hasResults = (sP06ClassName != null && sDbOpenerClass != null && sDbOpenMethodName != null
+            // 仅核心必选字段纳入「缓存可用」判定; convScroll/convLongPress/convMenu/a21/label/
+            // convAdapter/j1Caller 在当前版本可能扫描不到(可选)。
+            // v955: 关键键(标签 provider / 服务定位器)缺失不再清空全量缓存,
+            // 而是判为「可用但需定向补扫」, 保留其余键, 否则补扫只覆盖 v955 会丢掉核心键。
+            boolean hasV955Critical = sLabelStorageProviderClass != null
+                && sLabelStorageProviderMethod != null && !sLabelStorageProviderMethod.isEmpty()
+                && sServiceLocatorClass != null;
+            boolean hasCoreResults = (sP06ClassName != null && sDbOpenerClass != null && sDbOpenMethodName != null
                 && sImeiClassName != null && sImeiMethodName != null && sCsoLoaderClass != null
                 && sJ1ServiceClass != null && sContactStorageClass != null
                 && sChatOpenClass != null && sChatOpenMethod != null
                 && sVoiceApiClass != null && sE9ClassName != null && sAvatarHelperClass != null);
 
-            if (!hasResults) {
+            if (!hasCoreResults) {
                 LogWriter.log(TAG, "loadResultsFromMMKV: incomplete cached results, clearing cache");
                 kv.clearAll();
+                kv.sync();
                 return false;
             }
 
-            LogWriter.log(TAG, "loadResultsFromMMKV: loaded cached results for version " + cachedVersion);
+            LogWriter.log(TAG, "loadResultsFromMMKV: loaded cached results for version " + cachedVersion
+                + " v955Critical=" + hasV955Critical);
 
             // Initialize DexKit bridge so post-scan callbacks can use findClassesByString
             DexKitCacheBridge.RecyclableBridge bridge = null;
@@ -555,6 +653,8 @@ public class DexKitHelper {
                 LogWriter.log(TAG, "loadResultsFromMMKV: bridge init err: " + e.getMessage());
             }
 
+            // v955(问题3): 先置「完成」标志再 drain 回调, 消除 addPostScanCallback 竞态窗口
+            synchronized (DexKitHelper.class) { sScanComplete = true; }
             runPostScanCallbacks();
 
             // Close bridge after all callbacks have finished
@@ -562,8 +662,10 @@ public class DexKitHelper {
                 try { bridge.close(); } catch (Throwable ignored) {}
             }
 
-            // Mark scan complete AFTER callbacks have run and bridge is ready
-            sScanComplete = true;
+            // v1101: 缓存命中但缺「标题栏」键时(旧版本缓存/分身首次), 后台精准补扫一次
+            rescanActionBarIfMissing(app);
+            // v955(问题2): 缓存命中但缺 3180 关键键(标签 provider/服务定位器)时, 定向补扫并回写
+            if (!hasV955Critical) rescanMissingV955Keys(app);
             return true;
         } catch (Throwable e) {
             LogWriter.log(TAG, "loadResultsFromMMKV error: " + e.getMessage());
@@ -593,8 +695,6 @@ public class DexKitHelper {
             if (sImeiMethodName != null) kv.encode(KEY_IMEI_METHOD, sImeiMethodName);
             if (sCsoLoaderClass != null) kv.encode(KEY_CSO_LOADER, sCsoLoaderClass);
             if (sCsoLoaderMethod != null) kv.encode(KEY_CSO_LOADER_METHOD, sCsoLoaderMethod);
-            if (sJ1CallerClass != null) kv.encode(KEY_J1_CALLER_CLASS, sJ1CallerClass);
-            if (sJ1CallerMethod != null) kv.encode(KEY_J1_CALLER_METHOD, sJ1CallerMethod);
             if (sJ1ServiceClass != null) kv.encode(KEY_J1_SERVICE, sJ1ServiceClass);
             if (sContactStorageClass != null) kv.encode(KEY_CONTACT_STORAGE, sContactStorageClass);
             if (sChatOpenClass != null) kv.encode(KEY_CHAT_OPEN_CLASS, sChatOpenClass);
@@ -608,6 +708,7 @@ public class DexKitHelper {
             if (sVoiceApiClass != null) kv.encode(KEY_VOICE_API, sVoiceApiClass);
             if (sE9ClassName != null) kv.encode(KEY_E9_CLASS, sE9ClassName);
             if (sA21ClassName != null) kv.encode(KEY_A21_CLASS, sA21ClassName);
+            if (sA21MethodName != null) kv.encode(KEY_A21_METHOD, sA21MethodName);
             if (sAvatarHelperClass != null) kv.encode(KEY_AVATAR_HELPER, sAvatarHelperClass);
             if (sLabelStorageClass != null) kv.encode(KEY_LABEL_STORAGE, sLabelStorageClass);
             if (sConvListListAdapterClass != null) kv.encode(KEY_CONV_LIST_ADAPTER, sConvListListAdapterClass);
@@ -629,10 +730,360 @@ public class DexKitHelper {
                 }
                 kv.encode(KEY_MENU_G4_IMPLS, sb.toString());
             }
+
+            // v955: 3180 适配目标纳入落盘(此前缺失, 导致分身/热启动 label provider 恒 null)
+            if (sLabelStorageProviderClass != null) kv.encode(KEY_LABEL_PROVIDER_CLASS, sLabelStorageProviderClass);
+            if (sLabelStorageProviderMethod != null) kv.encode(KEY_LABEL_PROVIDER_METHOD, sLabelStorageProviderMethod);
+            if (sPinyinUtilClass != null) kv.encode(KEY_PINYIN_UTIL, sPinyinUtilClass);
+            if (sServiceLocatorClass != null) kv.encode(KEY_SERVICE_LOCATOR, sServiceLocatorClass);
+            if (sMediaPathServiceClass != null) kv.encode(KEY_MEDIA_PATH_SERVICE, sMediaPathServiceClass);
+            if (sMediaPathMethod != null) kv.encode(KEY_MEDIA_PATH_METHOD, sMediaPathMethod);
+            if (sClipboardJsApiClass != null) kv.encode(KEY_CLIPBOARD_JSAPI, sClipboardJsApiClass);
+            if (!sRevokeListenerClasses.isEmpty()) kv.encode(KEY_REVOKE_LISTENERS, joinList(sRevokeListenerClasses));
+            if (!sChatMoreSelectClasses.isEmpty()) kv.encode(KEY_CHAT_MORE_SELECT, joinList(sChatMoreSelectClasses));
+
+            // 问题11: 关键写后 sync, 避免 clearAll 中间态被其他进程读到
+            kv.sync();
             LogWriter.log(TAG, "saveResultsToMMKV: done for version " + sVersionCode);
         } catch (Throwable e) {
             LogWriter.log(TAG, "saveResultsToMMKV error: " + e.getMessage());
         }
+    }
+
+    /** "|" 连接字符串列表, 供 MMKV/基线序列化复用。 */
+    private static String joinList(java.util.List<String> list) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < list.size(); i++) {
+            if (i > 0) sb.append("|");
+            sb.append(list.get(i));
+        }
+        return sb.toString();
+    }
+
+    // ==================== v1101: 大厅基线(导入/导出) + 精准补扫 ====================
+
+    /** 本实例房间是否已有与当前版本一致的完整缓存。 */
+    private static boolean hasCompleteLocalCache() {
+        try {
+            MMKV kv = MMKV.mmkvWithID(MMKV_RESULTS_ID, MMKV.MULTI_PROCESS_MODE);
+            if (kv.decodeInt(KEY_VERSION_CODE, 0) != sVersionCode) return false;
+            if (kv.decodeInt(KEY_MODULE_VERSION, 0) != sModuleVersion) return false;
+            if (kv.decodeString(KEY_P06_CLASS, null) == null) return false;
+            if (kv.decodeString(KEY_DB_OPENER_CLASS, null) == null) return false;
+            if (kv.decodeString(KEY_CONTACT_STORAGE, null) == null) return false;
+            if (kv.decodeString(KEY_J1_SERVICE, null) == null) return false;
+            // v955: 关键键(标签 provider / 服务定位器)纳入完整性判定, 分身缺它则走补扫
+            if (kv.decodeString(KEY_LABEL_PROVIDER_CLASS, null) == null) return false;
+            if (kv.decodeString(KEY_LABEL_PROVIDER_METHOD, null) == null) return false;
+            if (kv.decodeString(KEY_SERVICE_LOCATOR, null) == null) return false;
+            return true;
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    /**
+     * 读取模块 APK 大厅(assets/{@link #BASELINE_ASSET})里的解析表。
+     * <p>模块 APK 是所有实例都能读的公共只读文件; 主微信与分身版本一致时解析表完全相同,
+     * 因此各实例直接共享同一份, 无需复制。必须用模块 APK 路径 + addAssetPath 读取,
+     * 不能用宿主 Application.getAssets()(那读的是微信自己的资源)。</p>
+     */
+    private static org.json.JSONObject readModuleBaselineJson() {
+        java.io.InputStream in = null;
+        try {
+            String moduleApk = com.leshao.v3.IconLoader.moduleApkPath();
+            if (moduleApk == null || moduleApk.isEmpty()) {
+                LogWriter.log(TAG, "readModuleBaseline: moduleApkPath null");
+                return null;
+            }
+            android.content.res.AssetManager am = android.content.res.AssetManager.class
+                    .getDeclaredConstructor().newInstance();
+            java.lang.reflect.Method addPath = android.content.res.AssetManager.class
+                    .getDeclaredMethod("addAssetPath", String.class);
+            addPath.setAccessible(true);
+            Object cookie = addPath.invoke(am, moduleApk);
+            if (cookie instanceof Integer && (Integer) cookie == 0) {
+                LogWriter.log(TAG, "readModuleBaseline: addAssetPath failed: " + moduleApk);
+                return null;
+            }
+            try {
+                in = am.open(BASELINE_ASSET);
+            } catch (Throwable e) {
+                return null; // 模块 APK 尚未预置基线
+            }
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) != -1) bos.write(buf, 0, n);
+            String json = new String(bos.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+            if (json.trim().isEmpty()) return null;
+            return new org.json.JSONObject(json);
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "readModuleBaseline err: " + e.getMessage());
+            return null;
+        } finally {
+            if (in != null) try { in.close(); } catch (Throwable ignored) {}
+        }
+    }
+
+    /** 把大厅 JSON 的键值填入内存静态字段(与 MMKV 缓存同键名)。 */
+    private static void applyBaselineJsonToFields(org.json.JSONObject o) {
+        if (o == null) return;
+        sP06ClassName = o.optString(KEY_P06_CLASS, null);
+        sDbOpenerClass = o.optString(KEY_DB_OPENER_CLASS, null);
+        sDbOpenMethodName = o.optString(KEY_DB_OPEN_METHOD, null);
+        String dbParams = o.optString(KEY_DB_OPEN_PARAMS, null);
+        if (dbParams != null && !dbParams.isEmpty()) sDbOpenMethodParamTypes = dbParams.split("\\|");
+        sImeiClassName = o.optString(KEY_IMEI_CLASS, null);
+        sImeiMethodName = o.optString(KEY_IMEI_METHOD, null);
+        sCsoLoaderClass = o.optString(KEY_CSO_LOADER, null);
+        sCsoLoaderMethod = o.optString(KEY_CSO_LOADER_METHOD, null);
+        sJ1ServiceClass = o.optString(KEY_J1_SERVICE, null);
+        sContactStorageClass = o.optString(KEY_CONTACT_STORAGE, null);
+        sChatOpenClass = o.optString(KEY_CHAT_OPEN_CLASS, null);
+        sChatOpenMethod = o.optString(KEY_CHAT_OPEN_METHOD, null);
+        sConvScrollClass = o.optString(KEY_CONV_SCROLL_CLASS, null);
+        sConvScrollMethod = o.optString(KEY_CONV_SCROLL_METHOD, null);
+        sConvLongPressClass = o.optString(KEY_CONV_LONGPRESS_CLASS, null);
+        sConvLongPressMethod = o.optString(KEY_CONV_LONGPRESS_METHOD, null);
+        sConvMenuClass = o.optString(KEY_CONV_MENU_CLASS, null);
+        sConvMenuMethod = o.optString(KEY_CONV_MENU_METHOD, null);
+        sVoiceApiClass = o.optString(KEY_VOICE_API, null);
+        sE9ClassName = o.optString(KEY_E9_CLASS, null);
+        sA21ClassName = o.optString(KEY_A21_CLASS, null);
+        sA21MethodName = o.optString(KEY_A21_METHOD, null);
+        sAvatarHelperClass = o.optString(KEY_AVATAR_HELPER, null);
+        sLabelStorageClass = o.optString(KEY_LABEL_STORAGE, null);
+        sConvListListAdapterClass = o.optString(KEY_CONV_LIST_ADAPTER, null);
+        sActionBarCustomAreaClass = o.optString(KEY_ACTION_BAR_CLASS, null);
+
+        // v955: 3180 适配目标纳入基线导入
+        sLabelStorageProviderClass = o.optString(KEY_LABEL_PROVIDER_CLASS, null);
+        String lpMethod = o.optString(KEY_LABEL_PROVIDER_METHOD, null);
+        if (lpMethod != null && !lpMethod.isEmpty()) sLabelStorageProviderMethod = lpMethod;
+        sPinyinUtilClass = o.optString(KEY_PINYIN_UTIL, null);
+        sServiceLocatorClass = o.optString(KEY_SERVICE_LOCATOR, null);
+        sMediaPathServiceClass = o.optString(KEY_MEDIA_PATH_SERVICE, null);
+        String mpMethod = o.optString(KEY_MEDIA_PATH_METHOD, null);
+        if (mpMethod != null && !mpMethod.isEmpty()) sMediaPathMethod = mpMethod;
+        sClipboardJsApiClass = o.optString(KEY_CLIPBOARD_JSAPI, null);
+
+        String lpImpls = o.optString(KEY_CONV_LP_IMPLS, null);
+        if (lpImpls != null && !lpImpls.isEmpty()) {
+            sConvLongPressImpls = new java.util.ArrayList<>();
+            for (String s : lpImpls.split("\\|")) if (!s.isEmpty()) sConvLongPressImpls.add(s);
+        }
+        String menuImpls = o.optString(KEY_MENU_G4_IMPLS, null);
+        if (menuImpls != null && !menuImpls.isEmpty()) {
+            sMenuG4Impls = new java.util.ArrayList<>();
+            for (String s : menuImpls.split("\\|")) if (!s.isEmpty()) sMenuG4Impls.add(s);
+        }
+        String revoke = o.optString(KEY_REVOKE_LISTENERS, null);
+        if (revoke != null && !revoke.isEmpty()) {
+            sRevokeListenerClasses = new java.util.ArrayList<>();
+            for (String s : revoke.split("\\|")) if (!s.isEmpty()) sRevokeListenerClasses.add(s);
+        }
+        String chatMore = o.optString(KEY_CHAT_MORE_SELECT, null);
+        if (chatMore != null && !chatMore.isEmpty()) {
+            sChatMoreSelectClasses = new java.util.ArrayList<>();
+            for (String s : chatMore.split("\\|")) if (!s.isEmpty()) sChatMoreSelectClasses.add(s);
+        }
+    }
+
+    /**
+     * 从模块 APK 大厅直接加载解析表(共享只读, 不复制)。成功即视为扫描完成。
+     *
+     * @return true 表示大厅可用且已填入内存
+     */
+    public static boolean tryLoadBaselineFromModule(Application app) {
+        try {
+            org.json.JSONObject o = readModuleBaselineJson();
+            if (o == null) return false;
+            int ver = o.optInt(KEY_VERSION_CODE, 0);
+            if (ver != sVersionCode) {
+                LogWriter.log(TAG, "baseline: version mismatch (module=" + ver
+                        + " current=" + sVersionCode + "), skip");
+                return false;
+            }
+            // v955(问题2): 基线同时校验 moduleVersion, 版本变更时失效重建
+            int modVer = o.optInt(KEY_MODULE_VERSION, 0);
+            if (modVer != sModuleVersion) {
+                LogWriter.log(TAG, "baseline: moduleVersion mismatch (module=" + modVer
+                        + " current=" + sModuleVersion + "), skip");
+                return false;
+            }
+            if (!o.has(KEY_P06_CLASS) || !o.has(KEY_DB_OPENER_CLASS)
+                    || !o.has(KEY_CONTACT_STORAGE) || !o.has(KEY_J1_SERVICE)) {
+                LogWriter.log(TAG, "baseline: incomplete, skip");
+                return false;
+            }
+            // v955: 关键键(标签 provider/服务定位器)缺失的旧基线不可用, 交由定向补扫
+            if (!o.has(KEY_LABEL_PROVIDER_CLASS) || !o.has(KEY_LABEL_PROVIDER_METHOD)
+                    || !o.has(KEY_SERVICE_LOCATOR)) {
+                LogWriter.log(TAG, "baseline: missing v955 critical keys, skip");
+                return false;
+            }
+            applyBaselineJsonToFields(o);
+            LogWriter.log(TAG, "baseline: applied from module APK (version " + ver
+                    + ", keys=" + o.length() + ")");
+
+            DexKitCacheBridge.RecyclableBridge bridge = null;
+            try {
+                if (app != null) {
+                    loadDexKitLibrary(app);
+                    initDexKitCache(app);
+                    bridge = createBridge(app.getClassLoader());
+                }
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "baseline: bridge init err: " + e.getMessage());
+            }
+            markScanCompleteAndDrain();
+            if (sActionBarCustomAreaClass == null && app != null) rescanActionBarIfMissing(app);
+            if (bridge != null) try { bridge.close(); } catch (Throwable ignored) {}
+            return true;
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "tryLoadBaselineFromModule err: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 把本实例当前完整缓存导出为大厅基线文件(供回填 assets 打包)。
+     * 非破坏性: 仅当缓存完整(含核心键)时才导出。
+     *
+     * @param force true 覆盖已存在文件(手动导出); false 已存在则跳过(自动导出)
+     */
+    public static void exportBaselineToFile(Application app, boolean force) {
+        if (app == null) return;
+        try {
+            MMKV kv = MMKV.mmkvWithID(MMKV_RESULTS_ID, MMKV.MULTI_PROCESS_MODE);
+            int ver = kv.decodeInt(KEY_VERSION_CODE, 0);
+            if (ver != sVersionCode) return;
+            // v955(问题2): 导出同样校验 moduleVersion
+            int modVer = kv.decodeInt(KEY_MODULE_VERSION, 0);
+            if (modVer != sModuleVersion) {
+                LogWriter.log(TAG, "exportBaseline: moduleVersion mismatch, skip");
+                return;
+            }
+            String p06 = kv.decodeString(KEY_P06_CLASS, null);
+            String contact = kv.decodeString(KEY_CONTACT_STORAGE, null);
+            String labelProvider = kv.decodeString(KEY_LABEL_PROVIDER_CLASS, null);
+            String serviceLocator = kv.decodeString(KEY_SERVICE_LOCATOR, null);
+            if (p06 == null || contact == null || labelProvider == null || serviceLocator == null) {
+                LogWriter.log(TAG, "exportBaseline: cache incomplete (missing v955 critical), skip");
+                return;
+            }
+            java.io.File out = new java.io.File(PathUtil.getLeshaoRootDir(app), BASELINE_FILE);
+            if (out.exists() && !force) return;
+
+            org.json.JSONObject o = new org.json.JSONObject();
+            o.put(KEY_VERSION_CODE, kv.decodeInt(KEY_VERSION_CODE, 0));
+            o.put(KEY_MODULE_VERSION, kv.decodeInt(KEY_MODULE_VERSION, 0));
+            for (String k : kv.allKeys()) {
+                if (KEY_VERSION_CODE.equals(k) || KEY_MODULE_VERSION.equals(k)) continue;
+                String v = kv.decodeString(k, null);
+                if (v != null && !v.isEmpty()) o.put(k, v);
+            }
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(out, false);
+            try {
+                fos.write(o.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            } finally {
+                try { fos.close(); } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "exportBaseline: " + out.getAbsolutePath()
+                    + " keys=" + o.length());
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "exportBaseline err: " + e.getMessage());
+        }
+    }
+
+    /** 缓存命中但缺标题栏键时, 后台精准补扫一次(不整体重扫, 避免死循环)。 */
+    private static void rescanActionBarIfMissing(final Application app) {
+        if (sActionBarCustomAreaClass != null || app == null) return;
+        if (!sActionBarRescanAttempted.compareAndSet(false, true)) return;
+        sExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                // 问题16: 与主扫描/缓存串行, 避免独立 clearAll+逐键写与主线程并发
+                synchronized (sScanLock) {
+                    DexKitCacheBridge.RecyclableBridge bridge = null;
+                    try {
+                        loadDexKitLibrary(app);
+                        if (!sLibraryLoaded.get()) return;
+                        initDexKitCache(app);
+                        bridge = createBridge(app.getClassLoader());
+                        if (bridge == null) return;
+                        final DexKitCacheBridge.RecyclableBridge fb = bridge;
+                        fb.withBridge(new DexKitCacheBridge.RecyclableBridge.BridgeFunction() {
+                            @Override
+                            public void apply(DexKitBridge b) {
+                                findActionBarCustomArea(b);
+                            }
+                        });
+                        if (sActionBarCustomAreaClass != null) {
+                            saveResultsToMMKV();
+                            LogWriter.log(TAG, "rescanActionBar: saved " + sActionBarCustomAreaClass);
+                        } else {
+                            LogWriter.log(TAG, "rescanActionBar: still not found");
+                        }
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "rescanActionBar err: " + e.getMessage());
+                    } finally {
+                        if (bridge != null) try { bridge.close(); } catch (Throwable ignored) {}
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * v955(问题2): 分身/缓存命中但缺 3180 关键键(标签 provider / 服务定位器)时的定向补扫。
+     * 只跑 {@link #findV955Targets} 子集, 结果回写 MMKV; 失败也置完成标志并 drain 回调。
+     */
+    private static void rescanMissingV955Keys(final Application app) {
+        if (sLabelStorageProviderClass != null && sServiceLocatorClass != null) return;
+        if (!sCloneRescanAttempted.compareAndSet(false, true)) {
+            markScanCompleteAndDrain();
+            return;
+        }
+        if (app == null) {
+            markScanCompleteAndDrain();
+            return;
+        }
+        sExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                synchronized (sScanLock) {
+                    DexKitCacheBridge.RecyclableBridge bridge = null;
+                    try {
+                        loadDexKitLibrary(app);
+                        if (!sLibraryLoaded.get()) { markScanCompleteAndDrain(); return; }
+                        initDexKitCache(app);
+                        bridge = createBridge(app.getClassLoader());
+                        if (bridge == null) { markScanCompleteAndDrain(); return; }
+                        bridge.withBridge(new DexKitCacheBridge.RecyclableBridge.BridgeFunction() {
+                            @Override
+                            public void apply(DexKitBridge b) {
+                                findV955Targets(b);
+                            }
+                        });
+                        if (sLabelStorageProviderClass != null) {
+                            saveResultsToMMKV();
+                            LogWriter.log(TAG, "rescanV955: saved labelProvider=" + sLabelStorageProviderClass
+                                    + " serviceLocator=" + sServiceLocatorClass);
+                        } else {
+                            LogWriter.log(TAG, "rescanV955: label provider still not found");
+                        }
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "rescanV955 err: " + e.getMessage());
+                    } finally {
+                        if (bridge != null) try { bridge.close(); } catch (Throwable ignored) {}
+                        // 补扫失败也必须放行回调, 避免永久排队
+                        markScanCompleteAndDrain();
+                    }
+                }
+            }
+        });
     }
 
     private static void scanWechatTargets(final DexKitCacheBridge.RecyclableBridge cacheBridge) {
@@ -646,6 +1097,8 @@ public class DexKitHelper {
         };
         final int totalSteps = scanSteps.length;
 
+        // 问题3/16: 扫描全程持锁, 与补扫/缓存写入串行
+        synchronized (sScanLock) {
         cacheBridge.withBridge(new DexKitCacheBridge.RecyclableBridge.BridgeFunction() {
             @Override
             public void apply(DexKitBridge b) {
@@ -689,7 +1142,7 @@ public class DexKitHelper {
              }
         });
 
-        sScanComplete = true;
+        synchronized (DexKitHelper.class) { sScanComplete = true; }
         LogWriter.log(TAG, "scan complete: p06=" + sP06ClassName
             + " j1=" + sJ1ServiceClass
             + " dbOpener=" + sDbOpenerClass + "." + sDbOpenMethodName
@@ -709,10 +1162,18 @@ public class DexKitHelper {
 
         saveResultsToMMKV();
 
+        // v1101: 扫描成功且缓存完整时, 自动导出大厅基线文件(已存在则跳过), 供回填 assets 打包
+        try {
+            android.content.Context ctx = sAppContextForCache;
+            if (ctx instanceof Application) {
+                exportBaselineToFile((Application) ctx, false);
+            }
+        } catch (Throwable ignored) {}
+
         reportProgress(100, "扫描完成", "所有功能已就绪");
         reportComplete();
-
-        runPostScanCallbacks();
+        } // synchronized(sScanLock)
+        markScanCompleteAndDrain();
     }
 
     private static void findP06Class(DexKitBridge bridge) {
@@ -817,6 +1278,35 @@ public class DexKitHelper {
         }
     }
 
+    /** v955(问题15): 明显的框架/系统库类, 作为 DexKit 候选项直接排除。 */
+    private static boolean isExcludedCandidate(String clsName) {
+        if (clsName == null || clsName.isEmpty()) return true;
+        return clsName.startsWith("android.")
+                || clsName.startsWith("androidx.")
+                || clsName.startsWith("java.")
+                || clsName.startsWith("javax.")
+                || clsName.startsWith("kotlin.")
+                || clsName.startsWith("kotlinx.")
+                || clsName.startsWith("org.")
+                || clsName.startsWith("com.android.")
+                || clsName.startsWith("dalvik.")
+                || clsName.startsWith("libcore.")
+                || clsName.startsWith("com.google.");
+    }
+
+    /**
+     * v955(问题15): 优先返回非框架类候选下标, 全部被排除时回退 0(保持旧行为不回归)。
+     * 无候选返回 -1。
+     */
+    private static int pickCandidateIndex(List<MethodData> methods) {
+        if (methods == null || methods.isEmpty()) return -1;
+        for (int i = 0; i < methods.size(); i++) {
+            MethodData m = methods.get(i);
+            if (m != null && !isExcludedCandidate(m.getClassName())) return i;
+        }
+        return 0;
+    }
+
     private static void findCsoLoader(DexKitBridge bridge) {
         try {
             MethodMatcher mMatcher = MethodMatcher.create()
@@ -832,10 +1322,12 @@ public class DexKitHelper {
                     + " params=" + m.getParamTypeNames());
             }
 
-            if (!methods.isEmpty()) {
-                sCsoLoaderClass = methods.get(0).getClassName();
-                sCsoLoaderMethod = methods.get(0).getName();
-                LogWriter.log(TAG, "findCsoLoader: " + sCsoLoaderClass + "." + methods.get(0).getName());
+            int idx = pickCandidateIndex(methods);
+            if (idx >= 0) {
+                MethodData m = methods.get(idx);
+                sCsoLoaderClass = m.getClassName();
+                sCsoLoaderMethod = m.getName();
+                LogWriter.log(TAG, "findCsoLoader: " + sCsoLoaderClass + "." + m.getName());
                 return;
             }
 
@@ -848,7 +1340,7 @@ public class DexKitHelper {
             LogWriter.log(TAG, "findCsoLoader: " + methods2.size() + " 0-param methods use 'CsoLoader'");
             for (MethodData m : methods2) {
                 String clsName = m.getClassName();
-                if (clsName != null && clsName.contains("CsoLoader")) {
+                if (clsName != null && clsName.contains("CsoLoader") && !isExcludedCandidate(clsName)) {
                     sCsoLoaderClass = clsName;
                     sCsoLoaderMethod = m.getName();
                     LogWriter.log(TAG, "findCsoLoader (name match): " + clsName + "." + m.getName());
@@ -856,10 +1348,12 @@ public class DexKitHelper {
                 }
             }
 
-            if (!methods2.isEmpty()) {
-                sCsoLoaderClass = methods2.get(0).getClassName();
-                sCsoLoaderMethod = methods2.get(0).getName();
-                LogWriter.log(TAG, "findCsoLoader (first): " + sCsoLoaderClass + "." + methods2.get(0).getName());
+            int idx2 = pickCandidateIndex(methods2);
+            if (idx2 >= 0) {
+                MethodData m = methods2.get(idx2);
+                sCsoLoaderClass = m.getClassName();
+                sCsoLoaderMethod = m.getName();
+                LogWriter.log(TAG, "findCsoLoader (first): " + sCsoLoaderClass + "." + m.getName());
                 return;
             }
 
@@ -878,7 +1372,9 @@ public class DexKitHelper {
                 FindMethod.create().matcher(mMatcher)
             );
             LogWriter.log(TAG, "findImeiClass: " + methods.size() + " methods use 'READ_PHONE_STATE' return String");
-            for (MethodData m : methods) {
+            int idx = pickCandidateIndex(methods);
+            if (idx >= 0) {
+                MethodData m = methods.get(idx);
                 sImeiClassName = m.getClassName();
                 sImeiMethodName = m.getName();
                 LogWriter.log(TAG, "findImeiClass: " + sImeiClassName + "." + sImeiMethodName);
@@ -892,7 +1388,9 @@ public class DexKitHelper {
                 FindMethod.create().matcher(mMatcher2)
             );
             LogWriter.log(TAG, "findImeiClass: " + methods2.size() + " methods use 'getDeviceId' return String");
-            for (MethodData m : methods2) {
+            int idx2 = pickCandidateIndex(methods2);
+            if (idx2 >= 0) {
+                MethodData m = methods2.get(idx2);
                 sImeiClassName = m.getClassName();
                 sImeiMethodName = m.getName();
                 LogWriter.log(TAG, "findImeiClass (getDeviceId): " + sImeiClassName + "." + sImeiMethodName);
@@ -927,6 +1425,9 @@ public class DexKitHelper {
     public static String getVoiceApiClass() { return sVoiceApiClass; }
     public static String getE9ClassName() { return sE9ClassName; }
     public static String getA21ClassName() { return sA21ClassName; }
+
+    /** v1134: DexKit 命中的 a21 目标方法名 (含 "voicemsg" 字符串), 供 hookA21Oi 精确挂载。 */
+    public static String getA21MethodName() { return sA21MethodName; }
     public static String getAvatarHelperClass() { return sAvatarHelperClass; }
     public static String getLabelStorageClass() { return sLabelStorageClass; }
     public static String getConvListListAdapterClass() { return sConvListListAdapterClass; }
@@ -948,8 +1449,6 @@ public class DexKitHelper {
     public static String getImeiMethodName() { return sImeiMethodName; }
     public static String getCsoLoaderClass() { return sCsoLoaderClass; }
     public static String getCsoLoaderMethod() { return sCsoLoaderMethod; }
-    public static String getJ1CallerClass() { return sJ1CallerClass; }
-    public static String getJ1CallerMethod() { return sJ1CallerMethod; }
     public static String getContactStorageClass() { return sContactStorageClass; }
     public static String getChatOpenClass() { return sChatOpenClass; }
     public static String getChatOpenMethod() { return sChatOpenMethod; }
@@ -974,7 +1473,7 @@ public class DexKitHelper {
         return copy;
     }
 
-    /** v1094: 标题栏(ActionBarCustomArea) helper 类名; 供 CornerMenu 标题栏注入使用 */
+    /** v1094: 标题栏(ActionBarCustomArea) helper 类名 */
     public static String getActionBarCustomAreaClass() {
         return sActionBarCustomAreaClass;
     }
@@ -1145,7 +1644,8 @@ public class DexKitHelper {
                 String cn = m.getClassName();
                 if (cn != null && cn.contains("a21")) {
                     sA21ClassName = cn;
-                    LogWriter.log(TAG, "findA21: " + cn);
+                    try { sA21MethodName = m.getName(); } catch (Throwable ignored) {}
+                    LogWriter.log(TAG, "findA21: " + cn + "#" + sA21MethodName);
                     break;
                 }
             }
@@ -1254,9 +1754,10 @@ public class DexKitHelper {
                 }
             }
             // Strategy 3: any s(Class)/v(Class) method regardless of class name
+            // v955(问题15): 排除 android./androidx./java. 等框架候选, 避免误取系统 ServiceManager
             for (MethodData m : methods) {
                 String clsName = m.getClassName();
-                if (clsName == null) continue;
+                if (isExcludedCandidate(clsName)) continue;
                 List<String> pts = m.getParamTypeNames();
                 if (pts.size() == 1 && "java.lang.Class".equals(pts.get(0))) {
                     sJ1ServiceClass = clsName;
@@ -1266,38 +1767,6 @@ public class DexKitHelper {
             }
         } catch (Throwable e) {
             LogWriter.log(TAG, "findJ1Service error: " + e.getMessage());
-        }
-    }
-
-    private static void findJ1Caller(DexKitBridge bridge) {
-        try {
-            // 8.0.78: j1 服务定位器混淆为 gp0.j1，不再用 hm0.j1
-            // v955: 3180 定位方法为 v(Class)(旧版 s), 双签名兼容
-            String[] j1Candidates = {"gp0.j1.j", "gp0.j1", "hm0.j1", "fp0.j1.j", "fp0.j1"};
-            for (String j1Class : j1Candidates) {
-                for (String mn : new String[]{"v", "s"}) {
-                    try {
-                        MethodMatcher callerMatcher = MethodMatcher.create()
-                            .addInvoke(MethodMatcher.create()
-                                .declaredClass(j1Class)
-                                .name(mn)
-                                .paramTypes("java.lang.Class"));
-                        List<MethodData> methods = bridge.findMethod(
-                            FindMethod.create().matcher(callerMatcher)
-                        );
-                        if (!methods.isEmpty()) {
-                            MethodData first = methods.get(0);
-                            sJ1CallerClass = first.getClassName();
-                            sJ1CallerMethod = first.getName();
-                            LogWriter.log(TAG, "findJ1Caller: " + sJ1CallerClass + "." + sJ1CallerMethod + " via " + j1Class + "." + mn);
-                            return;
-                        }
-                    } catch (Throwable ignored) {}
-                }
-            }
-            LogWriter.log(TAG, "findJ1Caller: NOT found");
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "findJ1Caller error: " + e.getMessage());
         }
     }
 
@@ -1312,12 +1781,12 @@ public class DexKitHelper {
                 FindMethod.create().matcher(mMatcher)
             );
             LogWriter.log(TAG, "findContactStorageAlt: " + methods.size() + " ij() returning long");
-            for (MethodData m : methods) {
-                String clsName = m.getClassName();
-                if (clsName == null) continue;
+            int idx = pickCandidateIndex(methods);
+            if (idx >= 0) {
+                MethodData m = methods.get(idx);
                 // 8.0.78: contact storage 类名可能是 e32.a 等短名
-                sContactStorageClass = clsName;
-                LogWriter.log(TAG, "findContactStorageAlt: " + clsName + ".ij()");
+                sContactStorageClass = m.getClassName();
+                LogWriter.log(TAG, "findContactStorageAlt: " + sContactStorageClass + ".ij()");
                 return;
             }
             // 兜底：搜索所有 ij() 方法
@@ -1326,59 +1795,16 @@ public class DexKitHelper {
             List<MethodData> objMethods = bridge.findMethod(
                 FindMethod.create().matcher(objMatcher)
             );
-            for (MethodData m : objMethods) {
-                String clsName = m.getClassName();
-                if (clsName != null) {
-                    sContactStorageClass = clsName;
-                    LogWriter.log(TAG, "findContactStorageAlt (any ij): " + clsName + ".ij()");
-                    return;
-                }
+            int idx2 = pickCandidateIndex(objMethods);
+            if (idx2 >= 0) {
+                MethodData m = objMethods.get(idx2);
+                sContactStorageClass = m.getClassName();
+                LogWriter.log(TAG, "findContactStorageAlt (any ij): " + sContactStorageClass + ".ij()");
+                return;
             }
             LogWriter.log(TAG, "findContactStorageAlt: NOT found");
         } catch (Throwable e) {
             LogWriter.log(TAG, "findContactStorageAlt error: " + e.getMessage());
-        }
-    }
-
-    private static void findJ1Methods(DexKitBridge bridge) {
-        try {
-            MethodMatcher mMatcher = MethodMatcher.create()
-                .declaredClass("hm0.j1");
-            List<MethodData> methods = bridge.findMethod(
-                FindMethod.create().matcher(mMatcher)
-            );
-            LogWriter.log(TAG, "findJ1Methods: " + methods.size() + " methods in hm0.j1");
-            int limit = Math.min(methods.size(), 20);
-            for (int i = 0; i < limit; i++) {
-                MethodData m = methods.get(i);
-                LogWriter.log(TAG, "  hm0.j1." + m.getName() + " params=" + m.getParamTypeNames()
-                    + " return=" + m.getReturnTypeName());
-            }
-            if (methods.size() > 20) {
-                LogWriter.log(TAG, "  ... " + (methods.size() - 20) + " more hm0.j1 methods");
-            }
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "findJ1Methods error: " + e.getMessage());
-        }
-    }
-
-    private static void findRealP06Class(DexKitBridge bridge) {
-        try {
-            ClassMatcher matcher = ClassMatcher.create();
-            List<ClassData> classes = bridge.findClass(
-                FindClass.create().matcher(matcher)
-            );
-            for (ClassData c : classes) {
-                String name = c.getName();
-                if (name != null && (name.equals("p06") || name.endsWith(".p06"))) {
-                    sP06ClassName = name;
-                    LogWriter.log(TAG, "findRealP06Class: " + name);
-                    return;
-                }
-            }
-            LogWriter.log(TAG, "findRealP06Class: class named 'p06' NOT found in any dex");
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "findRealP06Class error: " + e.getMessage());
         }
     }
 
@@ -1481,8 +1907,9 @@ public class DexKitHelper {
             if (callers.size() > cLimit) {
                 LogWriter.log(TAG, "  ... " + (callers.size() - cLimit) + " more");
             }
-            if (!callers.isEmpty()) {
-                MethodData m = callers.get(0);
+            int cSel = pickCandidateIndex(callers);
+            if (cSel >= 0) {
+                MethodData m = callers.get(cSel);
                 sConvLongPressClass = m.getClassName();
                 sConvLongPressMethod = m.getName();
                 LogWriter.log(TAG, "findConvLongPressEntry: selected "
@@ -1497,16 +1924,19 @@ public class DexKitHelper {
             );
             LogWriter.log(TAG, "findConvLongPressEntry: " + impls.size()
                 + " classes implement OnItemLongClickListener (all pkg)");
-            int iLimit = Math.min(impls.size(), 25);
+            // v955(问题22): 实现类数量设上限, 避免异常机型(数千实现类)导致 hook 面过大/内存膨胀
+            final int MAX_LP_IMPLS = 200;
+            int logLimit = Math.min(impls.size(), 25);
+            int iLimit = Math.min(impls.size(), MAX_LP_IMPLS);
             List<String> newImpls = new java.util.ArrayList<>();
             for (int i = 0; i < iLimit; i++) {
                 String cn = impls.get(i).getName();
-                LogWriter.log(TAG, "  lpImpl[" + i + "]: " + cn);
+                if (i < logLimit) LogWriter.log(TAG, "  lpImpl[" + i + "]: " + cn);
                 newImpls.add(cn);
             }
-            // 全量收集（不截断），供 Bug3 hook 使用
-            for (int i = iLimit; i < impls.size(); i++) {
-                newImpls.add(impls.get(i).getName());
+            if (impls.size() > iLimit) {
+                LogWriter.log(TAG, "findConvLongPressEntry: impls truncated "
+                        + impls.size() + " -> " + iLimit);
             }
             // 优先保留会话相关实现类，减少门控 hook 安装面
             java.util.List<String> convOnly = new java.util.ArrayList<>();
@@ -1965,6 +2395,77 @@ public class DexKitHelper {
         }
     }
 
+    /**
+     * 抽取自原主进程扫描执行块: 触发一次完整 DexKit 扫描。
+     * <p>主进程调用时 {@code showDialog=true}(保持 sShouldShowScanDialog=true 与弹窗时序);
+     * 分身/子进程调用时 {@code showDialog=false}(不弹窗)。</p>
+     * <p>幂等: 入口以 {@link #sFullScanScheduled} CAS 保证每进程至多调度一次。
+     * <b>不复位</b>——扫描已由 {@link #markScanCompleteAndDrain()} 保证所有终态都会放行回调,
+     * 无需重试; 若失败后复位, 多次 attachBaseContext 会反复触发重量级全量扫描, 造成 CPU 空转与卡顿,
+     * 需要重试时走显式的 {@link #forceReload()}。</p>
+     * <p>终态必置位: 库未加载 / bridge 为 null / 执行异常 均调用 {@link #markScanCompleteAndDrain()},
+     * 避免 post-scan 回调永久排队。</p>
+     */
+    private static void startFullScan(final Application app, final boolean showDialog) {
+        try {
+            if (!sFullScanScheduled.compareAndSet(false, true)) {
+                LogWriter.log(TAG, "startFullScan: full scan already scheduled, skip");
+                return;
+            }
+            if (showDialog) {
+                sShouldShowScanDialog = true;
+            }
+            sExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    DexKitCacheBridge.RecyclableBridge cacheBridge = null;
+                    try {
+                        loadDexKitLibrary(app);
+                        if (!sLibraryLoaded.get()) {
+                            LogWriter.log(TAG, "DexKit library not loaded, skipping");
+                            if (showDialog) {
+                                sShouldShowScanDialog = false;
+                                com.leshao.v3.ui.DexKitScanDialog.dismiss();
+                            }
+                            markScanCompleteAndDrain();
+                            return;
+                        }
+
+                        initDexKitCache(app);
+
+                        final String appTag = "wechat_" + (sVersionCode > 0 ? sVersionCode : "");
+                        LogWriter.log(TAG, "startFullScan: appTag=" + appTag
+                            + " showDialog=" + showDialog);
+
+                        cacheBridge = DexKitCacheBridge.create(
+                            appTag, app.getClassLoader());
+                        LogWriter.log(TAG, "DexKitCacheBridge.create done");
+
+                        if (cacheBridge != null) {
+                            scanWechatTargets(cacheBridge);
+                        } else {
+                            LogWriter.log(TAG, "startFullScan: bridge null, drain callbacks");
+                            markScanCompleteAndDrain();
+                        }
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "DexKit scan thread error: " + e.getMessage());
+                        markScanCompleteAndDrain();
+                    } finally {
+                        if (cacheBridge != null) {
+                            try {
+                                cacheBridge.close();
+                            } catch (Throwable ignored) {}
+                        }
+                        // 主进程弹窗保持原语义: 不在此处 dismiss, 由用户手动关闭
+                    }
+                }
+            });
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "startFullScan err: " + e.getMessage());
+            markScanCompleteAndDrain();
+        }
+    }
+
     public static void hookApplication(final XC_LoadPackage.LoadPackageParam lpparam) {
         try {
             java.lang.reflect.Method attachMethod = android.content.ContextWrapper.class
@@ -1981,8 +2482,24 @@ public class DexKitHelper {
 
                     if (!isMainProcess) {
                         LogWriter.log(TAG, "clone process " + processName + ": reading MMKV cache only");
+                        // v1101: 子进程也必须先初始化 MMKV, 否则读取本实例房间缓存会失败
                         try {
-                            loadResultsFromMMKV(app);
+                            MMKV.initialize(app);
+                        } catch (Throwable e) {
+                            LogWriter.log(TAG, "clone process MMKV.initialize err: " + e.getMessage());
+                        }
+                        try {
+                            // v1101: 本实例无完整缓存时, 直接从模块 APK 大厅共享加载(不复制)
+                            if (!hasCompleteLocalCache()) {
+                                if (!tryLoadBaselineFromModule(app)) {
+                                    // 无大厅时回退本地缓存读取; 缓存仍不完整则兜底全量扫描(分身不弹窗)
+                                    if (!loadResultsFromMMKV(app)) {
+                                        startFullScan(app, false);
+                                    }
+                                }
+                            } else {
+                                loadResultsFromMMKV(app);
+                            }
                         } catch (Throwable e) {
                             LogWriter.log(TAG, "clone process MMKV read failed: " + e.getMessage());
                         }
@@ -1994,6 +2511,16 @@ public class DexKitHelper {
                         MMKV.initialize(app);
                     } catch (Throwable e) {
                         LogWriter.log(TAG, "MMKV.initialize err: " + e.getMessage());
+                    }
+
+                    // v1101: 本地无完整缓存时, 直接从模块 APK 大厅共享加载, 免全量扫描
+                    try {
+                        if (!hasCompleteLocalCache() && tryLoadBaselineFromModule(app)) {
+                            LogWriter.log(TAG, "hookApplication: baseline loaded from module APK");
+                            return;
+                        }
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "hookApplication baseline load err: " + e.getMessage());
                     }
 
                     // Try loading from MMKV cache first — if hit, no scan needed
@@ -2015,46 +2542,8 @@ public class DexKitHelper {
                         LogWriter.log(TAG, "hookApplication MMKV check err: " + e.getMessage());
                     }
 
-                    // Cache miss — show scan dialog on next Activity creation
-                    sShouldShowScanDialog = true;
-
-                    sExecutor.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            DexKitCacheBridge.RecyclableBridge cacheBridge = null;
-                            try {
-                                loadDexKitLibrary(app);
-                                if (!sLibraryLoaded.get()) {
-                                    LogWriter.log(TAG, "DexKit library not loaded, skipping");
-                                    sShouldShowScanDialog = false;
-                                    com.leshao.v3.ui.DexKitScanDialog.dismiss();
-                                    return;
-                                }
-
-                                initDexKitCache(app);
-
-                                final String appTag = "wechat_" + (sVersionCode > 0 ? sVersionCode : "");
-                                LogWriter.log(TAG, "main process: appTag=" + appTag);
-
-                                cacheBridge = DexKitCacheBridge.create(
-                                    appTag, app.getClassLoader());
-                                LogWriter.log(TAG, "DexKitCacheBridge.create done");
-
-                                if (cacheBridge != null) {
-                                    scanWechatTargets(cacheBridge);
-                                }
-                            } catch (Throwable e) {
-                                LogWriter.log(TAG, "DexKit scan thread error: " + e.getMessage());
-                            } finally {
-                                if (cacheBridge != null) {
-                                    try {
-                                        cacheBridge.close();
-                                    } catch (Throwable ignored) {}
-                                }
-                                // Do NOT dismiss dialog here — user closes manually
-                            }
-                        }
-                    });
+                    // Cache miss — 触发一次全量扫描(主进程 showDialog=true, 走弹窗提示)
+                    startFullScan(app, true);
                 }
             });
 

@@ -131,9 +131,14 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
 
         // 方案7: 双模式开关 — 语音发送音质: 人声增强(v928, 音乐伴奏更清晰) vs 原音还原(v929, 默认保真)
         boolean voiceEnhance = WmPrefs.get("voice_enhance", false);
+        boolean voiceBassBoost = WmPrefs.get("voice_bass_boost", false);
         LinearLayout cardVoiceMode = makeCard(ctx, d);
         cardVoiceMode.addView(switchRow(ctx, d, "语音发送人声增强", "开启=人声增强链(高通+EQ+压缩, 音乐带伴奏人声更突出); 关闭=原音还原链(透明处理, 保真优先, 默认)",
                 voiceEnhance, (v, on) -> WmPrefs.set("voice_enhance", on)));
+        // v1141: DJ低音增强 — 低架EQ提升低频, 音频转语音后音乐/舞曲更澎湃(优先于人声增强)
+        cardVoiceMode.addView(itemDivider(ctx, d));
+        cardVoiceMode.addView(switchRow(ctx, d, "DJ低音增强", "提升低频下潜, 音乐/舞曲更澎湃(优先于人声增强)",
+                voiceBassBoost, (v, on) -> WmPrefs.set("voice_bass_boost", on)));
         root.addView(cardVoiceMode);
 
         // v1085: 文字转语音误报语音时长 — 超过 60 秒的语音按指定秒数误报, 保证语音能发出
@@ -297,14 +302,9 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         status.setSingleLine(false);
 
         if (wlCount == 0) {
-            // 白名单为空: 严格模式下全静音(与 FilterManager 逻辑对应)
-            if (strict) {
-                status.setText("⚠️ 当前状态：白名单为空 + 严格模式开启 → 所有消息都不会播报！请添加白名单或关闭严格模式");
-                status.setTextColor(AppColors.error());
-            } else {
-                status.setText("✅ 当前状态：白名单为空 + 严格模式关闭 → 全部消息播报");
-                status.setTextColor(AppColors.onSurfaceVariant());
-            }
+            // 白名单为空: 不做限制(严格模式仅在白名单非空时生效, 与 FilterManager 一致)
+            status.setText("✅ 当前状态：白名单为空 → 全部消息播报（严格模式仅在白名单非空时生效）");
+            status.setTextColor(AppColors.onSurfaceVariant());
         } else if (strict) {
             status.setText("⚠️ 当前状态：仅播报白名单内 " + wlCount + " 个会话，其他一切消息将被拦截（如收不到播报请检查此处）");
             status.setTextColor(AppColors.warning());
@@ -807,6 +807,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         }
         return WmPrefs.get("auto_voice", false)
                 && WmPrefs.get("voice_enhance", false)
+                && WmPrefs.get("voice_bass_boost", false)
                 && WmPrefs.get("ls_tts_false_dur_on", false);
     }
 
@@ -819,6 +820,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         }
         WmPrefs.set("auto_voice", on);
         WmPrefs.set("voice_enhance", on);
+        WmPrefs.set("voice_bass_boost", on);
         WmPrefs.set("ls_tts_false_dur_on", on);
     }
 
@@ -857,7 +859,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         TextView titleTv = new TextView(ctx);
         titleTv.setText("配音魔方接口配置");
         titleTv.setTextSize(16);
-        titleTv.setTextColor(AppColors.TEXT_TITLE);
+        titleTv.setTextColor(AppColors.text1());
         titleTv.setTypeface(null, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams ttlp = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
@@ -963,7 +965,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
             if (window != null) {
                 android.util.DisplayMetrics dm = parentAct.getResources().getDisplayMetrics();
                 window.setLayout((int) (dm.widthPixels * 0.85f), (int) (dm.heightPixels * 0.75f));
-                window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(AppColors.CARD_BG));
+                window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(AppColors.card()));
             }
         } catch (Throwable ignored) {}
 
@@ -1021,11 +1023,33 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
             java.util.List<VoiceItem> builtin = fetchBuiltinVoices(key);
             parentAct.runOnUiThread(() -> statusTv.setText("拉取自定义音色列表..."));
             java.util.List<VoiceItem> custom = fetchUserVoices(key);
+            // v986: 去重/过滤/截断等 CPU 重活在后台线程完成, 主线程只做必要的 View 构建,
+            // 防止音色数量很大时在主线程遍历构建造成卡顿/ANR。
+            final java.util.List<VoiceItem> builtinFinal = compactVoices(builtin, MAX_VOICE_ROWS);
+            final java.util.List<VoiceItem> customFinal =
+                    compactVoices(custom, Math.max(0, MAX_VOICE_ROWS - builtinFinal.size()));
             parentAct.runOnUiThread(() -> {
                 voiceList.removeView(statusTv);
-                buildVoiceListUI(ctx, parentAct, d, voiceList, key, builtin, custom);
+                buildVoiceListUI(ctx, parentAct, d, voiceList, key, builtinFinal, customFinal);
             });
         }).start();
+    }
+
+    /** v986: 单次最多渲染的音色行数, 避免超长列表在主线程一次性构建。 */
+    private static final int MAX_VOICE_ROWS = 300;
+
+    /** v986: 后台线程完成音色去重/空值过滤/截断。 */
+    private static java.util.List<VoiceItem> compactVoices(java.util.List<VoiceItem> src, int max) {
+        java.util.List<VoiceItem> out = new java.util.ArrayList<>();
+        if (src == null || max <= 0) return out;
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
+        for (VoiceItem vi : src) {
+            if (vi == null || vi.voiceId == null || vi.voiceId.isEmpty()) continue;
+            if (!seen.add(vi.voiceId)) continue;
+            out.add(vi);
+            if (out.size() >= max) break;
+        }
+        return out;
     }
 
     private static void showKeyInputPopup(Context ctx, Activity parentAct, float d, Button keyBtn,
@@ -1089,7 +1113,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         TextView listTitle = new TextView(ctx);
         listTitle.setText("选择默认音色");
         listTitle.setTextSize(14);
-        listTitle.setTextColor(AppColors.TEXT_TITLE);
+        listTitle.setTextColor(AppColors.text1());
         listTitle.setTypeface(null, Typeface.BOLD);
         listTitle.setPadding(0, (int)(8 * d), 0, (int)(8 * d));
         voiceList.addView(listTitle);

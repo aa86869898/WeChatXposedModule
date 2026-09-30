@@ -56,9 +56,12 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Instructions:
   - 每次编译前，同步递增 `app/build.gradle.kts` 中 `versionCode`/`versionName`、`MainHook.MODULE_BUILD`(如 "v936")与 `MainHook.MODULE_VERSION_CODE`(整数，与 DexKit 扫描缓存失效键相同)
   - release 构建命令：`cd /workspace/LeShaoWeChat/LeShaoWeChatV3 && ./gradlew :app:assembleRelease --offline -x lint`（R8 会改写 XposedHelpers，varargs findAndHookMethod 不可用，须用 findClass+getDeclaredMethod+hookMethod 模式）
+  - 仅语法校验可用快速任务：`cd /workspace/LeShaoWeChat/LeShaoWeChatV3 && ./gradlew :app:compileReleaseJavaWithJavac --offline -x lint`（秒级失败反馈，检查通过后再跑完整 assembleRelease；正式发版仍须 `clean` 后重新构建）
   - release 产物：`app/build/outputs/apk/release/LeShaoWeChat-v{versionCode}.apk`；签名已配置在 build.gradle.kts signingConfigs(release.keystore)
   - 分发：复制 APK 到 `/tmp/opencode/download/` 并更新 `download/index.html`（置顶新版本入口）后方可提供下载；历史下载页亦同步维护
-  - 当前下载服务：`python3 -m http.server 8085 --bind 0.0.0.0`，根目录 `/tmp/opencode/download/`；外网直链 `https://8085-796f33fc01a6a82b.monkeycode-ai.online/LeShaoV3-v{versionCode}-release.apk`
+  - 当前下载服务（支持线程池 + 断点续传/Range 206）：脚本 `/tmp/opencode/range_http_server.py`，启动命令 `python3 /tmp/opencode/range_http_server.py 8085 /tmp/opencode/download`（用 background terminal 常驻）；根目录 `/tmp/opencode/download/`；外网直链 `https://8085-796f33fc01a6a82b.monkeycode-ai.online/LeShaoWeChat-v{versionCode}.apk`
+  - 断点续传特性：响应头 `Accept-Ranges: bytes`，Range 请求返回 `206 Partial Content` + `Content-Range`，超范围返回 `416`；已验证 `curl -C -` 续传与 4 并发分段合并后 MD5 与源文件一致；线程池默认 32（可调 `HTTP_POOL` 环境变量）
+  - 注意：旧 `python3 -m http.server` 不支持 Range（对 Range 请求返回 200 且无 Accept-Ranges/Content-Range），已弃用
 
 ### AI 反编译审计结论（f9.Bb 接收链路实锤）
 - Date: 2026-09-24

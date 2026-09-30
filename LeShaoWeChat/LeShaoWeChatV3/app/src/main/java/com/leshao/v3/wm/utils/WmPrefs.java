@@ -48,7 +48,6 @@ public class WmPrefs {
     public static boolean isMsgSearch() { return get("msg_search", true); }
     public static boolean isTTSCube() { return get("tts_cube", true); }
     public static boolean isBatchSend() { return get("batch_send", true); }
-    public static boolean isScheduledMoment() { return get("scheduled_moment", false); }
     public static boolean isLongPressMenu() { return get("long_press_menu", true); }
     public static boolean isCardOrder() { return get("card_order", false); }
     public static boolean isVoiceOrder() { return get("voice_order", false); }
@@ -56,7 +55,6 @@ public class WmPrefs {
     public static boolean isMergeForward() { return get("merge_forward", true); }
     public static boolean isWatermark() { return get("watermark", false); }
     public static boolean isGrpExport() { return get("grp_export", true); }
-    public static boolean isGrpWxid() { return get("grp_wxid", true); }
     public static boolean isGrpReport() { return get("grp_report", true); }
     public static boolean isGrpNotice() { return get("grp_notice", true); }
     public static boolean isGrpBroadcast() { return get("grp_broadcast", true); }
@@ -66,14 +64,25 @@ public class WmPrefs {
     public static boolean isGrpAll() { return get("grp_all", true); }
 
     public static boolean isCornerMenu() { return get("corner_menu", true); }
-    public static boolean isInputButtons() { return get("input_buttons", true); }
+
+    // ===== 消息长按菜单净化 =====
+    public static void ensureInit() {
+        if (sp == null) init();
+    }
+
+    public static boolean isMsgMenuEnabled() { return get("msg_menu_enabled", true); }
+    public static void setMsgMenuEnabled(boolean v) { ensureInit(); set("msg_menu_enabled", v); }
+    public static String getMsgMenuHidden() { ensureInit(); return getStr("msg_menu_hidden", ""); }
+    public static void setMsgMenuHidden(String v) { ensureInit(); setStr("msg_menu_hidden", v); }
+    public static String getMsgMenuObserved() { ensureInit(); return getStr("msg_menu_observed", ""); }
+    public static void setMsgMenuObserved(String v) { ensureInit(); setStr("msg_menu_observed", v); }
 
     public static boolean defaultFor(String key) {
         return "auto_voice".equals(key);
     }
 
     public static String getQuickReplyTexts() {
-        return getStr("quick_reply_texts", "好的,收到|稍等,马上|在忙,晚点回复|OK|👍");
+        return getStr("quick_reply_phrases", "好的|收到|稍等|在路上|马上到");
     }
 
     public static String getKeywords() { return getStr("keywords", ""); }
