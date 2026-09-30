@@ -341,8 +341,66 @@ public final class LeftTopEntryHook {
         iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
         iv.setContentDescription("模块入口");
         iv.setClickable(true);
-        iv.setOnClickListener(v -> openModule(v.getContext()));
+        iv.setOnClickListener(v -> showMenu(asActivity(v.getContext())));
         return iv;
+    }
+
+    /** 点击左上角入口弹出快捷菜单：模块主页 / 一键群聊免打扰 / 一键解除群聊免打扰。 */
+    public static void showMenu(final Activity act) {
+        if (act == null || act.isFinishing()) return;
+        final String[] items = {"模块主页", "一键群聊免打扰", "一键解除群聊免打扰"};
+        try {
+            new android.app.AlertDialog.Builder(act)
+                    .setTitle("乐少模块")
+                    .setItems(items, (d, which) -> {
+                        try {
+                            switch (which) {
+                                case 0:
+                                    com.leshao.v3.ui.MainActivity.open(act);
+                                    break;
+                                case 1:
+                                    runMute(act, true);
+                                    break;
+                                case 2:
+                                    runMute(act, false);
+                                    break;
+                                default:
+                                    break;
+                            }
+                        } catch (Throwable e) {
+                            LogWriter.log(TAG, "menu item err: " + e);
+                        }
+                    })
+                    .setCancelable(true)
+                    .show();
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "showMenu err: " + e);
+        }
+    }
+
+    /** 子线程执行批量免打扰/解除，完成后 Toast 结果。 */
+    private static void runMute(final Activity act, final boolean mute) {
+        new Thread(() -> {
+            try {
+                final GroupMuteHook.MuteResult r = GroupMuteHook.muteAllGroups(mute);
+                final String msg;
+                if (!r.ready) {
+                    msg = "免打扰逻辑初始化失败，请稍后重试";
+                } else if (r.total <= 0) {
+                    msg = "未找到可操作的群聊";
+                } else {
+                    msg = (mute ? "已免打扰 " : "已解除免打扰 ") + r.ok + "/" + r.total + " 个群";
+                }
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    try {
+                        android.widget.Toast.makeText(act.getApplicationContext(), msg,
+                                android.widget.Toast.LENGTH_LONG).show();
+                    } catch (Throwable ignored) {}
+                });
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "runMute err: " + e);
+            }
+        }, "leshao-mute").start();
     }
 
     private static int statusBarHeight(Context ctx) {

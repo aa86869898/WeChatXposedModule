@@ -330,10 +330,10 @@ public class CornerMenu {
                 int pad = dp(ctx, 3);
                 icon.setPadding(pad, pad, pad, pad);
             } catch (Throwable ignored) {}
-            // v1105: 点击左上角三横按钮直接进入模块主页(原为弹出快捷菜单)
+            // 点击左上角入口弹出快捷菜单（模块主页/一键群聊免打扰/一键解除群聊免打扰）
             icon.setOnClickListener(v -> {
-                try { com.leshao.v3.ui.MainActivity.open(act); }
-                catch (Throwable e) { LogWriter.log(TAG, "打开模块主页失败: " + e.getMessage()); }
+                try { com.leshao.v3.hook.LeftTopEntryHook.showMenu(act); }
+                catch (Throwable e) { LogWriter.log(TAG, "打开左上角菜单失败: " + e.getMessage()); }
             });
 
             WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
