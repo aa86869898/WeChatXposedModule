@@ -6,6 +6,7 @@ import android.text.InputType;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -34,39 +35,73 @@ public final class MsgForgePageView {
         root.addView(cardSwitch);
         root.addView(PageKit.divider(ctx));
 
-        // 伪装类型
+        // 文案输入框（切换类型时同步刷新内容）与预览
+        final EditText input = M3Page.input(ctx, "");
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        input.setText(currentContent());
+        final TextView previewText = PageKit.bodyText(ctx, MsgForgeHook.preview());
+
+        // 伪装类型（互斥开关：同时只允许一种生效）
         final String[] modeHolder = {MsgForgeHook.getMode()};
+        final Switch[] swSystem = new Switch[1];
+        final Switch[] swCard = new Switch[1];
+        final Switch[] swApp = new Switch[1];
         LinearLayout cardMode = PageKit.makeCard(ctx, d);
-        final TextView modeText = PageKit.bodyText(ctx, "");
-        cardMode.addView(PageKit.sectionLabel(ctx, "伪装类型"));
-        cardMode.addView(modeText);
-        LinearLayout modeBtns = new LinearLayout(ctx);
-        modeBtns.setOrientation(LinearLayout.HORIZONTAL);
-        modeBtns.addView(PageKit.actionButton(ctx, "系统消息", v -> {
-            MsgForgeHook.setMode(MsgForgeHook.MODE_SYSTEM);
-            modeHolder[0] = MsgForgeHook.MODE_SYSTEM;
-            modeText.setText("当前：系统消息（type=10000）");
-        }));
-        modeBtns.addView(PageKit.actionButton(ctx, "名片", v -> {
-            MsgForgeHook.setMode(MsgForgeHook.MODE_CARD);
-            modeHolder[0] = MsgForgeHook.MODE_CARD;
-            modeText.setText("当前：名片（type=42）");
-        }));
-        modeBtns.addView(PageKit.actionButton(ctx, "链接卡片", v -> {
-            MsgForgeHook.setMode(MsgForgeHook.MODE_APPMSG);
-            modeHolder[0] = MsgForgeHook.MODE_APPMSG;
-            modeText.setText("当前：链接卡片（type=49）");
-        }));
-        cardMode.addView(modeBtns);
+        cardMode.addView(PageKit.sectionLabel(ctx, "伪装类型（同时只启用一种）"));
+        cardMode.addView(PageKit.switchRow(ctx, d, "系统消息",
+                "文本伪装成系统提示（type=10000）", MsgForgeHook.MODE_SYSTEM.equals(modeHolder[0]),
+                (v, on) -> {
+                    if (on) {
+                        if (swCard[0] != null) swCard[0].setChecked(false);
+                        if (swApp[0] != null) swApp[0].setChecked(false);
+                        MsgForgeHook.setMode(MsgForgeHook.MODE_SYSTEM);
+                        modeHolder[0] = MsgForgeHook.MODE_SYSTEM;
+                        input.setText(currentContent());
+                        previewText.setText(MsgForgeHook.preview());
+                        Toast.makeText(ctx, "伪装类型：系统消息", Toast.LENGTH_SHORT).show();
+                    } else if ((swCard[0] == null || !swCard[0].isChecked())
+                            && (swApp[0] == null || !swApp[0].isChecked())) {
+                        swSystem[0].setChecked(true);
+                    }
+                }, null, swSystem));
+        cardMode.addView(PageKit.switchRow(ctx, d, "名片",
+                "伪装成发送微信名片（type=42）", MsgForgeHook.MODE_CARD.equals(modeHolder[0]),
+                (v, on) -> {
+                    if (on) {
+                        if (swSystem[0] != null) swSystem[0].setChecked(false);
+                        if (swApp[0] != null) swApp[0].setChecked(false);
+                        MsgForgeHook.setMode(MsgForgeHook.MODE_CARD);
+                        modeHolder[0] = MsgForgeHook.MODE_CARD;
+                        input.setText(currentContent());
+                        previewText.setText(MsgForgeHook.preview());
+                        Toast.makeText(ctx, "伪装类型：名片", Toast.LENGTH_SHORT).show();
+                    } else if ((swSystem[0] == null || !swSystem[0].isChecked())
+                            && (swApp[0] == null || !swApp[0].isChecked())) {
+                        swCard[0].setChecked(true);
+                    }
+                }, null, swCard));
+        cardMode.addView(PageKit.switchRow(ctx, d, "链接卡片",
+                "伪装成发送链接卡片（type=49）", MsgForgeHook.MODE_APPMSG.equals(modeHolder[0]),
+                (v, on) -> {
+                    if (on) {
+                        if (swSystem[0] != null) swSystem[0].setChecked(false);
+                        if (swCard[0] != null) swCard[0].setChecked(false);
+                        MsgForgeHook.setMode(MsgForgeHook.MODE_APPMSG);
+                        modeHolder[0] = MsgForgeHook.MODE_APPMSG;
+                        input.setText(currentContent());
+                        previewText.setText(MsgForgeHook.preview());
+                        Toast.makeText(ctx, "伪装类型：链接卡片", Toast.LENGTH_SHORT).show();
+                    } else if ((swSystem[0] == null || !swSystem[0].isChecked())
+                            && (swCard[0] == null || !swCard[0].isChecked())) {
+                        swApp[0].setChecked(true);
+                    }
+                }, null, swApp));
         root.addView(cardMode);
         root.addView(PageKit.divider(ctx));
 
         // 文案
         LinearLayout cardContent = PageKit.makeCard(ctx, d);
         cardContent.addView(PageKit.sectionLabel(ctx, "伪装文案（按 | 分隔多项）"));
-        final EditText input = M3Page.input(ctx, "");
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        input.setText(currentContent());
         cardContent.addView(input);
         cardContent.addView(PageKit.bodyText(ctx,
                 "系统消息：直接填文案\n名片：wxid|昵称\n链接卡片：标题|描述|链接"));
@@ -83,7 +118,7 @@ public final class MsgForgePageView {
         // 预览
         LinearLayout cardPreview = PageKit.makeCard(ctx, d);
         cardPreview.addView(PageKit.sectionLabel(ctx, "预览"));
-        cardPreview.addView(PageKit.bodyText(ctx, MsgForgeHook.preview()));
+        cardPreview.addView(previewText);
         root.addView(cardPreview);
         root.addView(PageKit.divider(ctx));
 
@@ -93,16 +128,7 @@ public final class MsgForgePageView {
                         + "把消息类型改写为伪装类型并附带配套 XML，由微信原生渲染。部分类型需 flag=1。"));
         root.addView(cardNote);
 
-        modeText.setText(modeLabel(MsgForgeHook.getMode()));
         return root;
-    }
-
-    private static String modeLabel(String mode) {
-        switch (mode) {
-            case MsgForgeHook.MODE_CARD: return "当前：名片（type=42）";
-            case MsgForgeHook.MODE_APPMSG: return "当前：链接卡片（type=49）";
-            default: return "当前：系统消息（type=10000）";
-        }
     }
 
     private static String currentContent() {

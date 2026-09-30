@@ -49,6 +49,14 @@ public final class PageKit {
                                          boolean checked,
                                          CompoundButton.OnCheckedChangeListener listener,
                                          View.OnClickListener configListener) {
+        return switchRow(ctx, d, title, desc, checked, listener, configListener, null);
+    }
+
+    public static LinearLayout switchRow(Context ctx, float d, String title, String desc,
+                                         boolean checked,
+                                         CompoundButton.OnCheckedChangeListener listener,
+                                         View.OnClickListener configListener,
+                                         Switch[] swHolder) {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
@@ -93,6 +101,7 @@ public final class PageKit {
         sw.setChecked(checked);
         sw.setOnCheckedChangeListener(listener);
         row.addView(sw);
+        if (swHolder != null && swHolder.length > 0) swHolder[0] = sw;
         return row;
     }
 
