@@ -301,6 +301,8 @@ public class SubPageActivity {
                 return WeChatDbPageView.create(ctx, parentAct);
             case 26: // 输入框快捷按钮
                 return ChatFooterBarPageView.create(ctx, parentAct);
+            case 27: // 自定义气泡
+                return BubblePageView.create(ctx, parentAct);
             case 15: // 批量加好友记录
                 return BatchAddRecordPageView.create(ctx, parentAct);
             default:

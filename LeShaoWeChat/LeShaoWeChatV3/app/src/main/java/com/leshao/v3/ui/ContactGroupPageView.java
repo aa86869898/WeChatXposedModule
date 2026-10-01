@@ -50,6 +50,37 @@ public class ContactGroupPageView {
 
         root.addView(candyDivider(ctx, d));
 
+        // 自定义气泡：分别选择收/发消息气泡图片（文档《修改聊天气泡WeChatChatBubbleReplace.md》方案A）
+        boolean bubbleOn = prefs != null && prefs.getBoolean(ChatBubbleHook.K_ENABLED, false);
+        LinearLayout cardBubble = makeCard(ctx, d);
+        cardBubble.addView(switchRow(ctx, d, "自定义气泡",
+                "分别选择收到/发出消息的气泡图片", bubbleOn,
+                (v, on) -> {
+                    if (prefs != null) prefs.edit().putBoolean(ChatBubbleHook.K_ENABLED, on).apply();
+                    ChatBubbleHook.setEnabled(on);
+                    Toast.makeText(ctx, "自定义气泡已" + (on ? "开启" : "关闭")
+                            + "（重启微信后完全生效）", Toast.LENGTH_SHORT).show();
+                },
+                v -> SubPageActivity.open(act, "自定义气泡", 27)));
+        root.addView(cardBubble);
+
+        root.addView(candyDivider(ctx, d));
+
+        // 收藏语音转发：文档《收藏语音转发WeChat_FavVoice_Forward_Analysis.md》路线A
+        boolean favVoiceOn = prefs != null && prefs.getBoolean(FavVoiceForwardHook.K_ENABLED, false);
+        LinearLayout cardFavVoice = makeCard(ctx, d);
+        cardFavVoice.addView(switchRow(ctx, d, "收藏语音转发",
+                "收藏的语音长按可转发给联系人/群聊", favVoiceOn,
+                (v, on) -> {
+                    if (prefs != null) prefs.edit().putBoolean(FavVoiceForwardHook.K_ENABLED, on).apply();
+                    FavVoiceForwardHook.setEnabled(on);
+                    Toast.makeText(ctx, "收藏语音转发已" + (on ? "开启" : "关闭"),
+                            Toast.LENGTH_SHORT).show();
+                }, null));
+        root.addView(cardFavVoice);
+
+        root.addView(candyDivider(ctx, d));
+
         // v1146: 消息防撤回（严格实现文档《WeChat_AntiRevoke_Reverse.md》H1/H3 方案）
         boolean antiRevokeOn = prefs != null && prefs.getBoolean(AntiRecallHook.K_MASTER, true);
         LinearLayout cardAntiRevoke = makeCard(ctx, d);

@@ -10,6 +10,8 @@ import android.os.Process;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.AutoForwardHook;
 import com.leshao.v3.hook.AntiDetectionHook;
+import com.leshao.v3.hook.ChatBubbleHook;
+import com.leshao.v3.hook.FavVoiceForwardHook;
 import com.leshao.v3.hook.ChatGroupHook;
 import com.leshao.v3.hook.ChatGroupUiInjector;
 import com.leshao.v3.hook.ChatVoiceSwitchHook;
@@ -58,11 +60,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v3.0.69";
+    public static final String MODULE_BUILD = "v3.0.70";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 30069;
+    public static final int MODULE_VERSION_CODE = 30070;
 
     /** v1079: 当前前台 Activity(onResume 记录/onPause 清除), 供 talker 解析等复用。 */
     private static volatile java.lang.ref.WeakReference<Activity> sResumedActivity;
@@ -347,6 +349,12 @@ public class MainHook implements IXposedHookLoadPackage {
                         safeRun("ChatFooterBarHook", () -> com.leshao.v3.hook.ChatFooterBarHook.hook(cl));
                         safeRun("MsgForgeHook", () -> com.leshao.v3.hook.MsgForgeHook.hook(cl));
                         safeRun("RedPacketHook", () -> com.leshao.v3.hook.RedPacketHook.hook(cl));
+
+                        // 自定义气泡（文档方案A）+ 收藏语音转发（文档路线A）
+                        safeRun("ChatBubbleHook", () -> HookManager.register("ChatBubbleHook",
+                                () -> ChatBubbleHook.hook(cl)));
+                        safeRun("FavVoiceForwardHook", () -> HookManager.register("FavVoiceForwardHook",
+                                () -> FavVoiceForwardHook.hook(cl)));
 
                         safeRun("WmEntry", () -> WmEntry.injectAll(cl));
 

@@ -115,7 +115,7 @@ public class MainActivity {
     private static final Map<Integer, String> PAGE_FEATURES = new HashMap<>();
     static {
         PAGE_FEATURES.put(14, "聊天分组|标签分组|分组管理|标签管理|ChatGroup");
-        PAGE_FEATURES.put(3, "通讯录导出|通讯录|联系人|防撤回|消息防撤回|语音转发|语音消息转发");
+        PAGE_FEATURES.put(3, "通讯录导出|通讯录|联系人|防撤回|消息防撤回|语音转发|语音消息转发|自定义气泡|气泡|收藏语音转发");
         PAGE_FEATURES.put(8, "语音播报|TTS播报|排版引擎|配音|API|Voice|间隔|熔断|消息类型|免打扰|安静时段|播报参数|音量|语速|音调|TTS|文字消息播报|语音消息播报|图片消息播报|播报发送人昵称|播报群聊消息|截断长文字");
         PAGE_FEATURES.put(22, "在线音乐|音乐|点歌|歌曲搜索|专辑|歌手|歌单|排行榜|无损|试听|下载|酷我|Music|点歌白名单");
         PAGE_FEATURES.put(20, "关于模块|版本|模块版本|热更新|更新管控|禁止微信热更新|WeChatUpdateBlocker");
