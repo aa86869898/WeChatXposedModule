@@ -333,13 +333,18 @@ public final class MsgForgeHook {
         return systemContent(original);
     }
 
-    /** 群聊 @ 消息：content 形如「@昵称 正文」，@ 关系由 msgsource 字段携带，
-     *  content 里必须隐藏 @ 昵称，只保留伪装文案（否则 @ 出来等于没伪装）。
-     *  msgsource 的 atusernames 不被修改，@ 提醒仍有效，但显示内容不含 @ 前缀。 */
+    /** 群聊 @ 消息：content 形如「@昵称 正文」，@ 关系由 msgsource 字段携带。
+     *  v3.0.86 清空 msgsource 导致 @ 提醒失效（对方收不到 @）。v3.0.87 改为：
+     *  content 用「@ + 零宽空格 + 空格 + 伪装文案」——显示上隐藏 @ 昵称（看不出 @ 谁），
+     *  但 msgsource 原样保留，微信按 @ 消息发送，对方仍收到 @ 提醒。
+     *  若服务端严格校验 @ 昵称与 atusernames 一致而拒绝发送，会降级为普通消息失败，
+     *  届时再回退「完全伪装（清 msgsource）」方案。 */
     private static String forgeAtMessage(String content) {
         if (content == null) return content;
         String forged = (sText == null || sText.isEmpty()) ? content : sText;
-        LogWriter.log(TAG, "at msg forged hiddenAt body=" + trunc(forged, 20));
+        forged = "@\u200B " + forged;
+        LogWriter.log(TAG, "at msg forged hiddenAt body=" + trunc(forged, 20)
+                + " keepMsgSource=true");
         return forged;
     }
 
@@ -464,12 +469,8 @@ public final class MsgForgeHook {
         a[1] = content;
         a[2] = targetType();
         if (a.length >= 4 && a[3] instanceof Number) a[3] = targetFlag();
-        // 群聊 @ 消息：content 已隐藏 @ 昵称，必须同步清空 atusernames/msgsource 参数，
-        // 否则微信按 @ 消息校验（content 无 @ 昵称）会拒绝发送。
-        if (isAtMessage(original)) {
-            clearAtArgs(a);
-            LogWriter.log(TAG, "sendmgr patch clearedAtArgs");
-        }
+        // v3.0.87：不再清空 msgsource/atusernames —— @ 提醒依赖它们，
+        // content 已用「@零宽空格 」前缀伪装显示，@ 关系保留给对方发提醒。
         LogWriter.log(TAG, "sendmgr patch -> type=" + a[2]
                 + " talker=" + a[0] + " text=" + trunc(original, 20));
     }
@@ -539,10 +540,7 @@ public final class MsgForgeHook {
         a[1] = content;
         a[2] = targetType();
         if (a.length >= 4 && a[3] instanceof Number) a[3] = targetFlag();
-        if (isAtMessage(original)) {
-            clearAtArgs(a);
-            LogWriter.log(TAG, "logic patch clearedAtArgs");
-        }
+        // v3.0.87：保留 msgsource 保证 @ 提醒有效（content 已用 @零宽空格伪装显示）
         LogWriter.log(TAG, "logic patch -> type=" + a[2]
                 + " origLen=" + (original == null ? 0 : original.length()));
     }
@@ -777,12 +775,8 @@ public final class MsgForgeHook {
         if (original == null || original.isEmpty() || isForged(original)) return;
         String content = apply(original);
         if (content == null) return;
-        // 群聊 @ 消息：content 隐藏 @ 昵称后，必须同步清空消息对象上的 msgsource，
-        // 否则微信按 @ 消息校验（content 无 @ 昵称）会拒绝发送。
-        if (isAtMessage(original)) {
-            clearMsgSource(msg);
-            LogWriter.log(TAG, "storage patch clearedMsgSource");
-        }
+        // v3.0.87：不再清空消息对象上的 msgsource —— @ 提醒依赖它，
+        // content 已用「@零宽空格 」前缀伪装显示，@ 关系保留给对方发提醒。
         // 写入 type：优先 setType 方法，失败沿继承链写字段
         boolean typeWritten = false;
         try {

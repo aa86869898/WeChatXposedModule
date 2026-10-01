@@ -326,11 +326,40 @@ public final class ChatBubbleHook {
         } catch (Throwable ignored) {}
     }
 
-    /** 方案 C：XML 兜底路径，View.setBackgroundResource 按 resId 替换（覆盖 X2C 关闭场景）。 */
+    /** 方案 C：XML 兜底路径，View.setBackgroundResource 按 resId 替换（覆盖 X2C 关闭场景）。
+     *  before 阶段用微信原始气泡资源保存 baseDrawable（setBackgroundResource 参数是 int，
+     *  无法替换参数，但保存微信原生气泡 Drawable 后，后续 setBackground/setImageDrawable
+     *  可拦截微信的重复覆盖）；after 阶段替换为自定义气泡图。 */
     private static void installBackgroundResourceHook() {
         try {
             Method m = View.class.getMethod("setBackgroundResource", int.class);
             XposedBridge.hookMethod(m, new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        int resId = ((Number) param.args[0]).intValue();
+                        boolean from = resId == sFromResId;
+                        boolean to = resId == sToResId;
+                        if (!from && !to) return;
+                        int kind = from ? KIND_FROM : KIND_TO;
+                        View v = (View) param.thisObject;
+                        try {
+                            if (from && sFromBaseDrawable == null) {
+                                Drawable base = v.getResources().getDrawable(resId);
+                                if (base != null) sFromBaseDrawable = base;
+                            } else if (to && sToBaseDrawable == null) {
+                                Drawable base = v.getResources().getDrawable(resId);
+                                if (base != null) sToBaseDrawable = base;
+                            }
+                            LogWriter.log(TAG, "setBackgroundResource before resId=" + resId
+                                    + " view=" + v.getClass().getName()
+                                    + " baseSaved=" + (from ? sFromBaseDrawable != null
+                                    : sToBaseDrawable != null));
+                        } catch (Throwable ignored) {}
+                    } catch (Throwable ignored) {}
+                }
+
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     try {
@@ -466,10 +495,18 @@ public final class ChatBubbleHook {
                         try {
                             if (!sEnabled) return;
                             Object holder = param.args[1];
-                            if (holder == null) return;
-                            View bubble = findBubbleView(holder);
-                            if (bubble == null) return;
                             boolean isRecv = Boolean.TRUE.equals(param.args[3]);
+                            if (holder == null) {
+                                LogWriter.log(TAG, "viewitems.to.b called isRecv=" + isRecv
+                                        + " holder=null");
+                                return;
+                            }
+                            View bubble = findBubbleView(holder);
+                            LogWriter.log(TAG, "viewitems.to.b called isRecv=" + isRecv
+                                    + " holder=" + holder.getClass().getName()
+                                    + " bubble=" + (bubble == null ? "null"
+                                    : bubble.getClass().getName()));
+                            if (bubble == null) return;
                             int kind = isRecv ? KIND_FROM : KIND_TO;
                             Drawable custom = loadDrawable(kind);
                             if (custom != null) {
@@ -537,7 +574,9 @@ public final class ChatBubbleHook {
         }
     }
 
-    /** 在 ViewHolder 字段中定位气泡 View：优先 MMNeat7extView，其次背景匹配原生气泡的 View。 */
+    /** 在 ViewHolder 字段中定位气泡 View：优先 MMNeat7extView（类名可能被微信 R8 混淆，
+     *  因此同时按 TextView 类型、字段名 b/d/f、背景匹配兜底）。
+     *  遍历时打印 View 字段信息，便于下次日志确认微信实际气泡 View 落在哪个字段。 */
     private static View findBubbleView(Object holder) {
         for (Class<?> c = holder.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
             for (java.lang.reflect.Field f : c.getDeclaredFields()) {
@@ -547,7 +586,18 @@ public final class ChatBubbleHook {
                     if (!(v instanceof View)) continue;
                     View view = (View) v;
                     String cn = view.getClass().getName();
-                    if (cn.contains("MMNeat7extView") || cn.contains("MMNeatTextView")) {
+                    String bg = view.getBackground() == null ? "null"
+                            : view.getBackground().getClass().getName();
+                    LogWriter.log(TAG, "  holderField " + c.getSimpleName() + "." + f.getName()
+                            + " view=" + cn + " w=" + view.getWidth() + " h=" + view.getHeight()
+                            + " bg=" + bg);
+                    if (cn.contains("MMNeat7extView") || cn.contains("MMNeatTextView")
+                            || cn.contains("Neat")) {
+                        return view;
+                    }
+                    String fn = f.getName();
+                    if (("b".equals(fn) || "d".equals(fn) || "f".equals(fn))
+                            && view instanceof android.widget.TextView) {
                         return view;
                     }
                     if (matchBaseDrawable(view.getBackground()) >= 0) return view;

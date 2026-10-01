@@ -130,10 +130,10 @@ public final class FavVoiceForwardHook {
         installMenuInject(cl);
         // ===== 2. 拦截点击：de2.n（新链路）与 hc（兜底）=====
         installClickInterceptor(cl);
-        // ===== 3. 选人结果：FavoriteIndexUI.onActivityResult + SelectConversationUI.W7 兜底 =====
+        // ===== 3. 选人结果：FavoriteIndexUI.onActivityResult + SelectConversationUI.W7 兜底
+        //          （v3.0.87 起不再启动微信 SelectConversationUI，改用模块联系人选择器，
+        //            此钩子仅作历史兜底，pending 被模块选择器回调消费后不会触发）=====
         installPickResult(cl);
-        // ===== 3.1 选人兜底：SelectConversationUI.onPause 字段扫描（微信新版不走 onActivityResult 返回）=====
-        installSelectUiCapture(cl);
         LogWriter.log(TAG, "installHooks done");
     }
 
@@ -490,21 +490,40 @@ public final class FavVoiceForwardHook {
 
     // ---------------- 转发启动与发送 ----------------
 
+    /** v3.0.87：收藏语音转发不再依赖微信 SelectConversationUI（微信不走 onActivityResult、
+     *  字段扫描也无法稳定定位选中联系人），改为直接拉起模块自己的联系人选择器
+     *  {@link com.leshao.v3.ui.ContactPickerDialog}，勾选对象后逐个调用
+     *  {@link TtsVoiceSender#sendViaSceneVoice} 直接发出。 */
     private static void startForward(Activity ctx, Object favItem) {
         sPendingLocalId = getLocalId(favItem);
         sPendingFavInfo = favItem;
         try {
-            Intent it = new Intent();
-            it.setClassName(ctx, C_SELECT_UI);
-            // 单选转发模式：不加 mutil_select_is_ret，点联系人立即返回 RESULT_OK
-            it.putExtra("Select_Conv_Type", 3);
-            it.putExtra("scene_from", 1);
-            it.putExtra("select_count", 1);
-            ctx.startActivityForResult(it, REQ_VOICE_FWD);
-            LogWriter.log(TAG, "startForward SelectConversationUI localId=" + sPendingLocalId);
+            com.leshao.v3.ui.ContactPickerDialog.show(ctx, "",
+                    com.leshao.v3.ui.ContactPickerDialog.MODE_FRIEND,
+                    (wxids, display) -> {
+                        long localId = sPendingLocalId;
+                        Object info = sPendingFavInfo;
+                        sPendingLocalId = 0;
+                        sPendingFavInfo = null;
+                        if (wxids == null || wxids.isEmpty()) {
+                            LogWriter.log(TAG, "contact picker empty selection localId=" + localId);
+                            return;
+                        }
+                        LogWriter.log(TAG, "contact picker selected count=" + wxids.size()
+                                + " localId=" + localId + " display=" + display);
+                        for (String toUser : wxids) {
+                            if (toUser == null || toUser.isEmpty()) continue;
+                            final String t = toUser;
+                            final long lid = localId;
+                            final Object fav = info;
+                            new Thread(() -> sendVoice(lid, fav, t), "leshao-fav-voice-send")
+                                    .start();
+                        }
+                    });
+            LogWriter.log(TAG, "startForward ContactPickerDialog localId=" + sPendingLocalId);
         } catch (Throwable t) {
             LogWriter.log(TAG, "startForward err: " + t.getMessage());
-            toast("无法打开转发选择");
+            toast("无法打开联系人选择");
         }
     }
 
