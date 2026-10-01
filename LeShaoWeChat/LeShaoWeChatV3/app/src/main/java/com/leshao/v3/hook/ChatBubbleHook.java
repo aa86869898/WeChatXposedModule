@@ -247,6 +247,7 @@ public final class ChatBubbleHook {
                     installResourceHelperHook(cl);
                     installResourceGetDrawableHook(cl);
                     installChatListViewHook(cl);
+                    installChattingListCollector(cl);
                     sHooked = true;
                     LogWriter.log(TAG, "bubble resolver hooked attempt=" + attempt);
                     return;
@@ -741,6 +742,100 @@ public final class ChatBubbleHook {
                     LogWriter.log(TAG, "RecyclerView.onLayout hooked " + cn);
                 }
             } catch (Throwable ignored) {}
+        }
+    }
+
+    /** v3.0.89：收集当前进程当前 UI 的 View 与调用链验证。
+     *  日志显示 setBackgroundResource REPLACE 大量命中无关 TextView/AnimImageView
+     *  （w=0 h=0），真实气泡 View 尚未定位。此 hook 在微信聊天列表刷新后遍历
+     *  View 树，打印所有 View 的类名/宽高/背景，结合 ke5.a.i 调用栈确认真实气泡 View；
+     *  ke5.a.i 返回值替换法保留，真实气泡路径确认后再替换。 */
+    private static void installChattingListCollector(ClassLoader cl) {
+        try {
+            List<String> cands = new ArrayList<>();
+            cands.add("com.tencent.mm.ui.chatting.ChattingList");
+            try {
+                List<String> dk = DexKitHelper.findClassesByString(cl, "refreshChattingList");
+                for (String cn : dk) if (!cands.contains(cn)) cands.add(cn);
+            } catch (Throwable ignored) {}
+            int hooked = 0;
+            for (String cn : cands) {
+                try {
+                    Class<?> c = XposedHelpers.findClass(cn, cl);
+                    for (Method m : c.getDeclaredMethods()) {
+                        if (!"refreshChattingList".equals(m.getName())) continue;
+                        m.setAccessible(true);
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
+                            @Override
+                            protected void afterHookedMethod(MethodHookParam param) {
+                                try {
+                                    if (!sEnabled) return;
+                                    Object thiz = param.thisObject;
+                                    if (thiz instanceof View) {
+                                        dumpViewTree((View) thiz, "refreshChattingList");
+                                    } else {
+                                        LogWriter.log(TAG, "refreshChattingList thiz="
+                                                + (thiz == null ? "null" : thiz.getClass().getName()));
+                                    }
+                                } catch (Throwable ignored) {}
+                            }
+                        });
+                        hooked++;
+                        LogWriter.log(TAG, "ChattingList.refreshChattingList hooked cls="
+                                + c.getName() + " m=" + m);
+                    }
+                } catch (Throwable ignored) {}
+            }
+            if (hooked == 0) {
+                try {
+                    Class<?> rv = XposedHelpers.findClass("androidx.recyclerview.widget.RecyclerView", cl);
+                    Method onLayout = null;
+                    for (Method m : rv.getDeclaredMethods()) {
+                        if ("onLayout".equals(m.getName())) { onLayout = m; break; }
+                    }
+                    if (onLayout != null) {
+                        onLayout.setAccessible(true);
+                        XposedBridge.hookMethod(onLayout, new XC_MethodHook() {
+                            @Override
+                            protected void afterHookedMethod(MethodHookParam param) {
+                                try {
+                                    if (!sEnabled) return;
+                                    dumpViewTree((View) param.thisObject, "RecyclerView.onLayout");
+                                } catch (Throwable ignored) {}
+                            }
+                        });
+                        hooked++;
+                        LogWriter.log(TAG, "RecyclerView.onLayout dump hooked (fallback)");
+                    }
+                } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "ChattingList collector hooks=" + hooked);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installChattingListCollector err: " + t.getMessage());
+        }
+    }
+
+    /** 递归打印 View 树：类名、宽高、屏幕坐标、背景，用于确认真实气泡 View。 */
+    private static void dumpViewTree(View v, String src) {
+        if (v == null) return;
+        try {
+            StringBuilder sb = new StringBuilder();
+            sb.append("view=").append(v.getClass().getName())
+                    .append(" w=").append(v.getWidth()).append(" h=").append(v.getHeight());
+            try {
+                int[] loc = new int[2];
+                v.getLocationOnScreen(loc);
+                sb.append(" xy=").append(loc[0]).append(",").append(loc[1]);
+            } catch (Throwable ignored) {}
+            Drawable bg = v.getBackground();
+            sb.append(" bg=").append(bg == null ? "null" : bg.getClass().getName());
+            LogWriter.log(TAG, "chattingView[" + src + "] " + sb);
+        } catch (Throwable ignored) {}
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                dumpViewTree(g.getChildAt(i), src);
+            }
         }
     }
 

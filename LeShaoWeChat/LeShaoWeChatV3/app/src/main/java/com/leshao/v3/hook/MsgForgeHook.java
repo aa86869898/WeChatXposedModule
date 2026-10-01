@@ -356,9 +356,9 @@ public final class MsgForgeHook {
     }
 
     /** 群聊 @ 消息：content 形如「@昵称 正文」，@ 关系由 msgsource 字段携带。
-     *  v3.0.88 起由 hideAt 配置决定：
-     *  - hideAt=true（默认）：content 完全不含 @ 符号（= 伪装文案），发送时同步清空
-     *    msgsource 降级为普通消息，保证发送成功；代价是对方收不到 @ 提醒。
+     *  v3.0.89 起 hideAt 配置语义调整为「只隐藏 content 中的 @ 符号，保留 msgsource」：
+     *  - hideAt=true（默认）：content 完全不含 @ 符号（= 伪装文案），但 msgsource
+     *    原样保留，发送后对方仍收到 @ 提醒，只是消息内容上看不到 @ 标记。
      *  - hideAt=false：content 保留「@ + 零宽空格 + 空格」前缀，msgsource 保留，
      *    对方仍收到 @ 提醒，但显示带 @ 符号。 */
     private static String forgeAtMessage(String content) {
@@ -366,7 +366,7 @@ public final class MsgForgeHook {
         String forged = (sText == null || sText.isEmpty()) ? content : sText;
         if (sHideAt) {
             LogWriter.log(TAG, "at msg forged hiddenAt body=" + trunc(forged, 20)
-                    + " clearMsgSource=true");
+                    + " keepMsgSource=true");
             return forged;
         }
         forged = "@\u200B " + forged;
@@ -496,11 +496,9 @@ public final class MsgForgeHook {
         a[1] = content;
         a[2] = targetType();
         if (a.length >= 4 && a[3] instanceof Number) a[3] = targetFlag();
-        // v3.0.88：hideAt=true 时清空 msgsource/atusernames（content 无 @，必须降级普通消息
-        // 才能发送成功，代价是 @ 提醒失效）；hideAt=false 时保留 msgsource（@ 提醒有效）。
+        // v3.0.89：hideAt=true 只隐藏 content 的 @，msgsource 原样保留（@ 提醒有效）。
         if (isAtMessage(original) && sHideAt) {
-            clearAtArgs(a);
-            LogWriter.log(TAG, "sendmgr patch clearedAtArgs hideAt=true");
+            LogWriter.log(TAG, "sendmgr patch hideAt keepMsgSource=true");
         }
         LogWriter.log(TAG, "sendmgr patch -> type=" + a[2]
                 + " talker=" + a[0] + " text=" + trunc(original, 20));
@@ -571,10 +569,9 @@ public final class MsgForgeHook {
         a[1] = content;
         a[2] = targetType();
         if (a.length >= 4 && a[3] instanceof Number) a[3] = targetFlag();
-        // v3.0.88：hideAt=true 清空 msgsource 降级普通消息；false 保留 @ 提醒
+        // v3.0.89：hideAt=true 只隐藏 content 的 @，msgsource 原样保留（@ 提醒有效）
         if (isAtMessage(original) && sHideAt) {
-            clearAtArgs(a);
-            LogWriter.log(TAG, "logic patch clearedAtArgs hideAt=true");
+            LogWriter.log(TAG, "logic patch hideAt keepMsgSource=true");
         }
         LogWriter.log(TAG, "logic patch -> type=" + a[2]
                 + " origLen=" + (original == null ? 0 : original.length()));
@@ -810,11 +807,9 @@ public final class MsgForgeHook {
         if (original == null || original.isEmpty() || isForged(original)) return;
         String content = apply(original);
         if (content == null) return;
-        // v3.0.88：hideAt=true 时清空消息对象上的 msgsource（content 无 @ 必须降级普通消息）；
-        // hideAt=false 时保留 msgsource（@ 提醒有效）。
+        // v3.0.89：hideAt=true 只隐藏 content 的 @，msgsource 原样保留（@ 提醒有效）。
         if (isAtMessage(original) && sHideAt) {
-            clearMsgSource(msg);
-            LogWriter.log(TAG, "storage patch clearedMsgSource hideAt=true");
+            LogWriter.log(TAG, "storage patch hideAt keepMsgSource=true");
         }
         // 写入 type：优先 setType 方法，失败沿继承链写字段
         boolean typeWritten = false;

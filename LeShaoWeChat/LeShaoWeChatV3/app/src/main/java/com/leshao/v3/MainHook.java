@@ -12,6 +12,7 @@ import com.leshao.v3.hook.AutoForwardHook;
 import com.leshao.v3.hook.AntiDetectionHook;
 import com.leshao.v3.hook.ChatBubbleHook;
 import com.leshao.v3.hook.FavVoiceForwardHook;
+import com.leshao.v3.hook.ForwardLimitHook;
 import com.leshao.v3.hook.ChatGroupHook;
 import com.leshao.v3.hook.ChatGroupUiInjector;
 import com.leshao.v3.hook.ChatVoiceSwitchHook;
@@ -60,11 +61,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v3.0.88";
+    public static final String MODULE_BUILD = "v3.0.89";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 30088;
+    public static final int MODULE_VERSION_CODE = 30089;
 
     /** v1079: 当前前台 Activity(onResume 记录/onPause 清除), 供 talker 解析等复用。 */
     private static volatile java.lang.ref.WeakReference<Activity> sResumedActivity;
@@ -355,6 +356,9 @@ public class MainHook implements IXposedHookLoadPackage {
                                 () -> ChatBubbleHook.hook(cl)));
                         safeRun("FavVoiceForwardHook", () -> HookManager.register("FavVoiceForwardHook",
                                 () -> FavVoiceForwardHook.hook(cl)));
+                        // v3.0.89: 突破转发/群发多选联系人 9 人上限（文档方案A：hook Intent.getIntExtra）
+                        safeRun("ForwardLimitHook", () -> HookManager.register("ForwardLimitHook",
+                                () -> ForwardLimitHook.hook(cl)));
 
                         safeRun("WmEntry", () -> WmEntry.injectAll(cl));
 

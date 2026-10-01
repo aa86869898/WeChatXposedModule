@@ -20,7 +20,9 @@ import java.io.FileOutputStream;
 import java.lang.reflect.Method;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -693,7 +695,9 @@ public final class FavVoiceForwardHook {
         return null;
     }
 
-    /** 获取 FavApiLogic 实例：优先 hook 捕获的 thisObject，其次静态字段/静态方法。 */
+    /** 获取 FavApiLogic 实例：优先 hook 捕获的 thisObject，其次静态字段/静态方法，
+     *  v3.0.89 起再尝试 BFS 扫描已知收藏相关类的静态字段（微信未调用 tc2.s2 方法时，
+     *  单例仍会保存在某个静态字段中，BFS 可直接找到）。 */
     private static Object getFavApiInstance(Class<?> apiCls) {
         if (sFavApiLogic != null) return sFavApiLogic;
         try {
@@ -701,10 +705,60 @@ public final class FavVoiceForwardHook {
             if (inst != null) { sFavApiLogic = inst; return inst; }
         } catch (Throwable ignored) {}
         try {
+            Object inst = XposedHelpers.getStaticObjectField(apiCls, "f");
+            if (inst != null) { sFavApiLogic = inst; return inst; }
+        } catch (Throwable ignored) {}
+        try {
             Object inst = XposedHelpers.callStaticMethod(apiCls, "getInstance");
             if (inst != null) { sFavApiLogic = inst; return inst; }
         } catch (Throwable ignored) {}
+        try {
+            Object inst = scanFavApiInstance(apiCls);
+            if (inst != null) { sFavApiLogic = inst; return inst; }
+        } catch (Throwable ignored) {}
         LogWriter.log(TAG, "getFavApiInstance no instance yet cls=" + apiCls.getName());
+        return null;
+    }
+
+    /** v3.0.89：BFS 扫描收藏相关类的静态字段，寻找类型与 tc2.s2 兼容的单例实例。
+     *  从 tc2.s2 自身及常见持有者（n0.c、tc2.* 等）出发，逐类扫描静态字段；
+     *  字段类型为 apiCls 的类也加入队列（其静态字段可能直接持有实例）。 */
+    private static Object scanFavApiInstance(Class<?> apiCls) {
+        java.util.ArrayDeque<Class<?>> queue = new java.util.ArrayDeque<>();
+        java.util.Set<Class<?>> visited = new java.util.HashSet<>();
+        queue.add(apiCls);
+        for (String seed : new String[]{"n0.c", "n0.d", "tc2.s2", "tc2.r1", "tc2.t1",
+                "tc2.u1", "tc2.v1", "tc2.s1", "tc2.q1"}) {
+            try {
+                Class<?> c = XposedHelpers.findClass(seed, apiCls.getClassLoader());
+                if (c != null) queue.add(c);
+            } catch (Throwable ignored) {}
+        }
+        int scanned = 0;
+        while (!queue.isEmpty() && scanned < 400) {
+            Class<?> c = queue.poll();
+            if (c == null || !visited.add(c)) continue;
+            scanned++;
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                try {
+                    if (!java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                    f.setAccessible(true);
+                    Object v = f.get(null);
+                    if (v != null && apiCls.isAssignableFrom(v.getClass())) {
+                        LogWriter.log(TAG, "BFS found FavApiLogic instance field="
+                                + c.getName() + "." + f.getName());
+                        return v;
+                    }
+                    if (v instanceof Class) queue.add((Class<?>) v);
+                } catch (Throwable ignored) {}
+            }
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                if (f.getType() == apiCls) {
+                    try { queue.add(f.getDeclaringClass()); } catch (Throwable ignored) {}
+                }
+            }
+        }
+        LogWriter.log(TAG, "BFS scan done classes=" + scanned + " no FavApiLogic instance");
         return null;
     }
 

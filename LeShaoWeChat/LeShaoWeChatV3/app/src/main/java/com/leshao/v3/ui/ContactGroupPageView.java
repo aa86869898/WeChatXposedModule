@@ -153,6 +153,23 @@ public class ContactGroupPageView {
 
         root.addView(candyDivider(ctx, d));
 
+        // v3.0.89: 突破转发/群发多选联系人 9 人上限（文档《微信突破转发群发9个联系人上限》方案A）
+        boolean forwardLimitOn = prefs != null
+                && prefs.getBoolean(ForwardLimitHook.K_ENABLED, false);
+        LinearLayout cardForwardLimit = makeCard(ctx, d);
+        cardForwardLimit.addView(switchRow(ctx, d, "去你妈只能选9个对象",
+                "转发/群发多选联系人时突破 9 人上限", forwardLimitOn,
+                (v, on) -> {
+                    if (prefs != null) prefs.edit().putBoolean(ForwardLimitHook.K_ENABLED, on).apply();
+                    ForwardLimitHook.setEnabled(on);
+                    Toast.makeText(ctx, (on ? "已开启" : "已关闭")
+                                    + "突破9人上限（频繁大群发易触发风控，请注意频率）",
+                            Toast.LENGTH_LONG).show();
+                }, null));
+        root.addView(cardForwardLimit);
+
+        root.addView(candyDivider(ctx, d));
+
         // 新增（文档实现）：消息伪装 / 自动抢红包 / 输入框快捷按钮 / 数据库直读
         LinearLayout cardNew = makeCard(ctx, d);
         cardNew.addView(switchRow(ctx, d, "消息伪装",
