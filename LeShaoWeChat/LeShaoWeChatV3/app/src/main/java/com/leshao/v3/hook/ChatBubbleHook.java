@@ -246,22 +246,43 @@ public final class ChatBubbleHook {
     }
 
     /** 解析气泡资源 ID：优先反射 R$drawable 字段（R8 不混淆资源字段名），
-     *  其次 getIdentifier，最后回退文档已知值。 */
+     *  其次 getIdentifier，最后回退文档已知值。R8 可能把 R 类扁平化为
+     *  com$tencent$mm$R$drawable，因此遍历候选类名变体。 */
     private static void resolveBubbleResIds(ClassLoader cl) {
-        try {
-            Class<?> rDrawable = XposedHelpers.findClass("com.tencent.mm.R$drawable", cl);
-            java.lang.reflect.Field f1 = rDrawable.getDeclaredField("chatfrom_bg");
-            java.lang.reflect.Field f2 = rDrawable.getDeclaredField("chatto_bg");
-            f1.setAccessible(true);
-            f2.setAccessible(true);
-            int from = f1.getInt(null);
-            int to = f2.getInt(null);
-            if (from != 0) sFromResId = from;
-            if (to != 0) sToResId = to;
-            LogWriter.log(TAG, "bubble resIds via R$drawable from=" + sFromResId + " to=" + sToResId);
-            return;
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "R$drawable resolve err: " + t.getMessage());
+        String[] candidates = {
+                "com.tencent.mm.R$drawable",
+                "com$tencent$mm$R$drawable",
+                "com.tencent.mm.R$drawable"
+        };
+        for (String cn : candidates) {
+            try {
+                Class<?> rDrawable = cl.loadClass(cn);
+                int from = 0;
+                int to = 0;
+                try {
+                    java.lang.reflect.Field f1 = rDrawable.getDeclaredField("chatfrom_bg");
+                    f1.setAccessible(true);
+                    from = f1.getInt(null);
+                } catch (NoSuchFieldException ignored) {}
+                try {
+                    java.lang.reflect.Field f2 = rDrawable.getDeclaredField("chatto_bg");
+                    f2.setAccessible(true);
+                    to = f2.getInt(null);
+                } catch (NoSuchFieldException ignored) {}
+                if (from == 0 && to == 0) {
+                    LogWriter.log(TAG, "R$drawable " + cn + " loaded but no chatfrom/chatto fields");
+                    continue;
+                }
+                if (from != 0) sFromResId = from;
+                if (to != 0) sToResId = to;
+                LogWriter.log(TAG, "bubble resIds via R$drawable cn=" + cn
+                        + " from=" + sFromResId + " to=" + sToResId);
+                return;
+            } catch (ClassNotFoundException ignored) {
+                // 继续尝试下一个候选名
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "R$drawable resolve err cn=" + cn + ": " + t.getMessage());
+            }
         }
         try {
             android.content.res.Resources res = ContextManager.getAppContext().getResources();
@@ -275,6 +296,18 @@ public final class ChatBubbleHook {
         } catch (Throwable t) {
             LogWriter.log(TAG, "resolveBubbleResIds err: " + t.getMessage());
         }
+        // 无论成功与否，打印旧值对应的当前资源名，供人工核对锚点。
+        try {
+            android.content.res.Resources res = ContextManager.getAppContext().getResources();
+            for (int id : new int[]{sFromResId, sToResId}) {
+                try {
+                    String name = res.getResourceEntryName(id);
+                    LogWriter.log(TAG, "legacy resId " + id + " -> name=" + name);
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "legacy resId " + id + " name err: " + t.getMessage());
+                }
+            }
+        } catch (Throwable ignored) {}
     }
 
     /** 方案 C：XML 兜底路径，View.setBackgroundResource 按 resId 替换（覆盖 X2C 关闭场景）。 */
@@ -339,6 +372,22 @@ public final class ChatBubbleHook {
                                     boolean from = resId == sFromResId;
                                     boolean to = resId == sToResId;
                                     if (!from && !to) return;
+                                    // 打印资源名 + 调用栈，确认是否为聊天气泡背景加载
+                                    try {
+                                        Context ctx = (Context) param.args[0];
+                                        String name = ctx.getResources().getResourceEntryName(resId);
+                                        LogWriter.log(TAG, "ke5.a.i resId=" + resId + " name=" + name);
+                                    } catch (Throwable ignored) {}
+                                    try {
+                                        StackTraceElement[] st = Thread.currentThread().getStackTrace();
+                                        StringBuilder sb = new StringBuilder("ke5.a.i stack:");
+                                        int n = Math.min(st.length, 8);
+                                        for (int i = 2; i < n; i++) {
+                                            sb.append("\n  ").append(st[i].getClassName())
+                                                    .append('.').append(st[i].getMethodName());
+                                        }
+                                        LogWriter.log(TAG, sb.toString());
+                                    } catch (Throwable ignored) {}
                                     int kind = from ? KIND_FROM : KIND_TO;
                                     Drawable d = loadDrawable(kind);
                                     if (d != null) {

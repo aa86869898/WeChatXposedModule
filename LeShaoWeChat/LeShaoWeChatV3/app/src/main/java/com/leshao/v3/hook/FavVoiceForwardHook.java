@@ -179,13 +179,32 @@ public final class FavVoiceForwardHook {
             }
         });
 
-        // 诊断：菜单点击分发 K7 —— 确认「转发」点击是否到达
+        // 诊断：菜单点击分发 K7 —— 确认「转发」点击是否到达，itemId==3 时强制放行
         XposedBridge.hookAllMethods(favUi, "K7", new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
                 try {
                     Object itemId = param.args.length > 0 ? param.args[0] : null;
+                    int id = -1;
+                    if (itemId instanceof Number) id = ((Number) itemId).intValue();
                     LogWriter.log(TAG, "K7 hit: args=" + param.args.length + " itemId=" + itemId);
+                    if (id == 3) {
+                        LogWriter.log(TAG, "K7 forward hit");
+                        Object info = findFavItem(param.args);
+                        int t = getType(info);
+                        if (t == TYPE_VOICE) {
+                            sPendingLocalId = getLocalId(info);
+                            sPendingFavInfo = info;
+                            LogWriter.log(TAG, "K7 forward voice -> allow localId=" + sPendingLocalId);
+                            // K7 若返回 boolean 则放行，避免被预检拦截
+                            try {
+                                if (param.method instanceof java.lang.reflect.Method) {
+                                    Class<?> rt = ((java.lang.reflect.Method) param.method).getReturnType();
+                                    if (rt == boolean.class) param.setResult(true);
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    }
                 } catch (Throwable ignored) {}
             }
         });
@@ -249,14 +268,25 @@ public final class FavVoiceForwardHook {
                             try {
                                 if (!sEnabled) return;
                                 Object host = param.thisObject;
+                                LogWriter.log(TAG, "gc.a after: cls=" + host.getClass().getName());
+                                // gc 是菜单构建器，真正的菜单宿主在其字段中（MMListPopupWindow，含 add/findItem）。
+                                Object menu = findMenuHost(host);
+                                if (menu == null) {
+                                    LogWriter.log(TAG, "gc.a after: no menu host found, fallback on host");
+                                    menu = host;
+                                }
                                 Object existing = null;
                                 try {
-                                    existing = XposedHelpers.callMethod(host, "findItem", 3);
+                                    existing = XposedHelpers.callMethod(menu, "findItem", 3);
                                 } catch (Throwable ignored) {}
-                                if (existing != null) return;
-                                boolean added = tryAddForwardItem(host);
-                                LogWriter.log(TAG, "gc.a after: findItem3=" + (existing != null)
-                                        + " addForward=" + added);
+                                if (existing != null) {
+                                    LogWriter.log(TAG, "gc.a after: forward item already present menu="
+                                            + menu.getClass().getName());
+                                    return;
+                                }
+                                boolean added = tryAddForwardItem(menu);
+                                LogWriter.log(TAG, "gc.a after: menu=" + menu.getClass().getName()
+                                        + " findItem3=" + (existing != null) + " addForward=" + added);
                             } catch (Throwable ignored) {}
                         }
                     });
@@ -298,6 +328,36 @@ public final class FavVoiceForwardHook {
     }
 
     /** 手动向收藏长按菜单注入「转发」项（兼容不同 add 签名） */
+    /** 在菜单构建器实例的字段链中查找真正的菜单宿主（含 add(int,int,int,...) 方法的对象）。 */
+    private static Object findMenuHost(Object host) {
+        if (host == null) return null;
+        Class<?> c = host.getClass();
+        while (c != null && c != Object.class) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                try {
+                    f.setAccessible(true);
+                    Object v = f.get(host);
+                    if (v == null) continue;
+                    Class<?> vc = v.getClass();
+                    try {
+                        vc.getMethod("add", int.class, int.class, int.class, CharSequence.class);
+                        return v;
+                    } catch (NoSuchMethodException ignored) {}
+                    try {
+                        vc.getMethod("add", int.class, int.class, int.class, int.class);
+                        return v;
+                    } catch (NoSuchMethodException ignored) {}
+                    try {
+                        vc.getMethod("add", int.class, CharSequence.class);
+                        return v;
+                    } catch (NoSuchMethodException ignored) {}
+                } catch (Throwable ignored) {}
+            }
+            c = c.getSuperclass();
+        }
+        return null;
+    }
+
     private static boolean tryAddForwardItem(Object menuHost) {
         Object[][] attempts = {
                 {0, 3, 0, 2131761210, 0},

@@ -481,13 +481,15 @@ public final class MsgForgeHook {
 
     private static void installIntercept(ClassLoader cl) {
         final ClassLoader fcl = resolveLoader(cl);
-        // 三条链路同时安装，互不干扰：
+        // 四条链路同时安装，互不干扰：
         //  - qs5.v5(SendMsgMgr) 发送方法改写（8.0.78 实测 UI 发送最终收敛于此，主生效点）；
         //  - oh0.c 命中时在发送任务内就地改写 content/type（对走新框架的发送生效）；
-        //  - om.SendTextComponent 命中时仅记录并放行（诊断，不再预发送/拦截）。
+        //  - om.SendTextComponent 命中时仅记录并放行（诊断，不再预发送/拦截）；
+        //  - f9 消息入库层改写（最可靠兜底：微信 UI 发送必然 insert MMMsg 到 message 表）。
         installSendMgrPatch(fcl);
         installLogicPatch(fcl);
         installSendComponentFallback(fcl);
+        installStoragePatch(fcl);
     }
 
     private static ClassLoader resolveLoader(ClassLoader cl) {
@@ -737,5 +739,125 @@ public final class MsgForgeHook {
 
     private static String trunc(String s, int m) {
         return s == null ? "" : s.length() > m ? s.substring(0, m) + "..." : s;
+    }
+
+    // ---------------- 消息入库层改写（最可靠兜底） ----------------
+    //
+    // 微信 UI 发送文本必然调用 com.tencent.mm.storage.f9 的 insert 方法（Bb/Db/Hb/yb），
+    // 参数 p0=com.tencent.mm.storage.e9（MMMsg）。在此处将出站 type==1 消息的
+    // field_type / field_content 就地改写为伪造类型与 XML，微信原生完成上屏与状态流转。
+    private static void installStoragePatch(ClassLoader cl) {
+        try {
+            Class<?> f9 = VersionCompat.findMsgStorageClass(cl);
+            if (f9 == null) {
+                try {
+                    f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
+                } catch (Throwable ignored) {}
+            }
+            if (f9 == null) {
+                LogWriter.log(TAG, "storage patch FAIL: f9 not found");
+                return;
+            }
+            int installed = 0;
+            for (Method m : f9.getDeclaredMethods()) {
+                String mn = m.getName();
+                if (!"Bb".equals(mn) && !"Db".equals(mn)
+                        && !"Hb".equals(mn) && !"yb".equals(mn)) continue;
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length < 1) continue;
+                try {
+                    m.setAccessible(true);
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam p) {
+                            try {
+                                patchStorageArgs(p);
+                            } catch (Throwable e) {
+                                LogWriter.log(TAG, "storage patch err: " + e);
+                            }
+                        }
+                    });
+                    installed++;
+                    LogWriter.log(TAG, "storage patch hooked " + f9.getName()
+                            + "." + mn + "(" + Arrays.toString(pts) + ")");
+                } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "storage patch hooks=" + installed);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installStoragePatch FAIL: " + t.getMessage());
+        }
+    }
+
+    private static void patchStorageArgs(XC_MethodHook.MethodHookParam p) {
+        if (!sEnabled) return;
+        if (p.args == null || p.args.length < 1 || p.args[0] == null) return;
+        Object msg = p.args[0];
+        // 只处理出站消息（field_isSend == 1）
+        int isSend;
+        try {
+            isSend = readIntField(msg, "field_isSend");
+        } catch (Throwable t) {
+            return;
+        }
+        if (isSend != 1) return;
+        int type;
+        try {
+            type = readIntField(msg, "field_type");
+        } catch (Throwable t) {
+            return;
+        }
+        if (type != 1) return;
+        String original;
+        try {
+            original = readStrField(msg, "field_content");
+        } catch (Throwable t) {
+            return;
+        }
+        if (original == null || original.isEmpty() || isForged(original)) return;
+        String content = apply(original);
+        if (content == null) return;
+        writeIntField(msg, "field_type", targetType());
+        writeStrField(msg, "field_content", content);
+        long msgId = 0;
+        try {
+            msgId = readLongField(msg, "field_msgId");
+        } catch (Throwable ignored) {}
+        LogWriter.log(TAG, "storage patch -> type=" + targetType()
+                + " isSend=1 msgId=" + msgId + " text=" + trunc(original, 20));
+    }
+
+    private static int readIntField(Object o, String name) throws Throwable {
+        java.lang.reflect.Field f = o.getClass().getDeclaredField(name);
+        f.setAccessible(true);
+        return ((Number) f.get(o)).intValue();
+    }
+
+    private static long readLongField(Object o, String name) throws Throwable {
+        java.lang.reflect.Field f = o.getClass().getDeclaredField(name);
+        f.setAccessible(true);
+        return ((Number) f.get(o)).longValue();
+    }
+
+    private static String readStrField(Object o, String name) throws Throwable {
+        java.lang.reflect.Field f = o.getClass().getDeclaredField(name);
+        f.setAccessible(true);
+        Object v = f.get(o);
+        return v == null ? null : v.toString();
+    }
+
+    private static void writeIntField(Object o, String name, int value) {
+        try {
+            java.lang.reflect.Field f = o.getClass().getDeclaredField(name);
+            f.setAccessible(true);
+            f.set(o, value);
+        } catch (Throwable ignored) {}
+    }
+
+    private static void writeStrField(Object o, String name, String value) {
+        try {
+            java.lang.reflect.Field f = o.getClass().getDeclaredField(name);
+            f.setAccessible(true);
+            f.set(o, value);
+        } catch (Throwable ignored) {}
     }
 }
