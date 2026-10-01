@@ -792,72 +792,106 @@ public final class MsgForgeHook {
         if (!sEnabled) return;
         if (p.args == null || p.args.length < 1 || p.args[0] == null) return;
         Object msg = p.args[0];
-        // 只处理出站消息（field_isSend == 1）
+        // e9 的 isSend/type/content 字段可能声明在父类（MessageHook 用 z0()/getType() 方法调用），
+        // 因此先尝试方法调用，失败再沿继承链反射字段，避免 getDeclaredField 找不到而静默失败。
         int isSend;
         try {
-            isSend = readIntField(msg, "field_isSend");
+            isSend = ((Number) XposedHelpers.callMethod(msg, "z0")).intValue();
         } catch (Throwable t) {
-            return;
+            try {
+                isSend = readIntFieldUp(msg, "field_isSend");
+            } catch (Throwable t2) {
+                return;
+            }
         }
         if (isSend != 1) return;
         int type;
         try {
-            type = readIntField(msg, "field_type");
+            type = ((Number) XposedHelpers.callMethod(msg, "getType")).intValue();
         } catch (Throwable t) {
-            return;
+            try {
+                type = readIntFieldUp(msg, "field_type");
+            } catch (Throwable t2) {
+                return;
+            }
         }
         if (type != 1) return;
-        String original;
+        String original = null;
         try {
-            original = readStrField(msg, "field_content");
-        } catch (Throwable t) {
-            return;
+            Object v = XposedHelpers.callMethod(msg, "getContent");
+            if (v != null) original = v.toString();
+        } catch (Throwable ignored) {}
+        if (original == null || original.isEmpty()) {
+            try {
+                original = readStrFieldUp(msg, "field_content");
+            } catch (Throwable ignored) {}
         }
         if (original == null || original.isEmpty() || isForged(original)) return;
         String content = apply(original);
         if (content == null) return;
-        writeIntField(msg, "field_type", targetType());
-        writeStrField(msg, "field_content", content);
+        // 写入 type：优先 setType 方法，失败沿继承链写字段
+        boolean typeWritten = false;
+        try {
+            XposedHelpers.callMethod(msg, "setType", targetType());
+            typeWritten = true;
+        } catch (Throwable ignored) {}
+        if (!typeWritten) {
+            try {
+                writeIntFieldUp(msg, "field_type", targetType());
+            } catch (Throwable ignored) {}
+        }
+        // 写入 content：优先 setContent，失败写字段
+        boolean contentWritten = false;
+        try {
+            XposedHelpers.callMethod(msg, "setContent", content);
+            contentWritten = true;
+        } catch (Throwable ignored) {}
+        if (!contentWritten) {
+            try {
+                writeStrFieldUp(msg, "field_content", content);
+            } catch (Throwable ignored) {}
+        }
         long msgId = 0;
         try {
-            msgId = readLongField(msg, "field_msgId");
+            msgId = ((Number) XposedHelpers.callMethod(msg, "getMsgId")).longValue();
         } catch (Throwable ignored) {}
         LogWriter.log(TAG, "storage patch -> type=" + targetType()
                 + " isSend=1 msgId=" + msgId + " text=" + trunc(original, 20));
     }
 
-    private static int readIntField(Object o, String name) throws Throwable {
-        java.lang.reflect.Field f = o.getClass().getDeclaredField(name);
-        f.setAccessible(true);
+    /** 沿继承链查找字段（e9 的字段可能在父类声明）。 */
+    private static java.lang.reflect.Field findFieldUp(Object o, String name) throws NoSuchFieldException {
+        Class<?> c = o.getClass();
+        while (c != null && c != Object.class) {
+            try {
+                java.lang.reflect.Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                return f;
+            } catch (NoSuchFieldException e) {
+                c = c.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(name);
+    }
+
+    private static int readIntFieldUp(Object o, String name) throws Throwable {
+        java.lang.reflect.Field f = findFieldUp(o, name);
         return ((Number) f.get(o)).intValue();
     }
 
-    private static long readLongField(Object o, String name) throws Throwable {
-        java.lang.reflect.Field f = o.getClass().getDeclaredField(name);
-        f.setAccessible(true);
-        return ((Number) f.get(o)).longValue();
-    }
-
-    private static String readStrField(Object o, String name) throws Throwable {
-        java.lang.reflect.Field f = o.getClass().getDeclaredField(name);
-        f.setAccessible(true);
+    private static String readStrFieldUp(Object o, String name) throws Throwable {
+        java.lang.reflect.Field f = findFieldUp(o, name);
         Object v = f.get(o);
         return v == null ? null : v.toString();
     }
 
-    private static void writeIntField(Object o, String name, int value) {
-        try {
-            java.lang.reflect.Field f = o.getClass().getDeclaredField(name);
-            f.setAccessible(true);
-            f.set(o, value);
-        } catch (Throwable ignored) {}
+    private static void writeIntFieldUp(Object o, String name, int value) throws Throwable {
+        java.lang.reflect.Field f = findFieldUp(o, name);
+        f.set(o, value);
     }
 
-    private static void writeStrField(Object o, String name, String value) {
-        try {
-            java.lang.reflect.Field f = o.getClass().getDeclaredField(name);
-            f.setAccessible(true);
-            f.set(o, value);
-        } catch (Throwable ignored) {}
+    private static void writeStrFieldUp(Object o, String name, String value) throws Throwable {
+        java.lang.reflect.Field f = findFieldUp(o, name);
+        f.set(o, value);
     }
 }

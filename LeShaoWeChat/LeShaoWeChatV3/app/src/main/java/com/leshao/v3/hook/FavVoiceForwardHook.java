@@ -296,6 +296,22 @@ public final class FavVoiceForwardHook {
             }
         }
 
+        // 真实菜单宿主：调用栈确认 fc.onItemLongClick -> eu5.s0.n -> eu5.s0.p -> gc.a，
+        // 微信的 this.a.add(0,3,0,"转发") 发生在 eu5.s0 的字段 a（MMListPopupWindow）上。
+        // 直接 hook eu5.s0.n/p 的 after，在真实菜单宿主上检查并注入 itemId=3。
+        for (String s0Name : new String[]{"eu5.s0"}) {
+            try {
+                for (Class<?> s0Cls : HookUtil.loadClasses(cl, s0Name)) {
+                    LogWriter.log(TAG, "eu5.s0 declared n=" + countMethods(s0Cls, "n")
+                            + " p=" + countMethods(s0Cls, "p") + " cls=" + s0Name);
+                    XposedBridge.hookAllMethods(s0Cls, "n", menuBuildHook());
+                    XposedBridge.hookAllMethods(s0Cls, "p", menuBuildHook());
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "eu5.s0 hook err: " + t.getMessage());
+            }
+        }
+
         // 接管选人结果：W7(String username) 单选回调
         Class<?> selUi = XposedHelpers.findClass(C_SELECT_UI, cl);
         LogWriter.log(TAG, "SelectConversationUI: W7=" + countMethods(selUi, "W7"));
@@ -328,6 +344,37 @@ public final class FavVoiceForwardHook {
     }
 
     /** 手动向收藏长按菜单注入「转发」项（兼容不同 add 签名） */
+    private static XC_MethodHook menuBuildHook() {
+        return new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                try {
+                    if (!sEnabled) return;
+                    Object host = param.thisObject;
+                    String mn = param.method.getName();
+                    LogWriter.log(TAG, "eu5.s0." + mn + " after: cls=" + host.getClass().getName());
+                    Object menu = findMenuHost(host);
+                    if (menu == null) {
+                        LogWriter.log(TAG, "eu5.s0." + mn + " after: no menu host");
+                        return;
+                    }
+                    Object existing = null;
+                    try {
+                        existing = XposedHelpers.callMethod(menu, "findItem", 3);
+                    } catch (Throwable ignored) {}
+                    if (existing != null) {
+                        LogWriter.log(TAG, "eu5.s0." + mn + " after: forward item already present menu="
+                                + menu.getClass().getName());
+                        return;
+                    }
+                    boolean added = tryAddForwardItem(menu);
+                    LogWriter.log(TAG, "eu5.s0." + mn + " after: menu=" + menu.getClass().getName()
+                            + " findItem3=" + (existing != null) + " addForward=" + added);
+                } catch (Throwable ignored) {}
+            }
+        };
+    }
+
     /** 在菜单构建器实例的字段链中查找真正的菜单宿主（含 add(int,int,int,...) 方法的对象）。 */
     private static Object findMenuHost(Object host) {
         if (host == null) return null;

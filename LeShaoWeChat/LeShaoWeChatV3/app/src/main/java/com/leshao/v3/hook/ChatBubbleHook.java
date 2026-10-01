@@ -231,6 +231,7 @@ public final class ChatBubbleHook {
                     installBubbleResolver(cl);
                     installBackgroundResourceHook();
                     installResourceHelperHook(cl);
+                    installResourceGetDrawableHook(cl);
                     sHooked = true;
                     LogWriter.log(TAG, "bubble resolver hooked attempt=" + attempt);
                     return;
@@ -336,6 +337,70 @@ public final class ChatBubbleHook {
             LogWriter.log(TAG, "View.setBackgroundResource hooked");
         } catch (Throwable t) {
             LogWriter.log(TAG, "installBackgroundResourceHook err: " + t.getMessage());
+        }
+    }
+
+    /** 方案 D：Resources.getDrawable 加载路径（聊天页加载气泡背景的最通用入口）。
+     *  ke5.a.i 只在启动预构建时调用一次，kw5.g.r / setBackgroundResource 在 8.0.78 实测不触发；
+     *  微信聊天 item 很可能通过 Resources.getDrawable(resId) 加载气泡九宫格。 */
+    private static void installResourceGetDrawableHook(ClassLoader cl) {
+        try {
+            Class<?> resCls = XposedHelpers.findClass("android.content.res.Resources", cl);
+            XC_MethodHook h = new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        int resId = ((Number) param.args[0]).intValue();
+                        boolean from = resId == sFromResId;
+                        boolean to = resId == sToResId;
+                        if (!from && !to) return;
+                        int kind = from ? KIND_FROM : KIND_TO;
+                        // 打印资源名 + 调用栈，确认是否为聊天气泡背景加载
+                        try {
+                            Object ctx = ContextManager.getAppContext();
+                            android.content.res.Resources res = (android.content.res.Resources) param.thisObject;
+                            String name = res.getResourceEntryName(resId);
+                            LogWriter.log(TAG, "getDrawable resId=" + resId + " name=" + name);
+                        } catch (Throwable ignored) {}
+                        try {
+                            StackTraceElement[] st = Thread.currentThread().getStackTrace();
+                            StringBuilder sb = new StringBuilder("getDrawable stack:");
+                            int n = Math.min(st.length, 6);
+                            for (int i = 2; i < n; i++) {
+                                sb.append("\n  ").append(st[i].getClassName())
+                                        .append('.').append(st[i].getMethodName());
+                            }
+                            LogWriter.log(TAG, sb.toString());
+                        } catch (Throwable ignored) {}
+                        Drawable d = loadDrawable(kind);
+                        if (d != null) {
+                            LogWriter.log(TAG, "getDrawable REPLACE resId=" + resId);
+                            param.setResult(d);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            };
+            for (Method m : resCls.getDeclaredMethods()) {
+                String mn = m.getName();
+                if (!"getDrawable".equals(mn)) continue;
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length == 1 && pts[0] == int.class) {
+                    try {
+                        m.setAccessible(true);
+                        XposedBridge.hookMethod(m, h);
+                        LogWriter.log(TAG, "Resources.getDrawable(int) hooked");
+                    } catch (Throwable ignored) {}
+                } else if (pts.length == 2 && pts[0] == int.class) {
+                    try {
+                        m.setAccessible(true);
+                        XposedBridge.hookMethod(m, h);
+                        LogWriter.log(TAG, "Resources.getDrawable(int,Theme) hooked");
+                    } catch (Throwable ignored) {}
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installResourceGetDrawableHook err: " + t.getMessage());
         }
     }
 
