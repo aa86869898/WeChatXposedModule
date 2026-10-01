@@ -114,11 +114,18 @@ public final class FavVoiceForwardHook {
             protected void beforeHookedMethod(MethodHookParam param) {
                 try {
                     Object info = param.args.length > 0 ? param.args[0] : null;
-                    if (getType(info) == TYPE_VOICE) {
+                    int t = getType(info);
+                    long lid = getLocalId(info);
+                    LogWriter.log(TAG, "x3.b hit: args=" + param.args.length
+                            + " info=" + (info == null ? "null" : info.getClass().getName())
+                            + " type=" + t + " localId=" + lid);
+                    if (t == TYPE_VOICE) {
                         LogWriter.log(TAG, "x3.b voice -> force false");
                         param.setResult(false);
                     }
-                } catch (Throwable ignored) {}
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "x3.b err: " + t.getMessage());
+                }
             }
         });
 
@@ -129,15 +136,33 @@ public final class FavVoiceForwardHook {
             protected void beforeHookedMethod(MethodHookParam param) {
                 try {
                     Object listObj = param.args.length > 0 ? param.args[0] : null;
+                    boolean hasVoice = false;
                     if (listObj instanceof List) {
                         for (Object item : (List<?>) listObj) {
                             if (getType(item) == TYPE_VOICE) {
-                                LogWriter.log(TAG, "H7 voice list -> force true");
-                                param.setResult(true);
-                                return;
+                                hasVoice = true;
+                                break;
                             }
                         }
                     }
+                    LogWriter.log(TAG, "H7 hit: args=" + param.args.length + " list="
+                            + (listObj == null ? "null" : listObj.getClass().getName())
+                            + " hasVoice=" + hasVoice);
+                    if (hasVoice) {
+                        LogWriter.log(TAG, "H7 voice list -> force true");
+                        param.setResult(true);
+                    }
+                } catch (Throwable ignored) {}
+            }
+        });
+
+        // 诊断：菜单点击分发 K7 —— 确认「转发」点击是否到达
+        XposedBridge.hookAllMethods(favUi, "K7", new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                try {
+                    Object itemId = param.args.length > 0 ? param.args[0] : null;
+                    LogWriter.log(TAG, "K7 hit: args=" + param.args.length + " itemId=" + itemId);
                 } catch (Throwable ignored) {}
             }
         });
@@ -149,7 +174,11 @@ public final class FavVoiceForwardHook {
             protected void beforeHookedMethod(MethodHookParam param) {
                 try {
                     Object info = param.args.length > 3 ? param.args[3] : null;
-                    if (getType(info) == TYPE_VOICE) {
+                    int t = getType(info);
+                    LogWriter.log(TAG, "mc.g hit: args=" + param.args.length
+                            + " info=" + (info == null ? "null" : info.getClass().getName())
+                            + " type=" + t);
+                    if (t == TYPE_VOICE) {
                         sPendingLocalId = getLocalId(info);
                         sPendingFavInfo = info;
                         LogWriter.log(TAG, "mc.g voice -> allow localId=" + sPendingLocalId);
@@ -163,9 +192,12 @@ public final class FavVoiceForwardHook {
             protected void beforeHookedMethod(MethodHookParam param) {
                 try {
                     Object listObj = param.args.length > 2 ? param.args[2] : null;
+                    LogWriter.log(TAG, "mc.h hit: args=" + param.args.length
+                            + " list=" + (listObj == null ? "null" : listObj.getClass().getName()));
                     if (listObj instanceof List && !((List<?>) listObj).isEmpty()) {
                         Object info = ((List<?>) listObj).get(0);
-                        if (getType(info) == TYPE_VOICE) {
+                        int t = getType(info);
+                        if (t == TYPE_VOICE) {
                             sPendingLocalId = getLocalId(info);
                             sPendingFavInfo = info;
                             LogWriter.log(TAG, "mc.h voice -> allow localId=" + sPendingLocalId);
@@ -175,6 +207,30 @@ public final class FavVoiceForwardHook {
                 } catch (Throwable ignored) {}
             }
         });
+
+        // 兜底：长按菜单构建 gc.a() 中若微信未添加「转发」项（x3.b 未生效），手动注入 itemId=3
+        try {
+            Class<?> gcCls = XposedHelpers.findClass("com.tencent.mm.plugin.fav.ui.gc", cl);
+            XposedBridge.hookAllMethods(gcCls, "a", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        Object host = param.thisObject;
+                        Object existing = null;
+                        try {
+                            existing = XposedHelpers.callMethod(host, "findItem", 3);
+                        } catch (Throwable ignored) {}
+                        if (existing != null) return;
+                        boolean added = tryAddForwardItem(host);
+                        LogWriter.log(TAG, "gc.a after: findItem3=" + (existing != null)
+                                + " addForward=" + added);
+                    } catch (Throwable ignored) {}
+                }
+            });
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "gc hook err: " + t.getMessage());
+        }
 
         // 接管选人结果：W7(String username) 单选回调
         Class<?> selUi = XposedHelpers.findClass(C_SELECT_UI, cl);
@@ -204,6 +260,25 @@ public final class FavVoiceForwardHook {
                 } catch (Throwable ignored) {}
             }
         });
+    }
+
+    /** 手动向收藏长按菜单注入「转发」项（兼容不同 add 签名） */
+    private static boolean tryAddForwardItem(Object menuHost) {
+        Object[][] attempts = {
+                {0, 3, 0, 2131761210, 0},
+                {0, 3, 0, "转发", 0},
+                {0, 3, 0, 2131761210},
+                {0, 3, 0, "转发"},
+                {3, "转发"},
+                {0, 0, 0, "转发"}
+        };
+        for (Object[] args : attempts) {
+            try {
+                XposedHelpers.callMethod(menuHost, "add", args);
+                return true;
+            } catch (Throwable ignored) {}
+        }
+        return false;
     }
 
     // ---------------- 发送逻辑 ----------------

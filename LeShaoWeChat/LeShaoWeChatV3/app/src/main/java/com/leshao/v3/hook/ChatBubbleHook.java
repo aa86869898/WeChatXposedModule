@@ -19,6 +19,7 @@ import com.leshao.v3.LogWriter;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.lang.reflect.Method;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -234,27 +235,41 @@ public final class ChatBubbleHook {
         t.start();
     }
 
-    private static void installBubbleResolver(ClassLoader cl) {
+    private static void installBubbleResolver(ClassLoader cl) throws Throwable {
         Class<?> resCls = XposedHelpers.findClass("kw5.g", cl);
-        XposedHelpers.findAndHookMethod(resCls, "r",
-                Context.class, View.class, String.class, String.class, int.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        try {
-                            if (!sEnabled) return;
-                            String value = (String) param.args[3];
-                            if (value == null) return;
-                            Drawable d = null;
-                            if ("@drawable/chatfrom_bg".equals(value)) {
-                                d = loadDrawable(KIND_FROM);
-                            } else if ("@drawable/chatto_bg".equals(value)) {
-                                d = loadDrawable(KIND_TO);
-                            }
-                            if (d != null) param.setResult(d);
-                        } catch (Throwable ignored) {}
+        // 本环境 R8 改写 XposedHelpers 的 varargs findAndHookMethod，统一走反射 + hookMethod
+        Method target = null;
+        for (Method m : resCls.getDeclaredMethods()) {
+            Class<?>[] pts = m.getParameterTypes();
+            if ("r".equals(m.getName()) && pts.length == 5
+                    && pts[0] == Context.class && pts[1] == View.class
+                    && pts[2] == String.class && pts[3] == String.class
+                    && pts[4] == int.class) {
+                target = m;
+                break;
+            }
+        }
+        if (target == null) {
+            throw new NoSuchMethodException("kw5.g.r(Context,View,String,String,int)");
+        }
+        target.setAccessible(true);
+        XposedBridge.hookMethod(target, new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                try {
+                    if (!sEnabled) return;
+                    String value = (String) param.args[3];
+                    if (value == null) return;
+                    Drawable d = null;
+                    if ("@drawable/chatfrom_bg".equals(value)) {
+                        d = loadDrawable(KIND_FROM);
+                    } else if ("@drawable/chatto_bg".equals(value)) {
+                        d = loadDrawable(KIND_TO);
                     }
-                });
+                    if (d != null) param.setResult(d);
+                } catch (Throwable ignored) {}
+            }
+        });
     }
 
     private static Drawable loadDrawable(int kind) {
