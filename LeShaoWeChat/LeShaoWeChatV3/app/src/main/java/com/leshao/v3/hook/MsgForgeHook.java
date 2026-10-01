@@ -359,12 +359,15 @@ public final class MsgForgeHook {
     /** 群聊 @ 消息：content 形如「@昵称 正文」，@ 关系由 msgsource 字段携带。
      *  v3.0.90 实测结论：微信协议要求 content 必须带 @ 标记才能发出 @ 消息；
      *  content 无 @ 但 msgsource 保留 @ 关系时发送失败。hideAt 配置语义：
-     *  - hideAt=true（默认）：content 完全不含 @ 符号（= 伪装文案），发送时同步清空
+     *  - hideAt=true：content 完全不含 @ 符号（= 伪装文案），发送时同步清空
      *    msgsource 降级为普通消息，保证发送成功；代价是对方收不到 @ 提醒。
      *  - hideAt=false：content 保留「@ + 零宽空格 + 空格」前缀，msgsource 保留，
      *    对方仍收到 @ 提醒，但显示带 @ 符号。二者不可兼得。
      *  v3.0.93：实测微信 content 中 @ 目标以 \u2005 分隔（@昵称1\u2005@昵称2\u2005正文），
-     *  伪装只替换 @ 前缀之后的正文，保留完整 @ 目标列表，@ 多人不再失败。 */
+     *  伪装只替换 @ 前缀之后的正文，保留完整 @ 目标列表，@ 多人不再失败。
+     *  v3.0.94：用户实测仅 @ 不输正文时 content 以 \u2005 结尾，旧逻辑把整条 content
+     *  当成前缀，昵称与伪装文案一起发出。改为将 @ 提及中的昵称脱敏为空白（保留 @ 与
+     *  \u2005 分隔），msgsource 不动，@ 提醒仍有效且真实昵称不再随消息发出。 */
     private static String forgeAtMessage(String content) {
         if (content == null) return content;
         // 未配置伪装文案时完全放行，保留原始 @ 前缀与正文
@@ -375,20 +378,37 @@ public final class MsgForgeHook {
                     + " clearMsgSource=true");
             return forged;
         }
-        String atPrefix = extractAtPrefix(content);
-        forged = (atPrefix != null ? atPrefix : "@\u200B ") + forged;
+        String masked = maskedAtPrefix(content);
+        forged = (masked != null ? masked : "@\u200B ") + forged;
         LogWriter.log(TAG, "at msg forged hiddenAt body=" + trunc(forged, 20)
-                + " keepMsgSource=true prefixLen=" + (atPrefix == null ? 0 : atPrefix.length()));
+                + " keepMsgSource=true prefixLen=" + (masked == null ? 0 : masked.length()));
         return forged;
     }
 
-    /** 提取 @ 提及前缀：微信 content 中 @ 目标以 \u2005 分隔（@昵称1\u2005@昵称2\u2005正文）。
-     *  返回 null 表示 content 不含 \u2005（@ 关系仅在 msgsource，content 无 @ 提及显示）。 */
-    private static String extractAtPrefix(String content) {
+    /** 提取 @ 提及前缀并将昵称脱敏为空白：微信 content 中 @ 目标以 \u2005 分隔
+     *  （@昵称1\u2005@昵称2\u2005正文）。只保留「@」与「\u2005」结构，跳过昵称字符，
+     *  返回形如「@\u2005@\u2005」的前缀。返回 null 表示 content 不含 \u2005
+     *  （@ 关系仅在 msgsource，content 无 @ 提及显示）。 */
+    private static String maskedAtPrefix(String content) {
         if (content == null) return null;
         int idx = content.lastIndexOf('\u2005');
         if (idx < 0) return null;
-        return content.substring(0, idx + 1);
+        String head = content.substring(0, idx + 1);
+        StringBuilder sb = new StringBuilder();
+        boolean inAt = false;
+        int len = head.length();
+        for (int i = 0; i < len; i++) {
+            char c = head.charAt(i);
+            if (c == '@' && !inAt) {
+                inAt = true;
+                sb.append('@');
+            } else if (c == '\u2005') {
+                inAt = false;
+                sb.append('\u2005');
+            }
+            // inAt=true 时的昵称字符与其余分隔符全部跳过（脱敏）
+        }
+        return sb.length() > 0 ? sb.toString() : null;
     }
 
     public static String systemContent(String original) {
@@ -703,11 +723,14 @@ public final class MsgForgeHook {
             LogWriter.log(TAG, "ui intercept " + mname + " talker 未知, 放行原发送 text=" + trunc(original, 20));
             return;
         }
-        // 不再“预发送 + 拦截原发送”（会导致消息上屏后状态无人更新而一直转圈）。
-        // 直接放行原发送：真实发送会流经 SendTextLogic 链路补丁（installLogicPatch），
-        // 由 patchLogicArgs 就地改写 content/type，微信原生完成上屏与状态流转。
-        LogWriter.log(TAG, "ui intercept " + mname + " 放行, 由逻辑链路改写 type=" + targetType()
-                + " talker=" + talker + " text=" + trunc(original, 30));
+        // 就地改写 content 参数为伪装文本后放行原发送：
+        // 微信原生完成上屏与状态流转（不会转圈），storage patch 仅作兜底。
+        String content = apply(original);
+        if (content == null || content.isEmpty()) return;
+        if (!content.equals(original)) p.args[0] = content;
+        LogWriter.log(TAG, "ui intercept " + mname + " 就地改写 type=" + targetType()
+                + " talker=" + talker + " text=" + trunc(original, 30)
+                + " -> " + trunc(content, 30));
     }
 
     private static boolean isForged(String s) {

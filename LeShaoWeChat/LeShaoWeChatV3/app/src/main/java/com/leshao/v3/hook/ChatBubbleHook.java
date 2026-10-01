@@ -70,6 +70,12 @@ public final class ChatBubbleHook {
     private static volatile Drawable sFromBaseDrawable;
     private static volatile Drawable sToBaseDrawable;
 
+    // v3.0.94：文本气泡在 setBackgroundResource 替换后可能被微信布局阶段再次覆盖。
+    // 记录已替换的气泡 View 与自定义 Drawable，在聊天列表 onLayout 后强制恢复，
+    // 解决文本消息（TextView w=0 h=0 时替换）最终仍显示原生气泡的问题。
+    private static final java.util.Map<View, Drawable> sBubbleViews =
+            new java.util.WeakHashMap<>();
+
     private static volatile BubblePickCallback sPickCb;
     private static volatile int sPickKind = KIND_FROM;
 
@@ -238,6 +244,9 @@ public final class ChatBubbleHook {
         Thread t = new Thread(() -> {
             for (int attempt = 0; attempt < 10 && !sHooked; attempt++) {
                 try {
+                    // v3.0.95：微信 8.0.78 气泡资源已改名(mh/o_)，且 ke5.a.i 运行时不再调用，
+                    // 必须主动加载微信原生气泡 Drawable，否则 constantState 匹配全部失效。
+                    ensureBaseDrawables();
                     installBubbleResolver(cl);
                     installBubbleApplyHook(cl);
                     installBackgroundResourceHook();
@@ -328,6 +337,35 @@ public final class ChatBubbleHook {
         } catch (Throwable ignored) {}
     }
 
+    /** v3.0.95：主动加载微信原生气泡 Drawable（资源 ID 已改名 mh/o_），
+     *  供 constantState 匹配识别真实气泡 View。ke5.a.i 在 8.0.78 运行时不再调用，
+     *  必须在此兜底，否则 setBackground/onLayout 等替换路径全部失效。 */
+    private static void ensureBaseDrawables() {
+        try {
+            Context ctx = ContextManager.getAppContext();
+            if (ctx == null) return;
+            android.content.res.Resources res = ctx.getResources();
+            if (sFromBaseDrawable == null && sFromResId != 0) {
+                Drawable d = res.getDrawable(sFromResId);
+                if (d != null) {
+                    sFromBaseDrawable = d;
+                    LogWriter.log(TAG, "baseDrawable loaded from resId=" + sFromResId
+                            + " name=" + res.getResourceEntryName(sFromResId));
+                }
+            }
+            if (sToBaseDrawable == null && sToResId != 0) {
+                Drawable d = res.getDrawable(sToResId);
+                if (d != null) {
+                    sToBaseDrawable = d;
+                    LogWriter.log(TAG, "baseDrawable loaded to resId=" + sToResId
+                            + " name=" + res.getResourceEntryName(sToResId));
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "ensureBaseDrawables err: " + t.getMessage());
+        }
+    }
+
     /** 方案 C：XML 兜底路径，View.setBackgroundResource 按 resId 替换（覆盖 X2C 关闭场景）。
      *  before 阶段用微信原始气泡资源保存 baseDrawable（setBackgroundResource 参数是 int，
      *  无法替换参数，但保存微信原生气泡 Drawable 后，后续 setBackground/setImageDrawable
@@ -375,6 +413,7 @@ public final class ChatBubbleHook {
                         if (d != null) {
                             View v = (View) param.thisObject;
                             v.setBackground(d);
+                            rememberBubble(v, d);
                             int[] loc = {0, 0};
                             try { v.getLocationOnScreen(loc); } catch (Throwable ignored) {}
                             LogWriter.log(TAG, "setBackgroundResource REPLACE resId=" + resId
@@ -534,6 +573,7 @@ public final class ChatBubbleHook {
                                 Drawable custom = loadDrawable(kind);
                                 if (custom != null) {
                                     bubble.setBackground(custom);
+                                    rememberBubble(bubble, custom);
                                     LogWriter.log(TAG, "viewitems.b REPLACE isRecv=" + isRecv
                                             + " view=" + bubble.getClass().getName());
                                 }
@@ -882,9 +922,41 @@ public final class ChatBubbleHook {
         }
     }
 
+    /** 记录已替换为自定义气泡的 View，供布局完成后强制恢复（文本气泡修复）。 */
+    private static void rememberBubble(View v, Drawable custom) {
+        if (v == null || custom == null) return;
+        synchronized (sBubbleViews) {
+            sBubbleViews.put(v, custom);
+        }
+    }
+
+    /** 聊天列表布局后，把已记录的气泡 View 背景强制恢复为自定义图。
+     *  微信在 RecyclerView 布局/复用阶段可能再次设置原生气泡背景，这里用引用比较
+     *  判断背景是否仍是自定义图，被覆盖则重新设置。 */
+    private static void restoreRecordedBubbles() {
+        synchronized (sBubbleViews) {
+            for (java.util.Iterator<java.util.Map.Entry<View, Drawable>> it =
+                 sBubbleViews.entrySet().iterator(); it.hasNext(); ) {
+                java.util.Map.Entry<View, Drawable> e = it.next();
+                View v = e.getKey();
+                if (v == null) continue;
+                try {
+                    if (!v.isShown()) continue;
+                    Drawable want = e.getValue();
+                    if (want != null && v.getBackground() != want) {
+                        v.setBackground(want);
+                        LogWriter.log(TAG, "bubble restore view=" + v.getClass().getName()
+                                + " w=" + v.getWidth() + " h=" + v.getHeight());
+                    }
+                } catch (Throwable ignored) {}
+            }
+        }
+    }
+
     /** 递归遍历 View 树，把背景与微信原生气泡匹配的 View 替换为用户图片。 */
     private static void replaceMatchingBubbles(View v) {
         if (v == null) return;
+        restoreRecordedBubbles();
         try {
             int kind = matchBaseDrawable(v.getBackground());
             if (kind >= 0) {
@@ -1120,6 +1192,7 @@ public final class ChatBubbleHook {
                                     ? (View) param.args[1] : null;
                             if (v != null) {
                                 v.setBackground(d);
+                                rememberBubble(v, d);
                                 LogWriter.log(TAG, "resolver setBackground view="
                                         + v.getClass().getName());
                             }
