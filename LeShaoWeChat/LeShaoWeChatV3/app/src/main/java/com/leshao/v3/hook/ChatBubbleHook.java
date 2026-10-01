@@ -257,16 +257,20 @@ public final class ChatBubbleHook {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
                 try {
-                    if (!sEnabled) return;
                     String value = (String) param.args[3];
                     if (value == null) return;
-                    Drawable d = null;
-                    if ("@drawable/chatfrom_bg".equals(value)) {
-                        d = loadDrawable(KIND_FROM);
-                    } else if ("@drawable/chatto_bg".equals(value)) {
-                        d = loadDrawable(KIND_TO);
+                    if ("@drawable/chatfrom_bg".equals(value) || "@drawable/chatto_bg".equals(value)) {
+                        boolean from = "@drawable/chatfrom_bg".equals(value);
+                        String path = from ? sFromPath : sToPath;
+                        LogWriter.log(TAG, "resolver hit value=" + value + " enabled=" + sEnabled
+                                + " path=" + (path != null && !path.isEmpty() ? "set" : "EMPTY"));
+                        if (!sEnabled) return;
+                        Drawable d = from ? loadDrawable(KIND_FROM) : loadDrawable(KIND_TO);
+                        if (d != null) {
+                            LogWriter.log(TAG, "resolver REPLACE " + value);
+                            param.setResult(d);
+                        }
                     }
-                    if (d != null) param.setResult(d);
                 } catch (Throwable ignored) {}
             }
         });
