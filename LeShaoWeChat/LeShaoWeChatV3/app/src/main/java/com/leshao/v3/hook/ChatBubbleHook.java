@@ -239,6 +239,8 @@ public final class ChatBubbleHook {
                     installBackgroundResourceHook();
                     installBackgroundHook();
                     installImageViewHook();
+                    installViewitemsToHook(cl);
+                    installLinkSubtypeHook(cl);
                     installResourceHelperHook(cl);
                     installResourceGetDrawableHook(cl);
                     installChatListViewHook(cl);
@@ -435,6 +437,93 @@ public final class ChatBubbleHook {
             LogWriter.log(TAG, "ImageView.setImageResource hooked");
         } catch (Throwable t) {
             LogWriter.log(TAG, "installImageViewHook setImageResource err: " + t.getMessage());
+        }
+    }
+
+    /** 文档 §5 方案2：精准 hook viewitems.to.b(e9, to, d, Boolean isRecv) ——
+     *  文本气泡最终设置点（普通态 chatfrom_bg/chatto_bg），方向由第4参给出。
+     *  after 中直接替换 holder.b（MMNeat7extView）背景。 */
+    private static void installViewitemsToHook(ClassLoader cl) {
+        try {
+            Class<?> toCls = XposedHelpers.findClass("com.tencent.mm.ui.chatting.viewitems.to", cl);
+            for (Method m : toCls.getDeclaredMethods()) {
+                if (!"b".equals(m.getName())) continue;
+                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length != 4 || pts[3] != Boolean.class) continue;
+                m.setAccessible(true);
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sEnabled) return;
+                            Object holder = param.args[1];
+                            if (holder == null) return;
+                            Object bubble = XposedHelpers.getObjectField(holder, "b");
+                            if (!(bubble instanceof View)) return;
+                            boolean isRecv = Boolean.TRUE.equals(param.args[3]);
+                            int kind = isRecv ? KIND_FROM : KIND_TO;
+                            Drawable custom = loadDrawable(kind);
+                            if (custom != null) {
+                                ((View) bubble).setBackground(custom);
+                                LogWriter.log(TAG, "viewitems.to.b REPLACE isRecv=" + isRecv
+                                        + " view=" + bubble.getClass().getName());
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "viewitems.to.b hooked " + m);
+                return;
+            }
+            LogWriter.log(TAG, "viewitems.to.b not found (fallback setBackgroundResource covers)");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installViewitemsToHook err: " + t.getMessage());
+        }
+    }
+
+    /** 文档 §5 方案2：链接/自动识别文本子类型 hn5.r0.g0(收)/hn5.s0.k0(发)，
+     *  after 中直接替换 MMNeat7extView 背景。 */
+    private static void installLinkSubtypeHook(ClassLoader cl) {
+        try {
+            Class<?> neatCls = XposedHelpers.findClass("com.tencent.mm.ui.widget.MMNeat7extView", cl);
+            String[] inners = {
+                    "com.tencent.mm.ui.chatting.viewitems.hn5$r0",
+                    "com.tencent.mm.ui.chatting.viewitems.hn5.r0",
+                    "com.tencent.mm.ui.chatting.viewitems.hn5$s0",
+                    "com.tencent.mm.ui.chatting.viewitems.hn5.s0"
+            };
+            for (String cn : inners) {
+                try {
+                    Class<?> c = XposedHelpers.findClass(cn, cl);
+                    for (Method m : c.getDeclaredMethods()) {
+                        if (m.getParameterTypes().length != 1) continue;
+                        if (m.getParameterTypes()[0] != neatCls) continue;
+                        m.setAccessible(true);
+                        final String owner = cn;
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
+                            @Override
+                            protected void afterHookedMethod(MethodHookParam param) {
+                                try {
+                                    if (!sEnabled) return;
+                                    Object v = param.args[0];
+                                    if (!(v instanceof View)) return;
+                                    // r0=收(chatfrom), s0=发(chatto)
+                                    int kind = m.getName().equals("g0") ? KIND_FROM : KIND_TO;
+                                    Drawable custom = loadDrawable(kind);
+                                    if (custom != null) {
+                                        ((View) v).setBackground(custom);
+                                        LogWriter.log(TAG, "link subtype REPLACE " + owner
+                                                + "." + m.getName() + " kind=" + kind);
+                                    }
+                                } catch (Throwable ignored) {}
+                            }
+                        });
+                        LogWriter.log(TAG, "link subtype hooked " + cn + "." + m.getName());
+                    }
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installLinkSubtypeHook err: " + t.getMessage());
         }
     }
 

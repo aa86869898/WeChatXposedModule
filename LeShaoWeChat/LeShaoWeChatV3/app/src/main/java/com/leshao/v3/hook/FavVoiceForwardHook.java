@@ -385,9 +385,9 @@ public final class FavVoiceForwardHook {
         try {
             Intent it = new Intent();
             it.setClassName(ctx, C_SELECT_UI);
+            // 单选转发模式：不加 mutil_select_is_ret，点联系人立即返回 RESULT_OK
             it.putExtra("Select_Conv_Type", 3);
             it.putExtra("scene_from", 1);
-            it.putExtra("mutil_select_is_ret", true);
             it.putExtra("select_count", 1);
             ctx.startActivityForResult(it, REQ_VOICE_FWD);
             LogWriter.log(TAG, "startForward SelectConversationUI localId=" + sPendingLocalId);
@@ -397,7 +397,10 @@ public final class FavVoiceForwardHook {
         }
     }
 
-    /** 文档 §7.4：收藏语音 → v61.d1.h 插记录 → 复制到 voice 目录 → v61.o 入队上传。 */
+    /** 收藏语音 → 直接复用模块内已验证的语音发送链路
+     *  {@link TtsVoiceSender#sendViaSceneVoice}：
+     *  v61.d1.h(talker,"amr_") 建记录 → 复制到 voice2 目录 → v61.d1.u 建 type=34 消息
+     *  → v61.v0.dj().e() 踢上传队列 → refreshChattingList 上屏。 */
     private static void sendVoice(long localId, Object favInfo, String toUser) {
         try {
             ClassLoader cl = sCl;
@@ -419,39 +422,13 @@ public final class FavVoiceForwardHook {
             if (durMs <= 0) durMs = 1000;
             LogWriter.log(TAG, "fav voice src=" + srcPath + " durMs=" + durMs);
 
-            // ② v61.d1.h(toUser, md5) 插 voice 记录，返回新 fileName
-            Object d1 = getService(cl, C_VOICE_LOGIC);
-            if (d1 == null) { toast("语音服务不可用"); return; }
-            String md5 = md5OfFile(srcPath);
-            String newName = (String) callVoiceLogic(cl, d1, "h", toUser, md5);
-            if (newName == null || newName.isEmpty()) {
-                LogWriter.log(TAG, "v61.d1.h returned null");
-                toast("生成语音记录失败");
-                return;
-            }
-
-            // ③ 复制语音文件到 voice 目录（u0.Fj(ou5.x.j, newName, false, true)）
-            String dst = voiceDirPath(cl, newName);
-            if (dst == null || dst.isEmpty()) {
-                LogWriter.log(TAG, "voice dir resolve failed, skip copy");
-                toast("无法解析 voice 目录");
-                return;
-            }
-            copyFile(srcPath, dst);
-            LogWriter.log(TAG, "voice copied: " + srcPath + " -> " + dst);
-
-            // ④ 入队上传：b41.h9.e().g(new v61.o(newName, durMs))
-            Object scene = newUploadScene(cl, newName, durMs);
-            if (scene == null) { toast("构造上传场景失败"); return; }
-            Object queue = getCoreEntry(cl, "e");
-            if (queue == null) { toast("网络队列不可用"); return; }
-            boolean queued = enqueueScene(cl, queue, scene);
-            LogWriter.log(TAG, "upload queued=" + queued + " to=" + toUser
-                    + " newName=" + newName + " durMs=" + durMs);
-            if (queued) {
-                toast("收藏语音已发送");
+            // ② 复用模块内已验证链路发送（v61.d1.h/u + kick queue + 上屏）
+            boolean ok = TtsVoiceSender.sendViaSceneVoice(toUser, srcPath, durMs);
+            LogWriter.log(TAG, "fav voice sendViaSceneVoice ok=" + ok + " to=" + toUser);
+            if (ok) {
+                toast("语音已转发");
             } else {
-                toast("语音上传入队失败");
+                toast("语音转发失败");
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, "sendVoice err: " + t.getMessage());
