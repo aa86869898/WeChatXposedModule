@@ -2,61 +2,73 @@ package com.leshao.v3.hook;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.ContextMenu;
+import android.view.View;
 import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.lang.reflect.Method;
+import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.UUID;
+import java.util.Set;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /**
- * 收藏语音转发 —— 文档《收藏语音转发WeChat_FavVoice_Forward_Analysis.md》路线 A。
+ * 收藏语音转发 —— 严格按《WeChat_收藏语音转发_逆向分析与注入方案.md》方案 A 实现。
  *
- * <p>微信官方在 {@code tc2.x3.b}（菜单可见性）、{@code FavoriteIndexUI.H7}（合法性预检）、
- * {@code mc.g/mc.h}（FavoriteMenuHelper）三处硬编码拦截收藏语音转发，且原生
- * SelectConversationUI → X7 链路对 type==3 无分支。模块放行三道拦截后复用微信原生选人页，
- * 在 {@code SelectConversationUI.W7(String)} 拦截选人结果，自行通过 {@code v61.d1}（VoiceLogic）
- * 组装 type=34 的语音消息并上传。</p>
+ * <p>微信在三个点硬编码拦截收藏语音转发：菜单构建（de2.m / gc 中 x3.b 过滤）、预检
+ * （FavoriteIndexUI.H7）、多选（mc.g）。本模块不放开微信原生「转发给朋友」，
+ * 而是注入自定义 itemId=10086 的「语音转发」菜单项，点击后自行拉起
+ * SelectConversationUI，选人后复刻聊天语音转发：{@code v61.d1.h + 复制文件 +
+ * v61.o 入队上传}（微信上传完自动建 type=34 消息并发送）。</p>
  */
 public final class FavVoiceForwardHook {
 
     public static final String TAG = "FavVoice";
     public static final String K_ENABLED = "ls_fav_voice_forward";
 
-    // 本构建实测混淆名（文档附录），微信换包后需按文档第十节重新锚定
-    private static final String C_FILTER = "tc2.x3";                          // FavSendFilter
+    // ===== 文档类名（当前版本混淆名，换包后需按文档重新核对）=====
     private static final String C_FAV_UI = "com.tencent.mm.plugin.fav.ui.FavoriteIndexUI";
-    private static final String C_MENU_HELPER = "com.tencent.mm.plugin.fav.ui.mc"; // FavoriteMenuHelper
+    private static final String C_BUILDER_NEW = "de2.m";                 // 新链路菜单构建器
+    private static final String C_DISPATCH_NEW = "de2.n";                 // 新链路点击分发
+    private static final String C_BUILDER_OLD = "com.tencent.mm.plugin.fav.ui.gc"; // 兜底构建器
+    private static final String C_DISPATCH_OLD = "com.tencent.mm.plugin.fav.ui.hc";  // 兜底点击回调
+    private static final String C_FAV_API = "tc2.s2";                    // FavApiUtil
+    private static final String C_VOICE_LOGIC = "v61.d1";                // VoiceLogic
+    private static final String C_VOICE_INFO = "v61.c1";                 // VoiceInfo
     private static final String C_SELECT_UI = "com.tencent.mm.ui.transmit.SelectConversationUI";
-    private static final String C_FAV_API = "tc2.s2";                            // FavApiLogic
-    private static final String C_VOICE_LOGIC = "v61.d1";                       // VoiceLogic
-    private static final String C_VOICE_INFO = "v61.c1";                         // VoiceInfo
-    private static final String C_P0 = "com.tencent.mm.modelbase.p0";             // 上传回调基类
+    private static final String C_UPLOAD_VOICE = "v61.o";               // NetSceneUploadVoice
+    private static final String C_CORE_ENTRY = "b41.h9";                // 核心静态入口
+    private static final String C_NETSCENE_QUEUE = "com.tencent.mm.modelbase.r1"; // NetSceneQueue
+    private static final String C_VOICE_PATH = "ou5.x";                  // voice 路径枚举
+    private static final String C_VOICE_SERVICE = "u0";                      // 路径服务
+
+    private static final int TYPE_VOICE = 3;
+    private static final int ITEM_VOICE_FWD = 10086;   // 自定义 itemId，微信原生集合 {0..9} 不冲突
+    private static final int REQ_VOICE_FWD = 0x5210;     // startActivityForResult 请求码
 
     private static volatile boolean sEnabled = false;
     private static volatile boolean sHooked = false;
     private static volatile ClassLoader sCl;
 
-    // 待转发状态：长按语音时由 mc.g/h 保存，选人后消费
+    // 待转发状态：点击「语音转发」时保存，选人结果返回后消费
     private static volatile long sPendingLocalId;
     private static volatile Object sPendingFavInfo;
-    // 最近长按的语音收藏对象：菜单点击回调（hc）参数里没有 fav info，用它兜底
-    private static volatile Object sLastLongClickInfo;
-
-    private static final int TYPE_VOICE = 3;
-    private static final int STATUS_UPLOAD_WAIT = 3;
-    private static final int COLUMN_MASK = 0x400d60; // 列存在位掩码（文档修正2）
 
     private FavVoiceForwardHook() {}
 
@@ -109,343 +121,468 @@ public final class FavVoiceForwardHook {
     }
 
     private static void installHooks(ClassLoader cl) throws Throwable {
-        // ===== 拦截 A：FavSendFilter —— 语音恒 true 视为不可转发，强制 false 让「转发」菜单出现 =====
-        // 类/方法名会随微信换包变化，且 DexKit 报告的声明类可能只存在于特定 ClassLoader（Tinker），
-        // 因此全包扫描所有包含 "MicroMsg.FavSendFilter" 字符串的方法并跨 ClassLoader hook。
-        List<String> filterSigs = new java.util.ArrayList<>();
-        try {
-            filterSigs.addAll(DexKitHelper.findMethodsByString(cl, null, "MicroMsg.FavSendFilter"));
-        } catch (Throwable ignored) {}
-        LogWriter.log(TAG, "FavSendFilter sigs=" + filterSigs);
-        for (String sig : filterSigs) {
-            String cn = classNameOf(sig);
-            String mn = methodNameOf(sig);
-            if (cn == null || mn == null) continue;
-            for (Class<?> c : HookUtil.loadClasses(cl, cn)) {
-                int declared = countMethods(c, mn);
-                LogWriter.log(TAG, "FavSendFilter hook cls=" + c.getName()
-                        + " loader=" + HookUtil.loaderName(c.getClassLoader())
-                        + " m=" + mn + " declared=" + declared);
-                XposedBridge.hookAllMethods(c, mn, new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        try {
-                            Object info = findFavItem(param.args);
-                            int t = getType(info);
-                            long lid = getLocalId(info);
-                            LogWriter.log(TAG, "x3 hit: m=" + param.method.getName()
-                                    + " args=" + param.args.length
-                                    + " info=" + (info == null ? "null" : info.getClass().getName())
-                                    + " type=" + t + " localId=" + lid);
-                            if (t == TYPE_VOICE) {
-                                LogWriter.log(TAG, "x3 voice -> force false");
-                                param.setResult(false);
-                                // 打印调用栈，定位当前版本真实菜单构建类（gc.a 可能已改名/换类）
-                                try {
-                                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
-                                    StringBuilder sb = new StringBuilder("x3 stack:");
-                                    int n = Math.min(st.length, 12);
-                                    for (int i = 2; i < n; i++) {
-                                        sb.append("\n  ").append(st[i].getClassName())
-                                                .append('.').append(st[i].getMethodName());
-                                    }
-                                    LogWriter.log(TAG, sb.toString());
-                                } catch (Throwable ignored) {}
-                            }
-                        } catch (Throwable t) {
-                            LogWriter.log(TAG, "x3 err: " + t.getMessage());
-                        }
-                    }
-                });
-            }
-        }
-
-        // ===== 拦截 B：FavoriteIndexUI.H7 —— 列表含语音时直接放行 =====
-        Class<?> favUi = XposedHelpers.findClass(C_FAV_UI, cl);
-        LogWriter.log(TAG, "FavoriteIndexUI: H7=" + countMethods(favUi, "H7")
-                + " K7=" + countMethods(favUi, "K7"));
-        XposedBridge.hookAllMethods(favUi, "H7", new XC_MethodHook() {
-            @Override
-            protected void beforeHookedMethod(MethodHookParam param) {
-                try {
-                    Object info = findFavItem(param.args);
-                    int t = getType(info);
-                    LogWriter.log(TAG, "H7 hit: args=" + param.args.length
-                            + " info=" + (info == null ? "null" : info.getClass().getName())
-                            + " type=" + t);
-                    if (t == TYPE_VOICE) {
-                        LogWriter.log(TAG, "H7 voice list -> force true");
-                        param.setResult(true);
-                    }
-                } catch (Throwable ignored) {}
-            }
-        });
-
-        // 诊断：菜单点击分发 K7 —— 确认「转发」点击是否到达，itemId==3 时强制放行
-        XposedBridge.hookAllMethods(favUi, "K7", new XC_MethodHook() {
-            @Override
-            protected void beforeHookedMethod(MethodHookParam param) {
-                try {
-                    Object itemId = param.args.length > 0 ? param.args[0] : null;
-                    int id = -1;
-                    if (itemId instanceof Number) id = ((Number) itemId).intValue();
-                    LogWriter.log(TAG, "K7 hit: args=" + param.args.length + " itemId=" + itemId);
-                    if (id == 3) {
-                        LogWriter.log(TAG, "K7 forward hit");
-                        Object info = findFavItem(param.args);
-                        int t = getType(info);
-                        if (t == TYPE_VOICE) {
-                            sPendingLocalId = getLocalId(info);
-                            sPendingFavInfo = info;
-                            if (info != null) sLastLongClickInfo = info;
-                            LogWriter.log(TAG, "K7 forward voice -> allow localId=" + sPendingLocalId);
-                            // K7 若返回 boolean 则放行，避免被预检拦截
-                            try {
-                                if (param.method instanceof java.lang.reflect.Method) {
-                                    Class<?> rt = ((java.lang.reflect.Method) param.method).getReturnType();
-                                    if (rt == boolean.class) param.setResult(true);
-                                }
-                            } catch (Throwable ignored) {}
-                        }
-                    }
-                } catch (Throwable ignored) {}
-            }
-        });
-
-        // ===== 拦截 C：FavoriteMenuHelper（mc.g / mc.h）=====
-        List<String> menuSigs = new java.util.ArrayList<>();
-        try {
-            menuSigs.addAll(DexKitHelper.findMethodsByString(cl, null, "MicroMsg.FavoriteMenuHelper"));
-        } catch (Throwable ignored) {}
-        LogWriter.log(TAG, "FavoriteMenuHelper sigs=" + menuSigs);
-        for (String sig : menuSigs) {
-            String cn = classNameOf(sig);
-            String mn = methodNameOf(sig);
-            if (cn == null || mn == null) continue;
-            for (Class<?> c : HookUtil.loadClasses(cl, cn)) {
-                int declared = countMethods(c, mn);
-                LogWriter.log(TAG, "FavoriteMenuHelper hook cls=" + c.getName()
-                        + " loader=" + HookUtil.loaderName(c.getClassLoader())
-                        + " m=" + mn + " declared=" + declared);
-                XposedBridge.hookAllMethods(c, mn, new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        try {
-                            Object info = findFavItem(param.args);
-                            int t = getType(info);
-                            LogWriter.log(TAG, "menu hit: m=" + mn + " args=" + param.args.length
-                                    + " info=" + (info == null ? "null" : info.getClass().getName())
-                                    + " type=" + t);
-                            if (t == TYPE_VOICE) {
-                                sPendingLocalId = getLocalId(info);
-                                sPendingFavInfo = info;
-                                LogWriter.log(TAG, "menu voice -> allow localId=" + sPendingLocalId);
-                                param.setResult(true);
-                            }
-                        } catch (Throwable ignored) {}
-                    }
-                });
-            }
-        }
-
-        // 兜底：长按菜单构建 gc.a() 中若微信未添加「转发」项（x3.b 未生效），手动注入 itemId=3
-        // gc 类名随版本可能变化（当前版本 R8 后可能非 com.tencent.mm.plugin.fav.ui.gc），
-        // 用 DexKit 字符串锚点动态定位：FavSendFilter 的调用者 / FavoriteMenuHelper 所在 UI 包。
-        java.util.Set<String> gcCands = new java.util.LinkedHashSet<>();
-        try {
-            gcCands.add("com.tencent.mm.plugin.fav.ui.gc");
-        } catch (Throwable ignored) {}
-        try {
-            for (String sig : DexKitHelper.findMethodsByString(cl, null, "MicroMsg.FavoriteMenuHelper")) {
-                String cn = classNameOf(sig);
-                if (cn != null) gcCands.add(cn);
-            }
-        } catch (Throwable ignored) {}
-        for (String gcName : gcCands) {
-            try {
-                for (Class<?> gcCls : HookUtil.loadClasses(cl, gcName)) {
-                    LogWriter.log(TAG, "gc.a declared=" + countMethods(gcCls, "a") + " cls=" + gcName);
-                    XposedBridge.hookAllMethods(gcCls, "a", new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            try {
-                                if (!sEnabled) return;
-                                Object host = param.thisObject;
-                                LogWriter.log(TAG, "gc.a after: cls=" + host.getClass().getName());
-                                // gc 是菜单构建器，真正的菜单宿主在其字段中（MMListPopupWindow，含 add/findItem）。
-                                Object menu = findMenuHost(host);
-                                if (menu == null) {
-                                    LogWriter.log(TAG, "gc.a after: no menu host found, fallback on host");
-                                    menu = host;
-                                }
-                                Object existing = null;
-                                try {
-                                    existing = XposedHelpers.callMethod(menu, "findItem", 3);
-                                } catch (Throwable ignored) {}
-                                if (existing != null) {
-                                    LogWriter.log(TAG, "gc.a after: forward item already present menu="
-                                            + menu.getClass().getName());
-                                    return;
-                                }
-                                boolean added = tryAddForwardItem(menu);
-                                LogWriter.log(TAG, "gc.a after: menu=" + menu.getClass().getName()
-                                        + " findItem3=" + (existing != null) + " addForward=" + added);
-                            } catch (Throwable ignored) {}
-                        }
-                    });
-                }
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "gc hook err: " + t.getMessage());
-            }
-        }
-
-        // 真实菜单宿主：调用栈确认 fc.onItemLongClick -> eu5.s0.n -> eu5.s0.p -> gc.a，
-        // 微信的 this.a.add(0,3,0,"转发") 发生在 eu5.s0 的字段 a（MMListPopupWindow）上。
-        // 直接 hook eu5.s0.n/p 的 after，在真实菜单宿主上检查并注入 itemId=3。
-        for (String s0Name : new String[]{"eu5.s0"}) {
-            try {
-                for (Class<?> s0Cls : HookUtil.loadClasses(cl, s0Name)) {
-                    LogWriter.log(TAG, "eu5.s0 declared n=" + countMethods(s0Cls, "n")
-                            + " p=" + countMethods(s0Cls, "p") + " cls=" + s0Name);
-                    XposedBridge.hookAllMethods(s0Cls, "n", menuBuildHook());
-                    XposedBridge.hookAllMethods(s0Cls, "p", menuBuildHook());
-                }
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "eu5.s0 hook err: " + t.getMessage());
-            }
-        }
-
-        // ===== 拦截 D：菜单点击回调 hc（FavoriteIndexUI$OnMMMenuItemSelected）=====
-        // 长按菜单点击转发走 FavoriteIndexUI$OnMMMenuItemSelected（文档类名 hc），
-        // 不是 K7（长按业务分发）。hook 该类所有方法，itemId==3 且语音时记录待转发状态。
-        java.util.Set<String> hcCands = new java.util.LinkedHashSet<>();
-        try {
-            hcCands.add("com.tencent.mm.plugin.fav.ui.hc");
-        } catch (Throwable ignored) {}
-        try {
-            for (String cn : DexKitHelper.findClassesByString(cl, "OnMMMenuItemSelected")) {
-                if (cn != null) hcCands.add(cn);
-            }
-        } catch (Throwable ignored) {}
-        LogWriter.log(TAG, "OnMMMenuItemSelected candidates=" + hcCands);
-        for (String hcName : hcCands) {
-            try {
-                for (Class<?> hcCls : HookUtil.loadClasses(cl, hcName)) {
-                    LogWriter.log(TAG, "hc cls=" + hcCls.getName()
-                            + " methods=" + hcCls.getDeclaredMethods().length);
-                    for (Method hcM : hcCls.getDeclaredMethods()) {
-                        hcM.setAccessible(true);
-                        XposedBridge.hookMethod(hcM, new XC_MethodHook() {
-                            @Override
-                            protected void beforeHookedMethod(MethodHookParam param) {
-                                try {
-                                    if (!sEnabled) return;
-                                    int itemId = findMenuItemId(param.args);
-                                    if (itemId != 3) return;
-                                    Object info = findFavItem(param.args);
-                                    if (info == null || getType(info) != TYPE_VOICE) {
-                                        info = sLastLongClickInfo;
-                                    }
-                                    int t = getType(info);
-                                    LogWriter.log(TAG, "hc click itemId=3 info="
-                                            + (info == null ? "null" : info.getClass().getName())
-                                            + " type=" + t);
-                                    if (t == TYPE_VOICE && info != null) {
-                                        sPendingLocalId = getLocalId(info);
-                                        sPendingFavInfo = info;
-                                        LogWriter.log(TAG, "hc forward voice -> pending localId="
-                                                + sPendingLocalId);
-                                        try {
-                                            Class<?> rt = ((Method) param.method).getReturnType();
-                                            if (rt == boolean.class) param.setResult(true);
-                                        } catch (Throwable ignored) {}
-                                    }
-                                } catch (Throwable ignored) {}
-                            }
-                        });
-                    }
-                }
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "hc hook err: " + t.getMessage());
-            }
-        }
-
-        // 接管选人结果：W7(String username) 单选回调
-        Class<?> selUi = XposedHelpers.findClass(C_SELECT_UI, cl);
-        LogWriter.log(TAG, "SelectConversationUI: W7=" + countMethods(selUi, "W7"));
-        XposedBridge.hookAllMethods(selUi, "W7", new XC_MethodHook() {
-            @Override
-            protected void beforeHookedMethod(MethodHookParam param) {
-                try {
-                    if (param.args.length != 1 || !(param.args[0] instanceof String)) return;
-                    String username = (String) param.args[0];
-                    if (sPendingLocalId == 0) return;
-                    final long localId = sPendingLocalId;
-                    final Object favInfo = sPendingFavInfo;
-                    sPendingLocalId = 0;
-                    sPendingFavInfo = null;
-                    LogWriter.log(TAG, "W7 selected=" + username + " localId=" + localId);
-                    // 阻止微信继续走 X7（Retr_Msg_Type=2 对语音不通）
-                    param.setResult(null);
-                    // 关闭选人页
-                    try {
-                        Activity act = (Activity) param.thisObject;
-                        act.setResult(Activity.RESULT_OK);
-                        act.finish();
-                    } catch (Throwable ignored) {}
-                    final String toUser = username;
-                    new Thread(() -> sendVoice(localId, favInfo, toUser), "leshao-fav-voice-send")
-                            .start();
-                } catch (Throwable ignored) {}
-            }
-        });
+        // ===== 1. 注入菜单项：de2.m（新链路）与 gc（兜底）=====
+        installMenuInject(cl);
+        // ===== 2. 拦截点击：de2.n（新链路）与 hc（兜底）=====
+        installClickInterceptor(cl);
+        // ===== 3. 选人结果：FavoriteIndexUI.onActivityResult + SelectConversationUI.W7 兜底 =====
+        installPickResult(cl);
+        LogWriter.log(TAG, "installHooks done");
     }
 
-    /** 手动向收藏长按菜单注入「转发」项（兼容不同 add 签名） */
-    private static XC_MethodHook menuBuildHook() {
-        return new XC_MethodHook() {
-            @Override
-            protected void beforeHookedMethod(MethodHookParam param) {
-                try {
-                    if (!sEnabled) return;
-                    Object fi = findFavItem(param.args);
-                    if (fi != null && getType(fi) == TYPE_VOICE) {
-                        sLastLongClickInfo = fi;
-                    }
-                } catch (Throwable ignored) {}
-            }
+    // ---------------- 菜单注入 ----------------
 
+    private static void installMenuInject(ClassLoader cl) {
+        XC_MethodHook injectHook = new XC_MethodHook() {
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
                 try {
                     if (!sEnabled) return;
-                    Object host = param.thisObject;
-                    String mn = param.method.getName();
-                    LogWriter.log(TAG, "eu5.s0." + mn + " after: cls=" + host.getClass().getName());
-                    Object menu = findMenuHost(host);
-                    if (menu == null) {
-                        LogWriter.log(TAG, "eu5.s0." + mn + " after: no menu host");
-                        return;
-                    }
-                    Object existing = null;
-                    try {
-                        existing = XposedHelpers.callMethod(menu, "findItem", 3);
-                    } catch (Throwable ignored) {}
-                    if (existing != null) {
-                        LogWriter.log(TAG, "eu5.s0." + mn + " after: forward item already present menu="
+                    Object builder = param.thisObject;
+                    Object item = findFavItemInFields(builder);
+                    int t = getType(item);
+                    LogWriter.log(TAG, "menu build after: cls=" + builder.getClass().getName()
+                            + " item=" + (item == null ? "null" : item.getClass().getName())
+                            + " type=" + t);
+                    if (item == null || t != TYPE_VOICE) return;
+                    Object menu = param.args.length > 0 ? param.args[0] : null;
+                    if (menu == null) return;
+                    if (menuHasItem(menu, ITEM_VOICE_FWD)) {
+                        LogWriter.log(TAG, "menu inject: item already present menu="
                                 + menu.getClass().getName());
                         return;
                     }
-                    boolean added = tryAddForwardItem(menu);
-                    LogWriter.log(TAG, "eu5.s0." + mn + " after: menu=" + menu.getClass().getName()
-                            + " findItem3=" + (existing != null) + " addForward=" + added);
+                    boolean ok = addMenuItem(menu, ITEM_VOICE_FWD, "语音转发");
+                    LogWriter.log(TAG, "menu inject itemId=" + ITEM_VOICE_FWD + " ok=" + ok
+                            + " menu=" + menu.getClass().getName());
                 } catch (Throwable ignored) {}
             }
         };
+
+        Set<String> builderCands = new LinkedHashSet<>();
+        builderCands.add(C_BUILDER_NEW);
+        builderCands.add(C_BUILDER_OLD);
+        try {
+            for (String cn : DexKitHelper.findClassesByString(cl, "FavoriteIndexUI")) {
+                if (cn != null) builderCands.add(cn);
+            }
+        } catch (Throwable ignored) {}
+        for (String cn : builderCands) {
+            try {
+                for (Class<?> c : HookUtil.loadClasses(cl, cn)) {
+                    for (Method m : c.getDeclaredMethods()) {
+                        if (!isMenuBuildMethod(m)) continue;
+                        m.setAccessible(true);
+                        LogWriter.log(TAG, "menu builder hooked " + c.getName() + "."
+                                + m.getName() + " params=" + Arrays.toString(m.getParameterTypes()));
+                        XposedBridge.hookMethod(m, injectHook);
+                    }
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "menu builder " + cn + " err: " + t.getMessage());
+            }
+        }
     }
 
-    /** 在菜单构建器实例的字段链中查找真正的菜单宿主（含 add(int,int,int,...) 方法的对象）。 */
-    private static Object findMenuHost(Object host) {
+    /** 判定是否为菜单构建方法：参数形如 (菜单接口, View, ContextMenuInfo)。 */
+    private static boolean isMenuBuildMethod(Method m) {
+        Class<?>[] pts = m.getParameterTypes();
+        if (pts.length != 3) return false;
+        String p0 = pts[0].getName();
+        if (!p0.startsWith("kj5")) return false;
+        if (pts[1] != View.class) return false;
+        return pts[2] == ContextMenu.ContextMenuInfo.class
+                || pts[2].isAssignableFrom(ContextMenu.ContextMenuInfo.class);
+    }
+
+    // ---------------- 点击拦截 ----------------
+
+    private static void installClickInterceptor(ClassLoader cl) {
+        XC_MethodHook clickHook = new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                try {
+                    if (!sEnabled) return;
+                    int itemId = findMenuItemId(param.args);
+                    LogWriter.log(TAG, "click dispatch: m=" + param.method.getName()
+                            + " this=" + param.thisObject.getClass().getName()
+                            + " itemId=" + itemId + " pending=" + sPendingLocalId);
+                    if (itemId != ITEM_VOICE_FWD) return;
+                    // 阻止微信原生逻辑（K7 对 10086 无分支，返回 boolean 时放行）
+                    try {
+                        Class<?> rt = ((Method) param.method).getReturnType();
+                        if (rt == boolean.class) param.setResult(true);
+                    } catch (Throwable ignored) {}
+                    Object item = findFavItemInFields(param.thisObject);
+                    if (item == null || getType(item) != TYPE_VOICE) item = sPendingFavInfo;
+                    if (item == null) {
+                        LogWriter.log(TAG, "voice forward: no fav item, skip");
+                        return;
+                    }
+                    Activity act = findActivity(param.thisObject);
+                    if (act == null) {
+                        LogWriter.log(TAG, "voice forward: no activity, skip");
+                        return;
+                    }
+                    startForward(act, item);
+                } catch (Throwable ignored) {}
+            }
+        };
+
+        Set<String> dispatchCands = new LinkedHashSet<>();
+        dispatchCands.add(C_DISPATCH_NEW);
+        dispatchCands.add(C_DISPATCH_OLD);
+        try {
+            for (String cn : DexKitHelper.findClassesByString(cl, "FavoriteIndexUI")) {
+                if (cn != null) dispatchCands.add(cn);
+            }
+        } catch (Throwable ignored) {}
+        for (String cn : dispatchCands) {
+            try {
+                for (Class<?> c : HookUtil.loadClasses(cl, cn)) {
+                    for (Method m : c.getDeclaredMethods()) {
+                        if (!isMenuClickMethod(m)) continue;
+                        m.setAccessible(true);
+                        LogWriter.log(TAG, "click dispatch hooked " + c.getName() + "."
+                                + m.getName() + " params=" + Arrays.toString(m.getParameterTypes()));
+                        XposedBridge.hookMethod(m, clickHook);
+                    }
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "click dispatch " + cn + " err: " + t.getMessage());
+            }
+        }
+    }
+
+    /** 判定是否为菜单点击分发方法：形如 onMMMenuItemSelected(MenuItem,int)。 */
+    private static boolean isMenuClickMethod(Method m) {
+        Class<?>[] pts = m.getParameterTypes();
+        if (pts.length == 2) {
+            String p0 = pts[0].getName();
+            if ("android.view.MenuItem".equals(p0) || p0.startsWith("android.view")) {
+                return pts[1] == int.class || pts[1] == Integer.class;
+            }
+        }
+        // 兜底：方法名 onMMMenuItemSelected
+        String n = m.getName();
+        return "onMMMenuItemSelected".equals(n) || "a".equals(n) || "b".equals(n);
+    }
+
+    // ---------------- 选人结果 ----------------
+
+    private static void installPickResult(ClassLoader cl) {
+        // 主入口：FavoriteIndexUI.onActivityResult 接收选人结果
+        try {
+            Class<?> favUi = XposedHelpers.findClass(C_FAV_UI, cl);
+            XposedBridge.hookAllMethods(favUi, "onActivityResult", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        if (param.args.length < 3) return;
+                        int reqCode = ((Number) param.args[0]).intValue();
+                        int resultCode = ((Number) param.args[1]).intValue();
+                        LogWriter.log(TAG, "onActivityResult req=" + reqCode
+                                + " result=" + resultCode + " pending=" + sPendingLocalId);
+                        if (reqCode != REQ_VOICE_FWD) return;
+                        if (sPendingLocalId == 0) return; // W7 已消费，防重复
+                        if (resultCode != Activity.RESULT_OK) {
+                            sPendingLocalId = 0;
+                            sPendingFavInfo = null;
+                            return;
+                        }
+                        Intent data = (Intent) param.args[2];
+                        String talker = data == null ? null
+                                : data.getStringExtra("Select_Conv_User");
+                        if (talker == null || talker.isEmpty()) {
+                            LogWriter.log(TAG, "onActivityResult no Select_Conv_User");
+                            return;
+                        }
+                        long localId = sPendingLocalId;
+                        Object info = sPendingFavInfo;
+                        sPendingLocalId = 0;
+                        sPendingFavInfo = null;
+                        final String toUser = talker;
+                        final long lid = localId;
+                        final Object fav = info;
+                        new Thread(() -> sendVoice(lid, fav, toUser), "leshao-fav-voice-send")
+                                .start();
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "onActivityResult hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "onActivityResult hook err: " + t.getMessage());
+        }
+
+        // 兜底：SelectConversationUI.W7(String) 单选回调 —— 阻止微信原生 X7 链路并回传 talker
+        try {
+            Class<?> selUi = XposedHelpers.findClass(C_SELECT_UI, cl);
+            XposedBridge.hookAllMethods(selUi, "W7", new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        if (param.args.length != 1 || !(param.args[0] instanceof String)) return;
+                        String username = (String) param.args[0];
+                        if (sPendingLocalId == 0) return;
+                        LogWriter.log(TAG, "W7 selected=" + username + " localId=" + sPendingLocalId);
+                        // 阻止微信继续走 X7（Retr_Msg_Type=2 对语音无效）
+                        param.setResult(null);
+                        try {
+                            Activity act = (Activity) param.thisObject;
+                            Intent data = new Intent();
+                            data.putExtra("Select_Conv_User", username);
+                            act.setResult(Activity.RESULT_OK, data);
+                            act.finish();
+                        } catch (Throwable ignored) {}
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "W7 hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "W7 hook err: " + t.getMessage());
+        }
+    }
+
+    // ---------------- 转发启动与发送 ----------------
+
+    private static void startForward(Activity ctx, Object favItem) {
+        sPendingLocalId = getLocalId(favItem);
+        sPendingFavInfo = favItem;
+        try {
+            Intent it = new Intent();
+            it.setClassName(ctx, C_SELECT_UI);
+            it.putExtra("Select_Conv_Type", 3);
+            it.putExtra("scene_from", 1);
+            it.putExtra("mutil_select_is_ret", true);
+            it.putExtra("select_count", 1);
+            ctx.startActivityForResult(it, REQ_VOICE_FWD);
+            LogWriter.log(TAG, "startForward SelectConversationUI localId=" + sPendingLocalId);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "startForward err: " + t.getMessage());
+            toast("无法打开转发选择");
+        }
+    }
+
+    /** 文档 §7.4：收藏语音 → v61.d1.h 插记录 → 复制到 voice 目录 → v61.o 入队上传。 */
+    private static void sendVoice(long localId, Object favInfo, String toUser) {
+        try {
+            ClassLoader cl = sCl;
+            if (cl == null) return;
+            if (toUser == null || toUser.isEmpty()) { toast("转发目标为空"); return; }
+            LogWriter.log(TAG, "sendVoice start localId=" + localId + " to=" + toUser);
+
+            // ① 收藏语音本地文件
+            Object rq0 = callFavApi(cl, "K", favInfo);
+            if (rq0 == null) { toast("获取收藏语音数据失败"); return; }
+            String srcPath = (String) callFavApi(cl, "y", rq0);
+            if (srcPath == null || srcPath.isEmpty() || !new File(srcPath).exists()) {
+                LogWriter.log(TAG, "silk file missing: " + srcPath);
+                toast("语音文件尚未下载，请先在收藏中播放一次");
+                return;
+            }
+            int durMs = 0;
+            try { durMs = XposedHelpers.getIntField(rq0, "y"); } catch (Throwable ignored) {}
+            if (durMs <= 0) durMs = 1000;
+            LogWriter.log(TAG, "fav voice src=" + srcPath + " durMs=" + durMs);
+
+            // ② v61.d1.h(toUser, md5) 插 voice 记录，返回新 fileName
+            Object d1 = getService(cl, C_VOICE_LOGIC);
+            if (d1 == null) { toast("语音服务不可用"); return; }
+            String md5 = md5OfFile(srcPath);
+            String newName = (String) callVoiceLogic(cl, d1, "h", toUser, md5);
+            if (newName == null || newName.isEmpty()) {
+                LogWriter.log(TAG, "v61.d1.h returned null");
+                toast("生成语音记录失败");
+                return;
+            }
+
+            // ③ 复制语音文件到 voice 目录（u0.Fj(ou5.x.j, newName, false, true)）
+            String dst = voiceDirPath(cl, newName);
+            if (dst == null || dst.isEmpty()) {
+                LogWriter.log(TAG, "voice dir resolve failed, skip copy");
+                toast("无法解析 voice 目录");
+                return;
+            }
+            copyFile(srcPath, dst);
+            LogWriter.log(TAG, "voice copied: " + srcPath + " -> " + dst);
+
+            // ④ 入队上传：b41.h9.e().g(new v61.o(newName, durMs))
+            Object scene = newUploadScene(cl, newName, durMs);
+            if (scene == null) { toast("构造上传场景失败"); return; }
+            Object queue = getCoreEntry(cl, "e");
+            if (queue == null) { toast("网络队列不可用"); return; }
+            boolean queued = enqueueScene(cl, queue, scene);
+            LogWriter.log(TAG, "upload queued=" + queued + " to=" + toUser
+                    + " newName=" + newName + " durMs=" + durMs);
+            if (queued) {
+                toast("收藏语音已发送");
+            } else {
+                toast("语音上传入队失败");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "sendVoice err: " + t.getMessage());
+            toast("语音发送失败: " + t.getMessage());
+        }
+    }
+
+    /** 构造 v61.o(String fileName, int durMs) 上传场景。 */
+    private static Object newUploadScene(ClassLoader cl, String fileName, int durMs) {
+        try {
+            Class<?> sceneCls = XposedHelpers.findClass(C_UPLOAD_VOICE, cl);
+            return XposedHelpers.newInstance(sceneCls, fileName, durMs);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "newUploadScene err: " + t.getMessage());
+            return null;
+        }
+    }
+
+    /** 调用 b41.h9.e() 等静态入口。 */
+    private static Object getCoreEntry(ClassLoader cl, String method) {
+        try {
+            Class<?> entry = XposedHelpers.findClass(C_CORE_ENTRY, cl);
+            return XposedHelpers.callStaticMethod(entry, method);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getCoreEntry " + method + " err: " + t.getMessage());
+            return null;
+        }
+    }
+
+    /** 调用 NetSceneQueue.g(NetScene) 入队，返回是否成功。 */
+    private static boolean enqueueScene(ClassLoader cl, Object queue, Object scene) {
+        try {
+            Class<?> qCls = XposedHelpers.findClass(C_NETSCENE_QUEUE, cl);
+            Method m = findMethod(qCls, "g", scene.getClass());
+            if (m == null) {
+                for (Method mm : qCls.getDeclaredMethods()) {
+                    if ("g".equals(mm.getName()) && mm.getParameterTypes().length == 1) {
+                        m = mm;
+                        break;
+                    }
+                }
+            }
+            if (m == null) {
+                LogWriter.log(TAG, "NetSceneQueue.g not found");
+                return false;
+            }
+            m.setAccessible(true);
+            Object r = m.invoke(queue, scene);
+            return !(r instanceof Boolean) || (Boolean) r;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "enqueueScene err: " + t.getMessage());
+            return false;
+        }
+    }
+
+    /** 解析 voice 目录中目标文件路径：u0.Fj(ou5.x.j, newName, false, true)。 */
+    private static String voiceDirPath(ClassLoader cl, String newName) {
+        try {
+            Class<?> pathEnum = XposedHelpers.findClass(C_VOICE_PATH, cl);
+            Object voiceDir = XposedHelpers.getStaticObjectField(pathEnum, "j");
+            Class<?> svc = XposedHelpers.findClass(C_VOICE_SERVICE, cl);
+            Object u0 = getServiceByClass(cl, svc);
+            if (u0 == null) return null;
+            Method m = findMethod(u0.getClass(), "Fj", voiceDir.getClass(), String.class,
+                    boolean.class, boolean.class);
+            if (m == null) {
+                for (Method mm : u0.getClass().getMethods()) {
+                    Class<?>[] pts = mm.getParameterTypes();
+                    if (pts.length == 4 && pts[1] == String.class && pts[2] == boolean.class
+                            && pts[3] == boolean.class) {
+                        m = mm;
+                        break;
+                    }
+                }
+            }
+            if (m == null) {
+                LogWriter.log(TAG, "u0.Fj not found in " + u0.getClass().getName());
+                return null;
+            }
+            m.setAccessible(true);
+            Object dst = m.invoke(u0, voiceDir, newName, false, true);
+            return dst == null ? null : dst.toString();
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "voiceDirPath err: " + t.getMessage());
+            return null;
+        }
+    }
+
+    // ---------------- 反射工具 ----------------
+
+    private static Object callFavApi(ClassLoader cl, String method, Object... args) {
+        try {
+            Class<?> apiCls = XposedHelpers.findClass(C_FAV_API, cl);
+            try {
+                return XposedHelpers.callStaticMethod(apiCls, method, args);
+            } catch (Throwable ignored) {}
+            try {
+                Object inst = XposedHelpers.getStaticObjectField(apiCls, "INSTANCE");
+                if (inst != null) return XposedHelpers.callMethod(inst, method, args);
+            } catch (Throwable ignored) {}
+            Object svc = getService(cl, C_FAV_API);
+            if (svc != null) return XposedHelpers.callMethod(svc, method, args);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "callFavApi " + method + " err: " + t.getMessage());
+        }
+        return null;
+    }
+
+    private static Object callVoiceLogic(ClassLoader cl, Object d1, String method, Object... args)
+            throws Throwable {
+        try {
+            Method m = findMethod(d1.getClass(), method, argTypes(args));
+            if (m != null) {
+                m.setAccessible(true);
+                return m.invoke(d1, args);
+            }
+            return XposedHelpers.callMethod(d1, method, args);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "callVoiceLogic " + method + " err: " + t.getMessage());
+            throw t;
+        }
+    }
+
+    private static Class<?>[] argTypes(Object... args) {
+        Class<?>[] types = new Class<?>[args.length];
+        for (int i = 0; i < args.length; i++) {
+            types[i] = args[i] == null ? Object.class : args[i].getClass();
+        }
+        return types;
+    }
+
+    private static Object getService(ClassLoader cl, String serviceClsName) {
+        try {
+            return getServiceByClass(cl, XposedHelpers.findClass(serviceClsName, cl));
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getService " + serviceClsName + " FAILED: " + t.getMessage());
+            return null;
+        }
+    }
+
+    private static Object getServiceByClass(ClassLoader cl, Class<?> svcCls) {
+        List<String> locators = new ArrayList<>();
+        String dk = DexKitHelper.getServiceLocatorClass();
+        if (dk != null && !dk.isEmpty()) locators.add(dk);
+        locators.add("ph5.n0");
+        locators.add("pa5.n0");
+        locators.add("hm0.j1");
+        for (String loc : locators) {
+            try {
+                Class<?> locCls = XposedHelpers.findClass(loc, cl);
+                Object inst = XposedHelpers.callStaticMethod(locCls, "c", svcCls);
+                if (inst != null) {
+                    LogWriter.log(TAG, "getService " + svcCls.getName() + " via " + loc);
+                    return inst;
+                }
+            } catch (Throwable ignored) {}
+        }
+        LogWriter.log(TAG, "getService " + svcCls.getName() + " FAILED");
+        return null;
+    }
+
+    /** 在对象字段链中查找带 field_type 的收藏对象（de2.m 字段 b、gc 的 UI 引用）。 */
+    private static Object findFavItemInFields(Object host) {
         if (host == null) return null;
         Class<?> c = host.getClass();
         while (c != null && c != Object.class) {
@@ -454,85 +591,14 @@ public final class FavVoiceForwardHook {
                     f.setAccessible(true);
                     Object v = f.get(host);
                     if (v == null) continue;
-                    Class<?> vc = v.getClass();
-                    try {
-                        vc.getMethod("add", int.class, int.class, int.class, CharSequence.class);
-                        return v;
-                    } catch (NoSuchMethodException ignored) {}
-                    try {
-                        vc.getMethod("add", int.class, int.class, int.class, int.class);
-                        return v;
-                    } catch (NoSuchMethodException ignored) {}
-                    try {
-                        vc.getMethod("add", int.class, CharSequence.class);
-                        return v;
-                    } catch (NoSuchMethodException ignored) {}
+                    if (hasFieldType(v)) return v;
+                    if (v instanceof List) {
+                        List<?> l = (List<?>) v;
+                        if (!l.isEmpty() && hasFieldType(l.get(0))) return l.get(0);
+                    }
                 } catch (Throwable ignored) {}
             }
             c = c.getSuperclass();
-        }
-        return null;
-    }
-
-    private static boolean tryAddForwardItem(Object menuHost) {
-        Object[][] attempts = {
-                {0, 3, 0, 2131761210, 0},
-                {0, 3, 0, "转发", 0},
-                {0, 3, 0, 2131761210},
-                {0, 3, 0, "转发"},
-                {3, "转发"},
-                {0, 0, 0, "转发"}
-        };
-        for (Object[] args : attempts) {
-            try {
-                XposedHelpers.callMethod(menuHost, "add", args);
-                return true;
-            } catch (Throwable ignored) {}
-        }
-        return false;
-    }
-
-// ---------------- DexKit 签名解析 ----------------
-
-    /** 从 "pkg.Cls.method(params)" 解析出声明类全名。 */
-    private static String classNameOf(String sig) {
-        if (sig == null) return null;
-        int p = sig.indexOf('(');
-        if (p < 0) p = sig.length();
-        String head = sig.substring(0, p);
-        int dot = head.lastIndexOf('.');
-        return dot > 0 ? head.substring(0, dot) : null;
-    }
-
-    /** 从 "pkg.Cls.method(params)" 解析出方法名。 */
-    private static String methodNameOf(String sig) {
-        if (sig == null) return null;
-        int p = sig.indexOf('(');
-        if (p < 0) p = sig.length();
-        String head = sig.substring(0, p);
-        int dot = head.lastIndexOf('.');
-        return dot > 0 && dot < head.length() - 1 ? head.substring(dot + 1) : null;
-    }
-        private static int countMethods(Class<?> cls, String name) {
-        if (cls == null || name == null) return 0;
-        int n = 0;
-        for (Method m : cls.getDeclaredMethods()) {
-            if (m.getName().equals(name)) n++;
-        }
-        return n;
-    }
-
-    /** 在参数列表中查找带 field_type 的收藏对象（List 取首个元素），兼容参数位置变化。 */
-    private static Object findFavItem(Object[] args) {
-        if (args == null) return null;
-        for (Object a : args) {
-            if (a == null) continue;
-            if (a instanceof List) {
-                List<?> l = (List<?>) a;
-                if (!l.isEmpty() && hasFieldType(l.get(0))) return l.get(0);
-                continue;
-            }
-            if (hasFieldType(a)) return a;
         }
         return null;
     }
@@ -544,6 +610,22 @@ public final class FavVoiceForwardHook {
             return true;
         } catch (Throwable t) {
             return false;
+        }
+    }
+
+    private static int getType(Object favItem) {
+        try {
+            return XposedHelpers.getIntField(favItem, "field_type");
+        } catch (Throwable t) {
+            return -1;
+        }
+    }
+
+    private static long getLocalId(Object favItem) {
+        try {
+            return XposedHelpers.getLongField(favItem, "field_localId");
+        } catch (Throwable t) {
+            return 0;
         }
     }
 
@@ -561,166 +643,90 @@ public final class FavVoiceForwardHook {
         return -1;
     }
 
-    // ---------------- 发送逻辑 ----------------
+    /** 查找对象字段链中的 Activity（de2.n 字段 e 是 Context，FavoriteIndexUI 本身是 Activity）。 */
+    private static Activity findActivity(Object host) {
+        if (host == null) return null;
+        if (host instanceof Activity) return (Activity) host;
+        Class<?> c = host.getClass();
+        while (c != null && c != Object.class) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                try {
+                    f.setAccessible(true);
+                    Object v = f.get(host);
+                    if (v instanceof Activity) return (Activity) v;
+                } catch (Throwable ignored) {}
+            }
+            c = c.getSuperclass();
+        }
+        return null;
+    }
 
-    private static void sendVoice(long localId, Object favInfo, String toUser) {
+    /** 判断菜单是否已含指定 itemId。 */
+    private static boolean menuHasItem(Object menu, int itemId) {
         try {
-            ClassLoader cl = sCl;
-            if (cl == null) return;
-            if (toUser == null || toUser.isEmpty()) { toast("转发目标为空"); return; }
-
-            // 1. tc2.s2.K(info) → FavDataItem(rq0)
-            Object rq0 = callFavApi(cl, "K", favInfo);
-            if (rq0 == null) { toast("获取收藏语音数据失败"); return; }
-
-            // 2. tc2.s2.y(rq0) → 本地 silk 路径
-            String path = (String) callFavApi(cl, "y", rq0);
-            if (path == null || path.isEmpty() || !new File(path).exists()) {
-                LogWriter.log(TAG, "silk file missing: " + path);
-                toast("语音文件尚未下载，请先在收藏中播放一次");
-                return;
-            }
-
-            // 3. 后缀 → voiceType；rq0.y → 时长(ms)
-            String suffix = (String) XposedHelpers.getObjectField(rq0, "K");
-            int voiceType = 0;
-            try {
-                Object vt = callFavApi(cl, "d0", suffix);
-                if (vt instanceof Integer) voiceType = (Integer) vt;
-            } catch (Throwable ignored) {}
-            int voiceLengthMs = 0;
-            try {
-                voiceLengthMs = XposedHelpers.getIntField(rq0, "y");
-            } catch (Throwable ignored) {}
-            int voiceLengthSec = Math.max(1, (int) Math.ceil(voiceLengthMs / 1000.0));
-            long fileLen = new File(path).length();
-
-            // 4. 组装 v61.c1（VoiceInfo），字段名见文档修正2
-            Class<?> c1Cls = XposedHelpers.findClass(C_VOICE_INFO, cl);
-            Object voiceInfo = XposedHelpers.newInstance(c1Cls);
-            String fileName = new File(path).getName();
-            long now = System.currentTimeMillis();
-            XposedHelpers.setObjectField(voiceInfo, "b", fileName);      // FileName
-            XposedHelpers.setObjectField(voiceInfo, "c", toUser);        // User（同时作 talker）
-            XposedHelpers.setObjectField(voiceInfo, "s", toUser);        // MsgTalker
-            XposedHelpers.setObjectField(voiceInfo, "g", fileLen); // FileNowSize
-            XposedHelpers.setObjectField(voiceInfo, "h", fileLen); // TotalLen
-            XposedHelpers.setIntField(voiceInfo, "i", STATUS_UPLOAD_WAIT); // Status 待传
-            XposedHelpers.setObjectField(voiceInfo, "j", now); // CreateTime
-            XposedHelpers.setObjectField(voiceInfo, "k", now); // LastModifyTime
-            XposedHelpers.setIntField(voiceInfo, "l", voiceLengthSec); // VoiceLength(秒)
-            XposedHelpers.setObjectField(voiceInfo, "t", UUID.randomUUID().toString()); // ClientId
-            XposedHelpers.setIntField(voiceInfo, "a", COLUMN_MASK);     // 列存在位掩码
-            LogWriter.log(TAG, "VoiceInfo assembled: file=" + fileName + " len=" + fileLen
-                    + " dur=" + voiceLengthSec + "s to=" + toUser + " voiceType=" + voiceType);
-
-            // 5. 获取 v61.d1（VoiceLogic）并调用 e(...) 触发上传
-            Object d1 = getService(cl, C_VOICE_LOGIC);
-            if (d1 == null) { toast("语音服务不可用"); return; }
-            Object msgId = invokeVoiceLogic(cl, d1, "e", voiceInfo);
-            if (msgId instanceof Long) {
-                LogWriter.log(TAG, "voice uploaded msgId=" + msgId + " to=" + toUser);
-                toast("收藏语音已发送");
-            } else {
-                LogWriter.log(TAG, "voice upload returned null");
-                toast("语音发送失败");
-            }
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "sendVoice err: " + t.getMessage());
-            toast("语音发送失败: " + t.getMessage());
+            Object item = XposedHelpers.callMethod(menu, "findItem", itemId);
+            return item != null;
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 
-    /** 反射调用 v61.d1.e(VoiceInfo, boolean, int, String, String, p0) */
-    private static Object invokeVoiceLogic(ClassLoader cl, Object d1, String method, Object voiceInfo)
-            throws Throwable {
-        try {
-            Class<?> c1Cls = XposedHelpers.findClass(C_VOICE_INFO, cl);
-            Class<?> p0Cls = null;
-            try { p0Cls = XposedHelpers.findClass(C_P0, cl); } catch (Throwable ignored) {}
-            if (p0Cls != null) {
-                Method m = findMethod(d1.getClass(), method,
-                        new Class<?>[]{c1Cls, boolean.class, int.class, String.class, String.class,
-                                p0Cls});
-                if (m != null) {
-                    m.setAccessible(true);
-                    return m.invoke(d1, voiceInfo, false, 0, null, null, null);
-                }
+    /** 向菜单注入 itemId 项：kj5.i4.c(0, itemId, 0, title, iconRes)。 */
+    private static boolean addMenuItem(Object menu, int itemId, String title) {
+        Object[][] attempts = {
+                {0, itemId, 0, title, 2131822160},
+                {0, itemId, 0, title},
+                {itemId, title}
+        };
+        for (String mn : new String[]{"c", "add"}) {
+            for (Object[] args : attempts) {
+                try {
+                    XposedHelpers.callMethod(menu, mn, args);
+                    return true;
+                } catch (Throwable ignored) {}
             }
-            // 兜底：让 XposedHelpers 按实参自动匹配方法
-            return XposedHelpers.callMethod(d1, method, voiceInfo, false, 0, null, null, null);
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "invokeVoiceLogic " + method + " err: " + t.getMessage());
-            throw t;
         }
+        return false;
     }
 
-    private static Method findMethod(Class<?> cls, String name, Class<?>[] paramTypes) {
+    private static Method findMethod(Class<?> cls, String name, Class<?>... paramTypes) {
         for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
             try {
-                Method m = c.getDeclaredMethod(name, paramTypes);
-                return m;
+                return c.getDeclaredMethod(name, paramTypes);
             } catch (Throwable ignored) {}
         }
         return null;
     }
 
-    // ---------------- 反射工具 ----------------
-
-private static Object callFavApi(ClassLoader cl, String method, Object... args) {
+    private static String md5OfFile(String path) {
         try {
-            Class<?> apiCls = XposedHelpers.findClass(C_FAV_API, cl);
-            try {
-                return XposedHelpers.callStaticMethod(apiCls, method, args);
-            } catch (Throwable ignored) {}
-            try {
-                Object inst = XposedHelpers.getStaticObjectField(apiCls, "INSTANCE");
-                if (inst != null) return XposedHelpers.callMethod(inst, method, args);
-            } catch (Throwable ignored) {}
-            // 兜底：通过服务定位器获取 FavApiLogic 实例
-            Object svc = getService(cl, C_FAV_API);
-            if (svc != null) return XposedHelpers.callMethod(svc, method, args);
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            try (FileInputStream in = new FileInputStream(path)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) md.update(buf, 0, n);
+            }
+            StringBuilder sb = new StringBuilder();
+            for (byte b : md.digest()) sb.append(String.format("%02x", b));
+            return sb.toString();
         } catch (Throwable t) {
-            LogWriter.log(TAG, "callFavApi " + method + " err: " + t.getMessage());
-        }
-        return null;
-    }
-
-    private static Object getService(ClassLoader cl, String serviceClsName) {
-        List<String> locators = new ArrayList<>();
-        String dk = DexKitHelper.getServiceLocatorClass();
-        if (dk != null && !dk.isEmpty()) locators.add(dk);
-        locators.add("ph5.n0");
-        locators.add("pa5.n0");
-        locators.add("hm0.j1");
-        for (String loc : locators) {
-            try {
-                Class<?> locCls = XposedHelpers.findClass(loc, cl);
-                Class<?> svcCls = XposedHelpers.findClass(serviceClsName, cl);
-                Object inst = XposedHelpers.callStaticMethod(locCls, "c", svcCls);
-                if (inst != null) {
-                    LogWriter.log(TAG, "getService " + serviceClsName + " via " + loc);
-                    return inst;
-                }
-            } catch (Throwable ignored) {}
-        }
-        LogWriter.log(TAG, "getService " + serviceClsName + " FAILED");
-        return null;
-    }
-
-    private static int getType(Object favItem) {
-        try {
-            return XposedHelpers.getIntField(favItem, "field_type");
-        } catch (Throwable t) {
-            return -1;
+            return "0";
         }
     }
 
-    private static long getLocalId(Object favItem) {
+    private static void copyFile(String src, String dst) {
         try {
-            return XposedHelpers.getLongField(favItem, "field_localId");
+            File out = new File(dst);
+            File parent = out.getParentFile();
+            if (parent != null && !parent.exists()) parent.mkdirs();
+            try (FileInputStream in = new FileInputStream(src);
+                 FileOutputStream fos = new FileOutputStream(out)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) > 0) fos.write(buf, 0, n);
+            }
         } catch (Throwable t) {
-            return 0;
+            LogWriter.log(TAG, "copyFile err: " + t.getMessage());
         }
     }
 
