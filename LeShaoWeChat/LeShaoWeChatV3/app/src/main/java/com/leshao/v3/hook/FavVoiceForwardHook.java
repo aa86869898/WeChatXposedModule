@@ -568,17 +568,22 @@ public final class FavVoiceForwardHook {
             if (toUser == null || toUser.isEmpty()) { toast("转发目标为空"); return; }
             LogWriter.log(TAG, "sendVoice start localId=" + localId + " to=" + toUser);
 
-            // ① 收藏语音本地文件
-            Object rq0 = callFavApi(cl, "K", favInfo);
+            // ① 收藏语音本地文件（v3.0.90：严格按《WeChat_收藏语音转发_逆向分析与注入方案_1.md》
+            //    附录 A 实现——静态方法 tc2.s2.K(item)/y(rq0) + 未混淆字段 field_favProto.f，
+            //    不依赖 tc2.s2 实例，规避 R8 下 varargs 反射静默失败的问题）
+            Object rq0 = getFavVoiceData(cl, favInfo);
             if (rq0 == null) { toast("获取收藏语音数据失败"); return; }
-            String srcPath = (String) callFavApi(cl, "y", rq0);
+            String srcPath = getFavVoicePath(cl, rq0);
             if (srcPath == null || srcPath.isEmpty() || !new File(srcPath).exists()) {
                 LogWriter.log(TAG, "silk file missing: " + srcPath);
                 toast("语音文件尚未下载，请先在收藏中播放一次");
                 return;
             }
             int durMs = 0;
-            try { durMs = XposedHelpers.getIntField(rq0, "y"); } catch (Throwable ignored) {}
+            try {
+                java.lang.reflect.Field fy = findFieldUp(rq0, "y");
+                durMs = (int) fy.getLong(rq0);
+            } catch (Throwable ignored) {}
             if (durMs <= 0) durMs = 1000;
             LogWriter.log(TAG, "fav voice src=" + srcPath + " durMs=" + durMs);
 
@@ -594,6 +599,102 @@ public final class FavVoiceForwardHook {
             LogWriter.log(TAG, "sendVoice err: " + t.getMessage());
             toast("语音发送失败: " + t.getMessage());
         }
+    }
+
+    /** v3.0.90：按文档附录 A 获取收藏语音数据项 rq0。
+     *  优先静态方法 tc2.s2.K(item)（显式反射调用，避免 R8 varargs 问题），
+     *  失败则直接用未混淆字段 field_favProto.f.get(0)。 */
+    private static Object getFavVoiceData(ClassLoader cl, Object favItem) {
+        try {
+            Class<?> apiCls = XposedHelpers.findClass(C_FAV_API, cl);
+            Method k = findMethod(apiCls, "K", favItem.getClass());
+            if (k != null) {
+                k.setAccessible(true);
+                Object rq0 = k.invoke(null, favItem);
+                if (rq0 != null) {
+                    LogWriter.log(TAG, "getFavVoiceData via tc2.s2.K cls="
+                            + rq0.getClass().getName());
+                    return rq0;
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getFavVoiceData K err: " + t.getMessage());
+        }
+        try {
+            Object proto = getObjectFieldByName(favItem, "field_favProto");
+            if (proto != null) {
+                Object f = getObjectFieldByName(proto, "f");
+                if (f instanceof List) {
+                    List<?> l = (List<?>) f;
+                    if (!l.isEmpty()) {
+                        LogWriter.log(TAG, "getFavVoiceData via field_favProto.f cls="
+                                + l.get(0).getClass().getName());
+                        return l.get(0);
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getFavVoiceData field err: " + t.getMessage());
+        }
+        LogWriter.log(TAG, "getFavVoiceData FAILED item="
+                + (favItem == null ? "null" : favItem.getClass().getName()));
+        return null;
+    }
+
+    /** v3.0.90：按文档附录 A 获取语音本地路径。优先静态方法 tc2.s2.y(rq0)，
+     *  失败则用 tc2.s2.D() 根目录 + tc2.s2.s(rq0.T) 子目录 + rq0.T/rq0.K 拼路径。 */
+    private static String getFavVoicePath(ClassLoader cl, Object rq0) {
+        try {
+            Class<?> apiCls = XposedHelpers.findClass(C_FAV_API, cl);
+            Method y = findMethod(apiCls, "y", rq0.getClass());
+            if (y != null) {
+                y.setAccessible(true);
+                Object path = y.invoke(null, rq0);
+                if (path != null && !path.toString().isEmpty()) {
+                    LogWriter.log(TAG, "getFavVoicePath via tc2.s2.y");
+                    return path.toString();
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getFavVoicePath y err: " + t.getMessage());
+        }
+        try {
+            Class<?> apiCls = XposedHelpers.findClass(C_FAV_API, cl);
+            Method d = findMethod(apiCls, "D");
+            Method s = findMethod(apiCls, "s", String.class);
+            String t = (String) getObjectFieldByName(rq0, "T");
+            String k = (String) getObjectFieldByName(rq0, "K");
+            if (d != null && s != null && t != null && k != null) {
+                d.setAccessible(true);
+                s.setAccessible(true);
+                Object root = d.invoke(null);
+                Object dir = s.invoke(null, t);
+                if (root != null && dir != null) {
+                    String path = dir + "/" + t + "." + k;
+                    LogWriter.log(TAG, "getFavVoicePath field-computed=" + path);
+                    return path;
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getFavVoicePath field err: " + t.getMessage());
+        }
+        return null;
+    }
+
+    /** 沿继承链反射读取 long 字段（rq0.y 时长毫秒）。 */
+    private static java.lang.reflect.Field findFieldUp(Object o, String name)
+            throws NoSuchFieldException {
+        Class<?> c = o.getClass();
+        while (c != null && c != Object.class) {
+            try {
+                java.lang.reflect.Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                return f;
+            } catch (NoSuchFieldException e) {
+                c = c.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(name);
     }
 
     /** 构造 v61.o(String fileName, int durMs) 上传场景。 */

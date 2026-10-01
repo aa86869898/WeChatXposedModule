@@ -478,10 +478,12 @@ public final class ChatBubbleHook {
         }
     }
 
-    /** 文档 §5 方案2：精准 hook 文本气泡 ViewHolder 的静态绑定方法
+/** 文档 §5 方案2：精准 hook 文本气泡 ViewHolder 的静态绑定方法
      *  b(e9, holder, data, Boolean isRecv) —— 普通态 chatfrom_bg/chatto_bg 最终设置点。
-     *  v3.0.88 起同时 hook viewitems.to 与 viewitems.mq（日志确认 8.0.78 实际气泡加载路径
-     *  是 viewitems.mq.b → ke5.a.i → setBackgroundResource），after 中定位气泡 View 替换。 */
+     *  v3.0.90：日志 ke5.a.i stack 证实 8.0.78 真实气泡加载路径是 viewitems.mq.b，
+     *  但 viewitems.mq.b 的签名并非固定的 (e9,to,gk5.d,Boolean)，因此放宽条件——
+     *  hook viewitems.to/viewitems.mq 所有「静态方法名为 b 且首参为 e9」的方法，
+     *  after 中从参数推导 isRecv（优先 Boolean 参数，其次 e9.isSend）。 */
     private static void installViewitemsToHook(ClassLoader cl) {
         String[] holderCands = {
                 "com.tencent.mm.ui.chatting.viewitems.to",
@@ -495,15 +497,26 @@ public final class ChatBubbleHook {
                     if (!"b".equals(m.getName())) continue;
                     if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
                     Class<?>[] pts = m.getParameterTypes();
-                    if (pts.length != 4 || pts[3] != Boolean.class) continue;
+                    if (pts.length < 2) continue;
+                    if (!"e9".equals(pts[0].getSimpleName())) continue;
                     m.setAccessible(true);
+                    final String owner = cn;
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
                             try {
                                 if (!sEnabled) return;
-                                Object holder = param.args[1];
-                                boolean isRecv = Boolean.TRUE.equals(param.args[3]);
+                                Object holder = param.args.length > 1 ? param.args[1] : null;
+                                boolean isRecv = param.args.length > 3
+                                        && Boolean.TRUE.equals(param.args[3]);
+                                if (param.args.length <= 3 || !(param.args[3] instanceof Boolean)) {
+                                    try {
+                                        Object msg = param.args[0];
+                                        Object isSend = XposedHelpers.callMethod(msg, "z0");
+                                        isRecv = !(isSend instanceof Number
+                                                && ((Number) isSend).intValue() == 1);
+                                    } catch (Throwable ignored) {}
+                                }
                                 if (holder == null) {
                                     LogWriter.log(TAG, "viewitems.b called isRecv=" + isRecv
                                             + " holder=null");
@@ -528,7 +541,8 @@ public final class ChatBubbleHook {
                         }
                     });
                     hooked++;
-                    LogWriter.log(TAG, "viewitems.b hooked " + m);
+                    LogWriter.log(TAG, "viewitems.b hooked " + owner + "." + m.getName()
+                            + Arrays.toString(pts));
                 }
             } catch (Throwable t) {
                 LogWriter.log(TAG, "viewitems.b class " + cn + " err: " + t.getMessage());
@@ -585,8 +599,9 @@ public final class ChatBubbleHook {
         }
     }
 
-    /** 在 ViewHolder 字段中定位气泡 View：优先 MMNeat7extView（类名可能被微信 R8 混淆，
-     *  因此同时按 TextView 类型、字段名 b/d/f、背景匹配兜底）。
+    /** 在 ViewHolder 字段中定位气泡 View：优先背景与 ke5.a.i 记录的微信原生气泡
+     *  （constantState）匹配的 View（真实气泡背景就是 chatfrom_bg/chatto_bg），
+     *  其次 MMNeat7extView（文本视图本身做气泡背景），再按字段名 b/d/f 兜底。
      *  遍历时打印 View 字段信息，便于下次日志确认微信实际气泡 View 落在哪个字段。 */
     private static View findBubbleView(Object holder) {
         for (Class<?> c = holder.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
@@ -602,6 +617,9 @@ public final class ChatBubbleHook {
                     LogWriter.log(TAG, "  holderField " + c.getSimpleName() + "." + f.getName()
                             + " view=" + cn + " w=" + view.getWidth() + " h=" + view.getHeight()
                             + " bg=" + bg);
+                    if (matchBaseDrawable(view.getBackground()) >= 0) {
+                        return view;
+                    }
                     if (cn.contains("MMNeat7extView") || cn.contains("MMNeatTextView")
                             || cn.contains("Neat")) {
                         return view;
@@ -611,7 +629,6 @@ public final class ChatBubbleHook {
                             && view instanceof android.widget.TextView) {
                         return view;
                     }
-                    if (matchBaseDrawable(view.getBackground()) >= 0) return view;
                 } catch (Throwable ignored) {}
             }
         }
@@ -922,9 +939,27 @@ public final class ChatBubbleHook {
                                         LogWriter.log(TAG, "ke5.a.i baseDrawable saved from="
                                                 + (from ? "y" : "n") + " to=" + (to ? "y" : "n"));
                                     } catch (Throwable ignored) {}
-                                    // 不替换 ke5.a.i 返回值：AnimImageView.setType 等路径会再次
-                                    // 加载并设置到真实气泡 View，真实替换点在 ImageView.setImageDrawable /
-                                    // setBackgroundResource / onLayout。
+                                } catch (Throwable ignored) {}
+                            }
+
+                            @Override
+                            protected void afterHookedMethod(MethodHookParam param) {
+                                // v3.0.90：ke5.a.i 返回值是气泡 Drawable 的最终加载点
+                                // （日志证实 viewitems.mq.b 调用 ke5.a.i），在此替换返回值，
+                                // 微信后续不再重新覆盖原始气泡背景。
+                                try {
+                                    if (!sEnabled) return;
+                                    int resId = ((Number) param.args[1]).intValue();
+                                    boolean from = resId == sFromResId;
+                                    boolean to = resId == sToResId;
+                                    if (!from && !to) return;
+                                    int kind = from ? KIND_FROM : KIND_TO;
+                                    Drawable custom = loadDrawable(kind);
+                                    if (custom != null) {
+                                        param.setResult(custom);
+                                        LogWriter.log(TAG, "ke5.a.i REPLACE RETURN resId=" + resId
+                                                + " kind=" + kind);
+                                    }
                                 } catch (Throwable ignored) {}
                             }
                         });
