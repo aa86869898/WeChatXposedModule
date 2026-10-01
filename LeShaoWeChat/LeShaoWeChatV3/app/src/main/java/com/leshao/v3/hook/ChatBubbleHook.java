@@ -63,6 +63,10 @@ public final class ChatBubbleHook {
     private static volatile String sFromBmpPath;
     private static volatile String sToBmpPath;
 
+    // 微信原始气泡 Drawable 基准（ke5.a.i 预构建时记录），用于 View.setBackground 拦截识别
+    private static volatile Drawable sFromBaseDrawable;
+    private static volatile Drawable sToBaseDrawable;
+
     private static volatile BubblePickCallback sPickCb;
     private static volatile int sPickKind = KIND_FROM;
 
@@ -230,6 +234,7 @@ public final class ChatBubbleHook {
                 try {
                     installBubbleResolver(cl);
                     installBackgroundResourceHook();
+                    installBackgroundHook();
                     installResourceHelperHook(cl);
                     installResourceGetDrawableHook(cl);
                     sHooked = true;
@@ -338,6 +343,52 @@ public final class ChatBubbleHook {
         } catch (Throwable t) {
             LogWriter.log(TAG, "installBackgroundResourceHook err: " + t.getMessage());
         }
+    }
+
+    /** 方案 E：View.setBackground / setBackgroundDrawable 拦截。
+     *  聊天 item 复用预构建 View 后可能重新设置气泡背景（不走 ke5.a.i/getDrawable），
+     *  在设置点用 ke5.a.i 记录的微信原始 Drawable 的 constantState 识别并替换。 */
+    private static void installBackgroundHook() {
+        try {
+            Method setBg = View.class.getMethod("setBackground", Drawable.class);
+            Method setBgDrawable = View.class.getMethod("setBackgroundDrawable", Drawable.class);
+            XC_MethodHook h = new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        if (param.args.length == 0 || !(param.args[0] instanceof Drawable)) return;
+                        Drawable d = (Drawable) param.args[0];
+                        int kind = matchBaseDrawable(d);
+                        if (kind < 0) return;
+                        Drawable custom = loadDrawable(kind);
+                        if (custom != null) {
+                            param.args[0] = custom;
+                            LogWriter.log(TAG, "setBackground REPLACE kind=" + kind
+                                    + " view=" + param.thisObject.getClass().getName());
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            };
+            XposedBridge.hookMethod(setBg, h);
+            XposedBridge.hookMethod(setBgDrawable, h);
+            LogWriter.log(TAG, "View.setBackground hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installBackgroundHook err: " + t.getMessage());
+        }
+    }
+
+    /** 与 ke5.a.i 记录的微信原始气泡 Drawable 对比 constantState。 */
+    private static int matchBaseDrawable(Drawable d) {
+        try {
+            if (sFromBaseDrawable != null && sameConstant(sFromBaseDrawable, d)) return KIND_FROM;
+            if (sToBaseDrawable != null && sameConstant(sToBaseDrawable, d)) return KIND_TO;
+        } catch (Throwable ignored) {}
+        return -1;
+    }
+
+    private static boolean sameConstant(Drawable a, Drawable b) {
+        return a.getConstantState() != null && a.getConstantState().equals(b.getConstantState());
     }
 
     /** 方案 D：Resources.getDrawable 加载路径（聊天页加载气泡背景的最通用入口）。
@@ -452,6 +503,18 @@ public final class ChatBubbleHook {
                                                     .append('.').append(st[i].getMethodName());
                                         }
                                         LogWriter.log(TAG, sb.toString());
+                                    } catch (Throwable ignored) {}
+                                    try {
+                                        // 记录微信原始气泡 Drawable（资源缓存实例，用于 setBackground 拦截识别）
+                                        Context ctx0 = (Context) param.args[0];
+                                        Drawable base = ctx0.getResources().getDrawable(resId);
+                                        if (from) {
+                                            sFromBaseDrawable = base;
+                                        } else if (to) {
+                                            sToBaseDrawable = base;
+                                        }
+                                        LogWriter.log(TAG, "ke5.a.i baseDrawable saved from="
+                                                + (from ? "y" : "n") + " to=" + (to ? "y" : "n"));
                                     } catch (Throwable ignored) {}
                                     int kind = from ? KIND_FROM : KIND_TO;
                                     Drawable d = loadDrawable(kind);

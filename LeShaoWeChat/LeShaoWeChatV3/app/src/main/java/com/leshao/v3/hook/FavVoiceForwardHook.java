@@ -69,6 +69,8 @@ public final class FavVoiceForwardHook {
     // 待转发状态：点击「语音转发」时保存，选人结果返回后消费
     private static volatile long sPendingLocalId;
     private static volatile Object sPendingFavInfo;
+    // 最近长按的收藏对象：菜单构建时 gc 不直接持有 item，用它兜底判断是否注入
+    private static volatile Object sLastLongClickInfo;
 
     private FavVoiceForwardHook() {}
 
@@ -121,6 +123,8 @@ public final class FavVoiceForwardHook {
     }
 
     private static void installHooks(ClassLoader cl) throws Throwable {
+        // ===== 0. 捕获长按的收藏对象：fc.onItemLongClick =====
+        installLongClickCapture(cl);
         // ===== 1. 注入菜单项：de2.m（新链路）与 gc（兜底）=====
         installMenuInject(cl);
         // ===== 2. 拦截点击：de2.n（新链路）与 hc（兜底）=====
@@ -128,6 +132,47 @@ public final class FavVoiceForwardHook {
         // ===== 3. 选人结果：FavoriteIndexUI.onActivityResult + SelectConversationUI.W7 兜底 =====
         installPickResult(cl);
         LogWriter.log(TAG, "installHooks done");
+    }
+
+    /** 捕获收藏列表长按的语音项：fc.onItemLongClick → ui.W.i(pos - headerViews)。 */
+    private static void installLongClickCapture(ClassLoader cl) {
+        try {
+            Class<?> fcCls = XposedHelpers.findClass("com.tencent.mm.plugin.fav.ui.fc", cl);
+            XposedBridge.hookAllMethods(fcCls, "onItemLongClick", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        Activity ui = findActivity(param.thisObject);
+                        if (ui == null) return;
+                        Object adapter = getObjectFieldByName(ui, "W");
+                        if (adapter == null) return;
+                        int pos = param.args.length > 2 && param.args[2] instanceof Number
+                                ? ((Number) param.args[2]).intValue() : -1;
+                        int header = 0;
+                        try {
+                            Object lv = XposedHelpers.getObjectField(ui, "h");
+                            if (lv != null) {
+                                header = ((Number) XposedHelpers.callMethod(lv,
+                                        "getHeaderViewsCount")).intValue();
+                            }
+                        } catch (Throwable ignored) {}
+                        if (pos < 0) return;
+                        Object item = XposedHelpers.callMethod(adapter, "i", pos - header);
+                        if (item == null) return;
+                        int t = getType(item);
+                        LogWriter.log(TAG, "longClick pos=" + pos + " type=" + t);
+                        if (t == TYPE_VOICE) {
+                            sLastLongClickInfo = item;
+                            LogWriter.log(TAG, "longClick voice saved localId=" + getLocalId(item));
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "longClick capture hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "longClick capture err: " + t.getMessage());
+        }
     }
 
     // ---------------- 菜单注入 ----------------
@@ -139,7 +184,7 @@ public final class FavVoiceForwardHook {
                 try {
                     if (!sEnabled) return;
                     Object builder = param.thisObject;
-                    Object item = findFavItemInFields(builder);
+                    Object item = findFavItemFromBuilder(builder);
                     int t = getType(item);
                     LogWriter.log(TAG, "menu build after: cls=" + builder.getClass().getName()
                             + " item=" + (item == null ? "null" : item.getClass().getName())
@@ -162,11 +207,6 @@ public final class FavVoiceForwardHook {
         Set<String> builderCands = new LinkedHashSet<>();
         builderCands.add(C_BUILDER_NEW);
         builderCands.add(C_BUILDER_OLD);
-        try {
-            for (String cn : DexKitHelper.findClassesByString(cl, "FavoriteIndexUI")) {
-                if (cn != null) builderCands.add(cn);
-            }
-        } catch (Throwable ignored) {}
         for (String cn : builderCands) {
             try {
                 for (Class<?> c : HookUtil.loadClasses(cl, cn)) {
@@ -213,8 +253,8 @@ public final class FavVoiceForwardHook {
                         Class<?> rt = ((Method) param.method).getReturnType();
                         if (rt == boolean.class) param.setResult(true);
                     } catch (Throwable ignored) {}
-                    Object item = findFavItemInFields(param.thisObject);
-                    if (item == null || getType(item) != TYPE_VOICE) item = sPendingFavInfo;
+                    Object item = findFavItemFromBuilder(param.thisObject);
+                    if (item == null || getType(item) != TYPE_VOICE) item = sLastLongClickInfo;
                     if (item == null) {
                         LogWriter.log(TAG, "voice forward: no fav item, skip");
                         return;
@@ -232,11 +272,6 @@ public final class FavVoiceForwardHook {
         Set<String> dispatchCands = new LinkedHashSet<>();
         dispatchCands.add(C_DISPATCH_NEW);
         dispatchCands.add(C_DISPATCH_OLD);
-        try {
-            for (String cn : DexKitHelper.findClassesByString(cl, "FavoriteIndexUI")) {
-                if (cn != null) dispatchCands.add(cn);
-            }
-        } catch (Throwable ignored) {}
         for (String cn : dispatchCands) {
             try {
                 for (Class<?> c : HookUtil.loadClasses(cl, cn)) {
@@ -257,15 +292,11 @@ public final class FavVoiceForwardHook {
     /** 判定是否为菜单点击分发方法：形如 onMMMenuItemSelected(MenuItem,int)。 */
     private static boolean isMenuClickMethod(Method m) {
         Class<?>[] pts = m.getParameterTypes();
-        if (pts.length == 2) {
+        if (pts.length == 2 && pts[1] == int.class) {
             String p0 = pts[0].getName();
-            if ("android.view.MenuItem".equals(p0) || p0.startsWith("android.view")) {
-                return pts[1] == int.class || pts[1] == Integer.class;
-            }
+            if ("android.view.MenuItem".equals(p0) || p0.startsWith("android.view")) return true;
         }
-        // 兜底：方法名 onMMMenuItemSelected
-        String n = m.getName();
-        return "onMMMenuItemSelected".equals(n) || "a".equals(n) || "b".equals(n);
+        return "onMMMenuItemSelected".equals(m.getName());
     }
 
     // ---------------- 选人结果 ----------------
@@ -578,6 +609,26 @@ public final class FavVoiceForwardHook {
             } catch (Throwable ignored) {}
         }
         LogWriter.log(TAG, "getService " + svcCls.getName() + " FAILED");
+        return null;
+    }
+
+    /** 从菜单构建器/分发器对象中获取收藏对象：先字段链直找，再用最近长按兜底。 */
+    private static Object findFavItemFromBuilder(Object builder) {
+        if (builder == null) return null;
+        Object direct = findFavItemInFields(builder);
+        if (direct != null) return direct;
+        return sLastLongClickInfo;
+    }
+
+    /** 按字段名沿继承链读取对象字段。 */
+    private static Object getObjectFieldByName(Object o, String name) {
+        for (Class<?> c = o.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            try {
+                java.lang.reflect.Field f = c.getDeclaredField(name);
+                f.setAccessible(true);
+                return f.get(o);
+            } catch (Throwable ignored) {}
+        }
         return null;
     }
 

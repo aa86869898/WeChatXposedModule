@@ -381,14 +381,26 @@ public final class MsgForgeHook {
 
     private static int targetType() {
         switch (sMode) {
-            case MODE_CARD: return 42;
+            // 名片 type=42 需要真实存在的 username（wxid/gh_），服务器会校验；
+            // 未配置有效 wxid 时回退 type=1 文本替换，避免发送失败（红色感叹号）。
+            case MODE_CARD: return isValidCardWxid() ? 42 : 1;
             case MODE_APPMSG: return 49;
-            default: return 10000;
+            // 系统消息 type=10000 微信不支持客户端网络发送（会永远转圈、对方收不到），
+            // 因此「系统消息」模式保持 type=1 普通文本，仅替换 content 为伪装文本，
+            // 让对方收到伪装内容且发送成功。
+            default: return 1;
         }
     }
 
+    /** 名片模式回退判断：wxid 必须是真实配置值（非空且非默认占位）。 */
+    private static boolean isValidCardWxid() {
+        return sCardWxid != null && !sCardWxid.isEmpty()
+                && !"gh_000000000000".equals(sCardWxid)
+                && !"wxid_".equals(sCardWxid);
+    }
+
     private static int targetFlag() {
-        return MODE_CARD.equals(sMode) ? 1 : 0;
+        return MODE_CARD.equals(sMode) && isValidCardWxid() ? 1 : 0;
     }
 
     /** 生成伪造 payload，doc §3.4/3.5/3.6 模板。 */
