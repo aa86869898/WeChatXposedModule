@@ -53,6 +53,10 @@ public final class ChatBubbleHook {
     private static volatile boolean sHooked = false;
     private static volatile boolean sResultHooked = false;
 
+    // 气泡资源 ID（XML 兜底路径用）。优先 getIdentifier 动态解析，失败回退文档已知值
+    private static volatile int sFromResId = 2131231925; // chatfrom_bg
+    private static volatile int sToResId = 2131232060;   // chatto_bg
+
     // Bitmap 缓存：路径不变时复用，避免每次 setBackground 都解码
     private static volatile Bitmap sFromBmp;
     private static volatile Bitmap sToBmp;
@@ -217,6 +221,7 @@ public final class ChatBubbleHook {
             sEnabled = isEnabled();
             sFromPath = getFromPath();
             sToPath = getToPath();
+            resolveBubbleResIds();
         } catch (Throwable ignored) {}
         ensureResultHook();
         if (sHooked) return;
@@ -224,6 +229,8 @@ public final class ChatBubbleHook {
             for (int attempt = 0; attempt < 10 && !sHooked; attempt++) {
                 try {
                     installBubbleResolver(cl);
+                    installBackgroundResourceHook();
+                    installResourceHelperHook(cl);
                     sHooked = true;
                     LogWriter.log(TAG, "bubble resolver hooked attempt=" + attempt);
                     return;
@@ -236,6 +243,102 @@ public final class ChatBubbleHook {
         }, "leshao-bubble-hook");
         t.setDaemon(true);
         t.start();
+    }
+
+    /** 解析气泡资源 ID，getIdentifier 失败时保持文档已知值。 */
+    private static void resolveBubbleResIds() {
+        try {
+            android.content.res.Resources res = ContextManager.getAppContext().getResources();
+            String pkg = ContextManager.getAppContext().getPackageName();
+            int from = res.getIdentifier("chatfrom_bg", "drawable", pkg);
+            int to = res.getIdentifier("chatto_bg", "drawable", pkg);
+            if (from != 0) sFromResId = from;
+            if (to != 0) sToResId = to;
+            LogWriter.log(TAG, "bubble resIds from=" + sFromResId + " to=" + sToResId
+                    + " (getIdentifier from=" + from + " to=" + to + ")");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "resolveBubbleResIds err: " + t.getMessage());
+        }
+    }
+
+    /** 方案 C：XML 兜底路径，View.setBackgroundResource 按 resId 替换（覆盖 X2C 关闭场景）。 */
+    private static void installBackgroundResourceHook() {
+        try {
+            Method m = View.class.getMethod("setBackgroundResource", int.class);
+            XposedBridge.hookMethod(m, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        int resId = ((Number) param.args[0]).intValue();
+                        boolean from = resId == sFromResId;
+                        boolean to = resId == sToResId;
+                        if (!from && !to) return;
+                        int kind = from ? KIND_FROM : KIND_TO;
+                        Drawable d = loadDrawable(kind);
+                        if (d != null) {
+                            View v = (View) param.thisObject;
+                            v.setBackground(d);
+                            LogWriter.log(TAG, "setBackgroundResource REPLACE resId=" + resId);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "View.setBackgroundResource hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installBackgroundResourceHook err: " + t.getMessage());
+        }
+    }
+
+    /** 方案 B：X2C Drawable 加载路径，hook ke5.a.i(Context,int) 按 resId 替换。 */
+    private static void installResourceHelperHook(ClassLoader cl) {
+        try {
+            if (!DexKitHelper.isScanComplete()) return;
+            List<String> classes = new ArrayList<>();
+            try {
+                classes.addAll(DexKitHelper.findClassesByString(cl, "MicroMsg.ResourceHelper"));
+            } catch (Throwable ignored) {}
+            if (!classes.contains("ke5.a")) classes.add("ke5.a");
+            for (String cn : classes) {
+                java.util.Set<Class<?>> loaded = HookUtil.loadClasses(cl, cn);
+                if (loaded.isEmpty()) {
+                    try {
+                        loaded.add(XposedHelpers.findClass(cn, cl));
+                    } catch (Throwable ignored) {}
+                }
+                for (Class<?> c : loaded) {
+                    for (Method m : c.getDeclaredMethods()) {
+                        Class<?>[] pts = m.getParameterTypes();
+                        if (!"i".equals(m.getName()) || pts.length != 2
+                                || pts[0] != Context.class || pts[1] != int.class) {
+                            continue;
+                        }
+                        m.setAccessible(true);
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
+                            @Override
+                            protected void beforeHookedMethod(MethodHookParam param) {
+                                try {
+                                    if (!sEnabled) return;
+                                    int resId = ((Number) param.args[1]).intValue();
+                                    boolean from = resId == sFromResId;
+                                    boolean to = resId == sToResId;
+                                    if (!from && !to) return;
+                                    int kind = from ? KIND_FROM : KIND_TO;
+                                    Drawable d = loadDrawable(kind);
+                                    if (d != null) {
+                                        LogWriter.log(TAG, "ke5.a.i REPLACE resId=" + resId);
+                                        param.setResult(d);
+                                    }
+                                } catch (Throwable ignored) {}
+                            }
+                        });
+                        LogWriter.log(TAG, "ResourceHelper hooked " + c.getName() + ".i");
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installResourceHelperHook err: " + t.getMessage());
+        }
     }
 
     private static void installBubbleResolver(ClassLoader cl) throws Throwable {

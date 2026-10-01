@@ -9,6 +9,7 @@ import com.leshao.v3.LogWriter;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -454,12 +455,11 @@ public final class MsgForgeHook {
 
     private static void installIntercept(ClassLoader cl) {
         final ClassLoader fcl = resolveLoader(cl);
-        // 两条链路同时安装，互不干扰：
+        // 三条链路同时安装，互不干扰：
+        //  - qs5.v5(SendMsgMgr) 发送方法改写（8.0.78 实测 UI 发送最终收敛于此，主生效点）；
         //  - oh0.c 命中时在发送任务内就地改写 content/type（对走新框架的发送生效）；
-        //  - om.SendTextComponent 命中时「先重发后拦截」，覆盖 PPC(v51.s1) 等不经过
-        //    oh0.c 的路径，并在 talker 已知时优先接管。
-        // 二者只有其一会在单次发送中生效：om 拦截成功会跳过原发送（不再进入 oh0.c），
-        // talker 未知放行时原发送才流经 oh0.c。因此不会重复伪装/重复发送。
+        //  - om.SendTextComponent 命中时仅记录并放行（诊断，不再预发送/拦截）。
+        installSendMgrPatch(fcl);
         installLogicPatch(fcl);
         installSendComponentFallback(fcl);
     }
@@ -470,6 +470,69 @@ public final class MsgForgeHook {
             if (tk != null && !tk.getClass().getName().contains("Leshao") && tk != cl) return tk;
         } catch (Throwable ignored) {}
         return cl;
+    }
+
+    /** 主生效点：qs5.v5（MicroMsg.SendMsgMgr）发送方法 oj/nj/mj/pj(toUser,content,type,flag)。 */
+    private static void installSendMgrPatch(ClassLoader cl) {
+        try {
+            List<String> names = new java.util.ArrayList<>();
+            try {
+                names.addAll(DexKitHelper.findClassesByString(cl, "MicroMsg.SendMsgMgr"));
+            } catch (Throwable ignored) {}
+            if (!names.contains("qs5.v5")) names.add("qs5.v5");
+            if (!names.contains("kl5.s5")) names.add("kl5.s5");
+            int installed = 0;
+            for (String cn : names) {
+                for (Class<?> c : HookUtil.loadClasses(cl, cn)) {
+                    for (Method m : c.getDeclaredMethods()) {
+                        Class<?>[] pts = m.getParameterTypes();
+                        if (pts.length < 4 || pts[0] != String.class || pts[1] != String.class) continue;
+                        if (!HookUtil.isInt(pts[2]) || !HookUtil.isInt(pts[3])) continue;
+                        String mn = m.getName();
+                        if (!"oj".equals(mn) && !"nj".equals(mn)
+                                && !"mj".equals(mn) && !"pj".equals(mn)) continue;
+                        try {
+                            m.setAccessible(true);
+                            XposedBridge.hookMethod(m, new XC_MethodHook() {
+                                @Override
+                                protected void beforeHookedMethod(MethodHookParam p) {
+                                    try {
+                                        patchSendMgrArgs(p);
+                                    } catch (Throwable e) {
+                                        LogWriter.log(TAG, "sendmgr patch err: " + e);
+                                    }
+                                }
+                            });
+                            installed++;
+                            LogWriter.log(TAG, "SendMsgMgr hooked cls=" + c.getName()
+                                    + " loader=" + HookUtil.loaderName(c.getClassLoader())
+                                    + " m=" + mn + "(" + Arrays.toString(pts) + ")");
+                        } catch (Throwable ignored) {}
+                    }
+                }
+            }
+            LogWriter.log(TAG, "SendMsgMgr 发送方法补丁 hooks=" + installed + " cands=" + names.size());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "SendMsgMgr 补丁 FAIL: " + t.getMessage());
+        }
+    }
+
+    private static void patchSendMgrArgs(XC_MethodHook.MethodHookParam p) {
+        if (!sEnabled) return;
+        Object[] a = p.args;
+        if (a == null || a.length < 4) return;
+        if (!(a[0] instanceof String) || !(a[1] instanceof String)) return;
+        int type = a[2] instanceof Number ? ((Number) a[2]).intValue() : 0;
+        if (type != 1) return;
+        String original = (String) a[1];
+        if (original == null || original.isEmpty() || isForged(original)) return;
+        String content = apply(original);
+        if (content == null) return;
+        a[1] = content;
+        a[2] = targetType();
+        if (a.length >= 4 && a[3] instanceof Number) a[3] = targetFlag();
+        LogWriter.log(TAG, "sendmgr patch -> type=" + a[2]
+                + " talker=" + a[0] + " text=" + trunc(original, 20));
     }
 
     /** 主方案：oh0.c（SendTextTask, MicroMsg.SendTextLogic）的 (String,String,int,..) 发送方法改写。 */

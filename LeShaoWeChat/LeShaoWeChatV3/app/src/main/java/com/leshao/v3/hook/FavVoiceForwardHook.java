@@ -13,9 +13,7 @@ import com.leshao.v3.LogWriter;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -110,31 +108,44 @@ public final class FavVoiceForwardHook {
 
     private static void installHooks(ClassLoader cl) throws Throwable {
         // ===== 拦截 A：FavSendFilter —— 语音恒 true 视为不可转发，强制 false 让「转发」菜单出现 =====
-        // 类/方法名会随微信换包变化，优先用 DexKit 按 "MicroMsg.FavSendFilter" 字符串动态锚定
-        String filterClsName = firstClassByDexKit(cl, "MicroMsg.FavSendFilter", C_FILTER);
-        Class<?> filterCls = XposedHelpers.findClass(filterClsName, cl);
-        String filterMethod = firstMethodByDexKit(cl, filterClsName, "MicroMsg.FavSendFilter", "b");
-        LogWriter.log(TAG, "FavSendFilter: class=" + filterClsName + " method=" + filterMethod
-                + " declared=" + countMethods(filterCls, filterMethod));
-        XposedBridge.hookAllMethods(filterCls, filterMethod, new XC_MethodHook() {
-            @Override
-            protected void beforeHookedMethod(MethodHookParam param) {
-                try {
-                    Object info = findFavItem(param.args);
-                    int t = getType(info);
-                    long lid = getLocalId(info);
-                    LogWriter.log(TAG, "x3 hit: m=" + param.method.getName() + " args=" + param.args.length
-                            + " info=" + (info == null ? "null" : info.getClass().getName())
-                            + " type=" + t + " localId=" + lid);
-                    if (t == TYPE_VOICE) {
-                        LogWriter.log(TAG, "x3 voice -> force false");
-                        param.setResult(false);
+        // 类/方法名会随微信换包变化，且 DexKit 报告的声明类可能只存在于特定 ClassLoader（Tinker），
+        // 因此全包扫描所有包含 "MicroMsg.FavSendFilter" 字符串的方法并跨 ClassLoader hook。
+        List<String> filterSigs = new java.util.ArrayList<>();
+        try {
+            filterSigs.addAll(DexKitHelper.findMethodsByString(cl, null, "MicroMsg.FavSendFilter"));
+        } catch (Throwable ignored) {}
+        LogWriter.log(TAG, "FavSendFilter sigs=" + filterSigs);
+        for (String sig : filterSigs) {
+            String cn = classNameOf(sig);
+            String mn = methodNameOf(sig);
+            if (cn == null || mn == null) continue;
+            for (Class<?> c : HookUtil.loadClasses(cl, cn)) {
+                int declared = countMethods(c, mn);
+                LogWriter.log(TAG, "FavSendFilter hook cls=" + c.getName()
+                        + " loader=" + HookUtil.loaderName(c.getClassLoader())
+                        + " m=" + mn + " declared=" + declared);
+                XposedBridge.hookAllMethods(c, mn, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        try {
+                            Object info = findFavItem(param.args);
+                            int t = getType(info);
+                            long lid = getLocalId(info);
+                            LogWriter.log(TAG, "x3 hit: m=" + param.method.getName()
+                                    + " args=" + param.args.length
+                                    + " info=" + (info == null ? "null" : info.getClass().getName())
+                                    + " type=" + t + " localId=" + lid);
+                            if (t == TYPE_VOICE) {
+                                LogWriter.log(TAG, "x3 voice -> force false");
+                                param.setResult(false);
+                            }
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "x3 err: " + t.getMessage());
+                        }
                     }
-                } catch (Throwable t) {
-                    LogWriter.log(TAG, "x3 err: " + t.getMessage());
-                }
+                });
             }
-        });
+        }
 
         // ===== 拦截 B：FavoriteIndexUI.H7 —— 列表含语音时直接放行 =====
         Class<?> favUi = XposedHelpers.findClass(C_FAV_UI, cl);
@@ -169,34 +180,39 @@ public final class FavVoiceForwardHook {
         });
 
         // ===== 拦截 C：FavoriteMenuHelper（mc.g / mc.h）=====
-        String menuClsName = firstClassByDexKit(cl, "MicroMsg.FavoriteMenuHelper", C_MENU_HELPER);
-        Class<?> menuHelper = XposedHelpers.findClass(menuClsName, cl);
-        Set<String> menuMethods = collectMethodNames(cl, menuClsName, "MicroMsg.FavoriteMenuHelper");
-        if (menuMethods.isEmpty()) {
-            menuMethods.add("g");
-            menuMethods.add("h");
-        }
-        LogWriter.log(TAG, "FavoriteMenuHelper: class=" + menuClsName + " methods=" + menuMethods
-                + " declared g/h=" + countMethods(menuHelper, "g") + "/" + countMethods(menuHelper, "h"));
-        for (final String mn : menuMethods) {
-            XposedBridge.hookAllMethods(menuHelper, mn, new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    try {
-                        Object info = findFavItem(param.args);
-                        int t = getType(info);
-                        LogWriter.log(TAG, "menu hit: m=" + mn + " args=" + param.args.length
-                                + " info=" + (info == null ? "null" : info.getClass().getName())
-                                + " type=" + t);
-                        if (t == TYPE_VOICE) {
-                            sPendingLocalId = getLocalId(info);
-                            sPendingFavInfo = info;
-                            LogWriter.log(TAG, "menu voice -> allow localId=" + sPendingLocalId);
-                            param.setResult(true);
-                        }
-                    } catch (Throwable ignored) {}
-                }
-            });
+        List<String> menuSigs = new java.util.ArrayList<>();
+        try {
+            menuSigs.addAll(DexKitHelper.findMethodsByString(cl, null, "MicroMsg.FavoriteMenuHelper"));
+        } catch (Throwable ignored) {}
+        LogWriter.log(TAG, "FavoriteMenuHelper sigs=" + menuSigs);
+        for (String sig : menuSigs) {
+            String cn = classNameOf(sig);
+            String mn = methodNameOf(sig);
+            if (cn == null || mn == null) continue;
+            for (Class<?> c : HookUtil.loadClasses(cl, cn)) {
+                int declared = countMethods(c, mn);
+                LogWriter.log(TAG, "FavoriteMenuHelper hook cls=" + c.getName()
+                        + " loader=" + HookUtil.loaderName(c.getClassLoader())
+                        + " m=" + mn + " declared=" + declared);
+                XposedBridge.hookAllMethods(c, mn, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        try {
+                            Object info = findFavItem(param.args);
+                            int t = getType(info);
+                            LogWriter.log(TAG, "menu hit: m=" + mn + " args=" + param.args.length
+                                    + " info=" + (info == null ? "null" : info.getClass().getName())
+                                    + " type=" + t);
+                            if (t == TYPE_VOICE) {
+                                sPendingLocalId = getLocalId(info);
+                                sPendingFavInfo = info;
+                                LogWriter.log(TAG, "menu voice -> allow localId=" + sPendingLocalId);
+                                param.setResult(true);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+            }
         }
 
         // 兜底：长按菜单构建 gc.a() 中若微信未添加「转发」项（x3.b 未生效），手动注入 itemId=3
@@ -274,53 +290,28 @@ public final class FavVoiceForwardHook {
         return false;
     }
 
-    // ---------------- DexKit 动态锚定 ----------------
+// ---------------- DexKit 签名解析 ----------------
 
-    private static String firstClassByDexKit(ClassLoader cl, String keyword, String fallback) {
-        try {
-            List<String> cands = DexKitHelper.findClassesByString(cl, keyword);
-            if (cands != null && !cands.isEmpty()) {
-                LogWriter.log(TAG, "DexKit class '" + keyword + "' -> " + cands.get(0));
-                return cands.get(0);
-            }
-        } catch (Throwable ignored) {}
-        return fallback;
+    /** 从 "pkg.Cls.method(params)" 解析出声明类全名。 */
+    private static String classNameOf(String sig) {
+        if (sig == null) return null;
+        int p = sig.indexOf('(');
+        if (p < 0) p = sig.length();
+        String head = sig.substring(0, p);
+        int dot = head.lastIndexOf('.');
+        return dot > 0 ? head.substring(0, dot) : null;
     }
 
-    /** 在指定类中查找包含 keyword 字符串的方法名，找不到返回 fallback。 */
-    private static String firstMethodByDexKit(ClassLoader cl, String clsName, String keyword, String fallback) {
-        try {
-            List<String> sigs = DexKitHelper.findMethodsByString(cl, clsName, keyword);
-            for (String sig : sigs) {
-                int dot = sig.lastIndexOf('.');
-                int paren = sig.indexOf('(');
-                if (dot >= 0 && paren > dot) {
-                    String mn = sig.substring(dot + 1, paren);
-                    if (!mn.isEmpty()) return mn;
-                }
-            }
-        } catch (Throwable ignored) {}
-        return fallback;
+    /** 从 "pkg.Cls.method(params)" 解析出方法名。 */
+    private static String methodNameOf(String sig) {
+        if (sig == null) return null;
+        int p = sig.indexOf('(');
+        if (p < 0) p = sig.length();
+        String head = sig.substring(0, p);
+        int dot = head.lastIndexOf('.');
+        return dot > 0 && dot < head.length() - 1 ? head.substring(dot + 1) : null;
     }
-
-    /** 收集指定类中包含 keyword 字符串的全部方法名。 */
-    private static Set<String> collectMethodNames(ClassLoader cl, String clsName, String keyword) {
-        Set<String> out = new HashSet<>();
-        try {
-            List<String> sigs = DexKitHelper.findMethodsByString(cl, clsName, keyword);
-            for (String sig : sigs) {
-                int dot = sig.lastIndexOf('.');
-                int paren = sig.indexOf('(');
-                if (dot >= 0 && paren > dot) {
-                    String mn = sig.substring(dot + 1, paren);
-                    if (!mn.isEmpty()) out.add(mn);
-                }
-            }
-        } catch (Throwable ignored) {}
-        return out;
-    }
-
-    private static int countMethods(Class<?> cls, String name) {
+        private static int countMethods(Class<?> cls, String name) {
         if (cls == null || name == null) return 0;
         int n = 0;
         for (Method m : cls.getDeclaredMethods()) {
