@@ -12,6 +12,8 @@ import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.provider.OpenableColumns;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.AbsListView;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
@@ -237,6 +239,7 @@ public final class ChatBubbleHook {
                     installBackgroundHook();
                     installResourceHelperHook(cl);
                     installResourceGetDrawableHook(cl);
+                    installChatListViewHook(cl);
                     sHooked = true;
                     LogWriter.log(TAG, "bubble resolver hooked attempt=" + attempt);
                     return;
@@ -456,6 +459,79 @@ public final class ChatBubbleHook {
     }
 
     /** 方案 B：X2C Drawable 加载路径，hook ke5.a.i(Context,int) 按 resId 替换。 */
+    /** 方案 F：聊天列表渲染兜底。微信聊天 item 在 8.0.78 不经过 ke5.a.i/getDrawable/
+     *  setBackground 设置气泡背景，而是在 X2C 预构建/代码构建的 item 上直接使用缓存 Drawable。
+     *  Hook AbsListView / RecyclerView 的 onLayout，每次布局后遍历 item 树，
+     *  凡背景与 ke5.a.i 记录的微信原生气泡 Drawable（constantState）匹配即替换。 */
+    private static void installChatListViewHook(ClassLoader cl) {
+        try {
+            Method onLayout = null;
+            for (Method m : AbsListView.class.getDeclaredMethods()) {
+                if ("onLayout".equals(m.getName())) { onLayout = m; break; }
+            }
+            if (onLayout != null) {
+                onLayout.setAccessible(true);
+                XposedBridge.hookMethod(onLayout, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sEnabled) return;
+                            replaceMatchingBubbles((View) param.thisObject);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "AbsListView.onLayout hooked");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "AbsListView.onLayout err: " + t.getMessage());
+        }
+        for (String cn : new String[]{"androidx.recyclerview.widget.RecyclerView",
+                "android.support.v7.widget.RecyclerView"}) {
+            try {
+                Class<?> rv = XposedHelpers.findClass(cn, cl);
+                Method onLayout = null;
+                for (Method m : rv.getDeclaredMethods()) {
+                    if ("onLayout".equals(m.getName())) { onLayout = m; break; }
+                }
+                if (onLayout != null) {
+                    onLayout.setAccessible(true);
+                    XposedBridge.hookMethod(onLayout, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            try {
+                                if (!sEnabled) return;
+                                replaceMatchingBubbles((View) param.thisObject);
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+                    LogWriter.log(TAG, "RecyclerView.onLayout hooked " + cn);
+                }
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    /** 递归遍历 View 树，把背景与微信原生气泡匹配的 View 替换为用户图片。 */
+    private static void replaceMatchingBubbles(View v) {
+        if (v == null) return;
+        try {
+            int kind = matchBaseDrawable(v.getBackground());
+            if (kind >= 0) {
+                Drawable custom = loadDrawable(kind);
+                if (custom != null) {
+                    v.setBackground(custom);
+                    LogWriter.log(TAG, "onLayout REPLACE kind=" + kind
+                            + " view=" + v.getClass().getName());
+                }
+            }
+        } catch (Throwable ignored) {}
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                replaceMatchingBubbles(g.getChildAt(i));
+            }
+        }
+    }
+
     private static void installResourceHelperHook(ClassLoader cl) {
         try {
             if (!DexKitHelper.isScanComplete()) return;

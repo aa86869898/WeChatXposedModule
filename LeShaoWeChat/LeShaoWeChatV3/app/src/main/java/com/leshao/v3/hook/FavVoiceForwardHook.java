@@ -184,7 +184,7 @@ public final class FavVoiceForwardHook {
                 try {
                     if (!sEnabled) return;
                     Object builder = param.thisObject;
-                    Object item = findFavItemFromBuilder(builder);
+                    Object item = resolveItemFromMenuContext(param, builder);
                     int t = getType(item);
                     LogWriter.log(TAG, "menu build after: cls=" + builder.getClass().getName()
                             + " item=" + (item == null ? "null" : item.getClass().getName())
@@ -253,7 +253,7 @@ public final class FavVoiceForwardHook {
                         Class<?> rt = ((Method) param.method).getReturnType();
                         if (rt == boolean.class) param.setResult(true);
                     } catch (Throwable ignored) {}
-                    Object item = findFavItemFromBuilder(param.thisObject);
+                    Object item = resolveItemFromMenuContext(param, param.thisObject);
                     if (item == null || getType(item) != TYPE_VOICE) item = sLastLongClickInfo;
                     if (item == null) {
                         LogWriter.log(TAG, "voice forward: no fav item, skip");
@@ -609,6 +609,83 @@ public final class FavVoiceForwardHook {
             } catch (Throwable ignored) {}
         }
         LogWriter.log(TAG, "getService " + svcCls.getName() + " FAILED");
+        return null;
+    }
+
+    /** 从菜单构建参数 ContextMenuInfo 解析收藏对象（主路径），再回退字段链/长按缓存。 */
+    private static Object resolveItemFromMenuContext(XC_MethodHook.MethodHookParam param,
+                                                      Object builder) {
+        try {
+            Object info = param.args.length > 2 ? param.args[2] : null;
+            if (info == null) return findFavItemFromBuilder(builder);
+            int pos = -1;
+            try {
+                Object p = XposedHelpers.callMethod(info, "getPosition");
+                if (p instanceof Number) pos = ((Number) p).intValue();
+            } catch (Throwable ignored) {}
+            if (pos < 0) {
+                try { pos = XposedHelpers.getIntField(info, "position"); } catch (Throwable ignored) {}
+            }
+            Object targetView = null;
+            try {
+                targetView = XposedHelpers.callMethod(info, "getTargetView");
+            } catch (Throwable ignored) {}
+            if (targetView == null) {
+                try { targetView = XposedHelpers.getObjectField(info, "targetView"); } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "menu ctx: pos=" + pos
+                    + " targetView=" + (targetView == null ? "null" : targetView.getClass().getName()));
+            if (pos >= 0) {
+                Activity ui = findActivity(builder);
+                if (ui != null) {
+                    Object adapter = getObjectFieldByName(ui, "W");
+                    if (adapter != null) {
+                        int header = 0;
+                        try {
+                            Object lv = XposedHelpers.getObjectField(ui, "h");
+                            if (lv != null) {
+                                header = ((Number) XposedHelpers.callMethod(lv,
+                                        "getHeaderViewsCount")).intValue();
+                            }
+                        } catch (Throwable ignored) {}
+                        Object item = callAdapterItem(adapter, pos - header);
+                        LogWriter.log(TAG, "menu ctx resolve pos=" + pos + " header=" + header
+                                + " item=" + (item == null ? "null" : item.getClass().getName())
+                                + " type=" + getType(item));
+                        if (item != null) return item;
+                    }
+                }
+            }
+            if (targetView instanceof View) {
+                Object tag = ((View) targetView).getTag();
+                if (tag != null && hasFieldType(tag)) return tag;
+            }
+        } catch (Throwable ignored) {}
+        return findFavItemFromBuilder(builder);
+    }
+
+    /** 调用收藏列表 adapter 的按位置取 item 方法（i / getItem 等）。 */
+    private static Object callAdapterItem(Object adapter, int position) {
+        if (adapter == null) return null;
+        try {
+            return XposedHelpers.callMethod(adapter, "i", position);
+        } catch (Throwable ignored) {}
+        try {
+            return XposedHelpers.callMethod(adapter, "getItem", position);
+        } catch (Throwable ignored) {}
+        for (Class<?> c = adapter.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Method m : c.getDeclaredMethods()) {
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length == 1 && pts[0] == int.class
+                        && m.getReturnType() != void.class && m.getReturnType() != int.class) {
+                    try {
+                        m.setAccessible(true);
+                        Object v = m.invoke(adapter, position);
+                        if (v != null) return v;
+                    } catch (Throwable ignored) {}
+                }
+            }
+        }
         return null;
     }
 

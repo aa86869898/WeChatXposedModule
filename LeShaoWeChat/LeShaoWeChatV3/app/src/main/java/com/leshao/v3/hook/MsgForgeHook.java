@@ -31,33 +31,15 @@ public final class MsgForgeHook {
     public static final String TAG = "MsgForge";
 
     private static final String K_ENABLED = "ls_msgforge_enabled";
-    private static final String K_MODE = "ls_msgforge_mode";
     private static final String K_TEXT = "ls_msgforge_text";
-    private static final String K_CARD_WXID = "ls_msgforge_card_wxid";
-    private static final String K_CARD_NICK = "ls_msgforge_card_nick";
-    private static final String K_APP_TITLE = "ls_msgforge_app_title";
-    private static final String K_APP_DESC = "ls_msgforge_app_desc";
-    private static final String K_APP_URL = "ls_msgforge_app_url";
 
+    /** 兼容旧配置残留的模式名，仅保留纯文本替换。 */
     public static final String MODE_SYSTEM = "system";
-    public static final String MODE_CARD = "card";
-    public static final String MODE_APPMSG = "appmsg";
 
     private static final String DEF_TEXT = "【安全提示】检测到当前会话存在风险，请谨慎操作。";
-    private static final String DEF_CARD_WXID = "gh_000000000000";
-    private static final String DEF_CARD_NICK = "微信团队";
-    private static final String DEF_APP_TITLE = "系统通知";
-    private static final String DEF_APP_DESC = "点击查看详情";
-    private static final String DEF_APP_URL = "https://weixin.qq.com/";
 
     private static volatile boolean sEnabled = false;
-    private static volatile String sMode = MODE_SYSTEM;
     private static volatile String sText = DEF_TEXT;
-    private static volatile String sCardWxid = DEF_CARD_WXID;
-    private static volatile String sCardNick = DEF_CARD_NICK;
-    private static volatile String sAppTitle = DEF_APP_TITLE;
-    private static volatile String sAppDesc = DEF_APP_DESC;
-    private static volatile String sAppUrl = DEF_APP_URL;
 
     private MsgForgeHook() {}
 
@@ -72,14 +54,8 @@ public final class MsgForgeHook {
         }
         if (sp == null) return;
         sEnabled = sp.getBoolean(K_ENABLED, false);
-        sMode = sp.getString(K_MODE, MODE_SYSTEM);
         sText = sp.getString(K_TEXT, DEF_TEXT);
-        sCardWxid = sp.getString(K_CARD_WXID, DEF_CARD_WXID);
-        sCardNick = sp.getString(K_CARD_NICK, DEF_CARD_NICK);
-        sAppTitle = sp.getString(K_APP_TITLE, DEF_APP_TITLE);
-        sAppDesc = sp.getString(K_APP_DESC, DEF_APP_DESC);
-        sAppUrl = sp.getString(K_APP_URL, DEF_APP_URL);
-        LogWriter.log(TAG, "config enabled=" + sEnabled + " mode=" + sMode);
+        LogWriter.log(TAG, "config enabled=" + sEnabled);
     }
 
     public static boolean isEnabled() {
@@ -98,22 +74,6 @@ public final class MsgForgeHook {
         LogWriter.log(TAG, "setEnabled " + on);
     }
 
-    public static String getMode() {
-        try {
-            return ContextManager.getPrefs().getString(K_MODE, MODE_SYSTEM);
-        } catch (Throwable t) {
-            return sMode;
-        }
-    }
-
-    public static void setMode(String mode) {
-        if (mode == null) mode = MODE_SYSTEM;
-        try {
-            ContextManager.getPrefs().edit().putString(K_MODE, mode).apply();
-        } catch (Throwable ignored) {}
-        sMode = mode;
-    }
-
     public static String getText() {
         try {
             return ContextManager.getPrefs().getString(K_TEXT, DEF_TEXT);
@@ -123,29 +83,6 @@ public final class MsgForgeHook {
     }
 
     public static void setText(String v) { put(K_TEXT, v); sText = v; }
-
-    public static String getCardWxid() { return getStr(K_CARD_WXID, DEF_CARD_WXID, sCardWxid); }
-    public static void setCardWxid(String v) { put(K_CARD_WXID, v); sCardWxid = v; }
-
-    public static String getCardNick() { return getStr(K_CARD_NICK, DEF_CARD_NICK, sCardNick); }
-    public static void setCardNick(String v) { put(K_CARD_NICK, v); sCardNick = v; }
-
-    public static String getAppTitle() { return getStr(K_APP_TITLE, DEF_APP_TITLE, sAppTitle); }
-    public static void setAppTitle(String v) { put(K_APP_TITLE, v); sAppTitle = v; }
-
-    public static String getAppDesc() { return getStr(K_APP_DESC, DEF_APP_DESC, sAppDesc); }
-    public static void setAppDesc(String v) { put(K_APP_DESC, v); sAppDesc = v; }
-
-    public static String getAppUrl() { return getStr(K_APP_URL, DEF_APP_URL, sAppUrl); }
-    public static void setAppUrl(String v) { put(K_APP_URL, v); sAppUrl = v; }
-
-    private static String getStr(String key, String def, String cache) {
-        try {
-            return ContextManager.getPrefs().getString(key, def);
-        } catch (Throwable t) {
-            return cache != null ? cache : def;
-        }
-    }
 
     private static void put(String key, String v) {
         try {
@@ -379,85 +316,30 @@ public final class MsgForgeHook {
 
     // ---------------- 伪装内容 ----------------
 
+    // v3.0.82：微信不支持客户端伪造发送系统消息/名片/链接卡片（type=42 名片需服务器校验真实
+    // username，type=10000 无客户端发送流程，type=49 会显示原始 XML）。因此消息伪装
+    // 只保留「纯文本替换」：type 恒为 1，仅把 content 替换为自定义伪装文字，保证发送成功。
     private static int targetType() {
-        switch (sMode) {
-            // 名片 type=42 需要真实存在的 username（wxid/gh_），服务器会校验；
-            // 未配置有效 wxid 时回退 type=1 文本替换，避免发送失败（红色感叹号）。
-            case MODE_CARD: return isValidCardWxid() ? 42 : 1;
-            case MODE_APPMSG: return 49;
-            // 系统消息 type=10000 微信不支持客户端网络发送（会永远转圈、对方收不到），
-            // 因此「系统消息」模式保持 type=1 普通文本，仅替换 content 为伪装文本，
-            // 让对方收到伪装内容且发送成功。
-            default: return 1;
-        }
-    }
-
-    /** 名片模式回退判断：wxid 必须是真实配置值（非空且非默认占位）。 */
-    private static boolean isValidCardWxid() {
-        return sCardWxid != null && !sCardWxid.isEmpty()
-                && !"gh_000000000000".equals(sCardWxid)
-                && !"wxid_".equals(sCardWxid);
+        return 1;
     }
 
     private static int targetFlag() {
-        return MODE_CARD.equals(sMode) && isValidCardWxid() ? 1 : 0;
+        return 0;
     }
 
-    /** 生成伪造 payload，doc §3.4/3.5/3.6 模板。 */
+    /** 生成伪造 payload：恒为自定义伪装文本。 */
     public static String apply(String original) {
-        switch (sMode) {
-            case MODE_CARD: return cardXml();
-            case MODE_APPMSG: return appMsgXml();
-            default: return systemContent(original);
-        }
+        return systemContent(original);
     }
 
     public static String systemContent(String original) {
         return (sText == null || sText.isEmpty()) ? original : sText;
     }
 
-    public static String cardXml() {
-        String wxid = xml(sCardWxid);
-        String nick = xml(sCardNick);
-        return "<msg username=\"" + wxid + "\" nickname=\"" + nick
-                + "\" fullpy=\"\" shortpy=\"\" alias=\"\" imagestatus=\"-1\""
-                + " scene=\"17\" province=\"\" city=\"\" sign=\"\" sex=\"0\""
-                + " certflag=\"0\" certinfo=\"\" brandIconUrl=\"\" brandHomeUrl=\"\""
-                + " brandSubscriptConfigUrl=\"\" brandFlags=\"0\" regionCode=\"CN\">"
-                + "<card type=\"0\"/></msg>";
-    }
-
-    public static String appMsgXml() {
-        return "<msg>"
-                + "<appmsg appid=\"\" sdkver=\"0\">"
-                + "<title>" + xml(sAppTitle) + "</title>"
-                + "<des>" + xml(sAppDesc) + "</des>"
-                + "<action>view</action>"
-                + "<type>5</type>"
-                + "<url>" + xml(sAppUrl) + "</url>"
-                + "</appmsg>"
-                + "<fromusername></fromusername>"
-                + "<scene>0</scene>"
-                + "<appinfo><version>1</version><appname></appname></appinfo>"
-                + "</msg>";
-    }
-
-    private static String xml(String v) {
-        if (v == null) return "";
-        return v.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;");
-    }
-
-    /** 供 UI 预览当前伪装配置的 payload。 */
+    /** 供 UI 预览当前伪装配置的文案。 */
     public static String preview() {
         updateConfig();
-        switch (sMode) {
-            case MODE_CARD: return cardXml();
-            case MODE_APPMSG: return appMsgXml();
-            default: return systemContent(DEF_TEXT);
-        }
+        return systemContent(DEF_TEXT);
     }
 
     /** 从 "pkg.Cls.method(params)" 解析出声明类全名。 */
@@ -863,17 +745,7 @@ public final class MsgForgeHook {
                 writeStrFieldUp(msg, "field_content", content);
             } catch (Throwable ignored) {}
         }
-        // type=10000（系统消息）微信没有网络发送流程，若保持 status=1 会永远转圈。
-        // 直接标记为已发送（status=2），让 UI 显示为系统消息且不转圈。
-        if (targetType() == 10000) {
-            try {
-                XposedHelpers.callMethod(msg, "setStatus", 2);
-            } catch (Throwable ignored) {
-                try {
-                    writeIntFieldUp(msg, "field_status", 2);
-                } catch (Throwable ignored2) {}
-            }
-        }
+        // type 恒为 1（纯文本替换），无需额外状态处理。
         long msgId = 0;
         try {
             msgId = ((Number) XposedHelpers.callMethod(msg, "getMsgId")).longValue();
