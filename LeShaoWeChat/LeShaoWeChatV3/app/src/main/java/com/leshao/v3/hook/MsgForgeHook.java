@@ -362,19 +362,33 @@ public final class MsgForgeHook {
      *  - hideAt=true（默认）：content 完全不含 @ 符号（= 伪装文案），发送时同步清空
      *    msgsource 降级为普通消息，保证发送成功；代价是对方收不到 @ 提醒。
      *  - hideAt=false：content 保留「@ + 零宽空格 + 空格」前缀，msgsource 保留，
-     *    对方仍收到 @ 提醒，但显示带 @ 符号。二者不可兼得。 */
+     *    对方仍收到 @ 提醒，但显示带 @ 符号。二者不可兼得。
+     *  v3.0.93：实测微信 content 中 @ 目标以 \u2005 分隔（@昵称1\u2005@昵称2\u2005正文），
+     *  伪装只替换 @ 前缀之后的正文，保留完整 @ 目标列表，@ 多人不再失败。 */
     private static String forgeAtMessage(String content) {
         if (content == null) return content;
-        String forged = (sText == null || sText.isEmpty()) ? content : sText;
+        // 未配置伪装文案时完全放行，保留原始 @ 前缀与正文
+        if (sText == null || sText.isEmpty()) return content;
+        String forged = sText;
         if (sHideAt) {
             LogWriter.log(TAG, "at msg forged hiddenAt body=" + trunc(forged, 20)
                     + " clearMsgSource=true");
             return forged;
         }
-        forged = "@\u200B " + forged;
+        String atPrefix = extractAtPrefix(content);
+        forged = (atPrefix != null ? atPrefix : "@\u200B ") + forged;
         LogWriter.log(TAG, "at msg forged hiddenAt body=" + trunc(forged, 20)
-                + " keepMsgSource=true");
+                + " keepMsgSource=true prefixLen=" + (atPrefix == null ? 0 : atPrefix.length()));
         return forged;
+    }
+
+    /** 提取 @ 提及前缀：微信 content 中 @ 目标以 \u2005 分隔（@昵称1\u2005@昵称2\u2005正文）。
+     *  返回 null 表示 content 不含 \u2005（@ 关系仅在 msgsource，content 无 @ 提及显示）。 */
+    private static String extractAtPrefix(String content) {
+        if (content == null) return null;
+        int idx = content.lastIndexOf('\u2005');
+        if (idx < 0) return null;
+        return content.substring(0, idx + 1);
     }
 
     public static String systemContent(String original) {
