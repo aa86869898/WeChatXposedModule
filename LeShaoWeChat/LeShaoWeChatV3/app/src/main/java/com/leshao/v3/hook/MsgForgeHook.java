@@ -187,10 +187,11 @@ public final class MsgForgeHook {
                 return;
             }
             LogWriter.log(TAG, "NetSceneSendMsg candidates=" + cands);
+            int totalHooked = 0;
             for (String clsName : cands) {
                 int total = 0;
                 for (Class<?> c : HookUtil.loadClasses(cl, clsName)) {
-                    total += HookUtil.hookCtors(c, MsgForgeHook::isSendCtor, new XC_MethodHook() {
+                    total += HookUtil.hookCtors(c, null, new XC_MethodHook() {
                         @Override
                         protected void beforeHookedMethod(MethodHookParam param) {
                             try {
@@ -204,11 +205,15 @@ public final class MsgForgeHook {
                 }
                 if (total > 0) {
                     LogWriter.log(TAG, "hooked ctors=" + total + " cls=" + clsName);
-                    return;
+                    totalHooked += total;
+                } else {
+                    LogWriter.log(TAG, "候选 " + clsName + " 无匹配构造器，尝试下一个");
                 }
-                LogWriter.log(TAG, "候选 " + clsName + " 无匹配构造器，尝试下一个");
             }
-            LogWriter.log(TAG, "NetSceneSendMsg 构造器未匹配 candidates=" + cands);
+            if (totalHooked == 0) {
+                LogWriter.log(TAG, "NetSceneSendMsg 构造器未匹配 candidates=" + cands);
+                return;
+            }
         } catch (Throwable e) {
             LogWriter.log(TAG, "hook err: " + e);
         }
@@ -228,18 +233,39 @@ public final class MsgForgeHook {
                 && params[5] == String.class;
     }
 
+    /**
+     * 在所有 NetSceneSendMsg 候选类构造器中扫描 (String content, int type==1) 参数对，
+     * 不依赖固定参数位置（不同微信版本构造器布局可能不同）。
+     */
     private static void disguiseCtor(XC_MethodHook.MethodHookParam param) {
         if (!sEnabled) return;
         Object[] args = param.args;
-        if (args == null || args.length != 6) return;
-        int type = args[2] instanceof Number ? ((Number) args[2]).intValue() : 0;
-        if (type != 1) return;
-        String content = apply(args[1] instanceof String ? (String) args[1] : "");
+        if (args == null || args.length < 2) return;
+        // 查找 content 位置：int type==1 的前一个参数是 String 内容
+        int contentIdx = -1;
+        int typeIdx = -1;
+        for (int i = 0; i < args.length; i++) {
+            if (args[i] instanceof Number
+                    && ((Number) args[i]).intValue() == 1
+                    && i > 0 && args[i - 1] instanceof String) {
+                typeIdx = i;
+                contentIdx = i - 1;
+                break;
+            }
+        }
+        if (contentIdx < 0) return;
+        String original = (String) args[contentIdx];
+        if (original == null || original.isEmpty() || isForged(original)) return;
+        String content = apply(original);
         if (content == null) return;
-        args[1] = content;
-        args[2] = targetType();
-        args[3] = targetFlag();
-        LogWriter.log(TAG, "disguise ctor -> type=" + args[2]);
+        args[contentIdx] = content;
+        args[typeIdx] = targetType();
+        if (typeIdx + 1 < args.length && args[typeIdx + 1] instanceof Number) {
+            args[typeIdx + 1] = targetFlag();
+        }
+        LogWriter.log(TAG, "disguise ctor -> type=" + args[typeIdx]
+                + " cls=" + param.method.getDeclaringClass().getName()
+                + " args=" + args.length);
     }
 
     /** 方案B 兜底：即使构造器未命中，也在 doScene 出网前改写请求体 (doc §9.2)。 */

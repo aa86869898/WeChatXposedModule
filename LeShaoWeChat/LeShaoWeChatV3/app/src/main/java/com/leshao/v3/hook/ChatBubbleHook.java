@@ -221,7 +221,7 @@ public final class ChatBubbleHook {
             sEnabled = isEnabled();
             sFromPath = getFromPath();
             sToPath = getToPath();
-            resolveBubbleResIds();
+            resolveBubbleResIds(cl);
         } catch (Throwable ignored) {}
         ensureResultHook();
         if (sHooked) return;
@@ -245,8 +245,24 @@ public final class ChatBubbleHook {
         t.start();
     }
 
-    /** 解析气泡资源 ID，getIdentifier 失败时保持文档已知值。 */
-    private static void resolveBubbleResIds() {
+    /** 解析气泡资源 ID：优先反射 R$drawable 字段（R8 不混淆资源字段名），
+     *  其次 getIdentifier，最后回退文档已知值。 */
+    private static void resolveBubbleResIds(ClassLoader cl) {
+        try {
+            Class<?> rDrawable = XposedHelpers.findClass("com.tencent.mm.R$drawable", cl);
+            java.lang.reflect.Field f1 = rDrawable.getDeclaredField("chatfrom_bg");
+            java.lang.reflect.Field f2 = rDrawable.getDeclaredField("chatto_bg");
+            f1.setAccessible(true);
+            f2.setAccessible(true);
+            int from = f1.getInt(null);
+            int to = f2.getInt(null);
+            if (from != 0) sFromResId = from;
+            if (to != 0) sToResId = to;
+            LogWriter.log(TAG, "bubble resIds via R$drawable from=" + sFromResId + " to=" + sToResId);
+            return;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "R$drawable resolve err: " + t.getMessage());
+        }
         try {
             android.content.res.Resources res = ContextManager.getAppContext().getResources();
             String pkg = ContextManager.getAppContext().getPackageName();

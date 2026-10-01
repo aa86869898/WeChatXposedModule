@@ -138,6 +138,17 @@ public final class FavVoiceForwardHook {
                             if (t == TYPE_VOICE) {
                                 LogWriter.log(TAG, "x3 voice -> force false");
                                 param.setResult(false);
+                                // 打印调用栈，定位当前版本真实菜单构建类（gc.a 可能已改名/换类）
+                                try {
+                                    StackTraceElement[] st = Thread.currentThread().getStackTrace();
+                                    StringBuilder sb = new StringBuilder("x3 stack:");
+                                    int n = Math.min(st.length, 12);
+                                    for (int i = 2; i < n; i++) {
+                                        sb.append("\n  ").append(st[i].getClassName())
+                                                .append('.').append(st[i].getMethodName());
+                                    }
+                                    LogWriter.log(TAG, sb.toString());
+                                } catch (Throwable ignored) {}
                             }
                         } catch (Throwable t) {
                             LogWriter.log(TAG, "x3 err: " + t.getMessage());
@@ -216,28 +227,43 @@ public final class FavVoiceForwardHook {
         }
 
         // 兜底：长按菜单构建 gc.a() 中若微信未添加「转发」项（x3.b 未生效），手动注入 itemId=3
+        // gc 类名随版本可能变化（当前版本 R8 后可能非 com.tencent.mm.plugin.fav.ui.gc），
+        // 用 DexKit 字符串锚点动态定位：FavSendFilter 的调用者 / FavoriteMenuHelper 所在 UI 包。
+        java.util.Set<String> gcCands = new java.util.LinkedHashSet<>();
         try {
-            Class<?> gcCls = XposedHelpers.findClass("com.tencent.mm.plugin.fav.ui.gc", cl);
-            LogWriter.log(TAG, "gc.a declared=" + countMethods(gcCls, "a"));
-            XposedBridge.hookAllMethods(gcCls, "a", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    try {
-                        if (!sEnabled) return;
-                        Object host = param.thisObject;
-                        Object existing = null;
-                        try {
-                            existing = XposedHelpers.callMethod(host, "findItem", 3);
-                        } catch (Throwable ignored) {}
-                        if (existing != null) return;
-                        boolean added = tryAddForwardItem(host);
-                        LogWriter.log(TAG, "gc.a after: findItem3=" + (existing != null)
-                                + " addForward=" + added);
-                    } catch (Throwable ignored) {}
+            gcCands.add("com.tencent.mm.plugin.fav.ui.gc");
+        } catch (Throwable ignored) {}
+        try {
+            for (String sig : DexKitHelper.findMethodsByString(cl, null, "MicroMsg.FavoriteMenuHelper")) {
+                String cn = classNameOf(sig);
+                if (cn != null) gcCands.add(cn);
+            }
+        } catch (Throwable ignored) {}
+        for (String gcName : gcCands) {
+            try {
+                for (Class<?> gcCls : HookUtil.loadClasses(cl, gcName)) {
+                    LogWriter.log(TAG, "gc.a declared=" + countMethods(gcCls, "a") + " cls=" + gcName);
+                    XposedBridge.hookAllMethods(gcCls, "a", new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            try {
+                                if (!sEnabled) return;
+                                Object host = param.thisObject;
+                                Object existing = null;
+                                try {
+                                    existing = XposedHelpers.callMethod(host, "findItem", 3);
+                                } catch (Throwable ignored) {}
+                                if (existing != null) return;
+                                boolean added = tryAddForwardItem(host);
+                                LogWriter.log(TAG, "gc.a after: findItem3=" + (existing != null)
+                                        + " addForward=" + added);
+                            } catch (Throwable ignored) {}
+                        }
+                    });
                 }
-            });
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "gc hook err: " + t.getMessage());
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "gc hook err: " + t.getMessage());
+            }
         }
 
         // 接管选人结果：W7(String username) 单选回调
