@@ -1,7 +1,13 @@
 package com.leshao.v3.hook;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Build;
 
 import com.leshao.ai.hook.wechat.StorageHub;
 import com.leshao.v3.ContextManager;
@@ -9,14 +15,13 @@ import com.leshao.v3.LogWriter;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
 import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -61,7 +66,7 @@ public final class RedPacketHook {
     private static volatile boolean sEnabled = false;
     private static volatile boolean sGroupOnly = true;
     private static volatile int sMaxPerMin = 10;
-    private static volatile int sDelayMax = 50;
+    private static volatile int sDelayMax = 0;
     private static volatile String sWhitelist = "";
 
     // xml → {talker}
@@ -85,13 +90,14 @@ public final class RedPacketHook {
     private static final Random sRandom = new Random();
 
     private static Constructor<?> sSceneCtor;
-    private static Method sDoScene;
-    private static Class<?> sCallbackItf;
-    private static Class<?> sDispatcherCls;
-    // 第二步 openwxhb：h6 构造器与响应解析（文档 §2.3/§2.4）
-    private static Constructor<?> sOpenCtor;
     private static Class<?> sRecvCls;
     private static Class<?> sOpenCls;
+    // H2 统一出口：q5（NetSceneLuckyMoneyBase）7 参 onGYNetEnd（文档 §4 H2）
+    private static Class<?> sNetBaseCls;
+    // 兜底 ClassLoader：本地已领查询（ph5.n0 / lj0.a3）用
+    private static volatile ClassLoader sCl;
+    // 第二步 openwxhb：h6 构造器与响应解析（文档 §2.3/§2.4）
+    private static Constructor<?> sOpenCtor;
     private static Method sHeadImgMethod;
     private static Method sNickMethod;
     // sendId → sessionUsername（群=聊天厅 id / 私聊=对方 wxid），发送 n6 时登记，第二步复用
@@ -110,7 +116,7 @@ public final class RedPacketHook {
         sEnabled = sp.getBoolean(K_ENABLED, false);
         sGroupOnly = sp.getBoolean(K_GROUP_ONLY, true);
         sMaxPerMin = sp.getInt(K_MAX_PER_MIN, 10);
-        sDelayMax = sp.getInt(K_DELAY_MAX, 50);
+        sDelayMax = sp.getInt(K_DELAY_MAX, 0);
         sWhitelist = sp.getString(K_WHITELIST, "");
         LogWriter.log(TAG, "config enabled=" + sEnabled + " groupOnly=" + sGroupOnly
                 + " maxPerMin=" + sMaxPerMin);
@@ -150,7 +156,7 @@ public final class RedPacketHook {
 
     public static int getDelayMax() {
         SharedPreferences sp = safePrefs();
-        return sp == null ? 50 : sp.getInt(K_DELAY_MAX, 50);
+        return sp == null ? 0 : sp.getInt(K_DELAY_MAX, 0);
     }
 
     public static void setDelayMax(int v) { putInt(K_DELAY_MAX, v); sDelayMax = v; }
@@ -177,6 +183,7 @@ public final class RedPacketHook {
     // ---------------- Hook ----------------
 
     public static void hook(final ClassLoader cl) {
+        sCl = cl;
         updateConfig();
         DexKitHelper.addPostScanCallback(() -> install(cl));
     }
@@ -185,8 +192,10 @@ public final class RedPacketHook {
         try {
             resolveScene(cl);
             resolveOpenScene(cl);
+            resolveNetBase(cl);
             hookAppMsgParse(cl);
             hookTalkerMapping(cl);
+            hookNetBaseEnd(cl);
             hookRecvEnd(cl);
             hookOpenEnd(cl);
             LogWriter.log(TAG, "hooked");
@@ -217,16 +226,10 @@ public final class RedPacketHook {
                     }
                 }
                 if (hit == null) continue;
-                Method doScene = findDoScene(c);
-                if (doScene == null) continue;
+                if (findDoScene(c) == null) continue;
                 sSceneCtor = hit;
-                sDoScene = doScene;
                 sRecvCls = c;
-                Class<?>[] p = doScene.getParameterTypes();
-                sDispatcherCls = p[0];
-                sCallbackItf = p[1];
-                LogWriter.log(TAG, "scene resolved cls=" + c.getName()
-                        + " doScene=" + doScene.getName());
+                LogWriter.log(TAG, "scene resolved cls=" + c.getName());
                 return;
             }
         }
@@ -307,6 +310,62 @@ public final class RedPacketHook {
         }
     }
 
+    /** 定位 H2 统一出口：q5（NetSceneLuckyMoneyBase）的 7 参 onGYNetEnd（文档 §4 H2）。 */
+    private static void resolveNetBase(ClassLoader cl) {
+        Class<?> c = sRecvCls != null ? sRecvCls : sOpenCls;
+        while (c != null && c != Object.class) {
+            for (Method m : c.getDeclaredMethods()) {
+                if ("onGYNetEnd".equals(m.getName()) && m.getParameterTypes().length == 7) {
+                    sNetBaseCls = c;
+                    LogWriter.log(TAG, "netbase resolved cls=" + c.getName());
+                    return;
+                }
+            }
+            c = c.getSuperclass();
+        }
+        LogWriter.log(TAG, "q5.onGYNetEnd(7参) 未定位，错误通知不可用");
+    }
+
+    /** H2：q5.onGYNetEnd(7参) after → errType/errCode/errMsg 统一出口。 */
+    private static void hookNetBaseEnd(ClassLoader cl) {
+        if (sNetBaseCls == null) return;
+        try {
+            for (Method m : sNetBaseCls.getDeclaredMethods()) {
+                if (!"onGYNetEnd".equals(m.getName()) || m.getParameterTypes().length != 7) continue;
+                m.setAccessible(true);
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (param.args == null || param.args.length != 7) return;
+                            onNetBaseEnd(param);
+                        } catch (Throwable t) {
+                            LogWriter.log(TAG, "netBaseEnd after err: " + t);
+                        }
+                    }
+                });
+            }
+            LogWriter.log(TAG, "hooked q5.onGYNetEnd cls=" + sNetBaseCls.getName());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookNetBaseEnd err: " + t);
+        }
+    }
+
+    /** H2 回调：retcode!=0 时只走 q5.onGYNetEnd，错误只能在这里拿（文档 §4 说明）。 */
+    private static void onNetBaseEnd(XC_MethodHook.MethodHookParam p) {
+        Object scene = p.thisObject;
+        if (scene == null) return;
+        int errType = p.args[1] instanceof Number ? ((Number) p.args[1]).intValue() : 0;
+        int errCode = p.args[2] instanceof Number ? ((Number) p.args[2]).intValue() : 0;
+        String errMsg = p.args[3] == null ? "" : p.args[3].toString();
+        if (errType == 0 && errCode == 0) return;
+        String sendId = strField(scene, "m");
+        LogWriter.log(TAG, "H2 err sendId=" + sendId + " " + errType + "/" + errCode + " " + errMsg);
+        if (sendId == null || !sHandled.contains(sendId)) return;
+        String session = sSendIdSession.get(sendId);
+        notifyGrab(sendId, session, -1L, null, "失败 " + errCode + " " + errMsg);
+    }
+
     /** H3：n6.onGYNetEnd(int,String,JSONObject) → 解析 timingIdentifier 并发第二步。 */
     private static void hookRecvEnd(ClassLoader cl) {
         if (sRecvCls == null) return;
@@ -368,6 +427,8 @@ public final class RedPacketHook {
         if (recvStat == 2 || hbStatus == 4 || hbStatus == 5) {
             LogWriter.log(TAG, "红包不可领 sendId=" + sendId + " hbStatus=" + hbStatus
                     + " recv=" + recvStat + " " + statusMess);
+            notifyGrab(sendId, session, -1L, null,
+                    (statusMess == null || statusMess.isEmpty()) ? "已领过/已过期" : statusMess);
             return;
         }
         if (timing == null || timing.isEmpty()) {
@@ -392,14 +453,14 @@ public final class RedPacketHook {
                 LogWriter.log(TAG, "NetSceneQueue 不可用，openwxhb 发送失败 sendId=" + sendId);
                 return;
             }
-            XposedHelpers.callMethod(queue, "h", open, 0);
+            XposedHelpers.callMethod(queue, "g", open);
             LogWriter.log(TAG, "openwxhb sent sendId=" + sendId + " session=" + session);
         } catch (Throwable t) {
             LogWriter.log(TAG, "openwxhb 发送失败 sendId=" + sendId + " err=" + t);
         }
     }
 
-    /** h6 响应：读取 e1 模型金额（q 字段，单位分）。 */
+    /** h6 响应：读取 e1 模型金额（q 字段，单位分），并发送到账通知（文档 §5.3 H4）。 */
     private static void onOpenEnd(Object scene) {
         if (scene == null) return;
         String sendId = strField(scene, "m");
@@ -413,9 +474,112 @@ public final class RedPacketHook {
         int recvStatus = intField(e1, "A", 0);
         long recNum = getLong(e1, "r");
         long totalNum = getLong(e1, "t");
+        long totalAmount = getLong(e1, "u");
+        String session = sSendIdSession.get(sendId);
         LogWriter.log(TAG, "红包到账 sendId=" + sendId + " amount=" + amountFen + "分"
                 + " nick=" + nick + " user=" + user + " recv=" + recvStatus
                 + " " + recNum + "/" + totalNum + " msg=" + statusMess);
+
+        String who = (nick == null || nick.isEmpty()) ? user : nick;
+        if (amountFen > 0) {
+            notifyGrab(sendId, session, amountFen, who,
+                    recNum + "/" + totalNum + "个 · 共" + fmtFen(totalAmount));
+        } else {
+            notifyGrab(sendId, session, -1L, who,
+                    (statusMess == null || statusMess.isEmpty()) ? ("状态码 " + recvStatus) : statusMess);
+        }
+    }
+
+    // ---------------- 专属红包 / 本地已领 / 到账通知（文档 §5.2/§5.3） ----------------
+
+    /** 解析 CDATA 包裹的元素值（文档 §5.2 cdata 工具）。 */
+    private static String cdata(String xml, String tag) {
+        if (xml == null || tag == null) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("<" + tag + ">\\s*(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?\\s*</" + tag + ">",
+                        java.util.regex.Pattern.DOTALL).matcher(xml);
+        return m.find() ? m.group(1).trim() : null;
+    }
+
+    /** 专属红包判断：exclusive_recv_username 非空且不是自己 wxid → 跳过（文档 §5.2/§6.3-5）。 */
+    private static boolean isExclusiveNotMine(String xml) {
+        if (xml == null || !xml.contains("exclusive_recv_username")) return false;
+        String exclusive = cdata(xml, "exclusive_recv_username");
+        if (exclusive == null || exclusive.isEmpty()) return false;
+        String self = selfWxid();
+        return self == null || !self.equals(exclusive);
+    }
+
+    /** 自己 wxid：StorageHub.selfWxid()（文档 b41.y1.u()）优先，ModuleConfig 兜底。 */
+    private static String selfWxid() {
+        try {
+            String w = StorageHub.get().selfWxid();
+            if (w != null && !w.isEmpty()) return w;
+        } catch (Throwable ignored) {}
+        try {
+            return com.leshao.v3.model.ModuleConfig.getCurrentWxid();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** 本地红包记录表已领判断：field_receiveAmount>0 即跳过（文档 §5.2）。 */
+    private static boolean isAlreadyReceived(String nativeUrl) {
+        if (sCl == null || nativeUrl == null) return false;
+        try {
+            Class<?> pluginCls = XposedHelpers.findClass("ph5.n0", sCl);
+            Class<?> pluginItf = XposedHelpers.findClass("lj0.a3", sCl);
+            Object plugin = XposedHelpers.callStaticMethod(pluginCls, "c", pluginItf);
+            if (plugin == null) return false;
+            Object dao = XposedHelpers.callMethod(plugin, "ij");
+            if (dao == null) return false;
+            Object rec = XposedHelpers.callMethod(dao, "t1", nativeUrl);
+            if (rec == null) return false;
+            Object amt = XposedHelpers.getObjectField(rec, "field_receiveAmount");
+            return amt instanceof Number && ((Number) amt).longValue() > 0;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** 到账/失败通知（文档 §5.3）。 */
+    private static void notifyGrab(String sendId, String session, long amountFen, String who, String extra) {
+        Context ctx = ContextManager.getAppContext();
+        if (ctx == null) return;
+        try {
+            NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
+            final String ch = "wx_lucky_grab";
+            if (Build.VERSION.SDK_INT >= 26) {
+                NotificationChannel c = new NotificationChannel(ch, "红包到账", NotificationManager.IMPORTANCE_HIGH);
+                c.setDescription("自动领取微信红包结果");
+                nm.createNotificationChannel(c);
+            }
+            boolean ok = amountFen > 0;
+            String title = ok ? ("抢到红包 ¥" + fmtFen(amountFen)) : "红包未抢到";
+            StringBuilder sb = new StringBuilder();
+            sb.append(session != null && session.endsWith(SESSION_SUFFIX) ? "群聊" : "私聊");
+            if (who != null && !who.isEmpty()) sb.append(" · ").append(who);
+            if (extra != null && !extra.isEmpty()) sb.append(" · ").append(extra);
+            Intent launch = ctx.getPackageManager().getLaunchIntentForPackage("com.tencent.mm");
+            if (launch == null) launch = new Intent();
+            int pf = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= 31) pf |= PendingIntent.FLAG_IMMUTABLE;
+            PendingIntent pi = PendingIntent.getActivity(ctx, 0, launch, pf);
+            Notification.Builder b = new Notification.Builder(ctx)
+                    .setAutoCancel(true)
+                    .setSmallIcon(ctx.getApplicationInfo().icon)
+                    .setContentTitle(title)
+                    .setContentText(sb.toString())
+                    .setContentIntent(pi);
+            if (Build.VERSION.SDK_INT >= 26) b.setChannelId(ch);
+            nm.notify((int) (System.currentTimeMillis() & 0x7fffffff), b.build());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "notify err sendId=" + sendId + " " + t);
+        }
+    }
+
+    private static String fmtFen(long fen) {
+        return String.format(Locale.US, "%.2f", fen / 100.0);
     }
 
     // ---------------- 反射工具（第二步用） ----------------
@@ -560,6 +724,11 @@ public final class RedPacketHook {
         if (!content.contains("wcpayinfo")
                 && !content.contains("wxpay://")
                 && !content.contains("weixin://openNativeUrl/weixinHB")) return;
+        // 专属红包：exclusive_recv_username 非自己 wxid 必须跳过（文档 §6.3-5）。
+        if (isExclusiveNotMine(content)) {
+            LogWriter.log(TAG, "专属红包非本人，跳过");
+            return;
+        }
         String talker = strCall(msg, "N0", "getTalker", "getTalkerName");
         String nativeUrl = parseNativeUrl(content);
         if (nativeUrl == null || nativeUrl.isEmpty()) return;
@@ -572,6 +741,11 @@ public final class RedPacketHook {
     private static void onParsed(String xml, Object parsed) {
         if (!sEnabled || xml == null || !xml.contains("wcpayinfo")) return;
         LogWriter.log(TAG, "redpacket candidate xml len=" + xml.length());
+        // 专属红包：exclusive_recv_username 非自己 wxid 必须跳过（文档 §6.3-5）。
+        if (isExclusiveNotMine(xml)) {
+            LogWriter.log(TAG, "专属红包非本人，跳过");
+            return;
+        }
         // 文档 §2.2：nativeUrl 是解析后对象 dx0.r 的字段（s1），不是 XML 属性。
         String nativeUrl = nativeUrlFromObject(parsed);
         if (nativeUrl == null || nativeUrl.isEmpty()) nativeUrl = extractNativeUrl(xml);
@@ -636,6 +810,11 @@ public final class RedPacketHook {
 
         String key = sendId;
         if (!sHandled.add(key)) return;
+        // 本地红包记录表已领过（field_receiveAmount>0）则跳过（文档 §5.2）。
+        if (isAlreadyReceived(nativeUrl)) {
+            LogWriter.log(TAG, "本地已领，跳过 key=" + key);
+            return;
+        }
         if (!allowByFrequency()) {
             LogWriter.log(TAG, "频控拦截 key=" + key);
             return;
@@ -738,7 +917,8 @@ public final class RedPacketHook {
         if (talker != null && !talker.isEmpty()) {
             sSendIdSession.put(sendId, talker);
         }
-        Object scene = sSceneCtor.newInstance(1, channelId, sendId, nativeUrl, 1, "v1.0",
+        // 文档 §2.2/§5.2：inWay=0（后台领取），msgType 固定 1。
+        Object scene = sSceneCtor.newInstance(1, channelId, sendId, nativeUrl, 0, "v1.0",
                 talker == null ? "" : talker);
 
         Object queue = StorageHub.get().netSceneQueue();
@@ -746,76 +926,13 @@ public final class RedPacketHook {
             LogWriter.log(TAG, "NetSceneQueue 不可用");
             return;
         }
-        Object dispatcher = null;
+        // 文档 §3.1/§5.2：submitScene = gp0.j1.j().q().b.g(scene)，即 queue.g(scene)。
         try {
-            dispatcher = XposedHelpers.callMethod(queue, "k");
-        } catch (Throwable ignored) {}
-
-        boolean dispatched = false;
-        if (sDoScene != null && dispatcher != null && sCallbackItf != null
-                && sDispatcherCls != null && sDispatcherCls.isInstance(dispatcher)) {
-            try {
-                Object cb = buildCallback(sendId, talker);
-                Object ret = sDoScene.invoke(scene, dispatcher, cb);
-                LogWriter.log(TAG, "doScene ret=" + ret + " sendId=" + sendId + " talker=" + talker);
-                dispatched = true;
-            } catch (Throwable e) {
-                LogWriter.log(TAG, "doScene err: " + e);
-            }
+            XposedHelpers.callMethod(queue, "g", scene);
+            LogWriter.log(TAG, "queue.g 入队 sendId=" + sendId + " talker=" + talker);
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "queue.g err: " + e);
         }
-        if (!dispatched) {
-            try {
-                XposedHelpers.callMethod(queue, "h", scene, 0);
-                LogWriter.log(TAG, "queue.h 入队 sendId=" + sendId + " talker=" + talker);
-            } catch (Throwable e) {
-                LogWriter.log(TAG, "queue.h err: " + e);
-            }
-        }
-    }
-
-    private static Object buildCallback(final String sendId, final String talker) {
-        InvocationHandler handler = (proxy, method, args) -> {
-            try {
-                if ("onSceneEnd".equals(method.getName()) && args != null && args.length >= 4) {
-                    int errType = toInt(args[0]);
-                    int errCode = toInt(args[1]);
-                    String errMsg = args[2] == null ? "" : args[2].toString();
-                    Object scene = args[3];
-                    onGrabResult(sendId, talker, errType, errCode, errMsg, scene);
-                }
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "callback err: " + t);
-            }
-            return null;
-        };
-        return Proxy.newProxyInstance(sCallbackItf.getClassLoader(),
-                new Class<?>[]{sCallbackItf}, handler);
-    }
-
-    private static void onGrabResult(String sendId, String talker,
-                                     int errType, int errCode, String errMsg, Object scene) {
-        if (errType != 0 || errCode != 0) {
-            LogWriter.log(TAG, "grab result fail " + errType + "/" + errCode + " " + errMsg
-                    + " sendId=" + sendId + " talker=" + talker);
-            return;
-        }
-        long amount = adaptiveAmount(scene);
-        LogWriter.log(TAG, "GRAB OK sendId=" + sendId + " talker=" + talker
-                + " amount=" + (amount < 0 ? "?" : amount));
-    }
-
-    private static long adaptiveAmount(Object scene) {
-        if (scene == null) return -1;
-        try {
-            for (Field f : scene.getClass().getFields()) {
-                if (f.getType() == long.class) {
-                    f.setAccessible(true);
-                    long v = f.getLong(scene);
-                    if (v > 0 && v < 1000000L) return v;
-                }
-            }
-        } catch (Throwable ignored) {}
-        return -1;
     }
 
     // ---------------- 解析工具 ----------------
@@ -918,10 +1035,6 @@ public final class RedPacketHook {
             } catch (Throwable ignored) {}
         }
         return false;
-    }
-
-    private static int toInt(Object o) {
-        return o instanceof Number ? ((Number) o).intValue() : 0;
     }
 
     private static int parseInt(String s, int def) {

@@ -44,8 +44,8 @@ public final class RedPacketPageView {
         etMax.setText(String.valueOf(RedPacketHook.getMaxPerMin()));
         cardParam.addView(etMax);
 
-        cardParam.addView(PageKit.bodyText(ctx, "随机延时上限（毫秒，避免秒抢特征）"));
-        final EditText etDelay = M3Page.input(ctx, "50");
+        cardParam.addView(PageKit.bodyText(ctx, "随机延时上限（毫秒，0=不延迟）"));
+        final EditText etDelay = M3Page.input(ctx, "0");
         etDelay.setInputType(InputType.TYPE_CLASS_NUMBER);
         etDelay.setText(String.valueOf(RedPacketHook.getDelayMax()));
         cardParam.addView(etDelay);
