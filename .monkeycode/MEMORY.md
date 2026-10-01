@@ -62,7 +62,10 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当前下载服务（支持线程池 + 断点续传/Range 206）：脚本 `/tmp/opencode/range_http_server.py`，启动命令 `python3 /tmp/opencode/range_http_server.py 8085 /tmp/opencode/download`（用 background terminal 常驻）；根目录 `/tmp/opencode/download/`；外网直链 `https://8085-796f33fc01a6a82b.monkeycode-ai.online/LeShaoWeChat-v{versionCode}.apk`
   - 断点续传特性：响应头 `Accept-Ranges: bytes`，Range 请求返回 `206 Partial Content` + `Content-Range`，超范围返回 `416`；已验证 `curl -C -` 续传与 4 并发分段合并后 MD5 与源文件一致；线程池默认 32（可调 `HTTP_POOL` 环境变量）
   - 注意：旧 `python3 -m http.server` 不支持 Range（对 Range 请求返回 200 且无 Accept-Ranges/Content-Range），已弃用
-  - 8899 端口同时有活跃下载服务：根目录 `/workspace/LeShaoWeChat/LeShaoWeChatV3`（下载路径 `/download/`，如 `/download/LeShaoWeChat-v{versionCode}.apk`），外网前缀 `https://8899-796f33fc01a6a82b.monkeycode-ai.online`；发版后验证 `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8899/download/LeShaoWeChat-v{versionCode}.apk` 返回 200 即就绪
+  - 8899 端口为唯一下载服务：使用支持 Range 的 `range_http_server.py` 常驻运行（启动命令 `HTTP_POOL=64 python3 /tmp/opencode/range_http_server.py 8899 /workspace/LeShaoWeChat/LeShaoWeChatV3`，用 background terminal 启动，勿用不支持 Range 的 `python3 -m http.server`）；根目录 `/workspace/LeShaoWeChat/LeShaoWeChatV3`，下载路径 `/download/LeShaoWeChat-v{versionCode}.apk`
+   - 公网下载前缀：`https://8899-796f33fc01a6a82b.monkeycode-ai.online`；下载页 `https://8899-796f33fc01a6a82b.monkeycode-ai.online/download/`
+   - 每次编译打包完成后，回复中必须直接附上公网下载链接（`https://8899-796f33fc01a6a82b.monkeycode-ai.online/download/LeShaoWeChat-v{versionCode}.apk`），不能只给本地路径/localhost/下载页间接入口
+   - 下载服务必须保持多线程池（HTTP_POOL=64，线程池最大）+ 断点续传（响应头 `Accept-Ranges: bytes`，Range 请求返回 `206 Partial Content` + `Content-Range`），确保 IDM/迅雷/aria2c 多线程满速下载、中断可续传；发版后验证 `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8899/download/LeShaoWeChat-v{versionCode}.apk` 返回 200 即就绪
 
 ### AI 反编译审计结论（f9.Bb 接收链路实锤）
 - Date: 2026-09-24

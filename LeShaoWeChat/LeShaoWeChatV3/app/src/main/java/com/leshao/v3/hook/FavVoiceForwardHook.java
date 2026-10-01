@@ -642,7 +642,9 @@ public final class FavVoiceForwardHook {
     }
 
     /** v3.0.90：按文档附录 A 获取语音本地路径。优先静态方法 tc2.s2.y(rq0)，
-     *  失败则用 tc2.s2.D() 根目录 + tc2.s2.s(rq0.T) 子目录 + rq0.T/rq0.K 拼路径。 */
+     *  失败则直接在磁盘上按文件名搜索（微信收藏语音落盘于
+     *  /data/data/com.tencent.mm/MicroMsg/<uinMd5>/favorite/ 下，
+     *  不依赖任何需要 Context 的微信 API）。 */
     private static String getFavVoicePath(ClassLoader cl, Object rq0) {
         try {
             Class<?> apiCls = XposedHelpers.findClass(C_FAV_API, cl);
@@ -659,24 +661,77 @@ public final class FavVoiceForwardHook {
             LogWriter.log(TAG, "getFavVoicePath y err: " + t.getMessage());
         }
         try {
-            Class<?> apiCls = XposedHelpers.findClass(C_FAV_API, cl);
-            Method d = findMethod(apiCls, "D");
-            Method s = findMethod(apiCls, "s", String.class);
             String t = (String) getObjectFieldByName(rq0, "T");
             String k = (String) getObjectFieldByName(rq0, "K");
-            if (d != null && s != null && t != null && k != null) {
-                d.setAccessible(true);
-                s.setAccessible(true);
-                Object root = d.invoke(null);
-                Object dir = s.invoke(null, t);
-                if (root != null && dir != null) {
-                    String path = dir + "/" + t + "." + k;
-                    LogWriter.log(TAG, "getFavVoicePath field-computed=" + path);
-                    return path;
-                }
+            if (t == null || t.isEmpty()) {
+                LogWriter.log(TAG, "getFavVoicePath disk skip: no T/K t=" + t + " k=" + k);
+                return null;
             }
+            String found = findFavVoiceFileOnDisk(t, k);
+            if (found != null) {
+                LogWriter.log(TAG, "getFavVoicePath disk-found=" + found);
+                return found;
+            }
+            LogWriter.log(TAG, "getFavVoicePath disk not found t=" + t + " k=" + k);
         } catch (Throwable t) {
-            LogWriter.log(TAG, "getFavVoicePath field err: " + t.getMessage());
+            LogWriter.log(TAG, "getFavVoicePath disk err: " + t.getMessage());
+        }
+        return null;
+    }
+
+    /** 在微信数据目录 MicroMsg/<uinMd5>/favorite/ 下递归搜索收藏语音文件。
+     *  匹配规则：文件名 == T，或 T + "." + K（silk/speex/amr），
+     *  或常见语音扩展名（mp3/wav）。 */
+    private static String findFavVoiceFileOnDisk(String name, String ext) {
+        try {
+            Context ctx = ContextManager.getAppContext();
+            if (ctx == null) return null;
+            File dataDir = new File(ctx.getApplicationInfo().dataDir);
+            File microMsg = new File(dataDir, "MicroMsg");
+            if (!microMsg.isDirectory()) {
+                LogWriter.log(TAG, "findFavVoice: no MicroMsg dir " + microMsg.getAbsolutePath());
+                return null;
+            }
+            List<String> candidates = new ArrayList<>();
+            if (ext != null && !ext.isEmpty()) {
+                candidates.add(name + "." + ext);
+                candidates.add(name + "." + ext.toLowerCase());
+            }
+            candidates.add(name);
+            for (String e : new String[]{"silk", "speex", "amr", "mp3", "wav"}) {
+                if (!candidates.contains(name + "." + e)) candidates.add(name + "." + e);
+            }
+            File[] uins = microMsg.listFiles();
+            if (uins == null) return null;
+            for (File uin : uins) {
+                if (!uin.isDirectory()) continue;
+                File favDir = new File(uin, "favorite");
+                if (!favDir.isDirectory()) continue;
+                LogWriter.log(TAG, "findFavVoice search " + favDir.getAbsolutePath());
+                File hit = searchFavDir(favDir, candidates, 0);
+                if (hit != null) return hit.getAbsolutePath();
+            }
+            LogWriter.log(TAG, "findFavVoice exhausted uinDirs=" + uins.length);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "findFavVoiceFileOnDisk err: " + t.getMessage());
+        }
+        return null;
+    }
+
+    /** 递归搜索目录（限制深度 4），返回第一个文件名匹配候选列表的文件。 */
+    private static File searchFavDir(File dir, List<String> candidates, int depth) {
+        if (dir == null || depth > 4) return null;
+        File[] files = dir.listFiles();
+        if (files == null) return null;
+        for (File f : files) {
+            try {
+                if (f.isDirectory()) {
+                    File hit = searchFavDir(f, candidates, depth + 1);
+                    if (hit != null) return hit;
+                } else if (candidates.contains(f.getName())) {
+                    return f;
+                }
+            } catch (Throwable ignored) {}
         }
         return null;
     }

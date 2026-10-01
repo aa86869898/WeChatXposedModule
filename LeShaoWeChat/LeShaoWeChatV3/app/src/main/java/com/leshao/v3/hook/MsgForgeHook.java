@@ -32,9 +32,10 @@ public final class MsgForgeHook {
 
     private static final String K_ENABLED = "ls_msgforge_enabled";
     private static final String K_TEXT = "ls_msgforge_text";
-    /** v3.0.88：群聊 @ 伪装是否完全隐藏 @ 符号。true=content 不含 @（需清空 msgsource，
+/** v3.0.88：群聊 @ 伪装是否完全隐藏 @ 符号。true=content 不含 @（需清空 msgsource，
      *  对方收不到 @ 提醒但发送成功）；false=content 保留「@零宽空格」前缀（@ 提醒有效，
-     *  但显示仍带 @ 符号）。微信协议两者不可兼得。 */
+     *  但显示带 @）。二者不可兼得。v3.0.91 起默认 false：用户反馈无 @ 提醒不可接受，
+     *  默认保留 @ 提醒（content 带 @ 才能发出 @ 消息，微信协议强制）。 */
     private static final String K_HIDE_AT = "ls_msgforge_hide_at";
 
     /** 兼容旧配置残留的模式名，仅保留纯文本替换。 */
@@ -60,13 +61,13 @@ public final class MsgForgeHook {
         if (sp == null) return;
         sEnabled = sp.getBoolean(K_ENABLED, false);
         sText = sp.getString(K_TEXT, DEF_TEXT);
-        sHideAt = sp.getBoolean(K_HIDE_AT, true);
+        sHideAt = sp.getBoolean(K_HIDE_AT, false);
         LogWriter.log(TAG, "config enabled=" + sEnabled + " hideAt=" + sHideAt);
     }
 
     public static boolean isHideAt() {
         try {
-            return ContextManager.getPrefs().getBoolean(K_HIDE_AT, true);
+            return ContextManager.getPrefs().getBoolean(K_HIDE_AT, false);
         } catch (Throwable t) {
             return sHideAt;
         }

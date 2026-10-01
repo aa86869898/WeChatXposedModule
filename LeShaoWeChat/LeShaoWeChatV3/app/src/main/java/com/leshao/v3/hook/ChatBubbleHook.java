@@ -239,6 +239,7 @@ public final class ChatBubbleHook {
             for (int attempt = 0; attempt < 10 && !sHooked; attempt++) {
                 try {
                     installBubbleResolver(cl);
+                    installBubbleApplyHook(cl);
                     installBackgroundResourceHook();
                     installBackgroundHook();
                     installImageViewHook();
@@ -480,10 +481,9 @@ public final class ChatBubbleHook {
 
 /** 文档 §5 方案2：精准 hook 文本气泡 ViewHolder 的静态绑定方法
      *  b(e9, holder, data, Boolean isRecv) —— 普通态 chatfrom_bg/chatto_bg 最终设置点。
-     *  v3.0.90：日志 ke5.a.i stack 证实 8.0.78 真实气泡加载路径是 viewitems.mq.b，
-     *  但 viewitems.mq.b 的签名并非固定的 (e9,to,gk5.d,Boolean)，因此放宽条件——
-     *  hook viewitems.to/viewitems.mq 所有「静态方法名为 b 且首参为 e9」的方法，
-     *  after 中从参数推导 isRecv（优先 Boolean 参数，其次 e9.isSend）。 */
+     *  v3.0.90：日志 ke5.a.i stack 证实 8.0.78 真实气泡加载路径是 viewitems.mq.b；
+     *  v3.0.91：mq.b 签名不满足「静态+首参e9」，故对 mq 类放宽为所有名为 b 的方法，
+     *  并用 HookUtil.loadClasses 遍历 Tinker 真实 ClassLoader。 */
     private static void installViewitemsToHook(ClassLoader cl) {
         String[] holderCands = {
                 "com.tencent.mm.ui.chatting.viewitems.to",
@@ -491,14 +491,17 @@ public final class ChatBubbleHook {
         };
         int hooked = 0;
         for (String cn : holderCands) {
-            try {
-                Class<?> toCls = XposedHelpers.findClass(cn, cl);
+            for (Class<?> toCls : HookUtil.loadClasses(cl, cn)) {
                 for (Method m : toCls.getDeclaredMethods()) {
                     if (!"b".equals(m.getName())) continue;
-                    if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
-                    Class<?>[] pts = m.getParameterTypes();
-                    if (pts.length < 2) continue;
-                    if (!"e9".equals(pts[0].getSimpleName())) continue;
+                    // to 类保持严格（文档签名）；mq 类放宽（日志证实 mq.b 是实际调用点，
+                    // 但签名未知——可能非静态/首参非 e9）
+                    boolean strict = cn.contains("to");
+                    if (strict) {
+                        if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                        Class<?>[] pts = m.getParameterTypes();
+                        if (pts.length < 2 || !"e9".equals(pts[0].getSimpleName())) continue;
+                    }
                     m.setAccessible(true);
                     final String owner = cn;
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
@@ -506,50 +509,73 @@ public final class ChatBubbleHook {
                         protected void afterHookedMethod(MethodHookParam param) {
                             try {
                                 if (!sEnabled) return;
-                                Object holder = param.args.length > 1 ? param.args[1] : null;
-                                boolean isRecv = param.args.length > 3
-                                        && Boolean.TRUE.equals(param.args[3]);
-                                if (param.args.length <= 3 || !(param.args[3] instanceof Boolean)) {
-                                    try {
-                                        Object msg = param.args[0];
-                                        Object isSend = XposedHelpers.callMethod(msg, "z0");
-                                        isRecv = !(isSend instanceof Number
-                                                && ((Number) isSend).intValue() == 1);
-                                    } catch (Throwable ignored) {}
+                                boolean isRecv = true;
+                                for (int i = 0; i < param.args.length; i++) {
+                                    if (param.args[i] instanceof Boolean) {
+                                        isRecv = (Boolean) param.args[i];
+                                        break;
+                                    }
                                 }
-                                if (holder == null) {
-                                    LogWriter.log(TAG, "viewitems.b called isRecv=" + isRecv
-                                            + " holder=null");
-                                    return;
+                                View bubble = null;
+                                for (Object a : param.args) {
+                                    if (a == null) continue;
+                                    if (a instanceof View) {
+                                        bubble = findBubbleViewInTree((View) a);
+                                        if (bubble != null) break;
+                                    } else if ("e9".equals(a.getClass().getSimpleName())
+                                            || hasFieldType(a)) {
+                                        bubble = findBubbleView(a);
+                                        if (bubble != null) break;
+                                    }
                                 }
-                                View bubble = findBubbleView(holder);
-                                LogWriter.log(TAG, "viewitems.b called isRecv=" + isRecv
-                                        + " holder=" + holder.getClass().getName()
-                                        + " bubble=" + (bubble == null ? "null"
-                                        : bubble.getClass().getName()));
+                                if (bubble == null) bubble = findBubbleView(param.thisObject);
                                 if (bubble == null) return;
                                 int kind = isRecv ? KIND_FROM : KIND_TO;
                                 Drawable custom = loadDrawable(kind);
                                 if (custom != null) {
                                     bubble.setBackground(custom);
                                     LogWriter.log(TAG, "viewitems.b REPLACE isRecv=" + isRecv
-                                            + " view=" + bubble.getClass().getName()
-                                            + " bg=" + (bubble.getBackground() == null ? "null"
-                                            : bubble.getBackground().getClass().getName()));
+                                            + " view=" + bubble.getClass().getName());
                                 }
                             } catch (Throwable ignored) {}
                         }
                     });
                     hooked++;
                     LogWriter.log(TAG, "viewitems.b hooked " + owner + "." + m.getName()
-                            + Arrays.toString(pts));
+                            + Arrays.toString(m.getParameterTypes())
+                            + " loader=" + HookUtil.loaderName(toCls.getClassLoader()));
                 }
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "viewitems.b class " + cn + " err: " + t.getMessage());
             }
         }
         if (hooked == 0) {
             LogWriter.log(TAG, "viewitems.b none found (fallback setBackgroundResource covers)");
+        }
+    }
+
+    /** 递归在 View 树中查找背景与微信原生气泡匹配的气泡 View。 */
+    private static View findBubbleViewInTree(View v) {
+        if (v == null) return null;
+        try {
+            if (matchBaseDrawable(v.getBackground()) >= 0) return v;
+        } catch (Throwable ignored) {}
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                View found = findBubbleViewInTree(g.getChildAt(i));
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    /** 判断对象是否带 field_type 字段（微信消息/收藏实体特征）。 */
+    private static boolean hasFieldType(Object o) {
+        if (o == null) return false;
+        try {
+            XposedHelpers.getIntField(o, "field_type");
+            return true;
+        } catch (Throwable t) {
+            return false;
         }
     }
 
@@ -878,6 +904,54 @@ public final class ChatBubbleHook {
         }
     }
 
+    /** v3.0.91：hook X2C 背景应用点 kw5.i0.f(Context, View, String, Drawable)。
+     *  文档证实 gm.g/gm.i 通过 kw5.i0.f 把气泡 Drawable 设置到 MMNeat7extView，
+     *  此处直接替换 Drawable 参数，命中真实气泡 View。
+     *  ke5.a.i 返回值替换后 custom 不匹配 baseDrawable，此处保持放行；
+     *  未走 ke5.a.i 的路径（如直接 getDrawable）在此拦截替换。 */
+    private static void installBubbleApplyHook(ClassLoader cl) {
+        try {
+            boolean hooked = false;
+            for (Class<?> c : HookUtil.loadClasses(cl, "kw5.i0")) {
+                for (Method m : c.getDeclaredMethods()) {
+                    Class<?>[] pts = m.getParameterTypes();
+                    if (!"f".equals(m.getName()) || pts.length != 4
+                            || pts[0] != Context.class || pts[1] != View.class
+                            || pts[2] != String.class || pts[3] != Drawable.class) {
+                        continue;
+                    }
+                    m.setAccessible(true);
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            try {
+                                if (!sEnabled) return;
+                                Drawable d = (Drawable) param.args[3];
+                                int kind = matchBaseDrawable(d);
+                                if (kind < 0) return;
+                                Drawable custom = loadDrawable(kind);
+                                if (custom != null) {
+                                    param.args[3] = custom;
+                                    LogWriter.log(TAG, "i0.f REPLACE kind=" + kind
+                                            + " view=" + param.thisObject.getClass().getName());
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+                    hooked = true;
+                    LogWriter.log(TAG, "bubble apply hooked " + c.getName() + "."
+                            + m.getName() + Arrays.toString(pts)
+                            + " loader=" + HookUtil.loaderName(c.getClassLoader()));
+                }
+            }
+            if (!hooked) {
+                LogWriter.log(TAG, "bubble apply hook none found (kw5.i0.f)");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installBubbleApplyHook err: " + t.getMessage());
+        }
+    }
+
     private static void installResourceHelperHook(ClassLoader cl) {
         try {
             if (!DexKitHelper.isScanComplete()) return;
@@ -995,19 +1069,20 @@ public final class ChatBubbleHook {
         Method target = null;
         Class<?> owner = null;
         for (String cn : genClasses) {
-            Class<?> c;
-            try {
-                c = XposedHelpers.findClass(cn, cl);
-            } catch (Throwable t) {
-                continue;
-            }
-            for (Class<?> sup = c.getSuperclass(); sup != null && sup != Object.class; sup = sup.getSuperclass()) {
-                Method m = findResolver(sup);
-                if (m != null) {
-                    target = m;
-                    owner = sup;
-                    break;
+            // v3.0.91：必须用 HookUtil.loadClasses 遍历所有候选 ClassLoader
+            //（Tinker DelegateLastClassLoader 才是运行时真实类，单个 cl 会 hook 空）
+            for (Class<?> c : HookUtil.loadClasses(cl, cn)) {
+                LogWriter.log(TAG, "X2C candidate " + cn + " loader="
+                        + HookUtil.loaderName(c.getClassLoader()));
+                for (Class<?> sup = c.getSuperclass(); sup != null && sup != Object.class; sup = sup.getSuperclass()) {
+                    Method m = findResolver(sup);
+                    if (m != null) {
+                        target = m;
+                        owner = sup;
+                        break;
+                    }
                 }
+                if (target != null) break;
             }
             if (target != null) break;
         }
