@@ -192,7 +192,7 @@ public final class MsgForgeHook {
         }
         if (contentIdx < 0) return;
         String original = (String) args[contentIdx];
-        if (original == null || original.isEmpty() || isForged(original)) return;
+        if (original == null || original.isEmpty() || isForged(original) || isAtMessage(original)) return;
         String content = apply(original);
         if (content == null) return;
         args[contentIdx] = content;
@@ -447,7 +447,7 @@ public final class MsgForgeHook {
         int type = a[2] instanceof Number ? ((Number) a[2]).intValue() : 0;
         if (type != 1) return;
         String original = (String) a[1];
-        if (original == null || original.isEmpty() || isForged(original)) return;
+        if (original == null || original.isEmpty() || isForged(original) || isAtMessage(original)) return;
         String content = apply(original);
         if (content == null) return;
         a[1] = content;
@@ -516,7 +516,7 @@ public final class MsgForgeHook {
         int type = a[2] instanceof Number ? ((Number) a[2]).intValue() : 0;
         if (type != 1) return;
         String original = (String) a[1];
-        if (isForged(original)) return;
+        if (isForged(original) || isAtMessage(original)) return;
         String content = apply(original);
         if (content == null) return;
         a[1] = content;
@@ -631,6 +631,24 @@ public final class MsgForgeHook {
         return t.startsWith("<msg") || t.startsWith("<?xml") || t.contains("<appmsg");
     }
 
+    /** 微信群聊 @ 消息识别：content 形如「@昵称 文字」且 @ 前只有不可见控制符/空白。
+     *  @ 消息结构特殊（含 @ 关系），若替换 content 会破坏发送协议导致发不出去，必须放行。 */
+    private static boolean isAtMessage(String s) {
+        if (s == null || s.isEmpty()) return false;
+        if (s.contains("atuserlist") || s.contains("<msgsource>")) return true;
+        int idx = s.indexOf('@');
+        if (idx < 0) return false;
+        String before = s.substring(0, idx);
+        for (int i = 0; i < before.length(); i++) {
+            char c = before.charAt(i);
+            if (!Character.isWhitespace(c) && !Character.isISOControl(c)
+                    && c != '\u200B' && c != '\u200C' && c != '\u200D' && c != '\uFEFF') {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static String trunc(String s, int m) {
         return s == null ? "" : s.length() > m ? s.substring(0, m) + "..." : s;
     }
@@ -720,7 +738,7 @@ public final class MsgForgeHook {
                 original = readStrFieldUp(msg, "field_content");
             } catch (Throwable ignored) {}
         }
-        if (original == null || original.isEmpty() || isForged(original)) return;
+        if (original == null || original.isEmpty() || isForged(original) || isAtMessage(original)) return;
         String content = apply(original);
         if (content == null) return;
         // 写入 type：优先 setType 方法，失败沿继承链写字段

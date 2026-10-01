@@ -14,6 +14,7 @@ import android.provider.OpenableColumns;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AbsListView;
+import android.widget.ImageView;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
@@ -237,6 +238,7 @@ public final class ChatBubbleHook {
                     installBubbleResolver(cl);
                     installBackgroundResourceHook();
                     installBackgroundHook();
+                    installImageViewHook();
                     installResourceHelperHook(cl);
                     installResourceGetDrawableHook(cl);
                     installChatListViewHook(cl);
@@ -381,6 +383,61 @@ public final class ChatBubbleHook {
         }
     }
 
+    /** 方案 G：ImageView 图片路径。8.0.78 聊天消息气泡（尤其自己发出的 chatto_bg）通过
+     *  AnimImageView（ImageView 子类）显示，ke5.a.i 加载的 Drawable 最终传给
+     *  ImageView.setImageDrawable。在此拦截，按微信原生气泡 constantState 识别替换。 */
+    private static void installImageViewHook() {
+        try {
+            Method setImageDrawable = ImageView.class.getMethod("setImageDrawable", Drawable.class);
+            XposedBridge.hookMethod(setImageDrawable, new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        if (param.args.length == 0 || !(param.args[0] instanceof Drawable)) return;
+                        Drawable d = (Drawable) param.args[0];
+                        int kind = matchBaseDrawable(d);
+                        if (kind < 0) return;
+                        Drawable custom = loadDrawable(kind);
+                        if (custom != null) {
+                            param.args[0] = custom;
+                            LogWriter.log(TAG, "setImageDrawable REPLACE kind=" + kind
+                                    + " view=" + param.thisObject.getClass().getName());
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "ImageView.setImageDrawable hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installImageViewHook err: " + t.getMessage());
+        }
+        try {
+            Method setImageResource = ImageView.class.getMethod("setImageResource", int.class);
+            XposedBridge.hookMethod(setImageResource, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        int resId = ((Number) param.args[0]).intValue();
+                        boolean from = resId == sFromResId;
+                        boolean to = resId == sToResId;
+                        if (!from && !to) return;
+                        int kind = from ? KIND_FROM : KIND_TO;
+                        Drawable custom = loadDrawable(kind);
+                        if (custom != null) {
+                            ((ImageView) param.thisObject).setImageDrawable(custom);
+                            LogWriter.log(TAG, "setImageResource REPLACE resId=" + resId
+                                    + " kind=" + kind);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "ImageView.setImageResource hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installImageViewHook setImageResource err: " + t.getMessage());
+        }
+    }
+
     /** 与 ke5.a.i 记录的微信原始气泡 Drawable 对比 constantState。 */
     private static int matchBaseDrawable(Drawable d) {
         try {
@@ -427,11 +484,9 @@ public final class ChatBubbleHook {
                             }
                             LogWriter.log(TAG, sb.toString());
                         } catch (Throwable ignored) {}
-                        Drawable d = loadDrawable(kind);
-                        if (d != null) {
-                            LogWriter.log(TAG, "getDrawable REPLACE resId=" + resId);
-                            param.setResult(d);
-                        }
+                        // 不替换 getDrawable 返回值：ke5.a.i / setBackgroundResource 内部
+                        // 会再次加载并设置到真实气泡 View，这里只记录，避免污染 baseDrawable。
+                        // 真实替换点：setBackgroundResource / ImageView.setImageDrawable / onLayout。
                     } catch (Throwable ignored) {}
                 }
             };
@@ -581,7 +636,8 @@ public final class ChatBubbleHook {
                                         LogWriter.log(TAG, sb.toString());
                                     } catch (Throwable ignored) {}
                                     try {
-                                        // 记录微信原始气泡 Drawable（资源缓存实例，用于 setBackground 拦截识别）
+                                        // 记录微信原始气泡 Drawable（资源缓存实例，用于 setBackground 拦截识别）。
+                                        // 此时 getDrawable 不替换，拿到的是微信原始气泡。
                                         Context ctx0 = (Context) param.args[0];
                                         Drawable base = ctx0.getResources().getDrawable(resId);
                                         if (from) {
@@ -592,12 +648,9 @@ public final class ChatBubbleHook {
                                         LogWriter.log(TAG, "ke5.a.i baseDrawable saved from="
                                                 + (from ? "y" : "n") + " to=" + (to ? "y" : "n"));
                                     } catch (Throwable ignored) {}
-                                    int kind = from ? KIND_FROM : KIND_TO;
-                                    Drawable d = loadDrawable(kind);
-                                    if (d != null) {
-                                        LogWriter.log(TAG, "ke5.a.i REPLACE resId=" + resId);
-                                        param.setResult(d);
-                                    }
+                                    // 不替换 ke5.a.i 返回值：AnimImageView.setType 等路径会再次
+                                    // 加载并设置到真实气泡 View，真实替换点在 ImageView.setImageDrawable /
+                                    // setBackgroundResource / onLayout。
                                 } catch (Throwable ignored) {}
                             }
                         });

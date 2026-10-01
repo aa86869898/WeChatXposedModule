@@ -8,6 +8,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.ContextMenu;
 import android.view.View;
+import android.widget.ListView;
 import android.widget.Toast;
 
 import com.leshao.v3.ContextManager;
@@ -612,34 +613,51 @@ public final class FavVoiceForwardHook {
         return null;
     }
 
-    /** 从菜单构建参数 ContextMenuInfo 解析收藏对象（主路径），再回退字段链/长按缓存。 */
+    /** 从菜单构建参数解析收藏对象：优先用长按 View 找 AbsListView 定位 position（主路径），
+     *  再尝试 ContextMenuInfo，最后回退字段链/长按缓存。 */
     private static Object resolveItemFromMenuContext(XC_MethodHook.MethodHookParam param,
                                                       Object builder) {
+        // ① 长按 View 参数：沿父链找 ListView，getPositionForView 定位
+        Object viewArg = param.args.length > 1 ? param.args[1] : null;
+        if (viewArg instanceof View) {
+            View v = (View) viewArg;
+            ListView lv = findAncestorListView(v);
+            if (lv != null) {
+                int pos = lv.getPositionForView(v);
+                LogWriter.log(TAG, "menu view: cls=" + v.getClass().getName()
+                        + " pos=" + pos);
+                if (pos >= 0) {
+                    Activity ui = findActivity(builder);
+                    if (ui != null) {
+                        Object adapter = getObjectFieldByName(ui, "W");
+                        int header = lv.getHeaderViewsCount();
+                        Object item = callAdapterItem(adapter, pos - header);
+                        LogWriter.log(TAG, "menu view resolve pos=" + pos + " header=" + header
+                                + " item=" + (item == null ? "null" : item.getClass().getName())
+                                + " type=" + getType(item));
+                        if (item != null) return item;
+                    }
+                }
+            }
+            Object tag = v.getTag();
+            if (tag != null && hasFieldType(tag)) return tag;
+        }
+        // ② ContextMenuInfo 兜底
         try {
             Object info = param.args.length > 2 ? param.args[2] : null;
-            if (info == null) return findFavItemFromBuilder(builder);
-            int pos = -1;
-            try {
-                Object p = XposedHelpers.callMethod(info, "getPosition");
-                if (p instanceof Number) pos = ((Number) p).intValue();
-            } catch (Throwable ignored) {}
-            if (pos < 0) {
-                try { pos = XposedHelpers.getIntField(info, "position"); } catch (Throwable ignored) {}
-            }
-            Object targetView = null;
-            try {
-                targetView = XposedHelpers.callMethod(info, "getTargetView");
-            } catch (Throwable ignored) {}
-            if (targetView == null) {
-                try { targetView = XposedHelpers.getObjectField(info, "targetView"); } catch (Throwable ignored) {}
-            }
-            LogWriter.log(TAG, "menu ctx: pos=" + pos
-                    + " targetView=" + (targetView == null ? "null" : targetView.getClass().getName()));
-            if (pos >= 0) {
-                Activity ui = findActivity(builder);
-                if (ui != null) {
-                    Object adapter = getObjectFieldByName(ui, "W");
-                    if (adapter != null) {
+            if (info != null) {
+                int pos = -1;
+                try {
+                    Object p = XposedHelpers.callMethod(info, "getPosition");
+                    if (p instanceof Number) pos = ((Number) p).intValue();
+                } catch (Throwable ignored) {}
+                if (pos < 0) {
+                    try { pos = XposedHelpers.getIntField(info, "position"); } catch (Throwable ignored) {}
+                }
+                if (pos >= 0) {
+                    Activity ui = findActivity(builder);
+                    if (ui != null) {
+                        Object adapter = getObjectFieldByName(ui, "W");
                         int header = 0;
                         try {
                             Object lv = XposedHelpers.getObjectField(ui, "h");
@@ -649,19 +667,24 @@ public final class FavVoiceForwardHook {
                             }
                         } catch (Throwable ignored) {}
                         Object item = callAdapterItem(adapter, pos - header);
-                        LogWriter.log(TAG, "menu ctx resolve pos=" + pos + " header=" + header
-                                + " item=" + (item == null ? "null" : item.getClass().getName())
-                                + " type=" + getType(item));
                         if (item != null) return item;
                     }
                 }
             }
-            if (targetView instanceof View) {
-                Object tag = ((View) targetView).getTag();
-                if (tag != null && hasFieldType(tag)) return tag;
-            }
         } catch (Throwable ignored) {}
         return findFavItemFromBuilder(builder);
+    }
+
+    /** 沿 View 父链找 AbsListView（ListView/GridView）。 */
+    private static ListView findAncestorListView(View v) {
+        View cur = v;
+        while (cur != null) {
+            if (cur instanceof ListView) return (ListView) cur;
+            Object parent = cur.getParent();
+            if (!(parent instanceof View)) break;
+            cur = (View) parent;
+        }
+        return null;
     }
 
     /** 调用收藏列表 adapter 的按位置取 item 方法（i / getItem 等）。 */
