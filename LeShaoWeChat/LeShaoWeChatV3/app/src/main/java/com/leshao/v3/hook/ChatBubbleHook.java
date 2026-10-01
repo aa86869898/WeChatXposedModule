@@ -477,54 +477,64 @@ public final class ChatBubbleHook {
         }
     }
 
-    /** 文档 §5 方案2：精准 hook viewitems.to.b(e9, to, d, Boolean isRecv) ——
-     *  文本气泡最终设置点（普通态 chatfrom_bg/chatto_bg），方向由第4参给出。
-     *  after 中直接替换 holder.b（MMNeat7extView）背景。 */
+    /** 文档 §5 方案2：精准 hook 文本气泡 ViewHolder 的静态绑定方法
+     *  b(e9, holder, data, Boolean isRecv) —— 普通态 chatfrom_bg/chatto_bg 最终设置点。
+     *  v3.0.88 起同时 hook viewitems.to 与 viewitems.mq（日志确认 8.0.78 实际气泡加载路径
+     *  是 viewitems.mq.b → ke5.a.i → setBackgroundResource），after 中定位气泡 View 替换。 */
     private static void installViewitemsToHook(ClassLoader cl) {
-        try {
-            Class<?> toCls = XposedHelpers.findClass("com.tencent.mm.ui.chatting.viewitems.to", cl);
-            for (Method m : toCls.getDeclaredMethods()) {
-                if (!"b".equals(m.getName())) continue;
-                if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
-                Class<?>[] pts = m.getParameterTypes();
-                if (pts.length != 4 || pts[3] != Boolean.class) continue;
-                m.setAccessible(true);
-                XposedBridge.hookMethod(m, new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        try {
-                            if (!sEnabled) return;
-                            Object holder = param.args[1];
-                            boolean isRecv = Boolean.TRUE.equals(param.args[3]);
-                            if (holder == null) {
-                                LogWriter.log(TAG, "viewitems.to.b called isRecv=" + isRecv
-                                        + " holder=null");
-                                return;
-                            }
-                            View bubble = findBubbleView(holder);
-                            LogWriter.log(TAG, "viewitems.to.b called isRecv=" + isRecv
-                                    + " holder=" + holder.getClass().getName()
-                                    + " bubble=" + (bubble == null ? "null"
-                                    : bubble.getClass().getName()));
-                            if (bubble == null) return;
-                            int kind = isRecv ? KIND_FROM : KIND_TO;
-                            Drawable custom = loadDrawable(kind);
-                            if (custom != null) {
-                                bubble.setBackground(custom);
-                                LogWriter.log(TAG, "viewitems.to.b REPLACE isRecv=" + isRecv
-                                        + " view=" + bubble.getClass().getName()
-                                        + " bg=" + (bubble.getBackground() == null ? "null"
-                                        : bubble.getBackground().getClass().getName()));
-                            }
-                        } catch (Throwable ignored) {}
-                    }
-                });
-                LogWriter.log(TAG, "viewitems.to.b hooked " + m);
-                return;
+        String[] holderCands = {
+                "com.tencent.mm.ui.chatting.viewitems.to",
+                "com.tencent.mm.ui.chatting.viewitems.mq"
+        };
+        int hooked = 0;
+        for (String cn : holderCands) {
+            try {
+                Class<?> toCls = XposedHelpers.findClass(cn, cl);
+                for (Method m : toCls.getDeclaredMethods()) {
+                    if (!"b".equals(m.getName())) continue;
+                    if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                    Class<?>[] pts = m.getParameterTypes();
+                    if (pts.length != 4 || pts[3] != Boolean.class) continue;
+                    m.setAccessible(true);
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            try {
+                                if (!sEnabled) return;
+                                Object holder = param.args[1];
+                                boolean isRecv = Boolean.TRUE.equals(param.args[3]);
+                                if (holder == null) {
+                                    LogWriter.log(TAG, "viewitems.b called isRecv=" + isRecv
+                                            + " holder=null");
+                                    return;
+                                }
+                                View bubble = findBubbleView(holder);
+                                LogWriter.log(TAG, "viewitems.b called isRecv=" + isRecv
+                                        + " holder=" + holder.getClass().getName()
+                                        + " bubble=" + (bubble == null ? "null"
+                                        : bubble.getClass().getName()));
+                                if (bubble == null) return;
+                                int kind = isRecv ? KIND_FROM : KIND_TO;
+                                Drawable custom = loadDrawable(kind);
+                                if (custom != null) {
+                                    bubble.setBackground(custom);
+                                    LogWriter.log(TAG, "viewitems.b REPLACE isRecv=" + isRecv
+                                            + " view=" + bubble.getClass().getName()
+                                            + " bg=" + (bubble.getBackground() == null ? "null"
+                                            : bubble.getBackground().getClass().getName()));
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+                    hooked++;
+                    LogWriter.log(TAG, "viewitems.b hooked " + m);
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "viewitems.b class " + cn + " err: " + t.getMessage());
             }
-            LogWriter.log(TAG, "viewitems.to.b not found (fallback setBackgroundResource covers)");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "installViewitemsToHook err: " + t.getMessage());
+        }
+        if (hooked == 0) {
+            LogWriter.log(TAG, "viewitems.b none found (fallback setBackgroundResource covers)");
         }
     }
 

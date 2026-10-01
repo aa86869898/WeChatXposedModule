@@ -72,6 +72,9 @@ public final class FavVoiceForwardHook {
     private static volatile Object sPendingFavInfo;
     // 最近长按的收藏对象：菜单构建时 gc 不直接持有 item，用它兜底判断是否注入
     private static volatile Object sLastLongClickInfo;
+    // v3.0.88：FavApiLogic（tc2.s2）实例 —— 微信打开收藏页时会调用其方法，
+    // hook 捕获 thisObject 后即可反射调用 K/y/d0 获取收藏语音数据。
+    private static volatile Object sFavApiLogic;
 
     private FavVoiceForwardHook() {}
 
@@ -134,6 +137,8 @@ public final class FavVoiceForwardHook {
         //          （v3.0.87 起不再启动微信 SelectConversationUI，改用模块联系人选择器，
         //            此钩子仅作历史兜底，pending 被模块选择器回调消费后不会触发）=====
         installPickResult(cl);
+        // ===== 3.2 v3.0.88：捕获 FavApiLogic（tc2.s2）实例，供 K/y 反射调用 =====
+        installFavApiInstanceCapture(cl);
         LogWriter.log(TAG, "installHooks done");
     }
 
@@ -488,6 +493,29 @@ public final class FavVoiceForwardHook {
         return false;
     }
 
+/** v3.0.88：捕获 FavApiLogic（tc2.s2）实例。微信打开收藏页/详情页时必然调用
+     *  tc2.s2 的方法，hook 所有声明方法在 before 中记录 thisObject，
+     *  之后 callFavApi 就能用实例反射调用 K(info)/y(rq0)/d0/Z。 */
+    private static void installFavApiInstanceCapture(ClassLoader cl) {
+        try {
+            Class<?> apiCls = XposedHelpers.findClass(C_FAV_API, cl);
+            for (Method m : apiCls.getDeclaredMethods()) {
+                try {
+                    m.setAccessible(true);
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            if (param.thisObject != null) sFavApiLogic = param.thisObject;
+                        }
+                    });
+                } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "FavApiLogic instance capture hooked cls=" + apiCls.getName());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installFavApiInstanceCapture err: " + t.getMessage());
+        }
+    }
+
     // ---------------- 转发启动与发送 ----------------
 
     /** v3.0.87：收藏语音转发不再依赖微信 SelectConversationUI（微信不走 onActivityResult、
@@ -652,18 +680,31 @@ public final class FavVoiceForwardHook {
     private static Object callFavApi(ClassLoader cl, String method, Object... args) {
         try {
             Class<?> apiCls = XposedHelpers.findClass(C_FAV_API, cl);
+            Object inst = getFavApiInstance(apiCls);
+            if (inst != null) {
+                return XposedHelpers.callMethod(inst, method, args);
+            }
             try {
                 return XposedHelpers.callStaticMethod(apiCls, method, args);
             } catch (Throwable ignored) {}
-            try {
-                Object inst = XposedHelpers.getStaticObjectField(apiCls, "INSTANCE");
-                if (inst != null) return XposedHelpers.callMethod(inst, method, args);
-            } catch (Throwable ignored) {}
-            Object svc = getService(cl, C_FAV_API);
-            if (svc != null) return XposedHelpers.callMethod(svc, method, args);
         } catch (Throwable t) {
             LogWriter.log(TAG, "callFavApi " + method + " err: " + t.getMessage());
         }
+        return null;
+    }
+
+    /** 获取 FavApiLogic 实例：优先 hook 捕获的 thisObject，其次静态字段/静态方法。 */
+    private static Object getFavApiInstance(Class<?> apiCls) {
+        if (sFavApiLogic != null) return sFavApiLogic;
+        try {
+            Object inst = XposedHelpers.getStaticObjectField(apiCls, "INSTANCE");
+            if (inst != null) { sFavApiLogic = inst; return inst; }
+        } catch (Throwable ignored) {}
+        try {
+            Object inst = XposedHelpers.callStaticMethod(apiCls, "getInstance");
+            if (inst != null) { sFavApiLogic = inst; return inst; }
+        } catch (Throwable ignored) {}
+        LogWriter.log(TAG, "getFavApiInstance no instance yet cls=" + apiCls.getName());
         return null;
     }
 
