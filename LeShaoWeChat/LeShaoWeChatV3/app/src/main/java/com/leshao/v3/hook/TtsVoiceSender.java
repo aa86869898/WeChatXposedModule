@@ -3415,7 +3415,7 @@ public class TtsVoiceSender {
                 LogWriter.log(TAG, "SceneVoice: read voiceinfo err " + t.getMessage());
             }
 
-            String voice2Dir = getVoice2Dir(voiceFile);
+            String voice2Dir = getVoice2Dir();
             LogWriter.log(TAG, "SceneVoice: voice2Dir=" + voice2Dir + " newName=" + newName);
             String dstPath = buildVoice2Path(voice2Dir, newName);
             LogWriter.log(TAG, "SceneVoice: dstPath=" + dstPath);
