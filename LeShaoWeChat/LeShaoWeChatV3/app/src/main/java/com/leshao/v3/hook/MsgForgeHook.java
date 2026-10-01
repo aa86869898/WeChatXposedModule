@@ -334,24 +334,13 @@ public final class MsgForgeHook {
     }
 
     /** 群聊 @ 消息：content 形如「@昵称 正文」，@ 关系由 msgsource 字段携带，
-     *  content 中必须保留 @ 昵称 前缀才能正常上屏/发送。保留前缀，正文替换为伪装文案。 */
+     *  content 里必须隐藏 @ 昵称，只保留伪装文案（否则 @ 出来等于没伪装）。
+     *  msgsource 的 atusernames 不被修改，@ 提醒仍有效，但显示内容不含 @ 前缀。 */
     private static String forgeAtMessage(String content) {
         if (content == null) return content;
-        int idx = -1;
-        for (int i = 0; i < content.length(); i++) {
-            char c = content.charAt(i);
-            if (c == ' ' || c == '\u3000' || c == '\t' || c == '\n') { idx = i; break; }
-        }
-        String prefix;
-        if (idx >= 0) {
-            prefix = content.substring(0, idx + 1);
-        } else {
-            prefix = content;
-        }
         String forged = (sText == null || sText.isEmpty()) ? content : sText;
-        LogWriter.log(TAG, "at msg forged prefixLen=" + prefix.length() + " body="
-                + trunc(forged, 20));
-        return prefix + forged;
+        LogWriter.log(TAG, "at msg forged hiddenAt body=" + trunc(forged, 20));
+        return forged;
     }
 
     public static String systemContent(String original) {

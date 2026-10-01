@@ -132,6 +132,8 @@ public final class FavVoiceForwardHook {
         installClickInterceptor(cl);
         // ===== 3. 选人结果：FavoriteIndexUI.onActivityResult + SelectConversationUI.W7 兜底 =====
         installPickResult(cl);
+        // ===== 3.1 选人兜底：SelectConversationUI.onPause 字段扫描（微信新版不走 onActivityResult 返回）=====
+        installSelectUiCapture(cl);
         LogWriter.log(TAG, "installHooks done");
     }
 
@@ -375,6 +377,85 @@ public final class FavVoiceForwardHook {
         } catch (Throwable t) {
             LogWriter.log(TAG, "W7 hook err: " + t.getMessage());
         }
+    }
+
+    /** 选人兜底：微信 8.0.78 SelectConversationUI 单选不走 onActivityResult 返回数据
+     *  （result 恒为 -1），选中联系人保存在 Activity 实例字段中。
+     *  hook onPause（finish 前必调），扫描字段找用户名并触发发送。 */
+    private static void installSelectUiCapture(ClassLoader cl) {
+        try {
+            Class<?> selUi = XposedHelpers.findClass(C_SELECT_UI, cl);
+            XposedBridge.hookAllMethods(selUi, "onPause", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled || sPendingLocalId == 0) return;
+                        Activity ui = (Activity) param.thisObject;
+                        String talker = findTalkerInFields(ui);
+                        LogWriter.log(TAG, "select onPause pending=" + sPendingLocalId
+                                + " talker=" + talker);
+                        if (talker == null || talker.isEmpty()) return;
+                        long localId = sPendingLocalId;
+                        Object info = sPendingFavInfo;
+                        sPendingLocalId = 0;
+                        sPendingFavInfo = null;
+                        final String toUser = talker;
+                        final long lid = localId;
+                        final Object fav = info;
+                        new Thread(() -> sendVoice(lid, fav, toUser), "leshao-fav-voice-send")
+                                .start();
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "select onPause capture hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installSelectUiCapture err: " + t.getMessage());
+        }
+    }
+
+    /** 扫描 Activity 实例字段，找像微信用户名的 String（wxid_/gh_/@chatroom/手机号）。 */
+    private static String findTalkerInFields(Object o) {
+        if (o == null) return null;
+        for (Class<?> c = o.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                try {
+                    f.setAccessible(true);
+                    Object v = f.get(o);
+                    if (v instanceof String) {
+                        String s = (String) v;
+                        if (looksLikeTalker(s)) {
+                            LogWriter.log(TAG, "select field " + f.getName() + " -> " + s);
+                            return s;
+                        }
+                    } else if (v instanceof List) {
+                        List<?> l = (List<?>) v;
+                        if (!l.isEmpty()) {
+                            Object first = l.get(0);
+                            if (first != null && looksLikeTalker(first.toString())) {
+                                LogWriter.log(TAG, "select list field " + f.getName()
+                                        + " -> " + first);
+                                return first.toString();
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+        }
+        return null;
+    }
+
+    private static boolean looksLikeTalker(String s) {
+        if (s == null || s.isEmpty()) return false;
+        if (s.contains("@chatroom")) return true;
+        if (s.startsWith("wxid_") || s.startsWith("gh_")) return true;
+        if (s.length() >= 5 && s.length() <= 20) {
+            boolean allDigit = true;
+            for (int i = 0; i < s.length(); i++) {
+                if (!Character.isDigit(s.charAt(i))) { allDigit = false; break; }
+            }
+            if (allDigit) return true;
+        }
+        return false;
     }
 
     // ---------------- 转发启动与发送 ----------------

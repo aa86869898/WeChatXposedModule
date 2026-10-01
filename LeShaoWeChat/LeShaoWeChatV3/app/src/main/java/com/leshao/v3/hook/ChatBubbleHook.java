@@ -229,6 +229,9 @@ public final class ChatBubbleHook {
             sFromPath = getFromPath();
             sToPath = getToPath();
             resolveBubbleResIds(cl);
+            LogWriter.log(TAG, "bubble config enabled=" + sEnabled
+                    + " from=" + (sFromPath != null && !sFromPath.isEmpty() ? "SET" : "EMPTY")
+                    + " to=" + (sToPath != null && !sToPath.isEmpty() ? "SET" : "EMPTY"));
         } catch (Throwable ignored) {}
         ensureResultHook();
         if (sHooked) return;

@@ -38,8 +38,8 @@ android {
         applicationId = "com.leshao.v3"
         minSdk = 24
         targetSdk = 36
-        versionCode = 30084
-        versionName = "3.0.84"
+        versionCode = 30085
+        versionName = "3.0.85"
         buildConfigField("String", "BUILD_TIME", "\"$moduleBuildTime\"")
     }
 
