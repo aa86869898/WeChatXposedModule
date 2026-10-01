@@ -464,6 +464,12 @@ public final class MsgForgeHook {
         a[1] = content;
         a[2] = targetType();
         if (a.length >= 4 && a[3] instanceof Number) a[3] = targetFlag();
+        // 群聊 @ 消息：content 已隐藏 @ 昵称，必须同步清空 atusernames/msgsource 参数，
+        // 否则微信按 @ 消息校验（content 无 @ 昵称）会拒绝发送。
+        if (isAtMessage(original)) {
+            clearAtArgs(a);
+            LogWriter.log(TAG, "sendmgr patch clearedAtArgs");
+        }
         LogWriter.log(TAG, "sendmgr patch -> type=" + a[2]
                 + " talker=" + a[0] + " text=" + trunc(original, 20));
     }
@@ -533,8 +539,27 @@ public final class MsgForgeHook {
         a[1] = content;
         a[2] = targetType();
         if (a.length >= 4 && a[3] instanceof Number) a[3] = targetFlag();
+        if (isAtMessage(original)) {
+            clearAtArgs(a);
+            LogWriter.log(TAG, "logic patch clearedAtArgs");
+        }
         LogWriter.log(TAG, "logic patch -> type=" + a[2]
                 + " origLen=" + (original == null ? 0 : original.length()));
+    }
+
+    /** 清空发送参数中索引 4 起的 @ 相关字符串（msgsource XML / atusernames / atuserlist）。
+     *  索引 0-3 分别是 talker/content/type/flag，绝不能动。 */
+    private static void clearAtArgs(Object[] a) {
+        if (a == null) return;
+        for (int i = 4; i < a.length; i++) {
+            if (a[i] instanceof String) {
+                String s = (String) a[i];
+                if (s.contains("<msgsource>") || s.contains("atusernames")
+                        || s.contains("atuserlist") || s.contains("@chatroom")) {
+                    a[i] = "";
+                }
+            }
+        }
     }
 
     /** 兜底：om.SendTextComponent 文本入口，拦截原发送并按伪造 type 经官方通道重发。 */
@@ -752,6 +777,12 @@ public final class MsgForgeHook {
         if (original == null || original.isEmpty() || isForged(original)) return;
         String content = apply(original);
         if (content == null) return;
+        // 群聊 @ 消息：content 隐藏 @ 昵称后，必须同步清空消息对象上的 msgsource，
+        // 否则微信按 @ 消息校验（content 无 @ 昵称）会拒绝发送。
+        if (isAtMessage(original)) {
+            clearMsgSource(msg);
+            LogWriter.log(TAG, "storage patch clearedMsgSource");
+        }
         // 写入 type：优先 setType 方法，失败沿继承链写字段
         boolean typeWritten = false;
         try {
@@ -781,6 +812,39 @@ public final class MsgForgeHook {
         } catch (Throwable ignored) {}
         LogWriter.log(TAG, "storage patch -> type=" + targetType()
                 + " isSend=1 msgId=" + msgId + " text=" + trunc(original, 20));
+    }
+
+/** 清空 e9 消息对象上的 msgsource（@ 关系载体），把 @ 消息降级为普通文本消息。 */
+    private static void clearMsgSource(Object msg) {
+        String[] names = {"msgSource", "msgsource", "field_msgSource", "field_msgsource"};
+        for (String n : names) {
+            try {
+                java.lang.reflect.Field f = findFieldUp(msg, n);
+                f.set(msg, "");
+                LogWriter.log(TAG, "msgSource cleared field=" + n);
+                return;
+            } catch (Throwable ignored) {}
+        }
+        try {
+            XposedHelpers.callMethod(msg, "setMsgSource", "");
+            LogWriter.log(TAG, "msgSource cleared via setMsgSource");
+            return;
+        } catch (Throwable ignored) {}
+        // 沿继承链找 String 字段值含 msgsource/atusernames 的兜底
+        for (Class<?> c = msg.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                try {
+                    f.setAccessible(true);
+                    Object v = f.get(msg);
+                    if (v instanceof String && (((String) v).contains("<msgsource>")
+                            || ((String) v).contains("atusernames"))) {
+                        f.set(msg, "");
+                        LogWriter.log(TAG, "msgSource cleared field=" + f.getName());
+                        return;
+                    }
+                } catch (Throwable ignored) {}
+            }
+        }
     }
 
     /** 沿继承链查找字段（e9 的字段可能在父类声明）。 */

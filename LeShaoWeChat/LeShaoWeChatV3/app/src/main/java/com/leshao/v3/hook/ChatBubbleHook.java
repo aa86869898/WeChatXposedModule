@@ -344,7 +344,12 @@ public final class ChatBubbleHook {
                         if (d != null) {
                             View v = (View) param.thisObject;
                             v.setBackground(d);
-                            LogWriter.log(TAG, "setBackgroundResource REPLACE resId=" + resId);
+                            int[] loc = {0, 0};
+                            try { v.getLocationOnScreen(loc); } catch (Throwable ignored) {}
+                            LogWriter.log(TAG, "setBackgroundResource REPLACE resId=" + resId
+                                    + " view=" + v.getClass().getName()
+                                    + " xy=(" + loc[0] + "," + loc[1] + ")"
+                                    + " w=" + v.getWidth() + " h=" + v.getHeight());
                         }
                     } catch (Throwable ignored) {}
                 }
@@ -462,15 +467,17 @@ public final class ChatBubbleHook {
                             if (!sEnabled) return;
                             Object holder = param.args[1];
                             if (holder == null) return;
-                            Object bubble = XposedHelpers.getObjectField(holder, "b");
-                            if (!(bubble instanceof View)) return;
+                            View bubble = findBubbleView(holder);
+                            if (bubble == null) return;
                             boolean isRecv = Boolean.TRUE.equals(param.args[3]);
                             int kind = isRecv ? KIND_FROM : KIND_TO;
                             Drawable custom = loadDrawable(kind);
                             if (custom != null) {
-                                ((View) bubble).setBackground(custom);
+                                bubble.setBackground(custom);
                                 LogWriter.log(TAG, "viewitems.to.b REPLACE isRecv=" + isRecv
-                                        + " view=" + bubble.getClass().getName());
+                                        + " view=" + bubble.getClass().getName()
+                                        + " bg=" + (bubble.getBackground() == null ? "null"
+                                        : bubble.getBackground().getClass().getName()));
                             }
                         } catch (Throwable ignored) {}
                     }
@@ -528,6 +535,26 @@ public final class ChatBubbleHook {
         } catch (Throwable t) {
             LogWriter.log(TAG, "installLinkSubtypeHook err: " + t.getMessage());
         }
+    }
+
+    /** 在 ViewHolder 字段中定位气泡 View：优先 MMNeat7extView，其次背景匹配原生气泡的 View。 */
+    private static View findBubbleView(Object holder) {
+        for (Class<?> c = holder.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                try {
+                    f.setAccessible(true);
+                    Object v = f.get(holder);
+                    if (!(v instanceof View)) continue;
+                    View view = (View) v;
+                    String cn = view.getClass().getName();
+                    if (cn.contains("MMNeat7extView") || cn.contains("MMNeatTextView")) {
+                        return view;
+                    }
+                    if (matchBaseDrawable(view.getBackground()) >= 0) return view;
+                } catch (Throwable ignored) {}
+            }
+        }
+        return null;
     }
 
     /** 与 ke5.a.i 记录的微信原始气泡 Drawable 对比 constantState。 */

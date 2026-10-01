@@ -381,20 +381,30 @@ public final class FavVoiceForwardHook {
 
     /** 选人兜底：微信 8.0.78 SelectConversationUI 单选不走 onActivityResult 返回数据
      *  （result 恒为 -1），选中联系人保存在 Activity 实例字段中。
-     *  hook onPause（finish 前必调），扫描字段找用户名并触发发送。 */
+     *  SelectConversationUI 的 onPause 可能在父类（MMFragmentActivity）声明，
+     *  因此全局 hook Activity.onPause，再判断实例是否为选人界面。 */
     private static void installSelectUiCapture(ClassLoader cl) {
         try {
-            Class<?> selUi = XposedHelpers.findClass(C_SELECT_UI, cl);
-            XposedBridge.hookAllMethods(selUi, "onPause", new XC_MethodHook() {
+            XposedBridge.hookAllMethods(Activity.class, "onPause", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
                     try {
                         if (!sEnabled || sPendingLocalId == 0) return;
-                        Activity ui = (Activity) param.thisObject;
+                        Object thiz = param.thisObject;
+                        if (thiz == null) return;
+                        String cn = thiz.getClass().getName();
+                        if (!cn.equals(C_SELECT_UI)
+                                && !cn.startsWith("com.tencent.mm.ui.transmit.SelectConversation")) {
+                            return;
+                        }
+                        Activity ui = (Activity) thiz;
                         String talker = findTalkerInFields(ui);
                         LogWriter.log(TAG, "select onPause pending=" + sPendingLocalId
-                                + " talker=" + talker);
-                        if (talker == null || talker.isEmpty()) return;
+                                + " talker=" + talker + " cls=" + cn);
+                        if (talker == null || talker.isEmpty()) {
+                            dumpStringFields(ui);
+                            return;
+                        }
                         long localId = sPendingLocalId;
                         Object info = sPendingFavInfo;
                         sPendingLocalId = 0;
@@ -407,10 +417,30 @@ public final class FavVoiceForwardHook {
                     } catch (Throwable ignored) {}
                 }
             });
-            LogWriter.log(TAG, "select onPause capture hooked");
+            LogWriter.log(TAG, "select onPause capture hooked (global Activity.onPause)");
         } catch (Throwable t) {
             LogWriter.log(TAG, "installSelectUiCapture err: " + t.getMessage());
         }
+    }
+
+    /** 找不到用户名时打印全部 String 字段（值裁剪），便于下次定位选中联系人存在哪里。 */
+    private static void dumpStringFields(Object o) {
+        try {
+            for (Class<?> c = o.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                    try {
+                        f.setAccessible(true);
+                        Object v = f.get(o);
+                        if (v instanceof String) {
+                            String s = (String) v;
+                            if (s.isEmpty()) continue;
+                            LogWriter.log(TAG, "  strField " + c.getSimpleName() + "." + f.getName()
+                                    + " = " + (s.length() > 40 ? s.substring(0, 40) + "..." : s));
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            }
+        } catch (Throwable ignored) {}
     }
 
     /** 扫描 Activity 实例字段，找像微信用户名的 String（wxid_/gh_/@chatroom/手机号）。 */
