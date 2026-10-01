@@ -51,6 +51,8 @@ public final class FavVoiceForwardHook {
     // 待转发状态：长按语音时由 mc.g/h 保存，选人后消费
     private static volatile long sPendingLocalId;
     private static volatile Object sPendingFavInfo;
+    // 最近长按的语音收藏对象：菜单点击回调（hc）参数里没有 fav info，用它兜底
+    private static volatile Object sLastLongClickInfo;
 
     private static final int TYPE_VOICE = 3;
     private static final int STATUS_UPLOAD_WAIT = 3;
@@ -195,6 +197,7 @@ public final class FavVoiceForwardHook {
                         if (t == TYPE_VOICE) {
                             sPendingLocalId = getLocalId(info);
                             sPendingFavInfo = info;
+                            if (info != null) sLastLongClickInfo = info;
                             LogWriter.log(TAG, "K7 forward voice -> allow localId=" + sPendingLocalId);
                             // K7 若返回 boolean 则放行，避免被预检拦截
                             try {
@@ -312,6 +315,61 @@ public final class FavVoiceForwardHook {
             }
         }
 
+        // ===== 拦截 D：菜单点击回调 hc（FavoriteIndexUI$OnMMMenuItemSelected）=====
+        // 长按菜单点击转发走 FavoriteIndexUI$OnMMMenuItemSelected（文档类名 hc），
+        // 不是 K7（长按业务分发）。hook 该类所有方法，itemId==3 且语音时记录待转发状态。
+        java.util.Set<String> hcCands = new java.util.LinkedHashSet<>();
+        try {
+            hcCands.add("com.tencent.mm.plugin.fav.ui.hc");
+        } catch (Throwable ignored) {}
+        try {
+            for (String cn : DexKitHelper.findClassesByString(cl, "OnMMMenuItemSelected")) {
+                if (cn != null) hcCands.add(cn);
+            }
+        } catch (Throwable ignored) {}
+        LogWriter.log(TAG, "OnMMMenuItemSelected candidates=" + hcCands);
+        for (String hcName : hcCands) {
+            try {
+                for (Class<?> hcCls : HookUtil.loadClasses(cl, hcName)) {
+                    LogWriter.log(TAG, "hc cls=" + hcCls.getName()
+                            + " methods=" + hcCls.getDeclaredMethods().length);
+                    for (Method hcM : hcCls.getDeclaredMethods()) {
+                        hcM.setAccessible(true);
+                        XposedBridge.hookMethod(hcM, new XC_MethodHook() {
+                            @Override
+                            protected void beforeHookedMethod(MethodHookParam param) {
+                                try {
+                                    if (!sEnabled) return;
+                                    int itemId = findMenuItemId(param.args);
+                                    if (itemId != 3) return;
+                                    Object info = findFavItem(param.args);
+                                    if (info == null || getType(info) != TYPE_VOICE) {
+                                        info = sLastLongClickInfo;
+                                    }
+                                    int t = getType(info);
+                                    LogWriter.log(TAG, "hc click itemId=3 info="
+                                            + (info == null ? "null" : info.getClass().getName())
+                                            + " type=" + t);
+                                    if (t == TYPE_VOICE && info != null) {
+                                        sPendingLocalId = getLocalId(info);
+                                        sPendingFavInfo = info;
+                                        LogWriter.log(TAG, "hc forward voice -> pending localId="
+                                                + sPendingLocalId);
+                                        try {
+                                            Class<?> rt = ((Method) param.method).getReturnType();
+                                            if (rt == boolean.class) param.setResult(true);
+                                        } catch (Throwable ignored) {}
+                                    }
+                                } catch (Throwable ignored) {}
+                            }
+                        });
+                    }
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "hc hook err: " + t.getMessage());
+            }
+        }
+
         // 接管选人结果：W7(String username) 单选回调
         Class<?> selUi = XposedHelpers.findClass(C_SELECT_UI, cl);
         LogWriter.log(TAG, "SelectConversationUI: W7=" + countMethods(selUi, "W7"));
@@ -346,6 +404,17 @@ public final class FavVoiceForwardHook {
     /** 手动向收藏长按菜单注入「转发」项（兼容不同 add 签名） */
     private static XC_MethodHook menuBuildHook() {
         return new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                try {
+                    if (!sEnabled) return;
+                    Object fi = findFavItem(param.args);
+                    if (fi != null && getType(fi) == TYPE_VOICE) {
+                        sLastLongClickInfo = fi;
+                    }
+                } catch (Throwable ignored) {}
+            }
+
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
                 try {
@@ -476,6 +545,20 @@ public final class FavVoiceForwardHook {
         } catch (Throwable t) {
             return false;
         }
+    }
+
+    /** 从菜单点击回调参数中解析 itemId：第一个 Number，或可调用 getItemId() 的对象。 */
+    private static int findMenuItemId(Object[] args) {
+        if (args == null) return -1;
+        for (Object a : args) {
+            if (a == null) continue;
+            if (a instanceof Number) return ((Number) a).intValue();
+            try {
+                Object id = XposedHelpers.callMethod(a, "getItemId");
+                if (id instanceof Number) return ((Number) id).intValue();
+            } catch (Throwable ignored) {}
+        }
+        return -1;
     }
 
     // ---------------- 发送逻辑 ----------------

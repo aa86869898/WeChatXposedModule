@@ -522,17 +522,31 @@ public final class ChatBubbleHook {
             protected void beforeHookedMethod(MethodHookParam param) {
                 try {
                     String value = (String) param.args[3];
-                    if (value == null) return;
-                    if ("@drawable/chatfrom_bg".equals(value) || "@drawable/chatto_bg".equals(value)) {
-                        boolean from = "@drawable/chatfrom_bg".equals(value);
-                        String path = from ? sFromPath : sToPath;
-                        LogWriter.log(TAG, "resolver hit value=" + value + " enabled=" + sEnabled
+                    int resId = param.args.length > 4 && param.args[4] instanceof Number
+                            ? ((Number) param.args[4]).intValue() : 0;
+                    boolean isFrom = resId == sFromResId
+                            || (value != null && value.contains("chatfrom_bg"));
+                    boolean isTo = resId == sToResId
+                            || (value != null && value.contains("chatto_bg"));
+                    if (isFrom || isTo) {
+                        int kind = isFrom ? KIND_FROM : KIND_TO;
+                        String path = kind == KIND_FROM ? sFromPath : sToPath;
+                        LogWriter.log(TAG, "resolver hit value=" + value + " resId=" + resId
+                                + " enabled=" + sEnabled
                                 + " path=" + (path != null && !path.isEmpty() ? "set" : "EMPTY"));
                         if (!sEnabled) return;
-                        Drawable d = from ? loadDrawable(KIND_FROM) : loadDrawable(KIND_TO);
+                        Drawable d = loadDrawable(kind);
                         if (d != null) {
-                            LogWriter.log(TAG, "resolver REPLACE " + value);
+                            LogWriter.log(TAG, "resolver REPLACE " + value + " resId=" + resId
+                                    + " kind=" + kind);
                             param.setResult(d);
+                            View v = param.args.length > 1 && param.args[1] instanceof View
+                                    ? (View) param.args[1] : null;
+                            if (v != null) {
+                                v.setBackground(d);
+                                LogWriter.log(TAG, "resolver setBackground view="
+                                        + v.getClass().getName());
+                            }
                         }
                     }
                 } catch (Throwable ignored) {}

@@ -851,6 +851,17 @@ public final class MsgForgeHook {
                 writeStrFieldUp(msg, "field_content", content);
             } catch (Throwable ignored) {}
         }
+        // type=10000（系统消息）微信没有网络发送流程，若保持 status=1 会永远转圈。
+        // 直接标记为已发送（status=2），让 UI 显示为系统消息且不转圈。
+        if (targetType() == 10000) {
+            try {
+                XposedHelpers.callMethod(msg, "setStatus", 2);
+            } catch (Throwable ignored) {
+                try {
+                    writeIntFieldUp(msg, "field_status", 2);
+                } catch (Throwable ignored2) {}
+            }
+        }
         long msgId = 0;
         try {
             msgId = ((Number) XposedHelpers.callMethod(msg, "getMsgId")).longValue();

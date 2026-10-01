@@ -62,6 +62,7 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 当前下载服务（支持线程池 + 断点续传/Range 206）：脚本 `/tmp/opencode/range_http_server.py`，启动命令 `python3 /tmp/opencode/range_http_server.py 8085 /tmp/opencode/download`（用 background terminal 常驻）；根目录 `/tmp/opencode/download/`；外网直链 `https://8085-796f33fc01a6a82b.monkeycode-ai.online/LeShaoWeChat-v{versionCode}.apk`
   - 断点续传特性：响应头 `Accept-Ranges: bytes`，Range 请求返回 `206 Partial Content` + `Content-Range`，超范围返回 `416`；已验证 `curl -C -` 续传与 4 并发分段合并后 MD5 与源文件一致；线程池默认 32（可调 `HTTP_POOL` 环境变量）
   - 注意：旧 `python3 -m http.server` 不支持 Range（对 Range 请求返回 200 且无 Accept-Ranges/Content-Range），已弃用
+  - 8899 端口同时有活跃下载服务：根目录 `/workspace/LeShaoWeChat/LeShaoWeChatV3`（下载路径 `/download/`，如 `/download/LeShaoWeChat-v{versionCode}.apk`），外网前缀 `https://8899-796f33fc01a6a82b.monkeycode-ai.online`；发版后验证 `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8899/download/LeShaoWeChat-v{versionCode}.apk` 返回 200 即就绪
 
 ### AI 反编译审计结论（f9.Bb 接收链路实锤）
 - Date: 2026-09-24
@@ -109,3 +110,4 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - APK 已解除 gitignore (!**/build/outputs/apk/debug/*.apk)，可随源码一起推送
    - 编译后必须提供下载链接：将 APK 复制到 `/workspace/LeShaoWeChat/LeShaoWeChatV3/download/` 目录，通过 `request_preview` 端口 8000 获取预览地址，下载链接为 `预览地址/LeShaoWeChat-v814.apk`
   - 推送命令: `git push`（本地 master → 远程 master）
+  - 严禁提交 `/workspace/leshao_v3_log.txt`（用户实机日志，包含隐私，永不入 git）；提交前用 `git status --short` 核对暂存文件列表，只 add 源码与 download/index.html
