@@ -5,7 +5,6 @@ import android.content.SharedPreferences;
 import com.leshao.v3.ChatFooterLongPressMenu;
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
-import com.leshao.v3.wm.utils.WmReflect;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -512,6 +511,8 @@ public final class MsgForgeHook {
                             }
                         });
                         installed++;
+                        LogWriter.log(TAG, "SendTextLogic hooked cls=" + c.getName()
+                                + " m=" + m.getName() + "(" + java.util.Arrays.toString(pts) + ")");
                     } catch (Throwable ignored) {}
                 }
             }
@@ -632,20 +633,10 @@ public final class MsgForgeHook {
             LogWriter.log(TAG, "ui intercept " + mname + " talker 未知, 放行原发送 text=" + trunc(original, 20));
             return;
         }
-        String content = apply(original);
-        if (content == null) return;
-        int type = targetType();
-        // 先经官方通道按伪造 type 发送，成功后再拦截原发送；重发失败则放行原发送，
-        // 避免「伪造发送失败 + 原发送被拦截」导致用户消息丢失。
-        boolean ok = WmReflect.sendTextMsg(cl, content, talker, type, targetFlag());
-        if (!ok) {
-            LogWriter.log(TAG, "ui intercept " + mname + ": 伪造重发失败, 放行原发送 talker=" + talker);
-            return;
-        }
-        try {
-            p.setResult(defaultReturnValue(methodReturnType(p)));
-        } catch (Throwable ignored) {}
-        LogWriter.log(TAG, "ui intercept " + mname + " resend type=" + type + " ok=true"
+        // 不再“预发送 + 拦截原发送”（会导致消息上屏后状态无人更新而一直转圈）。
+        // 直接放行原发送：真实发送会流经 SendTextLogic 链路补丁（installLogicPatch），
+        // 由 patchLogicArgs 就地改写 content/type，微信原生完成上屏与状态流转。
+        LogWriter.log(TAG, "ui intercept " + mname + " 放行, 由逻辑链路改写 type=" + targetType()
                 + " talker=" + talker + " text=" + trunc(original, 30));
     }
 
@@ -657,27 +648,5 @@ public final class MsgForgeHook {
 
     private static String trunc(String s, int m) {
         return s == null ? "" : s.length() > m ? s.substring(0, m) + "..." : s;
-    }
-
-    private static Object defaultReturnValue(Class<?> rt) {
-        if (rt == null || rt == void.class || rt == Void.class) return null;
-        if (rt == boolean.class) return false;
-        if (rt == int.class) return 0;
-        if (rt == long.class) return 0L;
-        if (rt == float.class) return 0f;
-        if (rt == double.class) return 0d;
-        if (rt == short.class) return (short) 0;
-        if (rt == byte.class) return (byte) 0;
-        if (rt == char.class) return '\0';
-        return null;
-    }
-
-    private static Class<?> methodReturnType(XC_MethodHook.MethodHookParam param) {
-        try {
-            if (param.method instanceof java.lang.reflect.Method) {
-                return ((java.lang.reflect.Method) param.method).getReturnType();
-            }
-        } catch (Throwable ignored) {}
-        return null;
     }
 }

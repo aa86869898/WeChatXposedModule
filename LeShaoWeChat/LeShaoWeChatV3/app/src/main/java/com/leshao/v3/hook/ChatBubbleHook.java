@@ -20,6 +20,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -236,22 +239,50 @@ public final class ChatBubbleHook {
     }
 
     private static void installBubbleResolver(ClassLoader cl) throws Throwable {
-        Class<?> resCls = XposedHelpers.findClass("kw5.g", cl);
-        // 本环境 R8 改写 XposedHelpers 的 varargs findAndHookMethod，统一走反射 + hookMethod
+        if (!DexKitHelper.isScanComplete()) {
+            throw new IllegalStateException("DexKit scan not ready");
+        }
+        // 文档第 5 节：search_strings("chatfrom_bg"/"chatto_bg") → X2C 生成类，
+        // 其父类才是资源解析包装层（含 r(Context,View,String,String,int)→Drawable）。
+        List<String> genClasses = new ArrayList<>();
+        for (String kw : new String[]{"chatfrom_bg", "chatto_bg"}) {
+            try {
+                List<String> sigs = DexKitHelper.findMethodsByString(cl, null, kw);
+                for (String sig : sigs) {
+                    String cn = classNameOf(sig);
+                    if (cn != null && !genClasses.contains(cn)) genClasses.add(cn);
+                }
+            } catch (Throwable ignored) {}
+        }
+        if (genClasses.isEmpty()) {
+            throw new NoSuchMethodException("no X2C class contains chatfrom_bg/chatto_bg");
+        }
+        LogWriter.log(TAG, "X2C gen classes=" + genClasses);
         Method target = null;
-        for (Method m : resCls.getDeclaredMethods()) {
-            Class<?>[] pts = m.getParameterTypes();
-            if ("r".equals(m.getName()) && pts.length == 5
-                    && pts[0] == Context.class && pts[1] == View.class
-                    && pts[2] == String.class && pts[3] == String.class
-                    && pts[4] == int.class) {
-                target = m;
-                break;
+        Class<?> owner = null;
+        for (String cn : genClasses) {
+            Class<?> c;
+            try {
+                c = XposedHelpers.findClass(cn, cl);
+            } catch (Throwable t) {
+                continue;
             }
+            for (Class<?> sup = c.getSuperclass(); sup != null && sup != Object.class; sup = sup.getSuperclass()) {
+                Method m = findResolver(sup);
+                if (m != null) {
+                    target = m;
+                    owner = sup;
+                    break;
+                }
+            }
+            if (target != null) break;
         }
         if (target == null) {
-            throw new NoSuchMethodException("kw5.g.r(Context,View,String,String,int)");
+            throw new NoSuchMethodException("resolver r(Context,View,String,String,int) not found");
         }
+        final Class<?> fOwner = owner;
+        LogWriter.log(TAG, "resolver class=" + fOwner.getName()
+                + " method=" + target.getName() + Arrays.toString(target.getParameterTypes()));
         target.setAccessible(true);
         XposedBridge.hookMethod(target, new XC_MethodHook() {
             @Override
@@ -274,6 +305,30 @@ public final class ChatBubbleHook {
                 } catch (Throwable ignored) {}
             }
         });
+    }
+
+    private static Method findResolver(Class<?> c) {
+        if (c == null) return null;
+        for (Method m : c.getDeclaredMethods()) {
+            Class<?>[] pts = m.getParameterTypes();
+            if ("r".equals(m.getName()) && pts.length == 5
+                    && pts[0] == Context.class && pts[1] == View.class
+                    && pts[2] == String.class && pts[3] == String.class
+                    && pts[4] == int.class) {
+                return m;
+            }
+        }
+        return null;
+    }
+
+    /** 从 "pkg.Cls.method(params)" 解析出声明类全名。 */
+    private static String classNameOf(String sig) {
+        if (sig == null) return null;
+        int p = sig.indexOf('(');
+        if (p < 0) p = sig.length();
+        String head = sig.substring(0, p);
+        int dot = head.lastIndexOf('.');
+        return dot > 0 ? head.substring(0, dot) : null;
     }
 
     private static Drawable loadDrawable(int kind) {

@@ -292,7 +292,7 @@ public final class FavVoiceForwardHook {
         try {
             List<String> sigs = DexKitHelper.findMethodsByString(cl, clsName, keyword);
             for (String sig : sigs) {
-                int dot = sig.indexOf('.');
+                int dot = sig.lastIndexOf('.');
                 int paren = sig.indexOf('(');
                 if (dot >= 0 && paren > dot) {
                     String mn = sig.substring(dot + 1, paren);
@@ -309,7 +309,7 @@ public final class FavVoiceForwardHook {
         try {
             List<String> sigs = DexKitHelper.findMethodsByString(cl, clsName, keyword);
             for (String sig : sigs) {
-                int dot = sig.indexOf('.');
+                int dot = sig.lastIndexOf('.');
                 int paren = sig.indexOf('(');
                 if (dot >= 0 && paren > dot) {
                     String mn = sig.substring(dot + 1, paren);
