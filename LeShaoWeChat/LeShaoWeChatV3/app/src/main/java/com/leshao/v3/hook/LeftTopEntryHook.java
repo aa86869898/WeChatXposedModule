@@ -1,7 +1,10 @@
 package com.leshao.v3.hook;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -11,9 +14,13 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import com.leshao.v3.CornerMenu;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.ui.AppColors;
+import com.leshao.v3.ui.CandyUi;
 import com.leshao.v3.wm.utils.WmPrefs;
 
 import java.lang.ref.WeakReference;
@@ -345,36 +352,77 @@ public final class LeftTopEntryHook {
         return iv;
     }
 
-    /** 点击左上角入口弹出快捷菜单：模块主页 / 一键群聊免打扰 / 一键解除群聊免打扰。 */
+    /** 点击左上角入口弹出快捷菜单：模块主页 / 一键群聊免打扰 / 一键解除群聊免打扰。
+     *  菜单界面适配模块 M3 主题配色（surface 背景 + primary 标题 + 行按压反馈）。 */
     public static void showMenu(final Activity act) {
         if (act == null || act.isFinishing()) return;
         final String[] items = {"模块主页", "一键群聊免打扰", "一键解除群聊免打扰"};
         try {
-            new android.app.AlertDialog.Builder(act)
-                    .setTitle("乐少模块")
-                    .setItems(items, (d, which) -> {
-                        try {
-                            switch (which) {
-                                case 0:
-                                    com.leshao.v3.ui.MainActivity.open(act);
-                                    break;
-                                case 1:
-                                    runMute(act, true);
-                                    break;
-                                case 2:
-                                    runMute(act, false);
-                                    break;
-                                default:
-                                    break;
-                            }
-                        } catch (Throwable e) {
-                            LogWriter.log(TAG, "menu item err: " + e);
-                        }
-                    })
+            final float d = act.getResources().getDisplayMetrics().density;
+            Context ctx = act;
+
+            LinearLayout panel = new LinearLayout(ctx);
+            panel.setOrientation(LinearLayout.VERTICAL);
+            panel.setPadding((int) (18 * d), (int) (10 * d), (int) (18 * d), (int) (10 * d));
+            panel.setBackgroundColor(AppColors.windowBg());
+
+            TextView title = new TextView(ctx);
+            title.setText("乐少模块");
+            title.setTextSize(18);
+            title.setTextColor(AppColors.primary());
+            title.setTypeface(Typeface.DEFAULT_BOLD);
+            title.setPadding((int) (8 * d), (int) (8 * d), (int) (8 * d), (int) (6 * d));
+            panel.addView(title);
+
+            final AlertDialog[] ref = {null};
+            for (int i = 0; i < items.length; i++) {
+                final int which = i;
+                TextView item = new TextView(ctx);
+                item.setText(items[i]);
+                item.setTextSize(15);
+                item.setTextColor(AppColors.onSurface());
+                item.setPadding((int) (8 * d), (int) (12 * d), (int) (8 * d), (int) (12 * d));
+                item.setBackground(CandyUi.rowPressBg(ctx));
+                item.setOnClickListener(v -> {
+                    try {
+                        if (ref[0] != null && ref[0].isShowing()) ref[0].dismiss();
+                    } catch (Throwable ignored) {}
+                    handleMenuClick(act, which);
+                });
+                panel.addView(item);
+            }
+
+            ref[0] = new AlertDialog.Builder(act)
+                    .setView(panel)
                     .setCancelable(true)
-                    .show();
+                    .create();
+            if (ref[0].getWindow() != null) {
+                ref[0].getWindow().setBackgroundDrawable(new ColorDrawable(AppColors.windowBg()));
+            }
+            ref[0].show();
         } catch (Throwable e) {
             LogWriter.log(TAG, "showMenu err: " + e);
+        }
+    }
+
+    /** 菜单项点击处理。 */
+    private static void handleMenuClick(Activity act, int which) {
+        try {
+            switch (which) {
+                case 0:
+                    com.leshao.v3.ui.MainActivity.open(act);
+                    break;
+                case 1:
+                    runMute(act, true);
+                    break;
+                case 2:
+                    runMute(act, false);
+                    break;
+                default:
+                    break;
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "menu item err: " + e);
         }
     }
 

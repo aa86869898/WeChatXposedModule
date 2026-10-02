@@ -386,9 +386,9 @@ public final class MsgForgeHook {
     }
 
     /** 提取 @ 提及前缀并将昵称脱敏为空白：微信 content 中 @ 目标以 \u2005 分隔
-     *  （@昵称1\u2005@昵称2\u2005正文）。只保留「@」与「\u2005」结构，跳过昵称字符，
-     *  返回形如「@\u2005@\u2005」的前缀。返回 null 表示 content 不含 \u2005
-     *  （@ 关系仅在 msgsource，content 无 @ 提及显示）。 */
+     *  （@昵称1\u2005@昵称2\u2005正文）。只保留「第一个@」与「\u2005」分隔结构，
+     *  其余 @ 与昵称全部跳过（脱敏），返回形如「@\u2005\u2005」的前缀。
+     *  返回 null 表示 content 不含 \u2005（@ 关系仅在 msgsource，content 无 @ 提及显示）。 */
     private static String maskedAtPrefix(String content) {
         if (content == null) return null;
         int idx = content.lastIndexOf('\u2005');
@@ -396,12 +396,17 @@ public final class MsgForgeHook {
         String head = content.substring(0, idx + 1);
         StringBuilder sb = new StringBuilder();
         boolean inAt = false;
+        boolean atKept = false;
         int len = head.length();
         for (int i = 0; i < len; i++) {
             char c = head.charAt(i);
             if (c == '@' && !inAt) {
                 inAt = true;
-                sb.append('@');
+                // 只保留第一个 @，避免群聊 @ 多人时伪装消息出现多个 @ 字符
+                if (!atKept) {
+                    sb.append('@');
+                    atKept = true;
+                }
             } else if (c == '\u2005') {
                 inAt = false;
                 sb.append('\u2005');

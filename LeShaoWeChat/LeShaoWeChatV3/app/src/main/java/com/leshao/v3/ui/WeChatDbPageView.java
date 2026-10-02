@@ -85,21 +85,16 @@ public final class WeChatDbPageView {
         root.setPadding(p12, p12, p12, (int) (24 * d));
         sv.addView(root);
 
-        // 数据库状态
-        LinearLayout cardStatus = PageKit.makeCard(ctx, d);
-        cardStatus.addView(PageKit.sectionLabel(ctx, "数据库状态"));
-        final TextView statusText = PageKit.bodyText(ctx,
-                "内存缓存：联系人 " + ContactRepository.getFriends().size()
-                        + " / 群聊 " + ContactRepository.getGroups().size());
-        cardStatus.addView(statusText);
-        cardStatus.addView(PageKit.actionButton(ctx, "重新加载通讯录", v -> {
-            statusText.setText("加载中…");
-            ContactRepository.loadAsync(() -> act.runOnUiThread(() -> {
-                statusText.setText("内存缓存：联系人 " + ContactRepository.getFriends().size()
-                        + " / 群聊 " + ContactRepository.getGroups().size());
-            }));
-        }));
-        root.addView(cardStatus);
+        // 搜索框（顶部）
+        final EditText search = new EditText(ctx);
+        search.setHint("搜索名称 / 微信号 / 备注");
+        search.setHintTextColor(AppColors.onSurfaceVariant());
+        search.setTextSize(14);
+        search.setTextColor(AppColors.onSurface());
+        search.setSingleLine(true);
+        search.setPadding(p12, (int) (10 * d), p12, (int) (10 * d));
+        search.setBackground(CandyUi.inputBg(ctx));
+        root.addView(search);
 
         // 页签
         final int friendCount = ContactRepository.getFriends().size();
@@ -115,49 +110,49 @@ public final class WeChatDbPageView {
         tabBox.addView(tabs);
         root.addView(tabBox);
 
-        // 搜索框
-        final EditText search = new EditText(ctx);
-        search.setHint("搜索名称 / 微信号 / 备注");
-        search.setHintTextColor(AppColors.onSurfaceVariant());
-        search.setTextSize(14);
-        search.setTextColor(AppColors.onSurface());
-        search.setSingleLine(true);
-        search.setPadding(p12, (int) (10 * d), p12, (int) (10 * d));
-        search.setBackground(CandyUi.inputBg(ctx));
-        root.addView(search);
-
-        // 列表容器（页面整体由外层 ScrollView 滚动，这里直接展开所有行）
+        // 列表区域（固定高度约10行，内部滚动）
         final LinearLayout listRoot = new LinearLayout(ctx);
         listRoot.setOrientation(LinearLayout.VERTICAL);
         listRoot.setPadding(0, p4, 0, p4);
-        root.addView(listRoot);
+        ScrollView listScroll = new ScrollView(ctx);
+        listScroll.setFillViewport(true);
+        listScroll.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, (int) (10 * 52 * d)));
+        listScroll.addView(listRoot);
+        root.addView(listScroll);
 
-        final TextView topInfo = PageKit.bodyText(ctx, "点击行可多选，底部可复制选中项。");
+        final TextView topInfo = PageKit.bodyText(ctx, "共 0 项，已选 0 项");
+        topInfo.setPadding(0, p4, 0, p4);
         root.addView(topInfo);
 
-        // 底部操作栏
+        // 底部操作栏：取消 / 全选(取消勾选) / 确定
         LinearLayout bottom = new LinearLayout(ctx);
         bottom.setOrientation(LinearLayout.HORIZONTAL);
         bottom.setGravity(Gravity.CENTER);
         bottom.setPadding(0, p8, 0, 0);
 
-        final ModernButton copyBtn = new ModernButton(ctx, "复制选中", ModernButton.STYLE_PRIMARY);
-        final ModernButton clearBtn = new ModernButton(ctx, "清空", ModernButton.STYLE_GHOST);
-        final ModernButton allBtn = new ModernButton(ctx, "全选当前", ModernButton.STYLE_TEXT);
+        final ModernButton cancelBtn = new ModernButton(ctx, "取消", ModernButton.STYLE_GHOST);
+        final ModernButton toggleBtn = new ModernButton(ctx, "全选", ModernButton.STYLE_TEXT);
+        final ModernButton okBtn = new ModernButton(ctx, "确定", ModernButton.STYLE_PRIMARY);
 
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
         btnLp.setMargins(p4, 0, p4, 0);
-        bottom.addView(copyBtn, btnLp);
-        bottom.addView(clearBtn, btnLp);
-        bottom.addView(allBtn, btnLp);
+        bottom.addView(cancelBtn, btnLp);
+        bottom.addView(toggleBtn, btnLp);
+        bottom.addView(okBtn, btnLp);
         root.addView(bottom);
 
         // 初始化状态与刷新
         final State state = new State(search, listRoot, topInfo);
         loadLabelNames(ctx, state.labelNames);
 
-        final Runnable refresh = () -> refreshList(ctx, state);
+        final Runnable refresh = () -> {
+            List<ContactCard> vis = visibleCards(state);
+            boolean allSelected = !vis.isEmpty() && state.selected.containsAll(idsOf(vis));
+            toggleBtn.setText(allSelected ? "取消勾选" : "全选");
+            refreshList(ctx, state);
+        };
 
         tabs.setOnSegmentChangedListener((index, label) -> {
             state.tab = index;
@@ -171,7 +166,26 @@ public final class WeChatDbPageView {
             @Override public void afterTextChanged(Editable s) { refresh.run(); }
         });
 
-        copyBtn.onClick(() -> {
+        cancelBtn.onClick(() -> {
+            try {
+                SubPageActivity.closePage(act);
+            } catch (Throwable t1) {
+                try { act.finish(); } catch (Throwable t2) {}
+            }
+        });
+
+        toggleBtn.onClick(() -> {
+            List<ContactCard> visible = visibleCards(state);
+            if (visible.isEmpty()) return;
+            Set<String> ids = idsOf(visible);
+            boolean allSelected = !visible.isEmpty() && state.selected.containsAll(ids);
+            if (allSelected) state.selected.removeAll(ids);
+            else state.selected.addAll(ids);
+            toggleBtn.setText(allSelected ? "全选" : "取消勾选");
+            refresh.run();
+        });
+
+        okBtn.onClick(() -> {
             if (state.selected.isEmpty()) {
                 Toast.makeText(ctx, "尚未选择任何项", Toast.LENGTH_SHORT).show();
                 return;
@@ -192,30 +206,16 @@ public final class WeChatDbPageView {
                 ClipboardManager cm = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
                 cm.setText(sb.toString());
                 Toast.makeText(ctx, "已复制 " + state.selected.size() + " 项", Toast.LENGTH_SHORT).show();
+                try {
+                    SubPageActivity.closePage(act);
+                } catch (Throwable ignored) {}
             } catch (Throwable t) {
                 Toast.makeText(ctx, "复制失败", Toast.LENGTH_SHORT).show();
             }
         });
 
-        clearBtn.onClick(() -> {
-            state.selected.clear();
-            refresh.run();
-        });
-
-        allBtn.onClick(() -> {
-            List<ContactCard> visible = visibleCards(state);
-            if (visible.isEmpty()) return;
-            Set<String> ids = idsOf(visible);
-            boolean allSelected = !visible.isEmpty() && state.selected.containsAll(ids);
-            if (allSelected) state.selected.removeAll(ids);
-            else state.selected.addAll(ids);
-            refresh.run();
-        });
-
         // 数据加载完成后刷新；已缓存则立即刷新
         ContactRepository.loadAsync(() -> act.runOnUiThread(() -> {
-            statusText.setText("内存缓存：联系人 " + ContactRepository.getFriends().size()
-                    + " / 群聊 " + ContactRepository.getGroups().size());
             state.recentTimes = loadRecentTimes();
             refresh.run();
         }));
@@ -283,7 +283,7 @@ public final class WeChatDbPageView {
         Map<String, Integer> counts = labelCounts();
         if (counts.isEmpty()) {
             addEmpty(ctx, state.listRoot,
-                    "联系人中没有标签数据（contactLabelIds 为空）。\n可尝试点击上方「重新加载通讯录」。");
+                    "联系人中没有标签数据（contactLabelIds 为空）。");
             state.topInfo.setText("标签聚合");
             return;
         }
@@ -411,19 +411,18 @@ public final class WeChatDbPageView {
     }
 
     private static String subTitle(ContactCard c) {
-        StringBuilder sb = new StringBuilder();
         if (c.category == Category.GROUP) {
-            sb.append(c.username);
-        } else {
-            if (c.alias != null && !c.alias.isEmpty()) sb.append("微信号 ").append(c.alias);
-            if (c.conRemark != null && !c.conRemark.isEmpty()) {
-                if (sb.length() > 0) sb.append("  ");
-                sb.append("备注 ").append(c.conRemark);
-            }
-            if (c.contactLabelIds != null && !c.contactLabelIds.isEmpty()) {
-                if (sb.length() > 0) sb.append("  ");
-                sb.append("标签 ").append(c.contactLabelIds);
-            }
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        if (c.alias != null && !c.alias.isEmpty()) sb.append("微信号 ").append(c.alias);
+        if (c.conRemark != null && !c.conRemark.isEmpty()) {
+            if (sb.length() > 0) sb.append("  ");
+            sb.append("备注 ").append(c.conRemark);
+        }
+        if (c.contactLabelIds != null && !c.contactLabelIds.isEmpty()) {
+            if (sb.length() > 0) sb.append("  ");
+            sb.append("标签 ").append(c.contactLabelIds);
         }
         return sb.toString();
     }

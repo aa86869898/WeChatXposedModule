@@ -79,6 +79,11 @@ public class SubPageActivity {
         openInternal(parentAct, title, pageId, false);
     }
 
+    /** 页面底部「取消/确定」等场景：关闭当前子页面弹窗并回到上一级。 */
+    public static void closePage(Activity parentAct) {
+        goBack(parentAct != null ? parentAct : sParentAct, true);
+    }
+
     private static void openInternal(Activity parentAct, String title, int pageId, boolean pushCurrent) {
         if (ActivationManager.isCurrentUserBlocked()) {
             showBlacklistBlock(parentAct);

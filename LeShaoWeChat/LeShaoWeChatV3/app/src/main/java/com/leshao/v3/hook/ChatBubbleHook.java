@@ -701,11 +701,22 @@ public final class ChatBubbleHook {
         return null;
     }
 
-    /** 与 ke5.a.i 记录的微信原始气泡 Drawable 对比 constantState。 */
+    /** 与 ke5.a.i 记录的微信原始气泡 Drawable 对比 constantState。
+     *  文本气泡背景是 StateListDrawable（selector），内部状态子项含原生气泡资源，
+     *  递归匹配子 Drawable，否则文本气泡（selector）会被 setBackground 拦截路径跳过。 */
     private static int matchBaseDrawable(Drawable d) {
+        if (d == null) return -1;
         try {
             if (sFromBaseDrawable != null && sameConstant(sFromBaseDrawable, d)) return KIND_FROM;
             if (sToBaseDrawable != null && sameConstant(sToBaseDrawable, d)) return KIND_TO;
+            if (d instanceof android.graphics.drawable.StateListDrawable) {
+                android.graphics.drawable.StateListDrawable sld =
+                        (android.graphics.drawable.StateListDrawable) d;
+                for (int i = 0; i < sld.getStateCount(); i++) {
+                    int k = matchBaseDrawable(sld.getStateDrawable(i));
+                    if (k >= 0) return k;
+                }
+            }
         } catch (Throwable ignored) {}
         return -1;
     }
