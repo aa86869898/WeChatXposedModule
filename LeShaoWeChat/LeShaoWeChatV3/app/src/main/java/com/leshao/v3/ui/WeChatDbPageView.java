@@ -39,8 +39,9 @@ import java.util.Set;
 
 /**
  * 数据库直读 - 新版联系人选择器。
- * 数据源为 ContactRepository 内存缓存（日志证实 53 好友 / 105 群 / 63 服务号），
+ * 数据源为 ContactRepository 内存缓存（日志证实 53 好友 / 105 群），
  * 不依赖 rawQuery 结果，保证选择器窗口可独立运行。
+ * 页签仅保留 全部 / 好友 / 群聊 / 标签，服务号订阅号一律过滤不展示。
  * 标签页从联系人 contactLabelIds 聚合，性别按资料包结论展示。
  */
 public final class WeChatDbPageView {
@@ -48,8 +49,7 @@ public final class WeChatDbPageView {
     private static final int TAB_ALL = 0;
     private static final int TAB_FRIEND = 1;
     private static final int TAB_GROUP = 2;
-    private static final int TAB_SERVICE = 3;
-    private static final int TAB_LABEL = 4;
+    private static final int TAB_LABEL = 3;
 
     private WeChatDbPageView() {}
 
@@ -90,15 +90,13 @@ public final class WeChatDbPageView {
         cardStatus.addView(PageKit.sectionLabel(ctx, "数据库状态"));
         final TextView statusText = PageKit.bodyText(ctx,
                 "内存缓存：联系人 " + ContactRepository.getFriends().size()
-                        + " / 群聊 " + ContactRepository.getGroups().size()
-                        + " / 服务号 " + ContactRepository.getServiceAccounts().size());
+                        + " / 群聊 " + ContactRepository.getGroups().size());
         cardStatus.addView(statusText);
         cardStatus.addView(PageKit.actionButton(ctx, "重新加载通讯录", v -> {
             statusText.setText("加载中…");
             ContactRepository.loadAsync(() -> act.runOnUiThread(() -> {
                 statusText.setText("内存缓存：联系人 " + ContactRepository.getFriends().size()
-                        + " / 群聊 " + ContactRepository.getGroups().size()
-                        + " / 服务号 " + ContactRepository.getServiceAccounts().size());
+                        + " / 群聊 " + ContactRepository.getGroups().size());
             }));
         }));
         root.addView(cardStatus);
@@ -106,12 +104,10 @@ public final class WeChatDbPageView {
         // 页签
         final int friendCount = ContactRepository.getFriends().size();
         final int groupCount = ContactRepository.getGroups().size();
-        final int serviceCount = ContactRepository.getServiceAccounts().size();
         SegmentedControl tabs = new SegmentedControl(ctx,
                 new String[]{"全部",
                         "联系人(" + friendCount + ")",
                         "群聊(" + groupCount + ")",
-                        "服务号(" + serviceCount + ")",
                         "标签"}, TAB_ALL);
         LinearLayout tabBox = new LinearLayout(ctx);
         tabBox.setOrientation(LinearLayout.VERTICAL);
@@ -181,7 +177,7 @@ public final class WeChatDbPageView {
                 return;
             }
             StringBuilder sb = new StringBuilder();
-            List<ContactCard> all = ContactRepository.getAll();
+            List<ContactCard> all = allContacts();
             int i = 0;
             for (String wid : state.selected) {
                 ContactCard c = findCard(all, wid);
@@ -219,8 +215,7 @@ public final class WeChatDbPageView {
         // 数据加载完成后刷新；已缓存则立即刷新
         ContactRepository.loadAsync(() -> act.runOnUiThread(() -> {
             statusText.setText("内存缓存：联系人 " + ContactRepository.getFriends().size()
-                    + " / 群聊 " + ContactRepository.getGroups().size()
-                    + " / 服务号 " + ContactRepository.getServiceAccounts().size());
+                    + " / 群聊 " + ContactRepository.getGroups().size());
             state.recentTimes = loadRecentTimes();
             refresh.run();
         }));
@@ -433,15 +428,21 @@ public final class WeChatDbPageView {
         return sb.toString();
     }
 
+    /** 全部数据 = 好友 + 群聊，服务号订阅号不展示。 */
+    private static List<ContactCard> allContacts() {
+        List<ContactCard> all = new ArrayList<>();
+        all.addAll(ContactRepository.getFriends());
+        all.addAll(ContactRepository.getGroups());
+        return all;
+    }
+
     private static List<ContactCard> visibleCards(State state) {
         String query = state.search.getText().toString().toLowerCase().trim();
         List<ContactCard> src;
         if (state.tab == TAB_ALL) {
-            src = ContactRepository.getAll();
+            src = allContacts();
         } else if (state.tab == TAB_GROUP) {
             src = ContactRepository.getGroups();
-        } else if (state.tab == TAB_SERVICE) {
-            src = ContactRepository.getServiceAccounts();
         } else if (state.tab == TAB_LABEL && state.currentLabelId != null) {
             src = cardsWithLabel(ContactRepository.getFriends(), state.currentLabelId);
         } else {
@@ -480,7 +481,6 @@ public final class WeChatDbPageView {
         Map<String, Integer> map = new LinkedHashMap<>();
         List<ContactCard> src = new ArrayList<>();
         src.addAll(ContactRepository.getFriends());
-        src.addAll(ContactRepository.getServiceAccounts());
         for (ContactCard c : src) {
             if (c.contactLabelIds == null) continue;
             for (String p : c.contactLabelIds.split(",")) {
