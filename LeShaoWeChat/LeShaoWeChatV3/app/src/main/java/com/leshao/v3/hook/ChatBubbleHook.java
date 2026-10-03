@@ -681,8 +681,11 @@ public final class ChatBubbleHook {
                     if (!isBubbleContext((View) param.thisObject)) return; // v3.0.131
                     Drawable d = (Drawable) param.args[0];
                     int kind = matchBaseDrawable(d);
-if (kind < 0) {
-                            debugDumpUnmatchedTextBubble((View) param.thisObject, d);
+                        if (kind < 0) {
+                            // v3.0.137：已被自定义气泡替换的背景不视为 UNMATCHED，避免误报刷屏。
+                            if (!isCustomBackground(d)) {
+                                debugDumpUnmatchedTextBubble((View) param.thisObject, d);
+                            }
                             return;
                         }
                         Drawable custom = loadDrawable(kind);
@@ -800,7 +803,10 @@ if (kind < 0) {
                         Drawable d = (Drawable) param.args[0];
                         int kind = matchBaseDrawable(d);
                         if (kind < 0) {
-                            debugDumpUnmatchedTextBubble((View) param.thisObject, d);
+                            // v3.0.137：已被自定义气泡替换的背景不视为 UNMATCHED，避免误报刷屏。
+                            if (!isCustomBackground(d)) {
+                                debugDumpUnmatchedTextBubble((View) param.thisObject, d);
+                            }
                             return;
                         }
                         Drawable custom = loadDrawable(kind);
@@ -956,22 +962,25 @@ if (kind < 0) {
         };
         int hooked = 0;
         for (String cn : holderCands) {
+            // v3.0.137：仅 to 类(文字)排除 View 参数重载 —— v3.0.135 卡死根因是 to 类某 View 参数
+            // 重载在非聊天场景被调用，findBubbleViewInTree 遍历整棵 View 树。
+            // mq 类(语音)必须保留全部 b 方法：mq.b(View,boolean,boolean) 是语音消息绑定主路径，
+            // v3.0.136 误过滤导致语音气泡失效（实测语音消息不起作用）。
+            boolean strictViewFilter = cn.contains(".to");
             for (Class<?> toCls : HookUtil.loadClasses(cl, cn)) {
                 for (Method m : toCls.getDeclaredMethods()) {
                     if (!"b".equals(m.getName())) continue;
-                    // v3.0.136：收紧 hook 条件。v3.0.135 全量 hook 所有 b 方法导致主线程卡死：
-                    // 若某重载参数含 View，after 中 findBubbleViewInTree 会递归遍历整棵 View 树。
-                    // 这里排除参数含 View/ViewGroup 的重载（可能被非聊天场景调用且遍历开销巨大），
-                    // 保留消息绑定相关重载（参数为消息实体/数据类/布尔），语音 mq.b 不受影响。
                     Class<?>[] pts = m.getParameterTypes();
-                    boolean hasViewParam = false;
-                    for (Class<?> pt : pts) {
-                        if (View.class.isAssignableFrom(pt)) {
-                            hasViewParam = true;
-                            break;
+                    if (strictViewFilter) {
+                        boolean hasViewParam = false;
+                        for (Class<?> pt : pts) {
+                            if (View.class.isAssignableFrom(pt)) {
+                                hasViewParam = true;
+                                break;
+                            }
                         }
+                        if (hasViewParam) continue;
                     }
-                    if (hasViewParam) continue;
                     m.setAccessible(true);
                     final String owner = cn;
                     final String methodSig = m.getName() + Arrays.toString(pts);
