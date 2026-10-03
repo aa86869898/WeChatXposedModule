@@ -93,6 +93,40 @@ public class AdBlockerHook {
         }
     }
 
+    /**
+     * v3.0.127: 仅在 {@code :appbrand0~4} 子进程调用 —— 只安装小程序（AppBrand）去广告 Hook。
+     *
+     * <p>小程序开屏广告全链路（{@code d7.K2} / {@code lc1.*} / {@code AppBrandAdUI}）都跑在
+     * {@code :appbrand0~4} 子进程，主进程安装的这些 Hook 在子进程永不触发（见《去广告最终文档.md》）。
+     * 子进程无需朋友圈/视频号/落地页 Hook，也不做 UI 注入，故只挂 {@link #hookAppBrand}，保持最小开销。</p>
+     *
+     * <p>与 {@link #hook(ClassLoader)} 共用 {@link #sEnabled}/{@link #sHooked} 门控，单进程内幂等。</p>
+     */
+    public static void hookAppBrandOnly(final ClassLoader cl) {
+        try {
+            boolean enabled = HookConfig.isEnabled(PREF_ENABLED);
+            sEnabled = enabled;
+            if (!enabled) {
+                LogWriter.log(TAG, "appBrandOnly: disabled (key=" + PREF_ENABLED + ")");
+                return;
+            }
+            if (sHooked) return;
+            sHooked = true;
+
+            LogWriter.log(TAG, "appBrandOnly: install start...");
+            sExecutor.execute(() -> {
+                try {
+                    hookAppBrand(cl);          // 仅小程序
+                    LogWriter.log(TAG, "appBrandOnly: install done");
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "appBrandOnly install err: " + t);
+                }
+            });
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "appBrandOnly err: " + t);
+        }
+    }
+
     // ============================================================
     // 1. 小程序（AppBrand）
     // ============================================================
@@ -126,9 +160,14 @@ public class AdBlockerHook {
         hookByNameParamCount(cl, splashLogic, "l", 1, null, "appbrand.sendShouldShowAdIfNeed");
 
         // 1.5 兜底: 开屏广告宿主 Activity 一起来就 finish
-        //     实测微信 3180 仅存在 AppBrandAdUI（:appbrand0 槽位），
-        //     AppBrandAdUI1..4 已从 APK 移除，硬编码会刷 NoSuchMethodException 噪音，故仅保留 0。
-        hookActivityFinishOnCreate(cl, "com.tencent.mm.plugin.appbrand.ad.ui.AppBrandAdUI", "appbrand.AdUI");
+        //     微信按进程槽位拆分 Activity：AppBrandAdUI(=slot0) / AppBrandAdUI1..4。
+        //     各槽位与 :appbrand0..4 一一对应，全部挂 finish 才能覆盖"第 2+ 个小程序"。
+        //     (见《去广告最终文档.md》附带发现 1；不存在的槽位类静默跳过，不刷日志。)
+        for (int slot = 0; slot <= 4; slot++) {
+            final String adUi = "com.tencent.mm.plugin.appbrand.ad.ui.AppBrandAdUI"
+                    + (slot == 0 ? "" : String.valueOf(slot));
+            hookActivityFinishOnCreateQuiet(cl, adUi, "appbrand.AdUI" + (slot == 0 ? "" : slot));
+        }
 
         // 1.6 兜底: "..."菜单广告 footer 不显示 (setPageView(pageView) 共 1 参)
         hookByNameParamCount(cl, "com.tencent.mm.plugin.appbrand.ad.ui.AppBrandMenuFooter",
@@ -143,65 +182,9 @@ public class AdBlockerHook {
                     }
                 }, "appbrand.JsApiShowSplashAd");
 
-        // 1.8 小程序内广告 JSAPI（banner / 插屏 / 激励视频）
-        //     小程序内广告没有独立宿主开关类，创建入口走 wx.createXxxAd 系列 JSAPI。
-        //     这里用 DexKit 方法字符串锚点跨版本定位这些 JSAPI 实现，命中后返回 fail，
-        //     小程序侧拿不到广告对象即无法渲染（仅限 appbrand.jsapi 包、且返回 String/void，避免误伤其它 JSAPI）。
-        hookAppBrandJsApiAds(cl);
-    }
-
-    /**
-     * 拦截小程序内广告创建类 JSAPI（createRewardedVideoAd / createInterstitialAd / createBannerAd）。
-     * <p>微信每个 JSAPI 都是独立实现类（见 {@code appbrand.ad.jsapi.*}），方法体内含 JSAPI 名字符串。
-     * 用 DexKit 全局方法字符串搜索定位，限定 {@code com.tencent.mm.plugin.appbrand.jsapi} 包，
-     * 且方法返回类型为 {@link String} 或 {@code void} 时才 hook，降低误伤其它 JSAPI 的风险。</p>
-     */
-    private static void hookAppBrandJsApiAds(ClassLoader cl) {
-        final String[] keys = {
-                "createRewardedVideoAd", "createInterstitialAd", "createBannerAd", "createVideoAd"
-        };
-        for (final String key : keys) {
-            try {
-                List<String> sigs = DexKitHelper.findMethodsByString(cl, null, key);
-                if (sigs == null || sigs.isEmpty()) continue;
-                int hooked = 0;
-                for (String sig : sigs) {
-                    String[] parsed = parseSig(sig);
-                    if (parsed == null) continue;
-                    if (!parsed[0].startsWith("com.tencent.mm.plugin.appbrand.jsapi")) continue;
-                    Class<?> c = loadClass(cl, parsed[0]);
-                    if (c == null) continue;
-                    for (Method m : c.getDeclaredMethods()) {
-                        if (!m.getName().equals(parsed[1])) continue;
-                        Class<?> rt = m.getReturnType();
-                        if (rt != String.class && rt != void.class) continue;
-                        m.setAccessible(true);
-                        XposedBridge.hookMethod(m, new XC_MethodHook() {
-                            @Override protected void beforeHookedMethod(MethodHookParam param) {
-                                if (!sEnabled) return;
-                                param.setResult("{\"errMsg\":\"" + key + ":fail ad disabled\"}");
-                            }
-                        });
-                        hooked++;
-                        LogWriter.log(TAG, "hooked " + parsed[0] + "." + parsed[1]
-                                + " as appbrand.jsapi." + key);
-                    }
-                }
-                if (hooked == 0) LogWriter.log(TAG, "appbrand.jsapi." + key + ": no hookable impl");
-            } catch (Throwable t) {
-                LogWriter.log(TAG, "[WARN] appbrand.jsapi." + key + ": " + t);
-            }
-        }
-    }
-
-    private static String[] parseSig(String sig) {
-        if (sig == null) return null;
-        int lp = sig.indexOf('(');
-        if (lp <= 0) return null;
-        String head = sig.substring(0, lp);
-        int dot = head.lastIndexOf('.');
-        if (dot <= 0 || dot >= head.length() - 1) return null;
-        return new String[]{ head.substring(0, dot), head.substring(dot + 1) };
+        // v3.0.127: 移除小程序内广告 JSAPI（createRewardedVideoAd 等 4 个 DexKit 方法字符串扫描）。
+        // 实测微信 3180 四处扫描全部 0 命中（该版本不走通用广告工厂），且空结果不进 MMKV 缓存，
+        // 会在 5 个 :appbrand 子进程各重跑一次全量 DexKit 扫描，代价高、收益为零，故删除。
     }
 
     // ============================================================
@@ -520,11 +503,38 @@ public class AdBlockerHook {
         else LogWriter.log(TAG, "hooked " + clsName + "." + methodName + " as " + tag + " (" + hooked + ")");
     }
 
-    /** Activity.onCreate(Bundle) after -> finish()。宿主广告页兜底。 */
+    /**
+     * Activity.onCreate(Bundle) after -> finish()。宿主广告页兜底。
+     * <p>与 {@link #hookActivityFinishOnCreateQuiet} 的区别：目标类不存在时打印 [WARN]，用于落地页等确定性目标。</p>
+     */
     private static void hookActivityFinishOnCreate(final ClassLoader cl, final String clsName,
                                                    final String tag) {
         Class<?> c = loadClass(cl, clsName);
         if (c == null) { LogWriter.log(TAG, "[WARN] " + tag + ": class null (" + clsName + ")"); return; }
+        try {
+            Method onCreate = c.getDeclaredMethod("onCreate", android.os.Bundle.class);
+            onCreate.setAccessible(true);
+            XposedBridge.hookMethod(onCreate, new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam param) {
+                    if (!sEnabled) return;
+                    try { XposedHelpers.callMethod(param.thisObject, "finish"); } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "hooked " + clsName + ".onCreate -> finish as " + tag);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[WARN] " + tag + ": onCreate err " + t);
+        }
+    }
+
+    /**
+     * Activity.onCreate(Bundle) after -> finish()。宿主广告页兜底。
+     * <p>与 {@link #hookActivityFinishOnCreate} 的区别：目标类不存在时静默跳过（不刷 [WARN]），
+     * 用于 {@code AppBrandAdUI} 的 5 个进程槽位（slot0/1..4）批量挂载——多数设备只启用部分槽位。</p>
+     */
+    private static void hookActivityFinishOnCreateQuiet(final ClassLoader cl, final String clsName,
+                                                        final String tag) {
+        Class<?> c = loadClass(cl, clsName);
+        if (c == null) return;   // 该槽位类不存在（设备未启用），静默跳过
         try {
             Method onCreate = c.getDeclaredMethod("onCreate", android.os.Bundle.class);
             onCreate.setAccessible(true);

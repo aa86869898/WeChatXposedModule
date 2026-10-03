@@ -69,11 +69,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v3.0.126";
+    public static final String MODULE_BUILD = "v3.0.127";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 30126;
+    public static final int MODULE_VERSION_CODE = 30127;
 
     /** v1079: 当前前台 Activity(onResume 记录/onPause 清除), 供 talker 解析等复用。 */
     private static volatile java.lang.ref.WeakReference<Activity> sResumedActivity;
@@ -218,12 +218,15 @@ public class MainHook implements IXposedHookLoadPackage {
         final String processName = lpparam.processName;
         final boolean isMainProcess = WX_PKG.equals(processName);
         final boolean isPushProcess = processName != null && processName.endsWith(":push");
+        final boolean isAppBrandProcess = isAppBrandSubProcess(processName);
 
-        // v1131 进程门控: :appbrand0/1、:sandbox、:toolsmp 等子进程不需要模块功能,
-        // 直接 return 最稳(不写文件日志、不做 UI 注入/重扫描, 避免无谓开销与残留副作用)。
+        // v1131 进程门控: :sandbox、:toolsmp 等子进程不需要模块功能, 直接 return 最稳
+        // (不写文件日志、不做 UI 注入/重扫描, 避免无谓开销与残留副作用)。
         // :push 进程需保留消息接收入库(MessageHook/WanQunGroupHook.hookReceive), 走最小初始化。
+        // v3.0.127: :appbrand0~4 子进程承载小程序开屏广告全链路(d7.K2/lc1.*/AppBrandAdUI),
+        //           需走"仅去广告"最小初始化(见《去广告最终文档.md》), 否则这些 hook 永不触发。
         // 主进程 com.tencent.mm 完整执行(分身 user 的 processName 同为 com.tencent.mm, 天然放行)。
-        if (!isMainProcess && !isPushProcess) {
+        if (!isMainProcess && !isPushProcess && !isAppBrandProcess) {
             try {
                 de.robv.android.xposed.XposedBridge.log("[LeShaoV3] skip sub-process: " + processName);
             } catch (Throwable ignored) {}
@@ -255,6 +258,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
         if (isPushProcess) {
             hookPushProcess(lpparam, cl, wxVerCode);
+            return;
+        }
+
+        if (isAppBrandProcess) {
+            hookAppBrandProcess(lpparam, cl, wxVerCode);
             return;
         }
 
@@ -456,6 +464,52 @@ public class MainHook implements IXposedHookLoadPackage {
                     int hookTasksRegistered = HookManager.pendingCount();
                     try { HookManager.activateAll(); } catch (Throwable t) {}
                     printModuleSummary(hookTasksRegistered);
+                }
+            }
+        });
+    }
+
+    /** 判断是否为小程序进程 {@code com.tencent.mm:appbrand0 ~ :appbrand4}（严格匹配 5 个槽位）。 */
+    private static boolean isAppBrandSubProcess(String processName) {
+        if (processName == null) return false;
+        for (int i = 0; i <= 4; i++) {
+            if (processName.equals(WX_PKG + ":appbrand" + i)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * v3.0.127: :appbrand0~4 子进程最小初始化 —— 仅安装小程序去广告 Hook。
+     *
+     * <p>小程序开屏广告全链路（{@code d7.K2} / {@code lc1.*} / {@code AppBrandAdUI}）都跑在
+     * :appbrand0~4 子进程，主进程安装的这些 Hook 在子进程永不触发（见《去广告最终文档.md》）。
+     * 这里不做 UI 注入 / DexKitScanDialog / 聊天/朋友圈等主进程功能，保持子进程最小开销。</p>
+     */
+    private static void hookAppBrandProcess(XC_LoadPackage.LoadPackageParam lpparam,
+                                            final ClassLoader cl, final int wxVerCode) {
+        LogWriter.log(TAG, "appbrand 进程最小初始化开始 process=" + lpparam.processName);
+        try {
+            ContextManager.init(cl, lpparam.appInfo.sourceDir);
+            captureModuleApkPath(lpparam);
+            ContextManager.hookAttachBaseContext(lpparam);
+            safeRun("DexKitHelper.setVersionCode(appbrand)", () -> DexKitHelper.setVersionCode(wxVerCode));
+            safeRun("DexKitHelper.setModuleVersion(appbrand)", () -> DexKitHelper.setModuleVersion(MODULE_VERSION_CODE));
+            safeRun("DexKitHelper.hookApplication(appbrand)", () -> DexKitHelper.hookApplication(lpparam));
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "appbrand init err: " + t.getMessage());
+        }
+        ContextManager.setOnReadyCallback(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (!InstanceManager.isEnabled()) {
+                        LogWriter.log(TAG, "appbrand 实例开关关闭, 跳过去广告 Hook");
+                        return;
+                    }
+                    safeRun("AdBlockerHook(appbrand)", () ->
+                            com.leshao.v3.hook.AdBlockerHook.hookAppBrandOnly(cl));
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "appbrand onReady FATAL: " + t.getMessage());
                 }
             }
         });
