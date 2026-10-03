@@ -635,15 +635,20 @@ public final class ChatBubbleHook {
                     if (!isBubbleContext((View) param.thisObject)) return; // v3.0.131
                     Drawable d = (Drawable) param.args[0];
                     int kind = matchBaseDrawable(d);
-                    if (kind < 0) return;
-                    Drawable custom = loadDrawable(kind);
-                    if (custom != null) {
-                        Drawable freshD = fresh(custom);
-                        param.args[0] = freshD;
-                        rememberBubble((View) param.thisObject, freshD, kind);
-                        LogWriter.log(TAG, "neat.setBackground REPLACE kind=" + kind
-                                + " view=" + param.thisObject.getClass().getName());
-                    }
+if (kind < 0) return;
+                        Drawable custom = loadDrawable(kind);
+                        if (custom != null) {
+                            Drawable freshD = fresh(custom);
+                            param.args[0] = freshD;
+                            rememberBubble((View) param.thisObject, freshD, kind);
+                            // v3.0.134: X2C 预构建路径（item attach 前）捕获进 BUBBLE 表，
+                            // attach 后自动补盖，避免复用未 rebind 导致文本气泡保持原生背景。
+                            synchronized (sBubble) {
+                                sBubble.put((View) param.thisObject, kind == KIND_FROM);
+                            }
+                            LogWriter.log(TAG, "neat.setBackground REPLACE kind=" + kind
+                                    + " view=" + param.thisObject.getClass().getName());
+                        }
                 } catch (Throwable ignored) {}
             }
 
@@ -711,7 +716,8 @@ public final class ChatBubbleHook {
                             custom.setBounds(0, 0, w, h);
                             custom.draw(canvas);
                             v.setBackground(custom);
-                            rememberBubble(v, custom);
+                            rememberBubble(v, custom, kind);
+                            synchronized (sBubble) { sBubble.put(v, kind == KIND_FROM); }
                             LogWriter.log(TAG, "neat.onDraw REPLACE kind=" + kind
                                     + " parent=" + parentChain(v, 1));
                         }
@@ -748,6 +754,13 @@ public final class ChatBubbleHook {
                         Drawable custom = loadDrawable(kind);
                         if (custom != null) {
                             param.args[0] = custom;
+                            // v3.0.134: X2C 预构建路径的 MMNeat7extView 在此捕获进 BUBBLE 表，
+                            // attach 后 onAttachedToWindow 会自动补盖，覆盖复用未 rebind 场景。
+                            View tv = (View) param.thisObject;
+                            if (isChatTextBubble(tv)) {
+                                rememberBubble(tv, custom, kind);
+                                synchronized (sBubble) { sBubble.put(tv, kind == KIND_FROM); }
+                            }
                             LogWriter.log(TAG, "setBackground REPLACE kind=" + kind
                                     + " view=" + param.thisObject.getClass().getName());
                         }
@@ -1427,7 +1440,7 @@ public final class ChatBubbleHook {
                 if (v == null) continue;
                 try {
                     if (!v.isShown()) continue;
-                    if (!inChatItem(v)) continue; // v3.0.132: 非聊天 item 的记录直接丢弃
+                    if (!inChatItem(v) && !isChatTextBubble(v)) continue; // v3.0.134: MMNeat 文本气泡放行
                     if (!isCustomBackground(v.getBackground())) need.add(v);
                 } catch (Throwable ignored) {}
             }
@@ -1455,7 +1468,8 @@ public final class ChatBubbleHook {
             int kind = matchBaseDrawable(v.getBackground());
             if (kind >= 0) {
                 // v3.0.132: 第一层门控 —— 只有聊天 item 内的 view 才允许替换
-                if (!inChatItem(v)) return;
+                // v3.0.134: MMNeat7extView（聊天文本专用）在 X2C 预构建/复用路径放行
+                if (!inChatItem(v) && !isChatTextBubble(v)) return;
                 Drawable custom = loadDrawable(kind);
                 if (custom != null) {
                     v.setBackground(custom);
@@ -2109,9 +2123,23 @@ public final class ChatBubbleHook {
 
     /** v3.0.132（《聊天气泡修复文档》）：综合上下文判断，严格走聊天 item tag 门控。
      *  <p>主页会话列表 / ChatFooter / 表情面板的 TextView + StateListDrawable 无
-     *  0x7f0a103c tag，在此直接短路，杜绝几何启发式误伤。</p> */
+     *  0x7f0a103c tag，在此直接短路，杜绝几何启发式误伤。</p>
+     *  <p>v3.0.134：MMNeat7extView 是微信聊天文本专用视图（主页/输入框不使用），
+     *  X2C 预构建/RecyclerView 复用路径会在 item attach 前就调用
+     *  {@code setBackground(原生气泡)}，此时 inChatItem 找不到 tag 导致文本气泡完全不替换。
+     *  对 MMNeat7extView 放行（后续仍有 matchBaseDrawable/resId 白名单二次校验，
+     *  主页会话列表/输入框背景不是原生气泡，不会被误伤）。</p> */
     private static boolean isBubbleContext(View v) {
-        return inChatItem(v);
+        if (inChatItem(v)) return true;
+        return isChatTextBubble(v);
+    }
+
+    /** v3.0.134：是否聊天文本气泡专用视图（MMNeat7extView / MMNeatTextView）。 */
+    private static boolean isChatTextBubble(View v) {
+        if (v == null) return false;
+        String cn = v.getClass().getName();
+        return cn.contains("MMNeat7extView") || cn.contains("MMNeatTextView")
+                || cn.contains("Neat");
     }
 
     /** 资源 ID → 资源名（失败返回 ?）。 */
