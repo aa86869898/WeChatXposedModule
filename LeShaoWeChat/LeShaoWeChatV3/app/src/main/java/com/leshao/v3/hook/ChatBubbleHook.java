@@ -680,14 +680,18 @@ public final class ChatBubbleHook {
                     if (!(param.thisObject instanceof View)) return;
                     if (!isBubbleContext((View) param.thisObject)) return; // v3.0.131
                     Drawable d = (Drawable) param.args[0];
+                    if (isCustomBackground(d)) return; // 已是自定义气泡
                     int kind = matchBaseDrawable(d);
-                        if (kind < 0) {
-                            // v3.0.137：已被自定义气泡替换的背景不视为 UNMATCHED，避免误报刷屏。
-                            if (!isCustomBackground(d)) {
-                                debugDumpUnmatchedTextBubble((View) param.thisObject, d);
-                            }
-                            return;
-                        }
+                    if (kind < 0) {
+                        // v3.0.138（v6 文档 §10）：普通态文本气泡唯一来源是 XML android:background，
+                        // inflate 时经 MMNeat7extView.setBackground 落入；该 Drawable 无法反推 resId、
+                        // constantState 与白名单资源不匹配（此前 UNMATCHED 根因）。MMNeat7extView 是
+                        // 聊天文本专用视图，直接按方向替换为自定义气泡，不再依赖白名单匹配。
+                        kind = kindOf((View) param.thisObject);
+                        if (loadDrawable(kind) == null) return;
+                        LogWriter.log(TAG, "neat.setBackground FALLBACK kind=" + kind
+                                + " view=" + param.thisObject.getClass().getName());
+                    }
                         Drawable custom = loadDrawable(kind);
                         if (custom != null) {
                             Drawable freshD = fresh(custom);
@@ -762,7 +766,13 @@ public final class ChatBubbleHook {
                             return;
                         }
                         int kind = matchBaseDrawable(bg);
-                        if (kind < 0) return;
+                        if (kind < 0) {
+                            // v3.0.138（v6 文档 §10）：普通态文本气泡背景来自 XML，无法反查 resId。
+                            // MMNeat7extView 是聊天文本专用视图，onDraw 兜底直接按方向替换。
+                            kind = kindOf(v);
+                            if (loadDrawable(kind) == null) return;
+                            LogWriter.log(TAG, "neat.onDraw FALLBACK kind=" + kind);
+                        }
                         Drawable custom = loadDrawable(kind);
                         if (custom != null) {
                             custom.setBounds(0, 0, w, h);
@@ -803,11 +813,19 @@ public final class ChatBubbleHook {
                         Drawable d = (Drawable) param.args[0];
                         int kind = matchBaseDrawable(d);
                         if (kind < 0) {
-                            // v3.0.137：已被自定义气泡替换的背景不视为 UNMATCHED，避免误报刷屏。
-                            if (!isCustomBackground(d)) {
-                                debugDumpUnmatchedTextBubble((View) param.thisObject, d);
+                            // v3.0.138：MVVM 视图（ChattingUrlMvvmView 等）气泡背景是 AppMsg 资源
+                            // 的 selector，constantState 可能不匹配；聊天 MVVM 视图专属聊天，按方向替换。
+                            if (!isChatMvvmView((View) param.thisObject)) {
+                                // v3.0.137：已被自定义气泡替换的背景不视为 UNMATCHED，避免误报刷屏。
+                                if (!isCustomBackground(d)) {
+                                    debugDumpUnmatchedTextBubble((View) param.thisObject, d);
+                                }
+                                return;
                             }
-                            return;
+                            kind = kindOf((View) param.thisObject);
+                            if (loadDrawable(kind) == null) return;
+                            LogWriter.log(TAG, "setBackground MVVM FALLBACK kind=" + kind
+                                    + " view=" + param.thisObject.getClass().getName());
                         }
                         Drawable custom = loadDrawable(kind);
                         if (custom != null) {
@@ -1275,7 +1293,7 @@ public final class ChatBubbleHook {
         try {
             if (!CALIBRATE) return;
             String vn = v.getClass().getName();
-            if (!vn.contains("Neat")) return;
+            if (!vn.contains("Neat") && !isChatMvvmView(v)) return; // v3.0.138: MVVM 视图一并诊断
             StackTraceElement[] st = Thread.currentThread().getStackTrace();
             String caller = st.length > 4 ? st[4].getClassName() + "." + st[4].getMethodName() : "?";
             String key = vn + "|" + d.getClass().getName() + "|" + caller;
@@ -2129,6 +2147,21 @@ public final class ChatBubbleHook {
         } catch (Throwable ignored) {}
     }
 
+    /** v3.0.138：布局完成后的几何方向判定（x 偏右=自己发出）。不可用返回 -1。 */
+    private static int guessKindByLayout(View v) {
+        if (v == null) return -1;
+        try {
+            int w = v.getWidth();
+            if (w <= 0) return -1;
+            int[] loc = {0, 0};
+            v.getLocationOnScreen(loc);
+            int screenW = v.getResources().getDisplayMetrics().widthPixels;
+            if (screenW <= 0 || loc[0] + w / 2 <= 0) return -1;
+            return (loc[0] + w / 2) > screenW / 2 ? KIND_TO : KIND_FROM;
+        } catch (Throwable ignored) {}
+        return -1;
+    }
+
     /** 取已记录的气泡方向；优先 BUBBLE 捕获表（微信直供 isRecv），其次已记录 kind，最后 x 坐标几何兜底。 */
     private static int kindOf(View v) {
         try {
@@ -2200,8 +2233,13 @@ public final class ChatBubbleHook {
                         final boolean isRecv = recv;
                         fv.post(() -> {
                             try {
-                                applyBubbleTo(fv, isRecv ? KIND_FROM : KIND_TO);
+                                // v3.0.138：MMNeat7extView 构造时记录的方向可能是默认值（未布局）。
+                                // attach post 后布局已完成，几何方向（x 偏右=自己）优先修正。
+                                int kind = guessKindByLayout(fv);
+                                if (kind < 0) kind = isRecv ? KIND_FROM : KIND_TO;
+                                applyBubbleTo(fv, kind);
                                 LogWriter.log(TAG, "attach BUBBLE apply isRecv=" + isRecv
+                                        + " kind=" + kind
                                         + " view=" + fv.getClass().getName());
                             } catch (Throwable ignored) {}
                         });
@@ -2272,10 +2310,14 @@ public final class ChatBubbleHook {
      *  X2C 预构建/RecyclerView 复用路径会在 item attach 前就调用
      *  {@code setBackground(原生气泡)}，此时 inChatItem 找不到 tag 导致文本气泡完全不替换。
      *  对 MMNeat7extView 放行（后续仍有 matchBaseDrawable/resId 白名单二次校验，
-     *  主页会话列表/输入框背景不是原生气泡，不会被误伤）。</p> */
+     *  主页会话列表/输入框背景不是原生气泡，不会被误伤）。</p>
+     *  <p>v3.0.138：MVVM 文本/链接视图（com.tencent.mm.ui.chatting.viewitems.mvvmview.*）
+     *  同样在绑定早期设置气泡背景（inChatItem=false），一并放行，类名含 chatting 包名专属聊天。</p> */
     private static boolean isBubbleContext(View v) {
         if (inChatItem(v)) return true;
-        return isChatTextBubble(v);
+        if (isChatTextBubble(v)) return true;
+        if (isChatMvvmView(v)) return true; // v3.0.138
+        return false;
     }
 
     /** v3.0.134：是否聊天文本气泡专用视图（MMNeat7extView / MMNeatTextView）。 */
@@ -2284,6 +2326,14 @@ public final class ChatBubbleHook {
         String cn = v.getClass().getName();
         return cn.contains("MMNeat7extView") || cn.contains("MMNeatTextView")
                 || cn.contains("Neat");
+    }
+
+    /** v3.0.138：是否聊天 MVVM 文本/链接视图（com.tencent.mm.ui.chatting.viewitems.mvvmview.*）。
+     *  微信 8.0.78 文字/链接消息经 MVVM 视图渲染，气泡背景在绑定早期（inChatItem=false）设置。 */
+    private static boolean isChatMvvmView(View v) {
+        if (v == null) return false;
+        String cn = v.getClass().getName();
+        return cn.contains("chatting") && cn.contains("MvvmView");
     }
 
     /** 资源 ID → 资源名（失败返回 ?）。 */
@@ -2325,8 +2375,10 @@ public final class ChatBubbleHook {
      *  资源名在本 APK 可能被混淆，故先按硬编码 resId 命中，再用 getResourceEntryName 兜底。</p> */
     private static int resolveKindByResId(Context ctx, int resId) {
         if (resId == 0) return -1;
-        if (resId == 2131231925 || resId == 2131231841 || resId == 2131231944) return KIND_FROM;
-        if (resId == 2131232060 || resId == 2131231895 || resId == 2131232070) return KIND_TO;
+        if (resId == 2131231925 || resId == 2131231841 || resId == 2131231944
+                || resId == 2131231853) return KIND_FROM; // 2131231853=AppMsg chat_from_mask_bg(v6 §3)
+        if (resId == 2131232060 || resId == 2131231895 || resId == 2131232070
+                || resId == 2131232062) return KIND_TO;   // 2131232062=AppMsg chatto_bg_app(v6 §3)
         // v3.0.132（《聊天气泡修复文档》）：AnimImageView.setType i==2 分支语音气泡收发态
         if (resId == 2131100638) return KIND_FROM; // 对方发送态
         if (resId == 2131100639) return KIND_TO;   // 自己发送态
