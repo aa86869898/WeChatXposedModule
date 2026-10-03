@@ -90,10 +90,15 @@ public final class ChatBubbleHook {
     private static final java.util.concurrent.atomic.AtomicInteger sCalCount =
             new java.util.concurrent.atomic.AtomicInteger();
 
-    // 启发式兜底：完全不依赖类名/resId，直接对聊天列表内「背景为九宫格(NinePatch)的气泡容器」
-    // 按 x 坐标(右半屏=发出 / 左半屏=收到)替换。开关默认开，可关闭。
-    private static final String K_HEURISTIC = "ls_bubble_heuristic";
-    private static volatile boolean sHeuristic = true;
+    // ==================== v3.0.132 三层门控（《聊天气泡修复文档》） ====================
+    // 第一层：聊天 item 根 keyed tag（0x7f0a103c = 2131365948）+ ChattingItem 基类 b0，
+    // 沿父链检查，非聊天 item 一律短路（主页会话列表/输入框/表情面板无此 tag）。
+    private static final int TAG_ITEM = 0x7f0a103c;
+    private static volatile Class<?> sItemCls;
+    private static volatile ClassLoader sHookCl;
+    // 第二层：BUBBLE 捕获表 —— 只记录微信亲自贴过气泡的 View（viewitems.to.b 的 holder.b、
+    // AnimImageView.setType），重盖/补色/换背景只动这张表里的 View，彻底删除几何启发式。
+    private static final java.util.Map<View, Boolean> sBubble = new java.util.WeakHashMap<>();
 
     // v3.0.128 气泡内文字颜色（0 = 不修改）。对方/自己各一份，运行时自校准后固化。
     private static volatile int sFromTextColor = 0;
@@ -340,12 +345,12 @@ public final class ChatBubbleHook {
 
     public static void hook(ClassLoader cl) {
         try {
+            sHookCl = cl;
             sEnabled = isEnabled();
             sFromPath = getFromPath();
             sToPath = getToPath();
             try {
                 SharedPreferences sp = safePrefs();
-                sHeuristic = sp == null || sp.getBoolean(K_HEURISTIC, true);
                 if (sp != null) {
                     sFromTextColor = sp.getInt(K_FROM_TEXT_COLOR, 0);
                     sToTextColor = sp.getInt(K_TO_TEXT_COLOR, 0);
@@ -377,7 +382,7 @@ public final class ChatBubbleHook {
                     installResourceGetDrawableHook(cl);
                     installChatListViewHook(cl);
                     installCalibrationHooks(cl);
-                    installInflateFallbackHook(cl);
+                    installAnimImageViewHook(cl);
                     installAttachApplyHook(cl);
                     if (DEBUG_VIEW_DUMP) installChattingListCollector(cl);
                     sHooked = true;
@@ -829,6 +834,51 @@ public final class ChatBubbleHook {
         }
     }
 
+    /** v3.0.132（《聊天气泡修复文档》）：语音气泡捕获点。
+     *  hook {@code com.tencent.mm.ui.base.AnimImageView.setType(int)}：
+     *  字段 {@code e} 即 isRecv（方向直供），after 把 view 收进 BUBBLE 表。
+     *  同时处理三个分支（Smali 实证，否则会把我们的替换盖回去）：
+     *  <ul>
+     *    <li>i==2 → setBackgroundResource(2131100638 对方 / 2131100639 自己)，resId 已进白名单；</li>
+     *    <li>i==3 → setBackgroundDrawable(null)，before 不拦 null（故意清空），after 由补盖恢复。</li>
+     *  </ul> */
+    private static void installAnimImageViewHook(ClassLoader cl) {
+        try {
+            Class<?> anim = XposedHelpers.findClass("com.tencent.mm.ui.base.AnimImageView", cl);
+            Method m = null;
+            for (Method mm : anim.getDeclaredMethods()) {
+                if ("setType".equals(mm.getName()) && mm.getParameterTypes().length == 1
+                        && mm.getParameterTypes()[0] == int.class) {
+                    m = mm;
+                    break;
+                }
+            }
+            if (m == null) {
+                LogWriter.log(TAG, "AnimImageView.setType not found");
+                return;
+            }
+            m.setAccessible(true);
+            XposedBridge.hookMethod(m, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        View v = (View) param.thisObject;
+                        boolean recv = false;
+                        try { recv = (Boolean) XposedHelpers.getObjectField(v, "e"); } catch (Throwable ignored) {}
+                        synchronized (sBubble) { sBubble.put(v, recv); }
+                        int type = ((Number) param.args[0]).intValue();
+                        LogWriter.log(TAG, "AnimImageView.setType type=" + type + " isRecv=" + recv
+                                + " view=" + v.getClass().getName());
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "AnimImageView.setType hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installAnimImageViewHook err: " + t.getMessage());
+        }
+    }
+
 /** 文档 §5 方案2：精准 hook 文本气泡 ViewHolder 的静态绑定方法
      *  b(e9, holder, data, Boolean isRecv) —— 普通态 chatfrom_bg/chatto_bg 最终设置点。
      *  v3.0.90：日志 ke5.a.i stack 证实 8.0.78 真实气泡加载路径是 viewitems.mq.b；
@@ -865,6 +915,19 @@ public final class ChatBubbleHook {
                                         isRecv = (Boolean) param.args[i];
                                         break;
                                     }
+                                }
+                                // v3.0.132: BUBBLE 捕获 —— 微信亲自贴过气泡的 View 收进表（holder.b 字段）
+                                for (Object a : param.args) {
+                                    if (a == null) continue;
+                                    if (a instanceof View || a instanceof Boolean
+                                            || "e9".equals(a.getClass().getSimpleName())) continue;
+                                    try {
+                                        Object b = XposedHelpers.getObjectField(a, "b");
+                                        if (b instanceof View) {
+                                            synchronized (sBubble) { sBubble.put((View) b, isRecv); }
+                                            break;
+                                        }
+                                    } catch (Throwable ignored) {}
                                 }
                                 View bubble = null;
                                 // v3.0.120：优先遍历 holder 字段找 MMNeat7extView —— 文字气泡真实承载视图。
@@ -1364,7 +1427,7 @@ public final class ChatBubbleHook {
                 if (v == null) continue;
                 try {
                     if (!v.isShown()) continue;
-                    if (!inChatList(v)) continue; // v3.0.131: 非聊天列表的记录直接丢弃
+                    if (!inChatItem(v)) continue; // v3.0.132: 非聊天 item 的记录直接丢弃
                     if (!isCustomBackground(v.getBackground())) need.add(v);
                 } catch (Throwable ignored) {}
             }
@@ -1391,6 +1454,8 @@ public final class ChatBubbleHook {
         try {
             int kind = matchBaseDrawable(v.getBackground());
             if (kind >= 0) {
+                // v3.0.132: 第一层门控 —— 只有聊天 item 内的 view 才允许替换
+                if (!inChatItem(v)) return;
                 Drawable custom = loadDrawable(kind);
                 if (custom != null) {
                     v.setBackground(custom);
@@ -1399,9 +1464,7 @@ public final class ChatBubbleHook {
                 }
             }
         } catch (Throwable ignored) {}
-        // v3.0.125 启发式兜底：baseDrawable 不可用(matchBaseDrawable 全失败)时，
-        // 按「九宫格背景 + x 坐标」判定收发方向并替换，确保文本气泡也能生效。
-        heuristicReplaceOne(v);
+        // v3.0.132: 已删除几何启发式（《聊天气泡修复文档》），仅保留微信原生气泡 constantState 匹配。
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) {
@@ -1757,7 +1820,7 @@ public final class ChatBubbleHook {
                                 + " resId=" + resId + " name=" + (resId != 0 ? entryName(resId) : "-")
                                 + " drawable=" + drawableCls
                                 + " xy=(" + loc[0] + "," + loc[1] + ") w=" + v.getWidth() + " h=" + v.getHeight()
-                                + " chat=" + inChatList(v)
+                                + " chat=" + inChatItem(v)
                                 + " parent=" + parentChain(v, 2));
                     } catch (Throwable ignored) {}
                 }
@@ -1814,91 +1877,8 @@ public final class ChatBubbleHook {
 
     /**
      * 方案③ 兜底：hook LayoutInflater.inflate(int, ViewGroup, boolean)。
-     * 当父容器是聊天列表容器时，inflate 完成后 post 一次遍历，
-     * 对"背景为九宫格的气泡容器"按 x 坐标替换（右半=发出/左半=收到）。
-     * 完全不依赖类名/resId，只要气泡可见即命中。
+     * v3.0.132 已按《聊天气泡修复文档》删除 —— 几何启发式是主页/输入框误伤元凶。
      */
-    private static void installInflateFallbackHook(ClassLoader cl) {
-        try {
-            Method inflate = null;
-            for (Method m : android.view.LayoutInflater.class.getDeclaredMethods()) {
-                if ("inflate".equals(m.getName())) {
-                    Class<?>[] pts = m.getParameterTypes();
-                    if (pts.length == 3 && pts[0] == int.class
-                            && ViewGroup.class.isAssignableFrom(pts[1]) && pts[2] == boolean.class) {
-                        inflate = m;
-                        break;
-                    }
-                }
-            }
-            if (inflate == null) {
-                LogWriter.log(TAG, "inflate fallback: method not found");
-                return;
-            }
-            inflate.setAccessible(true);
-            XposedBridge.hookMethod(inflate, new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    try {
-                        if (!sEnabled || !sHeuristic) return;
-                        Object root = param.args != null && param.args.length > 1 ? param.args[1] : null;
-                        if (!(root instanceof View) || !isChatContainer((View) root)) return;
-                        Object out = param.getResult();
-                        if (!(out instanceof View)) return;
-                        final View v = (View) out;
-                        v.post(() -> {
-                            try { heuristicReplaceBubbles(v); } catch (Throwable ignored) {}
-                        });
-                    } catch (Throwable ignored) {}
-                }
-            });
-            LogWriter.log(TAG, "LayoutInflater.inflate fallback hooked");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "installInflateFallbackHook err: " + t.getMessage());
-        }
-    }
-
-    /** 递归启发式替换：背景为九宫格(非自定义)的气泡容器按 x 坐标判定收发方向并替换。 */
-    private static void heuristicReplaceBubbles(View v) {
-        if (v == null) return;
-        heuristicReplaceOne(v);
-        if (v instanceof ViewGroup) {
-            ViewGroup g = (ViewGroup) v;
-            for (int i = 0; i < g.getChildCount(); i++) {
-                heuristicReplaceBubbles(g.getChildAt(i));
-            }
-        }
-    }
-
-    /** 单个 View 的启发式替换（供 onLayout 遍历复用）。 */
-    private static void heuristicReplaceOne(View v) {
-        if (v == null || !sEnabled || !sHeuristic) return;
-        try {
-            // v3.0.131: 列表容器自身不是气泡，绝不替换（PullDownListView 等被误渲染根因）
-            if (isChatContainer(v)) return;
-            Drawable bg = v.getBackground();
-            if (!isNinePatchLike(bg) || isCustomBackground(bg)) return;
-            if (!isBubbleContext(v)) return; // v3.0.131: 非聊天列表不启发式替换
-            int w = v.getWidth(), h = v.getHeight();
-            if (w <= 0 || h <= 0) return;
-            int[] loc = {0, 0};
-            try { v.getLocationOnScreen(loc); } catch (Throwable ignored) {}
-            int screenW = 0;
-            try { screenW = v.getResources().getDisplayMetrics().widthPixels; } catch (Throwable ignored) {}
-            if (screenW <= 0) return;
-            int center = loc[0] + w / 2;
-            // v3.0.131: 坐标异常保护（未布局/横滑容器坐标会超屏，误判方向且误替换）
-            if (center < 0 || center > screenW * 2) return;
-            int kind = center > screenW / 2 ? KIND_TO : KIND_FROM;
-            if (loadDrawable(kind) != null) {
-                applyBubbleTo(v, kind);
-                LogWriter.log(TAG, "heuristic REPLACE kind=" + kind
-                        + " view=" + v.getClass().getName()
-                        + " center=" + center + "/" + screenW
-                        + " parent=" + parentChain(v, 2));
-            }
-        } catch (Throwable ignored) {}
-    }
 
     // ==================== v3.0.128 统一补盖（根治偶发不渲染） ====================
 
@@ -1991,11 +1971,15 @@ public final class ChatBubbleHook {
         } catch (Throwable ignored) {}
     }
 
-    /** 取已记录的气泡方向；未记录时按 x 坐标几何兜底。 */
+    /** 取已记录的气泡方向；优先 BUBBLE 捕获表（微信直供 isRecv），其次已记录 kind，最后 x 坐标几何兜底。 */
     private static int kindOf(View v) {
         try {
             Integer k = sBubbleKind.get(v);
             if (k != null) return k;
+        } catch (Throwable ignored) {}
+        try {
+            Boolean recv = sBubble.get(v);
+            if (recv != null) return recv ? KIND_FROM : KIND_TO;
         } catch (Throwable ignored) {}
         try {
             int[] loc = {0, 0};
@@ -2009,7 +1993,7 @@ public final class ChatBubbleHook {
     /**
      * 补盖：微信 {@code AnimImageView.setType()} 在复用/空态分支会调用
      * {@code setBackgroundDrawable(null)} 把气泡清空；此处对"已记录的气泡 View"无条件补回自定义图。
-     * 未记录时退化为启发式替换。
+     * v3.0.132：仅 BUBBLE 捕获表（微信亲自贴过气泡的 View）内的 view 会被补盖，不再启发式。
      */
     private static void reapplyIfBubble(View v) {
         if (!sEnabled || v == null) return;
@@ -2026,33 +2010,22 @@ public final class ChatBubbleHook {
                 return;
             }
         } catch (Throwable ignored) {}
-        heuristicReplaceOne(v);
+        // v3.0.132: 未记录自定义图时，只有 BUBBLE 表内的 view 才按方向补盖
+        Boolean recv = sBubble.get(v);
+        if (recv == null) return;
+        int kind = recv ? KIND_FROM : KIND_TO;
+        Drawable d = fresh(loadDrawable(kind));
+        if (d == null) return;
+        v.setBackground(d);
+        rememberBubble(v, d, kind);
+        applyTextColor(v, kind);
+        syncBubblePadding(v);
+        try { v.requestLayout(); v.invalidate(); } catch (Throwable ignored) {}
     }
 
-    /** 对聊天 item 根 View 递归补盖：原生九宫格→替换；已是自定义→补文字色/内边距。 */
-    private static void applyToHolder(View item) {
-        if (item == null || !sEnabled) return;
-        try {
-            Drawable bg = item.getBackground();
-            if (isCustomBackground(bg)) {
-                applyTextColor(item, kindOf(item));
-            } else if (isNinePatchLike(bg)) {
-                heuristicReplaceOne(item);
-            }
-        } catch (Throwable ignored) {}
-        if (item instanceof ViewGroup) {
-            ViewGroup g = (ViewGroup) item;
-            for (int i = 0; i < g.getChildCount(); i++) {
-                applyToHolder(g.getChildAt(i));
-            }
-        }
-    }
-
-    /**
-     * bind/attach-after 补盖兜底（不再依赖 setter 是否触发）：
-     * hook {@code View.onAttachedToWindow}，当 View 是聊天列表的直接子项（item 根）时，
-     * post 一次对该 item 子树的补盖，覆盖 RecyclerView 视图池命中/复用未 rebind 路径。
-     */
+    /** v3.0.132（《聊天气泡修复文档》第二层）：重盖只走 BUBBLE 表。
+     *  hook {@code View.onAttachedToWindow}，仅当该 View 在 BUBBLE 捕获表内（微信亲自贴过气泡）
+     *  才 post 补盖；主页/输入框/表情面板不在表内，天然 0 误伤。 */
     private static void installAttachApplyHook(ClassLoader cl) {
         try {
             Method m = View.class.getDeclaredMethod("onAttachedToWindow");
@@ -2063,38 +2036,24 @@ public final class ChatBubbleHook {
                     try {
                         if (!sEnabled) return;
                         View v = (View) param.thisObject;
-                        android.view.ViewParent p = v.getParent();
-                        if (!(p instanceof View)) return;
-                        if (!isChatContainer((View) p)) return;   // 仅聊天列表的直接子项
-                        v.post(() -> {
-                            try { applyToHolder(v); } catch (Throwable ignored) {}
+                        Boolean recv = sBubble.get(v);
+                        if (recv == null) return;   // 只动真气泡，别的不碰
+                        final View fv = v;
+                        final boolean isRecv = recv;
+                        fv.post(() -> {
+                            try {
+                                applyBubbleTo(fv, isRecv ? KIND_FROM : KIND_TO);
+                                LogWriter.log(TAG, "attach BUBBLE apply isRecv=" + isRecv
+                                        + " view=" + fv.getClass().getName());
+                            } catch (Throwable ignored) {}
                         });
                     } catch (Throwable ignored) {}
                 }
             });
-            LogWriter.log(TAG, "onAttachedToWindow apply hooked");
+            LogWriter.log(TAG, "onAttachedToWindow apply hooked (BUBBLE)");
         } catch (Throwable t) {
             LogWriter.log(TAG, "installAttachApplyHook err: " + t.getMessage());
         }
-    }
-
-    /** 背景是否为九宫格 Drawable（含 selector 子项）。 */
-    private static boolean isNinePatchLike(Drawable d) {
-        if (d == null) return false;
-        if (d instanceof android.graphics.drawable.NinePatchDrawable) return true;
-        if (d instanceof android.graphics.drawable.StateListDrawable) {
-            android.graphics.drawable.StateListDrawable sld =
-                    (android.graphics.drawable.StateListDrawable) d;
-            for (int i = 0; i < sld.getStateCount(); i++) {
-                if (isNinePatchLike(sld.getStateDrawable(i))) return true;
-            }
-        }
-        try {
-            Drawable.ConstantState cs = d.getConstantState();
-            String n = cs == null ? "" : cs.getClass().getName();
-            if (n.contains("NinePatch") || n.contains("NineSlice")) return true;
-        } catch (Throwable ignored) {}
-        return false;
     }
 
     /** 判断容器是否聊天列表容器（RecyclerView/AbsListView/Chatting*）。 */
@@ -2106,6 +2065,34 @@ public final class ChatBubbleHook {
                 || cn.contains("ChattingList")
                 || cn.contains("ChattingUI")
                 || cn.contains("Chatting");
+    }
+
+    /** v3.0.132（《聊天气泡修复文档》第一层）：沿祖先链检查聊天 item 根 keyed tag。
+     *  微信聊天 item 根上有全 App 独有的 {@code setTag(0x7f0a103c, ChattingItem)}，
+     *  主页会话列表 / ChatFooter 输入框 / 表情面板等均无此 tag，一道祖先链检查全局挡死。 */
+    private static boolean inChatItem(View v) {
+        if (v == null) return false;
+        if (sItemCls == null) {
+            try {
+                // b0 类可能只在 Tinker DelegateLastClassLoader 下（MEMORY: Tinker 热修复），
+                // 用 HookUtil 遍历候选 CL 加载，避免 PathClassLoader 平行副本加载失败。
+                for (Class<?> c : HookUtil.loadClasses(sHookCl, "com.tencent.mm.ui.chatting.viewitems.b0")) {
+                    sItemCls = c;
+                    break;
+                }
+            } catch (Throwable ignored) {}
+        }
+        View p = v;
+        int depth = 0;
+        while (p != null && depth++ < 30) {
+            try {
+                Object t = p.getTag(TAG_ITEM);
+                if (t != null && sItemCls != null && sItemCls.isInstance(t)) return true;
+            } catch (Throwable ignored) {}
+            android.view.ViewParent parent = p.getParent();
+            p = parent instanceof View ? (View) parent : null;
+        }
+        return false;
     }
 
     /** 沿父链判断 View 是否位于聊天列表内。 */
@@ -2120,27 +2107,11 @@ public final class ChatBubbleHook {
         return false;
     }
 
-    /** v3.0.131: 综合判断是否为聊天气泡渲染上下文。
-     *  <p>已挂载于聊天列表内 → 是；未挂载（bind/inflate 阶段）但当前调用栈经过
-     *  com.tencent.mm.ui.chatting.viewitems（聊天 ViewHolder 绑定路径）→ 是。
-     *  二者均不满足（输入框/发现页/我的/设置等界面复用气泡资源）→ 否，拒绝替换。</p> */
+    /** v3.0.132（《聊天气泡修复文档》）：综合上下文判断，严格走聊天 item tag 门控。
+     *  <p>主页会话列表 / ChatFooter / 表情面板的 TextView + StateListDrawable 无
+     *  0x7f0a103c tag，在此直接短路，杜绝几何启发式误伤。</p> */
     private static boolean isBubbleContext(View v) {
-        if (inChatList(v)) return true;
-        return isBubbleBindStack();
-    }
-
-    /** 判断当前调用栈是否经过聊天 ViewHolder 绑定路径（viewitems 包）。 */
-    private static boolean isBubbleBindStack() {
-        try {
-            StackTraceElement[] st = Thread.currentThread().getStackTrace();
-            int n = Math.min(st.length, 24);
-            for (int i = 2; i < n; i++) {
-                String c = st[i].getClassName();
-                if (c == null) continue;
-                if (c.contains("viewitems")) return true;
-            }
-        } catch (Throwable ignored) {}
-        return false;
+        return inChatItem(v);
     }
 
     /** 资源 ID → 资源名（失败返回 ?）。 */
@@ -2184,6 +2155,9 @@ public final class ChatBubbleHook {
         if (resId == 0) return -1;
         if (resId == 2131231925 || resId == 2131231841 || resId == 2131231944) return KIND_FROM;
         if (resId == 2131232060 || resId == 2131231895 || resId == 2131232070) return KIND_TO;
+        // v3.0.132（《聊天气泡修复文档》）：AnimImageView.setType i==2 分支语音气泡收发态
+        if (resId == 2131100638) return KIND_FROM; // 对方发送态
+        if (resId == 2131100639) return KIND_TO;   // 自己发送态
         if (resId == sFromResId) return KIND_FROM;
         if (resId == sToResId) return KIND_TO;
         if (ctx == null) return -1;
