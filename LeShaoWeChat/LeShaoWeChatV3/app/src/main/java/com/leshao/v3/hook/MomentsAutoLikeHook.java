@@ -141,13 +141,17 @@ public final class MomentsAutoLikeHook {
             }
 
             // 右上角菜单注入（before：让 super → mController.g0 渲染我们的项）
+            // v3.0.132: 菜单始终注入（不再依赖 isEnabled），配置完全在朋友圈右上角完成
             Method ocom = findMethod(ui, "onCreateOptionsMenu", Menu.class);
             if (ocom != null) {
                 XposedBridge.hookMethod(ocom, new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
                         try {
-                            if (!isEnabled()) return;
+                            // 确保 Activity 实例可靠（onCreate hook 可能因时序未触发）
+                            if (param.thisObject instanceof Activity) {
+                                sTimeline = (Activity) param.thisObject;
+                            }
                             Menu menu = (Menu) param.args[0];
                             MenuItem item = menu.add(0, MENU_ID, 0, "自动点赞");
                             try {

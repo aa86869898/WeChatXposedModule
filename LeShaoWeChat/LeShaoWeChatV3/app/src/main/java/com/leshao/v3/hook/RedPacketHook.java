@@ -190,6 +190,8 @@ public final class RedPacketHook {
 
     private static void install(ClassLoader cl) {
         try {
+            // v3.0.132: 安装阶段 prefs 已就绪，强制刷新配置（hook() 的 defer 早期 prefs 可能为 null）
+            updateConfig();
             resolveScene(cl);
             resolveOpenScene(cl);
             resolveNetBase(cl);
@@ -716,7 +718,8 @@ public final class RedPacketHook {
 
     /** 入库路径（文档 §2.1 首选）：直接从 MsgInfo 拿 content + talker 后解析并抢。 */
     private static void maybeGrabFromMsg(Object msg) {
-        if (!sEnabled || msg == null) return;
+        // v3.0.132: 实时读 prefs，避免静态 sEnabled 与 UI 开关不同步
+        if (!isEnabled() || msg == null) return;
         // 自己发出的红包不抢（否则服务端会以“系统繁忙”拒绝，且无意义）。
         if (isSendOf(msg)) return;
         String content = contentOf(msg);
@@ -739,7 +742,8 @@ public final class RedPacketHook {
     // ---------------- 识别与领取 ----------------
 
     private static void onParsed(String xml, Object parsed) {
-        if (!sEnabled || xml == null || !xml.contains("wcpayinfo")) return;
+        // v3.0.132: 实时读 prefs，避免静态 sEnabled 与 UI 开关不同步
+        if (!isEnabled() || xml == null || !xml.contains("wcpayinfo")) return;
         LogWriter.log(TAG, "redpacket candidate xml len=" + xml.length());
         // 专属红包：exclusive_recv_username 非自己 wxid 必须跳过（文档 §6.3-5）。
         if (isExclusiveNotMine(xml)) {
@@ -785,7 +789,8 @@ public final class RedPacketHook {
         final String talker = (sender != null && !sender.isEmpty()) ? sender : null;
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
             try {
-                if (!sEnabled || sHandled.contains(sendId)) return;
+                // v3.0.132: 实时读 prefs
+                if (!isEnabled() || sHandled.contains(sendId)) return;
                 if (!sHandled.add(sendId)) return;
                 if (!allowByFrequency()) return;
                 LogWriter.log(TAG, "fallback grab sendId=" + sendId + " talker=" + talker);
@@ -796,7 +801,8 @@ public final class RedPacketHook {
 
     /** 统一处理：解析 sendId/channelId + 风控 + 异步领取。 */
     private static void handle(String nativeUrl, String talker) {
-        if (!sEnabled) return;
+        // v3.0.132: 实时读 prefs，避免静态 sEnabled 与 UI 开关不同步
+        if (!isEnabled()) return;
         if (nativeUrl == null || nativeUrl.isEmpty()) return;
         String sendId = query(nativeUrl, "sendid");
         if (sendId == null || sendId.isEmpty()) return;

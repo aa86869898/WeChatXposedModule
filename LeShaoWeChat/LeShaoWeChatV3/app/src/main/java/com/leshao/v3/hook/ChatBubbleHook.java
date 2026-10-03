@@ -1874,6 +1874,8 @@ public final class ChatBubbleHook {
     private static void heuristicReplaceOne(View v) {
         if (v == null || !sEnabled || !sHeuristic) return;
         try {
+            // v3.0.131: 列表容器自身不是气泡，绝不替换（PullDownListView 等被误渲染根因）
+            if (isChatContainer(v)) return;
             Drawable bg = v.getBackground();
             if (!isNinePatchLike(bg) || isCustomBackground(bg)) return;
             if (!isBubbleContext(v)) return; // v3.0.131: 非聊天列表不启发式替换
@@ -1883,8 +1885,11 @@ public final class ChatBubbleHook {
             try { v.getLocationOnScreen(loc); } catch (Throwable ignored) {}
             int screenW = 0;
             try { screenW = v.getResources().getDisplayMetrics().widthPixels; } catch (Throwable ignored) {}
+            if (screenW <= 0) return;
             int center = loc[0] + w / 2;
-            int kind = (screenW > 0 && center > screenW / 2) ? KIND_TO : KIND_FROM;
+            // v3.0.131: 坐标异常保护（未布局/横滑容器坐标会超屏，误判方向且误替换）
+            if (center < 0 || center > screenW * 2) return;
+            int kind = center > screenW / 2 ? KIND_TO : KIND_FROM;
             if (loadDrawable(kind) != null) {
                 applyBubbleTo(v, kind);
                 LogWriter.log(TAG, "heuristic REPLACE kind=" + kind

@@ -9,7 +9,6 @@ import android.widget.Toast;
 import com.leshao.v3.hook.AdBlockerHook;
 import com.leshao.v3.hook.FakeLocationHook;
 import com.leshao.v3.hook.HookConfig;
-import com.leshao.v3.hook.MomentsAutoLikeHook;
 import com.leshao.v3.ui.widgets.M3Page;
 
 /**
@@ -66,25 +65,7 @@ public final class MoreFeaturesPageView {
                 },
                 v -> SubPageActivity.open(act, "定位伪装", 29)));
         root.addView(cardLoc);
-        root.addView(PageKit.divider(ctx));
-
-        // ---- 朋友圈自动点赞 ----
-        root.addView(M3Page.section(ctx, "朋友圈自动点赞",
-                "朋友圈右上角「⋮」菜单 + 自动点赞"));
-        root.addView(M3Page.spacer(ctx, 2));
-
-        boolean likeOn = MomentsAutoLikeHook.isEnabled();
-        LinearLayout cardLike = PageKit.makeCard(ctx, d);
-        cardLike.addView(PageKit.switchRow(ctx, d, "朋友圈自动点赞",
-                "在朋友圈右上角注入「⋮ 自动点赞」菜单，可对指定联系人动态自动点赞",
-                likeOn,
-                (v, on) -> {
-                    MomentsAutoLikeHook.setEnabled(on);
-                    Toast.makeText(ctx, "朋友圈自动点赞已" + (on ? "开启" : "关闭")
-                            + "（重新进入朋友圈生效）", Toast.LENGTH_SHORT).show();
-                },
-                v -> SubPageActivity.open(act, "朋友圈自动点赞", 30)));
-        root.addView(cardLike);
+        // v3.0.132: 朋友圈自动点赞配置已迁移至朋友圈右上角「⋮ 自动点赞」菜单，主界面不再保留入口
         return root;
     }
 }

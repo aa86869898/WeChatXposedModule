@@ -89,6 +89,7 @@ public final class ColorPickerDialog {
         // 色板网格（每行 8 个）
         final int initial = initialColor == 0 ? 0xFF000000 : initialColor;
         final int[] selected = {initial};
+        final EditText hexInput = new EditText(ctx);
         final LinearLayout grid = new LinearLayout(ctx);
         grid.setOrientation(LinearLayout.VERTICAL);
         final int perRow = 8;
@@ -108,7 +109,10 @@ public final class ColorPickerDialog {
                 final int idx = i + j;
                 cell.setOnClickListener(v -> {
                     selected[0] = color;
+                    // v3.0.132: 点击色板同步 hex 输入框与预览（否则确定时取到 hexInput 旧值）
                     hexTv.setText(toHex(color));
+                    hexInput.setText(toHex(color));
+                    swatch.setBackground(swatchBg(color, false, d));
                     for (int k = 0; k < swatches.length; k++) {
                         if (swatches[k] != null) swatches[k].setBackground(
                                 swatchBg(PALETTE[k], k == idx, d));
@@ -124,7 +128,6 @@ public final class ColorPickerDialog {
         root.addView(spacer(ctx, d, 12));
 
         // 十六进制输入
-        final EditText hexInput = new EditText(ctx);
         hexInput.setText(toHex(initial));
         hexInput.setHint("#RRGGBB");
         hexInput.setTextSize(14);
