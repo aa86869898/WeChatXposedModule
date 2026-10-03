@@ -7,7 +7,9 @@ import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import com.leshao.v3.hook.AdBlockerHook;
+import com.leshao.v3.hook.FakeLocationHook;
 import com.leshao.v3.hook.HookConfig;
+import com.leshao.v3.hook.MomentsAutoLikeHook;
 import com.leshao.v3.ui.widgets.M3Page;
 
 /**
@@ -45,6 +47,44 @@ public final class MoreFeaturesPageView {
                 "原理：按《微信去广告_完整方案_三轮审查合并终版.md》对小程序（AppBrand）、"
                         + "朋友圈（SNS Timeline）、视频号（Finder）的广告位做拦截/过滤/隐藏。"));
         root.addView(cardNote);
+        root.addView(PageKit.divider(ctx));
+
+        // ---- 定位伪装 ----
+        root.addView(M3Page.section(ctx, "定位伪装",
+                "把微信定位统一替换为指定坐标"));
+        root.addView(M3Page.spacer(ctx, 2));
+
+        boolean locOn = FakeLocationHook.isEnabled();
+        LinearLayout cardLoc = PageKit.makeCard(ctx, d);
+        cardLoc.addView(PageKit.switchRow(ctx, d, "定位伪装",
+                "开启后微信定位结果统一替换为你配置的坐标（附近的人 / 地图 / 小程序）",
+                locOn,
+                (v, on) -> {
+                    FakeLocationHook.setEnabled(on);
+                    Toast.makeText(ctx, "定位伪装已" + (on ? "开启" : "关闭")
+                            + "（重启微信后完全生效）", Toast.LENGTH_SHORT).show();
+                },
+                v -> SubPageActivity.open(act, "定位伪装", 29)));
+        root.addView(cardLoc);
+        root.addView(PageKit.divider(ctx));
+
+        // ---- 朋友圈自动点赞 ----
+        root.addView(M3Page.section(ctx, "朋友圈自动点赞",
+                "朋友圈右上角「⋮」菜单 + 自动点赞"));
+        root.addView(M3Page.spacer(ctx, 2));
+
+        boolean likeOn = MomentsAutoLikeHook.isEnabled();
+        LinearLayout cardLike = PageKit.makeCard(ctx, d);
+        cardLike.addView(PageKit.switchRow(ctx, d, "朋友圈自动点赞",
+                "在朋友圈右上角注入「⋮ 自动点赞」菜单，可对指定联系人动态自动点赞",
+                likeOn,
+                (v, on) -> {
+                    MomentsAutoLikeHook.setEnabled(on);
+                    Toast.makeText(ctx, "朋友圈自动点赞已" + (on ? "开启" : "关闭")
+                            + "（重新进入朋友圈生效）", Toast.LENGTH_SHORT).show();
+                },
+                v -> SubPageActivity.open(act, "朋友圈自动点赞", 30)));
+        root.addView(cardLike);
         return root;
     }
 }

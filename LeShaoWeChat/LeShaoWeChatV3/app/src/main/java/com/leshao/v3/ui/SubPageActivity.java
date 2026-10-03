@@ -352,6 +352,10 @@ public class SubPageActivity {
                 return BatchAddRecordPageView.create(ctx, parentAct);
             case 28: // 更多功能（去广告等）
                 return MoreFeaturesPageView.create(ctx, parentAct);
+            case 29: // 定位伪装
+                return FakeLocationPageView.create(ctx, parentAct);
+            case 30: // 朋友圈自动点赞
+                return MomentsLikePageView.create(ctx, parentAct);
             default:
                 return makePlaceholder(ctx, parentAct);
         }

@@ -690,7 +690,7 @@ public class MainActivity {
             SubPageActivity.openFromMain(act, "更多功能", 28);
         });
         moreItem.setTag("menu_item");
-        searchMap.put(moreItem, "更多功能|去广告|广告");
+        searchMap.put(moreItem, "更多功能|去广告|广告|定位伪装|虚拟定位|伪装定位|朋友圈自动点赞|自动点赞|点赞");
         cardMore.addView(moreItem);
         body.addView(cardMore);
 

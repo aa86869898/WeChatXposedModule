@@ -150,9 +150,11 @@ public final class ChatFooterBarHook {
         LinearLayout bar = ChatVoiceSwitchHook.buildActionButtonRow(ctx, true);
         bar.setTag(ROW_TAG);
 
-        // 文档实测：footer 的父容器是自定义 ChattingScrollLayout，直接插兄弟节点不会被其
-        // onLayout 计入占位 → 遮挡消息。改为锚定 footer 内「包含输入框的垂直 LinearLayout」，
-        // 在其输入行之前插入，使 footer 高度自然增长（与 ChatVoiceSwitchHook 同方案）。
+        // 文档《WeChat_ChatFooterShortcutButton_遮挡_逆向分析与修复.md》结论：
+        // 消息列表由 ChattingScrollLayout 对 MMChattingListView 施加 translationY 顶起，
+        // 按钮必须成为「Footer 容器(n / ChatFooter 输入栏) 内部、按垂直度量合法 wrap_content 增高」
+        // 的一员，绝不可 overlay 到 MMChattingListView。这里锚定 footer 内「包含输入框的最外层
+        // 垂直 LinearLayout」，把按钮插到输入行正上方，使 footer 高度自然增长并触发 c() 重算。
         String target;
         try {
             View edit = findFirstEditText(footer);
@@ -161,15 +163,15 @@ public final class ChatFooterBarHook {
             if (edit != null) {
                 View child = edit;
                 ViewParent p = edit.getParent();
+                // 持续向上，取 footer 内「最外层」的垂直 LinearLayout（其子链末端即输入行）。
                 while (p instanceof ViewGroup && p != footer) {
                     ViewGroup vg = (ViewGroup) p;
                     if (vg instanceof LinearLayout
                             && ((LinearLayout) vg).getOrientation() == LinearLayout.VERTICAL) {
                         host = vg;
                         hostIdx = vg.indexOfChild(child);
-                        break;
                     }
-                    child = (View) vg;
+                    child = vg;
                     p = vg.getParent();
                 }
             }
@@ -196,7 +198,60 @@ public final class ChatFooterBarHook {
         }
         footer.requestLayout();
         parent.requestLayout();
+        // 文档通用要求：每次 addView 后必须请求重新布局并驱动一次协议刷新
+        // (ChatFooter.C2 → ChattingScrollLayout.c(false,false))，否则消息列表 translationY 不刷新。
+        final View f = footer;
+        footer.post(() -> {
+            try {
+                f.requestLayout();
+                refreshProtocol(f);
+            } catch (Throwable ignored) {}
+        });
         LogWriter.log(TAG, "injected bar " + target + " footer=" + footer.getClass().getName());
+    }
+
+    /**
+     * 驱动 ChattingScrollLayout 的高度协商协议刷新：
+     * 取 ChatFooter 的 {@code C2} 字段（ChattingScrollLayout），调用其 {@code c(false,false)}
+     * 重算消息列表 translationY。取不到 C2 时沿视图树向上找 ChattingScrollLayout。
+     */
+    private static void refreshProtocol(View footer) {
+        try {
+            Object scroll = null;
+            for (Class<?> k = footer.getClass(); k != null && k != Object.class; k = k.getSuperclass()) {
+                try {
+                    java.lang.reflect.Field f = k.getDeclaredField("C2");
+                    f.setAccessible(true);
+                    scroll = f.get(footer);
+                    if (scroll != null) break;
+                } catch (Throwable ignored) {}
+            }
+            if (scroll == null) {
+                ViewParent p = footer.getParent();
+                while (p instanceof ViewGroup) {
+                    ViewGroup g = (ViewGroup) p;
+                    if (g.getClass().getName().contains("ChattingScrollLayout")) {
+                        scroll = g;
+                        break;
+                    }
+                    p = g.getParent();
+                }
+            }
+            if (scroll == null) return;
+            Method c = null;
+            for (Class<?> k = scroll.getClass(); k != null && k != Object.class; k = k.getSuperclass()) {
+                try {
+                    c = k.getDeclaredMethod("c", boolean.class, boolean.class);
+                    break;
+                } catch (Throwable ignored) {}
+            }
+            if (c == null) return;
+            c.setAccessible(true);
+            c.invoke(scroll, false, false);
+            LogWriter.log(TAG, "protocol refresh c(false,false) on " + scroll.getClass().getSimpleName());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "refreshProtocol err: " + t);
+        }
     }
 
     private static void retryInject(final View footer, final int attempt) {
