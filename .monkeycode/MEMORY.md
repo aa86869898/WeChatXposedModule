@@ -134,3 +134,13 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 文字消息气泡背景在 main 线程绑定数据时以 `setBackground(StateListDrawable)` 设置，其 constantState 与 `res.getDrawable(2131231925/2131232060)`（chatfrom_bg/chatto_bg）不匹配 → matchBaseDrawable 返回 -1，X2C 阶段已替换的自定义图被微信覆盖回原生
   - 修复：扩展候选气泡资源（mi/ob/链接/发送中等相邻资源 ID）加入 constantState 匹配集；to 类 hook 放宽为所有 b 方法；输出 UNMATCHED textBubble 诊断日志（drawable 结构+调用栈）用于继续定位
   - 诊断：日志中语音消息正常（AnimImageView.setType + viewitems.b REPLACE neat=false）但无 to.b 触发 + 有 `CAL setBackground view=MMNeat7extView drawable=StateListDrawable chat=false` = 文字气泡路径未命中
+
+### 语音消息失效根因：View 参数过滤误伤 mq.b（v3.0.137 修复）
+- Date: 2026-10-03
+- Context: 用户反馈 v3.0.136 语音消息气泡也不起作用；分析 /workspace/全leshao_v3_log.txt 定位
+- Category: 排错调试
+- Instructions:
+  - v3.0.136 为防启动卡死对 `viewitems.to/mq` 所有 b 方法统一排除 View 参数重载，但 `mq.b(View,boolean,boolean)` 是语音消息绑定主路径（View 参数被 `View.class.isAssignableFrom(View)` 误杀）→ 日志中仅见 `to.b[e9,to,gk5.d,Boolean] hooked`、无任何 mq.b 安装行
+  - 修复：按类区分过滤——`to`（文字）类继续排除 View 参数重载（防卡死），`mq`（语音）类保留全部 b 方法（mq.b 接收 View 参数且 v3.0.135 前一直正常）
+  - 附带修正：`debugDumpUnmatchedTextBubble` 会把已替换的自定义 NineSliceDrawable 误报为 UNMATCHED，打印前需先 `isCustomBackground(d)` 排除
+  - v3.0.136 日志中语音其实仍通过 `AnimImageView.setType` + `setBackgroundResource REPLACE` 兜底替换（2131232060/2131231925），说明语音兜底路径有效；但 mq.b 主路径必须恢复以保留 BUBBLE 捕获与方向直供
