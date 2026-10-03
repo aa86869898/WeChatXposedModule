@@ -127,6 +127,21 @@ public final class ChatBubbleHook {
     private static volatile Drawable sFromBaseDrawable;
     private static volatile Drawable sToBaseDrawable;
 
+    // v3.0.135：微信 8.0.78 文字气泡实际使用的资源可能与 chatfrom_bg/chatto_bg 不同
+    // （X2C 布局中 MMNeat7extView 背景为 StateListDrawable，日志证实其 constantState
+    //  与 res.getDrawable(2131231925/2131232060) 不匹配）。扩展加载相邻候选资源
+    //  （mi/ob/链接/发送中等），供 constantState 匹配识别。
+    private static final int[] BASE_FROM_CANDIDATE_IDS = {
+            2131231925, 2131231926, 2131231944, 2131231841
+    };
+    private static final int[] BASE_TO_CANDIDATE_IDS = {
+            2131232060, 2131232062, 2131232070, 2131231895
+    };
+    private static final java.util.List<Drawable> sExtraFromBaseDrawables =
+            new java.util.ArrayList<>(4);
+    private static final java.util.List<Drawable> sExtraToBaseDrawables =
+            new java.util.ArrayList<>(4);
+
     // v3.0.94：文本气泡在 setBackgroundResource 替换后可能被微信布局阶段再次覆盖。
     // 记录已替换的气泡 View 与自定义 Drawable，在聊天列表 onLayout 后强制恢复，
     // 解决文本消息（TextView w=0 h=0 时替换）最终仍显示原生气泡的问题。
@@ -477,7 +492,8 @@ public final class ChatBubbleHook {
                 if (d != null) {
                     sFromBaseDrawable = d;
                     LogWriter.log(TAG, "baseDrawable loaded from resId=" + sFromResId
-                            + " name=" + res.getResourceEntryName(sFromResId));
+                            + " name=" + res.getResourceEntryName(sFromResId)
+                            + " cls=" + d.getClass().getName());
                 }
             }
             if (sToBaseDrawable == null && sToResId != 0) {
@@ -485,7 +501,35 @@ public final class ChatBubbleHook {
                 if (d != null) {
                     sToBaseDrawable = d;
                     LogWriter.log(TAG, "baseDrawable loaded to resId=" + sToResId
-                            + " name=" + res.getResourceEntryName(sToResId));
+                            + " name=" + res.getResourceEntryName(sToResId)
+                            + " cls=" + d.getClass().getName());
+                }
+            }
+            // v3.0.135：加载候选气泡资源（含子项），扩大 constantState 匹配集
+            if (sExtraFromBaseDrawables.isEmpty()) {
+                for (int id : BASE_FROM_CANDIDATE_IDS) {
+                    try {
+                        Drawable d = res.getDrawable(id);
+                        if (d != null) {
+                            sExtraFromBaseDrawables.add(d);
+                            LogWriter.log(TAG, "baseCandidate from resId=" + id
+                                    + " name=" + res.getResourceEntryName(id)
+                                    + " cls=" + d.getClass().getName());
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            }
+            if (sExtraToBaseDrawables.isEmpty()) {
+                for (int id : BASE_TO_CANDIDATE_IDS) {
+                    try {
+                        Drawable d = res.getDrawable(id);
+                        if (d != null) {
+                            sExtraToBaseDrawables.add(d);
+                            LogWriter.log(TAG, "baseCandidate to resId=" + id
+                                    + " name=" + res.getResourceEntryName(id)
+                                    + " cls=" + d.getClass().getName());
+                        }
+                    } catch (Throwable ignored) {}
                 }
             }
         } catch (Throwable t) {
@@ -635,7 +679,10 @@ public final class ChatBubbleHook {
                     if (!isBubbleContext((View) param.thisObject)) return; // v3.0.131
                     Drawable d = (Drawable) param.args[0];
                     int kind = matchBaseDrawable(d);
-if (kind < 0) return;
+if (kind < 0) {
+                            debugDumpUnmatchedTextBubble((View) param.thisObject, d);
+                            return;
+                        }
                         Drawable custom = loadDrawable(kind);
                         if (custom != null) {
                             Drawable freshD = fresh(custom);
@@ -750,7 +797,10 @@ if (kind < 0) return;
                         if (!isBubbleContext((View) param.thisObject)) return; // v3.0.131
                         Drawable d = (Drawable) param.args[0];
                         int kind = matchBaseDrawable(d);
-                        if (kind < 0) return;
+                        if (kind < 0) {
+                            debugDumpUnmatchedTextBubble((View) param.thisObject, d);
+                            return;
+                        }
                         Drawable custom = loadDrawable(kind);
                         if (custom != null) {
                             param.args[0] = custom;
@@ -907,14 +957,10 @@ if (kind < 0) return;
             for (Class<?> toCls : HookUtil.loadClasses(cl, cn)) {
                 for (Method m : toCls.getDeclaredMethods()) {
                     if (!"b".equals(m.getName())) continue;
-                    // to 类保持严格（文档签名）；mq 类放宽（日志证实 mq.b 是实际调用点，
-                    // 但签名未知——可能非静态/首参非 e9）
-                    boolean strict = cn.contains("to");
-                    if (strict) {
-                        if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
-                        Class<?>[] pts = m.getParameterTypes();
-                        if (pts.length < 2 || !"e9".equals(pts[0].getSimpleName())) continue;
-                    }
+                    // v3.0.135：to 类同样放宽为所有名为 b 的方法。
+                    // 日志证实 to.b[e9,to,gk5.d,Boolean]（静态+首参e9）已 hook 但从未触发，
+                    // 说明 8.0.78 文字消息绑定实际调用的是 to.b 的其他重载（非静态/参数不同）。
+                    // 放宽后 after 通过遍历参数找 holder 字段 + isRecv 布尔，误伤可控。
                     m.setAccessible(true);
                     final String owner = cn;
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
@@ -1162,6 +1208,13 @@ if (kind < 0) return;
         try {
             if (sFromBaseDrawable != null && sameConstant(sFromBaseDrawable, d)) return KIND_FROM;
             if (sToBaseDrawable != null && sameConstant(sToBaseDrawable, d)) return KIND_TO;
+            // v3.0.135：候选气泡资源匹配（文字气泡实际资源可能非 chatfrom_bg/chatto_bg）
+            for (Drawable cand : sExtraFromBaseDrawables) {
+                if (sameConstant(cand, d)) return KIND_FROM;
+            }
+            for (Drawable cand : sExtraToBaseDrawables) {
+                if (sameConstant(cand, d)) return KIND_TO;
+            }
             if (d instanceof android.graphics.drawable.StateListDrawable) {
                 android.graphics.drawable.StateListDrawable sld =
                         (android.graphics.drawable.StateListDrawable) d;
@@ -1176,6 +1229,62 @@ if (kind < 0) return;
 
     private static boolean sameConstant(Drawable a, Drawable b) {
         return a.getConstantState() != null && a.getConstantState().equals(b.getConstantState());
+    }
+
+    /** v3.0.135：文字消息气泡 setBackground 未被 constantState 匹配时输出诊断信息
+     *  （drawable 结构 + baseDrawable 类型 + 调用栈），用于定位 8.0.78 文字气泡真实资源/绑定路径。
+     *  仅聊天文本视图触发、按 key 去重、封顶 30 条，避免刷屏。 */
+    private static final java.util.Set<String> sUnmatchedDumped = new java.util.HashSet<>();
+
+    private static void debugDumpUnmatchedTextBubble(View v, Drawable d) {
+        try {
+            if (!CALIBRATE) return;
+            String vn = v.getClass().getName();
+            if (!vn.contains("Neat")) return;
+            StackTraceElement[] st = Thread.currentThread().getStackTrace();
+            String caller = st.length > 4 ? st[4].getClassName() + "." + st[4].getMethodName() : "?";
+            String key = vn + "|" + d.getClass().getName() + "|" + caller;
+            synchronized (sUnmatchedDumped) {
+                if (!sUnmatchedDumped.add(key)) return;
+                if (sUnmatchedDumped.size() > 30) return;
+            }
+            StringBuilder sb = new StringBuilder();
+            sb.append("UNMATCHED textBubble view=").append(vn)
+              .append(" drawable=").append(d.getClass().getName());
+            try {
+                if (d.getConstantState() != null) {
+                    sb.append(" cs=").append(d.getConstantState().getClass().getName());
+                }
+            } catch (Throwable ignored) {}
+            if (d instanceof android.graphics.drawable.StateListDrawable) {
+                android.graphics.drawable.StateListDrawable sld =
+                        (android.graphics.drawable.StateListDrawable) d;
+                sb.append(" states=").append(sld.getStateCount());
+                for (int i = 0; i < sld.getStateCount() && i < 6; i++) {
+                    Drawable sub = sld.getStateDrawable(i);
+                    sb.append(" [").append(i).append("]=")
+                      .append(sub == null ? "null" : sub.getClass().getName());
+                    if (sub != null && sub.getConstantState() != null) {
+                        sb.append("@").append(Integer.toHexString(
+                                System.identityHashCode(sub.getConstantState())));
+                    }
+                }
+            }
+            sb.append(" sFrom=").append(sFromBaseDrawable == null ? "null" :
+                    sFromBaseDrawable.getClass().getName() + "@" + Integer.toHexString(
+                            System.identityHashCode(sFromBaseDrawable.getConstantState())));
+            sb.append(" sTo=").append(sToBaseDrawable == null ? "null" :
+                    sToBaseDrawable.getClass().getName() + "@" + Integer.toHexString(
+                            System.identityHashCode(sToBaseDrawable.getConstantState())));
+            sb.append(" chat=").append(inChatItem(v))
+              .append(" parent=").append(parentChain(v, 2));
+            LogWriter.log(TAG, sb.toString());
+            int n = Math.min(st.length, 15);
+            for (int i = 2; i < n; i++) {
+                LogWriter.log(TAG, "  at " + st[i].getClassName() + "." + st[i].getMethodName()
+                        + (st[i].getLineNumber() > 0 ? ":" + st[i].getLineNumber() : ""));
+            }
+        } catch (Throwable ignored) {}
     }
 
     /** 是否为"本模块构建的自定义气泡图"。

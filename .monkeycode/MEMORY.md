@@ -114,3 +114,23 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
    - 编译后必须提供下载链接：将 APK 复制到 `/workspace/LeShaoWeChat/LeShaoWeChatV3/download/` 目录，通过 `request_preview` 端口 8000 获取预览地址，下载链接为 `预览地址/LeShaoWeChat-v814.apk`
   - 推送命令: `git push`（本地 master → 远程 master）
   - 严禁提交 `/workspace/leshao_v3_log.txt`（用户实机日志，包含隐私，永不入 git）；提交前用 `git status --short` 核对暂存文件列表，只 add 源码与 download/index.html
+
+### 气泡替换 X2C/复用路径失效（v3.0.133 文本气泡不生效根因）
+- Date: 2026-10-03
+- Context: 用户反馈 v3.0.133（三层门控重构）后聊天气泡不生效，分析 /workspace/全leshao_v3_log.txt 定位
+- Category: 排错调试
+- Instructions:
+  - 文本气泡背景可能在 item attach 前由 X2C 预构建/RecyclerView 复用路径直接 `setBackground(StateListDrawable)` 设置（此时 `inChatItem` 找不到 0x7f0a103c tag，chat=false），`viewitems.to.b/mq.b` 绑定方法不一定触发 → 严格 tag 门控会导致文本气泡完全不替换
+  - 判定：日志中语音气泡（AnimImageView.setType + attach BUBBLE apply）正常、红包 hook 正常，但无 `viewitems.b REPLACE`/`holderField`/`ke5.a.i stack`，同时有 `CAL setBackground view=MMNeat7extView ... chat=false`
+  - 修复：`MMNeat7extView` 是微信聊天文本专用视图（主页/输入框不用），`isBubbleContext` 对 `isChatTextBubble(v)`（类名含 MMNeat）放行；setBackground/neat.setBackground/onDraw 替换后把 view 收进 BUBBLE 表供 attach 补盖
+  - 注意：主页/输入框即使放行也不会误伤，因为所有替换路径仍有 matchBaseDrawable/resId 白名单二次校验
+
+### 文字消息 to.b 不触发/气泡资源不匹配（v3.0.134 文字气泡仍不生效根因）
+- Date: 2026-10-03
+- Context: 用户反馈 v3.0.134 语音消息生效、文字气泡仍不生效；分析 leshao_v3_log.txt（22:17 时段，群聊含文字消息）定位
+- Category: 排错调试
+- Instructions:
+  - 微信 8.0.78 文字消息绑定方法 `viewitems.to.b[e9,to,gk5.d,Boolean]`（静态+首参e9）虽能 hook 到，但运行时可能不调用该签名（走其他重载或 MVVM 路径 `viewitems.mvvmview.Chatting*MvvmView`）→ 只 hook 严格签名会零触发，必须对 to 类放宽为所有名为 b 的方法
+  - 文字消息气泡背景在 main 线程绑定数据时以 `setBackground(StateListDrawable)` 设置，其 constantState 与 `res.getDrawable(2131231925/2131232060)`（chatfrom_bg/chatto_bg）不匹配 → matchBaseDrawable 返回 -1，X2C 阶段已替换的自定义图被微信覆盖回原生
+  - 修复：扩展候选气泡资源（mi/ob/链接/发送中等相邻资源 ID）加入 constantState 匹配集；to 类 hook 放宽为所有 b 方法；输出 UNMATCHED textBubble 诊断日志（drawable 结构+调用栈）用于继续定位
+  - 诊断：日志中语音消息正常（AnimImageView.setType + viewitems.b REPLACE neat=false）但无 to.b 触发 + 有 `CAL setBackground view=MMNeat7extView drawable=StateListDrawable chat=false` = 文字气泡路径未命中
