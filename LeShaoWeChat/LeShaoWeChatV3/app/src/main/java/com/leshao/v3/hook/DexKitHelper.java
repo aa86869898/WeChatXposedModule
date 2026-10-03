@@ -36,6 +36,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.luckypray.dexkit.DexKitBridge;
 import org.luckypray.dexkit.DexKitCacheBridge;
@@ -52,7 +53,7 @@ import org.luckypray.dexkit.result.MethodData;
 public class DexKitHelper {
     private static final String BASELINE_ASSET = "dexkit_baseline.json";
     private static final String BASELINE_FILE = "dexkit_baseline.json";
-    private static final int CURRENT_MODULE_VERSION = 30120;
+    private static final int CURRENT_MODULE_VERSION = 30122;
     private static final String KEY_A21_CLASS = "a21_class";
     private static final String KEY_A21_METHOD = "a21_method";
     private static final String KEY_ACTION_BAR_CLASS = "action_bar_custom_area";
@@ -97,6 +98,7 @@ public class DexKitHelper {
     private static final String KEY_VOICE_API = "voice_api";
     private static final String KEY_X9_CLASS = "x9_class";
     private static final String MMKV_RESULTS_ID = "dexkit_scan_v3";
+    private static final String FIND_CACHE_MMKV = "dexkit_find_cache";
     private static final String TAG = "DexKit";
     private static volatile String sA21ClassName;
     private static volatile String sA21MethodName;
@@ -426,12 +428,65 @@ public class DexKitHelper {
         }
     }
 
+    private static String findCacheKey(String type, String className, String keyword) {
+        return type + "|" + (className == null ? "" : className) + "|" + keyword;
+    }
+
+    private static List<String> readFindCache(String key) {
+        try {
+            MMKV kv = MMKV.mmkvWithID(FIND_CACHE_MMKV, 2);
+            String verKey = "v_" + sVersionCode;
+            String json = kv.decodeString(verKey, null);
+            if (json == null || json.isEmpty()) {
+                return null;
+            }
+            JSONObject obj = new JSONObject(json);
+            JSONArray arr = obj.optJSONArray(key);
+            if (arr == null) {
+                return null;
+            }
+            List<String> out = new ArrayList<>();
+            for (int i = 0; i < arr.length(); i++) {
+                out.add(arr.getString(i));
+            }
+            return out;
+        } catch (Throwable th) {
+            return null;
+        }
+    }
+
+    private static void writeFindCache(String key, List<String> results) {
+        try {
+            if (results == null || results.isEmpty()) {
+                return;
+            }
+            MMKV kv = MMKV.mmkvWithID(FIND_CACHE_MMKV, 2);
+            String verKey = "v_" + sVersionCode;
+            String json = kv.decodeString(verKey, null);
+            JSONObject obj = (json == null || json.isEmpty()) ? new JSONObject() : new JSONObject(json);
+            JSONArray arr = new JSONArray();
+            for (String s : results) {
+                arr.put(s);
+            }
+            obj.put(key, arr);
+            kv.encode(verKey, obj.toString());
+            kv.sync();
+        } catch (Throwable th) {
+        }
+    }
+
     public static List<String> findClassesByString(ClassLoader cl, final String keyword) {
+        if (keyword == null || keyword.isEmpty()) {
+            return new ArrayList<>();
+        }
+        String cacheKey = findCacheKey("C", null, keyword);
+        List<String> cached = readFindCache(cacheKey);
+        if (cached != null) {
+            LogWriter.log(TAG, "findClassesByString(" + keyword + "): cache hit " + cached.size() + " candidates");
+            return new ArrayList<>(cached);
+        }
         DexKitCacheBridge.RecyclableBridge bridge = null;
         final List<String> results = new ArrayList<>();
-        if (keyword == null || keyword.isEmpty()) {
-            return results;
-        }
         waitForFullScanIfScheduled();
         synchronized (sBridgeLock) {
             try {
@@ -471,6 +526,7 @@ public class DexKitHelper {
                     }
                 });
                 LogWriter.log(TAG, "findClassesByString(" + keyword + "): " + results.size() + " candidates");
+                writeFindCache(cacheKey, results);
                 return results;
             } finally {
                 try {
@@ -482,11 +538,17 @@ public class DexKitHelper {
     }
 
     public static List<String> findMethodsByString(ClassLoader cl, final String className, final String keyword) {
+        if (keyword == null || keyword.isEmpty()) {
+            return new ArrayList<>();
+        }
+        String cacheKey = findCacheKey("M", className, keyword);
+        List<String> cached = readFindCache(cacheKey);
+        if (cached != null) {
+            LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): cache hit " + cached.size());
+            return new ArrayList<>(cached);
+        }
         DexKitCacheBridge.RecyclableBridge bridge = null;
         final List<String> results = new ArrayList<>();
-        if (keyword == null || keyword.isEmpty()) {
-            return results;
-        }
         waitForFullScanIfScheduled();
         synchronized (sBridgeLock) {
             try {
@@ -519,6 +581,7 @@ public class DexKitHelper {
                     }
                 });
                 LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): " + results.size());
+                writeFindCache(cacheKey, results);
                 return results;
             } finally {
                 try {
@@ -1012,9 +1075,9 @@ public class DexKitHelper {
         try {
             MMKV kv = MMKV.mmkvWithID(MMKV_RESULTS_ID, 2);
             kv.encode(KEY_VERSION_CODE, sVersionCode);
-            kv.encode(KEY_MODULE_VERSION, 30120);
+            kv.encode(KEY_MODULE_VERSION, 30122);
             kv.sync();
-            LogWriter.log(TAG, "persistScanVersion: wx=" + sVersionCode + " module=30120");
+            LogWriter.log(TAG, "persistScanVersion: wx=" + sVersionCode + " module=30122");
         } catch (Throwable e) {
             LogWriter.log(TAG, "persistScanVersion err: " + e.getMessage());
         }
@@ -2888,7 +2951,7 @@ public class DexKitHelper {
                     } catch (Throwable th) {
                     }
                 }
-            }, 10000L);
+            }, 0L);
         } catch (Throwable e) {
             LogWriter.log(TAG, "startFullScan err: " + e.getMessage());
             markScanCompleteAndDrain();
