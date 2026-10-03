@@ -53,7 +53,7 @@ import org.luckypray.dexkit.result.MethodData;
 public class DexKitHelper {
     private static final String BASELINE_ASSET = "dexkit_baseline.json";
     private static final String BASELINE_FILE = "dexkit_baseline.json";
-    private static final int CURRENT_MODULE_VERSION = 30122;
+    private static final int CURRENT_MODULE_VERSION = 30123;
     private static final String KEY_A21_CLASS = "a21_class";
     private static final String KEY_A21_METHOD = "a21_method";
     private static final String KEY_ACTION_BAR_CLASS = "action_bar_custom_area";
@@ -1075,9 +1075,9 @@ public class DexKitHelper {
         try {
             MMKV kv = MMKV.mmkvWithID(MMKV_RESULTS_ID, 2);
             kv.encode(KEY_VERSION_CODE, sVersionCode);
-            kv.encode(KEY_MODULE_VERSION, 30122);
+            kv.encode(KEY_MODULE_VERSION, 30123);
             kv.sync();
-            LogWriter.log(TAG, "persistScanVersion: wx=" + sVersionCode + " module=30122");
+            LogWriter.log(TAG, "persistScanVersion: wx=" + sVersionCode + " module=30123");
         } catch (Throwable e) {
             LogWriter.log(TAG, "persistScanVersion err: " + e.getMessage());
         }
@@ -3044,9 +3044,17 @@ public class DexKitHelper {
                             Object obj = param.args[0];
                             if (obj instanceof Activity) {
                                 Activity activity = (Activity) obj;
-                                if ("com.tencent.mm".equals(activity.getPackageName()) && "com.tencent.mm.ui.LauncherUI".equals(activity.getClass().getName())) {
+                                // v3.0.123: 不再只等 LauncherUI —— 微信启动先出现 WeChatSplashActivity，
+                                // 若扫描已开始而 LauncherUI 迟迟未创建（首启/升级后全量扫描耗时），
+                                // 用户会看到长时间黑屏且无任何进度反馈。这里放宽到启动期第一个
+                                // 微信 Activity（Splash / LauncherUI）即显示进度弹窗，保证有可见反馈。
+                                String actName = activity.getClass().getName();
+                                boolean isStartupActivity = "com.tencent.mm".equals(activity.getPackageName())
+                                        && ("com.tencent.mm.ui.LauncherUI".equals(actName)
+                                            || "com.tencent.mm.app.WeChatSplashActivity".equals(actName));
+                                if (isStartupActivity) {
                                     DexKitHelper.sShouldShowScanDialog = false;
-                                    LogWriter.log(DexKitHelper.TAG, "DexKitScanDialog shown on LauncherUI");
+                                    LogWriter.log(DexKitHelper.TAG, "DexKitScanDialog shown on " + actName);
                                     DexKitScanDialog.show(activity);
                                     if (!DexKitHelper.sFullScanScheduled.get() || DexKitHelper.isScanComplete()) {
                                         DexKitHelper.sMainHandler.postDelayed(new Runnable() { // from class: com.leshao.v3.hook.DexKitHelper$16$$ExternalSyntheticLambda0

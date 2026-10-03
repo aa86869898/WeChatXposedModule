@@ -240,6 +240,9 @@ public class VoiceForwardHook {
         sPendingView = anchor;
         sPendingMsg = tag;
         sPendingTalker = extractTalker(e9);
+        // v3.0.123: 标记本轮菜单已注入，供 click intercept 状态守卫判断（配合 sPendingMsg 非空）
+        sMenuInjected = true;
+        sMenuInjectedTime = System.currentTimeMillis();
         try {
             if (anchor.getContext() instanceof Activity) sChatAct = (Activity) anchor.getContext();
         } catch (Throwable ignored) {}
@@ -290,6 +293,12 @@ public class VoiceForwardHook {
                             try {
                                 MenuItem mi = (MenuItem) p.args[0];
                                 if (mi == null || mi.getItemId() != MENU_ID) return;
+                                // v3.0.123: 状态守卫 —— 只有本轮菜单确实注入过、且待转发消息有效时才执行转发；
+                                // 否则仅吞掉点击，避免菜单项状态残留/消息失效导致"闪返回"或误转发。
+                                if (!sMenuInjected || sPendingMsg == null) {
+                                    p.setResult(null);
+                                    return;
+                                }
                                 if (shortCircuitByField) {
                                     Field f = null;
                                     if (sPendingMsg != null) f = findTagField(p.thisObject.getClass(), sPendingMsg.getClass());

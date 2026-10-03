@@ -139,7 +139,7 @@ public class AppColors {
     private static int detectDynamicSeed() {
         if (android.os.Build.VERSION.SDK_INT < 31) return 0;
         try {
-            Context ctx = com.leshao.v3.ContextManager.getAppContext();
+            Context ctx = themedContext();
             if (ctx == null) return 0;
             return ctx.getResources().getColor(android.R.color.system_accent1_500,
                     ctx.getTheme());
@@ -151,6 +151,23 @@ public class AppColors {
             }
         } catch (Throwable ignored) {}
         return 0;
+    }
+
+    /**
+     * v3.0.123：获取带有效 Theme 的 Context。
+     * Application context 的 {@code getTheme()} 在部分机型/时机下不可用（返回默认空主题），
+     * 后台线程在 Application 尚未 attach 时更是拿不到 context。这里用 ContextThemeWrapper
+     * 绑定设备默认主题，保证系统强调色资源在任意线程都能解析，避免动态取色偶发失败回退。
+     */
+    private static Context themedContext() {
+        Context ctx = com.leshao.v3.ContextManager.getAppContext();
+        if (ctx == null) return null;
+        try {
+            return new android.view.ContextThemeWrapper(
+                    ctx, android.R.style.Theme_DeviceDefault_DayNight);
+        } catch (Throwable ignored) {
+            return ctx;
+        }
     }
 
     /** 动态取色是否可用（Android 12+） */
@@ -166,7 +183,7 @@ public class AppColors {
      */
     private static boolean applyDynamicPalette(boolean dark) {
         try {
-            Context ctx = com.leshao.v3.ContextManager.getAppContext();
+            Context ctx = themedContext();
             if (ctx == null || android.os.Build.VERSION.SDK_INT < 31) return false;
             android.content.res.Resources res = ctx.getResources();
             android.content.res.Resources.Theme theme = ctx.getTheme();
@@ -240,7 +257,7 @@ public class AppColors {
      * 低版本/系统色不可用时回退到糖果粉静态色板，保证所有界面/弹窗/控件视觉一致。
      * 旧 PALETTE_* API 与 getter 全部保留，仅取值来源优先为系统动态色。</p>
      */
-    private static void recomputePalette() {
+    private static synchronized void recomputePalette() {
         boolean dark = sDarkMode;
         // Android 12+ 动态取色可用时直接使用系统强调色（Material You）
         if (sPalette == PALETTE_DYNAMIC
@@ -249,6 +266,16 @@ public class AppColors {
             try {
                 com.leshao.v3.LogWriter.log("AppColors", "dynamic palette: sdk=" + android.os.Build.VERSION.SDK_INT
                         + " dark=" + dark + " seed=0x" + Integer.toHexString(detectDynamicSeed()));
+            } catch (Throwable ignored) {}
+            return;
+        }
+        // v3.0.123: 线程竞争修复 —— 后台线程可能在 Application 尚未 attach 时（app context 为空）
+        // 触发类加载并调用本方法，导致动态取色失败而回退静态色。若此前已成功取到动态色
+        // （sLastDynamicSeed != 0），则保留已生效的动态配色，绝不用静态色覆盖，避免 UI 颜色回退。
+        if (sPalette == PALETTE_DYNAMIC && sLastDynamicSeed != 0) {
+            try {
+                com.leshao.v3.LogWriter.log("AppColors", "keep dynamic palette (ctx not ready), seed=0x"
+                        + Integer.toHexString(sLastDynamicSeed));
             } catch (Throwable ignored) {}
             return;
         }

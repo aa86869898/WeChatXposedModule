@@ -116,9 +116,9 @@ public class WeChatUpdateBlocker {
     }
 
     /** 在目标类中查找方法名匹配、且参数个数==paramCount 的方法并 hook（before 阶段 setResult） */
-    private static void hookByName(ClassLoader cl, String clsName, String methodName,
+    private static boolean hookByName(ClassLoader cl, String clsName, String methodName,
                                    int paramCount, Object blockResult, String tag) {
-        if (clsName == null) return;
+        if (clsName == null) return false;
         try {
             Class<?> c = cl.loadClass(clsName);
             boolean hooked = false;
@@ -142,9 +142,68 @@ public class WeChatUpdateBlocker {
             }
             if (!hooked) LogWriter.log(TAG, "[WARN] " + tag + ": no method " + methodName
                 + " in " + clsName);
+            return hooked;
         } catch (Throwable t) {
             LogWriter.log(TAG, "[WARN] " + tag + ": class/method err " + t);
+            return false;
         }
+    }
+
+    /**
+     * v3.0.123 兜底: 当缓存类名/短名定位失败时，用 DexKit 在**全局**按方法字符串锚点搜索，
+     * 命中指定方法名的方法并 hook。用于 V2/T1/T6b 等因类名漂移而失效的阻断点。
+     */
+    private static void hookByGlobalMethodStrings(ClassLoader cl, String anchor,
+                                                  String methodName, Object blockResult,
+                                                  String tag) {
+        try {
+            List<String> sigs = DexKitHelper.findMethodsByString(cl, null, anchor);
+            if (sigs == null || sigs.isEmpty()) {
+                LogWriter.log(TAG, "[WARN] " + tag + ": no method strings '" + anchor + "' anywhere");
+                return;
+            }
+            int hooked = 0;
+            for (String sig : sigs) {
+                String[] parsed = parseSig(sig);
+                if (parsed == null) continue;
+                if (methodName != null && !methodName.equals(parsed[1])) continue;
+                try {
+                    Class<?> c = cl.loadClass(parsed[0]);
+                    for (Method m : c.getDeclaredMethods()) {
+                        if (!m.getName().equals(methodName)) continue;
+                        m.setAccessible(true);
+                        final String t = tag;
+                        final Object res = blockResult;
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
+                            @Override protected void beforeHookedMethod(MethodHookParam param) {
+                                try {
+                                    LogWriter.log(TAG, "[" + t + "] block " + m.getName());
+                                } catch (Throwable ignored) {}
+                                param.setResult(res);
+                            }
+                        });
+                        hooked++;
+                        LogWriter.log(TAG, "hooked " + parsed[0] + "." + methodName
+                                + " as " + tag + " (global)");
+                    }
+                } catch (Throwable ignored) {}
+            }
+            if (hooked == 0) LogWriter.log(TAG, "[WARN] " + tag
+                    + ": global found '" + anchor + "' but no hookable method "
+                    + (methodName == null ? "(any)" : methodName));
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[WARN] " + tag + " global err: " + t);
+        }
+    }
+
+    private static String[] parseSig(String sig) {
+        if (sig == null) return null;
+        int lp = sig.indexOf('(');
+        if (lp <= 0) return null;
+        String head = sig.substring(0, lp);
+        int dot = head.lastIndexOf('.');
+        if (dot <= 0 || dot >= head.length() - 1) return null;
+        return new String[]{ head.substring(0, dot), head.substring(dot + 1) };
     }
 
     /** 在目标类中按方法字符串特征定位方法（DexKit），再 hook */
@@ -207,7 +266,13 @@ public class WeChatUpdateBlocker {
         if (ns == null || ns.isEmpty()) {
             ns = firstClassByStrings(cl, "MicroMsg.NetSceneGetUpdateInfo");
         }
-        if (ns != null) hookByName(cl, ns, "onGYNetEnd", 3, null, "V2");
+        if (ns != null) {
+            boolean ok = hookByName(cl, ns, "onGYNetEnd", 3, null, "V2");
+            // 缓存类名方法签名漂移时，全局按方法字符串锚点兜底
+            if (!ok) hookByGlobalMethodStrings(cl, "MicroMsg.NetSceneGetUpdateInfo", "onGYNetEnd", null, "V2g");
+        } else {
+            hookByGlobalMethodStrings(cl, "MicroMsg.NetSceneGetUpdateInfo", "onGYNetEnd", null, "V2g");
+        }
         // V3: MMErrorProcessor.updateRequired(boolean 返回)
         hookByClassStrings(cl, "MicroMsg.MMErrorProcessor", "com.tencent.mm.ui.rc",
                 "b", -1, Boolean.FALSE, "V3");
@@ -227,6 +292,9 @@ public class WeChatUpdateBlocker {
         // T1: SubCoreHotpatch.onAccountInitialized
         hookByClassStrings(cl, "MicroMsg.Tinker.SubCoreHotpatch", "ge3.a0",
                 "onAccountInitialized", -1, null, "T1");
+        // T1 兜底: 全局按方法字符串锚点定位（类名/短名漂移时仍可命中）
+        hookByGlobalMethodStrings(cl, "MicroMsg.Tinker.SubCoreHotpatch",
+                "onAccountInitialized", null, "T1g");
         // T2: TinkerBootsActivateListener.callback
         hookByClassStrings(cl, "MicroMsg.Tinker.TinkerBootsActivateListener",
                 "com.tencent.mm.plugin.hp.model.TinkerBootsActivateListener",
@@ -249,7 +317,11 @@ public class WeChatUpdateBlocker {
         if (ct == null || ct.isEmpty()) {
             ct = firstClassByStrings(cl, "MicroMsg.Tinker.CTinkerInstaller");
         }
-        if (ct != null) hookByName(cl, ct, "f", -1, Integer.valueOf(-1), "T6b");
+        boolean t6b = false;
+        if (ct != null) t6b = hookByName(cl, ct, "f", -1, Integer.valueOf(-1), "T6b");
+        // T6b 兜底: 类名/方法名漂移时，按锚点全局搜索该 Tinker 类内任意方法并阻断（方法名已混淆，不再按 "f" 过滤）
+        if (!t6b) hookByGlobalMethodStrings(cl, "MicroMsg.Tinker.CTinkerInstaller",
+                null, Integer.valueOf(-1), "T6bg");
     }
 
     // ==================== 便捷: 类名是否已加载（日志辅助） ====================

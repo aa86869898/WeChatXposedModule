@@ -125,11 +125,10 @@ public class AdBlockerHook {
         }, "lc1.b0");
         hookByNameParamCount(cl, splashLogic, "l", 1, null, "appbrand.sendShouldShowAdIfNeed");
 
-        // 1.5 兜底: 开屏广告宿主 Activity（:appbrand0..4 五个槽位）一起来就 finish
-        for (int i = 0; i <= 4; i++) {
-            String c = "com.tencent.mm.plugin.appbrand.ad.ui.AppBrandAdUI" + (i == 0 ? "" : i);
-            hookActivityFinishOnCreate(cl, c, "appbrand.AdUI" + (i == 0 ? "" : i));
-        }
+        // 1.5 兜底: 开屏广告宿主 Activity 一起来就 finish
+        //     实测微信 3180 仅存在 AppBrandAdUI（:appbrand0 槽位），
+        //     AppBrandAdUI1..4 已从 APK 移除，硬编码会刷 NoSuchMethodException 噪音，故仅保留 0。
+        hookActivityFinishOnCreate(cl, "com.tencent.mm.plugin.appbrand.ad.ui.AppBrandAdUI", "appbrand.AdUI");
 
         // 1.6 兜底: "..."菜单广告 footer 不显示 (setPageView(pageView) 共 1 参)
         hookByNameParamCount(cl, "com.tencent.mm.plugin.appbrand.ad.ui.AppBrandMenuFooter",
@@ -143,6 +142,66 @@ public class AdBlockerHook {
                         param.setResult(null);
                     }
                 }, "appbrand.JsApiShowSplashAd");
+
+        // 1.8 小程序内广告 JSAPI（banner / 插屏 / 激励视频）
+        //     小程序内广告没有独立宿主开关类，创建入口走 wx.createXxxAd 系列 JSAPI。
+        //     这里用 DexKit 方法字符串锚点跨版本定位这些 JSAPI 实现，命中后返回 fail，
+        //     小程序侧拿不到广告对象即无法渲染（仅限 appbrand.jsapi 包、且返回 String/void，避免误伤其它 JSAPI）。
+        hookAppBrandJsApiAds(cl);
+    }
+
+    /**
+     * 拦截小程序内广告创建类 JSAPI（createRewardedVideoAd / createInterstitialAd / createBannerAd）。
+     * <p>微信每个 JSAPI 都是独立实现类（见 {@code appbrand.ad.jsapi.*}），方法体内含 JSAPI 名字符串。
+     * 用 DexKit 全局方法字符串搜索定位，限定 {@code com.tencent.mm.plugin.appbrand.jsapi} 包，
+     * 且方法返回类型为 {@link String} 或 {@code void} 时才 hook，降低误伤其它 JSAPI 的风险。</p>
+     */
+    private static void hookAppBrandJsApiAds(ClassLoader cl) {
+        final String[] keys = {
+                "createRewardedVideoAd", "createInterstitialAd", "createBannerAd", "createVideoAd"
+        };
+        for (final String key : keys) {
+            try {
+                List<String> sigs = DexKitHelper.findMethodsByString(cl, null, key);
+                if (sigs == null || sigs.isEmpty()) continue;
+                int hooked = 0;
+                for (String sig : sigs) {
+                    String[] parsed = parseSig(sig);
+                    if (parsed == null) continue;
+                    if (!parsed[0].startsWith("com.tencent.mm.plugin.appbrand.jsapi")) continue;
+                    Class<?> c = loadClass(cl, parsed[0]);
+                    if (c == null) continue;
+                    for (Method m : c.getDeclaredMethods()) {
+                        if (!m.getName().equals(parsed[1])) continue;
+                        Class<?> rt = m.getReturnType();
+                        if (rt != String.class && rt != void.class) continue;
+                        m.setAccessible(true);
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
+                            @Override protected void beforeHookedMethod(MethodHookParam param) {
+                                if (!sEnabled) return;
+                                param.setResult("{\"errMsg\":\"" + key + ":fail ad disabled\"}");
+                            }
+                        });
+                        hooked++;
+                        LogWriter.log(TAG, "hooked " + parsed[0] + "." + parsed[1]
+                                + " as appbrand.jsapi." + key);
+                    }
+                }
+                if (hooked == 0) LogWriter.log(TAG, "appbrand.jsapi." + key + ": no hookable impl");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "[WARN] appbrand.jsapi." + key + ": " + t);
+            }
+        }
+    }
+
+    private static String[] parseSig(String sig) {
+        if (sig == null) return null;
+        int lp = sig.indexOf('(');
+        if (lp <= 0) return null;
+        String head = sig.substring(0, lp);
+        int dot = head.lastIndexOf('.');
+        if (dot <= 0 || dot >= head.length() - 1) return null;
+        return new String[]{ head.substring(0, dot), head.substring(dot + 1) };
     }
 
     // ============================================================

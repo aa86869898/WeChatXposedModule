@@ -420,21 +420,28 @@ public final class BatchInviteManager {
             int accepted = 0, rejected = 0, needInvite = 0;
             for (Integer code : sInviteResults.values()) {
                 if (code != null && code == 0) accepted++;
-                else { rejected++; if (code != null && code == -2012) needInvite++; }
+                else {
+                    rejected++;
+                    if (code != null && code == -2012) needInvite++;
+                }
             }
+            // -2012(Need invite) 不是"发送失败"，而是服务端已受理请求、但该群开启
+            // 「群主/被邀请人确认」或目标非好友强校验，需要二次确认。单独归类，避免误导用户。
+            final int realReject = Math.max(0, rejected - needInvite);
             final int fsent = sent, fsendFail = sendFail, fcancel = cancelled;
-            final int faccept = accepted, freject = rejected, fneed = needInvite;
+            final int faccept = accepted, freject = realReject, fneed = needInvite;
             sInviteThread = null;
             sMain.post(() -> {
                 if (act != null && !act.isFinishing()) {
                     StringBuilder msg = new StringBuilder();
-                    if (faccept > 0) msg.append("成功邀请 ").append(faccept).append(" 个群");
+                    if (faccept > 0) msg.append("成功拉入 ").append(faccept).append(" 个群");
                     if (freject > 0) {
                         if (msg.length() > 0) msg.append("，");
                         msg.append("失败 ").append(freject).append(" 个群");
                     }
                     if (fneed > 0) {
-                        msg.append("（").append(fneed).append(" 个群需被邀请人/群主确认）");
+                        if (msg.length() > 0) msg.append("，");
+                        msg.append("已发出邀请请求 ").append(fneed).append(" 个群（需对方/群主确认）");
                     }
                     if (fsendFail > 0) {
                         if (msg.length() > 0) msg.append("，");
@@ -526,7 +533,8 @@ public final class BatchInviteManager {
             }
             // b() = 无 UI 直接发送（注意与字段 b 区分，这里是方法）
             XposedHelpers.callMethod(op, "b");
-            LogWriter.log(TAG, "inviteToRoom sent room=" + room + " targets=" + targets.size());
+            LogWriter.log(TAG, "inviteToRoom sent room=" + room + " targets=" + targets.size()
+                    + " reason=\"" + BatchInviteConfig.getReason() + "\" list=" + targets);
             return true;
         } catch (Throwable t) {
             LogWriter.log(TAG, "inviteToRoom err room=" + room + " : " + t);
