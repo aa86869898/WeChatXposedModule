@@ -416,9 +416,8 @@ public class ChatGroupUiInjector {
         hsv.setHorizontalScrollBarEnabled(false);
         hsv.setClipChildren(false);
         hsv.setClipToPadding(false);
-        // v3.0.123: 标签栏背景跟随动态主色容器（Material You），
-        // 不再使用 surfaceContainerHighest 的硬编码暖灰（动态配色下呈粉色，与主题脱节）。
-        hsv.setBackgroundColor(AppColors.primaryContainer());
+        // v3.0.131: 按用户要求去掉标签栏底部背景色（不再跟随 primaryContainer）
+        hsv.setBackgroundColor(0x00000000);
         LinearLayout ll = new LinearLayout(ctx);
         ll.setClipChildren(false);
         ll.setClipToPadding(false);

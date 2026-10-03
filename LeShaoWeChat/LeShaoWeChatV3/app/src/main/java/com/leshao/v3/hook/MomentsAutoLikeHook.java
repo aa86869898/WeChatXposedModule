@@ -184,8 +184,15 @@ public final class MomentsAutoLikeHook {
                         protected void beforeHookedMethod(MethodHookParam param) {
                             collect(param.args[0]);
                         }
+
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            // v3.0.131: 绑定完成后再次收集（W7 内部可能替换/填充 SnsInfo 字段）
+                            collect(param.args[0]);
+                        }
                     });
                     n++;
+                    LogWriter.log(TAG, "hooked lk4.g.W7 overload " + m.toGenericString());
                 }
                 LogWriter.log(TAG, "hooked lk4.g.W7 x" + n);
             } else {
@@ -230,9 +237,17 @@ public final class MomentsAutoLikeHook {
             String id = (String) XposedHelpers.callMethod(info, "getSnsId");
             if (id == null) return;
             synchronized (sLive) {
+                boolean fresh = !sLive.containsKey(id);
                 sLive.put(id, info);
+                if (fresh) {
+                    LogWriter.log(TAG, "collect snsId=" + id
+                            + " poster=" + XposedHelpers.callMethod(info, "getUserName")
+                            + " likeFlag=" + XposedHelpers.callMethod(info, "getLikeFlag"));
+                }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "collect err: " + t);
+        }
     }
 
     // ================================================================
@@ -314,10 +329,13 @@ public final class MomentsAutoLikeHook {
             }
         }
         if (targets.isEmpty()) {
+            LogWriter.log(TAG, "no target: sLive=" + sLive.size()
+                    + " selected=" + sel.size() + " running=" + sRunning);
             toast(act, "没有可点赞的朋友圈（可能已赞过或未加载）");
             return;
         }
         sRunning = true;
+        LogWriter.log(TAG, "start auto like targets=" + targets.size() + " scene=" + sScene);
         toast(act, "开始自动点赞，共 " + targets.size() + " 条");
         doLikeChain(0, targets, server);
     }
@@ -330,11 +348,26 @@ public final class MomentsAutoLikeHook {
         final Object info = targets.get(idx);
         try {
             String poster = (String) XposedHelpers.callMethod(info, "getUserName");
-            Method p = findLikeMethod(server);
-            if (p != null) {
-                p.invoke(null, poster, 5, null, info, sScene);
-                try { XposedHelpers.callMethod(info, "setLikeFlag", 1); } catch (Throwable ignored) {}
-                LogWriter.log(TAG, "liked " + safeId(info) + " by " + poster);
+            if (toBool(XposedHelpers.callMethod(info, "isExtFlag"))) {
+                // v3.0.131: 特殊态（extFlag）动态走评论式路由 opType=1
+                Method m = findCommentLikeMethod(server);
+                if (m != null) {
+                    m.invoke(null, info, 1, "", 0L, "", Boolean.FALSE, sScene);
+                    try { XposedHelpers.callMethod(info, "setLikeFlag", 1); } catch (Throwable ignored) {}
+                    LogWriter.log(TAG, "liked(ext) " + safeId(info) + " by " + poster);
+                } else {
+                    LogWriter.log(TAG, "like(ext) fail: h6.m not found");
+                }
+            } else {
+                Method p = findLikeMethod(server);
+                if (p != null) {
+                    p.invoke(null, poster, 5, null, info, sScene);
+                    try { XposedHelpers.callMethod(info, "setLikeFlag", 1); } catch (Throwable ignored) {}
+                    LogWriter.log(TAG, "liked " + safeId(info) + " by " + poster
+                            + " scene=" + sScene);
+                } else {
+                    LogWriter.log(TAG, "like fail: h6.p not found");
+                }
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, "like fail: " + t);
@@ -343,12 +376,38 @@ public final class MomentsAutoLikeHook {
         sH.postDelayed(() -> doLikeChain(idx + 1, targets, server), delay);
     }
 
-    /** 反射找 h6.p(String,int,lj4.a,SnsInfo,int)：参数 5 个且第 2 个为 int。 */
+    /** 反射找 h6.p(String,int,lj4.a,SnsInfo,int)：参数 5 个且第 2 个为 int。
+     *  v3.0.131: 优先精确匹配 String,int,*,SnsInfo,int 签名，避免选中错误重载。 */
     private static Method findLikeMethod(Class<?> server) {
+        Method fallback = null;
         for (Method m : server.getDeclaredMethods()) {
             if (!"p".equals(m.getName())) continue;
             Class<?>[] pts = m.getParameterTypes();
             if (pts.length == 5 && pts[1] == int.class) {
+                boolean exact = pts[0] == String.class && pts[4] == int.class
+                        && (pts[3].getName().equals(SNS_INFO) || pts[3].getName().endsWith("SnsInfo"));
+                if (exact) {
+                    m.setAccessible(true);
+                    LogWriter.log(TAG, "h6.p matched: " + m.toGenericString()
+                            + " static=" + java.lang.reflect.Modifier.isStatic(m.getModifiers()));
+                    return m;
+                }
+                if (fallback == null) {
+                    m.setAccessible(true);
+                    fallback = m;
+                }
+            }
+        }
+        return fallback;
+    }
+
+    /** 反射找 h6.m(SnsInfo,int,String,long,String,boolean,int) 评论式路由。 */
+    private static Method findCommentLikeMethod(Class<?> server) {
+        for (Method m : server.getDeclaredMethods()) {
+            if (!"m".equals(m.getName())) continue;
+            Class<?>[] pts = m.getParameterTypes();
+            if (pts.length == 7 && pts[1] == int.class && pts[4] == String.class
+                    && pts[5] == boolean.class && pts[6] == int.class) {
                 m.setAccessible(true);
                 return m;
             }
