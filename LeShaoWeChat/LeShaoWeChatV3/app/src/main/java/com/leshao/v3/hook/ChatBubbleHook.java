@@ -73,6 +73,25 @@ public final class ChatBubbleHook {
     // 常开会在每次 RecyclerView.onLayout 遍历并记录整棵 View 树，导致启动卡顿与日志暴涨，默认关闭。
     private static final boolean DEBUG_VIEW_DUMP = false;
 
+    // ==================== v3.0.125 运行时自校准 ====================
+    // 用户运行时构建与本模块静态分析的 base.apk 不一致：日志实锤
+    //   - MMNeat7extView.setBackgroundResource 全日志 0 触发；
+    //   - viewitems.to.b 命中的是 android.widget.TextView(neat=false)；
+    //   - resId 2131231925->mh / 2131232060->o_ 均为混淆短名，chatfrom_bg 名字查不到。
+    // 因此不再预设白名单，改为在**本机**全量记录所有气泡背景设置点(view类/resId/资源名/坐标/父链)，
+    // 导出真实 (resId, viewClass, x) 映射后再固化。CAL_MAX 为去重后最大记录条数(防日志暴涨)。
+    private static final boolean CALIBRATE = true;
+    private static final int CAL_MAX = 600;
+    private static final java.util.Set<String> sCalSeen =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
+    private static final java.util.concurrent.atomic.AtomicInteger sCalCount =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    // 启发式兜底：完全不依赖类名/resId，直接对聊天列表内「背景为九宫格(NinePatch)的气泡容器」
+    // 按 x 坐标(右半屏=发出 / 左半屏=收到)替换。开关默认开，可关闭。
+    private static final String K_HEURISTIC = "ls_bubble_heuristic";
+    private static volatile boolean sHeuristic = true;
+
     // 气泡资源 ID（XML 兜底路径用）。优先 getIdentifier 动态解析，失败回退文档已知值
     private static volatile int sFromResId = 2131231925; // chatfrom_bg
     private static volatile int sToResId = 2131232060;   // chatto_bg
@@ -291,6 +310,10 @@ public final class ChatBubbleHook {
             sEnabled = isEnabled();
             sFromPath = getFromPath();
             sToPath = getToPath();
+            try {
+                SharedPreferences sp = safePrefs();
+                sHeuristic = sp == null || sp.getBoolean(K_HEURISTIC, true);
+            } catch (Throwable ignored) {}
             resolveBubbleResIds(cl);
             LogWriter.log(TAG, "bubble config enabled=" + sEnabled
                     + " from=" + (sFromPath != null && !sFromPath.isEmpty() ? "SET" : "EMPTY")
@@ -316,6 +339,8 @@ public final class ChatBubbleHook {
                     installResourceHelperHook(cl);
                     installResourceGetDrawableHook(cl);
                     installChatListViewHook(cl);
+                    installCalibrationHooks(cl);
+                    installInflateFallbackHook(cl);
                     if (DEBUG_VIEW_DUMP) installChattingListCollector(cl);
                     sHooked = true;
                     LogWriter.log(TAG, "bubble resolver hooked attempt=" + attempt);
@@ -1252,6 +1277,9 @@ public final class ChatBubbleHook {
                 }
             }
         } catch (Throwable ignored) {}
+        // v3.0.125 启发式兜底：baseDrawable 不可用(matchBaseDrawable 全失败)时，
+        // 按「九宫格背景 + x 坐标」判定收发方向并替换，确保文本气泡也能生效。
+        heuristicReplaceOne(v);
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) {
@@ -1544,6 +1572,257 @@ public final class ChatBubbleHook {
                 sToDrawablePath = path;
             }
             return built;
+        }
+    }
+
+    // ==================== v3.0.125 运行时自校准 + 启发式兜底 ====================
+
+    /**
+     * 运行时自校准（方案②）：在本机"全量、不白名单"地记录所有气泡背景设置点，
+     * 导出真实 (viewClass, resId, name, xy, parent) 映射，供日志人工核对后固化。
+     * 覆盖：View.setBackgroundResource/setBackground/setBackgroundDrawable、
+     * TextView/ImageView 覆盖点、Resources.getDrawable(int)/(int,Theme)。
+     * 记录按签名去重并封顶 CAL_MAX 条，避免日志暴涨。
+     */
+    private static void installCalibrationHooks(ClassLoader cl) {
+        if (!CALIBRATE) return;
+        try {
+            hookBgSetter(View.class, "setBackgroundResource", int.class, "setBackgroundResource");
+            hookBgSetter(View.class, "setBackground", Drawable.class, "setBackground");
+            hookBgSetter(View.class, "setBackgroundDrawable", Drawable.class, "setBackgroundDrawable");
+            // 用户怀疑漏网点：TextView 老 API（若子类声明才命中，未声明则静默跳过）
+            hookBgSetter(android.widget.TextView.class, "setBackgroundDrawable", Drawable.class, "TextView.setBackgroundDrawable");
+            hookBgSetter(android.widget.TextView.class, "setBackgroundResource", int.class, "TextView.setBackgroundResource");
+            hookBgSetter(ImageView.class, "setImageDrawable", Drawable.class, "setImageDrawable");
+            hookBgSetter(ImageView.class, "setImageResource", int.class, "setImageResource");
+            installGetDrawableCalibration(cl);
+            LogWriter.log(TAG, "calibration hooks installed (CALIBRATE=" + CALIBRATE + ")");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installCalibrationHooks err: " + t.getMessage());
+        }
+    }
+
+    /** 通用背景设置点校准日志：不判断 resId 是否在白名单，仅按签名去重记录。 */
+    private static void hookBgSetter(Class<?> owner, String name, Class<?> argType, String tag) {
+        try {
+            Method m = null;
+            for (Method mm : owner.getDeclaredMethods()) {
+                if (mm.getName().equals(name) && mm.getParameterTypes().length == 1
+                        && mm.getParameterTypes()[0] == argType) {
+                    m = mm;
+                    break;
+                }
+            }
+            if (m == null) return;
+            m.setAccessible(true);
+            XposedBridge.hookMethod(m, new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!(param.thisObject instanceof View)) return;
+                        View v = (View) param.thisObject;
+                        Object a0 = (param.args != null && param.args.length > 0) ? param.args[0] : null;
+                        int resId = a0 instanceof Number ? ((Number) a0).intValue() : 0;
+                        String drawableCls = a0 instanceof Drawable ? a0.getClass().getName() : "-";
+                        String key = tag + "|" + v.getClass().getName() + "|" + resId + "|" + drawableCls;
+                        if (!sCalSeen.add(key)) return;
+                        if (sCalCount.incrementAndGet() > CAL_MAX) return;
+                        int[] loc = {0, 0};
+                        try { v.getLocationOnScreen(loc); } catch (Throwable ignored) {}
+                        LogWriter.log(TAG, "CAL " + tag
+                                + " view=" + v.getClass().getName()
+                                + " resId=" + resId + " name=" + (resId != 0 ? entryName(resId) : "-")
+                                + " drawable=" + drawableCls
+                                + " xy=(" + loc[0] + "," + loc[1] + ") w=" + v.getWidth() + " h=" + v.getHeight()
+                                + " chat=" + inChatList(v)
+                                + " parent=" + parentChain(v, 2));
+                    } catch (Throwable ignored) {}
+                }
+            });
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookBgSetter " + tag + " err: " + t.getMessage());
+        }
+    }
+
+    /** 校准 Resources.getDrawable：仅当调用栈含聊天/气泡关键字时记录（避免全 App 刷屏）。 */
+    private static void installGetDrawableCalibration(ClassLoader cl) {
+        try {
+            XC_MethodHook h = new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (param.args == null || param.args.length == 0
+                                || !(param.args[0] instanceof Number)) return;
+                        StackTraceElement[] st = Thread.currentThread().getStackTrace();
+                        boolean chat = false;
+                        String caller = "?";
+                        int n = Math.min(st.length, 14);
+                        for (int i = 2; i < n; i++) {
+                            String c = st[i].getClassName();
+                            if (i == 2) caller = c + "." + st[i].getMethodName();
+                            if (c.contains("chatting") || c.contains("Chatting")
+                                    || c.contains("viewitems") || c.contains("Bubble")
+                                    || c.contains("bubble")) { chat = true; break; }
+                        }
+                        if (!chat) return;
+                        int resId = ((Number) param.args[0]).intValue();
+                        String key = "getDrawable|" + resId;
+                        if (!sCalSeen.add(key)) return;
+                        if (sCalCount.incrementAndGet() > CAL_MAX) return;
+                        LogWriter.log(TAG, "CAL getDrawable resId=" + resId
+                                + " name=" + entryName(resId) + " caller=" + caller);
+                    } catch (Throwable ignored) {}
+                }
+            };
+            for (Method m : android.content.res.Resources.class.getDeclaredMethods()) {
+                if (!"getDrawable".equals(m.getName())) continue;
+                Class<?>[] pts = m.getParameterTypes();
+                if ((pts.length == 1 && pts[0] == int.class)
+                        || (pts.length == 2 && pts[0] == int.class)) {
+                    m.setAccessible(true);
+                    XposedBridge.hookMethod(m, h);
+                }
+            }
+            LogWriter.log(TAG, "getDrawable calibration hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installGetDrawableCalibration err: " + t.getMessage());
+        }
+    }
+
+    /**
+     * 方案③ 兜底：hook LayoutInflater.inflate(int, ViewGroup, boolean)。
+     * 当父容器是聊天列表容器时，inflate 完成后 post 一次遍历，
+     * 对"背景为九宫格的气泡容器"按 x 坐标替换（右半=发出/左半=收到）。
+     * 完全不依赖类名/resId，只要气泡可见即命中。
+     */
+    private static void installInflateFallbackHook(ClassLoader cl) {
+        try {
+            Method inflate = null;
+            for (Method m : android.view.LayoutInflater.class.getDeclaredMethods()) {
+                if ("inflate".equals(m.getName())) {
+                    Class<?>[] pts = m.getParameterTypes();
+                    if (pts.length == 3 && pts[0] == int.class
+                            && ViewGroup.class.isAssignableFrom(pts[1]) && pts[2] == boolean.class) {
+                        inflate = m;
+                        break;
+                    }
+                }
+            }
+            if (inflate == null) {
+                LogWriter.log(TAG, "inflate fallback: method not found");
+                return;
+            }
+            inflate.setAccessible(true);
+            XposedBridge.hookMethod(inflate, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled || !sHeuristic) return;
+                        Object root = param.args != null && param.args.length > 1 ? param.args[1] : null;
+                        if (!(root instanceof View) || !isChatContainer((View) root)) return;
+                        Object out = param.getResult();
+                        if (!(out instanceof View)) return;
+                        final View v = (View) out;
+                        v.post(() -> {
+                            try { heuristicReplaceBubbles(v); } catch (Throwable ignored) {}
+                        });
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "LayoutInflater.inflate fallback hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installInflateFallbackHook err: " + t.getMessage());
+        }
+    }
+
+    /** 递归启发式替换：背景为九宫格(非自定义)的气泡容器按 x 坐标判定收发方向并替换。 */
+    private static void heuristicReplaceBubbles(View v) {
+        if (v == null) return;
+        heuristicReplaceOne(v);
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                heuristicReplaceBubbles(g.getChildAt(i));
+            }
+        }
+    }
+
+    /** 单个 View 的启发式替换（供 onLayout 遍历复用）。 */
+    private static void heuristicReplaceOne(View v) {
+        if (v == null || !sEnabled || !sHeuristic) return;
+        try {
+            Drawable bg = v.getBackground();
+            if (!isNinePatchLike(bg) || isCustomBackground(bg)) return;
+            int w = v.getWidth(), h = v.getHeight();
+            if (w <= 0 || h <= 0) return;
+            int[] loc = {0, 0};
+            try { v.getLocationOnScreen(loc); } catch (Throwable ignored) {}
+            int screenW = 0;
+            try { screenW = v.getResources().getDisplayMetrics().widthPixels; } catch (Throwable ignored) {}
+            int center = loc[0] + w / 2;
+            int kind = (screenW > 0 && center > screenW / 2) ? KIND_TO : KIND_FROM;
+            Drawable custom = loadDrawable(kind);
+            if (custom != null) {
+                v.setBackground(custom);
+                rememberBubble(v, custom);
+                LogWriter.log(TAG, "heuristic REPLACE kind=" + kind
+                        + " view=" + v.getClass().getName()
+                        + " center=" + center + "/" + screenW
+                        + " parent=" + parentChain(v, 2));
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    /** 背景是否为九宫格 Drawable（含 selector 子项）。 */
+    private static boolean isNinePatchLike(Drawable d) {
+        if (d == null) return false;
+        if (d instanceof android.graphics.drawable.NinePatchDrawable) return true;
+        if (d instanceof android.graphics.drawable.StateListDrawable) {
+            android.graphics.drawable.StateListDrawable sld =
+                    (android.graphics.drawable.StateListDrawable) d;
+            for (int i = 0; i < sld.getStateCount(); i++) {
+                if (isNinePatchLike(sld.getStateDrawable(i))) return true;
+            }
+        }
+        try {
+            Drawable.ConstantState cs = d.getConstantState();
+            String n = cs == null ? "" : cs.getClass().getName();
+            if (n.contains("NinePatch") || n.contains("NineSlice")) return true;
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    /** 判断容器是否聊天列表容器（RecyclerView/AbsListView/Chatting*）。 */
+    private static boolean isChatContainer(View v) {
+        if (v == null) return false;
+        String cn = v.getClass().getName();
+        return v instanceof android.widget.AbsListView
+                || cn.contains("RecyclerView")
+                || cn.contains("ChattingList")
+                || cn.contains("ChattingUI")
+                || cn.contains("Chatting");
+    }
+
+    /** 沿父链判断 View 是否位于聊天列表内。 */
+    private static boolean inChatList(View v) {
+        View cur = v;
+        int depth = 0;
+        while (cur != null && depth++ < 30) {
+            if (isChatContainer(cur)) return true;
+            android.view.ViewParent p = cur.getParent();
+            cur = p instanceof View ? (View) p : null;
+        }
+        return false;
+    }
+
+    /** 资源 ID → 资源名（失败返回 ?）。 */
+    private static String entryName(int resId) {
+        try {
+            Context ctx = ContextManager.getAppContext();
+            if (ctx == null || resId == 0) return "-";
+            return ctx.getResources().getResourceEntryName(resId);
+        } catch (Throwable t) {
+            return "?";
         }
     }
 
