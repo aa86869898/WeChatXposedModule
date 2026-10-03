@@ -627,10 +627,26 @@ public final class ChatBubbleHook {
                     if (kind < 0) return;
                     Drawable custom = loadDrawable(kind);
                     if (custom != null) {
-                        param.args[0] = custom;
-                        rememberBubble((View) param.thisObject, custom);
+                        Drawable freshD = fresh(custom);
+                        param.args[0] = freshD;
+                        rememberBubble((View) param.thisObject, freshD, kind);
                         LogWriter.log(TAG, "neat.setBackground REPLACE kind=" + kind
                                 + " view=" + param.thisObject.getClass().getName());
+                    }
+                } catch (Throwable ignored) {}
+            }
+
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                try {
+                    if (!sEnabled) return;
+                    if (!(param.thisObject instanceof View)) return;
+                    View v = (View) param.thisObject;
+                    boolean cleared = param.args.length == 0 || param.args[0] == null;
+                    if (cleared) {
+                        reapplyIfBubble(v);          // setBackground(null) 清空 → 补盖
+                    } else {
+                        applyTextColor(v, kindOf(v)); // 背景已设 → 同步文字色
                     }
                 } catch (Throwable ignored) {}
             }
