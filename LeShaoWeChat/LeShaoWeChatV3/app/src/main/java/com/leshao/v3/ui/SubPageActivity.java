@@ -356,6 +356,8 @@ public class SubPageActivity {
                 return FakeLocationPageView.create(ctx, parentAct);
             case 30: // 朋友圈自动点赞
                 return MomentsLikePageView.create(ctx, parentAct);
+            case 31: // 朋友圈秒集赞
+                return MomentsFakeLikePageView.create(ctx, parentAct);
             default:
                 return makePlaceholder(ctx, parentAct);
         }

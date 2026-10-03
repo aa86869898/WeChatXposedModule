@@ -69,11 +69,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v3.0.138";
+    public static final String MODULE_BUILD = "v3.0.139";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 30138;
+    public static final int MODULE_VERSION_CODE = 30139;
 
     /** v1079: 当前前台 Activity(onResume 记录/onPause 清除), 供 talker 解析等复用。 */
     private static volatile java.lang.ref.WeakReference<Activity> sResumedActivity;
@@ -399,6 +399,9 @@ public class MainHook implements IXposedHookLoadPackage {
                             // 朋友圈自动点赞（更多功能 -> 朋友圈自动点赞）
                             safeRun("MomentsAutoLikeHook", () -> HookManager.register("MomentsAutoLikeHook",
                                     () -> com.leshao.v3.hook.MomentsAutoLikeHook.hook(cl)));
+                            // 朋友圈秒集赞（更多功能 -> 朋友圈秒集赞）
+                            safeRun("MomentsFakeLikeHook", () -> HookManager.register("MomentsFakeLikeHook",
+                                    () -> com.leshao.v3.hook.MomentsFakeLikeHook.hook(cl)));
                             // 一键拉群：聊天输入框上方快捷栏"拉群"按钮
                             safeRun("ChatFooterInviteHook", () -> {
                                 com.leshao.v3.hook.BatchInviteManager.init(cl);

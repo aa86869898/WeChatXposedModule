@@ -185,6 +185,134 @@ public class AdBlockerHook {
         // v3.0.127: 移除小程序内广告 JSAPI（createRewardedVideoAd 等 4 个 DexKit 方法字符串扫描）。
         // 实测微信 3180 四处扫描全部 0 命中（该版本不走通用广告工厂），且空结果不进 MMKV 缓存，
         // 会在 5 个 :appbrand 子进程各重跑一次全量 DexKit 扫描，代价高、收益为零，故删除。
+
+        // v3.0.138（《小程序内部广告_深度逆向分析.md》）：拦截 MBAD（MagicBrush Ad）小程序内部广告。
+        // 小程序页面内广告（rewardAd / playable / directGame）由 MagicAdMiniProgram 框架渲染，
+        // 全部 Hook 点均在 native 侧，进程覆盖：主进程 + :appbrand0~4（hookAppBrand 在两处均被调用）。
+        hookMbAd(cl);
+    }
+
+    // ============================================================
+    // 1.8 小程序内部广告（MBAD / MagicBrush Ad）——《小程序内部广告_深度逆向分析.md》
+    // ============================================================
+
+    /**
+     * v3.0.138：MBAD 小程序内部广告拦截。
+     *
+     * <p>依据《小程序内部广告_深度逆向分析.md》第一~三轮 + 第四轮 Hook 清单：</p>
+     * <ul>
+     *   <li>P0 总闸：{@code com.tencent.mm.plugin.appbrand.x3.k()}（startMBAd）、{@code cm1.u.d()}（preload）、
+     *       {@code cm1.m.n()/N3(...)}（bizCreated / postMessageToWeApp）、{@code bk3.a.t()/f()}（全链路上报）。</li>
+     *   <li>P1 事件总线：{@code jsapi.advertise.p.A(...)}（JsApiNotifyAdEvent）。</li>
+     *   <li>P1 广告跳转族：advertise.o / advertise.s / channels.b0 / channels.f0 / channels.w / j7 / y7 / profile.h
+     *       的 A/E/I/C 入口（MBAD JSAPI 白名单 kl3.i）。</li>
+     *   <li>P2 关系追踪：{@code nc1.f.f/f.a}（AdRelationTracker）。</li>
+     *   <li>第四轮渲染层：{@code hj3.v1.ji/R0/D1}（MBRendererView Surface 绑定 / MagicBrush 创建 / 心跳）。</li>
+     *   <li>第四轮数据层：{@code bk.j0.mj/lj}（innerPullAds / handleAdOpen）、{@code dk.f.invoke}、{@code dk.b.call}（CGI）。</li>
+     *   <li>第四轮生命周期：{@code cm1.i.d/c}（onShowMBAd / onRequestHide）、{@code cm1.j.e}（CoverView）、
+     *       {@code cm1.k.invoke}（bindFrameSetView）、{@code bu0.a.c}（预加载策略）、{@code ck3.p.t}、{@code ck3.v.t}（跳转）。</li>
+     *   <li>第四轮视频/上报：{@code tl3.g} 18 方法（视频播放器）、{@code pu0.m.cj/dj}（innerReport）。</li>
+     * </ul>
+     *
+     * <p>所有方法统一在 before 中 {@code setResult(null)}（等价 {@code XC_MethodReplacement.returnConstant(null)}），
+     * 使 MBAD 框架"不起来 / 广告不存在 / 上报不出去"。短名混淆类（cm1.*、bk.*、hj3.v1 等）由
+     * {@link #loadClass} 的 DexKit 短名兜底解析；方法名匹配任意参数签名（tryHookSoft 策略），签名漂移静默跳过。</p>
+     */
+    private static void hookMbAd(ClassLoader cl) {
+        LogWriter.log(TAG, "mbad: install MBAD in-app ad blocker (v3.0.138)");
+        // P0 总闸 + 服务
+        hookMethodsReturnNull(cl, "com.tencent.mm.plugin.appbrand.x3",
+                java.util.Collections.singleton("k"), "mbad.x3.startMBAd");
+        hookMethodsReturnNull(cl, "cm1.u",
+                java.util.Collections.singleton("d"), "mbad.cm1u.preload");
+        hookMethodsReturnNull(cl, "cm1.m",
+                new java.util.HashSet<>(java.util.Arrays.asList("n", "N3")), "mbad.cm1m.bizCreated");
+        hookMethodsReturnNull(cl, "bk3.a",
+                new java.util.HashSet<>(java.util.Arrays.asList("t", "f")), "mbad.bk3a.fullLinkReport");
+
+        // P1 广告事件总线（JsApiNotifyAdEvent）
+        hookMethodsReturnNull(cl, "com.tencent.mm.plugin.appbrand.jsapi.advertise.p",
+                java.util.Collections.singleton("A"), "mbad.jsapi.notifyAdEvent");
+
+        // P1 广告跳转族（MBAD JSAPI 白名单 kl3.i 中的 8 个类，统一软 hook A/E/I/C）
+        String[] jsApi = {
+                "com.tencent.mm.plugin.appbrand.jsapi.advertise.o",   // navigateToMiniProgram(MB)
+                "com.tencent.mm.plugin.appbrand.jsapi.advertise.s",   // openADCanvas
+                "com.tencent.mm.plugin.appbrand.jsapi.channels.b0",   // openChannelsRewardedVideoAd
+                "com.tencent.mm.plugin.appbrand.jsapi.channels.f0",   // openChannelsUserProfile
+                "com.tencent.mm.plugin.appbrand.jsapi.channels.w",    // private_openChannelsLive
+                "com.tencent.mm.plugin.appbrand.jsapi.j7",            // launchApplication
+                "com.tencent.mm.plugin.appbrand.jsapi.y7",            // launchApplicationDirectly
+                "com.tencent.mm.plugin.appbrand.jsapi.profile.h",     // openWeComUserProfile
+        };
+        java.util.Set<String> apiMethods = new java.util.HashSet<>(
+                java.util.Arrays.asList("A", "E", "I", "C"));
+        for (String c : jsApi) {
+            hookMethodsReturnNull(cl, c, apiMethods, "mbad.jsapi.jump");
+        }
+
+        // P2 广告关系追踪（防"杀宿主"误判）
+        hookMethodsReturnNull(cl, "nc1.f",
+                new java.util.HashSet<>(java.util.Arrays.asList("f", "a")), "mbad.adTracker");
+
+        // 第四轮 P0 渲染层（MBRendererView）
+        hookMethodsReturnNull(cl, "hj3.v1",
+                new java.util.HashSet<>(java.util.Arrays.asList("ji", "R0", "D1")), "mbad.rendererView");
+
+        // 第四轮 P0 数据层（MagicAdCommonFeatureService）
+        hookMethodsReturnNull(cl, "bk.j0",
+                new java.util.HashSet<>(java.util.Arrays.asList("mj", "lj")), "mbad.data");
+        hookMethodsReturnNull(cl, "dk.f",
+                java.util.Collections.singleton("invoke"), "mbad.cgi.invoke");
+        hookMethodsReturnNull(cl, "dk.b",
+                java.util.Collections.singleton("call"), "mbad.cgi.call");
+
+        // 第四轮 P1 交互/生命周期
+        hookMethodsReturnNull(cl, "ck3.p",
+                java.util.Collections.singleton("t"), "mbad.nav.serverDirect");
+        hookMethodsReturnNull(cl, "ck3.v",
+                java.util.Collections.singleton("t"), "mbad.openUrlExtraWebview");
+        hookMethodsReturnNull(cl, "cm1.i",
+                new java.util.HashSet<>(java.util.Arrays.asList("d", "c")), "mbad.showHide");
+        hookMethodsReturnNull(cl, "cm1.j",
+                java.util.Collections.singleton("e"), "mbad.coverView");
+        hookMethodsReturnNull(cl, "cm1.k",
+                java.util.Collections.singleton("invoke"), "mbad.bindFrameSetView");
+        hookMethodsReturnNull(cl, "bu0.a",
+                java.util.Collections.singleton("c"), "mbad.preloadStrategy");
+
+        // 第四轮 P2 视频播放器（MB_External_surface_video_tpp_listener）
+        String[] tpp = {"a", "b", "d", "e", "f", "g", "h", "i", "j",
+                "k", "l", "m", "n", "o", "p", "q", "r", "s"};
+        hookMethodsReturnNull(cl, "tl3.g",
+                new java.util.HashSet<>(java.util.Arrays.asList(tpp)), "mbad.videoPlayer");
+
+        // 第四轮 P2 上报（让广告主收不到数据）
+        hookMethodsReturnNull(cl, "pu0.m",
+                new java.util.HashSet<>(java.util.Arrays.asList("cj", "dj")), "mbad.innerReport");
+    }
+
+    /** v3.0.138：按方法名集合批量 hook 并返回 null（任意参数签名，签名漂移静默跳过）。 */
+    private static void hookMethodsReturnNull(final ClassLoader cl, final String clsName,
+                                              final java.util.Set<String> names, final String tag) {
+        Class<?> c = loadClass(cl, clsName);
+        if (c == null) {
+            LogWriter.log(TAG, "[WARN] " + tag + ": class null (" + clsName + ")");
+            return;
+        }
+        int hooked = 0;
+        for (Method m : c.getDeclaredMethods()) {
+            if (!names.contains(m.getName())) continue;
+            m.setAccessible(true);
+            XposedBridge.hookMethod(m, new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam param) {
+                    if (!sEnabled) return;
+                    param.setResult(null);
+                }
+            });
+            hooked++;
+        }
+        LogWriter.log(TAG, "hooked " + clsName + " methods(" + names + ") as " + tag + " x" + hooked);
     }
 
     // ============================================================

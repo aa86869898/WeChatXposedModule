@@ -68,7 +68,8 @@ public final class MomentsLikePageView {
                         + "未选择联系人时默认点赞全部好友动态（自动跳过广告与已赞）。"
                         + "每条点赞间隔 3.5~6 秒以降低风控风险。"
                         + "原理：Hook ImproveSnsTimelineUI.onCreateOptionsMenu 注入菜单项，"
-                        + "通过 lk4.g.W7 枚举时间线动态，调用 h6.p(wxid,5,null,SnsInfo,scene) 完成点赞。"));
+                        + "通过 lk4.g.W7 枚举时间线动态，调用 h6.n(SnsInfo,1,null,0) 标准路由"
+                        + "立即发送点赞（修复旧 h6.p 路由只入队不发送的问题）。"));
         root.addView(cardNote);
         return root;
     }

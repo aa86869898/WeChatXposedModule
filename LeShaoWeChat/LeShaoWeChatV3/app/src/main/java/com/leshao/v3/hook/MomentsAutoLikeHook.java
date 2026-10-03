@@ -29,15 +29,17 @@ import de.robv.android.xposed.XposedHelpers;
 
 /**
  * 朋友圈右上角注入「自动点赞」菜单 + 自动点赞 —— 依据
- * 《朋友圈右上角注入和自动点赞WeChat_Moments_TopRight_Menu_AutoLike_Reverse.md》。
+ * 《朋友圈右上角注入和自动点赞WeChat_Moments_TopRight_Menu_AutoLike_Reverse.md》
+ * 与《朋友圈自动点赞修复WeChat_Moments_AutoLike_Reverse.md》。
  *
  * <p>要点：</p>
  * <ul>
  *   <li>注入点：{@code ImproveSnsTimelineUI.onCreateOptionsMenu(Menu)} 的 <b>before</b>，
  *       菜单项经 {@code mController.g0(menu)} 渲染到微信自定义 ActionBar 右上角。</li>
  *   <li>枚举：Hook {@code lk4.g.W7(SnsInfo, tf5.b)} 收集时间线已加载的 {@code SnsInfo}。</li>
- *   <li>点赞：反射调用 {@code com.tencent.mm.plugin.sns.model.h6.p(发布者wxid, 5, null, SnsInfo, scene)}，
- *       即 {@code opType=5} 的空内容 {@code SnsComment}。</li>
+ *   <li>点赞（v3.0.139 修复）：反射调用 {@code com.tencent.mm.plugin.sns.model.h6.n(SnsInfo, 1, null, 0)}
+ *       —— 标准路由立即发送 {@code mmsnscomment} CGI（Cmd=0xD5）。
+ *       旧实现 {@code h6.p(wxid, 5, null, SnsInfo, scene)} 走 strangers 路由，只入队不发送，已废弃。</li>
  * </ul>
  */
 public final class MomentsAutoLikeHook {
@@ -206,27 +208,28 @@ public final class MomentsAutoLikeHook {
             LogWriter.log(TAG, "hook bind err: " + t);
         }
 
-        // 抓真实 comment_scene（手动点赞时上报一次）
+        // v3.0.139: 抓真实 comment_scene 改为 Hook h6.n（标准点赞路由，参数 (SnsInfo,int,?,int)）
         try {
             Class<?> server = loadClass(cl, SERVER_CLASS);
             if (server != null) {
                 for (Method m : server.getDeclaredMethods()) {
-                    if (!"p".equals(m.getName())) continue;
+                    if (!"n".equals(m.getName())) continue;
                     Class<?>[] pts = m.getParameterTypes();
-                    if (pts.length != 5 || pts[1] != int.class) continue;
+                    if (pts.length != 4 || pts[1] != int.class || pts[3] != int.class) continue;
                     m.setAccessible(true);
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void beforeHookedMethod(MethodHookParam param) {
                             try {
-                                sScene = (int) param.args[4];
-                                LogWriter.log(TAG, "real h6.p scene=" + sScene
-                                        + " op=" + param.args[1] + " to=" + param.args[0]);
+                                sScene = (int) param.args[3];
+                                LogWriter.log(TAG, "real h6.n scene=" + sScene
+                                        + " likeFlag=" + param.args[1] + " snsId="
+                                        + XposedHelpers.callMethod(param.args[0], "getSnsId"));
                             } catch (Throwable ignored) {}
                         }
                     });
                 }
-                LogWriter.log(TAG, "hooked h6.p(scene)");
+                LogWriter.log(TAG, "hooked h6.n(scene)");
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, "hook server err: " + t);
@@ -352,26 +355,17 @@ public final class MomentsAutoLikeHook {
         final Object info = targets.get(idx);
         try {
             String poster = (String) XposedHelpers.callMethod(info, "getUserName");
-            if (toBool(XposedHelpers.callMethod(info, "isExtFlag"))) {
-                // v3.0.131: 特殊态（extFlag）动态走评论式路由 opType=1
-                Method m = findCommentLikeMethod(server);
-                if (m != null) {
-                    m.invoke(null, info, 1, "", 0L, "", Boolean.FALSE, sScene);
-                    try { XposedHelpers.callMethod(info, "setLikeFlag", 1); } catch (Throwable ignored) {}
-                    LogWriter.log(TAG, "liked(ext) " + safeId(info) + " by " + poster);
-                } else {
-                    LogWriter.log(TAG, "like(ext) fail: h6.m not found");
-                }
+            // v3.0.139: 统一走 h6.n(SnsInfo,1,null,0) 标准路由立即发送。
+            // 废弃 h6.p(wxid,5,null,SnsInfo,scene)（strangers 路由只入队不发送）与
+            // extFlag 特殊态下的 h6.m 评论式路由（该分支同样基于旧协议假设）。
+            Method n = findStandardLikeMethod(server);
+            if (n != null) {
+                n.invoke(null, info, 1, null, 0);
+                try { XposedHelpers.callMethod(info, "setLikeFlag", 1); } catch (Throwable ignored) {}
+                LogWriter.log(TAG, "liked " + safeId(info) + " by " + poster
+                        + " via h6.n(SnsInfo,1,null,0)");
             } else {
-                Method p = findLikeMethod(server);
-                if (p != null) {
-                    p.invoke(null, poster, 5, null, info, sScene);
-                    try { XposedHelpers.callMethod(info, "setLikeFlag", 1); } catch (Throwable ignored) {}
-                    LogWriter.log(TAG, "liked " + safeId(info) + " by " + poster
-                            + " scene=" + sScene);
-                } else {
-                    LogWriter.log(TAG, "like fail: h6.p not found");
-                }
+                LogWriter.log(TAG, "like fail: h6.n not found");
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, "like fail: " + t);
@@ -380,19 +374,20 @@ public final class MomentsAutoLikeHook {
         sH.postDelayed(() -> doLikeChain(idx + 1, targets, server), delay);
     }
 
-    /** 反射找 h6.p(String,int,lj4.a,SnsInfo,int)：参数 5 个且第 2 个为 int。
-     *  v3.0.131: 优先精确匹配 String,int,*,SnsInfo,int 签名，避免选中错误重载。 */
-    private static Method findLikeMethod(Class<?> server) {
+    /** 反射找 h6.n(SnsInfo,int,?,int)：标准点赞路由（立即发送 mmsnscomment CGI）。
+     *  v3.0.139: 由 h6.p(String,int,lj4.a,SnsInfo,int) 改为 h6.n，依据
+     *  《朋友圈自动点赞修复WeChat_Moments_AutoLike_Reverse.md》。
+     *  优先精确匹配 (SnsInfo,int,*,int) 签名，避免选中错误重载。 */
+    private static Method findStandardLikeMethod(Class<?> server) {
         Method fallback = null;
         for (Method m : server.getDeclaredMethods()) {
-            if (!"p".equals(m.getName())) continue;
+            if (!"n".equals(m.getName())) continue;
             Class<?>[] pts = m.getParameterTypes();
-            if (pts.length == 5 && pts[1] == int.class) {
-                boolean exact = pts[0] == String.class && pts[4] == int.class
-                        && (pts[3].getName().equals(SNS_INFO) || pts[3].getName().endsWith("SnsInfo"));
+            if (pts.length == 4 && pts[1] == int.class && pts[3] == int.class) {
+                boolean exact = pts[0].getName().endsWith("SnsInfo");
                 if (exact) {
                     m.setAccessible(true);
-                    LogWriter.log(TAG, "h6.p matched: " + m.toGenericString()
+                    LogWriter.log(TAG, "h6.n matched: " + m.toGenericString()
                             + " static=" + java.lang.reflect.Modifier.isStatic(m.getModifiers()));
                     return m;
                 }
@@ -403,20 +398,6 @@ public final class MomentsAutoLikeHook {
             }
         }
         return fallback;
-    }
-
-    /** 反射找 h6.m(SnsInfo,int,String,long,String,boolean,int) 评论式路由。 */
-    private static Method findCommentLikeMethod(Class<?> server) {
-        for (Method m : server.getDeclaredMethods()) {
-            if (!"m".equals(m.getName())) continue;
-            Class<?>[] pts = m.getParameterTypes();
-            if (pts.length == 7 && pts[1] == int.class && pts[4] == String.class
-                    && pts[5] == boolean.class && pts[6] == int.class) {
-                m.setAccessible(true);
-                return m;
-            }
-        }
-        return null;
     }
 
     private static String safeId(Object info) {
