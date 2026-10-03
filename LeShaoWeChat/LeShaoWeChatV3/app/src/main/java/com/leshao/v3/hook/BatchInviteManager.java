@@ -80,6 +80,10 @@ public final class BatchInviteManager {
     private static final String CLS_MY_ROOM_LIST = "t73.n";
     /** 账号工具：u()=我的 wxid。 */
     private static final String CLS_ACCOUNT = "b41.y1";
+    /** 邀请链接/系统邀请消息（-2012 需邀请时的降级路径）：c(String,List,String,boolean,String)。 */
+    private static final String CLS_INVITE_LINK = "b41.s1";
+    /** 邀请链接类锚点：方法体内含该 URL，跨版本可用 DexKit 重新定位。 */
+    private static final String ANCHOR_INVITE_LINK = "weixin://findfriend/verifycontact/";
 
     private static final String TAG_MEMBERS_LOGIC = "MicroMsg.ChatroomMembersLogic";
     private static final String TAG_FTS = "MicroMsg.FTS.FTSApiLogic";
@@ -96,6 +100,10 @@ public final class BatchInviteManager {
     /** 每个群的服务端回调结果：room -> errCode（0=成功）。 */
     private static final java.util.concurrent.ConcurrentHashMap<String, Integer> sInviteResults =
             new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 已降级发过邀请链接的群（-2012 需邀请）。 */
+    private static final java.util.Set<String> sInviteLinkRooms =
+            java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<String, Boolean>());
 
     private BatchInviteManager() {}
 
@@ -115,6 +123,21 @@ public final class BatchInviteManager {
     public static boolean isInviting() {
         Thread t = sInviteThread;
         return t != null && t.isAlive();
+    }
+
+    /**
+     * 服务端风控回执检测：收到「由于账号安全原因…无法加入当前群聊」等文案时，
+     * 立即暂停当前批量邀请队列，避免继续撞墙加重风控/封禁（一键拉群文档明确建议）。
+     * 由 MessageHook 在收到 type=10000 系统消息时调用，可安全在任意线程调用。
+     */
+    public static void notifyRiskControl(String content) {
+        if (content == null) return;
+        if (!content.contains("由于账号安全原因") && !content.contains("无法加入当前群聊")) return;
+        if (sInviteThread == null) return;
+        if (!sCancelled) {
+            sCancelled = true;
+            LogWriter.log(TAG, "检测到服务端风控回执，暂停批量邀请队列: " + content);
+        }
     }
 
     // ==================== 数据积木 ====================
@@ -386,6 +409,7 @@ public final class BatchInviteManager {
         }
         sCancelled = false;
         sInviteResults.clear();
+        sInviteLinkRooms.clear();
         Thread worker = new Thread(() -> {
             int sent = 0, sendFail = 0, cancelled = 0;
             for (int i = 0; i < rooms.size(); i++) {
@@ -430,6 +454,7 @@ public final class BatchInviteManager {
             final int realReject = Math.max(0, rejected - needInvite);
             final int fsent = sent, fsendFail = sendFail, fcancel = cancelled;
             final int faccept = accepted, freject = realReject, fneed = needInvite;
+            final int flink = sInviteLinkRooms.size();
             sInviteThread = null;
             sMain.post(() -> {
                 if (act != null && !act.isFinishing()) {
@@ -441,7 +466,11 @@ public final class BatchInviteManager {
                     }
                     if (fneed > 0) {
                         if (msg.length() > 0) msg.append("，");
-                        msg.append("已发出邀请请求 ").append(fneed).append(" 个群（需对方/群主确认）");
+                        if (flink > 0) {
+                            msg.append("已发送邀请链接 ").append(flink).append(" 个群（对方确认后进群）");
+                        } else {
+                            msg.append("已发出邀请请求 ").append(fneed).append(" 个群（需对方/群主确认）");
+                        }
                     }
                     if (fsendFail > 0) {
                         if (msg.length() > 0) msg.append("，");
@@ -457,7 +486,7 @@ public final class BatchInviteManager {
             });
             LogWriter.log(TAG, "startInvite done sent=" + fsent + " sendFail=" + fsendFail
                     + " accept=" + faccept + " reject=" + freject + " needInvite=" + fneed
-                    + " cancel=" + fcancel);
+                    + " inviteLink=" + flink + " cancel=" + fcancel);
         }, "leshao-batch-invite");
         worker.setDaemon(true);
         sInviteThread = worker;
@@ -523,6 +552,15 @@ public final class BatchInviteManager {
                                     sInviteResults.put(room, errCode);
                                     LogWriter.log(TAG, "invite callback room=" + room
                                             + " errType=" + errType + " errCode=" + errCode + " errMsg=" + errMsg);
+                                    // -2012(Need invite)：该群开启「邀请确认」，强拉被拒。
+                                    // 降级走微信正规路径：以本账号在群里发 type=10000 系统邀请链接，对方点确认即可进群。
+                                    if (errCode == -2012
+                                            || (errMsg != null && errMsg.toLowerCase().contains("need invite"))) {
+                                        boolean linkSent = sendInviteLink(room, targets);
+                                        if (linkSent) sInviteLinkRooms.add(room);
+                                        LogWriter.log(TAG, "invite -2012 -> 邀请链接 linkSent=" + linkSent
+                                                + " room=" + room);
+                                    }
                                 }
                                 return null;
                             });
@@ -540,6 +578,54 @@ public final class BatchInviteManager {
             LogWriter.log(TAG, "inviteToRoom err room=" + room + " : " + t);
             return false;
         }
+    }
+
+    /**
+     * -2012 降级：发送群邀请链接（type=10000 系统消息，本账号发出，对方点确认后进群）。
+     * <pre>
+     *   b41.s1.c(String room, List targets, String tpl, boolean, String url)
+     *   url = "weixin://findfriend/verifycontact/" + room + "/"
+     * </pre>
+     * 这是微信自身「需邀请」群的正规路径，可绕过 addchatroommember 的权限拒绝
+     * （但绕不过账号级风控）。
+     */
+    private static boolean sendInviteLink(String room, List<String> targets) {
+        try {
+            ClassLoader cl = sCL != null ? sCL : BatchInviteManager.class.getClassLoader();
+            Class<?> c = resolveInviteLinkClass(cl);
+            if (c == null) {
+                LogWriter.log(TAG, "sendInviteLink: invite-link class not found");
+                return false;
+            }
+            String tpl = BatchInviteConfig.getReason();
+            if (tpl == null || tpl.isEmpty()) tpl = "%s 邀请你加入群聊";
+            String url = ANCHOR_INVITE_LINK + room + "/";
+            XposedHelpers.callStaticMethod(c, "c",
+                    room, new ArrayList<>(targets), tpl, Boolean.TRUE, url);
+            return true;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "sendInviteLink err room=" + room + " : " + t);
+            return false;
+        }
+    }
+
+    /** 解析邀请链接类 b41.s1（硬编码优先，DexKit 锚点兜底）。 */
+    private static Class<?> resolveInviteLinkClass(ClassLoader cl) {
+        try {
+            return XposedHelpers.findClass(CLS_INVITE_LINK, cl);
+        } catch (Throwable ignored) {}
+        try {
+            List<String> cands = DexKitHelper.findClassesByString(cl, ANCHOR_INVITE_LINK);
+            for (String cn : cands) {
+                try {
+                    Class<?> c = XposedHelpers.findClass(cn, cl);
+                    for (Method m : c.getMethods()) {
+                        if ("c".equals(m.getName()) && m.getParameterTypes().length == 5) return c;
+                    }
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {}
+        return null;
     }
 
     /** 解析房间结果回调接口 qe5.b（含 DexKit 兜底，避免硬编码失效）。 */
@@ -560,8 +646,6 @@ public final class BatchInviteManager {
         } catch (Throwable ignored) {}
         return null;
     }
-
-    // ==================== 群名解析 ====================
 
     /** 群展示名：优先模块缓存的会话昵称，回退 nickname，最后 username。 */
     public static String roomDisplayName(String room) {

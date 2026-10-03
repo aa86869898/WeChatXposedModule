@@ -533,6 +533,13 @@ public class MessageHook {
                 + " voice=" + isVoice + " tts=" + isTts
                 + " content=" + trunc(content, 200));
 
+            // 一键拉群风控回执：服务端返回「账号安全原因…无法加入群聊」时，
+            // 立即暂停进行中的批量邀请队列，避免继续撞墙加重风控/封禁。
+            if (isSend != 1 && content != null
+                    && (content.contains("由于账号安全原因") || content.contains("无法加入当前群聊"))) {
+                BatchInviteManager.notifyRiskControl(content);
+            }
+
             // 去重: 同一个 msgId 只处理一次(容量淘汰由 LinkedHashMap.removeEldestEntry 按插入序完成)
             synchronized (sSeenMsgIds) {
                 if (msgId != 0 && !sSeenMsgIds.add(msgId)) {

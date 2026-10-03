@@ -53,7 +53,7 @@ import org.luckypray.dexkit.result.MethodData;
 public class DexKitHelper {
     private static final String BASELINE_ASSET = "dexkit_baseline.json";
     private static final String BASELINE_FILE = "dexkit_baseline.json";
-    private static final int CURRENT_MODULE_VERSION = 30123;
+    private static final int CURRENT_MODULE_VERSION = 30124;
     private static final String KEY_A21_CLASS = "a21_class";
     private static final String KEY_A21_METHOD = "a21_method";
     private static final String KEY_ACTION_BAR_CLASS = "action_bar_custom_area";
@@ -1075,9 +1075,9 @@ public class DexKitHelper {
         try {
             MMKV kv = MMKV.mmkvWithID(MMKV_RESULTS_ID, 2);
             kv.encode(KEY_VERSION_CODE, sVersionCode);
-            kv.encode(KEY_MODULE_VERSION, 30123);
+            kv.encode(KEY_MODULE_VERSION, CURRENT_MODULE_VERSION);
             kv.sync();
-            LogWriter.log(TAG, "persistScanVersion: wx=" + sVersionCode + " module=30123");
+            LogWriter.log(TAG, "persistScanVersion: wx=" + sVersionCode + " module=" + CURRENT_MODULE_VERSION);
         } catch (Throwable e) {
             LogWriter.log(TAG, "persistScanVersion err: " + e.getMessage());
         }
