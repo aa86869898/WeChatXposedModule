@@ -331,7 +331,7 @@ public class CornerMenu {
                 int pad = dp(ctx, 3);
                 icon.setPadding(pad, pad, pad, pad);
             } catch (Throwable ignored) {}
-            // 点击左上角入口弹出快捷菜单（模块主页/一键群聊免打扰/一键解除群聊免打扰）
+            // 点击左上角入口弹出快捷菜单（仅模块主页；免打扰入口已移至右上角「+」菜单）
             icon.setOnClickListener(v -> {
                 try { com.leshao.v3.hook.LeftTopEntryHook.showMenu(act); }
                 catch (Throwable e) { LogWriter.log(TAG, "打开左上角菜单失败: " + e.getMessage()); }

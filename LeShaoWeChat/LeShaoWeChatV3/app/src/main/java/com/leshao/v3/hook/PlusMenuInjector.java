@@ -9,6 +9,7 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
@@ -62,8 +63,8 @@ public final class PlusMenuInjector {
     private static final String KEY_ORIG_COUNT = "leshao_plus_orig_count";
 
     /** 追加项文案（顺序即 position 增量）。 */
-    private static final String TITLE_MUTE = "一键群聊免打扰";
-    private static final String TITLE_UNMUTE = "一键解除群聊免打扰";
+    private static final String TITLE_MUTE = "一键免打扰";
+    private static final String TITLE_UNMUTE = "一键解除免打扰";
     private static final String[] TITLES = { TITLE_MUTE, TITLE_UNMUTE };
 
     private static volatile boolean sInstalled;
@@ -73,6 +74,13 @@ public final class PlusMenuInjector {
     private static Class<?> sAdapterClass;
     private static String sAdapterFieldName = "r";
     private static String sSparseArrayFieldName = "s";
+
+    // v3.0.126：视觉对齐微信原生「+」菜单项。首次拿到任意原生 item view 后缓存其
+    // 文本颜色/字号/图标色，套用到自绘项，保证与微信原生一致（深浅色主题自适应）。
+    private static volatile int sNativeTextColor = 0;
+    private static volatile int sNativeIconColor = 0;
+    private static volatile float sNativeTextSizePx = 0f;
+    private static volatile boolean sTemplateLogged;
 
     private static final Handler sH = new Handler(Looper.getMainLooper());
 
@@ -308,6 +316,19 @@ public final class PlusMenuInjector {
                                 : (Context) XposedHelpers.getObjectField(param.thisObject, "t");
                         param.setResult(buildItem(ctx, TITLES[idx], idx == 0));
                     }
+
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        // 缓存原生 item 作为视觉模板：读取其文本颜色/字号/图标色，
+                        // 使自绘项与微信原生完全一致（含深色/浅色主题）。
+                        try {
+                            int position = (int) param.args[0];
+                            int orig = readOrigCount(param.thisObject);
+                            if (orig > 0 && position >= orig) return; // 只采样原生项
+                            Object r = param.getResult();
+                            if (r instanceof View) captureTemplate((View) r);
+                        } catch (Throwable ignored) {}
+                    }
                 });
 
         // onItemClick Before → 消费追加项，关弹窗，执行免打扰
@@ -435,6 +456,98 @@ public final class PlusMenuInjector {
     }
 
     // ================================================================
+    // 视觉对齐：从原生 item 采样颜色/字号
+    // ================================================================
+
+    /** 采样微信原生菜单项的文本颜色、字号与图标色，供自绘项复用。 */
+    private static void captureTemplate(View nativeItem) {
+        if (nativeItem == null) return;
+        try {
+            TextView tv = findFirstTextView(nativeItem);
+            if (tv != null) {
+                int c = tv.getCurrentTextColor();
+                if (c != 0) sNativeTextColor = c;
+                float px = tv.getTextSize();
+                if (px > 0) sNativeTextSizePx = px;
+            }
+            int iconColor = 0;
+            ImageView iv = findFirstImageView(nativeItem);
+            if (iv != null) {
+                try {
+                    android.content.res.ColorStateList tint = iv.getImageTintList();
+                    if (tint != null) iconColor = tint.getDefaultColor();
+                } catch (Throwable ignored) {}
+                if (iconColor == 0) iconColor = sampleDrawableColor(iv.getDrawable());
+            }
+            if (iconColor == 0 && tv != null) iconColor = tv.getCurrentTextColor();
+            if (iconColor != 0) sNativeIconColor = iconColor;
+            if (!sTemplateLogged) {
+                sTemplateLogged = true;
+                LogWriter.log(TAG, "native template: textColor=#" + Integer.toHexString(sNativeTextColor)
+                        + " textSizePx=" + sNativeTextSizePx + " iconColor=#" + Integer.toHexString(sNativeIconColor)
+                        + " item=" + nativeItem.getClass().getName());
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static TextView findFirstTextView(View v) {
+        if (v == null) return null;
+        if (v instanceof TextView) return (TextView) v;
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                TextView t = findFirstTextView(g.getChildAt(i));
+                if (t != null) return t;
+            }
+        }
+        return null;
+    }
+
+    private static ImageView findFirstImageView(View v) {
+        if (v == null) return null;
+        if (v instanceof ImageView) return (ImageView) v;
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                ImageView t = findFirstImageView(g.getChildAt(i));
+                if (t != null) return t;
+            }
+        }
+        return null;
+    }
+
+    /** 从 Drawable 采样主色（对单色图标取不透明像素均值），用于无 tint 的场景。 */
+    private static int sampleDrawableColor(Drawable d) {
+        if (d == null) return 0;
+        try {
+            int w = d.getIntrinsicWidth() > 0 ? d.getIntrinsicWidth() : 48;
+            int h = d.getIntrinsicHeight() > 0 ? d.getIntrinsicHeight() : 48;
+            if (w > 128) w = 128;
+            if (h > 128) h = 128;
+            Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            Canvas c = new Canvas(bmp);
+            d.setBounds(0, 0, w, h);
+            d.draw(c);
+            long r = 0, g = 0, b = 0;
+            int n = 0;
+            for (int y = 0; y < h; y += 2) {
+                for (int x = 0; x < w; x += 2) {
+                    int px = bmp.getPixel(x, y);
+                    int a = (px >>> 24) & 0xff;
+                    if (a > 200) {
+                        r += (px >> 16) & 0xff;
+                        g += (px >> 8) & 0xff;
+                        b += px & 0xff;
+                        n++;
+                    }
+                }
+            }
+            if (n > 0) return 0xff000000 | (int) (r / n) << 16 | (int) (g / n) << 8 | (int) (b / n);
+        } catch (Throwable ignored) {}
+        return 0;
+    }
+
+    // ================================================================
     // 自绘菜单项（文档 §5.2）
     // ================================================================
 
@@ -457,8 +570,13 @@ public final class PlusMenuInjector {
 
         TextView tv = new TextView(ctx);
         tv.setText(title);
-        tv.setTextSize(15);
-        tv.setTextColor(Color.parseColor("#1A1A1A"));
+        // 字号/颜色优先对齐微信原生 item 采样值，未采到再回退合理默认。
+        if (sNativeTextSizePx > 0) {
+            tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, sNativeTextSizePx);
+        } else {
+            tv.setTextSize(15);
+        }
+        tv.setTextColor(sNativeTextColor != 0 ? sNativeTextColor : Color.parseColor("#1A1A1A"));
         tv.setTypeface(Typeface.DEFAULT);
         LinearLayout.LayoutParams tp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -470,13 +588,15 @@ public final class PlusMenuInjector {
         return root;
     }
 
-    /** 程序化绘制图标（不依赖模块资源 id，避免 resources.arsc 缺失导致崩溃）。 */
+    /** 程序化绘制图标（不依赖模块资源 id，避免 resources.arsc 缺失导致崩溃）。
+     *  颜色与微信原生菜单项一致（采样自原生 item；未采到则回退模块主色）。 */
     private static Bitmap drawIcon(boolean bellOn) {
         int size = 96;
         Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas cv = new Canvas(bmp);
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        p.setColor(AppColors.primary());
+        int color = sNativeIconColor != 0 ? sNativeIconColor : AppColors.primary();
+        p.setColor(color);
         p.setStyle(Paint.Style.STROKE);
         p.setStrokeWidth(size * 0.07f);
 
@@ -491,8 +611,8 @@ public final class PlusMenuInjector {
         cv.drawCircle(size * 0.5f, size * 0.82f, size * 0.06f, p);
 
         if (bellOn) {
-            // 免打扰：斜杠
-            p.setColor(Color.parseColor("#E53935"));
+            // 免打扰：斜杠（与铃铛同色，保持整体图标颜色与微信原生一致）
+            p.setColor(color);
             p.setStrokeWidth(size * 0.09f);
             p.setStyle(Paint.Style.STROKE);
             cv.drawLine(size * 0.2f, size * 0.2f, size * 0.8f, size * 0.8f, p);
