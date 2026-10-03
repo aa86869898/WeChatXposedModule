@@ -99,6 +99,8 @@ public final class ChatBubbleHook {
     // 第二层：BUBBLE 捕获表 —— 只记录微信亲自贴过气泡的 View（viewitems.to.b 的 holder.b、
     // AnimImageView.setType），重盖/补色/换背景只动这张表里的 View，彻底删除几何启发式。
     private static final java.util.Map<View, Boolean> sBubble = new java.util.WeakHashMap<>();
+    /** v3.0.136：findBubbleViewInTree 单次调用预算（防遍历整棵 View 树卡死主线程）。 */
+    private static int sTreeVisitCount = 0;
 
     // v3.0.128 气泡内文字颜色（0 = 不修改）。对方/自己各一份，运行时自校准后固化。
     private static volatile int sFromTextColor = 0;
@@ -957,17 +959,30 @@ if (kind < 0) {
             for (Class<?> toCls : HookUtil.loadClasses(cl, cn)) {
                 for (Method m : toCls.getDeclaredMethods()) {
                     if (!"b".equals(m.getName())) continue;
-                    // v3.0.135：to 类同样放宽为所有名为 b 的方法。
-                    // 日志证实 to.b[e9,to,gk5.d,Boolean]（静态+首参e9）已 hook 但从未触发，
-                    // 说明 8.0.78 文字消息绑定实际调用的是 to.b 的其他重载（非静态/参数不同）。
-                    // 放宽后 after 通过遍历参数找 holder 字段 + isRecv 布尔，误伤可控。
+                    // v3.0.136：收紧 hook 条件。v3.0.135 全量 hook 所有 b 方法导致主线程卡死：
+                    // 若某重载参数含 View，after 中 findBubbleViewInTree 会递归遍历整棵 View 树。
+                    // 这里排除参数含 View/ViewGroup 的重载（可能被非聊天场景调用且遍历开销巨大），
+                    // 保留消息绑定相关重载（参数为消息实体/数据类/布尔），语音 mq.b 不受影响。
+                    Class<?>[] pts = m.getParameterTypes();
+                    boolean hasViewParam = false;
+                    for (Class<?> pt : pts) {
+                        if (View.class.isAssignableFrom(pt)) {
+                            hasViewParam = true;
+                            break;
+                        }
+                    }
+                    if (hasViewParam) continue;
                     m.setAccessible(true);
                     final String owner = cn;
+                    final String methodSig = m.getName() + Arrays.toString(pts);
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) {
                             try {
                                 if (!sEnabled) return;
+                                // v3.0.136：预算保护 —— 防止遍历意外超时阻塞主线程（30ms）
+                                long start = android.os.SystemClock.uptimeMillis();
+                                sTreeVisitCount = 0;
                                 boolean isRecv = true;
                                 for (int i = 0; i < param.args.length; i++) {
                                     if (param.args[i] instanceof Boolean) {
@@ -975,6 +990,9 @@ if (kind < 0) {
                                         break;
                                     }
                                 }
+                                // v3.0.136：触发日志（供下版修复定位文字消息真实绑定路径）
+                                LogWriter.log(TAG, "viewitems.b CALL " + owner + "." + methodSig
+                                        + " isRecv=" + isRecv + " args=" + param.args.length);
                                 // v3.0.132: BUBBLE 捕获 —— 微信亲自贴过气泡的 View 收进表（holder.b 字段）
                                 for (Object a : param.args) {
                                     if (a == null) continue;
@@ -994,23 +1012,23 @@ if (kind < 0) {
                                 // 替换后用户看不到效果；而语音气泡(AnimImageView)走 setBackgroundResource 生效。
                                 for (Object a : param.args) {
                                     if (a == null) continue;
-                                    bubble = findMMNeatTextView(a);
+                                    bubble = findMMNeatTextView(a, start);
                                     if (bubble != null) break;
                                 }
                                 if (bubble == null) {
                                     for (Object a : param.args) {
                                         if (a == null) continue;
                                         if (a instanceof View) {
-                                            bubble = findBubbleViewInTree((View) a);
+                                            bubble = findBubbleViewInTree((View) a, 0, start);
                                             if (bubble != null) break;
                                         } else if ("e9".equals(a.getClass().getSimpleName())
                                                 || hasFieldType(a)) {
-                                            bubble = findBubbleView(a);
+                                            bubble = findBubbleView(a, start);
                                             if (bubble != null) break;
                                         }
                                     }
                                 }
-                                if (bubble == null) bubble = findBubbleView(param.thisObject);
+                                if (bubble == null) bubble = findBubbleView(param.thisObject, start);
                                 if (bubble == null) return;
                                 // v3.0.100: 方向判定仍以 to.b 自带的 isRecv 布尔为准（语义最准）。
                                 // 若该重载无布尔参数，则由 bubble 背景匹配白名单兜底。
@@ -1035,8 +1053,7 @@ if (kind < 0) {
                         }
                     });
                     hooked++;
-                    LogWriter.log(TAG, "viewitems.b hooked " + owner + "." + m.getName()
-                            + Arrays.toString(m.getParameterTypes())
+                    LogWriter.log(TAG, "viewitems.b hooked " + owner + "." + methodSig
                             + " loader=" + HookUtil.loaderName(toCls.getClassLoader()));
                 }
             }
@@ -1047,12 +1064,14 @@ if (kind < 0) {
     }
 
     /** v3.0.120：遍历 holder 对象字段，找类型为 MMNeat7extView 的 View —— 文字气泡真实承载视图。 */
-    private static View findMMNeatTextView(Object holder) {
+    private static View findMMNeatTextView(Object holder, long start) {
         if (holder == null) return null;
         try {
             Class<?> c = holder.getClass();
             while (c != null && c != Object.class) {
                 for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                    // v3.0.136：预算保护
+                    if (android.os.SystemClock.uptimeMillis() - start > 30L) return null;
                     try {
                         Class<?> ft = f.getType();
                         if (ft == null || !View.class.isAssignableFrom(ft)) continue;
@@ -1085,16 +1104,21 @@ if (kind < 0) {
         return sb.toString();
     }
 
-    /** 递归在 View 树中查找背景与微信原生气泡匹配的气泡 View。 */
-    private static View findBubbleViewInTree(View v) {
+    /** 递归在 View 树中查找背景与微信原生气泡匹配的气泡 View。
+     *  v3.0.136：限制深度(4层)/节点数(200)/耗时(30ms)，防止遍历整棵 View 树卡死主线程。 */
+    private static View findBubbleViewInTree(View v, int depth, long start) {
         if (v == null) return null;
+        if (depth > 4) return null;
+        if (sTreeVisitCount >= 200) return null;
+        sTreeVisitCount++;
+        if (android.os.SystemClock.uptimeMillis() - start > 30L) return null;
         try {
             if (matchBaseDrawable(v.getBackground()) >= 0) return v;
         } catch (Throwable ignored) {}
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) {
-                View found = findBubbleViewInTree(g.getChildAt(i));
+                View found = findBubbleViewInTree(g.getChildAt(i), depth + 1, start);
                 if (found != null) return found;
             }
         }
@@ -1168,9 +1192,11 @@ if (kind < 0) {
      *  （constantState）匹配的 View（真实气泡背景就是 chatfrom_bg/chatto_bg），
      *  其次 MMNeat7extView（文本视图本身做气泡背景），再按字段名 b/d/f 兜底。
      *  遍历时打印 View 字段信息，便于下次日志确认微信实际气泡 View 落在哪个字段。 */
-    private static View findBubbleView(Object holder) {
+    private static View findBubbleView(Object holder, long start) {
         for (Class<?> c = holder.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
             for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                // v3.0.136：预算保护
+                if (android.os.SystemClock.uptimeMillis() - start > 30L) return null;
                 try {
                     f.setAccessible(true);
                     Object v = f.get(holder);

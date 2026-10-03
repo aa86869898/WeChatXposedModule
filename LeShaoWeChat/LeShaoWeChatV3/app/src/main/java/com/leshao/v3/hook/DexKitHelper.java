@@ -53,7 +53,7 @@ import org.luckypray.dexkit.result.MethodData;
 public class DexKitHelper {
     private static final String BASELINE_ASSET = "dexkit_baseline.json";
     private static final String BASELINE_FILE = "dexkit_baseline.json";
-    private static final int CURRENT_MODULE_VERSION = 30135;
+    private static final int CURRENT_MODULE_VERSION = 30136;
     private static final String KEY_A21_CLASS = "a21_class";
     private static final String KEY_A21_METHOD = "a21_method";
     private static final String KEY_ACTION_BAR_CLASS = "action_bar_custom_area";
@@ -345,7 +345,13 @@ public class DexKitHelper {
         if (isMainThread()) {
             return;
         }
+        // v3.0.136: 最多等待 30s，避免首次全量扫描异常卡住时所有 find* 线程无限阻塞
+        long deadline = System.currentTimeMillis() + 30000L;
         while (sFullScanScheduled.get() && !isScanComplete()) {
+            if (System.currentTimeMillis() > deadline) {
+                LogWriter.log(TAG, "waitForFullScan: timeout 30s, proceed without scan result");
+                return;
+            }
             try {
                 Thread.sleep(100L);
             } catch (InterruptedException e) {
@@ -485,6 +491,11 @@ public class DexKitHelper {
             LogWriter.log(TAG, "findClassesByString(" + keyword + "): cache hit " + cached.size() + " candidates");
             return new ArrayList<>(cached);
         }
+        // v3.0.136: 主线程缓存未命中时不再现场扫描（DexKit 扫描可能在启动/主页卡死主线程）
+        if (isMainThread()) {
+            LogWriter.log(TAG, "findClassesByString(" + keyword + "): cache MISS on main thread, return empty (avoid block)");
+            return new ArrayList<>();
+        }
         DexKitCacheBridge.RecyclableBridge bridge = null;
         final List<String> results = new ArrayList<>();
         waitForFullScanIfScheduled();
@@ -547,6 +558,11 @@ public class DexKitHelper {
             LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): cache hit " + cached.size());
             return new ArrayList<>(cached);
         }
+        // v3.0.136: 主线程缓存未命中时不再现场扫描（避免卡死启动/主页）
+        if (isMainThread()) {
+            LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): cache MISS on main thread, return empty (avoid block)");
+            return new ArrayList<>();
+        }
         DexKitCacheBridge.RecyclableBridge bridge = null;
         final List<String> results = new ArrayList<>();
         waitForFullScanIfScheduled();
@@ -595,6 +611,11 @@ public class DexKitHelper {
     public static MethodData findMethod(ClassLoader cl, final String className, final String methodName, final String... paramTypeNames) {
         MethodData methodData = null;
         if (className == null || methodName == null) {
+            return null;
+        }
+        // v3.0.136: 主线程不现场扫描（避免卡死启动/主页）
+        if (isMainThread()) {
+            LogWriter.log(TAG, "findMethod(" + className + "." + methodName + "): main thread, return null (avoid block)");
             return null;
         }
         waitForFullScanIfScheduled();
@@ -901,10 +922,11 @@ public class DexKitHelper {
                 sScanComplete = true;
             }
             runPostScanCallbacks();
-            rescanActionBarIfMissing(app);
-            if (!hasV955Critical) {
-                rescanMissingV955Keys(app);
-            }
+            // v3.0.136: 缓存完整即用，不再补扫 —— 补扫(rescanActionBarIfMissing/rescanMissingV955Keys)
+            // 会每次启动重建 DexKit bridge 扫描，造成"每次都扫"、启动卡死。
+            // 微信更新或首次安装时 startFullScan 已一次性写入全部目标（含 v955/actionBar/runtime）。
+            LogWriter.log(TAG, "loadResultsFromMMKV: cache-only mode, v955Critical="
+                    + hasV955Critical + ", skip rescan");
             return true;
         } catch (Throwable e) {
             LogWriter.log(TAG, "loadResultsFromMMKV error: " + e.getMessage());
@@ -1304,9 +1326,7 @@ public class DexKitHelper {
                         }
                     }
                     markScanCompleteAndDrain();
-                    if (sActionBarCustomAreaClass == null && app != null) {
-                        rescanActionBarIfMissing(app);
-                    }
+                    // v3.0.136: baseline 命中后不再补扫 actionBar（避免每次启动扫描）
                     if (bridge != null) {
                         try {
                             bridge.close();
@@ -2952,6 +2972,17 @@ public class DexKitHelper {
                     }
                 }
             }, 0L);
+            // v3.0.136: 扫描总超时 180s，防止 dex 解析异常时 sFullScanScheduled 永远为 true、
+            // 导致其他线程在 waitForFullScanIfScheduled 中无限等待（启动卡死）。
+            sMainHandler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (!DexKitHelper.isScanComplete()) {
+                        LogWriter.log(DexKitHelper.TAG, "startFullScan: FORCE timeout 180s, mark complete");
+                        DexKitHelper.markScanCompleteAndDrain();
+                    }
+                }
+            }, 180000L);
         } catch (Throwable e) {
             LogWriter.log(TAG, "startFullScan err: " + e.getMessage());
             markScanCompleteAndDrain();
@@ -2999,14 +3030,22 @@ public class DexKitHelper {
                             try {
                                 MMKV kv = MMKV.mmkvWithID(DexKitHelper.MMKV_RESULTS_ID, 2);
                                 int cachedVersion = kv.decodeInt(DexKitHelper.KEY_VERSION_CODE, 0);
-                                if (cachedVersion != DexKitHelper.sVersionCode || !DexKitHelper.hasCompleteLocalCache()) {
-                                    LogWriter.log(DexKitHelper.TAG, "hookApplication: MMKV cache miss (cachedWx=" + cachedVersion + " currentWx=" + DexKitHelper.sVersionCode + ")");
+                                boolean cacheComplete = DexKitHelper.hasCompleteLocalCache();
+                                // v3.0.136: 仅当 ①无缓存(首次安装) 或 ②微信版本变化(微信更新) 时全量扫描；
+                                // 其他情况直接加载缓存，绝不触发任何 DexKit 扫描（避免每次启动卡死）。
+                                if (cachedVersion != DexKitHelper.sVersionCode || !cacheComplete) {
+                                    LogWriter.log(DexKitHelper.TAG, "hookApplication: SCAN NEEDED (cachedWx=" + cachedVersion
+                                            + " currentWx=" + DexKitHelper.sVersionCode
+                                            + " cacheComplete=" + cacheComplete + ")");
                                 } else {
-                                    LogWriter.log(DexKitHelper.TAG, "hookApplication: MMKV cache hit (wx=" + cachedVersion + "), skip DexKit load/scan");
+                                    LogWriter.log(DexKitHelper.TAG, "hookApplication: SCAN SKIP (wx=" + cachedVersion
+                                            + " module=" + DexKitHelper.CURRENT_MODULE_VERSION
+                                            + " cacheComplete=true), cache-only");
                                     if (!DexKitHelper.loadResultsFromMMKV(app)) {
                                         LogWriter.log(DexKitHelper.TAG, "hookApplication: cache hit but load failed, falling back to scan");
                                     } else {
-                                        DexKitHelper.rescanRuntimeHookTargetsIfMissing(app);
+                                        // v3.0.136: 不再 rescanRuntimeHookTargetsIfMissing —— 否则每次启动
+                                        // 都会重建 DexKit bridge 扫描 runtime targets，造成"每次都扫"。
                                         return;
                                     }
                                 }
