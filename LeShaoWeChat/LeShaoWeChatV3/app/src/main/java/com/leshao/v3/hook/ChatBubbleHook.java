@@ -57,6 +57,9 @@ public final class ChatBubbleHook {
     public static final String K_ENABLED = "ls_bubble_enabled";
     public static final String K_FROM_PATH = "ls_bubble_from_path";
     public static final String K_TO_PATH = "ls_bubble_to_path";
+    /** v3.0.128：气泡内文字颜色（0 = 不修改，保持微信原生）。对方/自己各一份。 */
+    public static final String K_FROM_TEXT_COLOR = "ls_bubble_from_text_color";
+    public static final String K_TO_TEXT_COLOR = "ls_bubble_to_text_color";
 
     public static final int KIND_FROM = 0;
     public static final int KIND_TO = 1;
@@ -92,6 +95,10 @@ public final class ChatBubbleHook {
     private static final String K_HEURISTIC = "ls_bubble_heuristic";
     private static volatile boolean sHeuristic = true;
 
+    // v3.0.128 气泡内文字颜色（0 = 不修改）。对方/自己各一份，运行时自校准后固化。
+    private static volatile int sFromTextColor = 0;
+    private static volatile int sToTextColor = 0;
+
     // 气泡资源 ID（XML 兜底路径用）。优先 getIdentifier 动态解析，失败回退文档已知值
     private static volatile int sFromResId = 2131231925; // chatfrom_bg
     private static volatile int sToResId = 2131232060;   // chatto_bg
@@ -119,6 +126,10 @@ public final class ChatBubbleHook {
     // 记录已替换的气泡 View 与自定义 Drawable，在聊天列表 onLayout 后强制恢复，
     // 解决文本消息（TextView w=0 h=0 时替换）最终仍显示原生气泡的问题。
     private static final java.util.Map<View, Drawable> sBubbleViews =
+            new java.util.WeakHashMap<>();
+
+    /** v3.0.128：记录已替换气泡的方向（收/发），供补盖时同步文字颜色。 */
+    private static final java.util.Map<View, Integer> sBubbleKind =
             new java.util.WeakHashMap<>();
 
     private static volatile BubblePickCallback sPickCb;
@@ -170,6 +181,28 @@ public final class ChatBubbleHook {
             synchronized (sDrawableCache) { sToDrawableState = null; sToDrawablePath = null; }
         }
         LogWriter.log(TAG, "bubble path kind=" + kind + " -> " + path);
+    }
+
+    // ---------------- v3.0.128 气泡内文字颜色 ----------------
+
+    /** 读取气泡内文字颜色（0 = 不修改）。 */
+    public static int getTextColor(int kind) {
+        if (kind == KIND_FROM) return sFromTextColor;
+        return sToTextColor;
+    }
+
+    /** 设置气泡内文字颜色（0 = 不修改，恢复微信原生）。 */
+    public static void setTextColor(int kind, int color) {
+        SharedPreferences sp = safePrefs();
+        if (kind == KIND_FROM) {
+            sFromTextColor = color;
+            if (sp != null) sp.edit().putInt(K_FROM_TEXT_COLOR, color).apply();
+        } else {
+            sToTextColor = color;
+            if (sp != null) sp.edit().putInt(K_TO_TEXT_COLOR, color).apply();
+        }
+        LogWriter.log(TAG, "bubble text color kind=" + kind + " -> 0x"
+                + Integer.toHexString(color));
     }
 
     private static SharedPreferences safePrefs() {
@@ -313,6 +346,10 @@ public final class ChatBubbleHook {
             try {
                 SharedPreferences sp = safePrefs();
                 sHeuristic = sp == null || sp.getBoolean(K_HEURISTIC, true);
+                if (sp != null) {
+                    sFromTextColor = sp.getInt(K_FROM_TEXT_COLOR, 0);
+                    sToTextColor = sp.getInt(K_TO_TEXT_COLOR, 0);
+                }
             } catch (Throwable ignored) {}
             resolveBubbleResIds(cl);
             LogWriter.log(TAG, "bubble config enabled=" + sEnabled
@@ -341,6 +378,7 @@ public final class ChatBubbleHook {
                     installChatListViewHook(cl);
                     installCalibrationHooks(cl);
                     installInflateFallbackHook(cl);
+                    installAttachApplyHook(cl);
                     if (DEBUG_VIEW_DUMP) installChattingListCollector(cl);
                     sHooked = true;
                     LogWriter.log(TAG, "bubble resolver hooked attempt=" + attempt);
@@ -541,11 +579,8 @@ public final class ChatBubbleHook {
                     int resId = ((Number) param.args[0]).intValue();
                     int kind = resolveKindByResId(ContextManager.getAppContext(), resId);
                     if (kind < 0) return;
-                    Drawable d = loadDrawable(kind);
-                    if (d == null) return;
                     View v = (View) param.thisObject;
-                    v.setBackground(d);
-                    rememberBubble(v, d);
+                    applyBubbleTo(v, kind);
                     int[] loc = {0, 0};
                     try { v.getLocationOnScreen(loc); } catch (Throwable ignored) {}
                     LogWriter.log(TAG, "setBackgroundResource REPLACE resId=" + resId
@@ -673,6 +708,8 @@ public final class ChatBubbleHook {
                 protected void beforeHookedMethod(MethodHookParam param) {
                     try {
                         if (!sEnabled) return;
+                        // 空 Drawable 不拦：微信 AnimImageView.setType() 复用/空态分支会
+                        // setBackgroundDrawable(null) 清空背景，交由 after 无条件补盖。
                         if (param.args.length == 0 || !(param.args[0] instanceof Drawable)) return;
                         Drawable d = (Drawable) param.args[0];
                         int kind = matchBaseDrawable(d);
@@ -682,6 +719,18 @@ public final class ChatBubbleHook {
                             param.args[0] = custom;
                             LogWriter.log(TAG, "setBackground REPLACE kind=" + kind
                                     + " view=" + param.thisObject.getClass().getName());
+                        }
+                    } catch (Throwable ignored) {}
+                }
+
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        boolean cleared = param.args.length == 0 || param.args[0] == null;
+                        if (!cleared) return;
+                        if (param.thisObject instanceof View) {
+                            reapplyIfBubble((View) param.thisObject);
                         }
                     } catch (Throwable ignored) {}
                 }
@@ -813,10 +862,8 @@ public final class ChatBubbleHook {
                                 // v3.0.100: 方向判定仍以 to.b 自带的 isRecv 布尔为准（语义最准）。
                                 // 若该重载无布尔参数，则由 bubble 背景匹配白名单兜底。
                                 int kind = isRecv ? KIND_FROM : KIND_TO;
-                                Drawable custom = loadDrawable(kind);
-                                if (custom != null) {
-                                    bubble.setBackground(custom);
-                                    rememberBubble(bubble, custom);
+                                if (loadDrawable(kind) != null) {
+                                    applyBubbleTo(bubble, kind);
                                     LogWriter.log(TAG, "viewitems.b REPLACE isRecv=" + isRecv
                                             + " kind=" + kind
                                             + " view=" + bubble.getClass().getName()
@@ -932,9 +979,8 @@ public final class ChatBubbleHook {
                                     if (!(v instanceof View)) return;
                                     // r0=收(chatfrom), s0=发(chatto)
                                     int kind = m.getName().equals("g0") ? KIND_FROM : KIND_TO;
-                                    Drawable custom = loadDrawable(kind);
-                                    if (custom != null) {
-                                        ((View) v).setBackground(custom);
+                                    if (loadDrawable(kind) != null) {
+                                        applyBubbleTo((View) v, kind);
                                         LogWriter.log(TAG, "link subtype REPLACE " + owner
                                                 + "." + m.getName() + " kind=" + kind);
                                     }
@@ -1010,15 +1056,20 @@ public final class ChatBubbleHook {
         return a.getConstantState() != null && a.getConstantState().equals(b.getConstantState());
     }
 
-    /** 是否为自定义气泡图（NinePatchDrawable 或自实现 NineSliceDrawable）。 */
+    /** 是否为"本模块构建的自定义气泡图"。
+     *  v3.0.128：不再把所有 {@link android.graphics.drawable.NinePatchDrawable} 一律视为自定义
+     *  （微信原生气泡本身就是 NinePatchDrawable，会被误判从而挡住启发式替换）；
+     *  改为 NineSliceDrawable 直接命中 + 用 constantState 与本模块缓存态比对。 */
     private static boolean isCustomBackground(Drawable d) {
         if (d == null) return false;
         if (d instanceof BubbleDrawableFactory.NineSliceDrawable) return true;
-        if (d instanceof android.graphics.drawable.NinePatchDrawable) return true;
         try {
             Drawable.ConstantState cs = d.getConstantState();
-            String n = cs == null ? "" : cs.getClass().getName();
-            return n.contains("NineSlice");
+            if (cs != null) {
+                if (sFromDrawableState != null && cs.equals(sFromDrawableState)) return true;
+                if (sToDrawableState != null && cs.equals(sToDrawableState)) return true;
+                if (cs.getClass().getName().contains("NineSlice")) return true;
+            }
         } catch (Throwable ignored) {}
         return false;
     }
@@ -1239,10 +1290,22 @@ public final class ChatBubbleHook {
         }
     }
 
+    /** v3.0.128：记录气泡 View 及其方向，供补盖时同步文字颜色。 */
+    private static void rememberBubble(View v, Drawable custom, int kind) {
+        if (v == null || custom == null) return;
+        synchronized (sBubbleViews) {
+            sBubbleViews.put(v, custom);
+        }
+        try {
+            synchronized (sBubbleKind) { sBubbleKind.put(v, kind); }
+        } catch (Throwable ignored) {}
+    }
+
     /** 聊天列表布局后，把已记录的气泡 View 背景强制恢复为自定义图。
-     *  微信在 RecyclerView 布局/复用阶段可能再次设置原生气泡背景，这里用引用比较
-     *  判断背景是否仍是自定义图，被覆盖则重新设置。 */
+     *  v3.0.128：改用「背景是否仍为自定义图」判定（constantState 级），避免每帧重复补盖；
+     *  恢复时用独立实例并同步文字颜色/内边距。 */
     private static void restoreRecordedBubbles() {
+        final java.util.List<View> need = new java.util.ArrayList<>();
         synchronized (sBubbleViews) {
             for (java.util.Iterator<java.util.Map.Entry<View, Drawable>> it =
                  sBubbleViews.entrySet().iterator(); it.hasNext(); ) {
@@ -1251,14 +1314,22 @@ public final class ChatBubbleHook {
                 if (v == null) continue;
                 try {
                     if (!v.isShown()) continue;
-                    Drawable want = e.getValue();
-                    if (want != null && v.getBackground() != want) {
-                        v.setBackground(want);
-                        LogWriter.log(TAG, "bubble restore view=" + v.getClass().getName()
-                                + " w=" + v.getWidth() + " h=" + v.getHeight());
-                    }
+                    if (!isCustomBackground(v.getBackground())) need.add(v);
                 } catch (Throwable ignored) {}
             }
+        }
+        for (View v : need) {
+            try {
+                int kind = kindOf(v);
+                Drawable d = fresh(loadDrawable(kind));
+                if (d == null) continue;
+                v.setBackground(d);
+                rememberBubble(v, d, kind);
+                applyTextColor(v, kind);
+                syncBubblePadding(v);
+                LogWriter.log(TAG, "bubble restore view=" + v.getClass().getName()
+                        + " w=" + v.getWidth() + " h=" + v.getHeight());
+            } catch (Throwable ignored) {}
         }
     }
 
@@ -1553,7 +1624,7 @@ public final class ChatBubbleHook {
             String cachedPath = kind == KIND_FROM ? sFromDrawablePath : sToDrawablePath;
             if (cached != null && path.equals(cachedPath)) {
                 Drawable d = cached.newDrawable(ctx.getResources());
-                if (d != null) return d;
+                if (d != null) { d.mutate(); return d; }
             }
             Drawable built = BubbleDrawableFactory.build(ctx, path);
             if (built == null) {
@@ -1761,16 +1832,176 @@ public final class ChatBubbleHook {
             try { screenW = v.getResources().getDisplayMetrics().widthPixels; } catch (Throwable ignored) {}
             int center = loc[0] + w / 2;
             int kind = (screenW > 0 && center > screenW / 2) ? KIND_TO : KIND_FROM;
-            Drawable custom = loadDrawable(kind);
-            if (custom != null) {
-                v.setBackground(custom);
-                rememberBubble(v, custom);
+            if (loadDrawable(kind) != null) {
+                applyBubbleTo(v, kind);
                 LogWriter.log(TAG, "heuristic REPLACE kind=" + kind
                         + " view=" + v.getClass().getName()
                         + " center=" + center + "/" + screenW
                         + " parent=" + parentChain(v, 2));
             }
         } catch (Throwable ignored) {}
+    }
+
+    // ==================== v3.0.128 统一补盖（根治偶发不渲染） ====================
+
+    /**
+     * 从模板 Drawable 派生一个可独立变更的新实例。
+     *
+     * <p>修复「共享 Drawable 实例 → bounds/callback 互踩 → 偶发不画」：多 View 若共用同一
+     * Drawable 实例，滚动时会互相覆盖 setBounds，导致部分气泡不渲染。每次 newDrawable().mutate()
+     * 出新实例即可隔离。</p>
+     */
+    private static Drawable fresh(Drawable template) {
+        if (template == null) return null;
+        try {
+            Drawable.ConstantState cs = template.getConstantState();
+            if (cs != null) {
+                Drawable d = cs.newDrawable();
+                if (d != null) {
+                    d.mutate();
+                    return d;
+                }
+            }
+        } catch (Throwable ignored) {}
+        try { return template.mutate(); } catch (Throwable ignored) {}
+        return template;
+    }
+
+    /**
+     * 统一把某个 View 应用为自定义气泡：设置独立背景实例 + 同步内边距(触发 NeatTextView 重排)
+     * + 应用文字颜色 + requestLayout/invalidate。所有替换路径（setBackgroundResource、
+     * bind-after、attach-after、onLayout、启发式）都收敛到此处，行为一致。
+     */
+    private static void applyBubbleTo(View v, int kind) {
+        if (v == null || !sEnabled) return;
+        try {
+            Drawable custom = loadDrawable(kind);
+            if (custom == null) return;
+            Drawable d = fresh(custom);
+            v.setBackground(d);
+            rememberBubble(v, d, kind);
+            applyTextColor(v, kind);
+            syncBubblePadding(v);
+            try { v.requestLayout(); v.invalidate(); } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {}
+    }
+
+    /** 应用气泡内文字颜色（0 = 不修改）。文本气泡承载视图可能是 MMNeat7extView（非 TextView），
+     *  其 setTextColor 会把颜色同步到内层 wrappedTextView。 */
+    private static void applyTextColor(View v, int kind) {
+        int color = kind == KIND_FROM ? sFromTextColor : sToTextColor;
+        if (color == 0 || v == null) return;
+        try {
+            if (v instanceof android.widget.TextView) {
+                ((android.widget.TextView) v).setTextColor(color);
+                return;
+            }
+        } catch (Throwable ignored) {}
+        try {
+            Method m = v.getClass().getMethod("setTextColor", int.class);
+            m.setAccessible(true);
+            m.invoke(v, color);
+        } catch (Throwable ignored) {}
+    }
+
+    /**
+     * 重新下发一次 padding（值不变）以触发 {@code MMNeat7extView.setPadding} 重写 →
+     * 同步内层 wrappedTextView 的 padding 并重算 Layout 缓存。不复排会导致换了背景后
+     * 文字不随气泡伸缩（看着像没渲染/错位）。
+     */
+    private static void syncBubblePadding(View v) {
+        if (v == null) return;
+        try {
+            v.setPadding(v.getPaddingLeft(), v.getPaddingTop(),
+                    v.getPaddingRight(), v.getPaddingBottom());
+        } catch (Throwable ignored) {}
+    }
+
+    /** 取已记录的气泡方向；未记录时按 x 坐标几何兜底。 */
+    private static int kindOf(View v) {
+        try {
+            Integer k = sBubbleKind.get(v);
+            if (k != null) return k;
+        } catch (Throwable ignored) {}
+        try {
+            int[] loc = {0, 0};
+            v.getLocationOnScreen(loc);
+            int screenW = v.getResources().getDisplayMetrics().widthPixels;
+            if (screenW > 0 && (loc[0] + v.getWidth() / 2) > screenW / 2) return KIND_TO;
+        } catch (Throwable ignored) {}
+        return KIND_FROM;
+    }
+
+    /**
+     * 补盖：微信 {@code AnimImageView.setType()} 在复用/空态分支会调用
+     * {@code setBackgroundDrawable(null)} 把气泡清空；此处对"已记录的气泡 View"无条件补回自定义图。
+     * 未记录时退化为启发式替换。
+     */
+    private static void reapplyIfBubble(View v) {
+        if (!sEnabled || v == null) return;
+        try {
+            Drawable recorded = sBubbleViews.get(v);
+            if (recorded != null) {
+                int kind = kindOf(v);
+                Drawable d = fresh(recorded);
+                v.setBackground(d);
+                rememberBubble(v, d, kind);
+                applyTextColor(v, kind);
+                syncBubblePadding(v);
+                try { v.requestLayout(); v.invalidate(); } catch (Throwable ignored) {}
+                return;
+            }
+        } catch (Throwable ignored) {}
+        heuristicReplaceOne(v);
+    }
+
+    /** 对聊天 item 根 View 递归补盖：原生九宫格→替换；已是自定义→补文字色/内边距。 */
+    private static void applyToHolder(View item) {
+        if (item == null || !sEnabled) return;
+        try {
+            Drawable bg = item.getBackground();
+            if (isCustomBackground(bg)) {
+                applyTextColor(item, kindOf(item));
+            } else if (isNinePatchLike(bg)) {
+                heuristicReplaceOne(item);
+            }
+        } catch (Throwable ignored) {}
+        if (item instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) item;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                applyToHolder(g.getChildAt(i));
+            }
+        }
+    }
+
+    /**
+     * bind/attach-after 补盖兜底（不再依赖 setter 是否触发）：
+     * hook {@code View.onAttachedToWindow}，当 View 是聊天列表的直接子项（item 根）时，
+     * post 一次对该 item 子树的补盖，覆盖 RecyclerView 视图池命中/复用未 rebind 路径。
+     */
+    private static void installAttachApplyHook(ClassLoader cl) {
+        try {
+            Method m = View.class.getDeclaredMethod("onAttachedToWindow");
+            m.setAccessible(true);
+            XposedBridge.hookMethod(m, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        View v = (View) param.thisObject;
+                        android.view.ViewParent p = v.getParent();
+                        if (!(p instanceof View)) return;
+                        if (!isChatContainer((View) p)) return;   // 仅聊天列表的直接子项
+                        v.post(() -> {
+                            try { applyToHolder(v); } catch (Throwable ignored) {}
+                        });
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "onAttachedToWindow apply hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installAttachApplyHook err: " + t.getMessage());
+        }
     }
 
     /** 背景是否为九宫格 Drawable（含 selector 子项）。 */
