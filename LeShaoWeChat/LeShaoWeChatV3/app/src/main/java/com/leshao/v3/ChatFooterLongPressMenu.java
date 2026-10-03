@@ -793,14 +793,26 @@ public class ChatFooterLongPressMenu {
         // v1023: 面板重新打开时清空上次选择的音频文件(需重新选择)
         sLastPickedPath = null;
         View audioPanel = createAudioToVoicePanel(ctx);
-        root.addView(audioPanel);
+
+        // v30102: 面板内容包进 ScrollView；PopupWindow 高度固定为屏高 85%，
+        // 播放动画(EqBars 180dp)出现时只把下方内容往下推(内部滚动)，窗口高度不再变化，
+        // 避免整个面板被播放动画撑长超出屏幕。
+        // v30111: 改为高度随内容自适应（上限 90% 屏高），内容少时不再留白；
+        // ScrollView 设置最大高度 90% 屏高，播放动画出现时内部滚动、窗口不超屏。
+        ScrollView panelScroll = new ScrollView(ctx);
+        panelScroll.setFillViewport(false);
+        panelScroll.setVerticalScrollBarEnabled(false);
+        panelScroll.addView(audioPanel);
+        // 高度随内容自适应（上限 90% 屏高）：内容少时紧贴内容，内容多时内部滚动
+        ViewGroup panelScrollWrap = InsetsUtil.maxHeight90(ctx, panelScroll);
+        root.addView(panelScrollWrap, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // PopupWindow
-        // 宽度固定为屏宽 85% (放大), 高度自适应
+        // 宽度固定为屏宽 90% (全局窗口宽度上限), 高度随内容自适应（上限 90% 屏高）
         android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-        int panelW = (int) (dm.widthPixels * 0.85f);
-        popupWindow = new PopupWindow(root, panelW,
-                ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        int panelW = (int) (dm.widthPixels * 0.9f);
+        popupWindow = new PopupWindow(root, panelW, ViewGroup.LayoutParams.WRAP_CONTENT, true);
         popupWindow.setBackgroundDrawable(new ColorDrawable(0));
         popupWindow.setElevation(dp(ctx, 8));
         popupWindow.setOutsideTouchable(true);
@@ -1594,8 +1606,14 @@ public class ChatFooterLongPressMenu {
             });
         });
 
+        // v30102: 内容包进 ScrollView + 高度上限（90% 屏），播放动画(EqBars 180dp)出现时
+        // 只把下方内容往下推(内部滚动)，整个窗口高度随内容自适应不再撑长超出屏幕。
+        ScrollView dlgScroll = new ScrollView(ctx);
+        dlgScroll.setFillViewport(false);
+        dlgScroll.addView(root);
+
         final AlertDialog dialog = new AlertDialog.Builder(ctx)
-            .setView(root)
+            .setView(InsetsUtil.maxHeight90(ctx, dlgScroll))
             .setPositiveButton("发送", (d, w) -> {
                 stopPcmPreview();
                 sendPreparedFromDialog(ctx, pv, talker, splitSeconds, fakeDurationMs);
@@ -1609,6 +1627,13 @@ public class ChatFooterLongPressMenu {
         });
         dialog.show();
         themeAlertDialog(dialog);
+        try {
+            android.view.Window win = dialog.getWindow();
+            if (win != null) {
+                android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+                win.setLayout((int) (dm.widthPixels * 0.9f), ViewGroup.LayoutParams.WRAP_CONTENT);
+            }
+        } catch (Throwable ignored) {}
     }
 
     /** v1143: 毫秒 → 中文时长 "xx分xx秒" */

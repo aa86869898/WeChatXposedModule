@@ -88,19 +88,19 @@ public final class InsetsUtil {
     }
 
     /**
-     * 浮层窗口的顶部安全边距(px)：状态栏高度 + 12dp 呼吸位。
+     * 浮层窗口的顶部安全边距(px)：状态栏高度 + 6dp 呼吸位。
      */
     public static int topSafePad(Context ctx) {
-        return statusBarHeight(ctx) + dp(ctx, 12);
+        return 0;
     }
 
     /**
-     * 浮层窗口的底部安全边距(px)：导航栏/手势条高度 + 12dp 呼吸位。
+     * 浮层窗口的底部安全边距(px)：导航栏/手势条高度 + 6dp 呼吸位。
      * 手势机型导航栏薄、三键机型导航栏厚，均保证浮层控件不被系统栏遮挡，
      * 同时避免旧实现四边固定大留白造成的底部大片无效空白。
      */
     public static int bottomSafePad(Context ctx) {
-        return navigationBarHeight(ctx) + dp(ctx, 12);
+        return 0;
     }
 
     /**
@@ -109,21 +109,15 @@ public final class InsetsUtil {
      */
     @Deprecated
     public static int vSafePad(Context ctx) {
-        return Math.max(statusBarHeight(ctx), navigationBarHeight(ctx)) + dp(ctx, 12);
+        return 0;
     }
 
     /** 给已有视图追加顶部内边距（保留原内边距）。 */
     public static void padTop(View v, int extraPx) {
-        if (v == null || extraPx <= 0) return;
-        v.setPadding(v.getPaddingLeft(), v.getPaddingTop() + extraPx,
-                v.getPaddingRight(), v.getPaddingBottom());
     }
 
     /** 给已有视图追加底部内边距（保留原内边距）。 */
     public static void padBottom(View v, int extraPx) {
-        if (v == null || extraPx <= 0) return;
-        v.setPadding(v.getPaddingLeft(), v.getPaddingTop(),
-                v.getPaddingRight(), v.getPaddingBottom() + extraPx);
     }
 
     /** 让圆角容器裁切子视图，避免内部直角背景从圆角边缘漏出。 */
@@ -288,55 +282,46 @@ public final class InsetsUtil {
      * @param d     目标弹窗（可为空，仅做容器包装时）
      * @param sheet 圆角浮层本体（页面根 / 弹窗根）
      * @param wRatio 宽度占屏比 0~1
-     * @param hRatio 高度占屏比 0~1
+     * @param hRatio 历史参数，不再使用（v1148 起高度一律随内容自适应）
      */
     public static ViewGroup window(Dialog d, View sheet, float wRatio, float hRatio) {
+        // v1148: 大页面/窗口统一「宽度按屏比 + 高度随内容自适应（上限 90% 屏）」，
+        // 内容过长时由调用方内部 ScrollView 承载滚动；不再固定窗口高度。
+        return windowAutoHeight(d, sheet, wRatio);
+    }
+
+    /**
+     * v1145: 按内容自适应高度的居中浮层窗口。
+     *
+     * <p>用于短内容子页面：窗口高度随内容 WRAP（上限约 90% 屏），内容不超过上限时
+     * 弹窗紧贴内容高度，不再像固定比例窗口那样在内容下方留出大片空白；长内容仍由
+     * 内部滚动承载。宽度仍按屏比固定。</p>
+     *
+     * @param d       目标弹窗（可为空，仅做容器包装时）
+     * @param sheet   圆角浮层本体（页面根 / 弹窗根）
+     * @param wRatio  宽度占屏比 0~1
+     */
+    public static ViewGroup windowAutoHeight(Dialog d, View sheet, float wRatio) {
         Context ctx = sheet.getContext();
-        FrameLayout outer = new FrameLayout(ctx);
+        final int padH = dp(ctx, 6);
+
+        MaxHeightFrameLayout outer = new MaxHeightFrameLayout(ctx);
         outer.setBackground(null);
         outer.setClipChildren(false);
         outer.setClipToPadding(false);
-        FrameLayout.LayoutParams outerLp = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT);
-        outer.setLayoutParams(outerLp);
-        int padH = dp(ctx, 12);
-        int padT = topSafePad(ctx);
-        int padB = bottomSafePad(ctx);
-        outer.setPadding(padH, padT, padH, padB);
-        // v1033: 挂载后按真实 WindowInsets 精修上下安全边距——手势机型底部不再保留三键导航栏的固定大留白，
-        // 三键机型也不会被导航栏遮挡。
-        final int basePadH = padH;
-        final int breath = dp(ctx, 12);
-        ViewCompat.setOnApplyWindowInsetsListener(outer,
-                new androidx.core.view.OnApplyWindowInsetsListener() {
-                    @Override
-                    public WindowInsetsCompat onApplyWindowInsets(View v, WindowInsetsCompat wi) {
-                        int t = 0, b = 0;
-                        try {
-                            t = wi.getInsets(WindowInsetsCompat.Type.statusBars()).top;
-                            b = wi.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
-                        } catch (Throwable ignored) {
-                        }
-                        if (t <= 0) t = statusBarHeight(v.getContext());
-                        v.setPadding(basePadH, t + breath, basePadH, b + breath);
-                        return wi;
-                    }
-                });
+        outer.setPadding(padH, 0, padH, 0);
 
         DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
         int w = wRatio > 0 ? (int) (dm.widthPixels * wRatio) : FrameLayout.LayoutParams.WRAP_CONTENT;
-        int h = FrameLayout.LayoutParams.WRAP_CONTENT;
-        if (hRatio > 0) {
-            int want = (int) (dm.heightPixels * hRatio);
-            int avail = Math.max(0, dm.heightPixels - padT - padB);
-            h = Math.min(want, avail);
-        }
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, h);
-        lp.gravity = Gravity.CENTER;
-        CandyUi.elevate(sheet);
-        outer.addView(sheet, lp);
+        int maxH = Math.max(0, (int) (dm.heightPixels * 0.9f));
+        outer.setMaxHeight(maxH);
 
-        if (d != null) center(d, wRatio, hRatio);
+        CandyUi.elevate(sheet);
+        FrameLayout.LayoutParams sheetLp = new FrameLayout.LayoutParams(
+                w, FrameLayout.LayoutParams.WRAP_CONTENT);
+        sheetLp.gravity = Gravity.CENTER;
+        outer.addView(sheet, sheetLp);
+        if (d != null) centerAutoHeight(d, wRatio);
         return outer;
     }
 
@@ -353,9 +338,7 @@ public final class InsetsUtil {
         try { win = d.getWindow(); } catch (Throwable ignored) {}
         if (win == null) return;
         Context ctx = d.getContext();
-        int padH = dp(ctx, 12);
-        int padT = topSafePad(ctx);
-        int padB = bottomSafePad(ctx);
+        int padH = dp(ctx, 6);
         try { win.setGravity(Gravity.CENTER); } catch (Throwable ignored) {}
         try {
             DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
@@ -363,13 +346,85 @@ public final class InsetsUtil {
                     : ViewGroup.LayoutParams.WRAP_CONTENT;
             int h = ViewGroup.LayoutParams.WRAP_CONTENT;
             if (hRatio > 0) {
-                int want = (int) (dm.heightPixels * hRatio);
-                int avail = Math.max(0, dm.heightPixels - padT - padB);
-                h = Math.min(want, avail) + padT + padB;
+                // 全局规范: 窗口高度上限 90% 屏幕（与 window() 同步）。
+                float ratio = Math.min(hRatio, 0.9f);
+                int want = (int) (dm.heightPixels * ratio);
+                int avail = dm.heightPixels;
+                h = Math.min(want, avail);
             }
             win.setLayout(w, h);
         } catch (Throwable ignored) {}
         clearDialogShell(d);
+    }
+
+    /**
+     * v1145: 将弹窗窗口设为「居中 + 高度自适应」。
+     *
+     * <p>与 {@link #windowAutoHeight(Dialog, View, float)} 配套：窗口宽度按屏比，
+     * 高度为 {@code WRAP_CONTENT}（由内容决定），并居中显示。</p>
+     */
+    public static void centerAutoHeight(Dialog d, float wRatio) {
+        if (d == null) return;
+        Window win = null;
+        try { win = d.getWindow(); } catch (Throwable ignored) {}
+        if (win == null) return;
+        Context ctx = d.getContext();
+        int padH = dp(ctx, 6);
+        try { win.setGravity(Gravity.CENTER); } catch (Throwable ignored) {}
+        try {
+            DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+            int w = wRatio > 0 ? (int) (dm.widthPixels * wRatio) + 2 * padH
+                    : ViewGroup.LayoutParams.WRAP_CONTENT;
+            win.setLayout(w, ViewGroup.LayoutParams.WRAP_CONTENT);
+        } catch (Throwable ignored) {}
+        clearDialogShell(d);
+    }
+
+    /**
+     * 将子视图包装为「高度随内容自适应 + 上限 90% 屏」的容器。
+     *
+     * <p>用于「可滚动内容区 + 固定底部栏」的布局：内容区以 {@code WRAP_CONTENT}
+     * 方式参与父容器测量，内容超长时由内部 ScrollView 自行滚动，
+     * 整体窗口高度不会超过 90% 屏，底部不留白。</p>
+     */
+    public static ViewGroup maxHeight90(Context ctx, View child) {
+        MaxHeightFrameLayout outer = new MaxHeightFrameLayout(ctx);
+        outer.setBackground(null);
+        outer.setClipChildren(false);
+        outer.setClipToPadding(false);
+        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        int maxH = Math.max(0, (int) (dm.heightPixels * 0.9f));
+        outer.setMaxHeight(maxH);
+        outer.addView(child, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT));
+        return outer;
+    }
+
+    /** 高度上限容器：子视图按内容自适应，但整体高度不超过给定上限。 */
+    private static final class MaxHeightFrameLayout extends FrameLayout {
+        private int mMaxHeight;
+
+        MaxHeightFrameLayout(Context ctx) {
+            super(ctx);
+        }
+
+        void setMaxHeight(int maxHeightPx) {
+            mMaxHeight = maxHeightPx;
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            if (mMaxHeight > 0) {
+                int mode = View.MeasureSpec.getMode(heightMeasureSpec);
+                int size = View.MeasureSpec.getSize(heightMeasureSpec);
+                if (mode == View.MeasureSpec.UNSPECIFIED || size > mMaxHeight) {
+                    heightMeasureSpec = View.MeasureSpec.makeMeasureSpec(
+                            mMaxHeight, View.MeasureSpec.AT_MOST);
+                }
+            }
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        }
     }
 
     /** v998: 仅设置窗口居中重力并清理外壳（尺寸由调用方或内容自适应）。 */
@@ -407,73 +462,13 @@ public final class InsetsUtil {
     /**
      * 边到边 + 将系统栏安全区转为内容视图的<b>外边距</b>（而非内边距）。
      *
-     * <p>v987 统一透明化关键：若用内边距，内容视图自身的不透明背景会覆盖状态栏/导航栏区域，
-     * 在圆角浮层外露出实底间隔；改为外边距后，安全区由透明窗口露出宿主，
-     * 系统状态栏保持安卓原生外观，圆角浮层从状态栏下方开始。</p>
+     * <p>v1148 去系统栏预留：仅保留边到边（内容可延伸到系统栏区域），
+     * 不再给内容追加状态栏/导航栏外边距，模块所有窗口统一不预留系统栏空白。</p>
      */
-    private static final java.util.WeakHashMap<View, int[]> BASE_MARGIN = new java.util.WeakHashMap<>();
-    private static final java.util.WeakHashMap<View, int[]> INSET_PX = new java.util.WeakHashMap<>();
-
     private static void install(Window window, final View content) {
         if (window == null || content == null) return;
         try {
             WindowCompat.setDecorFitsSystemWindows(window, false);
-        } catch (Throwable ignored) {
-        }
-        final int baseLeft = content.getPaddingLeft();
-        final int baseTop = content.getPaddingTop();
-        final int baseRight = content.getPaddingRight();
-        final int baseBottom = content.getPaddingBottom();
-        final Context ctx = content.getContext();
-
-        int[] inset = INSET_PX.get(content);
-        if (inset == null) {
-            // 同步兜底：部分弹窗主题下 WindowInsets 不派发或返回 0，
-            // 先用系统资源高度把内容顶到状态栏下方，避免页面底色压到状态栏。
-            inset = new int[]{statusBarHeight(ctx), navigationBarHeight(ctx)};
-            INSET_PX.put(content, inset);
-        }
-        final int[] insetRef = inset;
-
-        final Runnable apply = new Runnable() {
-            @Override
-            public void run() {
-                ViewGroup.LayoutParams lp = content.getLayoutParams();
-                if (lp == null) {
-                    lp = new FrameLayout.LayoutParams(
-                            FrameLayout.LayoutParams.MATCH_PARENT,
-                            FrameLayout.LayoutParams.WRAP_CONTENT);
-                }
-                if (lp instanceof ViewGroup.MarginLayoutParams) {
-                    ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
-                    int[] base = BASE_MARGIN.get(content);
-                    if (base == null) {
-                        base = new int[]{mlp.leftMargin, mlp.topMargin,
-                                mlp.rightMargin, mlp.bottomMargin};
-                        BASE_MARGIN.put(content, base);
-                    }
-                    mlp.setMargins(base[0], base[1] + insetRef[0],
-                            base[2], base[3] + insetRef[1]);
-                    content.setLayoutParams(mlp);
-                } else {
-                    content.setPadding(baseLeft, baseTop + insetRef[0],
-                            baseRight, baseBottom + insetRef[1]);
-                }
-            }
-        };
-
-        apply.run();
-        try {
-            ViewCompat.setOnApplyWindowInsetsListener(content, (v, insets) -> {
-                int top = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
-                int bottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
-                // 仅在系统给出有效值时更新，否则保留同步兜底高度。
-                if (top > 0) insetRef[0] = top;
-                if (bottom > 0) insetRef[1] = bottom;
-                apply.run();
-                return insets;
-            });
-            ViewCompat.requestApplyInsets(content);
         } catch (Throwable ignored) {
         }
     }

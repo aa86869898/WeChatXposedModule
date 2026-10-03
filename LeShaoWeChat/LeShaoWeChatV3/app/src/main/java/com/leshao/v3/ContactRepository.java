@@ -187,7 +187,7 @@ public class ContactRepository {
                 String dbHash = VersionCompat.getDbHash(cl, (int) uin);
                 String dbPath = baseDir + "MicroMsg/" + dbHash + "/EnMicroMsg.db";
                 String password = md5(imei + uin).substring(0, 7);
-                LogWriter.log(TAG, "opening db: " + dbPath);
+                LogWriter.log(TAG, "opening db: " + dbHash + "/EnMicroMsg.db");
                 Class<?> dbCls = VersionCompat.findDbOpenerClass(cl);
 
                 long openDeadline = System.currentTimeMillis() + 20000L;

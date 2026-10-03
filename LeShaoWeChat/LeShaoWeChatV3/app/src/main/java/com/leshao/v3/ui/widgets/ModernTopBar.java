@@ -44,8 +44,8 @@ public class ModernTopBar extends LinearLayout {
 
         mTitle = new TextView(ctx);
         mTitle.setText(title);
-        mTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19);
-        mTitle.setTypeface(Typeface.DEFAULT);
+        mTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        mTitle.setTypeface(Typeface.DEFAULT_BOLD);
         mTitle.setTextColor(AppColors.onSurface());
         mTitle.setSingleLine(true);
         mTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);

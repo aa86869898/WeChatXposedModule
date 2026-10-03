@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="12dp">
 
         <!-- ========== 1. 总开关 ========== -->
         <LinearLayout
@@ -18,7 +18,8 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingVertical="10dp">
+            android:minHeight="48dp"
+            android:paddingVertical="8dp">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -50,12 +51,12 @@
             android:layout_height="1dp"
             android:background="@color/divider" />
 
-        <!-- ========== 2. 区块：通用 / 服务商 ========== -->
+        <!-- ========== 区块：通用 / 服务商 ========== -->
         <TextView
             style="@style/Widget.LeshaoAI.SectionTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="13dp"
             android:text="@string/section_provider" />
 
         <!-- 2. 服务商选择 -->
@@ -77,7 +78,7 @@
             style="@style/Widget.LeshaoAI.RowLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="13dp"
             android:text="@string/label_base_url" />
 
         <EditText
@@ -94,7 +95,7 @@
             style="@style/Widget.LeshaoAI.RowLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="13dp"
             android:text="@string/label_api_key" />
 
         <EditText
@@ -111,7 +112,7 @@
             style="@style/Widget.LeshaoAI.SectionTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="13dp"
             android:text="@string/section_persona" />
 
         <!-- 8. 机器人名字 -->
@@ -135,7 +136,7 @@
             style="@style/Widget.LeshaoAI.RowLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="13dp"
             android:text="@string/label_model" />
 
         <EditText
@@ -151,7 +152,7 @@
             style="@style/Widget.LeshaoAI.RowLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="13dp"
             android:text="@string/label_system_prompt" />
 
         <EditText
@@ -170,7 +171,7 @@
             style="@style/Widget.LeshaoAI.RowLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="13dp"
             android:text="@string/label_temperature" />
 
         <TextView
@@ -193,7 +194,7 @@
             style="@style/Widget.LeshaoAI.SectionTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="13dp"
             android:text="@string/section_trigger" />
 
         <!-- 9. 唤醒关键词 -->
@@ -218,7 +219,8 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingVertical="10dp">
+            android:minHeight="48dp"
+            android:paddingVertical="8dp">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -250,6 +252,7 @@
             android:id="@+id/btn_whitelist"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="13dp"
             android:backgroundTint="@color/colorPrimary"
             android:textColor="@android:color/white"
             android:text="@string/label_manage_whitelist" />
@@ -259,7 +262,7 @@
             style="@style/Widget.LeshaoAI.SectionTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="13dp"
             android:text="@string/section_reply" />
 
         <!-- 11. TTS -->
@@ -268,6 +271,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
+            android:minHeight="48dp"
             android:paddingVertical="8dp">
 
             <TextView
@@ -289,6 +293,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
+            android:minHeight="48dp"
             android:paddingVertical="8dp">
 
             <TextView
@@ -309,6 +314,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
+            android:minHeight="48dp"
             android:paddingVertical="8dp">
 
             <TextView
@@ -329,7 +335,7 @@
             style="@style/Widget.LeshaoAI.RowLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="13dp"
             android:text="@string/label_memory_count" />
 
         <EditText
@@ -369,7 +375,7 @@
 
         <View
             android:layout_width="match_parent"
-            android:layout_height="24dp" />
+            android:layout_height="16dp" />
 
     </LinearLayout>
 </ScrollView>

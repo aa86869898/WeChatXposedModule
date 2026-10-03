@@ -13,10 +13,11 @@ import android.view.animation.LinearInterpolator;
 import java.util.WeakHashMap;
 
 /**
- * v1067 葡萄气泡 · 流光渐变 Drawable。
+ * v3.0.101 糖果粉 · 纯色 Drawable。
  *
- * <p>三色（紫 → 淡紫 → 粉）循环渐变，并以周期平移形成「流光」动效。渐变的颜色函数
- * 以自身宽度为一个周期，平移一周后与起始画面完全重合，因此循环无缝、无跳变。</p>
+ * <p>三色（糖果粉 #FF99C2 → #FF99C2 → #FF99C2）循环渐变，并以周期平移形成「流光」动效。
+ * 三色相同，视觉上保持糖果粉纯色，同时保留循环平移机制与既有 API 兼容。
+ * 渐变的颜色函数以自身宽度为一个周期，平移一周后与起始画面完全重合，因此循环无缝、无跳变。</p>
  *
  * <p>实现要点：单例全局 {@link android.animation.ValueAnimator} 驱动所有可见实例
  * （{@link #onVisible} 注册/注销，WeakHashMap 防止泄漏），避免每个控件各起一个动画。

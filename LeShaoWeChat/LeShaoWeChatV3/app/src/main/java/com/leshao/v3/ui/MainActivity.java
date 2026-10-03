@@ -125,21 +125,32 @@ public class MainActivity {
         long now = System.currentTimeMillis();
         if (now - sLastOpenTime < 2000) return;
         sLastOpenTime = now;
-        loadUserInfoAsync();
+        try {
+            LogWriter.logSync(TAG, "open called");
+            loadUserInfoAsync();
+            LogWriter.logSync(TAG, "open: userinfo async started");
 
-        String currentWxid = ModuleConfig.getCurrentWxid();
-        if (currentWxid != null && !currentWxid.isEmpty()
-                && ActivationManager.isBlacklisted(currentWxid)
-                && !ActivationManager.isAdmin(currentWxid)) {
-            showBlacklistBlock(act);
-            return;
-        }
+            String currentWxid = ModuleConfig.getCurrentWxid();
+            if (currentWxid != null && !currentWxid.isEmpty()
+                    && ActivationManager.isBlacklisted(currentWxid)
+                    && !ActivationManager.isAdmin(currentWxid)) {
+                showBlacklistBlock(act);
+                return;
+            }
 
-        SharedPreferences prefs = ContextManager.getPrefs();
-        if (prefs == null || !prefs.getBoolean("ls_disclaimer_accepted", false)) {
-            showDisclaimer(act);
-        } else {
-            showMainPanel(act);
+            SharedPreferences prefs = ContextManager.getPrefs();
+            if (prefs == null || !prefs.getBoolean("ls_disclaimer_accepted", false)) {
+                LogWriter.logSync(TAG, "open: show disclaimer");
+                showDisclaimer(act);
+            } else {
+                LogWriter.logSync(TAG, "open: show main panel");
+                showMainPanel(act);
+            }
+        } catch (Throwable t) {
+            LogWriter.logSync(TAG, "open ERROR: " + android.util.Log.getStackTraceString(t));
+            try {
+                Toast.makeText(act, "模块打开异常: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+            } catch (Throwable ignored) {}
         }
     }
 
@@ -184,7 +195,9 @@ public class MainActivity {
                             LogWriter.log(TAG, "loadUserDetails: using Tinker ClassLoader");
                         }
                         if (cl != null) {
+                        LogWriter.logSync(TAG, "userdetails: openDb begin");
                         Object db = openDb(cl, uin);
+                        LogWriter.logSync(TAG, "userdetails: openDb " + (db != null ? "done" : "null"));
                         if (db != null) {
                             try {
                                 java.lang.reflect.Method queryMethod = findQueryMethod(db.getClass());
@@ -455,16 +468,17 @@ public class MainActivity {
         root.addView(msgTv);
 
         AlertDialog.Builder b = new AlertDialog.Builder(ctx, dialogTheme());
-        b.setView(InsetsUtil.window(null, root, 0.86f, -1f));
+        b.setView(InsetsUtil.window(null, root, 0.9f, -1f));
         b.setCancelable(false);
         AlertDialog dlg = b.create();
-        InsetsUtil.center(dlg, 0.86f, -1f);
+        InsetsUtil.center(dlg, 0.9f, -1f);
         Window w = dlg.getWindow();
         sActiveDialog = dlg;
         dlg.setOnDismissListener(ignored -> { if (sActiveDialog == dlg) sActiveDialog = null; });
         dlg.show();
+        InsetsUtil.clearDialogShell(dlg);
         if (w != null) WindowLayer.track(w);
-        InsetsUtil.center(dlg, 0.86f, -1f);
+        InsetsUtil.center(dlg, 0.9f, -1f);
     }
 
     private static void showDisclaimer(Activity act) {
@@ -578,14 +592,15 @@ public class MainActivity {
         });
 
         AlertDialog dl = new AlertDialog.Builder(ctx, dialogTheme())
-            .setView(InsetsUtil.window(null, root, 0.9f, 0.88f))
+            .setView(InsetsUtil.window(null, root, 0.9f, 0.9f))
             .setCancelable(false)
             .create();
         dlRef[0] = dl;
         sActiveDialog = dl;
         dl.setOnDismissListener(ignored -> { if (sActiveDialog == dl) sActiveDialog = null; });
         dl.show();
-        InsetsUtil.center(dl, 0.9f, 0.88f);
+        InsetsUtil.clearDialogShell(dl);
+        InsetsUtil.centerAutoHeight(dl, 0.9f);
         Window w = dl.getWindow();
         if (w != null) WindowLayer.track(w);
     }
@@ -609,6 +624,7 @@ public class MainActivity {
         dismissDialog();
         sMainPanelAct = new java.lang.ref.WeakReference<>(act);
         sMainPanelShowing = true;
+        LogWriter.logSync(TAG, "panel: begin build");
 
         float d = act.getResources().getDisplayMetrics().density;
         Context ctx = act;
@@ -634,9 +650,9 @@ public class MainActivity {
         LinearLayout card1 = buildCard(ctx, d);
         card1.addView(makeListRow(ctx, d, 0x2764, "爱心捐赠", AppColors.accent(), true, v -> showDonateDialog(act)));
         card1.addView(candyDivider(ctx, d));
-        card1.addView(makeListRow(ctx, d, 0x1F464, "个人中心", 0, false, v -> {
+        card1.addView(makeListRow(ctx, d, 0x1F464, "乐少群发", 0, false, v -> {
             dismissDialog();
-            SubPageActivity.openFromMain(act, "个人中心", 99);
+            SubPageActivity.openFromMain(act, "乐少群发", 99);
         }));
         // v998: 实例隔离入口已隐藏(默认开启), 不再提供主页切换开关
         body.addView(card1);
@@ -667,15 +683,28 @@ public class MainActivity {
 
         body.addView(candyDivider(ctx, d));
 
+        // 更多功能卡片（去广告等）
+        LinearLayout cardMore = buildCard(ctx, d);
+        View moreItem = makeListRow(ctx, d, 0x2699, "更多功能", 0, false, v -> {
+            dismissDialog();
+            SubPageActivity.openFromMain(act, "更多功能", 28);
+        });
+        moreItem.setTag("menu_item");
+        searchMap.put(moreItem, "更多功能|去广告|广告");
+        cardMore.addView(moreItem);
+        body.addView(cardMore);
+
+        body.addView(candyDivider(ctx, d));
+
         sv.addView(body, new LinearLayout.LayoutParams(-1, -2));
         root.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         AlertDialog.Builder b = new AlertDialog.Builder(ctx, dialogTheme());
-        b.setView(InsetsUtil.window(null, root, 0.92f, 0.90f));
+        b.setView(InsetsUtil.window(null, root, 0.9f, 0.9f));
         b.setCancelable(true);
         AlertDialog dlg = b.create();
 
-        InsetsUtil.center(dlg, 0.92f, 0.90f);
+        InsetsUtil.centerAutoHeight(dlg, 0.9f);
         Window w = dlg.getWindow();
         if (w != null) {
             InsetsUtil.transparentWindow(w);
@@ -688,9 +717,12 @@ public class MainActivity {
         setupSearch(searchBox, searchMap, card2);
 
         InsetsUtil.clearDialogShell(dlg);
+        LogWriter.logSync(TAG, "panel: dialog.show");
         dlg.show();
+        LogWriter.logSync(TAG, "panel: shown");
         InsetsUtil.clearDialogShell(dlg);
         if (w != null) WindowLayer.track(w);
+        LogWriter.logSync(TAG, "panel: tracked");
     }
 
     // ===== User Card (v955 新增) =====
@@ -700,21 +732,22 @@ public class MainActivity {
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(dp(d, 16), dp(d, 12), dp(d, 16), 0);
+        lp.setMargins(dp(d, 12), dp(d, 12), dp(d, 12), 0);
         card.setLayoutParams(lp);
         card.setBackground(CandyUi.cardBg(ctx));
         InsetsUtil.clipRounded(card);
         card.setPadding(dp(d, 16), dp(d, 14), dp(d, 16), dp(d, 14));
         card.setClickable(true);
         card.setFocusable(true);
-        applyRipple(card, d, AppColors.SHAPE_MD_DP);
+        applyRipple(card, d, AppColors.SHAPE_CARD_DP);
 
         // v1013 M3: 头像 44dp 圆形容器；真实头像异步加载，加载前显示首字母占位
         final android.widget.ImageView avatar = new android.widget.ImageView(ctx);
         int avSize = dp(d, 44);
-        FlowingGradientDrawable avBg = new FlowingGradientDrawable(
-                AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+        GradientDrawable avBg = new GradientDrawable();
+        avBg.setShape(GradientDrawable.RECTANGLE);
         avBg.setCornerRadius(avSize / 2f);
+        avBg.setColor(AppColors.primary());
         avatar.setBackground(avBg);
         avatar.setClipToOutline(true);
         avatar.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
@@ -752,8 +785,8 @@ public class MainActivity {
 
         // v1013: 去掉等级逻辑，仅显示 wxid
         TextView subTv = new TextView(ctx);
-        subTv.setText((wxid != null && !wxid.isEmpty()) ? wxid : "点击查看个人中心");
-        subTv.setTextSize(11);
+        subTv.setText((wxid != null && !wxid.isEmpty()) ? wxid : "点击查看乐少群发");
+        subTv.setTextSize(12);
         subTv.setTextColor(AppColors.textTertiary());
         subTv.setSingleLine(true);
         subTv.setPadding(0, dp(d, 2), 0, 0);
@@ -769,7 +802,7 @@ public class MainActivity {
 
         card.setOnClickListener(v -> {
             dismissDialog();
-            SubPageActivity.openFromMain(act, "个人中心", 99);
+            SubPageActivity.openFromMain(act, "乐少群发", 99);
         });
 
         return card;
@@ -781,8 +814,9 @@ public class MainActivity {
         LinearLayout bar = new LinearLayout(ctx);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(d, 16), dp(d, 12), dp(d, 16), dp(d, 12));
-        // v1067 葡萄气泡: hero 顶栏流光渐变 + 28dp 底部圆角(M3 extra-large shape)
+        // v1143: 收紧主页顶栏上下留白
+        bar.setPadding(dp(d, 16), dp(d, 8), dp(d, 16), dp(d, 8));
+        // v3.0.101 糖果粉: hero 顶栏糖果粉纯色 + 28dp 底部圆角(M3 extra-large shape)
         bar.setBackground(CandyUi.topBarGradientBg(ctx));
         InsetsUtil.clipRounded(bar);
 
@@ -800,9 +834,8 @@ public class MainActivity {
 
         TextView verTv = new TextView(ctx);
         verTv.setText("v" + ContextManager.getVersionName() + " · 微信功能增强模块");
-        // v998: 说明小字再缩小 3dp
-        verTv.setTextSize(8);
-        verTv.setTextColor(0xB3FFFFFF);
+        verTv.setTextSize(11);
+        verTv.setTextColor(AppColors.onPrimary());
         verTv.setGravity(Gravity.CENTER);
         verTv.setPadding(0, dp(d, 3), 0, 0);
         textCol.addView(verTv);
@@ -819,16 +852,16 @@ public class MainActivity {
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(-1, -2);
-        cardLp.setMargins(dp(d, 16), 0, dp(d, 16), 0);
+        cardLp.setMargins(dp(d, 12), 0, dp(d, 12), 0);
         card.setLayoutParams(cardLp);
-        // v955 M3 search bar: surfaceContainerHigh + 28dp 全圆角
+        // M3 Expressive search bar: 纯白底 + 28dp 全圆角
         GradientDrawable searchBg = new GradientDrawable();
         searchBg.setShape(GradientDrawable.RECTANGLE);
         searchBg.setCornerRadius(dp(d, AppColors.DIALOG_RADIUS_DP));
-        searchBg.setColor(AppColors.surfaceContainerHigh());
+        searchBg.setColor(AppColors.surfaceContainerLowest());
         card.setBackground(searchBg);
         InsetsUtil.clipRounded(card);
-        card.setPadding(dp(d, 14), dp(d, 9), dp(d, 14), dp(d, 9));
+        card.setPadding(dp(d, 14), dp(d, 10), dp(d, 14), dp(d, 10));
 
         // v955: 放大镜图标
         TextView searchIcon = new TextView(ctx);
@@ -891,9 +924,9 @@ public class MainActivity {
     private static LinearLayout buildCard(Context ctx, float d) {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(d, 4), dp(d, 4), dp(d, 4), dp(d, 4));
+        card.setPadding(0, 0, 0, 0);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(dp(d, 16), 0, dp(d, 16), 0);
+        lp.setMargins(dp(d, 12), 0, dp(d, 12), 0);
         card.setLayoutParams(lp);
         card.setBackground(CandyUi.cardBg(ctx));
         InsetsUtil.clipRounded(card);
@@ -908,30 +941,18 @@ public class MainActivity {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(d, 14), dp(d, 9), dp(d, 14), dp(d, 9));
+        // 全局规范: 行触控区域不低于 48dp
+        row.setMinimumHeight((int)(48 * d));
+        row.setPadding(dp(d, 12), dp(d, 8), dp(d, 12), dp(d, 8));
         row.setBackground(CandyUi.rowPressBg(ctx));
         row.setOnClickListener(onClick);
         row.setClickable(true);
 
-        // v955 M3: 图标 40dp 圆角容器(secondaryContainer)
-        LinearLayout iconWrap = new LinearLayout(ctx);
-        iconWrap.setGravity(Gravity.CENTER);
-        int iconBox = dp(d, 40);
-        iconWrap.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_MD_DP));
-        LinearLayout.LayoutParams iconWrapLp = new LinearLayout.LayoutParams(iconBox, iconBox);
-        iconWrapLp.setMarginEnd(dp(d, 12));
-        iconWrap.setLayoutParams(iconWrapLp);
-
-        TextView icon = new TextView(ctx);
-        icon.setText(new String(Character.toChars(emoji)));
-        icon.setTextSize(17);
-        icon.setGravity(Gravity.CENTER);
-        iconWrap.addView(icon);
-        row.addView(iconWrap);
+        // v3.0.99 按需求去图标化：不再渲染左侧 emoji 图标
 
         TextView tv = new TextView(ctx);
         tv.setText(title);
-        tv.setTextSize(15);
+        tv.setTextSize(16);
         tv.setTextColor(textColor != 0 ? textColor : AppColors.text1());
         if (bold) tv.setTypeface(null, Typeface.BOLD);
         tv.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
@@ -939,7 +960,7 @@ public class MainActivity {
 
         TextView arrow = new TextView(ctx);
         arrow.setText("›");
-        arrow.setTextSize(20);
+        arrow.setTextSize(22);
         arrow.setTextColor(AppColors.arrow());
         row.addView(arrow);
 
@@ -949,7 +970,7 @@ public class MainActivity {
     private static View makeInnerDivider(Context ctx, float d) {
         View v = new View(ctx);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 1);
-        lp.setMargins(dp(d, 52), 0, 0, 0);
+        lp.setMargins(dp(d, 12), 0, 0, 0);
         v.setLayoutParams(lp);
         v.setBackgroundColor(AppColors.divider());
         return v;
@@ -978,7 +999,7 @@ public class MainActivity {
         LinearLayout card1 = new LinearLayout(ctx);
         card1.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable card1Bg = new GradientDrawable();
-        card1Bg.setCornerRadius(dp(d, AppColors.SHAPE_MD_DP));
+        card1Bg.setCornerRadius(dp(d, AppColors.SHAPE_CARD_DP));
         card1Bg.setColor(AppColors.card());
         card1.setBackground(card1Bg);
         card1.setPadding(dp(d, 12), dp(d, 10), dp(d, 12), dp(d, 10));
@@ -990,7 +1011,7 @@ public class MainActivity {
         LinearLayout card2 = new LinearLayout(ctx);
         card2.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable card2Bg = new GradientDrawable();
-        card2Bg.setCornerRadius(dp(d, AppColors.SHAPE_MD_DP));
+        card2Bg.setCornerRadius(dp(d, AppColors.SHAPE_CARD_DP));
         card2Bg.setColor(AppColors.card());
         card2.setBackground(card2Bg);
         card2.setPadding(dp(d, 16), dp(d, 14), dp(d, 16), dp(d, 14));
@@ -998,12 +1019,12 @@ public class MainActivity {
         TextView contactBtn = new TextView(ctx);
         contactBtn.setText("联系乐少");
         contactBtn.setTextSize(15);
-        contactBtn.setTextColor(Color.WHITE);
+        contactBtn.setTextColor(AppColors.whiteTextOnAccent());
         contactBtn.setTypeface(null, Typeface.BOLD);
         contactBtn.setGravity(Gravity.CENTER);
         contactBtn.setPadding(dp(d, 14), dp(d, 12), dp(d, 14), dp(d, 12));
-        contactBtn.setBackground(CandyUi.gradientBgStatic(ctx, AppColors.SHAPE_MD_DP));
-        applyRipple(contactBtn, d, AppColors.SHAPE_MD_DP);
+        contactBtn.setBackground(CandyUi.gradientBgStatic(ctx, AppColors.SHAPE_FULL_DP));
+        applyRipple(contactBtn, d, AppColors.SHAPE_FULL_DP);
         contactBtn.setOnClickListener(cv -> {
             try {
                 Intent intent = new Intent();
@@ -1055,14 +1076,14 @@ public class MainActivity {
         btn.setGravity(Gravity.CENTER);
         btn.setPadding(dp(d, 8), dp(d, 6), dp(d, 8), dp(d, 6));
         GradientDrawable btnBg = new GradientDrawable();
-        btnBg.setCornerRadius(dp(d, AppColors.SHAPE_SM_DP));
+        btnBg.setCornerRadius(dp(d, AppColors.SHAPE_LG_DP));
         btnBg.setColor(AppColors.bg());
         btn.setBackground(btnBg);
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(0, -2, 1.0f);
         btn.setLayoutParams(btnLp);
         btn.setClickable(true);
         btn.setOnClickListener(v -> showDonateImage(ctx, d, act, resName, label));
-        applyRipple(btn, d, AppColors.SHAPE_SM_DP);
+        applyRipple(btn, d, AppColors.SHAPE_LG_DP);
 
         android.graphics.drawable.Drawable thumb = loadModuleDrawable(ctx, resName);
         if (thumb != null) {
@@ -1153,8 +1174,9 @@ public class MainActivity {
         LinearLayout bar = new LinearLayout(ctx);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(d, 12), dp(d, 8), dp(d, 12), dp(d, 8));
-        // v1067 葡萄气泡: 子页顶栏流光渐变 + 28dp 底部圆角
+        // v1143: 收紧顶栏上下留白，压缩无效空白
+        bar.setPadding(dp(d, 12), dp(d, 5), dp(d, 12), dp(d, 5));
+        // v3.0.101 糖果粉: 子页顶栏糖果粉纯色 + 28dp 底部圆角
         bar.setBackground(CandyUi.topBarGradientBg(ctx));
         InsetsUtil.clipRounded(bar);
         final int barOn = AppColors.onGradient();
@@ -1173,7 +1195,7 @@ public class MainActivity {
 
         TextView tv = new TextView(ctx);
         tv.setText(title);
-        tv.setTextSize(18);
+        tv.setTextSize(19);
         tv.setTextColor(barOn);
         tv.setTypeface(null, Typeface.BOLD);
         tv.setGravity(Gravity.CENTER);
@@ -1229,12 +1251,12 @@ public class MainActivity {
     }
 
     private static View candyDivider(Context ctx, float d) {
-        GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-            new int[]{AppColors.candyPink(), AppColors.candyYellow(), AppColors.accent(), AppColors.candyPink()});
+        GradientDrawable gd = new GradientDrawable();
+        gd.setColor(AppColors.divider());
         View v = new View(ctx);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1.5f * d));
-        lp.setMargins((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
+            LinearLayout.LayoutParams.MATCH_PARENT, (int)(1f * d));
+        lp.setMargins((int)(12 * d), (int)(4 * d), (int)(12 * d), (int)(4 * d));
         v.setLayoutParams(lp);
         v.setBackground(gd);
         return v;

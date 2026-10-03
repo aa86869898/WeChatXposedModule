@@ -114,10 +114,10 @@ public class WxMasterFeatures {
         };
 
         AlertDialog.Builder b = new AlertDialog.Builder(act, m3Theme(act));
-        b.setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.92f, 0.7f));
+        b.setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.9f, -1f));
         b.setCancelable(true);
         AlertDialog dlg = b.create();
-        com.leshao.v3.ui.InsetsUtil.center(dlg, 0.92f, 0.7f);
+        com.leshao.v3.ui.InsetsUtil.centerAutoHeight(dlg, 0.9f);
         android.view.Window w = dlg.getWindow();
         if (w != null) {
             com.leshao.v3.ui.InsetsUtil.transparentWindow(w);

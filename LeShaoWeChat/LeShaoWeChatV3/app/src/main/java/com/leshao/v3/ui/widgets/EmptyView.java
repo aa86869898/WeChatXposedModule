@@ -29,7 +29,7 @@ public class EmptyView extends LinearLayout {
 
         mMsg = new TextView(ctx);
         mMsg.setText(msg != null ? msg : "暂无数据");
-        mMsg.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        mMsg.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         mMsg.setTypeface(Typeface.DEFAULT_BOLD);
         mMsg.setTextColor(AppColors.textTertiary());
         mMsg.setGravity(Gravity.CENTER);

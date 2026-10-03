@@ -23,11 +23,11 @@ import com.leshao.v3.ui.FlowingGradientDrawable;
 import com.leshao.v3.ui.InsetsUtil;
 
 /**
- * M3 页面构建工具箱（v955）—— 全部页面深度重排的统一结构件：
- *  root(渐变→surface  ScrollView) / section(分区标题) / card(卡片容器)
+ * M3 Expressive 页面构建工具箱 —— 全部页面深度重排的统一结构件：
+ *  root(暖白渐变→surface  ScrollView) / section(分区标题) / card(大圆角卡片容器)
  *  switchRow(开关行) / clickRow(导航行) / textRow(信息行) / divider(内分割线)
  *  button(按钮) / input(输入框) / spacer(间距)
- * 每个页面按 M3 规范：16dp 页边距、12dp 圆角卡片、分区标题、行高 56dp、状态层按压。
+ * 每个页面按 M3 Expressive 规范：12dp 页边距、24dp 大圆角卡片、粗体分区标题、行高 ≥48dp、状态层按压。
  */
 public final class M3Page {
 
@@ -49,8 +49,9 @@ public final class M3Page {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
         InsetsUtil.clipRounded(root);
-        int m = dp(ctx, 14);
-        root.setPadding(m, dp(ctx, 8), m, dp(ctx, 12));
+        int m = dp(ctx, 12);
+        // 全局规范: 页面左右边距 12dp，底部留白 12dp，避免页面根圆角区裁切底部按钮/圆角描边
+        root.setPadding(m, dp(ctx, 6), m, dp(ctx, 12));
         return root;
     }
 
@@ -71,16 +72,16 @@ public final class M3Page {
         return new SectionHeader(ctx, title, sub);
     }
 
-    /** 卡片容器（M3 filled card：12dp 圆角 + surfaceContainerLow 底） */
+    /** 卡片容器（M3 Expressive filled card：24dp 大圆角 + 纯白底） */
     public static LinearLayout card(Context ctx) {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(CandyUi.cardBg(ctx));
         InsetsUtil.clipRounded(card);
-        int p = dp(ctx, 4);
+        int p = dp(ctx, 0);
         card.setPadding(p, p, p, p);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 0, 0, dp(ctx, 4));
+        lp.setMargins(0, 0, 0, dp(ctx, AppColors.SPACE_CARD_GAP_DP));
         card.setLayoutParams(lp);
         return card;
     }
@@ -179,13 +180,16 @@ public final class M3Page {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        int p = dp(ctx, 16);
+        int p = dp(ctx, 12);
+        // 全局规范: 行触控区域不低于 48dp
+        row.setMinimumHeight(dp(ctx, 48));
         row.setPadding(p, dp(ctx, 14), p, dp(ctx, 14));
         row.setBackground(CandyUi.rowPressBg(ctx));
 
         TextView t = new TextView(ctx);
         t.setText(title);
-        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setTextColor(AppColors.onSurface());
         t.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         row.addView(t);
@@ -313,14 +317,15 @@ public final class M3Page {
 
     // ==================== 文本排版（M3 type scale） ====================
 
-    /** 页面/弹窗标题（M3 title large · onSurface · 粗体） */
+    /** 页面/弹窗标题（M3 Expressive title large · onSurface · 粗体 · 微字距） */
     public static TextView title(Context ctx, String text) {
         TextView tv = new TextView(ctx);
         tv.setText(text);
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
         tv.setTypeface(Typeface.DEFAULT_BOLD);
         tv.setTextColor(AppColors.onSurface());
         tv.setGravity(Gravity.CENTER);
+        tv.setLetterSpacing(0.02f);
         tv.setPadding(0, 0, 0, dp(ctx, 2));
         return tv;
     }
@@ -329,8 +334,7 @@ public final class M3Page {
     public static TextView fieldLabel(Context ctx, String text) {
         TextView tv = new TextView(ctx);
         tv.setText(text);
-        // v998: 字段标签再缩小 3dp
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         tv.setTextColor(AppColors.onSurfaceVariant());
         tv.setPadding(dp(ctx, 2), dp(ctx, 6), 0, dp(ctx, 2));
         return tv;
@@ -340,10 +344,9 @@ public final class M3Page {
     public static TextView note(Context ctx, String text) {
         TextView tv = new TextView(ctx);
         tv.setText(text);
-        // v998: 说明段落再缩小 3dp
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 9);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         tv.setTextColor(AppColors.onSurfaceVariant());
-        tv.setLineSpacing(dp(ctx, 2), 1.1f);
+        tv.setLineSpacing(dp(ctx, 2), 1.2f);
         tv.setPadding(dp(ctx, 2), dp(ctx, 4), dp(ctx, 2), dp(ctx, 8));
         return tv;
     }
@@ -351,7 +354,7 @@ public final class M3Page {
     // ==================== 控件 ====================
 
     /**
-     * M3 滑杆：葡萄气泡流光渐变进度 + 渐变圆球滑块 + surfaceContainerHighest 轨道
+     * M3 滑杆：糖果粉纯色进度 + 圆形滑块 + surfaceContainerHighest 轨道
      * （framework SeekBar，避免 appcompat 属性碰撞）。
      *
      * <p>v1067：进度轨改为「静态轨道(View 背景) + ClipDrawable(流光渐变)」组合，
@@ -371,23 +374,23 @@ public final class M3Page {
             track.setCornerRadius(h / 2f);
             track.setColor(AppColors.surfaceContainerHighest());
 
-            FlowingGradientDrawable fill = new FlowingGradientDrawable(
-                    AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+            GradientDrawable fill = new GradientDrawable();
+            fill.setShape(GradientDrawable.RECTANGLE);
             fill.setCornerRadius(h / 2f);
             fill.setSize(0, h);
-            fill.setPhaseOffset(0.15f);
+            fill.setColor(AppColors.primary());
 
             android.graphics.drawable.ClipDrawable clip =
                     new android.graphics.drawable.ClipDrawable(
                             fill, Gravity.START, android.graphics.drawable.ClipDrawable.HORIZONTAL);
             clip.setLevel(5000);
 
-            int thumbSize = dp(ctx, 20);
-            FlowingGradientDrawable thumb = new FlowingGradientDrawable(
-                    AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+            int thumbSize = dp(ctx, 24);
+            GradientDrawable thumb = new GradientDrawable();
+            thumb.setShape(GradientDrawable.OVAL);
             thumb.setCornerRadius(thumbSize / 2f);
             thumb.setSize(thumbSize, thumbSize);
-            thumb.setPhaseOffset(0.5f);
+            thumb.setColor(AppColors.primary());
 
             sb.setBackground(track);
             sb.setProgressDrawable(clip);
@@ -419,7 +422,7 @@ public final class M3Page {
         final SettingRow row = new SettingRow(ctx, icon, title, sub);
         final TextView mark = new TextView(ctx);
         final boolean[] state = {checked};
-        int size = dp(ctx, 24);
+        int size = dp(ctx, 28);
         mark.setGravity(Gravity.CENTER);
         mark.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         mark.setTypeface(Typeface.DEFAULT_BOLD);
@@ -428,10 +431,10 @@ public final class M3Page {
             @Override
             public void run() {
                 if (state[0]) {
-                    FlowingGradientDrawable fg = new FlowingGradientDrawable(
-                            AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+                    GradientDrawable fg = new GradientDrawable();
+                    fg.setShape(GradientDrawable.OVAL);
                     fg.setCornerRadius(size / 2f);
-                    fg.setPhaseOffset(0.25f);
+                    fg.setColor(AppColors.primary());
                     mark.setBackground(fg);
                     mark.setText("✓");
                     mark.setTextColor(AppColors.onGradient());

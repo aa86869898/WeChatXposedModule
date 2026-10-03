@@ -44,6 +44,7 @@ import com.leshao.v3.hook.DexKitHelper;
 import com.leshao.v3.hook.TtsVoiceSender;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
+import com.leshao.v3.ui.InsetsUtil;
 import com.leshao.v3.wm.utils.WmPrefs;
 import com.leshao.v3.wm.utils.WmReflect;
 import com.leshao.v3.wm.utils.WmUi;
@@ -175,13 +176,16 @@ public class WmChatHook {
 
         sv.addView(btns);
         panel.addView(sv, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
         panel.addView(com.leshao.v3.wm.utils.WmUi.makePrimaryBtn(sAct, "✕ 收起面板",
                 WmChatHook::hidePanel));
 
+        // 高度随内容自适应（上限 90% 屏）：内容区 sv 以 WRAP 参与测量，内部滚动
+        ViewGroup panelHost = InsetsUtil.maxHeight90(sAct, panel);
         Dialog dialog = new Dialog(sAct);
-        dialog.setContentView(panel);
+        dialog.setContentView(panelHost);
         dialog.setCanceledOnTouchOutside(true);
         dialog.setOnDismissListener(d -> { sPanelShow = false; });
 
@@ -195,8 +199,8 @@ public class WmChatHook {
         Window w = dialog.getWindow();
         if (w == null) return;
         int pw = dp(250);
-        int ph = dp(560);
-        w.setLayout(pw, ph);
+        // 面板高度随内容自适应（WRAP_CONTENT），不再固定 80% 屏高
+        w.setLayout(pw, ViewGroup.LayoutParams.WRAP_CONTENT);
         WindowManager.LayoutParams lp = w.getAttributes();
         lp.dimAmount = 0.05f;
         lp.gravity = Gravity.CENTER;
@@ -351,11 +355,18 @@ public class WmChatHook {
             fos = new FileOutputStream(f);
 
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            String meCss = String.format(java.util.Locale.US, ".me{color:#%06X;text-align:right}.other{color:#%06X}",
+                    AppColors.primary() & 0xFFFFFF, AppColors.onSurface() & 0xFFFFFF);
+            String bubbleCss = String.format(java.util.Locale.US,
+                    ".bubble{display:inline-block;max-width:70%;padding:8px 12px;border-radius:8px;margin:2px 0}"
+                    + ".me .bubble{background:#%06X}.other .bubble{background:#%06X;border:1px solid #%06X}",
+                    AppColors.primaryContainer() & 0xFFFFFF,
+                    AppColors.surfaceContainerHighest() & 0xFFFFFF,
+                    AppColors.outlineVariant() & 0xFFFFFF);
             fos.write(("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>" + escHtml(sUser)
                 + "</title><style>body{font-family:sans-serif;max-width:800px;margin:auto;padding:10px}"
-                + ".me{color:#8B5CF6;text-align:right}.other{color:#333}.time{font-size:10px;color:#999}"
-                + ".bubble{display:inline-block;max-width:70%;padding:8px 12px;border-radius:8px;margin:2px 0}"
-                + ".me .bubble{background:#E9D5FF}.other .bubble{background:#fff;border:1px solid #eee}"
+                + meCss + ".time{font-size:10px;color:#999}"
+                + bubbleCss
                 + "</style></head><body><h2>" + escHtml(sUser) + "</h2><hr>\n").getBytes("UTF-8"));
             int cnt = 0;
             while (c.moveToNext()) {
@@ -809,18 +820,18 @@ public class WmChatHook {
     private static int inputBg()    { return withAlpha(AppColors.surfaceContainerHighest(), 0x99); }
     private static int dividerCol() { return withAlpha(AppColors.outlineVariant(), isDarkMode() ? 0x40 : 0x33); }
 
-    // 霓虹糖果色（浅暗通用）· 葡萄气泡家族；仅红保留给危险/失败语义
-    private static final int NEON_PINK   = 0xFFFF6FB0;
-    private static final int NEON_BLUE   = 0xFF7C3AED;
-    private static final int NEON_PURPLE = 0xFF8B5CF6;
-    private static final int NEON_CYAN   = 0xFF9F7BFF;
-    private static final int NEON_GREEN  = 0xFF8B5CF6;
-    private static final int NEON_ORANGE = 0xFFD946EF;
-    private static final int NEON_RED    = 0xFFEF4444;
-    private static final int NEON_MINT   = 0xFFA78BFA;
-    private static final int NEON_LAVENDER = 0xFFD8B4FE;
+    // 霓虹主题色（跟随 AppColors 动态角色）；红/琥珀保留给危险/警示语义
+    private static final int NEON_PINK   = AppColors.primary();
+    private static final int NEON_BLUE   = AppColors.tertiary();
+    private static final int NEON_PURPLE = AppColors.secondary();
+    private static final int NEON_CYAN   = AppColors.tertiary();
+    private static final int NEON_GREEN  = AppColors.primary();
+    private static final int NEON_ORANGE = AppColors.warning();
+    private static final int NEON_RED    = AppColors.error();
+    private static final int NEON_MINT   = AppColors.secondaryContainer();
+    private static final int NEON_LAVENDER = AppColors.secondary();
 
-    // v1067 葡萄气泡：霓虹调色板收拢到葡萄/粉/薰衣草家族，保持全局一致
+    // v30111: 霓虹调色板统一为品牌绿系，保持全局一致
     private static final int[] NEON_PALETTE = {
         NEON_PURPLE, NEON_LAVENDER, NEON_PINK, NEON_PURPLE,
         NEON_PINK, NEON_LAVENDER, NEON_PURPLE
@@ -879,7 +890,7 @@ public class WmChatHook {
         btn.setAllCaps(false);
         btn.setTypeface(null, android.graphics.Typeface.BOLD);
         btn.setTextColor(0xFFFFFFFF);
-        // v1067 葡萄气泡：填充按钮走流光渐变
+        // v3.0.101 糖果粉：填充按钮走糖果粉纯色
         btn.setBackground(CandyUi.gradientBg(sAct, 14));
         btn.setElevation(dp(3));
         btn.setPadding(dp(24), 0, dp(24), 0);
@@ -1165,7 +1176,9 @@ public class WmChatHook {
         sv.addView(root);
 
         final Dialog dlg = new Dialog(sAct);
-        dlg.setContentView(sv);
+        // 窗口自适应：宽 90% 屏，高随内容 WRAP（上限 90%），内部 ScrollView 滚动
+        ViewGroup host = InsetsUtil.windowAutoHeight(dlg, sv, 0.9f);
+        dlg.setContentView(host);
         dlg.setCanceledOnTouchOutside(true);
 
         recBtn.setOnClickListener(v -> { dlg.dismiss(); showMassSendRecords(); });
@@ -1173,13 +1186,6 @@ public class WmChatHook {
 
         Window w = dlg.getWindow();
         if (w != null) {
-            int ww = (int) (sAct.getResources().getDisplayMetrics().widthPixels * 0.92f);
-            w.setLayout(ww, WindowManager.LayoutParams.WRAP_CONTENT);
-            w.setGravity(Gravity.CENTER);
-            w.setBackgroundDrawable(new GradientDrawable() {{
-                setColor(surface());
-                setCornerRadius(dp(20));
-            }});
             w.getAttributes().dimAmount = 0.5f;
         }
         dlg.show();
@@ -1575,14 +1581,19 @@ public class WmChatHook {
         Button nextBtn = makeNeonBtn("下一步 →", headColor);
         bottomBar.addView(nextBtn, new LinearLayout.LayoutParams(0, dp(48), 1f));
 
+        ViewGroup svWrap = InsetsUtil.maxHeight90(sAct, sv);
         LinearLayout step2Wrap = new LinearLayout(sAct);
         step2Wrap.setOrientation(LinearLayout.VERTICAL);
-        step2Wrap.addView(sv, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        step2Wrap.setBackgroundColor(surface());
+        step2Wrap.addView(svWrap, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
         step2Wrap.addView(bottomBar);
 
         final Dialog dlgStep2 = new Dialog(sAct);
-        dlgStep2.setContentView(step2Wrap);
+        // 窗口自适应：宽 90% 屏，高随内容 WRAP（上限 90%），内容区内部滚动
+        ViewGroup host = InsetsUtil.windowAutoHeight(dlgStep2, step2Wrap, 0.9f);
+        dlgStep2.setContentView(host);
         dlgStep2.setCanceledOnTouchOutside(true);
 
         backBtn.setOnClickListener(v2 -> { dlgStep2.dismiss(); showMassSend(); });
@@ -1620,10 +1631,6 @@ public class WmChatHook {
 
         Window w2 = dlgStep2.getWindow();
         if (w2 != null) {
-            int ww = (int) (sAct.getResources().getDisplayMetrics().widthPixels * 0.92f);
-            w2.setLayout(ww, WindowManager.LayoutParams.WRAP_CONTENT);
-            w2.setGravity(Gravity.CENTER);
-            w2.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
             w2.getAttributes().dimAmount = 0.5f;
         }
         dlgStep2.show();
@@ -1927,18 +1934,16 @@ public class WmChatHook {
             toast("任务已创建，" + new SimpleDateFormat("MM月dd日 HH:mm").format(new Date(sWizardTimeMs)) + " 准时发送");
         });
 
-        final Dialog dlgStep3 = new Dialog(sAct);
-        dlgStep3.setContentView(root);
-        dlgStep3.setCanceledOnTouchOutside(true);
+sv.addView(root);
 
-        root.setTag(dlgStep3);
+        final Dialog dlgStep3 = new Dialog(sAct);
+        // 窗口自适应：宽 90% 屏，高随内容 WRAP（上限 90%），内部 ScrollView 滚动
+        ViewGroup host = InsetsUtil.windowAutoHeight(dlgStep3, sv, 0.9f);
+        dlgStep3.setContentView(host);
+        dlgStep3.setCanceledOnTouchOutside(true);
 
         Window w3 = dlgStep3.getWindow();
         if (w3 != null) {
-            int ww = (int) (sAct.getResources().getDisplayMetrics().widthPixels * 0.92f);
-            w3.setLayout(ww, WindowManager.LayoutParams.WRAP_CONTENT);
-            w3.setGravity(Gravity.CENTER);
-            w3.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
             w3.getAttributes().dimAmount = 0.5f;
         }
         dlgStep3.show();
@@ -2059,7 +2064,9 @@ public class WmChatHook {
         root.addView(btnRow);
 
         final Dialog dlg = new Dialog(sAct);
-        dlg.setContentView(root);
+        // 窗口自适应：宽 90% 屏，高随内容 WRAP（上限 90%）
+        ViewGroup host = InsetsUtil.windowAutoHeight(dlg, root, 0.9f);
+        dlg.setContentView(host);
         dlg.setCanceledOnTouchOutside(true);
 
         cancelBtn.setOnClickListener(v -> dlg.dismiss());
@@ -2077,13 +2084,6 @@ public class WmChatHook {
 
         Window w = dlg.getWindow();
         if (w != null) {
-            int ww = (int) (sAct.getResources().getDisplayMetrics().widthPixels * 0.9f);
-            w.setLayout(ww, WindowManager.LayoutParams.WRAP_CONTENT);
-            w.setGravity(Gravity.CENTER);
-            w.setBackgroundDrawable(new GradientDrawable() {{
-                setColor(surface());
-                setCornerRadius(dp(20));
-            }});
             w.getAttributes().dimAmount = 0.5f;
         }
         dlg.show();
@@ -2308,7 +2308,9 @@ public class WmChatHook {
         sv.addView(root);
 
         final Dialog dlg = new Dialog(sAct);
-        dlg.setContentView(sv);
+        // 窗口自适应：宽 90% 屏，高随内容 WRAP（上限 90%），内部 ScrollView 滚动
+        ViewGroup host = InsetsUtil.windowAutoHeight(dlg, sv, 0.9f);
+        dlg.setContentView(host);
         dlg.setCanceledOnTouchOutside(true);
 
         clearBtn.setOnClickListener(v -> {
@@ -2327,13 +2329,6 @@ public class WmChatHook {
 
         Window w = dlg.getWindow();
         if (w != null) {
-            int ww = (int) (sAct.getResources().getDisplayMetrics().widthPixels * 0.9f);
-            w.setLayout(ww, WindowManager.LayoutParams.WRAP_CONTENT);
-            w.setGravity(Gravity.CENTER);
-            w.setBackgroundDrawable(new GradientDrawable() {{
-                setColor(surface());
-                setCornerRadius(dp(20));
-            }});
             w.getAttributes().dimAmount = 0.5f;
         }
         dlg.show();

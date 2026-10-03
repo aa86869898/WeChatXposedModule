@@ -103,10 +103,10 @@ public class DiscView extends View {
         float R = Math.min(w, h) / 2f * 0.90f;
         boolean dark = AppColors.isDarkMode();
 
-        // 盘体：淡蓝 → 淡紫 → 淡粉（暗色下同色系压低）
-        int c1 = dark ? 0xFF2E3A58 : 0xFFEAF4FF;
-        int c2 = dark ? 0xFF3A2E58 : 0xFFF2EAFE;
-        int c3 = dark ? 0xFF4C3244 : 0xFFFFEDF6;
+        // 盘体：全局糖果粉纯色（浅色/暗色一致）
+        int c1 = AppColors.gradientStart();
+        int c2 = AppColors.gradientStart();
+        int c3 = AppColors.gradientStart();
         mBodyGrad = new LinearGradient(cx - R, cy - R, cx + R, cy + R,
                 new int[]{c1, c2, c3}, new float[]{0f, 0.5f, 1f}, Shader.TileMode.CLAMP);
 

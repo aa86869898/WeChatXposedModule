@@ -86,3 +86,47 @@
   - 陷阱：不要再用 `f9.getDeclaredMethods()` 遍历 hook 所有名为 I9 的重载做独立 hook（RedPacketHook.hookMessageInsert v720 这样写导致微信主进程启动闪退，日志只剩子进程 appbrand0/appbrand1 的 STARTUP+skip，主进程日志全丢）；复用 ChatHooks 已有的精确 I9 hook，在 afterHookedMethod 里检测红包/转账并调用 RedPacketHook.onIncomingMessage 即可
   - field_isSend 对红包/转账消息不可靠，收发判断不要依赖它，只按 type 判断类型
   - 红包/转账检测要独立于 AI 开关（不能放在 `if(!AiConfig.masterEnabled()...) return` 之后），否则 AI 关闭时红包不生效
+
+### UI 改版（v1145）约束与空白问题根因
+- Date: 2026-10-02
+- Context: 用户要求全量 UI 重设计（Material 3 樱花粉）时给出强约束
+- Category: 工作流协作
+- Instructions:
+  - 只修改 `app/src/main/java/com/leshao/v3/ui/` 下文件；禁止改 hook/ 目录、MainHook.java、ContextManager.java、versionName/versionCode
+  - 禁止修改 SharedPreferences key、hook 开关回调、Toast 文案、config 按钮逻辑、activity result 契约
+  - `CandyUi.newSwitch` 必须保持返回 `android.widget.Switch`；`DexKitScanDialog` 静态 API（show/initSteps/updateProgress/dismiss/onScanComplete/isShowing）签名不可变（并行修复者依赖）
+  - SubPageActivity 导航/返回栈逻辑不可变
+  - 禁止运行 gradle（并行修复者负责编译）；本地语法校验可用 javac：`javac -nowarn -proc:none -d /tmp/out -cp "/opt/android-sdk/platforms/android-35/android.jar:<androidx-core-runtime.jar>:app/build/intermediates/javac/debug/classes:app/libs/xposed-api-82.jar" <文件>`
+  - 底部大片空白根因：SubPageActivity 对所有子页面用固定 90% 屏高 + weight=1 ScrollView，短内容页底部留白
+  - v1145 解法：短内容页（非 no_wrap）改用 WRAP 高度 + `InsetsUtil.windowAutoHeight/centerAutoHeight`（内容自适应，上限 87% 屏）；no_wrap 标记页（WeChatDbPageView）保持固定高度
+  - 页面分区模板：ContactGroupPageView 的「乐少转发」= `M3Page.section(title, desc)` + 卡片间 `M3Page.divider`，卡片用 `CandyUi.cardBg` + `InsetsUtil.clipRounded`
+
+### DexKit 全量扫描 native 崩溃的根因与 v30112 解法
+- Date: 2026-10-03
+- Context: 用户反馈升级 v30111 后微信主进程打开主页仍闪退，日志显示升级后首次启动全量扫描（模块版本 30110→30111 触发 cache miss）期间进程无 Java 堆栈直接消亡（典型 native SIGSEGV/SIGABRT）
+- Category: 排错调试
+- Instructions:
+  - 崩溃特征：升级后首次启动日志中主进程与 push 进程两个 `DexKitScan-1` 线程同时 `loadLibrary libdexkit`、同时 `scanWechatTargets`、共享同一 MMKV 缓存 → 多进程并发扫描同一份 DEX + 写同一 MMKV 是 native 崩溃主因；启动早期扫描与各 hook 安装线程的 find* 搜索叠加进一步恶化
+  - 结论：普通重启（微信版本与模块版本一致且缓存完整）不加载 so 不扫描；只有微信版本/模块版本变化或缓存不完整才触发全量扫描
+  - v30112 解法（DexKitHelper.java）：① 子进程（push/分身等非主进程）不再调用 startFullScan，缓存不完整时用 `deferCloneCacheRead` 延迟 30s 重读主进程写入的缓存；② 主进程全量扫描由立即执行改为 `sMainHandler.postDelayed` 延迟 10s 执行，避开冷启动早期；③ 新增 `waitForFullScanIfScheduled()`，全量扫描进行时后台线程的 find* 搜索先等待（主线程不等待防 ANR），由 sBridgeLock 保证 native 串行
+  - 多进程并发扫描是首要嫌疑，子进程禁止扫描后单进程扫描基本不会崩
+
+### DexKit native 崩溃：v30112 遗漏的第二座桥（v30113 修复）
+- Date: 2026-10-03
+- Context: v30112 后主进程仍在 DexKit 操作期间无 Java 堆栈闪退（日志按不同线程截断：boot1 在 `[DexKitScan-1] findConvLongPressEntry`，boot2 在 `[pool-4-thread-1] AntiRecallHook class hit`），排除多进程并发后仍复现
+- Category: 排错调试
+- Instructions:
+  - 根因：AI 模块 `com.leshao.ai.util.DexKitBridgeHolder` 用 `DexKitBridge.create(cl,false)` 另建了**第二个 native dexkit 桥**，且 `DexKitAdapter.findClass/findMethods` 的查询不经过 v3 的 `sBridgeLock` → 与全量扫描/补扫并发访问 libdexkit 崩溃；v30112 只串行化了 v3 自身的桥，漏掉了这座 AI 桥
+  - v30113 解法：`DexKitHelper` 新增 `public interface BridgeAction<T>` 与 `public static <T> T withWechatBridge(ClassLoader, BridgeAction<T>)`，复用 v3 进程级缓存桥并在 `sBridgeLock` 内串行执行；`DexKitAdapter` 改走该入口；`DexKitBridgeHolder` 不再是桥持有者（init 空操作，get 已移除）
+  - 排查要点：全项目 `grep -rn "DexKitBridge\|DexKitCacheBridge\|withBridge\|libdexkit"` 找出所有 native 使用点，除 DexKitHelper 外仅 AI 模块
+  - 版本号三处同步：v30113 = build.gradle.kts(30113/3.0.113) + MainHook.java(MODULE_BUILD/MODULE_VERSION_CODE)
+
+### LeShaoWeChat V3 构建与发布流程
+- Date: 2026-10-03
+- Context: Agent 完成 v30112 修复后整理构建/发布命令
+- Category: 构建编译
+- Instructions:
+  - 构建：`cd /workspace/LeShaoWeChat/LeShaoWeChatV3 && ./gradlew :app:assembleDebug :app:assembleRelease`（Java 17 已配置）；产物在 `app/build/outputs/apk/{debug,release}/LeShaoWeChat-v<versionCode>.apk`，需复制到项目根目录并命名为 `LeShaoWeChat-v<versionCode>.apk` 与 `LeShaoWeChat-v<versionCode>-debug.apk`
+  - 版本号同步更新：`app/src/main/java/com/leshao/v3/MainHook.java` 的 `MODULE_VERSION_CODE` 与 `app/build.gradle.kts` 的 `versionCode`/`versionName` 必须一致（MainHook 值用于 MMKV 缓存失效判断）
+  - 发布：更新根目录 `index.html` 的下载链接与版本描述；启动下载服务器 `cd /workspace/LeShaoWeChat/LeShaoWeChatV3 && python3 upload_server.py`（8899 端口，同时提供 APK 下载与日志上传）
+  - 用户侧日志回传位置：`/workspace/leshao_v3_log.txt`（微信日志通过 8899 上传服务器写入）

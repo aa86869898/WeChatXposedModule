@@ -31,19 +31,8 @@ public class AiIconDrawable extends Drawable {
     public static final int G_LAYERS = 8;
     public static final int G_SLIDERS = 9;
 
-    // v1067 葡萄气泡：图标色板统一到葡萄/粉/薰衣草家族
-    private static final int[] PALETTE = {
-            0xFF8B5CF6, // spark 总开关
-            0xFF9F7BFF, // cloud 服务商
-            0xFFC026D3, // chip 模型/核心
-            0xFFB56BF0, // user 人设/会话
-            0xFF9333EA, // bell 唤醒/@
-            0xFFDB2777, // voice 语音
-            0xFFD946EF, // eq 音色
-            0xFF7C3AED, // db 记忆
-            0xFFFF8FC7, // layers 模板
-            0xFFA78BFA, // sliders 独立配置
-    };
+    // v30111: 去静态固化 —— 每次创建时获取当前动态主题色板，深色/动态取色切换后自动跟随
+    private static int[] palette() { return AppColors.aiIconPalette(); }
 
     private final int mGlyph;
     private final int mColor;
@@ -70,7 +59,8 @@ public class AiIconDrawable extends Drawable {
 
     /** 按内置调色板取色。 */
     public static AiIconDrawable of(int glyph) {
-        int c = (glyph >= 0 && glyph < PALETTE.length) ? PALETTE[glyph] : PALETTE[0];
+        int[] pal = palette();
+        int c = (glyph >= 0 && glyph < pal.length) ? pal[glyph] : pal[0];
         return new AiIconDrawable(glyph, c);
     }
 
@@ -87,7 +77,7 @@ public class AiIconDrawable extends Drawable {
         float h = b.height();
         float box = Math.min(w, h);
         float radius = box * 0.28f;
-        int base = AppColors.isDarkMode() ? AppColors.surfaceContainerHigh() : Color.WHITE;
+        int base = AppColors.isDarkMode() ? AppColors.surfaceContainerHigh() : AppColors.surfaceContainerLowest();
         mBgPaint.setColor(blend(mColor, base, 0.16f));
         mBox.set(b.left, b.top, b.right, b.bottom);
         canvas.drawRoundRect(mBox, radius, radius, mBgPaint);

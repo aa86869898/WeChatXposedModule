@@ -14,6 +14,7 @@ import android.widget.Toast;
 
 import com.leshao.v3.hook.ChatGroupHook;
 import com.leshao.v3.hook.model.LabelInfo;
+import com.leshao.v3.ui.widgets.M3Page;
 
 import java.util.List;
 
@@ -29,13 +30,17 @@ public class ChatGroupPageView {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
         InsetsUtil.clipRounded(root);
-        root.setPadding((int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_MD_DP * d),
-                (int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_XL_DP * d));
+        root.setPadding((int)(AppColors.SPACE_MD_DP * d), (int)(6 * d),
+                (int)(AppColors.SPACE_MD_DP * d), (int)(8 * d));
 
         LinearLayout content = new LinearLayout(ctx);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(0, (int)(8 * d), 0, 0);
         root.addView(content);
+
+        // v1145: 页面顶部统一分区标题
+        content.addView(M3Page.section(ctx, "聊天分组",
+                "标签/分组管理，聊天列表顶部同步显示分组栏"));
 
         buildLabelList(ctx, parentAct, d, content);
         return root;
@@ -50,15 +55,15 @@ public class ChatGroupPageView {
         LinearLayout card = makeCard(ctx, d);
         TextView header = new TextView(ctx);
         header.setText("分组管理");
-        header.setTextSize(15); header.setTextColor(AppColors.text1());
+        header.setTextSize(16); header.setTextColor(AppColors.text1());
         header.setTypeface(null, Typeface.BOLD);
-        header.setPadding((int)(14*d), (int)(12*d), (int)(14*d), (int)(4*d));
+        header.setPadding((int)(12*d), (int)(12*d), (int)(12*d), (int)(4*d));
         card.addView(header);
 
         LinearLayout actionRow = new LinearLayout(ctx);
         actionRow.setOrientation(LinearLayout.HORIZONTAL);
         actionRow.setGravity(Gravity.CENTER_VERTICAL);
-        actionRow.setPadding((int)(14*d), (int)(4*d), (int)(14*d), (int)(10*d));
+        actionRow.setPadding((int)(12*d), (int)(4*d), (int)(12*d), (int)(10*d));
 
         EditText searchEt = new EditText(ctx);
         searchEt.setHint("搜索分组...");
@@ -112,7 +117,7 @@ public class ChatGroupPageView {
                     TextView empty = new TextView(ctx);
                     empty.setText("暂无分组");
                     empty.setTextSize(12); empty.setTextColor(AppColors.text2());
-                    empty.setPadding((int)(14*d), (int)(16*d), (int)(14*d), (int)(16*d));
+                    empty.setPadding((int)(12*d), (int)(16*d), (int)(12*d), (int)(16*d));
                     empty.setGravity(Gravity.CENTER);
                     listRoot.addView(empty);
                 } else {
@@ -130,7 +135,7 @@ public class ChatGroupPageView {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding((int)(14*d), (int)(10*d), (int)(14*d), (int)(10*d));
+        row.setPadding((int)(12*d), (int)(10*d), (int)(12*d), (int)(10*d));
         row.setBackground(CandyUi.rowPressBg(ctx));
 
         LinearLayout textCol = new LinearLayout(ctx);
@@ -139,14 +144,14 @@ public class ChatGroupPageView {
 
         TextView tvName = new TextView(ctx);
         tvName.setText(label.labelName);
-        tvName.setTextSize(13); tvName.setTextColor(AppColors.text1());
+        tvName.setTextSize(14); tvName.setTextColor(AppColors.text1());
         tvName.setTypeface(null, Typeface.BOLD);
         textCol.addView(tvName);
 
         TextView tvCount = new TextView(ctx);
         boolean builtIn = label.labelId == ChatGroupHook.LABEL_ID_GROUP || label.labelId == ChatGroupHook.LABEL_ID_FRIEND || label.labelId == ChatGroupHook.LABEL_ID_SERVICE;
         tvCount.setText(builtIn ? "内置分组" : (label.contacts.size() + " 位联系人" + (label.isTemporary ? " | 临时" : "")));
-        tvCount.setTextSize(11); tvCount.setTextColor(AppColors.text2());
+        tvCount.setTextSize(12); tvCount.setTextColor(AppColors.text2());
         tvCount.setPadding(0, (int)(2*d), 0, 0);
         textCol.addView(tvCount);
         row.addView(textCol);
@@ -196,7 +201,7 @@ public class ChatGroupPageView {
     }
 
     private static void showDeleteLabelDialog(Context ctx, Activity parentAct, float d, String labelId, String labelName, Runnable onDone) {
-        showConfirmDialog(ctx, parentAct, d, "确认删除", "确定要删除分组 \"" + labelName + "\" 吗？", "删除", 0xFFE53935, () -> {
+        showConfirmDialog(ctx, parentAct, d, "确认删除", "确定要删除分组 \"" + labelName + "\" 吗？", "删除", AppColors.error(), () -> {
             if (ChatGroupHook.deleteLabel(labelId)) { Toast.makeText(parentAct, "已删除", Toast.LENGTH_SHORT).show(); if (onDone != null) onDone.run(); }
             else Toast.makeText(parentAct, "删除失败", Toast.LENGTH_SHORT).show();
         });
@@ -211,8 +216,8 @@ public class ChatGroupPageView {
         AlertDialog dialog = new AlertDialog.Builder(ctx, dlgTheme).create();
         LinearLayout dlgRoot = new LinearLayout(ctx);
         dlgRoot.setOrientation(LinearLayout.VERTICAL);
-        dlgRoot.setPadding((int)(14*d), (int)(14*d), (int)(14*d), (int)(8*d));
-        dlgRoot.setBackground(CandyUi.cardBg(ctx));
+        dlgRoot.setPadding((int)(12*d), (int)(12*d), (int)(12*d), (int)(8*d));
+        dlgRoot.setBackground(CandyUi.dialogBg(ctx));
         InsetsUtil.clipRounded(dlgRoot);
 
         TextView title = new TextView(ctx);
@@ -253,7 +258,7 @@ public class ChatGroupPageView {
         close.setText("关闭");
         close.setTextSize(14); close.setTextColor(AppColors.text2());
         close.setGravity(Gravity.CENTER);
-        close.setPadding(0, (int)(12*d), 0, 0);
+        close.setPadding(0, (int)(8*d), 0, 0);
         CandyUi.ripple(close, AppColors.SHAPE_FULL_DP);
         close.setOnClickListener(v2 -> dialog.dismiss());
         dlgRoot.addView(close);
@@ -269,8 +274,8 @@ public class ChatGroupPageView {
         AlertDialog dialog = new AlertDialog.Builder(ctx, dlgTheme).create();
         LinearLayout dlgRoot = new LinearLayout(ctx);
         dlgRoot.setOrientation(LinearLayout.VERTICAL);
-        dlgRoot.setPadding((int)(14*d), (int)(14*d), (int)(14*d), (int)(8*d));
-        dlgRoot.setBackground(CandyUi.cardBg(ctx));
+        dlgRoot.setPadding((int)(12*d), (int)(12*d), (int)(12*d), (int)(8*d));
+        dlgRoot.setBackground(CandyUi.dialogBg(ctx));
         InsetsUtil.clipRounded(dlgRoot);
 
         TextView dlgTitle = new TextView(ctx); dlgTitle.setText(title); dlgTitle.setTextSize(16); dlgTitle.setTextColor(AppColors.text1()); dlgTitle.setTypeface(null, Typeface.BOLD); dlgTitle.setPadding(0,0,0,(int)(10*d)); dlgRoot.addView(dlgTitle);
@@ -295,8 +300,8 @@ public class ChatGroupPageView {
         AlertDialog dialog = new AlertDialog.Builder(ctx, dlgTheme).create();
         LinearLayout dlgRoot = new LinearLayout(ctx);
         dlgRoot.setOrientation(LinearLayout.VERTICAL);
-        dlgRoot.setPadding((int)(14*d), (int)(14*d), (int)(14*d), (int)(8*d));
-        dlgRoot.setBackground(CandyUi.cardBg(ctx));
+        dlgRoot.setPadding((int)(12*d), (int)(12*d), (int)(12*d), (int)(8*d));
+        dlgRoot.setBackground(CandyUi.dialogBg(ctx));
         InsetsUtil.clipRounded(dlgRoot);
 
         TextView dlgTitle = new TextView(ctx); dlgTitle.setText(title); dlgTitle.setTextSize(16); dlgTitle.setTextColor(AppColors.text1()); dlgTitle.setTypeface(null, Typeface.BOLD); dlgTitle.setPadding(0,0,0,(int)(4*d)); dlgRoot.addView(dlgTitle);
@@ -321,8 +326,8 @@ public class ChatGroupPageView {
         et.setPadding((int)(12*d), (int)(10*d), (int)(12*d), (int)(10*d));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(AppColors.inputBg());
-        bg.setCornerRadius((int)(AppColors.SHAPE_SM_DP*d));
-        bg.setStroke((int)(1.5f*d), AppColors.candyPink());
+        bg.setCornerRadius((int)(AppColors.SHAPE_INPUT_DP*d));
+        bg.setStroke((int)(1.5f*d), AppColors.outlineVariant());
         et.setBackground(bg);
         return et;
     }
@@ -331,10 +336,9 @@ public class ChatGroupPageView {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setBackground(CandyUi.cardBg(ctx));
-        int p = (int)(4*d);
-        card.setPadding(p, p, p, p);
+        card.setPadding(0, 0, 0, 0);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(0, 0, 0, (int)(8*d));
+        lp.setMargins(0, 0, 0, (int)(13*d));
         card.setLayoutParams(lp);
         return card;
     }

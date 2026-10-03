@@ -13,7 +13,7 @@ import android.graphics.Color;
  * M3 色彩角色（primary/onPrimary/primaryContainer/surface/surfaceVariant/outline/…）
  * 一律走动态 getter，支持暗色模式运行时切换。
  *
- * 主题：葡萄气泡 · 流光渐变（#8B5CF6 / #D8B4FE / #FFAFCC，浅色 + 暗色双方案）。
+ * 主题：微信绿 · 纯色（#07C160，动态取色优先，低版本回退微信绿）。
  */
 public class AppColors {
 
@@ -45,22 +45,22 @@ public class AppColors {
     public static final int PALETTE_DYNAMIC = 101;
 
     private static final String[] PALETTE_NAMES = {
-        "葡萄紫", "薰衣草", "品红", "玫瑰粉", "樱粉", "兰紫",
-        "深紫", "藕荷", "玫紫", "紫罗兰", "粉紫", "石墨紫"
+        "糖果粉", "樱粉", "蜜桃", "玫瑰粉", "淡粉", "亮粉",
+        "深粉", "藕粉", "玫粉", "暖粉", "荧光粉", "粉紫"
     };
     private static final int[] PALETTE_SEEDS = {
-        0xFF8B5CF6, // 葡萄紫（主题）
-        0xFFA78BFA, // 薰衣草
-        0xFFD946EF, // 品红
-        0xFFFF6FB0, // 玫瑰粉
+        0xFFFF99C2, // 糖果粉（主题）
         0xFFFFAFCC, // 樱粉
-        0xFF9F7BFF, // 兰紫
-        0xFF7C3AED, // 深紫
-        0xFFC9A9FF, // 藕荷
-        0xFFB56BF0, // 玫紫
-        0xFF9333EA, // 紫罗兰
-        0xFFDB2777, // 粉紫
-        0xFF6B5B95, // 石墨紫
+        0xFFF472B6, // 蜜桃
+        0xFFFF6FB0, // 玫瑰粉
+        0xFFFFC2D8, // 淡粉
+        0xFFFF8FC7, // 亮粉
+        0xFFD9639D, // 深粉
+        0xFFFFD9E8, // 藕粉
+        0xFFE56EA6, // 玫粉
+        0xFFFB7185, // 暖粉
+        0xFFFF5FA2, // 荧光粉
+        0xFF8E6B7C, // 粉紫
     };
     private static final String PREFS = "leshao_m3_prefs";
     private static final String KEY_PALETTE = "m3_palette";
@@ -69,8 +69,10 @@ public class AppColors {
     private static final String KEY_SWITCH = "m3_override_switch";
     private static final String KEY_WINDOWBG = "m3_override_windowbg";
     private static volatile int sPalette = PALETTE_DYNAMIC;
-    private static volatile int sCustomSeed = 0xFF8B5CF6;
+    private static volatile int sCustomSeed = 0xFF07C160;
     private static volatile int sSchemeVersion = 0;
+    /** 上次成功读取的动态取色 seed（Android 12+ system_accent1_500），用于 refresh 时检测壁纸变化 */
+    private static volatile int sLastDynamicSeed = 0;
     /** 三个自定义色（0 表示未设置，走默认角色） */
     private static volatile int sOvTitleBar = 0, sOvSwitch = 0, sOvWindowBg = 0;
 
@@ -157,70 +159,161 @@ public class AppColors {
     }
 
     /**
+     * v3.0.102：Material You 动态取色 —— Android 12+ 读取系统壁纸生成的强调色资源，
+     * 映射到 M3 全部色彩角色（primary/secondary/tertiary + surfaceContainer 中性层次）。
+     * 低版本或系统资源不可用时返回 false，由调用方回退到糖果粉静态色板。
+     * 成功后记录 sLastDynamicSeed，供 refresh() 检测壁纸变化后重算。
+     */
+    private static boolean applyDynamicPalette(boolean dark) {
+        try {
+            Context ctx = com.leshao.v3.ContextManager.getAppContext();
+            if (ctx == null || android.os.Build.VERSION.SDK_INT < 31) return false;
+            android.content.res.Resources res = ctx.getResources();
+            android.content.res.Resources.Theme theme = ctx.getTheme();
+            int seed = res.getColor(android.R.color.system_accent1_500, theme);
+            if (dark) {
+                cPrimary              = res.getColor(android.R.color.system_accent1_200, theme);
+                cOnPrimary            = res.getColor(android.R.color.system_accent1_700, theme);
+                cPrimaryContainer     = res.getColor(android.R.color.system_accent1_700, theme);
+                cOnPrimaryContainer   = res.getColor(android.R.color.system_accent1_100, theme);
+                cSecondary            = res.getColor(android.R.color.system_accent2_200, theme);
+                cOnSecondary          = res.getColor(android.R.color.system_accent2_700, theme);
+                cSecondaryContainer   = res.getColor(android.R.color.system_accent2_700, theme);
+                cOnSecondaryContainer = res.getColor(android.R.color.system_accent2_100, theme);
+                cTertiary             = res.getColor(android.R.color.system_accent3_200, theme);
+                cOnTertiary           = res.getColor(android.R.color.system_accent3_700, theme);
+                cTertiaryContainer    = res.getColor(android.R.color.system_accent3_700, theme);
+                cOnTertiaryContainer  = res.getColor(android.R.color.system_accent3_100, theme);
+                cPrimaryDark          = cPrimary;
+                // 深色中性面保持暖炭色，与静态暗色方案一致
+                cBackground           = 0xFF1B1218;
+                cSurface              = 0xFF1B1218;
+                cScLowest             = 0xFF130B10;
+                cScLow                = 0xFF241A20;
+                cSc                   = 0xFF2A2026;
+                cScHigh               = 0xFF35292F;
+                cScHighest            = 0xFF40343A;
+                cSurfaceVariant       = 0xFF44323B;
+                cOnSurface            = 0xFFF5E6ED;
+                cOnSurfaceVariant     = 0xFFD0B4C1;
+                cOutline              = 0xFF9D838F;
+                cOutlineVariant       = 0xFF4B3843;
+            } else {
+                cPrimary              = seed;
+                cOnPrimary            = onColor(seed);
+                cPrimaryContainer     = res.getColor(android.R.color.system_accent1_100, theme);
+                cOnPrimaryContainer   = res.getColor(android.R.color.system_accent1_900, theme);
+                cSecondary            = res.getColor(android.R.color.system_accent2_500, theme);
+                cOnSecondary          = onColor(cSecondary);
+                cSecondaryContainer   = res.getColor(android.R.color.system_accent2_100, theme);
+                cOnSecondaryContainer = res.getColor(android.R.color.system_accent2_900, theme);
+                cTertiary             = res.getColor(android.R.color.system_accent3_500, theme);
+                cOnTertiary           = onColor(cTertiary);
+                cTertiaryContainer    = res.getColor(android.R.color.system_accent3_100, theme);
+                cOnTertiaryContainer  = res.getColor(android.R.color.system_accent3_900, theme);
+                cPrimaryDark          = cPrimary;
+                // 浅色中性面保持暖白，与静态浅色方案一致
+                cBackground           = 0xFFFBF8F6;
+                cSurface              = 0xFFFBF8F6;
+                cScLowest             = 0xFFFFFFFF;
+                cScLow                = 0xFFF7F3F1;
+                cSc                   = 0xFFF2ECEA;
+                cScHigh               = 0xFFECE5E3;
+                cScHighest            = 0xFFE6DEDC;
+                cSurfaceVariant       = 0xFFF1DEE4;
+                cOnSurface            = 0xFF221A1E;
+                cOnSurfaceVariant     = 0xFF6B5560;
+                cOutline              = 0xFF9C818D;
+                cOutlineVariant       = 0xFFE4CBD5;
+            }
+            sLastDynamicSeed = seed;
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    /**
      * 依据明暗模式重算当前配色角色。
      *
-     * <p>v1067：全局锁定「葡萄气泡」主题（#8B5CF6 紫 / #D8B4FE 淡紫 / #FFAFCC 粉），
-     * 不再随系统强调色或历史配色选择变化，保证所有界面/弹窗/控件视觉完全一致。
-     * 旧 PALETTE_* API 与 getter 全部保留，仅取值来源固定为葡萄气泡方案。</p>
+     * <p>v3.0.102：全局锁定「动态取色」（Material You）——Android 12+ 读取系统壁纸强调色，
+     * 低版本/系统色不可用时回退到糖果粉静态色板，保证所有界面/弹窗/控件视觉一致。
+     * 旧 PALETTE_* API 与 getter 全部保留，仅取值来源优先为系统动态色。</p>
      */
     private static void recomputePalette() {
         boolean dark = sDarkMode;
+        // Android 12+ 动态取色可用时直接使用系统强调色（Material You）
+        if (sPalette == PALETTE_DYNAMIC
+                && android.os.Build.VERSION.SDK_INT >= 31
+                && applyDynamicPalette(dark)) {
+            try {
+                com.leshao.v3.LogWriter.log("AppColors", "dynamic palette: sdk=" + android.os.Build.VERSION.SDK_INT
+                        + " dark=" + dark + " seed=0x" + Integer.toHexString(detectDynamicSeed()));
+            } catch (Throwable ignored) {}
+            return;
+        }
+        try {
+            com.leshao.v3.LogWriter.log("AppColors", "fallback static palette: sdk=" + android.os.Build.VERSION.SDK_INT
+                    + " dark=" + dark + " (dynamic unavailable)");
+        } catch (Throwable ignored) {}
+        // ==================== M3 Expressive · 微信绿体系 ====================
+        // 浅色：暖中性 surface（#FBF8F6）避免死白；微信绿 primary；灰绿 secondary；
+        //       青蓝 tertiary；完整 surfaceContainer 层次（Lowest=纯白卡片 → Highest=浅灰）。
+        // 深色：暖深棕 surface（#1B1218），主色提亮为亮微信绿，保持 Expressive 活力。
         if (dark) {
-            // 葡萄气泡 · 深色
-            cPrimary              = 0xFFC9A9FF;
-            cOnPrimary            = 0xFF2A1550;
-            cPrimaryContainer     = 0xFF4A2A82;
-            cOnPrimaryContainer   = 0xFFEADDFF;
-            cSecondary            = 0xFFCFC0EA;
-            cOnSecondary          = 0xFF332B45;
-            cSecondaryContainer   = 0xFF453A5C;
-            cOnSecondaryContainer = 0xFFE8DEF8;
-            cTertiary             = 0xFFFFB0CE;
-            cOnTertiary           = 0xFF560027;
-            cTertiaryContainer    = 0xFF7A3A57;
-            cOnTertiaryContainer  = 0xFFFFD9E6;
-            cPrimaryDark          = 0xFF9F7BFF;
+            cPrimary              = 0xFF3DD68C;
+            cOnPrimary            = 0xFF00391F;
+            cPrimaryContainer     = 0xFF005234;
+            cOnPrimaryContainer   = 0xFFB3F5D3;
+            cSecondary            = 0xFFB4CCBC;
+            cOnSecondary          = 0xFF21382A;
+            cSecondaryContainer   = 0xFF37513F;
+            cOnSecondaryContainer = 0xFFD0E8D4;
+            cTertiary             = 0xFFA6D8C2;
+            cOnTertiary           = 0xFF00382A;
+            cTertiaryContainer    = 0xFF00513D;
+            cOnTertiaryContainer  = 0xFFB0F2DA;
+            cPrimaryDark          = 0xFF3DD68C;
 
-            cBackground           = 0xFF150F1E;
-            cSurface              = 0xFF150F1E;
-            cScLowest             = 0xFF100A18;
-            cScLow                = 0xFF1D1530;
-            cSc                   = 0xFF241B38;
-            cScHigh               = 0xFF2A2040;
-            cScHighest            = 0xFF332845;
-            cSurfaceVariant       = 0xFF2A2040;
-            cOnSurface            = 0xFFF2ECFB;
-            cOnSurfaceVariant     = 0xFFB6A6D1;
-            cOutline              = 0xFF8A79A8;
-            cOutlineVariant       = 0xFF3B2F55;
+            cBackground           = 0xFF1B1218;
+            cSurface              = 0xFF1B1218;
+            cScLowest             = 0xFF130B10;
+            cScLow                = 0xFF241A20;
+            cSc                   = 0xFF2A2026;
+            cScHigh               = 0xFF35292F;
+            cScHighest            = 0xFF40343A;
+            cSurfaceVariant       = 0xFF44323B;
+            cOnSurface            = 0xFFF5E6ED;
+            cOnSurfaceVariant     = 0xFFD0B4C1;
+            cOutline              = 0xFF9D838F;
+            cOutlineVariant       = 0xFF4B3843;
         } else {
-            // 葡萄气泡 · 浅色
-            cPrimary              = 0xFF8B5CF6;
+            cPrimary              = 0xFF07C160;
             cOnPrimary            = 0xFFFFFFFF;
-            cPrimaryContainer     = 0xFFEADDFF;
-            cOnPrimaryContainer   = 0xFF21005D;
-            cSecondary            = 0xFF7C6BA8;
+            cPrimaryContainer     = 0xFF9EF2C8;
+            cOnPrimaryContainer   = 0xFF00391F;
+            cSecondary            = 0xFF4E6356;
             cOnSecondary          = 0xFFFFFFFF;
-            cSecondaryContainer   = 0xFFE8DEF8;
-            cOnSecondaryContainer = 0xFF21005D;
-            cTertiary             = 0xFFD5497E;
+            cSecondaryContainer   = 0xFFD0E8D4;
+            cOnSecondaryContainer = 0xFF0C1F14;
+            cTertiary             = 0xFF3D6373;
             cOnTertiary           = 0xFFFFFFFF;
-            cTertiaryContainer    = 0xFFFFD9E6;
-            cOnTertiaryContainer  = 0xFF3A001C;
-            cPrimaryDark          = 0xFF7C3AED;
+            cTertiaryContainer    = 0xFFC1E8FA;
+            cOnTertiaryContainer  = 0xFF001F29;
+            cPrimaryDark          = 0xFF07C160;
 
-            cBackground           = 0xFFFBF9FF;
-            cSurface              = 0xFFFBF9FF;
+            cBackground           = 0xFFFBF8F6;
+            cSurface              = 0xFFFBF8F6;
             cScLowest             = 0xFFFFFFFF;
-            cScLow                = 0xFFF6F1FF;
-            cSc                   = 0xFFF1EAFE;
-            cScHigh               = 0xFFECE3FB;
-            cScHighest            = 0xFFE7DCF8;
-            cSurfaceVariant       = 0xFFE6DCF7;
-            cOnSurface            = 0xFF2A2340;
-            cOnSurfaceVariant     = 0xFF6F6389;
-            cOutline              = 0xFF9A8CB8;
-            cOutlineVariant       = 0xFFDCCFF2;
+            cScLow                = 0xFFF7F3F1;
+            cSc                   = 0xFFF2ECEA;
+            cScHigh               = 0xFFECE5E3;
+            cScHighest            = 0xFFE6DEDC;
+            cSurfaceVariant       = 0xFFF1DEE4;
+            cOnSurface            = 0xFF221A1E;
+            cOnSurfaceVariant     = 0xFF6B5560;
+            cOutline              = 0xFF9C818D;
+            cOutlineVariant       = 0xFFE4CBD5;
         }
     }
 
@@ -355,12 +448,17 @@ public class AppColors {
         return false;
     }
 
-    /** 页面 onResume 时调用：微信内切换深色模式后刷新令牌（旧静态常量不失效，新 getter 立即跟随） */
+    /** 页面 onResume 时调用：微信内切换深色模式/系统壁纸后刷新令牌（旧静态常量不失效，新 getter 立即跟随） */
     public static void refresh() {
         try {
             boolean prev = sDarkMode;
             sDarkMode = detectDarkMode();
-            if (prev != sDarkMode) {
+            boolean changed = prev != sDarkMode;
+            if (sPalette == PALETTE_DYNAMIC) {
+                int seed = detectDynamicSeed();
+                if (seed != 0 && seed != sLastDynamicSeed) changed = true;
+            }
+            if (changed) {
                 recomputePalette();
                 notifyThemeChanged();
             }
@@ -405,87 +503,84 @@ public class AppColors {
     public static void init(Activity act) { refresh(); }
     public static boolean isDarkMode() { return sDarkMode; }
 
-    // ==================== 葡萄气泡 · 流光渐变令牌（v1067 全局锁定） ====================
-    /** 渐变起始（紫） */
-    public static int gradientStart() { return sDarkMode ? 0xFF9F7BFF : 0xFF8B5CF6; }
-    /** 渐变中段（淡紫） */
-    public static int gradientMid()   { return sDarkMode ? 0xFFDCC3FF : 0xFFD8B4FE; }
-    /** 渐变收尾（粉） */
-    public static int gradientEnd()   { return sDarkMode ? 0xFFFFB8D4 : 0xFFFFAFCC; }
-    /** 渐变上的文字/图标色（白） */
-    public static int onGradient()    { return 0xFFFFFFFF; }
-    /** 三色流光循环（start → mid → end） */
+    // ==================== M3 Expressive · 品牌渐变令牌 ====================
+    // 去渐变：渐变三色统一返回主色 primary，所有依赖这些令牌的渐变自动变为纯色。
+    public static int gradientStart() { return primary(); }
+    public static int gradientMid()   { return primary(); }
+    public static int gradientEnd()   { return primary(); }
+    public static int onGradient()    { return onPrimary(); }
+    /** 品牌渐变循环色（跟随主色） */
     public static int[] gradientColors() {
-        return new int[]{ gradientStart(), gradientMid(), gradientEnd() };
+        return new int[]{ primary(), primary(), primary() };
     }
-    /** 渐变按压态（用于状态层/按下变暗） */
-    public static int gradientPressed() { return sDarkMode ? 0xFF8A5CF0 : 0xFF6D28D9; }
+    /** 品牌色按压态（主色加深） */
+    public static int gradientPressed() { return primaryDark(); }
 
-    // ==================== M3 色彩角色（浅色方案 · 葡萄气泡） ====================
-    private static final int L_PRIMARY            = 0xFF8B5CF6;
-    private static final int L_ON_PRIMARY         = 0xFFFFFFFF;
-    private static final int L_PRIMARY_CONTAINER  = 0xFFEADDFF;
-    private static final int L_ON_PRIMARY_CONTAINER = 0xFF21005D;
-    private static final int L_SECONDARY          = 0xFF7C6BA8;
+// ==================== M3 色彩角色（浅色方案 · Expressive 中性暖白） ====================
+    private static final int L_PRIMARY            = 0xFF07C160;
+    private static final int L_ON_PRIMARY        = 0xFFFFFFFF;
+    private static final int L_PRIMARY_CONTAINER  = 0xFF9EF2C8;
+    private static final int L_ON_PRIMARY_CONTAINER = 0xFF00391F;
+    private static final int L_SECONDARY          = 0xFF4E6356;
     private static final int L_ON_SECONDARY       = 0xFFFFFFFF;
-    private static final int L_SECONDARY_CONTAINER = 0xFFE8DEF8;
-    private static final int L_ON_SECONDARY_CONTAINER = 0xFF21005D;
-    private static final int L_TERTIARY           = 0xFFD5497E;
+    private static final int L_SECONDARY_CONTAINER = 0xFFD0E8D4;
+    private static final int L_ON_SECONDARY_CONTAINER = 0xFF0C1F14;
+    private static final int L_TERTIARY           = 0xFF3D6373;
     private static final int L_ON_TERTIARY        = 0xFFFFFFFF;
-    private static final int L_TERTIARY_CONTAINER = 0xFFFFD9E6;
-    private static final int L_ON_TERTIARY_CONTAINER = 0xFF3A001C;
+    private static final int L_TERTIARY_CONTAINER = 0xFFC1E8FA;
+    private static final int L_ON_TERTIARY_CONTAINER = 0xFF001F29;
     private static final int L_ERROR              = 0xFFBA1A1A;
     private static final int L_ON_ERROR           = 0xFFFFFFFF;
     private static final int L_ERROR_CONTAINER    = 0xFFFFDAD6;
     private static final int L_ON_ERROR_CONTAINER = 0xFF410002;
-    private static final int L_BACKGROUND         = 0xFFFBF9FF;
-    private static final int L_ON_BACKGROUND      = 0xFF2A2340;
-    private static final int L_SURFACE            = 0xFFFBF9FF;
-    private static final int L_ON_SURFACE         = 0xFF2A2340;
-    private static final int L_SURFACE_VARIANT    = 0xFFE6DCF7;
-    private static final int L_ON_SURFACE_VARIANT = 0xFF6F6389;
+    private static final int L_BACKGROUND         = 0xFFF8F8F8;
+    private static final int L_ON_BACKGROUND      = 0xFF1A1C1B;
+    private static final int L_SURFACE            = 0xFFF8F8F8;
+    private static final int L_ON_SURFACE        = 0xFF1A1C1B;
+    private static final int L_SURFACE_VARIANT    = 0xFFE3E3E3;
+    private static final int L_ON_SURFACE_VARIANT = 0xFF444746;
     private static final int L_SURFACE_CONTAINER_LOWEST = 0xFFFFFFFF;
-    private static final int L_SURFACE_CONTAINER_LOW = 0xFFF6F1FF;
-    private static final int L_SURFACE_CONTAINER = 0xFFF1EAFE;
-    private static final int L_SURFACE_CONTAINER_HIGH = 0xFFECE3FB;
-    private static final int L_SURFACE_CONTAINER_HIGHEST = 0xFFE7DCF8;
-    private static final int L_OUTLINE            = 0xFF9A8CB8;
-    private static final int L_OUTLINE_VARIANT    = 0xFFDCCFF2;
-    private static final int L_INVERSE_SURFACE    = 0xFF2E2440;
-    private static final int L_INVERSE_ON_SURFACE = 0xFFF1EAFE;
+    private static final int L_SURFACE_CONTAINER_LOW = 0xFFF3F3F3;
+    private static final int L_SURFACE_CONTAINER = 0xFFEDEDED;
+    private static final int L_SURFACE_CONTAINER_HIGH = 0xFFE6E6E6;
+    private static final int L_SURFACE_CONTAINER_HIGHEST = 0xFFE0E0E0;
+    private static final int L_OUTLINE            = 0xFF79747E;
+    private static final int L_OUTLINE_VARIANT    = 0xFFCAC4D0;
+    private static final int L_INVERSE_SURFACE    = 0xFF303030;
+    private static final int L_INVERSE_ON_SURFACE = 0xFFF5F5F5;
 
-    // ==================== M3 色彩角色（暗色方案 · 葡萄气泡） ====================
-    private static final int D_PRIMARY            = 0xFFC9A9FF;
-    private static final int D_ON_PRIMARY         = 0xFF2A1550;
-    private static final int D_PRIMARY_CONTAINER  = 0xFF4A2A82;
-    private static final int D_ON_PRIMARY_CONTAINER = 0xFFEADDFF;
-    private static final int D_SECONDARY          = 0xFFCFC0EA;
-    private static final int D_ON_SECONDARY       = 0xFF332B45;
-    private static final int D_SECONDARY_CONTAINER = 0xFF453A5C;
-    private static final int D_ON_SECONDARY_CONTAINER = 0xFFE8DEF8;
-    private static final int D_TERTIARY           = 0xFFFFB0CE;
-    private static final int D_ON_TERTIARY        = 0xFF560027;
-    private static final int D_TERTIARY_CONTAINER = 0xFF7A3A57;
-    private static final int D_ON_TERTIARY_CONTAINER = 0xFFFFD9E6;
+// ==================== M3 色彩角色（暗色方案 · Expressive 中性深灰） ====================
+    private static final int D_PRIMARY            = 0xFF3DD68C;
+    private static final int D_ON_PRIMARY         = 0xFF00391F;
+    private static final int D_PRIMARY_CONTAINER  = 0xFF005234;
+    private static final int D_ON_PRIMARY_CONTAINER = 0xFFB3F5D3;
+    private static final int D_SECONDARY          = 0xFFB4CCBC;
+    private static final int D_ON_SECONDARY       = 0xFF21382A;
+    private static final int D_SECONDARY_CONTAINER = 0xFF37513F;
+    private static final int D_ON_SECONDARY_CONTAINER = 0xFFD0E8D4;
+    private static final int D_TERTIARY           = 0xFFA6D8C2;
+    private static final int D_ON_TERTIARY        = 0xFF00382A;
+    private static final int D_TERTIARY_CONTAINER = 0xFF00513D;
+    private static final int D_ON_TERTIARY_CONTAINER = 0xFFB0F2DA;
     private static final int D_ERROR              = 0xFFFFB4AB;
     private static final int D_ON_ERROR           = 0xFF690005;
     private static final int D_ERROR_CONTAINER    = 0xFF93000A;
     private static final int D_ON_ERROR_CONTAINER = 0xFFFFDAD6;
-    private static final int D_BACKGROUND         = 0xFF150F1E;
-    private static final int D_ON_BACKGROUND      = 0xFFF2ECFB;
-    private static final int D_SURFACE            = 0xFF150F1E;
-    private static final int D_ON_SURFACE         = 0xFFF2ECFB;
-    private static final int D_SURFACE_VARIANT    = 0xFF2A2040;
-    private static final int D_ON_SURFACE_VARIANT = 0xFFB6A6D1;
-    private static final int D_SURFACE_CONTAINER_LOWEST = 0xFF100A18;
-    private static final int D_SURFACE_CONTAINER_LOW = 0xFF1D1530;
-    private static final int D_SURFACE_CONTAINER = 0xFF241B38;
-    private static final int D_SURFACE_CONTAINER_HIGH = 0xFF2A2040;
-    private static final int D_SURFACE_CONTAINER_HIGHEST = 0xFF332845;
-    private static final int D_OUTLINE            = 0xFF8A79A8;
-    private static final int D_OUTLINE_VARIANT    = 0xFF3B2F55;
-    private static final int D_INVERSE_SURFACE    = 0xFFEADDFF;
-    private static final int D_INVERSE_ON_SURFACE = 0xFF2A1550;
+    private static final int D_BACKGROUND         = 0xFF121212;
+    private static final int D_ON_BACKGROUND      = 0xFFF0F0F0;
+    private static final int D_SURFACE            = 0xFF121212;
+    private static final int D_ON_SURFACE         = 0xFFF0F0F0;
+    private static final int D_SURFACE_VARIANT    = 0xFF3A3A3A;
+    private static final int D_ON_SURFACE_VARIANT = 0xFFC9C9C9;
+    private static final int D_SURFACE_CONTAINER_LOWEST = 0xFF0E0E0E;
+    private static final int D_SURFACE_CONTAINER_LOW = 0xFF1A1A1A;
+    private static final int D_SURFACE_CONTAINER = 0xFF212121;
+    private static final int D_SURFACE_CONTAINER_HIGH = 0xFF2A2A2A;
+    private static final int D_SURFACE_CONTAINER_HIGHEST = 0xFF333333;
+    private static final int D_OUTLINE            = 0xFF9B9B9B;
+    private static final int D_OUTLINE_VARIANT    = 0xFF494949;
+    private static final int D_INVERSE_SURFACE    = 0xFF3A3A3A;
+    private static final int D_INVERSE_ON_SURFACE = 0xFFF5F5F5;
 
     // ==================== M3 getter（暗色实时跟随） ====================
     private static boolean custom() { return sPalette != PALETTE_GREEN; }
@@ -528,8 +623,8 @@ public class AppColors {
     public static int stateLayerOnPrimary() { return 0x14FFFFFF; }
 
     // ==================== 便捷别名（M3 角色映射，供组件工厂使用） ====================
-    /** 主色按压深阶（渐变/按压态用）：浅色 #7C3AED，暗色 #9F7BFF */
-    public static int primaryDark()  { return custom() ? cPrimaryDark : (sDarkMode ? 0xFF9F7BFF : 0xFF7C3AED); }
+    /** 主色按压深阶（渐变/按压态用）：糖果粉深阶 #D9639D */
+    public static int primaryDark()  { return custom() ? cPrimaryDark : (sDarkMode ? 0xFF3DD68C : 0xFF07C160); }
     /** 三级文字（弱化）：M3 outline */
     public static int textTertiary() { return outline(); }
     /** 主色底上的文字/图标：M3 onPrimary */
@@ -610,15 +705,17 @@ public class AppColors {
     public static final int SWITCH_HEIGHT_DP = 32;
     public static final int SWITCH_RADIUS_DP = 16;
     public static final int ITEM_HEIGHT_DP = 58;
-    public static final int DIALOG_RADIUS_DP = 28;   // M3 extra-large shape
+    public static final int DIALOG_RADIUS_DP = 28;   // 全局弹窗/页面浮层统一外层圆角（M3 Expressive）
 
-    // ==================== M3 形状阶梯（dp） ====================
+    // ==================== M3 Expressive 形状阶梯（dp） ====================
     public static final int SHAPE_XS_DP = 4;
     public static final int SHAPE_SM_DP = 8;
     public static final int SHAPE_MD_DP = 12;
     public static final int SHAPE_LG_DP = 16;
+    public static final int SHAPE_CARD_DP = 24;     // 卡片圆角
+    public static final int SHAPE_INPUT_DP = 16;    // 输入框圆角
     public static final int SHAPE_XL_DP = 28;
-    public static final int SHAPE_FULL_DP = 999;
+    public static final int SHAPE_FULL_DP = 999;    // 药丸/全圆角
 
     // ==================== M3 间距阶梯（dp） ====================
     public static final int SPACE_XS_DP = 4;
@@ -626,10 +723,11 @@ public class AppColors {
     public static final int SPACE_MD_DP = 12;
     public static final int SPACE_LG_DP = 16;
     public static final int SPACE_XL_DP = 24;
+    public static final int SPACE_CARD_GAP_DP = 13;  // 页面级卡片垂直间距
 
     public static final int TOP_BAR_HEIGHT_DP = 52;   // M3 top app bar
-    public static final int ROW_HEIGHT_DP = 50;       // M3 list item (one line)
-    public static final int BUTTON_HEIGHT_DP = 40;    // M3 button
+    public static final int ROW_HEIGHT_DP = 56;       // M3 list item（≥48dp 触控区）
+    public static final int BUTTON_HEIGHT_DP = 48;    // M3 button（≥48dp 触控区）
 
     // ==================== M3 字阶（sp） ====================
     public static final float TYPE_HEADLINE_SMALL = 24f;
@@ -642,6 +740,9 @@ public class AppColors {
     public static final float TYPE_LABEL_LARGE = 14f;
     public static final float TYPE_LABEL_MEDIUM = 12f;
     public static final float TYPE_LABEL_SMALL = 11f;
+    // M3 Expressive 分区标题（粗体 18–20sp）
+    public static final float TYPE_SECTION_TITLE = 19f;        // 分区标题
+    public static final float TYPE_SECTION_TITLE_LARGE = 20f; // 页面大标题/分区大标题
 
     // ==================== 旧动态方法（全部保留，语义切换到 M3 角色） ====================
     public static int bg()          { return surfaceContainerLow(); }
@@ -663,6 +764,49 @@ public class AppColors {
     public static int whiteTextOnAccent() { return sDarkMode ? D_WHITE_TEXT : L_WHITE_TEXT; }
     public static int bubbleSelfBg()  { return sDarkMode ? D_PRIMARY_CONTAINER : L_PRIMARY_CONTAINER; }
     public static int bubbleOtherBg() { return sDarkMode ? D_SURFACE_CONTAINER_HIGH : L_SURFACE_CONTAINER_HIGH; }
+
+    // ==================== AudioMix 时间线面板（M3 动态角色 · 自绘专用） ====================
+    public static int timelinePanelTop()      { return surfaceContainerHigh(); }
+    public static int timelinePanelBottom()    { return surfaceContainerHighest(); }
+    public static int timelineRulerTop()       { return surfaceContainerLowest(); }
+    public static int timelineRulerBottom()    { return surfaceContainerLow(); }
+    public static int timelinePink()            { return primary(); }              // 播放头 / 剪辑游标高亮
+    public static int timelinePinkText()        { return onPrimaryContainer(); }   // 刻度 / 空状态文字
+    public static int timelinePinkSoft()        { return primaryContainer(); }         // 片段名
+    public static int timelinePinkPale()        { return secondaryContainer(); }     // 缩放标签
+    public static int timelineAmber()           { return 0xFFFFE08A; }            // 剪辑游标
+    public static int timelineGridMinor()       { return (0x20 << 24) | (primary() & 0x00FFFFFF); }
+    public static int timelineGridMajor()       { return (0x30 << 24) | (tertiary() & 0x00FFFFFF); }
+    public static int timelineBlockBase()       { return 0x26FFFFFF; }
+    public static int timelineDimOverlay()       { return 0x6E0A0612; }
+    public static int timelineDimPlain()       { return 0x2E000000; }
+    public static int timelineDeleteBadge()   { return 0xFFE0455F; }
+    public static int timelineBadgeDark()       { return 0xB30A0612; }
+    public static int timelineWhite()           { return 0xFFFFFFFF; }
+    public static int timelineBarAlt1()       { return secondary(); }
+    public static int timelineBarAlt2()       { return tertiary(); }
+
+    /** AI 图标分类调色板（M3 动态角色色，10 个分类图标在主题色系内轮换）。 */
+    public static int[] aiIconPalette() {
+        int p = primary();
+        int t = tertiary();
+        int s = secondary();
+        int pc = primaryContainer();
+        int tc = tertiaryContainer();
+        int sc = secondaryContainer();
+        return new int[]{
+                p,   // spark 总开关
+                t,   // cloud 服务商
+                p,   // chip 模型/核心
+                s,   // user 人设/会话
+                t,   // bell 唤醒/@
+                p,   // voice 语音
+                s,   // eq 音色
+                t,   // db 记忆
+                p,   // layers 模板
+                s    // sliders 独立配置
+        };
+    }
 
     private AppColors() {}
 }

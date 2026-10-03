@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.view.View;
@@ -38,8 +39,8 @@ public class CandyUi {
         int w = (int) (AppColors.SWITCH_WIDTH_DP * d);
         int h = (int) (AppColors.SWITCH_HEIGHT_DP * d);
         int trackR = (int) (AppColors.SWITCH_RADIUS_DP * d);
-        int thumbOff = (int) (18 * d);
-        int thumbOn = (int) (24 * d);
+        int thumbOff = (int) (20 * d);
+        int thumbOn = (int) (26 * d);
         sw.setMinimumWidth(w);
         sw.setMinimumHeight(h);
         sw.setPadding(0, 0, 0, 0);
@@ -62,33 +63,46 @@ public class CandyUi {
             off.setStroke(dp(ctx, 2), AppColors.outline());
             off.setSize(w, h);
             track.addState(new int[]{-android.R.attr.state_checked}, off);
-            FlowingGradientDrawable on = new FlowingGradientDrawable(
-                    AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+            // 打开状态轨道：纯色 primary 填充，圆角胶囊形。
+            GradientDrawable on = new GradientDrawable();
+            on.setColor(AppColors.primary());
             on.setCornerRadius(trackR);
             on.setSize(w, h);
             track.addState(new int[]{android.R.attr.state_checked}, on);
             sw.setTrackDrawable(track);
 
-            // thumb 外圈圆环：关=空心圆环；开=白色本体 + 圆环。
+            // thumb：白色圆形 + 底部浅阴影，开/关状态一致。
             StateListDrawable thumb = new StateListDrawable();
-            GradientDrawable tOff = new GradientDrawable();
-            tOff.setShape(GradientDrawable.OVAL);
-            tOff.setColor(0x00000000);
-            tOff.setStroke(dp(ctx, 2), AppColors.outline());
-            tOff.setSize(thumbOff, thumbOff);
-            thumb.addState(new int[]{-android.R.attr.state_checked}, tOff);
-            GradientDrawable tOn = new GradientDrawable();
-            tOn.setShape(GradientDrawable.OVAL);
-            tOn.setColor(AppColors.onColor(AppColors.switchColor()));
-            tOn.setStroke(dp(ctx, 2), AppColors.outline());
-            tOn.setSize(thumbOn, thumbOn);
-            thumb.addState(new int[]{android.R.attr.state_checked}, tOn);
+            thumb.addState(new int[]{-android.R.attr.state_checked}, whiteThumb(ctx, thumbOff));
+            thumb.addState(new int[]{android.R.attr.state_checked}, whiteThumb(ctx, thumbOn));
             sw.setThumbDrawable(thumb);
 
             sw.setBackground(null);
             sw.setSwitchMinWidth(w);
         } catch (Throwable ignored) {}
         return sw;
+    }
+
+    /**
+     * 白色圆形 thumb：底部叠加 1dp 半透明阴影层，形成浅投影。
+     * 仅使用 framework drawable，兼容微信宿主进程（无 Material 依赖）。
+     */
+    private static Drawable whiteThumb(Context ctx, int sizePx) {
+        int shadow = Math.max(1, dp(ctx, 1));
+        GradientDrawable shadowLayer = new GradientDrawable();
+        shadowLayer.setShape(GradientDrawable.OVAL);
+        shadowLayer.setColor(0x33000000);
+        shadowLayer.setSize(sizePx, sizePx);
+
+        GradientDrawable body = new GradientDrawable();
+        body.setShape(GradientDrawable.OVAL);
+        body.setColor(0xFFFFFFFF);
+        int inner = Math.max(sizePx - shadow * 2, 1);
+        body.setSize(inner, inner);
+
+        LayerDrawable ld = new LayerDrawable(new Drawable[]{shadowLayer, body});
+        ld.setLayerInset(1, shadow, 0, shadow, shadow * 2);
+        return ld;
     }
 
     /**
@@ -102,33 +116,34 @@ public class CandyUi {
         gd.setShape(GradientDrawable.RECTANGLE);
         float d = Resources.getSystem().getDisplayMetrics().density;
         gd.setCornerRadius(AppColors.DIALOG_RADIUS_DP * d);
-        // v1067 葡萄气泡：页面浮层用极淡的紫调纵向渐变替代纯色，增强层次
-        gd.setOrientation(GradientDrawable.Orientation.TOP_BOTTOM);
-        gd.setColors(new int[]{AppColors.surfaceContainerLow(), AppColors.surface()});
+        // 去渐变：页面浮层统一纯色 surfaceContainerLowest 底
+        gd.setColor(AppColors.surfaceContainerLowest());
         gd.setStroke(Math.max(1, (int) (1.0f * d + 0.5f)), AppColors.outlineVariant());
         return gd;
     }
 
-    /** v1067：流光渐变圆角底（动画），用于按钮/徽标/FAB 等主色面 */
+/** v3.0.101：糖果粉纯色圆角底（保留动画接口），用于按钮/徽标/FAB 等主色面 */
     public static Drawable gradientBg(Context ctx, float radiusDp) {
-        FlowingGradientDrawable fg = new FlowingGradientDrawable(
-                AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
-        fg.setCornerRadius(dp(ctx, radiusDp));
-        return fg;
+        GradientDrawable gd = new GradientDrawable();
+        gd.setShape(GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(dp(ctx, radiusDp));
+        gd.setColor(AppColors.primary());
+        return gd;
     }
 
-    /** v1067：三色渐变圆角底（流光动画），用于按钮/徽标/卡片等主色面 */
+    /** v3.0.101：糖果粉纯色圆角底，用于按钮/徽标/卡片等主色面 */
     public static Drawable gradientBgStatic(Context ctx, float radiusDp) {
         return gradientBg(ctx, radiusDp);
     }
 
-    /** v1067：顶栏/Hero 流光渐变底——仅上方圆角，贴合页面浮层顶部 */
+    /** v3.0.101：顶栏/Hero 糖果粉纯色底——仅上方圆角，贴合页面浮层顶部 */
     public static Drawable topBarGradientBg(Context ctx) {
-        FlowingGradientDrawable fg = new FlowingGradientDrawable(
-                AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+        GradientDrawable gd = new GradientDrawable();
+        gd.setShape(GradientDrawable.RECTANGLE);
         float r = AppColors.DIALOG_RADIUS_DP * ctx.getResources().getDisplayMetrics().density;
-        fg.setCornerRadii(new float[]{r, r, 0f, 0f});
-        return fg;
+        gd.setCornerRadii(new float[]{r, r, r, r, 0f, 0f, 0f, 0f});
+        gd.setColor(AppColors.primary());
+        return gd;
     }
 
     /**
@@ -139,7 +154,7 @@ public class CandyUi {
         if (v == null) return;
         try {
             float d = v.getResources().getDisplayMetrics().density;
-            v.setElevation(8f * d);
+            v.setElevation(12f * d);
             if (android.os.Build.VERSION.SDK_INT >= 21) {
                 v.setOutlineProvider(android.view.ViewOutlineProvider.BACKGROUND);
             }
@@ -147,20 +162,11 @@ public class CandyUi {
         }
     }
 
-    /** M3 filled 卡片：surfaceContainerLow 底 + 12dp 圆角 */
+    /** M3 Expressive filled 卡片：surfaceContainerLowest（浅色纯白）底 + 24dp 大圆角 */
     public static GradientDrawable cardBg(Context ctx) {
         GradientDrawable gd = new GradientDrawable();
         gd.setShape(GradientDrawable.RECTANGLE);
-        gd.setCornerRadius(dp(ctx, AppColors.SHAPE_MD_DP));
-        gd.setColor(AppColors.surfaceContainerLow());
-        return gd;
-    }
-
-    /** M3 elevated 卡片：surfaceContainerLowest 底 + 12dp 圆角 + 细描边（暗色下区分层级） */
-    public static GradientDrawable cardElevatedBg(Context ctx) {
-        GradientDrawable gd = new GradientDrawable();
-        gd.setShape(GradientDrawable.RECTANGLE);
-        gd.setCornerRadius(dp(ctx, AppColors.SHAPE_MD_DP));
+        gd.setCornerRadius(dp(ctx, AppColors.SHAPE_CARD_DP));
         gd.setColor(AppColors.surfaceContainerLowest());
         if (AppColors.isDarkMode()) {
             gd.setStroke(dp(ctx, 0.5f), AppColors.outlineVariant());
@@ -168,50 +174,80 @@ public class CandyUi {
         return gd;
     }
 
-    /** M3 filter chip：选中流光渐变底 / 未选中 surfaceContainerLow + outline 描边 */
+    /** M3 Expressive elevated 卡片：surfaceContainerLowest 底 + 24dp 大圆角 + 细描边（暗色下区分层级） */
+    public static GradientDrawable cardElevatedBg(Context ctx) {
+        GradientDrawable gd = new GradientDrawable();
+        gd.setShape(GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(dp(ctx, AppColors.SHAPE_CARD_DP));
+        gd.setColor(AppColors.surfaceContainerLowest());
+        if (AppColors.isDarkMode()) {
+            gd.setStroke(dp(ctx, 0.5f), AppColors.outlineVariant());
+        }
+        return gd;
+    }
+
+    /** M3 Expressive 行背景：surfaceContainerLow 底 + 16dp 圆角（独立行/列表行） */
+    public static GradientDrawable rowBg(Context ctx) {
+        return roundedRect(AppColors.surfaceContainerLow(), dp(ctx, AppColors.SHAPE_LG_DP));
+    }
+
+    /** M3 Expressive 指定圆角卡片底（供页面自定义卡片半径时使用） */
+    public static GradientDrawable cardBgRadius(Context ctx, float radiusDp) {
+        GradientDrawable gd = new GradientDrawable();
+        gd.setShape(GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(dp(ctx, radiusDp));
+        gd.setColor(AppColors.surfaceContainerLowest());
+        if (AppColors.isDarkMode()) {
+            gd.setStroke(dp(ctx, 0.5f), AppColors.outlineVariant());
+        }
+        return gd;
+    }
+
+    /** M3 Expressive filter chip：药丸全圆角，选中主色纯色 / 未选中 surfaceContainerLow + outline 描边 */
     public static Drawable pillBg(boolean selected, Context ctx) {
         if (selected) {
-            FlowingGradientDrawable fg = new FlowingGradientDrawable(
-                    AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
-            fg.setCornerRadius(dp(ctx, AppColors.SHAPE_SM_DP));
-            fg.setPhaseOffset(0.35f);
-            return fg;
+            GradientDrawable gd = new GradientDrawable();
+            gd.setShape(GradientDrawable.RECTANGLE);
+            gd.setCornerRadius(dp(ctx, AppColors.SHAPE_FULL_DP));
+            gd.setColor(AppColors.primary());
+            return gd;
         }
         GradientDrawable gd = new GradientDrawable();
         gd.setShape(GradientDrawable.RECTANGLE);
-        gd.setCornerRadius(dp(ctx, AppColors.SHAPE_SM_DP));
+        gd.setCornerRadius(dp(ctx, AppColors.SHAPE_FULL_DP));
         gd.setColor(AppColors.surfaceContainerLow());
         gd.setStroke(dp(ctx, 1), AppColors.outline());
         return gd;
     }
 
-    /** M3 标签底：primaryContainer（旧糖果粉位） */
+    /** M3 标签底：primaryContainer 底 + 8dp 圆角 */
     public static GradientDrawable tagPinkBg(Context ctx) {
-        return roundedRect(AppColors.primaryContainer(), dp(ctx, AppColors.SHAPE_XS_DP));
+        return roundedRect(AppColors.primaryContainer(), dp(ctx, AppColors.SHAPE_SM_DP));
     }
 
-    /** M3 标签底：tertiaryContainer（旧柠黄位） */
+    /** M3 标签底：tertiaryContainer 底 + 8dp 圆角 */
     public static GradientDrawable tagYellowBg(Context ctx) {
-        return roundedRect(AppColors.tertiaryContainer(), dp(ctx, AppColors.SHAPE_XS_DP));
+        return roundedRect(AppColors.tertiaryContainer(), dp(ctx, AppColors.SHAPE_SM_DP));
     }
 
-    /** M3 filled text field：surfaceContainerHighest 底 + 12dp 圆角 + outline 描边 */
+    /** M3 filled text field：surfaceContainerHighest 底 + 16dp 圆角 + outline 描边 */
     public static GradientDrawable inputBg(Context ctx) {
-        GradientDrawable gd = roundedRect(AppColors.surfaceContainerHighest(), dp(ctx, AppColors.SHAPE_MD_DP));
+        GradientDrawable gd = roundedRect(AppColors.surfaceContainerHighest(), dp(ctx, AppColors.SHAPE_INPUT_DP));
         gd.setStroke(dp(ctx, 1), AppColors.outlineVariant());
         return gd;
     }
 
-    /** M3 filled button：流光渐变底 + 全圆角 + 状态层涟漪（v1067 葡萄气泡） */
+    /** M3 filled button：糖果粉纯色底 + 全圆角 + 状态层涟漪（v3.0.101） */
     public static Drawable buttonBg(Context ctx) {
         StateListDrawable sd = new StateListDrawable();
-        FlowingGradientDrawable pressed = new FlowingGradientDrawable(
-                AppColors.gradientPressed(), AppColors.gradientMid(), AppColors.gradientEnd());
+        GradientDrawable pressed = new GradientDrawable();
+        pressed.setShape(GradientDrawable.RECTANGLE);
         pressed.setCornerRadius(dp(ctx, AppColors.SHAPE_FULL_DP));
-        pressed.setAnimated(false);
-        FlowingGradientDrawable normal = new FlowingGradientDrawable(
-                AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
+        pressed.setColor(AppColors.gradientPressed());
+        GradientDrawable normal = new GradientDrawable();
+        normal.setShape(GradientDrawable.RECTANGLE);
         normal.setCornerRadius(dp(ctx, AppColors.SHAPE_FULL_DP));
+        normal.setColor(AppColors.primary());
         sd.addState(new int[]{android.R.attr.state_pressed}, pressed);
         sd.addState(new int[]{}, normal);
         return rippleWrap(ctx, sd, AppColors.stateLayerOnPrimary());
@@ -287,12 +323,12 @@ public class CandyUi {
         }
     }
 
-    /** M3 行按压状态层：12% onSurface 涟漪 + 12dp 圆角裁剪 */
+    /** M3 行按压状态层：12% onSurface 涟漪 + 16dp 圆角裁剪 */
     public static Drawable rowPressBg(Context ctx) {
         try {
             GradientDrawable mask = new GradientDrawable();
             mask.setShape(GradientDrawable.RECTANGLE);
-            mask.setCornerRadius(dp(ctx, AppColors.SHAPE_MD_DP));
+            mask.setCornerRadius(dp(ctx, AppColors.SHAPE_LG_DP));
             mask.setColor(AppColors.surfaceContainerLow());
             return new RippleDrawable(
                 android.content.res.ColorStateList.valueOf(AppColors.stateLayerPressed()),
@@ -300,7 +336,7 @@ public class CandyUi {
         } catch (Throwable t) {
             GradientDrawable gd = new GradientDrawable();
             gd.setShape(GradientDrawable.RECTANGLE);
-            gd.setCornerRadius(dp(ctx, AppColors.SHAPE_MD_DP));
+            gd.setCornerRadius(dp(ctx, AppColors.SHAPE_LG_DP));
             gd.setColor(AppColors.stateLayerPressed());
             return gd;
         }

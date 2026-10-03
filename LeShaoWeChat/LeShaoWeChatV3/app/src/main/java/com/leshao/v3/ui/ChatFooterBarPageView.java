@@ -7,6 +7,7 @@ import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import com.leshao.v3.hook.ChatFooterBarHook;
+import com.leshao.v3.ui.widgets.M3Page;
 
 /** 聊天窗口输入框上方快捷按钮功能页（文档《WeChat_ChatFooter_ButtonBar.md》）。 */
 public final class ChatFooterBarPageView {
@@ -16,6 +17,11 @@ public final class ChatFooterBarPageView {
     public static View create(Context ctx, Activity act) {
         float d = ctx.getResources().getDisplayMetrics().density;
         LinearLayout root = PageKit.pageRoot(ctx);
+
+        // v1145: 页面顶部统一分区标题
+        root.addView(M3Page.section(ctx, "输入框快捷按钮",
+                "聊天输入框上方常驻一排快捷按钮"));
+        root.addView(M3Page.spacer(ctx, 2));
 
         LinearLayout cardSwitch = PageKit.makeCard(ctx, d);
         cardSwitch.addView(PageKit.switchRow(ctx, d, "输入框快捷按钮",

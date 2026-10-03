@@ -491,9 +491,9 @@ public final class ChatVoiceSwitchHook {
         row.setPadding(0, (int) (5 * density), 0, (int) (5 * density));
 
         int gap = (int) (6 * density);
-        addButton(row, makeFooterButton(ctx, "音色", 0xFFC026D3, v -> openTtsPage(ctx), noBackground), gap);
-        addButton(row, makeFooterButton(ctx, "群发", 0xFF8B5CF6, v -> openMassSend(ctx), noBackground), gap);
-        addButton(row, makeFooterButton(ctx, "语音", 0xFF9333EA, v -> {
+        addButton(row, makeFooterButton(ctx, "音色", AppColors.primary(), v -> openTtsPage(ctx), noBackground), gap);
+        addButton(row, makeFooterButton(ctx, "群发", AppColors.tertiary(), v -> openMassSend(ctx), noBackground), gap);
+        addButton(row, makeFooterButton(ctx, "语音", AppColors.primary(), v -> {
             // v960: 面板展示异常(BadTokenException 等)必须兜底, 否则点击即闪退
             try {
                 com.leshao.v3.ChatFooterLongPressMenu.showPanelStatic(v);
@@ -502,9 +502,9 @@ public final class ChatVoiceSwitchHook {
             }
         }, noBackground), gap);
         // AI助手：原「更多」菜单中的 AI 助手功能直达
-        addButton(row, makeFooterButton(ctx, "AI助手", 0xFF7C3AED, v -> openAiAssistant(ctx), noBackground), gap);
+        addButton(row, makeFooterButton(ctx, "AI助手", AppColors.secondary(), v -> openAiAssistant(ctx), noBackground), gap);
         // 转发：原「更多」菜单中的自动转发功能直达
-        addButton(row, makeFooterButton(ctx, "转发", 0xFFDB2777, v -> openAutoForward(ctx), noBackground), 0);
+        addButton(row, makeFooterButton(ctx, "转发", AppColors.primary(), v -> openAutoForward(ctx), noBackground), 0);
         return row;
     }
 
@@ -515,6 +515,8 @@ public final class ChatVoiceSwitchHook {
         // 输入框上方按钮统一由「输入框快捷按钮」(ChatFooterBarHook) 注入；
         // 此处仅复用同一条 reconcile 触发链，并兜底清理旧版遗留的按钮行。
         try { ChatFooterBarHook.ensureInjected(act); } catch (Throwable ignored) {}
+        // 微信复用 ChatFooter 时「一键拉群」按钮可能丢失，接入同一 reconcile 链补注入。
+        try { ChatFooterInviteHook.ensureInjected(act); } catch (Throwable ignored) {}
         try {
             View footer = null;
             java.lang.ref.WeakReference<View> cf = sCachedFooter;
@@ -566,9 +568,9 @@ public final class ChatVoiceSwitchHook {
             int borderColor = dark ? mix(color, 0xFF1B1F24, 0.55f) : mix(color, 0xFFFFFFFF, 0.45f);
             int textColor = dark ? mix(color, 0xFFFFFFFF, 0.78f) : color;
 
-            // v1067 葡萄气泡：同色系浅底也加入流光，整体动起来
-            com.leshao.v3.ui.FlowingGradientDrawable bg = new com.leshao.v3.ui.FlowingGradientDrawable(
-                    bgColor, borderColor, bgColor);
+            // v1148 去渐变：纯色底 + 描边（此前为三色流动渐变）
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(bgColor);
             bg.setCornerRadius(dp(18, ctx));
             bg.setStroke(dp(1, ctx), borderColor);
             btn.setBackground(bg);

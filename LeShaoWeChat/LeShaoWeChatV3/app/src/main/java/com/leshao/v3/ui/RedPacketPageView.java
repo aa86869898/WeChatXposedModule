@@ -21,6 +21,11 @@ public final class RedPacketPageView {
         LinearLayout root = PageKit.pageRoot(ctx);
         RedPacketHook.updateConfig();
 
+        // v1145: 页面顶部统一分区标题
+        root.addView(M3Page.section(ctx, "自动抢红包",
+                "纯后台解析红包消息并自动领取，内置风控策略"));
+        root.addView(M3Page.spacer(ctx, 2));
+
         LinearLayout cardSwitch = PageKit.makeCard(ctx, d);
         cardSwitch.addView(PageKit.switchRow(ctx, d, "自动抢红包",
                 "纯后台解析红包消息并自动领取", RedPacketHook.isEnabled(),

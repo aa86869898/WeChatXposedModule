@@ -19,7 +19,7 @@
  *           + 300ms 兜底轮询(仅在主页 Activity 处于前台时运行)。
  *
  * 保留: 文档符号仅用于 diagSymbols() 诊断打印, 不参与任何判定。
- * 保留: 葡萄气泡图标样式、wm_prefs.corner_menu 开关、点击弹出的快捷菜单。
+ * 保留: 糖果粉图标样式、wm_prefs.corner_menu 开关、点击弹出的快捷菜单。
  * ============================================================
  */
 package com.leshao.v3;
@@ -40,6 +40,7 @@ import android.view.WindowManager;
 import android.widget.ImageView;
 
 import com.leshao.v3.hook.VersionCompat;
+import com.leshao.v3.ui.AppColors;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
@@ -393,24 +394,25 @@ public class CornerMenu {
     // 图标
     // ================================================================
 
-    /** 绘制图标(葡萄气泡: 紫→淡紫→粉 流光渐变)。已锁定样式 02「四宫格」 */
+    /** 绘制图标(颜色跟随 AppColors 动态主色)。已锁定样式 02「四宫格」 */
     private static void createBitmaps() {
         int size = 128;
         Paint paint = new Paint();
         paint.setStyle(Paint.Style.FILL);
         paint.setAntiAlias(true);
 
+        int primary = AppColors.primary();
         sBitmapLight = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(sBitmapLight);
         paint.setShader(new android.graphics.LinearGradient(0f, 0f, size, size,
-                new int[]{0xFF8B5CF6, 0xFFD8B4FE, 0xFFFFAFCC}, null,
+                new int[]{primary, primary, primary}, null,
                 android.graphics.Shader.TileMode.CLAMP));
         drawGrid(canvas, paint);
 
         sBitmapDark = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         canvas = new Canvas(sBitmapDark);
         paint.setShader(new android.graphics.LinearGradient(0f, 0f, size, size,
-                new int[]{0xFF9F7BFF, 0xFFDCC3FF, 0xFFFFB8D4}, null,
+                new int[]{primary, primary, primary}, null,
                 android.graphics.Shader.TileMode.CLAMP));
         drawGrid(canvas, paint);
     }

@@ -6,8 +6,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.provider.OpenableColumns;
@@ -32,11 +30,26 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /**
- * 自定义聊天气泡 —— 文档《修改聊天气泡WeChatChatBubbleReplace.md》方案 A。
+ * 自定义聊天气泡替换。
  *
- * <p>Hook X2C 资源解析包装层 {@code kw5.g.r(Context, View, String, String value, int resId)}，
- * 按 value 字符串匹配 {@code @drawable/chatfrom_bg}（收到）/ {@code @drawable/chatto_bg}（发出），
- * 返回用户通过系统文件管理器选择的图片。开关在「联系人和群聊」页，设置页分别选择收/发气泡图。</p>
+ * <p>v3.0.100 根因修复（依据《微信聊天对话气泡替换精准深挖报告》§0.1）：文本气泡承载视图
+ * {@code com.tencent.mm.ui.widget.MMNeat7extView}（继承 {@code NeatTextView extends android.view.View}）
+ * 自己<b>重写</b>了 {@code setBackgroundResource(int)} 与 {@code setBackground(Drawable)}，
+ * Java 虚分派直接进入其 override，<b>永不落到 {@code android.view.View} 实现</b>。
+ * 因此旧实现对基类 {@code View.setBackground*} 的 hook 对文本气泡一次都不触发——这是
+ * 「自定义文字消息气泡替换不生效」的真正断点。</p>
+ *
+ * <p>修复策略（报告 §3 方案 1，唯一全场景可靠）：</p>
+ * <ol>
+ *   <li>直接对真实类 {@code MMNeat7extView} 的 {@code setBackgroundResource(int)} /
+ *       {@code setBackground(Drawable)} 安装 hook；</li>
+ *   <li>{@code setBackgroundResource} 的 after 阶段按 resId 白名单（报告 §2：普通/发送中/链接共 6 个）
+ *       判定收/发方向，覆盖为用户选定的气泡图片；</li>
+ *   <li>自定义图片统一由 {@link BubbleDrawableFactory} 构造成 native 9-patch，
+ *       保证 MMNeat7extView 的测量/内边距与拉伸正确；</li>
+ *   <li>同时保留基类 / ImageView / ViewHolder 绑定方法 / onLayout 兜底，
+ *       覆盖图片、语音等不重写背景方法的容器气泡。</li>
+ * </ol>
  */
 public final class ChatBubbleHook {
 
@@ -56,17 +69,30 @@ public final class ChatBubbleHook {
     private static volatile boolean sHooked = false;
     private static volatile boolean sResultHooked = false;
 
+    // v3.0.115：View 树 dump 仅用于早期定位真实气泡 View，属调试功能。
+    // 常开会在每次 RecyclerView.onLayout 遍历并记录整棵 View 树，导致启动卡顿与日志暴涨，默认关闭。
+    private static final boolean DEBUG_VIEW_DUMP = false;
+
     // 气泡资源 ID（XML 兜底路径用）。优先 getIdentifier 动态解析，失败回退文档已知值
     private static volatile int sFromResId = 2131231925; // chatfrom_bg
     private static volatile int sToResId = 2131232060;   // chatto_bg
 
-    // Bitmap 缓存：路径不变时复用，避免每次 setBackground 都解码
+    // 气泡图片缓存
     private static volatile Bitmap sFromBmp;
     private static volatile Bitmap sToBmp;
     private static volatile String sFromBmpPath;
     private static volatile String sToBmpPath;
 
-    // 微信原始气泡 Drawable 基准（ke5.a.i 预构建时记录），用于 View.setBackground 拦截识别
+    // 已构建的自定义气泡 Drawable 缓存：缓存 ConstantState，每次使用时 newDrawable() 出新实例，
+    // 避免同一 Drawable 实例被大量 View 共享导致 bounds/callback/state 串扰（报告 §0.2）。
+    private static final Object sDrawableCache = new Object();
+    private static volatile Drawable.ConstantState sFromDrawableState;
+    private static volatile Drawable.ConstantState sToDrawableState;
+    private static volatile String sFromDrawablePath;
+    private static volatile String sToDrawablePath;
+    private static volatile boolean sFirstResolverLogged;
+
+    // 微信原始气泡 Drawable 基准
     private static volatile Drawable sFromBaseDrawable;
     private static volatile Drawable sToBaseDrawable;
 
@@ -116,11 +142,13 @@ public final class ChatBubbleHook {
             sFromPath = path;
             sFromBmp = null;
             sFromBmpPath = null;
+            synchronized (sDrawableCache) { sFromDrawableState = null; sFromDrawablePath = null; }
         } else {
             sp.edit().putString(K_TO_PATH, path).apply();
             sToPath = path;
             sToBmp = null;
             sToBmpPath = null;
+            synchronized (sDrawableCache) { sToDrawableState = null; sToDrawablePath = null; }
         }
         LogWriter.log(TAG, "bubble path kind=" + kind + " -> " + path);
     }
@@ -144,6 +172,9 @@ public final class ChatBubbleHook {
     public static void pickBubbleImage(Activity act, int kind, BubblePickCallback cb) {
         sPickCb = cb;
         sPickKind = kind;
+        // 微信部分 Activity 重写 onActivityResult 且不调用 super，仅 hook 基类会丢失回调。
+        // 针对性 hook 该 Activity 的实际运行时类（幂等，重复 hook 由 XposedBridge 去重）。
+        hookActivityInstanceOnResult(act);
         try {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -156,28 +187,54 @@ public final class ChatBubbleHook {
         }
     }
 
+    /** hook 指定 Activity 运行时类的 onActivityResult（若该类重写），兜底基类 hook 的失效场景。 */
+    private static void hookActivityInstanceOnResult(Activity act) {
+        if (act == null) return;
+        try {
+            Class<?> c = act.getClass();
+            while (c != null && c != Activity.class && Activity.class.isAssignableFrom(c)) {
+                try {
+                    final java.lang.reflect.Method m = c.getDeclaredMethod(
+                            "onActivityResult", int.class, int.class, Intent.class);
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            handleActivityResult(param);
+                        }
+                    });
+                } catch (NoSuchMethodException ignored) {
+                } catch (Throwable ignored) {}
+                c = c.getSuperclass();
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    private static void handleActivityResult(de.robv.android.xposed.XC_MethodHook.MethodHookParam param) {
+        try {
+            int requestCode = (int) param.args[0];
+            if (requestCode != REQ_PICK_BUBBLE || sPickCb == null) return;
+            BubblePickCallback cb = sPickCb;
+            sPickCb = null;
+            String path = null;
+            int resultCode = (int) param.args[1];
+            Intent data = (Intent) param.args[2];
+            if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
+                path = copyUriToBubbleDir((Activity) param.thisObject, data.getData());
+            }
+            cb.onPick(path);
+        } catch (Throwable ignored) {}
+    }
+
     private static void ensureResultHook() {
         if (sResultHooked) return;
-        sResultHooked = true;
         try {
             XposedBridge.hookAllMethods(Activity.class, "onActivityResult", new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) {
-                    try {
-                        int requestCode = (int) param.args[0];
-                        if (requestCode != REQ_PICK_BUBBLE || sPickCb == null) return;
-                        BubblePickCallback cb = sPickCb;
-                        sPickCb = null;
-                        String path = null;
-                        int resultCode = (int) param.args[1];
-                        Intent data = (Intent) param.args[2];
-                        if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null) {
-                            path = copyUriToBubbleDir((Activity) param.thisObject, data.getData());
-                        }
-                        cb.onPick(path);
-                    } catch (Throwable ignored) {}
+                    handleActivityResult(param);
                 }
             });
+            sResultHooked = true;
             LogWriter.log(TAG, "onActivityResult hook installed");
         } catch (Throwable t) {
             LogWriter.log(TAG, "ensureResultHook err: " + t.getMessage());
@@ -249,15 +306,17 @@ public final class ChatBubbleHook {
                     ensureBaseDrawables();
                     installBubbleResolver(cl);
                     installBubbleApplyHook(cl);
-                    installBackgroundResourceHook();
-                    installBackgroundHook();
-                    installImageViewHook();
+                    installBackgroundResourceHook(cl);
+                    installNeatBackgroundHook(cl);
+                    installNeatOnDrawHook(cl);
+                    installBackgroundHook(cl);
+                    installImageViewHook(cl);
                     installViewitemsToHook(cl);
                     installLinkSubtypeHook(cl);
                     installResourceHelperHook(cl);
                     installResourceGetDrawableHook(cl);
                     installChatListViewHook(cl);
-                    installChattingListCollector(cl);
+                    if (DEBUG_VIEW_DUMP) installChattingListCollector(cl);
                     sHooked = true;
                     LogWriter.log(TAG, "bubble resolver hooked attempt=" + attempt);
                     return;
@@ -366,74 +425,221 @@ public final class ChatBubbleHook {
         }
     }
 
-    /** 方案 C：XML 兜底路径，View.setBackgroundResource 按 resId 替换（覆盖 X2C 关闭场景）。
-     *  before 阶段用微信原始气泡资源保存 baseDrawable（setBackgroundResource 参数是 int，
-     *  无法替换参数，但保存微信原生气泡 Drawable 后，后续 setBackground/setImageDrawable
-     *  可拦截微信的重复覆盖）；after 阶段替换为自定义气泡图。 */
-    private static void installBackgroundResourceHook() {
+    /** 方案 C + 方案 1（报告 §0.1 根因）：XML 兜底路径。
+     *
+     *  <p>关键修正：文本气泡承载视图 {@code MMNeat7extView} 自己重写了
+     *  {@code setBackgroundResource(int)}（smali：先 super 再同步内嵌 wrappedTextView 的 padding），
+     *  Java 虚分派会直接进入它自己的 override，<b>永不落到 {@code android.view.View} 实现</b>。
+     *  因此旧实现 hook {@code View.setBackgroundResource} 对文本气泡 100% 不触发——这是
+     *  「文字气泡替换不生效」的真正断点。</p>
+     *
+     *  <p>修正后：直接对真实类 {@code com.tencent.mm.ui.widget.MMNeat7extView} 的
+     *  {@code setBackgroundResource(int)} 安装 hook。textual 气泡的三个设置点
+     *  （{@code viewitems.to.b} / {@code hn5.r0.g0} / {@code hn5.s0.k0}）全部调用它，
+     *  在 after 阶段按 6 个原始 resId 白名单 → 收/发方向覆盖为用户图片。
+     *  同时保留对 {@code android.view.View} 基类的兜底（覆盖图片/语音等不 override 的容器），
+     *  两者并存不冲突（对 override 类基类 hook 不触发，不会双替换）。</p> */
+    private static void installBackgroundResourceHook(ClassLoader cl) {
         try {
-            Method m = View.class.getMethod("setBackgroundResource", int.class);
-            XposedBridge.hookMethod(m, new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    try {
-                        if (!sEnabled) return;
-                        int resId = ((Number) param.args[0]).intValue();
-                        boolean from = resId == sFromResId;
-                        boolean to = resId == sToResId;
-                        if (!from && !to) return;
-                        int kind = from ? KIND_FROM : KIND_TO;
-                        View v = (View) param.thisObject;
-                        try {
-                            if (from && sFromBaseDrawable == null) {
-                                Drawable base = v.getResources().getDrawable(resId);
-                                if (base != null) sFromBaseDrawable = base;
-                            } else if (to && sToBaseDrawable == null) {
-                                Drawable base = v.getResources().getDrawable(resId);
-                                if (base != null) sToBaseDrawable = base;
-                            }
-                            LogWriter.log(TAG, "setBackgroundResource before resId=" + resId
-                                    + " view=" + v.getClass().getName()
-                                    + " baseSaved=" + (from ? sFromBaseDrawable != null
-                                    : sToBaseDrawable != null));
-                        } catch (Throwable ignored) {}
-                    } catch (Throwable ignored) {}
-                }
-
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    try {
-                        if (!sEnabled) return;
-                        int resId = ((Number) param.args[0]).intValue();
-                        boolean from = resId == sFromResId;
-                        boolean to = resId == sToResId;
-                        if (!from && !to) return;
-                        int kind = from ? KIND_FROM : KIND_TO;
-                        Drawable d = loadDrawable(kind);
-                        if (d != null) {
-                            View v = (View) param.thisObject;
-                            v.setBackground(d);
-                            rememberBubble(v, d);
-                            int[] loc = {0, 0};
-                            try { v.getLocationOnScreen(loc); } catch (Throwable ignored) {}
-                            LogWriter.log(TAG, "setBackgroundResource REPLACE resId=" + resId
-                                    + " view=" + v.getClass().getName()
-                                    + " xy=(" + loc[0] + "," + loc[1] + ")"
-                                    + " w=" + v.getWidth() + " h=" + v.getHeight());
+            XC_MethodHook h = createBackgroundResourceHook();
+            // 1) 文本气泡真实 override —— 唯一可靠触发点
+            Class<?> neat = null;
+            try {
+                neat = XposedHelpers.findClass("com.tencent.mm.ui.widget.MMNeat7extView", cl);
+            } catch (Throwable ignored) {}
+            ClassicSet: {
+                if (neat == null) break ClassicSet;
+                Method m = null;
+                try {
+                    m = neat.getDeclaredMethod("setBackgroundResource", int.class);
+                } catch (Throwable ignored) {}
+                if (m == null) {
+                    for (Method mm : neat.getDeclaredMethods()) {
+                        if ("setBackgroundResource".equals(mm.getName())
+                                && mm.getParameterTypes().length == 1
+                                && mm.getParameterTypes()[0] == int.class) {
+                            m = mm;
+                            break;
                         }
-                    } catch (Throwable ignored) {}
+                    }
                 }
-            });
-            LogWriter.log(TAG, "View.setBackgroundResource hooked");
+                if (m != null) {
+                    m.setAccessible(true);
+                    XposedBridge.hookMethod(m, h);
+                    LogWriter.log(TAG, "MMNeat7extView.setBackgroundResource hooked (real text bubble)");
+                    break ClassicSet;
+                }
+                LogWriter.log(TAG, "MMNeat7extView has no setBackgroundResource override");
+            }
+            // 2) 基类兜底（图片/语音等非 override 容器气泡）
+            try {
+                Method base = View.class.getMethod("setBackgroundResource", int.class);
+                XposedBridge.hookMethod(base, h);
+                LogWriter.log(TAG, "View.setBackgroundResource hooked (fallback)");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "View.setBackgroundResource hook err: " + t.getMessage());
+            }
         } catch (Throwable t) {
             LogWriter.log(TAG, "installBackgroundResourceHook err: " + t.getMessage());
         }
     }
 
+    /** 构造 setBackgroundResource(int) 的替换 hook：after 阶段按 resId 白名单映射方向并覆盖背景。 */
+    private static XC_MethodHook createBackgroundResourceHook() {
+        return new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                try {
+                    if (!sEnabled) return;
+                    int resId = ((Number) param.args[0]).intValue();
+                    int kind = resolveKindByResId(ContextManager.getAppContext(), resId);
+                    if (kind < 0) return;
+                    View v = (View) param.thisObject;
+                    try {
+                        if (kind == KIND_FROM && sFromBaseDrawable == null) {
+                            Drawable base = v.getResources().getDrawable(resId);
+                            if (base != null) sFromBaseDrawable = base;
+                        } else if (kind == KIND_TO && sToBaseDrawable == null) {
+                            Drawable base = v.getResources().getDrawable(resId);
+                            if (base != null) sToBaseDrawable = base;
+                        }
+                    } catch (Throwable ignored) {}
+                    LogWriter.log(TAG, "setBackgroundResource before resId=" + resId
+                            + " kind=" + kind + " view=" + v.getClass().getName());
+                } catch (Throwable ignored) {}
+            }
+
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) {
+                try {
+                    if (!sEnabled) return;
+                    int resId = ((Number) param.args[0]).intValue();
+                    int kind = resolveKindByResId(ContextManager.getAppContext(), resId);
+                    if (kind < 0) return;
+                    Drawable d = loadDrawable(kind);
+                    if (d == null) return;
+                    View v = (View) param.thisObject;
+                    v.setBackground(d);
+                    rememberBubble(v, d);
+                    int[] loc = {0, 0};
+                    try { v.getLocationOnScreen(loc); } catch (Throwable ignored) {}
+                    LogWriter.log(TAG, "setBackgroundResource REPLACE resId=" + resId
+                            + " kind=" + kind + " view=" + v.getClass().getName()
+                            + " xy=(" + loc[0] + "," + loc[1] + ")"
+                            + " w=" + v.getWidth() + " h=" + v.getHeight());
+                } catch (Throwable ignored) {}
+            }
+        };
+    }
+
+    /** 方案 1.2（报告 §3.2）：MMNeat7extView 同样重写了 {@code setBackground(Drawable)}，
+     *  某些路径（DataBinding / 我们自己的 after 兜底 / X2C）会以 Drawable 形式设置气泡背景，
+     *  基类 {@code View.setBackground} hook 对文本气泡同样不触发。此处直接 hook 真实类。
+     *  无法用 resId 判定方向时，用 constantState 与已记录的微信原生气泡比对。 */
+    private static void installNeatBackgroundHook(ClassLoader cl) {
+        Class<?> neat = null;
+        try {
+            neat = XposedHelpers.findClass("com.tencent.mm.ui.widget.MMNeat7extView", cl);
+        } catch (Throwable ignored) {}
+        if (neat == null) return;
+        Method m = null;
+        for (Method mm : neat.getDeclaredMethods()) {
+            if ("setBackground".equals(mm.getName())
+                    && mm.getParameterTypes().length == 1
+                    && mm.getParameterTypes()[0] == Drawable.class) {
+                m = mm;
+                break;
+            }
+        }
+        if (m == null) {
+            LogWriter.log(TAG, "MMNeat7extView.setBackground(Drawable) not found");
+            return;
+        }
+        m.setAccessible(true);
+        XposedBridge.hookMethod(m, new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                try {
+                    if (!sEnabled) return;
+                    if (param.args.length == 0 || !(param.args[0] instanceof Drawable)) return;
+                    Drawable d = (Drawable) param.args[0];
+                    int kind = matchBaseDrawable(d);
+                    if (kind < 0) return;
+                    Drawable custom = loadDrawable(kind);
+                    if (custom != null) {
+                        param.args[0] = custom;
+                        rememberBubble((View) param.thisObject, custom);
+                        LogWriter.log(TAG, "neat.setBackground REPLACE kind=" + kind
+                                + " view=" + param.thisObject.getClass().getName());
+                    }
+                } catch (Throwable ignored) {}
+            }
+        });
+        LogWriter.log(TAG, "MMNeat7extView.setBackground(Drawable) hooked");
+    }
+
+    /** v3.0.120：文字气泡兜底。语音气泡走 AnimImageView 背景/图片生效；
+     *  文字气泡（MMNeat7extView）可能自绘气泡而不读取 View background，
+     *  导致 setBackground* 全部替换后仍看不到效果。
+     *  此处在 onDraw 前主动绘制自定义气泡：若背景已是自定义图则直接绘制，
+     *  若背景仍是微信原生气泡则替换后绘制，确保自定义图出现在文字下方。 */
+    private static void installNeatOnDrawHook(ClassLoader cl) {
+        try {
+            Class<?> neat = XposedHelpers.findClass("com.tencent.mm.ui.widget.MMNeat7extView", cl);
+            Method onDraw = null;
+            for (Method m : neat.getDeclaredMethods()) {
+                if ("onDraw".equals(m.getName()) && m.getParameterTypes().length == 1
+                        && m.getParameterTypes()[0] == android.graphics.Canvas.class) {
+                    onDraw = m;
+                    break;
+                }
+            }
+            if (onDraw == null) {
+                LogWriter.log(TAG, "MMNeat7extView.onDraw not found");
+                return;
+            }
+            onDraw.setAccessible(true);
+            XposedBridge.hookMethod(onDraw, new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        View v = (View) param.thisObject;
+                        android.graphics.Canvas canvas = (android.graphics.Canvas) param.args[0];
+                        int w = v.getWidth();
+                        int h = v.getHeight();
+                        if (w <= 0 || h <= 0) return;
+                        Drawable bg = v.getBackground();
+                        if (isCustomBackground(bg)) {
+                            bg.setBounds(0, 0, w, h);
+                            bg.draw(canvas);
+                            return;
+                        }
+                        int kind = matchBaseDrawable(bg);
+                        if (kind < 0) return;
+                        Drawable custom = loadDrawable(kind);
+                        if (custom != null) {
+                            custom.setBounds(0, 0, w, h);
+                            custom.draw(canvas);
+                            v.setBackground(custom);
+                            rememberBubble(v, custom);
+                            LogWriter.log(TAG, "neat.onDraw REPLACE kind=" + kind
+                                    + " parent=" + parentChain(v, 1));
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "MMNeat7extView.onDraw hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installNeatOnDrawHook err: " + t.getMessage());
+        }
+    }
+
     /** 方案 E：View.setBackground / setBackgroundDrawable 拦截。
      *  聊天 item 复用预构建 View 后可能重新设置气泡背景（不走 ke5.a.i/getDrawable），
-     *  在设置点用 ke5.a.i 记录的微信原始 Drawable 的 constantState 识别并替换。 */
-    private static void installBackgroundHook() {
+     *  在设置点用 ke5.a.i 记录的微信原始 Drawable 的 constantState 识别并替换。
+     *  注：此基类 hook 对 override 的 MMNeat7extView 不触发（见 installNeatBackgroundHook）。 */
+    private static void installBackgroundHook(ClassLoader cl) {
         try {
             Method setBg = View.class.getMethod("setBackground", Drawable.class);
             Method setBgDrawable = View.class.getMethod("setBackgroundDrawable", Drawable.class);
@@ -466,7 +672,7 @@ public final class ChatBubbleHook {
     /** 方案 G：ImageView 图片路径。8.0.78 聊天消息气泡（尤其自己发出的 chatto_bg）通过
      *  AnimImageView（ImageView 子类）显示，ke5.a.i 加载的 Drawable 最终传给
      *  ImageView.setImageDrawable。在此拦截，按微信原生气泡 constantState 识别替换。 */
-    private static void installImageViewHook() {
+    private static void installImageViewHook(ClassLoader cl) {
         try {
             Method setImageDrawable = ImageView.class.getMethod("setImageDrawable", Drawable.class);
             XposedBridge.hookMethod(setImageDrawable, new XC_MethodHook() {
@@ -556,26 +762,41 @@ public final class ChatBubbleHook {
                                     }
                                 }
                                 View bubble = null;
+                                // v3.0.120：优先遍历 holder 字段找 MMNeat7extView —— 文字气泡真实承载视图。
+                                // 此前 findBubbleViewInTree 命中的 android.widget.TextView 并非可见气泡，
+                                // 替换后用户看不到效果；而语音气泡(AnimImageView)走 setBackgroundResource 生效。
                                 for (Object a : param.args) {
                                     if (a == null) continue;
-                                    if (a instanceof View) {
-                                        bubble = findBubbleViewInTree((View) a);
-                                        if (bubble != null) break;
-                                    } else if ("e9".equals(a.getClass().getSimpleName())
-                                            || hasFieldType(a)) {
-                                        bubble = findBubbleView(a);
-                                        if (bubble != null) break;
+                                    bubble = findMMNeatTextView(a);
+                                    if (bubble != null) break;
+                                }
+                                if (bubble == null) {
+                                    for (Object a : param.args) {
+                                        if (a == null) continue;
+                                        if (a instanceof View) {
+                                            bubble = findBubbleViewInTree((View) a);
+                                            if (bubble != null) break;
+                                        } else if ("e9".equals(a.getClass().getSimpleName())
+                                                || hasFieldType(a)) {
+                                            bubble = findBubbleView(a);
+                                            if (bubble != null) break;
+                                        }
                                     }
                                 }
                                 if (bubble == null) bubble = findBubbleView(param.thisObject);
                                 if (bubble == null) return;
+                                // v3.0.100: 方向判定仍以 to.b 自带的 isRecv 布尔为准（语义最准）。
+                                // 若该重载无布尔参数，则由 bubble 背景匹配白名单兜底。
                                 int kind = isRecv ? KIND_FROM : KIND_TO;
                                 Drawable custom = loadDrawable(kind);
                                 if (custom != null) {
                                     bubble.setBackground(custom);
                                     rememberBubble(bubble, custom);
                                     LogWriter.log(TAG, "viewitems.b REPLACE isRecv=" + isRecv
-                                            + " view=" + bubble.getClass().getName());
+                                            + " kind=" + kind
+                                            + " view=" + bubble.getClass().getName()
+                                            + " neat=" + bubble.getClass().getName().contains("MMNeat")
+                                            + " parent=" + parentChain(bubble, 2));
                                 }
                             } catch (Throwable ignored) {}
                         }
@@ -590,6 +811,45 @@ public final class ChatBubbleHook {
         if (hooked == 0) {
             LogWriter.log(TAG, "viewitems.b none found (fallback setBackgroundResource covers)");
         }
+    }
+
+    /** v3.0.120：遍历 holder 对象字段，找类型为 MMNeat7extView 的 View —— 文字气泡真实承载视图。 */
+    private static View findMMNeatTextView(Object holder) {
+        if (holder == null) return null;
+        try {
+            Class<?> c = holder.getClass();
+            while (c != null && c != Object.class) {
+                for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                    try {
+                        Class<?> ft = f.getType();
+                        if (ft == null || !View.class.isAssignableFrom(ft)) continue;
+                        boolean typeHits = ft.getName().contains("MMNeat");
+                        f.setAccessible(true);
+                        Object v = f.get(holder);
+                        if (!(v instanceof View)) continue;
+                        View view = (View) v;
+                        if (typeHits || view.getClass().getName().contains("MMNeat")) return view;
+                    } catch (Throwable ignored) {}
+                }
+                c = c.getSuperclass();
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    /** 打印 View 的父链（最多 maxLevel 层），用于定位文字气泡真实视图。 */
+    private static String parentChain(View v, int maxLevel) {
+        if (v == null) return "";
+        StringBuilder sb = new StringBuilder();
+        View cur = v;
+        int level = 0;
+        while (cur != null && level <= maxLevel) {
+            if (sb.length() > 0) sb.append(" -> ");
+            sb.append(cur.getClass().getSimpleName());
+            cur = cur.getParent() instanceof View ? (View) cur.getParent() : null;
+            level++;
+        }
+        return sb.toString();
     }
 
     /** 递归在 View 树中查找背景与微信原生气泡匹配的气泡 View。 */
@@ -723,6 +983,19 @@ public final class ChatBubbleHook {
 
     private static boolean sameConstant(Drawable a, Drawable b) {
         return a.getConstantState() != null && a.getConstantState().equals(b.getConstantState());
+    }
+
+    /** 是否为自定义气泡图（NinePatchDrawable 或自实现 NineSliceDrawable）。 */
+    private static boolean isCustomBackground(Drawable d) {
+        if (d == null) return false;
+        if (d instanceof BubbleDrawableFactory.NineSliceDrawable) return true;
+        if (d instanceof android.graphics.drawable.NinePatchDrawable) return true;
+        try {
+            Drawable.ConstantState cs = d.getConstantState();
+            String n = cs == null ? "" : cs.getClass().getName();
+            return n.contains("NineSlice");
+        } catch (Throwable ignored) {}
+        return false;
     }
 
     /** 方案 D：Resources.getDrawable 加载路径（聊天页加载气泡背景的最通用入口）。
@@ -1189,23 +1462,25 @@ public final class ChatBubbleHook {
                             || (value != null && value.contains("chatto_bg"));
                     if (isFrom || isTo) {
                         int kind = isFrom ? KIND_FROM : KIND_TO;
-                        String path = kind == KIND_FROM ? sFromPath : sToPath;
-                        LogWriter.log(TAG, "resolver hit value=" + value + " resId=" + resId
-                                + " enabled=" + sEnabled
-                                + " path=" + (path != null && !path.isEmpty() ? "set" : "EMPTY"));
                         if (!sEnabled) return;
+                        View v0 = param.args.length > 1 && param.args[1] instanceof View
+                                ? (View) param.args[1] : null;
+                        // 抖动抑制 v3.0.120：背景已是自定义图时仍必须 setResult(custom)，
+                        // 阻止原始 r() 继续执行把微信原生气泡流出覆盖我们的替换；
+                        // 仅跳过重复 setBackground，避免形成替换风暴。
+                        boolean bgAlreadyCustom = v0 != null && isCustomBackground(v0.getBackground());
+                        if (!sFirstResolverLogged) {
+                            sFirstResolverLogged = true;
+                            String path = kind == KIND_FROM ? sFromPath : sToPath;
+                            LogWriter.log(TAG, "resolver first hit value=" + value + " resId=" + resId
+                                    + " path=" + (path != null ? path : "null"));
+                        }
                         Drawable d = loadDrawable(kind);
                         if (d != null) {
-                            LogWriter.log(TAG, "resolver REPLACE " + value + " resId=" + resId
-                                    + " kind=" + kind);
                             param.setResult(d);
-                            View v = param.args.length > 1 && param.args[1] instanceof View
-                                    ? (View) param.args[1] : null;
-                            if (v != null) {
-                                v.setBackground(d);
-                                rememberBubble(v, d);
-                                LogWriter.log(TAG, "resolver setBackground view="
-                                        + v.getClass().getName());
+                            if (v0 != null && !bgAlreadyCustom) {
+                                v0.setBackground(d);
+                                rememberBubble(v0, d);
                             }
                         }
                     }
@@ -1243,43 +1518,54 @@ public final class ChatBubbleHook {
         if (ctx == null) return null;
         String path = kind == KIND_FROM ? sFromPath : sToPath;
         if (path == null || path.isEmpty()) return null;
-        Bitmap bmp = getBitmapCached(kind, path);
-        if (bmp == null) return null;
-        return new BitmapDrawable(ctx.getResources(), bmp);
-    }
-
-    private static Bitmap getBitmapCached(int kind, String path) {
-        if (kind == KIND_FROM) {
-            if (sFromBmpPath == null || !sFromBmpPath.equals(path)) {
-                sFromBmp = loadBitmap(path);
-                sFromBmpPath = path;
+        // 路径不变时复用已构建的 Drawable 模板：缓存 ConstantState，每次 newDrawable() 出新实例，
+        // 避免列表滚动时反复解码/构造，同时防止多 View 共享同一可变 Drawable。
+        synchronized (sDrawableCache) {
+            Drawable.ConstantState cached = kind == KIND_FROM ? sFromDrawableState : sToDrawableState;
+            String cachedPath = kind == KIND_FROM ? sFromDrawablePath : sToDrawablePath;
+            if (cached != null && path.equals(cachedPath)) {
+                Drawable d = cached.newDrawable(ctx.getResources());
+                if (d != null) return d;
             }
-            return sFromBmp;
-        } else {
-            if (sToBmpPath == null || !sToBmpPath.equals(path)) {
-                sToBmp = loadBitmap(path);
-                sToBmpPath = path;
+            Drawable built = BubbleDrawableFactory.build(ctx, path);
+            if (built == null) {
+                LogWriter.log(TAG, "loadDrawable BUILD FAILED kind=" + kind + " path=" + path
+                        + " exists=" + new java.io.File(path).exists());
+                return null;
             }
-            return sToBmp;
+            LogWriter.log(TAG, "loadDrawable built kind=" + kind + " cls=" + built.getClass().getName()
+                    + " path=" + path + " iw=" + built.getIntrinsicWidth() + "ih=" + built.getIntrinsicHeight());
+            Drawable.ConstantState cs = built.getConstantState();
+            if (kind == KIND_FROM) {
+                sFromDrawableState = cs;
+                sFromDrawablePath = path;
+            } else {
+                sToDrawableState = cs;
+                sToDrawablePath = path;
+            }
+            return built;
         }
     }
 
-    private static Bitmap loadBitmap(String path) {
+    /** 未解析出 ResourceHelper 时，判断原始气泡 resId 的收/发方向。
+     *
+     *  <p>报告 §2 白名单（本构建 8.0.78 实测，覆盖普通/发送中/链接三种子场景）：
+     *  收到 = {2131231925 普通, 2131231841 发送中, 2131231944 链接}；
+     *  发出 = {2131232060 普通, 2131231895 发送中, 2131232070 链接}。
+     *  资源名在本 APK 可能被混淆，故先按硬编码 resId 命中，再用 getResourceEntryName 兜底。</p> */
+    private static int resolveKindByResId(Context ctx, int resId) {
+        if (resId == 0) return -1;
+        if (resId == 2131231925 || resId == 2131231841 || resId == 2131231944) return KIND_FROM;
+        if (resId == 2131232060 || resId == 2131231895 || resId == 2131232070) return KIND_TO;
+        if (resId == sFromResId) return KIND_FROM;
+        if (resId == sToResId) return KIND_TO;
+        if (ctx == null) return -1;
         try {
-            BitmapFactory.Options opt = new BitmapFactory.Options();
-            opt.inJustDecodeBounds = true;
-            BitmapFactory.decodeFile(path, opt);
-            int maxEdge = 1024;
-            int sample = 1;
-            while (opt.outWidth / sample > maxEdge || opt.outHeight / sample > maxEdge) {
-                sample *= 2;
-            }
-            BitmapFactory.Options o2 = new BitmapFactory.Options();
-            o2.inSampleSize = sample;
-            return BitmapFactory.decodeFile(path, o2);
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "loadBitmap err: " + t.getMessage());
-            return null;
-        }
+            String name = ctx.getResources().getResourceEntryName(resId);
+            if (name == null) return -1;
+            if (name.contains("chatfrom")) return KIND_FROM;
+            if (name.contains("chatto")) return KIND_TO;
+        } catch (Throwable ignored) {}
+        return -1;
     }
 }

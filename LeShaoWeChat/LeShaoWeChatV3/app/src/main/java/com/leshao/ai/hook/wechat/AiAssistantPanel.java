@@ -135,8 +135,8 @@ public final class AiAssistantPanel {
 
             android.util.DisplayMetrics dm = anchor.getResources().getDisplayMetrics();
             android.content.Context actx = anchor.getContext();
-            // v1047: 弹窗最大宽度占屏 92%
-            int panelW = (int) (dm.widthPixels * 0.92f);
+            // v1148: 弹窗最大宽度占屏 90%（全局窗口宽度上限）
+            int panelW = (int) (dm.widthPixels * 0.9f);
 
             // v985: 可用显示区改为以「物理屏 - 真实系统栏内边距」为准。此前依赖
             // getWindowVisibleDisplayFrame, 在 ColorOS 上会返回比物理屏更大的 frame, 且
@@ -153,7 +153,9 @@ public final class AiAssistantPanel {
             }
             int availH = Math.max(dp(actx, 240), availBottom - availTop);
             int margin = dp(actx, 12);
-            int maxPanelH = Math.max(dp(actx, 200), availH - margin * 2);
+            // v1148: 所有弹窗高度上限统一为屏幕 90%（全局窗口高度上限）。
+            int maxPanelH = Math.max(dp(actx, 200),
+                    Math.min(availH - margin * 2, (int) (screenH * 0.9f)));
 
             // v985: 面板高度改为「确定值」并让根视图 MATCH_PARENT 填满。
             // 内容不超限时按内容高度(紧凑); 超限时压缩滚动区后取 maxPanelH,

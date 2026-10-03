@@ -13,6 +13,7 @@ import android.widget.Switch;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
+import com.leshao.v3.ui.InsetsUtil;
 import com.leshao.v3.ui.widgets.ModernButton;
 import com.leshao.v3.wm.utils.WmPrefs;
 import com.leshao.v3.wm.utils.WmReflect;
@@ -483,14 +484,12 @@ public class WanQunGroupHook {
         root.addView(btnRow);
 
         AlertDialog dialog = new AlertDialog.Builder(ctx)
-                .setView(sv)
                 .setCancelable(true)
                 .create();
         try {
-            dialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT));
-            android.view.Window w = dialog.getWindow();
-            android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
-            w.setLayout((int) (dm.widthPixels * 0.92f), (int) (dm.heightPixels * 0.82f));
+            // 窗口自适应：宽度 90% 屏，高度随内容 WRAP，上限 90% 屏（ScrollView 内部滚动）
+            android.view.ViewGroup host = InsetsUtil.windowAutoHeight(dialog, sv, 0.9f);
+            dialog.setView(host);
         } catch (Throwable ignored) {}
 
         saveBtn.setOnClickListener(v -> {
@@ -525,14 +524,13 @@ public class WanQunGroupHook {
         return gd;
     }
 
-    /** 顶部品牌头：渐变背景 + 标题 + 副标题 */
+    /** 顶部品牌头：纯色背景 + 标题 + 副标题（v1148 去渐变） */
     private static android.view.View makeSectionHeader(Context ctx, String title, String subtitle, int accent, boolean big) {
         LinearLayout box = new LinearLayout(ctx);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(ctx, 20), dp(ctx, 18), dp(ctx, 20), dp(ctx, 16));
-        android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[]{accent, AppColors.candyPink()});
+        android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
+        gd.setColor(accent);
         gd.setCornerRadius(dp(ctx, 14));
         box.setBackground(gd);
 

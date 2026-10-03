@@ -26,24 +26,29 @@ public class BubblePageView {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
         InsetsUtil.clipRounded(root);
-        root.setPadding((int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_MD_DP * d),
-                (int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_XL_DP * d));
+        root.setPadding((int)(AppColors.SPACE_MD_DP * d), (int)(6 * d),
+                (int)(AppColors.SPACE_MD_DP * d), (int)(8 * d));
+
+        // v1145: 页面顶部统一分区标题
+        root.addView(M3Page.section(ctx, "自定义气泡",
+                "分别选择收到/发出消息的气泡图片"));
+        root.addView(M3Page.spacer(ctx, 2));
 
         LinearLayout card = makeCard(ctx, d);
 
         TextView header = new TextView(ctx);
         header.setText("气泡图片设置");
-        header.setTextSize(15);
+        header.setTextSize(16);
         header.setTextColor(AppColors.text1());
         header.setTypeface(null, Typeface.BOLD);
-        header.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(4 * d));
+        header.setPadding((int)(12 * d), (int)(12 * d), (int)(12 * d), (int)(4 * d));
         card.addView(header);
 
         TextView tip = new TextView(ctx);
         tip.setText("图片会拉伸填充消息气泡，建议选择纯色/简单图形背景图。仅替换文本消息气泡。");
         tip.setTextSize(12);
         tip.setTextColor(AppColors.text2());
-        tip.setPadding((int)(14 * d), (int)(4 * d), (int)(14 * d), (int)(10 * d));
+        tip.setPadding((int)(12 * d), (int)(4 * d), (int)(12 * d), (int)(10 * d));
         card.addView(tip);
 
         card.addView(M3Page.divider(ctx));
@@ -63,7 +68,7 @@ public class BubblePageView {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding((int)(14 * d), (int)(10 * d), (int)(14 * d), (int)(10 * d));
+        row.setPadding((int)(12 * d), (int)(10 * d), (int)(12 * d), (int)(10 * d));
         row.setBackground(CandyUi.rowPressBg(ctx));
 
         LinearLayout textCol = new LinearLayout(ctx);
@@ -72,14 +77,14 @@ public class BubblePageView {
 
         TextView tv = new TextView(ctx);
         tv.setText(title);
-        tv.setTextSize(14);
+        tv.setTextSize(16);
         tv.setTextColor(AppColors.text1());
         tv.setTypeface(null, Typeface.BOLD);
         textCol.addView(tv);
 
         TextView pathTv = new TextView(ctx);
         pathTv.setText(currentPath == null ? "未设置" : new java.io.File(currentPath).getName());
-        pathTv.setTextSize(11);
+        pathTv.setTextSize(12);
         pathTv.setTextColor(AppColors.text2());
         pathTv.setPadding(0, (int)(2 * d), 0, 0);
         pathTv.setSingleLine(true);
@@ -129,9 +134,12 @@ public class BubblePageView {
     private static LinearLayout makeCard(Context ctx, float d) {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding((int)(2 * d), (int)(2 * d), (int)(2 * d), (int)(2 * d));
+        card.setPadding(0, 0, 0, 0);
         card.setBackground(CandyUi.cardBg(ctx));
         InsetsUtil.clipRounded(card);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, (int)(13 * d));
+        card.setLayoutParams(lp);
         return card;
     }
 }

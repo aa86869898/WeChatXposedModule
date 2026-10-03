@@ -23,6 +23,11 @@ public final class MsgForgePageView {
 
         MsgForgeHook.updateConfig();
 
+        // v1145: 页面顶部统一分区标题
+        root.addView(M3Page.section(ctx, "消息伪装",
+                "发出的文本内容替换为自定义伪装文字"));
+        root.addView(M3Page.spacer(ctx, 2));
+
         // 总开关
         LinearLayout cardSwitch = PageKit.makeCard(ctx, d);
         cardSwitch.addView(PageKit.switchRow(ctx, d, "消息伪装",

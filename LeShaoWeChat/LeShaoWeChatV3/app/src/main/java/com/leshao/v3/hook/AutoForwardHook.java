@@ -420,10 +420,10 @@ public class AutoForwardHook {
                     com.leshao.v3.ui.AppColors.isDarkMode()
                             ? android.R.style.Theme_DeviceDefault_Dialog_Alert
                             : android.R.style.Theme_DeviceDefault_Light_Dialog_Alert)
-                    .setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.94f, 0.8f))
+                    .setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.9f, -1f))
                     .setCancelable(true)
                     .create();
-            com.leshao.v3.ui.InsetsUtil.center(dlg, 0.94f, 0.8f);
+            com.leshao.v3.ui.InsetsUtil.centerAutoHeight(dlg, 0.9f);
             dlg.show();
         } catch (Throwable t) {
             Toast.makeText(ctx, "打开记录失败: " + t.getMessage(), Toast.LENGTH_SHORT).show();
@@ -611,7 +611,7 @@ public class AutoForwardHook {
         sv.addView(content);
 
         // v1143: 高度自适应内容并收紧窗口(仅内容过长时才滚动), 去掉窗口下方大片空白
-        int sheetW = (int) (ctx.getResources().getDisplayMetrics().widthPixels * 0.92f);
+        int sheetW = (int) (ctx.getResources().getDisplayMetrics().widthPixels * 0.9f);
         int maxContentH = (int) (ctx.getResources().getDisplayMetrics().heightPixels * 0.72f);
         int innerW = Math.max(1, sheetW - (int) (24 * d) - (int) (8 * d));
         content.measure(
@@ -642,7 +642,7 @@ public class AutoForwardHook {
                 ? android.R.style.Theme_DeviceDefault_Dialog_Alert
                 : android.R.style.Theme_DeviceDefault_Light_Dialog_Alert;
         final android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(ctx, theme)
-                .setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.92f, -1f))
+                .setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.9f, -1f))
                 .setCancelable(true)
                 .create();
         btnCancel.onClick(() -> dlg.dismiss());
@@ -663,7 +663,7 @@ public class AutoForwardHook {
                     Toast.LENGTH_SHORT).show();
             dlg.dismiss();
         });
-        com.leshao.v3.ui.InsetsUtil.center(dlg, 0.92f, -1f);
+        com.leshao.v3.ui.InsetsUtil.centerAutoHeight(dlg, 0.9f);
         dlg.show();
         com.leshao.v3.ui.WindowLayer.track(dlg.getWindow());
     }
@@ -745,7 +745,7 @@ public class AutoForwardHook {
                 ? android.R.style.Theme_DeviceDefault_Dialog_Alert
                 : android.R.style.Theme_DeviceDefault_Light_Dialog_Alert;
         final android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(ctx, theme)
-                .setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.92f, 0.7f))
+                .setView(com.leshao.v3.ui.InsetsUtil.window(null, root, 0.9f, 0.7f))
                 .setCancelable(true)
                 .create();
         View clearBtn = com.leshao.v3.ui.widgets.M3Page.ghostButton(ctx, "清空名单",

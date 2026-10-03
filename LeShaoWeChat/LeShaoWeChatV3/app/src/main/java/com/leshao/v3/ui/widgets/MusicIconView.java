@@ -2,7 +2,6 @@ package com.leshao.v3.ui.widgets;
 
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
@@ -15,7 +14,7 @@ import com.leshao.v3.ui.AppColors;
  * 在线音乐矢量图标（v30033 落地「实心渐变 + 实心节点」方案）。
  *
  * <p>所有图形在 24x24 viewBox 内描述，绘制时按视图短边等比缩放并居中；描边色统一取自
- * 模块「葡萄气泡 · 流光渐变」三色（紫 → 粉，暗色自动切换），{@link #setActive(boolean)}
+ * 模块「糖果粉 · 纯色」同系色（粉 → 深玫，暗色自动切换），{@link #setActive(boolean)}
  * 关闭时退化为 {@link AppColors#text3()} 单色（用于底部导航未选中态）。</p>
  *
  * <p>两种渲染模式：</p>
@@ -133,10 +132,10 @@ public class MusicIconView extends View {
 
     private void configurePaints() {
         if (active) {
-            Shader sh = new LinearGradient(0f, 0f, VB, VB,
-                    AppColors.gradientStart(), AppColors.gradientEnd(), Shader.TileMode.CLAMP);
-            stroke.setShader(sh);
-            fill.setShader(sh);
+            stroke.setShader(null);
+            fill.setShader(null);
+            stroke.setColor(AppColors.primary());
+            fill.setColor(AppColors.primary());
         } else {
             int c = AppColors.text3();
             stroke.setShader(null);

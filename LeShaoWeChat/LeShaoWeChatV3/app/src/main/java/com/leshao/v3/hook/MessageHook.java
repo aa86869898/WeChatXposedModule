@@ -290,11 +290,11 @@ public class MessageHook {
     private static void hookX9Dispatch(ClassLoader cl) {
         try {
             Class<?> x9Cls = null;
-            // 1) 先用 DexKit 字符串搜索动态发现 x9 类（消息分发类）
-            List<String> candidates = DexKitHelper.findClassesByString(cl, "IEvent");
-            for (String cn : candidates) {
+            // 1) 优先使用全量扫描时持久化的缓存类名, 避免普通重启触发 DexKit 搜索(加载 so)
+            String cachedX9 = DexKitHelper.ngetX9Class();
+            if (cachedX9 != null && !cachedX9.isEmpty()) {
                 try {
-                    Class<?> c = cl.loadClass(cn);
+                    Class<?> c = cl.loadClass(cachedX9);
                     // 检查是否有接收 e9 类型参数的方法
                     for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
                         Class<?>[] pts = m.getParameterTypes();
@@ -302,15 +302,36 @@ public class MessageHook {
                             String pt0 = pts[0].getName();
                             if (pt0.equals("com.tencent.mm.storage.e9") || pt0.endsWith(".e9")) {
                                 x9Cls = c;
-                                LogWriter.log(TAG, "x9 class found via DexKit IEvent: " + cn);
+                                LogWriter.log(TAG, "x9 class found via cached X9: " + cachedX9);
                                 break;
                             }
                         }
                     }
-                    if (x9Cls != null) break;
                 } catch (Throwable ignored) {}
             }
-            // 2) 兜底：搜索包含 "EventBus" 字符串的类
+            // 2) 缓存缺失(首次扫描/微信更新后)才用 DexKit 字符串搜索动态发现 x9 类（消息分发类）
+            if (x9Cls == null) {
+                List<String> candidates = DexKitHelper.findClassesByString(cl, "IEvent");
+                for (String cn : candidates) {
+                    try {
+                        Class<?> c = cl.loadClass(cn);
+                        // 检查是否有接收 e9 类型参数的方法
+                        for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
+                            Class<?>[] pts = m.getParameterTypes();
+                            if (pts.length >= 1) {
+                                String pt0 = pts[0].getName();
+                                if (pt0.equals("com.tencent.mm.storage.e9") || pt0.endsWith(".e9")) {
+                                    x9Cls = c;
+                                    LogWriter.log(TAG, "x9 class found via DexKit IEvent: " + cn);
+                                    break;
+                                }
+                            }
+                        }
+                        if (x9Cls != null) break;
+                    } catch (Throwable ignored) {}
+                }
+            }
+            // 3) 兜底：搜索包含 "EventBus" 字符串的类
             if (x9Cls == null) {
                 List<String> busCandidates = DexKitHelper.findClassesByString(cl, "EventBus");
                 for (String cn : busCandidates) {
@@ -331,7 +352,7 @@ public class MessageHook {
                     } catch (Throwable ignored) {}
                 }
             }
-            // 3) 兜底：搜索所有包含 "MsgInfo" 字符串的类（8.0.78 消息存储类特征）
+            // 4) 兜底：搜索所有包含 "MsgInfo" 字符串的类（8.0.78 消息存储类特征）
             if (x9Cls == null) {
                 List<String> msgCandidates = DexKitHelper.findClassesByString(cl, "MsgInfo");
                 for (String cn : msgCandidates) {
@@ -352,7 +373,7 @@ public class MessageHook {
                     } catch (Throwable ignored) {}
                 }
             }
-            // 4) 兜底：搜索 "handleMsg" 或 "dispatch" 方法名
+            // 5) 兜底：搜索 "handleMsg" 或 "dispatch" 方法名
             if (x9Cls == null) {
                 List<String> dispatchCandidates = DexKitHelper.findMethodsByString(cl, null, "dispatch");
                 for (String sig : dispatchCandidates) {
@@ -374,7 +395,7 @@ public class MessageHook {
                     } catch (Throwable ignored) {}
                 }
             }
-            // 5) 兜底：搜索 any class with method taking e9/MsgInfo param
+            // 6) 兜底：搜索 any class with method taking e9/MsgInfo param
             if (x9Cls == null) {
                 List<String> e9Candidates = DexKitHelper.findClassesByString(cl, "storage");
                 for (String cn : e9Candidates) {

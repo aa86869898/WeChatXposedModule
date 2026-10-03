@@ -35,9 +35,14 @@ public class ContactGroupPageView {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
         InsetsUtil.clipRounded(root);
-        root.setPadding((int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_MD_DP * d),
-                (int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_XL_DP * d));
+        root.setPadding((int)(AppColors.SPACE_MD_DP * d), (int)(6 * d),
+                (int)(AppColors.SPACE_MD_DP * d), (int)(8 * d));
 
+        // ==================== 转发类 ====================
+        root.addView(M3Page.section(ctx, "乐少转发",
+                "语音/收藏/自动转发、突破9人上限、原生转发按钮替换、万群定时群发"));
+
+        // 语音消息转发
         LinearLayout cardChat = makeCard(ctx, d);
         boolean vfOn = HookConfig.isEnabled("voice_forward");
 
@@ -47,22 +52,6 @@ public class ContactGroupPageView {
             VoiceForwardHook.setEnabled(on);
         }, null));
         root.addView(cardChat);
-
-        root.addView(candyDivider(ctx, d));
-
-        // 自定义气泡：分别选择收/发消息气泡图片（文档《修改聊天气泡WeChatChatBubbleReplace.md》方案A）
-        boolean bubbleOn = prefs != null && prefs.getBoolean(ChatBubbleHook.K_ENABLED, false);
-        LinearLayout cardBubble = makeCard(ctx, d);
-        cardBubble.addView(switchRow(ctx, d, "自定义气泡",
-                "分别选择收到/发出消息的气泡图片", bubbleOn,
-                (v, on) -> {
-                    if (prefs != null) prefs.edit().putBoolean(ChatBubbleHook.K_ENABLED, on).apply();
-                    ChatBubbleHook.setEnabled(on);
-                    Toast.makeText(ctx, "自定义气泡已" + (on ? "开启" : "关闭")
-                            + "（重启微信后完全生效）", Toast.LENGTH_SHORT).show();
-                },
-                v -> SubPageActivity.open(act, "自定义气泡", 27)));
-        root.addView(cardBubble);
 
         root.addView(candyDivider(ctx, d));
 
@@ -81,22 +70,6 @@ public class ContactGroupPageView {
 
         root.addView(candyDivider(ctx, d));
 
-        // v1146: 消息防撤回（严格实现文档《WeChat_AntiRevoke_Reverse.md》H1/H3 方案）
-        boolean antiRevokeOn = prefs != null && prefs.getBoolean(AntiRecallHook.K_MASTER, true);
-        LinearLayout cardAntiRevoke = makeCard(ctx, d);
-        cardAntiRevoke.addView(switchRow(ctx, d, "消息防撤回",
-                "拦截服务端撤回改写，原消息继续显示（保留微信原生提示）", antiRevokeOn,
-                (v, on) -> {
-                    if (prefs != null) prefs.edit().putBoolean(AntiRecallHook.K_MASTER, on).apply();
-                    AntiRecallHook.setEnabled(on);
-                    Toast.makeText(ctx, "消息防撤回已" + (on ? "开启" : "关闭")
-                            + "（重启微信后完全生效）", Toast.LENGTH_SHORT).show();
-                },
-                v -> AntiRecallHook.showConfigDialog(act)));
-        root.addView(cardAntiRevoke);
-
-        root.addView(candyDivider(ctx, d));
-
         // 自动转发卡片
         boolean afOn = prefs != null && prefs.getBoolean("ls_autofw_enabled", false);
         LinearLayout cardAutoFw = makeCard(ctx, d);
@@ -107,49 +80,6 @@ public class ContactGroupPageView {
             Toast.makeText(ctx, "自动转发已" + (on ? "开启" : "关闭"), Toast.LENGTH_SHORT).show();
         }, v -> com.leshao.v3.hook.AutoForwardHook.showConfigDialog(act)));
         root.addView(cardAutoFw);
-
-        root.addView(candyDivider(ctx, d));
-
-        // 聊天分组卡片
-        boolean chatGroupOn = prefs != null && prefs.getBoolean("ls_chat_group_enabled", true);
-        LinearLayout cardGroup = makeCard(ctx, d);
-        cardGroup.addView(switchRow(ctx, d, "聊天分组", null, chatGroupOn, (v, on) -> {
-            if (prefs != null) prefs.edit().putBoolean("ls_chat_group_enabled", on).apply();
-            // v998: 开关变化后立即显示/隐藏聊天列表顶部的分组栏
-            ChatGroupUiInjector.onEnabledChanged();
-        }, v -> SubPageActivity.open(act, "聊天分组管理", 14)));
-        root.addView(cardGroup);
-
-        root.addView(candyDivider(ctx, d));
-
-        // v998: 万群定时群发从"群管理助手"移植到本菜单, 点击进入独立页面
-        LinearLayout cardWanQun = makeCard(ctx, d);
-        cardWanQun.addView(M3Page.clickRow(ctx, "\uD83D\uDCE2", "乐少万群定时群发", "勾选多个群+定时发送",
-                () -> SubPageActivity.open(act, "乐少万群定时群发", 4)));
-        root.addView(cardWanQun);
-
-        root.addView(candyDivider(ctx, d));
-
-        LinearLayout cardEntry = makeCard(ctx, d);
-        boolean cornerMenuOn = com.leshao.v3.wm.utils.WmPrefs.isCornerMenu();
-        boolean longPressMenuOn = com.leshao.v3.wm.utils.WmPrefs.isLongPressMenu();
-
-        cardEntry.addView(switchRow(ctx, d, "微信左上角菜单", null, cornerMenuOn, (v, on) -> {
-            com.leshao.v3.wm.utils.WmPrefs.set("corner_menu", on);
-        }, null));
-        cardEntry.addView(switchRow(ctx, d, "聊天窗口长按菜单", null, longPressMenuOn, (v, on) -> {
-            com.leshao.v3.wm.utils.WmPrefs.set("long_press_menu", on);
-        }, null));
-        root.addView(cardEntry);
-
-        root.addView(candyDivider(ctx, d));
-
-        // v1110: 消息长按菜单净化入口
-        LinearLayout cardMsgMenu = makeCard(ctx, d);
-        cardMsgMenu.addView(M3Page.clickRow(ctx, "\uD83E\uDDF9", "去你妈的消息长按菜单",
-                "勾选要移除的微信原生按钮",
-                () -> SubPageActivity.open(act, "去你妈的消息长按菜单", 21)));
-        root.addView(cardMsgMenu);
 
         root.addView(candyDivider(ctx, d));
 
@@ -170,36 +100,165 @@ public class ContactGroupPageView {
 
         root.addView(candyDivider(ctx, d));
 
-        // 新增（文档实现）：消息伪装 / 自动抢红包 / 输入框快捷按钮 / 数据库直读
-        LinearLayout cardNew = makeCard(ctx, d);
-        cardNew.addView(switchRow(ctx, d, "消息伪装",
+        // 微信原生转发按钮替换：长按消息菜单「转发」/ 多选左下角「转发」使用模块联系人选择器
+        boolean wxFwdReplaceOn = prefs != null
+                && prefs.getBoolean(WxForwardReplaceHook.K_ENABLED, false);
+        LinearLayout cardWxFwdReplace = makeCard(ctx, d);
+        cardWxFwdReplace.addView(switchRow(ctx, d, "微信原生转发按钮替换",
+                "长按消息「转发」/多选左下角「转发」改用模块联系人选择器（不限制人数）", wxFwdReplaceOn,
+                (v, on) -> {
+                    if (prefs != null) prefs.edit().putBoolean(WxForwardReplaceHook.K_ENABLED, on).apply();
+                    WxForwardReplaceHook.setEnabled(on);
+                    Toast.makeText(ctx, "微信原生转发按钮替换已" + (on ? "开启" : "关闭"), Toast.LENGTH_SHORT).show();
+                }, null));
+        root.addView(cardWxFwdReplace);
+
+        root.addView(candyDivider(ctx, d));
+
+        // v998: 万群定时群发从"群管理助手"移植到本菜单, 点击进入独立页面
+        LinearLayout cardWanQun = makeCard(ctx, d);
+        cardWanQun.addView(M3Page.clickRow(ctx, "\uD83D\uDCE2", "乐少万群定时群发", "勾选多个群+定时发送",
+                () -> SubPageActivity.open(act, "乐少万群定时群发", 4)));
+        root.addView(cardWanQun);
+
+        // ==================== 消息增强类 ====================
+        root.addView(M3Page.section(ctx, "消息增强",
+                "防撤回、长按菜单净化、消息伪装"));
+
+        // v1146: 消息防撤回（严格实现文档《WeChat_AntiRevoke_Reverse.md》H1/H3 方案）
+        boolean antiRevokeOn = prefs != null && prefs.getBoolean(AntiRecallHook.K_MASTER, true);
+        LinearLayout cardAntiRevoke = makeCard(ctx, d);
+        cardAntiRevoke.addView(switchRow(ctx, d, "消息防撤回",
+                "拦截服务端撤回改写，原消息继续显示（保留微信原生提示）", antiRevokeOn,
+                (v, on) -> {
+                    if (prefs != null) prefs.edit().putBoolean(AntiRecallHook.K_MASTER, on).apply();
+                    AntiRecallHook.setEnabled(on);
+                    Toast.makeText(ctx, "消息防撤回已" + (on ? "开启" : "关闭")
+                            + "（重启微信后完全生效）", Toast.LENGTH_SHORT).show();
+                },
+                v -> AntiRecallHook.showConfigDialog(act)));
+        root.addView(cardAntiRevoke);
+
+        root.addView(candyDivider(ctx, d));
+
+        // v1110: 消息长按菜单净化入口
+        LinearLayout cardMsgMenu = makeCard(ctx, d);
+        cardMsgMenu.addView(M3Page.clickRow(ctx, "\uD83E\uDDF9", "去你妈的消息长按菜单",
+                "勾选要移除的微信原生按钮",
+                () -> SubPageActivity.open(act, "去你妈的消息长按菜单", 21)));
+        root.addView(cardMsgMenu);
+
+        root.addView(candyDivider(ctx, d));
+
+        // 消息伪装（原"更多功能"卡片拆出，归入消息增强）
+        LinearLayout cardMsgForge = makeCard(ctx, d);
+        cardMsgForge.addView(switchRow(ctx, d, "消息伪装",
                 "文本伪装成系统消息 / 名片 / 链接卡片", MsgForgeHook.isEnabled(),
                 (v, on) -> {
                     MsgForgeHook.setEnabled(on);
                     Toast.makeText(ctx, "消息伪装已" + (on ? "开启" : "关闭"), Toast.LENGTH_SHORT).show();
                 },
                 v -> SubPageActivity.open(act, "消息伪装", 23)));
-        cardNew.addView(M3Page.divider(ctx));
-        cardNew.addView(switchRow(ctx, d, "自动抢红包",
+        root.addView(cardMsgForge);
+
+        // ==================== 红包装备类 ====================
+        root.addView(M3Page.section(ctx, "红包装备",
+                "自动抢红包"));
+
+        // 自动抢红包（原"更多功能"卡片拆出）
+        LinearLayout cardRedPacket = makeCard(ctx, d);
+        cardRedPacket.addView(switchRow(ctx, d, "自动抢红包",
                 "纯后台自动领取群红包", RedPacketHook.isEnabled(),
                 (v, on) -> {
                     RedPacketHook.setEnabled(on);
                     Toast.makeText(ctx, "自动抢红包已" + (on ? "开启" : "关闭"), Toast.LENGTH_SHORT).show();
                 },
                 v -> SubPageActivity.open(act, "自动抢红包", 24)));
-        cardNew.addView(M3Page.divider(ctx));
-        cardNew.addView(switchRow(ctx, d, "输入框快捷按钮",
+        root.addView(cardRedPacket);
+
+        // ==================== 聊天类 ====================
+        root.addView(M3Page.section(ctx, "聊天增强",
+                "聊天分组、输入框快捷按钮"));
+
+        // 聊天分组卡片
+        boolean chatGroupOn = prefs != null && prefs.getBoolean("ls_chat_group_enabled", true);
+        LinearLayout cardGroup = makeCard(ctx, d);
+        cardGroup.addView(switchRow(ctx, d, "聊天分组", null, chatGroupOn, (v, on) -> {
+            if (prefs != null) prefs.edit().putBoolean("ls_chat_group_enabled", on).apply();
+            // v998: 开关变化后立即显示/隐藏聊天列表顶部的分组栏
+            ChatGroupUiInjector.onEnabledChanged();
+        }, v -> SubPageActivity.open(act, "聊天分组管理", 14)));
+        root.addView(cardGroup);
+
+        root.addView(candyDivider(ctx, d));
+
+        // 输入框快捷按钮（原"更多功能"卡片拆出）
+        LinearLayout cardFooter = makeCard(ctx, d);
+        cardFooter.addView(switchRow(ctx, d, "输入框快捷按钮",
                 "聊天输入框上方常驻一排按钮", ChatFooterBarHook.isEnabled(),
                 (v, on) -> {
                     ChatFooterBarHook.setEnabled(on);
                     Toast.makeText(ctx, "输入框快捷按钮已" + (on ? "开启" : "关闭"), Toast.LENGTH_SHORT).show();
                 },
                 v -> SubPageActivity.open(act, "输入框快捷按钮", 26)));
-        cardNew.addView(M3Page.divider(ctx));
-        cardNew.addView(M3Page.clickRow(ctx, "\uD83D\uDDC4", "数据库直读",
+        root.addView(cardFooter);
+
+        root.addView(candyDivider(ctx, d));
+
+        // 一键拉群（文档《微信_一键邀请联系人进多群_逆向分析.md》）
+        LinearLayout cardBatchInvite = makeCard(ctx, d);
+        cardBatchInvite.addView(switchRow(ctx, d, "一键拉群",
+                "选好友→选群聊→按随机延迟逐群邀请",
+                com.leshao.v3.hook.BatchInviteConfig.isEnabled(),
+                (v, on) -> {
+                    com.leshao.v3.hook.BatchInviteConfig.setEnabled(on);
+                    Toast.makeText(ctx, "一键拉群已" + (on ? "开启" : "关闭"), Toast.LENGTH_SHORT).show();
+                },
+                v -> com.leshao.v3.hook.BatchInviteConfig.showConfigDialog(act)));
+        root.addView(cardBatchInvite);
+
+        // ==================== UI美化类 ====================
+        root.addView(M3Page.section(ctx, "UI美化",
+                "自定义气泡、微信原生菜单入口开关"));
+
+        // 自定义气泡：分别选择收/发消息气泡图片（文档《修改聊天气泡WeChatChatBubbleReplace.md》方案A）
+        boolean bubbleOn = prefs != null && prefs.getBoolean(ChatBubbleHook.K_ENABLED, false);
+        LinearLayout cardBubble = makeCard(ctx, d);
+        cardBubble.addView(switchRow(ctx, d, "自定义气泡",
+                "分别选择收到/发出消息的气泡图片", bubbleOn,
+                (v, on) -> {
+                    if (prefs != null) prefs.edit().putBoolean(ChatBubbleHook.K_ENABLED, on).apply();
+                    ChatBubbleHook.setEnabled(on);
+                    Toast.makeText(ctx, "自定义气泡已" + (on ? "开启" : "关闭")
+                            + "（重启微信后完全生效）", Toast.LENGTH_SHORT).show();
+                },
+                v -> SubPageActivity.open(act, "自定义气泡", 27)));
+        root.addView(cardBubble);
+
+        root.addView(candyDivider(ctx, d));
+
+        LinearLayout cardEntry = makeCard(ctx, d);
+        boolean cornerMenuOn = com.leshao.v3.wm.utils.WmPrefs.isCornerMenu();
+        boolean longPressMenuOn = com.leshao.v3.wm.utils.WmPrefs.isLongPressMenu();
+
+        cardEntry.addView(switchRow(ctx, d, "微信左上角菜单", null, cornerMenuOn, (v, on) -> {
+            com.leshao.v3.wm.utils.WmPrefs.set("corner_menu", on);
+        }, null));
+        cardEntry.addView(switchRow(ctx, d, "聊天窗口长按菜单", null, longPressMenuOn, (v, on) -> {
+            com.leshao.v3.wm.utils.WmPrefs.set("long_press_menu", on);
+        }, null));
+        root.addView(cardEntry);
+
+        // ==================== 系统工具类 ====================
+        root.addView(M3Page.section(ctx, "系统工具",
+                "数据库直读"));
+
+        // 数据库直读（原"更多功能"卡片拆出）
+        LinearLayout cardDb = makeCard(ctx, d);
+        cardDb.addView(M3Page.clickRow(ctx, "\uD83D\uDDC4", "数据库直读",
                 "直接只读查询微信主库（联系人/群/消息）",
                 () -> SubPageActivity.open(act, "数据库直读", 25)));
-        root.addView(cardNew);
+        root.addView(cardDb);
 
         return root;
     }
@@ -221,9 +280,12 @@ public class ContactGroupPageView {
     private static LinearLayout makeCard(Context ctx, float d) {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding((int)(2 * d), (int)(2 * d), (int)(2 * d), (int)(2 * d));
+        card.setPadding(0, 0, 0, 0);
         card.setBackground(CandyUi.cardBg(ctx));
         InsetsUtil.clipRounded(card);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, (int)(13 * d));
+        card.setLayoutParams(lp);
         return card;
     }
 
@@ -233,8 +295,10 @@ public class ContactGroupPageView {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        row.setBackground(CandyUi.cardBg(ctx));
+        // 全局规范: 行触控区域不低于 48dp
+        row.setMinimumHeight((int)(48 * d));
+        row.setPadding((int)(12 * d), (int)(10 * d), (int)(12 * d), (int)(10 * d));
+        row.setBackground(CandyUi.rowBg(ctx));
         InsetsUtil.clipRounded(row);
 
         LinearLayout textCol = new LinearLayout(ctx);
@@ -242,7 +306,7 @@ public class ContactGroupPageView {
         textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
 
         TextView tv = new TextView(ctx);
-        tv.setText(title); tv.setTextSize(15);
+        tv.setText(title); tv.setTextSize(16);
         tv.setTextColor(AppColors.text1()); tv.setTypeface(null, Typeface.BOLD);
         textCol.addView(tv);
 

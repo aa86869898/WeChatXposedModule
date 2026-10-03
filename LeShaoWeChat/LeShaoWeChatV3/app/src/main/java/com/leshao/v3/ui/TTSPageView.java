@@ -13,6 +13,7 @@ import android.os.Environment;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.EditText;
@@ -79,8 +80,12 @@ public class TTSPageView {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
         InsetsUtil.clipRounded(root);
-        root.setPadding((int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_MD_DP * d),
-                (int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_XL_DP * d));
+        root.setPadding((int)(AppColors.SPACE_MD_DP * d), (int)(6 * d),
+                (int)(AppColors.SPACE_MD_DP * d), (int)(8 * d));
+
+        // v1145: 页面顶部统一分区标题
+        root.addView(M3Page.section(ctx, "TTS 语音播报",
+                "自动播报新消息 / 群通知，支持音色切换与静音时段"));
 
         // ★ TTS 引擎选择 + 配音魔方入口 (置顶)
         root.addView(buildTtsEngineCard(ctx, parentAct, d, prefs));
@@ -292,10 +297,11 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         if (whitelist != null && !whitelist.trim().isEmpty()) {
             wlCount = whitelist.split("[,，]").length;
         }
-        LinearLayout row = new LinearLayout(ctx);
+LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding((int) (14 * d), (int) (10 * d), (int) (14 * d), (int) (10 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setPadding((int)(12 * d), (int)(10 * d), (int)(12 * d), (int)(10 * d));
+        row.setBackground(CandyUi.rowBg(ctx));
+        InsetsUtil.clipRounded(row);
 
         TextView status = new TextView(ctx);
         status.setTextSize(13);
@@ -319,8 +325,9 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
     private static View timeRangeRow(Context ctx, float d, String start, String end, TimeCallback cb) {        LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setPadding((int)(12 * d), (int)(10 * d), (int)(12 * d), (int)(10 * d));
+        row.setBackground(CandyUi.rowBg(ctx));
+        InsetsUtil.clipRounded(row);
 
         TextView label = new TextView(ctx);
         label.setText("时间段:  ");
@@ -335,8 +342,11 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         etStart.setSingleLine(true);
         etStart.setInputType(InputType.TYPE_CLASS_TEXT);
         etStart.setWidth((int)(80 * d));
-        etStart.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
-        etStart.setBackgroundColor(AppColors.card());
+        etStart.setPadding((int)(6 * d), (int)(6 * d), (int)(6 * d), (int)(6 * d));
+        GradientDrawable startBg = new GradientDrawable();
+        startBg.setColor(AppColors.inputBg());
+        startBg.setCornerRadius(AppColors.SHAPE_INPUT_DP * d);
+        etStart.setBackground(startBg);
         row.addView(etStart);
 
         TextView sep = new TextView(ctx);
@@ -352,8 +362,11 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         etEnd.setSingleLine(true);
         etEnd.setInputType(InputType.TYPE_CLASS_TEXT);
         etEnd.setWidth((int)(80 * d));
-        etEnd.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
-        etEnd.setBackgroundColor(AppColors.card());
+        etEnd.setPadding((int)(6 * d), (int)(6 * d), (int)(6 * d), (int)(6 * d));
+        GradientDrawable endBg = new GradientDrawable();
+        endBg.setColor(AppColors.inputBg());
+        endBg.setCornerRadius(AppColors.SHAPE_INPUT_DP * d);
+        etEnd.setBackground(endBg);
         row.addView(etEnd);
 
         TextView save = new TextView(ctx);
@@ -376,8 +389,9 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
                                      String desc, int min, int max, IntCallback cb) {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setPadding((int)(12 * d), (int)(10 * d), (int)(12 * d), (int)(10 * d));
+        row.setBackground(CandyUi.rowBg(ctx));
+        InsetsUtil.clipRounded(row);
 
         LinearLayout labelRow = new LinearLayout(ctx);
         labelRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -435,8 +449,10 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setMinimumHeight((int)(48 * d));
+        row.setPadding((int)(12 * d), (int)(10 * d), (int)(12 * d), (int)(10 * d));
+        row.setBackground(CandyUi.rowBg(ctx));
+        InsetsUtil.clipRounded(row);
 
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
@@ -444,7 +460,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
 
         TextView tv = new TextView(ctx);
         tv.setText(title);
-        tv.setTextSize(14);
+        tv.setTextSize(16);
         tv.setTextColor(AppColors.text1());
         tv.setTypeface(null, Typeface.BOLD);
         textCol.addView(tv);
@@ -488,8 +504,12 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
     private static LinearLayout makeCard(Context ctx, float d) {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding((int)(2 * d), (int)(2 * d), (int)(2 * d), (int)(2 * d));
-        card.setBackgroundColor(AppColors.card());
+        card.setPadding(0, 0, 0, 0);
+        card.setBackground(CandyUi.cardBg(ctx));
+        InsetsUtil.clipRounded(card);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.setMargins(0, 0, 0, (int)(13 * d));
+        card.setLayoutParams(lp);
         return card;
     }
 
@@ -498,15 +518,17 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setMinimumHeight((int)(48 * d));
+        row.setPadding((int)(12 * d), (int)(10 * d), (int)(12 * d), (int)(10 * d));
+        row.setBackground(CandyUi.rowBg(ctx));
+        InsetsUtil.clipRounded(row);
 
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
         textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         TextView tv = new TextView(ctx);
         tv.setText(title);
-        tv.setTextSize(15);
+        tv.setTextSize(16);
         tv.setTextColor(AppColors.text1());
         tv.setTypeface(null, Typeface.BOLD);
         textCol.addView(tv);
@@ -532,15 +554,17 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setMinimumHeight((int)(48 * d));
+        row.setPadding((int)(12 * d), (int)(10 * d), (int)(12 * d), (int)(10 * d));
+        row.setBackground(CandyUi.rowBg(ctx));
+        InsetsUtil.clipRounded(row);
 
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(LinearLayout.VERTICAL);
         textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
         TextView tv = new TextView(ctx);
         tv.setText(title);
-        tv.setTextSize(15);
+        tv.setTextSize(16);
         tv.setTextColor(AppColors.text1());
         tv.setTypeface(null, Typeface.BOLD);
         textCol.addView(tv);
@@ -566,9 +590,9 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         et.setTextColor(AppColors.text1());
         GradientDrawable etBg = new GradientDrawable();
         etBg.setColor(AppColors.inputBg());
-        etBg.setCornerRadius(8 * d);
+        etBg.setCornerRadius(AppColors.SHAPE_INPUT_DP * d);
         et.setBackground(etBg);
-        LinearLayout.LayoutParams etLp = new LinearLayout.LayoutParams((int)(64 * d), (int)(38 * d));
+        LinearLayout.LayoutParams etLp = new LinearLayout.LayoutParams((int)(64 * d), (int)(44 * d));
         inputCol.addView(et, etLp);
         if (suffix != null && !suffix.isEmpty()) {
             TextView sfx = new TextView(ctx);
@@ -606,9 +630,10 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
     private static TextView sectionLabel(Context ctx, float d, String text) {
         TextView tv = new TextView(ctx);
         tv.setText(text);
-        tv.setTextSize(13);
+        tv.setTextSize(14);
+        tv.setTypeface(Typeface.DEFAULT_BOLD);
         tv.setTextColor(AppColors.text2());
-        tv.setPadding(0, 0, 0, (int)(8 * d));
+        tv.setPadding((int)(12 * d), 0, (int)(12 * d), (int)(8 * d));
         return tv;
     }
 
@@ -627,8 +652,9 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
     private static View speedRateRow(Context ctx, float d, float currentRate, FloatCallback cb) {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(12 * d));
-        row.setBackgroundColor(AppColors.whiteCard());
+        row.setPadding((int)(12 * d), (int)(10 * d), (int)(12 * d), (int)(10 * d));
+        row.setBackground(CandyUi.rowBg(ctx));
+        InsetsUtil.clipRounded(row);
 
         LinearLayout header = new LinearLayout(ctx);
         header.setOrientation(LinearLayout.HORIZONTAL);
@@ -685,16 +711,16 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
 
         TextView title = new TextView(ctx);
         title.setText("TTS 引擎选择");
-        title.setTextSize(15);
+        title.setTextSize(16);
         title.setTextColor(AppColors.text1());
         title.setTypeface(null, Typeface.BOLD);
-        title.setPadding((int)(14 * d), (int)(12 * d), (int)(14 * d), (int)(8 * d));
+        title.setPadding((int)(12 * d), (int)(12 * d), (int)(12 * d), (int)(8 * d));
         card.addView(title);
 
         // 单选按钮行
         LinearLayout radioRow = new LinearLayout(ctx);
         radioRow.setOrientation(LinearLayout.HORIZONTAL);
-        radioRow.setPadding((int)(14 * d), (int)(4 * d), (int)(14 * d), (int)(8 * d));
+        radioRow.setPadding((int)(12 * d), (int)(4 * d), (int)(12 * d), (int)(8 * d));
         radioRow.setGravity(Gravity.CENTER_VERTICAL);
 
         String engine = WmPrefs.isTTSCube() ? "cube" : "system";
@@ -707,11 +733,11 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         btnCube.setGravity(Gravity.CENTER);
         android.graphics.drawable.GradientDrawable cubeBg = new android.graphics.drawable.GradientDrawable();
         cubeBg.setColor(isCube ? AppColors.accent() : AppColors.card());
-        cubeBg.setCornerRadius((int)(6 * d));
+        cubeBg.setCornerRadius((int)(AppColors.SHAPE_FULL_DP * d));
         cubeBg.setStroke(isCube ? 0 : 1, AppColors.divider());
         btnCube.setBackground(cubeBg);
         btnCube.setTextColor(isCube ? AppColors.WHITE_TEXT : AppColors.text1());
-        btnCube.setPadding((int)(18 * d), (int)(10 * d), (int)(18 * d), (int)(10 * d));
+        btnCube.setPadding((int)(16 * d), (int)(10 * d), (int)(16 * d), (int)(10 * d));
         LinearLayout.LayoutParams btnCubeLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         btnCubeLp.setMargins(0, 0, (int)(6 * d), 0);
         radioRow.addView(btnCube, btnCubeLp);
@@ -723,37 +749,37 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         btnSys.setGravity(Gravity.CENTER);
         android.graphics.drawable.GradientDrawable sysBg = new android.graphics.drawable.GradientDrawable();
         sysBg.setColor(!isCube ? AppColors.accent() : AppColors.card());
-        sysBg.setCornerRadius((int)(6 * d));
+        sysBg.setCornerRadius((int)(AppColors.SHAPE_FULL_DP * d));
         sysBg.setStroke(!isCube ? 0 : 1, AppColors.divider());
         btnSys.setBackground(sysBg);
         btnSys.setTextColor(!isCube ? AppColors.WHITE_TEXT : AppColors.text1());
-        btnSys.setPadding((int)(18 * d), (int)(10 * d), (int)(18 * d), (int)(10 * d));
+        btnSys.setPadding((int)(16 * d), (int)(10 * d), (int)(16 * d), (int)(10 * d));
         LinearLayout.LayoutParams btnSysLp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         btnSysLp.setMargins((int)(6 * d), 0, 0, 0);
         radioRow.addView(btnSys, btnSysLp);
         card.addView(radioRow);
 
-        CandyUi.ripple(btnCube, AppColors.SHAPE_SM_DP);
+        CandyUi.ripple(btnCube, AppColors.SHAPE_FULL_DP);
         btnCube.setOnClickListener(v -> {
             WmPrefs.set("tts_cube", true);
-            btnCube.setBackground(CandyUi.gradientBg(ctx, 6));
+            btnCube.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_FULL_DP));
             btnCube.setTextColor(AppColors.WHITE_TEXT);
             android.graphics.drawable.GradientDrawable gd2 = new android.graphics.drawable.GradientDrawable();
             gd2.setColor(AppColors.card());
-            gd2.setCornerRadius((int)(6 * d));
+            gd2.setCornerRadius((int)(AppColors.SHAPE_FULL_DP * d));
             gd2.setStroke(1, AppColors.divider());
             btnSys.setBackground(gd2);
             btnSys.setTextColor(AppColors.text1());
             Toast.makeText(parentAct, "已切换为配音魔方TTS", Toast.LENGTH_SHORT).show();
         });
-        CandyUi.ripple(btnSys, AppColors.SHAPE_SM_DP);
+        CandyUi.ripple(btnSys, AppColors.SHAPE_FULL_DP);
         btnSys.setOnClickListener(v -> {
             WmPrefs.set("tts_cube", false);
-            btnSys.setBackground(CandyUi.gradientBg(ctx, 6));
+            btnSys.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_FULL_DP));
             btnSys.setTextColor(AppColors.WHITE_TEXT);
             android.graphics.drawable.GradientDrawable gd2 = new android.graphics.drawable.GradientDrawable();
             gd2.setColor(AppColors.card());
-            gd2.setCornerRadius((int)(6 * d));
+            gd2.setCornerRadius((int)(AppColors.SHAPE_FULL_DP * d));
             gd2.setStroke(1, AppColors.divider());
             btnCube.setBackground(gd2);
             btnCube.setTextColor(AppColors.text1());
@@ -767,8 +793,8 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         cfgBtn.setAllCaps(false);
         cfgBtn.setTextColor(AppColors.WHITE_TEXT);
         cfgBtn.setGravity(Gravity.CENTER);
-        cfgBtn.setBackground(CandyUi.gradientBg(ctx, 8));
-        cfgBtn.setPadding(0, (int)(12 * d), 0, (int)(12 * d));
+        cfgBtn.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_FULL_DP));
+        cfgBtn.setPadding(0, (int)(8 * d), 0, (int)(8 * d));
         LinearLayout.LayoutParams cfgLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         cfgLp.setMargins((int)(14 * d), (int)(8 * d), (int)(14 * d), (int)(12 * d));
@@ -928,8 +954,8 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         saveBtn.setTextSize(14);
         saveBtn.setAllCaps(false);
         saveBtn.setTextColor(AppColors.WHITE_TEXT);
-        saveBtn.setBackground(CandyUi.gradientBg(ctx, 8));
-        saveBtn.setPadding(0, (int)(10 * d), 0, (int)(10 * d));
+        saveBtn.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_FULL_DP));
+        saveBtn.setPadding(0, (int)(8 * d), 0, (int)(8 * d));
         LinearLayout.LayoutParams saveLp = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         saveLp.setMargins(0, 0, (int)(8 * d), 0);
@@ -942,10 +968,10 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         closeBtn.setTextColor(AppColors.text1());
         android.graphics.drawable.GradientDrawable closeBg = new android.graphics.drawable.GradientDrawable();
         closeBg.setColor(AppColors.card());
-        closeBg.setCornerRadius((int)(8 * d));
+        closeBg.setCornerRadius((int)(AppColors.SHAPE_FULL_DP * d));
         closeBg.setStroke(1, AppColors.divider());
         closeBtn.setBackground(closeBg);
-        closeBtn.setPadding(0, (int)(10 * d), 0, (int)(10 * d));
+        closeBtn.setPadding(0, (int)(8 * d), 0, (int)(8 * d));
         LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         bottomBar.addView(closeBtn, closeLp);
@@ -954,20 +980,12 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         outerLayout.addView(bottomBar);
 
         AlertDialog dialog = new AlertDialog.Builder(parentAct)
-                .setView(outerLayout)
                 .create();
         sTtsCubeDialog = dialog;
+        // 窗口自适应：宽度 90% 屏，高度随内容 WRAP，上限 90% 屏（内容区 ScrollView 内部滚动）
+        ViewGroup host = InsetsUtil.windowAutoHeight(dialog, outerLayout, 0.9f);
+        dialog.setView(host);
         dialog.show();
-
-        // 调整窗口大小：宽度 85%（+5），高度 75%（+5）
-        try {
-            android.view.Window window = dialog.getWindow();
-            if (window != null) {
-                android.util.DisplayMetrics dm = parentAct.getResources().getDisplayMetrics();
-                window.setLayout((int) (dm.widthPixels * 0.85f), (int) (dm.heightPixels * 0.75f));
-                window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(AppColors.card()));
-            }
-        } catch (Throwable ignored) {}
 
         CandyUi.ripple(keyBtn, AppColors.SHAPE_FULL_DP);
         keyBtn.setOnClickListener(v -> showKeyInputPopup(ctx, parentAct, d, keyBtn, voiceList, statusTv));
@@ -1069,7 +1087,7 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         b.setView(InsetsUtil.window(null, root, 0.9f, 0.5f));
         b.setCancelable(true);
         AlertDialog dlg = b.create();
-        InsetsUtil.center(dlg, 0.9f, 0.5f);
+        InsetsUtil.centerAutoHeight(dlg, 0.9f);
         android.view.Window w = dlg.getWindow();
         if (w != null) {
             InsetsUtil.transparentWindow(w);
@@ -1130,8 +1148,8 @@ boolean announceText = prefs != null && prefs.getBoolean(KEY_ANNOUNCE_TEXT, true
         }
         android.graphics.drawable.GradientDrawable sBg = new android.graphics.drawable.GradientDrawable();
         sBg.setColor(AppColors.inputBg());
-        sBg.setCornerRadius((int)(6 * d));
-        sBg.setStroke((int)(1.5f * d), AppColors.candyPink());
+        sBg.setCornerRadius((int)(AppColors.SHAPE_INPUT_DP * d));
+        sBg.setStroke((int)(1.5f * d), AppColors.stroke());
         searchEt.setBackground(sBg);
         voiceList.addView(searchEt);
 

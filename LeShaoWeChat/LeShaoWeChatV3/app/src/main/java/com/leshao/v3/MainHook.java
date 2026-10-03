@@ -13,6 +13,7 @@ import com.leshao.v3.hook.AntiDetectionHook;
 import com.leshao.v3.hook.ChatBubbleHook;
 import com.leshao.v3.hook.FavVoiceForwardHook;
 import com.leshao.v3.hook.ForwardLimitHook;
+import com.leshao.v3.hook.WxForwardReplaceHook;
 import com.leshao.v3.hook.ChatGroupHook;
 import com.leshao.v3.hook.ChatGroupUiInjector;
 import com.leshao.v3.hook.ChatVoiceSwitchHook;
@@ -55,17 +56,24 @@ public class MainHook implements IXposedHookLoadPackage {
     private static final AtomicInteger sModuleOk = new AtomicInteger(0);
     private static final AtomicInteger sModuleFail = new AtomicInteger(0);
     private static long sStartTime = 0;
+    /** onReady 回调专用后台执行器(单线程守护), 避免 DexKit 全量搜索阻塞主线程冷启动。 */
+    private static final java.util.concurrent.ExecutorService sOnReadyExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "leshao-onReady");
+                t.setDaemon(true);
+                return t;
+            });
 
     /** v1131: 每个 Activity 生命周期都写文件日志噪声过大, 默认关闭(仅保留功能性 probe)。 */
     private static final boolean ACTIVITY_LIFECYCLE_LOG = false;
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v3.0.97";
+    public static final String MODULE_BUILD = "v3.0.121";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 30097;
+    public static final int MODULE_VERSION_CODE = 30121;
 
     /** v1079: 当前前台 Activity(onResume 记录/onPause 清除), 供 talker 解析等复用。 */
     private static volatile java.lang.ref.WeakReference<Activity> sResumedActivity;
@@ -293,100 +301,118 @@ public class MainHook implements IXposedHookLoadPackage {
                  };
                  com.leshao.v3.ui.DexKitScanDialog.initSteps(steps, details);
              });
-            safeRun("MessageHook", () -> MessageHook.hook(cl));
-            safeRun("TtsVoiceSender", () -> TtsVoiceSender.hook(cl));
-            safeRun("MessageMenuHook", () -> MessageMenuHook.hook(cl));
-            safeRun("ChatFooterLongPressMenu", () -> ChatFooterLongPressMenu.hook(cl));
-            safeRun("WmChatHook.p06Bypass", () -> WmChatHook.hookP06BypassEarly(cl));
-            safeRun("ChatGroupUiInjector", () -> ChatGroupUiInjector.hook(cl));
+            deferRun("MessageHook", () -> MessageHook.hook(cl));
+            deferRun("TtsVoiceSender", () -> TtsVoiceSender.hook(cl));
+            deferRun("MessageMenuHook", () -> MessageMenuHook.hook(cl));
+            deferRun("ChatFooterLongPressMenu", () -> ChatFooterLongPressMenu.hook(cl));
+            deferRun("WmChatHook.p06Bypass", () -> WmChatHook.hookP06BypassEarly(cl));
+            deferRun("ChatGroupUiInjector", () -> ChatGroupUiInjector.hook(cl));
+            deferRun("MsgForgeHook", () -> com.leshao.v3.hook.MsgForgeHook.hook(cl));
+            deferRun("RedPacketHook", () -> com.leshao.v3.hook.RedPacketHook.hook(cl));
             ContextManager.setOnReadyCallback(new Runnable() {
                 @Override
                 public void run() {
-                    try {
-                        // v962: 实例总开关门控 —— 关闭时本实例不加载任何功能 Hook
-                        // (日志/崩溃链/悬浮球菜单等早期 Hook 仍保留, 用户可经悬浮球进入设置重新开启)
-                        LogWriter.log(TAG, "实例状态: " + InstanceManager.label()
-                                + " enabled=" + InstanceManager.isEnabled()
-                                + " dataDir=" + InstanceManager.dataDir());
-                        if (!InstanceManager.isEnabled()) {
-                            LogWriter.log(TAG, "实例总开关已关闭(userId=" + InstanceManager.userId()
-                                    + "), 跳过全部功能加载");
-                            return;
-                        }
-                        Context ctx = ContextManager.getAppContext();
-                        LogWriter.log(TAG, "--- ContextManager.onReady 回调开始 ---");
-                        rearmCrashHandler();
-
-                        // v1024: 监听 WCDB 捕获结果, DB 就绪后主动加载联系人(联系人选择器使用)
+                    sOnReadyExecutor.execute(() -> {
                         try {
-                            com.leshao.v3.db.DatabaseProvider.setOnDbReadyListener((db, pwd) -> {
-                                LogWriter.log(TAG, "[MainHook] DB captured listener fired, loading contacts");
-                                ContactRepository.loadAsync(null);
+                            // v962: 实例总开关门控 —— 关闭时本实例不加载任何功能 Hook
+                            // (日志/崩溃链/悬浮球菜单等早期 Hook 仍保留, 用户可经悬浮球进入设置重新开启)
+                            LogWriter.log(TAG, "实例状态: " + InstanceManager.label()
+                                    + " enabled=" + InstanceManager.isEnabled()
+                                    + " dataDir=" + InstanceManager.dataDir());
+                            if (!InstanceManager.isEnabled()) {
+                                LogWriter.log(TAG, "实例总开关已关闭(userId=" + InstanceManager.userId()
+                                        + "), 跳过全部功能加载");
+                                return;
+                            }
+                            Context ctx = ContextManager.getAppContext();
+                            LogWriter.log(TAG, "--- ContextManager.onReady 回调开始 ---");
+                            rearmCrashHandler();
+
+                            // v1024: 监听 WCDB 捕获结果, DB 就绪后主动加载联系人(联系人选择器使用)
+                            try {
+                                com.leshao.v3.db.DatabaseProvider.setOnDbReadyListener((db, pwd) -> {
+                                    LogWriter.log(TAG, "[MainHook] DB captured listener fired, loading contacts");
+                                    ContactRepository.loadAsync(null);
+                                });
+                            } catch (Throwable t) {
+                                LogWriter.log(TAG, "[MainHook] DatabaseProvider listener err: " + t.getMessage());
+                            }
+
+                            safeRun("SignatureDump", () -> SignatureDump.dump(cl));
+                            safeRun("TTSBroadcaster", () -> TTSBroadcaster.init(ctx));
+                            safeRun("VoiceAutoPlay", () -> VoiceAutoPlay.hook(cl));
+                            safeRun("ModuleConfig.initWxid", () -> ModuleConfig.initWxid(ctx));
+                            safeRun("VoiceHistoryDbHelper", () -> VoiceHistoryDbHelper.getInstance(ctx)
+                                    .deleteExpired(System.currentTimeMillis() - 30L * 86400000L));
+
+                            safeRun("AntiDetectionHook", () -> AntiDetectionHook.hook(cl));
+                            // v1146: 消息防撤回（文档《WeChat_AntiRevoke_Reverse.md》H1/H3 方案）
+                            safeRun("AntiRecallHook", () -> HookManager.register("AntiRecallHook",
+                                    () -> com.leshao.v3.hook.AntiRecallHook.hook(cl)));
+                            safeRun("ChatGroupHook", () -> HookManager.register("ChatGroupHook", () -> ChatGroupHook.hook(cl)));
+
+                            safeRun("VoiceForwardHook", () -> HookManager.register("VoiceForwardHook", VoiceForwardHook::hook));
+                            safeRun("AutoForwardHook", () -> HookManager.register("AutoForwardHook", () -> AutoForwardHook.hook(cl)));
+                            safeRun("WeChatUpdateBlocker", () -> HookManager.register("WeChatUpdateBlocker", () -> WeChatUpdateBlocker.hook(cl)));
+                            safeRun("ChatVoiceSwitchHook", () -> ChatVoiceSwitchHook.init(cl));
+
+                            // 新增（严格按需求文档实现）
+                            safeRun("LeftTopEntryHook", () -> com.leshao.v3.hook.LeftTopEntryHook.hook(cl));
+                            safeRun("ChatFooterBarHook", () -> com.leshao.v3.hook.ChatFooterBarHook.hook(cl));
+
+                            // 自定义气泡（文档方案A）+ 收藏语音转发（文档路线A）
+                            safeRun("ChatBubbleHook", () -> HookManager.register("ChatBubbleHook",
+                                    () -> ChatBubbleHook.hook(cl)));
+                            safeRun("FavVoiceForwardHook", () -> HookManager.register("FavVoiceForwardHook",
+                                    () -> FavVoiceForwardHook.hook(cl)));
+                            // v3.0.89: 突破转发/群发多选联系人 9 人上限（文档方案A：hook Intent.getIntExtra）
+                            safeRun("ForwardLimitHook", () -> HookManager.register("ForwardLimitHook",
+                                    () -> ForwardLimitHook.hook(cl)));
+                            // v3.0.x: 微信原生转发按钮替换为模块联系人选择器（文档《微信原生转发按钮替换》）
+                            safeRun("WxForwardReplaceHook", () -> HookManager.register("WxForwardReplaceHook",
+                                    () -> WxForwardReplaceHook.hook(cl)));
+
+                            safeRun("WmEntry", () -> WmEntry.injectAll(cl));
+
+                            safeRun("WanQunGroupHook", () -> {
+                                WanQunGroupHook.init(cl);
+                                WanQunGroupHook.hookReceive(cl);
+                            });
+
+                            // 右上角"+"菜单注入：一键免打扰 / 一键解除免打扰
+                            safeRun("PlusMenuInjector", () -> HookManager.register("PlusMenuInjector",
+                                    () -> com.leshao.v3.hook.PlusMenuInjector.hook(cl)));
+                            // 去广告（更多功能 -> 去你妈的广告）
+                            safeRun("AdBlockerHook", () -> HookManager.register("AdBlockerHook",
+                                    () -> com.leshao.v3.hook.AdBlockerHook.hook(cl)));
+                            // 一键拉群：聊天输入框上方快捷栏"拉群"按钮
+                            safeRun("ChatFooterInviteHook", () -> {
+                                com.leshao.v3.hook.BatchInviteManager.init(cl);
+                                HookManager.register("ChatFooterInviteHook",
+                                        () -> com.leshao.v3.hook.ChatFooterInviteHook.hook(cl));
+                            });
+
+                            // v998: 已移除"添加好友伪装来源"(FakeAddSource)
+
+                            // v980: LeshaoAI 依赖 DexKit 联网解析, 原实现直接在主线程同步执行(阻塞 294ms),
+                            // 其 hook 目标(聊天菜单)在后段 UI 才加载, 改为后台线程延迟安装, 既不丢 hook 时机,
+                            // 又消除启动期主线程阻塞。
+                            deferRun("LeshaoAI", () -> {
+                                com.leshao.ai.hook.HookEntry.appClassLoader = cl;
+                                com.leshao.ai.util.DexKitBridgeHolder.init(cl);
+                                com.leshao.ai.hook.wechat.WeChatHook.install(lpparam);
+                                LogWriter.log(TAG, "[MainHook] LeshaoAI 模块已加载");
                             });
                         } catch (Throwable t) {
-                            LogWriter.log(TAG, "[MainHook] DatabaseProvider listener err: " + t.getMessage());
+                            LogWriter.log(TAG, "[MainHook] FATAL in onReadyCallback: " + t.getClass().getSimpleName()
+                                + " " + t.getMessage());
+                        } finally {
+                            int hookTasksRegistered = HookManager.pendingCount();
+                            try { HookManager.activateAll(); }
+                            catch (Throwable t) { LogWriter.log(TAG, "[MainHook] activateAll FAIL: " + t.getMessage()); }
+                            printModuleSummary(hookTasksRegistered);
                         }
-
-                        safeRun("SignatureDump", () -> SignatureDump.dump(cl));
-                        safeRun("TTSBroadcaster", () -> TTSBroadcaster.init(ctx));
-                        safeRun("VoiceAutoPlay", () -> VoiceAutoPlay.hook(cl));
-                        safeRun("ModuleConfig.initWxid", () -> ModuleConfig.initWxid(ctx));
-                        safeRun("VoiceHistoryDbHelper", () -> VoiceHistoryDbHelper.getInstance(ctx)
-                                .deleteExpired(System.currentTimeMillis() - 30L * 86400000L));
-
-                        safeRun("AntiDetectionHook", () -> AntiDetectionHook.hook(cl));
-                        // v1146: 消息防撤回（文档《WeChat_AntiRevoke_Reverse.md》H1/H3 方案）
-                        safeRun("AntiRecallHook", () -> HookManager.register("AntiRecallHook",
-                                () -> com.leshao.v3.hook.AntiRecallHook.hook(cl)));
-                        safeRun("ChatGroupHook", () -> HookManager.register("ChatGroupHook", () -> ChatGroupHook.hook(cl)));
-
-                        safeRun("VoiceForwardHook", () -> HookManager.register("VoiceForwardHook", VoiceForwardHook::hook));
-                        safeRun("AutoForwardHook", () -> HookManager.register("AutoForwardHook", () -> AutoForwardHook.hook(cl)));
-                        safeRun("WeChatUpdateBlocker", () -> HookManager.register("WeChatUpdateBlocker", () -> WeChatUpdateBlocker.hook(cl)));
-                        safeRun("ChatVoiceSwitchHook", () -> ChatVoiceSwitchHook.init(cl));
-
-                        // 新增（严格按需求文档实现）
-                        safeRun("LeftTopEntryHook", () -> com.leshao.v3.hook.LeftTopEntryHook.hook(cl));
-                        safeRun("ChatFooterBarHook", () -> com.leshao.v3.hook.ChatFooterBarHook.hook(cl));
-                        safeRun("MsgForgeHook", () -> com.leshao.v3.hook.MsgForgeHook.hook(cl));
-                        safeRun("RedPacketHook", () -> com.leshao.v3.hook.RedPacketHook.hook(cl));
-
-                        // 自定义气泡（文档方案A）+ 收藏语音转发（文档路线A）
-                        safeRun("ChatBubbleHook", () -> HookManager.register("ChatBubbleHook",
-                                () -> ChatBubbleHook.hook(cl)));
-                        safeRun("FavVoiceForwardHook", () -> HookManager.register("FavVoiceForwardHook",
-                                () -> FavVoiceForwardHook.hook(cl)));
-                        // v3.0.89: 突破转发/群发多选联系人 9 人上限（文档方案A：hook Intent.getIntExtra）
-                        safeRun("ForwardLimitHook", () -> HookManager.register("ForwardLimitHook",
-                                () -> ForwardLimitHook.hook(cl)));
-
-                        safeRun("WmEntry", () -> WmEntry.injectAll(cl));
-
-                        safeRun("WanQunGroupHook", () -> {
-                            WanQunGroupHook.init(cl);
-                            WanQunGroupHook.hookReceive(cl);
-                        });
-
-                        // v998: 已移除"添加好友伪装来源"(FakeAddSource)
-
-                        // v980: LeshaoAI 依赖 DexKit 联网解析, 原实现直接在主线程同步执行(阻塞 294ms),
-                        // 其 hook 目标(聊天菜单)在后段 UI 才加载, 改为后台线程延迟安装, 既不丢 hook 时机,
-                        // 又消除启动期主线程阻塞。
-                        deferRun("LeshaoAI", () -> {
-                            com.leshao.ai.hook.HookEntry.appClassLoader = cl;
-                            com.leshao.ai.util.DexKitBridgeHolder.init(cl);
-                            com.leshao.ai.hook.wechat.WeChatHook.install(lpparam);
-                            LogWriter.log(TAG, "[MainHook] LeshaoAI 模块已加载");
-                        });
-                    } catch (Throwable t) {
-                        LogWriter.log(TAG, "[MainHook] FATAL in onReadyCallback: " + t.getClass().getSimpleName()
-                            + " " + t.getMessage());
-                    } finally {
-                        int hookTasksRegistered = HookManager.pendingCount();
-                        try { HookManager.activateAll(); }
-                        catch (Throwable t) { LogWriter.log(TAG, "[MainHook] activateAll FAIL: " + t.getMessage()); }
-                        printModuleSummary(hookTasksRegistered);
-                    }
+                    });
                 }
             });
         } catch (Throwable t) {

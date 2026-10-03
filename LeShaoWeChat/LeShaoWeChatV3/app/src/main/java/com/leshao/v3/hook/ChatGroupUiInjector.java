@@ -416,8 +416,7 @@ public class ChatGroupUiInjector {
         hsv.setHorizontalScrollBarEnabled(false);
         hsv.setClipChildren(false);
         hsv.setClipToPadding(false);
-        boolean dark = isDarkMode(ctx);
-        hsv.setBackgroundColor(dark ? Color.parseColor("#1E1E1E") : Color.parseColor("#F5F5F5"));
+        hsv.setBackgroundColor(AppColors.surfaceContainerHighest());
         LinearLayout ll = new LinearLayout(ctx);
         ll.setClipChildren(false);
         ll.setClipToPadding(false);
@@ -511,15 +510,16 @@ public class ChatGroupUiInjector {
                 bg.setStroke(dp(1, ctx), 0xB3FFFFFF);
                 tv.setBackground(bg);
                 tv.setTextColor(Color.WHITE);
-                tv.setShadowLayer(dp(4, ctx), 0, 0, 0x40A855F7);
+                tv.setShadowLayer(dp(4, ctx), 0, 0, (AppColors.primary() & 0x00FFFFFF) | 0x40000000);
             } else {
-                GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                    dark ? new int[]{0x26C9A9FF, 0x26A855F7, 0x26FF6FB0}
-                         : new int[]{0x1AC9A9FF, 0x1AA855F7, 0x1AFF6FB0});
+                // v1148 去渐变：主色浅底 + 主色描边
+                int accent = AppColors.primary();
+                GradientDrawable bg = new GradientDrawable();
+                bg.setColor((dark ? 0x26 : 0x1A) << 24 | (accent & 0x00FFFFFF));
                 bg.setCornerRadius(dp(20, ctx));
-                bg.setStroke(dp(1, ctx), dark ? Color.parseColor("#C9A9FF") : Color.parseColor("#8B5CF6"));
+                bg.setStroke(dp(1, ctx), accent);
                 tv.setBackground(bg);
-                tv.setTextColor(dark ? Color.parseColor("#C8C8CE") : Color.parseColor("#555555"));
+                tv.setTextColor(AppColors.onSurfaceVariant());
             }
         } catch (Throwable ignored) {}
     }
@@ -687,15 +687,14 @@ public class ChatGroupUiInjector {
 
         TextView tv = new TextView(ctx);
         tv.setText("\uFF0B"); tv.setTextSize(15);
-        boolean dark = isDarkMode(ctx);
-        tv.setTextColor(dark ? Color.parseColor("#C9A9FF") : Color.parseColor("#8B5CF6"));
+        tv.setTextColor(AppColors.onPrimary());
         tv.setPadding(dp(10, ctx), dp(7, ctx), dp(10, ctx), dp(7, ctx));
         tv.setGravity(Gravity.CENTER); tv.setTypeface(null, Typeface.BOLD);
         tv.setMinWidth(dp(39, ctx));
         com.leshao.v3.ui.FlowingGradientDrawable bg = new com.leshao.v3.ui.FlowingGradientDrawable(
-            0xFFC9A9FF, 0xFFA855F7, dark ? 0xFFFFB8D4 : 0xFFFF6FB0);
+            AppColors.primary(), AppColors.primary(), AppColors.primary());
         bg.setCornerRadii(new float[]{dp(16, ctx), dp(16, ctx), dp(16, ctx), dp(16, ctx)});
-        bg.setStroke(dp(1, ctx), dark ? Color.parseColor("#C9A9FF") : Color.parseColor("#8B5CF6"));
+        bg.setStroke(dp(1, ctx), AppColors.onPrimary());
         tv.setBackground(bg);
         FrameLayout.LayoutParams tvLp = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -767,7 +766,7 @@ public class ChatGroupUiInjector {
     private static int themeTitle() { return isDarkMode(getCurrentActivityContext()) ? 0xFFE4E4E8 : 0xFF1D1D1F; }
     private static int themeBody()   { return isDarkMode(getCurrentActivityContext()) ? 0xFFB0B0B8 : 0xFF565659; }
     private static int themeNote()   { return isDarkMode(getCurrentActivityContext()) ? 0xFF707079 : 0xFF949499; }
-    private static int themeAccent() { return isDarkMode(getCurrentActivityContext()) ? 0xFFC9A9FF : 0xFF8B5CF6; }
+    private static int themeAccent() { return AppColors.primary(); }
     private static int themeBg()     { return isDarkMode(getCurrentActivityContext()) ? 0xFF2A2A2E : 0xFFFFFFFF; }
     private static int themeCard()   { return isDarkMode(getCurrentActivityContext()) ? 0xFF1E1E22 : 0xFFF5F5F5; }
 

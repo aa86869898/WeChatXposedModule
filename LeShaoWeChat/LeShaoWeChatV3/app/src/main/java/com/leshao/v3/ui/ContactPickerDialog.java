@@ -43,7 +43,26 @@ public class ContactPickerDialog {
         void onSelected(Set<String> wxids, String display);
     }
 
+    public interface OnCanceled {
+        void onCanceled();
+    }
+
     public static void show(Activity parentAct, String currentIds, int initialMode, OnContactsSelected callback) {
+        show(parentAct, currentIds, initialMode, callback, null);
+    }
+
+    public static void show(Activity parentAct, String currentIds, int initialMode,
+                            OnContactsSelected callback, OnCanceled cancelCallback) {
+        show(parentAct, currentIds, initialMode, callback, cancelCallback, null);
+    }
+
+    /**
+     * 一键拉群等场景的扩展入口(向后兼容): 允许自定义顶部标题。
+     *
+     * @param title 非空时替换默认「选择联系人」标题, null 保持原行为。
+     */
+    public static void show(Activity parentAct, String currentIds, int initialMode,
+                            OnContactsSelected callback, OnCanceled cancelCallback, String title) {
         if (parentAct == null || parentAct.isFinishing()) return;
 
         // v1025: 先立即显示加载框(DB 捕获/联系人加载完成后替换内容), 选择器秒开
@@ -92,14 +111,21 @@ public class ContactPickerDialog {
                 if (loadingRef[0] != null) {
                     try { loadingRef[0].dismiss(); } catch (Throwable ignored) {}
                 }
-                showDialog(parentAct, contacts, selected, initialMode, callback);
+                showDialog(parentAct, contacts, selected, initialMode, callback, cancelCallback, title);
             });
         });
     }
 
     private static void showDialog(Activity act, List<ContactCard> items,
                                    Set<String> selected, int initialMode,
-                                   OnContactsSelected callback) {
+                                   OnContactsSelected callback, OnCanceled cancelCallback) {
+        showDialog(act, items, selected, initialMode, callback, cancelCallback, null);
+    }
+
+    private static void showDialog(Activity act, List<ContactCard> items,
+                                   Set<String> selected, int initialMode,
+                                   OnContactsSelected callback, OnCanceled cancelCallback,
+                                   String title) {
         int p16 = dp(act, 16);
         int p12 = dp(act, 12);
         int p8 = dp(act, 8);
@@ -107,11 +133,13 @@ public class ContactPickerDialog {
 
         LinearLayout root = new LinearLayout(act);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setMinimumHeight(dp(act, 520));
-        root.setBackground(CandyUi.dialogBg(act));
+        // v30111: 高度随内容自适应（上限 90%），不再强制最小高避免底部留白
+        root.setBackground(CandyUi.dialogBg(act, WindowLayer.depth()));
         InsetsUtil.clipRounded(root);
+        CandyUi.elevate(root);
 
-        final ModernTopBar topBar = new ModernTopBar(act, "\u9009\u62e9\u8054\u7cfb\u4eba", false, null);
+        final ModernTopBar topBar = new ModernTopBar(act,
+                (title != null && !title.isEmpty()) ? title : "\u9009\u62e9\u8054\u7cfb\u4eba", false, null);
         root.addView(topBar, new LinearLayout.LayoutParams(-1, -2));
 
         // Tab bar: 好友 | 群聊 counts
@@ -210,7 +238,7 @@ public class ContactPickerDialog {
         // Bottom bar: toggle + buttons
         LinearLayout bottomBar = new LinearLayout(act);
         bottomBar.setOrientation(LinearLayout.VERTICAL);
-        bottomBar.setPadding(p16, p8, p16, p8);
+        bottomBar.setPadding(p16, p8, p16, p12);
 
         LinearLayout btns = new LinearLayout(act);
         btns.setOrientation(LinearLayout.HORIZONTAL);
@@ -280,7 +308,10 @@ public class ContactPickerDialog {
         });
 
         dialog.setOnCancelListener(d -> {
-            // 返回键取消: 不回调, 保留原有配置
+            // 返回键取消: 不回调, 保留原有配置; 若提供了取消回调则通知调用方
+            if (cancelCallback != null) {
+                cancelCallback.onCanceled();
+            }
         });
 
         // Update toggle text + confirm button in refresh
@@ -371,7 +402,7 @@ public class ContactPickerDialog {
             canvas.drawCircle(size / 2f, size / 2f, size / 2f - 1, fill);
 
             Paint check = new Paint(Paint.ANTI_ALIAS_FLAG);
-            check.setColor(Color.WHITE);
+            check.setColor(AppColors.whiteTextOnAccent());
             check.setStrokeWidth(dp(act, 2.2f));
             check.setStyle(Paint.Style.STROKE);
             check.setStrokeCap(Paint.Cap.ROUND);
@@ -401,7 +432,7 @@ public class ContactPickerDialog {
 
     private static Bitmap letterAvatar(Activity act, String letter, int size) {
         Paint paint = new Paint();
-        paint.setColor(Color.WHITE);
+        paint.setColor(AppColors.onSecondaryContainer());
         paint.setTextSize(size * 0.45f);
         paint.setAntiAlias(true);
         paint.setTextAlign(Paint.Align.CENTER);

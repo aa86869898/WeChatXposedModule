@@ -211,7 +211,7 @@ public final class AudioMixEditorPage {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
-        int m = dp(14);
+        int m = dp(12);
         root.setPadding(m, dp(10), m, dp(10));
 
         root.addView(buildTopBar(), new LinearLayout.LayoutParams(-1, -2));
@@ -262,10 +262,11 @@ public final class AudioMixEditorPage {
         root.addView(buildBottomBar(), new LinearLayout.LayoutParams(-1, -2));
 
         dialog = new Dialog(ctx, android.R.style.Theme_Black_NoTitleBar);
-        dialog.setContentView(root);
+        // 窗口自适应：宽度 90% 屏，高度随内容 WRAP，上限 90% 屏（内容区内部滚动）
+        ViewGroup host = InsetsUtil.windowAutoHeight(dialog, root, 0.9f);
+        dialog.setContentView(host);
         Window w = dialog.getWindow();
         if (w != null) {
-            w.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT);
             w.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
             WindowManager.LayoutParams lp = w.getAttributes();
             lp.dimAmount = 0.5f;
@@ -289,9 +290,6 @@ public final class AudioMixEditorPage {
         rebuildEditor();
         rebuildList();
         dialog.show();
-        if (w != null) {
-            w.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT);
-        }
     }
 
     private View buildTopBar() {
@@ -306,7 +304,7 @@ public final class AudioMixEditorPage {
         back.setGravity(Gravity.CENTER);
         back.setPadding(dp(6), 0, dp(6), 0);
         back.setOnClickListener(v -> dialog.dismiss());
-        bar.addView(back, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        bar.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
 
         TextView title = new TextView(ctx);
         title.setText("音频拼接与混合");
@@ -369,19 +367,19 @@ public final class AudioMixEditorPage {
                 });
             }, "ls-amix-preview").start();
         });
-        LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(0, dp(46), 1f);
+        LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(0, dp(40), 1f);
         lp1.rightMargin = dp(8);
         bar.addView(playAllBtn, lp1);
 
         exportBtn = new TextView(ctx);
         exportBtn.setText("导出并发送");
-        exportBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        exportBtn.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         exportBtn.setTypeface(Typeface.DEFAULT_BOLD);
         exportBtn.setTextColor(AppColors.textOnPrimary());
         exportBtn.setGravity(Gravity.CENTER);
-        exportBtn.setBackground(CandyUi.gradientBg(ctx, 16));
+        exportBtn.setBackground(CandyUi.gradientBg(ctx, AppColors.SHAPE_LG_DP));
         exportBtn.setOnClickListener(v -> doExport());
-        bar.addView(exportBtn, new LinearLayout.LayoutParams(0, dp(46), 1.4f));
+        bar.addView(exportBtn, new LinearLayout.LayoutParams(0, dp(40), 1.4f));
         return bar;
     }
 
@@ -1021,16 +1019,15 @@ public final class AudioMixEditorPage {
             if (w <= 0 || h <= 0) return;
             ensureShaders(w);
 
-            // ===== 流光录音棚：深色渐变面板 =====
+            // ===== 糖果粉：深色纯色面板 =====
             paint.setStyle(Paint.Style.FILL);
-            paint.setShader(new LinearGradient(0, 0, 0, h,
-                    0xFF241E31, 0xFF2E2640, Shader.TileMode.CLAMP));
+            paint.setColor(AppColors.timelinePanelTop());
             rect.set(0, 0, w, h);
             cv.drawRoundRect(rect, dp(14), dp(14), paint);
             paint.setShader(null);
 
             if (data.isEmpty()) {
-                textPaint.setColor(0xFFA896C9);
+textPaint.setColor(AppColors.timelinePinkText());
                 textPaint.setTextSize(dp(12));
                 textPaint.setTextAlign(Paint.Align.CENTER);
                 cv.drawText("添加片段后可在此查看轨道并剪辑", w / 2f, h / 2f, textPaint);
@@ -1046,10 +1043,9 @@ public final class AudioMixEditorPage {
             float span = viewMsSpan();
             int rh = rulerH();
 
-            // 顶部标尺条（深色，下方直角）
+            // 顶部标尺条（糖果粉深色纯色，下方直角）
             paint.setStyle(Paint.Style.FILL);
-            paint.setShader(new LinearGradient(0, 0, 0, rh,
-                    0xFF211B2C, 0xFF1B1626, Shader.TileMode.CLAMP));
+            paint.setColor(AppColors.timelineRulerTop());
             rect.set(0, 0, w, rh);
             cv.drawRoundRect(rect, dp(14), dp(14), paint);
             cv.drawRect(0, rh / 2f, w, rh, paint);
@@ -1071,7 +1067,7 @@ public final class AudioMixEditorPage {
                 float outX = xOf(g[0] + s.effEnd());
                 drawBlock(cv, s, x, rw, top, laneH, inX, outX, i == vSel);
                 if (rw > dp(44)) {
-                    textPaint.setColor(0xFFEDE7FF);
+                    textPaint.setColor(AppColors.timelinePinkSoft());
                     textPaint.setTextSize(dp(9));
                     textPaint.setTextAlign(Paint.Align.LEFT);
                     cv.drawText(s.name, x + dp(5), top + dp(10), textPaint);
@@ -1080,16 +1076,16 @@ public final class AudioMixEditorPage {
 
             // 全局播放头
             if (playheadMs >= 0) {
-                drawVLine(cv, xOf(playheadMs), rh, h - dp(2), 0xFFFFAFCC);
+                drawVLine(cv, xOf(playheadMs), rh, h - dp(2), AppColors.timelinePink());
             }
             // 选中片段的剪辑游标
             if (vSel >= 0 && vSel < data.size()) {
                 int[] g = blockGeom(vSel);
                 float cx = xOf(g[0] + scrubLocal());
-                drawVLine(cv, cx, rh, h - dp(2), editActive ? 0xFFFFE08A : 0xFFFFC2D8);
+                drawVLine(cv, cx, rh, h - dp(2), editActive ? AppColors.timelineAmber() : AppColors.timelinePink());
                 paint.setStyle(Paint.Style.FILL);
                 paint.setShader(null);
-                paint.setColor(editActive ? 0xFFFFE08A : 0xFFFFC2D8);
+                paint.setColor(editActive ? AppColors.timelineAmber() : AppColors.timelinePink());
                 cursorTri.reset();
                 cursorTri.moveTo(cx - dp(5), rh + dp(1));
                 cursorTri.lineTo(cx + dp(5), rh + dp(1));
@@ -1114,10 +1110,10 @@ public final class AudioMixEditorPage {
             float interval = majorInterval();
             long first = (long) (Math.floor(scrollMs / interval) * interval);
             textPaint.setTextSize(dp(9));
-            textPaint.setColor(0xFFA896C9);
+            textPaint.setColor(AppColors.timelinePinkText());
             paint.setStyle(Paint.Style.FILL);
             paint.setShader(null);
-            paint.setColor(0xFFA896C9);
+            paint.setColor(AppColors.timelinePinkText());
             for (float t = first; t <= scrollMs + span + 1; t += interval) {
                 float x = xOf(t);
                 if (x < pad - dp(2) || x > getWidth() - pad + dp(2)) continue;
@@ -1127,7 +1123,7 @@ public final class AudioMixEditorPage {
             }
             if (zoom > 1.01f) {
                 textPaint.setTextAlign(Paint.Align.RIGHT);
-                textPaint.setColor(0xFFDCC3FF);
+                textPaint.setColor(AppColors.timelinePinkPale());
                 cv.drawText(String.format(java.util.Locale.US, "%.1fx", zoom),
                         getWidth() - pad, dp(12), textPaint);
             }
@@ -1140,14 +1136,14 @@ public final class AudioMixEditorPage {
             long firstMin = (long) (Math.floor(scrollMs / minor) * minor);
             paint.setStyle(Paint.Style.FILL);
             paint.setShader(null);
-            paint.setColor(0x10C4B5FD);
+            paint.setColor(AppColors.timelineGridMinor());
             for (float t = firstMin; t <= scrollMs + span + 1; t += minor) {
                 float x = xOf(t);
                 if (x < 0 || x > getWidth()) continue;
                 cv.drawRect(x, top, x + dp(1), bottom, paint);
             }
             long firstMaj = (long) (Math.floor(scrollMs / major) * major);
-            paint.setColor(0x30C4B5FD);
+            paint.setColor(AppColors.timelineGridMajor());
             for (float t = firstMaj; t <= scrollMs + span + 1; t += major) {
                 float x = xOf(t);
                 if (x < 0 || x > getWidth()) continue;
@@ -1200,7 +1196,7 @@ public final class AudioMixEditorPage {
             // 片段底
             paint.setStyle(Paint.Style.FILL);
             paint.setShader(null);
-            paint.setColor(0x26FFFFFF);
+            paint.setColor(AppColors.timelineBlockBase());
             rect.set(x, top, x + rw, top + laneH);
             cv.drawRoundRect(rect, dp(6), dp(6), paint);
 
@@ -1215,7 +1211,7 @@ public final class AudioMixEditorPage {
                 // 选区外压暗
                 paint.setStyle(Paint.Style.FILL);
                 paint.setShader(null);
-                paint.setColor(0x6E0A0612);
+                paint.setColor(AppColors.timelineDimOverlay());
                 if (inX > x) cv.drawRect(x, top, Math.min(inX, x + rw), top + laneH, paint);
                 if (outX < x + rw) cv.drawRect(Math.max(outX, x), top, x + rw, top + laneH, paint);
 
@@ -1242,7 +1238,7 @@ public final class AudioMixEditorPage {
             } else {
                 paint.setStyle(Paint.Style.FILL);
                 paint.setShader(null);
-                paint.setColor(0x2E000000);
+                paint.setColor(AppColors.timelineDimPlain());
                 rect.set(x, top, x + rw, top + laneH);
                 cv.drawRoundRect(rect, dp(6), dp(6), paint);
             }
@@ -1252,11 +1248,11 @@ public final class AudioMixEditorPage {
                 float cx = x + rw - dp(12), cy = top + dp(12);
                 paint.setShader(null);
                 paint.setStyle(Paint.Style.FILL);
-                paint.setColor(sel ? 0xE6E0455F : 0xB30A0612);
+                paint.setColor(sel ? AppColors.timelineDeleteBadge() : AppColors.timelineBadgeDark());
                 cv.drawCircle(cx, cy, dp(9), paint);
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setStrokeWidth(dp(1.6f));
-                paint.setColor(0xFFFFFFFF);
+                paint.setColor(AppColors.timelineWhite());
                 cv.drawLine(cx - dp(3.6f), cy - dp(3.6f), cx + dp(3.6f), cy + dp(3.6f), paint);
                 cv.drawLine(cx + dp(3.6f), cy - dp(3.6f), cx - dp(3.6f), cy + dp(3.6f), paint);
                 paint.setStyle(Paint.Style.FILL);
@@ -1310,7 +1306,7 @@ public final class AudioMixEditorPage {
             cv.drawCircle(hx, top + dp(7), dp(6), paint);
             cv.drawCircle(hx, bottom - dp(7), dp(6), paint);
             paint.setShader(null);
-            paint.setColor(0xFFFFFFFF);
+            paint.setColor(AppColors.timelineWhite());
             cv.drawCircle(hx, top + dp(7), dp(2f), paint);
             cv.drawCircle(hx, bottom - dp(7), dp(2f), paint);
         }
@@ -1591,7 +1587,8 @@ public final class AudioMixEditorPage {
     }
 
     private int barColor(int i) {
-        int[] pal = {AppColors.gradientStart(), 0xFF7C3AED, AppColors.gradientEnd(), 0xFFA78BFA};
+        int[] pal = {AppColors.gradientStart(), AppColors.gradientEnd(),
+                AppColors.timelineBarAlt1(), AppColors.timelineBarAlt2()};
         return pal[i % pal.length];
     }
 
@@ -2280,7 +2277,7 @@ public final class AudioMixEditorPage {
         tv.setText(msg);
         tv.setTextColor(AppColors.onSurface());
         tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        tv.setPadding(dp(24), dp(22), dp(24), dp(22));
+        tv.setPadding(dp(20), dp(16), dp(20), dp(16));
         busy = new AlertDialog.Builder(ctx).setView(tv).setCancelable(false).create();
         busy.show();
         this.busyText = tv;
@@ -2322,7 +2319,7 @@ public final class AudioMixEditorPage {
         tv.setTextColor(AppColors.error());
         tv.setGravity(Gravity.CENTER);
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(12));
+        bg.setCornerRadius(dp(AppColors.SHAPE_MD_DP));
         bg.setColor(AppColors.errorContainer());
         tv.setBackground(bg);
         tv.setPadding(dp(4), dp(11), dp(4), dp(11));
@@ -2334,18 +2331,17 @@ public final class AudioMixEditorPage {
     private TextView playIconButton() {
         TextView tv = new TextView(ctx);
         tv.setText("▶");
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 24);
-        tv.setTextColor(0xFFFFFFFF);
+        tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        tv.setTextColor(AppColors.whiteTextOnAccent());
         tv.setGravity(Gravity.CENTER);
-        GradientDrawable bg = new GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                new int[]{AppColors.gradientStart(), AppColors.gradientEnd()});
+        GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
+        bg.setColor(AppColors.primary());
         tv.setBackground(bg);
-        int sz = dp(58);
+        int sz = dp(44);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(sz, sz);
         lp.gravity = Gravity.CENTER_HORIZONTAL;
-        lp.topMargin = dp(10);
+        lp.topMargin = dp(6);
         lp.bottomMargin = dp(2);
         tv.setLayoutParams(lp);
         return tv;
@@ -2364,7 +2360,7 @@ public final class AudioMixEditorPage {
         tv.setTextColor(AppColors.primary());
         tv.setGravity(Gravity.CENTER);
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(12));
+        bg.setCornerRadius(dp(AppColors.SHAPE_MD_DP));
         bg.setColor(AppColors.surfaceContainerLow());
         bg.setStroke(dp(1), AppColors.outlineVariant());
         tv.setBackground(bg);
@@ -2380,7 +2376,7 @@ public final class AudioMixEditorPage {
         tv.setTextColor(AppColors.primary());
         tv.setGravity(Gravity.CENTER);
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(10));
+        bg.setCornerRadius(dp(AppColors.SHAPE_MD_DP));
         bg.setColor(AppColors.surfaceContainerHigh());
         tv.setBackground(bg);
         tv.setPadding(dp(10), dp(7), dp(10), dp(7));
@@ -2399,7 +2395,7 @@ public final class AudioMixEditorPage {
         tv.setTextColor(AppColors.error());
         tv.setGravity(Gravity.CENTER);
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(10));
+        bg.setCornerRadius(dp(AppColors.SHAPE_MD_DP));
         bg.setColor(AppColors.errorContainer());
         tv.setBackground(bg);
         tv.setPadding(dp(10), dp(7), dp(10), dp(7));
@@ -2436,7 +2432,7 @@ public final class AudioMixEditorPage {
 
     private GradientDrawable borderBg() {
         GradientDrawable bg = new GradientDrawable();
-        bg.setCornerRadius(dp(4));
+        bg.setCornerRadius(dp(AppColors.SHAPE_XS_DP));
         bg.setColor(AppColors.primaryContainer());
         bg.setStroke(dp(1), AppColors.primary());
         return bg;

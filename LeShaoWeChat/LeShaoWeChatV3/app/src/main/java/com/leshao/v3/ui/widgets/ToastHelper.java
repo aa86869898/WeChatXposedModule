@@ -15,9 +15,6 @@ import com.leshao.v3.ui.AppColors;
 /** 卡片式 Toast（成功/失败/普通），自动消失，主线程安全 */
 public class ToastHelper {
 
-    private static final int COLOR_SUCCESS = 0xFF8B5CF6;
-    private static final int COLOR_ERROR = 0xFFFA5151;
-
     private ToastHelper() {}
 
     public static void show(Context ctx, String msg) {
@@ -25,11 +22,11 @@ public class ToastHelper {
     }
 
     public static void success(Context ctx, String msg) {
-        show(ctx, "✅ " + msg, COLOR_SUCCESS);
+        show(ctx, "✅ " + msg, AppColors.primary());
     }
 
     public static void error(Context ctx, String msg) {
-        show(ctx, "❌ " + msg, COLOR_ERROR);
+        show(ctx, "❌ " + msg, AppColors.error());
     }
 
     public static void show(Context ctx, String msg, int accent) {
@@ -64,7 +61,7 @@ public class ToastHelper {
 
             GradientDrawable bg = new GradientDrawable();
             bg.setShape(GradientDrawable.RECTANGLE);
-            bg.setCornerRadius(AppColors.SHAPE_XS_DP * d);
+            bg.setCornerRadius(AppColors.SHAPE_LG_DP * d);
             // M3 snackbar：inverseSurface 底 + inverseOnSurface 字
             bg.setColor(accent == 0 ? AppColors.inverseSurface() : accent);
             card.setBackground(bg);

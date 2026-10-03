@@ -22,6 +22,15 @@ public class HookManager {
     private static final AtomicInteger failCount = new AtomicInteger(0);
     // v1131: activated 由多线程读写, 用 AtomicBoolean 保证可见性
     private static final AtomicBoolean activated = new AtomicBoolean(false);
+    /** 单任务超时保护: 个别任务(DexKit 全量搜索等)卡死时, 记录 FAIL 并继续下一个, 避免整个激活循环被饿死。 */
+    private static final long TASK_TIMEOUT_SECONDS = 10L;
+    /** 每个任务独立提交到守护线程池, 便于按任务粒度超时控制; 超时后任务线程仍可能运行(daemon), 但不阻塞激活循环。 */
+    private static final java.util.concurrent.ExecutorService sTaskExecutor =
+            java.util.concurrent.Executors.newCachedThreadPool(r -> {
+                Thread t = new Thread(r, "leshao-hook-task");
+                t.setDaemon(true);
+                return t;
+            });
 
     private static final class NamedTask {
         final String name;
@@ -77,7 +86,20 @@ public class HookManager {
         long started = System.currentTimeMillis();
         LogWriter.log(TAG, "[" + index + "/" + total + "] START " + namedTask.name);
         try {
-            namedTask.task.run();
+            java.util.concurrent.Future<?> f = sTaskExecutor.submit(namedTask.task);
+            try {
+                f.get(TASK_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (java.util.concurrent.TimeoutException te) {
+                // 尝试中断任务线程; DexKit native 搜索可能不响应, 但任务线程是 daemon, 不会拖垮进程。
+                f.cancel(true);
+                LogWriter.log(TAG, "[" + index + "/" + total + "] TIMEOUT " + namedTask.name
+                        + " after " + TASK_TIMEOUT_SECONDS + "s, continuing");
+                return false;
+            } catch (Throwable ex) {
+                LogWriter.log(TAG, "[" + index + "/" + total + "] FAIL " + namedTask.name + ": "
+                        + ex.getClass().getSimpleName() + " " + ex.getMessage());
+                return false;
+            }
             LogWriter.log(TAG, "[" + index + "/" + total + "] OK " + namedTask.name
                     + " elapsed=" + (System.currentTimeMillis() - started) + "ms");
             return true;

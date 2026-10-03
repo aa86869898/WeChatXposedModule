@@ -99,7 +99,6 @@ public class ContactSelectorView {
 
         LinearLayout root = new LinearLayout(act);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setMinimumHeight(dp(act, 520));
         root.setBackground(CandyUi.dialogBg(act));
 
         // Title
@@ -108,7 +107,7 @@ public class ContactSelectorView {
         title.setTextSize(17);
         title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
         title.setTextColor(AppColors.onSurface());
-        title.setPadding(p16, p16, p16, p12);
+        title.setPadding(p12, p12, p12, p8);
         title.setGravity(Gravity.CENTER);
         root.addView(title);
 
@@ -125,7 +124,7 @@ public class ContactSelectorView {
         LinearLayout tabs = new LinearLayout(act);
         tabs.setOrientation(LinearLayout.HORIZONTAL);
         tabs.setGravity(Gravity.CENTER);
-        tabs.setPadding(p12, 0, p12, p12);
+        tabs.setPadding(p12, 0, p12, p8);
 
         TextView tabAll = buildTab(act, "\u5168\u90e8(" + fAllCount + ")", true);
         TextView tabFriend = buildTab(act, "\u597d\u53cb(" + fFriendCount + ")", false);
@@ -219,7 +218,7 @@ public class ContactSelectorView {
         // Bottom bar: toggle + buttons
         LinearLayout bottomBar = new LinearLayout(act);
         bottomBar.setOrientation(LinearLayout.VERTICAL);
-        bottomBar.setPadding(p16, p8, p16, p8);
+        bottomBar.setPadding(p16, p8, p16, p12);
 
         LinearLayout btns = new LinearLayout(act);
         btns.setOrientation(LinearLayout.HORIZONTAL);
@@ -242,11 +241,12 @@ public class ContactSelectorView {
         bottomBar.addView(btns);
         root.addView(bottomBar);
 
-        // M3 对话框外壳：透明窗口 + 根布局自身圆角底
+        // M3 对话框外壳：透明窗口 + 根布局自身圆角底；宽度 90% 屏、高度随内容自适应（上限 90% 屏）
         AlertDialog dialog = new AlertDialog.Builder(act)
-                .setView(root)
                 .setCancelable(true)
                 .create();
+        ViewGroup host = InsetsUtil.windowAutoHeight(dialog, root, 0.9f);
+        dialog.setView(host);
         CandyUi.ripple(cancel, AppColors.SHAPE_FULL_DP);
         cancel.setOnClickListener(v -> {
             dialog.dismiss();
@@ -305,10 +305,6 @@ public class ContactSelectorView {
         try {
             android.view.Window w = dialog.getWindow();
             if (w != null) {
-                w.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(0x00000000));
-                android.util.DisplayMetrics dm = act.getResources().getDisplayMetrics();
-                w.setLayout((int) (dm.widthPixels * 0.92f),
-                        android.view.WindowManager.LayoutParams.WRAP_CONTENT);
                 WindowLayer.track(w);
             }
         } catch (Throwable ignored) {}
@@ -320,15 +316,15 @@ public class ContactSelectorView {
         applyPill(t2, act, idx == 2);
     }
 
-    /** M3 filter chip：选中=流光渐变底/白字，未选中=surfaceContainerLow+outline 描边。 */
+    /** M3 filter chip：选中=主色纯色底/白字，未选中=surfaceContainerLow+outline 描边。 */
     private static void applyPill(TextView tv, Activity act, boolean selected) {
-        int radius = dp(act, 20);
+        int radius = dp(act, AppColors.SHAPE_FULL_DP);
         if (selected) {
-            FlowingGradientDrawable fg = new FlowingGradientDrawable(
-                    AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
-            fg.setCornerRadius(radius);
-            fg.setPhaseOffset(0.2f);
-            tv.setBackground(fg);
+            GradientDrawable gd = new GradientDrawable();
+            gd.setShape(GradientDrawable.RECTANGLE);
+            gd.setCornerRadius(radius);
+            gd.setColor(AppColors.primary());
+            tv.setBackground(gd);
             tv.setTextColor(AppColors.onGradient());
         } else {
             GradientDrawable gd = new GradientDrawable();
@@ -415,7 +411,7 @@ public class ContactSelectorView {
             canvas.drawCircle(size / 2f, size / 2f, size / 2f - 1, fill);
 
             Paint check = new Paint(Paint.ANTI_ALIAS_FLAG);
-            check.setColor(Color.WHITE);
+            check.setColor(AppColors.whiteTextOnAccent());
             check.setStrokeWidth(dp(act, 2.2f));
             check.setStyle(Paint.Style.STROKE);
             check.setStrokeCap(Paint.Cap.ROUND);
@@ -445,18 +441,18 @@ public class ContactSelectorView {
         return false;
     }
 
-    /** M3 filled button：流光渐变底 + 白色文字。 */
+    /** M3 filled button：主色纯色底 + 白色文字。 */
     private static TextView filledBtn(Activity act, String text) {
         TextView btn = new TextView(act);
         btn.setText(text);
         btn.setTextSize(14);
         btn.setGravity(Gravity.CENTER);
         btn.setPadding(dp(act, 18), dp(act, 8), dp(act, 18), dp(act, 8));
-        FlowingGradientDrawable fg = new FlowingGradientDrawable(
-                AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
-        fg.setCornerRadius(dp(act, AppColors.SHAPE_FULL_DP));
-        fg.setPhaseOffset(0.5f);
-        btn.setBackground(fg);
+        GradientDrawable gd = new GradientDrawable();
+        gd.setShape(GradientDrawable.RECTANGLE);
+        gd.setCornerRadius(dp(act, AppColors.SHAPE_FULL_DP));
+        gd.setColor(AppColors.primary());
+        btn.setBackground(gd);
         btn.setTextColor(AppColors.onGradient());
         return btn;
     }

@@ -250,14 +250,18 @@ public final class DexKitAdapter {
                 .addMethod(MethodMatcher.create().usingStrings(strings))), label);
     }
 
-    private static Class<?> findClass(FindClass query, String label) {
-        DexKitBridge bridge = com.leshao.ai.util.DexKitBridgeHolder.get();
-        if (bridge == null) {
-            Log.w(TAG, label + ": DEXKIT 不可用");
-            return null;
-        }
+    private static Class<?> findClass(final FindClass query, final String label) {
         try {
-            ClassDataList list = bridge.findClass(query);
+            // v30113: 复用 v3 的进程级缓存桥(同一 native 实例)并在全局桥锁内串行,
+            // 不再自建第二个 DexKitBridge, 避免与全量扫描并发导致 native 崩溃。
+            ClassDataList list = com.leshao.v3.hook.DexKitHelper.withWechatBridge(
+                    HookEntry.appClassLoader,
+                    new com.leshao.v3.hook.DexKitHelper.BridgeAction<ClassDataList>() {
+                        @Override
+                        public ClassDataList run(DexKitBridge bridge) {
+                            return bridge.findClass(query);
+                        }
+                    });
             if (list == null || list.isEmpty()) {
                 Log.w(TAG, label + " 未找到匹配类");
                 return null;
@@ -273,13 +277,16 @@ public final class DexKitAdapter {
         }
     }
 
-    private static MethodDataList findMethods(FindMethod query) {
-        DexKitBridge bridge = com.leshao.ai.util.DexKitBridgeHolder.get();
-        if (bridge == null) {
-            return new MethodDataList();
-        }
+    private static MethodDataList findMethods(final FindMethod query) {
         try {
-            MethodDataList list = bridge.findMethod(query);
+            MethodDataList list = com.leshao.v3.hook.DexKitHelper.withWechatBridge(
+                    HookEntry.appClassLoader,
+                    new com.leshao.v3.hook.DexKitHelper.BridgeAction<MethodDataList>() {
+                        @Override
+                        public MethodDataList run(DexKitBridge bridge) {
+                            return bridge.findMethod(query);
+                        }
+                    });
             return list == null ? new MethodDataList() : list;
         } catch (Throwable t) {
             Log.w(TAG, "findMethods 失败: " + t);

@@ -58,7 +58,7 @@ public class DexKitScanDialog {
                 if (window != null) {
                     window.setDimAmount(0.6f);
                     WindowManager.LayoutParams lp = window.getAttributes();
-                    lp.width = (int) (ctx.getResources().getDisplayMetrics().widthPixels * 0.86f);
+                    lp.width = (int) (ctx.getResources().getDisplayMetrics().widthPixels * 0.9f);
                     lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
                     lp.gravity = Gravity.CENTER;
                     window.setAttributes(lp);
@@ -126,9 +126,11 @@ public class DexKitScanDialog {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
-        root.setPadding(dp(ctx, 20), dp(ctx, 20), dp(ctx, 20), dp(ctx, 18));
-        root.setBackground(CandyUi.dialogBg(ctx));
+        root.setPadding(dp(ctx, 16), dp(ctx, 16), dp(ctx, 16), dp(ctx, 14));
+        // v1145: 按当前浮层层级取底色，并补上统一阴影
+        root.setBackground(CandyUi.dialogBg(ctx, WindowLayer.depth()));
         InsetsUtil.clipRounded(root);
+        CandyUi.elevate(root);
 
         // 流光进度条（左→右填充 + 流动虚线 + 斜飞鸟）
         sProgressBar = new FlyingProgressBar(ctx);

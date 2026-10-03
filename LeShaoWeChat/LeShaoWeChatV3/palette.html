@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeShaoWeChat 模块色板</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "PingFang SC", sans-serif; background: #FBF9FF; color: #2A2340; padding: 24px; max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: #6F6389; font-size: 13px; margin-bottom: 24px; }
+  h2 { font-size: 16px; margin: 28px 0 12px; padding-left: 10px; border-left: 4px solid #8B5CF6; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .card { background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 8px rgba(42,35,64,.08); cursor: pointer; transition: transform .15s; }
+  .card:hover { transform: translateY(-3px); }
+  .swatch { height: 90px; position: relative; }
+  .swatch .hex { position: absolute; bottom: 6px; right: 8px; font-size: 11px; font-weight: 700; color: rgba(0,0,0,.55); background: rgba(255,255,255,.75); padding: 2px 6px; border-radius: 6px; }
+  .card.dark .swatch .hex { color: rgba(255,255,255,.9); background: rgba(0,0,0,.35); }
+  .info { padding: 10px 12px; }
+  .name { font-size: 13px; font-weight: 600; }
+  .code { font-size: 11px; color: #6F6389; margin-top: 2px; }
+  .group-label { font-size: 12px; color: #9A8CB8; margin: 18px 0 8px; font-weight: 600; }
+  .toast { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); background: #2A2340; color: #fff; padding: 10px 20px; border-radius: 24px; font-size: 13px; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 99; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <h1>LeShaoWeChat 模块色板</h1>
+  <div class="sub">点击任意色块复制 HEX 色值，便于在主题设置中挑选颜色</div>
+
+  <h2>渐变主题三色</h2>
+  <div class="grid" id="grad"></div>
+
+  <h2>12 款可选主题色（色板种子）</h2>
+  <div class="grid" id="seeds"></div>
+
+  <h2>M3 色彩角色 · 浅色模式</h2>
+  <div class="grid" id="light"></div>
+
+  <h2>M3 色彩角色 · 深色模式</h2>
+  <div class="grid" id="dark"></div>
+
+  <h2>通用背景 / 卡片</h2>
+  <div class="grid" id="common"></div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+const GRAD = [
+  { n: "渐变起始 · 葡萄紫", c: "#8B5CF6", d: false, g: "浅色模式" },
+  { n: "渐变中间 · 浅紫",   c: "#D8B4FE", d: false, g: "浅色模式" },
+  { n: "渐变结束 · 樱粉",   c: "#FFAFCC", d: false, g: "浅色模式" },
+  { n: "渐变按压 · 深紫",   c: "#6D28D9", d: false, g: "浅色模式" },
+  { n: "渐变起始 · 兰紫",   c: "#9F7BFF", d: true,  g: "深色模式" },
+  { n: "渐变中间 · 浅紫",   c: "#DCC3FF", d: true,  g: "深色模式" },
+  { n: "渐变结束 · 樱粉",   c: "#FFB8D4", d: true,  g: "深色模式" },
+  { n: "渐变按压 · 葡萄紫", c: "#8A5CF0", d: true,  g: "深色模式" },
+];
+
+const SEEDS = [
+  { n: "葡萄紫（主题）", c: "#8B5CF6" },
+  { n: "薰衣草",         c: "#A78BFA" },
+  { n: "品红",           c: "#D946EF" },
+  { n: "玫瑰粉",         c: "#FF6FB0" },
+  { n: "樱粉",           c: "#FFAFCC" },
+  { n: "兰紫",           c: "#9F7BFF" },
+  { n: "深紫",           c: "#7C3AED" },
+  { n: "藕荷",           c: "#C9A9FF" },
+  { n: "玫紫",           c: "#B56BF0" },
+  { n: "紫罗兰",         c: "#9333EA" },
+  { n: "粉紫",           c: "#DB2777" },
+  { n: "石墨紫",         c: "#6B5B95" },
+];
+
+const LIGHT = [
+  { n: "Primary 主色",   c: "#8B5CF6" },
+  { n: "OnPrimary",      c: "#FFFFFF" },
+  { n: "Primary 容器",   c: "#EADDFF" },
+  { n: "OnPrimary容器", c: "#21005D" },
+  { n: "Secondary",      c: "#7C6BA8" },
+  { n: "OnSecondary",    c: "#FFFFFF" },
+  { n: "Secondary容器", c: "#E8DEF8" },
+  { n: "Tertiary",       c: "#D5497E" },
+  { n: "OnTertiary",     c: "#FFFFFF" },
+  { n: "Tertiary容器",   c: "#FFD9E6" },
+  { n: "Error 错误",      c: "#BA1A1A" },
+  { n: "Error容器",      c: "#FFDAD6" },
+  { n: "Background",     c: "#FBF9FF" },
+  { n: "OnBackground",   c: "#2A2340" },
+  { n: "Surface",        c: "#FBF9FF" },
+  { n: "OnSurface",     c: "#2A2340" },
+  { n: "SurfaceVariant", c: "#E6DCF7" },
+  { n: "OnSurfaceVariant", c: "#6F6389" },
+  { n: "Outline",        c: "#9A8CB8" },
+  { n: "OutlineVariant", c: "#DCCFF2" },
+  { n: "Surface容器低",  c: "#F6F1FF" },
+  { n: "Surface容器",    c: "#F1EAFE" },
+  { n: "Surface容器高",  c: "#ECE3FB" },
+  { n: "Surface容器最高", c: "#E7DCF8" },
+  { n: "InverseSurface", c: "#2E2440" },
+];
+
+const DARK = [
+  { n: "Primary 主色",   c: "#C9A9FF", d: true },
+  { n: "OnPrimary",      c: "#2A1550", d: true },
+  { n: "Primary 容器",   c: "#4A2A82", d: true },
+  { n: "OnPrimary容器", c: "#EADDFF", d: true },
+  { n: "Secondary",           c: "#CFC0EA", d: true },
+  { n: "OnSecondary",     c: "#332B45", d: true },
+  { n: "Secondary容器",   c: "#453A5C", d: true },
+  { n: "Tertiary",        c: "#FFB0CE", d: true },
+  { n: "OnTertiary",     c: "#560027", d: true },
+  { n: "Tertiary容器",   c: "#7A3A57", d: true },
+  { n: "Error 错误",      c: "#FFB4AB", d: true },
+  { n: "Error容器",      c: "#93000A", d: true },
+  { n: "Background",     c: "#150F1E", d: true },
+  { n: "OnBackground",   c: "#F2ECFB", d: true },
+  { n: "Surface",        c: "#150F1E", d: true },
+  { n: "OnSurface",     c: "#F2ECFB", d: true },
+  { n: "SurfaceVariant", c: "#2A2040", d: true },
+  { n: "OnSurfaceVariant", c: "#B6A6D1", d: true },
+  { n: "Outline",        c: "#8A79A8", d: true },
+  { n: "OutlineVariant", c: "#3B2F55", d: true },
+  { n: "Surface容器低",  c: "#1D1530", d: true },
+  { n: "Surface容器",    c: "#241B38", d: true },
+  { n: "Surface容器高",   c: "#2A2040", d: true },
+  { n: "Surface容器最高", c: "#332845", d: true },
+  { n: "InverseSurface", c: "#EADDFF", d: true },
+];
+
+const COMMON = [
+  { n: "纯白（主色面文字）", c: "#FFFFFF" },
+  { n: "浅色页面背景",       c: "#FBF9FF" },
+  { n: "浅色卡片背景",       c: "#FFFFFF" },
+  { n: "浅色输入框背景",     c: "#E7DCF8" },
+  { n: "深色页面背景",       c: "#150F1E", d: true },
+  { n: "深色卡片背景",       c: "#1D1530", d: true },
+  { n: "深色输入框背景",     c: "#332845", d: true },
+  { n: "遮罩层",             c: "#66000000", d: true },
+];
+
+function card(item) {
+  const el = document.createElement("div");
+  el.className = "card" + (item.d ? " dark" : "");
+  el.innerHTML =
+    '<div class="swatch" style="background:' + item.c + '"><span class="hex">' + item.c + "</span></div>" +
+    '<div class="info"><div class="name">' + item.n + "</div><div class=\"code\">" + (item.g || "") + "</div></div>";
+  el.addEventListener("click", function() {
+    const hex = item.c.replace("#", "");
+    const full = hex.length === 6 ? "FF" + hex : hex;
+    navigator.clipboard.writeText(item.c).then(function() {
+      toast("已复制 " + item.c);
+    }, function() { toast("复制失败"); });
+  });
+  return el;
+}
+
+function render(id, list) {
+  const box = document.getElementById(id);
+  list.forEach(function(item) { box.appendChild(card(item)); });
+}
+
+const toastEl = document.getElementById("toast");
+let toastTimer = null;
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function() { toastEl.classList.remove("show"); }, 1200);
+}
+
+render("grad", GRAD);
+render("seeds", SEEDS);
+render("light", LIGHT);
+render("dark", DARK);
+render("common", COMMON);
+</script>
+</body>
+</html>

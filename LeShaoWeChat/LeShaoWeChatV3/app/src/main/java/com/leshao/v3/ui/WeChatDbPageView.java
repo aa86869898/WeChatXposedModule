@@ -77,13 +77,12 @@ public final class WeChatDbPageView {
         int p8 = (int) (8 * d);
         int p4 = (int) (4 * d);
 
-        ScrollView sv = new ScrollView(ctx);
-        sv.setFillViewport(true);
-
+        // v1143: 移除最外层 ScrollView，改为 no_wrap 固定结构：
+        // 搜索/页签/底部按钮固定，中间列表独立滚动，避免双层 ScrollView 嵌套导致列表无法滑动。
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(p12, p12, p12, (int) (24 * d));
-        sv.addView(root);
+        root.setPadding(p12, p8, p12, p8);
+        root.setTag("no_wrap");
 
         // 搜索框（顶部）
         final EditText search = new EditText(ctx);
@@ -110,14 +109,14 @@ public final class WeChatDbPageView {
         tabBox.addView(tabs);
         root.addView(tabBox);
 
-        // 列表区域（固定高度约10行，内部滚动）
+        // 列表区域（weight=1 占满剩余高度，内部滚动）
         final LinearLayout listRoot = new LinearLayout(ctx);
         listRoot.setOrientation(LinearLayout.VERTICAL);
         listRoot.setPadding(0, p4, 0, p4);
         ScrollView listScroll = new ScrollView(ctx);
         listScroll.setFillViewport(true);
         listScroll.setLayoutParams(new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, (int) (10 * 52 * d)));
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f));
         listScroll.addView(listRoot);
         root.addView(listScroll);
 
@@ -229,10 +228,10 @@ public final class WeChatDbPageView {
                     state.recentTimes = next;
                     refresh.run();
                 }
-                if (sv.isAttachedToWindow()) poller.postDelayed(this, 3000);
+                if (root.isAttachedToWindow()) poller.postDelayed(this, 3000);
             }
         };
-        sv.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+        root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) {
                 poller.postDelayed(pollTask, 3000);
             }
@@ -241,7 +240,7 @@ public final class WeChatDbPageView {
             }
         });
 
-        return sv;
+        return root;
     }
 
     private static void refreshList(Context ctx, State state) {
@@ -588,11 +587,10 @@ public final class WeChatDbPageView {
         Canvas canvas = new Canvas(bm);
         if (checked) {
             Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
-            fill.setShader(new android.graphics.LinearGradient(0, 0, size, size,
-                    AppColors.gradientColors(), null, android.graphics.Shader.TileMode.CLAMP));
+            fill.setColor(AppColors.primary());
             canvas.drawCircle(size / 2f, size / 2f, size / 2f - 1, fill);
             Paint check = new Paint(Paint.ANTI_ALIAS_FLAG);
-            check.setColor(Color.WHITE);
+            check.setColor(AppColors.whiteTextOnAccent());
             check.setStrokeWidth((float) (2.2 * ctx.getResources().getDisplayMetrics().density));
             check.setStyle(Paint.Style.STROKE);
             check.setStrokeCap(Paint.Cap.ROUND);
@@ -614,7 +612,7 @@ public final class WeChatDbPageView {
 
     private static Bitmap letterAvatar(Context ctx, String letter, int size) {
         Paint paint = new Paint();
-        paint.setColor(Color.WHITE);
+        paint.setColor(AppColors.onSecondaryContainer());
         paint.setTextSize(size * 0.45f);
         paint.setAntiAlias(true);
         paint.setTextAlign(Paint.Align.CENTER);

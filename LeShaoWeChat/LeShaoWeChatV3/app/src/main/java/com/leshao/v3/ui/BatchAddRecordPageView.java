@@ -30,8 +30,15 @@ public class BatchAddRecordPageView {
 
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding((int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_MD_DP * d),
-                (int)(AppColors.SPACE_LG_DP * d), (int)(AppColors.SPACE_XL_DP * d));
+        // v1145: 与其他子页面统一：补上 pageGradient 背景 + 圆角裁切
+        root.setBackground(CandyUi.pageGradient());
+        InsetsUtil.clipRounded(root);
+        root.setPadding((int)(AppColors.SPACE_MD_DP * d), (int)(6 * d),
+                (int)(AppColors.SPACE_MD_DP * d), (int)(8 * d));
+
+        // v1145: 页面顶部统一分区标题
+        root.addView(M3Page.section(ctx, "批量加好友记录",
+                "全部/成功/失败记录，重启微信不丢失"));
 
         final LinearLayout listArea = new LinearLayout(ctx);
         listArea.setOrientation(LinearLayout.VERTICAL);
@@ -44,10 +51,6 @@ public class BatchAddRecordPageView {
         tabBar.setBackground(CandyUi.cardBg(ctx));
         InsetsUtil.clipRounded(tabBar);
         tabBar.setPadding((int)(4 * d), (int)(4 * d), (int)(4 * d), (int)(4 * d));
-        GradientDrawable tabBg = new GradientDrawable();
-        tabBg.setColor(AppColors.card());
-        tabBg.setCornerRadius((int)(AppColors.SHAPE_SM_DP * d));
-        tabBar.setBackground(tabBg);
 
         String[] tabs = {"全部", "成功", "失败"};
 
@@ -55,11 +58,12 @@ public class BatchAddRecordPageView {
             final int idx = i;
             TextView tab = new TextView(ctx);
             tab.setText(tabs[i]);
-            tab.setTextSize(13);
+            tab.setTextSize(14);
+            tab.setTypeface(Typeface.DEFAULT_BOLD);
             tab.setGravity(Gravity.CENTER);
             tab.setPadding((int)(8 * d), (int)(8 * d), (int)(8 * d), (int)(8 * d));
             tab.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-            CandyUi.ripple(tab, AppColors.SHAPE_SM_DP);
+            CandyUi.ripple(tab, AppColors.SHAPE_FULL_DP);
             tab.setOnClickListener(v -> {
                 currentTab[0] = idx;
                 for (int j = 0; j < tabBar.getChildCount(); j++) {
@@ -81,7 +85,7 @@ public class BatchAddRecordPageView {
         LinearLayout actionRow = new LinearLayout(ctx);
         actionRow.setOrientation(LinearLayout.HORIZONTAL);
         actionRow.setGravity(Gravity.CENTER_VERTICAL);
-        actionRow.setPadding((int)(14 * d), (int)(6 * d), (int)(14 * d), (int)(6 * d));
+        actionRow.setPadding((int)(12 * d), (int)(6 * d), (int)(12 * d), (int)(6 * d));
 
         TextView countTv = new TextView(ctx);
         countTv.setTextSize(12);
@@ -92,7 +96,7 @@ public class BatchAddRecordPageView {
         TextView clearBtn = new TextView(ctx);
         clearBtn.setText("清空记录");
         clearBtn.setTextSize(12);
-        clearBtn.setTextColor(0xFFE53935);
+        clearBtn.setTextColor(AppColors.error());
         clearBtn.setPadding((int)(10 * d), (int)(6 * d), (int)(10 * d), (int)(6 * d));
         CandyUi.ripple(clearBtn, AppColors.SHAPE_FULL_DP);
         clearBtn.setOnClickListener(v -> {
@@ -161,8 +165,8 @@ public class BatchAddRecordPageView {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding((int)(14 * d), (int)(10 * d), (int)(14 * d), (int)(10 * d));
-        row.setBackground(CandyUi.cardBg(ctx));
+        row.setPadding((int)(12 * d), (int)(10 * d), (int)(12 * d), (int)(10 * d));
+        row.setBackground(CandyUi.rowBg(ctx));
         InsetsUtil.clipRounded(row);
 
         LinearLayout textCol = new LinearLayout(ctx);
@@ -172,7 +176,7 @@ public class BatchAddRecordPageView {
         TextView name = new TextView(ctx);
         String label = (r.displayName != null && !r.displayName.isEmpty()) ? r.displayName : r.username;
         name.setText(label);
-        name.setTextSize(13);
+        name.setTextSize(14);
         name.setTextColor(AppColors.text1());
         name.setTypeface(null, Typeface.BOLD);
         textCol.addView(name);
@@ -180,14 +184,14 @@ public class BatchAddRecordPageView {
         TextView sub = new TextView(ctx);
         sub.setText(timeStr + (r.username != null && !r.username.isEmpty() && !r.username.equals(r.displayName)
                 ? "  " + r.username : ""));
-        sub.setTextSize(11);
+        sub.setTextSize(12);
         sub.setTextColor(AppColors.text3());
         sub.setPadding(0, (int)(2 * d), 0, 0);
         textCol.addView(sub);
 
         TextView reason = new TextView(ctx);
         reason.setText(r.reason != null ? r.reason : "");
-        reason.setTextSize(11);
+        reason.setTextSize(12);
         reason.setTextColor(AppColors.text3());
         reason.setPadding(0, (int)(2 * d), 0, 0);
         if (r.reason != null && !r.reason.isEmpty()) textCol.addView(reason);
@@ -196,13 +200,13 @@ public class BatchAddRecordPageView {
 
         TextView badge = new TextView(ctx);
         badge.setText(r.success ? "成功" : "失败");
-        badge.setTextSize(11);
-        badge.setTextColor(0xFFFFFFFF);
+        badge.setTextSize(12);
+        badge.setTextColor(AppColors.whiteTextOnAccent());
         badge.setGravity(Gravity.CENTER);
-        badge.setPadding((int)(10 * d), (int)(4 * d), (int)(10 * d), (int)(4 * d));
+        badge.setPadding((int)(12 * d), (int)(5 * d), (int)(12 * d), (int)(5 * d));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(r.success ? AppColors.primary() : AppColors.error());
-        bg.setCornerRadius((int)(AppColors.SHAPE_MD_DP * d));
+        bg.setCornerRadius((int)(AppColors.SHAPE_FULL_DP * d));
         badge.setBackground(bg);
         row.addView(badge);
 

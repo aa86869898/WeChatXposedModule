@@ -12,6 +12,7 @@ import com.leshao.v3.ContextManager;
 import com.leshao.v3.ChatFooterLongPressMenu;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.db.VoiceHistoryDbHelper;
+import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.wm.utils.WmPrefs;
 
 import java.io.ByteArrayOutputStream;
@@ -325,8 +326,8 @@ public class TtsVoiceSender {
         return false;
     }
 
-    // ===== TTS 模式: 输入框文字显示粉色 =====
-    private static final int TTS_MODE_TEXT_COLOR = 0xFFFF5FA2;
+    // ===== TTS 模式: 输入框文字显示动态主色 =====
+    private static final int TTS_MODE_TEXT_COLOR = AppColors.primary();
     private static final java.util.Map<android.widget.EditText, Boolean> sComposerWatchers =
             java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
     private static final java.util.Map<android.widget.EditText, Integer> sComposerOrigColor =
@@ -451,12 +452,14 @@ public class TtsVoiceSender {
     public static void hook(ClassLoader cl) {
         sClassLoader = cl;
         installCrashReporter();
-        // Defer voice API discovery until DexKit scan completes
-        com.leshao.v3.hook.DexKitHelper.addPostScanCallback(() -> {
+        // Defer voice API discovery until DexKit scan completes.
+        // 注意: postScan 回调可能在微信 attachBaseContext 主线程被触发(缓存命中/baseline 加载时),
+        // 必须转交后台线程执行, 避免 DexKit 搜索阻塞主线程冷启动。
+        runPostScanAsync(() -> {
             discoverVoiceApi(cl);
             LogWriter.log(TAG, "TtsVoiceSender post-scan init done");
         });
-        DexKitHelper.addPostScanCallback(() -> hookE9D1(cl));
+        runPostScanAsync(() -> hookE9D1(cl));
         hookSetTypeGuard(cl);
         hookChatFooterSend(cl);
         hookComposerColor(cl);
@@ -464,7 +467,7 @@ public class TtsVoiceSender {
         hookE9Trace(cl);
         hookE9AllTrace(cl);
         hookE9Render(cl);
-        DexKitHelper.addPostScanCallback(() -> hookA21Oi(cl));
+        runPostScanAsync(() -> hookA21Oi(cl));
         hookChattingUiAll(cl);
         hookChattingUIFragmentAll(cl);
         hookConvertTo(cl);
@@ -475,11 +478,26 @@ public class TtsVoiceSender {
         hookF9RaForTts(cl);
         // v1073: TTS 兜底 —— 直接拦截 UI 发送入口 om.A0(content, atType, atMap),
         // 覆盖 f9.Bb / x9 / f9.Ra 均未命中的机型(文档《音频转语音_新》发送链)。
-        DexKitHelper.addPostScanCallback(() -> hookOmA0(cl));
+        runPostScanAsync(() -> hookOmA0(cl));
         // 自动发现微信内部类（功能所需）
         autoDiscoverClasses(cl, "com.tencent.mm.ui.chatting.ChattingUIFragment");
         autoDiscoverClasses(cl, "com.tencent.mm.ui.chatting.view.MMChattingListView");
         autoDiscoverClasses(cl, "com.tencent.mm.ui.chatting.ChattingUI");
+    }
+
+    /**
+     * 注册 DexKit post-scan 回调, 但保证回调体绝不在主线程执行。
+     * 缓存命中/baseline 加载时, DexKitHelper 会在 attachBaseContext 主线程 drain 回调,
+     * 这里检测到主线程则转交 TTS 后台线程执行, 避免启动期主线程卡顿。
+     */
+    private static void runPostScanAsync(final Runnable r) {
+        DexKitHelper.addPostScanCallback(() -> {
+            if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                sTtsPool.execute(r);
+            } else {
+                r.run();
+            }
+        });
     }
 
     // ========== 懒初始化 TTS ==========

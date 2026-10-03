@@ -19,13 +19,14 @@ import com.leshao.v3.ui.AppColors;
 import com.leshao.v3.ui.CandyUi;
 
 /**
- * 统一设置行：emoji 图标 + 标题 + 副标题 + 尾部控件（开关 / 箭头 / 自定义）。
+ * 统一设置行：标题 + 副标题 + 尾部控件（开关 / 箭头 / 自定义）。
  * 用法：new SettingRow(ctx, "⚙", "标题", "副标题").switchOn(true, listener)
  *      new SettingRow(ctx, "👤", "标题", null).arrow(click)
+ * 注：v3.0.99 起按需求去掉左侧图标，icon 参数保留仅作兼容，不再渲染。
  */
 public class SettingRow extends LinearLayout {
 
-    private final TextView mIcon;
+    private final TextView mIcon = null;
     private final TextView mTitle;
     private final TextView mSub;
     private final LinearLayout mTail;
@@ -37,26 +38,10 @@ public class SettingRow extends LinearLayout {
         setGravity(Gravity.CENTER_VERTICAL);
         int h = (int) (AppColors.ROW_HEIGHT_DP * d);
         setMinimumHeight(h);
-        setPadding((int) (14 * d), (int) (8 * d), (int) (14 * d), (int) (8 * d));
+        setPadding((int) (12 * d), (int) (8 * d), (int) (12 * d), (int) (8 * d));
         setClickable(true);
         setFocusable(true);
         try { setBackground(CandyUi.rowPressBg(ctx)); } catch (Throwable ignored) {}
-
-        // v955 M3: 图标容器 40dp 圆角方块(secondaryContainer 底)
-        mIcon = new TextView(ctx);
-        mIcon.setText(icon != null ? icon : "•");
-        mIcon.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
-        mIcon.setGravity(Gravity.CENTER);
-        mIcon.setTextColor(AppColors.onGradient());
-        int iconSize = (int) (36 * d);
-        // v1067 葡萄气泡：图标底改为流光渐变，提升整体主题一致性
-        com.leshao.v3.ui.FlowingGradientDrawable iconBg = new com.leshao.v3.ui.FlowingGradientDrawable(
-                AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
-        iconBg.setCornerRadius(AppColors.SHAPE_MD_DP * d);
-        mIcon.setBackground(iconBg);
-        LayoutParams iconLp = new LayoutParams(iconSize, iconSize);
-        iconLp.setMarginEnd((int) (12 * d));
-        addView(mIcon, iconLp);
 
         LinearLayout textCol = new LinearLayout(ctx);
         textCol.setOrientation(VERTICAL);
@@ -66,15 +51,14 @@ public class SettingRow extends LinearLayout {
         mTitle = new TextView(ctx);
         mTitle.setText(title);
         mTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        mTitle.setTypeface(Typeface.DEFAULT);
+        mTitle.setTypeface(Typeface.DEFAULT_BOLD);
         mTitle.setTextColor(AppColors.textPrimary());
         mTitle.setSingleLine(true);
         mTitle.setEllipsize(TextUtils.TruncateAt.END);
         textCol.addView(mTitle);
 
         mSub = new TextView(ctx);
-        // v998: 说明小字再缩小 3dp
-        mSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        mSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         mSub.setTextColor(AppColors.textTertiary());
         mSub.setSingleLine(true);
         mSub.setEllipsize(TextUtils.TruncateAt.END);
@@ -99,7 +83,7 @@ public class SettingRow extends LinearLayout {
 
     private void applyDrawableIcon(Drawable icon) {
         try {
-            if (icon == null) return;
+            if (mIcon == null || icon == null) return;
             float den = getResources().getDisplayMetrics().density;
             int size = (int) (36 * den + 0.5f);
             int end = (int) (12 * den + 0.5f);
@@ -148,7 +132,7 @@ public class SettingRow extends LinearLayout {
         try {
             TextView arrow = new TextView(getContext());
             arrow.setText("›");
-            arrow.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+            arrow.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
             arrow.setTextColor(AppColors.arrow());
             mTail.addView(arrow);
             if (onClick != null) setOnClickListener(v -> {
@@ -172,7 +156,7 @@ public class SettingRow extends LinearLayout {
     /** v974: 用联系人/群真实头像替换图标位(加载失败回退首字母底色块)。 */
     public SettingRow avatar(String username) {
         try {
-            if (TextUtils.isEmpty(username)) return this;
+            if (mIcon == null || TextUtils.isEmpty(username)) return this;
             float d = getResources().getDisplayMetrics().density;
             int size = (int) (36 * d);
             ImageView iv = new ImageView(getContext());

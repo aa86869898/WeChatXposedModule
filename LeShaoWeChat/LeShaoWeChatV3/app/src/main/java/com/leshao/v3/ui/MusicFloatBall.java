@@ -26,7 +26,7 @@ import android.widget.LinearLayout;
  * 无操作 5 秒自动侧边休眠（缩回只露半圆）；无播放时自动消失。
  * × 关闭悬浮球（不停止播放），再次进入在线音乐并返回时会重新出现。</p>
  *
- * <p>外观跟随模块「葡萄气泡」主题（紫 → 淡紫 → 粉渐变），浅色/暗色模式自动适配。</p>
+ * <p>外观跟随模块「糖果粉」主题（#FF99C2 纯色），浅色/暗色模式自动适配。</p>
  *
  * <p>使用 {@link WindowManager.LayoutParams#TYPE_APPLICATION_PANEL} 挂到 Activity 的
  * WindowManager，无需系统悬浮窗权限，随 Activity 一起销毁。</p>
@@ -208,22 +208,22 @@ public final class MusicFloatBall {
         sync();
     }
 
-    /** 按当前深浅模式重刷配色（葡萄气泡主题）。 */
+    /** 按当前深浅模式重刷配色（糖果粉主题）。 */
     private static void applyColors() {
         EqIconView ball = sBall;
         if (ball == null) return;
         Context ctx = ball.getContext();
         try {
-            GradientDrawable bg = new GradientDrawable(
-                    GradientDrawable.Orientation.TL_BR, AppColors.gradientColors());
+            GradientDrawable bg = new GradientDrawable();
             bg.setShape(GradientDrawable.OVAL);
+            bg.setColor(AppColors.primary());
             ball.setBackground(bg);
 
             LinearLayout panel = sPanel;
             if (panel != null) {
                 GradientDrawable pg = new GradientDrawable();
                 pg.setColor(AppColors.surfaceContainerHighest());
-                pg.setCornerRadius(dp(ctx, 20));
+                pg.setCornerRadius(dp(ctx, AppColors.SHAPE_CARD_DP));
                 pg.setStroke(dp(ctx, 1), AppColors.outlineVariant());
                 panel.setBackground(pg);
             }
@@ -341,7 +341,7 @@ public final class MusicFloatBall {
 
         EqIconView(Context ctx) {
             super(ctx);
-            p.setColor(Color.WHITE);
+            p.setColor(AppColors.whiteTextOnAccent());
             p.setStyle(Paint.Style.FILL);
         }
 

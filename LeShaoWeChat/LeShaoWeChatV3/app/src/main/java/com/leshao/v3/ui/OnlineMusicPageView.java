@@ -393,16 +393,16 @@ public final class OnlineMusicPageView {
 
             LinearLayout page = new LinearLayout(ctx);
             page.setOrientation(LinearLayout.VERTICAL);
-            page.setPadding(dp(14), dp(6), dp(14), dp(20));
+            page.setPadding(dp(12), dp(6), dp(12), dp(12));
 
             page.addView(searchEntry());
-            page.addView(M3Page.spacer(ctx, 10));
+            page.addView(M3Page.spacer(ctx, 8));
 
             SegmentedControl seg = new SegmentedControl(ctx,
                     new String[]{"榜单", "歌单", "导入"}, HOME_TAB_SHEETS);
             seg.setOnSegmentChangedListener((i, label) -> selectTab(i));
             page.addView(seg);
-            page.addView(M3Page.spacer(ctx, 10));
+            page.addView(M3Page.spacer(ctx, 8));
             page.addView(content);
 
             scroll.addView(page);
@@ -419,10 +419,10 @@ public final class OnlineMusicPageView {
             try {
                 GradientDrawable bg = new GradientDrawable();
                 bg.setColor(AppColors.surfaceContainerHighest());
-                bg.setCornerRadius(dp(14));
+                bg.setCornerRadius(dp(AppColors.SHAPE_INPUT_DP));
                 box.setBackground(bg);
             } catch (Throwable ignored) {}
-            CandyUi.ripple(box, 14);
+            CandyUi.ripple(box, AppColors.SHAPE_INPUT_DP);
 
             MusicIconView ic = new MusicIconView(ctx, MusicIconView.SEARCH);
             ic.setIconSizeDp(18);
@@ -451,7 +451,7 @@ public final class OnlineMusicPageView {
             try {
                 GradientDrawable bgd = new GradientDrawable();
                 bgd.setColor(AppColors.surfaceContainerLowest());
-                float r = dp(16);
+                float r = dp(AppColors.SHAPE_LG_DP);
                 bgd.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
                 miniBar.setBackground(bgd);
             } catch (Throwable ignored) {}
@@ -463,10 +463,9 @@ public final class OnlineMusicPageView {
             progressTrack = track;
             View fill = new View(ctx);
             try {
-                FlowingGradientDrawable fg = new FlowingGradientDrawable(
-                        AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
-                fg.setPhaseOffset(0.3f);
-                fill.setBackground(fg);
+                GradientDrawable gd = new GradientDrawable();
+                gd.setColor(AppColors.primary());
+                fill.setBackground(gd);
             } catch (Throwable ignored) { fill.setBackgroundColor(AppColors.primary()); }
             fill.setLayoutParams(new FrameLayout.LayoutParams(0, dp(2)));
             progressFill = fill;
@@ -578,7 +577,7 @@ public final class OnlineMusicPageView {
             LinearLayout page = new LinearLayout(ctx);
             page.setOrientation(LinearLayout.VERTICAL);
             page.setGravity(Gravity.CENTER_HORIZONTAL);
-            page.setPadding(dp(22), dp(6), dp(22), dp(16));
+            page.setPadding(dp(22), dp(6), dp(22), dp(12));
             page.setLayoutParams(new LinearLayout.LayoutParams(-1, -1));
 
             TextView back = new TextView(ctx);
@@ -692,15 +691,15 @@ public final class OnlineMusicPageView {
 
         private View playToggle() {
             FrameLayout box = new FrameLayout(ctx);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(68), dp(68));
-            lp.setMargins(dp(22), 0, dp(22), 0);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(48), dp(48));
+            lp.setMargins(dp(14), 0, dp(14), 0);
             box.setLayoutParams(lp);
             playToggle = box;
             playToggleIcon = new MusicIconView(ctx, MusicIconView.PLAY);
-            playToggleIcon.setIconSizeDp(38);
+            playToggleIcon.setIconSizeDp(28);
             FrameLayout.LayoutParams ilp = new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER);
             box.addView(playToggleIcon, ilp);
-            CandyUi.ripple(box, 34);
+            CandyUi.ripple(box, 24);
             box.setContentDescription("播放/暂停");
             box.setOnClickListener(v -> togglePlay());
             return box;
@@ -715,11 +714,11 @@ public final class OnlineMusicPageView {
         private FrameLayout baseCover(int sizeDp, int glyphSp) {
             FrameLayout box = new FrameLayout(ctx);
             try {
-                FlowingGradientDrawable bg = new FlowingGradientDrawable(
-                        AppColors.gradientStart(), AppColors.gradientMid(), AppColors.gradientEnd());
-                final float r = dp(sizeDp >= 100 ? 22 : 12);
+                GradientDrawable bg = new GradientDrawable();
+                bg.setShape(GradientDrawable.RECTANGLE);
+                final float r = dp(sizeDp >= 100 ? AppColors.SHAPE_CARD_DP : AppColors.SHAPE_MD_DP);
                 bg.setCornerRadius(r);
-                bg.setPhaseOffset(0.25f);
+                bg.setColor(AppColors.primary());
                 box.setBackground(bg);
                 box.setClipToOutline(true);
                 box.setOutlineProvider(new ViewOutlineProvider() {
@@ -834,12 +833,12 @@ public final class OnlineMusicPageView {
             center.setOrientation(LinearLayout.HORIZONTAL);
             center.setGravity(Gravity.CENTER);
             center.addView(transportIcon(MusicIconView.PREV, "上一首", v -> prev()),
-                    new LinearLayout.LayoutParams(dp(46), dp(46)));
-            LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(dp(68), dp(68));
-            plp.setMargins(dp(22), 0, dp(22), 0);
+                    new LinearLayout.LayoutParams(dp(40), dp(40)));
+            LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(dp(48), dp(48));
+            plp.setMargins(dp(14), 0, dp(14), 0);
             center.addView(playToggle(), plp);
             center.addView(transportIcon(MusicIconView.NEXT, "下一首", v -> next()),
-                    new LinearLayout.LayoutParams(dp(46), dp(46)));
+                    new LinearLayout.LayoutParams(dp(40), dp(40)));
             bar.addView(center, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER));
 
             MusicIconView order = transportIcon(orderIcon(), "播放顺序", v -> cyclePlayMode());
@@ -1005,7 +1004,7 @@ public final class OnlineMusicPageView {
 
             LinearLayout page = new LinearLayout(ctx);
             page.setOrientation(LinearLayout.VERTICAL);
-            page.setPadding(dp(14), dp(6), dp(14), dp(20));
+            page.setPadding(dp(12), dp(6), dp(12), dp(12));
 
             page.addView(M3Page.section(ctx, "点歌与设置"));
             LinearLayout card1 = M3Page.card(ctx);
@@ -1015,7 +1014,6 @@ public final class OnlineMusicPageView {
                         openSettings();
                     }));
             page.addView(card1);
-            page.addView(M3Page.spacer(ctx, 10));
 
             page.addView(M3Page.section(ctx, "默认音质"));
             String q = OnlineMusicPrefs.quality();
@@ -1028,7 +1026,6 @@ public final class OnlineMusicPageView {
             page.addView(qSeg);
             page.addView(M3Page.spacer(ctx, 6));
             page.addView(M3Page.note(ctx, "“自动”优先取最高音质，不可用时自动降档；点歌与在线试听均按此设置。"));
-            page.addView(M3Page.spacer(ctx, 10));
 
             page.addView(M3Page.section(ctx, "下载"));
             LinearLayout card2 = M3Page.card(ctx);
@@ -1347,7 +1344,7 @@ public final class OnlineMusicPageView {
 
             LinearLayout root = new LinearLayout(ctx);
             root.setOrientation(LinearLayout.VERTICAL);
-            root.setMinimumHeight(dp(520));
+            // v30111: 高度随内容自适应（上限 90%），不再强制最小高避免底部留白
             root.setBackground(CandyUi.dialogBg(ctx));
             InsetsUtil.clipRounded(root);
 
@@ -1465,7 +1462,7 @@ public final class OnlineMusicPageView {
                 try {
                     GradientDrawable bg = new GradientDrawable();
                     bg.setColor(AppColors.surfaceContainerHigh());
-                    bg.setCornerRadius(dp(14));
+                    bg.setCornerRadius(dp(AppColors.SHAPE_FULL_DP));
                     chip.setBackground(bg);
                 } catch (Throwable ignored) {}
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
@@ -1623,7 +1620,6 @@ public final class OnlineMusicPageView {
                         });
             }));
             content.addView(card);
-            content.addView(M3Page.spacer(ctx, 10));
             content.addView(M3Page.note(ctx,
                     "支持 www.kuwo.cn/playlist_detail/{id} 或 m.kuwo.cn/h5app/playlist/{id}，也可直接填数字 ID"));
             content.addView(host);
@@ -1839,7 +1835,6 @@ public final class OnlineMusicPageView {
                         OnlineMusicPrefs.autoRandom(),
                         (v, on) -> OnlineMusicPrefs.setAutoRandom(on)));
                 host.addView(card);
-                host.addView(M3Page.spacer(ctx, 10));
 
                 host.addView(M3Page.section(ctx, "生效范围"));
                 LinearLayout wlCard = M3Page.card(ctx);
@@ -1856,7 +1851,6 @@ public final class OnlineMusicPageView {
                                     });
                         }));
                 host.addView(wlCard);
-                host.addView(M3Page.spacer(ctx, 10));
 
                 host.addView(M3Page.section(ctx, "指令与参数"));
                 LinearLayout card2 = M3Page.card(ctx);
@@ -1875,7 +1869,6 @@ public final class OnlineMusicPageView {
                         OnlineMusicPrefs.noticeText(), true,
                         OnlineMusicPrefs::setNoticeText));
                 host.addView(card2);
-                host.addView(M3Page.spacer(ctx, 10));
 
                 host.addView(M3Page.section(ctx, "音质"));
                 String q = OnlineMusicPrefs.quality();
@@ -2118,7 +2111,7 @@ public final class OnlineMusicPageView {
             MusicIconView ic = new MusicIconView(ctx, name);
             ic.setSolid(true);
             ic.setIconSizeDp(28);
-            ic.setPadding(dp(9), dp(8), dp(9), dp(8));
+            ic.setPadding(dp(10), dp(10), dp(10), dp(10));
             ic.setContentDescription(desc);
             ic.setOnClickListener(v -> {
                 try { cb.run(); } catch (Throwable ignored) {}

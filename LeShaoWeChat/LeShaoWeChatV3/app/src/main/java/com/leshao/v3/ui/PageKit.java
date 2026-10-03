@@ -23,15 +23,16 @@ public final class PageKit {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(CandyUi.pageGradient());
         InsetsUtil.clipRounded(root);
-        root.setPadding((int) (AppColors.SPACE_LG_DP * d), (int) (AppColors.SPACE_MD_DP * d),
-                (int) (AppColors.SPACE_LG_DP * d), (int) (AppColors.SPACE_XL_DP * d));
+        // 全局规范: 页面左右边距 12dp，底部留白 12dp，避免页面根圆角区裁切底部按钮/圆角描边
+        root.setPadding((int) (AppColors.SPACE_MD_DP * d), (int) (6 * d),
+                (int) (AppColors.SPACE_MD_DP * d), (int) (12 * d));
         return root;
     }
 
     public static LinearLayout makeCard(Context ctx, float d) {
         LinearLayout card = new LinearLayout(ctx);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding((int) (2 * d), (int) (2 * d), (int) (2 * d), (int) (2 * d));
+        card.setPadding((int) (0 * d), (int) (0 * d), (int) (0 * d), (int) (0 * d));
         card.setBackground(CandyUi.cardBg(ctx));
         InsetsUtil.clipRounded(card);
         return card;
@@ -60,7 +61,9 @@ public final class PageKit {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding((int) (14 * d), (int) (12 * d), (int) (14 * d), (int) (12 * d));
+        // 全局规范: 行触控区域不低于 48dp
+        row.setMinimumHeight((int)(48 * d));
+        row.setPadding((int) (12 * d), (int) (8 * d), (int) (12 * d), (int) (8 * d));
         row.setBackground(CandyUi.cardBg(ctx));
         InsetsUtil.clipRounded(row);
 
@@ -70,7 +73,7 @@ public final class PageKit {
 
         TextView tv = new TextView(ctx);
         tv.setText(title);
-        tv.setTextSize(15);
+        tv.setTextSize(16);
         tv.setTextColor(AppColors.text1());
         tv.setTypeface(null, Typeface.BOLD);
         textCol.addView(tv);
@@ -109,7 +112,8 @@ public final class PageKit {
         float d = ctx.getResources().getDisplayMetrics().density;
         TextView tv = new TextView(ctx);
         tv.setText(text);
-        tv.setTextSize(13);
+        tv.setTextSize(14);
+        tv.setTypeface(Typeface.DEFAULT_BOLD);
         tv.setTextColor(AppColors.text2());
         tv.setPadding(0, 0, 0, (int) (8 * d));
         return tv;
@@ -119,11 +123,13 @@ public final class PageKit {
         float d = ctx.getResources().getDisplayMetrics().density;
         TextView tv = new TextView(ctx);
         tv.setText(text);
-        tv.setTextSize(14);
+        tv.setTextSize(15);
+        tv.setTypeface(Typeface.DEFAULT_BOLD);
         tv.setGravity(Gravity.CENTER);
+        tv.setMinimumHeight((int) (48 * d));
         tv.setTextColor(AppColors.text1());
         tv.setPadding((int) (10 * d), (int) (10 * d), (int) (10 * d), (int) (10 * d));
-        tv.setBackground(CandyUi.cardBg(ctx));
+        tv.setBackground(CandyUi.rowBg(ctx));
         InsetsUtil.clipRounded(tv);
         CandyUi.ripple(tv, AppColors.SHAPE_FULL_DP);
         if (l != null) tv.setOnClickListener(l);
@@ -133,7 +139,7 @@ public final class PageKit {
     public static TextView bodyText(Context ctx, String text) {
         TextView tv = new TextView(ctx);
         tv.setText(text);
-        tv.setTextSize(12);
+        tv.setTextSize(13);
         tv.setTextColor(AppColors.text2());
         float d = ctx.getResources().getDisplayMetrics().density;
         tv.setPadding((int) (4 * d), (int) (4 * d), (int) (4 * d), (int) (4 * d));

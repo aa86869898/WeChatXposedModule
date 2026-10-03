@@ -39,6 +39,17 @@ public class WeChatUpdateBlocker {
 
     private static volatile boolean sEnabled = false;
     private static volatile boolean sHooked = false;
+    /**
+     * 版本更新/Tinker 热补丁阻断涉及大量 DexKit 全量搜索(单次可达数秒),
+     * 参照 AntiRecallHook 的修复模式: hook() 只做入队, 搜索与安装全部放到后台线程,
+     * 避免阻塞 HookManager.activateAll 串行循环导致后续任务饿死。
+     */
+    private static final java.util.concurrent.ExecutorService sExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "wx-update-blocker");
+                t.setDaemon(true);
+                return t;
+            });
 
     private WeChatUpdateBlocker() {}
 
@@ -73,9 +84,17 @@ public class WeChatUpdateBlocker {
             sHooked = true;
 
             LogWriter.log(TAG, "hook: install...");
-            blockVersionUpdate(cl);
-            blockTinkerHotPatch(cl);
-            LogWriter.log(TAG, "hook: done");
+            // 阻断点依赖 DexKit 全量搜索, 单次可达数秒, 必须放到后台线程执行,
+            // 让 HookManager.activateAll 立即返回, 不阻塞后续任务。
+            sExecutor.execute(() -> {
+                try {
+                    blockVersionUpdate(cl);
+                    blockTinkerHotPatch(cl);
+                    LogWriter.log(TAG, "hook: done");
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "hook err: " + t);
+                }
+            });
         } catch (Throwable t) {
             LogWriter.log(TAG, "hook err: " + t);
         }
@@ -183,14 +202,20 @@ public class WeChatUpdateBlocker {
         // V1: Updater.f(int)
         hookByClassStrings(cl, "MicroMsg.Updater", "com.tencent.mm.sandbox.updater.Updater",
                 "f", 1, null, "V1");
-        // V2: NetSceneGetUpdateInfo.onGYNetEnd
-        String ns = firstClassByStrings(cl, "MicroMsg.NetSceneGetUpdateInfo");
+        // V2: NetSceneGetUpdateInfo.onGYNetEnd (缓存优先, 避免普通重启触发 DexKit 搜索)
+        String ns = DexKitHelper.ngetNetSceneUpdateInfo();
+        if (ns == null || ns.isEmpty()) {
+            ns = firstClassByStrings(cl, "MicroMsg.NetSceneGetUpdateInfo");
+        }
         if (ns != null) hookByName(cl, ns, "onGYNetEnd", 3, null, "V2");
         // V3: MMErrorProcessor.updateRequired(boolean 返回)
         hookByClassStrings(cl, "MicroMsg.MMErrorProcessor", "com.tencent.mm.ui.rc",
                 "b", -1, Boolean.FALSE, "V3");
-        // V4: UpdaterManager download/handleCommand
-        String um = firstClassByStrings(cl, "MicroMsg.UpdaterManager");
+        // V4: UpdaterManager download/handleCommand (类名缓存优先, 方法字符串搜索仍走 hookByStrings)
+        String um = DexKitHelper.ngetUpdaterManager();
+        if (um == null || um.isEmpty()) {
+            um = firstClassByStrings(cl, "MicroMsg.UpdaterManager");
+        }
         if (um != null) {
             hookByStrings(cl, um, "MicroMsg.UpdaterManager", -1, null, "V4");
         }
@@ -219,7 +244,11 @@ public class WeChatUpdateBlocker {
         // T6: CTinkerInstaller.c / f
         hookByClassStrings(cl, "MicroMsg.Tinker.CTinkerInstaller", "ee3.a",
                 "c", -1, Integer.valueOf(-1), "T6");
-        String ct = firstClassByStrings(cl, "MicroMsg.Tinker.CTinkerInstaller");
+        // T6b: CTinkerInstaller.f (缓存优先, 避免普通重启触发 DexKit 搜索)
+        String ct = DexKitHelper.ngetCtinkerInstaller();
+        if (ct == null || ct.isEmpty()) {
+            ct = firstClassByStrings(cl, "MicroMsg.Tinker.CTinkerInstaller");
+        }
         if (ct != null) hookByName(cl, ct, "f", -1, Integer.valueOf(-1), "T6b");
     }
 

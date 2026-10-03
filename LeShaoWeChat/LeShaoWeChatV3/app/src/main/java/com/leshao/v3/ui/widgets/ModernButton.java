@@ -33,8 +33,8 @@ public class ModernButton extends LinearLayout {
 
         mLabel = new TextView(ctx);
         mLabel.setText(text);
-        mLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        mLabel.setTypeface(Typeface.DEFAULT);
+        mLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        mLabel.setTypeface(Typeface.DEFAULT_BOLD);
         mLabel.setGravity(Gravity.CENTER);
         applyStyle(style);
         addView(mLabel, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
@@ -53,7 +53,7 @@ public class ModernButton extends LinearLayout {
                 break;
             case STYLE_DANGER:
                 setBackground(CandyUi.buttonDangerBg(getContext()));
-                mLabel.setTextColor(0xFFFFFFFF);
+                mLabel.setTextColor(AppColors.whiteTextOnAccent());
                 break;
             case STYLE_GHOST:
                 setBackground(CandyUi.buttonGhostBg(getContext()));

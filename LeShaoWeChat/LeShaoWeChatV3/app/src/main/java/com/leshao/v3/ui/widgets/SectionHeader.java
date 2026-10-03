@@ -23,18 +23,19 @@ public class SectionHeader extends LinearLayout {
         super(ctx);
         setOrientation(VERTICAL);
         float d = getResources().getDisplayMetrics().density;
-        setPadding((int) (4 * d), (int) (14 * d), (int) (4 * d), (int) (6 * d));
+        // 全局规范: 分区标题与上方卡片间距 13dp（卡片底部 4dp + 本标题顶部 9dp）
+        setPadding((int) (12 * d), (int) (9 * d), (int) (12 * d), (int) (13 * d));
 
         mTitle = new TextView(ctx);
         mTitle.setText(title);
-        mTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        mTitle.setTypeface(Typeface.DEFAULT);
+        mTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, AppColors.TYPE_SECTION_TITLE);
+        mTitle.setTypeface(Typeface.DEFAULT_BOLD);
         mTitle.setTextColor(AppColors.textPrimary());
+        mTitle.setLetterSpacing(0.01f);
         addView(mTitle);
 
         mSub = new TextView(ctx);
-        // v998: 说明小字再缩小 3dp
-        mSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 8);
+        mSub.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         mSub.setTextColor(AppColors.textTertiary());
         mSub.setGravity(Gravity.START);
         if (sub != null && !sub.isEmpty()) {

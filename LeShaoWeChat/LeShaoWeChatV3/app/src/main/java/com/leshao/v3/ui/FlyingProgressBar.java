@@ -2,21 +2,19 @@ package com.leshao.v3.ui;
 
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
-import android.graphics.Shader;
 import android.os.SystemClock;
 import android.view.View;
 
 /**
  * 流光进度条（v1138 样式定稿 X6/Y6）：
- *   · 轨道胶囊 + 左→右填充（模块统一主题色渐变，循环流动）
+ *   · 轨道胶囊 + 左→右填充（模块统一主题色纯色）
  *   · 填充内叠加「流动虚线」装饰元素
  *   · 领先端点处一只斜向上飞行的鸟（侧面剪影，双翅 + 收拢双脚），
- *     填充使用与进度条同一套动态渐变
+ *     填充使用与进度条同一套主题色
  *   · 百分比在条下方（由调用方 TextView 承担，见 setProgressListener）
  *
  * 自绘、无资源依赖；显示值缓动追随目标值，跳变上报也能丝滑过渡。
@@ -55,17 +53,12 @@ public class FlyingProgressBar extends View {
     private final Paint mEyeHiPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private final RectF mRect = new RectF();
-    private final Matrix mBarMat = new Matrix();
-    private final Matrix mBirdMat = new Matrix();
     private final Matrix mBirdXform = new Matrix();
     private final Path mTmp = new Path();
     private final Matrix mWingMat = new Matrix();
     private final Path mWingTmp = new Path();
 
     private int mBarHeightPx;
-
-    // 主题渐变（模块统一）
-    private int[] mColors;
 
     // 鸟的各部件（局部坐标 96×72）
     private Path mFarWing, mTail, mBody, mNearWing, mHead, mBeak, mFeet, mEye, mEyeHi;
@@ -75,34 +68,33 @@ public class FlyingProgressBar extends View {
         float density = context.getResources().getDisplayMetrics().density;
         mBarHeightPx = Math.round(12 * density);
 
-        int g1 = AppColors.gradientStart();
-        int g2 = AppColors.gradientMid();
-        int g3 = AppColors.gradientEnd();
-        mColors = new int[]{g1, g2, g3, g2, g1};
-
         mTrackPaint.setColor(AppColors.surfaceContainerHighest());
         mTrackPaint.setStyle(Paint.Style.FILL);
 
+        mFillPaint.setColor(AppColors.primary());
         mFillPaint.setStyle(Paint.Style.FILL);
-        mDashPaint.setColor(0xA6FFFFFF);
+        mDashPaint.setColor((AppColors.whiteTextOnAccent() & 0x00FFFFFF) | 0xA6000000);
         mDashPaint.setStyle(Paint.Style.FILL);
 
         mGlowPaint.setStyle(Paint.Style.FILL);
-        mGlowPaint.setColor((g3 & 0x00FFFFFF) | 0x55000000);
+        mGlowPaint.setColor((AppColors.primary() & 0x00FFFFFF) | 0x55000000);
 
+        mBirdPaint.setColor(AppColors.primary());
         mBirdPaint.setStyle(Paint.Style.FILL);
+        mBirdFarPaint.setColor(AppColors.primary());
         mBirdFarPaint.setStyle(Paint.Style.FILL);
         mBirdFarPaint.setAlpha(184);
+        mFeetPaint.setColor(AppColors.primary());
         mFeetPaint.setStyle(Paint.Style.STROKE);
         mFeetPaint.setStrokeCap(Paint.Cap.ROUND);
         mFeetPaint.setStrokeJoin(Paint.Join.ROUND);
         mFeetPaint.setStrokeWidth(2.4f * density);
 
-        mBeakPaint.setColor(0xFFFFB25E);
+        mBeakPaint.setColor(AppColors.warning());
         mBeakPaint.setStyle(Paint.Style.FILL);
-        mEyePaint.setColor(0xFF2F2A45);
+        mEyePaint.setColor(AppColors.onSurface());
         mEyePaint.setStyle(Paint.Style.FILL);
-        mEyeHiPaint.setColor(0xFFFFFFFF);
+        mEyeHiPaint.setColor(AppColors.whiteTextOnAccent());
         mEyeHiPaint.setStyle(Paint.Style.FILL);
 
         buildBird();
@@ -314,11 +306,6 @@ public class FlyingProgressBar extends View {
             canvas.save();
             canvas.clipPath(clipPath);
 
-            LinearGradient barShader = new LinearGradient(
-                    barLeft, 0, barRight, 0, mColors, null, Shader.TileMode.MIRROR);
-            mBarMat.setTranslate(-flow * barW, 0);
-            barShader.setLocalMatrix(mBarMat);
-            mFillPaint.setShader(barShader);
             canvas.drawRect(clip, mFillPaint);
 
             float period = Math.max(barH, 8);
@@ -346,13 +333,6 @@ public class FlyingProgressBar extends View {
         mBirdXform.postTranslate(edgeX, centerY + bob);
 
         float bw = 96 * scale;
-        LinearGradient birdShader = new LinearGradient(
-                0, 0, Math.max(bw, 1), 0, mColors, null, Shader.TileMode.MIRROR);
-        mBirdMat.setTranslate(-flow * bw, 0);
-        birdShader.setLocalMatrix(mBirdMat);
-        mBirdPaint.setShader(birdShader);
-        mBirdFarPaint.setShader(birdShader);
-        mFeetPaint.setShader(birdShader);
 
         // 翅膀持续扇动：绕各自翅根摆动，双翅同向起落，其余部件保持原位。
         float flap = (float) Math.sin(SystemClock.uptimeMillis() / 120.0) * 26f;

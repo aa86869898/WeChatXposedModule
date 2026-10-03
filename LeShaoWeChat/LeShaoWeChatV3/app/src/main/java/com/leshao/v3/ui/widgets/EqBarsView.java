@@ -3,8 +3,6 @@ package com.leshao.v3.ui.widgets;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.LinearGradient;
-import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Shader;
@@ -39,7 +37,6 @@ public class EqBarsView extends View {
     private static final long FALLBACK_INTERVAL_MS = 80L;
     private static final float MAG_FLOOR = 6f;
     private static final float SILENCE_FLOOR = 2f;
-    private static final long FLOW_DURATION_MS = 3200L;
     /** v30018: 柱组（旋律柱）默认占视图宽度 80%，居中，左右各留 10%。 */
     private static final float SPAN_RATIO = 0.80f;
     /** 当前柱组占宽比例，可按页面覆盖（如播放器页 90%）。 */
@@ -71,11 +68,6 @@ public class EqBarsView extends View {
     private final float[] mPcmRing = new float[PCM_FFT];
     private int mPcmFill;
     private int mPcmRate = 24000;
-
-    // 流光渐变：单例 shader + 平移矩阵，逐帧改变相位形成横向流动
-    private LinearGradient mGrad;
-    private final Matrix mGradMatrix = new Matrix();
-    private int mGradWidth;
 
     public EqBarsView(Context ctx) {
         super(ctx);
@@ -426,20 +418,12 @@ public class EqBarsView extends View {
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        mGrad = null;
-        mGradWidth = 0;
+        mPaint.setShader(null);
     }
 
     private void ensureGradient(int w) {
-        if (mGrad != null && mGradWidth == w) return;
-        mGradWidth = w;
-        float span = Math.max(1f, w * 2f);
-        // 三色循环，首尾同色以便无缝平移；span 内完成一个周期
-        mGrad = new LinearGradient(-span / 2f, 0f, span / 2f, 0f,
-                new int[]{AppColors.gradientStart(), AppColors.gradientMid(),
-                        AppColors.gradientEnd(), AppColors.gradientStart()},
-                new float[]{0f, 0.33f, 0.66f, 1f}, Shader.TileMode.CLAMP);
-        mPaint.setShader(mGrad);
+        mPaint.setShader(null);
+        mPaint.setColor(AppColors.primary());
     }
 
     @Override
@@ -457,14 +441,8 @@ public class EqBarsView extends View {
         if (barW <= 0f) return;
         float radius = Math.min(barW, 4f * d);
 
-        // 流光渐变：横向循环平移相位
+        // 纯色填充：跟随模块主题主色
         ensureGradient(w);
-        if (mGrad != null) {
-            float flowSpan = Math.max(1f, w * 2f);
-            float phase = (SystemClock.uptimeMillis() % FLOW_DURATION_MS) / (float) FLOW_DURATION_MS;
-            mGradMatrix.setTranslate(phase * flowSpan - flowSpan / 2f, 0f);
-            mGrad.setLocalMatrix(mGradMatrix);
-        }
 
         for (int i = 0; i < BAR_COUNT; i++) {
             float v = mCurrent[i];
