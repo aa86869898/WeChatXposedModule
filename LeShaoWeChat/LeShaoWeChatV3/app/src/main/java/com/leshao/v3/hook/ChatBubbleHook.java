@@ -15,6 +15,7 @@ import android.widget.AbsListView;
 import android.widget.ImageView;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.leshao.v3.ContextManager;
@@ -24,6 +25,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.lang.reflect.Method;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -63,8 +65,20 @@ public final class ChatBubbleHook {
     /** v3.0.128：气泡内文字颜色（0 = 不修改，保持微信原生）。对方/自己各一份。 */
     public static final String K_FROM_TEXT_COLOR = "ls_bubble_from_text_color";
     public static final String K_TO_TEXT_COLOR = "ls_bubble_to_text_color";
-    /** v3.0.150（《新聊天气泡替换.md》v8 §12.3）：聊天记录内时间分隔条文字颜色（0 = 不修改）。 */
+    /** v3.0.203：暗色主题独立配置。浅色用上述无后缀 key（向后兼容既有配置），
+     *  暗色用 *_dark key，运行时按 {@link #isDarkMode()} 选取对应套。 */
+    public static final String K_FROM_PATH_DARK = "ls_bubble_from_path_dark";
+    public static final String K_TO_PATH_DARK = "ls_bubble_to_path_dark";
+    public static final String K_FROM_TEXT_COLOR_DARK = "ls_bubble_from_text_color_dark";
+    public static final String K_TO_TEXT_COLOR_DARK = "ls_bubble_to_text_color_dark";
+    /** v3.0.150（《新聊天气泡替换.md》v8 §12.3）：聊天记录内时间分隔条文字颜色（0 = 不修改）。浅色套。 */
     public static final String K_TIME_TEXT_COLOR = "ls_bubble_time_text_color";
+    /** v3.0.208：聊天记录内时间分隔条文字颜色 —— 暗色套（浅色用 {@link #K_TIME_TEXT_COLOR}）。 */
+    public static final String K_TIME_TEXT_COLOR_DARK = "ls_bubble_time_text_color_dark";
+    /** v3.0.208：聊天时间修改总开关（微信美化 → 聊天时间修改）。 */
+    public static final String K_TIME_MODIFY_ENABLED = "ls_chat_time_modify_enabled";
+    /** v3.0.208：自定义时间线文本格式（Java SimpleDateFormat 语义；空 = 保留微信原生）。 */
+    public static final String K_TIME_FORMAT = "ls_chat_time_format";
     /** v3.0.150（《新聊天气泡替换.md》v8 §12.5）：群聊成员昵称文字颜色（0 = 不修改）。 */
     public static final String K_NICK_TEXT_COLOR = "ls_bubble_nick_text_color";
     /** h0.timeTV（0x7f0a10b0）时间分隔条 id，to.a findViewById 实证。 */
@@ -79,6 +93,10 @@ public final class ChatBubbleHook {
 
     public static final int KIND_FROM = 0;
     public static final int KIND_TO = 1;
+
+    /** v3.0.203：气泡外观主题。浅色/暗色各一套独立配置，运行时按微信深色设置自动选取。 */
+    public static final int THEME_LIGHT = 0;
+    public static final int THEME_DARK = 1;
 
     private static final int REQ_PICK_BUBBLE = 0x7F02;
 
@@ -117,6 +135,11 @@ public final class ChatBubbleHook {
     // 第二层：BUBBLE 捕获表 —— 只记录微信亲自贴过气泡的 View（viewitems.to.b 的 holder.b、
     // AnimImageView.setType），重盖/补色/换背景只动这张表里的 View，彻底删除几何启发式。
     private static final java.util.Map<View, Boolean> sBubble = new java.util.WeakHashMap<>();
+    /** v3.0.202：语音消息 item 根集合 —— 记录 mq.b voiceBinder 绑定的语音根，
+     *  setBackgroundResource 对语音 item 内「非 AnimImageView」的视图（时长/转文字/昵称等
+     *  TextView，实锤 id=2131366108 与气泡同位同尺寸被贴背景形成“文本消息”）一律跳过替换。 */
+    private static final java.util.Set<View> sVoiceRoots =
+            java.util.Collections.newSetFromMap(new java.util.WeakHashMap<View, Boolean>());
     /** v3.0.136：findBubbleViewInTree 单次调用预算（防遍历整棵 View 树卡死主线程）。 */
     private static int sTreeVisitCount = 0;
     /** v3.0.155：语音气泡替换后延迟校验（每个 View 只记一次，定位"替换后又被盖回默认"）。 */
@@ -131,6 +154,11 @@ public final class ChatBubbleHook {
     // v3.0.150 聊天时间线 / 群聊昵称颜色（0 = 不修改，保持微信原生）。
     private static volatile int sTimeTextColor = 0;
     private static volatile int sNickTextColor = 0;
+    /** v3.0.208：最近一次 bind-after 的方向（dealItemView 注入时记录），供链接 span 染方向色。 */
+    private static volatile boolean sLastBindRecv = false;
+    // v3.0.208 聊天时间修改：总开关 / 自定义时间线格式 / 暗色时间线颜色。
+    private static volatile boolean sTimeModifyEnabled = false;
+    private static volatile String sTimeFormat = null;
 
     // 气泡资源 ID（XML 兜底路径用）。优先 getIdentifier 动态解析，失败回退文档已知值
     private static volatile int sFromResId = 2131231925; // chatfrom_bg
@@ -202,69 +230,275 @@ public final class ChatBubbleHook {
         LogWriter.log(TAG, "setEnabled=" + on);
     }
 
+    /** v3.0.203：运行时主题判定 —— 跟随微信「深色模式」设置（AppColors 内部优先 bk.C，回退系统 uiMode）。 */
+    public static boolean isDarkMode() {
+        try { return com.leshao.v3.ui.AppColors.isDarkMode(); } catch (Throwable t) { return false; }
+    }
+
+    /** 当前生效主题：暗色返回 {@link #THEME_DARK}，否则 {@link #THEME_LIGHT}。 */
+    public static int currentTheme() {
+        return isDarkMode() ? THEME_DARK : THEME_LIGHT;
+    }
+
+    private static String fromPathKey(int theme) {
+        return theme == THEME_DARK ? K_FROM_PATH_DARK : K_FROM_PATH;
+    }
+
+    private static String toPathKey(int theme) {
+        return theme == THEME_DARK ? K_TO_PATH_DARK : K_TO_PATH;
+    }
+
+    private static String fromColorKey(int theme) {
+        return theme == THEME_DARK ? K_FROM_TEXT_COLOR_DARK : K_FROM_TEXT_COLOR;
+    }
+
+    private static String toColorKey(int theme) {
+        return theme == THEME_DARK ? K_TO_TEXT_COLOR_DARK : K_TO_TEXT_COLOR;
+    }
+
+    /** 按主题读取对方气泡图路径。theme 用 {@link #THEME_LIGHT} / {@link #THEME_DARK}。 */
+    public static String getFromPath(int theme) {
+        SharedPreferences sp = safePrefs();
+        if (sp != null) return sp.getString(fromPathKey(theme), null);
+        return theme == THEME_DARK ? null : sFromPath;
+    }
+
+    /** 按主题读取自己气泡图路径。 */
+    public static String getToPath(int theme) {
+        SharedPreferences sp = safePrefs();
+        if (sp != null) return sp.getString(toPathKey(theme), null);
+        return theme == THEME_DARK ? null : sToPath;
+    }
+
+    /** 当前生效主题的对方气泡图路径（运行时按微信深色设置自动切换）。 */
     public static String getFromPath() {
-        SharedPreferences sp = safePrefs();
-        return sp != null ? sp.getString(K_FROM_PATH, null) : sFromPath;
+        return getFromPath(currentTheme());
     }
 
+    /** 当前生效主题的自己气泡图路径。 */
     public static String getToPath() {
-        SharedPreferences sp = safePrefs();
-        return sp != null ? sp.getString(K_TO_PATH, null) : sToPath;
+        return getToPath(currentTheme());
     }
 
-    public static void setBubblePath(int kind, String path) {
+    /** 按主题设置气泡图路径。写后若主题正是当前生效主题则清缓存；非当前主题仅持久化。 */
+    public static void setBubblePath(int kind, int theme, String path) {
         SharedPreferences sp = safePrefs();
         if (sp == null) return;
         if (kind == KIND_FROM) {
-            sp.edit().putString(K_FROM_PATH, path).apply();
-            sFromPath = path;
-            sFromBmp = null;
-            sFromBmpPath = null;
-            synchronized (sDrawableCache) { sFromDrawableState = null; sFromDrawablePath = null; }
+            sp.edit().putString(fromPathKey(theme), path).apply();
+            if (theme == currentTheme()) {
+                sFromPath = path;
+                sFromBmp = null;
+                sFromBmpPath = null;
+                synchronized (sDrawableCache) { sFromDrawableState = null; sFromDrawablePath = null; }
+            }
         } else {
-            sp.edit().putString(K_TO_PATH, path).apply();
-            sToPath = path;
-            sToBmp = null;
-            sToBmpPath = null;
-            synchronized (sDrawableCache) { sToDrawableState = null; sToDrawablePath = null; }
+            sp.edit().putString(toPathKey(theme), path).apply();
+            if (theme == currentTheme()) {
+                sToPath = path;
+                sToBmp = null;
+                sToBmpPath = null;
+                synchronized (sDrawableCache) { sToDrawableState = null; sToDrawablePath = null; }
+            }
         }
-        LogWriter.log(TAG, "bubble path kind=" + kind + " -> " + path);
+        LogWriter.log(TAG, "bubble path kind=" + kind + " theme=" + theme + " -> " + path);
+    }
+
+    /** 按当前主题设置气泡图路径（兼容旧调用）。 */
+    public static void setBubblePath(int kind, String path) {
+        setBubblePath(kind, currentTheme(), path);
     }
 
     // ---------------- v3.0.128 气泡内文字颜色 ----------------
 
-    /** 读取气泡内文字颜色（0 = 不修改）。 */
-    public static int getTextColor(int kind) {
-        if (kind == KIND_FROM) return sFromTextColor;
-        return sToTextColor;
-    }
-
-    /** 设置气泡内文字颜色（0 = 不修改，恢复微信原生）。v3.0.166：写后立即刷新已渲染视图。 */
-    public static void setTextColor(int kind, int color) {
+    /** 按主题读取气泡内文字颜色（0 = 不修改）。theme 用 {@link #THEME_LIGHT} / {@link #THEME_DARK}。 */
+    public static int getTextColor(int kind, int theme) {
         SharedPreferences sp = safePrefs();
         if (kind == KIND_FROM) {
-            sFromTextColor = color;
-            if (sp != null) sp.edit().putInt(K_FROM_TEXT_COLOR, color).apply();
-        } else {
-            sToTextColor = color;
-            if (sp != null) sp.edit().putInt(K_TO_TEXT_COLOR, color).apply();
+            if (sp != null) return sp.getInt(fromColorKey(theme), 0);
+            return theme == THEME_DARK ? 0 : sFromTextColor;
         }
-        LogWriter.log(TAG, "bubble text color kind=" + kind + " -> 0x"
+        if (sp != null) return sp.getInt(toColorKey(theme), 0);
+        return theme == THEME_DARK ? 0 : sToTextColor;
+    }
+
+    /** 按主题设置气泡内文字颜色（0 = 不修改，恢复微信原生）。写后立即刷新已渲染视图。
+     *  v3.0.205：取色拖动时 ColorPickerDialog 高频回调（日志实测每 ~40ms 一次），
+     *  若每次都全量 refreshRenderedColors 会在聊天列表上形成布局风暴（爆闪取色不了）。
+     *  修复：同色去重 + 刷新节流（200ms 合并帧，末次颜色为准）。 */
+    public static void setTextColor(int kind, int theme, int color) {
+        SharedPreferences sp = safePrefs();
+        boolean changed = false;
+        if (kind == KIND_FROM) {
+            if (sp != null && sp.getInt(fromColorKey(theme), 0) != color) {
+                sp.edit().putInt(fromColorKey(theme), color).apply();
+            }
+            if (theme == currentTheme() && sFromTextColor != color) {
+                sFromTextColor = color;
+                changed = true;
+            }
+        } else {
+            if (sp != null && sp.getInt(toColorKey(theme), 0) != color) {
+                sp.edit().putInt(toColorKey(theme), color).apply();
+            }
+            if (theme == currentTheme() && sToTextColor != color) {
+                sToTextColor = color;
+                changed = true;
+            }
+        }
+        LogWriter.log(TAG, "bubble text color kind=" + kind + " theme=" + theme + " -> 0x"
                 + Integer.toHexString(color));
+        if (changed) scheduleColorRefresh();
+    }
+
+    /** v3.0.205：refreshRenderedColors 节流 —— 取色拖动高频回调时最多每 200ms 合并刷新一次。 */
+    private static final Runnable sColorRefreshTask = () -> {
+        try { refreshRenderedColors(); } catch (Throwable ignored) {}
+    };
+    private static void scheduleColorRefresh() {
+        try {
+            android.os.Handler h = new android.os.Handler(Looper.getMainLooper());
+            h.removeCallbacks(sColorRefreshTask);
+            h.postDelayed(sColorRefreshTask, 200);
+        } catch (Throwable t) {
+            try { refreshRenderedColors(); } catch (Throwable ignored) {}
+        }
+    }
+
+    /** v3.0.205：取色实时预览 —— 拖动过程中高频调用，仅更新内存与持久化并节流刷新已渲染视图，
+     *  不触发任何页面重建（由调用方负责最终确认）。与 {@link #setTextColor} 共用节流队列。 */
+    public static void previewTextColor(int kind, int theme, int color) {
+        SharedPreferences sp = safePrefs();
+        boolean changed = false;
+        if (kind == KIND_FROM) {
+            if (sp != null) sp.edit().putInt(fromColorKey(theme), color).apply();
+            if (theme == currentTheme() && sFromTextColor != color) {
+                sFromTextColor = color;
+                changed = true;
+            }
+        } else {
+            if (sp != null) sp.edit().putInt(toColorKey(theme), color).apply();
+            if (theme == currentTheme() && sToTextColor != color) {
+                sToTextColor = color;
+                changed = true;
+            }
+        }
+        if (changed) scheduleColorRefresh();
+    }
+
+    /** 按当前主题读取气泡内文字颜色（兼容旧调用）。 */
+    public static int getTextColor(int kind) {
+        return getTextColor(kind, currentTheme());
+    }
+
+    /** 按当前主题设置气泡内文字颜色（兼容旧调用）。 */
+    public static void setTextColor(int kind, int color) {
+        setTextColor(kind, currentTheme(), color);
+    }
+
+    /** 按当前微信主题重载运行时配置（sFromPath/sToPath/文字色）并清空 Drawable 缓存。
+     *  非当前主题的历史配置只存在于 prefs，运行时字段只保留当前主题生效值。 */
+    private static void loadThemeConfig() {
+        int theme = currentTheme();
+        sFromPath = getFromPath(theme);
+        sToPath = getToPath(theme);
+        sFromTextColor = getTextColor(KIND_FROM, theme);
+        sToTextColor = getTextColor(KIND_TO, theme);
+        try {
+            SharedPreferences sp = safePrefs();
+            if (sp != null) {
+                // v3.0.208：时间线颜色分为浅色/暗色两套，运行时按当前主题取对应套。
+                sTimeTextColor = sp.getInt(
+                        theme == THEME_DARK ? K_TIME_TEXT_COLOR_DARK : K_TIME_TEXT_COLOR, 0);
+                sNickTextColor = sp.getInt(K_NICK_TEXT_COLOR, 0);
+                // v3.0.208：聊天时间修改配置。
+                sTimeModifyEnabled = sp.getBoolean(K_TIME_MODIFY_ENABLED, false);
+                sTimeFormat = sp.getString(K_TIME_FORMAT, null);
+            }
+        } catch (Throwable ignored) {}
+        synchronized (sDrawableCache) {
+            sFromDrawableState = null; sFromDrawablePath = null;
+            sToDrawableState = null; sToDrawablePath = null;
+        }
+        sFromBmp = null; sFromBmpPath = null;
+        sToBmp = null; sToBmpPath = null;
+    }
+
+    /** v3.0.203：微信切换深色模式后由 MainHook.onResume 调用 —— 重载当前主题配置并刷新已渲染气泡。 */
+    public static void refreshThemeConfig() {
+        loadThemeConfig();
         refreshRenderedColors();
     }
 
     // ---------------- v3.0.150 聊天时间线 / 群聊昵称颜色 ----------------
 
-    /** 读取聊天记录内时间分隔条文字颜色（0 = 不修改）。 */
+    /** v3.0.208：按主题读取聊天时间线文字颜色（0 = 不修改）。
+     *  theme 用 {@link #THEME_LIGHT} / {@link #THEME_DARK}。 */
+    public static int getTimeTextColor(int theme) {
+        try {
+            SharedPreferences sp = safePrefs();
+            if (sp != null) {
+                return sp.getInt(theme == THEME_DARK ? K_TIME_TEXT_COLOR_DARK : K_TIME_TEXT_COLOR, 0);
+            }
+        } catch (Throwable ignored) {}
+        return sTimeTextColor;
+    }
+
+    /** 读取当前主题时间线文字颜色（兼容旧调用）。 */
     public static int getTimeTextColor() { return sTimeTextColor; }
 
-    /** 设置聊天记录内时间分隔条文字颜色（0 = 不修改，恢复微信原生）。v3.0.166：写后立即刷新。 */
-    public static void setTimeTextColor(int color) {
-        sTimeTextColor = color;
+    /** v3.0.208：按主题设置聊天时间线文字颜色（0 = 不修改，恢复微信原生）。
+     *  浅色用 {@link #K_TIME_TEXT_COLOR}，暗色用 {@link #K_TIME_TEXT_COLOR_DARK}；
+     *  写入后刷新已渲染聊天窗口，且当前主题下立即生效。 */
+    public static void setTimeTextColor(int theme, int color) {
         SharedPreferences sp = safePrefs();
-        if (sp != null) sp.edit().putInt(K_TIME_TEXT_COLOR, color).apply();
-        LogWriter.log(TAG, "time text color -> 0x" + Integer.toHexString(color));
+        if (sp != null) {
+            sp.edit().putInt(theme == THEME_DARK ? K_TIME_TEXT_COLOR_DARK : K_TIME_TEXT_COLOR, color).apply();
+        }
+        if (theme == currentTheme()) {
+            sTimeTextColor = color;
+            LogWriter.log(TAG, "time text color(theme=" + theme + ") -> 0x" + Integer.toHexString(color));
+            refreshRenderedColors();
+        } else {
+            LogWriter.log(TAG, "time text color(theme=" + theme + ") saved -> 0x" + Integer.toHexString(color));
+        }
+    }
+
+    /** 设置聊天时间线文字颜色（兼容旧调用，作用于当前主题）。 */
+    public static void setTimeTextColor(int color) {
+        setTimeTextColor(currentTheme(), color);
+    }
+
+    // ---------------- v3.0.208 聊天时间修改（自定义时间线内容） ----------------
+
+    /** 读取聊天时间修改总开关。 */
+    public static boolean isTimeModifyEnabled() { return sTimeModifyEnabled; }
+
+    /** 设置聊天时间修改总开关。开启后按 {@link #K_TIME_FORMAT} 改写每条消息时间分隔条文本。 */
+    public static void setTimeModifyEnabled(boolean on) {
+        sTimeModifyEnabled = on;
+        SharedPreferences sp = safePrefs();
+        if (sp != null) sp.edit().putBoolean(K_TIME_MODIFY_ENABLED, on).apply();
+        LogWriter.log(TAG, "time modify enabled=" + on);
+        refreshRenderedColors();
+    }
+
+    /** 读取自定义时间线格式（null/空 = 保留微信原生）。 */
+    public static String getTimeFormat() {
+        String f = sTimeFormat;
+        return f == null || f.trim().isEmpty() ? null : f.trim();
+    }
+
+    /** 设置自定义时间线格式（null/空 = 恢复微信原生）。 */
+    public static void setTimeFormat(String format) {
+        String f = (format == null || format.trim().isEmpty()) ? null : format.trim();
+        sTimeFormat = f;
+        SharedPreferences sp = safePrefs();
+        if (sp != null) {
+            if (f == null) sp.edit().remove(K_TIME_FORMAT).apply();
+            else sp.edit().putString(K_TIME_FORMAT, f).apply();
+        }
+        LogWriter.log(TAG, "time format -> " + f);
         refreshRenderedColors();
     }
 
@@ -278,6 +512,26 @@ public final class ChatBubbleHook {
         if (sp != null) sp.edit().putInt(K_NICK_TEXT_COLOR, color).apply();
         LogWriter.log(TAG, "nick text color -> 0x" + Integer.toHexString(color));
         refreshRenderedColors();
+    }
+
+    /** v3.0.208：按用户自定义格式渲染时间线文本。
+     *  <p>与微信数据层同款 token 语义（Java {@link java.text.SimpleDateFormat} 兼容，
+     *  参照《WeChatBubble_终极合并报告_v15.md》§8.2）：</p>
+     *  yyyy=4位年 / yy=2位年 / YYYY=周年 / MM/M=月(补零/不补零) / dd/d=日(补零/不补零) /
+     *  DD=年内第几天 / HH/H=24时(补零/不补零) / hh/h=12时(补零/不补零) / mm=分 / ss=秒 /
+     *  SSS=毫秒 / a=上午/下午 / E=星期简写 / EEEE=星期全称 / w=当年第几周。
+     *  非法格式或格式为空时返回 null（调用方保留微信原文）。 */
+    public static String formatTimeLine(long createTimeMs, String format) {
+        if (createTimeMs <= 0 || format == null) return null;
+        String f = format.trim();
+        if (f.isEmpty()) return null;
+        try {
+            return new java.text.SimpleDateFormat(f, java.util.Locale.CHINA)
+                    .format(new java.util.Date(createTimeMs));
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "formatTimeLine err: " + t.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -300,9 +554,12 @@ public final class ChatBubbleHook {
                     if (v == null || !v.isShown()) continue;
                     boolean recv = Boolean.TRUE.equals(e.getValue());
                     int kind = recv ? KIND_FROM : KIND_TO;
-                    if (isAnimImage(v) || v.getId() == ID_MQ_E || v.getId() == ID_MQ_U
-                            || v.getId() == ID_MQ_D) {
+                    if (isVoiceCarrier(v, recv)) {
                         applyVoiceBubble(v, recv, false);
+                        applyVoiceContentColor(v, kind);
+                    } else if (isAnimImage(v) || v.getId() == ID_MQ_E || v.getId() == ID_MQ_U
+                            || v.getId() == ID_MQ_D) {
+                        // v3.0.200：语音相关但非当前方向真承载（mq.D 备用承载 / 对向占位层）只改内容色
                         applyVoiceContentColor(v, kind);
                     } else {
                         applyBubbleTo(v, kind);
@@ -339,43 +596,103 @@ public final class ChatBubbleHook {
 
     /** 语音气泡内内容（播放图标/时长等）改色：v3.0.166（任务2）。
      *  在语音气泡视图上，遍历其直接子树找图标 ImageView 与时长 TextView，
-     *  用气泡方向对应的自定义文字色（未设置时用白字，避免黑色看不清）。 */
+     *  用气泡方向对应的自定义文字色。v3.0.203：图标色必须跟随用户设定的字色
+     *  （自定义气泡可能是灰/黑底，擅自用深灰或白字会与字色反调导致看不见）；
+     *  未设定字色（0 = 不修改）时保持微信原生配色，不做自动着色。
+     *  v3.0.204：统一从整条消息 item 根遍历着色 —— 语音动画/秒数、位置消息文字、
+     *  名片消息文字、文章链接文字等其它消息文字一并使用当前主题字色。 */
     private static void applyVoiceContentColor(View bubbleView, int kind) {
         if (bubbleView == null) return;
         int color = kind == KIND_FROM ? sFromTextColor : sToTextColor;
-        if (color == 0) color = 0xFFFFFFFF;
+        if (color == 0) return;
         try {
-            // 语音气泡根是 AnimImageView（mq.e/mq.u）或 TextView（mq.D）。
-            // 真实布局里时长/图标是 AnimImageView 的兄弟视图，先找其父容器。
-            View container = bubbleView;
-            Object parent = bubbleView.getParent();
-            if (parent instanceof ViewGroup) container = (ViewGroup) parent;
-            repaintVoiceContent(container, color, bubbleView, 0);
+            View itemRoot = findChatItemRoot(bubbleView);
+            repaintVoiceContent(itemRoot != null ? itemRoot : bubbleView, color, bubbleView, 0);
         } catch (Throwable ignored) {}
     }
 
+    /** 沿父链找到聊天消息 item 根（最顶层仍在聊天 item 内的视图），供整条内容统一着色。 */
+    private static View findChatItemRoot(View v) {
+        if (v == null) return null;
+        View cur = v;
+        View root = v;
+        int depth = 0;
+        while (cur != null && depth++ < 40) {
+            android.view.ViewParent p = cur.getParent();
+            View np = p instanceof View ? (View) p : null;
+            if (np == null) break;
+            if (!inChatItem(np)) break;
+            root = np;
+            cur = np;
+        }
+        return root;
+    }
+
+    /** 语音内容着色：非气泡背景的 ImageView（播放动画图标）SRC_IN 着色 + 全部 TextView 设字色。
+     *  v3.0.205（用户反馈 v3.0.204 语音动画仍是灰色）：语音波形动画是 AnimImageView(mq.e/mq.u)
+     *  的「前景 image」，气泡替换只发生在 background —— ImageView.setColorFilter 只染前景
+     *  drawable、不影响 background 气泡图。此前把真承载 mq.e 当 skip 短路、且对 AnimImageView
+     *  一律跳过，导致前景波形动画从未被着色。修复：skip 命中但为语音 AnimImageView 时，仍对
+     *  其前景 setColorFilter（background 气泡图不受影响）；其余非语音 AnimImageView 不改。 */
     private static void repaintVoiceContent(View v, int color, View skip, int depth) {
-        if (v == null || depth > 8 || v == skip) return;
+        if (v == null || depth > 14) return;
+        if (v == skip) {
+            // 真承载自身：着色其前景动画（波形/播放图层），background 气泡图为自定义图不动。
+            if (v instanceof android.widget.ImageView && isAnimImage(v)
+                    && (v.getId() == ID_MQ_E || v.getId() == ID_MQ_U)) {
+                try {
+                    ((android.widget.ImageView) v).setColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN);
+                } catch (Throwable ignored) {}
+            }
+            return;
+        }
         if (v instanceof android.widget.ImageView) {
             try {
                 android.widget.ImageView iv = (android.widget.ImageView) v;
-                if (isAnimImage(iv)) return; // 气泡背景自身不改
+                int id = iv.getId();
+                if (isAnimImage(iv)) {
+                    if (id == ID_MQ_E || id == ID_MQ_U) {   // 语音前景动画层：着色
+                        iv.setColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN);
+                    }
+                    // 其它 AnimImageView（非语音/图片承载）：不改
+                    return;
+                }
                 iv.setColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN);
             } catch (Throwable ignored) {}
             return;
         }
+        repaintTextContent(v, color, skip, depth);
+    }
+
+    /** 纯文字着色：所有 TextView（秒数/位置/名片/链接等）设字色；
+     *  跳过气泡背景自身、时间条/昵称/黑名单 id。
+     *  非 TextView 的自绘文本视图（MMNeat7extView 等）用反射 setTextColor 兼容。
+     *  不碰 ImageView —— 位置/名片/链接的缩略图保持原样。 */
+    private static void repaintTextContent(View v, int color, View skip, int depth) {
+        if (v == null || depth > 14 || v == skip) return;
         if (v instanceof android.widget.TextView) {
             try {
                 android.widget.TextView tv = (android.widget.TextView) v;
-                if (tv.getId() == ID_TIME_TV || tv.getId() == ID_NICK_TV) return;
+                int id = tv.getId();
+                if (id == ID_TIME_TV || id == ID_NICK_TV) return;
+                if (sIdBlack.contains(id)) return;
                 tv.setTextColor(color);
             } catch (Throwable ignored) {}
             return;
         }
-        if (v instanceof android.view.ViewGroup) {
-            android.view.ViewGroup g = (android.view.ViewGroup) v;
+        // 非 TextView 的文本承载视图（MMNeat7extView 等，setTextColor 会同步内层 wrappedTextView）
+        try {
+            if (!(v instanceof ViewGroup)) {
+                Method m = v.getClass().getMethod("setTextColor", int.class);
+                m.setAccessible(true);
+                m.invoke(v, color);
+                return;
+            }
+        } catch (Throwable ignored) {}
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) {
-                repaintVoiceContent(g.getChildAt(i), color, skip, depth + 1);
+                repaintTextContent(g.getChildAt(i), color, skip, depth + 1);
             }
         }
     }
@@ -517,19 +834,10 @@ public final class ChatBubbleHook {
         try {
             sHookCl = cl;
             sEnabled = isEnabled();
-            sFromPath = getFromPath();
-            sToPath = getToPath();
-            try {
-                SharedPreferences sp = safePrefs();
-                if (sp != null) {
-                    sFromTextColor = sp.getInt(K_FROM_TEXT_COLOR, 0);
-                    sToTextColor = sp.getInt(K_TO_TEXT_COLOR, 0);
-                    sTimeTextColor = sp.getInt(K_TIME_TEXT_COLOR, 0);
-                    sNickTextColor = sp.getInt(K_NICK_TEXT_COLOR, 0);
-                }
-            } catch (Throwable ignored) {}
+            loadThemeConfig();
             resolveBubbleResIds(cl);
             LogWriter.log(TAG, "bubble config enabled=" + sEnabled
+                    + " theme=" + (isDarkMode() ? "DARK" : "LIGHT")
                     + " from=" + (sFromPath != null && !sFromPath.isEmpty() ? "SET" : "EMPTY")
                     + " to=" + (sToPath != null && !sToPath.isEmpty() ? "SET" : "EMPTY"));
         } catch (Throwable ignored) {}
@@ -548,6 +856,8 @@ public final class ChatBubbleHook {
                     } catch (Throwable e) {
                         LogWriter.log(TAG, "bubble X2C resolver skipped: " + e.getMessage());
                     }
+                    // v3.0.208：文档 §7 bind 级主注入（恒先装，作为统一渲染入口）
+                    installDealItemViewHook(cl);
                     installBubbleApplyHook(cl);
                     installBackgroundResourceHook(cl);
                     installNeatBackgroundHook(cl);
@@ -556,6 +866,7 @@ public final class ChatBubbleHook {
                     installImageViewHook(cl);
                     installViewitemsToHook(cl);
                     installLinkSubtypeHook(cl);
+                    installLinkSpanColorHook(cl);
                     installResourceHelperHook(cl);
                     installResourceGetDrawableHook(cl);
                     installChatListViewHook(cl);
@@ -763,6 +1074,28 @@ public final class ChatBubbleHook {
     /** 构造 setBackgroundResource(int) 的替换 hook：after 阶段按 resId 白名单映射方向并覆盖背景。
      *  v3.0.131：仅在聊天列表内的视图生效，防止微信输入框/发现页/我的/设置等复用
      *  chatfrom_bg/chatto_bg 资源的界面被误渲染成自定义气泡。 */
+    /** v3.0.202：判断视图是否位于任一语音消息 item 内（沿父链查询 sVoiceRoots）。 */
+    private static boolean insideVoiceItem(View v) {
+        if (v == null) return false;
+        View cur = v;
+        int depth = 0;
+        while (cur != null && depth++ < 30) {
+            synchronized (sVoiceRoots) {
+                if (sVoiceRoots.contains(cur)) return true;
+            }
+            android.view.ViewParent p = cur.getParent();
+            cur = p instanceof View ? (View) p : null;
+        }
+        return false;
+    }
+
+    /** v3.0.202：语音 item 内只有 AnimImageView（真承载 mq.e）可贴气泡背景；
+     *  其余 TextView（时长/转文字/昵称等）保持微信原生，防止叠出“文本消息”。 */
+    private static boolean voiceItemBubbleEligible(View v) {
+        if (!insideVoiceItem(v)) return true;   // 非语音 item：走原逻辑
+        return isAnimImage(v);                   // 语音 item：仅 AnimImageView
+    }
+
     private static XC_MethodHook createBackgroundResourceHook() {
         return new XC_MethodHook() {
             @Override
@@ -797,6 +1130,11 @@ public final class ChatBubbleHook {
                     if (kind < 0) return;
                     View v = (View) param.thisObject;
                     if (!shouldReplaceBg(v, v.getBackground())) return; // v3.0.142（v7 §11）：时间条/系统提示过滤
+                    if (!voiceItemBubbleEligible(v)) { // v3.0.202：语音 item 内非 AnimImageView 不贴气泡
+                        LogWriter.log(TAG, "setBackgroundResource skip 语音item内TextView id=" + v.getId()
+                                + " view=" + v.getClass().getName());
+                        return;
+                    }
                     applyBubbleTo(v, kind);
                     // v3.0.158：本路径此前不登记 sBubble，导致 onAttachedToWindow 补盖永不触发，
                     // 若微信在本 hook 之后再次覆盖背景则无法恢复。这里同步登记，纳入补盖范围。
@@ -1137,6 +1475,22 @@ public final class ChatBubbleHook {
         return v != null && v.getClass().getName().contains("AnimImageView");
     }
 
+    /**
+     * v3.0.201：语音气泡“真承载”判定 —— 收/发两方向统一 = mq.e(2131366091)。
+     * 修正 v3.0.200 的反向错误：文档《WeChatChatBubbleReplace.md》§13.3“收到侧=mq.u”是误判。
+     * v3.0.200 真机日志实锤（leshao_v3_log.txt 18:41 时段）：把收到侧 2131366091 当占位层
+     * 跳过 → 用户实测“真语音气泡被去掉、假的完好无损”。微信历史语音 item 中 mq.e(6091) 是
+     * 唯一真承载（波形/时长都在它上面），mq.u(6096) 是隐藏占位/动画层；mq.D(TextView) 备用承载。
+     * 修复：收/发都只补 mq.e(6091)，mq.u(6096) 与 mq.D(5816) 一律跳过。
+     */
+    private static boolean isVoiceCarrier(View v, boolean recv) {
+        if (v == null) return false;
+        int id = v.getId();
+        if (id == ID_MQ_D) return false;   // TextView 备用承载：永不贴气泡
+        if (id == ID_MQ_U) return false;   // mq.u 占位/动画层：不贴气泡、不 forceVisible
+        return id == ID_MQ_E;              // 真承载 = mq.e(2131366091)，收/发两方向一致
+    }
+
     /** v3.0.132（《聊天气泡修复文档》）：语音气泡捕获点。
      *  hook {@code com.tencent.mm.ui.base.AnimImageView.setType(int)}：
      *  字段 {@code e} 即 isRecv（方向直供），after 把 view 收进 BUBBLE 表。
@@ -1177,6 +1531,13 @@ public final class ChatBubbleHook {
                         synchronized (sBubble) { stored = sBubble.get(v); }
                         if (stored == null) return;   // 未登记（含录音麦克风）一律不碰、不入表
                         boolean recv = stored;
+                        // v3.0.200：即使登记过，对向占位层（收到侧 mq.e / 发出侧 mq.u）也不补盖。
+                        // 微信历史语音 item 会同时实例化两个 AnimImageView，setType 可能对两个都触发。
+                        if (!isVoiceCarrier(v, recv)) {
+                            LogWriter.log(TAG, "AnimImageView.setType skip(对向占位层) isRecv=" + recv
+                                    + " id=" + v.getId() + " view=" + v.getClass().getName());
+                            return;
+                        }
                         int type = ((Number) param.args[0]).intValue();
                         LogWriter.log(TAG, "AnimImageView.setType type=" + type + " isRecv=" + recv
                                 + " view=" + v.getClass().getName()
@@ -1280,12 +1641,21 @@ public final class ChatBubbleHook {
                                     try {
                                         View root = (View) param.args[0];
                                         boolean recv = Boolean.TRUE.equals(param.args[1]);
+                                        synchronized (sVoiceRoots) { sVoiceRoots.add(root); } // v3.0.202
                                         int found = 0;
                                         for (int id : new int[]{ID_MQ_E, ID_MQ_U, ID_MQ_D}) {
                                             View av = root.findViewById(id);
                                             if (av == null) continue;
+                                            // v3.0.200（历史语音“空气泡占位”修）：按方向只补“真承载”。
+                                            // 收到侧只 mq.u、发出侧只 mq.e；对向 AnimImageView 是微信原生
+                                            // 隐藏占位/图标层，强制 VISIBLE 会在头像行叠出空气泡并把真气泡
+                                            // 顶到下一行（用户实测：多层气泡叠加）。
+                                            if (!isVoiceCarrier(av, recv)) {
+                                                try { applyVoiceContentColor(av, recv ? KIND_FROM : KIND_TO); } catch (Throwable ignored) {}
+                                                continue;
+                                            }
                                             synchronized (sBubble) { sBubble.put(av, recv); }
-                                            applyVoiceBubble(av, recv, isAnimImage(av));
+                                            applyVoiceBubble(av, recv, true);
                                             // v3.0.166（任务2）：语音气泡内内容改色跟随方向
                                             applyVoiceContentColor(av, recv ? KIND_FROM : KIND_TO);
                                             found++;
@@ -1398,15 +1768,59 @@ public final class ChatBubbleHook {
     // ---------------- v3.0.150 聊天时间线 / 群聊昵称颜色（《新聊天气泡替换.md》v8 §12.3/§12.5） ----------------
     // 时间线 = h0.timeTV(0x7f0a10b0=2131366064)，昵称 = h0.userTV(0x7f0a10be=2131366078)。
     // 在 viewitems.b after 内执行：天然限定聊天 item，无需再走 inChatItem 门。
+    // v3.0.208：新增自定义时间线文本（sTimeModifyEnabled + sTimeFormat）。
     private static void applyTimeNickColor(Object[] args) {
+        applyTimeNickColor(args, null);
+    }
+
+    /** v3.0.208：时间线颜色 / 昵称颜色 / 自定义时间线内容 统一入口。
+     *  <p>两种调用场景共用：</p>
+     *  <ul>
+     *    <li>viewitems.b after（旧体系）：args 含直接的 View 或 holder（可 find MMNeat 上溯 item 根）；</li>
+     *    <li>xl5.g.h (dealItemView) after（文档 §7 bind 级主入口）：外部已拿到 itemView，直传复用。</li>
+     *  </ul> */
+    private static void applyTimeNickColor(Object[] args, View itemView) {
         int tColor = sTimeTextColor;
         int nColor = sNickTextColor;
-        if (tColor == 0 && nColor == 0) return;
+        boolean applyText = sTimeModifyEnabled && sTimeFormat != null && !sTimeFormat.trim().isEmpty();
+        if (tColor == 0 && nColor == 0 && !applyText) return;
+        // v3.0.208：从参数中定位消息对象(e9)取 createTime —— 兼容两种场景：
+        // 1) viewitems.b：args 直接含 e9；
+        // 2) dealItemView：args 含 MvvmMsgInfo(am5.d)，其 .d.b = e9（文档 §7.3）。
+        long createTimeMs = 0;
+        if (applyText) {
+            for (Object a : args) {
+                if (a == null) continue;
+                try {
+                    if ("e9".equals(a.getClass().getSimpleName())) {
+                        Object ct = XposedHelpers.callMethod(a, "getCreateTime");
+                        createTimeMs = ((Number) ct).longValue();
+                        break;
+                    }
+                } catch (Throwable ignored) {}
+            }
+            if (createTimeMs == 0) {
+                try {
+                    for (Object a : args) {
+                        if (a == null) continue;
+                        Object d = XposedHelpers.getObjectField(a, "d");   // MvvmMsgInfo.d
+                        if (d == null) continue;
+                        Object msg = XposedHelpers.getObjectField(d, "b"); // .b = e9
+                        if (msg == null) continue;
+                        Object ct = XposedHelpers.callMethod(msg, "getCreateTime");
+                        createTimeMs = ((Number) ct).longValue();
+                        if (createTimeMs != 0) break;
+                    }
+                } catch (Throwable ignored) {}
+            }
+        }
         long start = android.os.SystemClock.uptimeMillis();
-        View root = null;
+        View root = itemView;
         // 优先使用参数中直接的 View（mq.b(View,boolean,boolean) 等）。
-        for (Object a : args) {
-            if (a instanceof View) { root = (View) a; break; }
+        if (root == null) {
+            for (Object a : args) {
+                if (a instanceof View) { root = (View) a; break; }
+            }
         }
         // 无直接 View 时，用参数对象内 find 到的气泡 TextView 上溯 item 根。
         if (root == null) {
@@ -1442,6 +1856,14 @@ public final class ChatBubbleHook {
             if (nv != null && nColor != 0) {
                 nv.setTextColor(nColor);
                 LogWriter.log(TAG, "userTV color 0x" + Integer.toHexString(nColor));
+            }
+            // v3.0.208：自定义时间线文本 —— 仅在开关开启且有格式时改写内容。
+            if (tv != null && applyText) {
+                String custom = formatTimeLine(createTimeMs, sTimeFormat);
+                if (custom != null) {
+                    tv.setText(custom);
+                    LogWriter.log(TAG, "timeTV text -> " + custom);
+                }
             }
             // v3.0.158 诊断：延迟回读最终文字色，判断是被微信随后覆盖(值回退)还是视图不可见(值保留)。
             final int ft = tColor, fn = nColor;
@@ -1595,6 +2017,47 @@ public final class ChatBubbleHook {
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, "installLinkSubtypeHook err: " + t.getMessage());
+        }
+    }
+
+    /** v3.0.208：文档 §9 #12 —— hn5.o.invoke 内容内链接 span 染色（链接/电话等）。
+     *  <p>链接 span 不走 setTextColor / textColor，构造期经 {@code hn5.o.invoke(Object)} 生成，
+     *  返回对象含字段 {@code g}(常规色 2131102210) / {@code f}(按下色 2131100799)。
+     *  after 改这两字段 → 复杂消息（文章/名片/链接/位置）内嵌链接跟随方向文字色。</p>
+     *  <p>方向取最近一次 dealItemView bind 的方向（sLastBindRecv，§7 bind 级天然隔离）。</p> */
+    private static void installLinkSpanColorHook(ClassLoader cl) {
+        String[] owners = {
+                "com.tencent.mm.ui.chatting.viewitems.hn5$o",
+                "com.tencent.mm.ui.chatting.viewitems.hn5.o"
+        };
+        for (String cn : owners) {
+            try {
+                Class<?> c = XposedHelpers.findClass(cn, cl);
+                for (Method m : c.getDeclaredMethods()) {
+                    if (!"invoke".equals(m.getName())) continue;
+                    if (m.getParameterTypes().length != 1) continue;
+                    m.setAccessible(true);
+                    final String owner = cn;
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            try {
+                                if (!sEnabled) return;
+                                Object span = param.getResult();
+                                if (span == null) return;
+                                int kind = sLastBindRecv ? KIND_FROM : KIND_TO;
+                                int color = kind == KIND_FROM ? sFromTextColor : sToTextColor;
+                                if (color == 0) return;
+                                XposedHelpers.setObjectField(span, "g", color);   // 2131102210 常规
+                                XposedHelpers.setObjectField(span, "f", color);   // 2131100799 按下
+                                LogWriter.log(TAG, "link span color kind=" + kind
+                                        + " 0x" + Integer.toHexString(color) + " " + owner);
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+                    LogWriter.log(TAG, "link span color hooked " + cn + "." + m.getName());
+                }
+            } catch (Throwable ignored) {}
         }
     }
 
@@ -2037,8 +2500,18 @@ public final class ChatBubbleHook {
      *  vis=8(GONE)（日志 bubble VERIFY AnimImageView w=254 h=127 vis=8 custom=true），且背景已是
      *  custom —— 旧逻辑遇「已贴 custom」直接短路，GONE 态永远得不到 forceVisible，直到滚动
      *  recycle 触发 setType/mq.b 重绑才变 VISIBLE。现改为：只要 isVoiceImageView 且 attached，
-     *  要么 GONE（无条件补盖强制 VISIBLE），要么背景已被微信清（补盖），已可见且 custom 才跳过。 */
+     *  要么 GONE（无条件补盖强制 VISIBLE），要么背景已被微信清（补盖），已可见且 custom 才跳过。
+     *  v3.0.205（用户反馈 v3.0.204 取色爆闪）：onLayout 每帧触发把全部 w=0 h=0 vis=8 的历史语音
+     *  view 强制 VISIBLE + requestLayout，形成 onLayout→forceVisible→requestLayout 布局风暴。
+     *  修复：1) 补盖节流（200ms 内只执行一轮）；2) 单 view 700ms 内已补盖且背景仍 custom 跳过；
+     *  3) 未 layout（w==0 && h==0）的 view 不强制 VISIBLE（等真实布局后再由绑定/attach路径补盖）。 */
+    private static volatile long sLastVoiceCover = 0;
+    private static final java.util.Map<View, Long> sVoiceCoverAt = new java.util.WeakHashMap<>();
+
     private static void coverVoiceBubblesOnLayout() {
+        long now = SystemClock.uptimeMillis();
+        if (now - sLastVoiceCover < 200) return;   // 节流：防 onLayout 风暴
+        sLastVoiceCover = now;
         final java.util.List<View> need = new java.util.ArrayList<>();
         synchronized (sBubble) {
             for (java.util.Map.Entry<View, Boolean> e : sBubble.entrySet()) {
@@ -2047,9 +2520,12 @@ public final class ChatBubbleHook {
                 try {
                     if (!v.isAttachedToWindow()) continue;
                     if (!isVoiceImageView(v)) continue;
+                    if (!isVoiceCarrier(v, Boolean.TRUE.equals(e.getValue()))) continue; // v3.0.200：只补真承载
                     boolean gone = v.getVisibility() != View.VISIBLE;
                     boolean customBg = isCustomBackground(v.getBackground());
                     if (!gone && customBg) continue;   // 已可见且已贴 custom —— 真无需处理
+                    Long last = sVoiceCoverAt.get(v);
+                    if (last != null && now - last < 700 && customBg) continue;
                     need.add(v);                       // 其余：GONE→补盖强 VISIBLE；背景被清→重贴
                 } catch (Throwable ignored) {}
             }
@@ -2059,7 +2535,12 @@ public final class ChatBubbleHook {
                 Boolean r;
                 synchronized (sBubble) { r = sBubble.get(v); }
                 if (r == null) continue;
+                // v3.0.205：w==0&&h==0 表示该 view 尚未真正布局（RecyclerView 远离视口的复用项），
+                // 此处强制 VISIBLE + requestLayout 只会放大布局风暴；交给真实的 layout 后绑定补盖。
+                if (v.getWidth() == 0 && v.getHeight() == 0
+                        && v.getVisibility() != View.VISIBLE) continue;
                 applyVoiceBubble(v, r, true);
+                synchronized (sVoiceCoverAt) { sVoiceCoverAt.put(v, SystemClock.uptimeMillis()); }
                 LogWriter.log(TAG, "voice cover onLayout kind=" + (r ? KIND_FROM : KIND_TO)
                         + " view=" + v.getClass().getName()
                         + " w=" + v.getWidth() + " h=" + v.getHeight()
@@ -2156,6 +2637,214 @@ public final class ChatBubbleHook {
             ViewGroup g = (ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) {
                 replaceMatchingBubbles(g.getChildAt(i));
+            }
+        }
+    }
+
+    /** v3.0.208：文档 §7 bind 级主注入 —— hook {@code xl5.g.h}(MvvmChattingItem.dealItemView)。
+     *  <p>微信 8.0.78 聊天列表走 MVVM 架构（§3），每次 bind（初次/上下滑/回收复用/notifyItemChanged）
+     *  必经 {@code xl5.g.h(s0 holder, am5.d info, int pos, int type, boolean, List)}，且只存在于
+     *  聊天 ItemConvert → 天然聊天隔离（§7.1/§7.2）。after 内统一执行：</p>
+     *  <ol>
+     *    <li>{@code recolorItem(itemView, isRecv)}：整树上色（时间线/昵称/气泡文字/语音内容/图标）；</li>
+     *    <li>文本气泡 / 语音承载补盖（复用 {@link #applyBubbleTo}）；</li>
+     *    <li>{@code applyTimeNickColor(args)}：时间线文字颜色 + 自定义时间线内容（§8 三件套）。</li>
+     *  </ol>
+     *  <p>定位：DexKit 锚点 {@code "[onBindView] finish position:"}（§10）→ xl5.g；方法名 h。
+     *  形参为接口类型（s0/am5.d），hook 时对类内所有名为 h 的方法做参数适配：
+     *  第 2 个参数(索引1)对象含字段 e(时间文本) + d.b(msg) 即视为目标，避免写死混淆接口名。</p> */
+    private static void installDealItemViewHook(ClassLoader cl) {
+        try {
+            if (!DexKitHelper.isScanComplete()) {
+                LogWriter.log(TAG, "dealItemView hook: scan not complete, skip");
+                return;
+            }
+            List<String> cls = DexKitHelper.findMethodDeclClassByString(cl, "[onBindView] finish position:");
+            if (cls == null || cls.isEmpty()) {
+                LogWriter.log(TAG, "dealItemView hook: anchor string no candidates, try class name");
+                cls = new ArrayList<>();
+                cls.add("com.tencent.mm.ui.chatting.mvvm.MvvmChattingItem");
+            }
+            boolean hooked = false;
+            for (String cn : cls) {
+                for (Class<?> c : HookUtil.loadClasses(cl, cn)) {
+                    for (Method m : c.getDeclaredMethods()) {
+                        if (!"h".equals(m.getName())) continue;
+                        Class<?>[] pts = m.getParameterTypes();
+                        if (pts.length < 3) continue;
+                        // 目标：第 2 参是 MvvmMsgInfo（am5.d 混淆实现，形参为接口类型）。
+                        // 接口自身不声明字段 e/d（实现类声明），故放宽：含 e 或 d 字段即视为目标
+                        // （文档 §7.3：info.d.b = msg 是 dealItemView 锚点特征）。
+                        if (!hasFieldNamed(pts[1], "e") && !hasFieldNamed(pts[1], "d")) continue;
+                        m.setAccessible(true);
+                        final Method fm = m;
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
+                            @Override
+                            protected void afterHookedMethod(MethodHookParam param) {
+                                try {
+                                    if (!sEnabled) return;
+                                    applyDealItemView(param, fm);
+                                } catch (Throwable t) {
+                                    LogWriter.log(TAG, "dealItemView apply err: " + t.getMessage());
+                                }
+                            }
+                        });
+                        hooked = true;
+                        LogWriter.log(TAG, "dealItemView hooked " + c.getName() + "."
+                                + m.getName() + Arrays.toString(pts));
+                    }
+                }
+            }
+            if (!hooked) {
+                LogWriter.log(TAG, "dealItemView hook none found (xl5.g.h via anchor)");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installDealItemViewHook err: " + t.getMessage());
+        }
+    }
+
+    /** 判断类型是否声明了指定字段（沿父链）。 */
+    private static boolean hasFieldNamed(Class<?> c, String fieldName) {
+        Class<?> cur = c;
+        while (cur != null && cur != Object.class) {
+            try {
+                cur.getDeclaredField(fieldName);
+                return true;
+            } catch (Throwable ignored) {}
+            cur = cur.getSuperclass();
+        }
+        return false;
+    }
+
+    /** 文档 §7.3/§8 bind-after 统一渲染：时间线颜色+内容、气泡文字、语音承载补盖。 */
+    private static void applyDealItemView(de.robv.android.xposed.XC_MethodHook.MethodHookParam param, Method fm) {
+        Object[] args = param.args;
+        // 1) 从 holder 拿 itemView（文档 §7.3：((k3)args[0]).itemView）
+        View itemView = null;
+        try {
+            Object holder = args[0];
+            if (holder != null) {
+                Object iv = XposedHelpers.getObjectField(holder, "itemView");
+                if (iv instanceof View) itemView = (View) iv;
+            }
+        } catch (Throwable ignored) {}
+        if (itemView == null) {
+            // 兜底：从参数里直接找 View
+            for (Object a : args) {
+                if (a instanceof View) { itemView = (View) a; break; }
+            }
+        }
+        if (itemView == null) return;
+        // 2) 时间线颜色 / 昵称 / 自定义时间线内容（§8 三件套，bind-after 直用 itemView）
+        applyTimeNickColor(args, itemView);
+        // 3) 文本内容 / 图标整树上色（§6.4 recolorItem，兼容时间线/昵称 id）
+        boolean isRecv = !isSendFromArgs(args);
+        sLastBindRecv = isRecv;
+        recolorItem(itemView, isRecv);
+        // 4) 气泡承载逐节点应用（文档 §7.3：内容 ITV to.b / MMNeat7extView + 语音 BUBBLE 表）。
+        //    整树上色 recolorItem 只改颜色；承载贴图按方向对真承载应用，其余节点不动。
+        try {
+            applyBubbleToTree(itemView, isRecv);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "dealItemView bubble err: " + t.getMessage());
+        }
+    }
+
+    /** v3.0.208：文档 §7.3 —— 对 item 树内真气泡承载应用自定义气泡（文本 ITV + 语音 mq.e）。
+     *  与 recolorItem 分层：此处只管背景贴图，不碰文字/图标颜色。 */
+    private static void applyBubbleToTree(View root, boolean isRecv) {
+        if (root == null || !sEnabled) return;
+        int kind = isRecv ? KIND_FROM : KIND_TO;
+        boolean hasCustom = loadDrawable(kind) != null;
+        if (!hasCustom) return;                 // 无自定义气泡图则不贴
+        ArrayDeque<View> st = new ArrayDeque<>();
+        st.push(root);
+        while (!st.isEmpty()) {
+            View v = st.pop();
+            if (v == null) continue;
+            try {
+                // 文本气泡承载：MMNeat7extView（to.b 内容层）—— 语音转文字 mq.s 也同型，天然涵盖。
+                if (v instanceof android.widget.TextView
+                        && v.getClass().getName().contains("MMNeat")) {
+                    if (isReplaceableContentView(v)) {
+                        applyBubbleTo(v, kind);
+                    }
+                } else if (isVoiceCarrier(v, isRecv)) {
+                    // 语音真承载 mq.e：波形/时长都在它上面
+                    applyVoiceBubble(v, isRecv, false);
+                }
+            } catch (Throwable ignored) {}
+            if (v instanceof ViewGroup) {
+                ViewGroup g = (ViewGroup) v;
+                for (int i = 0; i < g.getChildCount(); i++) {
+                    st.push(g.getChildAt(i));
+                }
+            }
+        }
+    }
+
+    /** 从 dealItemView 参数里判定是否自己发送（文档 §7.3：msg.z0()=是否自己）。 */
+    private static boolean isSendFromArgs(Object[] args) {
+        try {
+            for (Object a : args) {
+                if (a == null) continue;
+                // MvvmMsgInfo（am5.d）：.d.b = e9 msg
+                Object d = null;
+                try { d = XposedHelpers.getObjectField(a, "d"); } catch (Throwable ignored) {}
+                if (d == null) continue;
+                Object msg = null;
+                try { msg = XposedHelpers.getObjectField(d, "b"); } catch (Throwable ignored) {}
+                if (msg == null) continue;
+                try {
+                    return Boolean.TRUE.equals(XposedHelpers.callMethod(msg, "z0"));
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    /** v3.0.208：文档 §6.4 recolorItem —— 整树遍历着色（时间线/昵称按 id，其余 TextView 按方向字色，
+     *  ImageView 按图标色）。bind-after 调用，天然聊天隔离。 */
+    private static void recolorItem(View root, boolean isRecv) {
+        if (root == null) return;
+        int timeColor = sTimeTextColor;
+        int nickColor = sNickTextColor;
+        int textColor = isRecv ? sFromTextColor : sToTextColor;
+        ArrayDeque<View> st = new ArrayDeque<>();
+        st.push(root);
+        while (!st.isEmpty()) {
+            View v = st.pop();
+            if (v == null) continue;
+            try {
+                int id = v.getId();
+                if (v instanceof android.widget.TextView) {
+                    android.widget.TextView tv = (android.widget.TextView) v;
+                    if (id == ID_TIME_TV && timeColor != 0) {
+                        tv.setTextColor(timeColor);
+                    } else if (id == ID_NICK_TV && nickColor != 0) {
+                        tv.setTextColor(nickColor);
+                    } else if (sIdBlack.contains(id)) {
+                        // §11：展开/历史提示/CheckBox/内容根等非内容 TextView 不动
+                    } else if (textColor != 0) {
+                        tv.setTextColor(textColor);
+                    }
+                } else if (v instanceof android.widget.ImageView) {
+                    // 语音图标 / 动画前景层：按方向字色染色（文档 §5.3/§6.4）。
+                    // 其余 ImageView（头像/缩略图）一律不动，避免误染。
+                    if (isAnimImage(v) || v.getId() == ID_MQ_E || v.getId() == ID_MQ_U) {
+                        int iconColor = textColor;
+                        if (iconColor != 0) {
+                            ((android.widget.ImageView) v).setColorFilter(iconColor,
+                                    android.graphics.PorterDuff.Mode.SRC_ATOP);
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+            if (v instanceof ViewGroup) {
+                ViewGroup g = (ViewGroup) v;
+                for (int i = 0; i < g.getChildCount(); i++) {
+                    st.push(g.getChildAt(i));
+                }
             }
         }
     }
@@ -2623,33 +3312,13 @@ public final class ChatBubbleHook {
     /** 应用气泡内文字颜色（0 = 不修改）。文本气泡承载视图可能是 MMNeat7extView（非 TextView），
      *  其 setTextColor 会把颜色同步到内层 wrappedTextView。
      *  v3.0.131：若目标视图是容器（如 TextView 气泡内嵌文本视图），递归对子树内可见的
-     *  TextView 一并设置，确保颜色真正落到显示文字的视图上。 */
+     *  TextView 一并设置，确保颜色真正落到显示文字的视图上。
+     *  v3.0.204：改从整条消息 item 根遍历，位置/名片/链接等其它消息文字一并着色。 */
     private static void applyTextColor(View v, int kind) {
         int color = kind == KIND_FROM ? sFromTextColor : sToTextColor;
         if (color == 0 || v == null) return;
-        applyTextColorInner(v, color, 0);
-    }
-
-    private static void applyTextColorInner(View v, int color, int depth) {
-        if (v == null || depth > 6) return;
-        try {
-            if (v instanceof android.widget.TextView) {
-                ((android.widget.TextView) v).setTextColor(color);
-                return; // TextView 无子视图
-            }
-        } catch (Throwable ignored) {}
-        try {
-            Method m = v.getClass().getMethod("setTextColor", int.class);
-            m.setAccessible(true);
-            m.invoke(v, color);
-            return;
-        } catch (Throwable ignored) {}
-        if (v instanceof ViewGroup) {
-            ViewGroup g = (ViewGroup) v;
-            for (int i = 0; i < g.getChildCount(); i++) {
-                applyTextColorInner(g.getChildAt(i), color, depth + 1);
-            }
-        }
+        View itemRoot = findChatItemRoot(v);
+        repaintTextContent(itemRoot != null ? itemRoot : v, color, v, 0);
     }
 
     /**
@@ -2771,8 +3440,17 @@ public final class ChatBubbleHook {
                         final boolean isRecv = recv;
                         fv.post(() -> {
                             try {
+                                // v3.0.200（历史语音“空气泡占位”修）：语音补盖只认“真承载”。
+                                // 方向+id 双约束：收到侧只 mq.u、发出侧只 mq.e；mq.D(TextView 备用承载)
+                                // 与对向 AnimImageView（收到侧 mq.e / 发出侧 mq.u）都是微信原生占位层，
+                                // 一旦 forceVisible 就叠出空气泡并把真气泡顶到下一行。
+                                if (!isVoiceCarrier(fv, isRecv)) {
+                                    LogWriter.log(TAG, "attach BUBBLE skip 占位层 isRecv=" + isRecv
+                                            + " id=" + fv.getId() + " view=" + fv.getClass().getSimpleName());
+                                    return;
+                                }
                                 final boolean pathVoice = isAnimImage(fv)
-                                        || fv.getId() == ID_MQ_E || fv.getId() == ID_MQ_U || fv.getId() == ID_MQ_D;
+                                        || fv.getId() == ID_MQ_E || fv.getId() == ID_MQ_U;
                                 int kind;
                                 if (pathVoice) {
                                     // v3.0.161：语音视图方向以 mq.b 登记的表为准（几何猜向在 GONE/w=0 时不可靠），

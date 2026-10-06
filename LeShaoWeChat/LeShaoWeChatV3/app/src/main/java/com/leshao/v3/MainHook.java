@@ -12,6 +12,7 @@ import com.leshao.v3.hook.AutoForwardHook;
 import com.leshao.v3.hook.AntiDetectionHook;
 import com.leshao.v3.hook.ChatBubbleHook;
 import com.leshao.v3.hook.FavVoiceForwardHook;
+import com.leshao.v3.hook.ChatFavVoiceHook;
 import com.leshao.v3.hook.ForwardLimitHook;
 import com.leshao.v3.hook.WxForwardReplaceHook;
 import com.leshao.v3.hook.ChatGroupHook;
@@ -71,11 +72,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v3.0.198";
+    public static final String MODULE_BUILD = "v3.0.208";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 30198;
+    public static final int MODULE_VERSION_CODE = 30210;
 
     /** v1079: 当前前台 Activity(onResume 记录/onPause 清除), 供 talker 解析等复用。 */
     private static volatile java.lang.ref.WeakReference<Activity> sResumedActivity;
@@ -399,6 +400,9 @@ public class MainHook implements IXposedHookLoadPackage {
                                     () -> ChatBubbleHook.hook(cl)));
                             safeRun("FavVoiceForwardHook", () -> HookManager.register("FavVoiceForwardHook",
                                     () -> FavVoiceForwardHook.hook(cl)));
+                            // v3.0.206: 聊天「+」→收藏选择页语音转发（独立开关，联系人和群聊页）
+                            safeRun("ChatFavVoiceHook", () -> HookManager.register("ChatFavVoiceHook",
+                                    () -> ChatFavVoiceHook.hook(cl)));
                             // v3.0.89: 突破转发/群发多选联系人 9 人上限（文档方案A：hook Intent.getIntExtra）
                             safeRun("ForwardLimitHook", () -> HookManager.register("ForwardLimitHook",
                                     () -> ForwardLimitHook.hook(cl)));
@@ -419,6 +423,9 @@ public class MainHook implements IXposedHookLoadPackage {
                             // 去广告（更多功能 -> 去你妈的广告）
                             safeRun("AdBlockerHook", () -> HookManager.register("AdBlockerHook",
                                     () -> com.leshao.v3.hook.AdBlockerHook.hook(cl)));
+                            // v3.0.206: 去你妈的面对面扫码（更多功能 -> 扫码，相册二维码按真实面对面交付）
+                            safeRun("FaceScanHook", () -> HookManager.register("FaceScanHook",
+                                    () -> com.leshao.v3.hook.FaceScanHook.hook(cl)));
                             // 定位伪装（更多功能 -> 定位伪装）
                             safeRun("FakeLocationHook", () -> HookManager.register("FakeLocationHook",
                                     () -> com.leshao.v3.hook.FakeLocationHook.hook(cl)));
@@ -575,6 +582,8 @@ public class MainHook implements IXposedHookLoadPackage {
                             sResumedActivity = new java.lang.ref.WeakReference<>((Activity) param.thisObject);
                             // v1140: 微信切换深色模式会重建 Activity, onResume 时实时重算模块配色
                             com.leshao.v3.ui.AppColors.refresh();
+                            // v3.0.203: 微信深浅色切换后重载气泡配置（浅/暗各一套）并刷新已渲染气泡
+                            ChatBubbleHook.refreshThemeConfig();
                             // v1025: 从微信 Activity 反查真实 ClassLoader 并重新 hook WCDB
                             com.leshao.v3.db.DatabaseProvider.probeAndRehook(param.thisObject);
                         }

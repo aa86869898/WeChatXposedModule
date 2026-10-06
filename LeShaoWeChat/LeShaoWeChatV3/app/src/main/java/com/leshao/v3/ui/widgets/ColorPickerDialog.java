@@ -39,6 +39,12 @@ public final class ColorPickerDialog {
         void onPick(int color);
     }
 
+    /** v3.0.205：实时预览回调 —— 拖动 SV 面板/色相条时高频触发（无节流原始频率）。
+     *  用于即时应用到已渲染视图（不重建页面），最终确认仍走 {@link OnPick#onPick}。 */
+    public interface OnPreview {
+        void onPreview(int color);
+    }
+
     private static final float HUE_BAR_DP = 26f;
     private static final float SV_PANEL_DP = 220f;
     private static final float THUMB_DP = 12f;
@@ -47,6 +53,11 @@ public final class ColorPickerDialog {
 
     public static void show(Context ctx, String title, int initialColor,
                             boolean allowDefault, final OnPick cb) {
+        show(ctx, title, initialColor, allowDefault, cb, null);
+    }
+
+    public static void show(Context ctx, String title, int initialColor,
+                            boolean allowDefault, final OnPick cb, final OnPreview preview) {
         if (ctx == null) return;
         final float d = ctx.getResources().getDisplayMetrics().density;
         int dlgTheme = AppColors.isDarkMode()
@@ -92,6 +103,8 @@ public final class ColorPickerDialog {
 
         // 联动模型：hue 由 HueBar 提供，s/v 由 SvPanel 提供；任一变化重算 hsv/color 并回调
         final int[] current = {Color.HSVToColor(hsv)};
+        // v3.0.206：程序内回显 hex 时的同步标志，避免 afterTextChanged 反推 hsv 把面板状态覆盖回去
+        final boolean[] syncingHex = {false};
         Runnable repaint = () -> { svPanel.invalidate(); hueBar.invalidate(); };
 
         // ---- 预览：色块 + hex 文本 ----
@@ -166,9 +179,12 @@ public final class ColorPickerDialog {
             int c = Color.HSVToColor(hsv);
             current[0] = c;
             hexTv.setText(toHex(c));
-            hexInput.setText(toHex(c));
+            syncingHex[0] = true;
+            try { hexInput.setText(toHex(c)); } finally { syncingHex[0] = false; }
             swatch.setBackground(swatchBg(c, d));
-            if (cb != null) cb.onPick(c);
+            // v3.0.205：拖动实时回调走 OnPreview（不重建页面），确认「确定」才走 OnPick。
+            if (preview != null) { preview.onPreview(c); }
+            else if (cb != null) cb.onPick(c);
         };
 
         svPanel.setListener(h -> {
@@ -179,6 +195,9 @@ public final class ColorPickerDialog {
         });
         hueBar.setListener(hue -> {
             hsv[0] = hue;
+            // v3.0.207：同步色相到 SV 面板底色 —— SvPanel.onDraw 用内部 mHue 画 S/V 渐变，
+            // 仅 invalidate 不 setHue 会导致拖色相条时面板底色纹丝不动。
+            svPanel.setHue(hue);
             repaint.run();
             firePick.run();
         });
@@ -191,6 +210,9 @@ public final class ColorPickerDialog {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
             @Override public void afterTextChanged(Editable s) {
+                // v3.0.206：拖动 SV/色相条时 firePick 会 setText 回显 hex，
+                // 程序内同步不重复回写 hsv（否则会把刚拖动的值反推覆盖回去，导致横条"点不动"、预览不变）。
+                if (syncingHex[0]) return;
                 Integer c = tryParse(s == null ? null : s.toString());
                 if (c == null) return;
                 current[0] = c;
@@ -202,6 +224,8 @@ public final class ColorPickerDialog {
                 swatch.setBackground(swatchBg(c, d));
                 svPanel.invalidate();
                 hueBar.invalidate();
+                if (preview != null) { preview.onPreview(c); }
+                else if (cb != null) cb.onPick(c);
             }
         });
 
@@ -297,10 +321,18 @@ public final class ColorPickerDialog {
             float y = ev.getY();
             switch (ev.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    if (mListener != null) {
+                        com.leshao.v3.LogWriter.log("ColorPicker", "SvPanel touch DOWN at " + (int)x + "," + (int)y);
+                    }
+                    // fall through
                 case MotionEvent.ACTION_MOVE:
                     svFromTouch(x, y);
                     invalidate();
-                    if (mListener != null) mListener.onChanged(new float[]{mS, mV});
+                    // v3.0.206：回调加保护，回调异常不回传中断触摸（否则拖动会"点不动"）
+                    if (mListener != null) {
+                        try { mListener.onChanged(new float[]{mS, mV}); }
+                        catch (Throwable ignored) {}
+                    }
                     return true;
                 default:
                     return super.onTouchEvent(ev);
@@ -372,10 +404,18 @@ public final class ColorPickerDialog {
         public boolean onTouchEvent(MotionEvent ev) {
             switch (ev.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    if (mListener != null) {
+                        com.leshao.v3.LogWriter.log("ColorPicker", "HueBar touch DOWN at " + (int)ev.getX());
+                    }
+                    // fall through
                 case MotionEvent.ACTION_MOVE:
                     hueFromTouch(ev.getX());
                     invalidate();
-                    if (mListener != null) mListener.onChanged(mHue);
+                    // v3.0.206：回调加保护，回调异常不回传中断触摸
+                    if (mListener != null) {
+                        try { mListener.onChanged(mHue); }
+                        catch (Throwable ignored) {}
+                    }
                     return true;
                 default:
                     return super.onTouchEvent(ev);

@@ -114,6 +114,23 @@ public final class MoreFeaturesPageView {
         root.addView(cardWxid);
         root.addView(PageKit.divider(ctx));
 
+        // v3.0.206: 去你妈的面对面扫码（更多功能 -> 扫码）
+        root.addView(M3Page.section(ctx, "扫码",
+                "相册二维码按真实面对面扫码交付"));
+        root.addView(M3Page.spacer(ctx, 2));
+
+        LinearLayout cardFaceScan = PageKit.makeCard(ctx, d);
+        cardFaceScan.addView(PageKit.switchRow(ctx, d, "去你妈的面对面扫码",
+                "扫一扫支持从相册选二维码，并按真实面对面扫码返回结果（result_image_source=1）",
+                com.leshao.v3.hook.FaceScanHook.isEnabled(),
+                (v, on) -> {
+                    com.leshao.v3.hook.FaceScanHook.setEnabled(on);
+                    Toast.makeText(ctx, "去你妈的面对面扫码已" + (on ? "开启" : "关闭")
+                            + "（重启微信后完全生效）", Toast.LENGTH_SHORT).show();
+                }, null));
+        root.addView(cardFaceScan);
+        root.addView(PageKit.divider(ctx));
+
         // v3.0.132: 朋友圈自动点赞配置已迁移至朋友圈右上角「⋮ 自动点赞」菜单，主界面不再保留入口
         return root;
     }

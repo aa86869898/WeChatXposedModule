@@ -71,6 +71,22 @@ public class ContactGroupPageView {
 
         root.addView(candyDivider(ctx, d));
 
+        // v3.0.206: 聊天页面收藏语音转发（聊天窗口「+」→ 收藏选择页，长按/单击语音直接转发给当前聊天）
+        boolean chatFavVoiceOn = prefs != null
+                && prefs.getBoolean(ChatFavVoiceHook.K_ENABLED, false);
+        LinearLayout cardChatFavVoice = makeCard(ctx, d);
+        cardChatFavVoice.addView(switchRow(ctx, d, "聊天页面收藏语音转发",
+                "聊天「+」→收藏选择页中，单击/长按语音可直接转发给当前聊天", chatFavVoiceOn,
+                (v, on) -> {
+                    if (prefs != null) prefs.edit().putBoolean(ChatFavVoiceHook.K_ENABLED, on).apply();
+                    ChatFavVoiceHook.setEnabled(on);
+                    Toast.makeText(ctx, "聊天页面收藏语音转发已" + (on ? "开启" : "关闭"),
+                            Toast.LENGTH_SHORT).show();
+                }, null));
+        root.addView(cardChatFavVoice);
+
+        root.addView(candyDivider(ctx, d));
+
         // v3.0.89: 突破转发/群发多选联系人 9 人上限（文档《微信突破转发群发9个联系人上限》方案A）
         boolean forwardLimitOn = prefs != null
                 && prefs.getBoolean(ForwardLimitHook.K_ENABLED, false);

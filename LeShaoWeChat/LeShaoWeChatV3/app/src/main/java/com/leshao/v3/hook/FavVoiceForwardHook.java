@@ -560,8 +560,10 @@ public final class FavVoiceForwardHook {
     /** 收藏语音 → 直接复用模块内已验证的语音发送链路
      *  {@link TtsVoiceSender#sendViaSceneVoice}：
      *  v61.d1.h(talker,"amr_") 建记录 → 复制到 voice2 目录 → v61.d1.u 建 type=34 消息
-     *  → v61.v0.dj().e() 踢上传队列 → refreshChattingList 上屏。 */
-    private static void sendVoice(long localId, Object favInfo, String toUser) {
+     *  → v61.v0.dj().e() 踢上传队列 → refreshChattingList 上屏。
+     *
+     *  <p>v3.0.206：提升为 public，供聊天「+」收藏选择页（ChatFavVoiceHook）复用。</p> */
+    public static void sendVoice(long localId, Object favInfo, String toUser) {
         try {
             ClassLoader cl = sCl;
             if (cl == null) return;
@@ -1122,7 +1124,8 @@ public final class FavVoiceForwardHook {
         }
     }
 
-    private static int getType(Object favItem) {
+    /** v3.0.206：提升为 public，供聊天「+」收藏选择页（ChatFavVoiceHook）复用作类型判定。 */
+    public static int getType(Object favItem) {
         try {
             return XposedHelpers.getIntField(favItem, "field_type");
         } catch (Throwable t) {
@@ -1130,7 +1133,8 @@ public final class FavVoiceForwardHook {
         }
     }
 
-    private static long getLocalId(Object favItem) {
+    /** v3.0.206：提升为 public，供聊天「+」收藏选择页（ChatFavVoiceHook）复用。 */
+    public static long getLocalId(Object favItem) {
         try {
             return XposedHelpers.getLongField(favItem, "field_localId");
         } catch (Throwable t) {

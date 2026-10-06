@@ -65,16 +65,18 @@ public final class WeChatBeautyPageView {
 
         root.addView(candyDivider(ctx, d));
 
-        // ==================== 聊天时间线颜色 ====================
-        LinearLayout cardTimeColor = makeCard(ctx, d);
-        cardTimeColor.addView(colorRow(ctx, d, "聊天时间线颜色",
-                "修改聊天记录内时间分隔条文字颜色",
-                ChatBubbleHook.getTimeTextColor(), color -> {
-                    ChatBubbleHook.setTimeTextColor(color);
-                    Toast.makeText(ctx, color == 0 ? "已恢复默认时间颜色"
-                            : "时间颜色已设置，重新进入聊天后生效", Toast.LENGTH_SHORT).show();
-                }));
-        root.addView(cardTimeColor);
+        // ==================== 聊天时间修改（v3.0.208：原「聊天时间线颜色」迁移至此，含自定义格式+浅/暗双套颜色） ====================
+        LinearLayout cardTimeMod = makeCard(ctx, d);
+        cardTimeMod.addView(switchRow(ctx, d, "聊天时间修改",
+                "自定义时间线内容 + 时间线颜色（浅色/暗色独立配置）",
+                ChatBubbleHook.isTimeModifyEnabled(),
+                (v, on) -> {
+                    ChatBubbleHook.setTimeModifyEnabled(on);
+                    Toast.makeText(ctx, "聊天时间修改已" + (on ? "开启" : "关闭")
+                            + (on ? "（重新进入聊天后生效）" : ""), Toast.LENGTH_SHORT).show();
+                },
+                v -> SubPageActivity.open(act, "聊天时间修改", 35)));
+        root.addView(cardTimeMod);
 
         root.addView(candyDivider(ctx, d));
 

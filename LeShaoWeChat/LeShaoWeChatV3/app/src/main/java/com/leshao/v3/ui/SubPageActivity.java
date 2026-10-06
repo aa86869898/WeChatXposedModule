@@ -364,6 +364,8 @@ public class SubPageActivity {
                 return WeChatBeautyPageView.create(ctx, parentAct);
             case 34: // 快捷菜单
                 return QuickMenuPageView.create(ctx, parentAct);
+            case 35: // 聊天时间修改（微信美化 → 聊天时间修改）
+                return TimeModifyPageView.create(ctx, parentAct);
             default:
                 return makePlaceholder(ctx, parentAct);
         }
