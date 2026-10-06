@@ -53,7 +53,7 @@ import org.luckypray.dexkit.result.MethodData;
 public class DexKitHelper {
     private static final String BASELINE_ASSET = "dexkit_baseline.json";
     private static final String BASELINE_FILE = "dexkit_baseline.json";
-    private static final int CURRENT_MODULE_VERSION = 30177;
+    private static final int CURRENT_MODULE_VERSION = 30198;
     private static final String KEY_A21_CLASS = "a21_class";
     private static final String KEY_A21_METHOD = "a21_method";
     private static final String KEY_ACTION_BAR_CLASS = "action_bar_custom_area";
@@ -686,6 +686,64 @@ public class DexKitHelper {
                     }
                 });
                 LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): " + results.size());
+                writeFindCache(cacheKey, results);
+                return results;
+            } finally {
+                try {
+                    bridge.close();
+                } catch (Throwable th) {
+                }
+            }
+        }
+    }
+
+    /** 方法粒度字符串定位（DexKit_StringFinder_Method.md §8.2 推荐）：找「方法体引用该字符串」的方法，
+     *  返回其声明类类名（去重）。比 findClassesByString（含 addFieldForType 类字段噪声）更精准，
+     *  用于定位具体的 Hook 锚点类（如 CombineEntranceService=com.tencent.mm.feature.combine 的 a10/a）。 */
+    public static List<String> findMethodDeclClassByString(ClassLoader cl, final String keyword) {
+        if (keyword == null || keyword.isEmpty()) {
+            return new ArrayList<>();
+        }
+        String cacheKey = findCacheKey("MD", null, keyword);   // MD=Method DeclClass by string
+        List<String> cached = readFindCache(cacheKey);
+        if (cached != null) {
+            LogWriter.log(TAG, "findMethodDeclClassByString(" + keyword + "): cache hit " + cached.size() + " classes");
+            return new ArrayList<>(cached);
+        }
+        if (isMainThread()) {
+            LogWriter.log(TAG, "findMethodDeclClassByString(" + keyword + "): cache MISS on main thread, return empty (avoid block)");
+            return new ArrayList<>();
+        }
+        DexKitCacheBridge.RecyclableBridge bridge = null;
+        final List<String> results = new ArrayList<>();
+        waitForFullScanIfScheduled();
+        synchronized (sBridgeLock) {
+            try {
+                bridge = createBridge(cl);
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "findMethodDeclClassByString err: " + e.getMessage());
+            }
+            if (bridge == null) {
+                return results;
+            }
+            try {
+                bridge.withBridge(new DexKitCacheBridge.RecyclableBridge.BridgeFunction() {
+                    @Override
+                    public void apply(DexKitBridge b) {
+                        try {
+                            MethodMatcher mMatcher = MethodMatcher.create().usingStrings(keyword);
+                            List<MethodData> methods = b.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
+                            for (MethodData m : methods) {
+                                String cn = m.getClassName();
+                                if (cn != null && !results.contains(cn)) {
+                                    results.add(cn);
+                                }
+                            }
+                        } catch (Throwable ignored) {
+                        }
+                    }
+                });
+                LogWriter.log(TAG, "findMethodDeclClassByString(" + keyword + "): " + results.size() + " classes");
                 writeFindCache(cacheKey, results);
                 return results;
             } finally {

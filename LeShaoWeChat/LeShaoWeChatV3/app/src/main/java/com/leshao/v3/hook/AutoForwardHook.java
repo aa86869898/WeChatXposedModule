@@ -184,7 +184,7 @@ public class AutoForwardHook {
         }
     }
 
-    private static String readContent(Object e9) {
+    static String readContent(Object e9) {
         for (String mn : new String[]{"I0", "j", "N1"}) {
             try {
                 Object v = XposedHelpers.callMethod(e9, mn);
@@ -198,6 +198,31 @@ public class AutoForwardHook {
             if (v != null) return v.toString();
         } catch (Throwable ignored) {}
         return null;
+    }
+
+    /**
+     * 转发按钮替换复用入口：把任意消息 e9 转发给指定目标列表（微信原生转发流程共用）。
+     * 返回成功数。类型覆盖：文本族/图片/AppMsg 卡片；语音走 TtsVoiceSender；其余暂不支持。
+     */
+    public static int forwardE9ToTargets(Object e9, Set<String> targets) {
+        if (e9 == null || targets == null || targets.isEmpty()) return 0;
+        ClassLoader cl = ContextManager.getClassLoader();
+        if (cl == null) return 0;
+        int type = 0;
+        try { type = (Integer) XposedHelpers.callMethod(e9, "getType"); } catch (Throwable ignored) {}
+        String content = readContent(e9);
+        int done = 0;
+        for (String target : targets) {
+            if (target == null || target.isEmpty()) continue;
+            try {
+                forwardOne(cl, type, content, target, e9);
+                LogWriter.log(TAG, "fwdReplace -> " + target + " type=" + type + " ok");
+                done++;
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "fwdReplace -> " + target + " err: " + t.getMessage());
+            }
+        }
+        return done;
     }
 
     private static String callStr(Object obj, String name) {
@@ -227,7 +252,12 @@ public class AutoForwardHook {
             || type == 0x42000031) && type != 0x11000031;
         boolean isImage = type == 3;
         boolean isAppMsg = (type & 0xffff) == 49 || type == 0x42000031 || type == 0x11000031;
+        boolean isVoice = type == 34 || type == 228 || type == 0x42000022;
 
+        if (isVoice) {
+            com.leshao.v3.hook.VoiceForwardHook.forwardVoiceToTarget(target, originalE9);
+            return;
+        }
         if (isTextFamily && content != null && !content.isEmpty()) {
             // 纯文本直发
             com.leshao.v3.wm.utils.WmReflect.sendTextMsg(cl, content, target);

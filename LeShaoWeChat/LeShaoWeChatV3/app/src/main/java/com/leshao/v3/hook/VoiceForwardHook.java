@@ -41,10 +41,17 @@ public class VoiceForwardHook {
     private static final String TAG = "VF";
     // 0x7E 段位: 与微信内建 itemId(100~190) 完全隔离, 且便于 qi#t0 兜底守卫识别
     private static final int MENU_ID = 0x7E000001;
+    // v3.0.186: 注入的「语音转发」按钮直接用微信原生转发 itemId(142)，
+    // 点击由微信 bq.Q(142) 原生拉起 MsgRetransmitUI（§12.1 已证不崩），方案B接管选人与模块发送。
+    private static final int MENU_ID_NATIVE_FORWARD = 142;
     private static volatile boolean sHooked = false;
     private static volatile boolean sMenuInjected = false;
     private static volatile long sMenuInjectedTime = 0;
     private static volatile boolean sEnabled = true;
+    // v3.0.184 修复：恢复注入自定义「语音转发」菜单项（0x7E000001），保证长按语音有转发按钮。
+    // 点击后走本模块 ContactPickerDialog + TtsVoiceSender 发送（executeForward）。
+    // 同时保留 WxForwardReplaceHook 注入的微信原生「转发」(142)（方案B：微信原生选人+模块发送）并行。
+    private static volatile boolean sUseNativeForward = false;
     private static volatile Activity sChatAct;
     private static volatile View sPendingView;
     private static volatile Object sPendingMsg;
@@ -200,6 +207,11 @@ public class VoiceForwardHook {
                 + " menu=" + menu.getClass().getName()
                 + " anchor=" + (anchorObj == null ? "null" : anchorObj.getClass().getName()));
         if (!sEnabled) return;
+        // v3.0.182：语音转发走微信原生（先不走模块语音转发），不注入自定义「语音转发」项
+        if (sUseNativeForward) {
+            if (dbg) LogWriter.log(TAG, "menuBuild: voice forward uses native, skip module injection");
+            return;
+        }
         if (!(anchorObj instanceof View)) { if (dbg) LogWriter.log(TAG, "menuBuild: anchor not View"); return; }
         View anchor = (View) anchorObj;
         Object tag = anchor.getTag();
@@ -212,8 +224,8 @@ public class VoiceForwardHook {
         if (msgTypeOf(e9) != 34) return;   // 34 = 语音消息
 
         try {
-            Object existing = XposedHelpers.callMethod(menu, "findItem", MENU_ID);
-            if (existing != null) return;  // 幂等: 已注入
+            Object existing = XposedHelpers.callMethod(menu, "findItem", MENU_ID_NATIVE_FORWARD);
+            if (existing != null) return;  // 幂等: 微信原生转发项已存在（含 WxFwdReplace 注入的 142）
         } catch (Throwable ignored) {}
 
         int groupId = 0;
@@ -224,12 +236,12 @@ public class VoiceForwardHook {
 
         boolean ok = false;
         try {
-            Object item = XposedHelpers.callMethod(menu, "add", groupId, MENU_ID, 0, "语音转发");
+            Object item = XposedHelpers.callMethod(menu, "add", groupId, MENU_ID_NATIVE_FORWARD, 0, "语音转发");
             setMenuIcon(item);
             ok = true;
         } catch (Throwable t1) {
             try {
-                XposedHelpers.callMethod(menu, "add", MENU_ID, "语音转发");
+                XposedHelpers.callMethod(menu, "add", MENU_ID_NATIVE_FORWARD, "语音转发");
                 ok = true;
             } catch (Throwable t2) {
                 LogWriter.log(TAG, "menu add fail: " + t2.getMessage());
@@ -246,8 +258,11 @@ public class VoiceForwardHook {
         try {
             if (anchor.getContext() instanceof Activity) sChatAct = (Activity) anchor.getContext();
         } catch (Throwable ignored) {}
-        LogWriter.log(TAG, "menu injected 语音转发 id=" + MENU_ID + " group=" + groupId
+        LogWriter.log(TAG, "menu injected 语音转发 id=142 group=" + groupId
                 + " talker=" + sPendingTalker + " msgId=" + extractMsgId(e9));
+        // v3.0.197: 菜单注入即标记方案B pending —— 日志铁证 onVoiceMenuBuilt 一定触发(menuBuild#1/#2)，
+        // 而 bq.Q(142)/launchNativeVoiceForward 均零回调。标记后 [FwdFix][B] 才有语音可发。
+        try { WxForwardReplaceHook.markVoiceForwardPending(e9); } catch (Throwable ignored) {}
     }
 
     private static int msgTypeOf(Object e9) {
@@ -304,7 +319,19 @@ public class VoiceForwardHook {
                                     if (sPendingMsg != null) f = findTagField(p.thisObject.getClass(), sPendingMsg.getClass());
                                     if (f == null) f = findFieldDeep(p.thisObject.getClass(), "d");
                                     if (f != null) { try { f.setAccessible(true); f.set(p.thisObject, null); } catch (Throwable ignored) {} }
-                                    executeForward();
+                                    // v3.0.185：点击「语音转发」→ 微信原生选人 + 模块发送（§19 方案B）
+                                    boolean launched = false;
+                                    try {
+                                        Object e9 = getE9(sPendingMsg);
+                                        Context ctx = sChatAct != null ? sChatAct
+                                                : (sPendingView != null ? sPendingView.getContext() : null);
+                                        if (e9 != null && ctx != null) {
+                                            launched = WxForwardReplaceHook.launchNativeVoiceForward(ctx, e9);
+                                        }
+                                    } catch (Throwable te) {
+                                        LogWriter.log(TAG, "native voice launch err: " + te.getMessage());
+                                    }
+                                    if (!launched) executeForward();   // 原生路径失败 → 回退模块选择器
                                 }
                                 p.setResult(null);
                             } catch (Throwable e) {
@@ -854,9 +881,13 @@ public class VoiceForwardHook {
         }
     }
 
+        // ===== 转发替换入口：把 e9 语音消息转发到指定目标 =====
+    public static boolean forwardVoiceToTarget(String targetWxid, Object msgObj) {
+        return doForwardVoice(null, msgObj, targetWxid);
+    }
+
     // ===== 实际转发语音 (tl.p0 SceneVoice Recorder 方案) =====
-    private static boolean doForwardVoice(Activity act, Object msgObj, String targetWxid) {
-        try {
+    private static boolean doForwardVoice(Activity act, Object msgObj, String targetWxid) {        try {
             Object e9 = getE9(msgObj);
             if (e9 == null) { LogWriter.log(TAG, "doForward: cannot get e9"); return false; }
 

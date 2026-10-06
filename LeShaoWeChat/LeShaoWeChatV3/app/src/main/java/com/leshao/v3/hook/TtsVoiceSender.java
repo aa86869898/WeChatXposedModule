@@ -3409,8 +3409,11 @@ public class TtsVoiceSender {
                 return false;
             }
 
+            // 目标唯一种子: h(talker, md5) 生成的 fileName 撞 voiceinfo 主键会返回 null。
+            // 多目标并发转发时固定种子必然撞键, 故种子绑定源文件+目标, 保证每个目标唯一。
+            String seed = md5(voiceFile + "|" + talker + "|" + System.nanoTime());
             String newName = (String) XposedHelpers.callStaticMethod(
-                    XposedHelpers.findClass(sVoiceGClass, voiceCl()), sVoiceGMethod, talker, "amr_");
+                    XposedHelpers.findClass(sVoiceGClass, voiceCl()), sVoiceGMethod, talker, seed);
             LogWriter.log(TAG, "SceneVoice: newName=" + newName + " talker=" + talker);
             if (newName == null || newName.isEmpty()) return false;
 

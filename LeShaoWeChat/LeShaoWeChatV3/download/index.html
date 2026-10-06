@@ -23,8 +23,56 @@
         完整工程源码 LeShaoWeChatV3-src-v30148.tar.gz (8MB)
         <div class="meta">v3.0.148 完整可编译工程源码包 · 含全部 Java/资源源码 + gradle wrapper + xposed-api-82.jar + debug/release keystore + 成品 release APK。本机需 Android SDK(35) + JDK17 可 ./gradlew assembleRelease</div>
     </a>
-    <a class="apk" href="LeShaoWeChat-v30177.apk">
-        最新版 LeShaoWeChat-v30177.apk (Release)
+    <a class="apk" href="LeShaoWeChat-v30198.apk">
+        最新版 LeShaoWeChat-v30198.apk (Release)
+        <div class="meta">v3.0.198 · 语音转发修复【目标集不污染 + 发送种子唯一】——依据 v3.0.197 真机日志（leshao_v3_log.txt 17:35:52 时段铁证）：用户在群聊转发语音给【个人 wxid_9ohhf82mrlgc22】，原生 data 的 Select_Conv_User=wxid_9ohhf82mrlgc22（正确唯一目标），但 v3.0.195 的「强制覆盖」用 readSelection 误抓的 [本群54238848862@chatroom, 个人] 覆盖正确值 → 双目标并发发送，本群成功、个人失败（SceneVoice: newName=null）；修复：①[FwdFix][B] 改为优先信任原生 data 的 Select_Conv_User（parseCsvUsers 解析，data 为空才用 sPickedTargets 兜底），并对解析结果 filterOfficialAccounts 过滤 facebookapp/fmessage/gh_ 官方号；②TtsVoiceSender.sendViaSceneVoice 的 v61.d1.h 种子从固定 "amr_" 改为 md5(voiceFile|talker|nanoTime) 目标唯一——根因是两个并发线程用同一种子生成相同 fileName 撞 voiceinfo 主键，后到者 insert 返回 null；验证目标：转发给个人后日志应见 [FwdFix][B] existing=个人（不被覆盖）+ injected=个人 单一目标，SceneVoice: newName 非空，无 MISMATCH</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v30197.apk">
+        上一版 LeShaoWeChat-v30197.apk (Release)
+        <div class="meta">v3.0.196 · 语音转发「主动驱动发送」定稿（leshao_v3_log.txt 16:38:39 铁证）：data 自带正确 Select_Conv_User、[FwdFix][B] 注入成功，但微信原生 3180 语音转发链根本不触发（MsgRetransmitUI 收到后直接 finish 回 LauncherUI，x51.b0.kj / v51.r0.doScene / 模块 doForward 全零回调）→ 判定原生语音转发 UI 链路已坏；本次在 [FwdFix][B] 回填 data 后新增【主动驱动模块发送】——遍历 sPickedTargets 每个目标，后台线程调 VoiceForwardHook.forwardVoiceToTarget(one, sVoicePendingMsg)（TtsVoiceSender 直发，绕开 UI），并打 activeSend=true/false 与 target；验证目标：转发后日志应出现 [FwdFix][B] activeSend=true target=XXX，随后 SceneVoice 模块发送链日志</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v30195.apk">
+        上一版 LeShaoWeChat-v30195.apk (Release)
+        <div class="meta">v3.0.195 · 语音转发两处真机日志定稿修复（leshao_v3_log.txt 16:26:41 铁证）：①readSelection 字段优先级修正——实测 [FwdFix][A] finish picked=[facebookapp,fmessage,gh_xxx...] 误命中 n0.q（官方账号「排除」HashSet），真正选中 54238848862@chatroom 在 n0.F:HashMap(key=wxid,value=SelectContactReportInfo)；改 Map 优先于 Collection，且 Collection 兜底跳过 facebookapp/weixin/qqmail 排除列表特征；②B 注入强制覆盖——真机 [FwdFix][B] 显示 data 已带 Select_Conv_User 但语音仍不发（该值不可信，疑排除列表污染），改只要 sPickedTargets(n0.F 真实选中) 有效就强制回填覆盖，并打 existing→injected 对比；③装机/回调已达要求（target=MsgRetransmitUI declCL=PathClassLoader、[FwdFix][A] finish、[FwdFix][B] ENTER 均正常）；验证目标：finish 打 [FwdFix][A] finish picked=[54238848862@chatroom]、B 打 injected=[54238848862@chatroom]</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v30194.apk">
+        上一版 LeShaoWeChat-v30194.apk (Release)
+        <div class="meta">v3.0.186 · 修复点击转发语音闪退（依据真机日志：launchNativeVoiceForward 后立即 BaseChattingUIFragment.onDestroy + STARTUP 重启）：①「语音转发」按钮 itemId 改用微信原生 142（MENU_ID_NATIVE_FORWARD），点击由微信 bq.Q(142) 原生拉起 MsgTransmitUI；②方案B（installVoicePendingInBQ pending + installVoiceNativeSendIntercept onActivityResult）接管选人与发送 ③移除闪退源</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v30185.apk">
+        上一版 LeShaoWeChat-v30185.apk (Release)
+        <div class="meta">v3.0.185 · 修复「语音转发」按钮点击后走模块选择器而非微信原生选人（依据真机日志「VF: forward: act=LauncherUI」）：①新增 WxForwardReplaceHook.launchNativeVoiceForward(ctx,e9)——点击「语音转发」时设置方案B pending 并构造 §12.1 语音 bq.Q(142) 同款 Intent（Retr_Msg_Type 6/4、Retr_Msg_content、scene_from=17、Retr_Msg_Id）拉起微信原生 MsgRetransmitUI→原生 SelectConversationUI 选人，不再弹模块 ContactPickerDialog；②VoiceForwardHook 点击拦截优先走原生选人，失败才回退模块选择器；③选人后仍由方案B onActivityResult hook 后台线程调 TtsVoiceSender 模块发送 + setResult(null) 防双发；④顺带消除在 LauncherUI 上弹模块对话框导致的界面状态异常（疑似语音气泡错乱诱因）</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v30184.apk">
+        上一版 LeShaoWeChat-v30184.apk (Release)
+        <div class="meta">v3.0.184 · 修复语音转发按钮不显示（依据真机日志「VF: menuBuild: voice forward uses native, skip module injection」根因）：①恢复 VoiceForwardHook 注入自定义「语音转发」菜单项（0x7E000001）——sUseNativeForward 改回 false，长按语音重新出现「语音转发」按钮，点击走模块 ContactPickerDialog + TtsVoiceSender 发送；②保留 WxForwardReplaceHook 注入的微信原生「转发」(142) 与 §19 方案B（微信原生选人 + 模块发送）逻辑，两条路径并存均可转发；③其余模块功能不受影响</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v30183.apk">
+        上一版 LeShaoWeChat-v30183.apk (Release)
+        <div class="meta">v3.0.183 · 语音转发按《wechat_forward_replace.md》§19 v12 方案B（确认版）落地——微信原生选人 + 模块内核发送：①菜单注入保留——o0.a 里 c(tag.d(), 142, 0, 微信title, 2131822160) 注入原生「转发」按钮；②微信原生选人——点击 142 让 bq.Q 原生拉起 MsgRetransmitUI→微信原生 SelectConversationUI（拦截器对已标记语音 msgId 放行，不用模块选择器）；③发送走模块——hook MsgRetransmitUI.onActivityResult 读到 Select_Conv_User 后，后台线程调 VoiceForwardHook.forwardVoiceToTarget 用模块 TtsVoiceSender 发送语音，并 setResult(null) 阻止微信原生 g7/t7（防双发）+ finish 关闭界面；④文本/图片等其他类型仍走 Design A（模块选择器 + 微信原生发送）</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v30182.apk">
+        上一版 LeShaoWeChat-v30182.apk (Release)
+        <div class="meta">v3.0.182 · 语音长按「转发」按钮修复后改用微信原生转发（按《wechat_forward_replace.md》§16.5 全链路）：①保留注入——hook 菜单提供者 a(kj5.i4, View, ContextMenuInfo)（3180 实测 viewitems.o0.a）用 c(group=tag.d(), 142, 0, "转发", 2131822160) 注入原生「转发」按钮，Title+Icon 同时非空（§16 铁律）；②语音走原生——注入时记录语音 msgId，Design A 拦截器对命中语音的 SelectConversationUI 启动放行，点击「转发」后由微信原生 MsgRetransmitUI→SelectConversationUI→g7(type6) 原生发送，模块不再接管语音转发；③模块语音转发暂禁用——VoiceForwardHook 不再注入自定义「语音转发」菜单项（0x7E000001），避免与原生「转发」并存/误走模块 TtsVoiceSender；④文本/图片等其他类型转发替换保持不变</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v30181.apk">
+        上一版 LeShaoWeChat-v30181.apk (Release)
+        <div class="meta">v3.0.181 · 语音长按「转发」按钮修复（严格按《wechat_forward_replace.md》§15/§16）：①注入点修正——从 hook bq.S 改为 hook 菜单提供者 a(kj5.i4, View, ContextMenuInfo)（3180 实测 viewitems.o0.a，DexKit 锚点 OnCreateContextMMMenu），根治"注入了却不显示"；②注入姿势修正——必须用 c(group=tag.d(), 142, 0, title字符串, iconRes) 同时给 Title+Icon（§16 铁律：add(IIII) 只存 int 不解析 → getTitle()=null 渲染空白格）；③只补语音(type==34)且 findItem(108/142) 判重不重复注入；④拦截放宽——按 §14.3 文档骨架以 caller==MsgTransmitUI + req==0 为来源过滤（原额外要求 Retr_* 会把语音路径误拒，语音不走 manager.t.a、sPendingMsg 为空）；⑤注入自检日志（size/title/icon）</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v30180.apk">
+        上一版 LeShaoWeChat-v30180.apk (Release)
+        <div class="meta">v3.0.180 · 原生转发替换按《wechat_forward_replace.md》v7 定稿严格对齐（在 v179 基础上修正）：①版本号四处全同步——build.gradle.kts(versionCode/versionName) + MainHook(MODULE_BUILD/MODULE_VERSION_CODE) + DexKitHelper(CURRENT_MODULE_VERSION=30180)，修复 DexKit 扫描缓存因版本不一致每次启动全量重扫；②语音菜单注入改为文档骨架精确 hook bq.S(kj5.i4, View, am5.d) + DexKit(MicroMsg.ChattingItemVoice) 批量兜底覆盖 To 变体；③拦截出口 takeOver 保存 from(WeakRef)+req+原Intent，回灌 onActivityResult 主线程 + 路径D 直发兜底，全程零新增发送内核</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v30179.apk">
+        上一版 LeShaoWeChat-v30179.apk (Release)
+        <div class="meta">v3.0.179 · 原生转发替换 v7 终版（严格对照《wechat_forward_replace.md》v7 §12-§14）：①语音专项——语音转发绕过 manager.t.a（bq.Q case142 直连 MsgRetransmitUI），升级框架层 startActivity/startActivityForResult 兜底为唯一全类型口（语音直连一并覆盖）；②语音长按菜单注入「转发」项——Hook bq.S(kj5.i4,View,am5.d) afterHooked 注 itemId=142（与文本同款 2131774067/2131822160），DexKit 按 MicroMsg.ChattingItemVoice 批量覆盖 From/To 语音变体，点转发仍走原生 g7 type6 发送；③路径D 直接发送模式——MsgTransmitUI 无实例/已销毁时用原转发 Intent(Retr_Msg_Id/Talker/content/Type/scene_from=17)+Select_Conv_User 重建并直发，微信原生直发任意类型（含语音），替代旧模块自发送降级；④拦截精确化——Activity.startActivityForResult(2参+3参)+ContextWrapper 变体+来源过滤(caller 开头 MsgRetransmitUI + req==0 + Retr_Msg_*)，选择器确认后主线程回灌 onActivityResult(0,RESULT_OK,{Select_Conv_User})；⑤移除 SelectConversationUI.onCreate 宽指纹（根因）</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v30178.apk">
+        上一版 LeShaoWeChat-v30178.apk (Release)
+        <div class="meta">v3.0.178 · 微信原生转发按钮替换重构（严格按《wechat_forward_replace.md》v4 §11.3 ★★★ Design A）：根治「长按消息转发选择器到处乱跳」。①架构级修正——微信 MsgRetransmitUI.onActivityResult(0, RESULT_OK, {Select_Conv_User}) 是全类型总发送入口，回灌即可让微信原生 g7()/t7() 全类型发送，零新增视频/文件/位置/名片/表情/小程序内核；②弃用 SelectConversationUI.onCreate 宽指纹接管（被建群/发消息/标签/私信等所有选人场景共用是乱跳根因），改 Activity.startActivityForResult 来源过滤（caller 开头 MsgRetransmitUI + req==0 + 带 Retr_Msg_Type）弹模块选择器；③确认后主线程回灌 onActivityResult(0, RESULT_OK, {Select_Conv_User})，微信原生发文/收文全类型发送；④§6 兜底：框架层 hook startActivity/startActivityForResult 三层，目标 MsgRetransmitUI/SelectConversationUI 且带 Retr_Msg_Id 时装接管，MsgRetransmitUI 已销毁时降级平 AutoForwardHook.forward 自发送文本/图片/AppMsg/语音；⑤入口 manager.t.a 用 DexKit 字符串锚点 "ShareDialogHelper" 兜底定位（§10.3）</div>
+    </a>
+<a class="apk" href="LeShaoWeChat-v30177.apk">
+        上一版 LeShaoWeChat-v30177.apk (Release)
         <div class="meta">v3.0.177 · 三任务修复版：①更新拦截锚点修正（严格对照《WeChat_3180_UpdateBlock_RPAppMsg_SendMsg.md》）——V1 弃用 "MicroMsg.Updater" 字符串锚点（实测误绑 TinkerPatchResultService），改权威类名 com.tencent.mm.sandbox.updater.Updater.f(I) 优先；V2 修复 onGYNetEnd 参数个数（文档 6 参，旧传 3 导致永不命中靠 V2g 兜底），改 hook 全部 onGYNetEnd；V3 updateRequired 修正为 com.tencent.mm.ui.rc.b(Activity,int,int,Intent)Z 静态 4 参精确匹配（旧实现误绑 conversation.j6）；②朋友圈自动点赞新增「定时刷新」——Hook ImproveDataUIC.&lt;init&gt; 捕获实例，定时调 getOverScrollView().a(1) 复用微信原生下拉刷新自动发现新帖并入点赞队列，控制面板新增定时刷新开关 + 间隔设置（2/5/10/15/30 分钟）；③微信左上角模块入口修复「聊天窗口误显示」——新增权威聊天态门控，按文档 Hook HomeUI 实例字段 r(NewChattingTabUI) 的无参 boolean 方法 m()(=isChattingForeground)，聊天前台立即隐藏、回主页立即恢复，绕开 MMEditText 信号漏检</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v30176.apk">
