@@ -43,6 +43,7 @@ public final class LeftTopEntryHook {
 
     private static final String TAG = "LeftTopEntry";
     private static final String LAUNCHER_UI = "com.tencent.mm.ui.LauncherUI";
+    private static final String HOME_UI = "com.tencent.mm.ui.HomeUI";
     private static final String CHAT_EDIT_TEXT = "com.tencent.mm.ui.widget.MMEditText";
     private static final String DECOR_TAG = "leshao_lefttop_decor_v1";
     private static final long POLL_MS = 300L;
@@ -74,6 +75,7 @@ public final class LeftTopEntryHook {
     private static void install(ClassLoader cl) {
         try {
             installDecorEntry(cl);
+            installChattingGate(cl);
             adoptCurrentHome();
             // 无条件启动轮询：无论 onResume/onWindowFocusChanged/closeChatting 哪个信号
             // 丢失，都能在 ≤POLL_MS 内补齐入口，消除「有时候很久没出来」。
@@ -179,7 +181,7 @@ public final class LeftTopEntryHook {
         hookStartChatting(cl);
     }
 
-    /** 从聊天窗口返回主页的即时信号，消除入口延迟显示。 */
+    /** 兜底聊天态检测：本方法遍历视图树找 MMEditText（可能因聊天窗口内嵌/输入框延迟而漏检）。 */
     private static void hookCloseChatting(ClassLoader cl) {
         hookLauncherMethod(cl, "closeChatting", new XC_MethodHook() {
             @Override
@@ -223,6 +225,82 @@ public final class LeftTopEntryHook {
         } catch (Throwable e) {
             LogWriter.log(TAG, "hook " + name + " err: " + e);
         }
+    }
+
+    /**
+     * 权威聊天态门控（绕开 MMEditText 信号漏检）：HomeUI 的字段 {@code r}(类型
+     * NewChattingTabUI) 上有一个无参 boolean 断言方法 {@code m()Z}，语义
+     * = isChattingForeground，与文档《WeChat_LeftTop_Inject_Analysis.md》§3 一致。
+     * 聊天前台时置 sInChat=true → sync 立即隐藏入口，杜绝「聊天窗口左上角误显示」。
+     * 字段名/字段类型名可能跨版本混淆，故同时按字段名(优先 r/m8)与"字段类型里有
+     * 无参 boolean 方法 m"两种方式解析，命中任一即 hook 其 m() 并派生门控。
+     */
+    private static void installChattingGate(ClassLoader cl) {
+        try {
+            Class<?> home = findClass(HOME_UI, cl);
+            if (home == null) {
+                LogWriter.log(TAG, "HomeUI not found, chatting gate off");
+                return;
+            }
+            java.lang.reflect.Field chosen = null;
+            for (java.lang.reflect.Field f : home.getDeclaredFields()) {
+                if (f.getName().equals("r")) { chosen = f; break; }
+            }
+            if (chosen == null) {
+                // 兜底：挑一个"类型里含无参 boolean m()"的字段（NewChattingTabUI 特征）
+                for (java.lang.reflect.Field f : home.getDeclaredFields()) {
+                    Class<?> ft = f.getType();
+                    if (ft != null && hasArglessBoolM(ft)) { chosen = f; break; }
+                }
+            }
+            if (chosen == null) {
+                LogWriter.log(TAG, "HomeUI.r(NewChattingTabUI) field not found, gate off");
+                return;
+            }
+            chosen.setAccessible(true);
+            Class<?> gateType = chosen.getType();
+            int n = 0;
+            for (Method m : gateType.getDeclaredMethods()) {
+                if (!"m".equals(m.getName()) || m.getParameterCount() != 0
+                        || m.getReturnType() != boolean.class) continue;
+                m.setAccessible(true);
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        try {
+                            boolean inChat = Boolean.TRUE.equals(p.getResult());
+                            if (inChat != sInChat) {
+                                sInChat = inChat;
+                                sH.post(() -> {
+                                    Activity a = sHost.get();
+                                    if (a != null) sync(a);
+                                });
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                n++;
+            }
+            LogWriter.log(TAG, "chatting gate installed on " + gateType.getName()
+                    + " via field " + chosen.getName() + " x" + n
+                    + " (m()"+ (n > 0 ? "" : " not found") + ")");
+            if (n == 0) {
+                // m() 未命中：把可读到的首实例字段也当作兜底，仅日志。
+                LogWriter.log(TAG, "NewChattingTabUI.m() no match, gate ineffective");
+            }
+        } catch (Throwable e) {
+            LogWriter.log(TAG, "installChattingGate err: " + e);
+        }
+    }
+
+    private static boolean hasArglessBoolM(Class<?> c) {
+        try {
+            if (c == null) return false;
+            for (Method m : c.getDeclaredMethods()) {
+                if (m.getParameterCount() == 0 && m.getReturnType() == boolean.class) return true;
+            }
+        } catch (Throwable ignored) {}
+        return false;
     }
 
     private static void onHomeResumed(Activity a) {

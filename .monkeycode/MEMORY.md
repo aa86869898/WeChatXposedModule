@@ -50,22 +50,19 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
    - 日志过滤 TAG: LeShaoV3
 
 ### 每次编译必须升版本号 + 清理缓存（当前以 release 构建为准）
-- Date: 2026-09-19
-- Context: 用户明确要求每次编译 APK 都要递增版本号并清理构建缓存，确保每次都是全新编译。自 v930 起实际使用 release 签名构建并推送
+- Date: 2026-09-19（2026-10-04 强化）
+- Context: 用户明确要求每次编译 APK 都要递增版本号并清理构建缓存，确保每次都是全新编译。自 v930 起实际使用 release 签名构建并推送。2026-10-04 用户再次强调：每次编译打包必须加版本号，并给出多线程分发高速服务器公网直链
 - Category: 构建编译
 - Instructions:
-  - 每次编译前，同步递增 `app/build.gradle.kts` 中 `versionCode`/`versionName`、`MainHook.MODULE_BUILD`(如 "v936")与 `MainHook.MODULE_VERSION_CODE`(整数，与 DexKit 扫描缓存失效键相同)
+  - **硬性规矩：每次编译打包前必须递增版本号**，四同步：`app/build.gradle.kts` 中 `versionCode`(整数+1) 与 `versionName`(如 "3.0.143")、`MainHook.MODULE_BUILD`(如 "v3.0.143") 与 `MainHook.MODULE_VERSION_CODE`(与 versionCode 相同)。禁止用旧版本号发新包
   - release 构建命令：`cd /workspace/LeShaoWeChat/LeShaoWeChatV3 && ./gradlew :app:assembleRelease --offline -x lint`（R8 会改写 XposedHelpers，varargs findAndHookMethod 不可用，须用 findClass+getDeclaredMethod+hookMethod 模式）
   - 仅语法校验可用快速任务：`cd /workspace/LeShaoWeChat/LeShaoWeChatV3 && ./gradlew :app:compileReleaseJavaWithJavac --offline -x lint`（秒级失败反馈，检查通过后再跑完整 assembleRelease；正式发版仍须 `clean` 后重新构建）
   - release 产物：`app/build/outputs/apk/release/LeShaoWeChat-v{versionCode}.apk`；签名已配置在 build.gradle.kts signingConfigs(release.keystore)
-  - 分发：复制 APK 到 `/tmp/opencode/download/` 并更新 `download/index.html`（置顶新版本入口）后方可提供下载；历史下载页亦同步维护
-  - 当前下载服务（支持线程池 + 断点续传/Range 206）：脚本 `/tmp/opencode/range_http_server.py`，启动命令 `python3 /tmp/opencode/range_http_server.py 8085 /tmp/opencode/download`（用 background terminal 常驻）；根目录 `/tmp/opencode/download/`；外网直链 `https://8085-796f33fc01a6a82b.monkeycode-ai.online/LeShaoWeChat-v{versionCode}.apk`
-  - 断点续传特性：响应头 `Accept-Ranges: bytes`，Range 请求返回 `206 Partial Content` + `Content-Range`，超范围返回 `416`；已验证 `curl -C -` 续传与 4 并发分段合并后 MD5 与源文件一致；线程池默认 32（可调 `HTTP_POOL` 环境变量）
-  - 注意：旧 `python3 -m http.server` 不支持 Range（对 Range 请求返回 200 且无 Accept-Ranges/Content-Range），已弃用
-  - 8899 端口为唯一下载服务：使用支持 Range 的 `range_http_server.py` 常驻运行（启动命令 `HTTP_POOL=64 python3 /tmp/opencode/range_http_server.py 8899 /workspace/LeShaoWeChat/LeShaoWeChatV3`，用 background terminal 启动，勿用不支持 Range 的 `python3 -m http.server`）；根目录 `/workspace/LeShaoWeChat/LeShaoWeChatV3`，下载路径 `/download/LeShaoWeChat-v{versionCode}.apk`
-   - 公网下载前缀：`https://8899-796f33fc01a6a82b.monkeycode-ai.online`；下载页 `https://8899-796f33fc01a6a82b.monkeycode-ai.online/download/`
-   - 每次编译打包完成后，回复中必须直接附上公网下载链接（`https://8899-796f33fc01a6a82b.monkeycode-ai.online/download/LeShaoWeChat-v{versionCode}.apk`），不能只给本地路径/localhost/下载页间接入口
-   - 下载服务必须保持多线程池（HTTP_POOL=64，线程池最大）+ 断点续传（响应头 `Accept-Ranges: bytes`，Range 请求返回 `206 Partial Content` + `Content-Range`），确保 IDM/迅雷/aria2c 多线程满速下载、中断可续传；发版后验证 `curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8899/download/LeShaoWeChat-v{versionCode}.apk` 返回 200 即就绪
+  - 分发：复制 APK 到 `/workspace/LeShaoWeChat/LeShaoWeChatV3/download/` 并更新 `index.html`（置顶新版本入口）后方可提供下载；历史下载页亦同步维护
+  - 下载服务：8899 端口运行多线程高速服务器 `/tmp/opencode/fast_dl -port 8899 -root /workspace/LeShaoWeChat/LeShaoWeChatV3`（FastDL 多线程 + Range 断点续传，支持 IDM/迅雷/aria2c 满速下载）；备选 `HTTP_POOL=64 python3 /tmp/opencode/range_http_server.py 8899 /workspace/LeShaoWeChat/LeShaoWeChatV3`
+  - 公网下载前缀：`https://8899-796f33fc01a6a82b.monkeycode-ai.online`；下载页 `https://8899-796f33fc01a6a82b.monkeycode-ai.online/download/`
+  - **每次编译打包完成后，回复中必须直接附上公网直链**（`https://8899-796f33fc01a6a82b.monkeycode-ai.online/download/LeShaoWeChat-v{versionCode}.apk`），禁止只给本地路径/localhost/预览页间接入口
+  - 发版后验证 `curl -s -o /dev/null -w "%{http_code}" https://8899-796f33fc01a6a82b.monkeycode-ai.online/download/LeShaoWeChat-v{versionCode}.apk` 返回 200 即就绪
 
 ### AI 反编译审计结论（f9.Bb 接收链路实锤）
 - Date: 2026-09-24
@@ -144,3 +141,23 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 修复：按类区分过滤——`to`（文字）类继续排除 View 参数重载（防卡死），`mq`（语音）类保留全部 b 方法（mq.b 接收 View 参数且 v3.0.135 前一直正常）
   - 附带修正：`debugDumpUnmatchedTextBubble` 会把已替换的自定义 NineSliceDrawable 误报为 UNMATCHED，打印前需先 `isCustomBackground(d)` 排除
   - v3.0.136 日志中语音其实仍通过 `AnimImageView.setType` + `setBackgroundResource REPLACE` 兜底替换（2131232060/2131231925），说明语音兜底路径有效；但 mq.b 主路径必须恢复以保留 BUBBLE 捕获与方向直供
+
+### v3.0.171 日志排错知识：DexKit 缓存不持久化根因与日志进程归属判断
+- Date: 2026-10-05
+- Context: Agent 审查用户回传的两份日志（全leshao_v3_log.txt=旧版 v3.0.164/165，leshao_v3_log.txt=v3.0.171 且全部来自 appbrand0/appbrand1 子进程）时发现
+- Category: 排错调试
+- Instructions:
+  - 红包抢不了根因是 DexKit 扫描结果从不持久化：v3.0.169 引入的 `isCoreScanHealthy()` 要求 core 13 项全部非 null，但 3180 上 dbOpener/imei/cso/avatar/label/convAdapter/chatOpen 本就无法定位（旧版日志证实为 null）→ 永远不健康 → `persistScanVersion()` 被跳过 → MMKV 缓存卡死旧版本号 → 子进程 read-only keep cache → 红包 scene 类候选找不到
+  - 修复方向：放宽 `isCoreScanHealthy()` 只检查 v3.0.171 核心审计锚点（p06/j1/e9/voiceApi/contactStorage），对已有运行时兜底的项不计数，然后重编译升版本号
+  - leshao_v3_log.txt 为多进程共享文件，每行时间戳可叠加但进程只能靠 `当前实例: 主微信(user0), process=com.tencent.mm:appbrandX` 行区分；子进程段不含主进程的 P06/TTS/红包 scene resolved 日志
+  - "收到消息自动发送相同内容"唯一代码路径是 MessageHook.processKeywordAndSensitive 的关键词回复（发送固定 r.reply），日志无 [KwReply] 记录时需主进程日志才能证实/排除
+
+### v3.0.173 修复经验：版本号四同步必须含 DexKitHelper.CURRENT_MODULE_VERSION；红包类名直接加载；AutoForward 回环；遮挡留白
+- Date: 2026-10-05
+- Context: Agent 审查 v3.0.172 日志并修复 4 个问题后沉淀
+- Category: 排错调试
+- Instructions:
+  - 升版本号是"五同步"而非四同步：除 build.gradle.kts(versionCode/versionName)、MainHook.MODULE_BUILD/MODULE_VERSION_CODE 外，还必须改 DexKitHelper.CURRENT_MODULE_VERSION。漏改会导致日志显示新版本号但 DexKit 缓存版本仍是旧的（currentModule=30171），子进程永远读旧缓存
+  - 红包类名在 3180 上是确定混淆名：com.tencent.mm.plugin.luckymoney.model.n6(NetSceneReceiveLuckyMoney, receivewxhb, 7参构造) / h6(NetSceneOpenLuckyMoney, openwxhb, 10参构造)。DexKit 字符串搜索 receivewxhb 在 3180 上返回 0 candidates（URL 被混淆/拆分），必须直接 loadClass 权威类名，DexKit 仅作兜底
+  - 自动转发回环：用户配置 sources=[A] targets=[A] 时，收到 A 消息会原样转发回 A。AutoForwardHook.forwardAll 已加 target==fromTalker 跳过防护
+  - 消息遮挡：快捷按钮行插入 footer 内垂直容器并驱动 c(false,false) 后，微信 bottomSpace 仍不含按钮行高度，最新消息会被按钮行盖住。必须在注入后调用 ChatVoiceSwitchHook.ensureMessageSpace/scheduleMessageSpace 给消息列表补 paddingBottom

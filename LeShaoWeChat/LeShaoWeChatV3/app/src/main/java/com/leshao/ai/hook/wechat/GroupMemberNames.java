@@ -32,6 +32,25 @@ public final class GroupMemberNames {
     private GroupMemberNames() {
     }
 
+    /** 角色判定（《微信群角色头衔逆向分析报告》§3）：群主/管理员/成员。
+     *  群主 = z2.L0(wxid)（field_roomowner 精确比对）；
+     *  管理员 = z2.E0(wxid)（roomFlag & 2048，ChatRoomMemberData.f 第 11 位）。
+     *  返回 null 表示链路不可用（调用方自行兜底）。 */
+    public static String roleOf(String chatroom, String wxid) {
+        if (chatroom == null || wxid == null || wxid.isEmpty()) return null;
+        Object room = roomMemberStorage(chatroom);
+        if (room == null) return null;
+        try {
+            Object owner = XposedHelpers.callMethod(room, "L0", wxid);
+            if (Boolean.TRUE.equals(owner)) return "群主";
+        } catch (Throwable ignored) {}
+        try {
+            Object admin = XposedHelpers.callMethod(room, "E0", wxid);
+            if (Boolean.TRUE.equals(admin)) return "管理员";
+        } catch (Throwable ignored) {}
+        return "成员";
+    }
+
     /** 取群昵称（群昵称 → 联系人显示名 → wxid）。 */
     public static String displayName(String chatroom, String wxid) {
         if (wxid == null || wxid.isEmpty()) {

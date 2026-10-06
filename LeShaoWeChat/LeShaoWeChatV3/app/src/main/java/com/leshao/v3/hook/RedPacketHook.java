@@ -207,35 +207,55 @@ public final class RedPacketHook {
     }
 
     private static void resolveScene(ClassLoader cl) {
+        // v3.0.173: 优先直接加载权威逆向类名 n6(NetSceneReceiveLuckyMoney)，不再依赖
+        // DexKit 字符串搜索(receivewxhb 在 3180 上被混淆/拆分导致 0 candidates)。
+        Class<?> direct = tryLoadScene(cl, "com.tencent.mm.plugin.luckymoney.model.n6", 7);
+        if (direct != null) return;
         List<String> cands = HookUtil.classCandidates(cl, ANCHOR_CGI, "NetSceneReceiveLuckyMoney request");
         if (cands.isEmpty()) {
             LogWriter.log(TAG, "n6 未定位，抢红包不可用");
             return;
         }
         for (String sceneCls : cands) {
-            for (Class<?> c : HookUtil.loadClasses(cl, sceneCls)) {
-                Constructor<?> hit = null;
-                for (Constructor<?> ctor : c.getDeclaredConstructors()) {
-                    Class<?>[] p = ctor.getParameterTypes();
-                    if (p.length == 7
-                            && HookUtil.isInt(p[0]) && HookUtil.isInt(p[1])
-                            && p[2] == String.class && p[3] == String.class
-                            && HookUtil.isInt(p[4])
-                            && p[5] == String.class && p[6] == String.class) {
-                        ctor.setAccessible(true);
-                        hit = ctor;
-                        break;
-                    }
-                }
-                if (hit == null) continue;
-                if (findDoScene(c) == null) continue;
-                sSceneCtor = hit;
-                sRecvCls = c;
-                LogWriter.log(TAG, "scene resolved cls=" + c.getName());
-                return;
-            }
+            if (tryLoadScene(cl, sceneCls, 7) != null) return;
         }
         LogWriter.log(TAG, "n6 构造签名未匹配 candidates=" + cands);
+    }
+
+    /** 尝试加载指定红包 scene 类并匹配构造器(构造参数个数 params)，成功返回该类。 */
+    private static Class<?> tryLoadScene(ClassLoader cl, String cls, int params) {
+        Class<?> c;
+        try {
+            c = XposedHelpers.findClass(cls, cl);
+        } catch (Throwable t) {
+            return null;
+        }
+        if (c == null) return null;
+        for (Constructor<?> ctor : c.getDeclaredConstructors()) {
+            Class<?>[] p = ctor.getParameterTypes();
+            if (p.length != params) continue;
+            if (params == 7) {
+                if (HookUtil.isInt(p[0]) && HookUtil.isInt(p[1])
+                        && p[2] == String.class && p[3] == String.class
+                        && HookUtil.isInt(p[4])
+                        && p[5] == String.class && p[6] == String.class) {
+                    ctor.setAccessible(true);
+                    if (findDoScene(c) == null) return null;
+                    sSceneCtor = ctor;
+                    sRecvCls = c;
+                    LogWriter.log(TAG, "scene resolved cls=" + c.getName());
+                    return c;
+                }
+            } else {
+                ctor.setAccessible(true);
+                sOpenCtor = ctor;
+                sOpenCls = c;
+                LogWriter.log(TAG, "h6 resolved cls=" + c.getName());
+                resolveHeadNick(cl);
+                return c;
+            }
+        }
+        return null;
     }
 
     private static Method findDoScene(Class<?> c) {
@@ -254,30 +274,16 @@ public final class RedPacketHook {
 
     /** 定位第二步 h6（NetSceneOpenLuckyMoney，openwxhb）：10 参构造器 + 自身类。 */
     private static void resolveOpenScene(ClassLoader cl) {
+        // v3.0.173: 优先直接加载权威逆向类名 h6，DexKit 搜索降级兜底。
+        Class<?> direct = tryLoadScene(cl, "com.tencent.mm.plugin.luckymoney.model.h6", 10);
+        if (direct != null) return;
         List<String> cands = HookUtil.classCandidates(cl, ANCHOR_CGI_OPEN, "NetSceneOpenLuckyMoney request");
         if (cands.isEmpty()) {
             LogWriter.log(TAG, "h6 未定位，第二步不可用");
             return;
         }
         for (String sceneCls : cands) {
-            for (Class<?> c : HookUtil.loadClasses(cl, sceneCls)) {
-                for (Constructor<?> ctor : c.getDeclaredConstructors()) {
-                    Class<?>[] p = ctor.getParameterTypes();
-                    if (p.length == 10
-                            && HookUtil.isInt(p[0]) && HookUtil.isInt(p[1])
-                            && p[2] == String.class && p[3] == String.class
-                            && p[4] == String.class && p[5] == String.class
-                            && p[6] == String.class && p[7] == String.class
-                            && p[8] == String.class && p[9] == String.class) {
-                        ctor.setAccessible(true);
-                        sOpenCtor = ctor;
-                        sOpenCls = c;
-                        LogWriter.log(TAG, "h6 resolved cls=" + c.getName());
-                        resolveHeadNick(cl);
-                        return;
-                    }
-                }
-            }
+            if (tryLoadScene(cl, sceneCls, 10) != null) return;
         }
         LogWriter.log(TAG, "h6 构造签名未匹配 candidates=" + cands);
     }
@@ -778,7 +784,11 @@ public final class RedPacketHook {
 
     /** 入库路径未命中时的兜底：短延时后用 sendusername（单聊即会话方）领取。 */
     private static void scheduleFallback(final String nativeUrl) {
-        if (sGroupOnly) return;
+        if (sGroupOnly) {
+            LogWriter.log(TAG, "fallback skip: groupOnly 模式且 talker 未知（解析层早于入库层）");
+            return;
+        }
+        LogWriter.log(TAG, "fallback scheduled: talker 未在解析层命中，1.5s 后按 sendusername 兜底领取");
         final String sendId = query(nativeUrl, "sendid");
         if (sendId == null || sendId.isEmpty()) return;
         final int channelId = parseInt(query(nativeUrl, "channelid"), 1);

@@ -14,6 +14,7 @@ import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.ContactPickerDialog;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -36,8 +37,11 @@ import de.robv.android.xposed.XposedHelpers;
  * <ul>
  *   <li>注入点：{@code ImproveSnsTimelineUI.onCreateOptionsMenu(Menu)} 的 <b>before</b>，
  *       菜单项经 {@code mController.g0(menu)} 渲染到微信自定义 ActionBar 右上角。</li>
- *   <li>枚举：Hook {@code lk4.g.W7(SnsInfo, tf5.b)} 收集时间线已加载的 {@code SnsInfo}。</li>
- *   <li>点赞（v3.0.139 修复）：反射调用 {@code com.tencent.mm.plugin.sns.model.h6.n(SnsInfo, 1, null, 0)}
+ *   <li>枚举（v3.0.150 修复）：Hook {@code jk4.p.<init>()（无参构造，必挂）} 收集时间线已加载的
+ *       行 bean，再经 {@code Z0()} 取 {@code SnsInfo}。弃用 {@code lk4.g.W7(SnsInfo, tf5.b)}——
+ *       其第二参数类型串易解析失败导致 hook 挂空、集合为空，是此前"没效果"的头号根因
+ *       （《WeChat_Moments_AutoLike_Reverse.md》§8）。W7 仅保留作兜底枚举。</li>
+ *   <li>点赞：反射调用 {@code com.tencent.mm.plugin.sns.model.h6.n(SnsInfo, 1, null, 0)}
  *       —— 标准路由立即发送 {@code mmsnscomment} CGI（Cmd=0xD5）。
  *       旧实现 {@code h6.p(wxid, 5, null, SnsInfo, scene)} 走 strangers 路由，只入队不发送，已废弃。</li>
  * </ul>
@@ -49,16 +53,36 @@ public final class MomentsAutoLikeHook {
 
     public static final String K_ENABLED = "ls_moments_like_enabled";
     public static final String K_SELECTED = "ls_moments_like_selected";
+    public static final String K_REFRESH_ENABLED = "ls_moments_like_refresh_enabled";
+    public static final String K_REFRESH_MINUTES = "ls_moments_like_refresh_minutes";
 
     private static final String UI_CLASS = "com.tencent.mm.plugin.sns.ui.improve.ImproveSnsTimelineUI";
     private static final String BIND_CLASS = "lk4.g";
+    private static final String BEAN_CLASS = "jk4.p";
     private static final String SERVER_CLASS = "com.tencent.mm.plugin.sns.model.h6";
     private static final String SNS_INFO = "com.tencent.mm.plugin.sns.storage.SnsInfo";
+    private static final String DATA_UIC = "com.tencent.mm.plugin.sns.ui.improve.ImproveDataUIC";
+    private static final int DEFAULT_REFRESH_MIN = 5;
 
     private static volatile ClassLoader sCl;
     private static volatile Activity sTimeline;
     private static final LinkedHashMap<String, Object> sLive = new LinkedHashMap<>();
+    /** ImproveDataUIC 实例（弱引用，用于定时原生刷新 §7）；低版本可能无此类，置 null 即定时刷新关闭。 */
+    private static volatile WeakReference<Object> sDataUIC;
+    private static volatile boolean sRefreshTimerRunning;
+    private static final Runnable sRefreshTimer = new Runnable() {
+        @Override public void run() {
+            if (!isRefreshEnabled()) { sRefreshTimerRunning = false; return; }
+            try {
+                triggerNativeRefresh();
+            } catch (Throwable ignored) {}
+            if (isRefreshEnabled()) {
+                sH.postDelayed(this, refreshIntervalMs());
+            }
+        }
+    };
     private static volatile boolean sRunning;
+    private static volatile boolean sJ7Hooked;
     private static volatile int sScene = 0;
     private static final Handler sH = new Handler(Looper.getMainLooper());
 
@@ -114,6 +138,70 @@ public final class MomentsAutoLikeHook {
         return getSelected().size();
     }
 
+    // ---------------- 定时原生刷新（文档 §7） ----------------
+
+    public static boolean isRefreshEnabled() {
+        SharedPreferences sp = prefs();
+        return sp != null && sp.getBoolean(K_REFRESH_ENABLED, false);
+    }
+
+    public static void setRefreshEnabled(boolean on) {
+        SharedPreferences sp = prefs();
+        if (sp != null) sp.edit().putBoolean(K_REFRESH_ENABLED, on).apply();
+        LogWriter.log(TAG, "setRefreshEnabled " + on);
+        if (on) startRefreshTimer(); else sRefreshTimerRunning = false;
+    }
+
+    public static int getRefreshMinutes() {
+        SharedPreferences sp = prefs();
+        return sp != null ? sp.getInt(K_REFRESH_MINUTES, DEFAULT_REFRESH_MIN) : DEFAULT_REFRESH_MIN;
+    }
+
+    public static void setRefreshMinutes(int minutes) {
+        if (minutes < 1) minutes = 1;
+        SharedPreferences sp = prefs();
+        if (sp != null) sp.edit().putInt(K_REFRESH_MINUTES, minutes).apply();
+        LogWriter.log(TAG, "setRefreshMinutes " + minutes);
+    }
+
+    /** 定时刷新循环间隔（毫秒）。§7 要求 ≥2~5 分钟以降低风控。 */
+    public static long refreshIntervalMs() {
+        return getRefreshMinutes() * 60_000L;
+    }
+
+    /* 启动定时刷新循环（须在详情页开启时调用；无 ImproveDataUIC 实例则自动降级跳过）。 */
+    static void startRefreshTimer() {
+        if (isRefreshEnabled() && !sRefreshTimerRunning) {
+            sRefreshTimerRunning = true;
+            sH.postDelayed(sRefreshTimer, refreshIntervalMs());
+            LogWriter.log(TAG, "refresh timer started interval=" + getRefreshMinutes() + "min");
+        }
+    }
+
+    /**
+     * 参考文档 §7：复用微信原生下拉刷新（ImproveOverScrollView.a(int)=directShowTopLoading）
+     * 触发 ImproveDataUIC.refresh() → 仓库拉取 → 每行重建 jk4.p / 触发 lk4.g.W7 → 新 SnsInfo 进集合。
+     * 比模拟手势 / 自打网络稳定。
+     */
+    static void triggerNativeRefresh() {
+        Object duic = sDataUIC != null ? sDataUIC.get() : null;
+        if (duic == null) {
+            LogWriter.log(TAG, "no ImproveDataUIC instance, native refresh skipped");
+            return;
+        }
+        try {
+            Object osv = XposedHelpers.callMethod(duic, "getOverScrollView");
+            if (osv != null) {
+                XposedHelpers.callMethod(osv, "a", 1);
+                LogWriter.log(TAG, "native refresh triggered");
+            } else {
+                LogWriter.log(TAG, "getOverScrollView returned null");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "triggerNativeRefresh err: " + t);
+        }
+    }
+
     public static boolean isRunning() {
         return sRunning;
     }
@@ -138,6 +226,8 @@ public final class MomentsAutoLikeHook {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) {
                         try { sTimeline = (Activity) param.thisObject; } catch (Throwable ignored) {}
+                        // v3.0.160：时间线打开后 ImproveDataUIC 类已加载（此前 hook 时未加载）
+                        tryHookJ7(cl);
                     }
                 });
             }
@@ -177,7 +267,45 @@ public final class MomentsAutoLikeHook {
             LogWriter.log(TAG, "hook ui err: " + t);
         }
 
-        // 枚举：收集时间线已加载的 SnsInfo
+        // 枚举（v3.0.162 重构）：启用从「真实读取路径」收集而非构造期 Z0()。
+        // 《WeChat_Moments_AutoLike_Reverse.md》§6 明确：<init> 时绑数据未就绪，
+        // 立即调 Z0() 会 materialize 懒加载(l1)并缓存空壳 SnsInfo(field_snsId==0→sns_table_0)，
+        // 原生手动点赞 changeLikeStatus→h6.n(pVar.Z0(),1,null,0) 拿到该空壳 → 赞发给 0 → 失败。
+        // 故不再 hook jk4.p.<init>→Z0()（v3.0.159 仅收到 sns_table_0 的根因），
+        // 改由下方三个「被真实调用才触发」的收集器补位：
+        //   ① jk4.p.Z0() after（渲染/交互读真实 SnsInfo 时收集，不过期、poster 非空）
+        //   ② lk4.g.W7(args[0]) before+after（数据装载事件，args[0] 为已填充的真实 SnsInfo）
+        //   ③ ImproveDataUIC.J7() after → MvvmList.d() 数据副本全量收集
+        try {
+            Class<?> bean = loadClass(cl, BEAN_CLASS);
+            if (bean != null) {
+                // ① jk4.p.Z0()(getSnsInfo) after —— 渲染每行必取一次真实绑定后的 SnsInfo
+                int z0hooked = 0;
+                for (Method z : bean.getDeclaredMethods()) {
+                    if (!"Z0".equals(z.getName()) || z.getParameterCount() != 0) continue;
+                    Class<?> rt = z.getReturnType();
+                    if (rt == null || !rt.getName().endsWith("storage.SnsInfo")) continue;
+                    z.setAccessible(true);
+                    XposedBridge.hookMethod(z, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) {
+                            try {
+                                Object info = param.getResult();
+                                if (info != null) collect(info);
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+                    z0hooked++;
+                }
+                LogWriter.log(TAG, "hooked jk4.p.Z0 x" + z0hooked);
+            } else {
+                LogWriter.log(TAG, "jk4.p not found (enum main off)");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hook bean err: " + t);
+        }
+
+        // 枚举兜底：lk4.g.W7 收集时间线已加载的 SnsInfo（v3.0.150 起仅作辅助）
         try {
             Class<?> bind = loadClass(cl, BIND_CLASS);
             if (bind != null) {
@@ -208,6 +336,13 @@ public final class MomentsAutoLikeHook {
             LogWriter.log(TAG, "hook bind err: " + t);
         }
 
+        // v3.0.151: 枚举增强 —— ImproveDataUIC.J7()(getLiveList) after → MvvmList.d()(数据副本)
+        // 全量收集。修复 v3.0.150 仅 jk4.p.<init> 收集到首条(sns_table_0)且 poster=null，
+        // 导致自动点赞目标列表为空"没效果"的根因（《WeChat_Moments_AutoLike_Reverse.md》§5/§10）。
+        // J7 在时间线数据装载/刷新后返回完整列表副本(d()=new ArrayList(this.o))，遍历安全。
+        // v3.0.160: 类在 hook 时可能未加载（日志 "not found"），移到时间线 onCreate 后补装 tryHookJ7。
+        tryHookJ7(cl);
+
         // v3.0.139: 抓真实 comment_scene 改为 Hook h6.n（标准点赞路由，参数 (SnsInfo,int,?,int)）
         try {
             Class<?> server = loadClass(cl, SERVER_CLASS);
@@ -234,6 +369,40 @@ public final class MomentsAutoLikeHook {
         } catch (Throwable t) {
             LogWriter.log(TAG, "hook server err: " + t);
         }
+
+        // v3.0.160: 手动正常点赞诊断 —— 真实 UI 入口 ImproveInteractionUtil.changeLikeStatus
+        // （mk4.r/mk4.s.onClick 最终都走这里；日志确认原生赞路由与模块互不干扰，只读不拦截）
+        try {
+            Class<?> iu = loadClass(cl, "com.tencent.mm.plugin.sns.ui.improve.util.ImproveInteractionUtil");
+            if (iu != null) {
+                int n = 0;
+                for (Method m : iu.getDeclaredMethods()) {
+                    if (!"changeLikeStatus".equals(m.getName())) continue;
+                    m.setAccessible(true);
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            try {
+                                StringBuilder sb = new StringBuilder("manualLike changeLikeStatus hit args=");
+                                for (int i = 0; i < param.args.length; i++) {
+                                    Object a = param.args[i];
+                                    sb.append(i).append(":")
+                                      .append(a == null ? "null" : a.getClass().getSimpleName()).append(" ");
+                                }
+                                LogWriter.log(TAG, sb.toString());
+                            } catch (Throwable ignored) {}
+                        }
+                    });
+                    n++;
+                }
+                if (n > 0) LogWriter.log(TAG, "hooked changeLikeStatus x" + n);
+                else LogWriter.log(TAG, "changeLikeStatus not found on ImproveInteractionUtil");
+            } else {
+                LogWriter.log(TAG, "ImproveInteractionUtil not found (manual like diag off)");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hook changeLikeStatus err: " + t);
+        }
     }
 
     private static void collect(Object info) {
@@ -241,19 +410,96 @@ public final class MomentsAutoLikeHook {
         String cn = info.getClass().getName();
         if (!cn.equals(SNS_INFO) && !cn.endsWith("storage.SnsInfo")) return;
         try {
-            String id = (String) XposedHelpers.callMethod(info, "getSnsId");
-            if (id == null) return;
+            // v3.0.162（《WeChat_Moments_AutoLike_Reverse.md》§5/§11）：★空壳过滤。
+            // 空壳 SnsInfo field_snsId==0 → getSnsId()=="sns_table_0"、getUserName()==null，
+            // 是"集合只有空壳 → 自动点赞无目标 / h6.n 发给 0 → 服务器不认(手动点赞也失败)"的根因。
+            String poster = (String) XposedHelpers.callMethod(info, "getUserName");
+            if (poster == null) return;                      // ★过滤空壳(poster=null)
+            Object sidO = XposedHelpers.getObjectField(info, "field_snsId");
+            long sid = (sidO instanceof Number) ? ((Number) sidO).longValue() : 0L;
+            if (sid == 0) return;                            // ★过滤空壳(field_snsId==0)
+            if (toBool(XposedHelpers.callMethod(info, "isAd"))) return; // 广告
+            String id = "sns_table_" + sid;
             synchronized (sLive) {
                 boolean fresh = !sLive.containsKey(id);
                 sLive.put(id, info);
                 if (fresh) {
                     LogWriter.log(TAG, "collect snsId=" + id
-                            + " poster=" + XposedHelpers.callMethod(info, "getUserName")
+                            + " poster=" + poster
                             + " likeFlag=" + XposedHelpers.callMethod(info, "getLikeFlag"));
                 }
             }
         } catch (Throwable t) {
             LogWriter.log(TAG, "collect err: " + t);
+        }
+    }
+
+    /** v3.0.151：从 J7() 返回的 MvvmList 数据副本（d()=getData）全量收集全部行 bean 的 SnsInfo。 */
+    private static void collectAllFromLiveList(Object mvvmList) {
+        if (mvvmList == null) return;
+        try {
+            Object data = XposedHelpers.callMethod(mvvmList, "d");
+            if (!(data instanceof List)) return;
+            for (Object bean : (List<?>) data) {
+                if (bean == null) continue;
+                try {
+                    Object info = XposedHelpers.callMethod(bean, "Z0");
+                    collect(info);
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "collectAllFromLiveList err: " + t);
+        }
+    }
+
+    /** v3.0.160：安装 ImproveDataUIC.J7() 枚举 hook。类在 hook() 时可能尚未加载
+     *  （日志 "ImproveDataUIC not found"），时间线 onCreate 后会再次调用补装；已装则跳过。 */
+    /** v3.0.160：安装 ImproveDataUIC.J7() 枚举 hook。类在 hook() 时可能尚未加载
+     *  （日志 "ImproveDataUIC not found"），时间线 onCreate 后会再次调用补装；已装则跳过。
+     *  同时捕获 ImproveDataUIC.<init> 实例供文档 §7 定时原生刷新使用。 */
+    private static void tryHookJ7(final ClassLoader cl) {
+        if (sJ7Hooked) return;
+        try {
+            final Class<?> duic = loadClass(cl, DATA_UIC);
+            if (duic == null) {
+                LogWriter.log(TAG, "ImproveDataUIC not found (enum J7 off, will retry on timeline open, refresh disabled)");
+                return;
+            }
+            // 捕获实例（<init>(androidx.appcompat.app.AppCompatActivity)）
+            try {
+                for (java.lang.reflect.Constructor<?> ctor : duic.getDeclaredConstructors()) {
+                    Class<?>[] pts = ctor.getParameterTypes();
+                    if (pts.length != 1 || !"androidx.appcompat.app.AppCompatActivity"
+                            .equals(pts[0].getName())) continue;
+                    ctor.setAccessible(true);
+                    XposedBridge.hookMethod(ctor, new XC_MethodHook() {
+                        @Override protected void afterHookedMethod(MethodHookParam p) {
+                            sDataUIC = new WeakReference<>(p.thisObject);
+                            if (isRefreshEnabled() && !sRefreshTimerRunning) startRefreshTimer();
+                            LogWriter.log(TAG, "captured ImproveDataUIC instance for native refresh");
+                        }
+                    });
+                    break;
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "hook ImproveDataUIC.<init> err: " + t);
+            }
+            int n = 0;
+            for (Method m : duic.getDeclaredMethods()) {
+                if (!"J7".equals(m.getName()) || m.getParameterCount() != 0) continue;
+                m.setAccessible(true);
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        collectAllFromLiveList(p.getResult());
+                    }
+                });
+                n++;
+            }
+            sJ7Hooked = n > 0;
+            LogWriter.log(TAG, "hooked ImproveDataUIC.J7 x" + n + " loader=" + HookUtil.loaderName(duic.getClassLoader()));
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hook J7 err: " + t);
         }
     }
 
@@ -358,10 +604,24 @@ public final class MomentsAutoLikeHook {
             // v3.0.139: 统一走 h6.n(SnsInfo,1,null,0) 标准路由立即发送。
             // 废弃 h6.p(wxid,5,null,SnsInfo,scene)（strangers 路由只入队不发送）与
             // extFlag 特殊态下的 h6.m 评论式路由（该分支同样基于旧协议假设）。
+            // v3.0.160: 顺序对齐《朋友圈自动点赞修复》B.2 与真实入口 mk4.r：
+            //   setLikeFlag(1) → l1.d(snsId,info) 写库（LiveDB 观察者触发 rebind）→ h6.n(...) 立即发。
+            try { XposedHelpers.callMethod(info, "setLikeFlag", 1); } catch (Throwable ignored) {}
+            try {
+                Class<?> l1 = loadClass(sCl, "com.tencent.mm.plugin.sns.storage.l1");
+                if (l1 != null) {
+                    String sidStr = (String) XposedHelpers.callMethod(info, "getSnsId");
+                    XposedHelpers.callStaticMethod(l1, "d", sidStr, info);
+                    LogWriter.log(TAG, "wrote back l1.d(" + sidStr + ") poster=" + poster);
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "l1.d err: " + t);
+            }
             Method n = findStandardLikeMethod(server);
             if (n != null) {
+                // §9：h6.n 内部含磁盘写（l1.d→SQLite），对齐 app 放宽 StrictMode 磁盘限制
+                try { android.os.StrictMode.allowThreadDiskReads(); } catch (Throwable ignored) {}
                 n.invoke(null, info, 1, null, 0);
-                try { XposedHelpers.callMethod(info, "setLikeFlag", 1); } catch (Throwable ignored) {}
                 LogWriter.log(TAG, "liked " + safeId(info) + " by " + poster
                         + " via h6.n(SnsInfo,1,null,0)");
             } else {

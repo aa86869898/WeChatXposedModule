@@ -207,6 +207,12 @@ public final class ChatFooterBarHook {
                 refreshProtocol(f);
             } catch (Throwable ignored) {}
         });
+        // v3.0.173: 按钮行使 footer 变高但微信 bottomSpace 不含其高度，主动补足消息列表
+        // 底部留白(原文档方案3兜底)，确保最新消息不被按钮行遮挡。
+        try {
+            com.leshao.v3.hook.ChatVoiceSwitchHook.ensureMessageSpace(footer, bar);
+            com.leshao.v3.hook.ChatVoiceSwitchHook.scheduleMessageSpace(footer, bar);
+        } catch (Throwable ignored) {}
         LogWriter.log(TAG, "injected bar " + target + " footer=" + footer.getClass().getName());
     }
 
@@ -351,6 +357,27 @@ public final class ChatFooterBarHook {
             }
             if (footer != null) injectBar(footer);
         } catch (Throwable ignored) {}
+    }
+
+    /** v3.0.167：模块主页开关（乐少群发）切换后刷新聊天快捷按钮行。
+     *  移除已注入的按钮排并重新按当前开关状态构建（如关闭「群发/转发」开关后
+     *  已注入的按钮也要消失）。 */
+    public static void refreshAfterSwitch() {
+        try {
+            View footer = sLastFooter != null ? sLastFooter.get() : null;
+            if (footer != null && footer.isAttachedToWindow()) {
+                View bar = footer.findViewWithTag(ROW_TAG);
+                if (bar != null) {
+                    ViewParent pp = bar.getParent();
+                    if (pp instanceof ViewGroup) {
+                        ((ViewGroup) pp).removeView(bar);
+                    }
+                }
+                injectBar(footer);
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "refreshAfterSwitch err: " + t.getMessage());
+        }
     }
 
     private static View findFooter(View view) {

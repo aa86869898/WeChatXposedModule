@@ -19,17 +19,49 @@
 <body>
     <h1>LeShaoWeChat 模块下载</h1>
     <p>微信 8.0.78(3180) 适配版。</p>
-    <a class="apk" href="LeShaoWeChat-v30139.apk">
-        最新版 LeShaoWeChat-v30139.apk (Debug)
-        <div class="meta">v3.0.139 · Debug 日志版 · 五合一升级：①小程序内部广告拦截（MBAD 全链路：拉起/渲染/上报全部拦截）；②朋友圈自动点赞修复（废弃 h6.p 入队路由，改用 h6.n(SnsInfo,1,null,0) 标准路由立即发送）；③定位伪装重构（仅对「实时共享位置」生效 + 微信原生位置选择器选点，不再影响附近的人/发送位置/小程序）；④新增朋友圈秒集赞（长按动态 → 本地伪造指定数量点赞）；⑤自动点赞入口迁移至模块主页「更多功能 → 朋友圈」</div>
+    <a class="apk" href="download/LeShaoWeChatV3-src-v30148.tar.gz">
+        完整工程源码 LeShaoWeChatV3-src-v30148.tar.gz (8MB)
+        <div class="meta">v3.0.148 完整可编译工程源码包 · 含全部 Java/资源源码 + gradle wrapper + xposed-api-82.jar + debug/release keystore + 成品 release APK。本机需 Android SDK(35) + JDK17 可 ./gradlew assembleRelease</div>
     </a>
-    <a class="apk" href="LeShaoWeChat-v30138.apk">
-        上一版 LeShaoWeChat-v30138.apk (Debug)
-        <div class="meta">v3.0.138 · Debug 日志版 · 修复朋友圈广告 MVVM 视图放行 + MMNeat7extView 背景直接替换 + 几何方向修正</div>
+    <a class="apk" href="download/LeShaoWeChat-v30176.apk">
+        最新版 LeShaoWeChat-v30176.apk (Release)
+        <div class="meta">v3.0.176 · 扫描数据源改造根治启动卡顿/死循环——按 DexKit 官方推荐方案将扫描数据源从 ClassLoader 切换为 APK path 直扫（DexKitCacheBridge.create(appTag, apkPath) 直接解析 base.apk 文件字节）：①扫描时机大幅提前——不再等待 Tinker ClassLoader 10s 轮询就绪，DEX 文件字节解析与类加载时序彻底解耦，消除"扫描过早→判定不健康→版本号永不落盘→每次启动全量重扫"的死循环；②微信版本升级/首次安装全量扫描并弹窗，微信未变（仅模块升级）静默补齐扫描不弹窗；③健康缓存一次成功后持久化，后续启动 SCAN SKIP 走缓存</div>
     </a>
-    <a class="apk" href="LeShaoWeChat-v30137-debug.apk">
-        历史版本 LeShaoWeChat-v30137-debug.apk (Debug)
-        <div class="meta">v3.0.137 · Debug 日志版 · 修复语音消息气泡失效：mq类(语音)恢复全量b方法hook(不再排除View参数，mq.b是语音绑定主路径)，to类(文字)保留排除View参数防卡死；UNMATCHED诊断不再误报已替换的自定义气泡</div>
+    <a class="apk" href="download/LeShaoWeChat-v30173.apk">
+        上一版 LeShaoWeChat-v30173.apk (Release)
+        <div class="meta">v3.0.173 · 三修复：①红包失效根因修复——不再依赖 DexKit 字符串搜索（3180 上 receivewxhb 被混淆/拆分导致 0 candidates），改直接加载权威逆向类名 com.tencent.mm.plugin.luckymoney.model.n6/h6；同步修复 MMKV 缓存版本号漏同步（CURRENT_MODULE_VERSION）与扫描健康判定过严（dbOpener 有 DatabaseProvider 运行时兜底不再计数），缓存一次成功持久化后主/子进程不再反复全量扫描，顺带降低启动卡死概率；②自动转发防回环——目标与来源相同时跳过，避免"收到 A 的消息又原样发回 A"；③聊天最新消息被快捷按钮行遮挡——按钮行注入后主动给消息列表补足底部留白</div>
+    </a>
+    <a class="apk" href="download/LeShaoWeChat-v30172.apk">
+        上一版 LeShaoWeChat-v30172.apk (Release)
+        <div class="meta">v3.0.172 · 红包抢不到根因修复——放宽 DexKit 核心扫描健康判定：健康检查从 13 项收紧为仅 6 项核心锚点（P06/数据库打开/通讯录存储/语音 API/e9/J1），imei/头像/标签存储/会话打开/会话列表等有运行时兜底的项不再计入，修复 MMKV 扫描缓存因判定不健康而永不持久化、小程序/红包子进程永远读旧缓存（cachedModule=30167）导致红包 scene 类候选解析失败的致命问题</div>
+    </a>
+    <a class="apk" href="download/LeShaoWeChat-v30171.apk">
+        上一版 LeShaoWeChat-v30171.apk (Release)
+        <div class="meta">v3.0.171 · 微信 3180 核心数据审计版（严格按三份反编译权威数据修正锚点）：①P06 内核单例修正——"Kernel not initialized" 仅在扁平包 gp0.j1.j()，P06 由 kw5.y0 修正为 gp0.j1，直接 hook gp0.j1.b 吞运行期异常；②TTS 锚点修正——e9.d1 实为 D1(J)V msgId 断言（非 TTS 逻辑），e9 无 voicemsg 字符串，废弃影视包 a21 查找，语音 API 改锚 VoiceContent 相关类（dl.f0/ks1.h/v61.f1 等）；③Item6 发送链接入现代主发送器 x51.b0（MicroMsg.SendMsgService）——批量发送 kj/mj/nj/lj 就地改写 content/type，AI 主动发送改 v51.r1 Builder→x51.b0 优先、v51.r0 经典 NetScene 降为回退；④红包/评论广告/长按菜单锚点核对与日志增强；⑤DexKit 扫描弹窗显示/关闭/完成日志补充</div>
+    </a>
+    <a class="apk" href="download/LeShaoWeChat-v30170.apk">
+        上一版 LeShaoWeChat-v30170.apk (Release)
+        <div class="meta">v3.0.170 · ①消息长按菜单重构：按《ChatLongPress_Menu_DeepDive》全表按钮做独立开关（复制/转发/收藏/删除/多选/引用/提醒/翻译/搜一搜/连续播报/打开/静音播放/相关表情/查看专属/编辑/转文字等 23 项），itemId+标题双保险，A 层构建期删项 + B 层点击期拦截 + C 层全局熄菜开关；②视频号评论区广告修复：移除渲染层 getAdvertisement_info 恒返 null 兜底（它使数据层 isAdComment 判定永远 false），让数据层根治真正生效；③语音气泡首启去延迟：气泡安装等待 DexKit 扫描完成再装，不再 2s×10 盲等；④扫描弹窗优化：完成后进度条补到 100% 保持 1.5s 再关闭</div>
+    </a>
+    <a class="apk" href="download/LeShaoWeChat-v30169.apk">
+        上一版 LeShaoWeChat-v30169.apk (Release)
+        <div class="meta">v3.0.169 · 核心修复：①DexKit 全量扫描时机修正——扫描线程等待真实微信/Tinker ClassLoader 就绪（10s 内每 200ms 轮询 findTinkerClassLoader，超时回退 base CL）再建桥扫描，从根因避免启动早期扫到平行副本 DEX 产出整批 null；②缓存污染防护——扫描结果核心目标（P06/DB/通讯录/语音/J1/e9/a21 等 13 项）任一为 null 判定扫描不健康：不覆盖旧缓存、不写版本号、不弹"未适配"误报，下次启动自动补扫；③启动"部分功能未适配"弹窗去假误报——仅列出真失效项（J1/P06/数据库打开/通讯录存储/语音 API/e9），不再因早期扫描的假 null 弹窗</div>
+    </a>
+    <a class="apk" href="download/LeShaoWeChat-v30168.apk">
+        上一版 LeShaoWeChat-v30168.apk (Release)
+        <div class="meta">v3.0.168 · 与 v3.0.167 同功能的重编译版本：①群成员头衔标签位置修正——改在昵称左侧显示小标签，按昵称直接父容器索引插入，WRAP_CONTENT + 小边距不再全宽；②视频号评论区广告拦截——评论区独立链路（FinderCommentLoader=model.z）批量插入 b 前剔除广告/推广评论、单条插入 a 拒绝，渲染层 getAdvertisement_info/getPromotion_info 恒返 null；③乐少群发内「乐少万群定时群发」「自动转发」改为纯开关；④「查看微信wxid」修复升级——UI 注入改克隆屏幕真实 KeyValuePreference，锚点改 contact_info_category_1 权威索引，数据采集永不门控持续积累离线库</div>
+    </a>
+    <a class="apk" href="download/LeShaoWeChat-v30167.apk">
+        上一版 LeShaoWeChat-v30167.apk (Release)
+        <div class="meta">v3.0.167 · 四项：①群成员头衔标签位置修正——改在昵称左侧显示小标签（原错误显示在消息上方且宽度铺满整条消息），按昵称直接父容器索引插入，WRAP_CONTENT + 小边距不再全宽；②视频号评论区广告拦截——评论区独立链路（FinderCommentLoader=model.z）批量插入 b 前剔除广告/推广评论、单条插入 a 拒绝，渲染层 getAdvertisement_info/getPromotion_info 恒返 null，信息流/评论区广告双链路全覆盖；③乐少群发内「乐少万群定时群发」「自动转发」改为纯开关——开关打开聊天输入框快捷菜单才显示对应入口按钮，关闭即隐藏（含已注入按钮行实时刷新），群发入口由 batch_send 开关控制、转发由 ls_autofw_enabled 控制；④「查看微信wxid」修复升级——UI 注入改克隆屏幕真实 KeyValuePreference（微信原生样式必正确渲染，无头像/名），锚点改 contact_info_category_1 权威索引，标题/值双通道落（Q+h / P()+m）并显式抑制图标，标题文案「微信号/ID」，数据采集不受开关门控始终积累离线库</div>
+    </a>
+    <a class="apk" href="download/LeShaoWeChat-v30166.apk">
+        上一版 LeShaoWeChat-v30166.apk (Release)
+        <div class="meta">v3.0.166 · 四项修复+增强：①主页菜单「微信美化」修复——长按消息菜单隐藏净化功能在微信 3180 失效，按官方方法签名重定位注入修复；②取色器升级——微信美化与联系人群聊「自定义取色」改 HSV 交互式选色，拖动实时生效；③语音气泡内容改色跟随方向；④群成员头衔标签修复——补 viewitems.b0.p holder 路径注入 + 注入诊断日志 + 头衔色实时刷新；另修复群标签存储（ChatGroupHook label=false）经 DexKit 实时检索兜底恢复</div>
+    </a>
+    <a class="apk" href="download/LeShaoWeChat-v30165.apk">
+        上一版 LeShaoWeChat-v30165.apk (Release)
+        <div class="meta">v3.0.165 · 主页菜单重组 + 群头衔修复：①模块主页新增「微信美化」「快捷菜单」两张卡片；②新增独立「微信美化」页（群头衔开关+群主/管理员/成员三角色背景色/文字色 6 色、自定义气泡、聊天时间线颜色、群聊成员昵称颜色），以上功能自「联系人和群聊」迁移；③新增独立「乐少群发」页（乐少万群定时群发、自动转发），原「联系人和群聊」内「自动转发/万群群发/用户信息卡」移除；④修复群成员头衔标签显示——严格按逆向文档重构：改用 com.tencent.mm.storage.z2 的 L0()/E0() 精确判定群主/管理员（替代反射读 roomOwner/adminList），消息对象按 e9 类精确提取群号/发送者，UI 注入补 viewitems.b0.p 主路径；⑤快捷菜单占位页</div>
     </a>
 </body>
 </html>

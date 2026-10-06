@@ -11,6 +11,7 @@ import com.leshao.v3.hook.FakeLocationHook;
 import com.leshao.v3.hook.HookConfig;
 import com.leshao.v3.hook.MomentsAutoLikeHook;
 import com.leshao.v3.hook.MomentsFakeLikeHook;
+import com.leshao.v3.hook.WeChatIdInjectHook;
 import com.leshao.v3.ui.widgets.M3Page;
 
 /**
@@ -92,6 +93,25 @@ public final class MoreFeaturesPageView {
                 },
                 v -> SubPageActivity.open(act, "朋友圈秒集赞", 31)));
         root.addView(cardFakeLike);
+        root.addView(PageKit.divider(ctx));
+
+        // ---- 查看微信wxid（v3.0.163：移植 WeChatIDInject.zip） ----
+        root.addView(M3Page.section(ctx, "微信号/ID 查看",
+                "联系人/群成员资料页注入「微信号 / ID」行"));
+        root.addView(M3Page.spacer(ctx, 2));
+
+        LinearLayout cardWxid = PageKit.makeCard(ctx, d);
+        cardWxid.addView(PageKit.switchRow(ctx, d, "查看微信wxid",
+                "打开联系人/群成员资料页时，在「微信号」下方注入一行显示微信号或 ID / wxid"
+                        + "（累计已收集 " + WeChatIdInjectHook.size() + " 条）",
+                WeChatIdInjectHook.isEnabled(),
+                (v, on) -> {
+                    WeChatIdInjectHook.setEnabled(on);
+                    Toast.makeText(ctx, "查看微信wxid已" + (on ? "开启" : "关闭")
+                            + "（打开资料页生效）", Toast.LENGTH_SHORT).show();
+                },
+                v -> SubPageActivity.open(act, "查看微信wxid", 32)));
+        root.addView(cardWxid);
         root.addView(PageKit.divider(ctx));
 
         // v3.0.132: 朋友圈自动点赞配置已迁移至朋友圈右上角「⋮ 自动点赞」菜单，主界面不再保留入口

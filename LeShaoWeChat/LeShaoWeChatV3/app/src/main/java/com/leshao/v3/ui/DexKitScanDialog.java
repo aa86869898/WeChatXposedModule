@@ -10,6 +10,7 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 /**
@@ -30,6 +31,11 @@ public class DexKitScanDialog {
     private static volatile FlyingProgressBar sProgressBar;
     private static volatile TextView sStatusText;
     private static volatile boolean sDismissed = false;
+    /** v3.0.156：记录最近用于显示进度弹窗的 Activity，供"部分功能未适配"弹窗复用以避开已销毁的 Splash。 */
+    private static volatile java.lang.ref.WeakReference<android.app.Activity> sHostAct =
+            new java.lang.ref.WeakReference<>(null);
+    /** 防重复弹出"部分功能未适配"。 */
+    private static volatile boolean sMissingShown = false;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     private static AlertDialog dialog() { return sDialogRef.get(); }
@@ -46,6 +52,9 @@ public class DexKitScanDialog {
 
     public static void show(Context ctx) {
         if (sDismissed) return;
+        if (ctx instanceof android.app.Activity) {
+            sHostAct = new java.lang.ref.WeakReference<>((android.app.Activity) ctx);
+        }
         MAIN.post(() -> {
             try {
                 AlertDialog cur = dialog();
@@ -54,6 +63,8 @@ public class DexKitScanDialog {
                 setDialog(d);
                 d.setCancelable(false);
                 d.show();
+                com.leshao.v3.LogWriter.log("DexKitScanDialog", "scan dialog shown on "
+                        + (ctx == null ? "null" : ctx.getClass().getName()));
                 Window window = d.getWindow();
                 if (window != null) {
                     window.setDimAmount(0.6f);
@@ -87,26 +98,108 @@ public class DexKitScanDialog {
         MAIN.post(() -> {
             try {
                 AlertDialog d = dialog();
-                if (d != null && d.isShowing()) d.dismiss();
+                if (d != null && d.isShowing()) {
+                    d.dismiss();
+                    com.leshao.v3.LogWriter.log("DexKitScanDialog", "scan dialog dismissed");
+                }
             } catch (Throwable ignored) {}
             setDialog(null);
             clearViewRefs();
         });
     }
 
-    /** 扫描完成: 直接补到 100% 并自动关闭弹窗(无需手动关闭)。 */
+    /** 扫描完成: 全部命中则直接补到 100% 并自动关闭弹窗(无需手动关闭)。 */
     public static void onScanComplete() {
+        onScanComplete(null);
+    }
+
+    /** v3.0.153: 全部命中则自动关闭; 存在未定位到的目标时弹出提示, 列出缺失项。
+     *  v3.0.170: 扫描通常数秒内完成、进度条只跑到个位数，立即关闭会让用户以为没扫完。
+     *  这里先把进度条补到 100%（自绘条会缓动追目标），并保持 1.5s 让用户看到“扫完了”再关。
+     *  @param missingSummary 缺失项摘要, null/空表示全部命中。 */
+    public static void onScanComplete(String missingSummary) {
+        com.leshao.v3.LogWriter.log("DexKitScanDialog", "onScanComplete called, missing="
+                + (missingSummary == null ? "null" : missingSummary.length() + " chars"));
         MAIN.post(() -> {
             try {
                 if (sProgressBar != null) sProgressBar.setProgress(100);
                 if (sPercentText != null) sPercentText.setText("100%");
-                MAIN.postDelayed(DexKitScanDialog::hideDialog, 700L);
+                if (sStatusText != null) sStatusText.setText("扫描完成");
             } catch (Throwable ignored) {}
+            if (missingSummary != null && !missingSummary.isEmpty()) {
+                if (sMissingShown) return;
+                sMissingShown = true;
+                showMissingSummary(missingSummary, 0);
+            } else {
+                MAIN.postDelayed(DexKitScanDialog::hideDialog, 1500L);
+            }
         });
     }
 
+    /** 弹出"部分功能未适配"提示, 列出本次扫描未定位到的目标。
+     *  v3.0.156：进度弹窗常挂在快速销毁的 WeChatSplashActivity 上，导致完成提示随 Splash 一起消失。
+     *  这里在弹窗时选取"当前未销毁的 Activity"（优先 LauncherUI），Splash 已销毁则延时重试。 */
+    private static void showMissingSummary(String summary, int attempt) {
+        try {
+            android.app.Activity host = pickLiveActivity();
+            if (host == null) {
+                if (attempt < 25) {
+                    MAIN.postDelayed(() -> showMissingSummary(summary, attempt + 1), 800L);
+                } else {
+                    android.app.Activity any = com.leshao.v3.MainHook.currentActivity();
+                    if (any != null && !any.isFinishing()) host = any;
+                    if (host == null) {
+                        com.leshao.v3.LogWriter.logSync("DexKitScanDialog",
+                                "showMissingSummary: no live activity, give up");
+                        return;
+                    }
+                }
+            }
+            if (host == null) return;
+            hideDialog();
+            TextView tv = new TextView(host);
+            tv.setText(summary);
+            tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+            tv.setPadding(dp(host, 8), dp(host, 8), dp(host, 8), dp(host, 8));
+            ScrollView sv = new ScrollView(host);
+            sv.addView(tv);
+            new AlertDialog.Builder(host)
+                    .setTitle("部分功能未适配")
+                    .setView(sv)
+                    .setPositiveButton("我知道了", null)
+                    .setCancelable(true)
+                    .show();
+            com.leshao.v3.LogWriter.logSync("DexKitScanDialog",
+                    "missing summary shown on " + host.getClass().getName());
+        } catch (Throwable t) {
+            com.leshao.v3.LogWriter.log("DexKitScanDialog", "showMissingSummary err: " + t.getMessage());
+            if (attempt < 8) {
+                MAIN.postDelayed(() -> showMissingSummary(summary, attempt + 1), 800L);
+            }
+        }
+    }
+
+    /** 选一个当前存活、可用的 Activity：优先记录的主机(非 Splash)，其次 MainHook 当前 Activity。 */
+    private static android.app.Activity pickLiveActivity() {
+        android.app.Activity act = sHostAct != null ? sHostAct.get() : null;
+        String cn = act != null ? act.getClass().getName() : "";
+        boolean splash = cn.contains("WeChatSplashActivity");
+        if (act != null && !act.isFinishing() && !splash) return act;
+        try {
+            android.app.Activity cur = com.leshao.v3.MainHook.currentActivity();
+            if (cur != null && !cur.isFinishing()
+                    && !cur.getClass().getName().contains("WeChatSplashActivity")) {
+                sHostAct = new java.lang.ref.WeakReference<>(cur);
+                return cur;
+            }
+        } catch (Throwable ignored) {}
+        // v3.0.158：不再回退到 Splash。Splash 上弹窗会随其销毁而消失/错位。
+        // 仍为 Splash 时返回 null，让上层继续重试直到真正的宿主页(LauncherUI/朋友圈/聊天)出现。
+        return null;
+    }
+
     /** 关闭弹窗但不清空可用状态(自动关闭用, 不锁定后续再次展示)。 */
-    private static void hideDialog() {
+    public static void hideDialog() {
         MAIN.post(() -> {
             try {
                 AlertDialog d = dialog();

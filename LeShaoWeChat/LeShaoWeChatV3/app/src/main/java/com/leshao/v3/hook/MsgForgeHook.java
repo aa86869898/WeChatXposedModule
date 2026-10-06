@@ -459,15 +459,18 @@ public final class MsgForgeHook {
 
     private static void installIntercept(ClassLoader cl) {
         final ClassLoader fcl = resolveLoader(cl);
-        // 四条链路同时安装，互不干扰：
+        // 五条链路同时安装，互不干扰：
         //  - qs5.v5(SendMsgMgr) 发送方法改写（8.0.78 实测 UI 发送最终收敛于此，主生效点）；
         //  - oh0.c 命中时在发送任务内就地改写 content/type（对走新框架的发送生效）；
         //  - om.SendTextComponent 命中时仅记录并放行（诊断，不再预发送/拦截）；
         //  - f9 消息入库层改写（最可靠兜底：微信 UI 发送必然 insert MMMsg 到 message 表）。
+        //  - x51.b0(SendMsgService) 现代主发送器改写（v3.0.171 核心数据：3180 普通消息真正
+        //    发送器是 x51.b0，它自行构造 RR(pc5.r66) 走 cgi522，不 new v51.r0）。
         installSendMgrPatch(fcl);
         installLogicPatch(fcl);
         installSendComponentFallback(fcl);
         installStoragePatch(fcl);
+        installSendServicePatch(fcl);
     }
 
     private static ClassLoader resolveLoader(ClassLoader cl) {
@@ -768,6 +771,77 @@ public final class MsgForgeHook {
 
     // ---------------- 消息入库层改写（最可靠兜底） ----------------
     //
+    // v3.0.171（核心数据）：3180 普通消息真正发送器 = x51.b0（MicroMsg.SendMsgService）。
+    // 链路：MsgSendTask → v51.r1.executeByPPC → x51.b0.kj(List<e9>, Continuation) 批量发送
+    //       → 逐条 e9 组装 pc5.pr4 + MsgSource(v51.i1.s) 入 pc5.r66 → modelbase.i → rp0/h.b → cgi522。
+    // 在此处遍历 List<e9> 就地改写 content/type，覆盖走现代发送器（不 new v51.r0）的发送。
+    private static void installSendServicePatch(ClassLoader cl) {
+        try {
+            List<String> names = new java.util.ArrayList<>();
+            try {
+                names.addAll(DexKitHelper.findClassesByString(cl, "MicroMsg.SendMsgService"));
+            } catch (Throwable ignored) {}
+            if (!names.contains("x51.b0")) names.add("x51.b0");
+            int installed = 0;
+            for (String cn : names) {
+                Class<?> c;
+                try {
+                    c = XposedHelpers.findClass(cn, cl);
+                } catch (Throwable t) {
+                    continue;
+                }
+                if (c == null) continue;
+                for (Method m : c.getDeclaredMethods()) {
+                    String mn = m.getName();
+                    if (!"kj".equals(mn) && !"mj".equals(mn) && !"nj".equals(mn) && !"lj".equals(mn)) continue;
+                    Class<?>[] pts = m.getParameterTypes();
+                    if (pts.length == 0) continue;
+                    try {
+                        m.setAccessible(true);
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
+                            @Override
+                            protected void beforeHookedMethod(MethodHookParam p) {
+                                try {
+                                    patchSendServiceArgs(p);
+                                } catch (Throwable e) {
+                                    LogWriter.log(TAG, "sendService patch err: " + e);
+                                }
+                            }
+                        });
+                        installed++;
+                        LogWriter.log(TAG, "SendMsgService(x51.b0) hooked cls=" + c.getName()
+                                + " loader=" + HookUtil.loaderName(c.getClassLoader())
+                                + " m=" + mn + "(" + Arrays.toString(pts) + ")");
+                    } catch (Throwable ignored) {}
+                }
+            }
+            LogWriter.log(TAG, "SendMsgService 补丁 hooks=" + installed + " cands=" + names.size());
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "SendMsgService 补丁 FAIL: " + t.getMessage());
+        }
+    }
+
+    private static void patchSendServiceArgs(XC_MethodHook.MethodHookParam p) {
+        if (!sEnabled) return;
+        if (p.args == null || p.args.length < 1 || p.args[0] == null) return;
+        Object a0 = p.args[0];
+        if (a0 instanceof List) {
+            int size = ((List<?>) a0).size();
+            for (Object item : (List<?>) a0) {
+                if (item == null) continue;
+                try {
+                    patchMsgObject(item);
+                } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "sendService patch -> list size=" + size);
+        } else {
+            try {
+                patchMsgObject(a0);
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    //
     // 微信 UI 发送文本必然调用 com.tencent.mm.storage.f9 的 insert 方法（Bb/Db/Hb/yb），
     // 参数 p0=com.tencent.mm.storage.e9（MMMsg）。在此处将出站 type==1 消息的
     // field_type / field_content 就地改写为伪造类型与 XML，微信原生完成上屏与状态流转。
@@ -816,7 +890,13 @@ public final class MsgForgeHook {
     private static void patchStorageArgs(XC_MethodHook.MethodHookParam p) {
         if (!sEnabled) return;
         if (p.args == null || p.args.length < 1 || p.args[0] == null) return;
-        Object msg = p.args[0];
+        patchMsgObject(p.args[0]);
+    }
+
+    /** 对单个出站 e9(MsgInfo) 消息对象就地改写 content/type（f9 入库层与 x51.b0 发送层共用）。 */
+    private static void patchMsgObject(Object msg) {
+        if (!sEnabled) return;
+        if (msg == null) return;
         // e9 的 isSend/type/content 字段可能声明在父类（MessageHook 用 z0()/getType() 方法调用），
         // 因此先尝试方法调用，失败再沿继承链反射字段，避免 getDeclaredField 找不到而静默失败。
         int isSend;

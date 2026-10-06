@@ -162,6 +162,14 @@ public final class AudioMixEditorPage {
     private int timelineHeightDp = -1;      // 时间线高度缓存(避免重复 relayout)
     private int lastPreviewFrom = Integer.MIN_VALUE; // 手柄拖拽预览的节流基准
 
+    // v3.0.160: 片段列表长按拖拽换序状态
+    private Seg dragSeg;
+    private int dragIndex = -1;
+    private boolean dragActive;
+
+    // v3.0.160: 上次在拼接/混合中使用的文字转语音音色(会话内记忆, 缺省用引擎默认)
+    private String lastTtsVoice;
+
     /** 单次改动的快照(记录片段顺序与每段的剪辑/音量/起始), 用于撤销。 */
     private static final class SegState {
         final Seg seg;
@@ -469,7 +477,101 @@ public final class AudioMixEditorPage {
 
         final int idx = index;
         row.setOnClickListener(v -> select(idx));
+        // v3.0.160: 长按上下拖动换序 —— 长按进入拖拽, 按住移动越过相邻行中线即互换位置, 松手落定
+        row.setOnLongClickListener(v -> {
+            if (segs.size() < 2) return false;
+            dragSeg = segs.get(index);
+            dragIndex = index;
+            dragActive = true;
+            pendingUndo = snapshot();
+            try { v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS); } catch (Throwable ignored) {}
+            LogWriter.log(TAG, "drag start idx=" + index);
+            refreshRowHighlights();
+            return true;
+        });
+        row.setOnTouchListener((v, ev) -> {
+            if (!dragActive) return false;
+            int act = ev.getActionMasked();
+            if (act == MotionEvent.ACTION_MOVE) {
+                int target = rowIndexAtRawY(ev.getRawY());
+                int guard = 0;
+                while (target >= 0 && target < segs.size() && target != dragIndex
+                        && guard++ < segs.size()) {
+                    int dir = target > dragIndex ? 1 : -1;
+                    swapListRows(dragIndex, dragIndex + dir);
+                }
+                return true;
+            }
+            if (act == MotionEvent.ACTION_UP || act == MotionEvent.ACTION_CANCEL) {
+                dragActive = false;
+                dragSeg = null;
+                dragIndex = -1;
+                commitPendingUndo();
+                rebuildList();
+                rebuildTimeline();
+                return true;
+            }
+            return false;
+        });
         return row;
+    }
+
+    /** v3.0.160: 交换相邻两段(同时物理移动行视图与中间分隔线), 保持拖拽视图连续接收手势。 */
+    private void swapListRows(int a, int b) {
+        if (a < 0 || b < 0 || a >= segs.size() || b >= segs.size() || Math.abs(a - b) != 1) return;
+        int lo = Math.min(a, b);
+        int hi = Math.max(a, b);
+        if (listCard != null && listCard.getChildCount() >= hi * 2 + 1) {
+            View rowLo = listCard.getChildAt(lo * 2);
+            View div = listCard.getChildAt(lo * 2 + 1);
+            View rowHi = listCard.getChildAt(hi * 2);
+            listCard.removeViewAt(hi * 2);  // 移除 rowHi
+            listCard.removeViewAt(lo * 2);  // 移除 rowLo
+            listCard.removeViewAt(lo * 2);  // 移除分隔线
+            listCard.addView(rowHi, lo * 2);
+            listCard.addView(div, lo * 2 + 1);
+            listCard.addView(rowLo, lo * 2 + 2);
+        }
+        java.util.Collections.swap(segs, a, b);
+        if (selected == a) selected = b;
+        else if (selected == b) selected = a;
+        dragIndex = b;
+        refreshRowHighlights();
+        if (timeline != null) {
+            timeline.setData(segs, mode, selected);
+            timeline.invalidate();
+        }
+    }
+
+    /** v3.0.160: 命中屏幕 y 坐标所在的行索引; -1 = 未命中任何行。 */
+    private int rowIndexAtRawY(float rawY) {
+        for (int i = 0; i < segs.size(); i++) {
+            if (listCard == null || i * 2 >= listCard.getChildCount()) continue;
+            View row = listCard.getChildAt(i * 2);
+            if (row == null) continue;
+            int[] loc = new int[2];
+            row.getLocationOnScreen(loc);
+            if (rawY >= loc[1] && rawY <= loc[1] + row.getHeight()) return i;
+        }
+        return -1;
+    }
+
+    /** v3.0.160: 拖拽中重刷各行高亮(拖拽行描边, 其余恢复原状)。 */
+    private void refreshRowHighlights() {
+        if (listCard == null) return;
+        for (int i = 0; i + 1 < listCard.getChildCount(); i += 2) {
+            View row = listCard.getChildAt(i);
+            boolean isDrag = dragActive && (i / 2 == dragIndex);
+            row.setBackground(isDrag ? dragBg() : (selected == i / 2 ? borderBg() : CandyUi.rowPressBg(ctx)));
+        }
+    }
+
+    private GradientDrawable dragBg() {
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(dp(AppColors.SHAPE_XS_DP));
+        bg.setColor(AppColors.primaryContainer());
+        bg.setStroke(dp(2), AppColors.primary());
+        return bg;
     }
 
     private void select(int index) {
@@ -576,51 +678,148 @@ public final class AudioMixEditorPage {
         tools4.addView(smallDangerButton("删除此段", () -> deleteSegment(selected)), weight());
         card.addView(tools4);
 
-        // 混合模式: 音量 + 起始时间
+        // 混合模式: 音量 + 起始时间（v3.0.160 精准样式: 刻度尺 + 精确数值 + 步进微调）
         if (mode == MODE_MIX) {
-            final TextView gainVal = valueLabel((int) (s.gain * 100) + "% · 起始 " + fmtMs(s.offsetMs));
-            card.addView(fieldRow("音量 / 起始", gainVal));
-            SeekBar gainBar = M3Page.slider(ctx);
-            gainBar.setMax(200);
-            gainBar.setProgress((int) (s.gain * 100));
-            gainBar.setOnSeekBarChangeListener(new SimpleSeek() {
-                public void onStartTrackingTouch(SeekBar sb) {
-                    pendingUndo = snapshot();
-                }
-                public void onProgressChanged(SeekBar sb, int value, boolean fromUser) {
-                    s.gain = value / 100f;
-                    gainVal.setText(value + "% · 起始 " + fmtMs(s.offsetMs));
-                }
-                public void onStopTrackingTouch(SeekBar sb) {
-                    commitPendingUndo();
-                    rebuildList();
-                }
-            });
-            card.addView(gainBar);
-
-            SeekBar offBar = M3Page.slider(ctx);
-            int maxOff = Math.max(1000, totalMixMs() + 3000);
-            offBar.setMax(maxOff);
-            offBar.setProgress(Math.min(s.offsetMs, maxOff));
-            offBar.setOnSeekBarChangeListener(new SimpleSeek() {
-                public void onStartTrackingTouch(SeekBar sb) {
-                    pendingUndo = snapshot();
-                }
-                public void onProgressChanged(SeekBar sb, int value, boolean fromUser) {
-                    s.offsetMs = value;
-                    gainVal.setText((int) (s.gain * 100) + "% · 起始 " + fmtMs(s.offsetMs));
-                    rebuildTimeline();
-                }
-                public void onStopTrackingTouch(SeekBar sb) {
-                    commitPendingUndo();
-                    rebuildList();
-                }
-            });
-            card.addView(offBar);
+            card.addView(buildMixParamEditor(s));
         }
 
         editorHost.addView(card);
     }
+
+    /** v3.0.160: 混合参数编辑器 —— 音量(0-200% 刻度尺 + 步进微调) 与 起始时间(毫秒级 + 步进微调)。 */
+    private View buildMixParamEditor(final Seg s) {
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+
+        // ---- 音量 ----
+        final TextView gainVal = valueLabel((int) (s.gain * 100) + " %  ·  " + gainDb(s.gain) + " dB");
+        box.addView(fieldRow("音量", gainVal));
+        final SeekBar gainBar = M3Page.slider(ctx);
+        gainBar.setMax(200);
+        gainBar.setProgress((int) (s.gain * 100));
+        gainBar.setOnSeekBarChangeListener(new SimpleSeek() {
+            public void onStartTrackingTouch(SeekBar sb) { pendingUndo = snapshot(); }
+            public void onProgressChanged(SeekBar sb, int value, boolean fromUser) {
+                if (!fromUser) return;
+                s.gain = value / 100f;
+                gainVal.setText(value + " %  ·  " + gainDb(s.gain) + " dB");
+            }
+            public void onStopTrackingTouch(SeekBar sb) {
+                commitPendingUndo();
+                rebuildList();
+                rebuildTimeline();
+            }
+        });
+        box.addView(gainBar);
+        box.addView(rulerView(new String[]{"0%", "50%", "100%", "150%", "200%"}));
+        box.addView(chipRow(new String[]{"-10%", "-5%", "-1%", "重置", "+1%", "+5%", "+10%"},
+                new int[]{-10, -5, -1, STEP_RESET, 1, 5, 10}, delta -> {
+                    pendingUndo = snapshot();
+                    if (delta == STEP_RESET) s.gain = 1f;
+                    else s.gain = clampGain((int) (s.gain * 100) + delta);
+                    gainBar.setProgress((int) (s.gain * 100));
+                    gainVal.setText((int) (s.gain * 100) + " %  ·  " + gainDb(s.gain) + " dB");
+                    commitPendingUndo();
+                    rebuildList();
+                }));
+
+        // ---- 起始时间 ----
+        box.addView(M3Page.spacer(ctx, 4));
+        final TextView offVal = valueLabel(fmtMs3(s.offsetMs));
+        box.addView(fieldRow("起始时间", offVal));
+        final SeekBar offBar = M3Page.slider(ctx);
+        final int maxOff = Math.max(1000, totalMixMs() + 3000);
+        offBar.setMax(maxOff);
+        offBar.setProgress(Math.min(s.offsetMs, maxOff));
+        offBar.setOnSeekBarChangeListener(new SimpleSeek() {
+            public void onStartTrackingTouch(SeekBar sb) { pendingUndo = snapshot(); }
+            public void onProgressChanged(SeekBar sb, int value, boolean fromUser) {
+                if (!fromUser) return;
+                s.offsetMs = value;
+                offVal.setText(fmtMs3(s.offsetMs));
+                rebuildTimeline();
+            }
+            public void onStopTrackingTouch(SeekBar sb) {
+                commitPendingUndo();
+                rebuildList();
+            }
+        });
+        box.addView(offBar);
+        box.addView(rulerView(new String[]{"0", fmtMs3(maxOff / 2), fmtMs3(maxOff)}));
+        box.addView(chipRow(new String[]{"-1秒", "-100毫秒", "归零", "+100毫秒", "+1秒"},
+                new int[]{-1000, -100, STEP_RESET, 100, 1000}, delta -> {
+                    pendingUndo = snapshot();
+                    s.offsetMs = (delta == STEP_RESET ? 0 : Math.max(0, Math.min(maxOff, s.offsetMs + delta)));
+                    offBar.setProgress(Math.min(s.offsetMs, maxOff));
+                    offVal.setText(fmtMs3(s.offsetMs));
+                    commitPendingUndo();
+                    rebuildTimeline();
+                    rebuildList();
+                }));
+
+        return box;
+    }
+
+    private static final int STEP_RESET = Integer.MIN_VALUE;
+
+    private static float clampGain(int percent) {
+        if (percent < 0) percent = 0;
+        if (percent > 200) percent = 200;
+        return percent / 100f;
+    }
+
+    /** 音量换算 dB（0 增益取近似 -60dB，避免 -∞ 溢出）。 */
+    private static String gainDb(float g) {
+        if (g <= 0.001f) return "-60.0";
+        double db = 20d * Math.log10(g);
+        return String.format(java.util.Locale.US, "%.1f", db);
+    }
+
+    /** 滑块下方的刻度尺视图（让滑杆有"精准时间轴"可读）。 */
+    private View rulerView(String[] labels) {
+        return new View(ctx) {
+            private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+            { setMinimumHeight(dp(18)); }
+            @Override
+            protected void onDraw(Canvas cv) {
+                int w = getWidth();
+                int h = getHeight();
+                p.setColor(AppColors.outlineVariant());
+                p.setStrokeWidth(dp(1.5f));
+                float seg = w / (float) (labels.length - 1);
+                for (int i = 0; i < labels.length; i++) {
+                    float x = i * seg;
+                    int tick = (i % 2 == 0) ? dp(5) : dp(3);
+                    cv.drawLine(x, 0, x, tick, p);
+                    p.setTextSize(dp(9));
+                    p.setTextAlign(Paint.Align.CENTER);
+                    p.setColor(AppColors.onSurfaceVariant());
+                    cv.drawText(labels[i], x, h - dp(2), p);
+                }
+            }
+        };
+    }
+
+    /** 步进微调按钮行（delta 为百分比/毫秒增量, STEP_RESET 为重值）。 */
+    private LinearLayout chipRow(String[] labels, int[] deltas, StepApply apply) {
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(0, dp(6), 0, 0);
+        for (int i = 0; i < labels.length; i++) {
+            TextView b = outlined(labels[i]);
+            b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+            b.setPadding(dp(2), dp(8), dp(2), dp(8));
+            final int d = deltas[i];
+            b.setOnClickListener(v -> apply.apply(d));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1f);
+            lp.leftMargin = dp(2);
+            lp.rightMargin = dp(2);
+            row.addView(b, lp);
+        }
+        return row;
+    }
+
+    private interface StepApply { void apply(int delta); }
 
     private void updateRangeLabel(TextView tv, Seg s) {
         tv.setText("起点 " + fmtMs3(s.effStart()) + "   终点 " + fmtMs3(s.effEnd())
@@ -1975,15 +2174,85 @@ textPaint.setColor(AppColors.timelinePinkText());
         int p = dp(16);
         box.setPadding(p, dp(8), p, dp(4));
         box.addView(et, new LinearLayout.LayoutParams(-1, -2));
+
+        // v3.0.160: 音色选择 —— 后台加载引擎音色列表, 默认选中默认音色
+        final TextView voiceHint = new TextView(ctx);
+        voiceHint.setText("音色: 加载中…");
+        voiceHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        voiceHint.setTextColor(AppColors.onSurfaceVariant());
+        box.addView(voiceHint);
+        final String[] sel = {lastTtsVoice};
+        final boolean[] voicesLoaded = {false};
+        new Thread(() -> {
+            final java.util.List<String> names = TtsVoiceSender.ttsVoiceNames();
+            final String def = TtsVoiceSender.ttsDefaultVoiceName();
+            ui.post(() -> {
+                try {
+                    voicesLoaded[0] = true;
+                    if (names == null || names.isEmpty()) {
+                        voiceHint.setText("音色: 系统默认（引擎无可选音色）");
+                        return;
+                    }
+                    if (sel[0] == null) sel[0] = def;
+                    LinearLayout chips = new LinearLayout(ctx);
+                    chips.setOrientation(LinearLayout.HORIZONTAL);
+                    chips.setPadding(0, dp(6), 0, 0);
+                    java.util.List<TextView> chipViews = new ArrayList<>();
+                    for (int i = 0; i < names.size(); i++) {
+                        final String nm = names.get(i);
+                        TextView chip = new TextView(ctx);
+                        chip.setText(shortVoiceName(nm));
+                        chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+                        chip.setTypeface(Typeface.DEFAULT_BOLD);
+                        chip.setGravity(Gravity.CENTER);
+                        chip.setPadding(dp(8), dp(7), dp(8), dp(7));
+                        final int fi = i;
+                        chip.setOnClickListener(v -> {
+                            sel[0] = nm;
+                            for (int k = 0; k < chipViews.size(); k++) {
+                                TextView c = chipViews.get(k);
+                                boolean on = (k == fi);
+                                c.setTextColor(on ? AppColors.textOnPrimary() : AppColors.primary());
+                                GradientDrawable bg = new GradientDrawable();
+                                bg.setCornerRadius(dp(AppColors.SHAPE_MD_DP));
+                                bg.setColor(on ? AppColors.primary() : AppColors.surfaceContainerHigh());
+                                c.setBackground(bg);
+                            }
+                        });
+                        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+                        lp.rightMargin = dp(6);
+                        chip.setLayoutParams(lp);
+                        chipViews.add(chip);
+                        chips.addView(chip);
+                    }
+                    int idx = box.indexOfChild(voiceHint);
+                    box.removeView(voiceHint);
+                    box.addView(chips, idx);
+                    // 默认选中项高亮
+                    int dk = names.indexOf(sel[0]);
+                    if (dk < 0) dk = 0;
+                    chipViews.get(dk).performClick();
+                    voiceHint.setText("音色: 点击选择");
+                    voiceHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+                    voiceHint.setTextColor(AppColors.onSurfaceVariant());
+                    box.addView(voiceHint, idx + 1);
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "tts voice picker err: " + t);
+                }
+            });
+        }, "ls-amix-voice").start();
+
         new AlertDialog.Builder(ctx)
                 .setTitle("文字转语音")
                 .setView(box)
                 .setPositiveButton("生成并加入", (d, w) -> {
                     String text = et.getText() == null ? "" : et.getText().toString().trim();
                     if (text.isEmpty()) { toast("请输入文字"); return; }
+                    final String voice = sel[0];
+                    if (voice != null) lastTtsVoice = voice;
                     showBusy("正在合成语音 …");
                     new Thread(() -> {
-                        final byte[] pcm = TtsVoiceSender.synthesizeTextToPcm(text);
+                        final byte[] pcm = TtsVoiceSender.synthesizeTextToPcm(text, voice);
                         if (pcm == null || pcm.length == 0) {
                             ui.post(() -> { hideBusy(); toast("合成失败, 请重试"); });
                             return;
@@ -2003,6 +2272,14 @@ textPaint.setColor(AppColors.timelinePinkText());
                 })
                 .setNegativeButton("取消", null)
                 .show();
+    }
+
+    private static String shortVoiceName(String name) {
+        if (name == null) return "默认";
+        int i = name.lastIndexOf('#');
+        String n = i >= 0 ? name.substring(i + 1) : name;
+        if (n.length() > 10) n = n.substring(0, 10);
+        return n.isEmpty() ? "默认" : n;
     }
 
     private void onAddRec() {

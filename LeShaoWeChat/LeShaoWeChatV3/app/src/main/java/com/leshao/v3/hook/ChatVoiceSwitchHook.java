@@ -19,8 +19,11 @@ import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.ui.TTSPageView;
 import com.leshao.v3.ui.AppColors;
+import com.leshao.v3.wm.utils.WmPrefs;
 
 import java.lang.reflect.Constructor;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.WeakHashMap;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -381,13 +384,11 @@ public final class ChatVoiceSwitchHook {
     }
 
     /**
-     * v1106: 保证消息列表底部留白包含注入的按钮行高度。
-     *
-     * <p>实测微信在 footer 因注入行变高后并不会刷新消息列表的底部留白, 导致最新一条
-     * 聊天记录被按钮行遮挡。这里直接给消息列表设置 {@code paddingBottom = 原始留白 + 按钮行高度}
-     * (以首次记录的原始值为基准, 幂等不叠加), 从根上保证消息顶在按钮行上方。</p>
+     * v1106: 保证消息列表底部留白包含注入的按钮行高度。对外暴露供 ChatFooterBarHook
+     * 注入快捷按钮行后主动调用(否则按钮行使 footer 变高但消息列表 bottomSpace 不含该高度,
+     * 最新消息会被按钮行遮挡)。
      */
-    private static void ensureMessageSpace(final View footer, final View row) {
+    public static void ensureMessageSpace(final View footer, final View row) {
         if (footer == null || row == null) return;
         try {
             if (Looper.myLooper() == Looper.getMainLooper()) applyMessageSpace(footer, row);
@@ -466,8 +467,9 @@ public final class ChatVoiceSwitchHook {
         } catch (Throwable ignored) {}
     }
 
-    /** 注入后延迟补足消息区底部留白(footer 首次测量可能仍带旧高, 多次兜底)。 */
-    private static void scheduleMessageSpace(final View footer, final View row) {
+    /** 注入后延迟补足消息区底部留白(footer 首次测量可能仍带旧高, 多次兜底)。
+     *  对外暴露供 ChatFooterBarHook 注入按钮行后调用。 */
+    public static void scheduleMessageSpace(final View footer, final View row) {
         if (footer == null || row == null) return;
         final Runnable r = () -> applyMessageSpace(footer, row);
         footer.post(r);
@@ -482,6 +484,10 @@ public final class ChatVoiceSwitchHook {
      *
      * <p>供「输入框快捷按钮」(ChatFooterBarHook) 复用同一按钮组；{@code noBackground=true}
      * 时按钮不设背景（新版样式），{@code false} 时沿用本 Hook 的流光浅底描边样式。</p>
+     *
+     * <p>v3.0.167：群发/转发按钮按开关显隐——「乐少万群定时群发」由 WmPrefs 的
+     * batch_send 控制，「自动转发」由 AutoForwardHook 的 ls_autofw_enabled 控制，
+     * 开关关闭时该按钮不再出现在快捷菜单。</p>
      */
     public static LinearLayout buildActionButtonRow(final Context ctx, boolean noBackground) {
         float density = ctx.getResources().getDisplayMetrics().density;
@@ -491,20 +497,30 @@ public final class ChatVoiceSwitchHook {
         row.setPadding(0, (int) (5 * density), 0, (int) (5 * density));
 
         int gap = (int) (6 * density);
-        addButton(row, makeFooterButton(ctx, "音色", AppColors.primary(), v -> openTtsPage(ctx), noBackground), gap);
-        addButton(row, makeFooterButton(ctx, "群发", AppColors.tertiary(), v -> openMassSend(ctx), noBackground), gap);
-        addButton(row, makeFooterButton(ctx, "语音", AppColors.primary(), v -> {
+        // v3.0.167：按开关收集可见按钮（音色/群发/语音/AI助手/转发），末尾按钮间距为 0
+        List<TextView> buttons = new ArrayList<>(5);
+        buttons.add(makeFooterButton(ctx, "音色", AppColors.primary(), v -> openTtsPage(ctx), noBackground));
+        if (WmPrefs.isBatchSend()) {
+            buttons.add(makeFooterButton(ctx, "群发", AppColors.tertiary(), v -> openMassSend(ctx), noBackground));
+        }
+        buttons.add(makeFooterButton(ctx, "语音", AppColors.primary(), v -> {
             // v960: 面板展示异常(BadTokenException 等)必须兜底, 否则点击即闪退
             try {
                 com.leshao.v3.ChatFooterLongPressMenu.showPanelStatic(v);
             } catch (Throwable t) {
                 LogWriter.log(TAG, "voice btn click err: " + t);
             }
-        }, noBackground), gap);
+        }, noBackground));
         // AI助手：原「更多」菜单中的 AI 助手功能直达
-        addButton(row, makeFooterButton(ctx, "AI助手", AppColors.secondary(), v -> openAiAssistant(ctx), noBackground), gap);
-        // 转发：原「更多」菜单中的自动转发功能直达
-        addButton(row, makeFooterButton(ctx, "转发", AppColors.primary(), v -> openAutoForward(ctx), noBackground), 0);
+        buttons.add(makeFooterButton(ctx, "AI助手", AppColors.secondary(), v -> openAiAssistant(ctx), noBackground));
+        // 转发：原「更多」菜单中的自动转发功能直达（v3.0.167 按开关显隐）
+        if (AutoForwardHook.isEnabled()) {
+            buttons.add(makeFooterButton(ctx, "转发", AppColors.primary(), v -> openAutoForward(ctx), noBackground));
+        }
+        for (int i = 0; i < buttons.size(); i++) {
+            int mg = (i == buttons.size() - 1) ? 0 : gap;
+            addButton(row, buttons.get(i), mg);
+        }
         return row;
     }
 

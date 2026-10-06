@@ -478,7 +478,7 @@ public class VersionCompat {
 
     /** v1042: 判定该 CL 是否为微信 Tinker 热修复的真实运行时加载器。
      *  真实存储类在此类加载器下独立加载, base.apk 平行副本(PathClassLoader)不可用。 */
-    private static boolean isTinkerRuntimeLoader(ClassLoader cl) {
+    public static boolean isTinkerRuntimeLoader(ClassLoader cl) {
         if (cl == null) return false;
         String name = cl.getClass().getName();
         return name.contains("DelegateLastClassLoader")

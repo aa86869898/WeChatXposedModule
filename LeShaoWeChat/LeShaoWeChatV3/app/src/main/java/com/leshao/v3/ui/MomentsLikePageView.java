@@ -1,6 +1,7 @@
 package com.leshao.v3.ui;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -62,6 +63,34 @@ public final class MomentsLikePageView {
         root.addView(cardContacts);
         root.addView(PageKit.divider(ctx));
 
+        // 定时原生刷新（文档 §7）：通过 ImproveOverScrollView.a(int) 复用微信原生下拉刷新，
+        // 自动发现新帖并入点赞扫描队列；间隔默认 5 分钟，建议 ≥2~5 分钟。
+        LinearLayout cardRefresh = PageKit.makeCard(ctx, d);
+        cardRefresh.addView(PageKit.switchRow(ctx, d, "开启定时刷新",
+                "自动按间隔刷新朋友圈，发现新动态并入点赞队列（建议 5 分钟以上）",
+                MomentsAutoLikeHook.isRefreshEnabled(),
+                (v, on) -> {
+                    MomentsAutoLikeHook.setRefreshEnabled(on);
+                    Toast.makeText(ctx, "定时刷新已" + (on ? "开启" : "关闭")
+                            + "（开启后下次进入朋友圈生效）", Toast.LENGTH_SHORT).show();
+                }, null));
+        cardRefresh.addView(M3Page.clickRow(ctx, "⏱", "刷新间隔",
+                "每 " + MomentsAutoLikeHook.getRefreshMinutes() + " 分钟刷新一次", () -> {
+                    final String[] mins = { "2 分钟", "5 分钟", "10 分钟", "15 分钟", "30 分钟" };
+                    final int[] vals = { 2, 5, 10, 15, 30 };
+                    new AlertDialog.Builder(act)
+                            .setTitle("定时刷新间隔")
+                            .setItems(mins, (d4, which) -> {
+                                MomentsAutoLikeHook.setRefreshMinutes(vals[which]);
+                                Toast.makeText(ctx, "刷新间隔已设为 " + vals[which]
+                                        + " 分钟", Toast.LENGTH_SHORT).show();
+                                SubPageActivity.refreshCurrent(act);
+                            })
+                            .show();
+                }));
+        root.addView(cardRefresh);
+        root.addView(PageKit.divider(ctx));
+
         LinearLayout cardNote = PageKit.makeCard(ctx, d);
         cardNote.addView(PageKit.bodyText(ctx,
                 "使用：进入朋友圈 → 点右上角「⋮ 自动点赞」→ 选择联系人 / 开始自动点赞。"
@@ -69,7 +98,9 @@ public final class MomentsLikePageView {
                         + "每条点赞间隔 3.5~6 秒以降低风控风险。"
                         + "原理：Hook ImproveSnsTimelineUI.onCreateOptionsMenu 注入菜单项，"
                         + "通过 lk4.g.W7 枚举时间线动态，调用 h6.n(SnsInfo,1,null,0) 标准路由"
-                        + "立即发送点赞（修复旧 h6.p 路由只入队不发送的问题）。"));
+                        + "立即发送点赞（修复旧 h6.p 路由只入队不发送的问题）。"
+                        + "定时刷新复用微信原生下拉刷新（ImproveOverScrollView.a(1)），"
+                        + "自动发现新帖并入自动点赞队列。"));
         root.addView(cardNote);
         return root;
     }

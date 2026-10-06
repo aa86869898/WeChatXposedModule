@@ -70,11 +70,21 @@ public final class WeChatMessenger {
             return false;
         }
         String msgSource = atWxid == null || atWxid.isEmpty() ? "" : buildAtMsgSource(atWxid);
-        // 优先 v1043 标准链：e9 构造 → f9.Bb(true) → v51.r0 → queue.h 入队
+        // v3.0.171（核心数据审计）：3180 普通消息真正发送器 = x51.b0（MicroMsg.SendMsgService），
+        // 入口为 v51.r1(SendMsgCgiFactory.Builder).executeByPPC；v51.r0 是经典 NetSceneSendMsg
+        // （classic path only, NOT used by modern normal send）。
+        // 无 @ 时现代 Builder 链优先；带 @ 时仍需 v51.r0 经典链写 msgsource（Builder 链不传 msgsource）。
+        if (atWxid == null || atWxid.isEmpty()) {
+            if (sendViaBuilder(talker, content)) {
+                return true;
+            }
+            LogWriter.log(TAG, "sendText: v51.r1 Builder 链路失败, 回退 v51.r0 经典 NetScene");
+            return sendViaMsgInfo(talker, content, msgSource, cl);
+        }
         if (sendViaMsgInfo(talker, content, msgSource, cl)) {
             return true;
         }
-        LogWriter.log(TAG, "sendText: v51.r0 链路失败, 回退 v51.r1 Builder");
+        LogWriter.log(TAG, "sendText: v51.r0 经典链失败(@), 回退 v51.r1 Builder（@ 可能失效）");
         return sendViaBuilder(talker, content);
     }
 
@@ -313,8 +323,10 @@ public final class WeChatMessenger {
 
 
     /**
-     * 标准链：构造 e9(isSend=1,type=1) → f9.Bb(msg,true) → new v51.r0(msgId,talker) → queue.h(scene,0)。
+     * 经典回退链：构造 e9(isSend=1,type=1) → f9.Bb(msg,true) → new v51.r0(msgId,talker) → queue.h(scene,0)。
      * 发送前 lj.N3(talker,msgId) 自检读表，避免 resend 读表失败静默掉。
+     * v3.0.171（核心数据）：v51.r0 = NetSceneSendMsg 经典路径（classic path only,
+     * NOT used by modern normal send）；作为带 @ msgsource 或 Builder 链失败时的回退。
      */
     private static boolean sendViaMsgInfo(String talker, String content, String msgSource, ClassLoader cl) {
         try {
@@ -421,7 +433,9 @@ public final class WeChatMessenger {
     }
 
     /**
-     * 回退链：v51.r1 (SendMsgCgiFactory.Builder)。类名由 DexKitAdapter 动态定位。
+     * 现代主发送链：v51.r1 (SendMsgCgiFactory.Builder) → executeByPPC → x51.b0(SendMsgService)。
+     * v3.0.171（核心数据）：3180 普通消息真正发送器是 x51.b0，v51.r1 是其入口工厂。
+     * 类名由 DexKitAdapter 动态定位。
      */
     private static boolean sendViaBuilder(String talker, String content) {
         try {

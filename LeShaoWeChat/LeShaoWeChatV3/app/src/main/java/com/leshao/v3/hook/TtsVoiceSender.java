@@ -7,6 +7,7 @@ import android.media.MediaFormat;
 import android.os.Process;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
+import android.speech.tts.Voice;
 
 import com.leshao.v3.ContextManager;
 import com.leshao.v3.ChatFooterLongPressMenu;
@@ -467,7 +468,10 @@ public class TtsVoiceSender {
         hookE9Trace(cl);
         hookE9AllTrace(cl);
         hookE9Render(cl);
-        runPostScanAsync(() -> hookA21Oi(cl));
+        // v3.0.171（核心数据审计）：a21 = mj_publisher 影视/时间线剪辑扁平包
+        // （a21.q 是 RecyclerView holder，38 字段均为 MJID/时间线视图），与 MsgInfo/TTS 无关。
+        // 停用 hookA21Oi，避免在错误包上做无意义的兜底搜索。
+        LogWriter.log(TAG, "hookA21Oi: DISABLED (a21 = movie/timeline package, unrelated to TTS)");
         hookChattingUiAll(cl);
         hookChattingUIFragmentAll(cl);
         hookConvertTo(cl);
@@ -736,7 +740,11 @@ public class TtsVoiceSender {
         return "";
     }
 
-    // ========== Hook e9.d1(String) ==========
+    // ========== Hook e9 内容设置方法（历史命名 e9.d1） ==========
+    // v3.0.171（核心数据审计）：3180 反编译证实 e9.d1 实为 D1(J)V —— msgId 合理性断言
+    // （1500000001>j && -10<j），并非 TTS 逻辑；e9 内也无字符串 "voicemsg"，
+    // 语音判断在 b1() 用 MicroMsg.VoiceContent。因此这里不再按 "voicemsg" 找方法，
+    // 直接定位 e9 的 (String)void 内容设置方法拦截 TTS 命令。
 
     private static void hookE9D1(ClassLoader cl) {
         try {
@@ -760,46 +768,22 @@ public class TtsVoiceSender {
             }
             LogWriter.log(TAG, methods.toString());
 
-            // 1) 先用 DexKit 动态发现：查找 e9 类中包含 "voicemsg" 字符串的方法
+            // 1) 遍历 e9 自身方法找 (String)void 内容设置方法（e9 无 "voicemsg"，不再用 DexKit 字符串查找）
             java.lang.reflect.Method contentSetter = null;
-            List<String> methodCandidates = DexKitHelper.findMethodsByString(cl, e9Class.getName(), "voicemsg");
-            for (String sig : methodCandidates) {
-                try {
-                    String methodName = sig.substring(sig.indexOf('.') + 1, sig.indexOf('('));
-                    String paramStr = sig.substring(sig.indexOf('(') + 1, sig.indexOf(')'));
-                    if (paramStr.isEmpty()) continue;
-                    String[] paramNames = paramStr.split(",");
-                    Class<?>[] paramTypes = new Class<?>[paramNames.length];
-                    for (int i = 0; i < paramNames.length; i++) {
-                        paramTypes[i] = mapBasicType(paramNames[i].trim());
-                    }
-                    java.lang.reflect.Method m = e9Class.getDeclaredMethod(methodName, paramTypes);
-                    // 优先找 (String)void 类型的内容设置方法
-                    if (m.getReturnType() == void.class && paramTypes.length == 1 && paramTypes[0] == String.class) {
+            for (java.lang.reflect.Method m : e9Class.getDeclaredMethods()) {
+                if (m.getParameterTypes().length == 1 && m.getParameterTypes()[0] == String.class
+                        && m.getReturnType() == void.class) {
+                    String n = m.getName();
+                    // 8.0.78: 方法名已混淆为 X0/Y0/j1 等短名，不再有 d1(String)
+                    if ("d1".equals(n) || "d2".equals(n) || n.startsWith("set")
+                            || n.equals("X0") || n.equals("Y0") || n.equals("j1")
+                            || n.equals("b1") || n.equals("i1") || n.equals("m3")
+                            || n.equals("o3") || n.equals("p3") || n.equals("r1")
+                            || n.equals("r3") || n.equals("u3") || n.equals("w1")
+                            || n.equals("x1")) {
                         contentSetter = m;
-                        LogWriter.log(TAG, "e9 content setter found via DexKit: " + methodName + "(String)");
+                        LogWriter.log(TAG, "e9.d1 fallback: using " + n + "(String)");
                         break;
-                    }
-                } catch (Throwable ignored) {}
-            }
-
-            // 2) 兜底：遍历 e9 自身方法找 (String)void 方法
-            if (contentSetter == null) {
-                for (java.lang.reflect.Method m : e9Class.getDeclaredMethods()) {
-                    if (m.getParameterTypes().length == 1 && m.getParameterTypes()[0] == String.class
-                            && m.getReturnType() == void.class) {
-                        String n = m.getName();
-                        // 8.0.78: 方法名已混淆为 X0/Y0/j1 等短名，不再有 d1(String)
-                        if ("d1".equals(n) || "d2".equals(n) || n.startsWith("set")
-                                || n.equals("X0") || n.equals("Y0") || n.equals("j1")
-                                || n.equals("b1") || n.equals("i1") || n.equals("m3")
-                                || n.equals("o3") || n.equals("p3") || n.equals("r1")
-                                || n.equals("r3") || n.equals("u3") || n.equals("w1")
-                                || n.equals("x1")) {
-                            contentSetter = m;
-                            LogWriter.log(TAG, "e9.d1 fallback: using " + n + "(String)");
-                            break;
-                        }
                     }
                 }
             }
@@ -1548,6 +1532,9 @@ public class TtsVoiceSender {
     }
 
     private static void hookA21Oi(ClassLoader cl) {
+        // v3.0.171（核心数据审计）：已废弃。a21 = 影视/时间线剪辑扁平包
+        // （a21.q = androidx.recyclerview.widget.p2 holder，38 字段 MJID/时间线视图），
+        // 与 MsgInfo/TTS 无关。此方法不再被 hook() 调用，保留仅作历史参考。
         // 8.0.78: a21.o 已混淆，使用 DexKit 扫描结果
         Class<?> a21o = null;
         String a21FromDexKit = DexKitHelper.getA21ClassName();
@@ -1631,19 +1618,35 @@ public class TtsVoiceSender {
                     } catch (Throwable ignored) {}
                 }
                 List<String> a21Classes = DexKitHelper.findClassesByString(cl, pkgName);
+                // v1147: 过滤过严(startWith pkgName)在混淆版(a21.o 默认包)下候选全被丢弃
+                // 导致 searched=1(仅 stub 类)。放宽为 load 全部候选按 e9 特征匹配, 减少误丢。
                 int added = 0;
+                int skipped = 0;
                 for (String cn : a21Classes) {
-                    if (cn == null || !cn.startsWith(pkgName)) continue;
-                    try {
-                        Class<?> c = XposedHelpers.findClass(cn, cl);
-                        if (!searchClasses.contains(c)) {
-                            searchClasses.add(c);
-                            added++;
-                            if (added >= 24) break;
-                        }
-                    } catch (Throwable ignored) {}
+                    if (cn == null) continue;
+                    if (cn.startsWith(pkgName)) {
+                        try {
+                            Class<?> c = XposedHelpers.findClass(cn, cl);
+                            if (!searchClasses.contains(c)) {
+                                searchClasses.add(c);
+                                added++;
+                            }
+                            continue;
+                        } catch (Throwable ignored) {}
+                    }
+                    skipped++;
+                    if (added < 24) {
+                        try {
+                            Class<?> c = XposedHelpers.findClass(cn, cl);
+                            if (!searchClasses.contains(c)) {
+                                searchClasses.add(c);
+                                added++;
+                            }
+                        } catch (Throwable ignored) {}
+                    }
                 }
-                if (added > 0) LogWriter.log(TAG, "hookA21Oi: +DexKit siblings=" + added);
+                if (added > 0) LogWriter.log(TAG, "hookA21Oi: +DexKit siblings=" + added
+                        + " (relaxed, skipped=" + skipped + ")");
             }
             String a21HintName = DexKitHelper.getA21MethodName();
             java.lang.reflect.Method target = null;
@@ -4621,8 +4624,18 @@ public class TtsVoiceSender {
      * 异常不逃逸; finally 确保删除临时 wav 文件。
      */
     private static byte[] synthesizeSegmentToPcm(String text, File tmpDir, String tagSuffix) {
+        return synthesizeSegmentToPcm(text, tmpDir, tagSuffix, null);
+    }
+
+    private static byte[] synthesizeSegmentToPcm(String text, File tmpDir, String tagSuffix, String voiceName) {
         File wavFile = new File(tmpDir, "tts_" + tagSuffix + ".wav");
+        Voice prevVoice = null;
         try {
+            // v3.0.160：按选定音色合成, 完事后恢复原音色, 避免影响其它 TTS 路径
+            if (voiceName != null && sTts != null) {
+                try { prevVoice = sTts.getVoice(); } catch (Throwable ignored) {}
+                applyVoiceSafe(voiceName);
+            }
             final CountDownLatch latch = new CountDownLatch(1);
             final boolean[] ok = {false};
             sTts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
@@ -4654,6 +4667,12 @@ public class TtsVoiceSender {
             return null;
         } finally {
             try { if (wavFile.exists()) wavFile.delete(); } catch (Throwable ignored) {}
+            if (voiceName != null && sTts != null) {
+                try {
+                    if (prevVoice != null) sTts.setVoice(prevVoice);
+                    else sTts.setLanguage(Locale.CHINESE);
+                } catch (Throwable ignored) {}
+            }
         }
     }
 
@@ -5661,6 +5680,11 @@ public class TtsVoiceSender {
 
     /** 合成一段文字为 24kHz mono 16bit PCM(内部按标点分段后顺序拼接)。失败返回 null。 */
     public static byte[] synthesizeTextToPcm(String text) {
+        return synthesizeTextToPcm(text, null);
+    }
+
+    /** v3.0.160：按指定音色合成(voiceName 为 null/空时用系统默认音色)。 */
+    public static byte[] synthesizeTextToPcm(String text, String voiceName) {
         if (text == null || text.trim().isEmpty()) return null;
         if (!ensureTtsReady()) {
             LogWriter.log(TAG, "synthesizeTextToPcm: TTS not ready");
@@ -5674,7 +5698,7 @@ public class TtsVoiceSender {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             long ts = System.currentTimeMillis();
             for (int i = 0; i < segs.size(); i++) {
-                byte[] seg = synthesizeSegmentToPcm(segs.get(i), tmpDir, ts + "_mix_" + i);
+                byte[] seg = synthesizeSegmentToPcm(segs.get(i), tmpDir, ts + "_mix_" + i, voiceName);
                 if (seg == null || seg.length == 0) {
                     LogWriter.log(TAG, "synthesizeTextToPcm seg " + i + " fail");
                     return null;
@@ -5682,11 +5706,79 @@ public class TtsVoiceSender {
                 out.write(seg, 0, seg.length);
             }
             byte[] pcm = out.toByteArray();
-            LogWriter.log(TAG, "synthesizeTextToPcm: " + pcm.length + "B segs=" + segs.size());
+            LogWriter.log(TAG, "synthesizeTextToPcm: " + pcm.length + "B segs=" + segs.size()
+                    + " voice=" + (voiceName != null ? voiceName : "default"));
             return pcm.length > 0 ? pcm : null;
         } catch (Throwable t) {
             LogWriter.log(TAG, "synthesizeTextToPcm err: " + t.getClass().getSimpleName() + " " + t.getMessage());
             return null;
+        }
+    }
+
+    // ==================== 音色(voice) 选择 ====================
+
+    /** 可用的音色名列表(中文优先, 其次其它语言), 无音色时返回空列表。 */
+    public static java.util.List<String> ttsVoiceNames() {
+        java.util.List<String> out = new ArrayList<>();
+        try {
+            if (!sReady) ensureTtsReady();
+            if (sTts == null) return out;
+            java.util.Set<Voice> vs = sTts.getVoices();
+            if (vs == null) return out;
+            java.util.List<String> zh = new ArrayList<>();
+            java.util.List<String> other = new ArrayList<>();
+            for (Voice v : vs) {
+                if (v == null || v.getName() == null) continue;
+                boolean isZh = v.getLocale() != null && "zh".equals(v.getLocale().getLanguage());
+                (isZh ? zh : other).add(v.getName());
+            }
+            out.addAll(zh);
+            out.addAll(other);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "ttsVoiceNames err: " + t);
+        }
+        return out;
+    }
+
+    /** 当前默认音色名(引擎当前激活音色); 无激活音色时返回列表首个(中文优先)。 */
+    public static String ttsDefaultVoiceName() {
+        try {
+            if (sTts != null && sTts.getVoice() != null) {
+                String n = sTts.getVoice().getName();
+                if (n != null && !n.isEmpty()) return n;
+            }
+        } catch (Throwable ignored) {}
+        java.util.List<String> vs = ttsVoiceNames();
+        return vs.isEmpty() ? null : vs.get(0);
+    }
+
+    private static Voice findVoice(String name) {
+        if (sTts == null || name == null) return null;
+        try {
+            java.util.Set<Voice> vs = sTts.getVoices();
+            if (vs == null) return null;
+            for (Voice v : vs) if (name.equals(v.getName())) return v;
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    /** 切换引擎音色; 名称为空/找不到时回退到中文 Locale。 */
+    private static void applyVoiceSafe(String name) {
+        if (sTts == null) return;
+        try {
+            if (name == null || name.isEmpty()) {
+                sTts.setLanguage(Locale.CHINESE);
+                return;
+            }
+            Voice v = findVoice(name);
+            if (v != null) {
+                sTts.setVoice(v);
+                LogWriter.log(TAG, "TTS voice -> " + name);
+            } else {
+                sTts.setLanguage(Locale.CHINESE);
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "applyVoiceSafe err: " + t);
         }
     }
 
@@ -5709,24 +5801,58 @@ public class TtsVoiceSender {
     /**
      * 叠加混音(混合模式): 每段从 offsetSamples 处开始叠加, gain 为音量系数。
      * 峰值超过 16bit 上限时整体归一化, 避免削波失真。
+     *
+     * <p>v3.0.160（自动压低/ducking）: 两段有重叠时<b>较长</b>的一段在重叠区间内被压低音量
+     * （最短与最长同播时压低最长的），重叠前后恢复原音量，两端带 10ms 淡入淡出避免爆音。</p>
      */
     public static byte[] mixPcm(java.util.List<byte[]> clips, java.util.List<Integer> offsetSamples,
             java.util.List<Float> gains, int totalSamples) {
         if (clips == null || clips.isEmpty() || totalSamples <= 0) return null;
+        int n = clips.size();
+        int[] off = new int[n];
+        int[] len = new int[n];
+        float[] g = new float[n];
+        // 每段逐采样增益(初始为段增益; 重叠时较长段被压低)
+        java.util.List<float[]> gainEnv = new java.util.ArrayList<>(n);
+        for (int k = 0; k < n; k++) {
+            byte[] pcm = clips.get(k);
+            if (pcm == null || pcm.length < 2) { off[k] = 0; len[k] = 0; g[k] = 1f; gainEnv.add(null); continue; }
+            off[k] = (offsetSamples != null && k < offsetSamples.size() && offsetSamples.get(k) != null)
+                    ? Math.max(0, offsetSamples.get(k)) : 0;
+            g[k] = (gains != null && k < gains.size() && gains.get(k) != null) ? gains.get(k) : 1f;
+            len[k] = pcm.length / 2;
+            float[] e = new float[len[k]];
+            java.util.Arrays.fill(e, g[k]);
+            gainEnv.add(e);
+        }
+        // ducking: 遍历所有两两重叠对, 较长者在重叠窗口内压低
+        for (int a = 0; a < n; a++) {
+            if (len[a] <= 0) continue;
+            for (int b = a + 1; b < n; b++) {
+                if (len[b] <= 0) continue;
+                int s = Math.max(off[a], off[b]);
+                int e = Math.min(off[a] + len[a], off[b] + len[b]);
+                if (s >= e) continue;
+                float[] ea = gainEnv.get(a);
+                float[] eb = gainEnv.get(b);
+                if (len[a] > len[b]) applyDuck(ea, s - off[a], e - off[a]);
+                else if (len[b] > len[a]) applyDuck(eb, s - off[b], e - off[b]);
+                else { applyDuck(ea, s - off[a], e - off[a]); applyDuck(eb, s - off[b], e - off[b]); }
+            }
+        }
         // 用 float 累加(内存占用为 double 的一半), 16bit 语音叠加精度足够
         float[] acc = new float[totalSamples];
-        for (int k = 0; k < clips.size(); k++) {
+        for (int k = 0; k < n; k++) {
             byte[] pcm = clips.get(k);
             if (pcm == null || pcm.length < 2) continue;
-            int offs = (offsetSamples != null && k < offsetSamples.size() && offsetSamples.get(k) != null)
-                    ? Math.max(0, offsetSamples.get(k)) : 0;
-            float g = (gains != null && k < gains.size() && gains.get(k) != null) ? gains.get(k) : 1f;
+            float[] e = gainEnv.get(k);
+            int offs = off[k];
             int samples = pcm.length / 2;
             for (int i = 0; i < samples; i++) {
                 int idx = offs + i;
                 if (idx >= totalSamples) break;
                 int s = (short) ((pcm[i * 2] & 0xff) | (pcm[i * 2 + 1] << 8));
-                acc[idx] += s * g;
+                acc[idx] += s * e[i];
             }
         }
         float peak = 0;
@@ -5739,8 +5865,29 @@ public class TtsVoiceSender {
             out[i * 2] = (byte) (v & 0xff);
             out[i * 2 + 1] = (byte) ((v >> 8) & 0xff);
         }
-        LogWriter.log(TAG, "mixPcm: tracks=" + clips.size() + " samples=" + totalSamples + " peak=" + (int) peak);
+        LogWriter.log(TAG, "mixPcm: tracks=" + n + " samples=" + totalSamples
+                + " peak=" + (int) peak + " duck=" + MIX_DUCK_GAIN);
         return out;
+    }
+
+    /** 混合模式自动压低系数(≈-5.2dB), 重叠期间较长段音量乘以该值。 */
+    private static final float MIX_DUCK_GAIN = 0.55f;
+
+    /** 在片段内部区间 [from,to) 上压低增益, 两端 10ms(240 采样)淡入淡出避免爆音。 */
+    private static void applyDuck(float[] e, int from, int to) {
+        int s = Math.max(0, from);
+        int t = Math.min(e.length, to);
+        if (t <= s) return;
+        int ramp = Math.max(1, Math.min(240, (t - s) / 3));
+        int s2 = Math.min(t, s + ramp);
+        int t2 = Math.max(s, t - ramp);
+        for (int i = s; i < t; i++) {
+            float d;
+            if (i < s2) d = MIX_DUCK_GAIN + (1f - MIX_DUCK_GAIN) * ((float) (i - s + 1) / ramp);
+            else if (i >= t2) d = MIX_DUCK_GAIN + (1f - MIX_DUCK_GAIN) * ((float) (t - i) / ramp);
+            else d = MIX_DUCK_GAIN;
+            e[i] *= d;
+        }
     }
 
     /** 按秒裁剪 PCM, 非法区间回退为整段。 */

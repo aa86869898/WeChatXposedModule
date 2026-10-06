@@ -34,15 +34,30 @@ final class BubbleDrawableFactory {
         if (ctx == null || path == null || path.isEmpty()) return null;
         Resources res = ctx.getResources();
 
-        if (path.toLowerCase().endsWith(".9.png")) {
-            // 框架解码 *.9.png 时会剥离 1px 边框并生成 device 格式 chunk，这是唯一安全的 9-patch 来源。
-            Drawable np = buildFromNinePatchFile(res, path);
-            if (np != null) return np;
-            LogWriter.log("Bubble", "9.png framework decode failed, fallback nine-slice");
-        }
+        // v3.0.141：不再只认 ".9.png" 后缀。微信把用户气泡存为 bubble_*.png 时可能已去掉
+        // ".9" 后缀，但文件内容仍是编译后的 nine-patch（PNG 内嵌 tEXt chunk）。
+        // 因此统一先尝试框架解码：若 Bitmap 携带有效 chunk，得到精确拉伸区 + 内容边距。
+        Drawable np = buildFromNinePatchFile(res, path);
+        if (np != null) return np;
 
         Bitmap bmp = decode(path);
         if (bmp == null) return null;
+
+        // v3.0.142b：用户上传的 .9.png 若未经 aapt 编译（无 tEXt chunk），BitmapFactory
+        // 不会生成 NinePatch chunk —— 但图片四边仍带有黑线标记。此时从边缘像素解析
+        // 四条边的黑线段：顶/左 = 拉伸区，右/下 = 内容边距，按原始 .9 语义构建
+        // NineSliceDrawable（非对称固定区），不再全局按短边 1/6 拉伸。
+        NinePatchRegion region = detectNinePatchRegion(bmp);
+        if (region != null) {
+            LogWriter.log("Bubble", "ninepatch region detected stretchX=" + region.stretchXStart
+                    + ".." + region.stretchXEnd + " stretchY=" + region.stretchYStart
+                    + ".." + region.stretchYEnd
+                    + " padX=" + region.padLeft + ".." + region.padRight
+                    + " padY=" + region.padTop + ".." + region.padBottom
+                    + " size=" + bmp.getWidth() + "x" + bmp.getHeight());
+            return new NineSliceDrawable(res, bmp, region);
+        }
+        // v3.0.142c：无黑线可辨时回退对称 slice（短边 1/6），保底不崩
         return new NineSliceDrawable(res, bmp, Math.max(1, Math.min(bmp.getWidth(), bmp.getHeight()) / 6));
     }
 
@@ -94,20 +109,190 @@ final class BubbleDrawableFactory {
     }
 
     /**
-     * 自实现 9-slice Drawable：把源位图按“四角 1:1、四边单轴拉伸、中心双轴拉伸”绘制到目标区域。
+     * 从位图四条边解析 .9.png 黑线标记（未编译的 nine-patch 源图）。
+     *
+     * <p>nine-patch 语义（Android 规范）：</p>
+     * <ul>
+     *   <li><b>顶边黑线</b>：水平拉伸区，黑线区间 [start,end] 内的列会被拉伸；</li>
+     *   <li><b>左边黑线</b>：垂直拉伸区，黑线区间 [start,end] 内的行会被拉伸；</li>
+     *   <li><b>右边黑线</b>：内容区左/右 padding 的参考（本实现用顶/左黑线外沿兜底）；</li>
+     *   <li><b>底边黑线</b>：内容区上/下 padding 的参考。</li>
+     * </ul>
+     *
+     * <p>返回非对称的拉伸区与内容边距，供 {@link NineSliceDrawable} 使用。
+     * 顶/左黑线必须存在且不与四角贯通；右/底黑线缺失时以拉伸区外沿作为内容边距兜底。
+     * 完全无法判定时返回 null（调用方回退对称 slice）。</p>
+     */
+    private static NinePatchRegion detectNinePatchRegion(Bitmap bmp) {
+        if (bmp == null) return null;
+        int w = bmp.getWidth();
+        int h = bmp.getHeight();
+        if (w < 4 || h < 4) return null;
+        try {
+            // 读取四条边各一行/列像素
+            int[] top = new int[w];
+            int[] bottom = new int[w];
+            int[] left = new int[h];
+            int[] right = new int[h];
+            bmp.getPixels(top, 0, w, 0, 0, w, 1);
+            bmp.getPixels(bottom, 0, w, 0, h - 1, w, 1);
+            bmp.getPixels(left, 0, 1, 0, 0, 1, h);
+            bmp.getPixels(right, 0, 1, w - 1, 0, 1, h);
+
+            // 黑线需要"有实体内容"支撑：黑线所在位置不应贯穿整条边（至少留 1px 角区）
+            // 顶边黑线 -> 水平拉伸区
+            int tStart = -1, tEnd = -1;
+            for (int x = 0; x < w; x++) {
+                if (isNinePatchMark(top[x])) {
+                    if (tStart < 0) tStart = x;
+                    tEnd = x;
+                }
+            }
+            // 左边黑线 -> 垂直拉伸区
+            int lStart = -1, lEnd = -1;
+            for (int y = 0; y < h; y++) {
+                if (isNinePatchMark(left[y])) {
+                    if (lStart < 0) lStart = y;
+                    lEnd = y;
+                }
+            }
+            // 顶/左黑线必须有效且不贯通到角区（避免整边拉伸或空拉伸）
+            boolean topValid = tStart > 0 && tEnd < w - 1 && (tEnd - tStart + 1) < w - 2;
+            boolean leftValid = lStart > 0 && lEnd < h - 1 && (lEnd - lStart + 1) < h - 2;
+            if (!topValid || !leftValid) return null;
+
+            // 拉伸区外沿：左固定区 = tStart，右固定区 = w - tEnd - 1（非对称）
+            int stretchXStart = tStart;
+            int stretchXEnd = tEnd;
+            int stretchYStart = lStart;
+            int stretchYEnd = lEnd;
+
+            // 内容边距：底边黑线 = 内容区左/右 padding；右边黑线 = 内容区上/下 padding。
+            // Android 规范：底边黑线段起点=内容左padding、终点=内容右padding 外沿；
+            // 右边黑线段起点=内容上padding、终点=内容下padding 外沿。
+            int padLeft = stretchXStart, padRight = w - 1 - stretchXEnd;
+            int padTop = stretchYStart, padBottom = h - 1 - stretchYEnd;
+
+            // 底边黑线（若存在且不贯通）
+            int bStart = -1, bEnd = -1;
+            for (int x = 0; x < w; x++) {
+                if (isNinePatchMark(bottom[x])) {
+                    if (bStart < 0) bStart = x;
+                    bEnd = x;
+                }
+            }
+            if (bStart > 0 && bEnd < w - 1 && (bEnd - bStart + 1) < w - 2) {
+                padLeft = Math.max(stretchXStart, bStart);
+                padRight = Math.max(w - 1 - stretchXEnd, w - 1 - bEnd);
+            }
+            // 右边黑线（若存在且不贯通）
+            int rStart = -1, rEnd = -1;
+            for (int y = 0; y < h; y++) {
+                if (isNinePatchMark(right[y])) {
+                    if (rStart < 0) rStart = y;
+                    rEnd = y;
+                }
+            }
+            if (rStart > 0 && rEnd < h - 1 && (rEnd - rStart + 1) < h - 2) {
+                padTop = Math.max(stretchYStart, rStart);
+                padBottom = Math.max(h - 1 - stretchYEnd, h - 1 - rEnd);
+            }
+
+            // 兜底：至少保留 1px 固定区，且固定区不得超过图片一半（防整图拉伸）
+            int maxFx = Math.max(1, w / 2 - 1);
+            int maxFy = Math.max(1, h / 2 - 1);
+            NinePatchRegion r = new NinePatchRegion();
+            r.stretchXStart = Math.min(Math.max(1, stretchXStart), maxFx);
+            r.stretchXEnd = Math.max(Math.min(w - 2, stretchXEnd), w - 1 - maxFx);
+            r.stretchYStart = Math.min(Math.max(1, stretchYStart), maxFy);
+            r.stretchYEnd = Math.max(Math.min(h - 2, stretchYEnd), h - 1 - maxFy);
+            r.padLeft = Math.max(0, Math.min(padLeft, r.stretchXStart));
+            r.padRight = Math.max(0, Math.min(padRight, w - 1 - r.stretchXEnd));
+            r.padTop = Math.max(0, Math.min(padTop, r.stretchYStart));
+            r.padBottom = Math.max(0, Math.min(padBottom, h - 1 - r.stretchYEnd));
+            return r;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /** nine-patch 四边黑线解析结果（全部以像素计）。 */
+    static final class NinePatchRegion {
+        int stretchXStart;   // 顶边黑线起点（左固定区宽）
+        int stretchXEnd;     // 顶边黑线终点（右固定区由 w-1-end 推得）
+        int stretchYStart;   // 左边黑线起点（上固定区高）
+        int stretchYEnd;     // 左边黑线终点（下固定区由 h-1-end 推得）
+        int padLeft;         // 内容左内边距
+        int padRight;        // 内容右内边距
+        int padTop;          // 内容上内边距
+        int padBottom;       // 内容下内边距
+    }
+
+    /** .9.png 标记像素：高不透明度的近黑色像素（黑线可能被微信重编码，放宽阈值）。 */
+    private static boolean isNinePatchMark(int pixel) {
+        int a = (pixel >>> 24) & 0xFF;
+        if (a < 0x80) return false;
+        int r = (pixel >> 16) & 0xFF;
+        int g = (pixel >> 8) & 0xFF;
+        int b = pixel & 0xFF;
+        return r < 0x60 && g < 0x60 && b < 0x60;
+    }
+
+    /**
+     * 自实现 9-slice Drawable：把源位图按"四角 1:1、四边单轴拉伸、中心双轴拉伸"绘制到目标区域。
      *
      * <p>slice 尺寸取图片短边的 1/6（至少 1px），对常见圆角气泡可正确保留圆角而拉伸中间。
-     * 纯 Java 绘制，不涉及 native nine-patch chunk，无崩溃风险。</p>
+     * 纯 Java 绘制，不涉及 native nine-patch chunk，无崩溃风险。
+     * v3.0.142b：支持水平/垂直不同 slice（sliceX/sliceY），用于未编译 .9.png 黑线拉伸区。
+     * v3.0.142c：支持 {@link NinePatchRegion} 非对称四边固定区与内容边距，完整还原 .9 语义。</p>
      */
     static final class NineSliceDrawable extends Drawable {
         private final Bitmap src;
-        private final int slice;
+        private final int left;       // 左固定区宽
+        private final int top;        // 上固定区高
+        private final int right;      // 右固定区宽
+        private final int bottom;     // 下固定区高
+        private final int padLeft;
+        private final int padTop;
+        private final int padRight;
+        private final int padBottom;
         private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
         private final Rect dst = new Rect();
 
         NineSliceDrawable(Resources res, Bitmap src, int slice) {
+            this(res, src, slice, slice);
+        }
+
+        NineSliceDrawable(Resources res, Bitmap src, int sliceX, int sliceY) {
+            this(res, src, sliceX, sliceY, sliceX, sliceY);
+        }
+
+        NineSliceDrawable(Resources res, Bitmap src, int sliceX, int sliceY,
+                          int padX, int padY) {
+            this(res, src, sliceX, sliceY, sliceX, sliceY, padX, padX, padY, padY);
+        }
+
+        NineSliceDrawable(Resources res, Bitmap src, NinePatchRegion r) {
+            this(res, src, r.stretchXStart, r.stretchYStart,
+                    Math.max(1, src.getWidth() - 1 - r.stretchXEnd),
+                    Math.max(1, src.getHeight() - 1 - r.stretchYEnd),
+                    r.padLeft, r.padRight, r.padTop, r.padBottom);
+        }
+
+        NineSliceDrawable(Resources res, Bitmap src, int left, int top,
+                          int right, int bottom, int padLeft, int padRight,
+                          int padTop, int padBottom) {
             this.src = src;
-            this.slice = Math.max(1, Math.min(slice, Math.min(src.getWidth(), src.getHeight()) / 2));
+            int maxX = Math.max(1, src.getWidth() / 2);
+            int maxY = Math.max(1, src.getHeight() / 2);
+            this.left = Math.max(1, Math.min(left, maxX));
+            this.right = Math.max(1, Math.min(right, maxX));
+            this.top = Math.max(1, Math.min(top, maxY));
+            this.bottom = Math.max(1, Math.min(bottom, maxY));
+            this.padLeft = Math.max(0, Math.min(padLeft, this.left));
+            this.padRight = Math.max(0, Math.min(padRight, this.right));
+            this.padTop = Math.max(0, Math.min(padTop, this.top));
+            this.padBottom = Math.max(0, Math.min(padBottom, this.bottom));
             this.paint.setAntiAlias(true);
             this.paint.setFilterBitmap(true);
         }
@@ -118,15 +303,14 @@ final class BubbleDrawableFactory {
             if (b.isEmpty() || src.isRecycled()) return;
             int w = src.getWidth();
             int h = src.getHeight();
-            int s = slice;
-            if (w <= 2 * s || h <= 2 * s) {
+            if (w <= left + right || h <= top + bottom) {
                 canvas.drawBitmap(src, null, b, paint);
                 return;
             }
-            int[] xs = {0, s, w - s, w};
-            int[] ys = {0, s, h - s, h};
-            int[] dx = {b.left, b.left + s, b.right - s, b.right};
-            int[] dy = {b.top, b.top + s, b.bottom - s, b.bottom};
+            int[] xs = {0, left, w - right, w};
+            int[] ys = {0, top, h - bottom, h};
+            int[] dx = {b.left, b.left + left, b.right - right, b.right};
+            int[] dy = {b.top, b.top + top, b.bottom - bottom, b.bottom};
             for (int i = 0; i < 3; i++) {
                 for (int j = 0; j < 3; j++) {
                     if (i == 1 && j == 1) continue; // 中心单独处理
@@ -151,10 +335,27 @@ final class BubbleDrawableFactory {
         @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
         @Override public int getIntrinsicWidth() { return src.getWidth(); }
         @Override public int getIntrinsicHeight() { return src.getHeight(); }
+
+        /** v3.0.141：提供内容边距。微信原生气泡 NinePatchDrawable 自带 padding 指定文字
+         *  内容区；此前 NineSliceDrawable 未实现 getPadding → 替换后文字贴边/错位。
+         *  v3.0.142c：内容边距直接采用 .9 底/右黑线解析出的值（非对称），
+         *  圆角与尾巴均被正确避让，文字不再压到气泡边缘。 */
+        @Override public boolean getPadding(Rect padding) {
+            if (padding == null) return true;
+            padding.set(padLeft, padTop, padRight, padBottom);
+            return true;
+        }
+
         @Override public Drawable.ConstantState getConstantState() {
             return new ConstantState() {
-                @Override public Drawable newDrawable() { return new NineSliceDrawable(null, src, slice); }
-                @Override public Drawable newDrawable(Resources res) { return new NineSliceDrawable(res, src, slice); }
+                @Override public Drawable newDrawable() {
+                    return new NineSliceDrawable(null, src, left, top, right, bottom,
+                            padLeft, padRight, padTop, padBottom);
+                }
+                @Override public Drawable newDrawable(Resources res) {
+                    return new NineSliceDrawable(res, src, left, top, right, bottom,
+                            padLeft, padRight, padTop, padBottom);
+                }
                 @Override public int getChangingConfigurations() { return 0; }
             };
         }

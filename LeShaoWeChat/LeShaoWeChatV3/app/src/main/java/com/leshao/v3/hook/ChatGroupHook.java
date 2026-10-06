@@ -145,37 +145,56 @@ public class ChatGroupHook {
                     } catch (Throwable ignored) {}
                 }
             }
+            // v3.0.166: 缓存加载(cache-only)可能缺 label_provider 结果, DexKit 结果与
+            // 旧候选均失败时, 现场扫描一次「静态 + 无参 + 返回 g4」的方法兜底
+            if (sLabelStorage == null) {
+                try {
+                    if (DexKitHelper.findLabelStorageProviderLive(cl)) {
+                        String lc = DexKitHelper.getLabelStorageProviderClass();
+                        Class<?> cls = XposedHelpers.findClass(lc, cl);
+                        Object r = XposedHelpers.callStaticMethod(cls, DexKitHelper.getLabelStorageProviderMethod());
+                        if (r != null) {
+                            sLabelStorage = r;
+                            sLabelEntityClass = r.getClass();
+                            LogWriter.log(TAG, "initCoreServices: label storage via LiveDexKit=" + lc);
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
 
             // Find j1 service locator: verify s(Class) OR v(Class) method exists
             // v955: 3180 实证 gp0.j1 只有 v(Class), 无 s(Class) — 旧版只认 s 导致全部匹配失败
+            // v3.0.154: 多候选 + 实测校验。DexKit 扫描结果可能误选(如 w5.y0 并无 v(Class))，
+            // 逐一验证「真实存在 v(Class) 或 s(Class)」后才采用；再兜底历史类名 gp0.j1。
             Class<?> j1 = null;
-            // Try DexKit-discovered j1 service class first
+            java.util.LinkedHashSet<String> j1Cands = new java.util.LinkedHashSet<>();
             String dexKitJ1 = DexKitHelper.getJ1ServiceClass();
-            if (dexKitJ1 != null && !dexKitJ1.isEmpty()) {
+            if (dexKitJ1 != null && !dexKitJ1.isEmpty()) j1Cands.add(dexKitJ1);
+            String dexKitP06 = DexKitHelper.getP06ClassName();
+            if (dexKitP06 != null && !dexKitP06.isEmpty()) j1Cands.add(dexKitP06);
+            j1Cands.add("gp0.j1");
+            j1Cands.add("gp0.j1.j");
+            String usedJ1 = null;
+            for (String cn : j1Cands) {
                 try {
-                    Class<?> j1Cls = XposedHelpers.findClass(dexKitJ1, cl);
-                    findMethodInHierarchy(j1Cls, "v", Class.class);
-                    j1 = j1Cls;
-                    LogWriter.log(TAG, "initCoreServices: using j1 from DexKit=" + dexKitJ1);
+                    Class<?> j1Cls = XposedHelpers.findClass(cn, cl);
+                    boolean hasV = true, hasS = true;
+                    try { findMethodInHierarchy(j1Cls, "v", Class.class); } catch (Throwable t) { hasV = false; }
+                    try { findMethodInHierarchy(j1Cls, "s", Class.class); } catch (Throwable t) { hasS = false; }
+                    if (hasV || hasS) {
+                        j1 = j1Cls;
+                        usedJ1 = cn;
+                        break;
+                    }
                 } catch (Throwable ignored) {}
             }
-            // Try DexKit-discovered p06 class (it's the actual service locator in 8.0.78)
             if (j1 == null) {
-                String dexKitP06 = DexKitHelper.getP06ClassName();
-                if (dexKitP06 != null && !dexKitP06.isEmpty()) {
-                    try {
-                        Class<?> j1Cls = XposedHelpers.findClass(dexKitP06, cl);
-                        findMethodInHierarchy(j1Cls, "v", Class.class);
-                        j1 = j1Cls;
-                        LogWriter.log(TAG, "initCoreServices: using j1 from DexKit p06=" + dexKitP06);
-                    } catch (Throwable ignored) {}
+                // 扫描未完成或内核未就绪：保留重试，但避免刷屏
+                int r = sRetryCount.get();
+                if (r <= 1 || r % 5 == 0) {
+                    LogWriter.log(TAG, "initCoreServices: j1 待定位 (扫描完成="
+                            + DexKitHelper.isScanComplete() + ", Tinker=" + (tkCL != null) + "), 将重试");
                 }
-            }
-            if (j1 == null) {
-                // v955: 严格遵守无类名兜底铁律 — j1 仅经 DexKit 动态检索
-                // (特征字符串 "Kernel not initialized" + v/s(Class) 方法签名),
-                // 扫描未完成时由 initCoreServices 重试机制(leshao-retry)再次尝试。
-                LogWriter.log(TAG, "initCoreServices: j1 待 DexKit 扫描(Tinker=" + (tkCL != null) + "), 将重试");
                 if (!DexKitHelper.isScanComplete()) {
                     DexKitHelper.addPostScanCallback(() -> {
                         try { initCoreServices(); } catch (Throwable ignored) {}
@@ -183,6 +202,7 @@ public class ChatGroupHook {
                 }
                 return false;
             }
+            LogWriter.log(TAG, "initCoreServices: using j1=" + usedJ1);
             sJ1Class = j1;
 
             // v963: j1.v 必须传 IM 服务接口(tn3.c4/sh3.c4), 不能传 DexKit 扫到的实现类 e32.a

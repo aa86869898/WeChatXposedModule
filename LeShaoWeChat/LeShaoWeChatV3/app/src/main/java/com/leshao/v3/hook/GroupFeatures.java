@@ -21,7 +21,7 @@ public class GroupFeatures {
         } catch (Throwable t) {
             XposedBridge.log("[Group] qs5.v5 发送异常, 回退 WeChatMessenger: " + t.getMessage());
         }
-        // 回退: AI 模块标准发送链(e9 isSend=1 -> f9.Bb -> v51.r0 -> NetSceneQueue.h)
+        // 回退: AI 模块发送链（v3.0.171 起现代 v51.r1 Builder → x51.b0 优先，v51.r0 经典 NetScene 为回退）
         try {
             if (com.leshao.ai.hook.wechat.WeChatMessenger.sendText(talker, text, cl)) {
                 XposedBridge.log("[Group] 文本已通过 WeChatMessenger 发送: " + talker);

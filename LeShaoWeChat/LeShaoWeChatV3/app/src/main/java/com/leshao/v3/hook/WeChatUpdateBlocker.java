@@ -107,8 +107,19 @@ public class WeChatUpdateBlocker {
             try {
                 List<String> cands = DexKitHelper.findClassesByString(cl, kw);
                 if (cands != null && !cands.isEmpty()) {
-                    LogWriter.log(TAG, "class hit: " + cands.get(0) + " via '" + kw + "'");
-                    return cands.get(0);
+                    // v3.0.149：过滤模块自身类 —— DexKit 字符串锚点会把模块 dex 内含同字符串
+                    // 常量的类也扫中（如 WeChatUpdateBlocker 本类含 "MicroMsg.Tinker.SubCoreHotpatch"，
+                    // 之前日志 3787 `class hit: com.leshao.v3.hook.WeChatUpdateBlocker`，随后 loadClass
+                    // 必 ClassNotFound、T1 定位失败）。命中 com.leshao 前缀一律跳过取下一个候选。
+                    for (String c : cands) {
+                        if (c == null || c.isEmpty()) continue;
+                        if (c.startsWith("com.leshao.")) {
+                            LogWriter.log(TAG, "class skip(module self): " + c + " via '" + kw + "'");
+                            continue;
+                        }
+                        LogWriter.log(TAG, "class hit: " + c + " via '" + kw + "'");
+                        return c;
+                    }
                 }
             } catch (Throwable ignored) {}
         }
@@ -258,24 +269,34 @@ public class WeChatUpdateBlocker {
     // ==================== V. 版本更新阻断 ====================
 
     private static void blockVersionUpdate(ClassLoader cl) {
-        // V1: Updater.f(int)
-        hookByClassStrings(cl, "MicroMsg.Updater", "com.tencent.mm.sandbox.updater.Updater",
+        // V1: Updater.f(int)。文档 §1 权威类名 = com.tencent.mm.sandbox.updater.Updater；
+        // 上报更新流程入口 f(I)。注意: "MicroMsg.Updater" 字符串锚点会误命中
+        // TinkerPatchResultService(实测 v3.0.176 日志绑错), 必须以权威类名优先。
+        boolean v1 = hookByName(cl, "com.tencent.mm.sandbox.updater.Updater",
                 "f", 1, null, "V1");
-        // V2: NetSceneGetUpdateInfo.onGYNetEnd (缓存优先, 避免普通重启触发 DexKit 搜索)
+        // V2: NetSceneGetUpdateInfo.onGYNetEnd。文档 §2 签名 = onGYNetEnd(III,String,y0,[B) 共 6 参,
+        // 旧实现传 paramCount=3 导致 V2 永不命中(实测 WARN 后靠 V2g 兜底), 现改为 hook 全部 onGYNetEnd。
         String ns = DexKitHelper.ngetNetSceneUpdateInfo();
         if (ns == null || ns.isEmpty()) {
             ns = firstClassByStrings(cl, "MicroMsg.NetSceneGetUpdateInfo");
         }
-        if (ns != null) {
-            boolean ok = hookByName(cl, ns, "onGYNetEnd", 3, null, "V2");
-            // 缓存类名方法签名漂移时，全局按方法字符串锚点兜底
+        String v2Cls = ns != null ? ns : (classExists(cl, "te5.a") ? "te5.a" : null);
+        if (v2Cls != null) {
+            boolean ok = hookByName(cl, v2Cls, "onGYNetEnd", -1, null, "V2");
             if (!ok) hookByGlobalMethodStrings(cl, "MicroMsg.NetSceneGetUpdateInfo", "onGYNetEnd", null, "V2g");
         } else {
             hookByGlobalMethodStrings(cl, "MicroMsg.NetSceneGetUpdateInfo", "onGYNetEnd", null, "V2g");
         }
-        // V3: MMErrorProcessor.updateRequired(boolean 返回)
-        hookByClassStrings(cl, "MicroMsg.MMErrorProcessor", "com.tencent.mm.ui.rc",
-                "b", -1, Boolean.FALSE, "V3");
+        // V3: updateRequired = com.tencent.mm.ui.rc.b(Activity,int,int,Intent)Z 静态 4 参(文档 §3)。
+        // 旧实现经 "MicroMsg.MMErrorProcessor" 锚点误命中 com.tencent.mm.ui.conversation.j6,
+        // 先按权威类名 + 精确签名(方法名 b / 4 参 / boolean 返回)安装, 失败再走字符串兜底。
+        boolean v3 = hookUpdateRequired(cl);
+        if (!v3) {
+            hookByClassStrings(cl, "MicroMsg.MMErrorProcessor", "com.tencent.mm.ui.rc",
+                    "b", 4, Boolean.FALSE, "V3f");
+            hookByClassStrings(cl, "MicroMsg.MMErrorProcessor", "com.tencent.mm.ui.rc",
+                    "b", -1, Boolean.FALSE, "V3");
+        }
         // V4: UpdaterManager download/handleCommand (类名缓存优先, 方法字符串搜索仍走 hookByStrings)
         String um = DexKitHelper.ngetUpdaterManager();
         if (um == null || um.isEmpty()) {
@@ -286,15 +307,55 @@ public class WeChatUpdateBlocker {
         }
     }
 
+    /**
+     * 按文档 §3 精确匹配 updateRequired: 类 com.tencent.mm.ui.rc,
+     * updateRequired = public static b(android.app.Activity, int, int, android.content.Intent) → boolean
+     * (文档 §3 明确 4 参: Activity,int,int,Intent)。setResult(FALSE) 阻断后续 Updater.f 进入更新流程。
+     */
+    private static boolean hookUpdateRequired(ClassLoader cl) {
+        try {
+            Class<?> c = cl.loadClass("com.tencent.mm.ui.rc");
+            int hooked = 0;
+            for (Method m : c.getDeclaredMethods()) {
+                if (!"b".equals(m.getName())) continue;
+                if (m.getParameterCount() != 4) continue;
+                if (m.getReturnType() != boolean.class) continue;
+                m.setAccessible(true);
+                final String t = "V3";
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam param) {
+                        try {
+                            LogWriter.log(TAG, "[" + t + "] block updateRequired "
+                                    + m.toGenericString());
+                        } catch (Throwable ignored) {}
+                        param.setResult(Boolean.FALSE);
+                    }
+                });
+                hooked++;
+                LogWriter.log(TAG, "hooked com.tencent.mm.ui.rc.b(" + m.getParameterCount()
+                        + ") as V3 exact=" + m.toGenericString());
+            }
+            if (hooked == 0) LogWriter.log(TAG, "[WARN] V3: rc.b(4参,boolean) 未命中");
+            return hooked > 0;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[WARN] V3: rc 类加载失败 " + t);
+            return false;
+        }
+    }
+
     // ==================== T. Tinker 热补丁阻断 ====================
 
     private static void blockTinkerHotPatch(ClassLoader cl) {
         // T1: SubCoreHotpatch.onAccountInitialized
-        hookByClassStrings(cl, "MicroMsg.Tinker.SubCoreHotpatch", "ge3.a0",
-                "onAccountInitialized", -1, null, "T1");
-        // T1 兜底: 全局按方法字符串锚点定位（类名/短名漂移时仍可命中）
-        hookByGlobalMethodStrings(cl, "MicroMsg.Tinker.SubCoreHotpatch",
-                "onAccountInitialized", null, "T1g");
+        // 3180 类名漂移为 ge3.a0, 方法名可能同漂移: 先按类锚点定位,
+        // 再按「方法名=onAccountInitialized 或 单参+参数类型含 Account/Profile」特征识别。
+        String t1cls = firstClassByStrings(cl, "MicroMsg.Tinker.SubCoreHotpatch");
+        if (t1cls == null) t1cls = "ge3.a0";
+        boolean t1 = hookAccountInit(cl, t1cls);
+        if (!t1) {
+            hookByGlobalMethodStrings(cl, "MicroMsg.Tinker.SubCoreHotpatch",
+                    "onAccountInitialized", null, "T1g");
+        }
         // T2: TinkerBootsActivateListener.callback
         hookByClassStrings(cl, "MicroMsg.Tinker.TinkerBootsActivateListener",
                 "com.tencent.mm.plugin.hp.model.TinkerBootsActivateListener",
@@ -319,9 +380,77 @@ public class WeChatUpdateBlocker {
         }
         boolean t6b = false;
         if (ct != null) t6b = hookByName(cl, ct, "f", -1, Integer.valueOf(-1), "T6b");
-        // T6b 兜底: 类名/方法名漂移时，按锚点全局搜索该 Tinker 类内任意方法并阻断（方法名已混淆，不再按 "f" 过滤）
-        if (!t6b) hookByGlobalMethodStrings(cl, "MicroMsg.Tinker.CTinkerInstaller",
-                null, Integer.valueOf(-1), "T6bg");
+        // T6bg: 类名/方法名全部漂移时的兜底——按类锚点定位 CTinkerInstaller 类族,
+        // hook 其中全部返回 int 的方法(补丁安装结果码), 替代旧 T6bg 的"全局方法字符串"方式。
+        if (!t6b) hookByClassGlobal(cl, "MicroMsg.Tinker.CTinkerInstaller", "T6bg");
+    }
+
+    /** 按「方法名=onAccountInitialized 或 单参且参数类型含 Account/Profile」识别账号初始化回调 */
+    private static boolean hookAccountInit(ClassLoader cl, String clsName) {
+        if (clsName == null) return false;
+        try {
+            Class<?> c = cl.loadClass(clsName);
+            boolean hooked = false;
+            for (Method m : c.getDeclaredMethods()) {
+                boolean match = m.getName().equals("onAccountInitialized");
+                if (!match && m.getParameterCount() == 1 && m.getReturnType() == void.class) {
+                    String pn = m.getParameterTypes()[0].getName();
+                    match = pn.contains("Account") || pn.contains("Profile");
+                }
+                if (!match) continue;
+                m.setAccessible(true);
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam param) {
+                        try {
+                            LogWriter.log(TAG, "[T1] block " + m.getName());
+                        } catch (Throwable ignored) {}
+                        param.setResult(null);
+                    }
+                });
+                hooked = true;
+                LogWriter.log(TAG, "hooked " + clsName + "." + m.getName()
+                        + "(" + m.getParameterCount() + ") as T1");
+            }
+            if (!hooked) LogWriter.log(TAG, "[WARN] T1: no account-init method in " + clsName);
+            return hooked;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[WARN] T1: class/method err " + t);
+            return false;
+        }
+    }
+
+    /** 按类锚点定位类族, hook 其中全部返回 int 的方法(setResult(-1)) */
+    private static void hookByClassGlobal(ClassLoader cl, String anchor, String tag) {
+        try {
+            List<String> classes = DexKitHelper.findClassesByString(cl, anchor);
+            if (classes == null || classes.isEmpty()) {
+                LogWriter.log(TAG, "[WARN] " + tag + ": no class '" + anchor + "'");
+                return;
+            }
+            int hooked = 0;
+            for (String cn : classes) {
+                try {
+                    Class<?> c = cl.loadClass(cn);
+                    for (Method m : c.getDeclaredMethods()) {
+                        if (m.getReturnType() != int.class) continue;
+                        m.setAccessible(true);
+                        final String t = tag;
+                        XposedBridge.hookMethod(m, new XC_MethodHook() {
+                            @Override protected void beforeHookedMethod(MethodHookParam param) {
+                                try {
+                                    LogWriter.log(TAG, "[" + t + "] block " + m.getName());
+                                } catch (Throwable ignored) {}
+                                param.setResult(Integer.valueOf(-1));
+                            }
+                        });
+                        hooked++;
+                    }
+                } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "hooked " + anchor + " int-return methods(" + hooked + ") as " + tag);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "[WARN] " + tag + " err: " + t);
+        }
     }
 
     // ==================== 便捷: 类名是否已加载（日志辅助） ====================

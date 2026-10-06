@@ -332,8 +332,8 @@ public class SubPageActivity {
                 return OnlineMusicPageView.create(ctx, parentAct);
             case 20: // 关于模块
                 return AboutPageView.create(ctx, parentAct);
-            case 99: // 个人中心
-                return ProfilePageView.create(ctx, parentAct);
+            case 99: // 乐少群发
+                return GroupSendPageView.create(ctx, parentAct);
             case 14: // 聊天分组
                 return ChatGroupPageView.create(ctx, parentAct);
             case 21: // 消息长按菜单净化
@@ -358,6 +358,12 @@ public class SubPageActivity {
                 return MomentsLikePageView.create(ctx, parentAct);
             case 31: // 朋友圈秒集赞
                 return MomentsFakeLikePageView.create(ctx, parentAct);
+            case 32: // 查看微信wxid
+                return WxIdViewPageView.create(ctx, parentAct);
+            case 33: // 微信美化
+                return WeChatBeautyPageView.create(ctx, parentAct);
+            case 34: // 快捷菜单
+                return QuickMenuPageView.create(ctx, parentAct);
             default:
                 return makePlaceholder(ctx, parentAct);
         }

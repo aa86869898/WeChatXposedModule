@@ -53,7 +53,7 @@ import org.luckypray.dexkit.result.MethodData;
 public class DexKitHelper {
     private static final String BASELINE_ASSET = "dexkit_baseline.json";
     private static final String BASELINE_FILE = "dexkit_baseline.json";
-    private static final int CURRENT_MODULE_VERSION = 30139;
+    private static final int CURRENT_MODULE_VERSION = 30177;
     private static final String KEY_A21_CLASS = "a21_class";
     private static final String KEY_A21_METHOD = "a21_method";
     private static final String KEY_ACTION_BAR_CLASS = "action_bar_custom_area";
@@ -210,6 +210,50 @@ public class DexKitHelper {
         }
     }
 
+    /** v3.0.153: 扫描完成时若存在未定位到的目标, 记录摘要供弹窗提示(非空即说明部分功能不可用)。 */
+    private static volatile String sMissingSummary = null;
+
+    /** v3.0.169: 最近一次全量扫描是否健康(核心关键目标全部命中)。
+     *  不健康视为"扫描过早/CL 未就绪", 不写缓存版本号, 下次启动补扫。 */
+    private static volatile boolean sLastScanHealthy = false;
+
+    public static String getMissingSummary() {
+        return sMissingSummary;
+    }
+
+/** v3.0.173: 核心扫描结果是否健康。仅检查必须依赖 DexKit 扫描值、无运行时兜底的核心锚点。
+     *  dbOpener(数据库)由 DatabaseProvider 独立 hook openDatabase 兜底；imei/csoLoader/
+     *  labelStorage/avatarHelper/chatOpen/convAdapter 等同样有运行时兜底或无需扫描值即能工作。
+     *  全部剔除，避免健康判定被"本就无法定位的项"卡死导致缓存永不持久化，
+     *  子进程(小程序/红包)永远读旧缓存。 */
+    private static boolean isCoreScanHealthy() {
+        return sP06ClassName != null
+                && sContactStorageClass != null
+                && sVoiceApiClass != null
+                && sE9ClassName != null
+                && sJ1ServiceClass != null;
+    }
+
+    /** 汇总真正失效的核心目标(缺失即功能不可用、无运行时兜底); 全部命中返回 null。
+     *  v3.0.169: 去除头像/标签存储/会话/菜单等有运行时兜底或无需扫描值即能工作的假误报项。 */
+    private static String buildMissingSummary() {
+        List<String> miss = new ArrayList<>();
+        if (sJ1ServiceClass == null) miss.add("J1 服务定位器");
+        if (sP06ClassName == null) miss.add("P06 核心类");
+        if (sDbOpenerClass == null || sDbOpenMethodName == null) miss.add("数据库打开接口");
+        if (sContactStorageClass == null) miss.add("通讯录存储");
+        if (sVoiceApiClass == null) miss.add("语音 API");
+        if (sE9ClassName == null) miss.add("e9 类");
+        if (miss.isEmpty()) return null;
+        StringBuilder sb = new StringBuilder();
+        sb.append("以下 ").append(miss.size()).append(" 项未能在当前微信版本中定位，相关功能可能不可用：\n");
+        for (int i = 0; i < miss.size(); i++) {
+            sb.append("• ").append(miss.get(i));
+            if (i != miss.size() - 1) sb.append('\n');
+        }
+        return sb.toString();
+    }
+
     public static boolean isScanComplete() {
         boolean z;
         synchronized (DexKitHelper.class) {
@@ -257,6 +301,7 @@ public class DexKitHelper {
                             return;
                         }
                         initDexKitCache(app);
+                        // v3.0.176: createBridge 内部已优先用 APK path 数据源, 无需再等 Tinker CL
                         bridge = createBridge(app.getClassLoader());
                         if (bridge == null) {
                             LogWriter.log(TAG, "forceReload: bridge 创建失败");
@@ -341,7 +386,7 @@ public class DexKitHelper {
         }
     }
 
-    private static void waitForFullScanIfScheduled() {
+    public static void waitForFullScanIfScheduled() {
         if (isMainThread()) {
             return;
         }
@@ -366,10 +411,11 @@ public class DexKitHelper {
             @Override // java.lang.Runnable
             public void run() {
                 try {
-                    if (!DexKitHelper.hasCompleteLocalCache() && !DexKitHelper.loadResultsFromMMKV(app)) {
-                        LogWriter.log(DexKitHelper.TAG, "clone process: cache still unavailable after defer");
+                    if (!DexKitHelper.loadResultsFromMMKV(app, false)) {
+                        LogWriter.log(DexKitHelper.TAG, "clone process: cache still unavailable after defer (read-only)");
+                    } else {
+                        LogWriter.log(DexKitHelper.TAG, "clone process: cache available after defer");
                     }
-                    LogWriter.log(DexKitHelper.TAG, "clone process: cache available after defer");
                 } catch (Throwable th) {
                 }
             }
@@ -377,11 +423,43 @@ public class DexKitHelper {
     }
 
     /* JADX INFO: Access modifiers changed from: private */
+    /** v3.0.176(官方 path 数据源): 获取微信 APK 文件路径(base.apk), 用于 DexKitCacheBridge.create(appTag, path)。
+     *  DexKit 是纯 C++ 解析 DEX 文件字节, 与 ClassLoader 就绪时序无关; 直接扫落盘 APK 可彻底摆脱
+     *  "等 Tinker CL 就绪" 的枷锁, 启动早期即可稳定扫描。混淆类名/字符串特征在 APK 文件内即可匹配。 */
+    private static String getWechatApkPath() {
+        try {
+            Context ctx = sAppContextForCache;
+            if (ctx == null) {
+                try {
+                    ctx = ContextManager.getAppContext();
+                } catch (Throwable th) {
+                }
+            }
+            if (ctx != null) {
+                android.content.pm.ApplicationInfo ai = ctx.getApplicationInfo();
+                if (ai != null && ai.sourceDir != null && new java.io.File(ai.sourceDir).isFile()) {
+                    return ai.sourceDir;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
     public static DexKitCacheBridge.RecyclableBridge createBridge(ClassLoader cl) {
         try {
             if (!sCacheInitialized) {
                 Context ctx = sAppContextForCache;
                 if (ctx == null) {
+                    try {
+                        ctx = ContextManager.getAppContext();
+                    } catch (Throwable th) {
+                    }
+                }
+                // v1147: app context 注入晚于部分后台线程(如 ls-msgmenu-resolve)首轮运行,
+                // 短轮询等待其就绪, 避免首轮 createBridge 失败后重试多次。
+                for (int wait = 0; ctx == null && wait < 15; wait++) {
+                    try { Thread.sleep(100L); } catch (InterruptedException ie) { break; }
                     try {
                         ctx = ContextManager.getAppContext();
                     } catch (Throwable th) {
@@ -398,6 +476,15 @@ public class DexKitHelper {
                     return null;
                 }
             }
+            // v3.0.176(官方 path 数据源): 优先直接用微信 APK 路径建桥, 不依赖 ClassLoader 就绪时序。
+            // path 数据源扫的是落盘的 base.apk DEX 文件, 微信混淆类名/字符串特征均在文件内, 无需等待
+            // Tinker 热补丁 CL。仅当 APK 路径不可得时才回退 classLoader 数据源。
+            String apkPath = getWechatApkPath();
+            if (apkPath != null) {
+                LogWriter.log(TAG, "createBridge: using apk path data source=" + apkPath);
+                return DexKitCacheBridge.create("wechat_" + (sVersionCode > 0 ? Integer.valueOf(sVersionCode) : ""), apkPath);
+            }
+            LogWriter.log(TAG, "createBridge: apk path unavailable, fallback classLoader data source");
             return DexKitCacheBridge.create("wechat_" + (sVersionCode > 0 ? Integer.valueOf(sVersionCode) : ""), cl != null ? cl : DexKitHelper.class.getClassLoader());
         } catch (Throwable e) {
             LogWriter.log(TAG, "createBridge err: " + e.getMessage());
@@ -435,7 +522,9 @@ public class DexKitHelper {
     }
 
     private static String findCacheKey(String type, String className, String keyword) {
-        return type + "|" + (className == null ? "" : className) + "|" + keyword;
+        // v3.0.166: 缓存 key 混入模块版本 —— 模块升级后旧缓存(含过时混淆签名如旧 MMMenu 类)
+        // 立即失效重新扫描，避免 MessageMenuHook 等因旧签名比对失败而 anchor not found。
+        return type + "|" + CURRENT_MODULE_VERSION + "|" + (className == null ? "" : className) + "|" + keyword;
     }
 
     private static List<String> readFindCache(String key) {
@@ -514,7 +603,7 @@ public class DexKitHelper {
                     public void apply(DexKitBridge b) {
                         try {
                             MethodMatcher mMatcher = MethodMatcher.create().usingStrings(keyword);
-                            List<MethodData> methods = b.findMethod(FindMethod.create().matcher(mMatcher));
+                            List<MethodData> methods = b.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
                             for (MethodData m : methods) {
                                 String cn = m.getClassName();
                                 if (cn != null && !results.contains(cn)) {
@@ -525,7 +614,7 @@ public class DexKitHelper {
                         }
                         try {
                             ClassMatcher cMatcher = ClassMatcher.create().addFieldForType(keyword);
-                            List<ClassData> classes = b.findClass(FindClass.create().matcher(cMatcher));
+                            List<ClassData> classes = b.findClass(FindClass.create().excludePackages("com.leshao").matcher(cMatcher));
                             for (ClassData c : classes) {
                                 String cn2 = c.getName();
                                 if (cn2 != null && !results.contains(cn2)) {
@@ -585,7 +674,7 @@ public class DexKitHelper {
                             if (str != null) {
                                 mMatcher.declaredClass(str);
                             }
-                            List<MethodData> methods = b.findMethod(FindMethod.create().matcher(mMatcher));
+                            List<MethodData> methods = b.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
                             for (MethodData m : methods) {
                                 String sig = m.getClassName() + "." + m.getName() + "(" + String.join(",", m.getParamTypeNames()) + ")";
                                 if (!results.contains(sig)) {
@@ -636,7 +725,7 @@ public class DexKitHelper {
                                 if (str != null) {
                                     mMatcher.declaredClass(str);
                                 }
-                                List<MethodData> methods = b.findMethod(FindMethod.create().matcher(mMatcher));
+                                List<MethodData> methods = b.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
                                 if (!methods.isEmpty()) {
                                     String[] strArr = paramTypeNames;
                                     if (strArr != null && strArr.length > 0) {
@@ -704,7 +793,7 @@ public class DexKitHelper {
                         public void apply(DexKitBridge b) {
                             try {
                                 ClassMatcher cMatcher = ClassMatcher.create();
-                                List<ClassData> classes = b.findClass(FindClass.create().matcher(cMatcher));
+                                List<ClassData> classes = b.findClass(FindClass.create().excludePackages("com.leshao").matcher(cMatcher));
                                 for (ClassData c : classes) {
                                     String cn = c.getName();
                                     if (cn != null && (cn.equals(simpleName) || cn.endsWith("." + simpleName))) {
@@ -819,12 +908,35 @@ public class DexKitHelper {
 
     /* JADX INFO: Access modifiers changed from: private */
     public static boolean loadResultsFromMMKV(Application app) {
+        return loadResultsFromMMKV(app, true);
+    }
+
+    /**
+     * 加载 DexKit 扫描结果缓存。
+     * allowClear=true（主进程）：版本不匹配或结果不完整时清空缓存并返回 false，随后触发全量扫描。
+     * allowClear=false（clone 进程）：只读，绝不 clearAll —— 否则会清掉主进程刚写入的扫描结果，
+     * 导致每个新启动的进程都读到空缓存、反复触发全量扫描。
+     */
+    public static boolean loadResultsFromMMKV(Application app, boolean allowClear) {
         try {
             MMKV kv = MMKV.mmkvWithID(MMKV_RESULTS_ID, 2);
             int cachedVersion = kv.decodeInt(KEY_VERSION_CODE, 0);
             if (cachedVersion != sVersionCode) {
-                LogWriter.log(TAG, "loadResultsFromMMKV: version mismatch (cachedVer=" + cachedVersion + " currentVer=" + sVersionCode + "), clearing cache");
-                kv.clearAll();
+                LogWriter.log(TAG, "loadResultsFromMMKV: version mismatch (cachedVer=" + cachedVersion + " currentVer=" + sVersionCode
+                        + (allowClear ? "), clearing cache" : "), read-only keep cache"));
+                if (allowClear) {
+                    kv.clearAll();
+                }
+                return false;
+            }
+            int cachedModule = kv.decodeInt(KEY_MODULE_VERSION, 0);
+            if (cachedModule != CURRENT_MODULE_VERSION) {
+                LogWriter.log(TAG, "loadResultsFromMMKV: module version mismatch (cachedModule=" + cachedModule + " currentModule=" + CURRENT_MODULE_VERSION
+                        + (allowClear ? "), clearing cache" : "), read-only keep cache"));
+                if (allowClear) {
+                    kv.clearAll();
+                    kv.sync();
+                }
                 return false;
             }
             sP06ClassName = kv.decodeString(KEY_P06_CLASS, null);
@@ -912,10 +1024,20 @@ public class DexKitHelper {
             boolean hasV955Critical = (sLabelStorageProviderClass == null || sLabelStorageProviderMethod == null || sLabelStorageProviderMethod.isEmpty() || sServiceLocatorClass == null) ? false : true;
             boolean hasCoreResults = (sP06ClassName == null || sDbOpenerClass == null || sDbOpenMethodName == null || sImeiClassName == null || sImeiMethodName == null || sCsoLoaderClass == null || sJ1ServiceClass == null || sContactStorageClass == null || sChatOpenClass == null || sChatOpenMethod == null || sVoiceApiClass == null || sE9ClassName == null || sAvatarHelperClass == null) ? false : true;
             if (!hasCoreResults) {
-                LogWriter.log(TAG, "loadResultsFromMMKV: incomplete cached results, clearing cache");
-                kv.clearAll();
-                kv.sync();
-                return false;
+                LogWriter.log(TAG, "loadResultsFromMMKV: incomplete cached results"
+                        + (allowClear ? ", clearing cache" : ", partial results still usable"));
+                if (allowClear) {
+                    kv.clearAll();
+                    kv.sync();
+                    return false;
+                }
+                // 只读场景（cache-only）：字段已尽力填充，标记完成并执行 postScan 回调，
+                // 缺失项由各自的运行时兜底（如 DatabaseProvider 捕获 DB 实例）补齐。
+                synchronized (DexKitHelper.class) {
+                    sScanComplete = true;
+                }
+                runPostScanCallbacks();
+                return true;
             }
             LogWriter.log(TAG, "loadResultsFromMMKV: loaded cached results for version " + cachedVersion + " v955Critical=" + hasV955Critical);
             synchronized (DexKitHelper.class) {
@@ -940,7 +1062,10 @@ public class DexKitHelper {
             MMKV kv = MMKV.mmkvWithID(MMKV_RESULTS_ID, 2);
             kv.clearAll();
             kv.encode(KEY_VERSION_CODE, sVersionCode);
-            kv.encode(KEY_MODULE_VERSION, sModuleVersion);
+            // v3.0.152: 所有写入 KEY_MODULE_VERSION 的位置统一用 CURRENT_MODULE_VERSION，
+            // 避免 saveResultsToMMKV(sModuleVersion) 与 persistScanVersion(CURRENT_MODULE_VERSION)
+            // 写入不一致，导致同一次扫描的缓存被判定 module mismatch 而反复清除、反复扫描。
+            kv.encode(KEY_MODULE_VERSION, CURRENT_MODULE_VERSION);
             if (sP06ClassName != null) {
                 kv.encode(KEY_P06_CLASS, sP06ClassName);
             }
@@ -1119,7 +1244,7 @@ public class DexKitHelper {
     private static boolean hasCompleteLocalCache() {
         try {
             MMKV kv = MMKV.mmkvWithID(MMKV_RESULTS_ID, 2);
-            if (kv.decodeInt(KEY_VERSION_CODE, 0) != sVersionCode || kv.decodeString(KEY_P06_CLASS, null) == null || kv.decodeString(KEY_DB_OPENER_CLASS, null) == null || kv.decodeString(KEY_CONTACT_STORAGE, null) == null || kv.decodeString(KEY_J1_SERVICE, null) == null || kv.decodeString(KEY_LABEL_PROVIDER_CLASS, null) == null || kv.decodeString(KEY_LABEL_PROVIDER_METHOD, null) == null) {
+            if (kv.decodeInt(KEY_VERSION_CODE, 0) != sVersionCode || kv.decodeInt(KEY_MODULE_VERSION, 0) != CURRENT_MODULE_VERSION || kv.decodeString(KEY_P06_CLASS, null) == null || kv.decodeString(KEY_DB_OPENER_CLASS, null) == null || kv.decodeString(KEY_CONTACT_STORAGE, null) == null || kv.decodeString(KEY_J1_SERVICE, null) == null || kv.decodeString(KEY_LABEL_PROVIDER_CLASS, null) == null || kv.decodeString(KEY_LABEL_PROVIDER_METHOD, null) == null) {
                 return false;
             }
             if (kv.decodeString(KEY_SERVICE_LOCATOR, null) == null) {
@@ -1609,7 +1734,10 @@ public class DexKitHelper {
         });
 
         synchronized (DexKitHelper.class) { sScanComplete = true; }
-        LogWriter.log(TAG, "scan complete: p06=" + sP06ClassName
+        // v3.0.169: 扫描过早(真实 CL 未就绪)时核心目标会整批为 null。
+        // 此时只保留内存结果、不覆盖旧缓存、不弹报错，下次启动补扫。
+        sLastScanHealthy = isCoreScanHealthy();
+        LogWriter.log(TAG, "scan complete(healthy=" + sLastScanHealthy + "): p06=" + sP06ClassName
             + " j1=" + sJ1ServiceClass
             + " dbOpener=" + sDbOpenerClass + "." + sDbOpenMethodName
             + " imei=" + sImeiClassName + "." + sImeiMethodName
@@ -1617,7 +1745,7 @@ public class DexKitHelper {
             + " contactStorage=" + sContactStorageClass
             + " voiceApi=" + sVoiceApiClass
             + " e9=" + sE9ClassName
-            + " a21=" + sA21ClassName
+            + " a21=" + (sA21ClassName == null ? "disabled" : sA21ClassName)
             + " avatar=" + sAvatarHelperClass
             + " label=" + sLabelStorageClass
             + " convAdapter=" + sConvListListAdapterClass
@@ -1626,17 +1754,30 @@ public class DexKitHelper {
             + " convLongPress=" + sConvLongPressClass + "." + sConvLongPressMethod
             + " convMenu=" + sConvMenuClass + "." + sConvMenuMethod);
 
-        saveResultsToMMKV();
+        if (sLastScanHealthy) {
+            saveResultsToMMKV();
 
-        // v1101: 扫描成功且缓存完整时, 自动导出大厅基线文件(已存在则跳过), 供回填 assets 打包
-        try {
-            android.content.Context ctx = sAppContextForCache;
-            if (ctx instanceof Application) {
-                exportBaselineToFile((Application) ctx, false);
+            // v1101: 扫描成功且缓存完整时, 自动导出大厅基线文件(已存在则跳过), 供回填 assets 打包
+            try {
+                android.content.Context ctx = sAppContextForCache;
+                if (ctx instanceof Application) {
+                    exportBaselineToFile((Application) ctx, false);
+                }
+            } catch (Throwable ignored) {}
+
+            sMissingSummary = buildMissingSummary();
+            if (sMissingSummary != null) {
+                LogWriter.log(TAG, "SCAN MISSING: " + sMissingSummary.replace('\n', ' '));
             }
-        } catch (Throwable ignored) {}
-
-        reportProgress(100, "扫描完成", "所有功能已就绪");
+            reportProgress(100, "扫描完成", sMissingSummary == null ? "所有功能已就绪" : "部分功能未适配");
+        } else {
+            // v3.0.169: 不健康扫描不落盘、不弹"未适配"误报(整批假 null 不是真实缺失),
+            // 内存结果仍可临时使用; 缓存保持旧值, 版本号不更新, 下次启动触发补扫。
+            sMissingSummary = null;
+            LogWriter.log(TAG, "scanWechatTargets: UNHEALTHY scan (core targets null, likely premature), "
+                + "keep old cache, suppress popup, will rescan next launch");
+            reportProgress(100, "扫描完成", "核心目标未完全定位，稍后自动补扫");
+        }
         reportComplete();
         } // synchronized(sBridgeLock)
         } // synchronized(sScanLock)
@@ -1648,12 +1789,27 @@ public class DexKitHelper {
     /* JADX INFO: Access modifiers changed from: private */
     public static void findP06Class(DexKitBridge bridge) {
         try {
-            MethodMatcher mMatcher = MethodMatcher.create().usingStrings("Kernel not initialized");
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(mMatcher));
-            LogWriter.log(TAG, "findP06Class: " + methods.size() + " methods use 'Kernel not initialized'");
+            // v3.0.171（核心数据审计）：3180 反编译证实 "Kernel not initialized by MMApplication!"
+            // 全 dex 只在 gp0.j1.j() 中；gp0.j1.b() 转调 j() 并断言 "mCoreAccount not initialized!"。
+            // kw5.y0 无 b 方法；sw5.y0 的 b() 是媒体列表装配，均无内核串。P06 即 gp0.j1（内核/账号单例）。
+            String kernelStr = "Kernel not initialized";
+            MethodMatcher mMatcher = MethodMatcher.create().usingStrings(kernelStr);
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
+            LogWriter.log(TAG, "findP06Class: " + methods.size() + " methods use '" + kernelStr + "'");
             for (MethodData m : methods) {
                 LogWriter.log(TAG, "  candidate: " + m.getClassName() + "." + m.getName() + " params=" + m.getParamTypeNames());
             }
+            // 首选：内核守卫类 gp0.j1（其 j() 抛 "Kernel not initialized"，b() 转调 j()）
+            for (MethodData m : methods) {
+                String clsName = m.getClassName();
+                if ("gp0.j1".equals(clsName)) {
+                    sP06ClassName = clsName;
+                    LogWriter.log(TAG, "findP06Class (kernel singleton): " + clsName + "." + m.getName()
+                            + " -> gp0.j1.b() 转调 j()");
+                    return;
+                }
+            }
+            // 兜底：保留原 b 方法优先 / 首个非 hm0.j1 候选
             for (MethodData m2 : methods) {
                 String clsName = m2.getClassName();
                 if (!"hm0.j1".equals(clsName) && "b".equals(m2.getName())) {
@@ -1682,7 +1838,7 @@ public class DexKitHelper {
         boolean z;
         try {
             MethodMatcher mMatcher = MethodMatcher.create().usingStrings("EnMicroMsg").modifiers(8).paramCount(4).paramTypes("java.lang.String", "java.lang.String", "int", "boolean");
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(mMatcher));
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
             LogWriter.log(TAG, "findDbOpener: " + methods.size() + " static methods match 'EnMicroMsg' + 4 params (String,String,int,boolean)");
             if (!methods.isEmpty()) {
                 MethodData m = methods.get(0);
@@ -1693,7 +1849,7 @@ public class DexKitHelper {
                 return;
             }
             MethodMatcher mMatcher32 = MethodMatcher.create().usingStrings("MicroMsg").modifiers(8).paramCount(4).paramTypes("java.lang.String", "java.lang.String", "int", "boolean");
-            List<MethodData> methods3 = bridge.findMethod(FindMethod.create().matcher(mMatcher32));
+            List<MethodData> methods3 = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher32));
             LogWriter.log(TAG, "findDbOpener: " + methods3.size() + " static methods match 'MicroMsg' + 4 params");
             if (!methods3.isEmpty()) {
                 MethodData m2 = methods3.get(0);
@@ -1704,7 +1860,7 @@ public class DexKitHelper {
                 return;
             }
             MethodMatcher mMatcher2 = MethodMatcher.create().usingStrings("EnMicroMsg").modifiers(8).paramCount(2);
-            List<MethodData> methods2 = bridge.findMethod(FindMethod.create().matcher(mMatcher2));
+            List<MethodData> methods2 = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher2));
             LogWriter.log(TAG, "findDbOpener: " + methods2.size() + " static methods match 'EnMicroMsg' + 2 params");
             for (MethodData m3 : methods2) {
                 List<String> pts = m3.getParamTypeNames();
@@ -1735,7 +1891,7 @@ public class DexKitHelper {
     }
 
     private static boolean isExcludedCandidate(String clsName) {
-        return clsName == null || clsName.isEmpty() || clsName.startsWith("android.") || clsName.startsWith("androidx.") || clsName.startsWith("java.") || clsName.startsWith("javax.") || clsName.startsWith("kotlin.") || clsName.startsWith("kotlinx.") || clsName.startsWith("org.") || clsName.startsWith("com.android.") || clsName.startsWith("dalvik.") || clsName.startsWith("libcore.") || clsName.startsWith("com.google.");
+        return clsName == null || clsName.isEmpty() || clsName.startsWith("android.") || clsName.startsWith("androidx.") || clsName.startsWith("java.") || clsName.startsWith("javax.") || clsName.startsWith("kotlin.") || clsName.startsWith("kotlinx.") || clsName.startsWith("org.") || clsName.startsWith("com.android.") || clsName.startsWith("dalvik.") || clsName.startsWith("libcore.") || clsName.startsWith("com.google.") || clsName.startsWith("com.leshao.");
     }
 
     private static int pickCandidateIndex(List<MethodData> methods) {
@@ -1755,7 +1911,7 @@ public class DexKitHelper {
     public static void findCsoLoader(DexKitBridge bridge) {
         try {
             MethodMatcher mMatcher = MethodMatcher.create().usingStrings("CsoLoader").modifiers(8).paramCount(0);
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(mMatcher));
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
             LogWriter.log(TAG, "findCsoLoader: " + methods.size() + " static 0-param methods use 'CsoLoader'");
             for (MethodData m : methods) {
                 LogWriter.log(TAG, "  candidate: " + m.getClassName() + "." + m.getName() + " params=" + m.getParamTypeNames());
@@ -1769,7 +1925,7 @@ public class DexKitHelper {
                 return;
             }
             MethodMatcher mMatcher2 = MethodMatcher.create().usingStrings("CsoLoader").paramCount(0);
-            List<MethodData> methods2 = bridge.findMethod(FindMethod.create().matcher(mMatcher2));
+            List<MethodData> methods2 = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher2));
             LogWriter.log(TAG, "findCsoLoader: " + methods2.size() + " 0-param methods use 'CsoLoader'");
             for (MethodData m3 : methods2) {
                 String clsName = m3.getClassName();
@@ -1798,7 +1954,7 @@ public class DexKitHelper {
     public static void findImeiClass(DexKitBridge bridge) {
         try {
             MethodMatcher mMatcher = MethodMatcher.create().usingStrings("android.permission.READ_PHONE_STATE").returnType("java.lang.String");
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(mMatcher));
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
             LogWriter.log(TAG, "findImeiClass: " + methods.size() + " methods use 'READ_PHONE_STATE' return String");
             int idx = pickCandidateIndex(methods);
             if (idx >= 0) {
@@ -1809,7 +1965,7 @@ public class DexKitHelper {
                 return;
             }
             MethodMatcher mMatcher2 = MethodMatcher.create().usingStrings("getDeviceId").returnType("java.lang.String");
-            List<MethodData> methods2 = bridge.findMethod(FindMethod.create().matcher(mMatcher2));
+            List<MethodData> methods2 = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher2));
             LogWriter.log(TAG, "findImeiClass: " + methods2.size() + " methods use 'getDeviceId' return String");
             int idx2 = pickCandidateIndex(methods2);
             if (idx2 >= 0) {
@@ -1820,7 +1976,7 @@ public class DexKitHelper {
                 return;
             }
             MethodMatcher mMatcher3 = MethodMatcher.create().paramTypes("boolean").returnType("java.lang.String");
-            List<MethodData> methods3 = bridge.findMethod(FindMethod.create().searchPackages("wo", "wn", "wp", "vo", "vn", "vp", "xo", "xn", "xp").matcher(mMatcher3));
+            List<MethodData> methods3 = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").searchPackages("wo", "wn", "wp", "vo", "vn", "vp", "xo", "xn", "xp").matcher(mMatcher3));
             for (MethodData m3 : methods3) {
                 String clsName = m3.getClassName();
                 if (clsName != null && clsName.endsWith("w0")) {
@@ -1993,7 +2149,7 @@ public class DexKitHelper {
             final java.util.LinkedHashSet<String> cands = new java.util.LinkedHashSet<>();
             // A) 类级字符串锚点(文档首选)
             try {
-                for (ClassData c : bridge.findClass(FindClass.create().matcher(
+                for (ClassData c : bridge.findClass(FindClass.create().excludePackages("com.leshao").matcher(
                         ClassMatcher.create().usingStrings("MicroMsg.ActionBarCustomArea")))) {
                     if (c.getName() != null) cands.add(c.getName());
                 }
@@ -2002,7 +2158,7 @@ public class DexKitHelper {
             }
             // A2) 方法级字符串锚点(更宽)
             try {
-                for (MethodData m : bridge.findMethod(FindMethod.create().matcher(
+                for (MethodData m : bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(
                         MethodMatcher.create().usingStrings("MicroMsg.ActionBarCustomArea")))) {
                     if (m.getClassName() != null) cands.add(m.getClassName());
                 }
@@ -2011,7 +2167,7 @@ public class DexKitHelper {
             }
             // B) 结构锚点: com.tencent.mm.ui 下所有含 <init>(View) 的类(标题栏 helper 在此包, 限制范围避免遍历过多类)
             try {
-                for (MethodData m : bridge.findMethod(FindMethod.create().matcher(
+                for (MethodData m : bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(
                         MethodMatcher.create().name("<init>").paramCount(1)
                                 .paramTypes("android.view.View")))) {
                     String cn = m.getClassName();
@@ -2095,13 +2251,16 @@ public class DexKitHelper {
 
     /* JADX INFO: Access modifiers changed from: private */
     public static void findVoiceApi(DexKitBridge bridge) {
+        // v3.0.171（核心数据审计）：3180 反编译证实字符串 "voicemsg" 不在 e9 中，
+        // 真正持有者是 VoiceContent 相关类：dl.f0 / ks1.h / sp3.i / t44.x5 / v61.f1 / x95.a / x95.b。
+        // 因此用 "voicemsg" 定位语音 API 类比 amr_/voice2 更精确，优先使用。
         List<MethodData> methods = new ArrayList<>();
         try {
-            String[] keywords = {"amr_", "voice2", "voicemsg"};
+            String[] keywords = {"voicemsg", "voice2", "amr_"};
             for (String kw : keywords) {
                 try {
                     MethodMatcher mMatcher = MethodMatcher.create().usingStrings(kw).paramCount(2).paramTypes("java.lang.String", "java.lang.String").returnType("java.lang.String");
-                    methods = bridge.findMethod(FindMethod.create().matcher(mMatcher));
+                    methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
                 } catch (Throwable th) {
                 }
                 if (methods.isEmpty()) {
@@ -2113,7 +2272,7 @@ public class DexKitHelper {
                 }
             }
             MethodMatcher m2 = MethodMatcher.create().usingStrings("voice2");
-            List<MethodData> m2s = bridge.findMethod(FindMethod.create().matcher(m2));
+            List<MethodData> m2s = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(m2));
             for (MethodData m : m2s) {
                 String cn = m.getClassName();
                 if (cn != null && !cn.equals(sVoiceApiClass)) {
@@ -2130,36 +2289,25 @@ public class DexKitHelper {
     /* JADX INFO: Access modifiers changed from: private */
     public static void findE9AndA21(DexKitBridge bridge) {
         try {
+            // v3.0.171（核心数据审计）：e9 = com.tencent.mm.storage.e9 = MicroMsg.MsgInfo（子包全路径，正确）。
+            // 其 "d1" 实为 D1(J)V（msgId 合理性断言，1500000001>j && -10<j），并非 TTS 内容转换；
+            // e9 内无字符串 "voicemsg"，语音判断在 b1() 用 MicroMsg.VoiceContent 字符串。
             sE9ClassName = "com.tencent.mm.storage.e9";
             LogWriter.log(TAG, "findE9 (fixed): " + sE9ClassName);
         } catch (Throwable e) {
             LogWriter.log(TAG, "findE9 error: " + e.getMessage());
         }
-        try {
-            MethodMatcher m2 = MethodMatcher.create().usingStrings("voicemsg").paramCount(1);
-            List<MethodData> a21Methods = bridge.findMethod(FindMethod.create().matcher(m2));
-            for (MethodData m : a21Methods) {
-                String cn = m.getClassName();
-                if (cn != null && cn.contains("a21")) {
-                    sA21ClassName = cn;
-                    try {
-                        sA21MethodName = m.getName();
-                    } catch (Throwable th) {
-                    }
-                    LogWriter.log(TAG, "findA21: " + cn + "#" + sA21MethodName);
-                    return;
-                }
-            }
-        } catch (Throwable e2) {
-            LogWriter.log(TAG, "findA21 error: " + e2.getMessage());
-        }
+        // v3.0.171：a21 为影视/时间线剪辑扁平包（a21.q = androidx.recyclerview.widget.p2 holder，
+        // 38 字段均为 MJID/时间线视图，与 MsgInfo/TTS 无关）。不再用 "voicemsg" 查找 a21，
+        // 保留 sA21ClassName=null，hookA21Oi 已停用。
+        LogWriter.log(TAG, "findA21: DISABLED (a21 = mj_publisher movie/timeline package, unrelated to TTS)");
     }
 
     /* JADX INFO: Access modifiers changed from: private */
     public static void findAvatarHelper(DexKitBridge bridge) {
         try {
             MethodMatcher m1 = MethodMatcher.create().returnType("android.graphics.Bitmap").paramCount(1).paramTypes("java.lang.String");
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(m1));
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(m1));
             for (MethodData m : methods) {
                 String cn = m.getClassName();
                 if (cn != null && (cn.contains("avatar") || cn.contains("Avatar") || cn.contains("mp0"))) {
@@ -2177,7 +2325,7 @@ public class DexKitHelper {
     public static void findLabelStorage(DexKitBridge bridge) {
         try {
             MethodMatcher m1 = MethodMatcher.create().name("hj").modifiers(8);
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(m1));
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(m1));
             for (MethodData m : methods) {
                 String cn = m.getClassName();
                 if (cn != null && cn.contains("x93")) {
@@ -2195,7 +2343,7 @@ public class DexKitHelper {
     public static void findConvListAdapter(DexKitBridge bridge) {
         try {
             ClassMatcher cm = ClassMatcher.create().addInterface("android.widget.ListAdapter");
-            List<ClassData> classes = bridge.findClass(FindClass.create().matcher(cm));
+            List<ClassData> classes = bridge.findClass(FindClass.create().excludePackages("com.leshao").matcher(cm));
             for (ClassData c : classes) {
                 String cn = c.getName();
                 if (cn != null && cn.contains("conversation") && cn.contains("Adapter")) {
@@ -2221,7 +2369,7 @@ public class DexKitHelper {
             while (i3 < i) {
                 String mn = strArr[i3];
                 MethodMatcher mMatcher = MethodMatcher.create().name(mn).paramCount(i2);
-                methods = bridge.findMethod(FindMethod.create().matcher(mMatcher));
+                methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
                 LogWriter.log(TAG, "findJ1Service: " + methods.size() + " " + mn + "(*) methods found");
                 Iterator<MethodData> it2 = methods.iterator();
                 while (it2.hasNext()) {
@@ -2248,19 +2396,26 @@ public class DexKitHelper {
                 i = 2;
                 i2 = 1;
             }
+            // v3.0.154: 修复「Kernel」兜底死代码 —— 旧实现无条件选第一个使用
+            // "Kernel not initialized" 的类(实测误选 w5.y0，该类并无 v/s(Class))，
+            // 必须要求候选类自身含 v(Class) 或 s(Class) 方法(真正的服务定位器特征)才采用。
             MethodMatcher m2 = MethodMatcher.create().usingStrings("Kernel not initialized");
-            List<MethodData> m2s = bridge.findMethod(FindMethod.create().matcher(m2));
-            Iterator<MethodData> it3 = m2s.iterator();
-            while (it3.hasNext()) {
-                String clsName2 = it3.next().getClassName();
-                if (clsName2 != null) {
-                    if (!clsName2.contains(".j1") && !clsName2.contains("$j1") && !clsName2.contains("j1")) {
-                    }
+            List<MethodData> m2s = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(m2));
+            for (MethodData md : m2s) {
+                String clsName2 = md.getClassName();
+                if (clsName2 == null || isExcludedCandidate(clsName2)) continue;
+                String mn2 = md.getName();
+                List<String> pts2 = md.getParamTypeNames();
+                boolean isLocator = ("v".equals(mn2) || "s".equals(mn2))
+                        && pts2.size() == 1 && "java.lang.Class".equals(pts2.get(0));
+                boolean nameLooksJ1 = clsName2.contains(".j1") || clsName2.contains("$j1") || clsName2.contains("j1");
+                if (isLocator || nameLooksJ1) {
                     sJ1ServiceClass = clsName2;
-                    LogWriter.log(TAG, "findJ1Service (Kernel): " + clsName2);
+                    LogWriter.log(TAG, "findJ1Service (Kernel " + mn2 + "): " + clsName2 + " params=" + pts2);
                     return;
                 }
             }
+            LogWriter.log(TAG, "findJ1Service (Kernel): no v/s(Class) candidate");
             for (MethodData m3 : methods) {
                 String clsName3 = m3.getClassName();
                 if (!isExcludedCandidate(clsName3)) {
@@ -2281,7 +2436,7 @@ public class DexKitHelper {
     public static void findContactStorageAlt(DexKitBridge bridge) {
         try {
             MethodMatcher mMatcher = MethodMatcher.create().name("ij").returnType("long");
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(mMatcher));
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
             LogWriter.log(TAG, "findContactStorageAlt: " + methods.size() + " ij() returning long");
             int idx = pickCandidateIndex(methods);
             if (idx >= 0) {
@@ -2291,7 +2446,7 @@ public class DexKitHelper {
                 return;
             }
             MethodMatcher objMatcher = MethodMatcher.create().name("ij");
-            List<MethodData> objMethods = bridge.findMethod(FindMethod.create().matcher(objMatcher));
+            List<MethodData> objMethods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(objMatcher));
             int idx2 = pickCandidateIndex(objMethods);
             if (idx2 >= 0) {
                 MethodData m2 = objMethods.get(idx2);
@@ -2309,7 +2464,7 @@ public class DexKitHelper {
     public static void findChatOpenEntry(DexKitBridge bridge) {
         try {
             MethodMatcher mMatcher = MethodMatcher.create().usingStrings("Chat_User");
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().searchPackages("com.tencent.mm.ui.chatting").matcher(mMatcher));
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").searchPackages("com.tencent.mm.ui.chatting").matcher(mMatcher));
             LogWriter.log(TAG, "findChatOpenEntry: " + methods.size() + " methods in chatting pkg use 'Chat_User'");
             int limit = Math.min(methods.size(), 30);
             for (int i = 0; i < limit; i++) {
@@ -2355,7 +2510,7 @@ public class DexKitHelper {
                 LogWriter.log(TAG, "findChatOpenEntry: selected " + sChatOpenClass + "." + sChatOpenMethod);
             }
             ClassMatcher cm = ClassMatcher.create().addFieldForType("com.tencent.mm.ui.widget.MMEditText");
-            List<ClassData> holders = bridge.findClass(FindClass.create().matcher(cm));
+            List<ClassData> holders = bridge.findClass(FindClass.create().excludePackages("com.leshao").matcher(cm));
             LogWriter.log(TAG, "findChatOpenEntry: " + holders.size() + " classes hold MMEditText field (all pkg)");
             int hLimit = Math.min(holders.size(), 10);
             for (int i3 = 0; i3 < hLimit; i3++) {
@@ -2371,7 +2526,7 @@ public class DexKitHelper {
         int MAX_LP_IMPLS;
         try {
             MethodMatcher callerMatcher = MethodMatcher.create().addInvoke(MethodMatcher.create().declaredClass("android.widget.AbsListView").name("setOnItemLongClickListener"));
-            List<MethodData> callers = bridge.findMethod(FindMethod.create().matcher(callerMatcher));
+            List<MethodData> callers = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(callerMatcher));
             LogWriter.log(TAG, "findConvLongPressEntry: " + callers.size() + " methods invoke setOnItemLongClickListener (all pkg)");
             int cLimit = Math.min(callers.size(), 20);
             for (int i = 0; i < cLimit; i++) {
@@ -2390,7 +2545,7 @@ public class DexKitHelper {
                 LogWriter.log(TAG, "findConvLongPressEntry: selected " + sConvLongPressClass + "." + sConvLongPressMethod);
             }
             ClassMatcher icm = ClassMatcher.create().addInterface("android.widget.AdapterView$OnItemLongClickListener");
-            List<ClassData> impls = bridge.findClass(FindClass.create().matcher(icm));
+            List<ClassData> impls = bridge.findClass(FindClass.create().excludePackages("com.leshao").matcher(icm));
             LogWriter.log(TAG, "findConvLongPressEntry: " + impls.size() + " classes implement OnItemLongClickListener (all pkg)");
             int MAX_LP_IMPLS2 = ItemTouchHelper.Callback.DEFAULT_DRAG_ANIMATION_DURATION;
             int logLimit = Math.min(impls.size(), 25);
@@ -2434,7 +2589,7 @@ public class DexKitHelper {
     public static void findConvScrollEntry(DexKitBridge bridge) {
         try {
             MethodMatcher scrollMatcher = MethodMatcher.create().addInvoke(MethodMatcher.create().declaredClass("android.widget.AbsListView").name("setSelection")).addInvoke(MethodMatcher.create().declaredClass("android.widget.ListView").name("smoothScrollToPosition")).addInvoke(MethodMatcher.create().declaredClass("android.widget.ListView").name("scrollTo")).addInvoke(MethodMatcher.create().declaredClass("android.widget.AbsListView").name("smoothScrollToPositionFromTop")).addInvoke(MethodMatcher.create().declaredClass("android.widget.AbsListView").name("setSelectionFromTop"));
-            List<MethodData> callers = bridge.findMethod(FindMethod.create().matcher(scrollMatcher));
+            List<MethodData> callers = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(scrollMatcher));
             LogWriter.log(TAG, "findConvScrollEntry: " + callers.size() + " methods invoke setSelection/smoothScrollToPosition/scrollTo (all pkg)");
             int cLimit = Math.min(callers.size(), 25);
             for (int i = 0; i < cLimit; i++) {
@@ -2460,7 +2615,7 @@ public class DexKitHelper {
     public static void findConvMenuEntry(DexKitBridge bridge) {
         try {
             MethodMatcher mMatcher = MethodMatcher.create().usingStrings("MicroMsg.ConversationLongClickListener");
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(mMatcher));
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
             LogWriter.log(TAG, "findConvMenuEntry: " + methods.size() + " methods use 'MicroMsg.ConversationLongClickListener'");
             int limit = Math.min(methods.size(), 20);
             for (int i = 0; i < limit; i++) {
@@ -2487,7 +2642,7 @@ public class DexKitHelper {
                 LogWriter.log(TAG, "findConvMenuEntry: selected(any) " + sConvMenuClass + "." + sConvMenuMethod);
             }
             ClassMatcher cm = ClassMatcher.create().addInterface("android.widget.AdapterView$OnItemLongClickListener").addInterface("android.view.View$OnCreateContextMenuListener");
-            List<ClassData> impls = bridge.findClass(FindClass.create().matcher(cm));
+            List<ClassData> impls = bridge.findClass(FindClass.create().excludePackages("com.leshao").matcher(cm));
             LogWriter.log(TAG, "findConvMenuEntry: " + impls.size() + " classes impl OnItemLongClickListener+OnCreateContextMenuListener");
             for (ClassData c : impls) {
                 String cn2 = c.getName();
@@ -2506,7 +2661,7 @@ public class DexKitHelper {
                 return;
             }
             MethodMatcher popupMatcher = MethodMatcher.create().usingStrings("MicroMsg.MMPopupMenu");
-            List<MethodData> popupMethods = bridge.findMethod(FindMethod.create().matcher(popupMatcher));
+            List<MethodData> popupMethods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(popupMatcher));
             LogWriter.log(TAG, "findConvMenuEntry: " + popupMethods.size() + " methods use 'MicroMsg.MMPopupMenu'");
             for (MethodData m4 : popupMethods) {
                 LogWriter.log(TAG, "  popupImpl: " + m4.getClassName() + "." + m4.getName());
@@ -2531,6 +2686,45 @@ public class DexKitHelper {
 
     public static String getLabelStorageProviderMethod() {
         return sLabelStorageProviderMethod;
+    }
+
+    /**
+     * v3.0.166：实时检索标签存储提供者（静态 + 无参 + 返回 com.tencent.mm.storage.g4）。
+     * 缓存加载（cache-only）模式可能缺 label_provider 结果，ChatGroupHook 重试失败
+     * （label=false，旧类名候选 x93.* 在 3180 不存在）时调用本方法现场扫描兜底。
+     * 命中后同步回写缓存字段，供后续逻辑复用。
+     */
+    public static boolean findLabelStorageProviderLive(ClassLoader cl) {
+        if (sLabelStorageProviderClass != null && sLabelStorageProviderMethod != null) return true;
+        if (isMainThread()) return false;
+        final String[] found = new String[2];
+        withWechatBridge(cl, new BridgeAction<Object>() {
+            @Override
+            public Object run(DexKitBridge b) {
+                try {
+                    List<MethodData> methods = b.findMethod(FindMethod.create().excludePackages("com.leshao")
+                            .matcher(MethodMatcher.create().modifiers(8)
+                                    .returnType("com.tencent.mm.storage.g4")));
+                    for (MethodData m : methods) {
+                        if (m.getParamTypeNames().isEmpty()) {
+                            found[0] = m.getClassName();
+                            found[1] = m.getName();
+                            break;
+                        }
+                    }
+                } catch (Throwable ignored) {}
+                return null;
+            }
+        });
+        if (found[0] != null) {
+            sLabelStorageProviderClass = found[0];
+            sLabelStorageProviderMethod = found[1];
+            LogWriter.log(TAG, "findLabelStorageProviderLive: "
+                    + found[0] + "." + found[1] + "()");
+            return true;
+        }
+        LogWriter.log(TAG, "findLabelStorageProviderLive: not found");
+        return false;
     }
 
     public static String getPinyinUtilClass() {
@@ -2575,7 +2769,7 @@ public class DexKitHelper {
         for (int i = 0; i < 2; i++) {
             String tag = strArr[i];
             try {
-                List<ClassData> classes = bridge.findClass(FindClass.create().matcher(ClassMatcher.create().usingStrings(tag)));
+                List<ClassData> classes = bridge.findClass(FindClass.create().excludePackages("com.leshao").matcher(ClassMatcher.create().usingStrings(tag)));
                 Iterator<ClassData> it = classes.iterator();
                 while (it.hasNext()) {
                     String cn2 = it.next().getName();
@@ -2593,7 +2787,7 @@ public class DexKitHelper {
             for (int i2 = 0; i2 < 3; i2++) {
                 String cn3 = strArr2[i2];
                 try {
-                    List<ClassData> classes2 = bridge.findClass(FindClass.create().matcher(ClassMatcher.create().className(cn3)));
+                    List<ClassData> classes2 = bridge.findClass(FindClass.create().excludePackages("com.leshao").matcher(ClassMatcher.create().className(cn3)));
                     for (ClassData c : classes2) {
                         if (c.getName() != null) {
                             out.add(c.getName());
@@ -2607,7 +2801,7 @@ public class DexKitHelper {
         }
         if (out.isEmpty()) {
             try {
-                List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(MethodMatcher.create().name("callback")));
+                List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(MethodMatcher.create().name("callback")));
                 for (MethodData m : methods) {
                     List<String> pts = m.getParamTypeNames();
                     if (pts != null) {
@@ -2635,7 +2829,7 @@ public class DexKitHelper {
         }
         if (out.isEmpty()) {
             try {
-                Iterator<ClassData> it3 = bridge.findClass(FindClass.create().matcher(ClassMatcher.create().className("Revoke", StringMatchType.Contains, false))).iterator();
+                Iterator<ClassData> it3 = bridge.findClass(FindClass.create().excludePackages("com.leshao").matcher(ClassMatcher.create().className("Revoke", StringMatchType.Contains, false))).iterator();
                 while (it3.hasNext()) {
                     String cn4 = it3.next().getName();
                     if (cn4 != null) {
@@ -2656,7 +2850,7 @@ public class DexKitHelper {
 
     private static void findLabelStorageProvider(DexKitBridge bridge) {
         try {
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(MethodMatcher.create().modifiers(8).returnType("com.tencent.mm.storage.g4")));
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(MethodMatcher.create().modifiers(8).returnType("com.tencent.mm.storage.g4")));
             for (MethodData m : methods) {
                 if (m.getParamTypeNames().isEmpty()) {
                     sLabelStorageProviderClass = m.getClassName();
@@ -2672,11 +2866,11 @@ public class DexKitHelper {
 
     private static void findPinyinUtil(DexKitBridge bridge) {
         try {
-            List<MethodData> aMethods = bridge.findMethod(FindMethod.create().matcher(MethodMatcher.create().modifiers(8).name("a").paramCount(1).paramTypes("java.lang.String").returnType("java.lang.String")));
+            List<MethodData> aMethods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(MethodMatcher.create().modifiers(8).name("a").paramCount(1).paramTypes("java.lang.String").returnType("java.lang.String")));
             for (MethodData am : aMethods) {
                 String cn = am.getClassName();
                 if (cn != null) {
-                    List<MethodData> bMethods = bridge.findMethod(FindMethod.create().matcher(MethodMatcher.create().modifiers(8).name("b").paramCount(1).paramTypes("java.lang.String").returnType("java.lang.String").declaredClass(cn)));
+                    List<MethodData> bMethods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(MethodMatcher.create().modifiers(8).name("b").paramCount(1).paramTypes("java.lang.String").returnType("java.lang.String").declaredClass(cn)));
                     if (!bMethods.isEmpty()) {
                         sPinyinUtilClass = cn;
                         LogWriter.log(TAG, "findPinyinUtil: " + cn);
@@ -2691,11 +2885,11 @@ public class DexKitHelper {
 
     private static void findServiceLocator(DexKitBridge bridge) {
         try {
-            List<ClassData> classes = bridge.findClass(FindClass.create().matcher(ClassMatcher.create().usingStrings("MicroMsg.ServiceManager")));
+            List<ClassData> classes = bridge.findClass(FindClass.create().excludePackages("com.leshao").matcher(ClassMatcher.create().usingStrings("MicroMsg.ServiceManager")));
             for (ClassData c : classes) {
                 String cn = c.getName();
                 if (cn != null) {
-                    List<MethodData> cms = bridge.findMethod(FindMethod.create().matcher(MethodMatcher.create().modifiers(8).name("c").paramCount(1).paramTypes("java.lang.Class").declaredClass(cn)));
+                    List<MethodData> cms = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(MethodMatcher.create().modifiers(8).name("c").paramCount(1).paramTypes("java.lang.Class").declaredClass(cn)));
                     if (!cms.isEmpty()) {
                         sServiceLocatorClass = cn;
                         LogWriter.log(TAG, "findServiceLocator: " + cn + ".c(Class)");
@@ -2710,7 +2904,7 @@ public class DexKitHelper {
 
     private static void findMediaPathService(DexKitBridge bridge) {
         try {
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(MethodMatcher.create().name("Nj").paramCount(4).returnType("java.lang.String")));
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(MethodMatcher.create().name("Nj").paramCount(4).returnType("java.lang.String")));
             Iterator<MethodData> it = methods.iterator();
             if (it.hasNext()) {
                 MethodData m = it.next();
@@ -2725,7 +2919,7 @@ public class DexKitHelper {
 
     private static void findClipboardJsApi(DexKitBridge bridge) {
         try {
-            List<ClassData> classes = bridge.findClass(FindClass.create().matcher(ClassMatcher.create().usingStrings("setClipboardData")));
+            List<ClassData> classes = bridge.findClass(FindClass.create().excludePackages("com.leshao").matcher(ClassMatcher.create().usingStrings("setClipboardData")));
             for (ClassData c : classes) {
                 String cn = c.getName();
                 if (cn != null && cn.contains("jsapi")) {
@@ -2741,12 +2935,12 @@ public class DexKitHelper {
 
     private static void findChatMoreSelect(DexKitBridge bridge) {
         try {
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().searchPackages("com.tencent.mm.ui.chatting").matcher(MethodMatcher.create().name("onCreateOptionsMenu").paramCount(1)));
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").searchPackages("com.tencent.mm.ui.chatting").matcher(MethodMatcher.create().name("onCreateOptionsMenu").paramCount(1)));
             LinkedHashSet<String> out = new LinkedHashSet<>();
             for (MethodData m : methods) {
                 String cn = m.getClassName();
                 if (cn != null) {
-                    List<MethodData> oim = bridge.findMethod(FindMethod.create().matcher(MethodMatcher.create().name("onOptionsItemSelected").paramCount(1).declaredClass(cn)));
+                    List<MethodData> oim = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(MethodMatcher.create().name("onOptionsItemSelected").paramCount(1).declaredClass(cn)));
                     if (!oim.isEmpty() && (cn.contains("Select") || cn.contains("More"))) {
                         out.add(cn);
                     }
@@ -2763,7 +2957,7 @@ public class DexKitHelper {
     public static void findMenuG4Impls(DexKitBridge bridge) {
         try {
             ClassMatcher cm = ClassMatcher.create().addInterface("android.view.Menu");
-            List<ClassData> impls = bridge.findClass(FindClass.create().matcher(cm));
+            List<ClassData> impls = bridge.findClass(FindClass.create().excludePackages("com.leshao").matcher(cm));
             LogWriter.log(TAG, "findMenuG4Impls: " + impls.size() + " classes implement android.view.Menu");
             List<String> newList = new ArrayList<>();
             for (ClassData c : impls) {
@@ -2775,7 +2969,7 @@ public class DexKitHelper {
             }
             try {
                 ClassMatcher cm2 = ClassMatcher.create().className(".*[Mm]enu.*");
-                List<ClassData> impls2 = bridge.findClass(FindClass.create().matcher(cm2));
+                List<ClassData> impls2 = bridge.findClass(FindClass.create().excludePackages("com.leshao").matcher(cm2));
                 for (ClassData c2 : impls2) {
                     String cn2 = c2.getName();
                     if (cn2 != null && !newList.contains(cn2) && !cn2.startsWith("android.") && !cn2.startsWith("java.")) {
@@ -2833,7 +3027,7 @@ public class DexKitHelper {
         }
         LinkedHashSet<String> cands = new LinkedHashSet<>();
         try {
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(MethodMatcher.create().usingStrings(keyword)));
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(MethodMatcher.create().usingStrings(keyword)));
             for (MethodData m : methods) {
                 String cn = m.getClassName();
                 if (cn != null && !isExcludedCandidate(cn)) {
@@ -2843,7 +3037,7 @@ public class DexKitHelper {
         } catch (Throwable th) {
         }
         try {
-            List<ClassData> classes = bridge.findClass(FindClass.create().matcher(ClassMatcher.create().addFieldForType(keyword)));
+            List<ClassData> classes = bridge.findClass(FindClass.create().excludePackages("com.leshao").matcher(ClassMatcher.create().addFieldForType(keyword)));
             for (ClassData c : classes) {
                 String cn2 = c.getName();
                 if (cn2 != null && !isExcludedCandidate(cn2)) {
@@ -2863,7 +3057,7 @@ public class DexKitHelper {
         String pt0;
         LinkedHashSet<String> cands = new LinkedHashSet<>();
         try {
-            List<MethodData> methods = bridge.findMethod(FindMethod.create().matcher(MethodMatcher.create().usingStrings("IEvent")));
+            List<MethodData> methods = bridge.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(MethodMatcher.create().usingStrings("IEvent")));
             for (MethodData m : methods) {
                 String cn = m.getClassName();
                 if (cn != null && !isExcludedCandidate(cn)) {
@@ -2893,6 +3087,11 @@ public class DexKitHelper {
         return null;
     }
 
+    /**
+     * v3.0.176: 扫描数据源已切换到官方 path 方式(createBridge 直接扫 APK 文件字节),
+     * 不再依赖 ClassLoader 就绪时序。原 v3.0.169 resolveScanClassLoader(等待 Tinker CL
+     * 的 10s 轮询)已删除——DexKit 解析 DEX 文件而非反射类加载, base.apk 内即可匹配全部锚点。
+     */
     /* JADX INFO: Access modifiers changed from: private */
     public static void startFullScan(final Application app, final boolean showDialog) {
         try {
@@ -2914,7 +3113,9 @@ public class DexKitHelper {
                                 LogWriter.log(DexKitHelper.TAG, "DexKit library not loaded, skipping");
                                 if (showDialog) {
                                     DexKitHelper.sShouldShowScanDialog = false;
-                                    DexKitScanDialog.dismiss();
+                                    // 仅临时关闭本次弹窗，不清除 sDismissed 永久标记，
+                                    // 下次版本变化触发的扫描仍可正常弹窗。
+                                    DexKitScanDialog.hideDialog();
                                 }
                                 DexKitHelper.markScanCompleteAndDrain();
                                 if (0 != 0) {
@@ -2929,18 +3130,42 @@ public class DexKitHelper {
                             }
                             DexKitHelper.initDexKitCache(app);
                             String appTag = "wechat_" + (DexKitHelper.sVersionCode > 0 ? Integer.valueOf(DexKitHelper.sVersionCode) : "");
-                            LogWriter.log(DexKitHelper.TAG, "startFullScan: appTag=" + appTag + " showDialog=" + showDialog);
-                            DexKitCacheBridge.RecyclableBridge cacheBridge2 = DexKitCacheBridge.create(appTag, app.getClassLoader());
-                            LogWriter.log(DexKitHelper.TAG, "DexKitCacheBridge.create done");
-                            if (cacheBridge2 != null) {
+                            // v3.0.176: 补扫循环。官方推荐 DexKitCacheBridge.create(appTag, path) 直接扫
+                            // 落盘 APK 文件, 不依赖 ClassLoader 就绪时序, 启动早期即可稳定扫描。
+                            // 仅在极端情况(APK 路径不可得)才回退 classLoader。仍保留 unhealthy 延迟重扫兜底。
+                            int deferredScanCount = 0;
+                            while (true) {
+                                // v3.0.176: 用官方 path 数据源建桥(扫描 DEX 文件字节), 不再等待 Tinker CL。
+                                // 若将来需覆盖补丁专属类, 可再叠 classLoader 兜底; 当前核心锚点均在 base.apk 内。
+                                DexKitCacheBridge.RecyclableBridge cacheBridge2 = DexKitHelper.createBridge(app.getClassLoader());
+                                LogWriter.log(DexKitHelper.TAG, "startFullScan: appTag=" + appTag + " showDialog=" + showDialog + " bridge=" + (cacheBridge2 != null ? "ok" : "null") + " deferCount=" + deferredScanCount);
+                                if (cacheBridge2 == null) {
+                                    LogWriter.log(DexKitHelper.TAG, "startFullScan: bridge null, drain callbacks");
+                                    DexKitHelper.markScanCompleteAndDrain();
+                                    break;
+                                }
                                 DexKitHelper.scanWechatTargets(cacheBridge2);
-                                DexKitHelper.persistScanVersion();
-                            } else {
-                                LogWriter.log(DexKitHelper.TAG, "startFullScan: bridge null, drain callbacks");
-                                DexKitHelper.markScanCompleteAndDrain();
-                            }
-                            if (cacheBridge2 != null) {
                                 cacheBridge2.close();
+                                // v3.0.169: 关键目标为空(视为扫描过早/不完整)时不写版本号,
+                                // 避免污染缓存导致下次 SCAN SKIP 复用坏结果
+                                if (DexKitHelper.sLastScanHealthy) {
+                                    DexKitHelper.persistScanVersion();
+                                    break;
+                                }
+                                LogWriter.log(DexKitHelper.TAG, "startFullScan: scan unhealthy, keep old cache (defer rescan " + (deferredScanCount + 1) + "/3)");
+                                if (deferredScanCount >= 3) {
+                                    LogWriter.log(DexKitHelper.TAG, "startFullScan: deferred rescans exhausted, give up this launch (next launch will rescan)");
+                                    break;
+                                }
+                                long delayMillis = deferredScanCount == 0 ? 5000L : (deferredScanCount == 1 ? 10000L : 20000L);
+                                deferredScanCount++;
+                                LogWriter.log(DexKitHelper.TAG, "startFullScan: defer rescan #" + deferredScanCount + " in " + delayMillis + "ms");
+                                try {
+                                    Thread.sleep(delayMillis);
+                                } catch (InterruptedException ie) {
+                                    LogWriter.log(DexKitHelper.TAG, "startFullScan: deferred rescan interrupted");
+                                    break;
+                                }
                             }
                         } catch (Throwable e) {
                             try {
@@ -3000,22 +3225,20 @@ public class DexKitHelper {
                             String processName = lpparam.processName;
                             boolean isMainProcess = "com.tencent.mm".equals(processName);
                             if (!isMainProcess) {
-                                LogWriter.log(DexKitHelper.TAG, "clone process " + processName + ": reading MMKV cache only");
+                                LogWriter.log(DexKitHelper.TAG, "clone process " + processName + ": reading MMKV cache only (read-only, never clears cache)");
                                 try {
                                     MMKV.initialize(app);
                                 } catch (Throwable e) {
                                     LogWriter.log(DexKitHelper.TAG, "clone process MMKV.initialize err: " + e.getMessage());
                                 }
                                 try {
-                                    if (!DexKitHelper.hasCompleteLocalCache()) {
-                                        if (!DexKitHelper.tryLoadBaselineFromModule(app) && !DexKitHelper.loadResultsFromMMKV(app)) {
-                                            LogWriter.log(DexKitHelper.TAG, "clone process: no cache/baseline, defer read (main process scanning)");
-                                            DexKitHelper.deferCloneCacheRead(app);
-                                            return;
-                                        }
+                                    if (!DexKitHelper.loadResultsFromMMKV(app, false)) {
+                                        // 只读：版本不匹配/缓存不完整时绝不 clearAll（否则清掉主进程扫描结果，
+                                        // 导致反复全量扫描）。模块刚更新时主进程正在扫描，defer 后重读即可。
+                                        LogWriter.log(DexKitHelper.TAG, "clone process: no usable cache, defer read (main process scanning)");
+                                        DexKitHelper.deferCloneCacheRead(app);
                                         return;
                                     }
-                                    DexKitHelper.loadResultsFromMMKV(app);
                                     return;
                                 } catch (Throwable e2) {
                                     LogWriter.log(DexKitHelper.TAG, "clone process MMKV read failed: " + e2.getMessage());
@@ -3030,45 +3253,32 @@ public class DexKitHelper {
                             try {
                                 MMKV kv = MMKV.mmkvWithID(DexKitHelper.MMKV_RESULTS_ID, 2);
                                 int cachedVersion = kv.decodeInt(DexKitHelper.KEY_VERSION_CODE, 0);
-                                boolean cacheComplete = DexKitHelper.hasCompleteLocalCache();
-                                // v3.0.136: 仅当 ①无缓存(首次安装) 或 ②微信版本变化(微信更新) 时全量扫描；
-                                // 其他情况直接加载缓存，绝不触发任何 DexKit 扫描（避免每次启动卡死）。
-                                if (cachedVersion != DexKitHelper.sVersionCode || !cacheComplete) {
-                                    LogWriter.log(DexKitHelper.TAG, "hookApplication: SCAN NEEDED (cachedWx=" + cachedVersion
-                                            + " currentWx=" + DexKitHelper.sVersionCode
-                                            + " cacheComplete=" + cacheComplete + ")");
-                                } else {
+                                int cachedModule = kv.decodeInt(DexKitHelper.KEY_MODULE_VERSION, 0);
+                                boolean versionMatch = (cachedVersion == DexKitHelper.sVersionCode)
+                                        && (cachedModule == DexKitHelper.CURRENT_MODULE_VERSION);
+                                // v3.0.152: 仅当 ①首次安装无缓存 或 ②微信版本变化(微信更新) 或 ③模块版本变化(模块更新)
+                                // 时全量扫描一次；版本匹配时只加载缓存（无论完整与否），绝不扫描、绝不 rescan、
+                                // 绝不 fallback scan —— 避免每次启动（含 appbrand/push 等 clone 进程）都触发
+                                // DexKit 扫描，造成"使用微信过程中反复加载 dexkit"。
+                                if (versionMatch) {
                                     LogWriter.log(DexKitHelper.TAG, "hookApplication: SCAN SKIP (wx=" + cachedVersion
-                                            + " module=" + DexKitHelper.CURRENT_MODULE_VERSION
-                                            + " cacheComplete=true), cache-only");
-                                    if (!DexKitHelper.loadResultsFromMMKV(app)) {
-                                        LogWriter.log(DexKitHelper.TAG, "hookApplication: cache hit but load failed, falling back to scan");
-                                    } else {
-                                        // v3.0.136: 不再 rescanRuntimeHookTargetsIfMissing —— 否则每次启动
-                                        // 都会重建 DexKit bridge 扫描 runtime targets，造成"每次都扫"。
-                                        return;
-                                    }
+                                            + " module=" + DexKitHelper.CURRENT_MODULE_VERSION + "), cache-only");
+                                    DexKitHelper.loadResultsFromMMKV(app, false);
+                                    return;
                                 }
+                                LogWriter.log(DexKitHelper.TAG, "hookApplication: SCAN NEEDED (cachedWx=" + cachedVersion
+                                        + " cachedModule=" + cachedModule
+                                        + " currentWx=" + DexKitHelper.sVersionCode
+                                        + " currentModule=" + DexKitHelper.CURRENT_MODULE_VERSION + ")");
+                                // v3.0.176: 微信未变(仅模块升级)时静默补齐扫描, 不弹"重新适配"窗;
+                                // 微信更新或首次安装才全量扫描并弹窗。DexKitCacheBridge 按 key 命中
+                                // 已有缓存, 模块升级只补查缺失锚点, 补齐后由 startFullScan 持久化版本号。
+                                boolean wxUnchanged = (cachedVersion == DexKitHelper.sVersionCode);
+                                DexKitHelper.sShouldShowScanDialog = !wxUnchanged;
+                                DexKitHelper.startFullScan(app, !wxUnchanged);
+                                return;
                             } catch (Throwable e4) {
                                 LogWriter.log(DexKitHelper.TAG, "hookApplication MMKV check err: " + e4.getMessage());
-                            }
-                            try {
-                                if (DexKitHelper.tryLoadBaselineFromModule(app)) {
-                                    LogWriter.log(DexKitHelper.TAG, "hookApplication: baseline loaded from module APK");
-                                    DexKitHelper.rescanRuntimeHookTargetsIfMissing(app);
-                                    return;
-                                }
-                            } catch (Throwable e5) {
-                                LogWriter.log(DexKitHelper.TAG, "hookApplication baseline load err: " + e5.getMessage());
-                            }
-                            try {
-                                if (DexKitHelper.loadResultsFromMMKV(app)) {
-                                    LogWriter.log(DexKitHelper.TAG, "hookApplication: partial MMKV cache loaded");
-                                    DexKitHelper.rescanRuntimeHookTargetsIfMissing(app);
-                                    return;
-                                }
-                            } catch (Throwable e6) {
-                                LogWriter.log(DexKitHelper.TAG, "hookApplication MMKV fallback err: " + e6.getMessage());
                             }
                             DexKitHelper.sShouldShowScanDialog = true;
                             DexKitHelper.startFullScan(app, true);
@@ -3156,10 +3366,8 @@ public class DexKitHelper {
                                 public void run() {
                                     DexKitCacheBridge.RecyclableBridge cacheBridge = null;
                                     try {
-                                        final String appTag = "wechat_"
-                                            + (sVersionCode > 0 ? sVersionCode : "");
-                                        cacheBridge = DexKitCacheBridge.create(
-                                            appTag, cl);
+                                        // v3.0.176: 统一走 createBridge(优先官方 path 数据源), 与主扫描同一 appTag 池化实例
+                                        cacheBridge = DexKitHelper.createBridge(cl);
                                         if (cacheBridge != null) {
                                             cacheBridge.withBridge(
                                                 new DexKitCacheBridge.RecyclableBridge.BridgeFunction() {
@@ -3220,8 +3428,8 @@ public class DexKitHelper {
                         DexKitCacheBridge.RecyclableBridge cacheBridge = null;
                         try {
                             try {
-                                String appTag = "wechat_" + (DexKitHelper.sVersionCode > 0 ? Integer.valueOf(DexKitHelper.sVersionCode) : "");
-                                cacheBridge = DexKitCacheBridge.create(appTag, AnonymousClass17.this.val$cl);
+                                // v3.0.176: 统一走 createBridge(优先官方 path 数据源), 与主扫描同一 appTag 池化实例
+                                cacheBridge = DexKitHelper.createBridge(AnonymousClass17.this.val$cl);
                                 if (cacheBridge != null) {
                                     cacheBridge.withBridge(new DexKitCacheBridge.RecyclableBridge.BridgeFunction() { // from class: com.leshao.v3.hook.DexKitHelper.17.1.1
                                         @Override // org.luckypray.dexkit.DexKitCacheBridge.RecyclableBridge.BridgeFunction

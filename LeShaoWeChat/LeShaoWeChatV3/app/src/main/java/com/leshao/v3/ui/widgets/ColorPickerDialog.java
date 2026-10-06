@@ -2,13 +2,18 @@ package com.leshao.v3.ui.widgets;
 
 import android.app.AlertDialog;
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
+import android.graphics.Paint;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -19,26 +24,24 @@ import com.leshao.v3.ui.CandyUi;
 import com.leshao.v3.ui.InsetsUtil;
 
 /**
- * v3.0.128 自定义色板取色器。
+ * v3.0.166 自定义 HSV 取色器（任务3：去掉格子取色，改交互式取色，实时生效）。
  *
- * <p>不依赖任何第三方库：内置一组常用色板 + #RRGGBB 十六进制输入 + 实时预览，
- * 供「气泡内文字颜色」等场景取色。回调 {@code color == 0} 表示"不修改/恢复默认"。</p>
+ * <p>不依赖任何第三方库：纯 View 绘制「色相条 + 饱和度/亮度二维面板 + 预览 + hex 回显」。
+ * 拖动过程中实时回调 {@link OnPick#onPick(int)}（每次松手或节流后即触发），
+ * 无需点「确定」即可在聊天窗口立即看到颜色变化。</p>
+ *
+ * <p>回调 {@code color == 0} 表示"不修改/恢复默认"。确认按钮保留，便于取到精确色后再提交。</p>
  */
 public final class ColorPickerDialog {
 
     public interface OnPick {
-        /** @param color 0 = 不修改(恢复微信原生)。 */
+        /** @param color 0 = 不修改(恢复微信原生)。实时回调时会不断携带当前色。 */
         void onPick(int color);
     }
 
-    /** 内置色板（40 色）。 */
-    private static final int[] PALETTE = {
-            0xFF000000, 0xFF424242, 0xFF757575, 0xFF9E9E9E, 0xFFBDBDBD, 0xFFE0E0E0, 0xFFFFFFFF, 0xFFF44336,
-            0xFFE91E63, 0xFF9C27B0, 0xFF673AB7, 0xFF3F51B5, 0xFF2196F3, 0xFF03A9F4, 0xFF00BCD4, 0xFF009688,
-            0xFF4CAF50, 0xFF8BC34A, 0xFFCDDC39, 0xFFFFEB3B, 0xFFFFC107, 0xFFFF9800, 0xFFFF5722, 0xFF795548,
-            0xFF607D8B, 0xFFB71C1C, 0xFF880E4F, 0xFF4A148C, 0xFF1A237E, 0xFF0D47A1, 0xFF006064, 0xFF1B5E20,
-            0xFF33691E, 0xFF827717, 0xFFE65100, 0xFF3E2723, 0xFF263238, 0xFF00E5FF, 0xFF76FF03, 0xFFFF4081
-    };
+    private static final float HUE_BAR_DP = 26f;
+    private static final float SV_PANEL_DP = 220f;
+    private static final float THUMB_DP = 12f;
 
     private ColorPickerDialog() {}
 
@@ -66,7 +69,32 @@ public final class ColorPickerDialog {
         titleTv.setPadding(0, 0, 0, (int) (12 * d));
         root.addView(titleTv);
 
-        // 预览：色块 + hex 文本
+        // ---- 饱和度/亮度 二维面板 + 色相条（实时绘制） ----
+        final float[] hsv = new float[3];
+        {
+            int initial = initialColor == 0 ? 0xFF000000 : initialColor;
+            Color.colorToHSV(initial, hsv);
+        }
+
+        final SvPanel svPanel = new SvPanel(ctx);
+        LinearLayout.LayoutParams svLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, (int) (SV_PANEL_DP * d));
+        svPanel.setLayoutParams(svLp);
+        root.addView(svPanel);
+
+        root.addView(spacer(ctx, d, 8));
+
+        final HueBar hueBar = new HueBar(ctx);
+        LinearLayout.LayoutParams hLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, (int) (HUE_BAR_DP * d));
+        hueBar.setLayoutParams(hLp);
+        root.addView(hueBar);
+
+        // 联动模型：hue 由 HueBar 提供，s/v 由 SvPanel 提供；任一变化重算 hsv/color 并回调
+        final int[] current = {Color.HSVToColor(hsv)};
+        Runnable repaint = () -> { svPanel.invalidate(); hueBar.invalidate(); };
+
+        // ---- 预览：色块 + hex 文本 ----
         LinearLayout previewRow = new LinearLayout(ctx);
         previewRow.setOrientation(LinearLayout.HORIZONTAL);
         previewRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -86,49 +114,9 @@ public final class ColorPickerDialog {
 
         root.addView(spacer(ctx, d, 12));
 
-        // 色板网格（每行 8 个）
-        final int initial = initialColor == 0 ? 0xFF000000 : initialColor;
-        final int[] selected = {initial};
-        final EditText hexInput = new EditText(ctx);
-        final LinearLayout grid = new LinearLayout(ctx);
-        grid.setOrientation(LinearLayout.VERTICAL);
-        final int perRow = 8;
-        final View[] swatches = new View[PALETTE.length];
-        for (int i = 0; i < PALETTE.length; i += perRow) {
-            LinearLayout row = new LinearLayout(ctx);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            for (int j = 0; j < perRow && i + j < PALETTE.length; j++) {
-                final int color = PALETTE[i + j];
-                View cell = new View(ctx);
-                int size = (int) (30 * d);
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
-                int gap = (int) (4 * d);
-                lp.setMargins(gap, gap, gap, gap);
-                cell.setLayoutParams(lp);
-                cell.setBackground(swatchBg(color, false, d));
-                final int idx = i + j;
-                cell.setOnClickListener(v -> {
-                    selected[0] = color;
-                    // v3.0.132: 点击色板同步 hex 输入框与预览（否则确定时取到 hexInput 旧值）
-                    hexTv.setText(toHex(color));
-                    hexInput.setText(toHex(color));
-                    swatch.setBackground(swatchBg(color, false, d));
-                    for (int k = 0; k < swatches.length; k++) {
-                        if (swatches[k] != null) swatches[k].setBackground(
-                                swatchBg(PALETTE[k], k == idx, d));
-                    }
-                });
-                swatches[idx] = cell;
-                row.addView(cell);
-            }
-            grid.addView(row);
-        }
-        root.addView(grid);
-
-        root.addView(spacer(ctx, d, 12));
-
         // 十六进制输入
-        hexInput.setText(toHex(initial));
+        final EditText hexInput = new EditText(ctx);
+        hexInput.setText(toHex(current[0]));
         hexInput.setHint("#RRGGBB");
         hexInput.setTextSize(14);
         hexInput.setSingleLine(true);
@@ -167,39 +155,235 @@ public final class ColorPickerDialog {
 
         TextView confirm = textBtn(ctx, d, "确定", AppColors.accent(), true);
         confirm.setOnClickListener(v -> {
-            int c = parseHex(hexInput.getText().toString(), selected[0]);
+            int c = parseHex(hexInput.getText().toString(), current[0]);
             if (cb != null) cb.onPick(c);
             dialog.dismiss();
         });
         btnRow.addView(confirm);
         root.addView(btnRow);
 
-        // 输入联动预览 + 色板高亮
+        Runnable firePick = () -> {
+            int c = Color.HSVToColor(hsv);
+            current[0] = c;
+            hexTv.setText(toHex(c));
+            hexInput.setText(toHex(c));
+            swatch.setBackground(swatchBg(c, d));
+            if (cb != null) cb.onPick(c);
+        };
+
+        svPanel.setListener(h -> {
+            hsv[1] = h[0];
+            hsv[2] = h[1];
+            repaint.run();
+            firePick.run();
+        });
+        hueBar.setListener(hue -> {
+            hsv[0] = hue;
+            repaint.run();
+            firePick.run();
+        });
+        hueBar.setHue(hsv[0]);
+        svPanel.setHue(hsv[0]);
+        svPanel.setSv(hsv[1], hsv[2]);
+
+        // 输入联动预览
         hexInput.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
             @Override public void afterTextChanged(Editable s) {
                 Integer c = tryParse(s == null ? null : s.toString());
                 if (c == null) return;
-                selected[0] = c;
-                swatch.setBackground(swatchBg(c, false, d));
-                for (int k = 0; k < swatches.length; k++) {
-                    if (swatches[k] != null) swatches[k].setBackground(
-                            swatchBg(PALETTE[k], PALETTE[k] == c, d));
-                }
+                current[0] = c;
+                Color.colorToHSV(c, hsv);
+                hueBar.setHue(hsv[0]);
+                svPanel.setHue(hsv[0]);
+                svPanel.setSv(hsv[1], hsv[2]);
+                hexTv.setText(toHex(c));
+                swatch.setBackground(swatchBg(c, d));
+                svPanel.invalidate();
+                hueBar.invalidate();
             }
         });
 
-        swatch.setBackground(swatchBg(initial, false, d));
-        for (int k = 0; k < swatches.length; k++) {
-            if (swatches[k] != null) swatches[k].setBackground(
-                    swatchBg(PALETTE[k], PALETTE[k] == initial, d));
-        }
+        swatch.setBackground(swatchBg(current[0], d));
+        hexTv.setText(toHex(current[0]));
 
         dialog.setView(root);
         InsetsUtil.transparentWindow(dialog);
         dialog.show();
     }
+
+    // ==================== HSV 控件 ====================
+
+    /** 饱和度(S)/亮度(V) 二维面板。 */
+    private static final class SvPanel extends View {
+        private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint mThumb = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint mThumbStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private float mHue = 0f;
+        private float mS = 0f;   // 0..1
+        private float mV = 1f;   // 0..1
+        private Listener mListener;
+
+        interface Listener { void onChanged(float[] sv); }
+
+        SvPanel(Context ctx) {
+            super(ctx);
+            mThumb.setStyle(Paint.Style.FILL);
+            mThumb.setColor(Color.WHITE);
+            mThumbStroke.setStyle(Paint.Style.STROKE);
+            mThumbStroke.setColor(0x55000000);
+            mThumbStroke.setStrokeWidth(dp(1.5f));
+        }
+
+        private float dp(float v) {
+            return v * getResources().getDisplayMetrics().density;
+        }
+
+        void setHue(float hue) {
+            mHue = hue;
+            invalidate();
+        }
+
+        void setSv(float s, float v) {
+            mS = s;
+            mV = v;
+            invalidate();
+        }
+
+        void setListener(Listener l) { mListener = l; }
+
+        private float[] xyFromSV() {
+            float w = getWidth() - dp(4);
+            float h = getHeight() - dp(4);
+            return new float[]{dp(2) + mS * w, dp(2) + (1f - mV) * h};
+        }
+
+        private void svFromTouch(float x, float y) {
+            float w = getWidth() - dp(4);
+            float h = getHeight() - dp(4);
+            mS = w <= 0 ? 0 : Math.max(0f, Math.min(1f, (x - dp(2)) / w));
+            mV = h <= 0 ? 1 : Math.max(0f, Math.min(1f, 1f - (y - dp(2)) / h));
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float w = getWidth();
+            float h = getHeight();
+            if (w <= 0 || h <= 0) return;
+            // S 方向：白 → 纯色；V 方向：黑 → 纯色
+            int base = Color.HSVToColor(new float[]{mHue, 1f, 1f});
+            LinearGradient sg = new LinearGradient(dp(2), 0, w - dp(2), 0,
+                    new int[]{Color.WHITE, base}, null, Shader.TileMode.CLAMP);
+            LinearGradient vg = new LinearGradient(0, dp(2), 0, h - dp(2),
+                    new int[]{0xFF000000, 0x00000000}, null, Shader.TileMode.CLAMP);
+            Paint bg = new Paint();
+            bg.setShader(sg);
+            canvas.drawRect(dp(2), dp(2), w - dp(2), h - dp(2), bg);
+            Paint vp = new Paint();
+            vp.setShader(vg);
+            canvas.drawRect(dp(2), dp(2), w - dp(2), h - dp(2), vp);
+
+            float[] xy = xyFromSV();
+            float r = dp(THUMB_DP / 2);
+            canvas.drawCircle(xy[0], xy[1], r, mThumbStroke);
+            canvas.drawCircle(xy[0], xy[1], r - dp(1.2f), mThumb);
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent ev) {
+            float x = ev.getX();
+            float y = ev.getY();
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                case MotionEvent.ACTION_MOVE:
+                    svFromTouch(x, y);
+                    invalidate();
+                    if (mListener != null) mListener.onChanged(new float[]{mS, mV});
+                    return true;
+                default:
+                    return super.onTouchEvent(ev);
+            }
+        }
+    }
+
+    /** 色相条。 */
+    private static final class HueBar extends View {
+        private final Paint mThumb = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint mThumbStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private float mHue = 0f;
+        private Listener mListener;
+
+        interface Listener { void onChanged(float hue); }
+
+        HueBar(Context ctx) {
+            super(ctx);
+            mThumb.setStyle(Paint.Style.FILL);
+            mThumb.setColor(Color.WHITE);
+            mThumbStroke.setStyle(Paint.Style.STROKE);
+            mThumbStroke.setColor(0x55000000);
+            mThumbStroke.setStrokeWidth(dp(1.5f));
+        }
+
+        private float dp(float v) {
+            return v * getResources().getDisplayMetrics().density;
+        }
+
+        void setHue(float hue) { mHue = hue; invalidate(); }
+
+        void setListener(Listener l) { mListener = l; }
+
+        private float thumbX() {
+            float w = getWidth() - dp(2);
+            return dp(1) + (mHue / 360f) * w;
+        }
+
+        private void hueFromTouch(float x) {
+            float w = getWidth() - dp(2);
+            mHue = w <= 0 ? 0 : Math.max(0f, Math.min(360f, ((x - dp(1)) / w) * 360f));
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float w = getWidth();
+            float h = getHeight();
+            if (w <= 0 || h <= 0) return;
+            int n = 12;
+            int[] colors = new int[n];
+            float[] stops = new float[n];
+            for (int i = 0; i < n; i++) {
+                stops[i] = i / (float) (n - 1);
+                colors[i] = Color.HSVToColor(new float[]{stops[i] * 360f, 1f, 1f});
+            }
+            LinearGradient g = new LinearGradient(dp(1), 0, w - dp(1), 0,
+                    colors, stops, Shader.TileMode.CLAMP);
+            Paint bg = new Paint();
+            bg.setShader(g);
+            canvas.drawRect(dp(1), 0, w - dp(1), h, bg);
+            float x = thumbX();
+            float r = dp(THUMB_DP / 2);
+            canvas.drawCircle(x, h / 2f, r, mThumbStroke);
+            canvas.drawCircle(x, h / 2f, r - dp(1.2f), mThumb);
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent ev) {
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                case MotionEvent.ACTION_MOVE:
+                    hueFromTouch(ev.getX());
+                    invalidate();
+                    if (mListener != null) mListener.onChanged(mHue);
+                    return true;
+                default:
+                    return super.onTouchEvent(ev);
+            }
+        }
+    }
+
+    // ==================== 通用 ====================
 
     private static View spacer(Context ctx, float d, float dp) {
         View v = new View(ctx);
@@ -218,16 +402,12 @@ public final class ColorPickerDialog {
         return tv;
     }
 
-    private static GradientDrawable swatchBg(int color, boolean selected, float d) {
+    private static GradientDrawable swatchBg(int color, float d) {
         GradientDrawable gd = new GradientDrawable();
         gd.setShape(GradientDrawable.RECTANGLE);
         gd.setColor(color);
         gd.setCornerRadius((int) (7 * d));
-        if (selected) {
-            gd.setStroke((int) (2.5f * d), AppColors.accent());
-        } else {
-            gd.setStroke((int) (1 * d), 0x33000000);
-        }
+        gd.setStroke((int) (1 * d), 0x33000000);
         return gd;
     }
 

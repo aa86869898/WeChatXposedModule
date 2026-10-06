@@ -119,6 +119,9 @@ public class MainActivity {
         PAGE_FEATURES.put(8, "语音播报|TTS播报|排版引擎|配音|API|Voice|间隔|熔断|消息类型|免打扰|安静时段|播报参数|音量|语速|音调|TTS|文字消息播报|语音消息播报|图片消息播报|播报发送人昵称|播报群聊消息|截断长文字");
         PAGE_FEATURES.put(22, "在线音乐|音乐|点歌|歌曲搜索|专辑|歌手|歌单|排行榜|无损|试听|下载|酷我|Music|点歌白名单");
         PAGE_FEATURES.put(20, "关于模块|版本|模块版本|热更新|更新管控|禁止微信热更新|WeChatUpdateBlocker");
+        PAGE_FEATURES.put(33, "微信美化|自定义气泡|气泡|聊天时间线颜色|时间颜色|群聊成员昵称颜色|昵称颜色|群成员头衔|头衔标签|群主|管理员");
+        PAGE_FEATURES.put(34, "快捷菜单|快捷|入口");
+        PAGE_FEATURES.put(99, "乐少群发|群发|万群定时群发|自动转发|转发");
     }
 
     public static void open(Activity act) {
@@ -647,6 +650,8 @@ public class MainActivity {
         body.addView(searchCard);
         body.addView(candyDivider(ctx, d));
 
+        final HashMap<View, String> searchMap = new HashMap<>();
+
         LinearLayout card1 = buildCard(ctx, d);
         card1.addView(makeListRow(ctx, d, 0x2764, "爱心捐赠", AppColors.accent(), true, v -> showDonateDialog(act)));
         card1.addView(candyDivider(ctx, d));
@@ -659,8 +664,33 @@ public class MainActivity {
 
         body.addView(candyDivider(ctx, d));
 
+        // 微信美化卡片（v3.0.165：移入 群头衔/自定义气泡/时间线颜色/昵称颜色）
+        LinearLayout cardBeauty = buildCard(ctx, d);
+        View beautyItem = makeListRow(ctx, d, 0x2728, "微信美化", 0, false, v -> {
+            dismissDialog();
+            SubPageActivity.openFromMain(act, "微信美化", 33);
+        });
+        beautyItem.setTag("menu_item");
+        searchMap.put(beautyItem, "微信美化|自定义气泡|气泡|聊天时间线颜色|时间颜色|群聊成员昵称颜色|昵称颜色|群成员头衔|头衔标签");
+        cardBeauty.addView(beautyItem);
+        body.addView(cardBeauty);
+
+        body.addView(candyDivider(ctx, d));
+
+        // 快捷菜单卡片（v3.0.165：占位，后续放置高频快捷功能）
+        LinearLayout cardQuick = buildCard(ctx, d);
+        View quickItem = makeListRow(ctx, d, 0x2699, "快捷菜单", 0, false, v -> {
+            dismissDialog();
+            SubPageActivity.openFromMain(act, "快捷菜单", 34);
+        });
+        quickItem.setTag("menu_item");
+        searchMap.put(quickItem, "快捷菜单|快捷|入口");
+        cardQuick.addView(quickItem);
+        body.addView(cardQuick);
+
+        body.addView(candyDivider(ctx, d));
+
         LinearLayout card2 = buildCard(ctx, d);
-        final HashMap<View, String> searchMap = new HashMap<>();
         boolean first = true;
         for (int i = 0; i < ITEM_NAMES.length; i++) {
             if (!first) card2.addView(candyDivider(ctx, d));

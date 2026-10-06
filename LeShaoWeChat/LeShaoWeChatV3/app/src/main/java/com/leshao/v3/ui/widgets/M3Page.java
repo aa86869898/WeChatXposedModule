@@ -63,13 +63,17 @@ public final class M3Page {
         return sv;
     }
 
-    /** 分区标题（M3 list subheader） */
+    /** 分区标题（M3 list subheader）。
+     *  v3.0.140: 模块主页已有分类导航，二级界面内不再显示分类标题栏（节省空间），
+     *  统一返回不可见占位 View，调用点无需逐个删除。 */
     public static View section(Context ctx, String title) {
         return section(ctx, title, null);
     }
 
     public static View section(Context ctx, String title, String sub) {
-        return new SectionHeader(ctx, title, sub);
+        View placeholder = new View(ctx);
+        placeholder.setVisibility(View.GONE);
+        return placeholder;
     }
 
     /** 卡片容器（M3 Expressive filled card：24dp 大圆角 + 纯白底） */

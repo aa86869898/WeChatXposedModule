@@ -19,6 +19,7 @@ import com.leshao.v3.ContextManager;
 import com.leshao.v3.LogWriter;
 import com.leshao.v3.hook.*;
 import com.leshao.v3.model.ModuleConfig;
+import com.leshao.v3.ui.widgets.ColorPickerDialog;
 import com.leshao.v3.ui.widgets.M3Page;
 
 import android.widget.Toast;
@@ -70,19 +71,6 @@ public class ContactGroupPageView {
 
         root.addView(candyDivider(ctx, d));
 
-        // 自动转发卡片
-        boolean afOn = prefs != null && prefs.getBoolean("ls_autofw_enabled", false);
-        LinearLayout cardAutoFw = makeCard(ctx, d);
-        cardAutoFw.addView(switchRow(ctx, d, "自动转发", "来源消息自动转发给目标联系人/群聊", afOn, (v, on) -> {
-            if (prefs != null) prefs.edit().putBoolean("ls_autofw_enabled", on).apply();
-            com.leshao.v3.hook.AutoForwardHook.setEnabled(on);
-            if (on) com.leshao.v3.hook.AutoForwardHook.updateConfig(prefs);
-            Toast.makeText(ctx, "自动转发已" + (on ? "开启" : "关闭"), Toast.LENGTH_SHORT).show();
-        }, v -> com.leshao.v3.hook.AutoForwardHook.showConfigDialog(act)));
-        root.addView(cardAutoFw);
-
-        root.addView(candyDivider(ctx, d));
-
         // v3.0.89: 突破转发/群发多选联系人 9 人上限（文档《微信突破转发群发9个联系人上限》方案A）
         boolean forwardLimitOn = prefs != null
                 && prefs.getBoolean(ForwardLimitHook.K_ENABLED, false);
@@ -114,12 +102,6 @@ public class ContactGroupPageView {
         root.addView(cardWxFwdReplace);
 
         root.addView(candyDivider(ctx, d));
-
-        // v998: 万群定时群发从"群管理助手"移植到本菜单, 点击进入独立页面
-        LinearLayout cardWanQun = makeCard(ctx, d);
-        cardWanQun.addView(M3Page.clickRow(ctx, "\uD83D\uDCE2", "乐少万群定时群发", "勾选多个群+定时发送",
-                () -> SubPageActivity.open(act, "乐少万群定时群发", 4)));
-        root.addView(cardWanQun);
 
         // ==================== 消息增强类 ====================
         root.addView(M3Page.section(ctx, "消息增强",
@@ -219,24 +201,10 @@ public class ContactGroupPageView {
 
         // ==================== UI美化类 ====================
         root.addView(M3Page.section(ctx, "UI美化",
-                "自定义气泡、微信原生菜单入口开关"));
+                "微信左上角菜单、聊天窗口长按菜单入口开关"));
 
-        // 自定义气泡：分别选择收/发消息气泡图片（文档《修改聊天气泡WeChatChatBubbleReplace.md》方案A）
-        boolean bubbleOn = prefs != null && prefs.getBoolean(ChatBubbleHook.K_ENABLED, false);
-        LinearLayout cardBubble = makeCard(ctx, d);
-        cardBubble.addView(switchRow(ctx, d, "自定义气泡",
-                "分别选择收到/发出消息的气泡图片", bubbleOn,
-                (v, on) -> {
-                    if (prefs != null) prefs.edit().putBoolean(ChatBubbleHook.K_ENABLED, on).apply();
-                    ChatBubbleHook.setEnabled(on);
-                    Toast.makeText(ctx, "自定义气泡已" + (on ? "开启" : "关闭")
-                            + "（重启微信后完全生效）", Toast.LENGTH_SHORT).show();
-                },
-                v -> SubPageActivity.open(act, "自定义气泡", 27)));
-        root.addView(cardBubble);
-
-        root.addView(candyDivider(ctx, d));
-
+        // v3.0.165: 自定义气泡 / 聊天时间线颜色 / 群聊成员昵称颜色 / 显示群成员头衔标签
+        // 已迁移至主页「微信美化」分类，此处仅保留微信原生菜单入口开关
         LinearLayout cardEntry = makeCard(ctx, d);
         boolean cornerMenuOn = com.leshao.v3.wm.utils.WmPrefs.isCornerMenu();
         boolean longPressMenuOn = com.leshao.v3.wm.utils.WmPrefs.isLongPressMenu();
@@ -330,9 +298,71 @@ public class ContactGroupPageView {
             row.addView(btn);
         }
 
-            Switch sw = CandyUi.newSwitch(ctx); sw.setChecked(checked);
+        Switch sw = CandyUi.newSwitch(ctx); sw.setChecked(checked);
         sw.setOnCheckedChangeListener(listener);
         row.addView(sw);
+        return row;
+    }
+
+    /** v3.0.150：颜色修改行（色块预览 + [取色]，0 = 恢复微信原生）。 */
+    private static LinearLayout colorRow(Context ctx, float d, String title, String desc,
+                                         int current, ColorPickerDialog.OnPick onPick) {
+        LinearLayout row = new LinearLayout(ctx);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight((int)(48 * d));
+        row.setPadding((int)(12 * d), (int)(10 * d), (int)(12 * d), (int)(10 * d));
+        row.setBackground(CandyUi.rowBg(ctx));
+        InsetsUtil.clipRounded(row);
+
+        LinearLayout textCol = new LinearLayout(ctx);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
+
+        TextView tv = new TextView(ctx);
+        tv.setText(title); tv.setTextSize(16);
+        tv.setTextColor(AppColors.text1()); tv.setTypeface(null, Typeface.BOLD);
+        textCol.addView(tv);
+
+        if (desc != null && !desc.isEmpty()) {
+            TextView dv = new TextView(ctx);
+            dv.setText(desc); dv.setTextSize(12);
+            dv.setTextColor(AppColors.text2());
+            dv.setPadding(0, (int)(3 * d), 0, 0);
+            textCol.addView(dv);
+        }
+        row.addView(textCol);
+
+        // 色块预览
+        int sz = (int)(22 * d);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(sz, sz);
+        slp.setMargins(0, 0, (int)(10 * d), 0);
+        View swatch = new View(ctx);
+        swatch.setLayoutParams(slp);
+        GradientDrawable gd = new GradientDrawable();
+        gd.setShape(GradientDrawable.RECTANGLE);
+        gd.setCornerRadius((int)(6 * d));
+        if (current == 0) {
+            gd.setColor(AppColors.inputBg());
+            gd.setStroke((int)(1 * d), AppColors.outlineVariant());
+        } else {
+            gd.setColor(current);
+            gd.setStroke((int)(1 * d), 0x33000000);
+        }
+        swatch.setBackground(gd);
+        row.addView(swatch);
+
+        TextView btn = new TextView(ctx);
+        btn.setText("[取色]");
+        btn.setTextSize(12);
+        btn.setTextColor(AppColors.accent());
+        btn.setPadding((int)(6 * d), 0, (int)(6 * d), 0);
+        btn.setPaintFlags(btn.getPaintFlags() | Paint.UNDERLINE_TEXT_FLAG);
+        CandyUi.ripple(btn, AppColors.SHAPE_FULL_DP);
+        btn.setOnClickListener(v ->
+                ColorPickerDialog.show(ctx, title, current, true, onPick));
+        row.addView(btn);
+
         return row;
     }
 

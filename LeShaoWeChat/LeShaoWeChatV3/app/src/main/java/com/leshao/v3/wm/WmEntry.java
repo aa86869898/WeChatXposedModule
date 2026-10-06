@@ -5,6 +5,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import com.leshao.v3.LogWriter;
+import com.leshao.v3.hook.MomentsLazyInstall;
 import com.leshao.v3.wm.hook.WmChatHook;
 import com.leshao.v3.wm.utils.WmPrefs;
 import com.leshao.v3.wm.utils.WmReflect;
@@ -71,6 +72,9 @@ public class WmEntry {
                         if (clsName.equals("com.tencent.mm.ui.LauncherUI")) {
                             // 返回主页，关闭聊天窗口功能入口（MMEditText detach 不触发，微信只隐藏视图）
                             WmChatHook.dismissTitleBtn();
+                            // v3.0.151: 主界面就绪后再安装 Moments 系列 hook，避免冷启动
+                            // 类加载竞争导致的类锁死锁(首次启动卡死)。安装本身在后台线程。
+                            MomentsLazyInstall.maybeInstall(cl);
                         } else if (clsName.equals("com.tencent.mm.ui.chatting.ChattingUI")) {
                             handleChatResume(p.thisObject, cl);
                         }

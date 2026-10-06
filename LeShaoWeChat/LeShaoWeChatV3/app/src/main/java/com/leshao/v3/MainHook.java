@@ -15,6 +15,7 @@ import com.leshao.v3.hook.FavVoiceForwardHook;
 import com.leshao.v3.hook.ForwardLimitHook;
 import com.leshao.v3.hook.WxForwardReplaceHook;
 import com.leshao.v3.hook.ChatGroupHook;
+import com.leshao.v3.hook.GroupTitleTagHook;
 import com.leshao.v3.hook.ChatGroupUiInjector;
 import com.leshao.v3.hook.ChatVoiceSwitchHook;
 import com.leshao.v3.hook.DexKitHelper;
@@ -28,6 +29,7 @@ import com.leshao.v3.hook.TtsVoiceSender;
 import com.leshao.v3.hook.SignatureDump;
 import com.leshao.v3.hook.VoiceForwardHook;
 import com.leshao.v3.hook.VoiceAutoPlay;
+import com.leshao.v3.hook.WeChatIdInjectHook;
 import com.leshao.v3.hook.WeChatUpdateBlocker;
 import com.leshao.v3.db.VoiceHistoryDbHelper;
 import com.leshao.v3.model.ModuleConfig;
@@ -69,11 +71,11 @@ public class MainHook implements IXposedHookLoadPackage {
 
     public MainHook() {}
 
-    public static final String MODULE_BUILD = "v3.0.139";
+    public static final String MODULE_BUILD = "v3.0.177";
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 30139;
+    public static final int MODULE_VERSION_CODE = 30177;
 
     /** v1079: 当前前台 Activity(onResume 记录/onPause 清除), 供 talker 解析等复用。 */
     private static volatile java.lang.ref.WeakReference<Activity> sResumedActivity;
@@ -186,13 +188,34 @@ public class MainHook implements IXposedHookLoadPackage {
 
     /**
      * 捕获模块自身 APK 路径。LSPosed 运行时会向 LoadPackageParam 注入 modulePath 字段（编译期 api-82 无此字段，用反射读）。
+     * v1147: 个别 LSPosed 版本不注入该字段, 直接 getObjectField 必失败。
+     * 先按名 "modulePath" 读, 失败则遍历 LoadPackageParam 声明字段找名含 "module" 的兜底,
+     * 仍拿不到仅记录一次(IconLoader.moduleApkPath 有 /proc/self/maps 等多级回退, 不影响功能)。
      */
+    private static volatile boolean sModulePathLogged = false;
+
     private static void captureModuleApkPath(XC_LoadPackage.LoadPackageParam lp) {
         try {
             Object v = XposedHelpers.getObjectField(lp, "modulePath");
             if (v != null) ContextManager.setModuleApkPath(String.valueOf(v));
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "modulePath capture fail: " + t.getMessage());
+        } catch (Throwable t1) {
+            boolean fallback = false;
+            try {
+                for (java.lang.reflect.Field f : lp.getClass().getDeclaredFields()) {
+                    if (!f.getName().contains("module")) continue;
+                    f.setAccessible(true);
+                    Object v = f.get(lp);
+                    if (v != null) {
+                        ContextManager.setModuleApkPath(String.valueOf(v));
+                        fallback = true;
+                        break;
+                    }
+                }
+            } catch (Throwable ignored) {}
+            if (!fallback && !sModulePathLogged) {
+                sModulePathLogged = true;
+                LogWriter.log(TAG, "modulePath not injected by framework; IconLoader fallback will cover");
+            }
         }
     }
 
@@ -289,21 +312,21 @@ public class MainHook implements IXposedHookLoadPackage {
                   }
                   @Override
                   public void onComplete() {
-                      // Don't auto-dismiss - let user close the dialog
-                      com.leshao.v3.ui.DexKitScanDialog.onScanComplete();
+                      // 全部命中自动关闭; 有未定位项则弹窗提示
+                      com.leshao.v3.ui.DexKitScanDialog.onScanComplete(DexKitHelper.getMissingSummary());
                   }
               });
              safeRun("DexKitScanDialog.initSteps", () -> {
                  String[] steps = {
                      "J1 服务定位器", "P06 核心类", "数据库接口", "设备标识 (IMEI)", "CsoLoader",
-                     "通讯录存储", "语音 API", "e9/a21 类", "头像服务", "标签存储",
+                     "通讯录存储", "语音 API", "e9 消息类", "头像服务", "标签存储",
                      "会话列表适配器", "聊天窗口入口",
                      "长按事件", "列表滚动", "菜单注入", "菜单实现类"
                  };
                  String[] details = {
                      "查找静态 s(Class) 方法", "查找 P06 核心类", "查找数据库打开接口",
                      "查找设备标识类", "查找 CsoLoader", "查找通讯录存储类",
-                     "查找语音 API 类", "查找 e9/a21 类", "查找头像服务类",
+                     "查找语音 API 类", "查找 e9 消息类", "查找头像服务类",
                      "查找标签存储类", "查找会话列表适配器", "查找聊天窗口入口",
                      "查找长按事件入口", "查找列表滚动入口", "查找菜单注入入口", "查找菜单实现类"
                  };
@@ -358,6 +381,9 @@ public class MainHook implements IXposedHookLoadPackage {
                             safeRun("AntiRecallHook", () -> HookManager.register("AntiRecallHook",
                                     () -> com.leshao.v3.hook.AntiRecallHook.hook(cl)));
                             safeRun("ChatGroupHook", () -> HookManager.register("ChatGroupHook", () -> ChatGroupHook.hook(cl)));
+                            // 群成员头衔标签（联系人和群聊 -> 显示群成员头衔标签，三角色独立配色）
+                            safeRun("GroupTitleTagHook", () -> HookManager.register("GroupTitleTagHook",
+                                    () -> GroupTitleTagHook.hook(cl)));
 
                             safeRun("VoiceForwardHook", () -> HookManager.register("VoiceForwardHook", VoiceForwardHook::hook));
                             safeRun("AutoForwardHook", () -> HookManager.register("AutoForwardHook", () -> AutoForwardHook.hook(cl)));
@@ -396,12 +422,12 @@ public class MainHook implements IXposedHookLoadPackage {
                             // 定位伪装（更多功能 -> 定位伪装）
                             safeRun("FakeLocationHook", () -> HookManager.register("FakeLocationHook",
                                     () -> com.leshao.v3.hook.FakeLocationHook.hook(cl)));
-                            // 朋友圈自动点赞（更多功能 -> 朋友圈自动点赞）
-                            safeRun("MomentsAutoLikeHook", () -> HookManager.register("MomentsAutoLikeHook",
-                                    () -> com.leshao.v3.hook.MomentsAutoLikeHook.hook(cl)));
-                            // 朋友圈秒集赞（更多功能 -> 朋友圈秒集赞）
-                            safeRun("MomentsFakeLikeHook", () -> HookManager.register("MomentsFakeLikeHook",
-                                    () -> com.leshao.v3.hook.MomentsFakeLikeHook.hook(cl)));
+                            // 朋友圈自动点赞 + 秒集赞：v3.0.151 起延后到 LauncherUI 就绪后安装，
+                            // 见 MomentsLazyInstall.maybeInstall(WmEntry.onResume 触发)。
+                            // 冷启动早期 hook SNS 类与微信类加载竞争会触发类锁死锁(首次启动卡死)。
+                            // 查看微信wxid（更多功能 -> 查看微信wxid，移植 WeChatIDInject.zip）
+                            safeRun("WeChatIdInjectHook", () -> HookManager.register("WeChatIdInjectHook",
+                                    () -> WeChatIdInjectHook.hook(cl)));
                             // 一键拉群：聊天输入框上方快捷栏"拉群"按钮
                             safeRun("ChatFooterInviteHook", () -> {
                                 com.leshao.v3.hook.BatchInviteManager.init(cl);

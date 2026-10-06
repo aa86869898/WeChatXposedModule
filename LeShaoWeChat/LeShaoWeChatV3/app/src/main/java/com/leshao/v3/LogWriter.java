@@ -1,6 +1,5 @@
 package com.leshao.v3;
 
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.text.SimpleDateFormat;
@@ -22,15 +21,12 @@ public class LogWriter {
     private static final LinkedBlockingQueue<String> sQueue = new LinkedBlockingQueue<>(2000);
     private static volatile boolean sWriterRunning = false;
 
-    private static final long HEARTBEAT_INTERVAL_MS = 20 * 1000;
-
     /** v1131: SimpleDateFormat 非线程安全, 每条 new 开销大 -> 每线程复用。 */
     private static final ThreadLocal<SimpleDateFormat> SDF =
             ThreadLocal.withInitial(() -> new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US));
 
-    /** v1131: 轮转/写入由唯一写线程持锁完成; logSync 仅追加, 不再 rename/delete。 */
+    /** v1147: 写线程与 logSync 均逐行原子追加, 持锁仅用于串行化单进程内写盘。 */
     private static final Object sLock = new Object();
-    private static BufferedWriter sWriter;
 
     public static void init() {
         if (ready) return;
@@ -53,37 +49,12 @@ public class LogWriter {
 
             ready = true;
             startWriterThread();
-            startHeartbeat();
 
             log("LogWriter", "=== STARTUP === logFile=" + logFile.getAbsolutePath());
             XposedBridge.log("LeShaoV3: [LogWriter] init DONE, ready=true");
         } catch (Throwable t) {
             XposedBridge.log("LeShaoV3: [LogWriter] init CRASH: " + t.getClass().getName() + ": " + t.getMessage());
         }
-    }
-
-    /** 心跳日志: 每 20s 写一行, 用于肉眼区分「进程冻结/日志断流」与「正常无消息」。 */
-    private static void startHeartbeat() {
-        Thread t = new Thread(() -> {
-            int cnt = 0;
-            while (sWriterRunning) {
-                try {
-                    Thread.sleep(HEARTBEAT_INTERVAL_MS);
-                } catch (InterruptedException e) {
-                    break;
-                }
-                try {
-                    long free = logFile == null ? -1 : logFile.getFreeSpace();
-                    cnt++;
-                    logSync("LogWriter", "心跳 alive cnt=" + cnt
-                        + " queue=" + sQueue.size()
-                        + " free=" + (free < 0 ? "na" : (free / 1024) + "KB"));
-                } catch (Throwable ignored) {
-                }
-            }
-        }, "leshao-heartbeat");
-        t.setDaemon(true);
-        t.start();
     }
 
     private static void startWriterThread() {
@@ -100,39 +71,36 @@ public class LogWriter {
                     }
                     synchronized (sLock) {
                         try {
-                            if (line == null) {
-                                flushLocked();
-                                continue;
-                            }
-                            writeLocked(line);
+                            if (line != null) writeLocked(line);
                         } catch (Throwable ex) {
                             XposedBridge.log("LeShaoV3: [LogWriter] write IO err: "
                                 + ex.getClass().getName() + ": " + ex.getMessage());
-                            closeLocked();
                         }
                     }
                 }
             } finally {
-                synchronized (sLock) { closeLocked(); }
+                synchronized (sLock) { /* 无长期持有的 writer, 无需关闭 */ }
             }
         }, "leshao-log-writer");
         t.setDaemon(true);
         t.start();
     }
 
-    /** 写前判长度: 超限先关闭当前 writer 再 rename, 由唯一写线程完成, 避免删除正在写的 inode。 */
+    /**
+     * 写前判长度: 超限先 rename, 再 append 单行。
+     * v1147: 每次写独立打开 FileWriter append 一行(单次 O_APPEND write 原子),
+     * 避免多进程各自持 BufferedWriter 攒批导致的行交错/截断。
+     */
     private static void writeLocked(String line) throws Exception {
         if (logFile == null) return;
-        if (sWriter != null && logFile.exists() && logFile.length() > MAX_SIZE) {
-            closeLocked();
-        }
-        if (sWriter == null) {
-            rotateIfNeededLocked();
-            sWriter = openWriter(logFile);
-        }
-        if (sWriter != null) {
-            sWriter.write(line);
-            sWriter.newLine();
+        rotateIfNeededLocked();
+        FileWriter fw = new FileWriter(logFile, true);
+        try {
+            fw.write(line);
+            fw.write('\n');
+        } finally {
+            try { fw.flush(); } catch (Throwable ignored) {}
+            try { fw.close(); } catch (Throwable ignored) {}
         }
     }
 
@@ -145,33 +113,6 @@ public class LogWriter {
                 XposedBridge.log("LeShaoV3: [LogWriter] rotated -> " + bak.getName());
             }
         } catch (Throwable ignored) {}
-    }
-
-    private static BufferedWriter openWriter(File f) {
-        try {
-            if (f.getParentFile() != null && !f.getParentFile().exists()) {
-                boolean ok = f.getParentFile().mkdirs();
-                XposedBridge.log("LeShaoV3: [LogWriter] openWriter mkdirs "
-                    + f.getParentFile().getAbsolutePath() + " ok=" + ok);
-            }
-            return new BufferedWriter(new FileWriter(f, true), 8192);
-        } catch (Throwable t) {
-            XposedBridge.log("LeShaoV3: [LogWriter] openWriter FAILED: " + f.getAbsolutePath()
-                + " " + t.getClass().getName() + ": " + t.getMessage());
-            return null;
-        }
-    }
-
-    private static void flushLocked() {
-        if (sWriter != null) { try { sWriter.flush(); } catch (Throwable ignored) {} }
-    }
-
-    private static void closeLocked() {
-        if (sWriter != null) {
-            try { sWriter.flush(); } catch (Throwable ignored) {}
-            try { sWriter.close(); } catch (Throwable ignored) {}
-            sWriter = null;
-        }
     }
 
     // v1088: 默认不再把每条日志同步镜像到 logcat(XposedBridge.log 会同步写 logd,

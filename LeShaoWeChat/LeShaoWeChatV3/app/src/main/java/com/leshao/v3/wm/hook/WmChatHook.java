@@ -2701,11 +2701,11 @@ private static void executeMassSend(String type, String text, java.util.List<Str
     }
 
     public static boolean hookP06BypassEarly(ClassLoader cl) {
-        // v1025: 不再立即安装 —— 微信启动早期调用 p06.b(内核访问器)时会先抛
-        // "Kernel not initialized by MMApplication!" 异常, 微信 catch 后初始化内核。
-        // 若此处吞掉异常返回 null, 微信拿到 null 当作成功, 内核引用永远为 null,
-        // 导致后续所有内核服务(语音发送 b96.b / 网络连接 1-7)报未初始化。
-        // 改为延迟安装: 跳过内核初始化窗口, 只拦截运行期的消息校验异常。
+        // v3.0.171（核心数据审计）：3180 反编译证实 P06 即扁平包内核单例 gp0.j1。
+        // gp0.j1.b() 转调 j()，j() 在 MMCoreAccount 未初始化时抛
+        // "Kernel not initialized by MMApplication!"；微信 catch 后初始化内核。
+        // 因此不能过早吞掉该异常，否则内核引用为 null，导致内核服务全部失效。
+        // 保持延迟安装：跳过内核初始化窗口，只拦截运行期的消息校验异常。
         DexKitHelper.addPostScanCallback(() -> {
             new Thread(() -> {
                 try {
@@ -2721,25 +2721,51 @@ private static void executeMassSend(String type, String text, java.util.List<Str
     }
 
     static boolean hookP06Bypass(ClassLoader cl) {
+        // Priority 0: 核心数据指定的扁平包内核单例 gp0.j1（3180 反编译确认，
+        // "Kernel not initialized" 只在 gp0.j1.j() 中；其 b() 转调 j() 并断言内核账号）。
+        try {
+            Class<?> p06 = XposedHelpers.findClass("gp0.j1", cl);
+            XposedBridge.hookAllMethods(p06, "b", new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    if (param.getThrowable() != null) {
+                        param.setThrowable(null);
+                        param.setResult(null);
+                    }
+                }
+            });
+            LogWriter.log(TAG, "hookP06Bypass OK (audit): gp0.j1.b hooked");
+            return true;
+        } catch (Throwable ignored) {}
+
         // Priority 1: use DexKit scan result
         if (DexKitHelper.isScanComplete()) {
             String p06Name = DexKitHelper.getP06ClassName();
             if (p06Name != null) {
-                try {
-                    Class<?> p06 = XposedHelpers.findClass(p06Name, cl);
-                    XposedBridge.hookAllMethods(p06, "b", new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            if (param.getThrowable() != null) {
-                                param.setThrowable(null);
-                                param.setResult(null);
+                // v3.0.154: DexKit 对内部类返回的名字可能用 '.' 或 '$' 分隔，逐一尝试；
+                // 旧实现只试原名，命中 ClassNotFoundException: w5$y0 后直接放弃。
+                String[] nameVariants = {
+                        p06Name,
+                        p06Name.replace('.', '$'),                                   // 全分隔符
+                        p06Name.replaceFirst("\\.([A-Za-z0-9_$]+)$", "\\$$1")        // 仅末段
+                };
+                for (String cn : nameVariants) {
+                    try {
+                        Class<?> p06 = XposedHelpers.findClass(cn, cl);
+                        XposedBridge.hookAllMethods(p06, "b", new XC_MethodHook() {
+                            @Override
+                            protected void afterHookedMethod(MethodHookParam param) {
+                                if (param.getThrowable() != null) {
+                                    param.setThrowable(null);
+                                    param.setResult(null);
+                                }
                             }
-                        }
-                    });
-                    LogWriter.log(TAG, "hookP06Bypass OK (DexKit): " + p06Name + ".b hooked");
-                    return true;
-                } catch (Throwable e) {
-                    LogWriter.log(TAG, "hookP06Bypass DexKit class failed: " + e.getMessage());
+                        });
+                        LogWriter.log(TAG, "hookP06Bypass OK (DexKit): " + cn + ".b hooked");
+                        return true;
+                    } catch (Throwable e) {
+                        LogWriter.log(TAG, "hookP06Bypass DexKit class failed: " + cn + " -> " + e.getMessage());
+                    }
                 }
             }
         }

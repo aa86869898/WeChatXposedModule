@@ -76,6 +76,12 @@ public class WmPrefs {
     public static void setMsgMenuHidden(String v) { ensureInit(); setStr("msg_menu_hidden", v); }
     public static String getMsgMenuObserved() { ensureInit(); return getStr("msg_menu_observed", ""); }
     public static void setMsgMenuObserved(String v) { ensureInit(); setStr("msg_menu_observed", v); }
+    /** v3.0.170：文档逐按钮开关（\n 分隔的按钮名集合，见 MessageMenuHook.BUTTONS）。 */
+    public static String getMsgMenuBtnHidden() { ensureInit(); return getStr("msg_menu_btn_hidden", ""); }
+    public static void setMsgMenuBtnHidden(String v) { ensureInit(); setStr("msg_menu_btn_hidden", v); }
+    /** v3.0.170：C 层全局长按熄菜（勾选后长按任何消息都不弹菜单）。 */
+    public static boolean isMsgMenuAllOff() { return get("msg_menu_all_off", false); }
+    public static void setMsgMenuAllOff(boolean v) { ensureInit(); set("msg_menu_all_off", v); }
 
     public static boolean defaultFor(String key) {
         return "auto_voice".equals(key);

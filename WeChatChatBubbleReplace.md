@@ -1,295 +1,156 @@
-# 微信聊天对话气泡替换 —— 地毯式深挖报告（修正版 v2）
-
-> 分析对象：`com.tencent.mm`（base.apk）
-> 工具：LSPilot（DexKit 定位 + jadx 反编译 + baksmali 逐层核查）
-> **v2 修正原因**：v1 结论（hook X2C 的 `kw5.g.r` 按 `chatfrom_bg` 名字替换）经深挖被证伪——**文本气泡的真实设置根本不在 X2C 链路上**。本文给出经 Smali 核查的完整 UI 封装链路与真正有效的替换点。
 
 ---
 
-## 0. 先说结论：为什么之前的方法无效
+## 13. v9 增补：语音气泡突然不渲染（setType(3) 清背景态）
 
-本版本微信的聊天气泡有**两套互不相干的设置路径**：
+### 13.1 日志实锤（本次回归）
 
-| 路径 | 谁在用 |  bubble drawable | 设置方式 |
-|---|---|---|---|
-| **X2C 创建期路径**（v1 报告聚焦点） | `gm.g/gm.i`（chatting_item_from/to）等 X2C 生成类 | chatfrom_bg(2131231925)/chatto_bg(2131232060) | `kw5.g.r` → `kw5.i0.f` → `setBackground` |
-| **Bind 填充期路径（真实生效）** | 文本 item `hn5.v/hn5.n0`（普通）、`hn5.r0/hn5.s0`（链接子类型） | **2131231925 / 2131232060 / 2131231944 / 2131232070 / 2131231841 / 2131231895** | `setBackgroundResource(int)` 直接调用 |
+| 时间 | 现象 |
+|---|---|
+| 20:33:42（正常） | `AnimImageView.setType type=1` -> `ke5.a.i(2131232060)` -> `REPLACE kind=1`，AnimImageView 有自定义气泡 |
+| 20:34:04 之后（故障） | `AnimImageView.setType type=3`（无 ke5.a.i 调用）-> `REPLACE kind=1`，但 VERIFY 显示 `AnimImageView vis=8 w=0 h=0`（GONE/零尺寸） |
+| 同时 | `mq.b CALL isRecv=false msgType=-1` —— 方向源读取失败，所有语音都按 kind=1（自己）处理 |
 
-深挖证实：
-1. **文本消息 item 的实际布局是 `0x7f0e0382`（二进制 XML），不在 X2C 注册表里**；X2C 的 `chatting_item_from/to`（gm.g/gm.i）不在文本 item 的加载路径上（只有"默认 item" `viewitems.d2` 用 X2C 的 from_appmsg）。
-2. 气泡在**每次 bind 填充时**由代码重新设置：`viewitems.to.b(msg, holder, ctx, isRecv)` → `setBackgroundResource(2131231925/2131232060)`；链接文本子类型再由 `hn5.r0.g0`/`hn5.s0.k0` → `setBackgroundResource(2131231944/2131232070)`。
-3. 所以 hook `kw5.g.r`（匹配 "@drawable/chatfrom_bg"）对文本气泡**完全不触发**——这就是"无任何效果"的根因。
-
-**有效的替换点（详见 §5）**：hook `View.setBackgroundResource(int)` 与 `View.setBackground(Drawable)`，按 resId 替换（自校准方向）；或精准 hook `viewitems.to.b(...)`（静态方法，自带 `isRecv` 方向参数与 holder）。
-
----
-
-## 1. 聊天界面 UI 封装全景（从 Activity 到气泡视图）
-
-```
-com.tencent.mm.ui.chatting.ChattingUI                       （MMSecDataFragmentActivity → BaseMvvmFragmentActivity → VASLauncher）
-└─ ChattingUIFragment                                        （f 字段 B = MMChattingListView）
-   └─ com.tencent.mm.ui.chatting.view.MMChattingListView      （MMPullDownView → FrameLayout，消息列表）
-      └─ 适配器 ChattingDataAdapter → com.tencent.mm.view.recyclerview.WxRecyclerAdapter（MvvmList 架构）
-         └─ ItemConvert：xl5.g（每个 viewType 一个实例）
-            ├─ c(recyclerView)        创建 item 视图
-            ├─ d(recyclerView, view) 组装 ViewHolder（tag 机制）
-            └─ h(holder, item, ...)   bind 填充
-               └─ Item 工厂：viewitems.lt.a(ctx) → viewitems.kt（"MicroMsg.ItemFactoryNew"）
-                  ├─ kt.c(msg)  计算 viewType（jt.invoke：type + subtype + isRecv + 子类型 index）
-                  └─ kt.b(key)  Class.newInstance() 造 item（默认 viewitems.d2）
-                     └─ item.H(inflater, null)   ← ChattingItem 基类 viewitems.b0 的抽象方法
-                        └─ new viewitems.jh(inflater, 内容布局resId)   ← jh = ChattingItemContainer
-                           └─ jh 构造函数：建"展开"TextView → inflate(0x7f0e0349 历史消息提示)
-                              → CheckBox(多选) → inflate(内容布局, null) 挂到自己身上
-```
-
-### 1.1 各层关键类速查
-
-| 层 | 类（本构建混淆名） | 职责 | 关键方法/证据 |
-|---|---|---|---|
-| 聊天页 Fragment | `com.tencent.mm.ui.chatting.ChattingUIFragment` | 持列表 | 字段 `B: MMChattingListView` |
-| 消息列表 | `com.tencent.mm.ui.chatting.view.MMChattingListView` | 列表容器 | extends `MMPullDownView` |
-| 适配器 | `ChattingDataAdapter` + `WxRecyclerAdapter` | MvvmList RecyclerView | `adapter.k.getView/S/O/G0/E0` |
-| ItemConvert | `xl5.g` | 每 viewType 的转换器 | `c()/d()/h()`（见 §1.2） |
-| Item 工厂 | `viewitems.lt` → `viewitems.kt`（implements `viewitems.os`） | viewType→Item 类 | 日志 `MicroMsg.ItemFactoryNew`；`kt.b(I)newInstance`；默认 `viewitems.d2` |
-| 注册逻辑 | `kt` 构造器 + `kt.f(from,to,Class,isRecv)` / `kt.h(...,lambda)` | 填充 map `b: key=rs.a(type,sub,isRecv,idx)` | smali 实测 |
-| Item 基类 | `viewitems.b0`（= ChattingItem） | 所有消息 item 基类 | `H(LayoutInflater,View)` 抽象；`i(View,isRecv,needMargin)` 设 6dp 边距；`r(...)` 全文截断 |
-| **Item 容器** | `viewitems.jh`（smali 内字符串 `ChattingItemContainer`） | **真正的 item 视图（RelativeLayout）** | ctor `(LayoutInflater, 内容布局resId)` |
-| 文本 item | `hn5.v`（收）/`hn5.n0`（发）普通；`hn5.r0`（收）/`hn5.s0`（发）链接子类型 | 文本消息 | `hn5.v.d` 日志 `MicroMsg.ChattingItemTextFrom`；继承 `viewitems.zn → b0` |
-| 文本 ViewHolder | `viewitems.to` | 持有气泡视图 | `b: MMNeat7extView`（正文/气泡）；`g: ProgressBar`（发送中）；`f: AnimImageView`；`e: ChattingItemTranslate` |
-| 语音 item | `viewitems.tr`（发）/`ur`（收），type 34 | 语音 | `kt.h(0x22,0,tr/ur,...)` |
-| 默认 item | `viewitems.d2` | 未知类型兜底 | `H → new jh(inflater, 0x7f0e03b9)`（X2C from_appmsg） |
-| 媒体类 item | `kn5.h7`（发）/`kn5.j7`（收），types {3,23,13,39,33} | 图片/卡片等 | `H → new jh(inflater, 0x7f0e03c3)` + DataBinding(`m7`) |
-
-### 1.2 ItemConvert（xl5.g）三个关键方法
+### 13.2 AnimImageView.setType 源码（v4 已实证，i 的语义）
 
 ```java
-// 创建 item 视图（xl5.g.c）
-public View c(RecyclerView rv) {
-    b0 item = lt.a(ctx).b(viewType);                 // viewitems.kt.b → newInstance
-    View H = item.H(inflater, null);                 // b0.H → new jh(inflater, 内容布局)
-    H.setTag(0x7f0a103c /*2131365948*/, item);       // tag[ChattingItem] = item
-    return H;
-}
-// 组装 ViewHolder（xl5.g.d）
-public s0 d(RecyclerView rv, View convertView) {
-    ChattingItem item = (ChattingItem) convertView.getTag(2131365948);
-    BaseViewHolder holder = (BaseViewHolder) convertView.getTag();
-    ((h0) holder).setChattingItem((b0) item);
-    return new e(convertView);
-}
-```
-
-### 1.3 ChattingItemContainer（viewitems.jh）构造函数（smali 实测）
-
-```java
-public jh(LayoutInflater inflater, int contentLayoutResId) {   // extends RelativeLayout
-    // 1) "展开/全文" TextView（X2C 视图池 kw5.q1.c(ctx,"X2CTextView") 取实例，id 0x7f0a1075）
-    // 2) inflater.inflate(0x7f0e0349 历史消息提示布局, null)  id=0x7f0a0fc3
-    // 3) CheckBox 多选框（setBackgroundResource(0x7f0811ae), id 0x7f0a0f6c）
-    // 4) inflater.inflate(contentLayoutResId, null)            ← 真正的消息内容布局！
-    //    内容根 id 兜底 0x7f0a0f74；容器自身 id 兜底 0x7f0a0ff4
-    // 全程用 ym0/a.d(...) 做 "android/view/View_EXEC_" 埋点（Matrix 监控）
-}
-```
-
-### 1.4 文本消息的 item 与布局（重点）
-
-- `viewitems.zn.H(inflater, null)` → `new jh(inflater, 0x7f0e0382)` + `new viewitems.to().a(view, true)` 作 tag。
-- **`0x7f0e0382` 不在 X2C 注册表（BootX2CFactory 的 24 个映射里没有它）→ 二进制 XML 布局**；气泡背景不来自 XML，完全由代码在 bind 时画上去。
-- `viewitems.to` ViewHolder：`b` = `MMNeat7extView`（**气泡 = 这个 TextView 的 background**）。
-
----
-
-## 2. 气泡资源 resId 全景表（本构建实测，全部经 Smali 核查）
-
-| 场景 | 对方（收到） | 自己（发出） | 设置点（类.方法） |
-|---|---|---|---|
-| **普通文本（最终态）** | **2131231925**（chatfrom_bg，0x7F0804B5） | **2131232060**（chatto_bg，0x7F08053C） | `viewitems.to.b(e9,to,d,Boolean isRecv)` 静态方法 |
-| 发送中/高亮分支（`msgId == j2.f`） | 2131231841 | 2131231895 | 同上 `to.b`（同时显示 ProgressBar `to.g`） |
-| **链接/自动识别文本子类型**（`y3.O4(msg) && !ctx.F()` 命中时用 hn5.r0/s0） | **2131231944** | **2131232070** | `hn5.r0.g0(MMNeat7extView)` / `hn5.s0.k0(MMNeat7extView)` |
-| AppMsg（仅"默认 item" d2 走 X2C） | chat_from_mask_bg = 2131231853（背景+前景） | chatto_bg_app = 2131232062（背景）+ chat_to_mask_bg = 2131231907（前景） | `kw5.g.r → kw5.i0.f/n`（gm.f/gm.h，X2C 创建期） |
-| X2C 旧链路（chatting_item_from/to，gm.g/gm.i，文本 item 不走） | chatfrom_bg = 2131231925 | chatto_bg = 2131232060 | `kw5.g.r → kw5.i0.f` |
-
-> 方向判定依据（三重证据）：① `kt` 注册表 key 的 bool = `!isSend`（`jt.invoke` 第 100 行 `rs.a(type, sub, !f0.i(msg), idx)`）；② 发送 item 注册 `FALSE`、接收 item 注册 `TRUE`；③ `hn5.v.d` 日志 tag 为 `MicroMsg.ChattingItemTextFrom`（From = 收到方），且其填充块 `hn5.q.invoke` 调用 `to.b(msg, holder, ctx, Boolean.TRUE)`。
-> 注意：`to.b`（普通态）与 `g0/k0`（链接子类型）的**最终赢家**取决于 `hn5.v.d` 中 `e.b() && e.d()` 两个配置开关（未静态解析）——所以 **6 个 resId 全部要纳入替换表**（见 §5 方案 1）。
-
----
-
-## 3. 文本气泡 bind 填充链路（逐层，含调用顺序）
-
-```
-xl5.g.h(holder, item, ...)                                  // onBindViewHolder
-└─ hn5.v.n(h0, d, msgData, str)                             // 文本 item 填充入口
-   └─ hn5.v.d(d, msgData, str, a1 uiBlocks)                 // 异步准备 + 注册 UI 块（241 行）
-      ├─ a1Var.d(new hn5.p(...))        → hn5.p.invoke(to)：
-      │     to.b 视图 setTag(2131365951 msgId / 2131365950 / 2131365949)
-      │     item.g0(contentITV)          ← 多态：普通 item(v/n0) 为空实现；链接子类型 r0/s0 生效
-      │         r0.g0: setMaxWidth + setBackgroundResource(2131231944) + b0.i(view,true,true)
-      │         s0.k0: setMaxWidth + setBackgroundResource(2131232070) + b0.i(view,false,true)
-      ├─ a1Var.d(new hn5.q(...))        → hn5.q.invoke(to)：   （条件 e.b() && e.d()）
-      │     to.b(msg, holder, ctx, Boolean.TRUE)：             ← 普通态气泡最终设置点
-      │         msgId == j2.f(发送中) → progressbar 显示 + setBackgroundResource(isRecv?2131231841:2131231895)
-      │         否则                   → setBackgroundResource(isRecv?2131231925:2131232060)
-      │         msgId == j2.e → AnimImageView(to.f) 动画
-      ├─ a1Var.d(new hn5.r/s/t/o/...))                       // 点击、长按、翻译、全文等
-```
-
-关键源码（smali/jadx 实测）：
-
-```java
-// viewitems.to.b —— 普通态气泡（静态包装方法，注意第 4 参 isRecv）
-public static void b(e9 msg, to holder, d ctx, Boolean isRecv) {
-    if (msg.getMsgId() == ((j2) ctx.c.a(j2.class)).f) {      // 发送中的消息
-        holder.g.setVisibility(0);                            // ProgressBar
-        holder.b.setBackgroundResource(isRecv ? 2131231841 : 2131231895);
+public void setType(int i) {
+    if (this.e) {                                   // e = isRecv
+        if (i == 2) setBackgroundResource(2131100638);
+        else if (i == 3) setBackgroundDrawable(null);        // <- 清背景态
+        else setBackgroundDrawable(ke5.a.i(ctx, 2131231925));
     } else {
-        holder.g.setVisibility(8);
-        holder.b.setBackgroundResource(isRecv ? 2131231925 /*chatfrom_bg*/ : 2131232060 /*chatto_bg*/);
+        if (i == 2) setBackgroundResource(2131100639);
+        else if (i == 3) setBackgroundDrawable(null);        // <- 清背景态
+        else setBackgroundDrawable(ke5.a.i(ctx, 2131232060));
     }
-    if (msg.getMsgId() == ((j2) ctx.c.a(j2.class)).e) { holder.f.setVisibility(0); holder.f.b(); }
-    else { holder.f.setVisibility(8); holder.f.c(); }
 }
-
-// hn5.r0.g0 —— 链接文本子类型（收到方）
-public void g0(MMNeat7extView contentITV) {
-    contentITV.setMaxWidth((int) (gk.p(0.88f) / f.g));
-    contentITV.setBackgroundResource(2131231944);
-    i(contentITV, true, true);
-}
-// hn5.s0.k0 —— 链接文本子类型（发出方）
-public void k0(MMNeat7extView contentITV) {
-    contentITV.setMaxWidth((int) (gk.p(0.88f) / f.g));
-    contentITV.setBackgroundResource(2131232070);
-    i(contentITV, false, true);
-}
-
-// viewitems.b0.i —— 气泡边距微调（左/右 6dp，跟随方向）
-public void i(View view, boolean isRecv, boolean needMargin) { /* margin 6dp */ }
 ```
+`i==3` = **微信主动清空气泡背景**（播放中/复用清理态），且此路径**不再经过 ke5.a.i / setBackgroundResource**，你原有的两道 resId 白名单完全旁路。
 
----
-
-## 4. X2C 链路现状（为何只对 AppMsg 默认 item 有效）
-
-- X2C 注册表：`com.tencent.mm.autogen.layout.BootX2CFactory extends kw5.i`，构造器注册 **24 个** 布局 → 生成类：
-  `gm.g=chatting_item_from(0x7F0E03CB, chatfrom_bg 2131231925)`、`gm.i=chatting_item_to(0x7F0E041C, chatto_bg 2131232060)`、`gm.f=from_appmsg(0x7F0E03B9, chat_from_mask_bg 2131231853)`、`gm.h=to_appmsg(0x7F0E040C, chatto_bg_app 2131232062 + chat_to_mask_bg 2131231907)`、`gm.d/gm.e`=头像 from/to、`gm.a`=history_msg_tip 等。
-- 文本实际布局 `0x7f0e0382`、媒体 item 布局 `0x7f0e03c3` **均不在注册表** → 二进制 XML。
-- X2C 开关 `RepairerConfigX2COpenFlag`（默认=开，`kw5/q0.f`），但当布局无生成类时 `com.tencent.mm.ui.hd`(MMLayoutInflater) 自动兜底 `super.inflate()` 走二进制 XML。
-- 结论：**hook `kw5.g.r`/`kw5.i0.f` 只能影响"默认 item"的 AppMsg 气泡，对文本气泡无效。**
-
----
-
-## 5. 气泡替换方法（按推荐度排序，附 Xposed 代码）
-
-### 方案 1（主推·全类型通用·抗混淆）：hook `View.setBackgroundResource(int)` + `View.setBackground(Drawable)`
-
-原理：无论气泡来自 bind 代码、二进制 XML（`android:background` 最终也走 `setBackground`）、DataBinding，**最后都落到 View 的这两个方法**。按 resId 白名单替换即可，与类名混淆、X2C 开关无关。
+### 13.3 语音 holder 完整字段表（mq.b Smali 实证，v9 新增）
 
 ```java
-// resId → 自定义气泡（方向映射见下文"自校准"）
-private int RES_RECV = 0, RES_SEND = 0;                 // 运行时采集后填入
-private static final Set<Integer> RECV_IDS = new HashSet<>(Arrays.asList(
-    2131231925, 2131231841, 2131231944));               // 对方：chatfrom_bg / 高亮 / 链接子类型
-private static final Set<Integer> SEND_IDS = new HashSet<>(Arrays.asList(
-    2131232060, 2131231895, 2131232070));               // 自己：chatto_bg / 高亮 / 链接子类型
-
-public void hookBubble(ClassLoader cl) {
-    // 1) 整数资源入口（气泡主路径）
-    XposedHelpers.findAndHookMethod(View.class, "setBackgroundResource", int.class, new XC_MethodHook() {
-        @Override protected void beforeHookedMethod(MethodHookParam param) {
-            Integer rep = mapRes((int) param.args[0]);
-            if (rep != null) param.args[0] = rep;
-        }
-    });
-    // 2) Drawable 入口（XML/databinding/前景）
-    XposedHelpers.findAndHookMethod(View.class, "setBackground", Drawable.class, new XC_MethodHook() {
-        @Override protected void beforeHookedMethod(MethodHookParam param) {
-            Drawable d = (Drawable) param.args[0];
-            Integer rep = mapRes(resIdOf(d));             // 用"已知气泡 drawable 的 ConstantState"反查
-            if (rep != null) param.args[0] = param.thisObject...
-        }
-    });
+public h0 b(View view, boolean z, boolean z2) {     // z = isRecv(对方)，z2 = isGroup(群聊)
+    timeTV = findViewById(2131366064);  userTV = findViewById(2131366078);
+    mq.d = findViewById(2131366097);     // 时长 TextView
+    stateIV = findViewById(2131366060);
+    mq.s = findViewById(2131365751);     // MMNeat7extView（语音转文字）
+    mq.o = findViewById(2131366098);     // FrameLayout
+    mq.t = findViewById(2131366092);     // ProgressBar
+    mq.c = findViewById(2131366095);     // TextView
+    mq.e = findViewById(2131366091);     // AnimImageView 主动画（自己的语音）setType(1)
+    mq.C = findViewById(2131365817);     // RelativeLayout 容器
+    mq.D = findViewById(2131365816);     // TextView（StateListDrawable 背景，备用承载）
+    if (z) {                              // 收到的语音
+        mq.e.setFromVoice(true); mq.e.setFromGroup(z2);
+        mq.u = findViewById(2131366096);  // 第二个 AnimImageView（收到侧）setType(0)
+        mq.u.setType(0);
+    } else {                              // 发出的语音
+        mq.q/r/w/x = ...
+        mq.e.setFromVoice(false);
+    }
 }
 ```
 
-**方向自校准（不依赖上表的硬编码）**：首次进入聊天页时，hook 以上两方法，对每个命中的 `MMNeat7extView`（`com.tencent.mm.ui.widget.MMNeat7extView`，类名未混淆）打印 `resId + getLocationOnScreen`：
-- 视图右缘离屏幕右半边近 → **自己（发出）**；离左半边近 → **对方（收到）**。
-- 用采集结果动态建表，之后同一会话/跨会话复用（resId 在同一 APK 构建内稳定）。
+关键修正：
+- **方向唯一可靠来源 = `mq.b` 的 `param.args[1]`（z=isRecv）与 `param.args[2]`（z2=isGroup）**；`AnimImageView` 自身字段读出的 isRecv 恒 false（日志实证），不可用。
+- 收到侧语音气泡挂在 **`mq.u`（id 2131366096，setType(0)）**，自己侧挂 **`mq.e`（id 2131366091，setType(1)）**；两条都可能在 type=3 态被清背景。
 
-### 方案 2（精准·仅文本气泡）：hook `viewitems.to.b` 与 `hn5.r0.g0 / hn5.s0.k0`
+### 13.4 修复方案
 
 ```java
-// to.b(e9 msg, to holder, d ctx, Boolean isRecv) —— 普通态最终设置点，自带方向
-XposedHelpers.findAndHookMethod("com.tencent.mm.ui.chatting.viewitems.to", cl, "b",
-    "com.tencent.mm.storage.e9", "com.tencent.mm.ui.chatting.viewitems.to",
-    "gk5.d", Boolean.class, new XC_MethodHook() {
-    @Override protected void afterHookedMethod(MethodHookParam param) {
-        Object holder = param.args[1];
-        boolean isRecv = (Boolean) param.args[3];
-        View bubble = (View) XposedHelpers.getObjectField(holder, "b");   // MMNeat7extView
-        bubble.setBackground(isRecv ? myRecvBubble : mySendBubble);
+// 1) 方向表：mq.b hook 拿准 z/z2，覆盖两个 AnimImageView
+findAndHookMethod("com.tencent.mm.ui.chatting.viewitems.mq", cl, "b",
+    View.class, Boolean.class, Boolean.class, new XC_MethodHook(){
+    protected void afterHookedMethod(MethodHookParam p){
+        boolean isRecv = (Boolean) p.args[1];                 // z
+        View root = (View) p.args[0];
+        for (int id : new int[]{2131366091, 2131366096}) {   // mq.e / mq.u
+            View av = root.findViewById(id);
+            if (av != null) BUBBLE.put(av, isRecv);
+        }
+        View d = root.findViewById(2131365816);               // mq.D 备用承载
+        if (d != null) BUBBLE.put(d, isRecv);
     }
 });
-// 链接文本子类型（类名每版会变，需按 §6 锚点重新定位）
-XposedHelpers.findAndHookMethod("hn5.r0", cl, "g0", "com.tencent.mm.ui.widget.MMNeat7extView", ...);
-XposedHelpers.findAndHookMethod("hn5.s0", cl, "k0", "com.tencent.mm.ui.widget.MMNeat7extView", ...);
-// after 里对 param.args[0]（MMNeat7extView）直接 setBackground
-```
-优点：语义最清晰（方向由参数/类直接给出）、调用频率低、不影响其他 UI。
 
-### 方案 3（资源级·覆盖 XML/DataBinding 路径）
-
-```java
-// ① hook WeChat 资源包装（仅覆盖 App 内部代码路径）
-XposedHelpers.findAndHookMethod("ke5.a", cl, "i", Context.class, int.class, new XC_MethodHook() {
-    @Override protected void beforeHookedMethod(MethodHookParam param) {
-        Integer rep = mapRes((int) param.args[1]);
-        if (rep != null) param.setResult(rep);             // 返回自定义 Drawable
+// 2) setType hook：type==3（清背景态）不要就地贴，延后到布局稳定后补
+findAndHookMethod("com.tencent.mm.ui.base.AnimImageView", cl, "setType", int.class,
+  new XC_MethodHook(){
+    protected void afterHookedMethod(MethodHookParam p){
+        View v = (View) p.thisObject;
+        if ((int) p.args[0] == 3) {                          // 微信正在清背景
+            v.post(() -> { Boolean r = BUBBLE.get(v); if (r != null) applyBubble(v, r); });
+        }
     }
 });
-// ② 或 XResources 按 resId 替换（覆盖二进制 XML，资源名已被微信混淆，按名替换不可行）
-xres.setReplacement(0x7F0804B5 /*chatfrom_bg*/, modRes);  // 注意每次构建 resId 会变
+
+// 3) 统一补盖入口（bind/attach/list onLayout 均调用，方向以 BUBBLE 表为准）
+void applyBubble(View v, boolean isRecv) {
+    Drawable d = fresh(isRecv ? myRecv : mySend);
+    v.setBackground(d);
+    v.setVisibility(View.VISIBLE);                           // 防 GONE 态不渲染
+    v.setPadding(pl, pt, pr, pb);
+    v.requestLayout(); v.invalidate();
+}
 ```
 
-### 方案 4（X2C 层）：仅对"默认 item"的 AppMsg 气泡有效，见 §4。文本气泡勿用。
+### 13.5 自检清单（换构建/回归必做）
+
+1. dump 语音 item 全树：`log(id, class, bg.class, vis, w, h)`，确认当前形态下气泡真实承载（mq.e / mq.u / mq.D 三者哪个有 9-patch 且 VISIBLE）。
+2. 播放一条语音，观察 `setType` 的 i 值序列（1/0 -> 3 -> 是否恢复 1/0）；依此决定补盖时机（post 延迟或 list onLayout after）。
+3. 校验方向：`mq.b` args[1]=true 的 item，气泡必须用 myRecv；日志里不再出现 `isRecv=false` 一刀切。
+4. ` AnimImageView` 若为 GONE，说明本形态气泡不在它身上——改贴 §13.3 表里 VISIBLE 的那个 view。
 
 ---
 
-## 6. 跨版本锚点定位法（类名/resId 每个构建都会变）
+## 14. v10 增补：语音气泡发送后彻底消失（录音面板被误贴 + setType(3) 状态机冲突）
 
-1. **`MMNeat7extView` 类名未混淆**（`com.tencent.mm.ui.widget.MMNeat7extView`）→ 气泡视图类型锚点。
-2. 找文本 item 基类：`search_strings("MicroMsg.ChattingItemTextFrom")` → `hn5.v`；其继承链 `→ viewitems.zn → viewitems.b0`。
-3. 找 Item 工厂：`search_strings("MicroMsg.ItemFactoryNew")` → `viewitems.kt`；构造函数里 `kt.f(type, sub, Class, isRecv)` 的注册表给出 type→item 类映射（type 1 = 文本）。
-4. 找气泡设置点：在文本 item 填充链中搜 `setBackgroundResource` 调用；或直接 hook `View.setBackgroundResource` 真机打印 resId 列表（最稳）。
-5. 找 X2C 注册表：`search_strings("chatfrom_bg")` / `"MicroMsg.X2C"` → `BootX2CFactory` / `kw5.*`。
-6. **真机自校准**（推荐每次换版本都做）：临时 hook `View.setBackgroundResource(int)`，打印 `(resId, view.getClass(), view 在屏幕中的 x/width)`，翻一遍聊天记录即可得到完整的"气泡 resId ↔ 方向"表。
+### 14.1 日志实锤（v3.0.160，21:49:58 正常 -> 21:50:02 故障）
 
----
+| 时间 | 证据 | 解读 |
+|---|---|---|
+| 21:49:58 | `AnimImageView.setType type=1 ... parent=FrameLayout` + VERIFY `w=254 h=127 vis=0 custom=true` | 聊天气泡正常渲染（mq.e，FrameLayout 内） |
+| 21:50:02（长按说话后） | `AnimImageView.setType type=3 ... parent=LinearLayout` -> `REAPPLY type=3 kind=1` | **出现第二类 AnimImageView**：按住说话录音面板的麦克风（76x76，LinearLayout 内） |
+| 21:50:02.458 | `AnimImageView VERIFY ... w=76 h=76 vis=0 attached=true parent=LinearLayout custom=true` | **模块把聊天气泡贴到了录音麦克风上**（漏网之鱼） |
+| 21:50:02 之后 | 列表 item 再无 `setType type=1` 事件；21:50:02.259 VERIFY 聊天气泡 `vis=8` | 微信清背景后不再自恢复，模块也没补 → 气泡消失 |
 
-## 7. 二次核查记录（v2 导出前逐项验证）
+### 14.2 根因
 
-| # | 结论 | 核查方式 | 结果 |
-|---|---|---|---|
-| 1 | 文本 item 布局 = 0x7f0e0382（非 X2C） | `zn.H` smali；对照 BootX2CFactory 24 项注册表逐一比对 | ✔ 不在注册表 |
-| 2 | 普通态气泡 = chatfrom_bg(2131231925)/chatto_bg(2131232060)，设置点 `to.b(e9,to,d,Boolean)` | jadx 反编译 `to.b` 全文 + `hn5.q.invoke` 调用点 | ✔ |
-| 3 | 链接子类型气泡 = 2131231944(收)/2131232070(发)，设置点 `hn5.r0.g0`/`hn5.s0.k0` | jadx 反编译 + 工厂注册（r0=TRUE=isRecv，s0=FALSE=isSend） | ✔ |
-| 4 | 方向映射：hn5.v/n0 = 收/发；r0/s0 = 收/发 | `kt.f/h` 注册参数 + `jt.invoke` key 计算 `!f0.i(msg)` + 日志 tag "ChattingItemTextFrom" + q 块传 `Boolean.TRUE` | ✔ 四证据一致 |
-| 5 | item 容器 = `viewitems.jh`（smali 字符串 `ChattingItemContainer`），ctor 里 `inflate(内容布局)` | jh 完整 smali（748 行）逐段核查 | ✔ |
-| 6 | Item 工厂 = `viewitems.kt`，`b(I)newInstance`，默认 `viewitems.d2` | kt.b smali + 构造器注册代码 | ✔ |
-| 7 | X2C gm.g/gm.i(chatfrom_bg/chatto_bg) 不在文本 item 路径 | 注册表 24 项枚举 + zn.H 用 0x7f0e0382 | ✔ |
-| 8 | `to.b` 发送中分支 2131231841/2131231895 + ProgressBar 逻辑 | jadx 反编译 | ✔ |
-| 9 | AppMsg 仅默认 item d2 走 X2C（gm.f from_appmsg，mask bg 2131231853/2062/1907） | d2.H smali + gm.f/gm.h 反编译 | ✔ |
-| 10 | hook `View.setBackground(int)` 可覆盖二进制 XML 的 `android:background` | Android 框架行为（View ctor 走 setBackground） | ✔（框架语义） |
+1. **AnimImageView.setType 有两类调用方**：聊天 item 内的气泡（parent=FrameLayout，mq.e/mq.u）和 ChatFooter 录音面板麦克风（parent=LinearLayout，76x76）。hook 必须用 `inChatItem(v)` 只认前者。
+2. `setType(3)` = 微信**主动清背景态**（录音中/复用清理）。after 里强制 REAPPLY 静态气泡，与微信录音动画状态机冲突；录音完成/发送后微信不再补 setType(1)（不重新 bind），气泡停在被冲掉的状态。
+3. 附带方向 bug：`attach BUBBLE apply isRecv=true kind=1 view=MMNeat7extView` —— isRecv=true 却贴 kind=1（自己）气泡，方向源混用。
 
-### 遗留不确定性（如实说明）
+### 14.3 修复
 
-- `to.b` 与 `g0/k0` 谁最终生效取决于 `hn5.v.d` 中 `e.b() && e.d()` 两个运行时配置开关（未静态解析）→ 方案 1 已把 6 个 resId 全部纳入替换表规避该不确定性。
-- `j2.f`/`j2.e` 语义（发送中消息 id / 动画态消息 id）为基于 ProgressBar/AnimImageView 行为的合理推断。
-- 图片/语音/卡片等非文本消息的气泡 drawable resId 未逐一采集（其布局走二进制 XML + DataBinding）→ 用 §6 第 6 条真机自校准采集后纳入方案 1 映射表。
-- 所有 resId/混淆类名仅对**本 base.apk 构建**有效，换版本必须按 §6 重新锚定。
+```java
+// 1) setType hook：只认聊天 item 内 + type=3 不 REAPPLY
+findAndHookMethod("com.tencent.mm.ui.base.AnimImageView", cl, "setType", int.class, after(p) -> {
+    View v = (View) p.thisObject;
+    if (!inChatItem(v)) return;                       // 录音麦克风/ChatFooter 全挡掉
+    if ((int) p.args[0] == 3) return;                 // 微信要清就让它清，别 REAPPLY
+    Boolean recv = BUBBLE.get(v);
+    if (recv != null) applyBubble(v, recv);
+});
 
----
+// 2) 补盖时机改到列表布局稳定后（录音结束后一次覆盖）
+findAndHookMethod(RecyclerView.class, "onLayout", boolean.class, int.class, int.class, int.class, int.class, after(p) -> {
+    if (!inChat) return;
+    for (Map.Entry<View, Boolean> e : BUBBLE.entrySet())
+        if (e.getKey().isAttachedToWindow()) applyBubble(e.getKey(), e.getValue());
+});
 
-*报告生成：LSPilot AI 分析助手 · v2 修正版（DexKit + jadx + baksmali 交叉验证）*
+// 3) 方向唯一来源：mq.b 的 args[1]（z=isRecv），apply 统一
+void applyBubble(View v, boolean isRecv) {
+    v.setBackground(fresh(isRecv ? myRecv : mySend));   // 杜绝 isRecv=true kind=1
+    v.setVisibility(View.VISIBLE);                      // 清背景态恢复后防 GONE
+    v.requestLayout(); v.invalidate();
+}
+```
+
+### 14.4 自检
+
+1. 长按说话时 dump：是否还有 `parent=LinearLayout w=76` 的 AnimImageView 被贴气泡（应为 0）。
+2. 发送语音后 3 秒内，`RecyclerView.onLayout` after 是否对 BUBBLE 集合补盖成功（VERIFY 出现 `w=254 h=127 vis=0 custom=true`）。
+3. 文本 item 不再出现 `isRecv=true kind=1` 组合。
