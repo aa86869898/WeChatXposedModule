@@ -23,8 +23,24 @@
         完整工程源码 LeShaoWeChatV3-src-v30148.tar.gz (8MB)
         <div class="meta">v3.0.148 完整可编译工程源码包 · 含全部 Java/资源源码 + gradle wrapper + xposed-api-82.jar + debug/release keystore + 成品 release APK。本机需 Android SDK(35) + JDK17 可 ./gradlew assembleRelease</div>
     </a>
+    <a class="apk" href="LeShaoWeChat-v30224.apk">
+        最新版 LeShaoWeChat-v30224.apk (Release)
+        <div class="meta">v3.0.224 · 聊天气泡+时间线重写版补全 DexKit 锚点 —— 按《聊天气泡与时间线_DexKit锚点汇总.md》K 区权威 resolve() 补全全部锚点：A 区适配器(_onBindViewHolder[ 唯一 + WxRecyclerAdapter 四级兜底)、B 区语音(B-1/B-2 唯一 + B-3 To + B-6 AutoPlay + B-7 VoiceLogic + B-8 VoiceInfo + B-9 VoiceContent + e 9参填充)、C 区文本(C-1 唯一 + b 4参赋值 + C-2 TextFrom)、D 区系统提示/时间线(chat_sys_msg_del_btn H2参 + SysMsgTemplate a5参 + timeTV 字段 + n 4参 + gj 5参 AND Tag)、E 区 chatbg、F 区红包(getC2CLuckyMoneyDescByHbStatus 唯一 + ChattingItemAppMsgC2CFrom H2参)、G 区引用(q71.n 接口44 + J7 工厂)、H 区消息(MicroMsg.MsgInfo + storage 包过滤 + convertFrom)、四级未混淆类名兜底(MsgQuoteItem/AnimImageView/MMNeat7extView)、三级 MVVM 子类(superClass bq/iq)。R1/R2 完整替换已按 M 区挂载：Resources#getDrawable 四重载 + View#setBackgroundDrawable 兜底 + setBackgroundResource 动态收集气泡 resId。依赖 org.luckypray:dexkit:2.3.0（官方最新）。</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v30223.apk">
+        上一版 LeShaoWeChat-v30223.apk (Release)
+        <div class="meta">v3.0.223 · 聊天气泡+时间线方案重写（完整替换方案初版）—— 按《聊天气泡与时间线_最终方案与权威数据.md》整体重写：废弃旧「贴皮」方案，改为从源头替换微信气泡 drawable（hook Resources.getDrawable 系列 + View.setBackgroundDrawable，覆盖 P1-P4 四条取 drawable 路径），自定义气泡/语音气泡/时间线/系统提示/红包替换由独立 WxBubbleFinal.kt（com.example.wxbubble.WxBubbleModule 新入口）实现；依赖修正为 org.luckypray:dexkit:2.3.0（官方最新，文档中的 io.github.lsposed.dexkit 坐标不存在）；旧 ChatBubbleHook 贴皮链路已停用待新方案验证后移除。DexKit 运行时锚点字符串后续按《DexKit锚点汇总》补齐</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v30222.apk">
+        上一版 LeShaoWeChat-v30222.apk (Release)
+        <div class="meta">v3.0.222 · 自己语音气泡底部原生残留修复 —— 日志实锤发送侧 mq.x(2131366108) 始终 w=0 h=0 不可见，发送侧可见背景承载是 mq.e(AnimImageView) + mq.u(播放动画层)。用户反馈「自定义气泡边缘还能看到原生气泡在底部」= 发送侧 mq.u 保留微信原生背景且可见，底部原生露出。本次：发送侧 mq.e + mq.x + mq.u 全部贴自定义背景，且 mq.u 在所有路径（mq.b/hookVoiceFillE/applyBubblesInItem/attach/setType/AnimImageView.b/cover）一律不 forceVisible（可见性完全由微信播放状态控制，v3.0.220 闪现根因即强制显示）。接收侧保持 mq.e 贴背景、mq.u/mq.x 只登记不贴（假气泡不回归）。验收：自己语音气泡边缘不再露出微信原生背景、反复进出窗口不闪现</div>
+    </a>
+    <a class="apk" href="LeShaoWeChat-v30221.apk">
+        上一版 LeShaoWeChat-v30221.apk (Release)
+        <div class="meta">v3.0.221 · 回退 v3.0.220 的 mq.u 方案并重新修复自己气泡尺寸 —— ①回退：v3.0.220 改贴 mq.u(2131366096) 播放动画层导致反复进聊天窗口自己气泡闪现（mq.u 可见性由微信播放状态控制，强制渲染即闪）；本次完全回退 v3.0.219 行为：mq.u 任何路径只登记不贴不 forceVisible，发送侧仍贴 mq.e+mq.x，接收侧贴 mq.e，假气泡修复不回归。②尺寸修复：v3.0.219 中 voiceItemBubbleEligible 把发送侧 mq.x 的 setBackgroundResource 也 skip，mq.x 上微信原生背景未被替换 → 发送侧 mq.e 小背景叠在 mq.x 原生大背景上 → 气泡显小；本次放行发送侧 mq.x 的 setBackgroundResource 替换（接收侧 mq.x 仍是隐藏镜像不替换）。验收：反复进出聊天窗口自己的气泡稳定渲染不闪现、尺寸与原生一致，对方语音假气泡不复发</div>
+    </a>
     <a class="apk" href="LeShaoWeChat-v30210.apk">
-        最新版 LeShaoWeChat-v30210.apk (Release)
+        上一版 LeShaoWeChat-v30210.apk (Release)
         <div class="meta">v3.0.210 · 「去你妈的面对面扫码」二次复审修复（依《微信相册二维码模拟真实相机扫码_二次复审.md》）——真正决定「是不是相机扫码」的字段是 qbar_string_scan_source（0=相机/1=相册/2|4=长按），此前误判 result_image_source（相册路径 j7 设 2 会被 i7 覆盖回 1，不决定性）。相册走 i7/j7 内部结果页时 j7 硬编码 qbar_string_scan_source=1 → f74.c.b → v74.v.g(source=1,getA8KeyScene=34) → 业务判定「非相机扫码」拒绝（面对面红包/扫码登录/面对面建群）。本次三层保险：①hook BaseScanUI.j7 改返回 Bundle（qbar_string_scan_source 1→0、result_image_source→1）；②hook f74.c.b(long,Bundle) before 强改 Bundle 两字段；③hook v74.v.g before 改 params（args[3]=source→0、args[4]=getA8KeyScene→4）。验证：日志 MicroMsg.QBarStringHandler source:%d 应为 0、getA8KeyScene:%d 应为 4。开关不变：更多功能页「去你妈的面对面扫码」(ls_face_scan_fake)</div>
     </a>
     <a class="apk" href="LeShaoWeChat-v30208.apk">

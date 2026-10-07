@@ -76,7 +76,7 @@ public class MainHook implements IXposedHookLoadPackage {
 
     /** 模块构建版本号(整数)。随 MODULE_BUILD 同步递增, 用于 DexKit 扫描缓存失效 */
 
-    public static final int MODULE_VERSION_CODE = 30210;
+    public static final int MODULE_VERSION_CODE = 30222;
 
     /** v1079: 当前前台 Activity(onResume 记录/onPause 清除), 供 talker 解析等复用。 */
     private static volatile java.lang.ref.WeakReference<Activity> sResumedActivity;
@@ -395,9 +395,10 @@ public class MainHook implements IXposedHookLoadPackage {
                             safeRun("LeftTopEntryHook", () -> com.leshao.v3.hook.LeftTopEntryHook.hook(cl));
                             safeRun("ChatFooterBarHook", () -> com.leshao.v3.hook.ChatFooterBarHook.hook(cl));
 
-                            // 自定义气泡（文档方案A）+ 收藏语音转发（文档路线A）
-                            safeRun("ChatBubbleHook", () -> HookManager.register("ChatBubbleHook",
-                                    () -> ChatBubbleHook.hook(cl)));
+                            // 自定义气泡 + 时间线：v3.0.223 起改用《聊天气泡与时间线_最终方案与权威数据.md》
+                            // 「完整替换」方案（WxBubbleModule，见 xposed_init 第二入口），旧贴皮方案停用。
+                            // safeRun("ChatBubbleHook", () -> HookManager.register("ChatBubbleHook",
+                            //         () -> ChatBubbleHook.hook(cl)));
                             safeRun("FavVoiceForwardHook", () -> HookManager.register("FavVoiceForwardHook",
                                     () -> FavVoiceForwardHook.hook(cl)));
                             // v3.0.206: 聊天「+」→收藏选择页语音转发（独立开关，联系人和群聊页）

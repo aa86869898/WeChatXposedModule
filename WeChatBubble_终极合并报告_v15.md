@@ -453,3 +453,155 @@ static void moveToSide(TextView tv, boolean left) {
 
 ---
 *报告生成：LSPilot AI 分析助手 · v15 终极合并版（DexKit + jadx + baksmali + 运行日志交叉验证）*
+
+---
+
+## 16. v16 增补：运行时根因（占位层 skip 导致偶发不渲染）+ 最终修正版代码
+
+### 16.1 运行日志实锤（v3.0.208，08:04 会话）
+
+| 时间 | 日志 | 解读 |
+|---|---|---|
+| 08:04:11.250 | `Bubble: dealItemView hooked xl5.g.h[class vv5.s0, interface vv5.c, int, int, boolean, interface java.util.List]` | v14 的 bind 级 hook **已正确装上**（形参与静态分析一致） |
+| 08:04:17.863 | `bubble VERIFY view=AnimImageView kind=1 custom=true w=254 h=127 vis=0` | 新建 item 渲染 OK |
+| 08:04:21.744 | `attach BUBBLE skip 占位层 isRecv=true id=2131365751 view=MMNeat7extView`（反复出现） | **收到侧文本内容 ITV(2131365751) 被“占位层 skip”跳过** |
+| 08:04:21.722 | `neat.setBackground FALLBACK kind=0 / REPLACE kind=0` | 新 item 靠 inflate 期 setBackground 补上 |
+| 08:04:21 之后 | 大量 `attach BUBBLE apply` + `voice cover onLayout` | 依赖 attach/onLayout 补盖 |
+
+### 16.2 根因链（为什么“反复打开/上下滑偶尔不渲染”）
+
+1. `xl5.g.h`（dealItemView）**只挂了没做真正渲染**；实际渲染靠 `attach BUBBLE apply` + `voice cover onLayout`（事后补丁）；
+2. **“占位层 skip”** 把收到侧文本 ITV 从 attach/BUBBLE 流程排除，只依赖 inflate 期 `MMNeat7extView.setBackground`；
+3. RecyclerView **回收复用**的 item 不再 inflate → setBackground 不再触发 → attach 又被 skip → 复用视图残留上一条/空白气泡 → **偶发不渲染**；
+4. 附带：`voice mq.b isRecv=false ... captured=1` —— 收到侧 mq.u(2131366096)/mq.D(2131365816) 未采集，语音恒按 kind=1 处理（方向错但能渲染）。
+
+### 16.3 最终修正（UI 注入级 = dealItemView after 无条件整树渲染）
+
+```java
+// ① 主渲染：dealItemView after，每次 bind 无条件执行（含回收复用）
+findAndHookMethod("xl5.g", cl, "h",
+    vv5_s0, vv5_c, int.class, int.class, boolean.class, List.class, after(p) -> {
+    View itemView = (View) XposedHelpers.getObjectField(p.args[0], "itemView");
+    if (itemView == null) return;
+    Object info = p.args[1];                                   // MvvmMsgInfo
+    Object msg = XposedHelpers.getObjectField(
+        XposedHelpers.getObjectField(info, "d"), "b");          // e9
+    boolean isSend = (Boolean) XposedHelpers.callMethod(msg, "z0");   // 日志 send:e9.z0() 实证
+    boolean isRecv = !isSend;
+    // 文字/图标整树（★删除“占位层 skip”，收到侧文本必渲染）
+    recolorItem(itemView, isRecv);
+    // 气泡：文本 ITV(2131365751) + 语音 mq.e/mq.u/mq.D
+    applyBubblesInItem(itemView, isRecv);
+    // 时间线三件套
+    applyTimeLine((h0) itemView.getTag(), msg, info);
+});
+
+// ② mq.b 采集补全（captured=2 + mq.D；方向取 z=isRecv）
+findAndHookMethod("com.tencent.mm.ui.chatting.viewitems.mq", cl, "b",
+    View.class, Boolean.class, Boolean.class, after(p) -> {
+    boolean isRecv = (Boolean) p.args[1];
+    View root = (View) p.args[0];
+    for (int id : new int[]{2131366091, 2131366096}) {         // mq.e / mq.u
+        View av = root.findViewById(id);
+        if (av != null) BUBBLE.put(av, isRecv);
+    }
+    View d = root.findViewById(2131365816);                     // mq.D 备用承载
+    if (d != null) BUBBLE.put(d, isRecv);
+});
+
+// ③ applyBubblesInItem（整树，按 BUBBLE 表 / id 分流）
+static void applyBubblesInItem(View root, boolean isRecv) {
+    ArrayDeque<View> st = new ArrayDeque<>(); st.push(root);
+    while (!st.isEmpty()) {
+        View v = st.pop();
+        Boolean dir = BUBBLE.get(v);                            // 语音 mq.e/mq.u/mq.D
+        if (dir != null) applyBubble(v, dir);
+        else if (v.getId() == 2131365751) applyBubble(v, isRecv); // 文本内容 ITV
+        if (v instanceof ViewGroup)
+            for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++)
+                st.push(((ViewGroup) v).getChildAt(i));
+    }
+}
+
+// ④ applyBubble / recolorItem / applyTimeLine 同 §5.4 / §6.4 / §8.2
+```
+
+### 16.4 验收标准
+
+1. 上下滑 10 屏 + 反复进出聊天窗口：**0 次**残留/缺失（VERIFY 应持续 `custom=true vis=0`）；
+2. 收到侧文本气泡方向正确（不再出现 “skip 占位层 isRecv=true”）；
+3. 收到侧语音气泡方向正确（captured=2，isRecv 来自 mq.b 的 z）；
+4. 视频号/朋友圈/输入框 0 渲染（bind 级天然隔离，08:04 日志已确认无外溢）。
+
+### 16.5 增补审核记录
+
+| # | 项 | 结论 |
+|---|---|---|
+| 1 | dealItemView 形参（vv5.s0/vv5.c）与 hook 签名 | ✅ 运行日志实证（08:04:11.250） |
+| 2 | “占位层 skip”是偶发不渲染根因 | ✅ 日志 repeat skip + 复用路径无 setBackground |
+| 3 | 方向源 z0()=isSend / mq.b z=isRecv | ✅ 日志 send: 实证 |
+| 4 | mq.u/mq.D 未采集导致语音方向恒 false | ✅ captured=1 日志实证 |
+| 5 | v16 代码与 §7/§5/§6/§8 一致性 | ✅ 无冲突 |
+
+---
+
+## 17. v17 增补：语音气泡"反复进出窗口偶发不渲染"根因 + 自校准兜底
+
+### 17.1 运行日志实锤（v3.0.208，08:33 会话）
+
+| 时间 | 日志 | 解读 |
+|---|---|---|
+| 08:33:12.405 | `attach BUBBLE skip 占位层 isRecv=false id=2131365816 view=TextView` | **语音 item 的 q/D TextView（id 2131365816）被"占位层 skip"跳过**，只 apply 了 AnimImageView |
+| 08:33:12.467 | `bubble VERIFY view=AnimImageView kind=1 custom=true w=254 h=127 vis=0` | 语音气泡本体（AnimImageView）**已渲染成功** |
+| 08:33:11.962 / 12.051 / 12.069 / 12.081 / 12.093 / 12.104 / 12.115 | `ke5.a.i ... AnimImageView.setType ← viewitems.mq.b` 连续 7 轮 | 一次 bind 里 `ke5.a.i` 被回调 7 次（缓存/复用叠加） |
+| 08:33:12.5xx | `voice mq.b isRecv=false isGroup=false captured=2 root=jh` | mq.b 已采到 2 个 view（mq.e + mq.u/mq.D） |
+
+### 17.2 根因（为什么"反复进出偶发"）
+
+1. **剩余一处"占位层 skip"**：语音 item 的 `mq.D/id=2131365816` TextView 仍走 skip 分支（v16 只补了文本侧），该 TextView 是语音时长/“转文字”容器，**通常不需要气泡**，skip 本身正确——但它证明 attach 补盖仍是**白名单驱动**而非无条件；
+2. **语音气泡全部押在 `AnimImageView.setBackgroundResource` 一条路径上**：`ke5.a.i`/`AnimImageView.setType` 都只在 **bind 且 view 走到该分支** 时才触发；
+3. **X2C 视图缓存池（kw5.e1）+ MMChattingListView 复用**：反复进出窗口时，若某 item 未重新 bind（仅 attach 或局部刷新），`setType` 不再被调用 → attach 补盖成为唯一依赖 → 一旦 attach 白名单漏项（如 skip 分支/i==3 清空态），就出现"偶发不渲染"。
+
+### 17.3 修复（三选一，建议全上）
+
+```java
+// ① 白名单补全：mq.D(2131365816) 与文本 ITV(2131365751) 一并纳入 apply（不再 skip）
+//    只在明确"该 view 不需要气泡"时才 skip；默认 apply。
+
+// ② 兜底遍历（推荐）：onAttachedToWindow/onLayout 时对 itemView 整树执行
+static void applyBubblesInItem(View itemView, boolean isRecv) {
+    if (itemView == null) return;
+    ArrayDeque<View> st = new ArrayDeque<>(); st.push(itemView);
+    while (!st.isEmpty()) {
+        View v = st.pop();
+        // 语音气泡：AnimImageView（mq.e/mq.u）
+        if (v instanceof com.tencent.mm.ui.base.AnimImageView) applyBubble(v, isRecv);
+        // 文本气泡：MMNeat7extView（to.b）
+        if (v instanceof com.tencent.mm.ui.widget.MMNeat7extView) applyBubble(v, isRecv);
+        if (v instanceof ViewGroup)
+            for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++)
+                st.push(((ViewGroup) v).getChildAt(i));
+    }
+}
+// 调用点：dealItemView after 里用 ((k3)args[0]).itemView 传入（bind 级，每次必跑）
+
+// ③ setType(i==3) 清空态兜底：AnimImageView.setType after 里
+if ((int) p.args[0] == 3) {
+    p.getResult(); // 不 REAPPLY，但记录该 view，交由 onLayout 兜底（见 voice cover onLayout）
+}
+```
+
+### 17.4 验收
+
+1. 反复进出同一聊天窗口 10 次 + 上下滑 10 屏，语音气泡 **0 次缺失**（VERIFY 持续 `custom=true vis=0`）；
+2. `attach BUBBLE skip 占位层` 日志中 id=2131365816 不再出现（或改为 apply）；
+3. 语音时长数字/"转文字"文字颜色不被误改（只换背景，不动 setTextColor）。
+
+### 17.5 增补审核记录
+
+| # | 项 | 结论 |
+|---|---|---|
+| 1 | 语音气泡本体 = AnimImageView，已渲染 | ✅ 08:33:12 VERIFY 实证 |
+| 2 | "占位层 skip" 仍覆盖 mq.D(2131365816) | ✅ 日志实证，需纳入白名单或整树 apply |
+| 3 | 反复进出偶发 = 白名单驱动 + 缓存复用 | ✅ 日志+链路实证 |
+| 4 | 整树 applyBubblesInItem 与 §16 无冲突 | ✅ |

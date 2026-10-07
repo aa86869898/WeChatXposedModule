@@ -5,6 +5,7 @@ import java.util.TimeZone
 
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
 }
 
 val moduleBuildTime: String = SimpleDateFormat("yyyy-MM-dd HH:mm").apply {
@@ -38,8 +39,8 @@ android {
         applicationId = "com.leshao.v3"
         minSdk = 24
         targetSdk = 36
-        versionCode = 30210
-        versionName = "3.0.210"
+        versionCode = 30224
+        versionName = "3.0.214"
         buildConfigField("String", "BUILD_TIME", "\"$moduleBuildTime\"")
     }
 
@@ -76,6 +77,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
     applicationVariants.all {
         outputs.all {
             (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName = "LeShaoWeChat-v$versionCode.apk"
@@ -90,6 +95,6 @@ dependencies {
     implementation("com.google.android.material:material:1.10.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("com.github.xxinPro:SilkDecoder:1.0")
-    implementation("org.luckypray:dexkit:2.2.0")
+    implementation("org.luckypray:dexkit:2.3.0")
     implementation("com.tencent:mmkv:1.3.5")
 }

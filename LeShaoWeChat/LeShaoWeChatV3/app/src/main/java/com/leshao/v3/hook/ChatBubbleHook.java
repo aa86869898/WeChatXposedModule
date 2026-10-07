@@ -24,6 +24,7 @@ import com.leshao.v3.LogWriter;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -83,6 +84,9 @@ public final class ChatBubbleHook {
     public static final String K_NICK_TEXT_COLOR = "ls_bubble_nick_text_color";
     /** h0.timeTV（0x7f0a10b0）时间分隔条 id，to.a findViewById 实证。 */
     public static final int ID_TIME_TV = 2131366064;
+    /** v16 增补：文本内容 ITV（to.b，MMNeat7extView），2131365751/0x7f0a0f77。
+     *  此前「占位层 skip」把它排除导致回收复用不渲染；§16 applyBubblesInItem 按此 id 无条件贴。 */
+    public static final int ID_TO_B = 2131365751;
     /** h0.userTV（0x7f0a10be）群聊成员昵称 id，to.a findViewById 实证。 */
     public static final int ID_NICK_TV = 2131366078;
     /** v3.0.161（mq.b Smali 实证）：语音 holder 字段表 —— mq.e 自己侧 AnimImageView、mq.u 对方侧第二个
@@ -90,6 +94,11 @@ public final class ChatBubbleHook {
     public static final int ID_MQ_E = 2131366091;
     public static final int ID_MQ_U = 2131366096;
     public static final int ID_MQ_D = 2131365816;
+    /** v3.0.216（WeChat_Bubble_Inject_Analysis.md §5.2）：mq.x TextView 2131366108 —— 发送侧
+     *  气泡背景承载（未播放 2131232066 / 已播放 2131232060）。发送侧必须连同 AnimImageView
+     *  一起替换，否则用户看到「自己的气泡小于原生气泡」（AnimImageView 自定义背景内缩在
+     *  mq.x 原生九宫格内部）。 */
+    public static final int ID_MQ_X = 2131366108;
 
     public static final int KIND_FROM = 0;
     public static final int KIND_TO = 1;
@@ -147,6 +156,14 @@ public final class ChatBubbleHook {
     /** v3.0.158：文本气泡 setBackgroundResource 路径替换后延迟校验（每个 View 只记一次）。 */
     private static final java.util.Set<View> sBgVerify =
             java.util.Collections.newSetFromMap(new java.util.WeakHashMap<View, Boolean>());
+
+    // ==================== v3.0.214（WeChat_Bubble_Inject_Analysis.md §15/§16）L1b 兜底 + L4 回收 ====================
+    // 文档方案：完整 bind（WxRecyclerAdapter.E0）与局部刷新（F0）必经父类方法都挂 after 兜底，
+    // 幂等重放注入 + 非目标还原，专治「局部刷新绕过业务 bind → 滑动/播放偶发不渲染」。
+    private static volatile Class<?> sWxRecyclerAdapterCls;
+    private static volatile Class<?> sChatDataAdapterCls;
+    private static volatile Class<?> sVoiceHolderCls;
+    private static volatile Class<?> sTextHolderCls;
 
     // v3.0.128 气泡内文字颜色（0 = 不修改）。对方/自己各一份，运行时自校准后固化。
     private static volatile int sFromTextColor = 0;
@@ -858,6 +875,8 @@ public final class ChatBubbleHook {
                     }
                     // v3.0.208：文档 §7 bind 级主注入（恒先装，作为统一渲染入口）
                     installDealItemViewHook(cl);
+                    // v3.0.214：WeChat_Bubble_Inject_Analysis.md §15 L1b 兜底（E0/F0 局部刷新）
+                    installWxRecyclerAdapterHook(cl);
                     installBubbleApplyHook(cl);
                     installBackgroundResourceHook(cl);
                     installNeatBackgroundHook(cl);
@@ -866,7 +885,6 @@ public final class ChatBubbleHook {
                     installImageViewHook(cl);
                     installViewitemsToHook(cl);
                     installLinkSubtypeHook(cl);
-                    installLinkSpanColorHook(cl);
                     installResourceHelperHook(cl);
                     installResourceGetDrawableHook(cl);
                     installChatListViewHook(cl);
@@ -1089,11 +1107,25 @@ public final class ChatBubbleHook {
         return false;
     }
 
-    /** v3.0.202：语音 item 内只有 AnimImageView（真承载 mq.e）可贴气泡背景；
-     *  其余 TextView（时长/转文字/昵称等）保持微信原生，防止叠出“文本消息”。 */
+    /** v3.0.202/v3.0.221/v3.0.222：语音 item 内气泡背景按微信原生布局处理：
+     *  接收侧 = mq.e(2131366091) AnimImageView；发送侧 = mq.x(2131366108) TextView
+     *  + mq.u(2131366096) AnimImageView 播放动画层（文档 §5.2）。
+     *  v3.0.220 曾贴 mq.u 但多条路径 forceVisible → 反复进窗口闪现；本次：
+     *  发送侧 mq.u 贴背景但任何路径都不 forceVisible（可见性完全由微信播放状态控制），
+     *  同时保留发送侧 mq.e（未播放时可见背景）与 mq.x（背景层）替换。 */
     private static boolean voiceItemBubbleEligible(View v) {
-        if (!insideVoiceItem(v)) return true;   // 非语音 item：走原逻辑
-        return isAnimImage(v);                   // 语音 item：仅 AnimImageView
+        if (v == null) return false;
+        if (!insideVoiceItem(v)) return true;          // 非语音 item：走原逻辑
+        int id = v.getId();
+        Boolean recv;
+        synchronized (sBubble) { recv = sBubble.get(v); }
+        if (id == ID_MQ_X) {
+            return Boolean.FALSE.equals(recv);        // 发送侧气泡背景 TextView
+        }
+        if (id == ID_MQ_U) {
+            return Boolean.FALSE.equals(recv);          // 发送侧播放动画层：仅贴背景不 forceVisible
+        }
+        return id == ID_MQ_E;                          // mq.e AnimImageView：收/发都贴
     }
 
     private static XC_MethodHook createBackgroundResourceHook() {
@@ -1460,15 +1492,35 @@ public final class ChatBubbleHook {
             Drawable custom = loadDrawable(kind);
             if (custom == null) return;
             Drawable d = fresh(custom);
+            // v3.0.217（文档 §6.5 首选）：优先用微信原背景 padding 保持文字/时长位置
+            android.graphics.Rect origPad = origPaddingOf(v);
             v.setBackground(d);
             rememberBubble(v, d, kind);
-            applyDrawablePadding(v, d);
+            if (origPad != null) {
+                v.setPadding(origPad.left, origPad.top, origPad.right, origPad.bottom);
+            } else {
+                applyDrawablePadding(v, d);
+            }
             syncBubblePadding(v);
             if (forceVisible) {
                 try { if (v.getVisibility() != View.VISIBLE) v.setVisibility(View.VISIBLE); } catch (Throwable ignored) {}
             }
             try { v.requestLayout(); v.invalidate(); } catch (Throwable ignored) {}
         } catch (Throwable ignored) {}
+    }
+
+    /** v3.0.217（文档 §6.5 首选）：取微信原背景 padding（设置自定义背景前调用）。
+     *  自定义气泡若是无 padding 的 NineSliceDrawable，用微信原 padding 保持文字位置。 */
+    private static android.graphics.Rect origPaddingOf(View v) {
+        try {
+            Drawable orig = v.getBackground();
+            if (orig == null) return null;
+            android.graphics.Rect r = new android.graphics.Rect();
+            if (orig.getPadding(r) && (r.left != 0 || r.top != 0 || r.right != 0 || r.bottom != 0)) {
+                return r;
+            }
+        } catch (Throwable ignored) {}
+        return null;
     }
 
     private static boolean isAnimImage(View v) {
@@ -1487,7 +1539,7 @@ public final class ChatBubbleHook {
         if (v == null) return false;
         int id = v.getId();
         if (id == ID_MQ_D) return false;   // TextView 备用承载：永不贴气泡
-        if (id == ID_MQ_U) return false;   // mq.u 占位/动画层：不贴气泡、不 forceVisible
+        if (id == ID_MQ_U) return !recv;   // v3.0.222：发送侧 mq.u 播放动画层（贴背景不 forceVisible）
         return id == ID_MQ_E;              // 真承载 = mq.e(2131366091)，收/发两方向一致
     }
 
@@ -1547,13 +1599,15 @@ public final class ChatBubbleHook {
                             // §14：type==3 = 微信主动清背景态（播放中/复用清理）。就地 REAPPLY 会与
                             // 微信录音/复用状态机冲突（录音完成发送后微信不再补 setType(1)），
                             // 且长按说话时录音麦克风也走 type=3。此处不贴、不 REAPPLY，
-                            // 交给延迟补盖（onLayout 兜底在混淆容器下可能不触发）。
+                            // 只登记该 view（§17.3 ③），交给延迟补盖（onLayout 兜底）恢复。
+                            synchronized (sType3Cleared) { sType3Cleared.put(v, SystemClock.uptimeMillis()); }
                             LogWriter.log(TAG, "AnimImageView.setType type=3 clear(skip) view="
                                     + v.getClass().getName());
                             scheduleVoiceCover();
                             return;
                         }
-                        applyVoiceBubble(v, recv, true);
+                        // v3.0.222：发送侧 mq.u 播放动画层只换背景不 forceVisible（避免闪现）
+                        applyVoiceBubble(v, recv, v.getId() != ID_MQ_U);
                         if (loadDrawable(recv ? KIND_FROM : KIND_TO) != null) {
                             LogWriter.log(TAG, "AnimImageView.setType REPLACE kind="
                                     + (recv ? KIND_FROM : KIND_TO)
@@ -1582,6 +1636,33 @@ public final class ChatBubbleHook {
                 }
             });
             LogWriter.log(TAG, "AnimImageView.setType hooked");
+            // v3.0.217（WeChat_Bubble_Inject_Analysis.md §7.3 L2-b）：播放语音时微信
+            // AnimImageView.b() 会 setBackgroundDrawable(2131231925/2060) 重设气泡背景。
+            // 该 setBackground 已被 L2 before 拦截替换成自定义，这里 after 再兜底一次：
+            // 若背景仍不是自定义（拦截漏网/异步回写），强制补回自定义皮肤。
+            try {
+                XposedBridge.hookAllMethods(anim, "b", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sEnabled) return;
+                            View v = (View) param.thisObject;
+                            Boolean stored;
+                            synchronized (sBubble) { stored = sBubble.get(v); }
+                            if (stored == null) return;
+                            if (!isVoiceCarrier(v, stored)) return;
+                            if (isCustomBackground(v.getBackground())) return; // 已是自定义，跳过
+                            // v3.0.222：发送侧 mq.u 只换背景不 forceVisible
+                            applyVoiceBubble(v, stored, v.getId() != ID_MQ_U);
+                            LogWriter.log(TAG, "AnimImageView.b refresh isRecv=" + stored
+                                    + " view=" + v.getClass().getName());
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "AnimImageView.b hooked (L2-b)");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "AnimImageView.b hook err: " + t.getMessage());
+            }
         } catch (Throwable t) {
             LogWriter.log(TAG, "installAnimImageViewHook err: " + t.getMessage());
         }
@@ -1604,10 +1685,21 @@ public final class ChatBubbleHook {
             // mq 类(语音)必须保留全部 b 方法：mq.b(View,boolean,boolean) 是语音消息绑定主路径，
             // v3.0.136 误过滤导致语音气泡失效（实测语音消息不起作用）。
             boolean strictViewFilter = cn.contains(".to");
-            for (Class<?> toCls : HookUtil.loadClasses(cl, cn)) {
+for (Class<?> toCls : HookUtil.loadClasses(cl, cn)) {
                 for (Method m : toCls.getDeclaredMethods()) {
-                    if (!"b".equals(m.getName())) continue;
+                    if (strictViewFilter) {
+                        if (!"b".equals(m.getName())) continue;
+                    } else if (!"b".equals(m.getName()) && !"e".equals(m.getName())) {
+                        continue;
+                    }
                     Class<?>[] pts = m.getParameterTypes();
+                    // v3.0.214（WeChat_Bubble_Inject_Analysis.md L1）：mq.e(b0,mq,am5.d,q,d,Z,Z,L,r6)
+                    // 9 参语音填充 —— 文档点名的语音气泡背景赋值点，独立 hook（不进入 b 的 voiceBinder）。
+                    if (!strictViewFilter && "e".equals(m.getName()) && pts.length == 9) {
+                        hookVoiceFillE(toCls, m);
+                        hooked++;
+                        continue;
+                    }
                     if (strictViewFilter) {
                         boolean hasViewParam = false;
                         for (Class<?> pt : pts) {
@@ -1638,26 +1730,42 @@ public final class ChatBubbleHook {
                                 // holder 真实字段 mq.e/mq.u(AnimImageView)+mq.D(TextView 备用承载)
                                 // 全部收录 BUBBLE 表并按方向贴自定义气泡，绕开几何启发式命中不可见视图。
                                 if (voiceBinder) {
-                                    try {
+                                     try {
                                         View root = (View) param.args[0];
                                         boolean recv = Boolean.TRUE.equals(param.args[1]);
                                         synchronized (sVoiceRoots) { sVoiceRoots.add(root); } // v3.0.202
                                         int found = 0;
-                                        for (int id : new int[]{ID_MQ_E, ID_MQ_U, ID_MQ_D}) {
+                                        // v3.0.212（§16.3 ②）：语音承载全采集 —— mq.e/mq.u 全部进
+                                        // BUBBLE 表并按其登记方向贴（不再用 isVoiceCarrier 只留 mq.e，
+                                        // 否则收到侧 mq.u 未采集 → 语音恒按 kind=1 方向错）。
+                                        // v3.0.216：mq.D 是时长/倍速提示容器，只登记不贴背景（防假气泡
+                                        // 把真 AnimImageView 顶下来，用户实测反馈）；新增发送侧
+                                        // mq.x(2131366108) 气泡背景 TextView 一并采集替换（治「自己的
+                                        // 气泡小于原生气泡」——AnimImageView 自定义背景内缩在 mq.x
+                                        // 原生九宫格内部）。
+                                        for (int id : new int[]{ID_MQ_E, ID_MQ_U, ID_MQ_X, ID_MQ_D}) {
                                             View av = root.findViewById(id);
                                             if (av == null) continue;
-                                            // v3.0.200（历史语音“空气泡占位”修）：按方向只补“真承载”。
-                                            // 收到侧只 mq.u、发出侧只 mq.e；对向 AnimImageView 是微信原生
-                                            // 隐藏占位/图标层，强制 VISIBLE 会在头像行叠出空气泡并把真气泡
-                                            // 顶到下一行（用户实测：多层气泡叠加）。
-                                            if (!isVoiceCarrier(av, recv)) {
-                                                try { applyVoiceContentColor(av, recv ? KIND_FROM : KIND_TO); } catch (Throwable ignored) {}
-                                                continue;
-                                            }
+                                            // v3.0.218：mq.x 是发送侧气泡背景，接收侧布局中同 id
+                                            // 的 TextView 是隐藏镜像/占位 —— 若接收侧也登记并贴背景
+                                            // 会形成「假气泡」（日志实锤 attach BUBBLE apply
+                                            // isRecv=true view=TextView）。接收侧一律跳过 mq.x。
+                                            if (id == ID_MQ_X && recv) continue;
                                             synchronized (sBubble) { sBubble.put(av, recv); }
-                                            applyVoiceBubble(av, recv, true);
-                                            // v3.0.166（任务2）：语音气泡内内容改色跟随方向
-                                            applyVoiceContentColor(av, recv ? KIND_FROM : KIND_TO);
+                                            if (id == ID_MQ_D) {
+                                                // v3.0.216：mq.D 只登记方向，不贴背景（防假气泡顶真气泡）
+                                            } else if (id == ID_MQ_X) {
+                                                // 发送侧气泡背景 TextView：只换背景、不 forceVisible、不改字色
+                                                applyVoiceBubble(av, recv, false);
+                                            } else if (id == ID_MQ_U) {
+                                                // v3.0.222：发送侧 mq.u 播放动画层贴背景但绝不 forceVisible
+                                                // （可见性由微信播放状态控制，v3.0.220 强制渲染导致闪现）；
+                                                // 接收侧 mq.u 是占位层，不贴（假气泡根源）
+                                                if (!recv) applyVoiceBubble(av, false, false);
+                                            } else {
+                                                applyVoiceBubble(av, recv, true);
+                                                applyVoiceContentColor(av, recv ? KIND_FROM : KIND_TO);
+                                            }
                                             found++;
                                         }
                                         LogWriter.log(TAG, "voice mq.b isRecv=" + recv
@@ -1968,97 +2076,185 @@ public final class ChatBubbleHook {
         }
     }
 
-    /** 文档 §5 方案2：链接/自动识别文本子类型 hn5.r0.g0(收)/hn5.s0.k0(发)，
-     *  after 中直接替换 MMNeat7extView 背景。 */
-    private static void installLinkSubtypeHook(ClassLoader cl) {
+    /** v3.0.214（WeChat_Bubble_Inject_Analysis.md §7.3 L1-b）：mq.e(...) 9 参语音填充。
+     *  <p>文档实锤语音气泡背景在 {@code mq.e(b0,mq,am5.d,q,d,Z,Z,L,r6)} 内赋值（mq.e/mq.x/mq.u）。
+     *  从 args[1] holder 按字段类型找 AnimImageView（mq.e/mq.u）与 mq.D TextView，
+     *  收录 BUBBLE 表并按方向贴自定义气泡。与 mq.b voiceBinder 幂等重叠，双保险。</p> */
+    private static void hookVoiceFillE(Class<?> holderCls, Method m) {
         try {
-            Class<?> neatCls = XposedHelpers.findClass("com.tencent.mm.ui.widget.MMNeat7extView", cl);
-            String[] inners = {
-                    "com.tencent.mm.ui.chatting.viewitems.hn5$r0",
-                    "com.tencent.mm.ui.chatting.viewitems.hn5.r0",
-                    "com.tencent.mm.ui.chatting.viewitems.hn5$s0",
-                    "com.tencent.mm.ui.chatting.viewitems.hn5.s0"
-            };
-            for (String cn : inners) {
-                try {
-                    Class<?> c = XposedHelpers.findClass(cn, cl);
-                    for (Method m : c.getDeclaredMethods()) {
-                        if (m.getParameterTypes().length != 1) continue;
-                        if (m.getParameterTypes()[0] != neatCls) continue;
-                        m.setAccessible(true);
-                        final String owner = cn;
-                        XposedBridge.hookMethod(m, new XC_MethodHook() {
-                            @Override
-                            protected void afterHookedMethod(MethodHookParam param) {
-                                try {
-                                    if (!sEnabled) return;
-                                    Object v = param.args[0];
-                                    if (!(v instanceof View)) return;
-                                    // r0=收(chatfrom), s0=发(chatto)
-                                    int kind = m.getName().equals("g0") ? KIND_FROM : KIND_TO;
-                                    // v3.0.131: 无自定义气泡图时仍可仅应用文字颜色
-                                    int color = kind == KIND_FROM ? sFromTextColor : sToTextColor;
-                                    if (loadDrawable(kind) != null || color != 0) {
-                                        applyBubbleTo((View) v, kind);
-                                        if (loadDrawable(kind) != null) {
-                                            LogWriter.log(TAG, "link subtype REPLACE " + owner
-                                                    + "." + m.getName() + " kind=" + kind);
-                                        } else {
-                                            LogWriter.log(TAG, "link subtype COLORONLY " + owner
-                                                    + "." + m.getName() + " kind=" + kind);
-                                        }
+            m.setAccessible(true);
+            XposedBridge.hookMethod(m, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        Object holder = param.args.length > 1 ? param.args[1] : null;
+                        if (holder == null) return;
+                        boolean recv = true;
+                        Object z = param.args.length > 5 ? param.args[5] : null;
+                        if (z instanceof Boolean) recv = (Boolean) z;
+                        // 双保险：从 ChattingItemData 取 e9.z0()（0=接收/1=发送）
+                        try {
+                            Object data = XposedHelpers.getObjectField(holder, "i");
+                            if (data != null) {
+                                Object d = XposedHelpers.getObjectField(data, "d");
+                                if (d != null) {
+                                    Object msg = XposedHelpers.getObjectField(d, "b");
+                                    if (msg != null) {
+                                        Object send = XposedHelpers.callMethod(msg, "z0");
+                                        if (send instanceof Number) recv = ((Number) send).intValue() != 1;
                                     }
-                                } catch (Throwable ignored) {}
+                                }
                             }
-                        });
-                        LogWriter.log(TAG, "link subtype hooked " + cn + "." + m.getName());
+                        } catch (Throwable ignored) {}
+                        java.util.List<View> targets = new java.util.ArrayList<>();
+                        for (Field f : holder.getClass().getDeclaredFields()) {
+                            if (!View.class.isAssignableFrom(f.getType())) continue;
+                            try {
+                                f.setAccessible(true);
+                                Object fv = f.get(holder);
+                                if (!(fv instanceof View)) continue;
+                                View v = (View) fv;
+                                int id = v.getId();
+                                // v3.0.218：mq.x 仅发送侧注入，接收侧同 id 是隐藏镜像/占位（假气泡元凶）
+                                if (id == ID_MQ_X && recv) continue;
+                                if (id == ID_MQ_E || id == ID_MQ_X) {
+                                    targets.add(v);
+                                } else if (id == ID_MQ_D) {
+                                    // v3.0.216：mq.D 提示容器只登记方向，不贴背景（防假气泡顶真气泡）
+                                    synchronized (sBubble) { sBubble.put(v, recv); }
+                                } else if (id == ID_MQ_U) {
+                                    // v3.0.222：发送侧 mq.u 播放动画层贴背景但绝不 forceVisible
+                                    synchronized (sBubble) { sBubble.put(v, recv); }
+                                    if (!recv) targets.add(v);
+                                } else if (isAnimImage(v)) {
+                                    targets.add(v);   // 字段类型 AnimImageView 兜底（文档 §6.6）
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                        for (View av : targets) {
+                            synchronized (sBubble) { sBubble.put(av, recv); }
+                            if (av.getId() == ID_MQ_X || av.getId() == ID_MQ_U) {
+                                // 发送侧背景/播放动画层：只换背景、不 forceVisible、不改字色
+                                applyVoiceBubble(av, recv, false);
+                            } else {
+                                applyVoiceBubble(av, recv, true);
+                                applyVoiceContentColor(av, recv ? KIND_FROM : KIND_TO);
+                            }
+                        }
+                        if (!targets.isEmpty()) {
+                            LogWriter.log(TAG, "voice mq.e isRecv=" + recv
+                                    + " captured=" + targets.size()
+                                    + " holder=" + holder.getClass().getSimpleName());
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "voice fill mq.e hooked " + holderCls.getName()
+                    + "." + m.getName() + Arrays.toString(m.getParameterTypes()));
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookVoiceFillE err: " + t.getMessage());
+        }
+    }
+
+    /** 文档 §5 方案2：链接/自动识别文本子类型 hn5.r0.g0(收)/hn5.s0.k0(发)，
+     *  after 中直接替换 MMNeat7extView 背景。
+     *  <p>v3.0.211：原实现只硬编码 {@code hn5$r0/s0} 类名；R8 重混淆后该类名在当前构建
+     *  找不到 → 静默失效（日志 0 触发）。改为先加载外层 {@code hn5} 类并扫描其全部
+     *  声明嵌套类，凡「一参 & 参数为 MMNeat7extView」的方法都 hook（覆盖 g0/k0/invoke，
+     *  invoke 一并做内容内链接 span 染色）；硬编码类名保留为兜底，全部 miss 时明确日志。</p> */
+    private static void installLinkSubtypeHook(ClassLoader cl) {
+        boolean any = false;
+        // 1) 外层 hn5 + 其嵌套类（R8 可能扁平化，靠 getDeclaredClasses 收敛）
+        String outer = "com.tencent.mm.ui.chatting.viewitems.hn5";
+        try {
+            for (Class<?> c : HookUtil.loadClasses(cl, outer)) {
+                if (hookNeatClass(cl, c)) any = true;
+                try {
+                    Class<?>[] nested = c.getDeclaredClasses();
+                    for (Class<?> inner : nested) {
+                        if (hookNeatClass(cl, inner)) any = true;
                     }
                 } catch (Throwable ignored) {}
             }
         } catch (Throwable t) {
-            LogWriter.log(TAG, "installLinkSubtypeHook err: " + t.getMessage());
+            LogWriter.log(TAG, "link subtype outer err: " + t.getMessage());
         }
+        if (any) {
+            LogWriter.log(TAG, "link subtype hooked via outer hn5 reflection");
+            return;
+        }
+        // 2) 兜底：硬编码嵌套类名（旧构建），不静默
+        String[] inners = {
+                "com.tencent.mm.ui.chatting.viewitems.hn5$r0",
+                "com.tencent.mm.ui.chatting.viewitems.hn5.r0",
+                "com.tencent.mm.ui.chatting.viewitems.hn5$s0",
+                "com.tencent.mm.ui.chatting.viewitems.hn5.s0"
+        };
+        for (String cn : inners) {
+            try {
+                for (Class<?> c : HookUtil.loadClasses(cl, cn)) {
+                    if (hookNeatClass(cl, c)) any = true;
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "link subtype inner " + cn + " miss: " + t.getMessage());
+            }
+        }
+        if (!any) LogWriter.log(TAG, "link subtype none (reflection+hardcoded both miss)");
     }
 
-    /** v3.0.208：文档 §9 #12 —— hn5.o.invoke 内容内链接 span 染色（链接/电话等）。
-     *  <p>链接 span 不走 setTextColor / textColor，构造期经 {@code hn5.o.invoke(Object)} 生成，
-     *  返回对象含字段 {@code g}(常规色 2131102210) / {@code f}(按下色 2131100799)。
-     *  after 改这两字段 → 复杂消息（文章/名片/链接/位置）内嵌链接跟随方向文字色。</p>
-     *  <p>方向取最近一次 dealItemView bind 的方向（sLastBindRecv，§7 bind 级天然隔离）。</p> */
-    private static void installLinkSpanColorHook(ClassLoader cl) {
-        String[] owners = {
-                "com.tencent.mm.ui.chatting.viewitems.hn5$o",
-                "com.tencent.mm.ui.chatting.viewitems.hn5.o"
-        };
-        for (String cn : owners) {
-            try {
-                Class<?> c = XposedHelpers.findClass(cn, cl);
-                for (Method m : c.getDeclaredMethods()) {
-                    if (!"invoke".equals(m.getName())) continue;
-                    if (m.getParameterTypes().length != 1) continue;
-                    m.setAccessible(true);
-                    final String owner = cn;
-                    XposedBridge.hookMethod(m, new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            try {
-                                if (!sEnabled) return;
+    /** 对单个类 hook 所有「一参且参数为 MMNeat7extView」的方法：
+     *  g0 收 / k0 发 → 气泡背景+文字颜色；invoke → 内容内链接 span 颜色(g/f 字段)。 */
+    private static boolean hookNeatClass(ClassLoader cl, Class<?> c) {
+        if (c == null) return false;
+        boolean hit = false;
+        try {
+            for (Method m : c.getDeclaredMethods()) {
+                if (m.getParameterTypes().length != 1) continue;
+                Class<?> p0 = m.getParameterTypes()[0];
+                if (p0 == null || !p0.getName().contains("MMNeat")) continue;
+                m.setAccessible(true);
+                final String owner = c.getName() + "." + m.getName();
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) {
+                        try {
+                            if (!sEnabled) return;
+                            // invoke → 链接 span；按最近 bind 方向取字色（§7 隔离）
+                            if ("invoke".equals(m.getName())) {
                                 Object span = param.getResult();
                                 if (span == null) return;
                                 int kind = sLastBindRecv ? KIND_FROM : KIND_TO;
                                 int color = kind == KIND_FROM ? sFromTextColor : sToTextColor;
-                                if (color == 0) return;
-                                XposedHelpers.setObjectField(span, "g", color);   // 2131102210 常规
-                                XposedHelpers.setObjectField(span, "f", color);   // 2131100799 按下
-                                LogWriter.log(TAG, "link span color kind=" + kind
-                                        + " 0x" + Integer.toHexString(color) + " " + owner);
-                            } catch (Throwable ignored) {}
-                        }
-                    });
-                    LogWriter.log(TAG, "link span color hooked " + cn + "." + m.getName());
-                }
-            } catch (Throwable ignored) {}
+                                if (color != 0) {
+                                    try {
+                                        XposedHelpers.setObjectField(span, "g", color); // 2131102210
+                                        XposedHelpers.setObjectField(span, "f", color); // 2131100799
+                                        LogWriter.log(TAG, "link span color kind=" + kind
+                                                + " 0x" + Integer.toHexString(color) + " " + owner);
+                                    } catch (Throwable ignored) {}
+                                }
+                                return;
+                            }
+                            Object v = param.args[0];
+                            if (!(v instanceof View)) return;
+                            int kind = m.getName().endsWith("0") ? KIND_FROM : KIND_TO;
+                            int color = kind == KIND_FROM ? sFromTextColor : sToTextColor;
+                            if (loadDrawable(kind) != null || color != 0) {
+                                applyBubbleTo((View) v, kind);
+                                LogWriter.log(TAG, "link subtype REPLACE " + owner
+                                        + " kind=" + kind);
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "link subtype hooked " + owner);
+                hit = true;
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookNeatClass err: " + t.getMessage());
         }
+        return hit;
     }
 
     /** 在 ViewHolder 字段中定位气泡 View：优先背景与 ke5.a.i 记录的微信原生气泡
@@ -2507,6 +2703,9 @@ public final class ChatBubbleHook {
      *  3) 未 layout（w==0 && h==0）的 view 不强制 VISIBLE（等真实布局后再由绑定/attach路径补盖）。 */
     private static volatile long sLastVoiceCover = 0;
     private static final java.util.Map<View, Long> sVoiceCoverAt = new java.util.WeakHashMap<>();
+    /** v3.0.213（§17.3 ③）：AnimImageView.setType(3) 清空态记录。setType(3) 后不就地 REAPPLY，
+     *  只登记该 view，由 onLayout/延迟补盖（coverVoiceBubblesOnLayout）统一兜底恢复。 */
+    private static final java.util.Map<View, Long> sType3Cleared = new java.util.WeakHashMap<>();
 
     private static void coverVoiceBubblesOnLayout() {
         long now = SystemClock.uptimeMillis();
@@ -2535,16 +2734,25 @@ public final class ChatBubbleHook {
                 Boolean r;
                 synchronized (sBubble) { r = sBubble.get(v); }
                 if (r == null) continue;
+                // v3.0.222：发送侧 mq.u 未播放时是 GONE（微信原生隐藏动画层），
+                // 不补盖不 forceVisible —— 否则未播放语音会叠出空白动画层。
+                if (v.getId() == ID_MQ_U && v.getVisibility() != View.VISIBLE) continue;
                 // v3.0.205：w==0&&h==0 表示该 view 尚未真正布局（RecyclerView 远离视口的复用项），
                 // 此处强制 VISIBLE + requestLayout 只会放大布局风暴；交给真实的 layout 后绑定补盖。
                 if (v.getWidth() == 0 && v.getHeight() == 0
                         && v.getVisibility() != View.VISIBLE) continue;
                 applyVoiceBubble(v, r, true);
                 synchronized (sVoiceCoverAt) { sVoiceCoverAt.put(v, SystemClock.uptimeMillis()); }
+                // §17.3 ③：setType(3) 清空态兜底 —— 该 view 已由 onLayout 路径恢复，消费记录。
+                boolean type3 = false;
+                synchronized (sType3Cleared) {
+                    type3 = sType3Cleared.remove(v) != null;
+                }
                 LogWriter.log(TAG, "voice cover onLayout kind=" + (r ? KIND_FROM : KIND_TO)
                         + " view=" + v.getClass().getName()
                         + " w=" + v.getWidth() + " h=" + v.getHeight()
-                        + " vis=" + v.getVisibility());
+                        + " vis=" + v.getVisibility()
+                        + (type3 ? " type3Cleared=true" : ""));
             } catch (Throwable ignored) {}
         }
     }
@@ -2660,7 +2868,8 @@ public final class ChatBubbleHook {
                 return;
             }
             List<String> cls = DexKitHelper.findMethodDeclClassByString(cl, "[onBindView] finish position:");
-            if (cls == null || cls.isEmpty()) {
+            boolean anchorHit = cls != null && !cls.isEmpty();
+            if (!anchorHit) {
                 LogWriter.log(TAG, "dealItemView hook: anchor string no candidates, try class name");
                 cls = new ArrayList<>();
                 cls.add("com.tencent.mm.ui.chatting.mvvm.MvvmChattingItem");
@@ -2672,10 +2881,17 @@ public final class ChatBubbleHook {
                         if (!"h".equals(m.getName())) continue;
                         Class<?>[] pts = m.getParameterTypes();
                         if (pts.length < 3) continue;
-                        // 目标：第 2 参是 MvvmMsgInfo（am5.d 混淆实现，形参为接口类型）。
-                        // 接口自身不声明字段 e/d（实现类声明），故放宽：含 e 或 d 字段即视为目标
-                        // （文档 §7.3：info.d.b = msg 是 dealItemView 锚点特征）。
-                        if (!hasFieldNamed(pts[1], "e") && !hasFieldNamed(pts[1], "d")) continue;
+                        // v3.0.211：接口形参 s0/am5.d 自身不声明字段（字段在实现类）→ hasFieldNamed 对
+                        // 接口必 false，旧逻辑把 anchor 命中的 h 全滤掉 → bind 级主注入静默失效。
+                        // 修复：anchor 命中即放行（anchor 类 xl5.g 的 h 即 dealItemView）；
+                        // 仅 anchor miss 回退类名时才做字段特征收窄。
+                        if (anchorHit) {
+                            // 放行
+                        } else if (!hasFieldNamed(pts[1], "e")
+                                && !hasFieldNamed(pts[1], "d")
+                                && !hasFieldNamed(pts[1], "b")) {
+                            continue;
+                        }
                         m.setAccessible(true);
                         final Method fm = m;
                         XposedBridge.hookMethod(m, new XC_MethodHook() {
@@ -2716,7 +2932,207 @@ public final class ChatBubbleHook {
         return false;
     }
 
-    /** 文档 §7.3/§8 bind-after 统一渲染：时间线颜色+内容、气泡文字、语音承载补盖。 */
+    /** v3.0.214（WeChat_Bubble_Inject_Analysis.md §15/§16）：L1b 兜底注入层 + L4 回收清理。
+     *  <p>完整 bind 必经 {@code WxRecyclerAdapter.E0(s0,pos)}，局部刷新（payload）必经
+     *  {@code F0(s0,pos,payloads)} —— 后者绕过业务 bind（文档 §14 R1/R2），是语音播放进度、
+     *  已读/发送态局部刷新时不渲染的根因。父类 hookAllMethods 不依赖业务签名，业务改名不失效。
+     *  另挂 {@code adapter.k.O(s0,pos)} 双保险；L4 在回收/离屏时清理登记防复用串味。</p> */
+    private static void installWxRecyclerAdapterHook(ClassLoader cl) {
+        try {
+            try {
+                sWxRecyclerAdapterCls = XposedHelpers.findClass(
+                        "com.tencent.mm.view.recyclerview.WxRecyclerAdapter", cl);
+            } catch (Throwable ignored) {
+                sWxRecyclerAdapterCls = null;
+            }
+            if (sWxRecyclerAdapterCls == null) {
+                LogWriter.log(TAG, "WxRecyclerAdapter not found (L1b skip)");
+                return;
+            }
+            try {
+                sChatDataAdapterCls = XposedHelpers.findClass(
+                        "com.tencent.mm.ui.chatting.adapter.k", cl);
+            } catch (Throwable ignored) {
+                sChatDataAdapterCls = null;
+            }
+            if (sChatDataAdapterCls == null) {
+                try {
+                    List<String> cands = DexKitHelper.findClassesByString(cl,
+                            "MicroMsg.ChattingDataAdapterV3");
+                    if (cands != null && !cands.isEmpty()) {
+                        for (Class<?> c : HookUtil.loadClasses(cl, cands.get(0))) {
+                            sChatDataAdapterCls = c;
+                            break;
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+            // 语音/文本 Holder 类（文档 §15.3：itemView.getTag() 即 Holder 实例）
+            try {
+                sVoiceHolderCls = XposedHelpers.findClass(
+                        "com.tencent.mm.ui.chatting.viewitems.mq", cl);
+            } catch (Throwable ignored) {
+                sVoiceHolderCls = null;
+            }
+            try {
+                sTextHolderCls = XposedHelpers.findClass(
+                        "com.tencent.mm.ui.chatting.viewitems.to", cl);
+            } catch (Throwable ignored) {
+                sTextHolderCls = null;
+            }
+            // L1b：完整 bind（E0）+ 局部刷新（F0）+ 业务双保险（O）
+            XC_MethodHook ensure = new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        ensureBubbleOnAdapter(param.thisObject,
+                                param.args.length > 0 ? param.args[0] : null);
+                    } catch (Throwable ignored) {}
+                }
+            };
+            XposedBridge.hookAllMethods(sWxRecyclerAdapterCls, "E0", ensure);
+            XposedBridge.hookAllMethods(sWxRecyclerAdapterCls, "F0", ensure);
+            if (sChatDataAdapterCls != null) {
+                XposedBridge.hookAllMethods(sChatDataAdapterCls, "O", ensure);
+            }
+            // L4：回收 / 离屏 —— 还原登记防复用串味
+            XC_MethodHook cleanup = new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                        if (!sEnabled) return;
+                        Object h = param.args.length > 0 ? param.args[0] : null;
+                        if (h == null) return;
+                        Object iv = XposedHelpers.getObjectField(h, "itemView");
+                        if (iv instanceof View) recycleItem((View) iv);
+                    } catch (Throwable ignored) {}
+                }
+            };
+            XposedBridge.hookAllMethods(sWxRecyclerAdapterCls, "onViewRecycled", cleanup);
+            XposedBridge.hookAllMethods(sWxRecyclerAdapterCls, "onViewDetachedFromWindow", cleanup);
+            LogWriter.log(TAG, "WxRecyclerAdapter L1b E0/F0/O + L4 recycle hooked"
+                    + " rv=" + sWxRecyclerAdapterCls.getName()
+                    + " adapter=" + (sChatDataAdapterCls == null ? "null" : sChatDataAdapterCls.getName()));
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "installWxRecyclerAdapterHook err: " + t.getMessage());
+        }
+    }
+
+    /** v3.0.214（文档 §15.2/§15.3）：L1b 兜底 —— 只处理聊天列表适配器数据项。
+     *  从 holder 反射取 itemView，幂等整树重放气泡注入（applyBubblesInItem），
+     *  再补引用气泡注入（injectQuote）。方向从 holder.i.d.b(e9).z0() 取，失败默认接收侧。 */
+    private static void ensureBubbleOnAdapter(Object adapter, Object holderArg) {
+        if (adapter == null || holderArg == null) return;
+        if (sChatDataAdapterCls != null
+                && !sChatDataAdapterCls.isAssignableFrom(adapter.getClass())) return;
+        Object iv;
+        try {
+            iv = XposedHelpers.getObjectField(holderArg, "itemView");
+        } catch (Throwable ignored) {
+            return;
+        }
+        if (!(iv instanceof View)) return;
+        View itemView = (View) iv;
+        boolean isRecv = !isSendFromHolder(holderArg);
+        // 文档 §15.2：itemView.getTag() 即 Holder 实例（mq/to/其它）。非目标类型显式还原
+        // （restoreAll 防串味），比只在目标类型注入更稳。
+        Object tag = itemView.getTag();
+        if (tag != null) {
+            boolean isVoice = sVoiceHolderCls != null && sVoiceHolderCls.isInstance(tag);
+            boolean isText = sTextHolderCls != null && sTextHolderCls.isInstance(tag);
+            if (!isVoice && !isText) {
+                recycleItem(itemView);
+                return;
+            }
+        }
+        // 幂等整树重放（已登记语音/文本 ITV 无条件重贴；非目标类型不会命中）
+        try {
+            applyBubblesInItem(itemView, isRecv);
+        } catch (Throwable ignored) {}
+        // v3.0.218：删除 injectQuote 启发式遍历（WeChat_Bubble_Inject_Analysis.md §24.1 E1 作废）。
+        // 启发式极易命中语音行空容器（mq.o/p/z/q/C 等）硬造出假气泡；引用气泡改走 q71.n 工厂
+        // 注入（后续实现），在此之前不处理引用气泡，避免假气泡回归。
+    }
+
+    /** 从 L1b 的 holder 取消息方向：holder.i(am5.d).d(hn5.a).b(e9).z0()=是否自己发送。 */
+    private static boolean isSendFromHolder(Object holder) {
+        try {
+            Object data = XposedHelpers.getObjectField(holder, "i");    // am5.d
+            if (data != null) {
+                Object d = XposedHelpers.getObjectField(data, "d");     // hn5.a
+                if (d != null) {
+                    Object msg = XposedHelpers.getObjectField(d, "b");  // e9
+                    if (msg != null) {
+                        return Boolean.TRUE.equals(XposedHelpers.callMethod(msg, "z0"));
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    /** v3.0.214（文档 §15.4）：引用气泡注入。遍历 item 树，找「背景像九宫格气泡」且未登记的
+     *  子 View（引用消息 q71.n 家族），按当前消息方向贴自定义气泡。保守启发式防误伤图标/进度条。
+     *  <p>v3.0.218（§24.1 E1）：<b>整段作废</b> —— 启发式极易命中语音行空容器（mq.o/p/z/q/C 等）
+     *  硬造出假气泡。引用气泡改走 q71.n 工厂注入（hook 各实现 b(Context)→View），本方法不再调用。</p> */
+    private static void injectQuote(View itemView, boolean isRecv) {
+        // 作废：不再执行启发式遍历，防止假气泡。
+    }
+
+    /** 启发式：背景是 NinePatch/Bitmap/Gradient/Layer/Shape 且尺寸像气泡（文档 §15.4）。
+     *  v3.0.217：NinePatch/StateList/Layer 的 intrinsicWidth 常为 -1（九宫格/状态列表/叠加层），
+     *  原实现按尺寸过滤会把引用气泡（NinePatchDrawable）全部漏掉。这些背景类型本身即气泡特征，
+     *  直接放行；Bitmap/Gradient/Shape 仍按尺寸约束防误伤图标/进度条。 */
+    private static boolean looksLikeBubble(View v) {
+        Drawable bg = v.getBackground();
+        if (bg == null) return false;
+        int w = bg.getIntrinsicWidth();
+        int h = bg.getIntrinsicHeight();
+        String n = bg.getClass().getName();
+        if (n.contains("NinePatch") || n.contains("StateList") || n.contains("Layer")) {
+            return true;   // 九宫格/状态列表/叠加层背景 = 气泡特征（引用气泡/九宫格）
+        }
+        if (w < 100 || w > 4000 || h < 40 || h > 600) return false;
+        return n.contains("Bitmap") || n.contains("Gradient") || n.contains("Shape");
+    }
+
+    /** 有限深度遍历 View 树（防深树卡顿）。 */
+    private static void walkBubbleTree(View v, int depth, java.util.function.Consumer<View> block) {
+        if (v == null || depth > 5) return;
+        try { block.accept(v); } catch (Throwable ignored) {}
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                walkBubbleTree(g.getChildAt(i), depth + 1, block);
+            }
+        }
+    }
+
+    /** v3.0.214（文档 §15.5 L4）：回收/离屏时移除该 item 树内所有气泡登记，防复用串味。
+     *  背景随 View 回收自然释放，不强写回原背景（避免与微信异步回写冲突）。 */
+    private static void recycleItem(View itemView) {
+        if (itemView == null) return;
+        final java.util.List<View> toRemove = new java.util.ArrayList<>();
+        walkBubbleTree(itemView, 8, v -> {
+            if (v == null) return;
+            synchronized (sBubble) {
+                if (sBubble.containsKey(v)) toRemove.add(v);
+            }
+        });
+        if (toRemove.isEmpty()) return;
+        synchronized (sBubble) { for (View v : toRemove) sBubble.remove(v); }
+        synchronized (sBubbleViews) { for (View v : toRemove) sBubbleViews.remove(v); }
+        synchronized (sBubbleKind) { for (View v : toRemove) sBubbleKind.remove(v); }
+        synchronized (sAnimVerifyDone) { for (View v : toRemove) sAnimVerifyDone.remove(v); }
+        synchronized (sVoiceCoverAt) { for (View v : toRemove) sVoiceCoverAt.remove(v); }
+        synchronized (sType3Cleared) { for (View v : toRemove) sType3Cleared.remove(v); }
+    }
+
+    /** 文档 §7.3/§8/§16.3 bind-after 统一渲染：时间线颜色+内容、气泡文字、语音承载补盖。
+     *  <p>v3.0.212（§16.3）：<b>无条件整树渲染</b> —— 每次 bind（含回收复用）都执行
+     *  recolorItem + applyBubblesInItem + applyTimeNickColor，根治「占位层 skip 导致
+     *  回收复用不渲染」的偶发问题。不再依赖 attach/onLayout 事后补盖。</p> */
     private static void applyDealItemView(de.robv.android.xposed.XC_MethodHook.MethodHookParam param, Method fm) {
         Object[] args = param.args;
         // 1) 从 holder 拿 itemView（文档 §7.3：((k3)args[0]).itemView）
@@ -2735,43 +3151,71 @@ public final class ChatBubbleHook {
             }
         }
         if (itemView == null) return;
+        // v3.0.218：系统提示（撤回/红包领取/群通知等 type=10000 家族）不贴气泡不着色。
+        // 文档 §23.1：这些提示只有 setForeground(2131232025) 没有气泡背景，模块不应触碰。
+        if (isSysMsgArgs(args)) return;
         // 2) 时间线颜色 / 昵称 / 自定义时间线内容（§8 三件套，bind-after 直用 itemView）
         applyTimeNickColor(args, itemView);
         // 3) 文本内容 / 图标整树上色（§6.4 recolorItem，兼容时间线/昵称 id）
         boolean isRecv = !isSendFromArgs(args);
         sLastBindRecv = isRecv;
         recolorItem(itemView, isRecv);
-        // 4) 气泡承载逐节点应用（文档 §7.3：内容 ITV to.b / MMNeat7extView + 语音 BUBBLE 表）。
-        //    整树上色 recolorItem 只改颜色；承载贴图按方向对真承载应用，其余节点不动。
+        // 4) 气泡承载整树贴图（§16.3 applyBubblesInItem：无条件，按 BUBBLE 表/id 分流）
         try {
-            applyBubbleToTree(itemView, isRecv);
+            applyBubblesInItem(itemView, isRecv);
         } catch (Throwable t) {
             LogWriter.log(TAG, "dealItemView bubble err: " + t.getMessage());
         }
     }
 
-    /** v3.0.208：文档 §7.3 —— 对 item 树内真气泡承载应用自定义气泡（文本 ITV + 语音 mq.e）。
-     *  与 recolorItem 分层：此处只管背景贴图，不碰文字/图标颜色。 */
-    private static void applyBubbleToTree(View root, boolean isRecv) {
+    /** v3.0.212（§16.3）/v3.0.213（§17.3）：对 item 树内真气泡承载整树应用自定义气泡。
+     *  <p>与 recolorItem 分层：此处只管背景贴图，不碰文字/图标颜色。
+     *  分流规则（§16.3 ③ + §17.3 ①）：BUBBLE 表命中（mq.b 采集的语音 mq.e/mq.u/mq.D）→ 按其
+     *  登记方向贴，其中 mq.D（语音时长/转文字容器）只换背景、不 forceVisible、不改文字颜色；
+     *  文本内容 ITV id==2131365751 → 按当前消息方向贴。<b>无条件执行</b>（含回收复用不 inflate 的
+     *  复用视图），修复 §16.2「占位层 skip + 复用无 setBackground → 偶发不渲染」与
+     *  §17.2「mq.D 占位层 skip + setType 单路径 → 反复进出偶发不渲染」。</p> */
+    private static void applyBubblesInItem(View root, boolean isRecv) {
         if (root == null || !sEnabled) return;
-        int kind = isRecv ? KIND_FROM : KIND_TO;
-        boolean hasCustom = loadDrawable(kind) != null;
-        if (!hasCustom) return;                 // 无自定义气泡图则不贴
         ArrayDeque<View> st = new ArrayDeque<>();
         st.push(root);
         while (!st.isEmpty()) {
             View v = st.pop();
             if (v == null) continue;
             try {
-                // 文本气泡承载：MMNeat7extView（to.b 内容层）—— 语音转文字 mq.s 也同型，天然涵盖。
-                if (v instanceof android.widget.TextView
-                        && v.getClass().getName().contains("MMNeat")) {
-                    if (isReplaceableContentView(v)) {
-                        applyBubbleTo(v, kind);
-                    }
-                } else if (isVoiceCarrier(v, isRecv)) {
-                    // 语音真承载 mq.e：波形/时长都在它上面
-                    applyVoiceBubble(v, isRecv, false);
+                Boolean dir = null;
+                synchronized (sBubble) {
+                    dir = sBubble.get(v);
+                }
+                if (dir != null) {
+                    // 语音承载：mq.b/mq.e 登记的 mq.e/mq.u/mq.x/mq.D —— 按其方向应用
+                    if (isVoiceCarrier(v, dir)) {
+                        applyVoiceBubble(v, dir, false);
+                        applyVoiceContentColor(v, dir ? KIND_FROM : KIND_TO);
+                    } else if (v.getId() == ID_MQ_X) {
+                        // 发送侧气泡背景 TextView：只换背景、不 forceVisible、不改字色。
+                        // v3.0.218：接收侧同 id 是隐藏镜像/占位，不贴（假气泡元凶）。
+                        if (!dir) {
+                            applyVoiceBubble(v, dir, false);
+                        }
+} else if (v.getId() == ID_MQ_D) {
+                                        // v3.0.216：mq.D 时长/倍速提示容器 —— 只登记方向，不贴背景
+                                        // （防假气泡把真 AnimImageView 顶下来，用户实测反馈）
+                                    } else if (v.getId() == ID_MQ_U) {
+                                        // v3.0.222：发送侧 mq.u 播放动画层贴背景但不 forceVisible
+                                        //（消除底部原生背景露出）；接收侧 mq.u 占位层不贴
+                                        if (!dir) {
+                                            applyVoiceBubble(v, false, false);
+                                        }
+                                    } else {
+                                        applyBubbleTo(v, dir ? KIND_FROM : KIND_TO);
+                                    }
+                } else if (v.getId() == ID_TO_B && isChatTextBubble(v)) {
+                    // 文本内容 ITV（to.b/MMNeat7extView）：无条件按当前消息方向贴。
+                    // v3.0.215：必须加 isChatTextBubble 类型判断 —— ID_TO_B(2131365751) 在语音
+                    // item 里是 mq.s 语音时长文本（普通 TextView，文档 §12 附录），裸 id 判断
+                    // 会把它误贴成气泡背景（用户反馈「秒数有一个气泡」）。
+                    applyBubbleTo(v, isRecv ? KIND_FROM : KIND_TO);
                 }
             } catch (Throwable ignored) {}
             if (v instanceof ViewGroup) {
@@ -2797,6 +3241,35 @@ public final class ChatBubbleHook {
                 if (msg == null) continue;
                 try {
                     return Boolean.TRUE.equals(XposedHelpers.callMethod(msg, "z0"));
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    /** v3.0.218/v3.0.219：系统提示消息 type 集合（WeChat_Bubble_Inject_Analysis.md §23.1/§26.3#29）：
+     *  时间线/撤回/红包领取/群通知等，只有 foreground 无气泡背景，模块一律不触碰；
+     *  v3.0.219 追加红包卡片(436207665)/转账(419430449) —— 红包相关文字不着色不贴气泡。 */
+    private static boolean isSysMsgType(int type) {
+        return type == 10000 || type == 10002 || type == 570425393 || type == 603979825
+                || type == 268445456 || type == 268445458 || type == 285222674 || type == 64
+                || type == 436207665 || type == 419430449;
+    }
+
+    /** 从 dealItemView 参数里判定是否系统提示消息（撤回/红包领取/群通知等）。 */
+    private static boolean isSysMsgArgs(Object[] args) {
+        try {
+            for (Object a : args) {
+                if (a == null) continue;
+                Object d = null;
+                try { d = XposedHelpers.getObjectField(a, "d"); } catch (Throwable ignored) {}
+                if (d == null) continue;
+                Object msg = null;
+                try { msg = XposedHelpers.getObjectField(d, "b"); } catch (Throwable ignored) {}
+                if (msg == null) continue;
+                try {
+                    int type = ((Number) XposedHelpers.callMethod(msg, "getType")).intValue();
+                    return isSysMsgType(type);
                 } catch (Throwable ignored) {}
             }
         } catch (Throwable ignored) {}
@@ -3298,9 +3771,15 @@ public final class ChatBubbleHook {
             Drawable custom = loadDrawable(kind);
             if (custom != null) {
                 Drawable d = fresh(custom);
+                // v3.0.217（文档 §6.5 首选）：优先用微信原背景 padding 保持文字位置
+                android.graphics.Rect origPad = origPaddingOf(v);
                 v.setBackground(d);
                 rememberBubble(v, d, kind);
-                applyDrawablePadding(v, d);
+                if (origPad != null) {
+                    v.setPadding(origPad.left, origPad.top, origPad.right, origPad.bottom);
+                } else {
+                    applyDrawablePadding(v, d);
+                }
                 syncBubblePadding(v);
                 try { v.requestLayout(); v.invalidate(); } catch (Throwable ignored) {}
             }
@@ -3444,7 +3923,20 @@ public final class ChatBubbleHook {
                                 // 方向+id 双约束：收到侧只 mq.u、发出侧只 mq.e；mq.D(TextView 备用承载)
                                 // 与对向 AnimImageView（收到侧 mq.e / 发出侧 mq.u）都是微信原生占位层，
                                 // 一旦 forceVisible 就叠出空气泡并把真气泡顶到下一行。
-                                if (!isVoiceCarrier(fv, isRecv)) {
+                                // v3.0.212（§16.3 修正）：attach 兜底不再跳过文本 ITV。
+                                // 历史 v3.0.200「占位层 skip」只应排除语音对向 AnimImageView / mq.D 占位，
+                                // 但文本内容 ITV(2131365751, MMNeat7extView) 也被误 skip → 回收复用不渲染。
+                                // v3.0.213（§17.3 ①白名单补全）：mq.D(2131365816) 语音时长/转文字容器
+                                // 一并纳入 apply（不再 skip），但只换背景、不 forceVisible、不动文字颜色。
+                                // 现在：语音视图仍按 isVoiceCarrier 方向约束防空气泡；文本 ITV 直接 applyBubbleTo。
+                                // v3.0.215：isTextItv 用类型判断（isChatTextBubble）——ID_TO_B 在语音
+                                // item 里是 mq.s 时长文本（普通 TextView），裸 id 判断会误放行。
+                                // v3.0.216：mq.D 只登记方向不贴背景（防假气泡）；mq.x 发送侧
+                                // 气泡背景 TextView 只换背景不 forceVisible。
+                                boolean isTextItv = isChatTextBubble(fv);
+                                boolean isMqD = fv.getId() == ID_MQ_D; // 提示容器，不贴
+                                boolean isMqX = fv.getId() == ID_MQ_X; // 发送侧气泡背景
+                                if (!isVoiceCarrier(fv, isRecv) && !isTextItv && !isMqD && !isMqX) {
                                     LogWriter.log(TAG, "attach BUBBLE skip 占位层 isRecv=" + isRecv
                                             + " id=" + fv.getId() + " view=" + fv.getClass().getSimpleName());
                                     return;
@@ -3455,8 +3947,24 @@ public final class ChatBubbleHook {
                                 if (pathVoice) {
                                     // v3.0.161：语音视图方向以 mq.b 登记的表为准（几何猜向在 GONE/w=0 时不可靠），
                                     // forceVisible 防 GONE 态不渲染。
+                                    // v3.0.222：发送侧 mq.u 播放动画层只换背景不 forceVisible
+                                    //（避免未播放时动画层被强制显示）。
                                     kind = isRecv ? KIND_FROM : KIND_TO;
-                                    applyVoiceBubble(fv, isRecv, isAnimImage(fv));
+                                    if (fv.getId() == ID_MQ_U) {
+                                        applyVoiceBubble(fv, isRecv, false);
+                                    } else {
+                                        applyVoiceBubble(fv, isRecv, isAnimImage(fv));
+                                    }
+                                } else if (isMqD) {
+                                    // v3.0.216：mq.D 提示容器 —— 只登记方向，不贴背景（防假气泡顶真气泡）
+                                    kind = isRecv ? KIND_FROM : KIND_TO;
+                                } else if (isMqX) {
+                                    // v3.0.218：mq.x 仅发送侧注入；接收侧同 id 是隐藏镜像/占位，
+                                    // 贴背景会形成「假气泡」（日志实锤），接收侧一律不贴。
+                                    kind = isRecv ? KIND_FROM : KIND_TO;
+                                    if (!isRecv) {
+                                        applyVoiceBubble(fv, isRecv, false);
+                                    }
                                 } else {
                                     // v3.0.162（§14）：方向唯一来源 = to.b/mq.b 的 isRecv 布尔（BUBBLE 表），
                                     // 几何猜向在方向错配时反而更不可靠，直接按登记的可读 recv 覆盖。
@@ -3564,10 +4072,18 @@ public final class ChatBubbleHook {
     // ==================== v7 过滤：时间文字 / 系统提示（防过度渲染） ====================
 
     /** v3.0.142（v7 文档 §11.1）：jh 容器内非内容视图 / 时间条 id 黑名单。
-     *  命中这些 id 的视图一律不替换，即使背景是 9-patch。 */
+     *  命中这些 id 的视图一律不替换，即使背景是 9-patch。
+     *  v3.0.217（WeChat_Bubble_Inject_Analysis.md §12 附录）：扩充时间线/昵称/内容容器/
+     *  引用容器/maskView/stateIV，全面防「系统提示/时间条/非内容视图」被误贴气泡。 */
     private static final java.util.Set<Integer> sIdBlack = new java.util.HashSet<>(
             java.util.Arrays.asList(
-                    2131366078,  // chatting_time_tv 时间分隔条（本构建实证）
+                    2131366078,  // chatting_time_tv / userTV 昵称（本构建实证）
+                    2131366064,  // timeTV 时间线（ID_TIME_TV）
+                    2131365748,  // 消息内容容器（to.c，适配器也用它）
+                    2131365722,  // 引用消息容器（to.q）
+                    2131365723,  // 引用消息容器（to.r）
+                    2131365979,  // maskView 多选遮罩
+                    2131366060,  // stateIV 状态图标
                     0x7f0a1075,  // jh 内“展开”TextView
                     0x7f0a0fc3,  // jh 内历史消息提示
                     0x7f0a0f6c,  // jh 内多选 CheckBox

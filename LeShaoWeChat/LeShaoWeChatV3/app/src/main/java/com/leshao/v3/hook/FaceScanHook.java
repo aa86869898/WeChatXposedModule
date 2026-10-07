@@ -262,45 +262,65 @@ public final class FaceScanHook {
 
     /** v3.0.210：方案② —— Hook f74.c.b(long, Bundle)（QRCodeHandler 内部处理），
      *  before 读 Bundle 前强改 qbar_string_scan_source=0（相机）。兜底链：相册 Bundle
-     *  走到这里时 i2 即相册来源，before 改回相机值后下游全自动。 */
+     *  走到这里时 i2 即相册来源，before 改回相机值后下游全自动。
+     *
+     *  <p>v3.0.211：旧实现硬签名字 b(long, Bundle) 未命中（日志 f74.c.b none）。
+     *  改为 findClassesByString(MicroMsg.QRCodeHandler) 定位类后，对该类<b>所有方法</b>
+     *  before 识别「含 Bundle 参数且 Bundle 内含 qbar_string_scan_source」即改——
+     *  不依赖方法名/签名，内容级定位更抗混淆。</p> */
     private static void hookF74Handler(ClassLoader cl) {
+        List<String> classes = null;
         try {
-            List<String> classes = DexKitHelper.findClassesByString(cl, S_QRCODE_HANDLER);
-            boolean hooked = false;
-            for (String cn : classes) {
+            classes = DexKitHelper.findClassesByString(cl, S_QRCODE_HANDLER);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "f74 findClasses err: " + t.getMessage());
+        }
+        if (classes == null || classes.isEmpty()) {
+            LogWriter.log(TAG, "f74.c.b none (QRCodeHandler anchor empty)");
+            return;
+        }
+        boolean hooked = false;
+        for (String cn : classes) {
+            try {
                 for (Class<?> c : HookUtil.loadClasses(cl, cn)) {
                     for (Method m : c.getDeclaredMethods()) {
-                        if (!"b".equals(m.getName())) continue;
                         Class<?>[] pts = m.getParameterTypes();
-                        if (pts.length != 2) continue;
-                        if (pts[0] != long.class || pts[1] != android.os.Bundle.class) continue;
-                        m.setAccessible(true);
+                        boolean hasBundle = false;
+                        for (Class<?> p : pts) {
+                            if (p == android.os.Bundle.class) { hasBundle = true; break; }
+                        }
+                        if (!hasBundle) continue;
+                        // 方法至少接收 Bundle 即 hook（before 内按内容识别目标 Bundle）
                         XposedBridge.hookMethod(m, new XC_MethodHook() {
                             @Override
                             protected void beforeHookedMethod(MethodHookParam p) throws Throwable {
                                 if (!sEnabled) return;
                                 try {
-                                    android.os.Bundle b = (android.os.Bundle) p.args[1];
-                                    if (b != null) {
-                                        boolean wasAlbum = b.getInt(K_QBAR_SOURCE, 0) != 0;
-                                        b.putInt(K_QBAR_SOURCE, 0);
-                                        b.putInt(K_RESULT_IMG_SRC, 1);
-                                        if (wasAlbum) LogWriter.log(TAG, "f74.c.b source->0");
+                                    for (Object a : p.args) {
+                                        if (a instanceof android.os.Bundle) {
+                                            android.os.Bundle b = (android.os.Bundle) a;
+                                            if (!b.containsKey(K_QBAR_SOURCE)) continue;
+                                            boolean wasAlbum = b.getInt(K_QBAR_SOURCE, 0) != 0;
+                                            b.putInt(K_QBAR_SOURCE, 0);
+                                            b.putInt(K_RESULT_IMG_SRC, 1);
+                                            if (wasAlbum) LogWriter.log(TAG, "f74 Handler source->0 (Bundle has qbar)");
+                                        }
                                     }
                                 } catch (Throwable t) {
-                                    LogWriter.log(TAG, "f74.c.b err: " + t.getMessage());
+                                    LogWriter.log(TAG, "f74 before err: " + t.getMessage());
                                 }
                             }
                         });
+                        LogWriter.log(TAG, "hooked f74 handler(bundle-arg) "
+                                + c.getName() + "." + m.getName());
                         hooked = true;
-                        LogWriter.log(TAG, "hooked f74.c.b " + c.getName() + "." + m.getName());
                     }
                 }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "f74 class err: " + t.getMessage());
             }
-            if (!hooked) LogWriter.log(TAG, "f74.c.b none (QRCodeHandler anchor)");
-        } catch (Throwable t) {
-            LogWriter.log(TAG, "hookF74Handler err: " + t.getMessage());
         }
+        if (!hooked) LogWriter.log(TAG, "f74.c.b none (no Bundle-arg method under QRCodeHandler)");
     }
 
     /** v3.0.210：方案③ —— Hook v74.v.g(...)（QBarStringHandler，16 参），before 改参数。

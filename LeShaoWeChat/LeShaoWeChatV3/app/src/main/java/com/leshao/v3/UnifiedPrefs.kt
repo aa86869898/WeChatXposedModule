@@ -1,7 +1,7 @@
-package com.leshao.v3;
+package com.leshao.v3
 
-import android.content.Context;
-import android.content.SharedPreferences;
+import android.content.Context
+import android.content.SharedPreferences
 
 /**
  * 主分身统一配置入口。
@@ -11,10 +11,11 @@ import android.content.SharedPreferences;
  * 该判定现仅作探测), 因此模块可能运行于机主用户、系统克隆分身与 LSPosed MultiApp 等身份中,
  * 各身份读写各自的 prefs 目录, 天然互不干扰。
  */
-public class UnifiedPrefs {
+object UnifiedPrefs {
 
-    public static SharedPreferences get(Context ctx, String name) {
-        if (ctx == null) return null;
-        return ctx.getSharedPreferences(name, Context.MODE_PRIVATE);
+    @JvmStatic
+    fun get(ctx: Context?, name: String): SharedPreferences? {
+        if (ctx == null) return null
+        return ctx.getSharedPreferences(name, Context.MODE_PRIVATE)
     }
 }

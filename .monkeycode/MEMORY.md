@@ -161,3 +161,11 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
   - 红包类名在 3180 上是确定混淆名：com.tencent.mm.plugin.luckymoney.model.n6(NetSceneReceiveLuckyMoney, receivewxhb, 7参构造) / h6(NetSceneOpenLuckyMoney, openwxhb, 10参构造)。DexKit 字符串搜索 receivewxhb 在 3180 上返回 0 candidates（URL 被混淆/拆分），必须直接 loadClass 权威类名，DexKit 仅作兜底
   - 自动转发回环：用户配置 sources=[A] targets=[A] 时，收到 A 消息会原样转发回 A。AutoForwardHook.forwardAll 已加 target==fromTalker 跳过防护
   - 消息遮挡：快捷按钮行插入 footer 内垂直容器并驱动 c(false,false) 后，微信 bottomSpace 仍不含按钮行高度，最新消息会被按钮行盖住。必须在注入后调用 ChatVoiceSwitchHook.ensureMessageSpace/scheduleMessageSpace 给消息列表补 paddingBottom
+
+### 气泡整改新文档优先级（WeChat_Bubble_Inject_Analysis.md）
+- Date: 2026-10-07
+- Context: 用户要求自定义气泡严格按 /workspace/WeChat_Bubble_Inject_Analysis.md 全部整改，并二次审查
+- Category: 工作流协作
+- Instructions:
+  - 该文档（2034 行）是气泡注入最高优先级依据，核心四层：L1=to.b/mq.e 业务注入、L1b=WxRecyclerAdapter.E0/F0（局部刷新兜底，治滑动丢失）+ adapter.k.O 双保险、L2=View.setBackground 家族防回写、L3=padding 拷贝（首选）、L4=onViewRecycled/onViewDetachedFromWindow 回收清理；另含 injectQuote 引用气泡注入
+  - v3.0.214 起 ChatBubbleHook.java 已落地 L1b/L4/injectQuote/hookVoiceFillE（mq.e 9 参）；后续气泡改动必须先对照该文档 §15/§16 再动代码

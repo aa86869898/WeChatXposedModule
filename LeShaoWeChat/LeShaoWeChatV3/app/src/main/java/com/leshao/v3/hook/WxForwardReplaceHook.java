@@ -279,11 +279,13 @@ public static void hook(ClassLoader cl) {
         LogWriter.log(TAG, "intercept: Activity.startActivityForResult hooked");
     }
 
-    /** §14.3 保险：ContextWrapper.startActivityForResult(Intent,int)（MMBaseActivity 2参会委托到它）。 */
+    /** §14.3 保险：ContextWrapper.startActivityForResult（MMBaseActivity 2参会委托到它）。
+     *  v3.0.211：ContextWrapper 有 (Intent,int) 与 (Intent,int,Bundle) 两个签名，单签名
+     *  findAndHookMethod 在签名不匹配时会抛误导性的 "No static method findAndHookMethod(...)V"
+     *  （日志 cw intercept install err）。改为两个签名逐一尝试，哪个存在 hook 哪个。 */
     private static void installCwIntercept() {
         try {
-            XposedHelpers.findAndHookMethod(ContextWrapper.class, "startActivityForResult",
-                    Intent.class, int.class, new XC_MethodHook() {
+            XC_MethodHook h = new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     if (!sEnabled) return;
@@ -308,7 +310,15 @@ public static void hook(ClassLoader cl) {
                         LogWriter.log(TAG, "cw intercept err: " + t.getMessage());
                     }
                 }
-            });
+            };
+            boolean any = false;
+            java.util.Set<de.robv.android.xposed.XC_MethodHook.Unhook> un = XposedBridge.hookAllMethods(
+                    ContextWrapper.class, "startActivityForResult", h);
+            if (un != null && !un.isEmpty()) {
+                LogWriter.log(TAG, "cw intercept hooked " + un.size() + " overloads");
+                any = true;
+            }
+            if (!any) LogWriter.log(TAG, "cw intercept none (ContextWrapper startActivityForResult miss)");
         } catch (Throwable t) {
             LogWriter.log(TAG, "cw intercept install err: " + t.getMessage());
         }
