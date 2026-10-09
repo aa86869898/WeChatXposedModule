@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_voice_forward,@drawable/ic_voice_list,@drawable/ic_schedule_send,@drawable/ic_leshao_group" />

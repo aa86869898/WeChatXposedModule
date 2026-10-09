@@ -1,0 +1,2849 @@
+package com.leshao.v3;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.database.Cursor;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
+import android.media.MediaMetadataRetriever;
+import android.media.MediaPlayer;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.OpenableColumns;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.PopupWindow;
+import android.widget.ProgressBar;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
+import android.app.AlertDialog;
+
+import android.widget.SeekBar;
+import com.leshao.v3.ContextManager;
+import com.leshao.v3.db.VoiceHistoryDbHelper;
+import com.leshao.v3.hook.TtsVoiceSender;
+import com.leshao.v3.ui.AppColors;
+import com.leshao.v3.ui.CandyUi;
+import com.leshao.v3.ui.FlyingProgressBar;
+import com.leshao.v3.ui.GradientText;
+import com.leshao.v3.ui.InsetsUtil;
+import com.leshao.v3.ui.WindowLayer;
+import com.leshao.v3.ui.widgets.EqBarsView;
+import com.leshao.v3.wm.utils.WmPrefs;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.WeakHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XposedBridge;
+import de.robv.android.xposed.XposedHelpers;
+
+public class ChatFooterLongPressMenu {
+
+    private static final String TAG = "CFLPMenu";
+    private static final int REQ_PICK_MP3 = 9998;
+    private static final Set<View> injectedViews = Collections.newSetFromMap(new WeakHashMap<View, Boolean>());
+    private static PopupWindow popupWindow;
+    private static ClassLoader sClassLoader;
+    private static volatile String sCurrentTalker;
+    private static Object sLastChatFooter;
+    /** v30001: 当前聊天 Fragment 弱引用, 供发送语音后刷新消息列表(修复"已发送但未上屏")。 */
+    private static volatile java.lang.ref.WeakReference<Object> sChattingFragmentRef = new java.lang.ref.WeakReference<>(null);
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+
+    /** v1073: 当前聊天会话 talker 缓存(供 TTS 发送入口兜底拦截使用)。 */
+    public static String currentTalker() {
+        return sCurrentTalker;
+    }
+
+    /**
+     * v30009: 仅供诊断/校验用的"实时"会话解析(无 Context 版本)。
+     * 依次尝试: 已 resume 的聊天 Fragment → ChatFooter.d → onResume 缓存。
+     */
+    public static String resolveLiveTalker() {
+        String t = talkerFromChattingFragment();
+        if (isValidTalker(t)) return t;
+        if (sLastChatFooter != null) {
+            try {
+                Field f = findField(sLastChatFooter.getClass(), "d");
+                if (f != null) {
+                    f.setAccessible(true);
+                    Object v = f.get(sLastChatFooter);
+                    if (v instanceof String && isValidTalker((String) v)) return (String) v;
+                }
+            } catch (Throwable ignored) {}
+        }
+        return isValidTalker(sCurrentTalker) ? sCurrentTalker : null;
+    }
+
+    /**
+     * v1079: 从任意微信对象(SendTextComponent / 组件宿主 / Activity)解析当前会话 talker。
+     * 逐层扫描字段图, 命中合法会话字符串即返回并写入缓存, 供 om.A0 等文字发送入口使用。
+     */
+    public static String resolveTalkerFrom(Object root) {
+        String cached = sCurrentTalker;
+        if (isValidTalker(cached)) return cached;
+        String t = null;
+        if (root instanceof String) {
+            t = (String) root;
+        } else {
+            if (root instanceof Activity) {
+                t = resolveTalkerFromActivity((Activity) root);
+            }
+            if (!isValidTalker(t)) t = scanTalkerFieldGraph(root);
+            if (!isValidTalker(t)) t = getTalkerFromObject(root);
+        }
+        if (!isValidTalker(t)) t = findGlobalTalker();
+        if (isValidTalker(t)) {
+            sCurrentTalker = t;
+            LogWriter.log(TAG, "resolveTalkerFrom: " + t
+                    + " (root=" + (root == null ? "null" : root.getClass().getSimpleName()) + ")");
+            return t;
+        }
+        LogWriter.log(TAG, "resolveTalkerFrom 未命中 root="
+                + (root == null ? "null" : root.getClass().getName()));
+        return null;
+    }
+
+    /**
+     * v1080: 全局兜底解析(调用方无 root 或字段图扫描失败时)。
+     * 依次尝试: ChatFooter.d(权威) → WmChatHook 当前打开的会话 → 前台 Activity。
+     */
+    private static String findGlobalTalker() {
+        if (sLastChatFooter != null) {
+            try {
+                Field f = findField(sLastChatFooter.getClass(), "d");
+                if (f != null) {
+                    f.setAccessible(true);
+                    Object v = f.get(sLastChatFooter);
+                    if (v instanceof String && isValidTalker((String) v)) {
+                        LogWriter.log(TAG, "findGlobalTalker: ChatFooter.d=" + v);
+                        return (String) v;
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        try {
+            String u = com.leshao.v3.wm.hook.WmChatHook.currentUser();
+            if (isValidTalker(u)) {
+                LogWriter.log(TAG, "findGlobalTalker: WmChatHook=" + u);
+                return u;
+            }
+        } catch (Throwable ignored) {}
+        try {
+            Activity act = MainHook.currentActivity();
+            if (act != null) {
+                String t = resolveTalkerFromActivity(act);
+                if (isValidTalker(t)) {
+                    LogWriter.log(TAG, "findGlobalTalker: activity=" + t);
+                    return t;
+                }
+                t = getTalkerFromObject(act);
+                if (isValidTalker(t)) {
+                    LogWriter.log(TAG, "findGlobalTalker: activity field=" + t);
+                    return t;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private static String scanTalkerFieldGraph(Object root) {
+        if (root == null) return null;
+        java.util.IdentityHashMap<Object, Boolean> visited = new java.util.IdentityHashMap<>();
+        java.util.ArrayDeque<Object> queue = new java.util.ArrayDeque<>();
+        java.util.ArrayDeque<Integer> depths = new java.util.ArrayDeque<>();
+        queue.add(root);
+        depths.add(0);
+        visited.put(root, Boolean.TRUE);
+        int nodes = 0;
+        while (!queue.isEmpty() && nodes++ < 400) {
+            Object cur = queue.poll();
+            int depth = depths.poll();
+            if (cur == null) continue;
+            String name = cur.getClass().getName();
+            if (cur instanceof String) continue;
+            // 会话/昵称 getter
+            for (String mn : new String[]{"getTalkerUserName", "getTalker", "getUserName",
+                    "getChatRoomName", "getChatroomName"}) {
+                try {
+                    Object v = XposedHelpers.callMethod(cur, mn);
+                    if (v instanceof String && isValidTalker((String) v)) return (String) v;
+                } catch (Throwable ignored) {}
+            }
+            if (cur instanceof Activity) {
+                String t = resolveTalkerFromActivity((Activity) cur);
+                if (isValidTalker(t)) return t;
+            }
+            if (depth >= 5) continue;
+            Class<?> c = cur.getClass();
+            while (c != null && c != Object.class) {
+                for (Field f : c.getDeclaredFields()) {
+                    if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                    String ft = f.getType().getName();
+                    if (f.getType().isPrimitive()) continue;
+                    if (ft.startsWith("java.") || ft.startsWith("android.graphics")
+                            || ft.startsWith("android.view") || ft.startsWith("android.widget")
+                            || ft.startsWith("android.os")) continue;
+                    try {
+                        f.setAccessible(true);
+                        Object v = f.get(cur);
+                        if (v == null) continue;
+                        if (v instanceof String) {
+                            if (isValidTalker((String) v)) return (String) v;
+                        } else if (v.getClass().getName().startsWith("com.tencent.mm")
+                                && !visited.containsKey(v)) {
+                            visited.put(v, Boolean.TRUE);
+                            queue.add(v);
+                            depths.add(depth + 1);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+                c = c.getSuperclass();
+            }
+        }
+        return null;
+    }
+    private static TextView sTargetPathText;
+    private static String sLastPickedPath;
+    private static Uri sLastResultUri;
+    private static long sLastResultAt;
+    private static ViewTreeObserver.OnGlobalLayoutListener sLayoutListener;
+    private static View sLayoutAnchor;
+    private static AlertDialog sHistoryDialog;
+    private static float sCutBeginSec;
+    private static float sCutEndSec;
+    private static PopupWindow sProgressPopup;
+    private static FlyingProgressBar sProgressBar;
+    private static TextView sProgressPct;
+    private static TextView sProgressLabel;
+
+    // v966: 处理选项播放图标
+    private static MediaPlayer sPanelPlayer;
+    private static ImageView sPanelPlayBtn;
+    private static EqBarsView sPanelEq;
+    private static String sPanelPlayingPath;
+    private static ImageView sHistPlayBtn;
+    // v1142: 试听/一键对比 PCM 播放(AudioTrack 流式)
+    private static android.media.AudioTrack sPcmTrack;
+    private static Thread sPcmThread;
+    private static volatile boolean sPcmStop = true;
+    private static Runnable sPcmOnDone;
+    // v966: 历史记录勾选状态
+    private static final java.util.Set<Long> sHistorySelected = new java.util.HashSet<>();
+    private static final Map<Long, CheckBox> sHistoryChecks = new HashMap<>();
+    private static TextView sHistorySelectAllBtn;
+    private static boolean sHistoryAllSelected;
+
+    // v966: 自绘图标类型
+    private static final int GLYPH_PLAY = 0;
+    private static final int GLYPH_PAUSE = 1;
+    private static final int GLYPH_SEND = 2;
+    private static final int GLYPH_DELETE = 3;
+
+    public static void hook(ClassLoader cl) {
+        sClassLoader = cl;
+        LogWriter.log(TAG, "hook entry");
+        try {
+            Class<?> chatFooterClass = findClassIfExists("com.tencent.mm.pluginsdk.ui.chat.ChatFooter", cl);
+            if (chatFooterClass == null) {
+                LogWriter.log(TAG, "ChatFooter class not found");
+                return;
+            }
+            LogWriter.log(TAG, "ChatFooter found: " + chatFooterClass.getName());
+
+            if (!hookMethodX(chatFooterClass)) {
+                hookConstructors(chatFooterClass);
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "Fatal: " + t.getClass().getSimpleName() + " " + t.getMessage());
+        }
+
+        hookChattingUI(cl);
+        hookActivityResult(cl);
+    }
+
+    private static void hookChattingUI(ClassLoader cl) {
+        try {
+            Class<?> chattingUIClass = findClassIfExists("com.tencent.mm.ui.chatting.ChattingUI", cl);
+            if (chattingUIClass == null) {
+                chattingUIClass = findClassIfExists("com.tencent.mm.ui.chatting.ChattingUIFragment", cl);
+            }
+            if (chattingUIClass == null) {
+                LogWriter.log(TAG, "ChattingUI not found");
+                return;
+            }
+
+            Method onResume = findMethodInHierarchy(chattingUIClass, "onResume");
+            if (onResume == null) {
+                LogWriter.log(TAG, "ChattingUI.onResume not found");
+                return;
+            }
+
+            XposedBridge.hookMethod(onResume, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam p) {
+                    try {
+                        Object obj = p.thisObject;
+                        String[] fieldNames = {"talker", "mTalker", "nPf", "hHF"};
+                        for (String fn : fieldNames) {
+                            Field f = findField(obj.getClass(), fn);
+                            if (f == null) continue;
+                            f.setAccessible(true);
+                            Object val = f.get(obj);
+                            if (val instanceof String) {
+                                String s = (String) val;
+                                if (s != null && !s.isEmpty() && !s.equals("not_set")) {
+                                    sCurrentTalker = s;
+                                    LogWriter.log(TAG, "talker captured via onResume: " + s);
+                                    return;
+                                }
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            LogWriter.log(TAG, "ChattingUI.onResume hooked OK");
+            // v30001: 保存当前聊天 Fragment 实例, 发送语音成功后据此刷新消息列表
+            try {
+                Class<?> fragCls = findClassIfExists("com.tencent.mm.ui.chatting.ChattingUIFragment", cl);
+                if (fragCls == null) fragCls = findClassIfExists("com.tencent.mm.ui.chatting.BaseChattingUIFragment", cl);
+                if (fragCls != null) {
+                    Method fragResume = findMethodInHierarchy(fragCls, "onResume");
+                    if (fragResume != null) {
+                        XposedBridge.hookMethod(fragResume, new XC_MethodHook() {
+                            @Override
+                            protected void afterHookedMethod(MethodHookParam p) {
+                                try {
+                                    if (p.thisObject != null) {
+                                        sChattingFragmentRef = new java.lang.ref.WeakReference<>(p.thisObject);
+                                    }
+                                } catch (Throwable ignored) {}
+                            }
+                        });
+                        LogWriter.log(TAG, "ChattingUIFragment.onResume captured for list refresh");
+                    }
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "hookChattingFragment err: " + t.getMessage());
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookChattingUI err: " + t.getMessage());
+        }
+    }
+
+    /**
+     * v30001: 发送语音后主动刷新当前聊天页消息列表。
+     * 微信底层 sendViaSceneVoice 入库后本应自动刷新, 但 3180 上实测会话列表不刷新
+     * (TtsVoiceSender 日志 "refresh no-op"), 导致用户看到"已发送"却不见消息上屏。
+     * 这里从当前 ChattingUIFragment 的视图树中找到消息列表 (RecyclerView / AbsListView),
+     * 触发 notifyDataSetChanged/invalidateViews 并滚到底部。需在主线程执行。
+     */
+    public static void refreshChattingList() {
+        MAIN.post(() -> {
+            try {
+                java.lang.ref.WeakReference<Object> ref = sChattingFragmentRef;
+                Object frag = ref == null ? null : ref.get();
+                if (frag == null) {
+                    LogWriter.log(TAG, "refreshChattingList: no chatting fragment captured");
+                    return;
+                }
+                View root = null;
+                try {
+                    Object v = XposedHelpers.callMethod(frag, "getView");
+                    if (v instanceof View) root = (View) v;
+                } catch (Throwable ignored) {}
+                if (root == null) {
+                    try {
+                        Object v = XposedHelpers.callMethod(frag, "getRootView");
+                        if (v instanceof View) root = (View) v;
+                    } catch (Throwable ignored) {}
+                }
+                if (root == null) {
+                    LogWriter.log(TAG, "refreshChattingList: root view null");
+                    return;
+                }
+                List<View> lists = new ArrayList<>();
+                collectListViews(root, lists);
+                boolean done = false;
+                for (View v : lists) {
+                    String cn = v.getClass().getName();
+                    if (cn.contains("RecyclerView")) {
+                        try {
+                            Object ad = XposedHelpers.callMethod(v, "getAdapter");
+                            if (ad != null) {
+                                XposedHelpers.callMethod(ad, "notifyDataSetChanged");
+                                int n = 0;
+                                try { n = (Integer) XposedHelpers.callMethod(ad, "getItemCount"); } catch (Throwable ignored) {}
+                                if (n > 0) {
+                                    try { XposedHelpers.callMethod(v, "scrollToPosition", n - 1); } catch (Throwable ignored) {}
+                                }
+                                LogWriter.log(TAG, "refreshChattingList: RecyclerView notified, count=" + n);
+                                done = true;
+                            }
+                        } catch (Throwable ignored) {}
+                    } else if (v instanceof android.widget.AbsListView) {
+                        try {
+                            ((android.widget.AbsListView) v).invalidateViews();
+                            LogWriter.log(TAG, "refreshChattingList: AbsListView invalidated");
+                            done = true;
+                        } catch (Throwable ignored) {}
+                    }
+                }
+                if (!done) LogWriter.log(TAG, "refreshChattingList: no message list view found");
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "refreshChattingList err: " + t.getMessage());
+            }
+        });
+    }
+
+    private static void collectListViews(View v, List<View> out) {
+        if (v == null) return;
+        String cn = v.getClass().getName();
+        if (cn.contains("RecyclerView") || v instanceof android.widget.AbsListView) {
+            out.add(v);
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                collectListViews(g.getChildAt(i), out);
+            }
+        }
+    }
+
+    private static void hookActivityResult(ClassLoader cl) {
+        String[] targets = {"com.tencent.mm.ui.LauncherUI", "com.tencent.mm.ui.chatting.ChattingUI"};
+        boolean anyHooked = false;
+        java.util.Set<Method> hookedMethods = new java.util.HashSet<>();
+        for (String className : targets) {
+            Class<?> c = findClassIfExists(className, cl);
+            if (c == null) continue;
+            // v1024: 仅 hook 第一个声明方法不可靠 —— 微信基类可能在中间层 override
+            // onActivityResult 且不调用 super, 导致 hook 的父类方法永不执行(v1023 实测
+            // startActivityForResult 发出后零回调)。改为 hook 继承链每一层的声明方法。
+            int layer = 0;
+            Class<?> cur = c;
+            while (cur != null && cur != Object.class) {
+                Method m = null;
+                try { m = cur.getDeclaredMethod("onActivityResult", int.class, int.class, Intent.class); }
+                catch (NoSuchMethodException ignored) {}
+                if (m != null && hookedMethods.add(m)) {
+                    final String layerCls = cur.getName();
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam p) {
+                            try {
+                                onActivityResultHook(p);
+                            } catch (Throwable e) {
+                                LogWriter.log("CFLPMenu", "cb err: " + e);
+                            }
+                        }
+                    });
+                    LogWriter.log(TAG, "onActivityResult hooked on " + c.getSimpleName()
+                            + " layer=" + layer + " decl=" + layerCls);
+                    anyHooked = true;
+                }
+                cur = cur.getSuperclass();
+                layer++;
+            }
+        }
+        // v1024 兜底: hook framework Activity.onActivityResult —— 任何微信 Activity 收到
+        // 结果都会沿继承链到达(除非某层 override 且不调 super, 此时上面逐层 hook 已覆盖)。
+        try {
+            Method base = Activity.class.getDeclaredMethod(
+                    "onActivityResult", int.class, int.class, Intent.class);
+            if (hookedMethods.add(base)) {
+                XposedBridge.hookMethod(base, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        try {
+                            int requestCode = (int) p.args[0];
+                            if (requestCode != REQ_PICK_MP3) return;
+                            onActivityResultHook(p);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "onActivityResult framework Activity base hooked");
+                anyHooked = true;
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "framework Activity base hook err: " + t.getMessage());
+        }
+        // v1024 最强兜底: hook framework Activity.dispatchActivityResult —— 系统分发结果的
+        // 入口, 早于微信任何 onActivityResult override, 即使微信某层 override 不调 super 也能捕获。
+        try {
+            for (Method dm : Activity.class.getDeclaredMethods()) {
+                if (!"dispatchActivityResult".equals(dm.getName())) continue;
+                Class<?>[] pts = dm.getParameterTypes();
+                int reqIdx = -1, resIdx = -1, dataIdx = -1;
+                for (int i = 0; i < pts.length; i++) {
+                    if (pts[i] == int.class && reqIdx < 0) reqIdx = i;
+                    else if (pts[i] == int.class && resIdx < 0) resIdx = i;
+                    else if (pts[i] == Intent.class) dataIdx = i;
+                }
+                if (reqIdx < 0 || resIdx < 0 || dataIdx < 0) continue;
+                if (!hookedMethods.add(dm)) continue;
+                final int ri = reqIdx, si = resIdx, di = dataIdx;
+                XposedBridge.hookMethod(dm, new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam p) {
+                        try {
+                            int requestCode = (int) p.args[ri];
+                            if (requestCode != REQ_PICK_MP3) return;
+                            int resultCode = (int) p.args[si];
+                            Intent data = (Intent) p.args[di];
+                            LogWriter.log(TAG, "dispatchActivityResult recv: req=" + requestCode
+                                    + " result=" + resultCode + " this="
+                                    + (p.thisObject != null ? p.thisObject.getClass().getSimpleName() : "null"));
+                            handleResult(requestCode, resultCode, data);
+                        } catch (Throwable ignored) {}
+                    }
+                });
+                LogWriter.log(TAG, "dispatchActivityResult hooked (" + pts.length + " params)");
+                anyHooked = true;
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "dispatchActivityResult hook err: " + t.getMessage());
+        }
+        if (!anyHooked) {
+            LogWriter.log(TAG, "onActivityResult NOT hooked on any target class");
+        }
+    }
+
+    private static void onActivityResultHook(XC_MethodHook.MethodHookParam p) {
+        try {
+            int requestCode = (int) p.args[0];
+            int resultCode = (int) p.args[1];
+            Intent data = (Intent) p.args[2];
+            // v1023: 记录所有到达 onActivityResult 的请求, 用于诊断回调链路
+            LogWriter.log(TAG, "onActivityResult recv: req=" + requestCode
+                    + " result=" + resultCode + " data=" + (data != null ? data.getData() : "null")
+                    + " this=" + (p.thisObject != null ? p.thisObject.getClass().getSimpleName() : "null"));
+            handleResult(requestCode, resultCode, data);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "onActivityResult err: " + t.getMessage());
+        }
+    }
+
+    /** v1024: 统一结果处理入口(供 onActivityResult 与 dispatchActivityResult 两个捕获点复用) */
+    private static void handleResult(int requestCode, int resultCode, Intent data) {
+        try {
+            if (requestCode != REQ_PICK_MP3 || resultCode != Activity.RESULT_OK || data == null) return;
+
+            Uri uri = data.getData();
+            if (uri == null) return;
+
+            // v30008: onActivityResult 与 dispatchActivityResult 两个捕获点会对同一次选择各回调一次,
+            // 导致重复解码/重复添加片段。以 uri + 时间窗去重, 同一结果只处理一次。
+            long now = System.currentTimeMillis();
+            if (uri.equals(sLastResultUri) && (now - sLastResultAt) < 2000L) {
+                LogWriter.log(TAG, "handleResult dedup skip: " + uri);
+                return;
+            }
+            sLastResultUri = uri;
+            sLastResultAt = now;
+
+            Context ctx = null;
+            if (sTargetPathText != null) {
+                ctx = sTargetPathText.getContext();
+            }
+            if (ctx == null) {
+                try {
+                    ctx = ContextManager.getAppContext();
+                } catch (Throwable ignored) {}
+            }
+            if (ctx == null) return;
+
+            String path = resolveUri(ctx, uri);
+            if (path != null) {
+                sLastPickedPath = path;
+                if (sTargetPathText != null) {
+                    sTargetPathText.setText(path);
+                }
+                LogWriter.log(TAG, "file picked: " + path);
+            } else {
+                Toast.makeText(ctx, "无法读取该文件，请重试", Toast.LENGTH_SHORT).show();
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "handleResult err: " + t.getMessage());
+        }
+    }
+
+    private static String resolveUri(Context ctx, Uri uri) {
+        if ("file".equals(uri.getScheme())) {
+            return uri.getPath();
+        }
+        if ("content".equals(uri.getScheme())) {
+            Cursor cursor = ctx.getContentResolver().query(uri, null, null, null, null);
+            if (cursor != null) {
+                try {
+                    if (cursor.moveToFirst()) {
+                        int idx = cursor.getColumnIndex("_data");
+                        if (idx >= 0) {
+                            String p = cursor.getString(idx);
+                            if (p != null && new File(p).exists()) return p;
+                        }
+                        idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                        if (idx >= 0) {
+                            String name = cursor.getString(idx);
+                            if (name != null) {
+                                InputStream is = null;
+                                FileOutputStream fos = null;
+                                try {
+                                    is = ctx.getContentResolver().openInputStream(uri);
+                                    if (is != null) {
+                                        File tmp = new File(ctx.getCacheDir(), name);
+                                        fos = new FileOutputStream(tmp);
+                                        byte[] buf = new byte[8192];
+                                        int n;
+                                        while ((n = is.read(buf)) > 0) fos.write(buf, 0, n);
+                                        return tmp.getAbsolutePath();
+                                    }
+                                } finally {
+                                    try { if (fos != null) fos.close(); } catch (Throwable ignored) {}
+                                    try { if (is != null) is.close(); } catch (Throwable ignored) {}
+                                }
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {} finally {
+                    cursor.close();
+                }
+            }
+        }
+        return null;
+    }
+
+    private static Method findMethodInHierarchy(Class<?> clazz, String name, Class<?>... paramTypes) {
+        Class<?> cur = clazz;
+        while (cur != null && cur != Object.class) {
+            try {
+                return cur.getDeclaredMethod(name, paramTypes);
+            } catch (NoSuchMethodException e) {
+                cur = cur.getSuperclass();
+            }
+        }
+        return null;
+    }
+
+    private static boolean hookMethodX(Class<?> clazz) {
+        try {
+            Method method = clazz.getDeclaredMethod("x", View.class, String.class);
+            XposedBridge.hookMethod(method, new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam p) {
+                    try {
+                                        String s = (String) p.args[1];
+                                        if ("chat_left_side_audio_btn".equals(s) || "chat_left_side_keyboard_btn".equals(s)) {
+                                            sLastChatFooter = p.thisObject;
+                                            inject((View) p.args[0]);
+                                        }
+                    } catch (Throwable e) {
+                        LogWriter.log("CFLPMenu", "cb err: " + e);
+                    }
+                }
+            });
+            LogWriter.log(TAG, "[x] hooked OK");
+            return true;
+        } catch (NoSuchMethodException e) {
+            LogWriter.log(TAG, "[x] not found, fallback to constructors");
+            return false;
+        }
+    }
+
+    private static void hookConstructors(Class<?> clazz) {
+        XposedBridge.hookAllConstructors(clazz, new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam p) {
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    try {
+                        Field f = findField(p.thisObject.getClass(), "q");
+                        if (f != null) {
+                            f.setAccessible(true);
+                            View v = (View) f.get(p.thisObject);
+                            sLastChatFooter = p.thisObject;
+                            inject(v);
+                        }
+                    } catch (Throwable t) {
+                        LogWriter.log(TAG, "ctor inject err: " + t.getMessage());
+                    }
+                }, 800);
+            }
+        });
+        LogWriter.log(TAG, "constructors hooked");
+    }
+
+    private static void inject(View btnView) {
+        if (!WmPrefs.isLongPressMenu()) return;
+        if (btnView == null) return;
+        synchronized (injectedViews) {
+            if (injectedViews.contains(btnView)) return;
+            injectedViews.add(btnView);
+        }
+        LogWriter.log(TAG, "Inject: " + btnView.getClass().getSimpleName());
+        btnView.setOnLongClickListener(v -> {
+            // v960: 长按弹面板异常必须兜底(展示/构建失败不得闪退)
+            try {
+                showPanel(v);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "long click err: " + t.getMessage());
+            }
+            return true;
+        });
+        btnView.setOnTouchListener((v, e) -> {
+            // v960: v.getParent() 未判空在触摸时 NPE 闪退
+            try {
+                if (e.getAction() == 0 && v.getParent() != null) {
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                }
+            } catch (Throwable ignored) {}
+            return false;
+        });
+    }
+
+    private static int dp(Context ctx, float v) {
+        return (int) (v * ctx.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    @SuppressLint("RtlHardcoded")
+    public static void showPanelStatic(View anchor) {
+        showPanel(anchor);
+    }
+
+    @SuppressLint("RtlHardcoded")
+    private static void showPanel(View anchor) {
+        if (!WmPrefs.isLongPressMenu()) return;
+        // v961: 全量兜底 —— v960 只包了 showAtLocation, 构建/PopupWindow 构造阶段的
+        // IllegalStateException(child already has a parent)仍会冒泡到按钮点击, 表现为"点了没反应"
+        try {
+            showPanelInner(anchor);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "showPanel err: " + android.util.Log.getStackTraceString(t));
+            try {
+                if (popupWindow != null && popupWindow.isShowing()) popupWindow.dismiss();
+            } catch (Throwable ignored) {}
+            popupWindow = null;
+            removeLayoutListener();
+        }
+    }
+
+    private static void showPanelInner(View anchor) {
+        if (popupWindow != null) {
+            try {
+                if (popupWindow.isShowing()) popupWindow.dismiss();
+            } catch (Throwable ignored) {}
+            popupWindow = null;
+            removeLayoutListener();
+        }
+
+        Context ctx = anchor.getContext();
+
+        int cardBg = AppColors.card();
+        int p6 = dp(ctx, 6);
+        int p8 = dp(ctx, 8);
+        int p10 = dp(ctx, 10);
+        int p12 = dp(ctx, 12);
+
+        // 主容器（垂直）— v955 M3: 28dp extra-large 圆角对话框
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackground(CandyUi.dialogBg(ctx));
+        root.setPadding(p8, dp(ctx, 4), p8, p8);
+        InsetsUtil.padTop(root, InsetsUtil.topInset(ctx, anchor));
+        InsetsUtil.padBottom(root, InsetsUtil.bottomInset(ctx, anchor));
+        InsetsUtil.clipRounded(root);
+
+        // 标题栏（横跨，居中）— v955 M3: 20sp onSurface 粗体
+        TextView titleBar = new TextView(ctx);
+        titleBar.setText("乐少音频转语音助手");
+        titleBar.setTextSize(18);
+        titleBar.setTextColor(AppColors.onSurface());
+        titleBar.setTypeface(null, android.graphics.Typeface.BOLD);
+        titleBar.setGravity(Gravity.CENTER);
+        titleBar.setPadding(0, dp(ctx, 6), 0, p8);
+        root.addView(titleBar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // 音频转语音 单面板（取消左侧分类/右侧面板方式）
+        // v1023: 面板重新打开时清空上次选择的音频文件(需重新选择)
+        sLastPickedPath = null;
+        View audioPanel = createAudioToVoicePanel(ctx);
+
+        // v30102: 面板内容包进 ScrollView；PopupWindow 高度固定为屏高 85%，
+        // 播放动画(EqBars 180dp)出现时只把下方内容往下推(内部滚动)，窗口高度不再变化，
+        // 避免整个面板被播放动画撑长超出屏幕。
+        // v30111: 改为高度随内容自适应（上限 90% 屏高），内容少时不再留白；
+        // ScrollView 设置最大高度 90% 屏高，播放动画出现时内部滚动、窗口不超屏。
+        ScrollView panelScroll = new ScrollView(ctx);
+        panelScroll.setFillViewport(false);
+        panelScroll.setVerticalScrollBarEnabled(false);
+        panelScroll.addView(audioPanel);
+        // 高度随内容自适应（上限 90% 屏高）：内容少时紧贴内容，内容多时内部滚动
+        ViewGroup panelScrollWrap = InsetsUtil.maxHeight90(ctx, panelScroll);
+        root.addView(panelScrollWrap, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // PopupWindow
+        // 宽度固定为屏宽 90% (全局窗口宽度上限), 高度随内容自适应（上限 90% 屏高）
+        android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        int panelW = (int) (dm.widthPixels * 0.9f);
+        popupWindow = new PopupWindow(root, panelW, ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        popupWindow.setBackgroundDrawable(new ColorDrawable(0));
+        popupWindow.setElevation(dp(ctx, 8));
+        popupWindow.setOutsideTouchable(true);
+        popupWindow.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+
+        // v961: 屏幕正中居中显示(Gravity.CENTER), 不再跟随按钮定位;
+        // showAtLocation 的 token 失效/子view冲突等异常已在 showPanel 全量兜底
+        try {
+            popupWindow.showAtLocation(anchor, Gravity.CENTER, 0, 0);
+            WindowLayer.trackView(root);
+            popupWindow.setOnDismissListener(() -> {
+                // v966: 面板关闭时停止试播并释放播放器
+                stopPanelPlayback();
+                sPanelPlayBtn = null;
+                sPanelEq = null;
+                removeLayoutListener();
+            });
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "showAtLocation FAILED: " + android.util.Log.getStackTraceString(t));
+            try {
+                if (popupWindow != null && popupWindow.isShowing()) popupWindow.dismiss();
+            } catch (Throwable ignored) {}
+            popupWindow = null;
+            removeLayoutListener();
+            return;
+        }
+    }
+
+    private static void removeLayoutListener() {
+        if (sLayoutListener != null && sLayoutAnchor != null) {
+            try { sLayoutAnchor.getViewTreeObserver().removeOnGlobalLayoutListener(sLayoutListener); } catch (Throwable ignored) {}
+        }
+        sLayoutListener = null;
+        sLayoutAnchor = null;
+    }
+
+    /** v966: 历史记录底部操作栏按钮等分布局参数 */
+    private static LinearLayout.LayoutParams barLp(Context ctx) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        lp.leftMargin = dp(ctx, 4);
+        lp.rightMargin = dp(ctx, 4);
+        return lp;
+    }
+
+    /** v966: 自绘单色矢量小图标(播放/暂停/发送/删除) */
+    private static android.graphics.Bitmap makeGlyphIcon(Context ctx, int type, int sizeDp, int color) {
+        int size = Math.max(dp(ctx, sizeDp), 1);
+        android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(
+                size, size, android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas c = new android.graphics.Canvas(bmp);
+        android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        p.setColor(color);
+        float w = size, h = size;
+        switch (type) {
+            case GLYPH_PLAY: {
+                p.setStyle(android.graphics.Paint.Style.FILL);
+                android.graphics.Path tri = new android.graphics.Path();
+                tri.moveTo(w * 0.28f, h * 0.18f);
+                tri.lineTo(w * 0.84f, h * 0.50f);
+                tri.lineTo(w * 0.28f, h * 0.82f);
+                tri.close();
+                c.drawPath(tri, p);
+                break;
+            }
+            case GLYPH_PAUSE: {
+                p.setStyle(android.graphics.Paint.Style.FILL);
+                c.drawRoundRect(new android.graphics.RectF(w * 0.22f, h * 0.18f, w * 0.40f, h * 0.82f), 2, 2, p);
+                c.drawRoundRect(new android.graphics.RectF(w * 0.60f, h * 0.18f, w * 0.78f, h * 0.82f), 2, 2, p);
+                break;
+            }
+            case GLYPH_SEND: {
+                p.setStyle(android.graphics.Paint.Style.FILL);
+                android.graphics.Path plane = new android.graphics.Path();
+                plane.moveTo(w * 0.08f, h * 0.52f);
+                plane.lineTo(w * 0.92f, h * 0.12f);
+                plane.lineTo(w * 0.56f, h * 0.90f);
+                plane.lineTo(w * 0.42f, h * 0.62f);
+                plane.close();
+                c.drawPath(plane, p);
+                p.setColor(0x88000000 | (color & 0x00FFFFFF));
+                android.graphics.Path fold = new android.graphics.Path();
+                fold.moveTo(w * 0.42f, h * 0.62f);
+                fold.lineTo(w * 0.92f, h * 0.12f);
+                fold.lineTo(w * 0.50f, h * 0.74f);
+                fold.close();
+                c.drawPath(fold, p);
+                break;
+            }
+            case GLYPH_DELETE: {
+                p.setStyle(android.graphics.Paint.Style.STROKE);
+                p.setStrokeWidth(Math.max(size * 0.09f, 1f));
+                p.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+                c.drawLine(w * 0.14f, h * 0.24f, w * 0.86f, h * 0.24f, p);
+                c.drawLine(w * 0.36f, h * 0.13f, w * 0.64f, h * 0.13f, p);
+                c.drawRoundRect(new android.graphics.RectF(w * 0.24f, h * 0.32f, w * 0.76f, h * 0.88f), 3, 3, p);
+                c.drawLine(w * 0.40f, h * 0.46f, w * 0.40f, h * 0.74f, p);
+                c.drawLine(w * 0.60f, h * 0.46f, w * 0.60f, h * 0.74f, p);
+                break;
+            }
+        }
+        return bmp;
+    }
+
+    /**
+     * v1081 A2 流光渐变填充按钮：空闲=三色流光渐变底 + 白色图标(播放)；
+     * 播放=透明底 + 2px 主色描边 + 主色图标(暂停)。
+     */
+    private static void applyPlayButtonState(ImageView btn, boolean playing) {
+        if (btn == null) return;
+        Context ctx = btn.getContext();
+        if (playing) {
+            GradientDrawable bg = new GradientDrawable();
+            bg.setShape(GradientDrawable.RECTANGLE);
+            bg.setColor(0x00000000);
+            bg.setStroke(dp(ctx, 2), AppColors.primary());
+            bg.setCornerRadius(dp(ctx, 20));
+            btn.setBackground(bg);
+            btn.setImageBitmap(makeGlyphIcon(ctx, GLYPH_PAUSE, 20, AppColors.primary()));
+        } else {
+            btn.setBackground(CandyUi.gradientBg(ctx, 20));
+            btn.setImageBitmap(makeGlyphIcon(ctx, GLYPH_PLAY, 20, AppColors.textOnPrimary()));
+        }
+    }
+
+    /** v1081 C3 柱状频谱：播放时显示并按音频频谱驱动，停止/关闭时隐藏。 */
+    private static void setPanelEqPlaying(boolean playing, MediaPlayer mp) {
+        if (sPanelEq == null) return;
+        if (playing && sPanelEq.isAttachedToWindow()) {
+            sPanelEq.setVisibility(View.VISIBLE);
+            sPanelEq.start(mp);
+        } else {
+            sPanelEq.stop();
+            sPanelEq.setVisibility(View.GONE);
+        }
+    }
+
+    /** v966: 开始播放指定音频(自动停止现有播放); 返回是否成功 */
+    private static boolean startPanelPlayback(Context ctx, String path) {
+        stopPanelPlayback();
+        try {
+            MediaPlayer mp = new MediaPlayer();
+            mp.setDataSource(path);
+            mp.setOnCompletionListener(m -> stopPanelPlayback());
+            mp.prepare();
+            mp.start();
+            sPanelPlayer = mp;
+            sPanelPlayingPath = path;
+            applyPlayButtonState(sPanelPlayBtn, true);
+            setPanelEqPlaying(true, mp);
+            return true;
+        } catch (Throwable t) {
+            stopPanelPlayback();
+            Toast.makeText(ctx, "播放失败: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+            return false;
+        }
+    }
+
+    /** v966: 主面板播放图标点击(播放/暂停当前选中音频) */
+    private static void togglePanelPlayback(Context ctx, String path) {
+        if (sPanelPlayer != null && path != null && path.equals(sPanelPlayingPath)) {
+            stopPanelPlayback();
+            return;
+        }
+        startPanelPlayback(ctx, path);
+    }
+
+    /** v966: 停止试播并恢复播放图标(其它操作按钮点击时调用) */
+    private static void stopPanelPlayback() {
+        if (sPanelPlayer != null) {
+            try { sPanelPlayer.stop(); } catch (Throwable ignored) {}
+            try { sPanelPlayer.release(); } catch (Throwable ignored) {}
+            sPanelPlayer = null;
+        }
+        sPanelPlayingPath = null;
+        applyPlayButtonState(sPanelPlayBtn, false);
+        setPanelEqPlaying(false, null);
+        if (sHistPlayBtn != null) {
+            sHistPlayBtn.setImageBitmap(makeGlyphIcon(
+                    sHistPlayBtn.getContext(), GLYPH_PLAY, 18, AppColors.accent()));
+            sHistPlayBtn = null;
+        }
+    }
+
+    private static View createAudioToVoicePanel(Context ctx) {
+        int text1 = AppColors.text1();
+        int text2 = AppColors.text2();
+        int accent = AppColors.accent();
+
+        int p6 = dp(ctx, 6);
+        int p8 = dp(ctx, 8);
+        int p10 = dp(ctx, 10);
+        int p12 = dp(ctx, 12);
+
+        // v955 M3 重排: 分区卡片结构(文件→选项→转换)
+        LinearLayout panel = new LinearLayout(ctx);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(0x00000000);
+
+        // ===== 分区1: 音频文件(卡片) =====
+        panel.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "请选择需要转换的音频文件"));
+        LinearLayout cardFile = com.leshao.v3.ui.widgets.M3Page.card(ctx);
+
+        // 文件选择行: [路径文本] [选择]
+        LinearLayout fileRow = new LinearLayout(ctx);
+        fileRow.setOrientation(LinearLayout.HORIZONTAL);
+        fileRow.setPadding(p12, p10, p12, p8);
+
+        final TextView pathText = new TextView(ctx);
+        pathText.setTextSize(12);
+        pathText.setTextColor(text1);
+        pathText.setPadding(p8, p8, p8, p8);
+        pathText.setBackground(CandyUi.inputBg(ctx));
+        pathText.setText(sLastPickedPath != null ? sLastPickedPath : "未选择文件");
+        pathText.setMaxLines(1);
+        pathText.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        LinearLayout.LayoutParams pathLp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        fileRow.addView(pathText, pathLp);
+
+        TextView browseBtn = new TextView(ctx);
+        browseBtn.setText("选择");
+        browseBtn.setTextSize(12);
+        browseBtn.setTextColor(AppColors.textOnPrimary());
+        browseBtn.setGravity(Gravity.CENTER);
+        browseBtn.        setPadding(dp(ctx, 4), p8, dp(ctx, 4), p8);
+        browseBtn.setBackground(CandyUi.gradientBg(ctx, 20));
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        btnLp.leftMargin = p8;
+        fileRow.addView(browseBtn, btnLp);
+        // v962 修复: 原 487 行 panel.addView(fileRow) 与 489 行 cardFile.addView(fileRow)
+        // 对同一 view 重复 addView, 第二次必抛 IllegalStateException(child already has a
+        // parent), 面板构建中断 → 语音按钮点击无反应(实测 v961 日志 16 次)。fileRow 只属 cardFile。
+        cardFile.addView(fileRow);
+
+        // 已选文件名显示
+        final TextView fileNameTv = new TextView(ctx);
+        fileNameTv.setTextSize(13);
+        fileNameTv.setTextColor(text2);
+        fileNameTv.setPadding(p12, 0, p12, p10);
+        fileNameTv.setVisibility(View.GONE);
+        cardFile.addView(fileNameTv);
+        panel.addView(cardFile);
+
+        // ===== 分区2: 处理选项(卡片) =====
+        panel.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "处理选项"));
+        LinearLayout cardOpt = com.leshao.v3.ui.widgets.M3Page.card(ctx);
+
+        // 音频切割 / 历史记录 按钮行
+        LinearLayout btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setPadding(p12, p10, p12, p8);
+
+        final TextView cutBtn = new TextView(ctx);
+        cutBtn.setText("音频切割");
+        cutBtn.setTextSize(12);
+        cutBtn.setTextColor(accent);
+        cutBtn.setGravity(Gravity.CENTER);
+        cutBtn.setPadding(dp(ctx, 4), p6, dp(ctx, 4), p6);
+        GradientDrawable cutBg = new GradientDrawable();
+        cutBg.setStroke(dp(ctx, 1), AppColors.outline());
+        cutBg.setCornerRadius(dp(ctx, 20));
+        cutBg.setColor(0x00000000);
+        cutBtn.setBackground(cutBg);
+        cutBtn.setTextColor(AppColors.primary());
+        cutBtn.setVisibility(View.GONE);
+        LinearLayout.LayoutParams cutLp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        cutLp.rightMargin = p6;
+        btnRow.addView(cutBtn, cutLp);
+
+        // v1081: A2 流光渐变填充播放按钮(空闲=三色流光渐变底+白图标; 播放=透明底+主色描边+主色图标)
+        final ImageView playIcon = new ImageView(ctx);
+        playIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        playIcon.setPadding(dp(ctx, 10), p6, dp(ctx, 10), p6);
+        applyPlayButtonState(playIcon, false);
+        LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, dp(ctx, 32));
+        playLp.leftMargin = p6;
+        playLp.rightMargin = p6;
+        btnRow.addView(playIcon, playLp);
+        sPanelPlayBtn = playIcon;
+        playIcon.setOnClickListener(pv -> {
+            String p = pathText.getText().toString().trim();
+            if (p.isEmpty() || p.equals("未选择文件")) {
+                Toast.makeText(ctx, "请先选择需要转换的音频文件", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            togglePanelPlayback(ctx, p);
+        });
+
+        final TextView historyBtn = new TextView(ctx);
+        historyBtn.setText("历史记录");
+        historyBtn.setTextSize(12);
+        historyBtn.setTextColor(text2);
+        historyBtn.setGravity(Gravity.CENTER);
+        historyBtn.setPadding(dp(ctx, 4), p6, dp(ctx, 4), p6);
+        GradientDrawable hBg = new GradientDrawable();
+        hBg.setColor(AppColors.surfaceContainerHigh());
+        hBg.setStroke(dp(ctx, 1), AppColors.outlineVariant());
+        hBg.setCornerRadius(dp(ctx, 20));
+        historyBtn.setBackground(hBg);
+        LinearLayout.LayoutParams histLp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        histLp.leftMargin = p6;
+        btnRow.addView(historyBtn, histLp);
+        cardOpt.addView(btnRow);
+
+        // v30018: C3 柱状频谱「旋律柱」播放动画(180dp 高, 柱组占宽 80%, 播放时显示)
+        EqBarsView eqBars = new EqBarsView(ctx);
+        eqBars.setVisibility(View.GONE);
+        LinearLayout.LayoutParams eqLp = new LinearLayout.LayoutParams(-1, dp(ctx, 180));
+        eqLp.setMargins(p12, p6, p12, p6);
+        cardOpt.addView(eqBars, eqLp);
+        sPanelEq = eqBars;
+
+        cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+
+        // v968: 误报语音时长(0-60 秒, 默认 1 秒) —— 发出的语音气泡所显示时长
+        LinearLayout durTail = new LinearLayout(ctx);
+        durTail.setOrientation(LinearLayout.HORIZONTAL);
+        durTail.setGravity(Gravity.CENTER_VERTICAL);
+        final android.widget.EditText etFakeDur =
+                com.leshao.v3.ui.widgets.M3Page.input(ctx, "1");
+        etFakeDur.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        etFakeDur.setGravity(Gravity.CENTER);
+        etFakeDur.setText(String.valueOf(WmPrefs.getInt("voice_fake_duration_sec", 1)));
+        etFakeDur.setLayoutParams(new LinearLayout.LayoutParams(dp(ctx, 56),
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        durTail.addView(etFakeDur);
+        TextView durUnit = new TextView(ctx);
+        durUnit.setText(" 秒");
+        durUnit.setTextSize(14);
+        durUnit.setTextColor(text2);
+        durTail.addView(durUnit);
+        etFakeDur.addTextChangedListener(new android.text.TextWatcher() {
+            public void afterTextChanged(android.text.Editable s) {
+                try {
+                    int v = Integer.parseInt(s.toString().trim());
+                    if (v < 0) v = 0;
+                    if (v > 60) v = 60;
+                    WmPrefs.setInt("voice_fake_duration_sec", v);
+                } catch (Throwable ignored) {}
+            }
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            public void onTextChanged(CharSequence s, int a, int b, int c) {}
+        });
+        cardOpt.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "⏱", "误报语音时长",
+                "0-60 秒, 默认 1 秒(语音气泡显示时长)").tail(durTail));
+        cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+
+        // 人声增强: 必须用 SettingRow.switchOn 把开关放右侧, 禁止自定义按钮
+        cardOpt.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "🎙", "人声增强",
+                "开启=人声增强链; 关闭=原音还原(默认)")
+                .switchOn(WmPrefs.get("voice_enhance", false), (b, checked) -> {
+                    LogWriter.log(TAG, "click: 人声增强 -> " + checked);
+                    WmPrefs.set("voice_enhance", checked);
+                }));
+        cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+
+        // v1141: DJ低音增强 — 低架EQ提升低频, 音乐/舞曲更澎湃(优先于人声增强)
+        cardOpt.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "🔊", "DJ低音增强",
+                "提升低频下潜, 音乐/舞曲更澎湃(优先于人声增强)")
+                .switchOn(WmPrefs.get("voice_bass_boost", false), (b, checked) -> {
+                    LogWriter.log(TAG, "click: DJ低音增强 -> " + checked);
+                    WmPrefs.set("voice_bass_boost", checked);
+                }));
+        cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+
+        // v1142: 高级音效 — 均衡与音色 / 响度与动态(独立对话框, 避免主面板过长溢出)
+        cardOpt.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "🎚", "高级音效",
+                "均衡与音色 / 响度与动态 (三段EQ·清晰度·去齿音·AGC·压缩·响度标准化)")
+                .arrow(() -> {
+                    stopPanelPlayback();
+                    showAdvancedAudioDialog(ctx);
+                }));
+        cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+
+        // v30007: 音频拼接与混合入口
+        cardOpt.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "🎵", "音频拼接与混合",
+                "多段音频顺序拼接 / 人声·音乐·旁白多轨混合, 支持可视化剪辑")
+                .arrow(() -> openAudioMixEditor(ctx)));
+        cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+
+        // v30018: 在线音乐入口(同置于音频转语音主页)
+        cardOpt.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "🎧", "在线音乐",
+                "搜歌 / 榜单 / 歌单, 试听·下载·发送到会话")
+                .arrow(() -> openOnlineMusic(ctx)));
+        cardOpt.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+
+        // 进度条(归入选项卡片, M3 主色)
+        final ProgressBar progressBar = new ProgressBar(ctx, null, android.R.attr.progressBarStyleHorizontal);
+        progressBar.setMax(100);
+        progressBar.setProgress(0);
+        progressBar.setVisibility(View.GONE);
+        LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(-1, dp(ctx, 6));
+        pbLp.setMargins(p12, p8, p12, 0);
+        cardOpt.addView(progressBar, pbLp);
+
+        // 进度文字
+        final TextView progressText = new TextView(ctx);
+        progressText.setTextSize(13);
+        progressText.setTextColor(text2);
+        progressText.setGravity(Gravity.CENTER);
+        progressText.setVisibility(View.GONE);
+        progressText.setPadding(p12, p6, p12, p10);
+        cardOpt.addView(progressText);
+        panel.addView(cardOpt);
+
+        // ===== 分区3: 转换(独立卡片 + M3 filled 按钮) =====
+        // v966: 删除「开始转换」标题及小字, 仅保留按钮(按钮右侧带发送图标)
+        LinearLayout cardConv = com.leshao.v3.ui.widgets.M3Page.card(ctx);
+        LinearLayout convRow = new LinearLayout(ctx);
+        convRow.setOrientation(LinearLayout.HORIZONTAL);
+        convRow.setPadding(p12, p10, p12, p10);
+
+        // 转码按钮
+        // v955 M3: 转换按钮改 ModernButton filled(全圆角主色, 40dp 高)
+        final TextView convertBtn = new TextView(ctx);
+        convertBtn.setText("开始转换");
+        convertBtn.setTextSize(15);
+        convertBtn.setTextColor(AppColors.textOnPrimary());
+        convertBtn.setTypeface(null, android.graphics.Typeface.BOLD);
+        convertBtn.setGravity(Gravity.CENTER);
+        convertBtn.setPadding(dp(ctx, 16), dp(ctx, 12), dp(ctx, 16), dp(ctx, 12));
+        convertBtn.setBackground(CandyUi.gradientBg(ctx, 20));
+        // v966: 按钮文字右侧加发送图标
+        try {
+            android.graphics.drawable.Drawable sendIc = new android.graphics.drawable.BitmapDrawable(
+                    ctx.getResources(), makeGlyphIcon(ctx, GLYPH_SEND, 16, AppColors.textOnPrimary()));
+            sendIc.setBounds(0, 0, dp(ctx, 16), dp(ctx, 16));
+            convertBtn.setCompoundDrawables(null, null, sendIc, null);
+            convertBtn.setCompoundDrawablePadding(dp(ctx, 6));
+        } catch (Throwable ignored) {}
+        LinearLayout.LayoutParams cvtLp = new LinearLayout.LayoutParams(-1, dp(ctx, 44));
+        convertBtn.setLayoutParams(cvtLp);
+        convRow.addView(convertBtn);
+        cardConv.addView(convRow);
+        panel.addView(cardConv);
+
+        // 事件绑定
+        browseBtn.setOnClickListener(v -> {
+            stopPanelPlayback();
+            Activity act = getActivityFromContext(ctx);
+            if (act == null) {
+                Toast.makeText(ctx, "无法打开文件选择器", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            sTargetPathText = pathText;
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("audio/*");
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                    "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav",
+                    "audio/ogg", "audio/mp4", "audio/aac", "audio/flac",
+                    "audio/x-ms-wma", "audio/opus"
+            });
+            intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false);
+            try {
+                LogWriter.log(TAG, "startActivityForResult from " + act.getClass().getName()
+                        + " req=" + REQ_PICK_MP3);
+                act.startActivityForResult(intent, REQ_PICK_MP3);
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "open picker FAILED: " + t);
+                Toast.makeText(ctx, "打开文件选择器失败", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        cutBtn.setOnClickListener(cutV -> {
+            stopPanelPlayback();
+            String mp3Path = pathText.getText().toString().trim();
+            if (mp3Path.isEmpty() || mp3Path.equals("未选择文件")) {
+                Toast.makeText(ctx, "请先选择MP3文件", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            showCutDialog(ctx, mp3Path, fileNameTv);
+        });
+
+        historyBtn.setOnClickListener(histV -> {
+            stopPanelPlayback();
+            showHistoryDialog(ctx);
+        });
+
+        convertBtn.setOnClickListener(v -> {
+            stopPanelPlayback();
+            final String mp3Path = pathText.getText().toString().trim();
+            if (mp3Path.isEmpty() || mp3Path.equals("未选择文件")) {
+                Toast.makeText(ctx, "请先选择MP3文件", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            // v1086: 必须优先实时解析"当前打开的聊天对象", 不能先取 sCurrentTalker 缓存。
+            // 缓存会被 om.A0 出站文本/万群转发等入口改写, 若刚好指向别的群,
+            // 音频转语音的 voiceinfo 记录 talker 就会错绑到其它群(用户反馈"偶尔发到其他群")。
+            String talker = getTalker(ctx);
+            if (talker == null || talker.isEmpty()) {
+                Toast.makeText(ctx, "无法获取当前聊天对象", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            final String finalTalker = talker;
+
+            if (popupWindow != null) popupWindow.dismiss();
+
+            LogWriter.log(TAG, "click: 开始转换 talker=" + finalTalker + " path=" + mp3Path);
+
+            // 直接转换: 先弹进度窗, 再后台转码发送
+            final float cutBegin = sCutBeginSec;
+            final float cutEnd = sCutEndSec;
+            sCutBeginSec = 0;
+            sCutEndSec = 0;
+
+            new Thread(() -> {
+                prepareAndPreview(ctx, mp3Path, finalTalker, 0, fakeVoiceDurationMs(), cutBegin, cutEnd);
+            }, "leshao-mp3-prepare").start();
+        });
+
+        // 文件选择回调更新显示
+        final ViewTreeObserver.OnGlobalLayoutListener updateFileName = () -> {
+            String name = new java.io.File(pathText.getText().toString().trim()).getName();
+            boolean hasFile = !name.isEmpty() && !name.equals("未选择文件");
+            if (hasFile) {
+                String label = "已选: " + name;
+                if (sCutBeginSec > 0 || sCutEndSec > 0) {
+                    label += " (裁剪 " + formatSec(sCutBeginSec) + "-" + formatSec(sCutEndSec) + ")";
+                }
+                fileNameTv.setText(label);
+                fileNameTv.setVisibility(View.VISIBLE);
+                cutBtn.setVisibility(View.VISIBLE);
+            } else {
+                cutBtn.setVisibility(View.GONE);
+            }
+            // v967: 未选音频文件前不显示播放图标
+            playIcon.setVisibility(hasFile ? View.VISIBLE : View.GONE);
+        };
+        pathText.addTextChangedListener(new android.text.TextWatcher() {
+            public void afterTextChanged(android.text.Editable s) { updateFileName.onGlobalLayout(); }
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+        });
+        updateFileName.onGlobalLayout();
+
+        return panel;
+    }
+
+    /** v968: 误报语音时长(毫秒) —— 取「误报语音时长」设置(0-60 秒), 默认 1 秒 */
+    private static int fakeVoiceDurationMs() {
+        int sec = WmPrefs.getInt("voice_fake_duration_sec", 1);
+        if (sec < 0) sec = 0;
+        if (sec > 60) sec = 60;
+        return sec * 1000;
+    }
+
+    private static String formatSec(float secs) {
+        int total = (int) secs;
+        return (total / 60) + ":" + String.format(java.util.Locale.US, "%02d", total % 60);
+    }
+
+    private static void transferAndReport(Context ctx, String mp3Path, String talker,
+            int splitSeconds, int fakeDurationMs, float cutBeginSec, float cutEndSec) {
+        final android.os.Handler h = new android.os.Handler(Looper.getMainLooper());
+        final CountDownLatch shown = new CountDownLatch(1);
+        h.post(() -> {
+            showConvertProgress(ctx);
+            shown.countDown();
+        });
+        try { shown.await(2, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
+
+        try {
+            VoiceHistoryDbHelper db = null;
+            try {
+                android.content.Context appCtx = ContextManager.getAppContext();
+                if (appCtx != null) db = VoiceHistoryDbHelper.getInstance(appCtx);
+            } catch (Throwable ignored) {}
+            final VoiceHistoryDbHelper finalDb = db;
+
+            float begin = cutBeginSec;
+            float end = cutEndSec;
+
+            boolean ok = TtsVoiceSender.sendMp3Voice(talker, mp3Path, splitSeconds, fakeDurationMs,
+                begin, end, new TtsVoiceSender.VoiceSendCallback() {
+                    @Override
+                    public void onProgress(int current, int total) {
+                        h.post(() -> {
+                            try {
+                                FlyingProgressBar bar = sProgressBar;
+                                TextView label = sProgressLabel;
+                                if (bar == null) return;
+                                int percent;
+                                String phase;
+                                if (total == 100) {
+                                    // 转码阶段：文字固定「音频转码中…」
+                                    percent = Math.min(current, 99);
+                                    phase = "音频转码中…";
+                                } else if (total <= 1) {
+                                    // 转码完成，进入发送
+                                    percent = 100;
+                                    phase = "正在发送语音…";
+                                } else {
+                                    // 分段发送阶段
+                                    percent = total > 0 ? current * 100 / total : 0;
+                                    phase = "正在发送语音…";
+                                }
+                                bar.setProgress(percent);
+                                if (label != null) label.setText(phase);
+                            } catch (Throwable ignored) {}
+                        });
+                    }
+                });
+
+            if (finalDb != null) {
+                try {
+                    finalDb.deleteExpired(System.currentTimeMillis() - 30L * 86400000L);
+                } catch (Throwable ignored) {}
+            }
+
+            final boolean finalOk = ok;
+            h.post(() -> {
+                dismissConvertProgress();
+                Toast.makeText(ctx, finalOk ? "语音已发送" : "发送失败", Toast.LENGTH_SHORT).show();
+            });
+        } catch (Throwable t) {
+            h.post(() -> {
+                dismissConvertProgress();
+                Toast.makeText(ctx, "转换失败: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+            });
+        }
+    }
+
+    /** v1142: 转码(不发送) → 弹「试听 / 取消 / 发送」+ 一键对比 */
+    private static void prepareAndPreview(Context ctx, String mp3Path, String talker,
+            int splitSeconds, int fakeDurationMs, float cutBeginSec, float cutEndSec) {
+        final android.os.Handler h = new android.os.Handler(Looper.getMainLooper());
+        final CountDownLatch shown = new CountDownLatch(1);
+        h.post(() -> {
+            showConvertProgress(ctx);
+            shown.countDown();
+        });
+        try { shown.await(2, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
+
+        TtsVoiceSender.PreparedVoice pv;
+        try {
+            pv = TtsVoiceSender.prepareMp3Voice(mp3Path, cutBeginSec, cutEndSec,
+                (cur, total) -> h.post(() -> {
+                    try {
+                        FlyingProgressBar bar = sProgressBar;
+                        TextView label = sProgressLabel;
+                        if (bar == null) return;
+                        int percent = (total == 100) ? Math.min(cur, 99) : 0;
+                        bar.setProgress(percent);
+                        if (label != null) label.setText("音频转码中…");
+                    } catch (Throwable ignored) {}
+                }));
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "prepareAndPreview err: " + t.getMessage());
+            pv = null;
+        }
+        final TtsVoiceSender.PreparedVoice fpv = pv;
+        h.post(() -> {
+            dismissConvertProgress();
+            if (fpv == null) {
+                Toast.makeText(ctx, "转码失败", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            showVoicePreviewDialog(ctx, fpv, talker, splitSeconds, fakeDurationMs);
+        });
+    }
+
+    /** v1143: 转码成功试听弹窗(处理音试听 + 原声对比: 原音→处理音) */
+    private static void showVoicePreviewDialog(final Context ctx, final TtsVoiceSender.PreparedVoice pv,
+            final String talker, final int splitSeconds, final int fakeDurationMs) {
+        int p12 = dp(ctx, 12);
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(p12, dp(ctx, 14), p12, dp(ctx, 8));
+
+        // 标题: 音频转码成功·试听转码效果 (加粗居中 + 动态流光渐变)
+        TextView title = new TextView(ctx);
+        title.setText("音频转码成功·试听转码效果");
+        title.setTextSize(17);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+        GradientText.apply(title);
+        root.addView(title);
+
+        // 副标题: 音频转码总时长 xx分xx秒 (加粗居中)
+        TextView info = new TextView(ctx);
+        info.setText("音频转码总时长 " + formatDurationCn(pv.durationMs));
+        info.setTextSize(14);
+        info.setTypeface(null, android.graphics.Typeface.BOLD);
+        info.setGravity(Gravity.CENTER);
+        info.setTextColor(AppColors.text1());
+        info.setPadding(0, dp(ctx, 6), 0, dp(ctx, 4));
+        root.addView(info);
+
+        final TextView stateTv = new TextView(ctx);
+        stateTv.setTextSize(12);
+        stateTv.setTextColor(AppColors.text2());
+        stateTv.setGravity(Gravity.CENTER);
+        stateTv.setPadding(0, dp(ctx, 2), 0, dp(ctx, 4));
+        stateTv.setText("可先试听效果, 满意后再发送。");
+        root.addView(stateTv);
+
+        // 播放动画(旋律柱, 180dp 高、柱组占宽 80%, 仅播放时显示), 位于试听按钮上方
+        final EqBarsView eqBars = new EqBarsView(ctx);
+        eqBars.setPcmSampleRate(24000);
+        eqBars.setVisibility(View.GONE);
+        LinearLayout.LayoutParams eqLp = new LinearLayout.LayoutParams(-1, dp(ctx, 180));
+        eqLp.setMargins(0, dp(ctx, 6), 0, dp(ctx, 6));
+        root.addView(eqBars, eqLp);
+
+        LinearLayout btnRow = new LinearLayout(ctx);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        final TextView previewBtn = new TextView(ctx);
+        previewBtn.setText("转码音频试听");
+        previewBtn.setTextSize(13);
+        previewBtn.setTextColor(AppColors.textOnPrimary());
+        previewBtn.setTypeface(null, android.graphics.Typeface.BOLD);
+        previewBtn.setGravity(Gravity.CENTER);
+        previewBtn.setPadding(p12, dp(ctx, 10), p12, dp(ctx, 10));
+        previewBtn.setBackground(CandyUi.gradientBg(ctx, 20));
+        LinearLayout.LayoutParams b1 = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        b1.rightMargin = dp(ctx, 6);
+        btnRow.addView(previewBtn, b1);
+
+        final TextView compareBtn = new TextView(ctx);
+        compareBtn.setText("原声试听对比");
+        compareBtn.setTextSize(13);
+        compareBtn.setTextColor(AppColors.textOnPrimary());
+        compareBtn.setTypeface(null, android.graphics.Typeface.BOLD);
+        compareBtn.setGravity(Gravity.CENTER);
+        compareBtn.setPadding(p12, dp(ctx, 10), p12, dp(ctx, 10));
+        compareBtn.setBackground(CandyUi.gradientBg(ctx, 20));
+        LinearLayout.LayoutParams b2 = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        b2.leftMargin = dp(ctx, 6);
+        btnRow.addView(compareBtn, b2);
+        root.addView(btnRow);
+
+        final boolean[] playing = {false};
+        final Runnable[] resetUi = new Runnable[1];
+        resetUi[0] = () -> {
+            playing[0] = false;
+            previewBtn.setText("转码音频试听");
+            compareBtn.setText("原声试听对比");
+            // 非播放态隐藏动画
+            eqBars.stop();
+            eqBars.setVisibility(View.GONE);
+        };
+
+        previewBtn.setOnClickListener(v -> {
+            if (playing[0]) {
+                stopPcmPreview();
+                resetUi[0].run();
+                return;
+            }
+            playing[0] = true;
+            previewBtn.setText("停止");
+            stateTv.setText("正在播放: 处理音");
+            // 播放才显示动画, 并用 PCM 频谱精准驱动
+            eqBars.setVisibility(View.VISIBLE);
+            eqBars.startExact();
+            playPcmPreview(pv.processedPcm, eqBars, () -> {
+                if (playing[0]) {
+                    stateTv.setText("播放完成。");
+                    resetUi[0].run();
+                }
+            });
+        });
+
+        compareBtn.setOnClickListener(v -> {
+            if (playing[0]) {
+                stopPcmPreview();
+                resetUi[0].run();
+                return;
+            }
+            playing[0] = true;
+            compareBtn.setText("停止对比");
+            stateTv.setText("正在播放: 原音 → 处理音");
+            eqBars.setVisibility(View.VISIBLE);
+            eqBars.startExact();
+            playPcmPreview(pv.originalPcm, eqBars, () -> {
+                if (!playing[0]) return;
+                stateTv.setText("正在播放: 处理音");
+                playPcmPreview(pv.processedPcm, eqBars, () -> {
+                    if (!playing[0]) return;
+                    stateTv.setText("对比完成。");
+                    resetUi[0].run();
+                });
+            });
+        });
+
+        // v30102: 内容包进 ScrollView + 高度上限（90% 屏），播放动画(EqBars 180dp)出现时
+        // 只把下方内容往下推(内部滚动)，整个窗口高度随内容自适应不再撑长超出屏幕。
+        ScrollView dlgScroll = new ScrollView(ctx);
+        dlgScroll.setFillViewport(false);
+        dlgScroll.addView(root);
+
+        final AlertDialog dialog = new AlertDialog.Builder(ctx)
+            .setView(InsetsUtil.maxHeight90(ctx, dlgScroll))
+            .setPositiveButton("发送", (d, w) -> {
+                stopPcmPreview();
+                sendPreparedFromDialog(ctx, pv, talker, splitSeconds, fakeDurationMs);
+            })
+            .setNegativeButton("取消", (d, w) -> stopPcmPreview())
+            .create();
+        dialog.setOnDismissListener(d -> {
+            stopPcmPreview();
+            eqBars.stop();
+            eqBars.setVisibility(View.GONE);
+        });
+        dialog.show();
+        themeAlertDialog(dialog);
+        try {
+            android.view.Window win = dialog.getWindow();
+            if (win != null) {
+                android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+                win.setLayout((int) (dm.widthPixels * 0.9f), ViewGroup.LayoutParams.WRAP_CONTENT);
+            }
+        } catch (Throwable ignored) {}
+    }
+
+    /** v1143: 毫秒 → 中文时长 "xx分xx秒" */
+    private static String formatDurationCn(long ms) {
+        long totalSec = Math.max(1, ms / 1000);
+        long m = totalSec / 60;
+        long s = totalSec % 60;
+        return m + "分" + String.format(java.util.Locale.US, "%02d", s) + "秒";
+    }
+
+    /** v1142: 发送已处理好的语音(带发送进度弹窗; v30001 改后台线程, 不再阻塞 UI 与试听窗关闭) */
+    private static void sendPreparedFromDialog(Context ctx, TtsVoiceSender.PreparedVoice pv,
+            String talker, int splitSeconds, int fakeDurationMs) {
+        final android.os.Handler h = new android.os.Handler(Looper.getMainLooper());
+        // 主线程立即显示进度窗(不阻塞), 实际发送放到后台线程
+        showConvertProgress(ctx);
+        if (sProgressLabel != null) sProgressLabel.setText("语音即将完成发送…");
+
+        new Thread(() -> {
+            boolean ok;
+            try {
+                ok = TtsVoiceSender.sendPreparedVoice(talker, pv, splitSeconds, fakeDurationMs,
+                    (cur, total) -> h.post(() -> {
+                        try {
+                            FlyingProgressBar bar = sProgressBar;
+                            TextView label = sProgressLabel;
+                            if (bar == null) return;
+                            int percent;
+                            if (total == 100) percent = Math.min(cur, 99);
+                            else if (total <= 1) percent = 100;
+                            else percent = total > 0 ? cur * 100 / total : 0;
+                            bar.setProgress(percent);
+                            if (label != null) label.setText("语音即将完成发送…");
+                        } catch (Throwable ignored) {}
+                    }));
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "sendPreparedFromDialog err: " + t.getMessage());
+                ok = false;
+            }
+            final boolean fok = ok;
+            h.post(() -> {
+                dismissConvertProgress();
+                Toast.makeText(ctx, fok ? "语音已发送" : "发送失败", Toast.LENGTH_SHORT).show();
+            });
+        }, "leshao-voice-send").start();
+    }
+
+    /** v1142: 播放 16bit LE mono PCM(24kHz); onDone 在自然播放结束后于主线程回调 */
+    private static void playPcmPreview(byte[] pcm, EqBarsView eq, Runnable onDone) {
+        stopPcmPreview();
+        if (pcm == null || pcm.length == 0) {
+            if (onDone != null) onDone.run();
+            return;
+        }
+        sPcmStop = false;
+        sPcmOnDone = onDone;
+        final int rate = 24000;
+        Thread th = new Thread(() -> {
+            android.media.AudioTrack track = null;
+            try {
+                int minBuf = android.media.AudioTrack.getMinBufferSize(rate,
+                        android.media.AudioFormat.CHANNEL_OUT_MONO,
+                        android.media.AudioFormat.ENCODING_PCM_16BIT);
+                int bufSize = Math.max(minBuf, 8192);
+                track = new android.media.AudioTrack.Builder()
+                        .setAudioAttributes(new android.media.AudioAttributes.Builder()
+                                .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .build())
+                        .setAudioFormat(new android.media.AudioFormat.Builder()
+                                .setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
+                                .setSampleRate(rate)
+                                .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO)
+                                .build())
+                        .setBufferSizeInBytes(bufSize)
+                        .setTransferMode(android.media.AudioTrack.MODE_STREAM)
+                        .build();
+                sPcmTrack = track;
+                track.play();
+                int offset = 0;
+                while (!sPcmStop && offset < pcm.length) {
+                    int len = Math.min(bufSize, pcm.length - offset);
+                    int written = track.write(pcm, offset, len);
+                    if (written <= 0) break;
+                    // 把实际播放到的 PCM 交给频谱动画, 精准跟随音乐
+                    if (eq != null) eq.pushPcm(pcm, offset, written);
+                    offset += written;
+                }
+                if (!sPcmStop) {
+                    int ms = (int) (bufSize / (rate * 2L) * 1000L) + 80;
+                    try { Thread.sleep(ms); } catch (InterruptedException ignored) {}
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "playPcmPreview err: " + t.getMessage());
+            } finally {
+                try { if (track != null) { track.pause(); track.flush(); track.release(); } } catch (Throwable ignored) {}
+                if (sPcmTrack == track) sPcmTrack = null;
+                final Runnable cb = sPcmOnDone;
+                sPcmOnDone = null;
+                if (cb != null && !sPcmStop) {
+                    new android.os.Handler(Looper.getMainLooper()).post(cb);
+                }
+            }
+        }, "leshao-pcm-preview");
+        th.setDaemon(true);
+        sPcmThread = th;
+        th.start();
+    }
+
+    private static void stopPcmPreview() {
+        sPcmStop = true;
+        sPcmOnDone = null;
+        android.media.AudioTrack t = sPcmTrack;
+        sPcmTrack = null;
+        if (t != null) {
+            try { t.pause(); } catch (Throwable ignored) {}
+            try { t.flush(); } catch (Throwable ignored) {}
+            try { t.release(); } catch (Throwable ignored) {}
+        }
+        sPcmThread = null;
+    }
+
+    private static String getTalker(Context ctx) {
+        // v30009: 第一优先 = 当前已 resume 的 ChattingUIFragment (最实时的会话来源),
+        // 避免 sLastChatFooter/ChatFooter.d 指向已切换走的旧会话导致"发到其他聊天/群"。
+        String fragTalker = talkerFromChattingFragment();
+        if (isValidTalker(fragTalker)) {
+            sCurrentTalker = fragTalker;
+            LogWriter.log(TAG, "talker resolved [fragment]: " + fragTalker);
+            return fragTalker;
+        }
+
+        // Primary: ChatFooter.d (输入栏绑定的当前实时会话, v923/v924 发送对象正确依赖此项)
+        if (sLastChatFooter != null) {
+            try {
+                Field f = findField(sLastChatFooter.getClass(), "d");
+                if (f != null) {
+                    f.setAccessible(true);
+                    Object val = f.get(sLastChatFooter);
+                    if (val instanceof String) {
+                        String s = (String) val;
+                        if (isValidTalker(s)) {
+                            sCurrentTalker = s;
+                            LogWriter.log(TAG, "talker resolved [ChatFooter.d]: " + s);
+                            return s;
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        // Fallback: ChattingUI.onResume cache
+        if (isValidTalker(sCurrentTalker)) {
+            LogWriter.log(TAG, "talker resolved [cache]: " + sCurrentTalker);
+            return sCurrentTalker;
+        }
+
+        // Fallback: 当前 Activity intent/fragment 实时解析 (仅作兜底, 不可优先于 ChatFooter.d,
+        // 否则 activity intent 残留旧会话会覆盖真实目标)
+        Activity act = getActivityFromContext(ctx);
+        if (act != null) {
+            String s = resolveTalkerFromActivity(act);
+            if (isValidTalker(s)) {
+                sCurrentTalker = s;
+                LogWriter.log(TAG, "talker resolved [activity]: " + s);
+                return s;
+            }
+        }
+
+        // Fallback: scan Activity fields
+        String s2 = getTalkerFromActivity(ctx);
+        LogWriter.log(TAG, "talker resolved [activity-scan]: " + s2);
+        return s2;
+    }
+
+    /**
+     * v30009: 从已 resume 的当前聊天 Fragment 实时解析 talker。
+     * 先读已知字段(与 ChattingUI.onResume 捕获一致), 再读 Chat_User 参数, 最后做字段图兜底,
+     * 避免 getDeclaredFields() 顺序不确定而命中引用/历史会话字段。
+     */
+    private static String talkerFromChattingFragment() {
+        Object f = sChattingFragmentRef == null ? null : sChattingFragmentRef.get();
+        if (f == null) return null;
+        String[] known = {"talker", "mTalker", "nPf", "hHF"};
+        for (String fn : known) {
+            try {
+                Field fld = findField(f.getClass(), fn);
+                if (fld == null) continue;
+                fld.setAccessible(true);
+                Object v = fld.get(f);
+                if (v instanceof String && isValidTalker((String) v)) return (String) v;
+            } catch (Throwable ignored) {}
+        }
+        try {
+            Object args = XposedHelpers.callMethod(f, "getArguments");
+            if (args instanceof android.os.Bundle) {
+                String u = ((android.os.Bundle) args).getString("Chat_User");
+                if (isValidTalker(u)) return u;
+            }
+        } catch (Throwable ignored) {}
+        try {
+            return getTalkerFromObject(f);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /** 实时从当前 Activity 的 intent (Chat_User 等 key) 与 ChattingUI Fragment 解析真实会话 */
+    private static String resolveTalkerFromActivity(Activity act) {
+        try {
+            Intent it = act.getIntent();
+            if (it != null) {
+                String[] keys = { "Chat_User", "Chatroom_Name", "contact_username",
+                        "username", "Openim_User", "Contact_User", "Chat_User_To",
+                        "talker", "Talker" };
+                for (String k : keys) {
+                    try {
+                        String v = it.getStringExtra(k);
+                        if (isValidTalker(v)) return v;
+                    } catch (Throwable ignored) {}
+                }
+            }
+        } catch (Throwable ignored) {}
+        try {
+            Object fm = XposedHelpers.callMethod(act, "getSupportFragmentManager");
+            if (fm != null) {
+                List<?> frags = (List<?>) XposedHelpers.callMethod(fm, "getFragments");
+                if (frags != null) {
+                    for (Object f : frags) {
+                        if (f == null) continue;
+                        String cls = f.getClass().getName();
+                        if (!cls.contains("ChattingUI")) continue;
+                        try {
+                            Object args = XposedHelpers.callMethod(f, "getArguments");
+                            if (args instanceof android.os.Bundle) {
+                                String u = ((android.os.Bundle) args).getString("Chat_User");
+                                if (isValidTalker(u)) return u;
+                            }
+                        } catch (Throwable ignored) {}
+                        try {
+                            for (Field fl : f.getClass().getDeclaredFields()) {
+                                if (fl.getType() != String.class) continue;
+                                fl.setAccessible(true);
+                                Object v = fl.get(f);
+                                if (v instanceof String && isValidTalker((String) v)) return (String) v;
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    /** 判定字符串是否为合法的微信会话对象 (排除内部假用户/模板账号) */
+    private static boolean isValidTalker(String s) {
+        if (s == null) return false;
+        s = s.trim();
+        if (s.isEmpty() || "not_set".equals(s)) return false;
+        // 内部假用户/品牌模板消息等, 直接排除
+        if (s.contains("fakeuser") || s.contains("TemplateMsg") || s.contains("@bbn") ) return false;
+        return s.startsWith("wxid_") || s.startsWith("gh_")
+                || s.endsWith("@chatroom") || s.endsWith("@im.chatroom")
+                || s.endsWith("@openim") || s.endsWith("@qqim")
+                || s.matches("\\d{5,}");
+    }
+
+    private static String getTalkerFromActivity(Context ctx) {
+        try {
+            Activity act = getActivityFromContext(ctx);
+            if (act == null) return null;
+            return getTalkerFromObject(act);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getTalkerFromActivity err: " + t.getMessage());
+            return null;
+        }
+    }
+
+    private static String getTalkerFromObject(Object obj) {
+        String[] fieldNames = {"talker", "mTalker", "nPf", "hHF", "cXU", "aUa", "talkerName",
+                "username", "mUsername", "userName", "contactName", "mContactName", "toUser",
+                "toUsername", "chatUser", "chatUsername", "conversationUser", "mConvUser"};
+        for (String fn : fieldNames) {
+            Field f = findField(obj.getClass(), fn);
+            if (f == null) continue;
+            try {
+                f.setAccessible(true);
+                Object val = f.get(obj);
+                if (val instanceof String) {
+                    String s = (String) val;
+                    if (isValidTalker(s)) {
+                        LogWriter.log(TAG, "getTalker: found via " + fn + "=" + s);
+                        return s;
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    private static int parseIntSafe(String s, int defaultVal) {
+        try { return Integer.parseInt(s); } catch (Throwable ignored) { return defaultVal; }
+    }
+
+    /** v1142: 高级音效对话框 — 均衡与音色 + 响度与动态 */
+    private static void showAdvancedAudioDialog(Context ctx) {
+        int p12 = dp(ctx, 12);
+
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(p12, dp(ctx, 8), p12, dp(ctx, 8));
+
+        TextView tip = new TextView(ctx);
+        tip.setText("以下处理在「转码」阶段生效; 全部关闭时等同默认响度最大化。");
+        tip.setTextSize(12);
+        tip.setTextColor(AppColors.text2());
+        tip.setPadding(dp(ctx, 2), 0, dp(ctx, 2), dp(ctx, 8));
+        root.addView(tip);
+
+        root.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "均衡与音色"));
+        root.addView(eqRow(ctx, "低音 EQ (200Hz)", "vproc_eq_low"));
+        root.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+        root.addView(eqRow(ctx, "中音 EQ (1kHz)", "vproc_eq_mid"));
+        root.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+        root.addView(eqRow(ctx, "高音 EQ (4kHz)", "vproc_eq_high"));
+        root.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+        root.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "🪄", "高音清晰度",
+                "3kHz 存在感 + 9kHz 空气感各 +3dB")
+                .switchOn(WmPrefs.get("vproc_clarity", false), (b, c) -> WmPrefs.set("vproc_clarity", c)));
+        root.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+        root.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "🍃", "去齿音",
+                "削弱 5kHz 以上「嘶嘶」齿音")
+                .switchOn(WmPrefs.get("vproc_deesser", false), (b, c) -> WmPrefs.set("vproc_deesser", c)));
+        root.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+        root.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "🔽", "去低频隆隆",
+                "80Hz 高通, 去除低频轰鸣/振动声")
+                .switchOn(WmPrefs.get("vproc_hpf", false), (b, c) -> WmPrefs.set("vproc_hpf", c)));
+        root.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+        root.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "🔇", "噪声门",
+                "静音段自动衰减, 去除底噪")
+                .switchOn(WmPrefs.get("vproc_gate", false), (b, c) -> WmPrefs.set("vproc_gate", c)));
+
+        root.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "响度与动态"));
+        root.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "📈", "自动增益 (AGC)",
+                "自动拉齐忽大忽小的音量")
+                .switchOn(WmPrefs.get("vproc_agc", false), (b, c) -> WmPrefs.set("vproc_agc", c)));
+        root.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+        root.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "🎛", "动态压缩",
+                "-18dB / 2.5:1, 声音更饱满稳定")
+                .switchOn(WmPrefs.get("vproc_compress", false), (b, c) -> WmPrefs.set("vproc_compress", c)));
+        root.addView(com.leshao.v3.ui.widgets.M3Page.divider(ctx));
+        root.addView(new com.leshao.v3.ui.widgets.SettingRow(ctx, "📊", "响度标准化 (LUFS)",
+                "标准化到 -16 LUFS, 与主流平台响度一致")
+                .switchOn(WmPrefs.get("vproc_loudness_norm", false), (b, c) -> WmPrefs.set("vproc_loudness_norm", c)));
+
+        ScrollView scroll = new ScrollView(ctx);
+        scroll.addView(root);
+
+        AlertDialog dialog = new AlertDialog.Builder(ctx)
+            .setTitle("高级音效")
+            .setView(scroll)
+            .setPositiveButton("完成", null)
+            .setNeutralButton("重置", (d, w) -> {
+                WmPrefs.setInt("vproc_eq_low", 0);
+                WmPrefs.setInt("vproc_eq_mid", 0);
+                WmPrefs.setInt("vproc_eq_high", 0);
+                WmPrefs.set("vproc_clarity", false);
+                WmPrefs.set("vproc_deesser", false);
+                WmPrefs.set("vproc_hpf", false);
+                WmPrefs.set("vproc_gate", false);
+                WmPrefs.set("vproc_agc", false);
+                WmPrefs.set("vproc_compress", false);
+                WmPrefs.set("vproc_loudness_norm", false);
+                Toast.makeText(ctx, "已重置高级音效", Toast.LENGTH_SHORT).show();
+                d.dismiss();
+                showAdvancedAudioDialog(ctx);
+            })
+            .create();
+        dialog.show();
+        themeAlertDialog(dialog);
+    }
+
+    /** 三段 EQ 单行: SettingRow + 数值输入(-12..+12 dB) */
+    private static View eqRow(Context ctx, String title, final String key) {
+        final android.widget.EditText et = com.leshao.v3.ui.widgets.M3Page.input(ctx,
+                String.valueOf(WmPrefs.getInt(key, 0)));
+        et.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
+                | android.text.InputType.TYPE_NUMBER_FLAG_SIGNED);
+        et.setGravity(Gravity.CENTER);
+        et.setLayoutParams(new LinearLayout.LayoutParams(dp(ctx, 64),
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        et.addTextChangedListener(new android.text.TextWatcher() {
+            public void afterTextChanged(android.text.Editable s) {
+                int v = parseIntSafe(s.toString().trim(), 0);
+                if (v > 12) v = 12;
+                if (v < -12) v = -12;
+                WmPrefs.setInt(key, v);
+            }
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            public void onTextChanged(CharSequence s, int a, int b, int c) {}
+        });
+        LinearLayout tail = new LinearLayout(ctx);
+        tail.setOrientation(LinearLayout.HORIZONTAL);
+        tail.setGravity(Gravity.CENTER_VERTICAL);
+        tail.addView(et);
+        TextView unit = new TextView(ctx);
+        unit.setText(" dB");
+        unit.setTextSize(13);
+        unit.setTextColor(AppColors.text2());
+        tail.addView(unit);
+        return new com.leshao.v3.ui.widgets.SettingRow(ctx, "🎚", title,
+                "-12 至 +12 dB, 0=不调整").tail(tail);
+    }
+
+    private static void showCutDialog(Context ctx, String mp3Path, final TextView fileNameTv) {
+        long durationMs = 0;
+        MediaMetadataRetriever mmr = new MediaMetadataRetriever();
+        try {
+            mmr.setDataSource(mp3Path);
+            String dur = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            if (dur != null) durationMs = Long.parseLong(dur);
+        } catch (Throwable t) {
+            Toast.makeText(ctx, "无法读取音频时长", Toast.LENGTH_SHORT).show();
+            return;
+        } finally {
+            try { mmr.release(); } catch (Throwable ignored) {}
+        }
+
+        if (durationMs <= 0) {
+            Toast.makeText(ctx, "音频时长为0", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        final float totalSecs = durationMs / 1000f;
+        final int totalInt = (int) totalSecs;
+
+        float d = ctx.getResources().getDisplayMetrics().density;
+        int p12 = (int)(12 * d);
+        int p8 = (int)(8 * d);
+
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(p12, p12, p12, 0);
+
+        int text1 = AppColors.text1();
+        int text2 = AppColors.text2();
+        int accent = AppColors.accent();
+        int divider = AppColors.divider();
+
+        TextView durTv = new TextView(ctx);
+        durTv.setText("总时长: " + formatSec(totalSecs) + " (" + totalInt + "秒)");
+        durTv.setTextSize(12);
+        durTv.setTextColor(text2);
+        durTv.setPadding(0, 0, 0, p12);
+        root.addView(durTv);
+
+        // 起始时间
+        TextView startLabel = new TextView(ctx);
+        startLabel.setText("起始时间 (秒)");
+        startLabel.setTextSize(12);
+        startLabel.setTextColor(text1);
+        root.addView(startLabel);
+
+        final EditText startInput = new EditText(ctx);
+        startInput.setText("0");
+        startInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        startInput.setTextColor(text1);
+        startInput.setBackground(CandyUi.inputBg(ctx));
+        startInput.setPadding(p12, p8, p12, p8);
+        root.addView(startInput);
+
+        View gap1 = new View(ctx);
+        gap1.setLayoutParams(new LinearLayout.LayoutParams(-1, p8));
+        root.addView(gap1);
+
+        // 结束时间
+        TextView endLabel = new TextView(ctx);
+        endLabel.setText("结束时间 (秒, 0=到末尾)");
+        endLabel.setTextSize(12);
+        endLabel.setTextColor(text1);
+        root.addView(endLabel);
+
+        final EditText endInput = new EditText(ctx);
+        endInput.setText("0");
+        endInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        endInput.setTextColor(text1);
+        endInput.setBackground(CandyUi.inputBg(ctx));
+        endInput.setPadding(p12, p8, p12, p8);
+        root.addView(endInput);
+
+        View gap2 = new View(ctx);
+        gap2.setLayoutParams(new LinearLayout.LayoutParams(-1, p12));
+        root.addView(gap2);
+
+        // 试听滑块
+        final SeekBar seekBar = com.leshao.v3.ui.widgets.M3Page.slider(ctx);
+        final int seekMax = Math.max(1, totalInt);
+        seekBar.setMax(seekMax);
+        seekBar.setProgress(0);
+        root.addView(seekBar);
+
+        // 设为起点 / 设为终点 按钮行
+        LinearLayout markRow = new LinearLayout(ctx);
+        markRow.setOrientation(LinearLayout.HORIZONTAL);
+        markRow.setPadding(0, p8, 0, 0);
+
+        final com.leshao.v3.ui.widgets.ModernButton markStartBtn =
+                new com.leshao.v3.ui.widgets.ModernButton(ctx, "设为起点",
+                        com.leshao.v3.ui.widgets.ModernButton.STYLE_GHOST);
+        LinearLayout.LayoutParams msLp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        msLp.rightMargin = (int)(4 * d);
+        markRow.addView(markStartBtn, msLp);
+
+        final com.leshao.v3.ui.widgets.ModernButton markEndBtn =
+                new com.leshao.v3.ui.widgets.ModernButton(ctx, "设为终点",
+                        com.leshao.v3.ui.widgets.ModernButton.STYLE_GHOST);
+        LinearLayout.LayoutParams meLp = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        meLp.leftMargin = (int)(4 * d);
+        markRow.addView(markEndBtn, meLp);
+        root.addView(markRow);
+
+        markStartBtn.setOnClickListener(msv -> {
+            int pos = seekBar.getProgress();
+            startInput.setText(String.valueOf(pos));
+            Toast.makeText(ctx, "起点已设为 " + formatSec(pos), Toast.LENGTH_SHORT).show();
+        });
+        markEndBtn.setOnClickListener(mev -> {
+            int pos = seekBar.getProgress();
+            endInput.setText(String.valueOf(pos));
+            Toast.makeText(ctx, "终点已设为 " + formatSec(pos), Toast.LENGTH_SHORT).show();
+        });
+
+        final TextView seekTime = new TextView(ctx);
+        seekTime.setText("0:00 / " + formatSec(totalSecs));
+        seekTime.setTextSize(11);
+        seekTime.setTextColor(text2);
+        seekTime.setGravity(Gravity.CENTER);
+        seekTime.setPadding(0, p8, 0, p8);
+        root.addView(seekTime);
+
+        // 播放/暂停按钮
+        final com.leshao.v3.ui.widgets.ModernButton playBtn =
+                new com.leshao.v3.ui.widgets.ModernButton(ctx, "播放",
+                        com.leshao.v3.ui.widgets.ModernButton.STYLE_PRIMARY);
+        root.addView(playBtn);
+
+        // MediaPlayer
+        final MediaPlayer[] playerHolder = new MediaPlayer[1];
+        final boolean[] isPlaying = {false};
+        final Handler h = new Handler(Looper.getMainLooper());
+        final Runnable seekUpdater = new Runnable() {
+            @Override
+            public void run() {
+                if (playerHolder[0] != null && isPlaying[0]) {
+                    try {
+                        int pos = playerHolder[0].getCurrentPosition() / 1000;
+                        seekBar.setProgress(Math.max(0, Math.min(seekMax, pos)));
+                        seekTime.setText(formatSec(pos) + " / " + formatSec(totalSecs));
+                        h.postDelayed(this, 200);
+                    } catch (Throwable ignored) {}
+                }
+            }
+        };
+
+        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
+                if (fromUser) {
+                    seekTime.setText(formatSec(progress) + " / " + formatSec(totalSecs));
+                    try {
+                        if (playerHolder[0] != null) {
+                            playerHolder[0].seekTo(progress * 1000);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            }
+
+            @Override public void onStartTrackingTouch(SeekBar sb) {
+            }
+
+            @Override public void onStopTrackingTouch(SeekBar sb) {
+            }
+        });
+
+        playBtn.setOnClickListener(pv -> {
+            if (isPlaying[0]) {
+                try { if (playerHolder[0] != null) playerHolder[0].pause(); } catch (Throwable ignored) {}
+                isPlaying[0] = false;
+                playBtn.setText("播放");
+                return;
+            }
+
+            try {
+                if (playerHolder[0] == null) {
+                    MediaPlayer mp = new MediaPlayer();
+                    mp.setDataSource(mp3Path);
+                    playBtn.setEnabled(false);
+                    playBtn.setText("加载中...");
+                    mp.setOnPreparedListener(preparedMp -> {
+                        playBtn.setEnabled(true);
+                        playBtn.setText("暂停");
+                        preparedMp.start();
+                        isPlaying[0] = true;
+                        h.post(seekUpdater);
+                    });
+                    mp.setOnCompletionListener(m -> {
+                        isPlaying[0] = false;
+                        playBtn.setText("播放");
+                        seekBar.setProgress(0);
+                        seekTime.setText("0:00 / " + formatSec(totalSecs));
+                    });
+                    mp.setOnErrorListener((mpErr, what, extra) -> {
+                        playBtn.setEnabled(true);
+                        playBtn.setText("播放");
+                        Toast.makeText(ctx, "播放失败", Toast.LENGTH_SHORT).show();
+                        return true;
+                    });
+                    mp.prepareAsync();
+                    playerHolder[0] = mp;
+                } else {
+                    playerHolder[0].start();
+                    isPlaying[0] = true;
+                    playBtn.setText("暂停");
+                    h.post(seekUpdater);
+                }
+            } catch (Throwable t) {
+                playBtn.setEnabled(true);
+                playBtn.setText("播放");
+                Toast.makeText(ctx, "播放失败: " + t.getMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        AlertDialog dialog = new AlertDialog.Builder(ctx)
+            .setTitle("音频切割")
+            .setView(root)
+            .setPositiveButton("确定", (dlg, w) -> {
+                try {
+                    if (playerHolder[0] != null) {
+                        playerHolder[0].stop();
+                        playerHolder[0].release();
+                        playerHolder[0] = null;
+                    }
+                    h.removeCallbacks(seekUpdater);
+                } catch (Throwable ignored) {}
+
+                float begin = (float) parseIntSafe(startInput.getText().toString().trim(), 0);
+                float end = (float) parseIntSafe(endInput.getText().toString().trim(), 0);
+                if (begin < 0) begin = 0;
+                if (end <= 0) end = totalSecs;
+                if (end > totalSecs) end = totalSecs;
+                if (begin >= end) {
+                    Toast.makeText(ctx, "起始时间必须小于结束时间", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+
+                // 直接转码发送: 确定即发送
+                sCutBeginSec = 0;
+                sCutEndSec = 0;
+                final float fBegin = begin;
+                final float fEnd = end;
+                // v1086: 同 convert 按钮, 实时解析当前聊天对象, 避免缓存错绑其它群
+                final String fTalker = getTalker(ctx);
+                if (fTalker == null || fTalker.isEmpty()) {
+                    Toast.makeText(ctx, "无法获取当前聊天对象", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                new Thread(() -> {
+                    prepareAndPreview(ctx, mp3Path, fTalker, 0, fakeVoiceDurationMs(), fBegin, fEnd);
+                }, "leshao-mp3-prepare").start();
+            })
+            .setNegativeButton("取消", (dlg, w) -> {
+                try {
+                    if (playerHolder[0] != null) {
+                        playerHolder[0].stop();
+                        playerHolder[0].release();
+                        playerHolder[0] = null;
+                    }
+                    h.removeCallbacks(seekUpdater);
+                } catch (Throwable ignored) {}
+            })
+            .setNeutralButton("重置", (dlg, w) -> {
+                try {
+                    if (playerHolder[0] != null) {
+                        playerHolder[0].stop();
+                        playerHolder[0].release();
+                        playerHolder[0] = null;
+                    }
+                    h.removeCallbacks(seekUpdater);
+                } catch (Throwable ignored) {}
+                sCutBeginSec = 0;
+                sCutEndSec = 0;
+                if (fileNameTv != null) {
+                    String name = new java.io.File(mp3Path).getName();
+                    fileNameTv.setText("已选: " + name);
+                    fileNameTv.setVisibility(View.VISIBLE);
+                }
+            })
+            .create();
+
+        dialog.setOnDismissListener(dlg -> {
+            try {
+                h.removeCallbacks(seekUpdater);
+                if (playerHolder[0] != null) {
+                    playerHolder[0].stop();
+                    playerHolder[0].release();
+                    playerHolder[0] = null;
+                }
+            } catch (Throwable ignored) {}
+        });
+
+        dialog.show();
+        themeAlertDialog(dialog);
+    }
+
+    private static void showHistoryDialog(Context ctx) {
+        VoiceHistoryDbHelper db;
+        try {
+            android.content.Context appCtx = ContextManager.getAppContext();
+            if (appCtx == null) {
+                Toast.makeText(ctx, "初始化失败", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            db = VoiceHistoryDbHelper.getInstance(appCtx);
+        } catch (Throwable t) {
+            Toast.makeText(ctx, "数据库初始化失败", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        java.util.List<VoiceHistoryDbHelper.VoiceHistoryItem> items = db.queryAll();
+
+        float d = ctx.getResources().getDisplayMetrics().density;
+        int p12 = (int)(12 * d);
+        int p10 = (int)(10 * d);
+        int p8 = (int)(8 * d);
+
+        ScrollView scroll = new ScrollView(ctx);
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(p12, p12, p12, 0);
+        scroll.addView(root);
+
+        int cardBg = AppColors.card();
+        int text1 = AppColors.text1();
+        int text2 = AppColors.text2();
+        int accent = AppColors.accent();
+        int divider = AppColors.divider();
+
+        if (items.isEmpty()) {
+            TextView empty = new TextView(ctx);
+            empty.setText("暂无历史记录");
+            empty.setTextSize(14);
+            empty.setTextColor(text2);
+            empty.setGravity(Gravity.CENTER);
+            empty.setPadding(0, p12, 0, p12);
+            root.addView(empty);
+        } else {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault());
+            sHistoryChecks.clear();
+
+            for (final VoiceHistoryDbHelper.VoiceHistoryItem item : items) {
+                LinearLayout row = new LinearLayout(ctx);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                row.setPadding(0, p8, 0, p8);
+                row.setGravity(Gravity.CENTER_VERTICAL);
+
+                // v966: 勾选区域(行首)
+                CheckBox cb = com.leshao.v3.ui.widgets.M3Page.checkBox(ctx);
+                cb.setChecked(sHistorySelected.contains(item.id));
+                cb.setOnCheckedChangeListener((b, checked) -> {
+                    if (checked) sHistorySelected.add(item.id);
+                    else sHistorySelected.remove(item.id);
+                    sHistoryAllSelected = !items.isEmpty()
+                            && sHistorySelected.size() >= items.size();
+                    if (sHistorySelectAllBtn != null) {
+                        sHistorySelectAllBtn.setText(sHistoryAllSelected ? "全不选" : "全选");
+                    }
+                });
+                row.addView(cb);
+                sHistoryChecks.put(item.id, cb);
+
+                LinearLayout info = new LinearLayout(ctx);
+                info.setOrientation(LinearLayout.VERTICAL);
+                LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(0,
+                        ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+
+                boolean fileExists = new File(item.filePath).exists();
+
+                TextView nameTv = new TextView(ctx);
+                nameTv.setText(item.fileName);
+                nameTv.setTextSize(13);
+                nameTv.setTextColor(fileExists ? text1 : AppColors.text3());
+                nameTv.setMaxLines(1);
+                nameTv.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+                info.addView(nameTv);
+
+                TextView metaTv = new TextView(ctx);
+                String meta = sdf.format(new java.util.Date(item.createdAt));
+                if (!fileExists) meta += " (文件已不存在)";
+                metaTv.setText(meta);
+                metaTv.setTextSize(11);
+                metaTv.setTextColor(text2);
+                info.addView(metaTv);
+
+                row.addView(info, infoLp);
+
+                if (fileExists) {
+                    // v966: 播放图标
+                    final ImageView playIc = new ImageView(ctx);
+                    playIc.setImageBitmap(makeGlyphIcon(ctx, GLYPH_PLAY, 18, AppColors.accent()));
+                    playIc.setPadding(p8, p8, p8, p8);
+                    playIc.setOnClickListener(pv -> {
+                        if (sPanelPlayer != null && item.filePath.equals(sPanelPlayingPath)) {
+                            stopPanelPlayback();
+                            return;
+                        }
+                        if (startPanelPlayback(ctx, item.filePath)) {
+                            playIc.setImageBitmap(makeGlyphIcon(ctx, GLYPH_PAUSE, 18, AppColors.accent()));
+                            sHistPlayBtn = playIc;
+                        }
+                    });
+                    row.addView(playIc);
+
+                    // v966: 发送图标(原「发送」文字)
+                    ImageView sendIc = new ImageView(ctx);
+                    sendIc.setImageBitmap(makeGlyphIcon(ctx, GLYPH_SEND, 18, AppColors.accent()));
+                    sendIc.setPadding(p8, p8, p8, p8);
+                    sendIc.setOnClickListener(reuseV -> {
+                        stopPanelPlayback();
+                        dismissHistoryDialog();
+                        String talker = item.talker;
+                        final String historyFilePath = item.filePath;
+                        sCutBeginSec = 0;
+                        sCutEndSec = 0;
+                        new Thread(() -> transferAndReport(ctx, historyFilePath, talker, 0, fakeVoiceDurationMs(), 0, 0), "leshao-mp3-send").start();
+                    });
+                    row.addView(sendIc);
+                }
+
+                // v966: 删除图标(原「删除」文字)
+                ImageView delIc = new ImageView(ctx);
+                delIc.setImageBitmap(makeGlyphIcon(ctx, GLYPH_DELETE, 18, 0xFFB3261E));
+                delIc.setPadding(p8, p8, p8, p8);
+                delIc.setOnClickListener(delV -> {
+                    db.deleteById(item.id);
+                    sHistorySelected.remove(item.id);
+                    dismissHistoryDialog();
+                    if (popupWindow != null) popupWindow.dismiss();
+                    showHistoryDialog(ctx);
+                });
+                row.addView(delIc);
+
+                root.addView(row);
+
+                View sep = new View(ctx);
+                sep.setLayoutParams(new LinearLayout.LayoutParams(-1, 1));
+                sep.setBackgroundColor(divider);
+                root.addView(sep);
+            }
+        }
+
+        View btnSep = new View(ctx);
+        btnSep.setLayoutParams(new LinearLayout.LayoutParams(-1, p12));
+        root.addView(btnSep);
+
+        if (!items.isEmpty()) {
+            // v966: 底部操作栏(全选 / 删除 / 发送)
+            LinearLayout bar = new LinearLayout(ctx);
+            bar.setOrientation(LinearLayout.HORIZONTAL);
+            bar.setGravity(Gravity.CENTER_VERTICAL);
+
+            sHistorySelectAllBtn = new TextView(ctx);
+            sHistorySelectAllBtn.setText(sHistoryAllSelected ? "全不选" : "全选");
+            sHistorySelectAllBtn.setTextSize(13);
+            sHistorySelectAllBtn.setTextColor(AppColors.primary());
+            sHistorySelectAllBtn.setGravity(Gravity.CENTER);
+            sHistorySelectAllBtn.setPadding(p8, p10, p8, p10);
+            GradientDrawable selBg = new GradientDrawable();
+            selBg.setStroke(1, AppColors.outline());
+            selBg.setCornerRadius(dp(ctx, 20));
+            selBg.setColor(0x00000000);
+            sHistorySelectAllBtn.setBackground(selBg);
+            sHistorySelectAllBtn.setOnClickListener(selV -> {
+                boolean target = !sHistoryAllSelected;
+                for (CheckBox c : sHistoryChecks.values()) c.setChecked(target);
+            });
+            bar.addView(sHistorySelectAllBtn, barLp(ctx));
+
+            TextView barDelBtn = new TextView(ctx);
+            barDelBtn.setText("删除");
+            barDelBtn.setTextSize(13);
+            barDelBtn.setTextColor(0xFFB3261E);
+            barDelBtn.setGravity(Gravity.CENTER);
+            barDelBtn.setPadding(p8, p10, p8, p10);
+            GradientDrawable delBg = new GradientDrawable();
+            delBg.setStroke(1, AppColors.outline());
+            delBg.setCornerRadius(dp(ctx, 20));
+            delBg.setColor(0x00000000);
+            barDelBtn.setBackground(delBg);
+            barDelBtn.setOnClickListener(dv -> {
+                stopPanelPlayback();
+                if (sHistorySelected.isEmpty()) {
+                    Toast.makeText(ctx, "请先勾选记录", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                for (Long id : new ArrayList<>(sHistorySelected)) db.deleteById(id);
+                sHistorySelected.clear();
+                sHistoryAllSelected = false;
+                dismissHistoryDialog();
+                if (popupWindow != null) popupWindow.dismiss();
+                showHistoryDialog(ctx);
+            });
+            bar.addView(barDelBtn, barLp(ctx));
+
+            TextView barSendBtn = new TextView(ctx);
+            barSendBtn.setText("发送");
+            barSendBtn.setTextSize(13);
+            barSendBtn.setTextColor(AppColors.textOnPrimary());
+            barSendBtn.setGravity(Gravity.CENTER);
+            barSendBtn.setPadding(p8, p10, p8, p10);
+            barSendBtn.setBackground(CandyUi.gradientBg(ctx, 20));
+            barSendBtn.setOnClickListener(sv -> {
+                stopPanelPlayback();
+                if (sHistorySelected.isEmpty()) {
+                    Toast.makeText(ctx, "请先勾选记录", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                List<VoiceHistoryDbHelper.VoiceHistoryItem> valid = new ArrayList<>();
+                for (VoiceHistoryDbHelper.VoiceHistoryItem it : items) {
+                    if (sHistorySelected.contains(it.id) && new File(it.filePath).exists()) {
+                        valid.add(it);
+                    }
+                }
+                if (valid.isEmpty()) {
+                    Toast.makeText(ctx, "所选文件已不存在", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                dismissHistoryDialog();
+                if (popupWindow != null) popupWindow.dismiss();
+                sHistorySelected.clear();
+                sHistoryAllSelected = false;
+                new Thread(() -> {
+                    for (VoiceHistoryDbHelper.VoiceHistoryItem it : valid) {
+                        transferAndReport(ctx, it.filePath, it.talker, 0, fakeVoiceDurationMs(), 0, 0);
+                    }
+                }, "leshao-mp3-send").start();
+            });
+            bar.addView(barSendBtn, barLp(ctx));
+
+            root.addView(bar);
+        }
+
+        AlertDialog dialog = new AlertDialog.Builder(ctx)
+            .setTitle("历史记录")
+            .setView(scroll)
+            .setPositiveButton("返回", null)
+            .create();
+
+        sHistoryDialog = dialog;
+        dialog.setOnDismissListener(dlg -> { if (sHistoryDialog == dialog) sHistoryDialog = null; });
+        dialog.show();
+        themeAlertDialog(dialog);
+
+        android.view.Window win = dialog.getWindow();
+        if (win != null) {
+            try {
+                android.view.WindowManager.LayoutParams lp = win.getAttributes();
+                lp.height = (int)(300 * d);
+                win.setAttributes(lp);
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    private static void dismissHistoryDialog() {
+        try {
+            if (sHistoryDialog != null && sHistoryDialog.isShowing()) {
+                sHistoryDialog.dismiss();
+            }
+        } catch (Throwable ignored) {}
+        sHistoryDialog = null;
+    }
+
+    private static Activity getActivityFromContext(Context ctx) {
+        try {
+            Context c = ctx;
+            while (c != null) {
+                if (c instanceof Activity) return (Activity) c;
+                if (c instanceof android.content.ContextWrapper) {
+                    c = ((android.content.ContextWrapper) c).getBaseContext();
+                } else {
+                    break;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private static Field findField(Class<?> clazz, String name) {
+        Class<?> cur = clazz;
+        while (cur != null && cur != Object.class) {
+            try {
+                return cur.getDeclaredField(name);
+            } catch (NoSuchFieldException e) {
+                cur = cur.getSuperclass();
+            }
+        }
+        return null;
+    }
+
+    private static Class<?> findClassIfExists(String className, ClassLoader loader) {
+        try {
+            return Class.forName(className, false, loader);
+        } catch (ClassNotFoundException e) {
+            return null;
+        }
+    }
+
+    private static void showConvertProgress(Context ctx) {
+        try {
+            dismissConvertProgress();
+            Activity act = getActivityFromContext(ctx);
+            View anchor = null;
+            if (act != null && act.getWindow() != null) {
+                try { anchor = act.getWindow().peekDecorView(); } catch (Throwable ignored) {}
+                if (anchor == null) {
+                    try { anchor = act.findViewById(android.R.id.content); } catch (Throwable ignored) {}
+                }
+            }
+            if (anchor == null) {
+                LogWriter.log(TAG, "showConvertProgress: anchor null");
+                return;
+            }
+            float d = ctx.getResources().getDisplayMetrics().density;
+            LinearLayout pv = createProgressView(ctx, d);
+            int w = (int) (ctx.getResources().getDisplayMetrics().widthPixels * 0.78f);
+            PopupWindow pw = new PopupWindow(pv, w, ViewGroup.LayoutParams.WRAP_CONTENT, false);
+            pw.setBackgroundDrawable(new ColorDrawable(0));
+            try { pw.setElevation(dp(ctx, 8)); } catch (Throwable ignored) {}
+            pw.setOutsideTouchable(false);
+            pw.setFocusable(false);
+            sProgressPopup = pw;
+            pw.showAtLocation(anchor, Gravity.CENTER, 0, 0);
+            LogWriter.log(TAG, "showConvertProgress OK");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "showConvertProgress err: " + android.util.Log.getStackTraceString(t));
+        }
+    }
+
+    private static void dismissConvertProgress() {
+        try {
+            PopupWindow pw = sProgressPopup;
+            sProgressPopup = null;
+            sProgressBar = null;
+            sProgressPct = null;
+            sProgressLabel = null;
+            if (pw != null && pw.isShowing()) pw.dismiss();
+        } catch (Throwable ignored) {}
+    }
+
+    private static LinearLayout createProgressView(Context ctx, float d) {
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER);
+        root.setBackground(CandyUi.dialogBg(ctx));
+        InsetsUtil.clipRounded(root);
+        root.setPadding((int)(24 * d), (int)(24 * d), (int)(24 * d), (int)(20 * d));
+        root.setMinimumWidth((int)(260 * d));
+
+        TextView title = new TextView(ctx);
+        title.setText("音频转语音");
+        title.setTextSize(18);
+        title.setTextColor(AppColors.onSurface());
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(0, 0, 0, (int)(12 * d));
+        root.addView(title);
+
+        // 流光进度条（v1138 定稿 Y6：左→右填充 + 流动虚线 + 斜飞鸟）
+        FlyingProgressBar bar = new FlyingProgressBar(ctx);
+        LinearLayout.LayoutParams barLp = new LinearLayout.LayoutParams(-1, -2);
+        barLp.setMargins((int)(6 * d), (int)(2 * d), (int)(6 * d), 0);
+        bar.setLayoutParams(barLp);
+        root.addView(bar);
+        sProgressBar = bar;
+
+        // 百分比（条下方，渐变流光）
+        TextView pct = new TextView(ctx);
+        pct.setText("0%");
+        pct.setTextSize(28);
+        pct.setTypeface(null, android.graphics.Typeface.BOLD);
+        pct.setGravity(Gravity.CENTER);
+        pct.setPadding(0, (int)(8 * d), 0, 0);
+        root.addView(pct);
+        GradientText.apply(pct);
+        sProgressPct = pct;
+
+        // 加粗渐变文字（转码中 / 发送中）
+        TextView label = new TextView(ctx);
+        label.setText("音频转码中…");
+        label.setTextSize(26);
+        label.setTypeface(null, android.graphics.Typeface.BOLD);
+        label.setGravity(Gravity.CENTER);
+        label.setPadding(0, (int)(2 * d), 0, 0);
+        root.addView(label);
+        GradientText.apply(label);
+        sProgressLabel = label;
+
+        bar.setProgressListener(p -> {
+            if (sProgressPct != null) sProgressPct.setText(p + "%");
+        });
+
+        return root;
+    }
+
+    private static void themeAlertDialog(android.app.AlertDialog dialog) {
+        android.view.Window w = null;
+        try {
+            w = dialog.getWindow();
+            if (w != null) {
+                w.setBackgroundDrawable(CandyUi.dialogBg(dialog.getContext()));
+            }
+        } catch (Throwable ignored) {}
+        if (w != null) WindowLayer.track(w);
+        try {
+            android.widget.Button pos = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE);
+            if (pos != null) pos.setTextColor(AppColors.accent());
+        } catch (Throwable ignored) {}
+        try {
+            android.widget.Button neg = dialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE);
+            if (neg != null) neg.setTextColor(AppColors.text2());
+        } catch (Throwable ignored) {}
+        try {
+            android.widget.Button neu = dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL);
+            if (neu != null) neu.setTextColor(AppColors.text3());
+        } catch (Throwable ignored) {}
+    }
+
+    // ==================== v30007: 音频拼接 / 混合 ====================
+
+    /** 音频选择回调(供拼接/混合编辑页复用主面板的文件选择链路) */
+    public interface AudioPickCallback {
+        void onPicked(String path);
+    }
+
+    /** 复用主面板的音频选择链路: 以探针 TextView 接收 onActivityResult 回填的路径。 */
+    public static void startAudioPick(Activity act, final AudioPickCallback cb) {
+        if (act == null || cb == null) return;
+        final TextView probe = new TextView(act);
+        probe.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void afterTextChanged(android.text.Editable s) {
+                String p = (s == null) ? null : s.toString().trim();
+                if (p != null && !p.isEmpty()) cb.onPicked(p);
+            }
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
+        });
+        sTargetPathText = probe;
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("audio/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav",
+                "audio/ogg", "audio/mp4", "audio/aac", "audio/flac",
+                "audio/x-ms-wma", "audio/opus"});
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, false);
+        try {
+            LogWriter.log(TAG, "startAudioPick req=" + REQ_PICK_MP3);
+            act.startActivityForResult(intent, REQ_PICK_MP3);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "startAudioPick FAILED: " + t);
+            Toast.makeText(act, "打开文件选择器失败", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** 打开音频拼接 / 混合编辑页(需当前处于聊天窗口)。 */
+    public static void openAudioMixEditor(Context ctx) {
+        stopPanelPlayback();
+        String talker = getTalker(ctx);
+        if (talker == null || talker.isEmpty()) {
+            Toast.makeText(ctx, "无法获取当前聊天对象", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (popupWindow != null && popupWindow.isShowing()) {
+            try { popupWindow.dismiss(); } catch (Throwable ignored) {}
+        }
+        try {
+            com.leshao.v3.ui.AudioMixEditorPage.show(ctx, talker);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "openAudioMixEditor err: " + t);
+            Toast.makeText(ctx, "打开编辑页失败", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** v30018: 从音频转语音主页打开「在线音乐」页。 */
+    public static void openOnlineMusic(Context ctx) {
+        stopPanelPlayback();
+        if (popupWindow != null && popupWindow.isShowing()) {
+            try { popupWindow.dismiss(); } catch (Throwable ignored) {}
+        }
+        Activity act = getActivityFromContext(ctx);
+        if (act == null) act = MainHook.currentActivity();
+        if (act == null) {
+            Toast.makeText(ctx, "无法打开在线音乐", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            com.leshao.v3.ui.SubPageActivity.openStandalone(act, "在线音乐", 22);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "openOnlineMusic err: " + t);
+            Toast.makeText(ctx, "打开在线音乐失败", Toast.LENGTH_SHORT).show();
+        }
+    }
+}

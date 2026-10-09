@@ -1,0 +1,1603 @@
+package com.leshao.v3.hook;
+
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.graphics.drawable.Drawable;
+import android.os.Process;
+import android.view.MenuItem;
+import android.view.View;
+import android.widget.Toast;
+
+import androidx.recyclerview.widget.RecyclerView;
+
+import com.leshao.v3.ContextManager;
+import com.leshao.v3.LogWriter;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+import de.robv.android.xposed.XC_MethodHook;
+import de.robv.android.xposed.XC_MethodReplacement;
+import de.robv.android.xposed.XposedBridge;
+import de.robv.android.xposed.XposedHelpers;
+
+/**
+ * 语音消息转发 — WeChat 8.0.76 Adapter 发现模式 v5
+ * ==============================================
+ *
+ * 已排除: ChattingUIFragment/ChattingUI (无长按方法)
+ * 新策略: 动态发现 RecyclerView Adapter → hook 其方法
+ */
+public class VoiceForwardHook {
+
+    private static final String TAG = "VF";
+    // 0x7E 段位: 与微信内建 itemId(100~190) 完全隔离, 且便于 qi#t0 兜底守卫识别
+    private static final int MENU_ID = 0x7E000001;
+    // v3.0.186: 注入的「语音转发」按钮直接用微信原生转发 itemId(142)，
+    // 点击由微信 bq.Q(142) 原生拉起 MsgRetransmitUI（§12.1 已证不崩），方案B接管选人与模块发送。
+    private static final int MENU_ID_NATIVE_FORWARD = 142;
+    private static volatile boolean sHooked = false;
+    private static volatile boolean sMenuInjected = false;
+    private static volatile long sMenuInjectedTime = 0;
+    private static volatile boolean sEnabled = true;
+    // v3.0.184 修复：恢复注入自定义「语音转发」菜单项（0x7E000001），保证长按语音有转发按钮。
+    // 点击后走本模块 ContactPickerDialog + TtsVoiceSender 发送（executeForward）。
+    // 同时保留 WxForwardReplaceHook 注入的微信原生「转发」(142)（方案B：微信原生选人+模块发送）并行。
+    private static volatile boolean sUseNativeForward = false;
+    private static volatile Activity sChatAct;
+    private static volatile View sPendingView;
+    private static volatile Object sPendingMsg;
+    private static volatile String sPendingTalker;
+    private static final AtomicInteger sCallCount = new AtomicInteger(0);
+    private static final AtomicInteger sMenuBuildSeen = new AtomicInteger(0);
+    private static final int MAX_LOG = 30;
+
+    public static void setEnabled(boolean v) {
+        sEnabled = v;
+        LogWriter.log(TAG, "setEnabled=" + v + " actual=" + sEnabled);
+    }
+
+    private static volatile boolean sForwarding = false;
+    private static volatile String sFullHookedClass = null;
+    private static volatile String sVfsCreateMethod = null;
+
+    // 动态发现的 API (版本无关)
+    static volatile String sGClass = null;        // g(talker,prefix)→newName 所在类
+    static volatile String sGMethod = null;        // 静态方法名
+    static volatile String sTClass = null;         // t(name,dur,flag,e9)→bool 所在类
+    static volatile String sTMethod = null;        // 静态方法名
+    static volatile String sPathServiceClass = null; // Mj() 所在的 service 类
+    static volatile String sPathMethod = null;     // Mj(vfsType,name,flag)→path
+
+    public static void hook() {
+        if (sHooked) return;
+        ClassLoader cl = ContextManager.getClassLoader();
+        if (cl == null) { LogWriter.log(TAG, "cl not ready"); return; }
+
+        // 与设置页开关统一: HookConfig "voice_forward" (默认 true)
+        try { sEnabled = HookConfig.isEnabled("voice_forward"); } catch (Throwable ignored) {}
+        LogWriter.log(TAG, "voiceForward enabled=" + sEnabled);
+
+        // Defer voice API discovery until DexKit scan completes
+        com.leshao.v3.hook.DexKitHelper.addPostScanCallback(() -> {
+            TtsVoiceSender.discoverVoiceApi(cl);
+            sHooked = true;
+            LogWriter.log(TAG, "VoiceForwardHook post-scan init done");
+        });
+
+        // ChattingUI onResume/onPause: 仅记录当前聊天 Activity
+        hookChatActivity(cl);
+        // 注入按钮: 复用 MessageMenuHook 的 A5 锚点回调(同一真实 CL, 免二次扫描)
+        try {
+            MessageMenuHook.setBuildListener(new MessageMenuHook.BuildListener() {
+                @Override public void onMenuBuilt(Object menu, Object anchorView) {
+                    try { onVoiceMenuBuilt(menu, anchorView); } catch (Throwable ignored) {}
+                }
+            });
+        } catch (Throwable ignored) {}
+        // 点击拦截: 需在真实 CL 上 hook, 后台重试直到拿到
+        hookClickPipeline(cl);
+        hookForwardTracing(cl);
+    }
+
+    // ===== 聊天页 Activity =====
+    private static void hookChatActivity(ClassLoader cl) {
+        try {
+            Class<?> cui = cl.loadClass("com.tencent.mm.ui.chatting.ChattingUI");
+            XposedBridge.hookAllMethods(cui, "onResume", new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                                        sChatAct = (Activity) param.thisObject;
+                                        sCallCount.set(0);
+                                        sMenuInjected = false;
+                                        sMenuInjectedTime = 0;
+                                        sPendingMsg = null;
+                                        sPendingView = null;
+                    } catch (Throwable e) {
+                        LogWriter.log("VF", "cb err: " + e);
+                    }
+                }
+            });
+            XposedBridge.hookAllMethods(cui, "onPause", new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam param) {
+                    try {
+                                        if (sChatAct == param.thisObject) sChatAct = null;
+                    } catch (Throwable e) {
+                        LogWriter.log("VF", "cb err: " + e);
+                    }
+                }
+            });
+        } catch (Throwable ignored) {}
+    }
+
+    // ===== 点击拦截: 在真实 CL 上 hook（按钮注入走 MessageMenuHook 的 A5 回调） =====
+    private static void hookClickPipeline(final ClassLoader base) {
+        Thread t = new Thread(new Runnable() {
+            @Override public void run() {
+                for (int attempt = 0; attempt < 8; attempt++) {
+                    ClassLoader useCL = pickRealLoader(base, attempt);
+                    if (useCL != null) {
+                        try {
+                            if (installClickIntercept(useCL)) {
+                                LogWriter.log(TAG, "click pipeline installed attempt=" + attempt
+                                        + " cl=" + useCL.getClass().getSimpleName());
+                                return;
+                            }
+                        } catch (Throwable e) {
+                            LogWriter.log(TAG, "click install err: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+                        }
+                    }
+                    try { Thread.sleep(2000L); } catch (InterruptedException ignored) {}
+                }
+                LogWriter.log(TAG, "click pipeline give up");
+            }
+        }, "ls-vf-click");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** 取微信真实 CL（DelegateLastClassLoader/Tinker）；拿不到时退回普通 CL 兜底 */
+    private static ClassLoader pickRealLoader(ClassLoader base, int attempt) {
+        try {
+            ClassLoader tk = VersionCompat.findTinkerClassLoader(base);
+            if (isRealLoader(tk)) return tk;
+        } catch (Throwable ignored) {}
+        try {
+            ClassLoader cm = ContextManager.getTinkerClassLoader();
+            if (isRealLoader(cm)) return cm;
+        } catch (Throwable ignored) {}
+        if (attempt >= 2) {
+            ClassLoader cm = ContextManager.getClassLoader();
+            return cm != null ? cm : base;
+        }
+        return null;
+    }
+
+    private static boolean isRealLoader(ClassLoader cl) {
+        if (cl == null) return false;
+        String n = cl.getClass().getName();
+        return n.contains("DelegateLastClassLoader") || n.contains("Tinker")
+                || n.contains("IncrementalClassLoader");
+    }
+
+    private static String[] parseSig(String sig) {
+        if (sig == null) return null;
+        int lp = sig.indexOf('(');
+        if (lp <= 0) return null;
+        String head = sig.substring(0, lp);
+        int dot = head.lastIndexOf('.');
+        if (dot <= 0 || dot >= head.length() - 1) return null;
+        return new String[]{ head.substring(0, dot), head.substring(dot + 1) };
+    }
+
+    /** 菜单构建后: 仅语音消息且开关开启时注入, 幂等 */
+    private static void onVoiceMenuBuilt(Object menu, Object anchorObj) {
+        if (menu == null) return;
+        int seen = sMenuBuildSeen.incrementAndGet();
+        boolean dbg = seen <= 40;
+        if (dbg) LogWriter.log(TAG, "menuBuild#" + seen + " enabled=" + sEnabled
+                + " menu=" + menu.getClass().getName()
+                + " anchor=" + (anchorObj == null ? "null" : anchorObj.getClass().getName()));
+        if (!sEnabled) return;
+        // v3.0.182：语音转发走微信原生（先不走模块语音转发），不注入自定义「语音转发」项
+        if (sUseNativeForward) {
+            if (dbg) LogWriter.log(TAG, "menuBuild: voice forward uses native, skip module injection");
+            return;
+        }
+        if (!(anchorObj instanceof View)) { if (dbg) LogWriter.log(TAG, "menuBuild: anchor not View"); return; }
+        View anchor = (View) anchorObj;
+        Object tag = anchor.getTag();
+        if (dbg) LogWriter.log(TAG, "menuBuild: tag=" + (tag == null ? "null" : tag.getClass().getName()));
+        if (tag == null) return;
+        Object e9 = getE9(tag);
+        if (dbg) LogWriter.log(TAG, "menuBuild: e9=" + (e9 == null ? "null" : e9.getClass().getName())
+                + " type=" + msgTypeOf(e9));
+        if (e9 == null) return;
+        if (msgTypeOf(e9) != 34) return;   // 34 = 语音消息
+
+        try {
+            Object existing = XposedHelpers.callMethod(menu, "findItem", MENU_ID_NATIVE_FORWARD);
+            if (existing != null) return;  // 幂等: 微信原生转发项已存在（含 WxFwdReplace 注入的 142）
+        } catch (Throwable ignored) {}
+
+        int groupId = 0;
+        try {
+            Object v = XposedHelpers.callMethod(tag, "d");  // ItemDataTag.d() = adapter position
+            if (v instanceof Integer) groupId = (Integer) v;
+        } catch (Throwable ignored) {}
+
+        boolean ok = false;
+        try {
+            Object item = XposedHelpers.callMethod(menu, "add", groupId, MENU_ID_NATIVE_FORWARD, 0, "语音转发");
+            setMenuIcon(item);
+            ok = true;
+        } catch (Throwable t1) {
+            try {
+                XposedHelpers.callMethod(menu, "add", MENU_ID_NATIVE_FORWARD, "语音转发");
+                ok = true;
+            } catch (Throwable t2) {
+                LogWriter.log(TAG, "menu add fail: " + t2.getMessage());
+            }
+        }
+        if (!ok) return;
+
+        sPendingView = anchor;
+        sPendingMsg = tag;
+        sPendingTalker = extractTalker(e9);
+        // v3.0.123: 标记本轮菜单已注入，供 click intercept 状态守卫判断（配合 sPendingMsg 非空）
+        sMenuInjected = true;
+        sMenuInjectedTime = System.currentTimeMillis();
+        try {
+            if (anchor.getContext() instanceof Activity) sChatAct = (Activity) anchor.getContext();
+        } catch (Throwable ignored) {}
+        LogWriter.log(TAG, "menu injected 语音转发 id=142 group=" + groupId
+                + " talker=" + sPendingTalker + " msgId=" + extractMsgId(e9));
+        // v3.0.197: 菜单注入即标记方案B pending —— 日志铁证 onVoiceMenuBuilt 一定触发(menuBuild#1/#2)，
+        // 而 bq.Q(142)/launchNativeVoiceForward 均零回调。标记后 [FwdFix][B] 才有语音可发。
+        try { WxForwardReplaceHook.markVoiceForwardPending(e9); } catch (Throwable ignored) {}
+    }
+
+    private static int msgTypeOf(Object e9) {
+        if (e9 == null) return -1;
+        try {
+            Object t = XposedHelpers.callMethod(e9, "getType");
+            if (t instanceof Integer) return (Integer) t;
+        } catch (Throwable ignored) {}
+        try {
+            Object t = XposedHelpers.getObjectField(e9, "field_type");
+            if (t instanceof Integer) return (Integer) t;
+        } catch (Throwable ignored) {}
+        return -1;
+    }
+
+    // ===== 点击拦截: 在微信处理前吃掉本模块 itemId =====
+    private static boolean installClickIntercept(final ClassLoader cl) {
+        boolean any = false;
+        // A8: r0#onMMMenuItemSelected —— "context item select failed, null dataTag"
+        if (hookClickMethod(cl, "context item select failed, null dataTag", true)) any = true;
+        // A9: qi#t0 —— "context item select failed, null msg" (兜底守卫)
+        if (hookClickMethod(cl, "context item select failed, null msg", false)) any = true;
+        return any;
+    }
+
+    private static boolean hookClickMethod(ClassLoader cl, String anchor, final boolean shortCircuitByField) {
+        boolean any = false;
+        try {
+            List<String> sigs = DexKitHelper.findMethodsByString(cl, null, anchor);
+            if (sigs == null || sigs.isEmpty()) return false;
+            for (String sig : sigs) {
+                String[] parsed = parseSig(sig);
+                if (parsed == null) continue;
+                Class<?> cls;
+                try { cls = Class.forName(parsed[0], false, cl); } catch (Throwable e) { continue; }
+                for (Method m : cls.getDeclaredMethods()) {
+                    if (!m.getName().equals(parsed[1])) continue;
+                    Class<?>[] pts = m.getParameterTypes();
+                    if (pts.length < 1 || !MenuItem.class.isAssignableFrom(pts[0])) continue;
+                    if (Modifier.isStatic(m.getModifiers())) continue;
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override protected void beforeHookedMethod(MethodHookParam p) {
+                            try {
+                                MenuItem mi = (MenuItem) p.args[0];
+                                if (mi == null || mi.getItemId() != MENU_ID) return;
+                                // v3.0.123: 状态守卫 —— 只有本轮菜单确实注入过、且待转发消息有效时才执行转发；
+                                // 否则仅吞掉点击，避免菜单项状态残留/消息失效导致"闪返回"或误转发。
+                                if (!sMenuInjected || sPendingMsg == null) {
+                                    p.setResult(null);
+                                    return;
+                                }
+                                if (shortCircuitByField) {
+                                    Field f = null;
+                                    if (sPendingMsg != null) f = findTagField(p.thisObject.getClass(), sPendingMsg.getClass());
+                                    if (f == null) f = findFieldDeep(p.thisObject.getClass(), "d");
+                                    if (f != null) { try { f.setAccessible(true); f.set(p.thisObject, null); } catch (Throwable ignored) {} }
+                                    // v3.0.185：点击「语音转发」→ 微信原生选人 + 模块发送（§19 方案B）
+                                    boolean launched = false;
+                                    try {
+                                        Object e9 = getE9(sPendingMsg);
+                                        Context ctx = sChatAct != null ? sChatAct
+                                                : (sPendingView != null ? sPendingView.getContext() : null);
+                                        if (e9 != null && ctx != null) {
+                                            launched = WxForwardReplaceHook.launchNativeVoiceForward(ctx, e9);
+                                        }
+                                    } catch (Throwable te) {
+                                        LogWriter.log(TAG, "native voice launch err: " + te.getMessage());
+                                    }
+                                    if (!launched) executeForward();   // 原生路径失败 → 回退模块选择器
+                                }
+                                p.setResult(null);
+                            } catch (Throwable e) {
+                                LogWriter.log(TAG, "click intercept err: " + e.getMessage());
+                            }
+                        }
+                    });
+                    any = true;
+                    LogWriter.log(TAG, "click intercept hooked " + parsed[0] + "." + parsed[1]
+                            + "(shortCircuit=" + shortCircuitByField + ")");
+                }
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "hookClickMethod err: " + t.getMessage());
+        }
+        return any;
+    }
+
+    private static Field findFieldDeep(Class<?> c, String name) {
+        while (c != null) {
+            try { return c.getDeclaredField(name); } catch (Throwable ignored) {}
+            c = c.getSuperclass();
+        }
+        return null;
+    }
+
+    /** 按字段类型匹配 ItemDataTag 字段(不依赖混淆名 "d") */
+    private static Field findTagField(Class<?> c, Class<?> tagType) {
+        while (c != null) {
+            for (Field f : c.getDeclaredFields()) {
+                if (Modifier.isStatic(f.getModifiers())) continue;
+                if (f.getType().isAssignableFrom(tagType)) return f;
+            }
+            c = c.getSuperclass();
+        }
+        return null;
+    }
+
+    private static final AtomicInteger sMenuAddBatch = new AtomicInteger(0);
+    private static volatile long sMenuAddLastTime = 0;
+
+    private static void hookMenuBuilder(ClassLoader cl) {
+        try {
+            Class<?> menuBuilder = cl.loadClass("com.android.internal.view.menu.MenuBuilder");
+            for (Method m : menuBuilder.getDeclaredMethods()) {
+                if (!m.getName().equals("add")) continue;
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length >= 3 && pts[pts.length - 1] == CharSequence.class) {
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override protected void afterHookedMethod(MethodHookParam param) {
+                            try {
+                                                        long now = System.currentTimeMillis();
+                                                        long gap = now - sMenuAddLastTime;
+                                                        if (gap > 2000) sMenuAddBatch.set(0);
+                                                        sMenuAddLastTime = now;
+                                                        int n = sMenuAddBatch.incrementAndGet();
+                                                        if (n > 15) return;
+                                                        LogWriter.log(TAG, "MenuBuilder.add #" + n + " id=" + param.args[1] + " title=" + param.args[pts.length - 1] + " gap=" + gap + "ms");
+                                                        if (n == 1 && gap > 500) {
+                                                            sPendingMsg = null;
+                                                            sPendingView = null;
+                                                        }
+                                                        if (n > 2 && n <= 12 && !sMenuInjected) {
+                                                            for (Object arg : param.args) {
+                                                                if (arg instanceof CharSequence && arg.toString().contains("文字")) {
+                                                                    sMenuInjected = true;
+                                                                    sMenuInjectedTime = now;
+                                                                    injectIntoMenuBuilder(param.thisObject);
+                                                                    return;
+                                                                }
+                                                            }
+                                                        }
+                            } catch (Throwable e) {
+                                LogWriter.log("VF", "cb err: " + e);
+                            }
+                        }
+                    });
+                }
+            }
+            LogWriter.log(TAG, "MenuBuilder.add hooked");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "MenuBuilder hook fail: " + t.getMessage());
+        }
+    }
+
+    private static void injectIntoMenuBuilder(Object menu) {
+        try {
+            Method add = menu.getClass().getMethod("add", int.class, int.class, int.class, CharSequence.class);
+            Object item = add.invoke(menu, 0, MENU_ID, 0, "语音转发");
+            setMenuIcon(item);
+            LogWriter.log(TAG, "injected 语音转发 into MenuBuilder");
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "MenuBuilder inject fail: " + t.getMessage());
+        }
+    }
+
+    /** 给菜单项设置"语音转发"图标 */
+    private static void setMenuIcon(Object menuItem) {
+        try {
+            android.graphics.drawable.Drawable d = com.leshao.v3.IconLoader.load(
+                    com.leshao.v3.ContextManager.getAppContext(),
+                    com.leshao.v3.IconLoader.IC_VOICE_FORWARD, 20);
+            if (d == null) return;
+            try {
+                menuItem.getClass().getMethod("setIcon", android.graphics.drawable.Drawable.class)
+                        .invoke(menuItem, d);
+            } catch (Throwable ignored) {}
+        } catch (Throwable ignored) {}
+    }
+
+    private static void hookAllClassesInPackages(ClassLoader cl, String[] pkgs) {
+        new Thread(() -> {
+            try {
+                String apkPath = ContextManager.getApkPath();
+                if (apkPath == null) { LogWriter.log(TAG, "APK path null"); return; }
+
+                dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+                try {
+                java.util.Enumeration<String> entries = dex.entries();
+                int clsCount = 0, hookedCount = 0;
+
+                while (entries.hasMoreElements()) {
+                    String className = entries.nextElement();
+                    boolean match = false;
+                    for (String pkg : pkgs) {
+                        if (className.startsWith(pkg + ".") || className.equals(pkg + ".a") || className.equals(pkg)) {
+                            match = true; break;
+                        }
+                    }
+                    if (!match) continue;
+
+                    try {
+                        Class<?> cls = cl.loadClass(className);
+                        int n = hookAllMethodsOnClass(cls, cls.getSimpleName());
+                        clsCount++;
+                        hookedCount += n;
+                        for (Class<?> inner : cls.getDeclaredClasses()) {
+                            int ni = hookAllMethodsOnClass(inner, cls.getSimpleName() + "$" + inner.getSimpleName());
+                            hookedCount += ni;
+                        }
+                    } catch (Throwable ignored) {}
+                }
+                LogWriter.log(TAG, "scan " + java.util.Arrays.toString(pkgs) + ": " + clsCount + " classes, " + hookedCount + " methods");
+                } finally {
+                    dex.close();
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "scan error: " + t.getMessage());
+            }
+        }, "leshao-vf-dex-scan").start();
+    }
+
+    // 对指定 simpleName 的类做全方法 hook（找 click handler）
+    private static void hookAllMethodsNoFilterOnLabel(String simpleName) {
+        ClassLoader cl = ContextManager.getClassLoader();
+        if (cl == null) return;
+        try {
+            String apkPath = ContextManager.getApkPath();
+            if (apkPath == null) return;
+            dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+            try {
+            java.util.Enumeration<String> entries = dex.entries();
+            while (entries.hasMoreElements()) {
+                String cn = entries.nextElement();
+                if (!cn.endsWith("." + simpleName)) continue;
+                if (!cn.startsWith("com.tencent.mm.ui.chatting.viewitems.")
+                    && !cn.startsWith("com.tencent.mm.ui.chatting.component.")) continue;
+                try {
+                    Class<?> cls = cl.loadClass(cn);
+                    int n = hookAllMethodsOnClass(cls, simpleName, true);
+                    LogWriter.log(TAG, "FULL-hook " + simpleName + ": " + n + " methods");
+                    for (Class<?> inner : cls.getDeclaredClasses()) {
+                        n += hookAllMethodsOnClass(inner, simpleName + "$" + inner.getSimpleName(), true);
+                    }
+                } catch (Throwable ignored) {}
+                break;
+            }
+            } finally {
+                dex.close();
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "FULL-hook error: " + t.getMessage());
+        }
+    }
+
+    private static int hookAllMethodsOnClass(Class<?> cls, String label) {
+        return hookAllMethodsOnClass(cls, label, false);
+    }
+
+    private static int hookAllMethodsOnClass(Class<?> cls, String label, boolean noFilter) {
+        int count = 0;
+        for (Method m : cls.getDeclaredMethods()) {
+            // 性能优化: 只 hook 参数签名为 (View,XXX) 或 (XXX,View) 或 (MenuItem,XXX) 的方法
+            if (!noFilter) {
+                Class<?>[] pts = m.getParameterTypes();
+                if (pts.length < 1) continue;
+                boolean hasTarget = false;
+                for (Class<?> pt : pts) {
+                    if (View.class.isAssignableFrom(pt) || MenuItem.class.isAssignableFrom(pt)) { hasTarget = true; break; }
+                }
+                if (!hasTarget) continue;
+            }
+
+            final String mName = m.getName();
+            count++;
+            XposedBridge.hookMethod(m, new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam param) {
+                    int n = sCallCount.incrementAndGet();
+                    if (n <= 30) {
+                        boolean hadTag = false;
+                        StringBuilder sb = new StringBuilder();
+                        sb.append(label).append(".").append(mName).append("(");
+                        for (int i = 0; i < Math.min(param.args.length, 4); i++) {
+                            if (i > 0) sb.append(",");
+                            Object a = param.args[i];
+                            if (a instanceof View) {
+                                Object tag = ((View) a).getTag();
+                                if (tag != null) hadTag = true;
+                                sb.append("V:").append(a.getClass().getSimpleName());
+                                sb.append(tag != null ? ":T=" + tag.getClass().getSimpleName() : "");
+                            } else if (a instanceof MenuItem) {
+                                sb.append("MI:").append(((MenuItem) a).getItemId());
+                            } else {
+                                sb.append(a == null ? "null" : a.getClass().getSimpleName());
+                            }
+                        }
+                        sb.append(")");
+                        if (hadTag) sb.insert(0, "★");
+                        LogWriter.log(TAG, sb.toString());
+                    }
+
+                    // ===== MenuItem click 检测 (仅 Click/Selected 方法，冷却后生效) =====
+                    long elapsed = System.currentTimeMillis() - sMenuInjectedTime;
+                    boolean isClickMethod = mName.contains("Selected") || mName.contains("Click") || mName.contains("MenuItem");
+                    for (Object arg : param.args) {
+                        if (arg instanceof MenuItem && ((MenuItem) arg).getItemId() == MENU_ID) {
+                            LogWriter.log(TAG, ">>> MENU_ID found in " + label + "." + mName + " elapsed=" + elapsed + "ms <<<");
+                            if (isClickMethod && sMenuInjected && elapsed > 500) {
+                                LogWriter.log(TAG, ">>> COOLDOWN PASSED — executeForward! <<<");
+                                sMenuInjected = false;
+                                executeForward();
+                                try { param.setResult(true); } catch (Throwable ignored) {}
+                                return;
+                            }
+                        }
+                    }
+
+                    // 时间冷却防重复注入, 冷却后可重新注入
+                    long sinceInj = System.currentTimeMillis() - sMenuInjectedTime;
+                    if (sinceInj < 500 && sinceInj > 0) return;
+                    View itemView = null;
+                    for (Object arg : param.args) {
+                        if (arg instanceof View) { itemView = (View) arg; break; }
+                    }
+                    if (itemView == null) return;
+
+                    // 有 View 了，找菜单对象
+                    Object menuObj = null;
+                    for (Object arg : param.args) {
+                        if (arg == itemView) continue;
+                        if (arg == null) continue;
+                        // 尝试调用 addMenuItem
+                        try {
+                            arg.getClass().getMethod("addMenuItem", int.class, CharSequence.class);
+                            menuObj = arg;
+                            break;
+                        } catch (Throwable ignored) {}
+                        // 尝试调用 add
+                        try {
+                            arg.getClass().getMethod("add", int.class, int.class, int.class, CharSequence.class);
+                            menuObj = arg;
+                            break;
+                        } catch (Throwable ignored) {}
+                    }
+
+                    if (menuObj == null) return;
+
+                    // 存储消息数据: 优先 View.tag (vo), 其次 args[2] (d)
+                    Object tagData = itemView.getTag();
+                    Object msgData = null;
+                    for (int i = 0; i < param.args.length; i++) {
+                        Object a = param.args[i];
+                        if (a != menuObj && a != itemView && a != null && !(a instanceof View)) {
+                            msgData = a;
+                            break;
+                        }
+                    }
+                    // vo tag 有更丰富层次结构，优先存
+                    sPendingMsg = (tagData != null) ? tagData : msgData;
+                    sPendingView = itemView;
+
+                    if (sPendingMsg != null) {
+                        long mid = extractMsgId(sPendingMsg);
+                        String tlk = extractTalker(sPendingMsg);
+                        LogWriter.log(TAG, "=== FOUND [" + label + "." + mName + "] msgId=" + mid + " talker=" + tlk + " msg=" + sPendingMsg.getClass().getSimpleName() + " ===");
+                        LogWriter.log(TAG, "  sPendingMsg: " + dumpObjFields(sPendingMsg));
+                        // 尝试调用 getter 方法
+                        for (String mn : new String[]{"getMsgInfo","getMsg","a","b","c","d","e","f","getTag","getData"}) {
+                            try {
+                                Object r = XposedHelpers.callMethod(sPendingMsg, mn);
+                                if (r != null && r.getClass().getName().contains("storage")) {
+                                    LogWriter.log(TAG, "  ★ " + mn + "() → " + r.getClass().getName());
+                                    long rmid = extractMsgId(r);
+                                    LogWriter.log(TAG, "  ★ " + mn + " msgId=" + rmid);
+                                }
+                            } catch (Throwable ignored) {}
+                        }
+                    } else {
+                        LogWriter.log(TAG, "=== FOUND [" + label + "." + mName + "] ===");
+                    }
+
+                    // dump 所有参数
+                    StringBuilder argsb = new StringBuilder("  args: ");
+                    for (int i = 0; i < param.args.length; i++) {
+                        Object a = param.args[i];
+                        argsb.append("[").append(i).append("]=");
+                        argsb.append(a == null ? "null" : a.getClass().getSimpleName());
+                        if (a instanceof View) {
+                            Object vt = ((View) a).getTag();
+                            if (vt != null) argsb.append(":T=").append(vt.getClass().getSimpleName());
+                        }
+                        argsb.append(" ");
+                    }
+                    LogWriter.log(TAG, argsb.toString());
+
+                    // dump parent chain tags with field values
+                    View p = (View) itemView.getParent();
+                    for (int pi = 0; p != null && pi < 5; pi++) {
+                        Object pt = p.getTag();
+                        if (pt != null) {
+                            StringBuilder sb = new StringBuilder("  parent[").append(pi).append("]=")
+                                .append(p.getClass().getSimpleName()).append(" tag=").append(pt.getClass().getName())
+                                .append(" {");
+                            for (Field f : pt.getClass().getDeclaredFields()) {
+                                try {
+                                    f.setAccessible(true);
+                                    Object v = f.get(pt);
+                                    sb.append(f.getName()).append("=");
+                                    if (v instanceof Number || v instanceof String || v instanceof Boolean) {
+                                        sb.append(v);
+                                    } else if (v != null) {
+                                        sb.append(v.getClass().getSimpleName());
+                                    } else {
+                                        sb.append("null");
+                                    }
+                                    sb.append(" ");
+                                } catch (Throwable ignored) {}
+                            }
+                            sb.append("}");
+                            LogWriter.log(TAG, sb.toString());
+                        }
+                        if (p.getParent() instanceof View) p = (View) p.getParent(); else break;
+                    }
+
+                    sPendingView = itemView;
+                    sMenuInjected = true;
+                    sMenuInjectedTime = System.currentTimeMillis();
+                    injectForwardMenuItem(menuObj, itemView);
+                }
+            });
+        }
+        return count;
+    }
+
+    private static void injectForwardMenuItem(Object menuObj, View itemView) {
+        try {
+            // WeKit 文档: addMenuItem(int, CharSequence, Drawable)
+            Object tag = itemView.getTag();
+            LogWriter.log(TAG, "View.tag: " + (tag == null ? "null" : tag.getClass().getName()));
+
+            // 尝试多种菜单添加方式
+            boolean ok = false;
+
+            // 方式1: addMenuItem(int, CharSequence) 
+            try {
+                Method addItem = menuObj.getClass().getMethod("addMenuItem", int.class, CharSequence.class);
+                Object item = addItem.invoke(menuObj, MENU_ID, "语音转发");
+                if (item instanceof MenuItem) setMenuIcon(item);
+                LogWriter.log(TAG, "added via addMenuItem(int,CharSequence)");
+                ok = true;
+            } catch (Throwable ignored) {}
+
+            // 方式2: addMenuItem(int, CharSequence, Drawable)
+            if (!ok) {
+                try {
+                    Method addItem = menuObj.getClass().getMethod("addMenuItem", int.class, CharSequence.class, Drawable.class);
+                    Object item = addItem.invoke(menuObj, MENU_ID, "语音转发",
+                            com.leshao.v3.IconLoader.load(itemView.getContext(),
+                                    com.leshao.v3.IconLoader.IC_VOICE_FORWARD, 20));
+                    LogWriter.log(TAG, "added via addMenuItem(int,CharSequence,Drawable)");
+                    ok = true;
+                } catch (Throwable ignored) {}
+            }
+
+            // 方式3: add(int, int, int, CharSequence) — ContextMenu 标准方法
+            if (!ok) {
+                try {
+                    Method add = menuObj.getClass().getMethod("add", int.class, int.class, int.class, CharSequence.class);
+                    Object item = add.invoke(menuObj, 0, MENU_ID, 0, "语音转发");
+                    if (item instanceof MenuItem) setMenuIcon(item);
+                    LogWriter.log(TAG, "added via add(int,int,int,CharSequence)");
+                    ok = true;
+                } catch (Throwable ignored) {}
+            }
+
+            // 方式4: add(int, int, int, int) 
+            if (!ok) {
+                try {
+                    Method add = menuObj.getClass().getMethod("add", int.class, int.class, int.class, int.class);
+                    add.invoke(menuObj, 0, MENU_ID, 0, 0);
+                    LogWriter.log(TAG, "added via add(int,int,int,int)");
+                    ok = true;
+                } catch (Throwable ignored) {}
+            }
+
+            if (!ok) {
+                LogWriter.log(TAG, "ALL addMenuItem methods failed on " + menuObj.getClass().getName());
+                StringBuilder sb = new StringBuilder("methods: ");
+                for (Method m : menuObj.getClass().getMethods()) {
+                    if (m.getName().toLowerCase().contains("add")) {
+                        sb.append(m.getName()).append("(");
+                        Class<?>[] pts = m.getParameterTypes();
+                        for (int i = 0; i < pts.length; i++) {
+                            if (i > 0) sb.append(",");
+                            sb.append(pts[i].getSimpleName());
+                        }
+                        sb.append(") ");
+                    }
+                }
+                LogWriter.log(TAG, sb.toString());
+            }
+
+            // 待后续: 注册 menu item click handler
+            // 需要 hook ContextMenu/Activity.onContextItemSelected 等
+
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "injectMenu error: " + t.getMessage());
+        }
+    }
+
+
+
+    // ===== 转发执行 — 使用自己的联系人选择器 ====
+    private static void executeForward() {
+        if (!sEnabled || sForwarding) return;
+        sForwarding = true;
+        try {
+            final Object msg = sPendingMsg;
+            final View view = sPendingView;
+            if (msg == null) { showToast("请先长按一条语音消息"); return; }
+
+            // 尝试从 vo/d/hq/父类提取 msgId
+            long msgId = extractMsgId(msg);
+            String talker = extractTalker(msg);
+
+            // 方法2: 通过 RecyclerView ViewHolder 获取 adapter position
+            if (msgId <= 0 && view != null) {
+                try {
+                    // 从 view 向上找 RecyclerView
+                    View p = view;
+                    while (p != null && !(p instanceof RecyclerView)) {
+                        if (p.getParent() instanceof View) p = (View) p.getParent();
+                        else break;
+                    }
+                    if (p instanceof RecyclerView) {
+                        RecyclerView rv = (RecyclerView) p;
+                        RecyclerView.ViewHolder vh = rv.findContainingViewHolder(view);
+                        if (vh != null) {
+                            int pos = vh.getAdapterPosition();
+                            LogWriter.log(TAG, "forward: ViewHolder pos=" + pos);
+                            RecyclerView.Adapter<?> adapter = rv.getAdapter();
+                            if (adapter != null) {
+                                LogWriter.log(TAG, "forward: adapter=" + adapter.getClass().getName());
+                                // 尝试通过 adapter 获取消息
+                                try {
+                                    Object adapterMsg = XposedHelpers.callMethod(adapter, "getItem", pos);
+                                    if (adapterMsg != null) {
+                                        LogWriter.log(TAG, "forward: adapter getItem=" + adapterMsg.getClass().getName());
+                                        msgId = extractMsgId(adapterMsg);
+                                        if (talker.isEmpty()) talker = extractTalker(adapterMsg);
+                                    }
+                                } catch (Throwable ignored) {}
+                            }
+                        }
+                    }
+                } catch (Throwable t) {
+                    LogWriter.log(TAG, "forward: adapter error: " + t.getMessage());
+                }
+            }
+
+            // 方法3: 通过 msg 的 getter 方法获取消息对象
+            if (msgId <= 0) {
+                for (String mn : new String[]{"a","b","c","d","e","f","getMsgInfo","getMsg","getData"}) {
+                    try {
+                        Object inner = XposedHelpers.callMethod(msg, mn);
+                        if (inner != null) {
+                            long id = extractMsgId(inner);
+                            if (id > 0) {
+                                msgId = id;
+                                if (talker.isEmpty()) talker = extractTalker(inner);
+                                LogWriter.log(TAG, "forward: msgId=" + msgId + " via " + mn + "() → " + inner.getClass().getSimpleName());
+                                break;
+                            }
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            }
+
+            LogWriter.log(TAG, "forward: msgId=" + msgId + " talker=" + talker + " msg=" + msg.getClass().getSimpleName());
+
+            // 从 view 获取 Activity
+            Activity act = sChatAct;
+            if (act == null && view != null) {
+                Context ctx = view.getContext();
+                if (ctx instanceof Activity) act = (Activity) ctx;
+                else try { act = (Activity) XposedHelpers.callMethod(ctx, "getActivity"); } catch (Throwable ignored) {}
+                if (act == null) {
+                    Class<?> launcherClass = VersionCompat.findLauncherUIClass(ContextManager.getClassLoader());
+                    if (launcherClass != null) act = (Activity) XposedHelpers.callStaticMethod(launcherClass, "getInstance");
+                }
+            }
+            if (act == null) { showToast("无法获取Activity"); return; }
+            LogWriter.log(TAG, "forward: act=" + act.getClass().getSimpleName());
+
+            // 用我们自己的 ContactPickerDialog
+            final Activity fwdAct = act;
+            final Object fwdMsg = (sPendingMsg != null) ? sPendingMsg : msg;
+            com.leshao.v3.ui.ContactPickerDialog.show(act, "", 
+                com.leshao.v3.ui.ContactPickerDialog.MODE_GROUP,
+                new com.leshao.v3.ui.ContactPickerDialog.OnContactsSelected() {
+                    @Override
+                    public void onSelected(Set<String> wxids, String display) {
+                        LogWriter.log(TAG, "forward: selected=" + wxids + " display=" + display);
+                        int done = 0;
+                        for (String wxid : wxids) {
+                            if (doForwardVoice(fwdAct, fwdMsg, wxid)) done++;
+                        }
+                        showToast("已转发到 " + done + " 个目标");
+                    }
+                });
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "forward error: " + t.getMessage());
+            showToast("转发失败: " + t.getMessage());
+        } finally {
+            sForwarding = false;
+            sMenuInjected = false;
+        }
+    }
+
+        // ===== 转发替换入口：把 e9 语音消息转发到指定目标 =====
+    public static boolean forwardVoiceToTarget(String targetWxid, Object msgObj) {
+        return doForwardVoice(null, msgObj, targetWxid);
+    }
+
+    // ===== 实际转发语音 (tl.p0 SceneVoice Recorder 方案) =====
+    private static boolean doForwardVoice(Activity act, Object msgObj, String targetWxid) {        try {
+            Object e9 = getE9(msgObj);
+            if (e9 == null) { LogWriter.log(TAG, "doForward: cannot get e9"); return false; }
+
+            ClassLoader cl = ContextManager.getClassLoader();
+            long msgId = extractMsgId(e9);
+            String xml = null;
+            try { xml = (String) XposedHelpers.callMethod(e9, "I0"); } catch (Throwable ignored) {}
+
+            LogWriter.log(TAG, "doForward: msgId=" + msgId + " → " + targetWxid);
+            try {
+                String live = com.leshao.v3.ChatFooterLongPressMenu.resolveLiveTalker();
+                LogWriter.log(TAG, "doForward: targetTalker=" + targetWxid + " liveTalker=" + live
+                        + (live != null && !live.equals(targetWxid) ? "  [MISMATCH live!=target]" : ""));
+            } catch (Throwable ignored) {}
+
+            // 1. 找语音文件
+            String voiceFile = findVoiceFile(e9);
+            if (voiceFile == null) {
+                LogWriter.log(TAG, "doForward: cannot find any voice file");
+                return false;
+            }
+            LogWriter.log(TAG, "doForward: voiceFile=" + voiceFile);
+
+            // 2. 解析时长
+            int duration = parseVoiceDuration(xml);
+            LogWriter.log(TAG, "doForward: duration=" + duration + "ms");
+
+            // 3. 使用 tl.p0 SceneVoice Recorder 发送
+            boolean sent = sendViaSceneVoice(act, cl, targetWxid, voiceFile, duration, e9);
+            LogWriter.log(TAG, "doForward: sent=" + sent);
+            return sent;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "doForward error: " + t.getMessage());
+            return false;
+        }
+    }
+
+    private static Object getE9(Object msgObj) {
+        if (msgObj == null) return null;
+        if (msgObj.getClass().getName().contains("storage")) return msgObj;
+        try { return XposedHelpers.callMethod(msgObj, "c"); } catch (Throwable ignored) {}
+        for (String mn : new String[]{"getMsgInfo","getMsg","a","b","d"}) {
+            try {
+                Object r = XposedHelpers.callMethod(msgObj, mn);
+                if (r != null && r.getClass().getName().contains("storage")) return r;
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    private static String findVoiceFile(Object e9) {
+        // 8.0.78(3180): e9.y0()(clientmsgid) 已删除。
+        // 兜底顺序: j()=field_content(冒号前缀=clientmsgid) → I0()=XML clientmsgid → x0()=field_imgPath(文件名)
+        ClassLoader cl = ContextManager.getClassLoader();
+
+        String cid = extractClientMsgId(e9);
+        if (cid == null || cid.isEmpty()) {
+            LogWriter.log(TAG, "voice: no clientmsgid");
+            return null;
+        }
+        LogWriter.log(TAG, "voice: cid=" + cid);
+
+        // 优先用 MD5 路径直接定位 (账号目录哈希必须用真实目录名, 非 md5(uin))
+        // v1134: 微信 voice2 的账号目录名是 md5(imei+uin)(即 DB 哈希), 不是 md5(uin),
+        // 旧逻辑恒不命中 → 每次都退化为全盘递归搜索(慢且可能跨账号选错文件)。
+        String uinHash = getAccountDirHash(cl);
+        if (uinHash == null) uinHash = getUinHash(cl);
+        if (uinHash != null) {
+            String[] roots = buildVoice2Roots(uinHash);
+            String md5 = md5(cid);
+            String path = md5.substring(0, 2) + "/" + md5.substring(2, 4) + "/msg_" + cid + ".amr";
+            for (String v2 : roots) {
+                java.io.File f = new java.io.File(v2, path);
+                if (f.exists()) { LogWriter.log(TAG, "voice: " + f.getAbsolutePath() + " EXISTS"); return f.getAbsolutePath(); }
+            }
+            LogWriter.log(TAG, "voice: md5 path not found, falling back to search");
+        } else {
+            LogWriter.log(TAG, "voice: no uinHash, searching recursively");
+        }
+
+        // fallback: 递归搜索 voice2 下精准匹配 msg_{cid}.amr
+        return searchVoice2Dir(cid);
+    }
+
+    private static String md5(String s) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+            byte[] d = md.digest(s.getBytes());
+            StringBuilder sb = new StringBuilder();
+            for (byte b : d) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Throwable t) { return ""; }
+    }
+
+    /** 8.0.78(3180): e9.y0()(clientmsgid) 已删除。
+     *  可靠取值: x0()=field_imgPath(语音文件名) → I0()=XML clientmsgid → j()=field_content(过滤非 cid 形态)。
+     *  j() 的冒号前缀在部分消息上取到的是发送者 wxid(talker) 而非 clientmsgid，故放到最后并过滤。 */
+    static String extractClientMsgId(Object e9) {
+        if (e9 == null) return null;
+        // 1) e9.x0() field_imgPath: 语音文件名 msg_<cid>.amr / <cid>.amr / <cid> (最可靠)
+        try {
+            String imgPath = (String) XposedHelpers.callMethod(e9, "x0");
+            if (imgPath != null && !imgPath.isEmpty()) {
+                String name = imgPath;
+                int slash = name.lastIndexOf('/');
+                if (slash >= 0) name = name.substring(slash + 1);
+                if (name.startsWith("msg_")) name = name.substring(4);
+                if (name.endsWith(".amr")) name = name.substring(0, name.length() - 4);
+                if (!name.isEmpty() && isPlausibleCid(name)) return name;
+            }
+        } catch (Throwable ignored) {}
+        // 2) e9.I0() XML 内 clientmsgid 属性
+        try {
+            String xml = (String) XposedHelpers.callMethod(e9, "I0");
+            if (xml != null) {
+                String cid = extractXmlAttr(xml, "clientmsgid");
+                if (cid != null && !cid.isEmpty() && isPlausibleCid(cid)) return cid;
+            }
+        } catch (Throwable ignored) {}
+        // 3) e9.j() field_content: "clientmsgid:时长:..." 冒号前缀 (最后兜底)
+        try {
+            String content = (String) XposedHelpers.callMethod(e9, "j");
+            if (content != null && !content.isEmpty()) {
+                int colon = content.indexOf(':');
+                if (colon > 0) {
+                    String cid = content.substring(0, colon).trim();
+                    if (!cid.isEmpty() && isPlausibleCid(cid)) return cid;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    /** 过滤明显非 clientmsgid 的值: wxid/talker/群号/含 @ 等均丢弃 */
+    private static boolean isPlausibleCid(String cid) {
+        if (cid == null || cid.isEmpty()) return false;
+        if (cid.contains("@")) return false;
+        if (cid.startsWith("wxid_")) return false;
+        if (cid.contains("/") || cid.contains("\\")) return false;
+        if (cid.contains(" ")) return false;
+        return true;
+    }
+
+    private static String extractXmlAttr(String xml, String attr) {
+        for (String q : new String[]{"\"", "'"}) {
+            String pattern = attr + "=" + q;
+            int idx = xml.indexOf(pattern);
+            if (idx >= 0) {
+                idx += pattern.length();
+                int end = xml.indexOf(q, idx);
+                if (end > idx) return xml.substring(idx, end);
+            }
+        }
+        return null;
+    }
+
+    /** v1134: 从磁盘定位当前微信用户的真实账号目录名 (含 EnMicroMsg.db 的目录, 取最新修改的)。
+     *  多开(clone)下必须用 Process.myUid() 对应的 user 目录, 避免误取主微信账号。 */
+    private static String getAccountDirHash(ClassLoader cl) {
+        try {
+            int currentUser = Process.myUid() / 100000;
+            java.io.File md = new java.io.File("/data/user/" + currentUser + "/com.tencent.mm/MicroMsg");
+            java.io.File[] dirs = md.listFiles();
+            if (dirs != null) {
+                java.io.File best = null;
+                long bestM = -1L;
+                for (java.io.File d : dirs) {
+                    if (!d.isDirectory()) continue;
+                    java.io.File db = new java.io.File(d, "EnMicroMsg.db");
+                    if (db.exists() && db.lastModified() > bestM) {
+                        bestM = db.lastModified();
+                        best = d;
+                    }
+                }
+                if (best != null) {
+                    LogWriter.log(TAG, "account hash from disk: " + best.getName());
+                    return best.getName();
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private static String getUinHash(ClassLoader cl) {
+        try {
+            // v955: kernel.g/h 在 3180 已并入 gp0.j1(服务定位器); 旧候选保留, 新增 3180 路径
+            for (String clsName : new String[]{
+                "com.tencent.mm.kernel.h",
+                "com.tencent.mm.kernel.g",
+                "gp0.j1",
+                "com.tencent.mm.sdk.platformtools.x"
+            }) {
+                try {
+                    Object acc = null;
+                    Class<?> kc = XposedHelpers.findClass(clsName, cl);
+                    // kernel.g/h: c() 取 account; gp0.j1: b() 取 kernel(再取 account)
+                    for (String mn : new String[]{"c", "b"}) {
+                        try {
+                            Object r = XposedHelpers.callStaticMethod(kc, mn);
+                            if (r != null) {
+                                if (mn.equals("b")) {
+                                    // gp0.j1.b() → kernel 对象, 再试其 c()/account
+                                    try { acc = XposedHelpers.callMethod(r, "c"); } catch (Throwable ignored) {}
+                                    if (acc == null) acc = r;
+                                } else {
+                                    acc = r;
+                                }
+                                if (acc != null) break;
+                            }
+                        } catch (Throwable ignored) {}
+                    }
+                    if (acc != null) {
+                        long uin = 0;
+                        try { uin = XposedHelpers.getIntField(acc, "e"); } catch (Throwable ignored) {}
+                        if (uin <= 0) try { uin = XposedHelpers.getLongField(acc, "e"); } catch (Throwable ignored) {}
+                        if (uin <= 0) try { uin = XposedHelpers.getIntField(acc, "field_uin"); } catch (Throwable ignored) {}
+                        if (uin <= 0) try {
+                            Object val = XposedHelpers.callMethod(acc, "getUin");
+                            if (val instanceof Integer) uin = ((Integer) val).longValue();
+                            else if (val instanceof Long) uin = (Long) val;
+                        } catch (Throwable ignored) {}
+                        if (uin > 0) {
+                            String uinStr = String.valueOf(uin);
+                            return md5(uinStr);
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+
+            try {
+                android.content.Context ctx = ContextManager.getAppContext();
+                if (ctx != null) {
+                    android.content.SharedPreferences sp = ctx.getSharedPreferences("system_config_prefs", 0);
+                    long uin = 0;
+                    try { uin = sp.getInt("default_uin", 0); } catch (Throwable ignored) {}
+                    if (uin <= 0) try { uin = sp.getLong("default_uin", 0); } catch (Throwable ignored) {}
+                    if (uin > 0) {
+                        LogWriter.log(TAG, "uinHash from prefs: uin=" + uin);
+                        return md5(String.valueOf(uin));
+                    }
+                }
+            } catch (Throwable t) {
+                LogWriter.log(TAG, "uinHash prefs error: " + t.getMessage());
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "getUinHash error: " + t.getMessage());
+        }
+        return null;
+    }
+
+    private static String searchVoice2Dir(String cid) {
+        // 覆盖微信多种落盘命名: msg_<cid>.amr / <cid>.amr / amr_<cid> / silk_<cid> / <cid>
+        String[] candidates = new String[]{
+            "msg_" + cid + ".amr",
+            cid + ".amr",
+            "amr_" + cid + ".amr",
+            "silk_" + cid + ".amr",
+            cid
+        };
+        String[] roots = buildMicroMsgRoots();
+        for (String root : roots) {
+            java.io.File md = new java.io.File(root);
+            if (!md.exists()) continue;
+            for (java.io.File userDir : md.listFiles()) {
+                if (!userDir.isDirectory()) continue;
+                java.io.File v2 = new java.io.File(userDir, "voice2");
+                if (!v2.isDirectory()) {
+                    v2 = new java.io.File(userDir, "voice");
+                }
+                if (!v2.isDirectory()) continue;
+                for (String targetName : candidates) {
+                    String found = searchFileRecursive(v2, targetName, 4);
+                    if (found != null) return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String searchFileRecursive(java.io.File dir, String targetName, int depth) {
+        if (depth <= 0 || dir == null) return null;
+        java.io.File[] files = dir.listFiles();
+        if (files == null) return null;
+        for (java.io.File f : files) {
+            if (f.isDirectory()) {
+                String found = searchFileRecursive(f, targetName, depth - 1);
+                if (found != null) return found;
+            } else if (f.isFile() && f.getName().equals(targetName) && f.length() > 500) {
+                LogWriter.log(TAG, "voice2: found " + f.getAbsolutePath() + " size=" + f.length());
+                return f.getAbsolutePath();
+            }
+        }
+        return null;
+    }
+
+    private static int parseVoiceDuration(String xml) {
+        if (xml == null) return 5000; // default 5s
+        try {
+            for (String attr : new String[]{"voicelength", "length"}) {
+                int idx = xml.indexOf(attr + "=\"");
+                if (idx >= 0) {
+                    idx += attr.length() + 2;
+                    int end = xml.indexOf("\"", idx);
+                    if (end > idx) return Integer.parseInt(xml.substring(idx, end));
+                }
+            }
+        } catch (Throwable ignored) {}
+        return 5000;
+    }
+
+    // ===== 版本无关的动态 API 发现 =====
+    private static void discoverVoiceApi(ClassLoader cl) {
+        try {
+            // Try DexKit-discovered voice API class first
+            String dexKitVoiceApi = com.leshao.v3.hook.DexKitHelper.getVoiceApiClass();
+            if (dexKitVoiceApi != null && !dexKitVoiceApi.isEmpty()) {
+                try {
+                    Class<?> cls = XposedHelpers.findClass(dexKitVoiceApi, cl);
+                    for (Method m : cls.getDeclaredMethods()) {
+                        if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                        Class<?>[] pts = m.getParameterTypes();
+                        if (sGMethod == null && m.getReturnType() == String.class
+                                && pts.length == 2 && pts[0] == String.class && pts[1] == String.class) {
+                            sGClass = dexKitVoiceApi;
+                            sGMethod = m.getName();
+                        }
+                        if (sTMethod == null && m.getReturnType() == boolean.class
+                                && pts.length >= 4 && pts[0] == String.class
+                                && pts[1] == int.class && pts[2] == int.class) {
+                            sTClass = dexKitVoiceApi;
+                            sTMethod = m.getName();
+                        }
+                    }
+                    if (sGMethod != null && sTMethod != null) {
+                        LogWriter.log(TAG, "discoverVoiceApi from DexKit: " + dexKitVoiceApi);
+                        return;
+                    }
+                } catch (Throwable ignored) {}
+            }
+            // Search for g(String,String)→String and t(String,int,int,Object)→boolean
+            List<String> candidates = com.leshao.v3.hook.DexKitHelper.findClassesByString(cl, "voice2");
+            for (String cn : candidates) {
+                try {
+                    Class<?> cls = XposedHelpers.findClass(cn, cl);
+                    for (Method m : cls.getDeclaredMethods()) {
+                        if (!java.lang.reflect.Modifier.isStatic(m.getModifiers())) continue;
+                        Class<?>[] pts = m.getParameterTypes();
+                        if (sGMethod == null && m.getName().length() <= 3 && m.getReturnType() == String.class
+                                && pts.length == 2 && pts[0] == String.class && pts[1] == String.class) {
+                            String test = (String) m.invoke(null, "test_talker", "amr_");
+                            if (test != null && !test.equals("test_talker") && !test.equals("amr_")
+                                    && test.matches("[0-9a-f]{20,}")) {
+                                sGClass = cn;
+                                sGMethod = m.getName();
+                                LogWriter.log(TAG, "◆discovered g(): " + cn + "." + m.getName());
+                            }
+                        }
+                        if (sTMethod == null && m.getName().length() <= 3 && m.getReturnType() == boolean.class
+                                && pts.length >= 4 && pts[0] == String.class
+                                && pts[1] == int.class && pts[2] == int.class) {
+                            sTClass = cn;
+                            sTMethod = m.getName();
+                            LogWriter.log(TAG, "◆discovered t(): " + cn + "." + m.getName());
+                        }
+                    }
+                    if (sGMethod != null && sTMethod != null) break;
+                } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "discoverVoiceApi: g=" + sGClass + "." + sGMethod + " t=" + sTClass + "." + sTMethod);
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "discoverVoiceApi err: " + t.getMessage());
+        }
+    }
+
+    /**
+     * 发送语音消息到目标会话 — 8.0.78(3180) 委托 TtsVoiceSender 新链路
+     *
+     * v61.d1.h(talker,"amr_") → baseName
+     * pv.p0.ej 解析路径 → 写文件 → v61.d1.u(base, duration, 0, null, null)
+     */
+    static boolean sendViaSceneVoice(Activity act, ClassLoader cl, String targetWxid, String voiceFile, int duration, Object origE9) {
+        try {
+            LogWriter.log(TAG, "SceneVoice: target=" + targetWxid + " file=" + voiceFile + " dur=" + duration + "ms");
+            boolean ok = TtsVoiceSender.sendViaSceneVoice(targetWxid, voiceFile, duration);
+            LogWriter.log(TAG, "SceneVoice: delegated to TtsVoiceSender → " + ok);
+            return ok;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "SceneVoice error: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return false;
+        }
+    }
+
+    static String getVoice2Dir(String voiceFile) {
+        int idx = voiceFile.indexOf("/voice2/");
+        if (idx >= 0) return voiceFile.substring(0, idx + 8);
+        return voiceFile.substring(0, voiceFile.lastIndexOf('/') + 1);
+    }
+
+    private static String findVfsCreateMethod(Class<?> w6) {
+        if (sVfsCreateMethod != null) return sVfsCreateMethod;
+        for (Method m : w6.getDeclaredMethods()) {
+            if (!Modifier.isStatic(m.getModifiers())) continue;
+            if (m.getReturnType() != OutputStream.class) continue;
+            Class<?>[] pts = m.getParameterTypes();
+            if (pts.length == 2 && pts[0] == String.class && pts[1] == boolean.class) {
+                sVfsCreateMethod = m.getName();
+                LogWriter.log(TAG, "VFS create: w6." + sVfsCreateMethod + "(String,boolean)→OutputStream");
+                return sVfsCreateMethod;
+            }
+        }
+        LogWriter.log(TAG, "VFS create method NOT found in w6");
+        return null;
+    }
+
+    private static Object sMsgStorage;
+
+    private static Object getMsgStorage(ClassLoader cl) {
+        if (sMsgStorage != null) return sMsgStorage;
+        try {
+            Class<?> e01d9 = VersionCompat.findVoiceMsgClass(cl);
+            if (e01d9 == null) { LogWriter.log(TAG, "e01.d9 not found"); return null; }
+            Object service = XposedHelpers.callStaticMethod(e01d9, "b");
+            if (service != null) {
+                sMsgStorage = XposedHelpers.callMethod(service, "u");
+                LogWriter.log(TAG, "SceneVoice: msgStorage obtained via e01.d9.b().u()");
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "SceneVoice: msgStorage error: " + t.getMessage());
+        }
+        return sMsgStorage;
+    }
+
+    private static boolean trySendViaB31(ClassLoader cl, String targetWxid, String voiceFile, int duration) {
+        try {
+            Class<?> wClass = VersionCompat.findVoiceStreamClass(cl);
+            if (wClass == null) { LogWriter.log(TAG, "b31.w not found"); return false; }
+            Object sender;
+
+            try {
+                // 先试无参构造
+                sender = XposedHelpers.newInstance(wClass);
+            } catch (Throwable e1) {
+                try {
+                    // 试 (int,int,com.tencent.mm.modelbase.b)  — b31 的内部类型
+                    sender = XposedHelpers.newInstance(wClass, 0, 0, null);
+                } catch (Throwable e2) {
+                    LogWriter.log(TAG, "b31.w: all constructors failed: " + e2.getMessage());
+                    return false;
+                }
+            }
+            LogWriter.log(TAG, "b31.w: instance created");
+
+            // 设目标 + 文件 + 时长
+            try { XposedHelpers.setObjectField(sender, "e", voiceFile); } catch (Throwable ignored) {}
+            try { XposedHelpers.setIntField(sender, "m", duration); } catch (Throwable ignored) {}
+            try { XposedHelpers.setObjectField(sender, "d", targetWxid); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(sender, "init", 0, 0, null); } catch (Throwable ignored) {}
+
+            // start 上传
+            try {
+                XposedHelpers.callMethod(sender, "start", voiceFile);
+            } catch (Throwable e) {
+                LogWriter.log(TAG, "b31.w start() failed: " + e.getMessage());
+                return false;
+            }
+            LogWriter.log(TAG, "b31.w: start() called → sent");
+            return true;
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "b31.w error: " + t.getClass().getSimpleName() + " " + t.getMessage());
+            return false;
+        }
+    }
+
+    // ===== 工具 =====
+    private static long extractMsgId(Object msg) {
+        if (msg == null) return 0;
+        long id = extractMsgIdFromClass(msg, msg.getClass());
+        if (id > 0) return id;
+        // 遍历父类链
+        for (Class<?> sc = msg.getClass().getSuperclass(); sc != null && sc != Object.class; sc = sc.getSuperclass()) {
+            id = extractMsgIdFromClass(msg, sc);
+            if (id > 0) return id;
+        }
+        return 0;
+    }
+
+    private static long extractMsgIdFromClass(Object msg, Class<?> cls) {
+        if (cls == null) return 0;
+        try { return XposedHelpers.getLongField(msg, "field_msgId"); } catch (Throwable ignored) {}
+        try { return XposedHelpers.getLongField(msg, "msgId"); } catch (Throwable ignored) {}
+        try { return XposedHelpers.getLongField(msg, "field_msgSvrId"); } catch (Throwable ignored) {}
+        try { return XposedHelpers.getLongField(msg, "msgSvrId"); } catch (Throwable ignored) {}
+        try { return XposedHelpers.getLongField(msg, "D"); } catch (Throwable ignored) {}
+        try { return XposedHelpers.getLongField(msg, "d"); } catch (Throwable ignored) {}
+        for (Field f : cls.getDeclaredFields()) {
+            if (f.getType() == long.class) {
+                String fn = f.getName().toLowerCase();
+                if (fn.contains("msgid") || fn.contains("svrid") || fn.contains("msg_id")) {
+                    try { f.setAccessible(true); return f.getLong(msg); } catch (Throwable ignored) {}
+                }
+            }
+        }
+        // 也检查 int 类型的 msgId
+        for (Field f : cls.getDeclaredFields()) {
+            if (f.getType() == int.class) {
+                String fn = f.getName().toLowerCase();
+                if (fn.contains("msgid") || fn.contains("svrid") || fn.contains("msg_id") || fn.contains("id")) {
+                    try { f.setAccessible(true); return f.getInt(msg); } catch (Throwable ignored) {}
+                }
+            }
+        }
+        return 0;
+    }
+
+    private static String extractTalker(Object msg) {
+        if (msg == null) return "";
+        String s = extractTalkerFromClass(msg, msg.getClass());
+        if (s != null && !s.isEmpty()) return s;
+        for (Class<?> sc = msg.getClass().getSuperclass(); sc != null && sc != Object.class; sc = sc.getSuperclass()) {
+            s = extractTalkerFromClass(msg, sc);
+            if (s != null && !s.isEmpty()) return s;
+        }
+        return "";
+    }
+
+    private static String extractTalkerFromClass(Object msg, Class<?> cls) {
+        if (cls == null) return null;
+        try { return (String) XposedHelpers.getObjectField(msg, "field_talker"); } catch (Throwable ignored) {}
+        try { return (String) XposedHelpers.getObjectField(msg, "talker"); } catch (Throwable ignored) {}
+        for (Field f : cls.getDeclaredFields()) {
+            if (f.getType() == String.class) {
+                String fn = f.getName().toLowerCase();
+                if (fn.contains("talker") || fn.contains("username") || fn.contains("fromuser")) {
+                    try { f.setAccessible(true); return (String) f.get(msg); } catch (Throwable ignored) {}
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String dumpObjFields(Object obj) {
+        if (obj == null) return "null";
+        StringBuilder sb = new StringBuilder(obj.getClass().getName()).append(" extends ");
+        Class<?> sc = obj.getClass().getSuperclass();
+        sb.append(sc != null ? sc.getSimpleName() : "null");
+        sb.append(" {");
+        for (Class<?> c = obj.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Field f : c.getDeclaredFields()) {
+                try {
+                    f.setAccessible(true);
+                    Object v = f.get(obj);
+                    sb.append(f.getName()).append("=");
+                    if (v instanceof Number || v instanceof String || v instanceof Boolean) {
+                        sb.append(v);
+                    } else if (v != null) {
+                        sb.append(v.getClass().getSimpleName());
+                    } else {
+                        sb.append("null");
+                    }
+                    sb.append(" ");
+                } catch (Throwable ignored) {}
+            }
+        }
+        sb.append("}");
+        return sb.toString();
+    }
+
+    private static void showToast(String text) {
+        try {
+            Context ctx = sChatAct != null ? sChatAct : ContextManager.getAppContext();
+            if (ctx != null) Toast.makeText(ctx, text, Toast.LENGTH_SHORT).show();
+        } catch (Throwable ignored) {}
+    }
+
+    // ===== Send API 发现: 找 tl.p0/x0 + b31.w/j =====
+    private static void hookForwardTracing(ClassLoader cl) {
+        // 8.0.78(3180): VF 发送已完全委托 TtsVoiceSender (v61.d1.h/u 链路, 见 sendViaSceneVoice)。
+        // 全 DEX 扫描 findSceneVoiceRecorder 是遗留逻辑, 只会打印 g=null.null 误导日志, 已停用。
+        LogWriter.log(TAG, "hookForwardTracing: VF send delegated to TtsVoiceSender, legacy scan disabled");
+    }
+
+    private static void findSceneVoiceRecorder(ClassLoader cl) {
+        // 扫描 DEX 中所有 simpleName 为 p0, o0, x0, y0 的类, 找 SceneVoice Recorder
+        try {
+            String apkPath = ContextManager.getApkPath();
+            if (apkPath == null) return;
+            dalvik.system.DexFile dex = new dalvik.system.DexFile(apkPath);
+            try {
+            Enumeration<String> entries = dex.entries();
+
+            while (entries.hasMoreElements()) {
+                String cn = entries.nextElement();
+                String simple = cn.substring(cn.lastIndexOf('.') + 1);
+                if (!simple.equals("p0") && !simple.equals("o0") && !simple.equals("x0") && !simple.equals("y0")
+                    && !simple.equals("w") && !simple.equals("j") && !simple.equals("l")) continue;
+                try {
+                    Class<?> cls = cl.loadClass(cn);
+                    // 检查 x0 特征: 有 t() 或 g() 静态方法
+                    if (simple.equals("x0")) {
+                        boolean hasT = false, hasGStatic = false;
+                        for (Method m : cls.getDeclaredMethods()) {
+                            if (m.getName().equals("t")) hasT = true;
+                            if (m.getName().equals("g") && Modifier.isStatic(m.getModifiers())) hasGStatic = true;
+                        }
+                        if (hasT || hasGStatic) {
+                            if (hasGStatic && sGMethod == null) {
+                                for (Method m : cls.getDeclaredMethods()) {
+                                    if (m.getName().equals("g") && Modifier.isStatic(m.getModifiers())
+                                        && m.getReturnType() == String.class
+                                        && m.getParameterTypes().length == 2
+                                        && m.getParameterTypes()[0] == String.class
+                                        && m.getParameterTypes()[1] == String.class) {
+                                        try {
+                                            String test = (String) m.invoke(null, "wxid_test12345", "amr_");
+                                            if (test != null && test.matches("[0-9a-f]{20,}")) {
+                                                sGClass = cn;
+                                                sGMethod = "g";
+                                                LogWriter.log(TAG, "discovered g(): " + cn + ".g(String,String)String test=" + test);
+                                            } else {
+                                                LogWriter.log(TAG, "g() test miss: " + cn + ".g " + test);
+                                            }
+                                        } catch (java.lang.reflect.InvocationTargetException e) {
+                                            sGClass = cn;
+                                            sGMethod = "g";
+                                            LogWriter.log(TAG, "discovered g(): " + cn + ".g(String,String)String (trusted, ITE on init)");
+                                        } catch (Throwable e) {
+                                            LogWriter.log(TAG, "g() test fail: " + cn + ".g " + e.getClass().getSimpleName() + " " + e.getMessage());
+                                        }
+                                    }
+                                }
+                            }
+                            if (hasT && sTMethod == null) {
+                                for (Method m : cls.getDeclaredMethods()) {
+                                    if (m.getName().equals("t") && Modifier.isStatic(m.getModifiers())
+                                        && m.getReturnType() == boolean.class
+                                        && m.getParameterTypes().length >= 4
+                                        && m.getParameterTypes()[0] == String.class
+                                        && m.getParameterTypes()[1] == int.class
+                                        && m.getParameterTypes()[2] == int.class) {
+                                        sTClass = cn;
+                                        sTMethod = "t";
+                                        LogWriter.log(TAG, "discovered t(): " + cn + ".t(" + sig(m) + ")");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {}
+            }
+            LogWriter.log(TAG, "discoverVoiceApi: g=" + sGClass + "." + sGMethod + " t=" + sTClass + "." + sTMethod + " path=" + sPathServiceClass + "." + sPathMethod);
+            } finally {
+                dex.close();
+            }
+        } catch (Throwable t) {
+            LogWriter.log(TAG, "◆find error: " + t.getMessage());
+        }
+    }
+
+    private static String sig(Method m) {
+        StringBuilder sb = new StringBuilder(m.getName()).append("(");
+        Class<?>[] pts = m.getParameterTypes();
+        for (int i = 0; i < pts.length; i++) {
+            if (i > 0) sb.append(",");
+            sb.append(pts[i].getSimpleName());
+        }
+        sb.append(")→").append(m.getReturnType().getSimpleName());
+        return sb.toString();
+    }
+
+    private static String[] buildVoice2Roots(String uinHash) {
+        int currentUser = Process.myUid() / 100000;
+        java.util.List<String> roots = new java.util.ArrayList<>();
+        roots.add("/data/user/" + currentUser + "/com.tencent.mm/MicroMsg/" + uinHash + "/voice2");
+        if (currentUser != 0) {
+            roots.add("/data/user/0/com.tencent.mm/MicroMsg/" + uinHash + "/voice2");
+        }
+        java.io.File userBase = new java.io.File("/data/user");
+        java.io.File[] userDirs = userBase.listFiles();
+        if (userDirs != null) {
+            for (java.io.File ud : userDirs) {
+                if (!ud.isDirectory()) continue;
+                try {
+                    int id = Integer.parseInt(ud.getName());
+                    if (id == currentUser || (currentUser != 0 && id == 0)) continue;
+                } catch (Throwable ignored) { continue; }
+                roots.add(ud.getAbsolutePath() + "/com.tencent.mm/MicroMsg/" + uinHash + "/voice2");
+            }
+        }
+        return roots.toArray(new String[0]);
+    }
+
+    private static String[] buildMicroMsgRoots() {
+        int currentUser = Process.myUid() / 100000;
+        java.util.List<String> roots = new java.util.ArrayList<>();
+        roots.add("/data/user/" + currentUser + "/com.tencent.mm/MicroMsg");
+        if (currentUser != 0) {
+            roots.add("/data/user/0/com.tencent.mm/MicroMsg");
+        }
+        java.io.File userBase = new java.io.File("/data/user");
+        java.io.File[] userDirs = userBase.listFiles();
+        if (userDirs != null) {
+            for (java.io.File ud : userDirs) {
+                if (!ud.isDirectory()) continue;
+                try {
+                    int id = Integer.parseInt(ud.getName());
+                    if (id == currentUser || (currentUser != 0 && id == 0)) continue;
+                } catch (Throwable ignored) { continue; }
+                roots.add(ud.getAbsolutePath() + "/com.tencent.mm/MicroMsg");
+            }
+        }
+        return roots.toArray(new String[0]);
+    }
+}

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 简单机器人头图标：圆形 + 眼睛 -->
+    <path
+        android:fillColor="#4A90D9"
+        android:pathData="M54,34 a20,20 0 1,1 0,40 a20,20 0 1,1 0,-40 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M46,48 a4,4 0 1,1 0,8 a4,4 0 1,1 0,-8 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M62,48 a4,4 0 1,1 0,8 a4,4 0 1,1 0,-8 Z" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M46,62 q8,6 16,0" />
+</vector>
