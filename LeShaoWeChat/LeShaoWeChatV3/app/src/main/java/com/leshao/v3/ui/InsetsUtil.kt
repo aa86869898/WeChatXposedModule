@@ -165,9 +165,8 @@ object InsetsUtil {
             val decor = w.decorView
             if (decor != null) decor.background = ColorDrawable(Color.TRANSPARENT)
         } catch (ignored: Throwable) {}
-        try {
-            w.setDimAmount(0f)
-        } catch (ignored: Throwable) {}
+        // v3.0.269: 不再清零 dimAmount —— 层级压暗统一由 WindowLayer.applyScrim 管理，
+        // 这里清零会覆盖多层弹窗的遮罩，导致堆叠时无法区分当前层。
         try {
             w.statusBarColor = Color.TRANSPARENT
         } catch (ignored: Throwable) {}

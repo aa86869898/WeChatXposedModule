@@ -132,6 +132,17 @@ public class ChatGroupHook {
                 } catch (Throwable ignored) {}
             }
             if (sLabelStorage == null) {
+                // v3.0.272: 反编译确认 jf3.z.bj() 为 3180 群标签存储提供者，优先尝试
+                try {
+                    Class<?> cls = XposedHelpers.findClass("jf3.z", cl);
+                    Object r = XposedHelpers.callStaticMethod(cls, "bj");
+                    if (r != null && "com.tencent.mm.storage.g4".equals(r.getClass().getName())) {
+                        sLabelStorage = r;
+                        sLabelEntityClass = r.getClass();
+                    }
+                } catch (Throwable ignored) {}
+            }
+            if (sLabelStorage == null) {
                 String[] cand = {"x93.r","x93.s","x93.q","x93.t","y93.r","w93.r"};
                 for (String cn : cand) {
                     try {
@@ -316,10 +327,10 @@ public class ChatGroupHook {
                 return false;
             }
             if (sLabelStorage == null) {
-                // v955: x93.r 3180 已不存在, 该 fallback 仅对旧版有效; 3180 走上方 jf3.z.bj()
+                // v3.0.272: 反编译确认 3180 群标签存储提供者 = jf3.z.bj()（返回 storage.g4）
                 try {
-                    Class<?> fallback = XposedHelpers.findClass("x93.r", cl);
-                    sLabelStorage = XposedHelpers.callStaticMethod(fallback, "hj");
+                    Class<?> fallback = XposedHelpers.findClass("jf3.z", cl);
+                    sLabelStorage = XposedHelpers.callStaticMethod(fallback, "bj");
                     if (sLabelStorage != null) sLabelEntityClass = sLabelStorage.getClass();
                 } catch (Throwable ignored) {}
             }

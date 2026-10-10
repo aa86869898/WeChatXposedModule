@@ -34,7 +34,7 @@ import de.robv.android.xposed.XposedHelpers;
  *
  * 配置存储于 prefs:
  *   ls_autofw_enabled   Boolean
- *   ls_autofw_sources   String (逗号分隔, 留空=所有来源)
+ *   ls_autofw_sources   String (逗号分隔, v3.0.273 起留空=不转发任何来源, 必须显式选择)
  *   ls_autofw_targets   String (逗号分隔)
  *   ls_autofw_types     String (逗号分隔, 留空=文本+AppMsg)
  */
@@ -162,8 +162,8 @@ public class AutoForwardHook {
             if (isSend == 1) return; // 自己发送的不转发
 
             if (talker == null || talker.isEmpty()) return;
-            // 来源过滤: sSources 非空时 talker 必须在列表内
-            if (!sSources.isEmpty() && !sSources.contains(talker)) return;
+            // 来源过滤: v3.0.273 起来源名单为空 = 不转发任何来源（必须显式选择才工作）
+            if (sSources.isEmpty() || !sSources.contains(talker)) return;
 
             if (!typeAllowed(type)) return;
 
@@ -549,20 +549,20 @@ public class AutoForwardHook {
         LinearLayout cardSrc = com.leshao.v3.ui.widgets.M3Page.card(ctx);
         final String[] srcHolder = {prefs.getString(PREF_SOURCES, "")};
         final TextView srcVal = new TextView(ctx);
-        srcVal.setText(srcHolder[0].isEmpty() ? "全部会话" : displayList(srcHolder[0]));
+        srcVal.setText(srcHolder[0].isEmpty() ? "未选择（不转发）" : displayList(srcHolder[0]));
         srcVal.setTextSize(13);
         srcVal.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
         srcVal.setSingleLine(true);
         srcVal.setEllipsize(android.text.TextUtils.TruncateAt.END);
         cardSrc.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "📥", "选择转发来源",
-                "打开联系人选择器多选(可切好友/群聊)", () -> {
+                "必须选择至少一个来源，否则不转发任何消息", () -> {
             if (act == null) { Toast.makeText(ctx, "当前上下文不支持选择器", Toast.LENGTH_SHORT).show(); return; }
             com.leshao.v3.ui.ContactPickerDialog.show(act, srcHolder[0],
                     com.leshao.v3.ui.ContactPickerDialog.MODE_FRIEND,
                     (wxids, display) -> {
                         srcHolder[0] = wxids == null || wxids.isEmpty() ? ""
                                 : android.text.TextUtils.join(",", wxids);
-                        srcVal.setText(srcHolder[0].isEmpty() ? "全部会话" : displayList(srcHolder[0]));
+                        srcVal.setText(srcHolder[0].isEmpty() ? "未选择（不转发）" : displayList(srcHolder[0]));
                     });
         }));
         content.addView(cardSrc);
@@ -689,8 +689,12 @@ public class AutoForwardHook {
                 .putString(PREF_TYPES, types.toString())
                 .apply();
             updateConfig(prefs);
-            Toast.makeText(ctx, "已保存" + (sEnabled ? "，自动转发已开启" : ""),
-                    Toast.LENGTH_SHORT).show();
+            if (sSources.isEmpty()) {
+                Toast.makeText(ctx, "已保存：来源为空，不会转发任何消息", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(ctx, "已保存" + (sEnabled ? "，自动转发已开启" : ""),
+                        Toast.LENGTH_SHORT).show();
+            }
             dlg.dismiss();
         });
         com.leshao.v3.ui.InsetsUtil.centerAutoHeight(dlg, 0.9f);

@@ -63,7 +63,7 @@ class GroupSendPageView private constructor() {
             val cardAutoFw = makeCard(ctx, d)
             val afOn = prefs != null && prefs.getBoolean("ls_autofw_enabled", false)
             cardAutoFw.addView(switchRow(ctx, d, "自动转发",
-                    "来源消息自动转发给目标联系人/群聊", afOn,
+                    "选择来源后自动转发给目标联系人/群聊（来源为空不转发）", afOn,
                     { _, on ->
                         if (prefs != null) prefs.edit().putBoolean("ls_autofw_enabled", on).apply()
                         AutoForwardHook.setEnabled(on)

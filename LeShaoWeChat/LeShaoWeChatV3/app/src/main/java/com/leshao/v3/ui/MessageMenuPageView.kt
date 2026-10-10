@@ -29,6 +29,10 @@ class MessageMenuPageView {
         @Volatile
         private var sListRef: WeakReference<LinearLayout> = WeakReference<LinearLayout>(null)
 
+        /** 弱引用文档按钮开关容器，清空隐藏项后同步刷新开关状态，避免开关残留旧状态 */
+        @Volatile
+        private var sBtnCardRef: WeakReference<LinearLayout> = WeakReference<LinearLayout>(null)
+
         @JvmStatic
         fun create(ctx: Context, parentAct: Activity): View {
             WmPrefs.ensureInit()
@@ -52,6 +56,7 @@ class MessageMenuPageView {
 
             val btnCard = M3Page.card(ctx)
             rebuildBtnList(btnCard)
+            sBtnCardRef = WeakReference<LinearLayout>(btnCard)
             root.addView(btnCard)
 
             root.addView(M3Page.section(ctx, "其他已收录",
@@ -74,6 +79,8 @@ class MessageMenuPageView {
                 WmPrefs.setMsgMenuBtnHidden("")
                 val c = sListRef.get()
                 if (c != null) rebuildList(c)
+                val bc = sBtnCardRef.get()
+                if (bc != null) rebuildBtnList(bc)
                 M3Page.toast(ctx, "已清空隐藏项")
             })
             root.addView(actionCard)

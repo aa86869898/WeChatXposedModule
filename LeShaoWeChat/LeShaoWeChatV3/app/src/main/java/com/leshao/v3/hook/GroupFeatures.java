@@ -35,33 +35,35 @@ public class GroupFeatures {
             Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
             if (e9Class == null) return;
             Object msg = XposedHelpers.newInstance(e9Class, talker);
-            // 8.0.78(3180) e9 setter: b1(content) u1(talker) e1(createTime) setType(int)
-            try {
-                XposedHelpers.callMethod(msg, "b1", text);
-            } catch (Throwable t1) {
-                try { XposedHelpers.callMethod(msg, "X0", text); } catch (Throwable ignored1) {}
-            }
-            try {
-                XposedHelpers.callMethod(msg, "u1", talker);
-            } catch (Throwable ignored) {}
-            try {
-                XposedHelpers.callMethod(msg, "e1", System.currentTimeMillis());
-            } catch (Throwable t2) {
-                try { XposedHelpers.callMethod(msg, "L1", System.currentTimeMillis()); } catch (Throwable ignored2) {}
-            }
-            try {
-                XposedHelpers.callMethod(msg, "setType", 1);
-            } catch (Throwable ignored) {}
+            // 8.0.78(3180) e9 setter（v3.0.272: 反编译确认 b1=setContent u1=setTalker e1=setCreateTime setType=int；
+            // 旧兜底 X0=setBizChatUserId、L1=getCreateTime 无参带参均错误，已删除）
+            try { XposedHelpers.callMethod(msg, "b1", text); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(msg, "u1", talker); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(msg, "e1", System.currentTimeMillis()); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(msg, "setType", 1); } catch (Throwable ignored) {}
 
-            // 兜底: f9.yb(e9) 入库
+            // 兜底: f9.Bb(e9, boolean) 入库（v3.0.272: 反编译确认 f9.yb 不存在，insert 为实例方法 Bb）
             try {
-                Class<?> f9 = XposedHelpers.findClass("com.tencent.mm.storage.f9", cl);
-                Object y = XposedHelpers.callStaticMethod(f9, "yb", msg, 0);
-                if (y != null) {
-                    XposedBridge.log("[Group] 消息已通过 f9.yb 入库");
+                Object f9 = null;
+                try {
+                    com.leshao.ai.hook.wechat.StorageHub hub = com.leshao.ai.hook.wechat.StorageHub.get();
+                    if (hub != null) f9 = hub.msgInfoStorage();
+                } catch (Throwable ignored) {}
+                if (f9 == null) {
+                    Class<?> shortCls = VersionCompat.findMsgStorageShortClass(cl);
+                    if (shortCls != null) {
+                        Object service = XposedHelpers.callStaticMethod(shortCls, "b");
+                        if (service != null) f9 = XposedHelpers.callMethod(service, "u");
+                    }
+                }
+                if (f9 != null) {
+                    Object y = XposedHelpers.callMethod(f9, "Bb", msg, false);
+                    if (y != null) {
+                        XposedBridge.log("[Group] 消息已通过 f9.Bb 入库");
+                    }
                 }
             } catch (Throwable t3) {
-                XposedBridge.log("[Group] f9.yb 失败, 回退 Footer: " + t3.getMessage());
+                XposedBridge.log("[Group] f9.Bb 失败, 回退 Footer: " + t3.getMessage());
                 sendViaFooter(cl, talker, text);
             }
         } catch (Throwable t) {
@@ -89,8 +91,9 @@ public class GroupFeatures {
             Class<?> e9Class = VersionCompat.findMsgInfoStorageClass(cl);
             if (e9Class == null) return;
             Object msg = XposedHelpers.newInstance(e9Class, talker);
-            XposedHelpers.callMethod(msg, "A1", 1);
-            XposedHelpers.callMethod(msg, "X0", text);
+            // v3.0.272: 反编译确认 A1 不存在、X0 为 setBizChatUserId；改用 setType + b1(setContent)
+            try { XposedHelpers.callMethod(msg, "setType", 1); } catch (Throwable ignored) {}
+            try { XposedHelpers.callMethod(msg, "b1", text); } catch (Throwable ignored) {}
             XposedHelpers.callMethod(footer, "F", msg, null);
             XposedBridge.log("[Group] 消息已发送(via Footer): " + text);
         } catch (Throwable t) {}

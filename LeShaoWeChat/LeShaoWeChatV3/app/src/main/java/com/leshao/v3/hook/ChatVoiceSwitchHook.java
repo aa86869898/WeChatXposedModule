@@ -11,6 +11,8 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -489,11 +491,11 @@ public final class ChatVoiceSwitchHook {
      * batch_send 控制，「自动转发」由 AutoForwardHook 的 ls_autofw_enabled 控制，
      * 开关关闭时该按钮不再出现在快捷菜单。</p>
      */
-    public static LinearLayout buildActionButtonRow(final Context ctx, boolean noBackground) {
+    public static HorizontalScrollView buildActionButtonRow(final Context ctx, boolean noBackground) {
         float density = ctx.getResources().getDisplayMetrics().density;
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER);
+        row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(0, (int) (5 * density), 0, (int) (5 * density));
 
         int gap = (int) (6 * density);
@@ -517,11 +519,23 @@ public final class ChatVoiceSwitchHook {
         if (AutoForwardHook.isEnabled()) {
             buttons.add(makeFooterButton(ctx, "转发", AppColors.primary(), v -> openAutoForward(ctx), noBackground));
         }
+        // v3.0.271: 「拉群」合并进快捷菜单（原独立按钮行会导致两行按钮栏），按开关显隐
+        if (BatchInviteConfig.isEnabled()) {
+            buttons.add(makeFooterButton(ctx, "拉群", AppColors.tertiary(),
+                    v -> com.leshao.v3.hook.ChatFooterInviteHook.openInvitePicker(ctx), noBackground));
+        }
         for (int i = 0; i < buttons.size(); i++) {
             int mg = (i == buttons.size() - 1) ? 0 : gap;
             addButton(row, buttons.get(i), mg);
         }
-        return row;
+        // v3.0.270: 输入框上方快捷菜单改为横向滚动容器，按钮多时不再换行/被截断，可左右滑动查看
+        HorizontalScrollView scroll = new HorizontalScrollView(ctx);
+        scroll.setHorizontalScrollBarEnabled(false);
+        scroll.setFillViewport(false);
+        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        scroll.addView(row, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        return scroll;
     }
 
     /** v1002: 供 WmEntry reconciler 调用 —— 微信复用 ChatFooter/漏掉生命周期 hook 时补注入。

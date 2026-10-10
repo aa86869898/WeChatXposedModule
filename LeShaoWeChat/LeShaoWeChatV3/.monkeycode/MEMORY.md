@@ -130,3 +130,15 @@
   - 版本号同步更新：`app/src/main/java/com/leshao/v3/MainHook.java` 的 `MODULE_VERSION_CODE` 与 `app/build.gradle.kts` 的 `versionCode`/`versionName` 必须一致（MainHook 值用于 MMKV 缓存失效判断）
   - 发布：更新根目录 `index.html` 的下载链接与版本描述；启动下载服务器 `cd /workspace/LeShaoWeChat/LeShaoWeChatV3 && python3 upload_server.py`（8899 端口，同时提供 APK 下载与日志上传）
   - 用户侧日志回传位置：`/workspace/leshao_v3_log.txt`（微信日志通过 8899 上传服务器写入）
+
+### 交付规则：不生成源码包 + 16线程池断点续传下载服务器（固定）
+- Date: 2026-10-10
+- Context: 用户明确要求写死为固定规则，后续每次交付必须遵守
+- Category: 工作流协作
+- Instructions:
+  - **不要每次交付时生成源码包**：任何修复/发布交付不得再生成 `bubble-src-*.zip` 之类的源码压缩包；下载目录只放最新 APK 与文档
+  - **每次交付必须使用最高速度下载服务器**：启动 `/tmp/opencode/fast_dl -port <端口> -root /workspace/LeShaoWeChat/LeShaoWeChatV3/download`（Go 高性能静态服务器，原生支持 Range/多段断点续传，goroutine 并发，本地吞吐 700MB/s+）；端口避开 8731(文档)/8899(日志上传)/8900(fast_dl)，推荐 8901
+  - 平台对公网单连接限速约 500-550KB/s，但支持 Range 多段并发突破限速（实测 4段=2.27MB/s、8段=3.23MB/s、16段=3.63MB/s，段数无上限，越接近平台总带宽上限收益递减）
+  - **交付只给「超高速下载页」一个链接**：`https://<端口>-796f33fc01a6a82b.monkeycode-ai.online/turbo-download.html`（页面内 JS 自动 16 线程分段并发下载并本地合并，实测约 3.6MB/s，是普通下载的 6 倍+）；**不要给发布主页（`/`）链接、不要给原始 APK 直链、不要给 aria2 命令、不要给任何其他下载入口**
+  - `download/index.html` 与根 `index.html` 精简为：只保留「超高速下载」按钮 + 质检文档链接；**移除普通 APK 直链与源码 zip 链接**
+  - 每次交付后验证 `turbo-download.html` 返回 200、`Range: bytes=0-1023` 返回 206、普通请求返回 200

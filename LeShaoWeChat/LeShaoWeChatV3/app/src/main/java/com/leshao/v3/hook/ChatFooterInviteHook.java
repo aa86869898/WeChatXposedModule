@@ -53,66 +53,18 @@ public final class ChatFooterInviteHook {
     private ChatFooterInviteHook() {}
 
     public static void hook(final ClassLoader cl) {
+        // v3.0.271: 「拉群」按钮已合并进输入框上方快捷菜单（ChatVoiceSwitchHook
+        // .buildActionButtonRow 内按开关显示），不再独立注入第二行按钮栏。
         try {
-            Class<?> footer = findClass(CHAT_FOOTER, cl);
-            if (footer == null) {
-                LogWriter.log(TAG, "ChatFooter 类未找到，拉群按钮不可用");
-                return;
-            }
-            sFooterClass = footer;
-            int n = 0;
-            for (Constructor<?> ctor : footer.getDeclaredConstructors()) {
-                try {
-                    ctor.setAccessible(true);
-                    XposedBridge.hookMethod(ctor, new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            try {
-                                if (!(param.thisObject instanceof View)) return;
-                                final View footerV = (View) param.thisObject;
-                                footerV.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
-                                    @Override public void onViewAttachedToWindow(View v) {
-                                        try {
-                                            if (!BatchInviteConfig.isEnabled()) return;
-                                            injectButton(v);
-                                        } catch (Throwable t) {
-                                            LogWriter.log(TAG, "attach inject err: " + t);
-                                        }
-                                    }
-                                    @Override public void onViewDetachedFromWindow(View v) {}
-                                });
-                            } catch (Throwable t) {
-                                LogWriter.log(TAG, "ctor after err: " + t);
-                            }
-                        }
-                    });
-                    n++;
-                } catch (Throwable ignored) {}
-            }
-            LogWriter.log(TAG, "hooked ChatFooter ctor x" + n + " cls=" + footer.getName());
-            hookFragmentResume(cl);
-        } catch (Throwable e) {
-            LogWriter.log(TAG, "hook err: " + e);
-        }
+            LogWriter.log(TAG, "拉群按钮已合并到快捷菜单，跳过独立注入");
+        } catch (Throwable ignored) {}
+        return;
     }
 
-    /** 供 WmEntry 等 reconcile 调用：in Activity view tree 找 ChatFooter 幂等补注入。 */
+    /** 供 WmEntry 等 reconcile 调用：v3.0.271 起拉群按钮已合并进快捷菜单，无需独立注入。 */
     public static void ensureInjected(Activity act) {
-        if (act == null || act.isFinishing() || !BatchInviteConfig.isEnabled()) return;
-        try {
-            View footer = sLastFooter != null ? sLastFooter.get() : null;
-            if (footer != null && footer.isAttachedToWindow()
-                    && footer.findViewWithTag(BTN_TAG) != null) {
-                return;
-            }
-            View decor = act.getWindow() == null ? null : act.getWindow().peekDecorView();
-            if (decor == null) return;
-            if (footer == null || !footer.isAttachedToWindow()) {
-                footer = findFooter(decor);
-                sLastFooter = footer != null ? new java.lang.ref.WeakReference<>(footer) : null;
-            }
-            if (footer != null) injectButton(footer);
-        } catch (Throwable ignored) {}
+        // 拉群按钮已合并进快捷菜单，独立按钮行不再注入
+        return;
     }
 
     // ==================== 注入实现 ====================
@@ -199,7 +151,7 @@ public final class ChatFooterInviteHook {
         btn.setBackground(null);
         btn.setPadding((int) (12 * density), (int) (5 * density),
                 (int) (12 * density), (int) (5 * density));
-        btn.setOnClickListener(v -> onInviteClick(ctx));
+        btn.setOnClickListener(v -> openInvitePicker(ctx));
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -207,8 +159,8 @@ public final class ChatFooterInviteHook {
         return row;
     }
 
-    /** 点击「拉群」：选好友（多选）→ 选群 → 立即邀请。 */
-    private static void onInviteClick(Context ctx) {
+    /** 点击「拉群」：选好友（多选）→ 选群 → 立即邀请。供快捷菜单按钮调用。 */
+    public static void openInvitePicker(Context ctx) {
         try {
             final Activity act = getActivity(ctx);
             if (act == null) {

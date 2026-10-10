@@ -62,17 +62,30 @@ class RedPacketPageView private constructor() {
             cardParam.addView(etWhite)
 
             cardParam.addView(PageKit.actionButton(ctx, "保存参数") {
-                try {
-                    RedPacketHook.setMaxPerMin(Integer.parseInt(etMax.text.toString().trim()))
-                } catch (ignored: Throwable) {
+                val maxStr = etMax.text.toString().trim()
+                val delayStr = etDelay.text.toString().trim()
+                var valid = true
+                if (maxStr.isNotEmpty()) {
+                    val v = maxStr.toIntOrNull()
+                    if (v == null || v < 0) {
+                        valid = false
+                        Toast.makeText(ctx, "每分钟次数必须是非负整数", Toast.LENGTH_SHORT).show()
+                    }
                 }
-                try {
-                    RedPacketHook.setDelayMax(Integer.parseInt(etDelay.text.toString().trim()))
-                } catch (ignored: Throwable) {
+                if (valid && delayStr.isNotEmpty()) {
+                    val v = delayStr.toIntOrNull()
+                    if (v == null || v < 0) {
+                        valid = false
+                        Toast.makeText(ctx, "随机延时上限必须是非负整数", Toast.LENGTH_SHORT).show()
+                    }
                 }
-                RedPacketHook.setWhitelist(etWhite.text.toString().trim())
-                RedPacketHook.updateConfig()
-                Toast.makeText(ctx, "已保存", Toast.LENGTH_SHORT).show()
+                if (valid) {
+                    RedPacketHook.setMaxPerMin(if (maxStr.isEmpty()) 0 else maxStr.toInt())
+                    RedPacketHook.setDelayMax(if (delayStr.isEmpty()) 0 else delayStr.toInt())
+                    RedPacketHook.setWhitelist(etWhite.text.toString().trim())
+                    RedPacketHook.updateConfig()
+                    Toast.makeText(ctx, "已保存", Toast.LENGTH_SHORT).show()
+                }
             })
             root.addView(cardParam)
             root.addView(PageKit.divider(ctx))

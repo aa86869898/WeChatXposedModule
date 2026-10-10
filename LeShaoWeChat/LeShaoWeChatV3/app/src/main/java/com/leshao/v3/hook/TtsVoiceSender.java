@@ -1524,7 +1524,8 @@ public class TtsVoiceSender {
         }
 
         try {
-            Class<?> c8 = XposedHelpers.findClass("dm.c8", voiceCl());
+            // v3.0.272: 反编译确认 dm.c8 在 3180 不存在，setType 定义在 e9 基类 im.c8
+            Class<?> c8 = XposedHelpers.findClass("im.c8", voiceCl());
             return c8.getDeclaredMethod("setType", int.class);
         } catch (Throwable ignored) {}
 
@@ -1915,7 +1916,12 @@ public class TtsVoiceSender {
 
     private static void hookB31W(ClassLoader cl) {
         try {
-            Class<?> b31w = XposedHelpers.findClass("b31.w", cl);
+            // v3.0.272: 反编译确认群成员枚举权威类为 b41.u1（ChatroomMembersLogic），b31.w 作历史候选
+            Class<?> b31w = null;
+            for (String cn : new String[]{"b41.u1", "b31.w"}) {
+                try { b31w = XposedHelpers.findClass(cn, cl); break; } catch (Throwable ignored) {}
+            }
+            if (b31w == null) return;
             int hooked = 0;
             for (java.lang.reflect.Method m : b31w.getDeclaredMethods()) {
                 String n = m.getName();

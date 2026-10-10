@@ -61,9 +61,17 @@ class SettingsActivity : Activity() {
         root.addView(M3Page.section(this, "功能开关", "修改后即时生效"))
         val cardSwitch = M3Page.card(this)
         switchEnabled = M3Page.appendSwitchRow(cardSwitch, this, "🤖",
-                "AI 助手", "总开关, 关闭后全部 AI 能力停用", false, null)
+                "AI 助手", "总开关, 关闭后全部 AI 能力停用", false) { _, _ ->
+            saveFieldsToConfig()
+            config?.save()
+            com.leshao.ai.data.AiDataProvider.pushRefresh(this)
+        }
         switchTts = M3Page.appendSwitchRow(cardSwitch, this, "🔊",
-                "语音消息发送", "开=AI 回复转语音发出; 关=发直文本", false, null)
+                "语音消息发送", "开=AI 回复转语音发出; 关=发直文本", false) { _, _ ->
+            saveFieldsToConfig()
+            config?.save()
+            com.leshao.ai.data.AiDataProvider.pushRefresh(this)
+        }
         root.addView(cardSwitch)
 
         root.addView(M3Page.section(this, "触发范围", "由会话级个性化配置控制"))

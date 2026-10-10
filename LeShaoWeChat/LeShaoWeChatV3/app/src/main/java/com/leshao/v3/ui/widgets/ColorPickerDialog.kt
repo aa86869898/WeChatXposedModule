@@ -22,6 +22,7 @@ import com.leshao.v3.LogWriter
 import com.leshao.v3.ui.AppColors
 import com.leshao.v3.ui.CandyUi
 import com.leshao.v3.ui.InsetsUtil
+import com.leshao.v3.ui.WindowLayer
 
 /**
  * v3.0.166 自定义 HSV 取色器（任务3：去掉格子取色，改交互式取色，实时生效）。
@@ -246,6 +247,7 @@ class ColorPickerDialog private constructor() {
             dialog.setView(root)
             InsetsUtil.transparentWindow(dialog)
             dialog.show()
+            WindowLayer.track(dialog.window)
         }
 
         // ==================== HSV 控件 ====================

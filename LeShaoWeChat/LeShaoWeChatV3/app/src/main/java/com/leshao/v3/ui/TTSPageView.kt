@@ -1020,6 +1020,7 @@ class TTSPageView private constructor() {
             val host = InsetsUtil.windowAutoHeight(dialog, outerLayout, 0.9f)
             dialog.setView(host)
             dialog.show()
+            WindowLayer.track(dialog.window)
 
             CandyUi.ripple(keyBtn, AppColors.SHAPE_FULL_DP.toFloat())
             keyBtn.setOnClickListener { showKeyInputPopup(ctx, parentAct, d, keyBtn, voiceList, statusTv) }
@@ -1124,7 +1125,6 @@ class TTSPageView private constructor() {
             val w = dlg.window
             if (w != null) {
                 InsetsUtil.transparentWindow(w)
-                w.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
             }
 
             val saveBtn = M3Page.button(ctx, "保存") {
@@ -1143,6 +1143,7 @@ class TTSPageView private constructor() {
 
             InsetsUtil.clearDialogShell(dlg)
             dlg.show()
+            WindowLayer.track(dlg.window)
             InsetsUtil.clearDialogShell(dlg)
         }
 

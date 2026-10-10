@@ -53,7 +53,7 @@ import org.luckypray.dexkit.result.MethodData;
 public class DexKitHelper {
     private static final String BASELINE_ASSET = "dexkit_baseline.json";
     private static final String BASELINE_FILE = "dexkit_baseline.json";
-    private static final int CURRENT_MODULE_VERSION = 30257;
+    private static final int CURRENT_MODULE_VERSION = 30314;
     private static final String KEY_A21_CLASS = "a21_class";
     private static final String KEY_A21_METHOD = "a21_method";
     private static final String KEY_ACTION_BAR_CLASS = "action_bar_custom_area";
@@ -155,9 +155,18 @@ public class DexKitHelper {
 
         @Override // java.util.concurrent.ThreadFactory
         public Thread newThread(Runnable r) {
-            Thread t = new Thread(r, "DexKitScan-" + this.threadNumber.getAndIncrement());
+            // v3.0.263：扫描线程以 Android 前台优先级（THREAD_PRIORITY_FOREGROUND）运行，
+            // 让 DexKit 全量扫描尽快完成，避免低优先级拖到 26 秒+ 持续占用 CPU 拖慢微信启动。
+            Thread t = new Thread(new Runnable() {
+                @Override public void run() {
+                    try {
+                        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_FOREGROUND);
+                    } catch (Throwable ignored) {}
+                    r.run();
+                }
+            }, "DexKitScan-" + this.threadNumber.getAndIncrement());
             t.setDaemon(true);
-            t.setPriority(1);
+            t.setPriority(Thread.NORM_PRIORITY);
             return t;
         }
     });
@@ -522,9 +531,72 @@ public class DexKitHelper {
     }
 
     private static String findCacheKey(String type, String className, String keyword) {
-        // v3.0.166: 缓存 key 混入模块版本 —— 模块升级后旧缓存(含过时混淆签名如旧 MMMenu 类)
-        // 立即失效重新扫描，避免 MessageMenuHook 等因旧签名比对失败而 anchor not found。
-        return type + "|" + CURRENT_MODULE_VERSION + "|" + (className == null ? "" : className) + "|" + keyword;
+        // v3.0.281: 缓存 key 只随微信版本(sVersionCode)变化，不再混入模块版本号。
+        // 根因: v3.0.166 起 key 混入 CURRENT_MODULE_VERSION，每次模块升级(如 30279→30280)都会令
+        // 全部 findClass/findMethodsByString 缓存失效，MessageMenuHook 等模块在启动早期重新执行
+        // DexKit 全量字符串扫描(微信 base.apk 巨大，native 内存峰值过高) → 进程被 LMK 杀掉 →
+        // 微信启动秒闪退。微信未更新时 DEX 混淆结构不变，旧缓存完全有效；微信更新后 sVersionCode
+        // 变化，缓存自动失效重扫，无需模块版本参与 key。
+        return type + "|" + sVersionCode + "|" + (className == null ? "" : className) + "|" + keyword;
+    }
+
+    private static volatile boolean sFindCacheMigrated = false;
+
+    // v3.0.281: 一次性迁移旧格式缓存。旧 key 形如 M|30280|类名|关键字(第二段是模块版本号)，
+    // 新 key 形如 M|3180|类名|关键字(第二段是微信版本号)。微信未更新时旧扫描结果完全有效，
+    // 直接改写 key 即可复用，避免模块升级后首启因缓存 miss 重新全量扫描导致闪退。
+    private static void migrateFindCache() {
+        if (sFindCacheMigrated) return;
+        synchronized (DexKitHelper.class) {
+            if (sFindCacheMigrated) return;
+            sFindCacheMigrated = true;
+            try {
+                MMKV kv = MMKV.mmkvWithID(FIND_CACHE_MMKV, 2);
+                String verKey = "v_" + sVersionCode;
+                String json = kv.decodeString(verKey, null);
+                if (json == null || json.isEmpty()) return;
+                JSONObject obj = new JSONObject(json);
+                JSONArray names = obj.names();
+                if (names == null || names.length() == 0) return;
+                JSONObject out = new JSONObject();
+                boolean changed = false;
+                String wxVer = String.valueOf(sVersionCode);
+                for (int i = 0; i < names.length(); i++) {
+                    String k = names.getString(i);
+                    String[] parts = k.split("\\|", 4);
+                    if (parts.length == 4 && parts[1] != null && !parts[1].isEmpty()
+                            && !parts[1].equals(wxVer)) {
+                        String nk = parts[0] + "|" + wxVer + "|" + parts[2] + "|" + parts[3];
+                        JSONArray arr = obj.optJSONArray(k);
+                        JSONArray merged = out.optJSONArray(nk);
+                        if (merged == null) {
+                            out.put(nk, arr);
+                        } else {
+                            if (arr != null) {
+                                for (int j = 0; j < arr.length(); j++) {
+                                    String item = arr.getString(j);
+                                    boolean dup = false;
+                                    for (int m = 0; m < merged.length(); m++) {
+                                        if (item.equals(merged.getString(m))) { dup = true; break; }
+                                    }
+                                    if (!dup) merged.put(item);
+                                }
+                            }
+                            out.put(nk, merged);
+                        }
+                        changed = true;
+                    } else {
+                        out.put(k, obj.optJSONArray(k));
+                    }
+                }
+                if (changed) {
+                    kv.encode(verKey, out.toString());
+                    kv.sync();
+                    LogWriter.log(TAG, "migrateFindCache: migrated legacy cache keys to wx-versioned keys");
+                }
+            } catch (Throwable th) {
+            }
+        }
     }
 
     private static List<String> readFindCache(String key) {
@@ -580,61 +652,18 @@ public class DexKitHelper {
             LogWriter.log(TAG, "findClassesByString(" + keyword + "): cache hit " + cached.size() + " candidates");
             return new ArrayList<>(cached);
         }
-        // v3.0.136: 主线程缓存未命中时不再现场扫描（DexKit 扫描可能在启动/主页卡死主线程）
-        if (isMainThread()) {
-            LogWriter.log(TAG, "findClassesByString(" + keyword + "): cache MISS on main thread, return empty (avoid block)");
-            return new ArrayList<>();
+        // v3.0.282: 缓存 miss 时先迁移旧格式缓存（微信更新后旧 key 是模块版本号格式），
+        // 避免启动早期线程在 migrateFindCache 运行前触发全量扫描导致 native 内存峰值闪退。
+        migrateFindCache();
+        cached = readFindCache(cacheKey);
+        if (cached != null) {
+            LogWriter.log(TAG, "findClassesByString(" + keyword + "): cache hit after migrate " + cached.size() + " candidates");
+            return new ArrayList<>(cached);
         }
-        DexKitCacheBridge.RecyclableBridge bridge = null;
-        final List<String> results = new ArrayList<>();
-        waitForFullScanIfScheduled();
-        synchronized (sBridgeLock) {
-            try {
-                bridge = createBridge(cl);
-            } catch (Throwable e) {
-                LogWriter.log(TAG, "findClassesByString err: " + e.getMessage());
-            }
-            if (bridge == null) {
-                return results;
-            }
-            try {
-                bridge.withBridge(new DexKitCacheBridge.RecyclableBridge.BridgeFunction() { // from class: com.leshao.v3.hook.DexKitHelper.5
-                    @Override // org.luckypray.dexkit.DexKitCacheBridge.RecyclableBridge.BridgeFunction
-                    public void apply(DexKitBridge b) {
-                        try {
-                            MethodMatcher mMatcher = MethodMatcher.create().usingStrings(keyword);
-                            List<MethodData> methods = b.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
-                            for (MethodData m : methods) {
-                                String cn = m.getClassName();
-                                if (cn != null && !results.contains(cn)) {
-                                    results.add(cn);
-                                }
-                            }
-                        } catch (Throwable th) {
-                        }
-                        try {
-                            ClassMatcher cMatcher = ClassMatcher.create().addFieldForType(keyword);
-                            List<ClassData> classes = b.findClass(FindClass.create().excludePackages("com.leshao").matcher(cMatcher));
-                            for (ClassData c : classes) {
-                                String cn2 = c.getName();
-                                if (cn2 != null && !results.contains(cn2)) {
-                                    results.add(cn2);
-                                }
-                            }
-                        } catch (Throwable th2) {
-                        }
-                    }
-                });
-                LogWriter.log(TAG, "findClassesByString(" + keyword + "): " + results.size() + " candidates");
-                writeFindCache(cacheKey, results);
-                return results;
-            } finally {
-                try {
-                    bridge.close();
-                } catch (Throwable th) {
-                }
-            }
-        }
+        // v3.0.283: 缓存未命中时一律不现场扫描（避免启动早期/主界面后的 DexKit 全量扫描
+        // 导致 native 内存峰值闪退）。依赖动态解析的模块请使用权威类名兜底。
+        LogWriter.log(TAG, "findClassesByString(" + keyword + "): cache MISS, return empty (avoid startup scan)");
+        return new ArrayList<>();
     }
 
     public static List<String> findMethodsByString(ClassLoader cl, final String className, final String keyword) {
@@ -647,54 +676,18 @@ public class DexKitHelper {
             LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): cache hit " + cached.size());
             return new ArrayList<>(cached);
         }
-        // v3.0.136: 主线程缓存未命中时不再现场扫描（避免卡死启动/主页）
-        if (isMainThread()) {
-            LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): cache MISS on main thread, return empty (avoid block)");
-            return new ArrayList<>();
+        // v3.0.282: 缓存 miss 时先迁移旧格式缓存（微信更新后旧 key 是模块版本号格式），
+        // 避免启动早期线程在 migrateFindCache 运行前触发全量扫描导致 native 内存峰值闪退。
+        migrateFindCache();
+        cached = readFindCache(cacheKey);
+        if (cached != null) {
+            LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): cache hit after migrate " + cached.size());
+            return new ArrayList<>(cached);
         }
-        DexKitCacheBridge.RecyclableBridge bridge = null;
-        final List<String> results = new ArrayList<>();
-        waitForFullScanIfScheduled();
-        synchronized (sBridgeLock) {
-            try {
-                bridge = createBridge(cl);
-            } catch (Throwable e) {
-                LogWriter.log(TAG, "findMethodsByString err: " + e.getMessage());
-            }
-            if (bridge == null) {
-                return results;
-            }
-            try {
-                bridge.withBridge(new DexKitCacheBridge.RecyclableBridge.BridgeFunction() { // from class: com.leshao.v3.hook.DexKitHelper.6
-                    @Override // org.luckypray.dexkit.DexKitCacheBridge.RecyclableBridge.BridgeFunction
-                    public void apply(DexKitBridge b) {
-                        try {
-                            MethodMatcher mMatcher = MethodMatcher.create().usingStrings(keyword);
-                            String str = className;
-                            if (str != null) {
-                                mMatcher.declaredClass(str);
-                            }
-                            List<MethodData> methods = b.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
-                            for (MethodData m : methods) {
-                                String sig = m.getClassName() + "." + m.getName() + "(" + String.join(",", m.getParamTypeNames()) + ")";
-                                if (!results.contains(sig)) {
-                                    results.add(sig);
-                                }
-                            }
-                        } catch (Throwable th) {
-                        }
-                    }
-                });
-                LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): " + results.size());
-                writeFindCache(cacheKey, results);
-                return results;
-            } finally {
-                try {
-                    bridge.close();
-                } catch (Throwable th) {
-                }
-            }
-        }
+        // v3.0.283: 缓存未命中时一律不现场扫描（避免启动早期/主界面后的 DexKit 全量扫描
+        // 导致 native 内存峰值闪退）。依赖动态解析的模块请使用权威类名兜底。
+        LogWriter.log(TAG, "findMethodsByString(" + className + "," + keyword + "): cache MISS, return empty (avoid startup scan)");
+        return new ArrayList<>();
     }
 
     /** 方法粒度字符串定位（DexKit_StringFinder_Method.md §8.2 推荐）：找「方法体引用该字符串」的方法，
@@ -710,49 +703,10 @@ public class DexKitHelper {
             LogWriter.log(TAG, "findMethodDeclClassByString(" + keyword + "): cache hit " + cached.size() + " classes");
             return new ArrayList<>(cached);
         }
-        if (isMainThread()) {
-            LogWriter.log(TAG, "findMethodDeclClassByString(" + keyword + "): cache MISS on main thread, return empty (avoid block)");
-            return new ArrayList<>();
-        }
-        DexKitCacheBridge.RecyclableBridge bridge = null;
-        final List<String> results = new ArrayList<>();
-        waitForFullScanIfScheduled();
-        synchronized (sBridgeLock) {
-            try {
-                bridge = createBridge(cl);
-            } catch (Throwable e) {
-                LogWriter.log(TAG, "findMethodDeclClassByString err: " + e.getMessage());
-            }
-            if (bridge == null) {
-                return results;
-            }
-            try {
-                bridge.withBridge(new DexKitCacheBridge.RecyclableBridge.BridgeFunction() {
-                    @Override
-                    public void apply(DexKitBridge b) {
-                        try {
-                            MethodMatcher mMatcher = MethodMatcher.create().usingStrings(keyword);
-                            List<MethodData> methods = b.findMethod(FindMethod.create().excludePackages("com.leshao").matcher(mMatcher));
-                            for (MethodData m : methods) {
-                                String cn = m.getClassName();
-                                if (cn != null && !results.contains(cn)) {
-                                    results.add(cn);
-                                }
-                            }
-                        } catch (Throwable ignored) {
-                        }
-                    }
-                });
-                LogWriter.log(TAG, "findMethodDeclClassByString(" + keyword + "): " + results.size() + " classes");
-                writeFindCache(cacheKey, results);
-                return results;
-            } finally {
-                try {
-                    bridge.close();
-                } catch (Throwable th) {
-                }
-            }
-        }
+        // v3.0.283: 缓存未命中时一律不现场扫描（避免启动早期/主界面后的 DexKit 全量扫描
+        // 导致 native 内存峰值闪退）。依赖动态解析的模块请使用权威类名兜底。
+        LogWriter.log(TAG, "findMethodDeclClassByString(" + keyword + "): cache MISS, return empty (avoid startup scan)");
+        return new ArrayList<>();
     }
 
     public static MethodData findMethod(ClassLoader cl, final String className, final String methodName, final String... paramTypeNames) {
@@ -989,14 +943,16 @@ public class DexKitHelper {
             }
             int cachedModule = kv.decodeInt(KEY_MODULE_VERSION, 0);
             if (cachedModule != CURRENT_MODULE_VERSION) {
-                LogWriter.log(TAG, "loadResultsFromMMKV: module version mismatch (cachedModule=" + cachedModule + " currentModule=" + CURRENT_MODULE_VERSION
-                        + (allowClear ? "), clearing cache" : "), read-only keep cache"));
-                if (allowClear) {
-                    kv.clearAll();
-                    kv.sync();
-                }
-                return false;
+                // v3.0.263：微信版本一致时信任旧缓存（即使模块版本变化），不再清空缓存、
+                // 不再触发全量扫描。模块升级只影响新增锚点，旧功能锚点（微信类名未变）仍有效。
+                LogWriter.log(TAG, "loadResultsFromMMKV: module version mismatch (cachedModule=" + cachedModule
+                        + " currentModule=" + CURRENT_MODULE_VERSION
+                        + "), wx unchanged => keep cache and load");
+                // 继续读取缓存，不清空、不返回 false
             }
+            // v3.0.281: 微信版本一致时先把旧格式(带模块版本号)缓存 key 改写为微信版本 key，
+            // 保证模块升级后首启直接命中缓存，不触发 DexKit 全量重扫（避免启动闪退）。
+            migrateFindCache();
             sP06ClassName = kv.decodeString(KEY_P06_CLASS, null);
             sDbOpenerClass = kv.decodeString(KEY_DB_OPENER_CLASS, null);
             sDbOpenMethodName = kv.decodeString(KEY_DB_OPEN_METHOD, null);
@@ -3322,16 +3278,24 @@ public class DexKitHelper {
                                     LogWriter.log(DexKitHelper.TAG, "hookApplication: SCAN SKIP (wx=" + cachedVersion
                                             + " module=" + DexKitHelper.CURRENT_MODULE_VERSION + "), cache-only");
                                     DexKitHelper.loadResultsFromMMKV(app, false);
+                                    // v3.0.271: 缓存命中时也显示「扫描完成」反馈弹窗，避免用户误以为模块未加载
+                                    DexKitHelper.sShouldShowScanDialog = true;
                                     return;
                                 }
                                 LogWriter.log(DexKitHelper.TAG, "hookApplication: SCAN NEEDED (cachedWx=" + cachedVersion
                                         + " cachedModule=" + cachedModule
                                         + " currentWx=" + DexKitHelper.sVersionCode
                                         + " currentModule=" + DexKitHelper.CURRENT_MODULE_VERSION + ")");
-                                // v3.0.176: 微信未变(仅模块升级)时静默补齐扫描, 不弹"重新适配"窗;
-                                // 微信更新或首次安装才全量扫描并弹窗。DexKitCacheBridge 按 key 命中
-                                // 已有缓存, 模块升级只补查缺失锚点, 补齐后由 startFullScan 持久化版本号。
+                                // v3.0.263：微信版本未变（仅模块升级）时直接读缓存，不再触发任何扫描 ——
+                                // 避免模块升级导致约 26 秒的静默全量扫描拖慢微信启动。
                                 boolean wxUnchanged = (cachedVersion == DexKitHelper.sVersionCode);
+                                if (wxUnchanged) {
+                                    LogWriter.log(DexKitHelper.TAG, "hookApplication: wx unchanged (module upgraded), cache-only, no rescan");
+                                    DexKitHelper.loadResultsFromMMKV(app, false);
+                                    // v3.0.271: 缓存命中时也显示「扫描完成」反馈弹窗，避免用户误以为模块未加载
+                                    DexKitHelper.sShouldShowScanDialog = true;
+                                    return;
+                                }
                                 DexKitHelper.sShouldShowScanDialog = !wxUnchanged;
                                 DexKitHelper.startFullScan(app, !wxUnchanged);
                                 return;
@@ -3351,14 +3315,11 @@ public class DexKitHelper {
                             Object obj = param.args[0];
                             if (obj instanceof Activity) {
                                 Activity activity = (Activity) obj;
-                                // v3.0.123: 不再只等 LauncherUI —— 微信启动先出现 WeChatSplashActivity，
-                                // 若扫描已开始而 LauncherUI 迟迟未创建（首启/升级后全量扫描耗时），
-                                // 用户会看到长时间黑屏且无任何进度反馈。这里放宽到启动期第一个
-                                // 微信 Activity（Splash / LauncherUI）即显示进度弹窗，保证有可见反馈。
+                                // v3.0.279：弹窗时机改为等微信主页（LauncherUI）创建后再显示，
+                                // 不再在 WeChatSplashActivity（闪屏页）上提前弹窗（用户反馈弹窗过早且进度条不动）。
                                 String actName = activity.getClass().getName();
                                 boolean isStartupActivity = "com.tencent.mm".equals(activity.getPackageName())
-                                        && ("com.tencent.mm.ui.LauncherUI".equals(actName)
-                                            || "com.tencent.mm.app.WeChatSplashActivity".equals(actName));
+                                        && "com.tencent.mm.ui.LauncherUI".equals(actName);
                                 if (isStartupActivity) {
                                     DexKitHelper.sShouldShowScanDialog = false;
                                     LogWriter.log(DexKitHelper.TAG, "DexKitScanDialog shown on " + actName);

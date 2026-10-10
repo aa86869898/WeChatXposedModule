@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LeShaoWeChat 超高速下载</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 640px; margin: 40px auto; padding: 0 20px; color: #333; text-align: center; }
+  h1 { font-size: 22px; }
+  .apk { font-size: 14px; color: #888; margin: 8px 0 24px; word-break: break-all; }
+  #btn { display: inline-block; padding: 18px 48px; background: #1a73e8; color: #fff; font-size: 18px; font-weight: 600; border: 0; border-radius: 12px; cursor: pointer; }
+  #btn:disabled { background: #9aa7b5; cursor: not-allowed; }
+  #btn:hover:not(:disabled) { background: #1558b0; }
+  #status { margin-top: 20px; font-size: 14px; color: #555; min-height: 20px; }
+  .bar { width: 100%; height: 14px; background: #eee; border-radius: 7px; margin-top: 16px; overflow: hidden; display: none; }
+  .bar > div { height: 100%; width: 0%; background: #34a853; transition: width .2s; }
+  .tip { margin-top: 28px; font-size: 12px; color: #999; line-height: 1.8; }
+</style>
+</head>
+<body>
+  <h1>LeShaoWeChat 超高速下载</h1>
+  <div class="apk">LeShaoWeChat-v30314.apk (约 9.3MB)</div>
+  <button id="btn">超高速下载（16线程）</button>
+  <div class="bar" id="bar"><div id="fill"></div></div>
+  <div id="status"></div>
+  <div class="tip">点击后浏览器自动分 16 段并发下载，完成后本地合并保存，速度可达普通下载的 5-7 倍。<br>若浏览器拦截下载，请允许多文件下载或改用 Chrome/Edge。</div>
+
+<script>
+(function () {
+  var FILE = 'LeShaoWeChat-v30314.apk';
+  var CONCURRENCY = 16;
+  var btn = document.getElementById('btn');
+  var bar = document.getElementById('bar');
+  var fill = document.getElementById('fill');
+  var status = document.getElementById('status');
+
+  function setStatus(s) { status.textContent = s || ''; }
+
+  async function getTotal() {
+    var r = await fetch(FILE, { headers: { Range: 'bytes=0-0' } });
+    if (!r.ok && r.status !== 206) throw new Error('无法获取文件大小 HTTP ' + r.status);
+    var cr = r.headers.get('Content-Range') || '';
+    var total = parseInt(cr.split('/')[1], 10);
+    if (!total) throw new Error('服务器不支持 Range 分段下载');
+    return total;
+  }
+
+  function fetchSegment(start, end) {
+    return fetch(FILE, { headers: { Range: 'bytes=' + start + '-' + end } })
+      .then(function (r) { if (!r.ok && r.status !== 206) throw new Error('分段请求失败 HTTP ' + r.status); return r.arrayBuffer(); });
+  }
+
+  async function turbo() {
+    btn.disabled = true;
+    bar.style.display = 'block';
+    fill.style.width = '0%';
+    setStatus('正在探测文件大小...');
+    var total;
+    try {
+      total = await getTotal();
+    } catch (e) {
+      setStatus('失败：' + e.message);
+      btn.disabled = false;
+      return;
+    }
+    var seg = Math.floor(total / CONCURRENCY);
+    var ranges = [];
+    for (var i = 0; i < CONCURRENCY; i++) {
+      var s = i * seg;
+      var e = i === CONCURRENCY - 1 ? total - 1 : (i + 1) * seg - 1;
+      ranges.push({ start: s, end: e });
+    }
+    var parts = new Array(CONCURRENCY);
+    var done = 0;
+    setStatus('正在 16 线程并发下载... 0%');
+    try {
+      await Promise.all(ranges.map(function (range, idx) {
+        return fetchSegment(range.start, range.end).then(function (buf) {
+          parts[idx] = buf;
+          done++;
+          var pct = Math.round(done / CONCURRENCY * 100);
+          fill.style.width = pct + '%';
+          setStatus('正在 16 线程并发下载... ' + pct + '%');
+        });
+      }));
+    } catch (e) {
+      setStatus('下载失败：' + e.message);
+      btn.disabled = false;
+      return;
+    }
+    setStatus('分段完成，正在合并文件...');
+    await new Promise(function (res) { setTimeout(res, 50); });
+    var blob = new Blob(parts, { type: 'application/vnd.android.package-archive' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = FILE;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 2000);
+    fill.style.width = '100%';
+    setStatus('已开始保存：' + FILE);
+    btn.disabled = false;
+  }
+
+  btn.addEventListener('click', turbo);
+})();
+</script>
+</body>
+</html>

@@ -1,6 +1,5 @@
 package com.example.wxbubble
 
-import android.app.Activity
 import android.content.Context
 import android.content.res.Resources
 import android.graphics.Canvas
@@ -22,6 +21,9 @@ import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
+import org.luckypray.dexkit.result.ClassData
+import org.luckypray.dexkit.query.enums.StringMatchType
+import org.luckypray.dexkit.query.BatchFindClassUsingStrings
 import org.luckypray.dexkit.query.FindClass
 import org.luckypray.dexkit.query.FindField
 import org.luckypray.dexkit.query.FindMethod
@@ -33,7 +35,6 @@ import org.luckypray.dexkit.query.matchers.MethodsMatcher
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 import java.lang.ref.WeakReference
-import java.util.Collections
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
 
@@ -51,23 +52,11 @@ private object C {
 
 // ============ 1. 入口 / 环境 / 启动 ============
 class WxBubbleModule : IXposedHookLoadPackage {
-    private val started = java.util.concurrent.atomic.AtomicBoolean(false)
-
     override fun handleLoadPackage(lp: XC_LoadPackage.LoadPackageParam) {
         if (lp.packageName != PKG) return
         WxEnv.lp = lp
         WxEnv.apkPath = lp.appInfo?.sourceDir ?: return
-        // v3.0.283：换方案 —— 锚点改用《微信消息气泡替换-逆向分析报告》核验的纯反射类名，
-        // 不再加载 libdexkit、不再 DexKit 扫描，从根源消除启动闪退。
-        // 仍等 LauncherUI 出现后再初始化，确保微信 UI 就绪后安装气泡替换 hook。
-        XposedBridge.hookAllMethods(Activity::class.java, "onResume", object : XC_MethodHook() {
-            override fun afterHookedMethod(p: MethodHookParam) {
-                val act = p.thisObject as? Activity ?: return
-                if (act.javaClass.name != "com.tencent.mm.ui.LauncherUI") return
-                if (started.getAndSet(true)) return
-                Thread({ WxBoot.start() }, "WxBubble-boot").start()
-            }
-        })
+        Thread({ WxBoot.start() }, "WxBubble-boot").start()
     }
 }
 
@@ -174,49 +163,58 @@ object R {
 
 object WxResolver {
     fun resolve(): Boolean {
-        // v3.0.283：换方案 —— 不再使用 DexKit 扫描（libdexkit 全量字符串扫描是启动闪退根因）。
-        // 改用《微信消息气泡替换-逆向分析报告》核验的稳定锚点（纯反射 fallback），
-        // 零 native 加载、零 DexKit 调用，微信启动不再闪退，气泡替换功能保留。
-        fallback()
+        runCatching { resolveByDexKit() }
+        if (!validate()) { log("DexKit 不完整 → 硬编码兜底"); fallback() }
         resolveDerived()
         return validate()
     }
 
     private fun resolveByDexKit() {
-        // v3.0.283：换方案，本方法已废弃（DexKit 全量字符串扫描是启动闪退根因），不再调用。
-        return
         DexKitHelper.withWechatBridge<Unit>(WxEnv.cl) { bridge ->
-            fun uniq(s: String, extra: (Class<*>) -> Boolean = { true }): Class<*>? =
-                bridge.findClass(FindClass.create().matcher(ClassMatcher.create().usingStrings(s)))
-                    .mapNotNull { cd -> Reflect.load(cd.descriptor) }
-                    .firstOrNull { extra(it) }
-            fun andStr(s: String, name: String, pc: Int): Class<*>? =
-                bridge.findClass(FindClass.create().matcher(ClassMatcher.create().usingStrings(s)))
-                    .mapNotNull { cd -> Reflect.load(cd.descriptor) }
+            val stringTags = linkedMapOf(
+                "adapter" to "_onBindViewHolder[",
+                "voiceItemFrom" to "onStateBtnClick voice msg(%s) re-download!",
+                "voiceHolder" to "[voice interrupt] set continue play visible ",
+                "voiceItemTo" to "ChattingItemVoice\$ChattingItemVoiceTo",
+                "autoPlay" to "voice_continue_play_info",
+                "voiceLogic" to "MicroMsg.VoiceLogic",
+                "voiceInfo" to "MasterBufId",
+                "voiceContent" to "voicemd5",
+                "textHolder" to "[isOpenNeatTextView]",
+                "textItemFrom" to "MicroMsg.ChattingItemTextFrom",
+                "sysMsgItem" to "chat_sys_msg_del_btn",
+                "sysMsgTemplate" to "com/tencent/mm/ui/chatting/viewitems/ChattingItemSysMsgTemplate",
+                "sysMsgGen" to "MicroMsg.SysMsgTemplateImp",
+                "chatBgAttr" to "chatbg",
+                "c2cUtil" to "getC2CLuckyMoneyDescByHbStatus",
+                "hbItem" to "MicroMsg.ChattingItemAppMsgC2CFrom"
+            )
+            val batch = BatchFindClassUsingStrings.create()
+            for ((tag, s) in stringTags) batch.addSearchGroup(s, listOf(s), StringMatchType.Contains, false)
+            val results = bridge.batchFindClassUsingStrings(batch)
+            fun classes(tag: String): List<ClassData> =
+                (results[stringTags[tag]] ?: emptyList()).toList()
+            fun uniq(tag: String): Class<*>? =
+                classes(tag).mapNotNull { Reflect.load(it.descriptor) }.firstOrNull()
+            fun andStr(tag: String, name: String, pc: Int): Class<*>? =
+                classes(tag).mapNotNull { Reflect.load(it.descriptor) }
                     .firstOrNull { c -> c.declaredMethods.any { m -> m.name == name && m.parameterTypes.size == pc } }
 
-            // ---- A 区 适配器 ----
-            R.adapter   = uniq("_onBindViewHolder[")                                   // A-1 唯一
-            R.rvAdapter = Reflect.load("Lcom/tencent/mm/view/recyclerview/WxRecyclerAdapter;") // 四级兜底
+            R.adapter   = uniq("adapter")                                   // A-1 唯一
+            R.rvAdapter = Reflect.load("Lcom/tencent/mm/view/recyclerview/WxRecyclerAdapter;")
 
-            // ---- B 区 语音 ----
-            R.voiceItemFrom = uniq("onStateBtnClick voice msg(%s) re-download!")         // B-1 唯一
-            R.voiceHolder   = uniq("[voice interrupt] set continue play visible ")       // B-2 唯一
-            R.voiceItemTo   = andStr("ChattingItemVoice\$ChattingItemVoiceTo", "H", 2) // B-3
-            R.autoPlay      = andStr("voice_continue_play_info", "H", 2)                   // B-6
-            R.voiceLogic    = andStr("MicroMsg.VoiceLogic", "n", 1)                      // B-7 n(J)F
-            R.voiceInfo     = andStr("MasterBufId", "b", 0)                              // B-8 b()→ContentValues
-            R.voiceContent  = andStr("voicemd5", "getLength", 0)                         // B-9
+            R.voiceItemFrom = uniq("voiceItemFrom")                           // B-1 唯一
+            R.voiceHolder   = uniq("voiceHolder")                             // B-2 唯一
+            R.voiceItemTo   = andStr("voiceItemTo", "H", 2)                 // B-3
+            R.autoPlay      = andStr("autoPlay", "H", 2)                    // B-6
+            R.voiceLogic    = andStr("voiceLogic", "n", 1)                  // B-7 n(J)F
+            R.voiceInfo     = andStr("voiceInfo", "b", 0)                  // B-8 b()→ContentValues
+            R.voiceContent  = andStr("voiceContent", "getLength", 0)       // B-9
             R.voiceFill     = R.voiceHolder?.let { c ->
                 c.declaredMethods.firstOrNull { it.name == "e" && it.parameterTypes.size == 9 } }
 
-            // ---- C 区 文本 ----
-            // v3.0.268：文本消息有 From(对方)/To(自己) 两类 holder，必须全部收集，
-            // 否则自己的消息类名不匹配导致不替换。
             R.textHolders.clear()
-            R.textHolders.addAll(bridge.findClass(FindClass.create().matcher(
-                    ClassMatcher.create().usingStrings("[isOpenNeatTextView]")))
-                .mapNotNull { cd -> Reflect.load(cd.descriptor) })
+            R.textHolders.addAll(classes("textHolder").mapNotNull { Reflect.load(it.descriptor) })
             R.textHolder = R.textHolders.firstOrNull()
             R.textHolderNames = R.textHolders.mapNotNull { it.name }.toSet()
             R.textBubbleSetters.clear()
@@ -225,40 +223,31 @@ object WxResolver {
                     ?.let { R.textBubbleSetters.add(it) }
             }
             R.textBubbleSetter = R.textBubbleSetters.firstOrNull()
-            R.textItemFrom = andStr("MicroMsg.ChattingItemTextFrom", "d", 4)             // C-2
+            R.textItemFrom = andStr("textItemFrom", "d", 4)                  // C-2
 
-            // ---- D 区 系统提示/时间线 ----
-            R.sysMsgItem = andStr("chat_sys_msg_del_btn", "H", 2)                        // D-1
-            R.sysMsgTemplate = andStr("com/tencent/mm/ui/chatting/viewitems/ChattingItemSysMsgTemplate", "a", 5) // D-3
+            R.sysMsgItem = andStr("sysMsgItem", "H", 2)                    // D-1
+            R.sysMsgTemplate = andStr("sysMsgTemplate", "a", 5)             // D-3
             R.baseHolder = bridge.findField(FindField.create().matcher(FieldMatcher.create().name("timeTV")))
-                .firstOrNull()?.let { fd -> Reflect.load(fd.className) }                  // D-5 ★结构
+                .firstOrNull()?.let { fd -> Reflect.load(fd.className) }     // D-5 ★结构
             R.sysMsgFill = R.sysMsgItem?.let { c ->
                 c.declaredMethods.firstOrNull { it.name == "n" && it.parameterTypes.size == 4 } }
 
-            // sysmsg 文本生成：gj 5 参 + AND Tag（D-2）
-            val tmplClasses = bridge.findClass(FindClass.create().matcher(
-                    ClassMatcher.create().usingStrings("MicroMsg.SysMsgTemplateImp")))
-                .mapNotNull { cd -> Reflect.load(cd.descriptor) }
+            val tmplClasses = classes("sysMsgGen").mapNotNull { Reflect.load(it.descriptor) }
             R.sysMsgGen = tmplClasses.firstOrNull { c ->
                 c.declaredMethods.any { it.name == "gj" && it.parameterTypes.size == 5 &&
                                         it.returnType == CharSequence::class.java } }
                 ?.let { c -> c.declaredMethods.first { it.name == "gj" } }
 
-            // ---- E 区 文字颜色 ----
-            R.chatBgAttr = uniq("chatbg")                                                // E-1 唯一
+            R.chatBgAttr = uniq("chatBgAttr")                                // E-1 唯一
+            R.c2cUtil = uniq("c2cUtil")                                       // F-1 唯一
+            R.hbItem  = andStr("hbItem", "H", 2)                            // F-3
 
-            // ---- F 区 红包 ----
-            R.c2cUtil = uniq("getC2CLuckyMoneyDescByHbStatus")                           // F-1 唯一
-            R.hbItem  = andStr("MicroMsg.ChattingItemAppMsgC2CFrom", "H", 2)             // F-3
-
-            // ---- G 区 引用 ----
             R.quoteImpls = bridge.findClass(FindClass.create().matcher(
                     ClassMatcher.create().interfaces(InterfacesMatcher.create().add("Lq71/n;")))) // G-2 ×44
                 .mapNotNull { cd -> Reflect.load(cd.descriptor) }
             bridge.findMethod(FindMethod.create().matcher(
                 MethodMatcher.create().name("J7").returnType("q71.n")))                  // G-1 仅诊断
 
-            // ---- H 区 消息 ----
             R.msgInfo = bridge.findClass(
                     FindClass.create().searchPackages(listOf("com.tencent.mm.storage"))
                         .matcher(ClassMatcher.create().usingStrings("MicroMsg.MsgInfo")
@@ -266,12 +255,10 @@ object WxResolver {
                                 MethodMatcher.create().name("convertFrom").paramTypes("android.database.Cursor"))))
                 ).firstOrNull()?.let { cd -> Reflect.load(cd.descriptor) }               // H-1
 
-            // ---- 四级：未混淆类名兜底 ----
             R.anim = Reflect.load("Lcom/tencent/mm/ui/base/AnimImageView;")
             R.neat = Reflect.load("Lcom/tencent/mm/ui/widget/MMNeat7extView;")
             R.msgQuote = Reflect.load("Lcom/tencent/mm/plugin/msgquote/model/MsgQuoteItem;")
 
-            // ---- 三级：MVVM 子类 ----
             R.voiceItemFromMvvm = bridge.findClass(FindClass.create().matcher(
                     ClassMatcher.create().superClass(R.voiceItemFrom?.name?.let { n ->
                         "L" + n.replace('.', '/') + ";" } ?: "")))
@@ -379,58 +366,18 @@ object Injectable {
         "c", "s",   // 副文本 / 秒数文本
         "o", "p", "z", "C", "B", "q", "r", "y", "t", "w", "f", "g"
     )
-    // ★ v3.0.289：占位/热区 View 资源 id 黑名单（全方向禁）。
-    // mq.u(2131366096)/mq.x(2131366108) 是发送侧真承载、接收侧镜像/占位，不在全局禁，
-    // 由语音分支按方向过滤（接收侧跳过，发送侧贴皮）。
-    private val BANNED_IDS = setOf(
-        2131365816, // mq.D  时长/倍速提示容器
-        2131366097  // mq.d  透明点击热区
-    )
     fun banned(n: String) = n in BANNED
     fun ok(v: View): Boolean {
-        // ★ 修复：占位/镜像/热区 id 一律不贴皮（根治「假空气泡顶真气泡」）
-        if (v.id in BANNED_IDS) return false
         val bg = v.background ?: return false
-        val bgCls = bg.javaClass.name
         if (v is ViewGroup) {
             val n = v.javaClass.name
             if (n.contains("AbsListView") || n.contains("RecyclerView") || n.contains("ListView")) return false
-            // 容器型气泡：只放行气泡类背景（九宫格/渐变/层/形状/状态列表）
-            if (!isBubbleBgClass(bgCls)) return false
-            // ★ 修复：空容器（没有任何可见内容子视图）不贴皮 —— 占位层/镜像层多为空容器
-            if (!hasVisibleContentChild(v)) return false
+            if (!bg.javaClass.name.contains("NinePatch")) return false
         }
-        // 不再校验 width/height 与 intrinsic 尺寸：绑定期未测量的气泡、以及使用
-        // StateListDrawable/GradientDrawable/ShapeDrawable（intrinsic 常为 -1）的
-        // 语音气泡(mq.x)、引用气泡、圆角容器，都必须放行，否则「发送侧语音/引用消息」不被替换。
+        // 不再校验 width/height：绑定期未测量的气泡也要替换（根因修复）
+        if (bg.intrinsicWidth <= 0 || bg.intrinsicHeight <= 0) return false
         if (v is TextView && v.text.isNullOrEmpty() && v.isClickable && v.isLongClickable) return false
-        // ★ 修复：秒数/时长/角标类小 TextView 不贴皮（如语音秒数、视频时长、红点数字）
-        if (v is TextView && isBadgeLike(v)) return false
         return true
-    }
-
-    private fun isBubbleBgClass(n: String): Boolean =
-        n.contains("NinePatch") || n.contains("Gradient") || n.contains("Layer") ||
-        n.contains("Shape") || n.contains("StateList")
-
-    /** ★ 修复：容器内是否有可见的「有内容」子视图（文本非空 / ImageView 有 drawable / 递归子容器） */
-    private fun hasVisibleContentChild(g: ViewGroup): Boolean {
-        for (i in 0 until g.childCount) {
-            val c = g.getChildAt(i)
-            if (c.visibility != View.VISIBLE) continue
-            if (c is android.widget.TextView && !c.text.isNullOrEmpty()) return true
-            if (c is android.widget.ImageView && c.drawable != null) return true
-            if (c is ViewGroup && hasVisibleContentChild(c)) return true
-        }
-        return false
-    }
-
-    /** ★ 修复：纯数字/时长/秒数/角标文本（如 "12"、"[语音] 5''"）不贴皮 */
-    private fun isBadgeLike(t: TextView): Boolean {
-        val s = t.text?.toString()?.trim() ?: return true
-        if (s.isEmpty()) return true
-        if (s.length <= 6 && s.all { it.isDigit() || it == ':' || it == '\'' || it == '"' || it == '.' }) return true
-        return false
     }
     fun nameOf(holder: Any, v: View): String? =
         Reflect.allFields(holder.javaClass).firstOrNull { f ->
@@ -527,9 +474,6 @@ object Replacer {
     val bubbleIds: MutableSet<Int> = ConcurrentHashMap.newKeySet()
     /** id → (from, voice)，首次见到该 id 时从气泡 View 反推并记住 */
     private val idMeta = ConcurrentHashMap<Int, Pair<Boolean, Boolean>>()
-    /** ★ v3.0.288：文本/语音共用的普通气泡资源 id，资源层不替换（无法区分用途），
-     *  由视图层按承载视图区分：文本 L1-a 贴文本皮，语音 R2 语音视图识别贴语音皮。 */
-    private val SHARED_TEXT_VOICE_IDS = setOf(2131231925, 2131232060)
 
     /** 自定义气泡工厂：返回 null = 不替换 */
     var factory: ((Context, from: Boolean, voice: Boolean, orig: Drawable?) -> Drawable?)? = null
@@ -542,32 +486,12 @@ object Replacer {
     private fun isOurs(d: Drawable): Boolean = d.javaClass.name.startsWith("com.example.wxbubble.")
 
     fun install() {
-        // v3.0.288：预置逆向核验的文本/语音气泡资源 ID（版本兜底；主路径仍靠运行时动态收集）。
-        // 文本气泡：收到 发送中 2131231841 / 链接 2131231944；
-        //           发出 发送中 2131231895 / 链接 2131232070 / 其他 2131232062。
-        // 语音气泡：播放/高亮 2131100638(对方)/2131100639(自己)。
-        // ★ 文本普通 2131231925(收到)/2131232060(发出) 与语音普通共用，不在资源层替换：
-        //   由视图层区分（文本 L1-a / 语音 R2 语音视图识别），避免语音被套成文本皮。
-        val preset = listOf(
-            2131231841 to (false to false),
-            2131231944 to (false to false),
-            2131231895 to (true to false),
-            2131232062 to (true to false),
-            2131232070 to (true to false),
-            2131100638 to (false to true),
-            2131100639 to (true to true)
-        )
-        preset.forEach { (id, meta) ->
-            bubbleIds.add(id)
-            idMeta.putIfAbsent(id, meta)
-        }
         val res = Reflect.load(C.RES) ?: run { log("Resources 类找不到"); return }
         listOf("getDrawable", "getDrawableForDensity").forEach { mName ->
             XposedBridge.hookAllMethods(res, mName, object : XC_MethodHook() {
                 override fun afterHookedMethod(p: MethodHookParam) {
                     val id = p.args[0] as? Int ?: return
                     if (id !in bubbleIds) return                    // O(1)，不影响其它资源
-                    if (id in SHARED_TEXT_VOICE_IDS) return        // ★ 文本/语音共用：留给视图层区分
                     val orig = p.result as? Drawable ?: return
                     if (isOurs(orig)) return                        // 已替换过，避免二次包裹
                     val c = ctx() ?: return
@@ -584,109 +508,33 @@ object Replacer {
             override fun beforeHookedMethod(p: MethodHookParam) {
                 if (BubbleEngine.writing.get()) return
                 val v = p.thisObject as? View ?: return
-                if (!inChatItem(v)) return                       // 只处理聊天 item 内
                 val d = p.args[0] as? Drawable ?: return
-                if (!Injectable.ok(v)) return
-                // ★ v3.0.289：语音视图识别（AnimImageView / 已登记语音 / mq.e 真承载 id 2131366091）。
-                //   文本/语音共用的普通气泡 id 已在资源层排除，这里拿到的是微信原生 Drawable；
-                //   语音视图跳过 looksWx（我们自己的文本皮不满足 looksWx，也必须能重贴语音皮）。
-                val voice = R.anim?.isInstance(v) == true || BubbleEngine.isRegisteredVoice(v) || v.id == 2131366091
-                if (!voice && !looksWx(d)) return
-                // 非语音视图且已是我们替换的 Drawable → 防二次包裹；语音视图允许重贴语音皮
-                if (isOurs(d) && !voice) return
+                if (!Injectable.ok(v) || !looksWx(d)) return
                 val c = ctx() ?: v.context
-                val ours = factory?.invoke(c, sideOf(v), voice, d) ?: return
+                val ours = factory?.invoke(c, sideOf(v), false, d) ?: return
                 cp(d, ours); ours.bounds = d.bounds
                 p.args[0] = ours
             }
         })
 
-        // ---------- R3：直接替换真实气泡承载视图的背景 override（进入聊天即全部替换好）----------
-        // 微信 X2C 预构建 / DataBinding / 复用会在 bind 之外直接 setBackground(Drawable)，
-        // 且 MMNeat7extView/AnimImageView 重写了 setBackground，基类 View hook 不触发。
-        // 这里 hook 真实类，在任何设置点都立即换成自定义气泡（设置即替换，无需等上下滑）。
-        runCatching {
-            val neat = Reflect.load("Lcom/tencent/mm/ui/widget/MMNeat7extView;")
-            if (neat != null) {
-                XposedBridge.hookAllMethods(neat, "setBackground", object : XC_MethodHook() {
-                    override fun beforeHookedMethod(p: MethodHookParam) {
-                        if (BubbleEngine.writing.get()) return
-                        if (p.args.isNullOrEmpty() || !(p.args[0] is Drawable)) return
-                        val v = p.thisObject as? View ?: return
-                        if (!inChatItem(v)) return                   // 只替换聊天 item 内的气泡
-                        val d = p.args[0] as Drawable
-                        if (isOurs(d)) return
-                        if (v.id == 0) return                       // 非内容 ITV（如语音秒数）不碰
-                        if (v is TextView && v.text.isNullOrEmpty() && v.isClickable && v.isLongClickable) return
-                        val from = BubbleEngine.appliedFrom(v) ?: sideOf(v)
-                        val ours = factory?.invoke(v.context, from, false, d) ?: return
-                        cp(d, ours); ours.bounds = d.bounds
-                        p.args[0] = ours
-                    }
-                })
-                log("R3 MMNeat7extView.setBackground hooked (immediate text bubble replace)")
-            }
-        }
-        runCatching {
-            val anim = Reflect.load("Lcom/tencent/mm/ui/base/AnimImageView;")
-            if (anim != null) {
-                XposedBridge.hookAllMethods(anim, "setBackground", object : XC_MethodHook() {
-                    override fun beforeHookedMethod(p: MethodHookParam) {
-                        if (BubbleEngine.writing.get()) return
-                        if (p.args.isNullOrEmpty() || !(p.args[0] is Drawable)) return
-                        val v = p.thisObject as? View ?: return
-                        if (!inChatItem(v)) return                   // 只替换聊天 item 内的语音气泡
-                        val d = p.args[0] as Drawable
-                        if (v.id == 0) return                        // 非内容 ITV（如语音秒数）不碰
-                        if (v is TextView && v.text.isNullOrEmpty() && v.isClickable && v.isLongClickable) return
-                        // ★ v3.0.287：聊天 item 内 AnimImageView 即语音承载，无论是否已登记
-                        //   一律按语音皮替换（不检查 isOurs：允许从资源层给的文本皮重贴语音皮）。
-                        val from = BubbleEngine.appliedFrom(v) ?: sideOf(v)
-                        val ours = factory?.invoke(v.context, from, true, d) ?: return
-                        cp(d, ours); ours.bounds = d.bounds
-                        p.args[0] = ours
-                    }
-                })
-                log("R3 AnimImageView.setBackground hooked (voice re-set immediate replace)")
-            }
-        }
-
-        // ★ v3.0.291：图片内容视图保护 —— getMainContentIv() 返回的 ImageView 绝不贴皮
-        runCatching {
-            val imgMvvm = Reflect.load("com.tencent.mm.ui.chatting.viewitems.mvvmview.ChattingImgMvvmView")
-            if (imgMvvm != null) {
-                XposedBridge.hookAllMethods(imgMvvm, "getMainContentIv", object : XC_MethodHook() {
-                    override fun afterHookedMethod(p: MethodHookParam) {
-                        (p.result as? View)?.let { BubbleEngine.contentViews.add(it) }
-                    }
-                })
-            }
-        }
-        // ★ v3.0.291：视频内容视图保护 —— ChattingVideoMvvmView 内 ImageView 不贴皮
-        runCatching {
-            val vidMvvm = Reflect.load("com.tencent.mm.ui.chatting.viewitems.mvvmview.ChattingVideoMvvmView")
-            if (vidMvvm != null) {
-                XposedBridge.hookAllMethods(vidMvvm, "onMeasure", object : XC_MethodHook() {
-                    override fun afterHookedMethod(p: MethodHookParam) {
-                        val root = p.thisObject as? ViewGroup ?: return
-                        BubbleEngine.protectImageViews(root)
-                    }
-                })
-            }
-        }
-
-        // ---------- 气泡资源 ID 动态收集（观察 hook：只登记，绝不修改背景）----------
-        // v3.0.286：只把聊天 item 内设置过的气泡 resId 收进集合 + 记录方向/语音元数据，
-        // 不替换背景、不跳过微信设置。替换统一在 getDrawable/getDrawableForDensity
-        // 返回值层完成（源头替换，无贴皮、无越界、无全局污染）。
+        // ---------- 收集气泡 id + 首次即时替换（避免第一帧闪原生）----------
         XposedBridge.hookAllMethods(View::class.java, "setBackgroundResource", object : XC_MethodHook() {
             override fun beforeHookedMethod(p: MethodHookParam) {
                 val v = p.thisObject as? View ?: return
-                if (!inChatItem(v)) return                        // 只在聊天 item 内收集（全局性红线）
                 val id = p.args[0] as? Int ?: return
-                if (id == 0) return
-                bubbleIds.add(id)
+                if (id == 0 || !Injectable.ok(v)) return
+                val isNew = bubbleIds.add(id)
                 idMeta.putIfAbsent(id, metaOf(v))
+                if (!isNew) return                               // 已收集 → 交给 R1
+                val c = ctx() ?: v.context
+                val (from, voice) = idMeta[id] ?: (true to false)
+                val orig = v.background
+                val ours = factory?.invoke(c, from, voice, orig) ?: return
+                orig?.let { cp(it, ours); ours.bounds = it.bounds }
+                BubbleEngine.applyDrawable(v, ours)
+                p.result = Unit                                  // 跳过微信原本的设置
+                log("R1 first replace id=0x${Integer.toHexString(id)} " +
+                    "view=${v.javaClass.simpleName} from=$from voice=$voice")
             }
         })
     }
@@ -729,29 +577,11 @@ object Replacer {
         return cur
     }
 
-    /** v3.0.275：是否位于聊天消息 item 内（沿父链找 item 根，其 tag 是聊天 viewitems holder）。
-     *  仅聊天 item 内的气泡才允许替换，主页/输入框/表情面板/发现页等一律不碰，
-     *  否则会把主页等页面里的 MMNeat7extView/渐变容器也误贴成气泡。 */
-    fun inChatItem(v: View?): Boolean {
-        if (v == null) return false
-        var cur: View? = v
-        var depth = 0
-        while (cur != null && depth++ < 40) {
-            val tag = cur.tag
-            if (tag != null && tag.javaClass.name.startsWith("com.tencent.mm.ui.chatting.viewitems.")) return true
-            cur = cur.parent as? View
-        }
-        return false
-    }
-
     private fun looksWx(d: Drawable): Boolean {
         val n = d.javaClass.name
-        // 气泡类背景：九宫格/状态列表/渐变/层/形状直接放行（intrinsic 常为 -1，
-        // 文字气泡背景是 StateListDrawable、语音/引用气泡可能是 Gradient/Layer）。
-        if (n.contains("NinePatch") || n.contains("StateList") || n.contains("Gradient") ||
-            n.contains("Layer") || n.contains("Shape")) return true
-        // 仅位图仍按尺寸约束防误伤头像/图标
-        return n.contains("Bitmap") && d.intrinsicWidth in 100..4000 && d.intrinsicHeight in 40..600
+        return (n.contains("NinePatch") || n.contains("Bitmap") || n.contains("Gradient") ||
+                n.contains("Layer") || n.contains("Shape")) &&
+               d.intrinsicWidth in 100..4000 && d.intrinsicHeight in 40..600
     }
 
     private fun cp(from: Drawable, to: Drawable) {
@@ -766,21 +596,6 @@ private fun padL(d: Drawable): Int { val r = Rect(); d.getPadding(r); return r.l
 private fun padR(d: Drawable): Int { val r = Rect(); d.getPadding(r); return r.right }
 object BubbleEngine {
     val writing = ThreadLocal.withInitial { false }
-
-    /** ★ v3.0.291：图片/视频内容视图（绝不贴皮，防遮挡图片/视频内容） */
-    val contentViews: MutableSet<View> = Collections.newSetFromMap(java.util.WeakHashMap())
-    private val protectedRoots: MutableSet<View> = Collections.newSetFromMap(java.util.WeakHashMap())
-
-    /** ★ v3.0.291：收集一个视图子树内的全部 ImageView 为内容视图（视频/图片 mvvm 内层） */
-    fun protectImageViews(root: ViewGroup) {
-        if (root in protectedRoots) return
-        protectedRoots.add(root)
-        for (i in 0 until root.childCount) {
-            val c = root.getChildAt(i)
-            if (c is android.widget.ImageView) contentViews.add(c)
-            if (c is ViewGroup) protectImageViews(c)
-        }
-    }
 
     private class Info(var original: Drawable?, var appliedFrom: Boolean, val voice: Boolean,
                        var padL: Int = 0, var padR: Int = 0)
@@ -805,25 +620,21 @@ object BubbleEngine {
         if (!R.adapter!!.isAssignableFrom(adapterThis.javaClass)) return
         val holder = holderArg ?: return
         val itemView = MsgAccess.itemViewOf(holder) ?: return
-        // ★ v3.0.292：方向优先用 holder 关联的 MsgInfo.isSend 判定（比 sideOf 反射 tag 可靠，
-        //   避免反射失败默认"发送侧"导致接收侧消息位置错乱）
-        val from = MsgAccess.msgOf(holder)?.let { MsgAccess.fromSide(it) } ?: Replacer.sideOf(itemView)
+        val from = Replacer.sideOf(itemView)
         val set = owners[itemView]
         if (!set.isNullOrEmpty()) {
             set.toList().forEach { v ->
                 val info = reg[v] ?: return@forEach
                 if (from != info.appliedFrom) applySkin(v, from, info.voice) else selfHeal(v)
             }
+            QuoteEngine.injectInto(itemView, from)
             TimelineEngine.apply(holder, itemView, from)
             return
         }
         val tag = itemView.tag ?: return
         val vn = tag.javaClass.name
-        val isVoiceItem = (R.voiceHolder?.name != null && vn == R.voiceHolder!!.name) ||
-            vn == R.voiceItemFrom?.name || vn == R.voiceItemTo?.name ||
-            vn == R.voiceItemFromMvvm?.name || vn == R.voiceItemToMvvm?.name
         when {
-            isVoiceItem -> {
+            R.voiceHolder?.name != null && vn == R.voiceHolder!!.name -> {
                 val t = LinkedHashSet<View>()
                 Reflect.fieldsByType(tag, C.ANIM).forEach { if (it is View) t += it }
                 Reflect.allFields(tag.javaClass).forEach { fd ->
@@ -833,65 +644,28 @@ object BubbleEngine {
                 }
                 t.filter { Injectable.nameOf(tag, it)?.let { n -> !Injectable.banned(n) } ?: true }
                  .filter { Injectable.ok(it) }
-                 // ★ v3.0.289：接收侧跳过 mq.x 镜像 / mq.u 占位（发送侧才贴）
-                 .filter { v -> !(!from && (v.id == 2131366108 || v.id == 2131366096)) }
                  .forEach { applySkin(it, from, true) }
             }
             vn in R.textHolderNames || Reflect.fieldByType(tag, C.NEAT) != null -> {
                 (Reflect.fieldByType(tag, C.NEAT) as? View)?.let { applySkin(it, from, false) }
             }
-            // ★ v3.0.295：非文本/语音类型不做通用扫描（通用扫描是假气泡/图片遮挡的根源），
-            //   这些消息（图片/视频/名片/卡片等）由资源级替换负责，视图层不碰。
-            else -> {}
+            // v3.0.270：非文本/语音（图片/视频/位置/卡片等）→ 通用扫描替换，而不是还原
+            else -> applyBubbles(itemView, from)
         }
+        QuoteEngine.injectInto(itemView, from)
         TimelineEngine.apply(holder, itemView, from)
     }
 
-    /** 通用气泡替换：扫描整个 itemView，把“像气泡”的背景全部替换（覆盖所有消息类型）。
-     *  ★ 修复：改为后序（自底向上）遍历 —— 内层真气泡优先贴皮；外层包裹容器若已含已贴气泡
-     *    则跳过，避免「外层空容器被贴皮形成假气泡、把内层真气泡顶下去」。 */
+    /** 通用气泡替换：扫描整个 itemView，把“像气泡”的背景全部替换（覆盖所有消息类型） */
     fun applyBubbles(itemView: View, from: Boolean) {
-        fun postOrder(v: View) {
-            if (v is ViewGroup) for (i in 0 until v.childCount) postOrder(v.getChildAt(i))
-            // ★ v3.0.291：图片/视频内容视图绝不贴皮（防遮挡图片/视频内容）
-            if (v in contentViews) return
-            // ★ v3.0.289：资源层替换但未登记的视图背景已是 ours，同样视为已贴皮
-            if (isRegistered(v) || isOursBackground(v)) return
-            if (!Injectable.ok(v)) return
-            val bg = v.background ?: return
+        walk(itemView, 0) { v ->
+            if (isRegistered(v)) return@walk
+            if (!Injectable.ok(v)) return@walk
+            val bg = v.background ?: return@walk
             val n = bg.javaClass.name
-            if (!(n.contains("NinePatch") || n.contains("Gradient") || n.contains("Layer") || n.contains("Shape") || n.contains("StateList"))) return
-            // ★ 修复：若该 ViewGroup 内已有子视图被贴皮，则它是外层包裹容器，跳过（防双层气泡）
-            // ★ v3.0.292：包含群成员昵称/时间条的容器是消息外壳，绝不贴皮
-            if (v is ViewGroup && (containsRegistered(v) || hasNickOrTime(v))) return
+            if (!(n.contains("NinePatch") || n.contains("Gradient") || n.contains("Layer") || n.contains("Shape"))) return@walk
             applySkin(v, from, false)
         }
-        postOrder(itemView)
-    }
-
-    /** ★ v3.0.289：视图背景是否已是我们替换的 Drawable（资源层替换未登记 reg 也视为已贴皮） */
-    fun isOursBackground(v: View): Boolean =
-        v.background?.javaClass?.name?.startsWith("com.example.wxbubble.") == true
-
-    /** ★ 修复：容器内是否已存在被贴皮的气泡子视图（含资源层替换但未登记 reg 的视图） */
-    fun containsRegistered(g: ViewGroup): Boolean {
-        for (i in 0 until g.childCount) {
-            val c = g.getChildAt(i)
-            if (isRegistered(c) || isOursBackground(c)) return true
-            if (c is ViewGroup && containsRegistered(c)) return true
-        }
-        return false
-    }
-
-    /** ★ v3.0.292：容器内是否包含群成员昵称(userTV)/时间分隔条(timeTV)。
-     *  群聊消息的昵称/时间模块必须保持透明，绝不能被气泡贴皮接管。 */
-    fun hasNickOrTime(g: ViewGroup): Boolean {
-        for (i in 0 until g.childCount) {
-            val c = g.getChildAt(i)
-            if (c.id == 2131366078 || c.id == 2131366064) return true
-            if (c is ViewGroup && hasNickOrTime(c)) return true
-        }
-        return false
     }
 
     fun applyDrawable(v: View, d: Drawable?) {
@@ -922,17 +696,8 @@ object BubbleEngine {
      *  v3.0.270：不再因 width==0 还原（未测量的新气泡不应被还原） */
     fun selfHeal(v: View) {
         val info = reg[v] ?: return
-        // v3.0.275：语音气泡不因不可见而还原，否则微信播放/状态切换时会把已替换的气泡
-        // 「秒换回官方气泡」。语音气泡的可见性由微信状态机控制，背景皮肤必须保持。
-        if (info.voice) return
         if (v.visibility != View.VISIBLE) applyDrawable(v, info.original)
     }
-
-    /** v3.0.275：是否已登记的语音气泡承载视图（供 AnimImageView.setType/b 重新贴皮）。 */
-    fun isRegisteredVoice(v: View?): Boolean = v != null && reg[v]?.voice == true
-
-    /** v3.0.275：已登记气泡的方向（供 R3 setBackground 重设时取方向，未登记返回 null）。 */
-    fun appliedFrom(v: View?): Boolean? = v?.let { reg[it]?.appliedFrom }
 
     private fun registerOwner(v: View) {
         itemRootOf(v)?.let { owners.getOrPut(it) { LinkedHashSet() }.add(v) }
@@ -974,19 +739,12 @@ object QuoteEngine {
         log("quote hooks=${impls.size}")
     }
     fun injectInto(itemView: View, from: Boolean) {
-        // ★ 修复：后序遍历 + 空容器/含已贴气泡容器跳过，杜绝引用扫描把占位容器贴成假气泡
-        fun postOrder(v: View) {
-            if (v is ViewGroup) for (i in 0 until v.childCount) postOrder(v.getChildAt(i))
-            // ★ v3.0.291：图片/视频内容视图绝不贴皮
-            if (v in BubbleEngine.contentViews) return
-            // ★ v3.0.289：资源层替换未登记的视图也视为已贴皮，防外层容器被贴成假气泡
-            if (BubbleEngine.isRegistered(v) || BubbleEngine.isOursBackground(v)) return
-            if (!Injectable.ok(v)) return
-            if (((v.parent as? ViewGroup)?.childCount ?: 0) < 2) return
-            if (v is ViewGroup && (BubbleEngine.containsRegistered(v) || BubbleEngine.hasNickOrTime(v))) return
+        walk(itemView, 0) { v ->
+            if (BubbleEngine.isRegistered(v)) return@walk
+            if (!Injectable.ok(v)) return@walk
+            if (((v.parent as? ViewGroup)?.childCount ?: 0) < 2) return@walk
             BubbleEngine.applySkin(v, from, false)
         }
-        postOrder(itemView)
     }
     private fun walk(v: View, d: Int, b: (View) -> Unit) {
         if (d > 5) return
@@ -1087,8 +845,13 @@ object TimelineEngine {
     }
 
     private fun addFallback(itemView: View, ct: Long) {
-        // ★ 修复：不再向消息 item 插入任何视图（插入 TextView 会破坏布局导致消息错位）。
-        // 时间线只通过原生 timeTV 显示；原生无 timeTV 的消息不显示时间。
+        added[itemView]?.let { it.text = format(ct); return }
+        val host = itemView as? ViewGroup ?: return
+        val tv = TextView(itemView.context).apply {
+            textSize = 11f; setTextColor(0xFF9B9B9B.toInt()); text = format(ct)
+        }
+        added[itemView] = tv
+        host.addView(tv, 0)
     }
 
     fun disable(holder: Any?) {
@@ -1101,32 +864,91 @@ object TimelineEngine {
 // ============ 13. 挂载 ============
 object Hk {
     fun install() {
-        // ★ 全新方案：底层直接替换（before-set 参数替换），不再使用任何旧的方案执行。
-        // 微信 setBackground 时在 before 阶段直接换成我们的气泡，微信只 set 一次，
-        // 零错位 / 零越界 / 零方向错乱 / 深浅色自适应。
-        val app = try {
-            XposedHelpers.callStaticMethod(
-                XposedHelpers.findClass("android.app.ActivityThread", null), "currentApplication")
-                as? android.content.Context
-        } catch (t: Throwable) { null }
-        WxBubbleDirectReplace.setAppContext(app)
-        WxBubbleDirectReplace.install(WxEnv.cl)
+        val rv = R.rvAdapter!!
+        val ad = R.adapter!!
 
-        // ★ v3.0.309：语音气泡内「图标/秒数/文字」颜色替换（深/浅色模式由 ChatBubbleHook 主题配置）
-        WxVoiceContentColor.install(WxEnv.cl)
-
-        // 时间线：只改 timeTV 文本（不 addView、不改布局，避免消息错位）
-        val rv = R.rvAdapter
-        if (rv != null) {
-            XposedBridge.hookAllMethods(rv, "E0", object : XC_MethodHook() {
+        // ---- L1-a 文本气泡（v3.0.268：覆盖 From/To 全部文本 holder）----
+        val textSetters = if (R.textBubbleSetters.isNotEmpty()) R.textBubbleSetters
+                          else listOfNotNull(R.textBubbleSetter)
+        textSetters.forEach { setter ->
+            XposedBridge.hookMethod(setter, object : XC_MethodHook() {
                 override fun afterHookedMethod(p: MethodHookParam) {
-                    val holder = p.args.getOrNull(0) ?: return
-                    val itemView = MsgAccess.itemViewOf(holder) ?: return
-                    TimelineEngine.apply(holder, itemView, true)
+                    val holder = p.args.getOrNull(1) ?: return
+                    val v = Reflect.fieldByType(holder, C.NEAT) as? View ?: return
+                    Replacer.setCtx(v.context)
+                    val from = (p.args.getOrNull(3) as? Boolean) ?: MsgAccess.fromSide(MsgAccess.msgOf(holder))
+                    BubbleEngine.applySkin(v, from, voice = false)
                 }
             })
         }
-        log("hooks installed (底层直接替换). ver=${WxEnv.verTag}")
+
+        // ---- L1-b 语音填充（覆盖 bq/iq/tr/ur）----
+        XposedBridge.hookMethod(R.voiceFill!!, object : XC_MethodHook() {
+            override fun afterHookedMethod(p: MethodHookParam) {
+                val holder = p.args.getOrNull(1) ?: return
+                // v3.0.270：方向直接用 mq.e 第 6 参（bq.n=from true / iq.n=to false），
+                // 比 Direction.fromHolder 的反射链路可靠得多
+                val from = (p.args.getOrNull(5) as? Boolean) ?: Direction.fromHolder(holder)
+                MsgAccess.itemViewOf(holder)?.let { Replacer.setCtx(it.context) }
+                val t = LinkedHashSet<View>()
+                Reflect.fieldsByType(holder, C.ANIM).forEach { if (it is View) t += it }
+                Reflect.allFields(holder.javaClass).forEach { fd ->
+                    if (fd.name == "x" && fd.type.name == "android.widget.TextView") {
+                        fd.isAccessible = true; (fd.get(holder) as? View)?.let { t += it }
+                    }
+                }
+                t.filter { Injectable.nameOf(holder, it)?.let { n -> !Injectable.banned(n) } ?: true }
+                 .filter { Injectable.ok(it) }
+                 .forEach { BubbleEngine.applySkin(it, from, voice = true) }
+            }
+        })
+
+        // ---- L1b 兜底 ----
+        val ensure = object : XC_MethodHook() {
+            override fun afterHookedMethod(p: MethodHookParam) {
+                BubbleEngine.ensureBubble(p.thisObject, p.args.getOrNull(0))
+            }
+        }
+        XposedBridge.hookAllMethods(rv, "E0", ensure)
+        XposedBridge.hookAllMethods(rv, "F0", ensure)
+
+        // ---- R1/R2 完整替换 ----
+        Replacer.install()
+
+        // ---- L3 尺寸补偿 ----
+        Reflect.method(R.voiceHolder ?: return, "c", 2)?.let { m ->
+            XposedBridge.hookMethod(m, object : XC_MethodHook() {
+                override fun afterHookedMethod(p: MethodHookParam) {
+                    val base = p.result as? Int ?: return
+                    val c = p.args.getOrNull(0) as? Context ?: return
+                    p.result = (base + BubbleEngine.padDeltaDp(c)).coerceAtLeast(80)
+                }
+            })
+        }
+        XposedBridge.hookAllMethods(R.baseHolder!!, "resetChatBubbleWidth", object : XC_MethodHook() {
+            override fun afterHookedMethod(p: MethodHookParam) {
+                BubbleEngine.compensateWidth(p.args[0] as? View, p.args[1] as? Int ?: return)
+            }
+        })
+        XposedBridge.hookAllMethods(R.neat!!, "setMaxWidth", object : XC_MethodHook() {
+            override fun afterHookedMethod(p: MethodHookParam) {
+                BubbleEngine.compensateTextMax(p.thisObject as? View, p.args[1] as? Int ?: return)
+            }
+        })
+
+        // ---- L4 回收 ----
+        val clean = object : XC_MethodHook() {
+            override fun afterHookedMethod(p: MethodHookParam) { BubbleEngine.recycle(p.args.getOrNull(0)) }
+        }
+        XposedBridge.hookAllMethods(rv, "onViewRecycled", clean)
+        XposedBridge.hookAllMethods(rv, "onViewDetachedFromWindow", clean)
+
+        // ---- 引擎 ----
+        SysTipEngine.install()
+        HkRedPacket.install()
+        QuoteEngine.install()
+
+        log("hooks installed. ver=${WxEnv.verTag}")
     }
 }
 

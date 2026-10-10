@@ -147,7 +147,8 @@ public final class ChatFooterBarHook {
         if (ctx == null) return;
 
         // 新版：复用模块现有按钮组（音色/群发/语音/AI助手/转发），按钮无背景。
-        LinearLayout bar = ChatVoiceSwitchHook.buildActionButtonRow(ctx, true);
+        // v3.0.270: buildActionButtonRow 返回 HorizontalScrollView，快捷菜单支持左右滑动不换行
+        View bar = ChatVoiceSwitchHook.buildActionButtonRow(ctx, true);
         bar.setTag(ROW_TAG);
 
         // 文档《WeChat_ChatFooterShortcutButton_遮挡_逆向分析与修复.md》结论：

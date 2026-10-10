@@ -26,7 +26,9 @@ open class WxMasterPageView {
             card1.addView(M3Page.clickRow(ctx, "📨", "乐少万群定时群发", "勾选多个群+定时发送") {
                 try {
                     WxMasterFeatures.batchSend(parentAct, cl)
-                } catch (ignored: Throwable) {
+                    M3Page.toast(ctx, "已发起群发")
+                } catch (e: Throwable) {
+                    M3Page.toast(ctx, "群发失败：" + (e.message ?: "未知错误"))
                 }
             })
             root.addView(card1)

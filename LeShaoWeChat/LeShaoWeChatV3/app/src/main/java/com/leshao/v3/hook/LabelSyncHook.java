@@ -15,7 +15,8 @@ public class LabelSyncHook {
 
     public static void install(ClassLoader cl) {
         try {
-            Class<?> netScene = XposedHelpers.findClass("aa3.d", cl);
+            // v3.0.272: 反编译确认 aa3.d 非 NetScene（枚举），真实标签同步 NetScene = mf3.d
+            Class<?> netScene = XposedHelpers.findClass("mf3.d", cl);
             XposedBridge.hookAllMethods(netScene, "onGYNetEnd",
                 new XC_MethodHook() {
                     @Override

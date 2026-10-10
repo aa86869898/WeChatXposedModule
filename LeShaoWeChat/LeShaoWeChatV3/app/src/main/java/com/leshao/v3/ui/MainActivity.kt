@@ -1089,6 +1089,7 @@ class MainActivity {
                 .create()
             InsetsUtil.clearDialogShell(dlg)
             dlg.show()
+            WindowLayer.track(dlg.window)
             InsetsUtil.center(dlg)
         }
 
@@ -1180,6 +1181,7 @@ class MainActivity {
                 .create()
             InsetsUtil.clearDialogShell(dlg)
             dlg.show()
+            WindowLayer.track(dlg.window)
             InsetsUtil.center(dlg)
         }
 

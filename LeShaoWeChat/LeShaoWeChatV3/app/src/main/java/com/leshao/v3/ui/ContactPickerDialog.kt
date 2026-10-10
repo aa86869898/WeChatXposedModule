@@ -80,10 +80,8 @@ class ContactPickerDialog {
             }
 
             ContactRepository.loadAsync {
-                val all: List<ContactCard>? = when (initialMode) {
-                    MODE_FRIEND -> ContactRepository.getFriends()
-                    else -> ContactRepository.getGroups()
-                }
+                // v3.0.270: 新增「全部」标签，初始数据集统一加载好友+群聊，供三个标签切换
+                val all: List<ContactCard>? = ContactRepository.getAll()
                 if (all == null || all.isEmpty()) {
                     parentAct.runOnUiThread {
                         val ld = loadingRef[0]
@@ -154,11 +152,17 @@ class ContactPickerDialog {
             for (c in ContactRepository.getGroups()) {
                 if (c.category == Category.GROUP) groupCount++
             }
+            val allCount = friendCount + groupCount
 
-            val currentTab = intArrayOf(if (initialMode == MODE_FRIEND) 0 else 1)
+            // v3.0.270: 标签 = 全部 / 好友 / 群聊（索引 0=全部, 1=好友, 2=群聊）
+            val currentTab = intArrayOf(when (initialMode) {
+                MODE_FRIEND -> 1
+                MODE_GROUP -> 2
+                else -> 0
+            })
             val refreshHolder = arrayOfNulls<Runnable>(1)
             val tabs = SegmentedControl(act,
-                    arrayOf("\u597d\u53cb(" + friendCount + ")", "\u7fa4\u804a(" + groupCount + ")"),
+                    arrayOf("\u5168\u90e8(" + allCount + ")", "\u597d\u53cb(" + friendCount + ")", "\u7fa4\u804a(" + groupCount + ")"),
                     currentTab[0])
             tabs.setOnSegmentChangedListener(object : SegmentedControl.OnSegmentChangedListener {
                 override fun onChanged(index: Int, label: String) {
@@ -201,10 +205,16 @@ class ContactPickerDialog {
                 listRoot.removeAllViews()
                 val f = search.text.toString().lowercase().trim()
 
-                if (currentTab[0] == 0) {
-                    filteredHolder[0] = ContactRepository.getFriends()
-                } else {
-                    filteredHolder[0] = ContactRepository.getGroups()
+                filteredHolder[0] = when (currentTab[0]) {
+                    1 -> ContactRepository.getFriends()
+                    2 -> ContactRepository.getGroups()
+                    else -> {
+                        // 「全部」= 好友 + 群聊
+                        val merged = ArrayList<ContactCard>()
+                        merged.addAll(ContactRepository.getFriends())
+                        merged.addAll(ContactRepository.getGroups())
+                        merged
+                    }
                 }
                 if (filteredHolder[0] == null) filteredHolder[0] = emptyList()
 

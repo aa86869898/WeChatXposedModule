@@ -573,16 +573,10 @@ class AppColors private constructor() {
         }
 
         private fun detectDarkMode(): Boolean {
-            // 优先用微信内部暗色检测（bk.C），更贴合微信「深色模式」设置；失败回退系统 uiMode
-            try {
-                val cl = com.leshao.v3.ContextManager.getClassLoader()
-                if (cl != null) {
-                    val bk = de.robv.android.xposed.XposedHelpers.findClass("com.tencent.mm.ui.bk", cl)
-                    val r = de.robv.android.xposed.XposedHelpers.callStaticMethod(bk, "C")
-                    if (r is Boolean) return r
-                }
-            } catch (ignored: Throwable) {
-            }
+            // v3.0.284: 不再反射调用微信内部类（原 com.tencent.mm.ui.gk.D() 会在微信 Application
+            // 初始化前触发 com.tencent.mm.sdk.platformtools.r4 静态块，此时 Context 为 null 导致
+            // NPE → ExceptionInInitializerError → 微信 Application 无法实例化 → 启动秒闪退）。
+            // 改用系统 uiMode 判断深色模式，零微信类加载，任何线程/时机调用都安全。
             try {
                 val ctx = com.leshao.v3.ContextManager.getAppContext()
                 if (ctx != null) {
@@ -591,7 +585,13 @@ class AppColors private constructor() {
                 }
             } catch (ignored: Throwable) {
             }
-            return false
+            return try {
+                val nightMode = android.content.res.Resources.getSystem().configuration.uiMode and
+                        Configuration.UI_MODE_NIGHT_MASK
+                nightMode == Configuration.UI_MODE_NIGHT_YES
+            } catch (ignored: Throwable) {
+                false
+            }
         }
 
         /** 页面 onResume 时调用：微信内切换深色模式/系统壁纸后刷新令牌 */

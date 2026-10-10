@@ -2770,72 +2770,11 @@ private static void executeMassSend(String type, String text, java.util.List<Str
             }
         }
 
-        // Priority 2: try known packages
-        String[] pkgs = {
-            "com.tencent.mm", "com.tencent.mm.model", "com.tencent.mm.storage",
-            "com.tencent.mm.modelmulti", "com.tencent.mm.sdk", "com.tencent.mm.kernel",
-            "com.tencent.mm.plugin.messenger", "com.tencent.mm.plugin.messenger.foundation",
-            "com.tencent.mm.cb", "com.tencent.mm.bootstrap",
-            "com.tencent.mm.app", "com.tencent.mm.ui",
-            "com.tencent.mm.modelstat", "com.tencent.mm.modelsns",
-            "com.tencent.mm.platformtools", "com.tencent.mm.protocal",
-            "com.tencent.mm.network", "com.tencent.mm.algorithm",
-            "com.tencent.mm.compatible"
-        };
-        for (String pkg : pkgs) {
-            try {
-                Class<?> p06 = XposedHelpers.findClass(pkg + ".p06", cl);
-                XposedBridge.hookAllMethods(p06, "b", new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        if (param.getThrowable() != null) {
-                            param.setThrowable(null);
-                            param.setResult(null);
-                        }
-                    }
-                });
-                LogWriter.log(TAG, "hookP06Bypass OK: " + pkg + ".p06.b hooked");
-                return true;
-            } catch (Throwable ignored) {}
-        }
-        try {
-            Class<?> p06 = XposedHelpers.findClass("p06", cl);
-            XposedBridge.hookAllMethods(p06, "b", new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    if (param.getThrowable() != null) {
-                        param.setThrowable(null);
-                        param.setResult(null);
-                    }
-                }
-            });
-            LogWriter.log(TAG, "hookP06Bypass OK: p06.b (default pkg) hooked");
-            return true;
-        } catch (Throwable ignored) {}
-        try {
-            java.lang.reflect.Field f = ClassLoader.class.getDeclaredField("classes");
-            f.setAccessible(true);
-            java.util.Vector<Class<?>> classes = (java.util.Vector<Class<?>>) f.get(cl);
-            for (Class<?> c : classes) {
-                if (c.getName().endsWith(".p06") || c.getSimpleName().equals("p06")) {
-                    LogWriter.log(TAG, "hookP06Bypass OK via brute: " + c.getName());
-                    XposedBridge.hookAllMethods(c, "b", new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) {
-                            if (param.getThrowable() != null) {
-                                param.setThrowable(null);
-                                param.setResult(null);
-                            }
-                        }
-                    });
-                    return true;
-                }
-            }
-        } catch (Throwable ignored) {}
+        // v3.0.272: 反编译确认 3180 无 p06 类，删除硬编码包扫描/默认包/暴力兜底，统一 gp0.j1/DexKit
         if (!DexKitHelper.isScanComplete()) {
             return false;
         }
-        LogWriter.log(TAG, "hookP06Bypass FAILED: p06 class NOT found in any package");
+        LogWriter.log(TAG, "hookP06Bypass FAILED: no P06 class found (gp0.j1 / DexKit both unavailable)");
         return false;
     }
 

@@ -82,15 +82,10 @@ public class VoiceAutoPlay {
         sClassLoader = cl;
         sHandler = new Handler(Looper.getMainLooper());
 
-        // v955: 3180 实证 k0 存活于 com.tencent.mm.app.k0(model.k0/k0 已改名), 优先现行包名
+        // v3.0.272: 反编译确认 com.tencent.mm.app.k0 仅为插件框架基类（死代码），
+        // com.tencent.mm.model.k0 / com.tencent.mm.k0 在 3180 不存在，去掉三级兜底。
         try { sK0Class = XposedHelpers.findClass("com.tencent.mm.app.k0", cl); }
-        catch (Throwable t) {
-            try { sK0Class = XposedHelpers.findClass("com.tencent.mm.model.k0", cl); }
-            catch (Throwable t2) {
-                try { sK0Class = XposedHelpers.findClass("com.tencent.mm.k0", cl); }
-                catch (Throwable t3) { sK0Class = null; }
-            }
-        }
+        catch (Throwable t) { sK0Class = null; }
         if (sK0Class == null) {
             LogWriter.log(TAG, "k0 class NOT found in any of the 4 alternatives");
         }
@@ -825,15 +820,8 @@ public class VoiceAutoPlay {
 
     private static Object getPlayer(Object so) {
         if (so == null) return null;
-        for (String method : new String[]{"n0", "getPlayer", "N0", "getVoicePlayer", "p0", "o0", "k0", "I0"}) {
-            try {
-                Object r = XposedHelpers.callMethod(so, method);
-                if (r != null) {
-                    LogWriter.log(TAG, "getPlayer: so." + method + "()=" + r.getClass().getSimpleName());
-                    return r;
-                }
-            } catch (Throwable ignored) {}
-        }
+        // v3.0.272: 反编译确认 3180 真实播放器为 v61.j1（MicroMsg.VoicePlayer），
+        // n0/getPlayer/N0/getVoicePlayer/p0/o0/k0/I0 方法均不存在，删除失效方法枚举，仅保留字段反射兜底。
         for (String field : new String[]{"p", "player", "n0", "mPlayer", "m", "N", "e", "f", "g"}) {
             try {
                 Object r = XposedHelpers.getObjectField(so, field);

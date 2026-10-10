@@ -463,11 +463,12 @@ class CornerMenu {
         private fun darkMode(ctx: Context): Boolean {
             try {
                 val cl = sClassLoader
+                // v3.0.272: 反编译权威类 com.tencent.mm.ui.gk（MicroMsg.UIUtils），方法 D()=深色模式
                 val bkClass = VersionCompat.findClassMulti(cl,
-                        "com.tencent.mm.ui.bk", "com.tencent.mm.ui.bl",
+                        "com.tencent.mm.ui.gk", "com.tencent.mm.ui.bk", "com.tencent.mm.ui.bl",
                         "com.tencent.mm.ui.bj", "com.tencent.mm.ui.bi")
                 if (bkClass == null) return false
-                for (m in arrayOf("C", "D", "B", "E")) {
+                for (m in arrayOf("D", "C", "B", "E")) {
                     try {
                         return XposedHelpers.callStaticMethod(bkClass, m) as Boolean
                     } catch (ignored: Throwable) {

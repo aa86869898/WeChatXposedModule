@@ -71,10 +71,11 @@ class WmReflect {
 
         @JvmStatic
         fun getChatroomLogic(cl: ClassLoader): Class<*>? {
+            // v3.0.272: 反编译确认 3180 群成员逻辑权威类 = b41.u1（ChatroomMembersLogic）
             try {
-                return XposedHelpers.findClass("e01.v1", cl)
+                return XposedHelpers.findClass("b41.u1", cl)
             } catch (t: Throwable) {
-                // Try DexKit candidates
+                // Try DexKit candidates（旧版 e01 系兜底）
                 val candidates = arrayOf("e01.v1", "e02.v1", "e00.v1", "e01.u1", "e01.w1")
                 for (name in candidates) {
                     try { return XposedHelpers.findClass(name, cl) } catch (ignored: Throwable) {}
@@ -371,39 +372,60 @@ class WmReflect {
             return out
         }
 
-        // ===== 踢人(d24.h.a) =====
+        // ===== 踢人（v3.0.272: 候选 b41.u1 / d24.h）=====
         @JvmStatic
         fun kickMember(cl: ClassLoader, room: String, member: String): Boolean {
             try {
                 if (!isChatRoom(cl, room)) return false
-                XposedHelpers.callStaticMethod(XposedHelpers.findClass("d24.h", cl), "a",
-                    room, 1, 0, 0, 0, 0, System.currentTimeMillis(), "")
-                return true
+                // 反编译确认 d24.h 非群成员逻辑；b41.u1(ChatroomMembersLogic) 为权威类，保留 d24.h 作旧版兜底
+                for (cn in arrayOf("b41.u1", "d24.h")) {
+                    try {
+                        XposedHelpers.callStaticMethod(XposedHelpers.findClass(cn, cl), "a",
+                                room, 1, 0, 0, 0, 0, System.currentTimeMillis(), "")
+                        return true
+                    } catch (ignored: Exception) {}
+                }
+                return false
             } catch (e: Exception) { return false }
         }
 
-        // ===== 邀请(kn.x) =====
+        // ===== 邀请（v3.0.272: 权威链路 un.k.get() → pe5.f.j(...) → factory.a.a()）=====
         @Suppress("UNCHECKED_CAST")
         @JvmStatic
         fun inviteMembers(cl: ClassLoader, room: String, members: List<String>): Boolean {
             try {
                 if (!isChatRoom(cl, room)) return false
-                val knx = XposedHelpers.findClass("kn.x", cl)
-                var req: Any? = null
+                // 权威链路（附录 G）：un.k.get() → pe5.f.j(room, members, ticket, null) → factory.a.a()
                 try {
-                    req = XposedHelpers.newInstance(knx, room, members, 0, null as Any?)
+                    val unk = XposedHelpers.newInstance(XposedHelpers.findClass("un.k", cl))
+                    val api = XposedHelpers.callMethod(unk, "get")
+                    if (api != null) {
+                        val task = XposedHelpers.callMethod(api, "j", room, members, null as Any?, null as Any?)
+                        if (task != null) {
+                            XposedHelpers.callMethod(task, "a")
+                            return true
+                        }
+                    }
                 } catch (ignored: Exception) {}
-                if (req == null) {
+                // 旧链路兜底（kn.x 已失效，仅兼容旧版）
+                try {
+                    val knx = XposedHelpers.findClass("kn.x", cl)
+                    var req: Any? = null
                     try {
-                        req = XposedHelpers.newInstance(knx, room, members, 0, "", null as Any?)
+                        req = XposedHelpers.newInstance(knx, room, members, 0, null as Any?)
                     } catch (ignored: Exception) {}
-                }
-                if (req == null) return false
-                val r1 = XposedHelpers.callStaticMethod(XposedHelpers.findClass("hm0.j1", cl), "d")
-                if (r1 != null) {
-                    XposedHelpers.callMethod(r1, "d", req)
-                    return true
-                }
+                    if (req == null) {
+                        try {
+                            req = XposedHelpers.newInstance(knx, room, members, 0, "", null as Any?)
+                        } catch (ignored: Exception) {}
+                    }
+                    if (req == null) return false
+                    val r1 = XposedHelpers.callStaticMethod(XposedHelpers.findClass("hm0.j1", cl), "d")
+                    if (r1 != null) {
+                        XposedHelpers.callMethod(r1, "d", req)
+                        return true
+                    }
+                } catch (ignored: Exception) {}
                 return false
             } catch (e: Exception) { return false }
         }

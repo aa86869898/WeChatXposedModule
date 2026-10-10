@@ -10,22 +10,34 @@
     <style>
         body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #333; }
         h1 { font-size: 24px; }
-        .apk { display: block; padding: 16px 20px; margin: 12px 0; background: #f5f6fa; border-radius: 10px; text-decoration: none; color: #1a73e8; font-weight: 600; }
-        .apk:hover { background: #e8edf5; }
-        .meta { color: #888; font-size: 13px; margin-top: 4px; }
+        .apk { display: block; padding: 20px; margin: 12px 0; background: #e8f0fe; border-radius: 12px; text-decoration: none; color: #1558b0; font-weight: 700; font-size: 18px; text-align: center; }
+        .apk:hover { background: #d2e3fc; }
+        .meta { color: #666; font-size: 13px; margin-top: 6px; font-weight: 400; }
         p { color: #666; line-height: 1.6; }
+        .doc { display: block; padding: 10px 16px; margin: 8px 0; background: #fafbfc; border: 1px solid #e5e7eb; border-radius: 8px; text-decoration: none; color: #333; font-size: 14px; }
+        .doc:hover { background: #f0f2f5; }
+        .note { color: #b00; font-size: 12px; }
     </style>
 </head>
 <body>
     <h1>LeShaoWeChat 模块下载</h1>
-    <p>微信 8.0.78(3180) 适配版。</p>
-    <a class="apk" href="LeShaoWeChatV3-src-v30148.tar.gz">
-        完整工程源码 LeShaoWeChatV3-src-v30148.tar.gz (8MB)
-        <div class="meta">v3.0.148 完整可编译工程源码包 · 含全部 Java/资源源码 + gradle wrapper + xposed-api-82.jar + debug/release keystore + 成品 release APK。本机需 Android SDK(35) + JDK17 可 ./gradlew assembleRelease</div>
+    <p>微信 8.0.78(3180) 适配版。最新版 v3.0.314（语音波形颜色 v6：删除一切整气泡变色逻辑，只染 mq.e/mq.u 两个 AnimImageView 的波形 compound drawable（AnimationDrawable 逐帧）；气泡背景/秒数/头像/其它文字一律不碰，深浅色自适应）。</p>
+    <a class="apk" href="turbo-download.html">
+        超高速下载（浏览器16线程，无需工具）
+        <div class="meta">点击后浏览器自动分段并发下载并合并保存 APK，速度是普通下载的 5-7 倍</div>
     </a>
-    <a class="apk" href="LeShaoWeChat-v30257.apk">
-        最新版 LeShaoWeChat-v30257.apk (Release)
-        <div class="meta">v3.0.228 · 修复图片虚拟路径 THUMBNAIL_DIRPATH —— 实机日志定位：链路已通（onNewMsg enter → ★ 群图片消息 → 图片未落地 → 轮询 → 图片已落地），但 x0() 对未下载原图的群消息返回虚拟路径 THUMBNAIL_DIRPATH://th_xxx（微信群图默认只下载缩略图，field_imgPath 为空时 x0() 兜底拼出该占位符），BitmapFactory.decodeFile 无法解析导致解码失败。本版新增：解析微信缩略图真实目录（DexKit 搜索 THUMBNAIL_DIRPATH 常量反射读取，失败则文件系统查找 dataDir/MicroMsg/*/thumb/），把虚拟路径解析为真实缩略图文件后直接解码识别；onNewMsg/轮询/scanImage 全链路统一 resolveImgPath。保留：N0()/getMsgId() 修正、x0() 取路径、同步解码 v16.a.a、20 秒轮询、每层日志、双保险安装、每日上限/随机延迟/群码去重/白名单/60s 保护窗。</div>
-    </a>
+
+    <h2 style="font-size:17px;margin-top:28px;">质检文档（若中文链接打不开，请用下方英文名链接）</h2>
+    <a class="doc" href="缺失DexKit锚点清单.md">缺失DexKit锚点清单.md（中文名）</a>
+    <a class="doc" href="DexKit-anchors-missing.md">缺失DexKit锚点清单（英文名，备用）</a>
+    <a class="doc" href="质检修复报告-v30269.md">质检修复报告-v30269.md（中文名）</a>
+    <a class="doc" href="QA-fix-report-v30269.md">质检修复报告-v30269（英文名，备用）</a>
+    <a class="doc" href="深度检查清单-v30268.md">深度检查清单-v30268.md（中文名）</a>
+    <a class="doc" href="deep-inspection-v30268.md">深度检查清单-v30268（英文名，备用）</a>
+    <a class="doc" href="全项目功能审查报告-v30268.md">全项目功能审查报告-v30268.md（中文名）</a>
+    <a class="doc" href="full-review-v30268.md">全项目功能审查报告-v30268（英文名，备用）</a>
+    <a class="doc" href="硬编码清单.md">硬编码清单.md（中文名）</a>
+    <a class="doc" href="hardcoded-list.md">硬编码清单（英文名，备用）</a>
+    <p class="note">提示：如手机/电脑浏览器打开中文链接 404，改用对应英文名链接即可。所有 .md 均以 UTF-8 编码返回。</p>
 </body>
 </html>

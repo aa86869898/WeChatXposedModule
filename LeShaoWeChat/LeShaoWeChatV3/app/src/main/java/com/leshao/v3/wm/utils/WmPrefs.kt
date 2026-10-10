@@ -19,21 +19,25 @@ object WmPrefs {
 
     @JvmStatic
     fun get(k: String, d: Boolean): Boolean {
+        ensureInit()
         return sp?.getBoolean(k, d) ?: d
     }
 
     @JvmStatic
     fun set(k: String, v: Boolean) {
+        ensureInit()
         sp?.edit()?.putBoolean(k, v)?.apply()
     }
 
     @JvmStatic
     fun getStr(k: String, d: String): String {
+        ensureInit()
         return sp?.getString(k, d) ?: d
     }
 
     @JvmStatic
     fun setStr(k: String, v: String) {
+        ensureInit()
         sp?.edit()?.putString(k, v)?.apply()
     }
 

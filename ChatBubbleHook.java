@@ -404,17 +404,19 @@ public final class ChatBubbleHook {
         }
     }
 
-    /** v3.0.270：取色实时预览 —— 拖动过程中高频调用，<b>仅更新内存</b>并节流刷新已渲染视图，
-     *  <b>不写入 SharedPreferences</b>（避免用户取消取色时颜色仍被持久化），
-     *  真正持久化由确认回调 {@link #setTextColor} 负责。与 {@link #setTextColor} 共用节流队列。 */
+    /** v3.0.205：取色实时预览 —— 拖动过程中高频调用，仅更新内存与持久化并节流刷新已渲染视图，
+     *  不触发任何页面重建（由调用方负责最终确认）。与 {@link #setTextColor} 共用节流队列。 */
     public static void previewTextColor(int kind, int theme, int color) {
+        SharedPreferences sp = safePrefs();
         boolean changed = false;
         if (kind == KIND_FROM) {
+            if (sp != null) sp.edit().putInt(fromColorKey(theme), color).apply();
             if (theme == currentTheme() && sFromTextColor != color) {
                 sFromTextColor = color;
                 changed = true;
             }
         } else {
+            if (sp != null) sp.edit().putInt(toColorKey(theme), color).apply();
             if (theme == currentTheme() && sToTextColor != color) {
                 sToTextColor = color;
                 changed = true;

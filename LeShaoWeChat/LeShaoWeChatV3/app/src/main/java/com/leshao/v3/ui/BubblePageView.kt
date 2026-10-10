@@ -212,10 +212,10 @@ class BubblePageView {
                             }
                         },
                         object : ColorPickerDialog.OnPreview {
-                            // v3.0.207：实时预览（拖动色相/SV 面板高频回调）——更新内存渲染，并就地刷新本行
-                            // 颜色预览块 + hex 文本，让拖动立刻看到反馈（不重建页面，避免爆闪）。
+                            // v3.0.270：拖动预览只就地刷新本行色块，不更新全局内存/聊天渲染，
+                            // 避免取色器取消后聊天文字色停留在预览值无法回退（ColorPickerDialog 无取消回调）。
+                            // 确认后由 onPick → setTextColor 持久化并刷新聊天。
                             override fun onPreview(color: Int) {
-                                ChatBubbleHook.previewTextColor(kind, theme, color)
                                 updateRowPreview(d, swatch, sub, color)
                             }
                         })
@@ -229,7 +229,7 @@ class BubblePageView {
             ChatBubbleHook.pickBubbleImage(parentAct, kind, ChatBubbleHook.BubblePickCallback { path ->
                 if (path != null) {
                     ChatBubbleHook.setBubblePath(kind, theme, path)
-                    Toast.makeText(ctx, "气泡图片已设置，重启微信或重新进入聊天后生效",
+                    Toast.makeText(ctx, "气泡图片已设置，新消息实时生效（已显示的重新进入聊天后更新）",
                             Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(ctx, "未选择图片", Toast.LENGTH_SHORT).show()
