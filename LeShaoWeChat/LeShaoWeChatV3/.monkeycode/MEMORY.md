@@ -257,3 +257,15 @@
   - 图片/AppMsg 正文不是 `<msgsource`，不受影响；null/空快速返回 false
   - 排查此类问题先看「实际发出内容」，不要只看 skip 日志——583 的 skip 日志正常，但被转发的仍是 XML
 - 版本 v3.0.584 / 30584；`assembleRelease` 通过；公网 200 / Range 206
+
+### 主微信与分身 prefs 各自独立，面板必须标实例（v3.0.585 关键经验）
+- Date: 2026-11-05
+- Context: 用户称分身未开自动转发、目标为空，日志却显示 user999 加载 enabled=true targets=545，判断为主微信/分身配置看串
+- Category: 环境配置 / 排错调试
+- Instructions:
+  - prefs 路径随用户隔离：`/data/user/0/com.tencent.mm/...` 与 `/data/user/999/com.tencent.mm/...`，互不同步，UI 与 hook 在各自进程读各自那份
+  - 面板标题固定显示 `InstanceManager.isPrimary()/userId()` 与 `applicationInfo.dataDir`
+  - 打开配置、点击保存、`updateConfig` 启动加载三处都要记录实例、目录、enabled、来源数、目标数
+  - 目标为空时 `forwardAll` 直接返回；目标 545 时面板必有红字「已选 545 个目标」，可据此判断用户看的是哪份配置
+  - 回答此类疑问先给日志里的 InstanceManager/userId 证据，再让用户在同一面板看红字数量
+- 版本 v3.0.585 / 30585；`assembleRelease` 通过；公网 200 / Range 206

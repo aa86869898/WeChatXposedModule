@@ -88,7 +88,9 @@ public class AutoForwardHook {
             sTypes.clear();
             sTypes.addAll(split(prefs.getString(PREF_TYPES, "")));
             LogWriter.log(TAG, "config: enabled=" + sEnabled + " sources=" + sSources.size()
-                + " targets=" + sTargets.size() + " types=" + sTypes);
+                + " targets=" + sTargets.size() + " types=" + sTypes
+                + " userId=" + com.leshao.v3.InstanceManager.userId()
+                + " dataDir=" + com.leshao.v3.InstanceManager.dataDir());
             if (sTargets.size() > 50) {
                 LogWriter.log(TAG, "⚠ 转发目标数量偏大(" + sTargets.size()
                     + ")，单条消息会触发同等数量的发送，已启用限速与熔断");
@@ -695,6 +697,16 @@ public class AutoForwardHook {
         SharedPreferences prefs = ContextManager.getPrefs();
         if (prefs == null) { Toast.makeText(ctx, "prefs 不可用", Toast.LENGTH_SHORT).show(); return; }
         final Activity act = ctx instanceof Activity ? (Activity) ctx : null;
+        // v3.0.585: 面板必须标明当前实例与 prefs 位置，否则主微信/分身各存一份时极易看错。
+        final String instDesc = "当前实例: " + (com.leshao.v3.InstanceManager.isPrimary()
+                ? "主微信" : "分身 user" + com.leshao.v3.InstanceManager.userId());
+        String ddir = "";
+        try { ddir = ctx.getApplicationInfo().dataDir; } catch (Throwable ignored) {}
+        final String dataDir = ddir;
+        LogWriter.log(TAG, "config dialog open: " + instDesc + " dataDir=" + dataDir
+                + " enabled=" + prefs.getBoolean(PREF_ENABLED, false)
+                + " sources=" + split(prefs.getString(PREF_SOURCES, "")).size()
+                + " targets=" + split(prefs.getString(PREF_TARGETS, "")).size());
 
         float d = ctx.getResources().getDisplayMetrics().density;
 
@@ -711,7 +723,8 @@ public class AutoForwardHook {
         content.setPadding((int) (4 * d), 0, (int) (4 * d), 0);
 
         // ===== 总开关 =====
-        content.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "自动转发", "命中来源的消息自动转发到目标"));
+        content.addView(new com.leshao.v3.ui.widgets.SectionHeader(ctx, "自动转发",
+                "命中来源的消息自动转发到目标 · " + instDesc + " · " + dataDir));
         LinearLayout cardMain = com.leshao.v3.ui.widgets.M3Page.card(ctx);
         final android.widget.Switch swEnabled = com.leshao.v3.ui.CandyUi.newSwitch(ctx);
         swEnabled.setChecked(prefs.getBoolean(PREF_ENABLED, false));
@@ -866,6 +879,9 @@ public class AutoForwardHook {
             final String typesCsv = types.toString();
             final int tgtN = split(tgtHolder[0]).size();
             final Runnable doSave = () -> {
+                LogWriter.log(TAG, "config save: " + instDesc + " dataDir=" + dataDir
+                        + " enabled=" + swEnabled.isChecked() + " sources=" + split(srcHolder[0]).size()
+                        + " targets=" + tgtN);
                 prefs.edit()
                     .putBoolean(PREF_ENABLED, swEnabled.isChecked())
                     .putString(PREF_SOURCES, srcHolder[0].trim())
