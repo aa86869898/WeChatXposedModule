@@ -269,3 +269,16 @@
   - 目标为空时 `forwardAll` 直接返回；目标 545 时面板必有红字「已选 545 个目标」，可据此判断用户看的是哪份配置
   - 回答此类疑问先给日志里的 InstanceManager/userId 证据，再让用户在同一面板看红字数量
 - 版本 v3.0.585 / 30585；`assembleRelease` 通过；公网 200 / Range 206
+
+### 「面板空 / 后台群发」按存盘-运行分叉排查（v3.0.586 关键经验）
+- Date: 2026-11-05
+- Context: 用户坚持勾了来源、目标为空，但日志显示自动转发按 545 个目标群发
+- Category: 排错调试 / 自动转发域
+- Instructions:
+  - 先分流：`fwd trigger` 只由 `AutoForwardHook` 打印，定时群发走 `WanQunGroupHook` 与 WmPrefs；日志里 `fwd trigger` 的条数可一票定性
+  - 目标读取只发生在 `updateConfig(prefs)`（启动 `hook()` 与保存时各一次），`setTargets` 无调用方；因此运行态必然来自 prefs 某个快照
+  - v3.0.586 起 `prefsSnapshot()` 在启动与打开面板时输出 `shared_prefs/leshao_v3_prefs.xml` 的绝对路径、mtime、size、rawLen、条目数、首尾 ID，用于证明看的是哪个实例、目标是否被清空
+  - 面板目标卡片第二行显示「已存盘 N / 运行中 M」，不一致转红并可点击按存盘值 `updateConfig` 纠正
+  - 保存时「原目标非空→新目标空」必须二次确认，`ContactPickerDialog` 确认空集合会直接把 targets 写成空串
+  - 用户回传日志时优先索取 `boot snapshot` 与 `config dialog open` 两行
+- 版本 v3.0.586 / 30586；`assembleRelease` 通过；离线 15 用例 PASS；公网 200 / Range 206

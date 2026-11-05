@@ -133,6 +133,10 @@ public class AutoForwardHook {
         try {
             SharedPreferences prefs = ContextManager.getPrefs();
             updateConfig(prefs);
+            // v3.0.586: 启动即落盘快照(文件路径/修改时间/原文长度/首尾 ID)。
+            // 用于排查「面板显示空、运行中却有目标」这类磁盘与内存不一致的情况。
+            LogWriter.log(TAG, "boot snapshot: " + prefsSnapshot(prefs)
+                + " runtimeTargets=" + sTargets.size());
             // 始终安装消息监听（即使当前 disabled/无目标），这样 UI 开启后立即生效；
             // 运行时由 onMsgInsert 内的 sEnabled/sSources/sTypes 过滤，避免"开启后不转发"。
             if (sHooked) return;
@@ -706,7 +710,9 @@ public class AutoForwardHook {
         LogWriter.log(TAG, "config dialog open: " + instDesc + " dataDir=" + dataDir
                 + " enabled=" + prefs.getBoolean(PREF_ENABLED, false)
                 + " sources=" + split(prefs.getString(PREF_SOURCES, "")).size()
-                + " targets=" + split(prefs.getString(PREF_TARGETS, "")).size());
+                + " targets=" + split(prefs.getString(PREF_TARGETS, "")).size()
+                + " runtimeTargets=" + sTargets.size()
+                + " | " + prefsSnapshot(prefs));
 
         float d = ctx.getResources().getDisplayMetrics().density;
 
@@ -768,6 +774,12 @@ public class AutoForwardHook {
         tgtCount.setTextSize(12);
         tgtCount.setPadding((int) (12 * d), (int) (2 * d), (int) (12 * d), (int) (8 * d));
         updateTargetCountHint(tgtCount, tgtHolder[0]);
+        // v3.0.586: 磁盘已存目标数 vs 运行中生效目标数，二者不一致时红字告警并可一键对齐，
+        // 避免「面板看着是空、后台仍按旧目标群发」。
+        final TextView tgtDiag = new TextView(ctx);
+        tgtDiag.setTextSize(11);
+        tgtDiag.setPadding((int) (12 * d), 0, (int) (12 * d), (int) (8 * d));
+        refreshTargetDiag(tgtDiag, tgtCount, tgtVal, tgtHolder, prefs);
         cardTgt.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "📤", "选择转发目标",
                 "打开联系人选择器多选(可切好友/群聊)", () -> {
             if (act == null) { Toast.makeText(ctx, "当前上下文不支持选择器", Toast.LENGTH_SHORT).show(); return; }
@@ -778,9 +790,11 @@ public class AutoForwardHook {
                                 : android.text.TextUtils.join(",", wxids);
                         tgtVal.setText(tgtHolder[0].isEmpty() ? "未设置" : displayList(tgtHolder[0]));
                         updateTargetCountHint(tgtCount, tgtHolder[0]);
+                        refreshTargetDiag(tgtDiag, tgtCount, tgtVal, tgtHolder, prefs);
                     });
         }));
         cardTgt.addView(tgtCount);
+        cardTgt.addView(tgtDiag);
         cardTgt.addView(com.leshao.v3.ui.widgets.M3Page.clickRow(ctx, "📝", "自动转发记录",
                 "查看转发历史(头像/昵称/内容/时间)", () -> showRecordsDialog(ctx)));
         content.addView(cardTgt);
@@ -899,8 +913,18 @@ public class AutoForwardHook {
                 }
                 dlg.dismiss();
             };
-            // v3.0.580: 目标数超过 50 时二次确认，避免误选全部群后一次刷屏
-            if (tgtN > 50) {
+            // v3.0.586: 存盘目标被清空时二次确认 —— 目标清空后自动转发会静默变成不转发
+            final int oldTgtN = split(prefs.getString(PREF_TARGETS, "")).size();
+            if (tgtN == 0 && oldTgtN > 0) {
+                new android.app.AlertDialog.Builder(ctx)
+                        .setTitle("确认清空转发目标")
+                        .setMessage("原本有 " + oldTgtN + " 个转发目标。\n\n"
+                                + "保存后目标为空，自动转发将不再发送到任何会话。\n\n确定清空吗？")
+                        .setPositiveButton("确定清空", (dd, w) -> doSave.run())
+                        .setNegativeButton("返回修改", null)
+                        .show();
+            } else if (tgtN > 50) {
+                // v3.0.580: 目标数超过 50 时二次确认，避免误选全部群后一次刷屏
                 new android.app.AlertDialog.Builder(ctx)
                         .setTitle("确认大批量群发")
                         .setMessage("当前已选择 " + tgtN + " 个转发目标。\n\n"
@@ -916,6 +940,60 @@ public class AutoForwardHook {
         com.leshao.v3.ui.InsetsUtil.centerAutoHeight(dlg, 0.9f);
         dlg.show();
         com.leshao.v3.ui.WindowLayer.track(dlg.getWindow());
+    }
+
+    /**
+     * v3.0.586: 落盘目标数与运行中目标数的对照行。
+     *
+     * <p>运行态是启动/保存时从 prefs 镜像出来的，一旦两者不一致，说明本次进程读到的配置
+     * 与磁盘现状已经分叉（多实例看错、外部改盘、缓存过期等），此时后台会按运行态发送，
+     * 面板却可能显示为空。这里直接暴露差异，并支持一键以磁盘为准重新加载。</p>
+     */
+    private static void refreshTargetDiag(TextView diag, TextView hint, TextView val,
+                                          String[] holder, SharedPreferences prefs) {
+        if (diag == null) return;
+        int disk = split(prefs.getString(PREF_TARGETS, "")).size();
+        int runtime = sTargets.size();
+        if (disk == runtime) {
+            diag.setText("已存盘 " + disk + " 个，运行中 " + runtime + " 个（一致）");
+            diag.setTextColor(com.leshao.v3.ui.AppColors.onSurfaceVariant());
+            diag.setOnClickListener(null);
+            return;
+        }
+        diag.setText("⚠ 运行中 " + runtime + " 个 ≠ 已存盘 " + disk
+                + " 个：后台正按 " + runtime + " 个发送，点此按存盘值纠正");
+        diag.setTextColor(0xFFD32F2F);
+        diag.setOnClickListener(v -> {
+            String reloaded = prefs.getString(PREF_TARGETS, "");
+            updateConfig(prefs);
+            holder[0] = reloaded;
+            if (val != null) val.setText(reloaded.isEmpty() ? "未设置" : displayList(reloaded));
+            updateTargetCountHint(hint, reloaded);
+            refreshTargetDiag(diag, hint, val, holder, prefs);
+        });
+    }
+
+    /** v3.0.586: prefs 中的目标值快照 —— 原文长度、条目数、首尾 ID 与文件 mtime。 */
+    private static String prefsSnapshot(SharedPreferences prefs) {
+        try {
+            String raw = prefs == null ? null : prefs.getString(PREF_TARGETS, "");
+            List<String> ids = split(raw);
+            String head = ids.isEmpty() ? "-" : ids.get(0);
+            String tail = ids.size() <= 1 ? "-" : ids.get(ids.size() - 1);
+            String file = "?";
+            try {
+                android.content.Context c = ContextManager.getAppContext();
+                if (c != null) {
+                    java.io.File f = new java.io.File(c.getApplicationInfo().dataDir,
+                            "shared_prefs/leshao_v3_prefs.xml");
+                    file = f.getAbsolutePath() + " mtime=" + f.lastModified() + " size=" + f.length();
+                }
+            } catch (Throwable ignored) {}
+            return "rawLen=" + (raw == null ? -1 : raw.length()) + " count=" + ids.size()
+                    + " head=" + head + " tail=" + tail + " file=" + file;
+        } catch (Throwable t) {
+            return "snapshot err: " + t.getMessage();
+        }
     }
 
     /** v3.0.580: 目标数量与风险提示。 */
