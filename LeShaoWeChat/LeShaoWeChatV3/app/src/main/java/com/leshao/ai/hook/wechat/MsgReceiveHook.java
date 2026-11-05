@@ -234,6 +234,12 @@ public final class MsgReceiveHook {
             fromUser = readString(msg, "field_fromUsername");
         }
 
+        // ⓪ v3.0.583: 首次落库回调 content 还是 msgsource XML 占位，正文在第二次回调。
+        // 跳过占位（不写入去重集合），否则会把 XML 当正文送 AI。
+        if (com.leshao.v3.hook.SelfMsgGuard.isMsgsourceXml(content)) {
+            LogWriter.log(TAG, "跳过 content 尚未回填(msgsource) talker=" + talker);
+            return;
+        }
         // ① 防循环：机器人自己所发（零宽水印）
         if (SendGuard.isBotSent(content)) {
             return;

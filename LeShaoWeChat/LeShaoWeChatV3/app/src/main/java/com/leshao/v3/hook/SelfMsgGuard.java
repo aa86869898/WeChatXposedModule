@@ -244,6 +244,27 @@ public final class SelfMsgGuard {
         }
     }
 
+    /**
+     * 内容是不是尚未回填的 msgsource XML 占位。
+     *
+     * <p>8.0.79 落库时先回调一次，此时 {@code F0()} 返回 {@code <msgsource>…}，
+     * 真正的正文要等紧随其后的第二次回调。转发/AI 若在第一次就取正文，会把 XML 发出去。</p>
+     */
+    public static boolean isMsgsourceXml(String content) {
+        if (content == null || content.isEmpty()) return false;
+        int i = 0;
+        int max = Math.min(content.length(), WATERMARK_SCAN);
+        while (i < max) {
+            char c = content.charAt(i);
+            if (c == '\u200B' || c == '\u200C' || c == '\uFEFF' || Character.isWhitespace(c)) {
+                i++;
+            } else {
+                break;
+            }
+        }
+        return content.startsWith("<msgsource", i);
+    }
+
     // ==================== 零宽水印 ====================
 
     /** 零宽空格 + 零宽非连接符。肉眼不可见，接收方阅读无感。 */

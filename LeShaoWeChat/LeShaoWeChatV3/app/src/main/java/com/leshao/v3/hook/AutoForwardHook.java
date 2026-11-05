@@ -205,6 +205,12 @@ public class AutoForwardHook {
             if (!typeAllowed(type)) return;
 
             String content = readContent(e9);
+            // v3.0.583: 首次落库回调的 content 还是 msgsource XML 占位，正文在紧随其后的
+            // 第二次回调里。此处先跳过，避免把整段 XML 转发出去；不占用 svrId 去重键。
+            if (SelfMsgGuard.isMsgsourceXml(content)) {
+                LogWriter.log(TAG, "skip: content 尚未回填(msgsource) talker=" + talker + " type=" + type);
+                return;
+            }
 
             // ---- v3.0.580: 模块自发消息护栏（本次事故的根因） ----
             long msgId = 0;

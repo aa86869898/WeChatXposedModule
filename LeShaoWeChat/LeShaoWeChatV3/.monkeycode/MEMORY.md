@@ -244,3 +244,16 @@
   - 取不到自己 wxid 返回 false，退回水印/账本，宁可多处理也不误杀真实消息
   - 白名单复核口径：`inWhitelist` 在 `maybeHandle` 里先于产物账本，空白名单固定 false；非白名单指令被吞掉，不送 AI
 - 版本 v3.0.583 / 30583；`assembleRelease` 通过；公网 200 / Range 206
+
+### 8.0.79 落库首回调 content 是 msgsource 占位（v3.0.584 关键经验）
+- Date: 2026-11-05
+- Context: 分身点歌仍群发 545 个群，真实日志显示群发内容就是 `<msgsource>…` XML
+- Category: 消息接收域 / 排错调试
+- Instructions:
+  - 微信落库先回调一次，`F0()` 此时返回 `<msgsource>…`，正文与水印都在紧随其后的第二次回调（同 msgId、同 svrId，间隔数毫秒）
+  - 任何在首次回调读 content 做判定的逻辑都会拿到 XML：转发、AI、点歌、关键词一律中招
+  - `SelfMsgGuard.isMsgsourceXml(content)`：剥零宽/空白后看前缀 `<msgsource`，三条接收链在 isSend==0 之后、业务判定之前直接 return
+  - **必须放在去重之前且不写入去重集合**：svrId 是去重键，占位若占了键，正文回调会被当成重复丢掉
+  - 图片/AppMsg 正文不是 `<msgsource`，不受影响；null/空快速返回 false
+  - 排查此类问题先看「实际发出内容」，不要只看 skip 日志——583 的 skip 日志正常，但被转发的仍是 XML
+- 版本 v3.0.584 / 30584；`assembleRelease` 通过；公网 200 / Range 206

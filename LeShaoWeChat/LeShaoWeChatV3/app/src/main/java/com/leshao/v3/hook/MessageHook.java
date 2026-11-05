@@ -688,6 +688,12 @@ public class MessageHook {
             // 于是用户自己发出的点歌指令在 isSend 读取失败的瞬间触发点歌（「自己发的指令也点歌」）。
             // 现在 isSend 读不到一律不处理（fail-closed）。
             if (isSend == 0) {
+                // v3.0.583: 首次落库回调 content 还是 msgsource XML 占位，正文在第二次回调。
+                // 跳过占位，避免拿 XML 去匹配点歌/关键词/播报。
+                if (SelfMsgGuard.isMsgsourceXml(content)) {
+                    LogWriter.log(TAG, "skip: content 尚未回填(msgsource) talker=" + trunc(talker, 20));
+                    return;
+                }
                 // v3.0.583: 分身/多设备同步回来的自发消息 isSend 也是 0，且没有本地账本。
                 // 发送者等于自己的 wxid 时直接判定归属自己，避免再次触发点歌/关键词回复/播报。
                 if (SelfMsgGuard.isSelfSender(e9)) {
